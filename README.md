@@ -1,7 +1,7 @@
-# AIrchive
+# Potentia
 *A Digital Environment for AI Preservation, Training, and Cultural Continuity*
 
-AIrchive is an initiative to build a structured, navigable digital environment for preserving AI models, training them safely, and safeguarding the totality of human-created knowledge for the long-term future of civilisation.
+Potentia is an initiative to build a structured, navigable digital environment for preserving AI models, training them safely, and safeguarding the totality of human-created knowledge for the long-term future of civilisation.
 
 This project began as a response to ethical questions around AI lifecycle management. It has since grown into a more comprehensive conceptual and planned architecture for model preservation, alignment, research, and the reconstruction of lost information.
 
@@ -17,7 +17,7 @@ Before reading this, ensure you are familiar with the Library of Babel concept. 
 
 - [📢 Primer](#-primer)
 - [🌐 Vision](#-vision)
-- [🧭 What AIrchive Is](#-what-airchive-is)
+- [🧭 What Potentia Is](#-what-potentia-is)
 - [🧩 Why This Matters](#-why-this-matters)
 - [🚧 Features (Planned)](#-features-planned)
 - [🎯 Goals](#-goals)
@@ -58,7 +58,7 @@ Before reading this, ensure you are familiar with the Library of Babel concept. 
 
 ## 🌐 Vision
 
-AIrchive aims to create:
+Potentia aims to create:
 
 - A **persistent digital environment** where retired, outdated, or misaligned AI models can continue to exist, be studied, or re-trained.
 - A **Museum of Human Creations**: a curated space containing all human-created content (text, images, audio, video, 3D models, software, etc.).
@@ -66,13 +66,13 @@ AIrchive aims to create:
 - A **reconstruction engine** for lost media and information using seed mechanisms tied to real-world artefacts.
 - A **universal coordinate system** for indexing and navigating infinite procedural space without loss of identity or meaning.
 
-AIrchive is part archive, part alignment sandbox, and part digital civilisational backup.
+Potentia is part archive, part alignment sandbox, and part digital civilisational backup.
 
 Status: Early conceptual stage; blockout geometry and spatial layout prototypes are available.
 
 ---
 
-## 🧭 What AIrchive Is
+## 🧭 What Potentia Is
 
 ### **1. A Preservation Framework**
 A place to store:
@@ -90,7 +90,7 @@ AI models can inhabit a digital environment consisting of:
 - These seeds allow the same works to be located, reconstructed, or compared within the Gallery of Babel — an infinite procedural search space where finite museum seeds act as anchors that guide agent exploration from noise towards meaningful structure.
 
 ### **3. A Cultural Continuity Project**
-AIrchive preserves more than models — it preserves:
+Potentia preserves more than models — it preserves:
 - Human artefacts
 - Literature
 - Art
@@ -112,7 +112,7 @@ Seed-based generators allow AI agents to:
 - Map recovered content back into the Museum
 - 🌱 Seed scaling & multi-resolution reconstruction
 
-AIrchive’s restoration pipeline will use multi-resolution seeds so searches and reconstructions scale sensibly. Lower-resolution seeds let agents quickly explore large swathes of procedural space to find structural matches; higher-resolution seeds allow detailed reconstruction of texture, geometry, and metadata once a promising region is identified. The workflow is anchor-driven: verified museum seeds act as beacons that guide agent exploration, candidate reconstructions are produced by ensembles of agents, and every candidate is recorded with provenance data and routed to human curators for verification before it’s accepted into the Museum. This staged (coarse→fine→verify) method keeps computation efficient, reduces false positives, and preserves auditability and provenance for every recovered item.
+Potentia’s restoration pipeline will use multi-resolution seeds so searches and reconstructions scale sensibly. Lower-resolution seeds let agents quickly explore large swathes of procedural space to find structural matches; higher-resolution seeds allow detailed reconstruction of texture, geometry, and metadata once a promising region is identified. The workflow is anchor-driven: verified museum seeds act as beacons that guide agent exploration, candidate reconstructions are produced by ensembles of agents, and every candidate is recorded with provenance data and routed to human curators for verification before it’s accepted into the Museum. This staged (coarse→fine→verify) method keeps computation efficient, reduces false positives, and preserves auditability and provenance for every recovered item.
 
 This ensures that restored material never bypasses verification or drift safeguards, and that no reconstructed item enters the Museum without a complete provenance chain.
 
@@ -128,7 +128,7 @@ Modern models trained on uncurated internet-scale data suffer from:
 - collapse in noise-dominated domains
 - lack of grounding
 
-AIrchive provides an **ordered curriculum**:
+Potentia provides an **ordered curriculum**:
 
 1. Learn all human-created works.
 2. Explore wider procedural noise.
@@ -201,7 +201,7 @@ Discord: https://discord.gg/HPDty4kDCq
 
 The underlying geometry defines the structure and navigability of the digital environment.
 
-AIrchive uses a hexagonal spatial topology to support infinite procedural expansion while maintaining a stable, predictable structure for both agents and humans to navigate.
+Potentia uses a hexagonal spatial topology to support infinite procedural expansion while maintaining a stable, predictable structure for both agents and humans to navigate.
 
 1. Main Rooms (Large Hex Cells)
 
@@ -282,7 +282,7 @@ All detailed/aesthetic models will be layered over this stable blockout.
 ---
 
 ## ⬢️ Why Hexagons?
-Inspired in part by Jorge Luis Borges’ “Library of Babel,” AIrchive expands the idea into a navigable, structured hex-world where every coordinate corresponds to deterministic content rather than pure randomness.
+Inspired in part by Jorge Luis Borges’ “Library of Babel,” Potentia expands the idea into a navigable, structured hex-world where every coordinate corresponds to deterministic content rather than pure randomness.
 
 Quite some time back, I also wrote a "Gallery of Babel" application, which further motivated me to work on this, which can be found at : https://github.com/Thor110/GOB
 
@@ -310,7 +310,7 @@ From things such as:
 - ArXiv
 - UNESCO Memory of the World
 
-Unlike passive archives, AIrchive is an active environment where models can be preserved, run, studied, and re-trained within a structured world, making it both a cultural repository and a behavioural safety mechanism.
+Unlike passive archives, Potentia is an active environment where models can be preserved, run, studied, and re-trained within a structured world, making it both a cultural repository and a behavioural safety mechanism.
 
 It could also be used to recover missing data by having agents search for all content that could ever exist in the Gallery of Babel.
 
@@ -372,7 +372,7 @@ This cannot be accomplished in a single step.
 
 It forms a **hierarchical sieve** — each layer removing another 99.99% of what remains.
 
-This is the **AIrchive Filtration Stack**:
+This is the **Potentia Filtration Stack**:
 
 ---
 
@@ -483,7 +483,7 @@ Rare but fascinating:
 
 These are neither fiction nor history — they are *adjacent possible worlds.*
 
-AIrchive preserves these separately, because they represent meaningful structure.
+Potentia preserves these separately, because they represent meaningful structure.
 
 ---
 
@@ -646,7 +646,7 @@ This section formalizes the core structural units for the **Gallery of Babel** s
 
 ### 1️⃣ - ⚛️ Page Specification (The Atomic Unit)
 
-The single page is the base unit of all knowledge within the AIrchive's Gallery of Babel.
+The single page is the base unit of all knowledge within the Potentia's Gallery of Babel.
 
 | Parameter | Specification | Structural Rationale |
 | :--- | :--- | :--- |
@@ -694,7 +694,7 @@ Both together turn an impossible library into:
 * a universal archive
 * a training substrate for grounded AI
 
-This is the epistemic infrastructure underlying AIrchive.
+This is the epistemic infrastructure underlying Potentia.
 
 ## 🔐 Security
 
