@@ -10,47 +10,62 @@
     background:#0a0a0f;
     color:#e0ddd8;
     font-family:'Courier New',monospace;
+    font-size: 16px;
     min-height:100vh;
     display:flex;
     flex-direction:column;
     align-items:center;
     justify-content: center;
-    padding:16px;
+    padding:32px;
   }
-  h1{font-size:16px;letter-spacing:0.3em;text-transform:uppercase;color:#666;margin-bottom:8px;text-align:center;}
-  .sub{font-size:11px;color:#444;margin-bottom:24px;letter-spacing:0.15em;text-align:center;max-width: 500px; line-height: 1.6;}
+  h1{font-size:16px;letter-spacing:0.3em;text-transform:uppercase;color:#666;margin-bottom:12px;text-align:center;white-space:nowrap;}
+  .sub{font-size:16px;color:#444;margin-bottom:20px;letter-spacing:0.15em;text-align:center;max-width:2000px;line-height:1.6;}
+  
+  /* Manifesto block lines with wider max-width to prevent premature wrapping */
+  .manifesto-line {
+    font-size: 16px;
+    color: #666;
+    margin-bottom: 16px;
+    letter-spacing: 0.1em;
+    text-align: center;
+    max-width: 2000px;
+    line-height: 1.5;
+  }
   
   /* Counter block matching the mechanical aesthetic */
   .counter-box {
     width: 100%;
-    max-width: 320px;
+    max-width: 600px;
     border: 1px solid #2a2a3a;
     background: #0d0d14;
-    padding: 16px;
+    padding: 20px;
     margin-bottom: 24px;
     text-align: center;
   }
   .counter-title {
-    font-size: 9px;
+    font-size: 16px;
     text-transform: uppercase;
     letter-spacing: 0.2em;
     color: #666;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
+    white-space: nowrap;
   }
   .counter-value {
-    font-size: 18px;
+    font-size: 16px;
     color: #e0ddd8;
     letter-spacing: 0.1em;
     font-weight: bold;
+    white-space: nowrap;
   }
 
   .section-label {
-    font-size: 9px;
+    font-size: 16px;
     text-transform: uppercase;
     letter-spacing: 0.2em;
     color: #444;
-    margin-bottom: 12px;
+    margin-bottom: 16px;
     text-align: center;
+    white-space: nowrap;
   }
 
   .nav-group {
@@ -58,7 +73,7 @@
     flex-direction: column;
     gap: 12px;
     width: 100%;
-    max-width: 320px;
+    max-width: 600px;
     margin-bottom: 24px;
   }
 
@@ -71,11 +86,12 @@
     color: #888;
     padding: 14px 20px;
     font-family: 'Courier New',monospace;
-    font-size: 11px;
+    font-size: 16px;
     letter-spacing: 0.15em;
     cursor: pointer;
     text-transform: uppercase;
     text-align: center;
+    white-space: nowrap;
     transition: all 0.15s;
   }
 
@@ -87,11 +103,12 @@
 
   .footer {
     margin-top: 16px;
-    font-size: 9px;
+    font-size: 16px;
     color: #222;
     letter-spacing: 0.1em;
     text-transform: uppercase;
     text-align: center;
+    white-space: nowrap;
   }
 </style>
 </head>
@@ -101,6 +118,13 @@
 <div class="sub">
   Infinite procedural generation pipelines and acoustic probes derived from Unicode boundary explorations.
 </div>
+
+<!-- Manifesto Lines -->
+<div class="manifesto-line">Since the 24th of April 2026 I could have automatically generated this many tracks using a custom pipeline to steer the result towards better potential.</div>
+<div class="manifesto-line">Note that the two Rattle Tracks albums Mechanical Mindset and Political Nonsense were manually generated and curated, while the playlists of the other channels while manually generated could have been completely automated if I had chosen to hook everything up.</div>
+<div class="manifesto-line">This experiment serves as a clear signal that legislation is needed to require the disclosure of AI-generated content.</div>
+<div class="manifesto-line">Disclosure ensures honesty; those happy to consume AI content won't mind, and those who prefer human-made works deserve the right to choose.</div>
+<div class="manifesto-line" style="margin-bottom: 24px;">Transparency fosters trust.</div>
 
 <!-- Static Client-Side Counter Box -->
 <div class="counter-box">
