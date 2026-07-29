@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Potentia // Audio Archive</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    background:#0a0a0f;
+    color:#e0ddd8;
+    font-family:'Courier New',monospace;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content: center;
+    padding:16px;
+  }
+  h1{font-size:16px;letter-spacing:0.3em;text-transform:uppercase;color:#666;margin-bottom:8px;text-align:center;}
+  .sub{font-size:11px;color:#444;margin-bottom:24px;letter-spacing:0.15em;text-align:center;max-width: 500px; line-height: 1.6;}
+  
+  /* Counter block matching the mechanical aesthetic */
+  .counter-box {
+    width: 100%;
+    max-width: 320px;
+    border: 1px solid #2a2a3a;
+    background: #0d0d14;
+    padding: 16px;
+    margin-bottom: 24px;
+    text-align: center;
+  }
+  .counter-title {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: #666;
+    margin-bottom: 6px;
+  }
+  .counter-value {
+    font-size: 18px;
+    color: #e0ddd8;
+    letter-spacing: 0.1em;
+    font-weight: bold;
+  }
+
+  .section-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: #444;
+    margin-bottom: 12px;
+    text-align: center;
+  }
+
+  .nav-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    max-width: 320px;
+    margin-bottom: 24px;
+  }
+
+  /* Matching the viewfinder button style exactly */
+  .btn-link {
+    display: block;
+    text-decoration: none;
+    background: transparent;
+    border: 1px solid #2a2a3a;
+    color: #888;
+    padding: 14px 20px;
+    font-family: 'Courier New',monospace;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    cursor: pointer;
+    text-transform: uppercase;
+    text-align: center;
+    transition: all 0.15s;
+  }
+
+  .btn-link:hover {
+    border-color: #555;
+    color: #ccc;
+    background: #111;
+  }
+
+  .footer {
+    margin-top: 16px;
+    font-size: 9px;
+    color: #222;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<h1>Potentia // Audio Archive</h1>
+<div class="sub">
+  Infinite procedural generation pipelines and acoustic probes derived from Unicode boundary explorations.
+</div>
+
+<!-- Static Client-Side Counter Box -->
+<div class="counter-box">
+  <div class="counter-title">Theoretical Pipeline Output</div>
+  <div class="counter-value" id="track-counter">0</div>
+</div>
+
+<div class="section-label">Archival Broadcast Channels</div>
+<div class="nav-group">
+  <a href="https://www.youtube.com/@RattleTracks" target="_blank" class="btn-link">RattleTracks</a>
+  <a href="https://www.youtube.com/@JazzFrequency-i2d" target="_blank" class="btn-link">JazzFrequency-i2d</a>
+  <a href="https://www.youtube.com/@VoidFrequency-u5c" target="_blank" class="btn-link">VoidFrequency-u5c</a>
+  <a href="https://www.youtube.com/@FolkFrequency-d9e" target="_blank" class="btn-link">FolkFrequency-d9e</a>
+</div>
+
+<div class="footer">
+  Deterministic Sieve · Gallery of Babel v1.0
+</div>
+
+<script>
+    // Launch reference epoch (adjust date as needed)
+    const launchDate = new Date("2026-04-024T00:00:00Z").getTime();
+    
+    // Generation rate: set to 1 track every 60 seconds (modify factor to speed up/slow down)
+    const secondsPerTrack = 60; 
+
+    function updateCounter() {
+        const now = new Date().getTime();
+        const elapsedSeconds = (now - launchDate) / 1000;
+        
+        if (elapsedSeconds > 0) {
+            const totalTracks = Math.floor(elapsedSeconds / secondsPerTrack);
+            document.getElementById("track-counter").innerText = totalTracks.toLocaleString();
+        }
+    }
+
+    // Refresh every second for a live ticking interface
+    setInterval(updateCounter, 1000);
+    updateCounter();
+</script>
+
+</body>
+</html>
