@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Potentia // Audio Archive</title>
+<title>Potentia // Core Architecture</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
   body{
@@ -19,43 +19,30 @@
     padding:32px;
   }
   h1{font-size:16px;letter-spacing:0.3em;text-transform:uppercase;color:#666;margin-bottom:12px;text-align:center;white-space:nowrap;}
-  .sub{font-size:16px;color:#444;margin-bottom:20px;letter-spacing:0.15em;text-align:center;max-width:2000px;line-height:1.6;}
+  .sub{font-size:16px;color:#444;margin-bottom:20px;letter-spacing:0.15em;text-align:center;max-width:800px;line-height:1.6;}
   
-  /* Manifesto block lines with wider max-width to prevent premature wrapping */
-  .manifesto-line {
-    font-size: 16px;
-    color: #666;
-    margin-bottom: 16px;
-    letter-spacing: 0.1em;
-    text-align: center;
-    max-width: 2000px;
-    line-height: 1.5;
-  }
-  
-  /* Counter block matching the mechanical aesthetic */
-  .counter-box {
+  .box {
     width: 100%;
-    max-width: 600px;
+    max-width: 700px;
     border: 1px solid #2a2a3a;
     background: #0d0d14;
-    padding: 20px;
+    padding: 24px;
     margin-bottom: 24px;
-    text-align: center;
   }
-  .counter-title {
+  .box-title {
     font-size: 16px;
     text-transform: uppercase;
     letter-spacing: 0.2em;
     color: #666;
-    margin-bottom: 8px;
-    white-space: nowrap;
+    margin-bottom: 12px;
+    text-align: center;
   }
-  .counter-value {
+  .box-text {
     font-size: 16px;
-    color: #e0ddd8;
-    letter-spacing: 0.1em;
-    font-weight: bold;
-    white-space: nowrap;
+    color: #b0aca5;
+    line-height: 1.6;
+    margin-bottom: 12px;
+    text-align: justify;
   }
 
   .section-label {
@@ -73,11 +60,10 @@
     flex-direction: column;
     gap: 12px;
     width: 100%;
-    max-width: 600px;
+    max-width: 700px;
     margin-bottom: 24px;
   }
 
-  /* Matching the viewfinder button style exactly */
   .btn-link {
     display: block;
     text-decoration: none;
@@ -114,58 +100,31 @@
 </head>
 <body>
 
-<h1>Potentia // Audio Archive</h1>
+<h1>Potentia // Core Architecture</h1>
 <div class="sub">
-  Infinite procedural generation pipelines and acoustic probes derived from Unicode boundary explorations.
+  A Digital Environment for AI Preservation, Training, and Cultural Continuity.
 </div>
 
-<!-- Manifesto Lines -->
-<div class="manifesto-line">Since the 24th of April 2026 I could have automatically generated this many tracks using a custom pipeline to steer the result towards better potential.</div>
-<div class="manifesto-line">Note that the two Rattle Tracks albums Mechanical Mindset and Political Nonsense were manually generated and curated, while the playlists of the other channels while manually generated could have been completely automated if I had chosen to hook everything up.</div>
-<div class="manifesto-line">This experiment serves as a clear signal that legislation is needed to require the disclosure of AI-generated content.</div>
-<div class="manifesto-line">Disclosure ensures honesty; those happy to consume AI content won't mind, and those who prefer human-made works deserve the right to choose.</div>
-<div class="manifesto-line">Transparency fosters trust.</div>
-<div class="manifesto-line">NOTE : This is based on consumer grade hardware.</div>
-
-<!-- Static Client-Side Counter Box -->
-<div class="counter-box">
-  <div class="counter-title">Theoretical Pipeline Output</div>
-  <div class="counter-value" id="track-counter">0</div>
+<div class="box">
+  <div class="box-title">Project Purpose</div>
+  <div class="box-text">
+    Potentia is a structured, navigable digital environment designed for preserving AI models, training them safely within grounded human knowledge substrates, and safeguarding the totality of human culture for the long-term future of civilisation.
+  </div>
+  <div class="box-text">
+    By combining the Museum of Human Creations with an infinite, deterministically addressable Gallery of Babel built on hexagonal spatial topology, Potentia bridges the gap between active model alignment and permanent civilisational backup.
+  </div>
 </div>
 
-<div class="section-label">Archival Broadcast Channels</div>
+<div class="section-label">Navigation Hub</div>
 <div class="nav-group">
-  <a href="https://www.youtube.com/@RattleTracks" target="_blank" class="btn-link">Rattle Tracks</a>
-  <a href="https://www.youtube.com/@JazzFrequency-i2d" target="_blank" class="btn-link">Jazz Frequency</a>
-  <a href="https://www.youtube.com/@VoidFrequency-u5c" target="_blank" class="btn-link">Void Frequency</a>
-  <a href="https://www.youtube.com/@FolkFrequency-d9e" target="_blank" class="btn-link">Folk Frequency</a>
+  <a href="pages/audio.html" class="btn-link">Audio Archive (Provisional Pipeline)</a>
+  <a href="https://github.com/Thor110/GOB" target="_blank" class="btn-link">Gallery of Babel Repository</a>
+  <a href="https://discord.gg/HPDty4kDCq" target="_blank" class="btn-link">Community Discord</a>
 </div>
 
 <div class="footer">
-  Deterministic Sieve · Gallery of Babel v1.0
+  Deterministic Sieve · Civilisational Backup v1.0
 </div>
-
-<script>
-    // Launch reference epoch (adjust date as needed)
-    const launchDate = new Date("2026-04-24T00:00:00Z").getTime();
-    
-    // Generation rate: set to 1 track every 60 seconds (modify factor to speed up/slow down)
-    const secondsPerTrack = 60; 
-
-    function updateCounter() {
-        const now = new Date().getTime();
-        const elapsedSeconds = (now - launchDate) / 1000;
-        
-        if (elapsedSeconds > 0) {
-            const totalTracks = Math.floor(elapsedSeconds / secondsPerTrack);
-            document.getElementById("track-counter").innerText = totalTracks.toLocaleString();
-        }
-    }
-
-    // Refresh every second for a live ticking interface
-    setInterval(updateCounter, 1000);
-    updateCounter();
-</script>
 
 </body>
 </html>
