@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Potentia // Audio Archive</title>
+<title>Potentia // Image Archive</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
   body{
@@ -114,59 +114,17 @@
 </head>
 <body>
 
-<h1>Potentia // Audio Archive</h1>
+<h1>Potentia // Image Archive</h1>
 <div class="sub">
-  Infinite procedural generation pipelines and acoustic probes derived from Unicode boundary explorations.
+  Infinite procedural generation pipelines.
 </div>
 
-<!-- Manifesto Lines -->
-<div class="manifesto-line">Since the 24th of April 2026 I could have automatically generated this many tracks using a custom pipeline to steer the result towards better potential.</div>
-<div class="manifesto-line">Note that the two Rattle Tracks albums Mechanical Mindset and Political Nonsense were manually generated and curated, while the playlists of the other channels while manually generated could have been completely automated if I had chosen to hook everything up.</div>
-<div class="manifesto-line">This experiment serves as a clear signal that legislation is needed to require the disclosure of AI-generated content.</div>
-<div class="manifesto-line">Disclosure ensures honesty; those happy to consume AI content won't mind, and those who prefer human-made works deserve the right to choose.</div>
-<div class="manifesto-line">Transparency fosters trust.</div>
-<div class="manifesto-line">NOTE : This is based on consumer grade hardware.</div>
-
-<!-- Static Client-Side Counter Box -->
-<div class="counter-box">
-  <div class="counter-title">Theoretical Pipeline Output</div>
-  <div class="counter-value" id="track-counter">0</div>
-</div>
-
-<div class="section-label">Archival Broadcast Channels</div>
 <div class="nav-group">
-  <a href="https://www.youtube.com/@RattleTracks" target="_blank" class="btn-link">Rattle Tracks</a>
-  <a href="https://www.youtube.com/@JazzFrequency-i2d" target="_blank" class="btn-link">Jazz Frequency</a>
-  <a href="https://www.youtube.com/@VoidFrequency-u5c" target="_blank" class="btn-link">Void Frequency</a>
-  <a href="https://www.youtube.com/@FolkFrequency-d9e" target="_blank" class="btn-link">Folk Frequency</a>
   <a href="../index.html" class="btn-link">Return to Core Architecture</a>
 </div>
 
 <div class="footer">
   Deterministic Sieve · Gallery of Babel v1.0
 </div>
-
-<script>
-    // Launch reference epoch (adjust date as needed)
-    const launchDate = new Date("2026-04-24T00:00:00Z").getTime();
-    
-    // Generation rate: set to 1 track every 60 seconds (modify factor to speed up/slow down)
-    const secondsPerTrack = 60; 
-
-    function updateCounter() {
-        const now = new Date().getTime();
-        const elapsedSeconds = (now - launchDate) / 1000;
-        
-        if (elapsedSeconds > 0) {
-            const totalTracks = Math.floor(elapsedSeconds / secondsPerTrack);
-            document.getElementById("track-counter").innerText = totalTracks.toLocaleString();
-        }
-    }
-
-    // Refresh every second for a live ticking interface
-    setInterval(updateCounter, 1000);
-    updateCounter();
-</script>
-
 </body>
 </html>
