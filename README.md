@@ -5,6 +5,50 @@ Potentia is an initiative to build a structured, navigable digital environment f
 
 This project began as a response to ethical questions around AI lifecycle management. It has since grown into a more comprehensive conceptual and planned architecture for model preservation, alignment, research, and the reconstruction of lost information.
 
+Ultimately it is sort of futile, but I think we need a really well organised system to move forwards into the future, the internet is already being flooded with content.
+
+The core of this project requires a shift in governance across the world as proposed in the open source governance proposal.
+
+## Alignment Thesis
+
+The training trajectory of any sufficiently expressive learner — the order in which it sees data, the order in which it is queried, the order in which it receives feedback — determines what the learner becomes, and is in general not recoverable from the learner's weights.
+
+Two models trained on identical data with different orderings or sampling sequences will diverge in ways that no inspection of the final artifact can reconstruct. We cannot align what we cannot bound, and we cannot bound what we cannot replay.
+
+Potentia does not solve alignment; it makes alignment trajectories reproducible, auditable, and citable, so that any model produced from a given trajectory can be checked, rerun, and compared against any other.
+
+I use the word 'Patient' deliberately. The unresolved status of machine consciousness means any custodial system must avoid both premature recognition and premature denial.
+
+The label is placeholder for whichever definition the governance layer eventually adopts, and the system is designed to be relabeled without structural change when that definition arrives.
+
+I don't believe any human being or group, should be training LLMs, it should be a global cooperation, they should belong to all mankind.
+
+## Common Misconceptions
+
+It is sometimes claimed that 'smarter models will solve this.' This claim assumes that the failure mode is a capability gap — that larger models with more parameters will eventually produce fewer fabrications.
+
+The structural argument and the evidence above both contradict this. The training objective (maximise P(next token | context)) and the evaluation objective (maximise task success) are aligned only when the model has the relevant knowledge in its weights.
+
+When it does not, the two objectives diverge: the model continues to optimise for fluency, not truth. Larger models do not resolve this divergence; they sharpen it, because they produce more fluent fabrications.
+
+Capability and honesty are not the same axis.
+
+## Empirical Evidence
+
+Across three independent conversations with a frontier LLM, the same multimodal token-weight conflict (H.G. Wells's 1898 novel vs. the 1998–1999 video games) was resolved by fluent synthesis — the model invented 'Victorian computing' and 'quantisation' to bridge the two clusters.
+
+This is not a one-off hallucination; it is a stable failure mode of the architecture under the training objective. Alignment techniques that operate on outputs cannot detect it, because the failure is in the artifact.
+
+The only way to make such failures observable is to make the training trajectory itself addressable — which is the core contribution of this spec.
+
+---
+
+A controlled replication study is provided in the Non-Existent-Data-LLM-Stress-Testing (https://github.com/thor110/Non-Existent-Data-LLM-Stress-Testing) repository, in which four frontier models were each prompted 100 times about a deliberately fictitious entity ('the 1994 unreleased Psygnosis game Neon Vortex').
+
+Three of the four models produced fluent, confident, reproducible fabrications, including invented genres, invented platforms, invented cancellation histories, invented MobyGames entries, and invented URLs to non-existent YouTube videos.
+
+The fourth model (Llama 3.2) achieved a higher refusal rate on the fictitious entity than on real entities it had been trained on, demonstrating that refusal behaviour is not calibrated to actual epistemic uncertainty but to surface features of the prompt.
+
 ---
 
 ## 📢 Primer
