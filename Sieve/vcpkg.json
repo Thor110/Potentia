@@ -1,0 +1,12 @@
+{
+  "name": "sieve",
+  "version-string": "0.4.0",
+  "description": "Sieve: the Gallery of Babel core and hallway client",
+  "dependencies": [],
+  "features": {
+    "client": {
+      "description": "SDL3 hallway client (milestone M4)",
+      "dependencies": [ "sdl3" ]
+    }
+  }
+}

@@ -1,0 +1,162 @@
+# sieve conformance vectors v1 (spec 2.0, feistel-sha256-v1)
+# alphabet	length	key	unit	positional	scrambled
+lower27	1	sieve	 	00	0d
+lower27	1	sieve	z	1a	0c
+lower27	1	sieve	r	12	04
+lower27	1	sieve	k	0b	18
+lower27	1	sieve	a	01	0e
+lower27	1	sieve	i	09	16
+lower27	1	alt-key	 	00	1a
+lower27	1	alt-key	z	1a	19
+lower27	1	alt-key	s	13	12
+lower27	1	alt-key	x	18	17
+lower27	1	alt-key	d	04	03
+lower27	1	alt-key	e	05	04
+lower27	2	sieve	  	000	14d
+lower27	2	sieve	zz	2d8	2a4
+lower27	2	sieve	 l	00c	1f0
+lower27	2	sieve	ue	23c	2be
+lower27	2	sieve	ob	197	042
+lower27	2	sieve	xl	294	1b3
+lower27	2	alt-key	  	000	15a
+lower27	2	alt-key	zz	2d8	26c
+lower27	2	alt-key	ds	07f	1e3
+lower27	2	alt-key	uh	23f	1c2
+lower27	2	alt-key	qv	1e1	0b9
+lower27	2	alt-key	vh	25a	0bf
+lower27	3	sieve	   	0000	375c
+lower27	3	sieve	zzz	4ce2	2905
+lower27	3	sieve	dpl	0d20	1a0f
+lower27	3	sieve	dlm	0cb5	4154
+lower27	3	sieve	zfw	4ac3	329c
+lower27	3	sieve	kyt	220a	2001
+lower27	3	alt-key	   	0000	24ab
+lower27	3	alt-key	zzz	4ce2	2a12
+lower27	3	alt-key	rjn	345e	44d4
+lower27	3	alt-key	kyl	2202	32f2
+lower27	3	alt-key	lin	232d	4c56
+lower27	3	alt-key	all	0429	1c4a
+lower27	7	sieve	       	000000000	1f4017e79
+lower27	7	sieve	zzzzzzz	26f7c52b2	08c1c40cf
+lower27	7	sieve	hljrgc 	0c3567aec	16491a03e
+lower27	7	sieve	jukovcy	0f93f8359	1e8daa03f
+lower27	7	sieve	unkfob 	1f1435871	0d8bd17b4
+lower27	7	sieve	hazcifr	0ba6b542b	0dc737780
+lower27	7	alt-key	       	000000000	048ad2e33
+lower27	7	alt-key	zzzzzzz	26f7c52b2	0e6f20c79
+lower27	7	alt-key	rox xcr	1ad3f4eba	1e37696be
+lower27	7	alt-key	ngfvvxs	1497e1754	1f76f430f
+lower27	7	alt-key	lbul ds	1177e9a2a	1b7d9b568
+lower27	7	alt-key	auriztv	029a26b39	00441a437
+lower27	16	sieve	                	00000000000000000000	0e79797b888b26f1ea79
+lower27	16	sieve	zzzzzzzzzzzzzzzz	10e425c56daffabc35c0	02fd83e58fa415c94913
+lower27	16	sieve	fgypuoeamvotsqrd	03f012684f25017177f4	0def385a393cf25acbed
+lower27	16	sieve	belezwbgryaugflb	0160a67d702d82595b0e	08325f204fb465926d17
+lower27	16	sieve	jkbfylvcmkgvvkoj	0683479f1727c1bd197a	0f53762e9b48d726e14e
+lower27	16	sieve	cmacgspeqlfixcf 	022dd179c9a233de4db0	0723c392b61e29d7b2ca
+lower27	16	alt-key	                	00000000000000000000	04eb749198c67cbb655f
+lower27	16	alt-key	zzzzzzzzzzzzzzzz	10e425c56daffabc35c0	0665904d34062f49c229
+lower27	16	alt-key	squwmytnptpa byy	0c4c8f9900866558a325	09c15513173c373bbd19
+lower27	16	alt-key	iiqnbdszuzcogoxw	05da9dc88fcbc601c42e	0c494f9b9321520d25f2
+lower27	16	alt-key	ditdjewrztvlaxtk	02ba6dabd7e5c9dfebf9	011e8bd0580348400099
+lower27	16	alt-key	xcmb ktpmkehsmkg	0f185a9a6e6f553671fa	06354ac3945b3c147dd0
+lower27	32	sieve	                                	000000000000000000000000000000000000000	047f91e233c29a749bcb828c884eda49f3c2667
+lower27	32	sieve	zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz	11d500bfaf40ac5044981798db5fb39f2c17b80	08b752d1eab54aa934e0b5827c54ee7ea267d76
+lower27	32	sieve	vsxctzgbkqakh yujac gwgoocriutbr	0f043574a8d4f5e7f71f9abe443c86b27b5f5a7	07c4ee928458d729439539b73e13f192404f0ae
+lower27	32	sieve	rxxsbymzifaufbtidpmxtjfljvlbmbiu	0c7f5a93cf0ea18ea7fe0833e5beaf0ace0b715	075c80606ecba2f2a2fdfceb2cec0b966a8c286
+lower27	32	sieve	gbzd dctlnsoxwnhzoyqoecqscddhzwq	04b21b976982425acd13c27321296430b709f86	0e540cce991f970d9a023198aa3affff9874c3d
+lower27	32	sieve	gwrvqahxejfb ehoouommwlqbboiqmqs	0533ea1cf4ff035b850c7208450d9a6d20119d0	01857c5455ed4b5ed3ae92b2186385cf5279949
+lower27	32	alt-key	                                	000000000000000000000000000000000000000	03061cb4037f68f31bbefe6ec4f2028e62b68e3
+lower27	32	alt-key	zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz	11d500bfaf40ac5044981798db5fb39f2c17b80	045871a08137681eeb9d3808353e0f22942e87b
+lower27	32	alt-key	fcllgpcppvylahfpbgthchwdx cmp   	040c1ea63ed9405b48c400d7c64d35dc26248b6	026d9b747925d425bac2132bbe1d95d4908e5ec
+lower27	32	alt-key	ow mkbsbzvttethkemezarmduvxcvbhz	0a78410c1c935632b55d9adc60e249fdd5ce82c	0e65202f8a5fe8828c82f0ea5a11918fd86a263
+lower27	32	alt-key	mfzezzqcbyfwrlqcrnoxukgqtylrrvxp	08c19e370796f547cf5f0908db51a3b7cc784fe	0db27d8c5e386534ecff19a6d23ae0abf35c289
+lower27	32	alt-key	znqbbslbwte oncyly obzvdibctjmnu	11878ec0a824fba9122b6ffc115eaee03b7dd73	0608c58d3f15076e006eae0189041f87b406bb7
+lower27	100	sieve	                                                                                                    	00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000	0575e86bcf3f1ab296011017326e5adbaaef3480f14bdca759cc38cd3c29c5b660561623ddae8cfa456c59048da4747bd4a00f0ad9cd05c2e7b3faa
+lower27	100	sieve	zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz	b39cfff485a5dbf4d6aae030b91bfb0ec6bba389cd8d7f85bba3985c19c5e24e40c543a123c6e028a873e9e3874e1b4623a44be39b34e67dc5c2670	7073671f7ce4dea2174cf1d2bb3274fdfad1425e1bea89eb154bbf8ac3fa9faebf141058399b6467ef64ec3a84184782fcba982f5f41d420ab93a27
+lower27	100	sieve	ggexe xaraitazit bliinfqimytggdw rirj kojjeltlyynqirswuvrb toxhsnd segtmtxuqthljucrjfzz hyxizyqxzivl	30584a9f82ada019d3a1a81b1b0cef7fbf4bcffe316fad6524e9e6ec70c29da9b8b6bc3f5d604747467be5169fceab71b68c17f507773f1da442c46	201d78cecaad02c80082338211b33f62a9f066ab184b90ed5cb4b8add0ca999af687019fd223b5330214b3b418fb53d2e6410f2fd44b1e573de2d84
+lower27	100	sieve	occikkac piwbigiwslcfjosbisxfjunflxciwjbybrtiklugcuhasbgqhuoydytezhunmxwsfeoqgdkv kmicgdeiirciesjbil	648e0bace289a76a2c1b02f05af8057f337a34ddc72236f259b8d7c8c5c53cc33f046c569d4fb62634702ea8a09b602200dfc95f4ccbd8e64188662	57abe469220b8b6bbbe4886b2300d422dcb5b880c593ca8e5d2101866e721a0e0a0d243f491238327054f6a2fe5f5710e749aaa48dc59b94faff7d3
+lower27	100	sieve	clxvivwlxytpavmwdqbmjjwgiprybostpjlxyzqrofvaqklcgikioptnzkatdbuvxbbptzrrnndqagbitlkipitgy afagpjguyp	1723e3c5a6da3e065606b21e6995c93e8e614a0dceeaeb5476a132ad47d2336192bc1a8f28788274bd638c7918753de3fcdc20f1ff425590186f6d5	1509e7cfdc4da5e68d88993c2ebb74de2b9b9c8292f0cc45ff063e46e039c17178694e1aa5569a8a45a529c1db53d743822b7ae481ecde96cef99dd
+lower27	100	sieve	jlkzktqh ycddyujjhqurptaayjvgyyhqjhrrr  vcnumbwdamdnkncvtzdtvtenvwpesjhbfimwrd sbmshfisbvtvhrvjeggkj	4596df77ba76c31250b675f898961f195e037511e47f7753394a760ba881b313853f5def30014cfd3fc74c77ff9bfe4b3900083b9c36ab3569b9132	9de61dfe9b5b93fe0ee45fb68a4cb18d1b524a5c1dcb7dcc0fc62c3e1059938c496409f20d6d8178a73964ea42b3bd9f1f6e5295375991edf728b0a
+lower27	100	alt-key	                                                                                                    	00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000	14644ef0ad76e8bf0310f2aaccdfe666dec904364813224e8f017cd907c6a60e1a080b12e46c6c13b208f233e8f2c272947ee8c4710d8fee172bf45
+lower27	100	alt-key	zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz	b39cfff485a5dbf4d6aae030b91bfb0ec6bba389cd8d7f85bba3985c19c5e24e40c543a123c6e028a873e9e3874e1b4623a44be39b34e67dc5c2670	214ed3e3a965da8075231457ca9af8b68ca175ec1bb48a2f4e7ce74cd1c51d3ea4a5de017c6cd75d3560ff2833b681fa6f0cd120e0a9b5f4a58d101
+lower27	100	alt-key	actbfgemcwjerxox dstn bimhjhjqrkixctsnxpuezmnqvfluiolalwphwptripowxibrygnbfxwtkwtyo pbkjxvtvwpmtikvw	0793230a4ad2b6bddc702cd6286d09600109293cd1b6c7df1a202e57ea4c81e4d2deee42464b226cd878d3aa3cdd460ff8ca406c52360b9c9c29284	4abaa26572798ca1219c06e9e296175554531b362f9a9a3bc55bb7bc6472338f451a472b0b5fcbd932a40194ef160d024b5237aa45a2edcdfb5ef95
+lower27	100	alt-key	rohntzabprrquamenkcgjsrstjqlebaxvvcgwufawdilkywqq ffjeyeafmgc vevwfckvsmkxszjfalszmfaxpim zkydetqxfc	7b8413fd5e1f24e62be53c68fd6ef33035d09ac5476ae9f2cdd63c2286c2e3a55611cd8dc4c4f9d38c4e81ae77c86a57eb2cf27d4dba6cda501d66d	5dadfffd4b9af7b002003ef2248e59a37755960baa8b0311e2945b8da72c2d0383360f97ba9ecc367a13b722095b4342d4b86af8d701b8dedac4044
+lower27	100	alt-key	zab jiivfjujypugcmcxqxwadhpdtzcwnjgjfzjcw kmq kyrmrxyeaefsihjdwmsaeezabeojlzotkmxxlljg bkhfgncsrhtfk	ad39c77aa3f42bcadd329495bfa475ef903544565d59460f64a4af06c7f8f2b00086663c4aac6df1221dab94e015455bd675c24ac5cd880ae59d0cc	7c8ac2dde00c32e44b0b960affe4d17e296c613eb3577a6e3563d3338326e124209f290982c74e284d2cc7ddc98abcd9f68b6afdac5a902e8e11f20
+lower27	100	alt-key	dcbkedeuvqnn s kdonydsbzkiuwmvvsxjtmefgrcfyewoevnxfbtutkibhn kdmekywqxoirulagiwa jp wroleaxalfzlbkgu	1b5edcd3ce92ae18de4b7379865f1a8c23acdfd7477da2644af9fe90b9941b968a96644d7f5784cb65051db671cb79ed704548347a05bd759bd9966	6e1b5360e17a5bc0ec24c97a57f4675f9ce1a7b26466111e2e72d2399a5d4276f118150f186bb3f1fe56ea404a7e0091dec216d42ee2f6bafae036a
+babel29	1	sieve	 	00	1a
+babel29	1	sieve	.	1c	19
+babel29	1	sieve	b	02	1c
+babel29	1	sieve	w	17	14
+babel29	1	sieve	n	0e	0b
+babel29	1	sieve	.	1c	19
+babel29	1	alt-key	 	00	0e
+babel29	1	alt-key	.	1c	0d
+babel29	1	alt-key	w	17	08
+babel29	1	alt-key	n	0e	1c
+babel29	1	alt-key	p	10	01
+babel29	1	alt-key	 	00	0e
+babel29	5	sieve	     	0000000	028fd55
+babel29	5	sieve	.....	138f9ac	101d6f4
+babel29	5	sieve	hqofi	05cdc1b	0d8275f
+babel29	5	sieve	j,w t	0764414	12e0ece
+babel29	5	sieve	ulkrt	0e740a2	0d6684f
+babel29	5	sieve	vkrao	0f1c13b	07ee848
+babel29	5	alt-key	     	0000000	0c8ad30
+babel29	5	alt-key	.....	138f9ac	05d475a
+babel29	5	alt-key	ocagd	0a30426	0daa6a7
+babel29	5	alt-key	ib,jd	06239bc	128b42b
+babel29	5	alt-key	rceee	0c37184	06d2ab6
+babel29	5	alt-key	rptus	0c87b2a	0152b34
+babel29	40	sieve	                                        	0000000000000000000000000000000000000000000000000	2b3a180f1db510b6c3b7c8624922d906bec58e00d17a9bf31
+babel29	40	sieve	........................................	4fd9df9dbf7e28ed5357ba4a062c19c48e628f6af73b06120	1cad2197e6380afbd022f05ef2085be4ddbbd4716a09a9c6e
+babel29	40	sieve	aoomgqapoj.fmveyquaciobjztwizbdamsj,pkkm	043a7280fc8eb1f9b75f9111ac38e02ae87bed78a001b4812	3d798523d9b4fdd26a21695bc61ce6b1e37664de6300d33db
+babel29	40	sieve	qso l,mqf,yyntjovyqxx.qckrmw.hbpoado nuz	30a99414917ad658164d3339fb2e92172a02f9cecc5590ba5	3d6809a1d788a8016530a673294f2baf229762dbcc8d63a67
+babel29	40	sieve	vbqcvq,zefaucduvczyqgxgi ibcco  ovqlp lk	3cd2997191186dca50d98390ed2be1373ea772a2a9372f0be	052882f4bb1e4b7a3bd4e748c2f5d45ae1926be068ea318f5
+babel29	40	sieve	emmnjvdsuqhjosqdcbc,ljiztv uckghux,w,xqy	0f0bc22f3c7ab4a774f44397963fc4edde1060ec9a8528a07	0422074ecb23b345f2c4b4114507a005ad8ad7e423b671789
+babel29	40	alt-key	                                        	0000000000000000000000000000000000000000000000000	019a0e5760d6d92295a3cb062a0d816dac9f3329516c3adf2
+babel29	40	alt-key	........................................	4fd9df9dbf7e28ed5357ba4a062c19c48e628f6af73b06120	06f0fe0e5d3ede8064bc54b7216cb1d72468db1a455d7e37c
+babel29	40	alt-key	.shwprlf x u z,mdpt rfktsk,pckprkeqepayw	4eee319eec52d577b18e1e5dc0e66d98080a41da033eda638	171633f1e2aa558ae92bd97b1fb17b7700916336a0b1bad02
+babel29	40	alt-key	fjomcgwcntnnpvulnfiks,ymnq v. kozes.no,b	11855eebfbd0e48c757a570f30702f7ce92cdd1a6a89cc6f4	4a9e0824df1af2d4382304b4ae3f8752203e9223a8ad00b1b
+babel29	40	alt-key	dqdzhcxmclgooonsgtc,xnuoi,xbxup j ,pidaq	0ca4e4c42bed3895a01a8c17cc9e11aa82c74444472a685d1	2c57b6a2f1c677405b2182d73dfc6bea447ed880330e8046b
+babel29	40	alt-key	dadijgooonjfqnzvvvlpkylfgjlnbennzj zskea	0b1f7f9509a0127cef3b2ee83f36fc2f752654b3ac14d65ff	1e732b656c8f5bcbb53b681fe6f62942723f0fbb6a1803e15
+ascii95	1	sieve	 	00	5b
+ascii95	1	sieve	~	5e	5a
+ascii95	1	sieve	>	1e	1a
+ascii95	1	sieve	9	19	15
+ascii95	1	sieve	M	2d	29
+ascii95	1	sieve	@	20	1c
+ascii95	1	alt-key	 	00	1a
+ascii95	1	alt-key	~	5e	19
+ascii95	1	alt-key	?	1f	39
+ascii95	1	alt-key	H	28	42
+ascii95	1	alt-key	p	50	0b
+ascii95	1	alt-key	/	0f	29
+ascii95	8	sieve	        	00000000000000	0d07faf1f41651
+ascii95	8	sieve	~~~~~~~~	1791c60f6fed00	1741ed1aca22ad
+ascii95	8	sieve	s.f{d>Op	14a178da16c88b	102bf998cd657f
+ascii95	8	sieve	jCfG#{Rj	1273e3273d5a4a	05bca5be7f75a2
+ascii95	8	sieve	"<-I&E0}	0091d75156b6c2	1310b726f8d5ba
+ascii95	8	sieve	c$-RRA5/	10a22af1ee236f	06a91fc088bb6b
+ascii95	8	alt-key	        	00000000000000	01c7d6d9d987e6
+ascii95	8	alt-key	~~~~~~~~	1791c60f6fed00	06d86f5eb5311f
+ascii95	8	alt-key	q y2HMVd	141936b379477b	032c1f651b3cf8
+ascii95	8	alt-key	#%066YX&	00c1ff4db4f899	0f8202535730d7
+ascii95	8	alt-key	g{N)(@7V	11da9d8ec00026	0d83b4ffa13a2f
+ascii95	8	alt-key	aNDN}><2	103f61d4a6ddee	16ba735faaae12
+ascii95	64	sieve	                                                                	0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000	0c52e3b83d3826b932d4baec2a7140f970b082b17bb93ae452df4366fd3156e0c9f6a7535f1317e0ae50b03a7a820f0fbd69724420
+ascii95	64	sieve	~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	162c64c7fd25f588f8d18dcf73092f829e45c07ce454e495458bbe99f7932460e27187333a99e3ec7cefae13fc018c7c50bafb6800	0c4768d00079a2a3fe79c61e587c803f162c1c48ef8de226ce391ca96a4a712d523753fbdb5967b129ae474b7a7bc9cab5104ee94a
+ascii95	64	sieve	&r_]/4hV.B.UCE3}GB>B(3A4OW(/M3]up[K(9ZD>\H9O~,gByrZ}3$@;g1aW[FS.	019a8163bee13dccc08bd79a87ac93ba5375f5e6117e64892d5bc5124f79065279167eff4b5bc902f8ca91ab19efc854d7f90c8f6a	0d4ee87b5792dd69fd0569166a0476ceb008c46c354be62e961ba0108c89927cd17af7662ca584c579cb01e234a20ce6d0a5a66de6
+ascii95	64	sieve	Y@<`lcG,|+uFH4}f .6i7x64<PH+'W8c<`>Xc'MC`00\'<5GY@A<gK/2z%Qu5}V;	0d6227262e47260986e8e4f976d10b666e3cbb31ff5161ae57c015c6bca53160f0c0fa0f9a01fec8d7add1c87e840cb14b25b2b3ae	04b108ac23781bf5e31d857d5b21fb34721a082b5fb5abb3920f0c794ac66246d6cb590d7a6467300d0a27eeb7c4f6a1d906b4b8f4
+ascii95	64	sieve	1O%i7U1+~C&@>YtLZezfIqK~0fcK1E9t`^y`ms+9>E < r9QU'c"P.^u4H.G-.dJ	0415600ca8d79baa082fed5d2845351c8684e4f3e1926a1a93c291a35dbc50dd9585f3cd7874da9c6939c1fcc1713d7e86a29eebab	04683c8dd0ad917f49289d30685b7e0bc17a25690ab8d6989c8c7eba7f28284ebf3b69b604e14baf2d96c6932e82306103239f6b67
+ascii95	64	sieve	 IK+ &w;?S-r>nLQ^k"R\IYa.BE$'Q"dRYTl8LkM)B~]A6e[_i&"n%^*TG-MSRnX	001a12acdbf43647d37952b4d77094e85b2a6b3e1249523ba028f7374e1f97ac40fc65104a9ad8d1c3bd17b7c3d722951bd971f3ef	0f539324e7b67a438a947c04b35bdac63ff26f4156fd0f6465f5afd67994d31bb88af408a628aa5d4f0445ddbafaf4141fa6f85b3e
+ascii95	64	alt-key	                                                                	0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000	049410e0aaed61710f22c5d87c49b9c25fda9dd11a828374a4aa8386f98e3c1f1db05cf53164524703667bd97b23675159233c3142
+ascii95	64	alt-key	~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	162c64c7fd25f588f8d18dcf73092f829e45c07ce454e495458bbe99f7932460e27187333a99e3ec7cefae13fc018c7c50bafb6800	0b89112cfcc3df4f0b7aac13e98b3530aa3bbe3687b52de10d657bad74597389cc19e1126a7e3405835e79b1d7d2047ed4839adca2
+ascii95	64	alt-key	#B*da@2S,9,}.;9G-`]wX`Ja+5dBRa2F\SB6IUtX,d=@(9U!LLi5N3ymq:H*>qZ'	00c8b5d513d283b339c3ea5705bedd7b6bbdf2e1dbfae3069fc483511d5d5f8822dc951e88cc5a0168e89a25abcefc53eb30f2ebcc	0c098633d907125ede4d49fc11df1347e8bb02a29b1dc46ab8fc20fea6ddc1e9bfd38d73fd1e65bbb49b13930c8d5aba99e09fbb13
+ascii95	64	alt-key	!x_6:#~M`:y(".P|"0UAfQ%5p~Ra2w!}B>Uc9;A|&zzB8Bd)<(kvaHf^&=^'*,cX	007384d8fded55ab8107f8172747c7f7e44cf5d5b2afa6e52ae40654ea4f5f4a83ecefd5a9ef2df18c1a2af12d7dd5b636cdd05c79	10702d0b09e54718af16e09fe4c64cb6214f5adcbe075d1471c973b0e5e65bbb44732d648e60e1af92f1baa568dff54f7a8dad864d
+ascii95	64	alt-key	afO7kS$m\t<&JOX0_lO'KZGQZbBI)_KptE7JO=riMJUq/[}4|*Lh-32`7@&`Q{7D	0f583045c8f7cef5f538fec4f3fd79b1f278841d7c417141703053ac85f67008952b7cba7b08a25c59a26e07b31c999fa150f2f782	10ffe6247dc147b799b3ab83051de3c7714a8e46c06e53c95ff6241e0e79eaa62c2194edb588bc7f141c8f1224c131b6da420bae0a
+ascii95	64	alt-key	zuw7"6zVg_f(4$X!v!&H=60]?gA_F,;}FF%]/:J75MrmuKAt`Z~_[nBXpP hJ}l[	1537acf3e7317da3bfcc69b574b7d22933af1becd0a267fc192fc9512c43268d539e09a5ee0821fcc5f2d2549b42b940cfaf446259	0a972b486c88a13e43079b5aea3a8a43c86048985030289521f0e241f2c59e6352cb0a3b7530f3506db99b8fdac675337e84132ce3
+lower27	32	sieve	it was the best of times        	066f1b1b557137f7d30eb550279691c9d306f86	007b30165818bf0311497600aa52996f9395e27
+lower27	1000	sieve	it was the best of times                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                	2ab82afdf32df688d405acc4fdb8e0fb8f5a96afc37112b1c500cf2aedbd0ffed0f6916bf7340c23fcdba65693f58004a2f96fb23c572f5997520e8002edf05dd3c7bb86d21ac0bda92476682617ddc3fc10dda9f5fa3860e38182f421cddf565f7f27e5e749b873374766f360e81f68a2e7654bdf270a2273a1d34c12889600069270089565a13e1fa59109282c87f87cd7e5afbccb83b51158cd85a2047b2b9ff5ce66656b39b76642dabadb3514a6db36c43bf03587fc4df683d3dee2d2a331d24a5ed9939dce44d84c45b3a609773b7056f81797984e313d2d0adbfa12414069de750ca5e20d73363dfad009fbcce85951bc0b0788ebc2de7540dfbf43301b4a6add6a9c482d2406be0b3c3f378b88425cd2d08ec9398217e16f9c7db596878b1ded4d6bb8322e5145c71af93c6b8fbad690dde911b74125db63e37c7a3f80a754d59ab238b0eee93f335b4455bad4d14480e64a806986371ddf76a1d6985988fa8da6c616aca47b1b9d7242234836a168eabe22ea6fc1d32a9e0b2125dedab1fd8c38416c8894767de95affc6741733c9009ba2620f5778a5c5f81ca4cef20b69a4e1b704099fb6608bcf2806d0480879ca6ed0d58751ca64251a409a388f5c1bae78b219bfa1de4858e043b62f4c1f5ae13176191414ff065ee567969d13e5d7c609e36f4e325cf3bd1eeabcd3e86fc0714ecabd017c37e593be99b35c71b3e335ff86e64454410143e3429c497c3f1dca414e116bb2d1d4e2f1260643500bdbfb976083b0066b0c4c8b421ccb98995242c37f609e5b8c612ddee7286a2699279cfcc962e8fc3789b3a5b1aed806ac6	21402f167bfdb32e4fa99ad9673197f9c1cb82623ff6bbe42acaa80739b331aeb947fd42cf6d4fd137022f6589cd7bee7225e647ae7860e33c19f223393e2374495c945c59653999e73d87b031062dd75e1ad9de2fb7e91a852b4109c8ffca98830947f7c714afe1673822f64faa0a961245ab6eec032a41f85d957f913a768570262564db83dc40c6974ed2ae18453bb362cc6fbc9d08635a4e22298cfd40e0ba318fe202dc4c9119b477fcb7c68b1aaabca859ea97992123f5616728cf53267a3ecbe94d7bf6bcf3b5d1c12f54aaabab8b2819a236141814f48680b9b55c12170571886e9d307d1c0e418c372f0b0d72dfeacbde265658e24678af43ee27f6071a9f0d07e11f48d89e2190f14b2aa2d0ac3a64f253f6e0fdb5d46604c4786b45ceba4cd902c2c4f146d73a66837c147afae0f88c3f53e59f3d2ffdce8704fd26aaaeac650e6973b6442fa8c45bb33c3e7e35fb9ca06ad99b09545fe40e9949f8518555ed254e790a48c2d315db4bcd657ef7cc907050d1fd9165656ec556a648426f2238a92a424bdc5efcfeaae25373b1344e7164b76a67a62854eb9720c8233c11a87eeb524fc88a165f4201647402a4010d26d1c9a8b90b5d9526ad4ff520f854bfa2fcd3ba39dbd22088a74ba73026f5d837b218f9e006f1af1779cc2d3f393fb7b4b7b5f9c35e9ccbce4d6087007ced4cc9a796bfc94bd3fa81fbd58a71dfc5e4aa17f4c141eef4f02925035626e98e97013d1282189863cb3344d23b1b958c9960316ee659d7ae090b0d6e9830b0a09a4a39821ce87d93413b527b1d7a76a85704b0b9ed6060597e5f0e37b876634
+lower27	32	sieve	the library of babel            	0d68be4626793581fa270e3bd0aa77e1c40e0fd	09689be00e5fadf626cad5ca59b0449282aa9ba
+lower27	1000	sieve	the library of babel                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    	59082219cea77e2394fff49497d82229b35be33998b5f0a23abf722103305c794cdc359d61277fb6cfd4e3577ec0c157ce2aa55079569666cec59c838faada46a0bf36db97ce0b1a11cf6a56e3212d41db99c567c8aa46ee1139397ce3b332fbd6ce214503d5b8295ea51436c89cde9c5f2950a6e82816eab14204ed5b22ea09f6964496510472885ba3521f4aa29291cf78cbe24d1eaed2f93bfe2c9ec8bbea00366be3c37cc9cfa7b535f72a12924d6ddaaf7828d7bdb790cb1a15e794983be4cc699aa4c882af25be47cf3ce02cfcf43e7a1c70ee983133aba4e1b64d1463e12760d8fae94b56cca51c9a61b2058dcdaa00a04fc36d558922031292bdc7a43ce916e35ab089edb9d5ad1eac8c67d2d0b5a7c82d85d5e087ea3316656f9f7481cd7daa349fb1e97bb8afc91199591b2db5cb6e2ebb957b91544e67e91f1bc6c9ee9ab32eeda4d096249e1f80f916616e45220df798f7c9b96bd2d8266d67ce468c1899a3ef78164527cdff535faa53068f99de21e30c64ebf211a48dda8b2bdc8cfcc17787ce2551829ac5651cdf984c5db05580c2e1fe1b3079bd4fad2218e07c30c75f8b12d3a11fc6d51382cef5886f6636a6bd73c9f54e555fcce463569ae2332e19a30fe1a2563b1be90743e7225dabf861122e863a773cbeb21fc539c70168aad1f53dbb2ea7aee8cb793485836f23e8e69b2e3f5c54509867bb2c797cf5e91304b81988e02f7fe09548bfd553547685a5e7aee660211e3b70463617697ba2a5d2fd1948cea7f995968e47c43ad3ad3c4caa32250737109f7e527bead8695195e030811cb88a04134997543834b5d	173bc07d142661e8ede855260380f637b8aff1fa1131a1c7ce8af4806ea1f726abebb31e2b7a18e9a80247f4c5d5a7b2ea6293620c167682518dab872ee05a08694ed29064cb46c319ad7b971cfe152a9092c31ade6a7cf7560060977a8a81769e75879565ad7674792e7a8f12cea5fa031389cc4c1be6efb1374359d4c2206604895d5e7cf6497fb60fa96db97754f9c4411f3fb90651e32a3b8dbdf238d7cf60a32dde385cd3faf684e0e57ea44b1abc75c3de5f7da490235424f6e33c2a8bfc240fbf280c0fd187e7b9965daaeb1e40b3a84d62ad778bf95181f1487c93fe1a10c545c085b8eef0c5be448c8ebd3a5eba726ded5ede3129842b33183cc1ea4d46eec72bbd8459b5f8064679795e4357fb416858531fb73ac2754ff4a79cd5002a968dfb413537eb44115ee553ffde23a357859b162f95a98fdc1829ebe9ee91d3953e2b629b0b974b11cb2118e4720e06da99727a4d77a6693010ec5c1b35bb66cc7f655b0626cc93f152bcd9c10364473d0074d8b9744ca2d0659fd7fe6ddbec3083fb960020bd14380d439e3c47719dfd8522bcce24f30424d051912d7cbe6802893d258cca4f4bbbdc48a7c5fdd143f1d5b4d543c312925dfad98fa400346ad714bf399d9a5e6c3ecd0d1f23a7bdd6438ab9b3f5e95d47c3c42ecd08cef6783548aecfe2e365425fddcfa9c49fef7dbc247de4a62df78c3d87afbc972b95c682e392686747f96e594d512f1b9bf93266cc5e9197980119f9068b09357283dda1c62af79a2424ee79828cf77f35767cad8a65f5f3267f12b0b01882d13f0034b2b89cb63e8221bdf6fdc51af43e68835
