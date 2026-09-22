@@ -42,6 +42,8 @@ help.resolution = The window size. The list holds your display's modes; it was s
 help.fullscreen = Fill the screen at the chosen resolution.
 help.edge_glow = A soft glow along the edges of the wireframe geometry.\nTurning it on turns Real Graphics off. Off by default, to keep Sieve light.
 help.real_graphics = Draw the corridor with real models instead of wireframe.\nTurning it on turns Geometry Edge Glow off. Off by default, to keep Sieve light.
+item.fps_counter = FPS Counter
+help.fps_counter = Frames per second in the top right corner of the hallway: the average over the last half\nsecond, its slowest frame and, with Real Graphics, how many triangles each frame draws.
 
 ; ---- controls
 screen.controls = SETTINGS > CONTROLS
@@ -229,3 +231,5 @@ msg.door = through the door into the {0} line, at the same corridor tile {1}
 msg.playing = playing
 msg.home = corridor tile 0: the start line of every line
 msg.holding = you stand still while holding a book: put it back first (E, a click or Esc)
+hud.fps = FPS {0}   {1} ms   slowest {2} ms
+hud.fps.triangles = {0} triangles

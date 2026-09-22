@@ -124,6 +124,7 @@ AppSettings AppSettings::load(const fs::path& path)
             else if (key == "fullscreen") s.fullscreen = on_off(value, false);
             else if (key == "edge_glow") s.edge_glow = on_off(value, false);
             else if (key == "real_graphics") s.real_graphics = on_off(value, false);
+            else if (key == "fps_counter") s.fps_counter = on_off(value, false);
         }
         else if (section == "controls")
         {
@@ -148,6 +149,7 @@ bool AppSettings::save(const fs::path& path) const
       << "fullscreen = " << on_off(fullscreen) << "\n"
       << "edge_glow = " << on_off(edge_glow) << "       ; Geometry Edge Glow\n"
       << "real_graphics = " << on_off(real_graphics) << "   ; Real Graphics (only one of the two is on)\n"
+      << "fps_counter = " << on_off(fps_counter) << "\n"
       << "\n[controls]\n"
       << "mouse_sensitivity = " << mouse_sensitivity << "   ; percent\n"
       << "invert_mouse_y = " << on_off(invert_mouse_y) << "\n"

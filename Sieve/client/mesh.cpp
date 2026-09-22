@@ -150,41 +150,68 @@ fs::path mesh_folder()
     return folders.front();
 }
 
-std::shared_ptr<const Mesh> load_model(const std::string& model, const std::string& medium, float max_edge)
+std::shared_ptr<const Mesh> load_model(const std::string& model, const std::string& medium)
 {
     const fs::path folder = mesh_folder();
     auto m = load_obj(folder / (model + "-" + medium + ".obj"));
     if (!m) m = load_obj(folder / "templates" / (model + ".obj"));
-    if (!m || max_edge <= 0) return m;
-    // Split every triangle at the midpoint of its longest edge until no edge is longer than max_edge.
-    auto split = std::make_shared<Mesh>(*m);
-    split->tris.clear();
-    std::vector<MeshTri> todo = m->tris;
-    while (!todo.empty())
+    return m;
+}
+
+std::shared_ptr<const Mesh> slice_z(const Mesh& mesh, float pitch)
+{
+    auto out = std::make_shared<Mesh>(mesh);
+    out->tris.clear();
+    std::vector<Vec3> poly, next;
+    for (const MeshTri& t : mesh.tris)
     {
-        MeshTri t = todo.back();
-        todo.pop_back();
-        int longest = 0;
-        float best = 0;
-        for (int i = 0; i < 3; ++i)
+        const float zmin = std::min({t.p[0].z, t.p[1].z, t.p[2].z}), zmax = std::max({t.p[0].z, t.p[1].z, t.p[2].z});
+        const int k0 = int(std::floor(zmin / pitch + 1e-4f)), k1 = int(std::floor(zmax / pitch - 1e-4f));
+        if (k0 >= k1 || k1 - k0 > 4096)
         {
-            const Vec3 e = t.p[(i + 1) % 3] - t.p[i];
-            if (dot(e, e) > best) { best = dot(e, e); longest = i; }
-        }
-        if (best <= max_edge * max_edge || split->tris.size() + todo.size() > 200000)
-        {
-            split->tris.push_back(t);
+            out->tris.push_back(t); // within one slab
             continue;
         }
-        const Vec3 a = t.p[longest], b = t.p[(longest + 1) % 3], c = t.p[(longest + 2) % 3];
-        const Vec3 mid = (a + b) * 0.5f;
-        MeshTri t1 = t, t2 = t;
-        t1.p[0] = a, t1.p[1] = mid, t1.p[2] = c;
-        t2.p[0] = mid, t2.p[1] = b, t2.p[2] = c;
-        todo.push_back(t1);
-        todo.push_back(t2);
+        for (int k = k0; k <= k1; ++k)
+        {
+            // Clip the triangle to the slab lo <= z <= hi (two half-planes), then fan it.
+            const float lo = float(k) * pitch, hi = float(k + 1) * pitch;
+            poly.assign(t.p, t.p + 3);
+            for (int side = 0; side < 2 && poly.size() >= 3; ++side)
+            {
+                next.clear();
+                auto inside = [&](const Vec3& p) { return side == 0 ? p.z >= lo : p.z <= hi; };
+                const float plane = side == 0 ? lo : hi;
+                for (size_t i = 0; i < poly.size(); ++i)
+                {
+                    const Vec3 a = poly[i], b = poly[(i + 1) % poly.size()];
+                    if (inside(a)) next.push_back(a);
+                    if (inside(a) != inside(b)) next.push_back(a + (b - a) * ((plane - a.z) / (b.z - a.z)));
+                }
+                poly.swap(next);
+            }
+            for (size_t i = 1; i + 1 < poly.size(); ++i)
+            {
+                MeshTri piece = t;
+                piece.p[0] = poly[0];
+                piece.p[1] = poly[i];
+                piece.p[2] = poly[i + 1];
+                const Vec3 c = cross(piece.p[1] - piece.p[0], piece.p[2] - piece.p[0]);
+                if (dot(c, c) > 1e-12f) out->tris.push_back(piece);
+            }
+        }
     }
-    return split;
+    return out;
+}
+
+std::shared_ptr<const Mesh> facing_x(const Mesh& mesh)
+{
+    auto out = std::make_shared<Mesh>(mesh);
+    out->tris.clear();
+    for (const MeshTri& t : mesh.tris)
+        if (t.n.x > 0.3f || t.n.y > 0.7f) out->tris.push_back(t);
+    if (out->tris.empty()) out->tris = mesh.tris;
+    return out;
 }
 
 void MeshBatch::begin(const Camera& cam, SDL_Color background, int width, int height)
@@ -260,10 +287,12 @@ void MeshBatch::add(const Mesh& mesh, const Placement& at)
 
 void MeshBatch::draw(SDL_Renderer* r)
 {
-    std::sort(tris_.begin(), tris_.end(), [](const Tri& a, const Tri& b) { return a.depth > b.depth; });
-    verts_.clear();
-    verts_.reserve(tris_.size() * 3);
-    for (const Tri& t : tris_) verts_.insert(verts_.end(), t.v, t.v + 3);
+    order_.resize(tris_.size());
+    for (uint32_t i = 0; i < uint32_t(tris_.size()); ++i) order_[i] = {tris_[i].depth, i};
+    std::sort(order_.begin(), order_.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+    verts_.resize(tris_.size() * 3);
+    for (size_t i = 0; i < order_.size(); ++i) std::copy(tris_[order_[i].second].v, tris_[order_[i].second].v + 3, verts_.begin() + std::ptrdiff_t(i * 3));
+    drawn_ = tris_.size();
     if (!verts_.empty()) SDL_RenderGeometry(r, nullptr, verts_.data(), int(verts_.size()), nullptr, 0);
 }
 

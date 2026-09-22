@@ -235,6 +235,9 @@ public:
     {
         bool loaded = false;
         std::shared_ptr<const Mesh> hallway, bookshelf, book, marker;
+        // Near the camera the bookcase is cut into one slab per slot so it sorts against the books;
+        // further away the whole case and just the books' spines and tops are enough.
+        std::shared_ptr<const Mesh> bookshelf_near, book_far;
     };
 
     Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> lines, const FilterConfig& filters, uint32_t book_pages)
@@ -1094,6 +1097,7 @@ public:
             visible[t + kBack] = cam_.box_visible(tile_lo_ + shift, tile_hi_ + shift);
         }
         // Real Graphics: the line's models, where it has them; the rest stays wireframe.
+        fps_tris_ = 0;
         const Models* md = real_graphics_ ? &models() : nullptr;
         const bool real_hall = md && md->hallway, real_cases = md && md->bookshelf, real_books = md && md->book,
                    real_marker = md && md->marker;
@@ -1193,8 +1197,10 @@ public:
         {
             const std::string medium = media_name(media());
             m.hallway = load_model("hallway", medium);
-            m.bookshelf = load_model("bookshelf", medium, 0.25f); // split so books and boards sort well
-            m.book = load_model("book", medium, 0.5f);
+            m.bookshelf = load_model("bookshelf", medium);
+            m.book = load_model("book", medium);
+            if (m.bookshelf) m.bookshelf_near = slice_z(*m.bookshelf, kBookPitch);
+            if (m.book) m.book_far = facing_x(*m.book);
             m.marker = load_model("marker", medium);
             m.loaded = true;
             std::cerr << "real graphics for the " << medium << " line:";
@@ -1225,12 +1231,16 @@ public:
                 marker_batch_.add(*md.marker, {{0, 0, z0}});
                 if (all_start(t)) marker_batch_.add(*md.marker, {{0, 0, z0 + 1.0f}}); // every line starts here
             }
+            // Tiles more than one away from the camera's are far enough for the simpler models.
+            const bool near = t >= -1 && t <= 1;
             if (md.bookshelf)
             {
-                thing_batch_.add(*md.bookshelf, {{0, 0, z0}});
-                thing_batch_.add(*md.bookshelf, {{0, 0, z0}, 1.0f, true});
+                const Mesh& shelf = near ? *md.bookshelf_near : *md.bookshelf;
+                thing_batch_.add(shelf, {{0, 0, z0}});
+                thing_batch_.add(shelf, {{0, 0, z0}, 1.0f, true});
             }
             if (!md.book) continue;
+            const Mesh& book_mesh = near ? *md.book : *md.book_far;
             const uint32_t books = books_in_tile(t);
             for (uint32_t k = 0; k < books; ++k)
             {
@@ -1252,12 +1262,13 @@ public:
                     continue;
                 // Records and tapes keep their size; pages, pictures and books take the slot's height.
                 const float scale = varied ? book_height(b.row, b.col, true) / kUniformBookHeight : 1.0f;
-                thing_batch_.add(*md.book, {{sx * kCaseFront, y0, zc}, scale, right, dim});
+                thing_batch_.add(book_mesh, {{sx * kCaseFront, y0, zc}, scale, right, dim});
             }
         }
         hall_batch_.draw(r_);
         marker_batch_.draw(r_);
         thing_batch_.draw(r_);
+        fps_tris_ = hall_batch_.drawn() + marker_batch_.drawn() + thing_batch_.drawn();
     }
 
     // Geometry Edge Glow: under each edge, a soft band in the edge's colour that fades to nothing
@@ -1406,6 +1417,37 @@ public:
         const Theme& th = theme();
         const SDL_Color ink = th.edge;
         const float W = float(w), H = float(h);
+
+        // FPS counter: the average over the last half second, and its slowest frame.
+        if (fps_counter_)
+        {
+            const Uint64 now = SDL_GetTicksNS();
+            if (fps_last_)
+            {
+                ++fps_frames_;
+                fps_worst_now_ = std::max(fps_worst_now_, double(now - fps_last_) / 1e6);
+            }
+            else fps_since_ = now;
+            fps_last_ = now;
+            if (now - fps_since_ >= 500000000ull && fps_frames_ > 0)
+            {
+                fps_ms_ = double(now - fps_since_) / 1e6 / fps_frames_;
+                fps_shown_ = 1000.0 / fps_ms_;
+                fps_worst_ = fps_worst_now_;
+                fps_frames_ = 0;
+                fps_worst_now_ = 0;
+                fps_since_ = now;
+            }
+            char a[32], b[32], c[32];
+            std::snprintf(a, sizeof a, "%.0f", fps_shown_);
+            std::snprintf(b, sizeof b, "%.1f", fps_ms_);
+            std::snprintf(c, sizeof c, "%.1f", fps_worst_);
+            std::string line = trf("hud.fps", {a, b, c});
+            if (fps_tris_) line += "   " + trf("hud.fps.triangles", {std::to_string(fps_tris_)});
+            const float tw = text_width(line, 1);
+            panel(W - tw - 22, 48, tw + 16, 18);
+            text(W - tw - 14, 53, line, 1, ink);
+        }
 
         // Crosshair.
         SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 255);
@@ -1602,6 +1644,7 @@ public:
         look_ = 0.0025f * float(sensitivity_percent) / 100.0f;
         invert_y_ = invert_y;
     }
+    void set_fps_counter(bool on) { fps_counter_ = on; }
     void set_graphics(bool edge_glow, bool real_graphics)
     {
         edge_glow_ = edge_glow;
@@ -1713,6 +1756,12 @@ private:
     float look_ = 0.0025f; // radians per pixel of mouse movement
     bool invert_y_ = false;
     bool edge_glow_ = false, real_graphics_ = false;
+    // FPS counter: frames and time since the shown figures were last updated (twice a second).
+    bool fps_counter_ = false;
+    Uint64 fps_since_ = 0, fps_last_ = 0;
+    int fps_frames_ = 0;
+    double fps_shown_ = 0, fps_ms_ = 0, fps_worst_ = 0, fps_worst_now_ = 0;
+    size_t fps_tris_ = 0;
     FilterStack stacks_[kLines]; // the books line's are in book_stacks_
     BookStacks book_stacks_;
     std::unique_ptr<BookSieve> book_sieve_; // null if the books' filters failed to build
@@ -1768,7 +1817,9 @@ const char* kUsage =
     "  --walk DX,DZ;...    walk these distances in metres first (doors work as when walking)\n"
     "  --press K,K,...     then press these keys (e.g. M,M,-,Shift+=), printing where you are\n"
     "  --edge-glow         draw with Geometry Edge Glow (or --settings a file that has it on)\n"
-    "  --real-graphics     draw with Real Graphics: the models in the meshes folder\n\n"
+    "  --real-graphics     draw with Real Graphics: the models in the meshes folder\n"
+    "  --fps-counter       show the FPS counter\n"
+    "  --bench N           before the screenshot, time N frames and print the frame rate\n\n"
     "Controls: WASD move, mouse look, Shift run, E or click take a book, T warp, G go to,\n"
     "M switch ordering (positional, scrambled, guided), - and = zoom out/in (guided; Shift: 8x),\n"
     "wheel/PgUp/PgDn/[ ] jump 1/1000/1000000 tiles, Home to corridor tile 0 (every line's start line),\n"
@@ -1988,6 +2039,23 @@ int run(const Args& a)
     {
         auto hall = make_hallway(window, renderer, a, true, filters);
         hall->set_graphics(app.edge_glow || a.has("edge-glow"), app.real_graphics || a.has("real-graphics"));
+        hall->set_fps_counter(app.fps_counter || a.has("fps-counter"));
+        if (a.has("bench"))
+        {
+            // Frame timing: render N frames (turning slowly, so nothing is cached between them).
+            const uint32_t n = a.get_positive("bench", 60);
+            hall->render();
+            const Uint64 t0 = SDL_GetTicksNS();
+            for (uint32_t i = 0; i < n; ++i)
+            {
+                hall->camera().yaw += 0.002f;
+                hall->render();
+                SDL_RenderPresent(renderer); // includes drawing the batched geometry
+            }
+            const double ms = double(SDL_GetTicksNS() - t0) / 1e6 / n;
+            std::cout << "bench: " << n << " frames, " << ms << " ms per frame (" << 1000.0 / ms << " fps), renderer "
+                      << SDL_GetRendererName(renderer) << "\n";
+        }
         hall->render(); // computes what you are looking at
         if (a.has("take")) hall->take_hovered();
         hall->render();
@@ -2029,6 +2097,7 @@ int run(const Args& a)
         auto hall = make_hallway(window, renderer, ha, first, filters);
         hall->set_controls(app.mouse_sensitivity, app.invert_mouse_y);
         hall->set_graphics(app.edge_glow, app.real_graphics);
+        hall->set_fps_counter(app.fps_counter);
         first = false;
         SDL_SetWindowRelativeMouseMode(window, true);
         bool quit = false;

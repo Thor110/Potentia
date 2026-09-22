@@ -26,7 +26,7 @@ inline uint64_t parse_whole(const std::string& v, const std::string& what, uint6
 // Options that are switches (take no value).
 inline bool is_flag(const std::string& key)
 {
-    return key == "short" || key == "help" || key == "take" || key == "menu" || key == "main-menu" || key == "edge-glow" || key == "real-graphics" || key == "no-menu" || key == "compact";
+    return key == "short" || key == "help" || key == "take" || key == "menu" || key == "main-menu" || key == "edge-glow" || key == "real-graphics" || key == "fps-counter" || key == "no-menu" || key == "compact";
 }
 
 struct Args

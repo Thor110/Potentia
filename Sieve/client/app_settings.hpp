@@ -7,6 +7,7 @@
 //   fullscreen = off
 //   edge_glow = off             ; Geometry Edge Glow
 //   real_graphics = off         ; Real Graphics (at most one of these two is on)
+//   fps_counter = off           ; frames per second, top right of the hallway
 //   [controls]
 //   mouse_sensitivity = 100     ; percent
 //   invert_mouse_y = off
@@ -47,6 +48,7 @@ struct AppSettings
     bool fullscreen = false;
     bool edge_glow = false;      // Geometry Edge Glow
     bool real_graphics = false;  // Real Graphics
+    bool fps_counter = false;    // show frames per second in the hallway
     int mouse_sensitivity = 100; // percent, 10..400
     bool invert_mouse_y = false;
     std::string language = "en";

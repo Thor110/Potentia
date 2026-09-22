@@ -188,6 +188,7 @@ jobs:
           # Real Graphics: every line loads the templates (no per-line models are committed yet).
           out=$($H --line audio --real-graphics --walk "0,0" --screenshot real.png 2>&1)
           echo "$out" | grep -q "real graphics for the audio line: hallway=hallway.obj bookshelf=bookshelf.obj book=book.obj marker=marker.obj"
+          $H --real-graphics --fps-counter --bench 5 --walk "0,0" --screenshot fps.png | grep -q "^bench: 5 frames"
           $H --main-menu --press "Down,Return,Return,Return" --screenshot main-res.png | grep -q "saved"
           $H --main-menu --settings app.ini --press "Down,Return,Return,Down,Down,Return,Down,Return" --screenshot main-gfx.png > /dev/null
           grep -q "^edge_glow = off" app.ini && grep -q "^real_graphics = on" app.ini

@@ -44,9 +44,16 @@ struct Mesh
 std::shared_ptr<const Mesh> load_obj(const std::filesystem::path& path);
 
 // The model for a line: <model>-<medium>.obj, else the template, else null (stays wireframe).
-// Triangles longer than `max_edge` metres are split, so that sorting them far to near works for
-// models whose parts overlap on screen (a long shelf board and the books standing on it).
-std::shared_ptr<const Mesh> load_model(const std::string& model, const std::string& medium, float max_edge = 0);
+std::shared_ptr<const Mesh> load_model(const std::string& model, const std::string& medium);
+
+// The mesh cut into slabs `pitch` metres long along Z (at z = k * pitch), so that sorting far to
+// near works where parts overlap on screen: a 6 m shelf board sorts slot by slot against the
+// books standing on it. Only faces that cross a slab boundary are cut, and only there.
+std::shared_ptr<const Mesh> slice_z(const Mesh& mesh, float pitch);
+
+// A cheap stand-in for a distant copy: only the faces turned towards +X (a book's spine, the
+// side you see from the corridor, for the left wall) and up (its top).
+std::shared_ptr<const Mesh> facing_x(const Mesh& mesh);
 std::filesystem::path mesh_folder();
 
 // Where and how one copy of a mesh is drawn: scaled in Y, mirrored in X or not, then moved.
@@ -68,6 +75,7 @@ public:
     void add(const Mesh& mesh, const Placement& at);
     void draw(SDL_Renderer* r);
     size_t triangles() const { return tris_.size(); }
+    size_t drawn() const { return drawn_; } // triangles in the last draw
 
 private:
     struct Tri
@@ -80,7 +88,9 @@ private:
     SDL_FColor bg_{};
     float w_ = 1, h_ = 1;
     std::vector<Tri> tris_;
+    std::vector<std::pair<float, uint32_t>> order_; // depth, index: sorting these is cheaper than the triangles
     std::vector<SDL_Vertex> verts_;
+    size_t drawn_ = 0;
 };
 
 } // namespace hallway
