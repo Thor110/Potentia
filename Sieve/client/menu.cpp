@@ -2,7 +2,12 @@
 
 #include "theme.hpp"
 
+#include "cli/dictionaries.hpp"
+#include "cli/models.hpp"
+
 #include "sieve/alphabet.hpp"
+#include "sieve/audio.hpp"
+#include "sieve/filter.hpp"
 #include "sieve/corridor.hpp"
 #include "sieve/image.hpp"
 
@@ -140,7 +145,10 @@ bool Menu::too_large() const
     return false;
 }
 
-Menu::Menu(SDL_Window* window, SDL_Renderer* renderer, Settings settings) : window_(window), r_(renderer), s_(std::move(settings)) {}
+Menu::Menu(SDL_Window* window, SDL_Renderer* renderer, Settings settings, sieve::cli::FilterConfig filters, std::string filters_path)
+    : window_(window), r_(renderer), s_(std::move(settings)), cfg_(std::move(filters)), cfg_path_(std::move(filters_path))
+{
+}
 
 int Menu::row_count() const { return 16; }
 
@@ -188,6 +196,36 @@ void Menu::press(SDL_Keycode key, SDL_Keymod mod)
 void Menu::handle(const SDL_Event& e, bool& done, Result& result)
 {
     if (e.type == SDL_EVENT_QUIT) { done = true; result = Result::Quit; return; }
+    auto inside = [](const SDL_FRect& r, float x, float y) { return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h; };
+    if (e.type == SDL_EVENT_MOUSE_WHEEL && overlay_ >= 0)
+    {
+        oscroll_ = std::max(0, oscroll_ - int(e.wheel.y));
+        orow_ = std::max(orow_, oscroll_);
+        return;
+    }
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
+    {
+        const float mx = e.button.x, my = e.button.y;
+        if (overlay_ >= 0)
+        {
+            if (!inside(box_, mx, my)) { save_filters(); overlay_ = -1; return; }
+            for (const auto& [r, i] : row_rects_)
+                if (inside(r, mx, my))
+                {
+                    orow_ = i;
+                    overlay_change(e.button.button == SDL_BUTTON_RIGHT ? -1 : 1, false);
+                }
+            return;
+        }
+        for (int i = 0; i < 4; ++i)
+            if (inside(magnifier_[i], mx, my)) open_filters(i);
+        return;
+    }
+    if (overlay_ >= 0)
+    {
+        if (e.type == SDL_EVENT_KEY_DOWN) overlay_key(e.key.key, (e.key.mod & SDL_KMOD_SHIFT) != 0);
+        return;
+    }
     if (e.type == SDL_EVENT_TEXT_INPUT && row_ == 2)
     {
         for (const char* p = e.text.text; *p; ++p)
@@ -208,10 +246,15 @@ void Menu::handle(const SDL_Event& e, bool& done, Result& result)
     case SDLK_BACKSPACE:
         if (row_ == 2 && !s_.key.empty()) s_.key.pop_back();
         break;
+    case SDLK_F:
+        // The filters of the line whose settings are selected.
+        if (row_ != 2) open_filters(row_ >= 7 && row_ <= 9 ? 1 : row_ == 10 ? 2 : row_ >= 11 && row_ <= 14 ? 3 : 0);
+        break;
     case SDLK_RETURN:
     case SDLK_KP_ENTER:
         if (s_.key.empty()) s_.key = "sieve";
         if (too_large()) break; // the map says which line; nothing to open on this machine
+        save_filters();
         done = true;
         result = Result::Enter;
         break;
@@ -300,7 +343,7 @@ void Menu::render()
         y += 18;
     }
     text(r_, 20, H - 40, "Up/Down choose   Left/Right change (Shift x10, Ctrl x100)   PgUp/PgDn double/halve", 1, grey);
-    text(r_, 20, H - 26, "type to edit the key   Enter walk in   Esc quit", 1, grey);
+    text(r_, 20, H - 26, "type to edit the key   F or the magnifying glass: a line's filters   Enter walk in   Esc quit", 1, grey);
     if (too_large())
         text(r_, 20, H - 60, "A line is too large for this machine to open (one address would need over a gigabyte).", 1, white);
 
@@ -310,7 +353,7 @@ void Menu::render()
     double scale_bits = 1;
     for (const auto& z : sizes) scale_bits = std::max(scale_bits, z.bits);
     const float x0 = 620, pitch = std::max(150.0f, (W - x0 - 20) / 4);
-    const float label = 118, top = 200, bottom = H - 60, span = bottom - top, min_bar = 12;
+    const float label = 118, top = 216, bottom = H - 60, span = bottom - top, min_bar = 12;
     text(r_, x0, 80, "MAP  (length = size in bits; one copy each)", 1, white);
     text(r_, x0, 92, "scale: the longest line fills the height (" + fixed(scale_bits, 0) + " bits)", 1, grey);
     for (int i = 0; i < 4; ++i)
@@ -321,7 +364,17 @@ void Menu::render()
         // Labels above the bar, so a full-length bar never runs into them.
         const size_t cols = size_t(std::max(8.0f, (i == 3 ? W - x - 8 : pitch - 8) / 8));
         auto clip = [&](const std::string& t) { return t.size() <= cols ? t : t.substr(0, cols - 2) + ".."; };
-        text(r_, x, label, th.name, 2, th.edge);
+        // Magnifying glass: opens this line's filters.
+        magnifier_[i] = {x - 2, label - 2, 20, 20};
+        SDL_SetRenderDrawColor(r_, th.edge.r, th.edge.g, th.edge.b, 255);
+        for (int k = 0; k < 16; ++k)
+        {
+            const float a0 = float(k) / 16 * 6.2831853f, a1 = float(k + 1) / 16 * 6.2831853f;
+            SDL_RenderLine(r_, x + 6 + 5 * std::cos(a0), label + 6 + 5 * std::sin(a0), x + 6 + 5 * std::cos(a1), label + 6 + 5 * std::sin(a1));
+        }
+        SDL_RenderLine(r_, x + 10, label + 10, x + 15, label + 15);
+        SDL_RenderLine(r_, x + 11, label + 10, x + 16, label + 15);
+        text(r_, x + 22, label, th.name, 2, th.edge);
         const size_t caret = z.units.find(" = ");
         text(r_, x, label + 22, clip(z.units.substr(0, caret) + " units"), 1, th.edge);
         text(r_, x, label + 34, clip(z.units.substr(caret + 3)), 1, th.edge);
@@ -339,7 +392,281 @@ void Menu::render()
         SDL_RenderRect(r_, &bar);
         const SDL_FRect inner{x + 9, top + 1, 38, len - 2};
         SDL_RenderRect(r_, &inner);
+        // What survives the ticked filters, where it can be counted exactly: a filled bar inside.
+        const StackInfo& info = stack_info(i);
+        if (info.survivor_bits >= 0)
+        {
+            const float slen = std::clamp(float(info.survivor_bits / scale_bits) * span, 3.0f, len - 4);
+            const SDL_FRect sv{x + 14, top + 2, 28, slen};
+            SDL_SetRenderDrawColor(r_, th.edge.r, th.edge.g, th.edge.b, 200);
+            SDL_RenderFillRect(r_, &sv);
+            text(r_, x, label + 82, clip("survivors ~" + fixed(info.survivor_bits, 0) + " bits"), 1, th.edge);
+        }
+        else if (!cfg_.lines[i].enabled.empty())
+            text(r_, x, label + 82, clip(std::to_string(cfg_.lines[i].enabled.size()) + " filters ticked"), 1, th.edge);
     }
+    if (overlay_ >= 0) render_overlay(W, H);
+}
+
+
+// ---------------------------------------------------------------- filters overlay
+
+sieve::FilterLine Menu::filter_line_of(int i) const
+{
+    sieve::FilterLine f;
+    switch (i)
+    {
+    case 0:
+    {
+        const sieve::Alphabet& a = sieve::alphabet_by_id(s_.alphabet);
+        f = {"text", a.id(), a.size(), s_.length, &a, 0, 0, 0};
+        break;
+    }
+    case 1:
+        f = {"image", "image/" + s_.image_palette + "/" + std::to_string(s_.image_w) + "x" + std::to_string(s_.image_h),
+             palette_size(s_.image_palette), s_.image_w * s_.image_h, nullptr, s_.image_w, s_.image_h, 1};
+        break;
+    case 2: f = {"audio", sieve::kNotesSymbolsId, kNoteSymbols, s_.notes, nullptr, 0, 0, 0}; break;
+    default:
+        f = {"video", "video/" + s_.video_palette + "/" + std::to_string(s_.video_w) + "x" + std::to_string(s_.video_h) + "x" + std::to_string(s_.frames),
+             palette_size(s_.video_palette), s_.video_w * s_.video_h * s_.frames, nullptr, s_.video_w, s_.video_h, s_.frames};
+        break;
+    }
+    return f;
+}
+
+const Menu::StackInfo& Menu::stack_info(int i)
+{
+    const sieve::FilterLine fl = filter_line_of(i);
+    const sieve::cli::LineFilters& lf = cfg_.lines[i];
+    std::string key = fl.symbols_id + "/" + std::to_string(fl.length) + "/" + to_string(lf.mode) + ":";
+    for (const auto& n : lf.enabled) key += n + ",";
+    for (const auto& [n, vals] : lf.values)
+        for (const auto& [k, v] : vals) key += n + "." + k + "=" + v + ";";
+    StackInfo& info = info_[i];
+    if (info.key == key) return info;
+    info = StackInfo{key, "", -1};
+    if (line_sizes()[size_t(i)].bits > kTooLargeBits)
+    {
+        info.status = "line too large to open";
+        return info;
+    }
+    try
+    {
+        const sieve::FilterStack st = sieve::cli::build_stack(fl, lf);
+        if (st.empty()) info.status = "no filters ticked: every unit is shelved";
+        else if (st.ranker())
+        {
+            const sieve::BigUint& n = st.ranker()->count();
+            info.survivor_bits = n.is_zero() ? 0 : n.log10_approx() / std::log10(2.0);
+            info.status = "survivors: " + (n.log10_approx() < 15 ? n.to_decimal() : "~10^" + fixed(n.log10_approx(), 1)) +
+                          " (exact); compact available";
+        }
+        else info.status = "survivors not countable exactly: " + st.compact_blocker();
+    }
+    catch (const std::exception& e)
+    {
+        info.status = std::string("error: ") + e.what();
+    }
+    return info;
+}
+
+std::vector<Menu::ORow> Menu::overlay_rows() const
+{
+    std::vector<ORow> rows{{ORow::Kind::Mode, "", ""}};
+    const sieve::cli::LineFilters& lf = cfg_.lines[overlay_];
+    for (const sieve::FilterSpec* f : sieve::filters_for(filter_line_of(overlay_)))
+    {
+        rows.push_back({ORow::Kind::Filter, f->name(), ""});
+        if (lf.is_enabled(f->name()))
+            for (const auto& p : f->params) rows.push_back({ORow::Kind::Param, f->name(), p.key});
+    }
+    return rows;
+}
+
+void Menu::save_filters()
+{
+    try
+    {
+        cfg_.save(cfg_path_);
+    }
+    catch (const std::exception&)
+    {
+        // Read-only folder: the settings still apply to this session.
+    }
+}
+
+void Menu::overlay_change(int dir, bool big)
+{
+    const auto rows = overlay_rows();
+    if (orow_ < 0 || orow_ >= int(rows.size())) return;
+    const ORow& row = rows[size_t(orow_)];
+    sieve::cli::LineFilters& lf = cfg_.lines[overlay_];
+    using sieve::cli::FilterMode;
+    switch (row.kind)
+    {
+    case ORow::Kind::Mode:
+    {
+        const FilterMode order[4] = {FilterMode::Off, FilterMode::Mark, FilterMode::Hide, FilterMode::Compact};
+        int m = 0;
+        while (order[m] != lf.mode) ++m;
+        lf.mode = order[((m + dir) % 4 + 4) % 4];
+        break;
+    }
+    case ORow::Kind::Filter: lf.set_enabled(row.filter, !lf.is_enabled(row.filter)); break;
+    case ORow::Kind::Param:
+    {
+        const sieve::FilterSpec* spec = sieve::find_filter(row.filter);
+        const sieve::FilterParam* p = nullptr;
+        for (const auto& q : spec->params)
+            if (q.key == row.key) p = &q;
+        sieve::FilterValues& vals = lf.values[row.filter];
+        if (p->kind == sieve::FilterParam::Kind::Integer)
+        {
+            int64_t v = 0;
+            try { v = sieve::param_int(*spec, vals, p->key); } catch (const std::exception&) { v = std::stoll(p->default_value); }
+            v = std::clamp<int64_t>(v + dir * p->step * (big ? 10 : 1), p->min, p->max);
+            vals[p->key] = std::to_string(v);
+        }
+        else
+        {
+            // Registered data: cycle through the registry's ids ("" = the default).
+            std::vector<std::string> choices{""};
+            try
+            {
+                if (p->key == "dictionary")
+                    for (const auto& e : sieve::cli::load_registry().entries) choices.push_back(e.id);
+                if (p->key == "model")
+                    for (const auto& e : sieve::cli::load_model_registry().entries)
+                        if (e.symbols == filter_line_of(overlay_).symbols_id) choices.push_back(e.id);
+            }
+            catch (const std::exception&)
+            {
+            }
+            const std::string cur = sieve::param_value(*spec, vals, p->key);
+            auto it = std::find(choices.begin(), choices.end(), cur);
+            const int i = it == choices.end() ? 0 : int(it - choices.begin());
+            vals[p->key] = choices[size_t(((i + dir) % int(choices.size()) + int(choices.size())) % int(choices.size()))];
+        }
+        break;
+    }
+    }
+    save_filters();
+}
+
+void Menu::overlay_key(SDL_Keycode key, bool shift)
+{
+    const int n = int(overlay_rows().size());
+    switch (key)
+    {
+    case SDLK_UP: orow_ = (orow_ + n - 1) % n; break;
+    case SDLK_DOWN: orow_ = (orow_ + 1) % n; break;
+    case SDLK_LEFT: overlay_change(-1, shift); break;
+    case SDLK_RIGHT:
+    case SDLK_SPACE:
+    case SDLK_RETURN:
+    case SDLK_KP_ENTER: overlay_change(1, shift); break;
+    case SDLK_ESCAPE:
+    case SDLK_F:
+        save_filters();
+        overlay_ = -1;
+        break;
+    default: break;
+    }
+    orow_ = std::clamp(orow_, 0, int(overlay_rows().size()) - 1);
+}
+
+void Menu::render_overlay(float W, float H)
+{
+    const SDL_Color white{255, 255, 255, 255}, grey{150, 150, 150, 255};
+    const Theme& th = kThemes[overlay_];
+    box_ = {600, 70, W - 614, H - 124};
+    SDL_SetRenderDrawColor(r_, 0, 0, 0, 250);
+    SDL_RenderFillRect(r_, &box_);
+    SDL_SetRenderDrawColor(r_, 255, 255, 255, 255);
+    SDL_RenderRect(r_, &box_);
+    const SDL_FRect inner{box_.x + 2, box_.y + 2, box_.w - 4, box_.h - 4};
+    SDL_RenderRect(r_, &inner);
+    const float x = box_.x + 14;
+    const size_t cols = size_t((box_.w - 60) / 8);
+    text(r_, x, box_.y + 10, std::string(th.name) + " FILTERS", 2, th.edge);
+    text(r_, x, box_.y + 32, "A unit is shelved only if it passes every ticked filter.", 1, grey);
+
+    const sieve::cli::LineFilters& lf = cfg_.lines[overlay_];
+    const auto rows = overlay_rows();
+    // Layout: each row's height, then scroll so the selected row stays in view.
+    struct Item
+    {
+        std::vector<std::string> lines;
+        float h;
+    };
+    std::vector<Item> items;
+    for (const ORow& row : rows)
+    {
+        Item it;
+        if (row.kind == ORow::Kind::Mode)
+            it.lines = {"display mode: " + std::string(to_string(lf.mode)), "    off: every book   mark: failures drawn faint",
+                        "    hide: failures left out   compact: only survivors, closed up"};
+        else if (row.kind == ORow::Kind::Filter)
+        {
+            const sieve::FilterSpec* f = sieve::find_filter(row.filter);
+            it.lines = {std::string(lf.is_enabled(row.filter) ? "[x] " : "[ ] ") + f->name()};
+            std::string d = f->description;
+            while (!d.empty())
+            {
+                size_t cut = d.size() <= cols - 4 ? d.size() : d.rfind(' ', cols - 4);
+                if (cut == std::string::npos || cut == 0) cut = std::min(d.size(), cols - 4);
+                it.lines.push_back("    " + d.substr(0, cut));
+                d = d.substr(std::min(d.size(), cut + 1));
+            }
+        }
+        else
+        {
+            const sieve::FilterSpec* f = sieve::find_filter(row.filter);
+            const auto vit = lf.values.find(row.filter);
+            std::string v;
+            try { v = sieve::param_value(*f, vit == lf.values.end() ? sieve::FilterValues{} : vit->second, row.key); } catch (...) {}
+            std::string desc;
+            for (const auto& p : f->params)
+                if (p.key == row.key) desc = p.description;
+            it.lines = {"      " + row.key + " = " + (v.empty() ? "(default)" : v) + "     " + desc};
+        }
+        it.h = float(it.lines.size()) * 12 + 8;
+        items.push_back(it);
+    }
+    const float top = box_.y + 54, bottom = box_.y + box_.h - 44;
+    // Scroll: first row shown.
+    oscroll_ = std::clamp(oscroll_, 0, std::max(0, int(items.size()) - 1));
+    if (orow_ < oscroll_) oscroll_ = orow_;
+    for (;;)
+    {
+        float h = 0;
+        for (int i = oscroll_; i <= orow_ && i < int(items.size()); ++i) h += items[size_t(i)].h;
+        if (h <= bottom - top || oscroll_ >= orow_) break;
+        ++oscroll_;
+    }
+    row_rects_.clear();
+    float y = top;
+    for (int i = oscroll_; i < int(items.size()); ++i)
+    {
+        const Item& it = items[size_t(i)];
+        if (y + it.h > bottom) break;
+        const SDL_FRect r{box_.x + 6, y - 3, box_.w - 12, it.h};
+        row_rects_.emplace_back(r, i);
+        if (i == orow_)
+        {
+            SDL_SetRenderDrawColor(r_, 255, 255, 255, 40);
+            SDL_RenderFillRect(r_, &r);
+        }
+        for (size_t k = 0; k < it.lines.size(); ++k)
+            text(r_, x, y + float(k) * 12, (k == 0 && i == orow_ ? "> " : "  ") + it.lines[k], 1, k == 0 ? white : grey);
+        y += it.h;
+    }
+    if (oscroll_ > 0) text(r_, box_.x + box_.w - 90, top - 12, "more above", 1, grey);
+    if (y < bottom && false) {}
+    const StackInfo& info = stack_info(overlay_);
+    text(r_, x, box_.y + box_.h - 36, info.status.substr(0, cols), 1, white);
+    text(r_, x, box_.y + box_.h - 20, "Up/Down choose  Space/Right tick or change  Left back  wheel scroll  Esc/F close", 1, grey);
 }
 
 } // namespace hallway

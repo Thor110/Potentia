@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(Sieve VERSION 0.7.1 LANGUAGES CXX)
+project(Sieve VERSION 0.8.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -21,9 +21,15 @@ add_library(sieve_core STATIC
     core/src/biguint.cpp
     core/src/canon.cpp
     core/src/corridor.cpp
+    core/src/filter.cpp
+    core/src/filters/builtin.cpp
+    core/src/filters/media.cpp
+    core/src/filters/statistics.cpp
+    core/src/filters/text_m1.cpp
     core/src/guided.cpp
     core/src/model.cpp
     core/src/image.cpp
+    core/src/intlog.cpp
     core/src/sha256.cpp
     core/src/sieve.cpp
     core/src/space.cpp
@@ -50,6 +56,7 @@ endif()
 # Shared by the command-line tool and the hallway: the four lines, file input/output, dictionaries.
 add_library(sieve_lines STATIC
     tools/cli/dictionaries.cpp
+    tools/cli/filter_config.cpp
     tools/cli/lines.cpp
     tools/cli/models.cpp)
 target_include_directories(sieve_lines PUBLIC tools)

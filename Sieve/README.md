@@ -12,7 +12,7 @@ Implementation of [SPECIFICATIONS.md](docs/SPECIFICATIONS.md) (v2.0). This cover
 
 | Path | Contents |
 | :--- | :--- |
-| `core/` | Dependency-free C++20 library: alphabets, palettes, notes, exact big integers, SHA-256, address map, canonicalisation, sieve |
+| `core/` | Dependency-free C++20 library: alphabets, palettes, notes, exact big integers, SHA-256, address map, canonicalisation, sieve, guided coder, the filtration stack (`core/src/filters/`) |
 | `tools/sieve_cli.cpp`, `tools/cli/` | The `sieve` command-line tool |
 | `client/` | The `hallway`: a 3D wireframe walk along the four lines (SDL3) |
 | `tools/plot_sieve.py` | Plots sieve results (needs matplotlib) |
@@ -148,6 +148,55 @@ What limits a line in practice is the machine. An address is one number held in 
 
 ![The setup menu](docs/images/hallway-menu.png)
 
+**Filters.** The magnifying glass beside each line's title (or **F** on that line's settings) opens the line's **filter list** over the map: a black box with a white outline, scrolled with the wheel or the arrow keys. It has three kinds of row:
+- **Display mode**, one of four:
+  - **off:** every book on the shelves.
+  - **mark:** books that fail are drawn faint. Good for record keeping and tests: you see exactly what the stack rejects.
+  - **hide:** books that fail are left out and the rest keep their places. Good for walking along and browsing.
+  - **compact:** only survivors stand on the shelves, packed together in address order. Slot *k* of a loop is the *k*-th survivor, and the loop is exactly as long as the survivor count.
+- **Filters**, each with a tickbox and a description.
+- **Parameters**, shown under a filter when it is ticked. Numbers step with Left/Right; a dictionary or model cycles through the registered ones.
+
+Space/Right ticks or changes a row and Left steps back; with the mouse, click to tick or change and right-click to step back. Esc, F or a click outside closes the list and saves it to `sieve-filters.ini` next to the executable (or wherever `--filters PATH` points). The file is plain text and may be edited by hand:
+
+```ini
+[text]
+mode = compact
+filters = words-v2
+[text.words-v2]
+dictionary = scowl-en-35
+```
+
+The footer says what the stack can do. Where it can count its survivors exactly, the map fills that part of the line's bar and labels it with the survivors' size in bits.
+
+![A line's filter list](docs/images/hallway-filters.png)
+
+![The map with a filter stack: 152 bits of lines, of which about 87 bits survive words-v2](docs/images/hallway-menu-sieved.png)
+
+Every filter is a separate, versioned module compiled into the core. Every decision is exact integer arithmetic, so every machine agrees, and the Python oracle checks each one:
+
+| Filter | Lines | Passes when | Compact |
+| :--- | :--- | :--- | :--- |
+| `clean-v1` | text | no double SPACE, at least one letter | yes |
+| `window-v1` | text | could be cut from running English (see `sift` below) | |
+| `words-v1` | text | every token is a dictionary word | yes |
+| `clean-v2`, `words-v2` | text | as v1, but the unit may end in SPACE padding, as the last unit of warped text does | yes |
+| `max-run-v1` | text | no letter repeated more than `max_run` times in a row (3) | |
+| `symbol-entropy-v1` | all | the unit's own Shannon entropy per symbol lies within [min, max] | |
+| `model-information-v1` | text | information under the pinned frequency model is at most `max` bits per symbol (5) | |
+| `neighbour-agreement-v1` | image, video | enough neighbouring pixels (and frames) share a colour | |
+
+**Compact** needs a filter that can count and rank its survivors (the "yes" column), and the positional ordering; mark and hide work in every ordering. Any other ticked filter must be one that filter *implies*: `words` implies `clean`, so the two together still compact, but `words` with `max-run` does not. When compact is not possible the hallway falls back to hide, and the top bar says why. Warp to text that fails the stack and it opens in hand marked **NOT ON THE SHELVES**, with the filter that rejected it.
+
+A changed filter never replaces the old one. It is registered as the next version (`words-v2` beside `words-v1`), so a result recorded with a stack's id can always be reproduced. To add a filter, write it in `core/src/filters/` and add one line to `core/src/filters/builtin.cpp`. The oracle and the vectors in `tests/vectors_filters_v1.tsv` should grow with it.
+
+| Mode | The text line at length 3, filtered by `words-v1` |
+| :--- | :--- |
+| mark | ![Mark](docs/images/hallway-mark.png) |
+| hide | ![Hide](docs/images/hallway-hide.png) |
+
+![Compact: only units that pass words-v2, with warped text on its shelf as survivor number 100485...4005](docs/images/hallway-compact.png)
+
 ![The text line, scrambled ordering](docs/images/hallway-text.png)
 
 **Colours.** Each line has two colours: a solid background and the colour of every edge. Doors are solid black.
@@ -189,7 +238,7 @@ A door **keeps your corridor position** and only changes which line reads it:
 | - / = | Guided ordering: zoom out / in by one bit (**Shift**: 8 bits) |
 | Mouse wheel · PgUp/PgDn · [ ] | Jump 1 · 1,000 · 1,000,000 tiles along the line |
 | Home | Corridor tile 0: the start line of every line (the double flag) |
-| F1 | Back to the setup menu |
+| F1 | Back to the setup menu (filters are set there) |
 | P | Play an audio book you are holding |
 | Esc | Close a panel or input, or free the mouse |
 | Ctrl+Q | Quit |
@@ -206,6 +255,7 @@ A door **keeps your corridor position** and only changes which line reads it:
 It also takes:
 - `--key`, `--mode positional|scrambled|guided` and `--line` for the starting line.
 - `--warp INPUT` or `--goto ADDRESS|P%|@T` to set where you start, `--zoom D` for the guided zoom, and `--tile N` to move N tiles along from there.
+- `--filters PATH` for the filter settings file.
 
 **Screenshots and scripted walks** (used by the automatic tests too):
 
@@ -381,6 +431,26 @@ CSV columns:
 | `verified_by` | Which methods agreed |
 | `pruned_window_states` | Prefix-tree nodes visited by the pruned walk |
 | `log10_frac_prefix_tree_explored` | The fraction of the prefix tree that represents |
+
+### `filters`, `check`: the filtration stack
+
+```
+sieve filters [--line LINE] [line options] [--filters PATH]
+sieve check   [--line LINE] [line options] [--filters PATH] (TEXT... | --file PATH)
+```
+
+`filters` lists every filter a line offers: which are ticked, their descriptions and parameters, and what each implies. It ends with the stack's provenance and id, and either the exact survivor count or why compact is unavailable. `check` fits content to the line as `warp` does. For each unit it shows every filter's verdict, whether the unit passes the ticked stack, and, if the stack can rank, its **survivor number**: its place on compact shelves. `read --survivor K` goes the other way:
+
+```sh
+sieve filters --filters words2.ini
+#   survivors    190011992984255955985337560 (exact; compact mode available)
+sieve check --length 32 --filters words2.ini "It was the best of times"
+#   [ ] words-v1                FAIL
+#   [x] words-v2                pass
+#   stack: passes, survivor number 100485593897630338697104005 of 190011992984255955985337560
+sieve read --length 32 --mode positional --filters words2.ini --survivor 100485593897630338697104005
+#   it was the best of times
+```
 
 ### `dicts`: the dictionary registry
 
@@ -566,6 +636,7 @@ What the results show:
 ## Next
 
 - **Models for the other lines:** a melody model for the audio line, and small-image statistics for the image line. The model format already takes any alphabet size.
-- **Shelving (§9):** classify units so that the guided view can leave noise off the shelves entirely.
+- **Compact in the other orderings:** mark and hide work in every ordering, but compact needs positional order. The guided view could close up failing arcs the same way.
+- **More filters:** rankers for more of them (so more stacks can compact), bigram and trigram checks, and S2 coherence tests, each as a new versioned module.
 - **M1 (images):** noise filters for tiny images, counted over every 5×5 and 6×6 1-bit picture.
-- **A larger text model** (for example ascii95 with case and punctuation, or a neural scorer with quantised outputs), measured with `sieve measure` against the same held-out books.
+- **A larger text model** (for example ascii95 with case and punctuation, or a longer context), measured with `sieve measure` against the same held-out books.

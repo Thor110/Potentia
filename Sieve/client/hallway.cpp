@@ -22,6 +22,7 @@
 #include "world.hpp"
 
 #include "cli/args.hpp"
+#include "cli/filter_config.hpp"
 #include "cli/image_io.hpp"
 #include "cli/lines.hpp"
 
@@ -166,9 +167,23 @@ bool save_render(SDL_Renderer* r, const std::string& path)
 class Hallway
 {
 public:
-    Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> lines)
+    Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> lines, const FilterConfig& filters)
         : window_(window), r_(renderer), lines_(std::move(lines)), tile_geometry_(build_tile()), book_geometry_(build_books())
     {
+        // Each line's filter stack and mode (sieve-filters.ini, edited in the setup menu).
+        for (int i = 0; i < 4; ++i)
+        {
+            modes_[i] = filters.lines[i].mode;
+            try
+            {
+                stacks_[i] = build_stack(lines_[size_t(i)], filters.lines[i]);
+            }
+            catch (const std::exception& e)
+            {
+                std::cerr << "filters for the " << to_string(lines_[size_t(i)].kind) << " line: " << e.what() << "\n";
+                modes_[i] = FilterMode::Off;
+            }
+        }
         // Bounds of one tile's geometry (plus its doors), for skipping tiles out of view.
         tile_lo_ = {-kHalfWidth, 0, -0.5f};
         tile_hi_ = {kHalfWidth, kHeight, kTile};
@@ -217,20 +232,61 @@ public:
         tile_ += d;
         loop_tile_ = offset_loop_tile(d);
         for (int i = 0; i < 4; ++i) all_loop_tiles_[i] = offset_loop_tile(all_loops_[i], all_loop_tiles_[i], d);
-        cache_.clear();
+        // Keep the books already worked out: they are the same books, d tiles closer.
+        std::unordered_map<int64_t, Book> shifted;
+        const int64_t by = d * int64_t(kBooksPerTile);
+        if (d > -16 && d < 16)
+            for (auto& [key, b] : cache_) shifted.emplace(key - by, std::move(b));
+        cache_ = std::move(shifted);
+    }
+
+    // ---- filters
+    //
+    // Each line has a stack and a mode: off, mark (failing books dimmed), hide (failing books
+    // left out, every address where it was) or compact (only survivors, in address order, closed
+    // up). Compact needs positional order and a stack that can rank its survivors; otherwise the
+    // line hides instead.
+    FilterMode effective_mode(int i) const
+    {
+        const FilterStack& st = stacks_[i];
+        if (st.empty()) return FilterMode::Off;
+        const FilterMode m = modes_[i];
+        if (m != FilterMode::Compact) return m;
+        const bool guided_here = guided_ && lines_[size_t(i)].guided;
+        if (!st.ranker() || st.ranker()->count().is_zero() || guided_here || mode_ != AddressMode::Positional) return FilterMode::Hide;
+        return FilterMode::Compact;
+    }
+    FilterMode effective_mode() const { return effective_mode(li_); }
+    const FilterStack& stack() const { return stacks_[li_]; }
+    std::string filter_status() const
+    {
+        const FilterStack& st = stack();
+        if (st.empty()) return "filters: none";
+        const FilterMode m = effective_mode();
+        std::string s = "filters: " + std::to_string(st.size()) + " " + to_string(m);
+        if (m == FilterMode::Compact) s += " (" + short_number(st.ranker()->count().to_decimal()) + " survivors)";
+        else if (modes_[li_] == FilterMode::Compact)
+            s += guided_on() || mode_ != AddressMode::Positional ? " (compact needs positional order)" : " (compact: " + st.compact_blocker() + ")";
+        return s;
+    }
+    // How many units line i has in its loop, in the current ordering and filter mode.
+    BigUint units_of(int i) const
+    {
+        if (effective_mode(i) == FilterMode::Compact) return stacks_[i].ranker()->count();
+        if (guided_ && lines_[size_t(i)].guided) return BigUint::pow(2, zoom_);
+        return lines_[size_t(i)].space.size();
     }
 
     // The loop of the current line in the current ordering, and which of its tiles you are in.
     // A full modulo is only needed when the line, ordering or zoom changes.
     void rebase()
     {
-        loop_ = LineLoop(guided_on() ? BigUint::pow(2, zoom_) : line().space.size());
+        loop_ = LineLoop(units_of(li_));
         loop_tile_ = loop_.loop_tile(tile_);
         // Every line's loop too, for the double flag where all four start together.
         for (int i = 0; i < 4; ++i)
         {
-            const Line& l = lines_[size_t(i)];
-            all_loops_[i] = LineLoop(guided_ && l.guided ? BigUint::pow(2, zoom_) : l.space.size());
+            all_loops_[i] = LineLoop(units_of(i));
             all_loop_tiles_[i] = all_loops_[i].loop_tile(tile_);
         }
         cache_.clear();
@@ -247,6 +303,9 @@ public:
         bool guided = false;  // guided only:
         size_t bits = 0;      //   length of the unit's own address (its information, within 2 bits)
         std::string own_hex;  //   the unit's own address
+        bool passes = true;   // passes the line's filter stack
+        std::string failed_by; // the first filter it fails
+        bool survivor = false; // compact: index is its survivor number
     };
 
     const Book& book(int64_t dt, uint32_t slot)
@@ -262,7 +321,16 @@ public:
         {
             b.index = *idx;
             const Space& sp = line().space;
-            if (guided_on())
+            if (effective_mode() == FilterMode::Compact)
+            {
+                // Only survivors stand here, in address order: slot i holds survivor number i.
+                b.unit = stack().ranker()->unrank(b.index);
+                b.survivor = true;
+                const auto address = sp.address_digits(b.unit, AddressMode::Positional);
+                b.hex = sp.hex_of(address);
+                b.fraction = sp.fraction_of(address);
+            }
+            else if (guided_on())
             {
                 const GuidedLine& g = guided();
                 BigUint point = b.index;
@@ -282,6 +350,12 @@ public:
                 b.hex = sp.hex_of(address);
                 b.fraction = sp.fraction_of(address);
             }
+            if (!b.survivor && !stack().empty())
+            {
+                const int fail = stack().first_failure(b.unit);
+                b.passes = fail < 0;
+                if (!b.passes) b.failed_by = stack().filter_name(size_t(fail));
+            }
         }
         return cache_.emplace(key, std::move(b)).first->second;
     }
@@ -300,6 +374,32 @@ public:
             return i;
         }
         return BigUint::from_digits(line().space.address_digits(unit, mode_), line().space.base());
+    }
+
+    // Go to a unit: its slot in the first copy of the loop, facing it. In compact mode a unit
+    // that fails the stack has no shelf; it is shown in hand instead (SPECIFICATIONS 6.4).
+    void go_to_unit(const Space::Digits& unit, bool open)
+    {
+        if (effective_mode() == FilterMode::Compact)
+        {
+            const int fail = stack().first_failure(unit);
+            if (fail >= 0)
+            {
+                Book b;
+                b.unit = unit;
+                const auto address = line().space.address_digits(unit, AddressMode::Positional);
+                b.hex = line().space.hex_of(address);
+                b.fraction = line().space.fraction_of(address);
+                b.passes = false;
+                b.failed_by = stack().filter_name(size_t(fail));
+                in_hand_ = b;
+                in_hand_where_ = "NOT ON THE SHELVES: fails " + b.failed_by;
+                return;
+            }
+            place(stack().ranker()->rank(unit), open);
+            return;
+        }
+        place(index_of(unit), open);
     }
 
     // Teleport to a unit's slot in the first copy of the loop (where position = address), face
@@ -361,8 +461,8 @@ public:
         else if (mode_ == AddressMode::Positional) mode_ = AddressMode::Scrambled;
         else if (line().guided) guided_ = true;
         else mode_ = AddressMode::Positional;
-        if (ref) place(index_of(unit), false);
-        else rebase();
+        rebase();
+        if (ref) go_to_unit(unit, false);
         const char* what = guided_on() ? " (each book is a point 2^-zoom along; likely text owns long stretches; - and = zoom)"
                            : mode_ == AddressMode::Positional ? " (neighbours share their beginning)"
                                                               : " (neighbours are unrelated)";
@@ -406,7 +506,7 @@ public:
             if (w.units.empty()) throw std::invalid_argument("nothing left after canonicalisation");
             trail_ = w.units;
             trail_index_ = 0;
-            place(index_of(trail_[0]), true);
+            go_to_unit(trail_[0], true);
             message("warped: " + w.report.front() + (trail_.size() > 1 ? "   (N / B: next / previous unit of the trail)" : ""));
             return true;
         }
@@ -463,6 +563,14 @@ public:
                 index = point;
                 index >>= g.scale_bits() - zoom_;
             }
+            else if (effective_mode() == FilterMode::Compact)
+            {
+                // An address names a unit; its place among the survivors is its rank.
+                trail_.clear();
+                go_to_unit(line().space.unit_of_address(line().space.parse_address(input), mode_), true);
+                message("went to " + input);
+                return true;
+            }
             else index = BigUint::from_digits(line().space.parse_address(input), line().space.base());
             trail_.clear();
             place(index, true);
@@ -480,7 +588,7 @@ public:
     {
         if (trail_.size() < 2) return;
         trail_index_ = (trail_index_ + trail_.size() + size_t(dir)) % trail_.size();
-        place(index_of(trail_[trail_index_]), true);
+        go_to_unit(trail_[trail_index_], true);
         message("unit " + std::to_string(trail_index_ + 1) + " of " + std::to_string(trail_.size()) + " of the trail");
     }
 
@@ -661,7 +769,7 @@ public:
         const Book& first = book(0, 0);
         std::string where = std::string(theme().name) + " line, " + ordering_name();
         if (guided_on()) where += " zoom " + std::to_string(zoom_);
-        where += ", tile " + short_number(tile_.to_decimal()) + ", x " + std::to_string(cam_.pos.x) + ", ";
+        where += ", " + filter_status() + ", tile " + short_number(tile_.to_decimal()) + ", x " + std::to_string(cam_.pos.x) + ", ";
         if (first.empty) where += "first slot empty (padding)";
         else
         {
@@ -685,6 +793,7 @@ public:
         SDL_SetRenderDrawBlendMode(r_, SDL_BLENDMODE_BLEND);
 
         hover_ = pick_book(cam_.pos, cam_.forward(), 0, 5.0f);
+        if (hover_ && effective_mode() == FilterMode::Hide && !book(hover_->tile, hover_->slot()).passes) hover_.reset();
 
         constexpr int kBack = 6, kAhead = 7;
         // Only tiles that can appear on screen are drawn (usually about half of them).
@@ -723,10 +832,11 @@ public:
         // Every edge, faded towards the background with distance. Padding slots have no book.
         constexpr int kBuckets = 12;
         std::vector<std::vector<SDL_FPoint>> buckets(kBuckets);
-        auto add = [&](const Segment& s, float z0) {
+        // `faint` is the least fade an edge gets (0 = full strength, 1 = background).
+        auto add = [&](const Segment& s, float z0, float faint = 0) {
             const auto p = cam_.project_segment({s.a.x, s.a.y, s.a.z + z0}, {s.b.x, s.b.y, s.b.z + z0});
             if (!p) return;
-            const float fade = std::clamp((p->second - 10.0f) / 45.0f, 0.0f, 1.0f);
+            const float fade = std::clamp(std::max((p->second - 10.0f) / 45.0f, faint), 0.0f, 1.0f);
             auto& b = buckets[size_t(std::min(kBuckets - 1, int(fade * kBuckets)))];
             b.push_back({p->first.first.x, p->first.first.y});
             b.push_back({p->first.second.x, p->first.second.y});
@@ -737,8 +847,20 @@ public:
             const float z0 = t * kTile;
             for (const Segment& s : tile_geometry_) add(s, z0);
             const uint32_t books = books_in_tile(t);
+            const FilterMode fm = effective_mode();
             for (uint32_t k = 0; k < books; ++k)
-                for (const Segment& s : book_geometry_[k]) add(s, z0);
+            {
+                // Mark: books that fail the filters are drawn faint, so survivors stand out.
+                // Hide: they are left out.
+                float dim = 0;
+                if (fm == FilterMode::Mark || fm == FilterMode::Hide)
+                    if (!book(t, k).passes)
+                    {
+                        if (fm == FilterMode::Hide) continue;
+                        dim = 0.8f;
+                    }
+                for (const Segment& s : book_geometry_[k]) add(s, z0, dim);
+            }
         }
         for (int i = 0; i < kBuckets; ++i)
         {
@@ -847,8 +969,9 @@ public:
         text(10, 7, where, 2, ink);
         const std::string loop = "loop " + short_number(loop_.tiles().to_decimal()) + " tiles" +
                                  (loop_.fills_whole_tiles() ? std::string() : " (+" + std::to_string(loop_.padding()) + " empty slots)");
-        text(10, 28, line().space.id() + (guided_on() ? "   model " + line().model_id : std::string()) + "   " + loop + "   doors: left -> " +
-                         kThemes[(li_ + 1) % 4].name + ", right -> " + kThemes[(li_ + 3) % 4].name, 1, ink);
+        text(10, 28, line().space.id() + (guided_on() ? "   model " + line().model_id : std::string()) + "   " + loop + "   " +
+                         filter_status() + "   doors: left -> " + kThemes[(li_ + 1) % 4].name + ", right -> " + kThemes[(li_ + 3) % 4].name,
+             1, ink);
 
         // The book you are looking at.
         if (hover_ && !in_hand_)
@@ -878,7 +1001,10 @@ public:
                 }
                 else text(20, y, "address " + short_address(bk.hex), 1, ink);
                 y += 12;
-                text(20, y, percent(bk.fraction) + " along the loop      E / click: take it off the shelf", 1, ink);
+                std::string verdict;
+                if (bk.survivor) verdict = "survivor number " + short_number(bk.index.to_decimal()) + "   ";
+                else if (!stack().empty()) verdict = bk.passes ? "passes the filters   " : "FAILS " + bk.failed_by + "   ";
+                text(20, y, verdict + percent(bk.fraction) + " along the loop      E / click: take it off the shelf", 1, ink);
                 y += 16;
                 if (line().kind == LineKind::Image || line().kind == LineKind::Video) draw_pixels(u, 20, y, 60, 0);
                 else text(20, y, wrap(one_line_preview(u), size_t(std::max(20.0f, (std::min(W - 20, 900.0f) - 40) / 16)))[0], 2, ink);
@@ -1057,6 +1183,8 @@ private:
     std::string message_;
     Uint64 message_until_ = 0;
     bool menu_requested_ = false;
+    FilterStack stacks_[4];
+    FilterMode modes_[4] = {FilterMode::Off, FilterMode::Off, FilterMode::Off, FilterMode::Off};
     Synth synth_;
 };
 
@@ -1082,8 +1210,12 @@ const char* kUsage =
     "  --goto ADDR|P%|@T   go to an address, a percentage, or corridor tile T on start\n\n"
     "Menu:\n"
     "  A setup menu opens first: adjust every line's state space and see the four lines as a map.\n"
+    "  The magnifying glass beside a line's title (or F) opens its filters: tick filters, set\n"
+    "  their parameters, and choose the mode: off, mark (failures faint), hide (failures left\n"
+    "  out) or compact (only survivors, packed together). Saved to the --filters file.\n"
     "  --no-menu           go straight into the hallway (F1 opens the menu from the hallway)\n"
-    "  --menu              with --screenshot: a picture of the menu (--press keys go to the menu)\n\n"
+    "  --menu              with --screenshot: a picture of the menu (--press keys go to the menu)\n"
+    "  --filters PATH      filter settings (default: sieve-filters.ini next to the executable)\n\n"
     "Screenshots (for documentation and testing):\n"
     "  --screenshot PATH   render one frame to a PNG and exit\n"
     "  --size WxH          window size (default 1280x720)\n"
@@ -1154,7 +1286,8 @@ std::vector<std::pair<SDL_Keycode, SDL_Keymod>> parse_presses(const std::string&
 }
 
 // Builds the hallway from options, and applies the start-up and scripting options.
-std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer, const Args& a, bool scripted)
+std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer, const Args& a, bool scripted,
+                                      const FilterConfig& filters)
 {
     std::vector<Line> lines = make_lines(a);
     int start_line = 0;
@@ -1165,7 +1298,7 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
     const bool text_has_model = lines[0].guided != nullptr;
     const LineKind start_kind = lines[size_t(start_line)].kind;
 
-    auto hall = std::make_unique<Hallway>(window, renderer, std::move(lines));
+    auto hall = std::make_unique<Hallway>(window, renderer, std::move(lines), filters);
     hall->set_line(start_line);
     if (a.has("mode"))
     {
@@ -1253,10 +1386,13 @@ int run(const Args& a)
     };
 
     Settings settings = Settings::from_args(a);
+    // Filter settings: --filters PATH, or sieve-filters.ini next to the executable.
+    const std::string filters_path = a.has("filters") ? a.get("filters") : FilterConfig::default_path().string();
+    FilterConfig filters = FilterConfig::load(filters_path);
     if (shot && a.has("menu"))
     {
         // A picture of the setup menu (for documentation and testing); --press keys go to the menu.
-        Menu menu(window, renderer, settings);
+        Menu menu(window, renderer, settings, filters, filters_path);
         if (a.has("press"))
             for (const auto& [key, mod] : parse_presses(a.get("press"))) menu.press(key, mod);
         menu.render();
@@ -1266,7 +1402,7 @@ int run(const Args& a)
     }
     if (shot)
     {
-        auto hall = make_hallway(window, renderer, a, true);
+        auto hall = make_hallway(window, renderer, a, true, filters);
         hall->render(); // computes what you are looking at
         if (a.has("take")) hall->take_hovered();
         hall->render();
@@ -1282,15 +1418,16 @@ int run(const Args& a)
     {
         if (show_menu)
         {
-            Menu menu(window, renderer, settings);
+            Menu menu(window, renderer, settings, filters, filters_path);
             if (menu.run() == Menu::Result::Quit) break;
             settings = menu.settings();
+            filters = menu.filters();
         }
         Args ha = a;
         if (show_menu) settings.apply(ha);
         if (!first)
             for (const char* k : {"warp", "goto", "zoom", "tile", "pose", "walk", "press"}) ha.opts.erase(k);
-        auto hall = make_hallway(window, renderer, ha, first);
+        auto hall = make_hallway(window, renderer, ha, first, filters);
         first = false;
         SDL_SetWindowRelativeMouseMode(window, true);
         bool quit = false;

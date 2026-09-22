@@ -5,6 +5,8 @@
 #include "sieve/biguint.hpp"
 #include "sieve/canon.hpp"
 #include "sieve/corridor.hpp"
+#include "sieve/filter.hpp"
+#include "sieve/intlog.hpp"
 #include "sieve/guided.hpp"
 #include "sieve/model.hpp"
 #include "sieve/image.hpp"
@@ -741,6 +743,254 @@ void test_guided_vectors(const std::string& dir)
     std::cout << "guided vectors checked: " << n << "\n";
 }
 
+// Resources for filter tests: one dictionary and the default model.
+class TestResources : public FilterResources
+{
+public:
+    TestResources(std::shared_ptr<const Dictionary> d, std::shared_ptr<const CharModel> m) : d_(std::move(d)), m_(std::move(m)) {}
+    std::shared_ptr<const Dictionary> dictionary(const std::string&) const override { return d_; }
+    std::shared_ptr<const CharModel> model(const std::string&, const std::string&) const override { return m_; }
+
+private:
+    std::shared_ptr<const Dictionary> d_;
+    std::shared_ptr<const CharModel> m_;
+};
+
+FilterLine text_line(uint32_t L)
+{
+    const Alphabet& a = alphabet_by_id("lower27");
+    return FilterLine{"text", "lower27", 27, L, &a, 0, 0, 0};
+}
+
+std::vector<uint32_t> digits27(const std::string& t)
+{
+    std::vector<uint32_t> d;
+    for (char c : t) d.push_back(c == ' ' ? 0 : uint32_t(c - 'a' + 1));
+    return d;
+}
+
+void test_filters(const std::string& dir)
+{
+    // Exact logarithms.
+    CHECK(log2_q16(1) == 0);
+    CHECK(log2_q16(2) == 65536);
+    CHECK(log2_q16(3) == 103872);          // floor(1.58496... * 65536)
+    CHECK(log2_q16(65536) == 16 * 65536);
+    CHECK(log2_q16(uint64_t(1) << 63) == 63 * 65536);
+
+    // The registry: unique names, and the lists each line offers.
+    CHECK(find_filter("words") == find_filter("words-v2")); // the newest version
+    CHECK(find_filter("words-v1") != find_filter("words-v2"));
+    CHECK(find_filter("nonsense") == nullptr);
+    CHECK(filters_for(text_line(8)).size() == 8);
+    const FilterLine image{"image", "image/mono/10x10", 2, 100, nullptr, 10, 10, 1};
+    CHECK(filters_for(image).size() == 2); // symbol-entropy, neighbour-agreement
+
+    // Rankers, exhaustively at small lengths with a small dictionary: rank = position among the
+    // survivors in address order, and unrank inverts it.
+    auto small = std::make_shared<const Dictionary>(Dictionary::from_words({"a", "an", "ant", "i", "in", "tan"}));
+    TestResources small_res(small, nullptr);
+    for (const char* name : {"clean-v1", "words-v1", "clean-v2", "words-v2"})
+        for (uint32_t L = 1; L <= 4; ++L)
+        {
+            const FilterStack st(text_line(L), {{find_filter(name), {}}}, small_res);
+            const Ranker* rk = st.ranker();
+            CHECK(rk != nullptr);
+            if (!rk) continue;
+            uint64_t k = 0;
+            bool ok = true;
+            const uint64_t total = uint64_t(std::pow(27.0, L) + 0.5);
+            for (uint64_t i = 0; i < total; ++i)
+            {
+                const auto u = BigUint(i).to_digits(27, L);
+                if (!st.passes(u)) continue;
+                ok = ok && rk->rank(u) == BigUint(k) && rk->unrank(BigUint(k)) == u;
+                ++k;
+            }
+            CHECK(ok);
+            CHECK(rk->count() == BigUint(k));
+        }
+
+    // Version 2 allows trailing SPACE padding and nothing else new: a v2 survivor either passes
+    // v1 or is a v1 survivor's prefix followed by two or more SPACEs; words-v2 implies clean-v2.
+    for (uint32_t L = 1; L <= 4; ++L)
+    {
+        const FilterStack c1(text_line(L), {{find_filter("clean-v1"), {}}}, small_res);
+        const FilterStack c2(text_line(L), {{find_filter("clean-v2"), {}}}, small_res);
+        const FilterStack w1(text_line(L), {{find_filter("words-v1"), {}}}, small_res);
+        const FilterStack w2(text_line(L), {{find_filter("words-v2"), {}}}, small_res);
+        std::vector<FilterStack> hc, hw; // v1 stacks for every shorter length
+        for (uint32_t n = 1; n <= L; ++n)
+        {
+            hc.emplace_back(text_line(n), std::vector<FilterStack::Entry>{{find_filter("clean-v1"), {}}}, small_res);
+            hw.emplace_back(text_line(n), std::vector<FilterStack::Entry>{{find_filter("words-v1"), {}}}, small_res);
+        }
+        bool ok = true;
+        const uint64_t total = uint64_t(std::pow(27.0, L) + 0.5);
+        for (uint64_t i = 0; i < total; ++i)
+        {
+            const auto u = BigUint(i).to_digits(27, L);
+            size_t n = u.size();
+            while (n > 0 && u[n - 1] == 0) --n;
+            const bool padded = u.size() - n >= 2;
+            const std::vector<uint32_t> head(u.begin(), u.begin() + long(n));
+            const bool head_c = n > 0 && hc[n - 1].passes(head);
+            const bool head_w = n > 0 && hw[n - 1].passes(head);
+            ok = ok && c2.passes(u) == (c1.passes(u) || (padded && head_c));
+            ok = ok && w2.passes(u) == (w1.passes(u) || (padded && head_w));
+            ok = ok && (!w2.passes(u) || c2.passes(u));
+        }
+        CHECK(ok);
+    }
+    // Against M1's exact counts (themselves checked by brute force and the pruned walk) with the
+    // real default dictionary, and round trips at paragraph scale.
+    auto scowl = std::make_shared<const Dictionary>(Dictionary::load_file(dir + "../data/dictionaries/scowl-2020.12.07-en-60.txt"));
+    auto model = std::make_shared<const CharModel>(CharModel::load_file(dir + "../data/models/gutenberg-lower27-o5.model"));
+    TestResources res(scowl, model);
+    for (uint32_t L : {1u, 2u, 5u, 12u, 32u})
+    {
+        const SieveCount c = sieve_counted(L, *scowl);
+        const FilterStack w(text_line(L), {{find_filter("words-v1"), {}}}, res);
+        const FilterStack cl(text_line(L), {{find_filter("clean-v1"), {}}}, res);
+        CHECK(w.ranker()->count() == c.words);
+        CHECK(cl.ranker()->count() == c.clean);
+    }
+    std::mt19937_64 rng(5);
+    for (uint32_t L : {32u, 1000u})
+    {
+        const FilterStack w(text_line(L), {{find_filter("words-v1"), {}}}, res);
+        const Ranker* rk = w.ranker();
+        bool ok = true;
+        for (int t = 0; t < (L == 32 ? 200 : 20); ++t)
+        {
+            BigUint k;
+            for (size_t b = 0; b < rk->count().bit_length() + 64; b += 32)
+            {
+                k <<= 32;
+                k.add_small(uint32_t(rng()));
+            }
+            k = BigUint::mod(k, rk->count());
+            const auto u = rk->unrank(k);
+            ok = ok && w.passes(u) && rk->rank(u) == k;
+        }
+        CHECK(ok);
+        // Consecutive ranks are consecutive survivors: nothing in between passes.
+        const auto a = rk->unrank(BigUint(1000)), b = rk->unrank(BigUint(1001));
+        CHECK(BigUint::from_digits(a, 27) < BigUint::from_digits(b, 27));
+    }
+
+    // Warped text shorter than a unit is padded with SPACEs: only version 2 shelves it.
+    {
+        const auto u = digits27("it was the best of times        ");
+        const FilterStack w1(text_line(32), {{find_filter("words-v1"), {}}}, res);
+        const FilterStack w2(text_line(32), {{find_filter("words-v2"), {}}}, res);
+        CHECK(!w1.passes(u));
+        CHECK(w2.passes(u));
+        CHECK(w2.ranker()->unrank(w2.ranker()->rank(u)) == u);
+        CHECK(w1.ranker()->count() < w2.ranker()->count());
+    }
+
+    // Stacks: compact needs one ranking filter implying the rest.
+    {
+        const FilterStack s1(text_line(32), {{find_filter("clean-v1"), {}}, {find_filter("words-v1"), {}}}, res);
+        CHECK(s1.ranker() != nullptr); // words implies clean
+        const FilterStack s2(text_line(32), {{find_filter("words-v1"), {}}, {find_filter("max-run-v1"), {}}}, res);
+        CHECK(s2.ranker() == nullptr);
+        CHECK(!s2.compact_blocker().empty());
+        CHECK(s1.id() != s2.id());
+        const FilterStack s3(text_line(32), {{find_filter("words-v1"), {{"dictionary", ""}}}}, res);
+        CHECK(s3.provenance().find(scowl->sha256()) != std::string::npos);
+    }
+
+    // The statistical filters on English and on noise.
+    {
+        const auto english = digits27("it was the best of times it was t");
+        const auto noise = digits27("qzxvjjkwpqpqzzzzxkcdvvvvwqwqkkkk");
+        const FilterStack info(text_line(33), {{find_filter("model-information-v1"), {}}}, res);
+        CHECK(info.passes(english));
+        const FilterStack info32(text_line(32), {{find_filter("model-information-v1"), {}}}, res);
+        CHECK(!info32.passes(noise));
+        const FilterStack run(text_line(32), {{find_filter("max-run-v1"), {}}}, res);
+        CHECK(!run.passes(noise)); // "zzzz"
+        CHECK(run.passes(digits27("aaa bbb ccc                     ")));
+        const FilterStack ent(text_line(4), {{find_filter("symbol-entropy-v1"), {{"min_millibits", "1000"}, {"max_millibits", "2000"}}}}, res);
+        CHECK(ent.passes(digits27("abab")));  // exactly 1 bit
+        CHECK(!ent.passes(digits27("aaaa"))); // 0 bits
+        CHECK(ent.passes(digits27("abcd")));  // exactly 2 bits: bounds are inclusive
+        const FilterStack ent2(text_line(4), {{find_filter("symbol-entropy-v1"), {{"max_millibits", "1999"}}}}, res);
+        CHECK(!ent2.passes(digits27("abcd")));
+    }
+    {
+        const FilterStack n(image, {{find_filter("neighbour-agreement-v1"), {}}}, res);
+        std::vector<uint32_t> flat(100, 1), checker(100);
+        for (uint32_t i = 0; i < 100; ++i) checker[i] = ((i % 10) + (i / 10)) % 2;
+        CHECK(n.passes(flat));
+        CHECK(!n.passes(checker));
+    }
+    CHECK(throws([&] { FilterStack(text_line(8), {{find_filter("max-run-v1"), {{"max_run", "0"}}}}, res); }));
+    CHECK(throws([&] { FilterStack(image, {{find_filter("words-v1"), {}}}, res); }));
+}
+
+// Filter vectors from the Python oracle (independent implementations of every filter and ranker).
+void test_filter_vectors(const std::string& dir)
+{
+    std::ifstream in(dir + "vectors_filters_v1.tsv");
+    CHECK(bool(in));
+    std::string line, dict_file;
+    std::vector<std::vector<std::string>> rows;
+    while (std::getline(in, line))
+    {
+        if (line.rfind("# dictionary ", 0) == 0) dict_file = line.substr(13);
+        if (line.empty() || line[0] == '#') continue;
+        std::vector<std::string> f;
+        std::stringstream ss(line);
+        std::string x;
+        while (std::getline(ss, x, '\t')) f.push_back(x);
+        rows.push_back(f);
+    }
+    auto dict = std::make_shared<const Dictionary>(Dictionary::load_file(dir + "../data/dictionaries/" + dict_file));
+    auto model = std::make_shared<const CharModel>(CharModel::load_file(dir + "../data/models/gutenberg-lower27-o5.model"));
+    TestResources res(dict, model);
+    auto values = [](const std::string& spec) {
+        FilterValues v;
+        std::stringstream ss(spec);
+        std::string kv;
+        while (std::getline(ss, kv, ','))
+            if (const size_t eq = kv.find('='); eq != std::string::npos && kv.substr(0, eq) != "dictionary") v[kv.substr(0, eq)] = kv.substr(eq + 1);
+        return v;
+    };
+    int n = 0;
+    for (const auto& f : rows)
+    {
+        ++n;
+        if (f[0] == "log2") CHECK(std::to_string(log2_q16(std::stoull(f[1]))) == f[2]);
+        else if (f[0] == "verdict")
+        {
+            const FilterStack st(text_line(uint32_t(std::stoul(f[3]))), {{find_filter(f[1]), values(f[2])}}, res);
+            CHECK(st.passes(digits27(f[4])) == (f[5] == "1"));
+        }
+        else if (f[0] == "image")
+        {
+            const uint32_t w = uint32_t(std::stoul(f[1])), h = uint32_t(std::stoul(f[2])), fr = uint32_t(std::stoul(f[3]));
+            const FilterLine l{fr > 1 ? "video" : "image", "px", 2, w * h * fr, nullptr, w, h, fr};
+            const FilterStack st(l, {{find_filter("neighbour-agreement-v1"), {{"min_permille", f[4]}}}}, res);
+            std::vector<uint32_t> px;
+            for (char c : f[5]) px.push_back(uint32_t(c - '0'));
+            CHECK(st.passes(px) == (f[6] == "1"));
+        }
+        else if (f[0] == "rank")
+        {
+            const FilterStack st(text_line(uint32_t(std::stoul(f[2]))), {{find_filter(f[1]), {}}}, res);
+            const Ranker* rk = st.ranker();
+            CHECK(rk && rk->count() == BigUint::from_decimal(f[3]));
+            CHECK(rk && rk->unrank(BigUint::from_decimal(f[4])) == digits27(f[5]));
+            CHECK(rk && rk->rank(digits27(f[5])) == BigUint::from_decimal(f[4]));
+        }
+        else { CHECK(false); }
+    }
+    std::cout << "filter vectors checked: " << n << "\n";
+}
+
 void run_all(int argc, char** argv)
 {
     test_sha256();
@@ -765,6 +1015,8 @@ void run_all(int argc, char** argv)
         test_canon_vectors(dir + "vectors_canon.tsv");
         test_image_vectors(dir + "vectors_image_v1.tsv");
         test_guided_vectors(dir);
+        test_filters(dir);
+        test_filter_vectors(dir);
     }
 }
 

@@ -11,6 +11,7 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
     python3 sieve_ref.py canon-vectors  > ../tests/vectors_canon.tsv
     python3 sieve_ref.py image-vectors  > ../tests/vectors_image_v1.tsv
     python3 sieve_ref.py guided-vectors > ../tests/vectors_guided_v1.tsv
+    python3 sieve_ref.py filter-vectors > ../tests/vectors_filters_v1.tsv
     python3 sieve_ref.py model-build --out /tmp/check.model   # rebuilds the pinned model
     python3 sieve_ref.py warp --length 32 "Some text"
     python3 sieve_ref.py read --length 32 --mode scrambled <hex>
@@ -601,6 +602,191 @@ def cmd_guided_vectors(args):
             print(f"point\t{L}\t{u}\t-\t{h}")
 
 
+# -- the filtration stack (filters and rankers), written from their definitions: plain Python
+#    integers, no shared code with the core.
+def log2_q16(x):
+    """floor(log2(x) * 2^16) by the pinned integer steps (sieve/intlog.hpp)."""
+    n = x.bit_length() - 1
+    m = x << (62 - n) if n <= 62 else x >> (n - 62)
+    r = n << 16
+    for i in range(16):
+        m = (m * m) >> 62
+        if m >= 2 << 62:
+            m >>= 1
+            r += 1 << (15 - i)
+    return r
+
+
+def f_max_run(u, max_run, space=0):
+    run = 0
+    for i, s in enumerate(u):
+        run = run + 1 if i and s == u[i - 1] and s != space else 1
+        if run > max_run:
+            return False
+    return True
+
+
+def f_symbol_entropy(u, lo, hi):
+    from collections import Counter
+    L = len(u)
+    hl = max(0, L * log2_q16(L) - sum(c * log2_q16(c) for c in Counter(u).values()))
+    return lo * L * 65536 <= 1000 * hl <= hi * L * 65536
+
+
+def f_model_information(u, model, max_mb):
+    cost = 0
+    for i, s in enumerate(u):
+        f = model.table(u[:i])
+        cost += 16 * 65536 - log2_q16(f[s])
+    return cost * 1000 <= max_mb * len(u) * 65536
+
+
+def f_neighbour_agreement(u, w, h, frames, min_pm):
+    eq = pairs = 0
+    fr = w * h
+    for f in range(frames):
+        for y in range(h):
+            for x in range(w):
+                i = f * fr + y * w + x
+                for ok, j in ((x + 1 < w, i + 1), (y + 1 < h, i + w), (f + 1 < frames, i + fr)):
+                    if ok:
+                        pairs += 1
+                        eq += u[i] == u[j]
+    return pairs == 0 or eq * 1000 >= min_pm * pairs
+
+
+class WordsRank:
+    """Rank/unrank of words (or clean) survivors in address order, by memoised recursion over
+    (automaton state, symbols left): an independent method from the core's word-length tables."""
+
+    def __init__(self, words, L, clean=False, padding=False):
+        self.L, self.clean, self.padding = L, clean, padding
+        self.words = set(words)
+        self.prefixes = {w[:i] for w in words for i in range(len(w) + 1)}
+        self.memo = {}
+
+    def step(self, state, c):
+        # states: ("start",), ("sp0",) space before any letter, ("w", prefix), ("sp",) space after a
+        # word, ("pad",) two or more trailing spaces (version 2 only; nothing may follow)
+        ch = " abcdefghijklmnopqrstuvwxyz"[c]
+        kind = state[0]
+        if kind == "pad":
+            return ("pad",) if ch == " " else None
+        if ch == " ":
+            if kind == "start":
+                return ("sp0",)
+            if kind == "sp" and self.padding:
+                return ("pad",)
+            if kind == "w" and (self.clean or state[1] in self.words):
+                return ("sp",)
+            return None
+        if self.clean:
+            return ("w", "")
+        p = (state[1] if kind == "w" else "") + ch
+        return ("w", p) if p in self.prefixes else None
+
+    def accept(self, state):
+        if state[0] == "pad":
+            return True
+        if self.clean:
+            return state[0] in ("w", "sp")
+        return (state[0] == "w" and state[1] in self.words) or state[0] == "sp"
+
+    def count(self, state, r):
+        key = (state, r)
+        if key not in self.memo:
+            if r == 0:
+                v = 1 if self.accept(state) else 0
+            else:
+                v = 0
+                for c in range(27):
+                    t = self.step(state, c)
+                    if t is not None:
+                        v += self.count(t, r - 1)
+            self.memo[key] = v
+        return self.memo[key]
+
+    def total(self):
+        return self.count(("start",), self.L)
+
+    def unrank(self, k):
+        s, out = ("start",), []
+        for i in range(self.L):
+            r = self.L - i
+            for c in range(27):
+                t = self.step(s, c)
+                if t is None:
+                    continue
+                n = self.count(t, r - 1)
+                if k < n:
+                    out.append(c)
+                    s = t
+                    break
+                k -= n
+        return out
+
+
+def passes_v2(u, filt, d):
+    """clean-v2 / words-v2: as v1, but two or more trailing SPACEs are padding (the prefix is judged)."""
+    t = u.rstrip(" ")
+    return passes(t, filt, d) if len(u) - len(t) >= 2 else passes(u, filt, d)
+
+
+def cmd_filter_vectors(_args):
+    """Filter verdicts, fixed-point logarithms, and ranks of words/clean survivors."""
+    here = "../data"
+    model = Model(f"{here}/models/gutenberg-lower27-o5.model")
+    dict_file = "scowl-2020.12.07-en-35.txt"
+    d = load_dict(f"{here}/dictionaries/{dict_file}")
+    sym = ALPHABETS["lower27"]
+    print("# sieve filter conformance vectors v1 (clean-v1 window-v1 words-v1 clean-v2 words-v2 max-run-v1 symbol-entropy-v1")
+    print("#   model-information-v1 neighbour-agreement-v1), dictionary scowl-en-35, model gutenberg-lower27-o5")
+    print(f"# dictionary {dict_file}")
+    print("# log2 <x> <floor(log2(x)*65536)>")
+    for x in [1, 2, 3, 5, 7, 10, 27, 100, 1000, 65535, 65536, 65537, 10 ** 9, 2 ** 40 + 12345, 2 ** 63, 2 ** 64 - 1]:
+        print(f"log2\t{x}\t{log2_q16(x)}")
+    print("# verdict <filter> <params> <length> <unit> <1|0>")
+    texts = ["it was the best of times", "the quick brown fox", "qzxj vvkw pqpq zzzz", "a  b", " an ant ", "aaaa bbb",
+             "zzz", "call me ishmael", "xylophone", "tan tan tan", "hello world", "lorem ipsum dolor"]
+    g = stream("filters")
+    for L in (8, 32):
+        units = [canonicalise(t, "lower27", L)[0] for t in texts]
+        units += ["".join(sym[next(g) % 27] for _ in range(L)) for _ in range(6)]
+        units.append(" " * L)
+        units += [t.ljust(L)[:L] for t in ("ant", " an", "tan  x", "i ", "xqz")]  # padding edge cases
+        for u in units:
+            digits = [sym.index(c) for c in u]
+            for f in ("clean", "window", "words"):
+                print(f"verdict\t{f}-v1\tdictionary=scowl-en-35\t{L}\t{u}\t{int(passes(u, f, d))}")
+            for f in ("clean", "words"):
+                print(f"verdict\t{f}-v2\tdictionary=scowl-en-35\t{L}\t{u}\t{int(passes_v2(u, f, d))}")
+            for mr in (2, 3):
+                print(f"verdict\tmax-run-v1\tmax_run={mr}\t{L}\t{u}\t{int(f_max_run(digits, mr))}")
+            for lo, hi in ((0, 4400), (2000, 3900), (3500, 32000)):
+                print(f"verdict\tsymbol-entropy-v1\tmin_millibits={lo},max_millibits={hi}\t{L}\t{u}\t{int(f_symbol_entropy(digits, lo, hi))}")
+            for mx in (2500, 5000, 9000):
+                print(f"verdict\tmodel-information-v1\tmax_millibits={mx}\t{L}\t{u}\t{int(f_model_information(digits, model, mx))}")
+    print("# image <w> <h> <frames> <min_permille> <pixels> <1|0>")
+    for w, h, fr in ((10, 10, 1), (5, 5, 8), (3, 4, 2)):
+        for k in range(5):
+            px = [next(g) % 2 for _ in range(w * h * fr)] if k < 3 else [k % 2] * (w * h * fr)
+            if k == 1:
+                px = [(i % w + i // w) % 2 for i in range(w * h * fr)]
+            for pm in (500, 600, 900):
+                print(f"image\t{w}\t{h}\t{fr}\t{pm}\t{''.join(map(str, px))}\t{int(f_neighbour_agreement(px, w, h, fr, pm))}")
+    print("# rank <filter> <length> <count> <rank> <unit>")
+    words = sorted(d[0])
+    for f, v, L in (("clean", 1, 12), ("words", 1, 5), ("words", 1, 12), ("clean", 2, 12), ("words", 2, 5), ("words", 2, 12)):
+        rk = WordsRank(words, L, clean=(f == "clean"), padding=(v == 2))
+        total = rk.total()
+        g2 = stream(f"rank/{f}/{L}" if v == 1 else f"rank/{f}-v{v}/{L}")
+        ks = [0, 1, total // 2, total - 1] + [int.from_bytes(bytes(next(g2) for _ in range(16)), "little") % total for _ in range(6)]
+        for k in ks:
+            u = "".join(sym[c] for c in rk.unrank(k))
+            assert (passes if v == 1 else passes_v2)(u, f, d)
+            print(f"rank\t{f}-v{v}\t{L}\t{total}\t{k}\t{u}")
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -625,6 +811,7 @@ def main():
     s.add_argument("--order", type=int, default=5)
     s.add_argument("--min-count", type=int, default=8)
     s.add_argument("--out", required=True)
+    sub.add_parser("filter-vectors")
     s = sub.add_parser("guided-vectors")
     s.add_argument("--model", default="../data/models/gutenberg-lower27-o5.model")
     args = p.parse_args()
@@ -643,6 +830,8 @@ def main():
         cmd_model_build(args)
     elif args.cmd == "guided-vectors":
         cmd_guided_vectors(args)
+    elif args.cmd == "filter-vectors":
+        cmd_filter_vectors(args)
     elif args.cmd == "warp":
         sp = Space(args.alphabet, args.length, args.key)
         for u in canonicalise(" ".join(args.text), args.alphabet, args.length):

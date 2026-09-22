@@ -62,6 +62,7 @@ public:
     uint32_t substrings_of_length(uint32_t k) const { return at(substrings_by_len_, k); }
 
     size_t word_count() const { return sorted_words_.size(); }
+    const std::vector<std::string>& words() const { return sorted_words_; } // sorted, distinct
     size_t skipped_lines() const { return skipped_; }
     const std::string& sha256() const { return sha256_; }
 

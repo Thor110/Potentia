@@ -7,15 +7,22 @@
 // drawing. The longest line always spans the map's full height, so no bar can run off the screen
 // however large the settings grow, and a bar never gets shorter than a minimum, so even a tiny
 // line stays visible next to a huge one.
+//
+// A magnifying glass beside each line's title (or F on that line's settings) opens its filter
+// list over the map: the display mode, every filter with a tickbox and description, and each
+// ticked filter's parameters. The choices are saved to sieve-filters.ini. Where the stack can
+// count its survivors exactly, the map shows them as a filled bar inside the line's bar.
 #pragma once
 
 #include "cli/args.hpp"
+#include "cli/filter_config.hpp"
 
 #include <SDL3/SDL.h>
 
 #include <array>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace hallway {
 
@@ -51,13 +58,15 @@ LineSize line_size(uint32_t base, uint64_t length);
 class Menu
 {
 public:
-    Menu(SDL_Window* window, SDL_Renderer* renderer, Settings settings);
+    Menu(SDL_Window* window, SDL_Renderer* renderer, Settings settings, sieve::cli::FilterConfig filters, std::string filters_path);
 
     enum class Result { Enter, Quit };
     Result run();                                  // interactive: until Enter or quit
     void press(SDL_Keycode key, SDL_Keymod mod);   // one key, as if typed (scripting)
     void render();
     const Settings& settings() const { return s_; }
+    const sieve::cli::FilterConfig& filters() const { return cfg_; }
+    void open_filters(int line) { overlay_ = line; orow_ = 0; oscroll_ = 0; }
 
 private:
     void handle(const SDL_Event& e, bool& done, Result& result);
@@ -66,10 +75,39 @@ private:
     void adjust(int dir, int step);
     int row_count() const;
 
+    // The filter overlay.
+    struct ORow
+    {
+        enum class Kind { Mode, Filter, Param } kind;
+        std::string filter, key;
+    };
+    std::vector<ORow> overlay_rows() const;
+    void overlay_key(SDL_Keycode key, bool shift);
+    void overlay_change(int dir, bool big);
+    void render_overlay(float W, float H);
+    sieve::FilterLine filter_line_of(int line) const;
+    struct StackInfo
+    {
+        std::string key;      // settings it was computed for
+        std::string status;   // one line for the overlay footer
+        double survivor_bits = -1; // exact survivors (log2), or -1
+    };
+    const StackInfo& stack_info(int line);
+    void save_filters();
+
     SDL_Window* window_;
     SDL_Renderer* r_;
     Settings s_;
     int row_ = 0;
+    sieve::cli::FilterConfig cfg_;
+    std::string cfg_path_;
+    int overlay_ = -1; // line whose filters are open, or -1
+    int orow_ = 0;
+    int oscroll_ = 0;
+    StackInfo info_[4];
+    SDL_FRect magnifier_[4] = {};
+    SDL_FRect box_ = {};
+    std::vector<std::pair<SDL_FRect, int>> row_rects_; // overlay rows on screen
 };
 
 } // namespace hallway

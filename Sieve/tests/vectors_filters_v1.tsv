@@ -1,0 +1,752 @@
+# sieve filter conformance vectors v1 (clean-v1 window-v1 words-v1 clean-v2 words-v2 max-run-v1 symbol-entropy-v1
+#   model-information-v1 neighbour-agreement-v1), dictionary scowl-en-35, model gutenberg-lower27-o5
+# dictionary scowl-2020.12.07-en-35.txt
+# log2 <x> <floor(log2(x)*65536)>
+log2	1	0
+log2	2	65536
+log2	3	103872
+log2	5	152169
+log2	7	183982
+log2	10	217705
+log2	27	311616
+log2	100	435411
+log2	1000	653117
+log2	65535	1048574
+log2	65536	1048576
+log2	65537	1048577
+log2	1000000000	1959352
+log2	1099511640121	2621440
+log2	9223372036854775808	4128768
+log2	18446744073709551615	4194303
+# verdict <filter> <params> <length> <unit> <1|0>
+verdict	clean-v1	dictionary=scowl-en-35	8	it was t	1
+verdict	window-v1	dictionary=scowl-en-35	8	it was t	1
+verdict	words-v1	dictionary=scowl-en-35	8	it was t	0
+verdict	clean-v2	dictionary=scowl-en-35	8	it was t	1
+verdict	words-v2	dictionary=scowl-en-35	8	it was t	0
+verdict	max-run-v1	max_run=2	8	it was t	1
+verdict	max-run-v1	max_run=3	8	it was t	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	it was t	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	8	it was t	1
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	it was t	0
+verdict	model-information-v1	max_millibits=2500	8	it was t	1
+verdict	model-information-v1	max_millibits=5000	8	it was t	1
+verdict	model-information-v1	max_millibits=9000	8	it was t	1
+verdict	clean-v1	dictionary=scowl-en-35	8	the quic	1
+verdict	window-v1	dictionary=scowl-en-35	8	the quic	1
+verdict	words-v1	dictionary=scowl-en-35	8	the quic	0
+verdict	clean-v2	dictionary=scowl-en-35	8	the quic	1
+verdict	words-v2	dictionary=scowl-en-35	8	the quic	0
+verdict	max-run-v1	max_run=2	8	the quic	1
+verdict	max-run-v1	max_run=3	8	the quic	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	the quic	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	8	the quic	1
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	the quic	0
+verdict	model-information-v1	max_millibits=2500	8	the quic	1
+verdict	model-information-v1	max_millibits=5000	8	the quic	1
+verdict	model-information-v1	max_millibits=9000	8	the quic	1
+verdict	clean-v1	dictionary=scowl-en-35	8	qzxj vvk	1
+verdict	window-v1	dictionary=scowl-en-35	8	qzxj vvk	0
+verdict	words-v1	dictionary=scowl-en-35	8	qzxj vvk	0
+verdict	clean-v2	dictionary=scowl-en-35	8	qzxj vvk	1
+verdict	words-v2	dictionary=scowl-en-35	8	qzxj vvk	0
+verdict	max-run-v1	max_run=2	8	qzxj vvk	1
+verdict	max-run-v1	max_run=3	8	qzxj vvk	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	qzxj vvk	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	8	qzxj vvk	1
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	qzxj vvk	0
+verdict	model-information-v1	max_millibits=2500	8	qzxj vvk	0
+verdict	model-information-v1	max_millibits=5000	8	qzxj vvk	0
+verdict	model-information-v1	max_millibits=9000	8	qzxj vvk	0
+verdict	clean-v1	dictionary=scowl-en-35	8	a b     	0
+verdict	window-v1	dictionary=scowl-en-35	8	a b     	0
+verdict	words-v1	dictionary=scowl-en-35	8	a b     	0
+verdict	clean-v2	dictionary=scowl-en-35	8	a b     	1
+verdict	words-v2	dictionary=scowl-en-35	8	a b     	0
+verdict	max-run-v1	max_run=2	8	a b     	1
+verdict	max-run-v1	max_run=3	8	a b     	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	a b     	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	8	a b     	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	a b     	0
+verdict	model-information-v1	max_millibits=2500	8	a b     	0
+verdict	model-information-v1	max_millibits=5000	8	a b     	0
+verdict	model-information-v1	max_millibits=9000	8	a b     	1
+verdict	clean-v1	dictionary=scowl-en-35	8	an ant  	0
+verdict	window-v1	dictionary=scowl-en-35	8	an ant  	0
+verdict	words-v1	dictionary=scowl-en-35	8	an ant  	0
+verdict	clean-v2	dictionary=scowl-en-35	8	an ant  	1
+verdict	words-v2	dictionary=scowl-en-35	8	an ant  	1
+verdict	max-run-v1	max_run=2	8	an ant  	1
+verdict	max-run-v1	max_run=3	8	an ant  	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	an ant  	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	8	an ant  	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	an ant  	0
+verdict	model-information-v1	max_millibits=2500	8	an ant  	0
+verdict	model-information-v1	max_millibits=5000	8	an ant  	1
+verdict	model-information-v1	max_millibits=9000	8	an ant  	1
+verdict	clean-v1	dictionary=scowl-en-35	8	aaaa bbb	1
+verdict	window-v1	dictionary=scowl-en-35	8	aaaa bbb	0
+verdict	words-v1	dictionary=scowl-en-35	8	aaaa bbb	0
+verdict	clean-v2	dictionary=scowl-en-35	8	aaaa bbb	1
+verdict	words-v2	dictionary=scowl-en-35	8	aaaa bbb	0
+verdict	max-run-v1	max_run=2	8	aaaa bbb	0
+verdict	max-run-v1	max_run=3	8	aaaa bbb	0
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	aaaa bbb	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	8	aaaa bbb	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	aaaa bbb	0
+verdict	model-information-v1	max_millibits=2500	8	aaaa bbb	0
+verdict	model-information-v1	max_millibits=5000	8	aaaa bbb	0
+verdict	model-information-v1	max_millibits=9000	8	aaaa bbb	0
+verdict	clean-v1	dictionary=scowl-en-35	8	zzz     	0
+verdict	window-v1	dictionary=scowl-en-35	8	zzz     	0
+verdict	words-v1	dictionary=scowl-en-35	8	zzz     	0
+verdict	clean-v2	dictionary=scowl-en-35	8	zzz     	1
+verdict	words-v2	dictionary=scowl-en-35	8	zzz     	0
+verdict	max-run-v1	max_run=2	8	zzz     	0
+verdict	max-run-v1	max_run=3	8	zzz     	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	zzz     	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	8	zzz     	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	zzz     	0
+verdict	model-information-v1	max_millibits=2500	8	zzz     	0
+verdict	model-information-v1	max_millibits=5000	8	zzz     	0
+verdict	model-information-v1	max_millibits=9000	8	zzz     	1
+verdict	clean-v1	dictionary=scowl-en-35	8	call me 	1
+verdict	window-v1	dictionary=scowl-en-35	8	call me 	1
+verdict	words-v1	dictionary=scowl-en-35	8	call me 	1
+verdict	clean-v2	dictionary=scowl-en-35	8	call me 	1
+verdict	words-v2	dictionary=scowl-en-35	8	call me 	1
+verdict	max-run-v1	max_run=2	8	call me 	1
+verdict	max-run-v1	max_run=3	8	call me 	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	call me 	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	8	call me 	1
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	call me 	0
+verdict	model-information-v1	max_millibits=2500	8	call me 	0
+verdict	model-information-v1	max_millibits=5000	8	call me 	1
+verdict	model-information-v1	max_millibits=9000	8	call me 	1
+verdict	clean-v1	dictionary=scowl-en-35	8	xylophon	1
+verdict	window-v1	dictionary=scowl-en-35	8	xylophon	1
+verdict	words-v1	dictionary=scowl-en-35	8	xylophon	0
+verdict	clean-v2	dictionary=scowl-en-35	8	xylophon	1
+verdict	words-v2	dictionary=scowl-en-35	8	xylophon	0
+verdict	max-run-v1	max_run=2	8	xylophon	1
+verdict	max-run-v1	max_run=3	8	xylophon	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	xylophon	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	8	xylophon	1
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	xylophon	0
+verdict	model-information-v1	max_millibits=2500	8	xylophon	0
+verdict	model-information-v1	max_millibits=5000	8	xylophon	0
+verdict	model-information-v1	max_millibits=9000	8	xylophon	1
+verdict	clean-v1	dictionary=scowl-en-35	8	tan tan 	1
+verdict	window-v1	dictionary=scowl-en-35	8	tan tan 	1
+verdict	words-v1	dictionary=scowl-en-35	8	tan tan 	1
+verdict	clean-v2	dictionary=scowl-en-35	8	tan tan 	1
+verdict	words-v2	dictionary=scowl-en-35	8	tan tan 	1
+verdict	max-run-v1	max_run=2	8	tan tan 	1
+verdict	max-run-v1	max_run=3	8	tan tan 	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	tan tan 	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	8	tan tan 	1
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	tan tan 	0
+verdict	model-information-v1	max_millibits=2500	8	tan tan 	0
+verdict	model-information-v1	max_millibits=5000	8	tan tan 	1
+verdict	model-information-v1	max_millibits=9000	8	tan tan 	1
+verdict	clean-v1	dictionary=scowl-en-35	8	hello wo	1
+verdict	window-v1	dictionary=scowl-en-35	8	hello wo	1
+verdict	words-v1	dictionary=scowl-en-35	8	hello wo	0
+verdict	clean-v2	dictionary=scowl-en-35	8	hello wo	1
+verdict	words-v2	dictionary=scowl-en-35	8	hello wo	0
+verdict	max-run-v1	max_run=2	8	hello wo	1
+verdict	max-run-v1	max_run=3	8	hello wo	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	hello wo	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	8	hello wo	1
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	hello wo	0
+verdict	model-information-v1	max_millibits=2500	8	hello wo	0
+verdict	model-information-v1	max_millibits=5000	8	hello wo	1
+verdict	model-information-v1	max_millibits=9000	8	hello wo	1
+verdict	clean-v1	dictionary=scowl-en-35	8	lorem ip	1
+verdict	window-v1	dictionary=scowl-en-35	8	lorem ip	0
+verdict	words-v1	dictionary=scowl-en-35	8	lorem ip	0
+verdict	clean-v2	dictionary=scowl-en-35	8	lorem ip	1
+verdict	words-v2	dictionary=scowl-en-35	8	lorem ip	0
+verdict	max-run-v1	max_run=2	8	lorem ip	1
+verdict	max-run-v1	max_run=3	8	lorem ip	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	lorem ip	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	8	lorem ip	1
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	lorem ip	0
+verdict	model-information-v1	max_millibits=2500	8	lorem ip	0
+verdict	model-information-v1	max_millibits=5000	8	lorem ip	0
+verdict	model-information-v1	max_millibits=9000	8	lorem ip	1
+verdict	clean-v1	dictionary=scowl-en-35	8	hgdctca 	1
+verdict	window-v1	dictionary=scowl-en-35	8	hgdctca 	0
+verdict	words-v1	dictionary=scowl-en-35	8	hgdctca 	0
+verdict	clean-v2	dictionary=scowl-en-35	8	hgdctca 	1
+verdict	words-v2	dictionary=scowl-en-35	8	hgdctca 	0
+verdict	max-run-v1	max_run=2	8	hgdctca 	1
+verdict	max-run-v1	max_run=3	8	hgdctca 	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	hgdctca 	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	8	hgdctca 	1
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	hgdctca 	0
+verdict	model-information-v1	max_millibits=2500	8	hgdctca 	0
+verdict	model-information-v1	max_millibits=5000	8	hgdctca 	0
+verdict	model-information-v1	max_millibits=9000	8	hgdctca 	0
+verdict	clean-v1	dictionary=scowl-en-35	8	qgafnkmy	1
+verdict	window-v1	dictionary=scowl-en-35	8	qgafnkmy	0
+verdict	words-v1	dictionary=scowl-en-35	8	qgafnkmy	0
+verdict	clean-v2	dictionary=scowl-en-35	8	qgafnkmy	1
+verdict	words-v2	dictionary=scowl-en-35	8	qgafnkmy	0
+verdict	max-run-v1	max_run=2	8	qgafnkmy	1
+verdict	max-run-v1	max_run=3	8	qgafnkmy	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	qgafnkmy	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	8	qgafnkmy	1
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	qgafnkmy	0
+verdict	model-information-v1	max_millibits=2500	8	qgafnkmy	0
+verdict	model-information-v1	max_millibits=5000	8	qgafnkmy	0
+verdict	model-information-v1	max_millibits=9000	8	qgafnkmy	0
+verdict	clean-v1	dictionary=scowl-en-35	8	zbfdicas	1
+verdict	window-v1	dictionary=scowl-en-35	8	zbfdicas	0
+verdict	words-v1	dictionary=scowl-en-35	8	zbfdicas	0
+verdict	clean-v2	dictionary=scowl-en-35	8	zbfdicas	1
+verdict	words-v2	dictionary=scowl-en-35	8	zbfdicas	0
+verdict	max-run-v1	max_run=2	8	zbfdicas	1
+verdict	max-run-v1	max_run=3	8	zbfdicas	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	zbfdicas	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	8	zbfdicas	1
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	zbfdicas	0
+verdict	model-information-v1	max_millibits=2500	8	zbfdicas	0
+verdict	model-information-v1	max_millibits=5000	8	zbfdicas	0
+verdict	model-information-v1	max_millibits=9000	8	zbfdicas	1
+verdict	clean-v1	dictionary=scowl-en-35	8	lsjakgg 	1
+verdict	window-v1	dictionary=scowl-en-35	8	lsjakgg 	0
+verdict	words-v1	dictionary=scowl-en-35	8	lsjakgg 	0
+verdict	clean-v2	dictionary=scowl-en-35	8	lsjakgg 	1
+verdict	words-v2	dictionary=scowl-en-35	8	lsjakgg 	0
+verdict	max-run-v1	max_run=2	8	lsjakgg 	1
+verdict	max-run-v1	max_run=3	8	lsjakgg 	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	lsjakgg 	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	8	lsjakgg 	1
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	lsjakgg 	0
+verdict	model-information-v1	max_millibits=2500	8	lsjakgg 	0
+verdict	model-information-v1	max_millibits=5000	8	lsjakgg 	0
+verdict	model-information-v1	max_millibits=9000	8	lsjakgg 	1
+verdict	clean-v1	dictionary=scowl-en-35	8	ndfm hr 	1
+verdict	window-v1	dictionary=scowl-en-35	8	ndfm hr 	0
+verdict	words-v1	dictionary=scowl-en-35	8	ndfm hr 	0
+verdict	clean-v2	dictionary=scowl-en-35	8	ndfm hr 	1
+verdict	words-v2	dictionary=scowl-en-35	8	ndfm hr 	0
+verdict	max-run-v1	max_run=2	8	ndfm hr 	1
+verdict	max-run-v1	max_run=3	8	ndfm hr 	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	ndfm hr 	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	8	ndfm hr 	1
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	ndfm hr 	0
+verdict	model-information-v1	max_millibits=2500	8	ndfm hr 	0
+verdict	model-information-v1	max_millibits=5000	8	ndfm hr 	0
+verdict	model-information-v1	max_millibits=9000	8	ndfm hr 	1
+verdict	clean-v1	dictionary=scowl-en-35	8	ryqjpdpk	1
+verdict	window-v1	dictionary=scowl-en-35	8	ryqjpdpk	0
+verdict	words-v1	dictionary=scowl-en-35	8	ryqjpdpk	0
+verdict	clean-v2	dictionary=scowl-en-35	8	ryqjpdpk	1
+verdict	words-v2	dictionary=scowl-en-35	8	ryqjpdpk	0
+verdict	max-run-v1	max_run=2	8	ryqjpdpk	1
+verdict	max-run-v1	max_run=3	8	ryqjpdpk	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	ryqjpdpk	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	8	ryqjpdpk	1
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	ryqjpdpk	0
+verdict	model-information-v1	max_millibits=2500	8	ryqjpdpk	0
+verdict	model-information-v1	max_millibits=5000	8	ryqjpdpk	0
+verdict	model-information-v1	max_millibits=9000	8	ryqjpdpk	0
+verdict	clean-v1	dictionary=scowl-en-35	8	        	0
+verdict	window-v1	dictionary=scowl-en-35	8	        	0
+verdict	words-v1	dictionary=scowl-en-35	8	        	0
+verdict	clean-v2	dictionary=scowl-en-35	8	        	0
+verdict	words-v2	dictionary=scowl-en-35	8	        	0
+verdict	max-run-v1	max_run=2	8	        	1
+verdict	max-run-v1	max_run=3	8	        	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	        	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	8	        	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	        	0
+verdict	model-information-v1	max_millibits=2500	8	        	1
+verdict	model-information-v1	max_millibits=5000	8	        	1
+verdict	model-information-v1	max_millibits=9000	8	        	1
+verdict	clean-v1	dictionary=scowl-en-35	8	ant     	0
+verdict	window-v1	dictionary=scowl-en-35	8	ant     	0
+verdict	words-v1	dictionary=scowl-en-35	8	ant     	0
+verdict	clean-v2	dictionary=scowl-en-35	8	ant     	1
+verdict	words-v2	dictionary=scowl-en-35	8	ant     	1
+verdict	max-run-v1	max_run=2	8	ant     	1
+verdict	max-run-v1	max_run=3	8	ant     	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	ant     	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	8	ant     	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	ant     	0
+verdict	model-information-v1	max_millibits=2500	8	ant     	0
+verdict	model-information-v1	max_millibits=5000	8	ant     	1
+verdict	model-information-v1	max_millibits=9000	8	ant     	1
+verdict	clean-v1	dictionary=scowl-en-35	8	 an     	0
+verdict	window-v1	dictionary=scowl-en-35	8	 an     	0
+verdict	words-v1	dictionary=scowl-en-35	8	 an     	0
+verdict	clean-v2	dictionary=scowl-en-35	8	 an     	1
+verdict	words-v2	dictionary=scowl-en-35	8	 an     	1
+verdict	max-run-v1	max_run=2	8	 an     	1
+verdict	max-run-v1	max_run=3	8	 an     	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	 an     	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	8	 an     	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	 an     	0
+verdict	model-information-v1	max_millibits=2500	8	 an     	0
+verdict	model-information-v1	max_millibits=5000	8	 an     	1
+verdict	model-information-v1	max_millibits=9000	8	 an     	1
+verdict	clean-v1	dictionary=scowl-en-35	8	tan  x  	0
+verdict	window-v1	dictionary=scowl-en-35	8	tan  x  	0
+verdict	words-v1	dictionary=scowl-en-35	8	tan  x  	0
+verdict	clean-v2	dictionary=scowl-en-35	8	tan  x  	0
+verdict	words-v2	dictionary=scowl-en-35	8	tan  x  	0
+verdict	max-run-v1	max_run=2	8	tan  x  	1
+verdict	max-run-v1	max_run=3	8	tan  x  	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	tan  x  	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	8	tan  x  	1
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	tan  x  	0
+verdict	model-information-v1	max_millibits=2500	8	tan  x  	0
+verdict	model-information-v1	max_millibits=5000	8	tan  x  	0
+verdict	model-information-v1	max_millibits=9000	8	tan  x  	1
+verdict	clean-v1	dictionary=scowl-en-35	8	i       	0
+verdict	window-v1	dictionary=scowl-en-35	8	i       	0
+verdict	words-v1	dictionary=scowl-en-35	8	i       	0
+verdict	clean-v2	dictionary=scowl-en-35	8	i       	1
+verdict	words-v2	dictionary=scowl-en-35	8	i       	0
+verdict	max-run-v1	max_run=2	8	i       	1
+verdict	max-run-v1	max_run=3	8	i       	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	i       	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	8	i       	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	i       	0
+verdict	model-information-v1	max_millibits=2500	8	i       	0
+verdict	model-information-v1	max_millibits=5000	8	i       	1
+verdict	model-information-v1	max_millibits=9000	8	i       	1
+verdict	clean-v1	dictionary=scowl-en-35	8	xqz     	0
+verdict	window-v1	dictionary=scowl-en-35	8	xqz     	0
+verdict	words-v1	dictionary=scowl-en-35	8	xqz     	0
+verdict	clean-v2	dictionary=scowl-en-35	8	xqz     	1
+verdict	words-v2	dictionary=scowl-en-35	8	xqz     	0
+verdict	max-run-v1	max_run=2	8	xqz     	1
+verdict	max-run-v1	max_run=3	8	xqz     	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	xqz     	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	8	xqz     	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	xqz     	0
+verdict	model-information-v1	max_millibits=2500	8	xqz     	0
+verdict	model-information-v1	max_millibits=5000	8	xqz     	0
+verdict	model-information-v1	max_millibits=9000	8	xqz     	1
+verdict	clean-v1	dictionary=scowl-en-35	32	it was the best of times        	0
+verdict	window-v1	dictionary=scowl-en-35	32	it was the best of times        	0
+verdict	words-v1	dictionary=scowl-en-35	32	it was the best of times        	0
+verdict	clean-v2	dictionary=scowl-en-35	32	it was the best of times        	1
+verdict	words-v2	dictionary=scowl-en-35	32	it was the best of times        	1
+verdict	max-run-v1	max_run=2	32	it was the best of times        	1
+verdict	max-run-v1	max_run=3	32	it was the best of times        	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	it was the best of times        	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	32	it was the best of times        	1
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	it was the best of times        	0
+verdict	model-information-v1	max_millibits=2500	32	it was the best of times        	1
+verdict	model-information-v1	max_millibits=5000	32	it was the best of times        	1
+verdict	model-information-v1	max_millibits=9000	32	it was the best of times        	1
+verdict	clean-v1	dictionary=scowl-en-35	32	the quick brown fox             	0
+verdict	window-v1	dictionary=scowl-en-35	32	the quick brown fox             	0
+verdict	words-v1	dictionary=scowl-en-35	32	the quick brown fox             	0
+verdict	clean-v2	dictionary=scowl-en-35	32	the quick brown fox             	1
+verdict	words-v2	dictionary=scowl-en-35	32	the quick brown fox             	1
+verdict	max-run-v1	max_run=2	32	the quick brown fox             	1
+verdict	max-run-v1	max_run=3	32	the quick brown fox             	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	the quick brown fox             	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	32	the quick brown fox             	1
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	the quick brown fox             	0
+verdict	model-information-v1	max_millibits=2500	32	the quick brown fox             	1
+verdict	model-information-v1	max_millibits=5000	32	the quick brown fox             	1
+verdict	model-information-v1	max_millibits=9000	32	the quick brown fox             	1
+verdict	clean-v1	dictionary=scowl-en-35	32	qzxj vvkw pqpq zzzz             	0
+verdict	window-v1	dictionary=scowl-en-35	32	qzxj vvkw pqpq zzzz             	0
+verdict	words-v1	dictionary=scowl-en-35	32	qzxj vvkw pqpq zzzz             	0
+verdict	clean-v2	dictionary=scowl-en-35	32	qzxj vvkw pqpq zzzz             	1
+verdict	words-v2	dictionary=scowl-en-35	32	qzxj vvkw pqpq zzzz             	0
+verdict	max-run-v1	max_run=2	32	qzxj vvkw pqpq zzzz             	0
+verdict	max-run-v1	max_run=3	32	qzxj vvkw pqpq zzzz             	0
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	qzxj vvkw pqpq zzzz             	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	32	qzxj vvkw pqpq zzzz             	1
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	qzxj vvkw pqpq zzzz             	0
+verdict	model-information-v1	max_millibits=2500	32	qzxj vvkw pqpq zzzz             	0
+verdict	model-information-v1	max_millibits=5000	32	qzxj vvkw pqpq zzzz             	0
+verdict	model-information-v1	max_millibits=9000	32	qzxj vvkw pqpq zzzz             	1
+verdict	clean-v1	dictionary=scowl-en-35	32	a b                             	0
+verdict	window-v1	dictionary=scowl-en-35	32	a b                             	0
+verdict	words-v1	dictionary=scowl-en-35	32	a b                             	0
+verdict	clean-v2	dictionary=scowl-en-35	32	a b                             	1
+verdict	words-v2	dictionary=scowl-en-35	32	a b                             	0
+verdict	max-run-v1	max_run=2	32	a b                             	1
+verdict	max-run-v1	max_run=3	32	a b                             	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	a b                             	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	32	a b                             	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	a b                             	0
+verdict	model-information-v1	max_millibits=2500	32	a b                             	1
+verdict	model-information-v1	max_millibits=5000	32	a b                             	1
+verdict	model-information-v1	max_millibits=9000	32	a b                             	1
+verdict	clean-v1	dictionary=scowl-en-35	32	an ant                          	0
+verdict	window-v1	dictionary=scowl-en-35	32	an ant                          	0
+verdict	words-v1	dictionary=scowl-en-35	32	an ant                          	0
+verdict	clean-v2	dictionary=scowl-en-35	32	an ant                          	1
+verdict	words-v2	dictionary=scowl-en-35	32	an ant                          	1
+verdict	max-run-v1	max_run=2	32	an ant                          	1
+verdict	max-run-v1	max_run=3	32	an ant                          	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	an ant                          	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	32	an ant                          	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	an ant                          	0
+verdict	model-information-v1	max_millibits=2500	32	an ant                          	1
+verdict	model-information-v1	max_millibits=5000	32	an ant                          	1
+verdict	model-information-v1	max_millibits=9000	32	an ant                          	1
+verdict	clean-v1	dictionary=scowl-en-35	32	aaaa bbb                        	0
+verdict	window-v1	dictionary=scowl-en-35	32	aaaa bbb                        	0
+verdict	words-v1	dictionary=scowl-en-35	32	aaaa bbb                        	0
+verdict	clean-v2	dictionary=scowl-en-35	32	aaaa bbb                        	1
+verdict	words-v2	dictionary=scowl-en-35	32	aaaa bbb                        	0
+verdict	max-run-v1	max_run=2	32	aaaa bbb                        	0
+verdict	max-run-v1	max_run=3	32	aaaa bbb                        	0
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	aaaa bbb                        	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	32	aaaa bbb                        	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	aaaa bbb                        	0
+verdict	model-information-v1	max_millibits=2500	32	aaaa bbb                        	0
+verdict	model-information-v1	max_millibits=5000	32	aaaa bbb                        	1
+verdict	model-information-v1	max_millibits=9000	32	aaaa bbb                        	1
+verdict	clean-v1	dictionary=scowl-en-35	32	zzz                             	0
+verdict	window-v1	dictionary=scowl-en-35	32	zzz                             	0
+verdict	words-v1	dictionary=scowl-en-35	32	zzz                             	0
+verdict	clean-v2	dictionary=scowl-en-35	32	zzz                             	1
+verdict	words-v2	dictionary=scowl-en-35	32	zzz                             	0
+verdict	max-run-v1	max_run=2	32	zzz                             	0
+verdict	max-run-v1	max_run=3	32	zzz                             	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	zzz                             	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	32	zzz                             	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	zzz                             	0
+verdict	model-information-v1	max_millibits=2500	32	zzz                             	1
+verdict	model-information-v1	max_millibits=5000	32	zzz                             	1
+verdict	model-information-v1	max_millibits=9000	32	zzz                             	1
+verdict	clean-v1	dictionary=scowl-en-35	32	call me ishmael                 	0
+verdict	window-v1	dictionary=scowl-en-35	32	call me ishmael                 	0
+verdict	words-v1	dictionary=scowl-en-35	32	call me ishmael                 	0
+verdict	clean-v2	dictionary=scowl-en-35	32	call me ishmael                 	1
+verdict	words-v2	dictionary=scowl-en-35	32	call me ishmael                 	0
+verdict	max-run-v1	max_run=2	32	call me ishmael                 	1
+verdict	max-run-v1	max_run=3	32	call me ishmael                 	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	call me ishmael                 	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	32	call me ishmael                 	1
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	call me ishmael                 	0
+verdict	model-information-v1	max_millibits=2500	32	call me ishmael                 	1
+verdict	model-information-v1	max_millibits=5000	32	call me ishmael                 	1
+verdict	model-information-v1	max_millibits=9000	32	call me ishmael                 	1
+verdict	clean-v1	dictionary=scowl-en-35	32	xylophone                       	0
+verdict	window-v1	dictionary=scowl-en-35	32	xylophone                       	0
+verdict	words-v1	dictionary=scowl-en-35	32	xylophone                       	0
+verdict	clean-v2	dictionary=scowl-en-35	32	xylophone                       	1
+verdict	words-v2	dictionary=scowl-en-35	32	xylophone                       	1
+verdict	max-run-v1	max_run=2	32	xylophone                       	1
+verdict	max-run-v1	max_run=3	32	xylophone                       	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	xylophone                       	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	32	xylophone                       	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	xylophone                       	0
+verdict	model-information-v1	max_millibits=2500	32	xylophone                       	0
+verdict	model-information-v1	max_millibits=5000	32	xylophone                       	1
+verdict	model-information-v1	max_millibits=9000	32	xylophone                       	1
+verdict	clean-v1	dictionary=scowl-en-35	32	tan tan tan                     	0
+verdict	window-v1	dictionary=scowl-en-35	32	tan tan tan                     	0
+verdict	words-v1	dictionary=scowl-en-35	32	tan tan tan                     	0
+verdict	clean-v2	dictionary=scowl-en-35	32	tan tan tan                     	1
+verdict	words-v2	dictionary=scowl-en-35	32	tan tan tan                     	1
+verdict	max-run-v1	max_run=2	32	tan tan tan                     	1
+verdict	max-run-v1	max_run=3	32	tan tan tan                     	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	tan tan tan                     	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	32	tan tan tan                     	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	tan tan tan                     	0
+verdict	model-information-v1	max_millibits=2500	32	tan tan tan                     	1
+verdict	model-information-v1	max_millibits=5000	32	tan tan tan                     	1
+verdict	model-information-v1	max_millibits=9000	32	tan tan tan                     	1
+verdict	clean-v1	dictionary=scowl-en-35	32	hello world                     	0
+verdict	window-v1	dictionary=scowl-en-35	32	hello world                     	0
+verdict	words-v1	dictionary=scowl-en-35	32	hello world                     	0
+verdict	clean-v2	dictionary=scowl-en-35	32	hello world                     	1
+verdict	words-v2	dictionary=scowl-en-35	32	hello world                     	1
+verdict	max-run-v1	max_run=2	32	hello world                     	1
+verdict	max-run-v1	max_run=3	32	hello world                     	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	hello world                     	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	32	hello world                     	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	hello world                     	0
+verdict	model-information-v1	max_millibits=2500	32	hello world                     	1
+verdict	model-information-v1	max_millibits=5000	32	hello world                     	1
+verdict	model-information-v1	max_millibits=9000	32	hello world                     	1
+verdict	clean-v1	dictionary=scowl-en-35	32	lorem ipsum dolor               	0
+verdict	window-v1	dictionary=scowl-en-35	32	lorem ipsum dolor               	0
+verdict	words-v1	dictionary=scowl-en-35	32	lorem ipsum dolor               	0
+verdict	clean-v2	dictionary=scowl-en-35	32	lorem ipsum dolor               	1
+verdict	words-v2	dictionary=scowl-en-35	32	lorem ipsum dolor               	0
+verdict	max-run-v1	max_run=2	32	lorem ipsum dolor               	1
+verdict	max-run-v1	max_run=3	32	lorem ipsum dolor               	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	lorem ipsum dolor               	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	32	lorem ipsum dolor               	1
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	lorem ipsum dolor               	0
+verdict	model-information-v1	max_millibits=2500	32	lorem ipsum dolor               	0
+verdict	model-information-v1	max_millibits=5000	32	lorem ipsum dolor               	1
+verdict	model-information-v1	max_millibits=9000	32	lorem ipsum dolor               	1
+verdict	clean-v1	dictionary=scowl-en-35	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	1
+verdict	window-v1	dictionary=scowl-en-35	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	0
+verdict	words-v1	dictionary=scowl-en-35	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	0
+verdict	clean-v2	dictionary=scowl-en-35	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	1
+verdict	words-v2	dictionary=scowl-en-35	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	0
+verdict	max-run-v1	max_run=2	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	0
+verdict	max-run-v1	max_run=3	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	1
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	1
+verdict	model-information-v1	max_millibits=2500	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	0
+verdict	model-information-v1	max_millibits=5000	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	0
+verdict	model-information-v1	max_millibits=9000	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	0
+verdict	clean-v1	dictionary=scowl-en-35	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	1
+verdict	window-v1	dictionary=scowl-en-35	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	0
+verdict	words-v1	dictionary=scowl-en-35	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	0
+verdict	clean-v2	dictionary=scowl-en-35	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	1
+verdict	words-v2	dictionary=scowl-en-35	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	0
+verdict	max-run-v1	max_run=2	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	1
+verdict	max-run-v1	max_run=3	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	1
+verdict	model-information-v1	max_millibits=2500	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	0
+verdict	model-information-v1	max_millibits=5000	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	0
+verdict	model-information-v1	max_millibits=9000	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	0
+verdict	clean-v1	dictionary=scowl-en-35	32	sbururkrhhytogl orjraiengirtul x	1
+verdict	window-v1	dictionary=scowl-en-35	32	sbururkrhhytogl orjraiengirtul x	0
+verdict	words-v1	dictionary=scowl-en-35	32	sbururkrhhytogl orjraiengirtul x	0
+verdict	clean-v2	dictionary=scowl-en-35	32	sbururkrhhytogl orjraiengirtul x	1
+verdict	words-v2	dictionary=scowl-en-35	32	sbururkrhhytogl orjraiengirtul x	0
+verdict	max-run-v1	max_run=2	32	sbururkrhhytogl orjraiengirtul x	1
+verdict	max-run-v1	max_run=3	32	sbururkrhhytogl orjraiengirtul x	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	sbururkrhhytogl orjraiengirtul x	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	32	sbururkrhhytogl orjraiengirtul x	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	sbururkrhhytogl orjraiengirtul x	1
+verdict	model-information-v1	max_millibits=2500	32	sbururkrhhytogl orjraiengirtul x	0
+verdict	model-information-v1	max_millibits=5000	32	sbururkrhhytogl orjraiengirtul x	0
+verdict	model-information-v1	max_millibits=9000	32	sbururkrhhytogl orjraiengirtul x	0
+verdict	clean-v1	dictionary=scowl-en-35	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
+verdict	window-v1	dictionary=scowl-en-35	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
+verdict	words-v1	dictionary=scowl-en-35	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
+verdict	clean-v2	dictionary=scowl-en-35	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
+verdict	words-v2	dictionary=scowl-en-35	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
+verdict	max-run-v1	max_run=2	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	1
+verdict	max-run-v1	max_run=3	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	1
+verdict	model-information-v1	max_millibits=2500	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
+verdict	model-information-v1	max_millibits=5000	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
+verdict	model-information-v1	max_millibits=9000	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
+verdict	clean-v1	dictionary=scowl-en-35	32	ttomsryknypp gevazvtjpvirrswwstb	1
+verdict	window-v1	dictionary=scowl-en-35	32	ttomsryknypp gevazvtjpvirrswwstb	0
+verdict	words-v1	dictionary=scowl-en-35	32	ttomsryknypp gevazvtjpvirrswwstb	0
+verdict	clean-v2	dictionary=scowl-en-35	32	ttomsryknypp gevazvtjpvirrswwstb	1
+verdict	words-v2	dictionary=scowl-en-35	32	ttomsryknypp gevazvtjpvirrswwstb	0
+verdict	max-run-v1	max_run=2	32	ttomsryknypp gevazvtjpvirrswwstb	1
+verdict	max-run-v1	max_run=3	32	ttomsryknypp gevazvtjpvirrswwstb	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	ttomsryknypp gevazvtjpvirrswwstb	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	32	ttomsryknypp gevazvtjpvirrswwstb	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	ttomsryknypp gevazvtjpvirrswwstb	1
+verdict	model-information-v1	max_millibits=2500	32	ttomsryknypp gevazvtjpvirrswwstb	0
+verdict	model-information-v1	max_millibits=5000	32	ttomsryknypp gevazvtjpvirrswwstb	0
+verdict	model-information-v1	max_millibits=9000	32	ttomsryknypp gevazvtjpvirrswwstb	0
+verdict	clean-v1	dictionary=scowl-en-35	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	1
+verdict	window-v1	dictionary=scowl-en-35	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	0
+verdict	words-v1	dictionary=scowl-en-35	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	0
+verdict	clean-v2	dictionary=scowl-en-35	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	1
+verdict	words-v2	dictionary=scowl-en-35	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	0
+verdict	max-run-v1	max_run=2	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	1
+verdict	max-run-v1	max_run=3	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	1
+verdict	model-information-v1	max_millibits=2500	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	0
+verdict	model-information-v1	max_millibits=5000	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	0
+verdict	model-information-v1	max_millibits=9000	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	0
+verdict	clean-v1	dictionary=scowl-en-35	32	                                	0
+verdict	window-v1	dictionary=scowl-en-35	32	                                	0
+verdict	words-v1	dictionary=scowl-en-35	32	                                	0
+verdict	clean-v2	dictionary=scowl-en-35	32	                                	0
+verdict	words-v2	dictionary=scowl-en-35	32	                                	0
+verdict	max-run-v1	max_run=2	32	                                	1
+verdict	max-run-v1	max_run=3	32	                                	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	                                	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	32	                                	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	                                	0
+verdict	model-information-v1	max_millibits=2500	32	                                	1
+verdict	model-information-v1	max_millibits=5000	32	                                	1
+verdict	model-information-v1	max_millibits=9000	32	                                	1
+verdict	clean-v1	dictionary=scowl-en-35	32	ant                             	0
+verdict	window-v1	dictionary=scowl-en-35	32	ant                             	0
+verdict	words-v1	dictionary=scowl-en-35	32	ant                             	0
+verdict	clean-v2	dictionary=scowl-en-35	32	ant                             	1
+verdict	words-v2	dictionary=scowl-en-35	32	ant                             	1
+verdict	max-run-v1	max_run=2	32	ant                             	1
+verdict	max-run-v1	max_run=3	32	ant                             	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	ant                             	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	32	ant                             	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	ant                             	0
+verdict	model-information-v1	max_millibits=2500	32	ant                             	1
+verdict	model-information-v1	max_millibits=5000	32	ant                             	1
+verdict	model-information-v1	max_millibits=9000	32	ant                             	1
+verdict	clean-v1	dictionary=scowl-en-35	32	 an                             	0
+verdict	window-v1	dictionary=scowl-en-35	32	 an                             	0
+verdict	words-v1	dictionary=scowl-en-35	32	 an                             	0
+verdict	clean-v2	dictionary=scowl-en-35	32	 an                             	1
+verdict	words-v2	dictionary=scowl-en-35	32	 an                             	1
+verdict	max-run-v1	max_run=2	32	 an                             	1
+verdict	max-run-v1	max_run=3	32	 an                             	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	 an                             	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	32	 an                             	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	 an                             	0
+verdict	model-information-v1	max_millibits=2500	32	 an                             	1
+verdict	model-information-v1	max_millibits=5000	32	 an                             	1
+verdict	model-information-v1	max_millibits=9000	32	 an                             	1
+verdict	clean-v1	dictionary=scowl-en-35	32	tan  x                          	0
+verdict	window-v1	dictionary=scowl-en-35	32	tan  x                          	0
+verdict	words-v1	dictionary=scowl-en-35	32	tan  x                          	0
+verdict	clean-v2	dictionary=scowl-en-35	32	tan  x                          	0
+verdict	words-v2	dictionary=scowl-en-35	32	tan  x                          	0
+verdict	max-run-v1	max_run=2	32	tan  x                          	1
+verdict	max-run-v1	max_run=3	32	tan  x                          	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	tan  x                          	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	32	tan  x                          	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	tan  x                          	0
+verdict	model-information-v1	max_millibits=2500	32	tan  x                          	1
+verdict	model-information-v1	max_millibits=5000	32	tan  x                          	1
+verdict	model-information-v1	max_millibits=9000	32	tan  x                          	1
+verdict	clean-v1	dictionary=scowl-en-35	32	i                               	0
+verdict	window-v1	dictionary=scowl-en-35	32	i                               	0
+verdict	words-v1	dictionary=scowl-en-35	32	i                               	0
+verdict	clean-v2	dictionary=scowl-en-35	32	i                               	1
+verdict	words-v2	dictionary=scowl-en-35	32	i                               	0
+verdict	max-run-v1	max_run=2	32	i                               	1
+verdict	max-run-v1	max_run=3	32	i                               	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	i                               	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	32	i                               	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	i                               	0
+verdict	model-information-v1	max_millibits=2500	32	i                               	1
+verdict	model-information-v1	max_millibits=5000	32	i                               	1
+verdict	model-information-v1	max_millibits=9000	32	i                               	1
+verdict	clean-v1	dictionary=scowl-en-35	32	xqz                             	0
+verdict	window-v1	dictionary=scowl-en-35	32	xqz                             	0
+verdict	words-v1	dictionary=scowl-en-35	32	xqz                             	0
+verdict	clean-v2	dictionary=scowl-en-35	32	xqz                             	1
+verdict	words-v2	dictionary=scowl-en-35	32	xqz                             	0
+verdict	max-run-v1	max_run=2	32	xqz                             	1
+verdict	max-run-v1	max_run=3	32	xqz                             	1
+verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	xqz                             	1
+verdict	symbol-entropy-v1	min_millibits=2000,max_millibits=3900	32	xqz                             	0
+verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	xqz                             	0
+verdict	model-information-v1	max_millibits=2500	32	xqz                             	1
+verdict	model-information-v1	max_millibits=5000	32	xqz                             	1
+verdict	model-information-v1	max_millibits=9000	32	xqz                             	1
+# image <w> <h> <frames> <min_permille> <pixels> <1|0>
+image	10	10	1	500	0100000100101101010010100001101010101111010100100011001110010111111010100111110101010100010101111110	0
+image	10	10	1	600	0100000100101101010010100001101010101111010100100011001110010111111010100111110101010100010101111110	0
+image	10	10	1	900	0100000100101101010010100001101010101111010100100011001110010111111010100111110101010100010101111110	0
+image	10	10	1	500	0101010101101010101001010101011010101010010101010110101010100101010101101010101001010101011010101010	0
+image	10	10	1	600	0101010101101010101001010101011010101010010101010110101010100101010101101010101001010101011010101010	0
+image	10	10	1	900	0101010101101010101001010101011010101010010101010110101010100101010101101010101001010101011010101010	0
+image	10	10	1	500	0100011110111110110010000100111001000000101110101110101000101110001001100010011110011111010110000001	0
+image	10	10	1	600	0100011110111110110010000100111001000000101110101110101000101110001001100010011110011111010110000001	0
+image	10	10	1	900	0100011110111110110010000100111001000000101110101110101000101110001001100010011110011111010110000001	0
+image	10	10	1	500	1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111	1
+image	10	10	1	600	1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111	1
+image	10	10	1	900	1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111	1
+image	10	10	1	500	0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000	1
+image	10	10	1	600	0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000	1
+image	10	10	1	900	0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000	1
+image	5	5	8	500	10111010101110011110100101110101001001001111110011111111011110100010111000100010000011011011100100010000101111000000100001000000100110111111111111110101011010110101000111101010100110011101000101100110	1
+image	5	5	8	600	10111010101110011110100101110101001001001111110011111111011110100010111000100010000011011011100100010000101111000000100001000000100110111111111111110101011010110101000111101010100110011101000101100110	0
+image	5	5	8	900	10111010101110011110100101110101001001001111110011111111011110100010111000100010000011011011100100010000101111000000100001000000100110111111111111110101011010110101000111101010100110011101000101100110	0
+image	5	5	8	500	01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101	0
+image	5	5	8	600	01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101	0
+image	5	5	8	900	01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101	0
+image	5	5	8	500	11100011011100100011001011000100100101011010000101110101111001011000011111100001110100101110011100110100101100011100100101000000010100010000001101100100011101011110000100111100111101001111001100100001	1
+image	5	5	8	600	11100011011100100011001011000100100101011010000101110101111001011000011111100001110100101110011100110100101100011100100101000000010100010000001101100100011101011110000100111100111101001111001100100001	0
+image	5	5	8	900	11100011011100100011001011000100100101011010000101110101111001011000011111100001110100101110011100110100101100011100100101000000010100010000001101100100011101011110000100111100111101001111001100100001	0
+image	5	5	8	500	11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111	1
+image	5	5	8	600	11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111	1
+image	5	5	8	900	11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111	1
+image	5	5	8	500	00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000	1
+image	5	5	8	600	00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000	1
+image	5	5	8	900	00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000	1
+image	3	4	2	500	111000111010111000100100	1
+image	3	4	2	600	111000111010111000100100	0
+image	3	4	2	900	111000111010111000100100	0
+image	3	4	2	500	010101010101010101010101	0
+image	3	4	2	600	010101010101010101010101	0
+image	3	4	2	900	010101010101010101010101	0
+image	3	4	2	500	110010111111011100111001	1
+image	3	4	2	600	110010111111011100111001	0
+image	3	4	2	900	110010111111011100111001	0
+image	3	4	2	500	111111111111111111111111	1
+image	3	4	2	600	111111111111111111111111	1
+image	3	4	2	900	111111111111111111111111	1
+image	3	4	2	500	000000000000000000000000	1
+image	3	4	2	600	000000000000000000000000	1
+image	3	4	2	900	000000000000000000000000	1
+# rank <filter> <length> <count> <rank> <unit>
+rank	clean-v1	12	147915585361865152	0	 a a a a a a
+rank	clean-v1	12	147915585361865152	1	 a a a a a b
+rank	clean-v1	12	147915585361865152	73957792680932576	mn a a a a a
+rank	clean-v1	12	147915585361865152	147915585361865151	zzzzzzzzzzzz
+rank	clean-v1	12	147915585361865152	117985156691435019	unrxogtyadjp
+rank	clean-v1	12	147915585361865152	108366198437264546	suijqdbgdxzm
+rank	clean-v1	12	147915585361865152	60288273673481620	k sxixnwsqdw
+rank	clean-v1	12	147915585361865152	113945451988728379	tuuurvbmyktz
+rank	clean-v1	12	147915585361865152	32864462140078843	f tlswmfom b
+rank	clean-v1	12	147915585361865152	50743075683802272	igtdjwzvz bc
+rank	words-v1	5	10648	0	 a a 
+rank	words-v1	5	10648	1	 a ad
+rank	words-v1	5	10648	5324	flyer
+rank	words-v1	5	10648	10647	zoos 
+rank	words-v1	5	10648	8221	pi oh
+rank	words-v1	5	10648	6914	lore 
+rank	words-v1	5	10648	4055	cabs 
+rank	words-v1	5	10648	6743	lawn 
+rank	words-v1	5	10648	3994	but a
+rank	words-v1	5	10648	172	 bar 
+rank	words-v1	12	3589530999	0	 a a a a a a
+rank	words-v1	12	3589530999	1	 a a a a ace
+rank	words-v1	12	3589530999	1794765499	hoe an cs ah
+rank	words-v1	12	3589530999	3589530998	zucchinis we
+rank	words-v1	12	3589530999	817867330	bank boa ken
+rank	words-v1	12	3589530999	1569872349	get a ho wed
+rank	words-v1	12	3589530999	2777866961	put dim gulf
+rank	words-v1	12	3589530999	335945670	 or okra con
+rank	words-v1	12	3589530999	2711167353	pit ton site
+rank	words-v1	12	3589530999	3151221639	suits it mys
+rank	clean-v2	12	148119306127407108	0	 a          
+rank	clean-v2	12	148119306127407108	1	 a a        
+rank	clean-v2	12	148119306127407108	74059653063703554	mn          
+rank	clean-v2	12	148119306127407108	148119306127407107	zzzzzzzzzzzz
+rank	clean-v2	12	148119306127407108	120048340891240158	ux vrknnyfsc
+rank	clean-v2	12	148119306127407108	53793080557473317	ivjcxexbzgeo
+rank	clean-v2	12	148119306127407108	57977387470991553	joyqqaqzdsy 
+rank	clean-v2	12	148119306127407108	127734361006144007	wgvjybumgbnv
+rank	clean-v2	12	148119306127407108	20511625281109944	ctujulbwpfih
+rank	clean-v2	12	148119306127407108	84630366421728129	okyxsfesspcj
+rank	words-v2	5	11216	0	 a   
+rank	words-v2	5	11216	1	 a a 
+rank	words-v2	5	11216	5608	fresh
+rank	words-v2	5	11216	11215	zoos 
+rank	words-v2	5	11216	946	 hate
+rank	words-v2	5	11216	7760	mud a
+rank	words-v2	5	11216	6476	hunks
+rank	words-v2	5	11216	6274	hi pa
+rank	words-v2	5	11216	8307	our a
+rank	words-v2	5	11216	1694	 poem
+rank	words-v2	12	3682384805	0	 a          
+rank	words-v2	12	3682384805	1	 a a        
+rank	words-v2	12	3682384805	1841192402	hoax zip if 
+rank	words-v2	12	3682384805	3682384804	zucchinis we
+rank	words-v2	12	3682384805	1142474996	creed at elm
+rank	words-v2	12	3682384805	419897396	 she rut dig
+rank	words-v2	12	3682384805	1535016112	fond moss ax
+rank	words-v2	12	3682384805	709797739	an spear pan
+rank	words-v2	12	3682384805	3386203215	tree pit ale
+rank	words-v2	12	3682384805	980349618	bug lax easy

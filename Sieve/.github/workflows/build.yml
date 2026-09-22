@@ -52,6 +52,23 @@ jobs:
           test "$got" = "90922c700685e28"
           test "$($exe read --length 32 --mode guided "$got" | sed 's/ *$//')" = "it was the best of times"
 
+      - name: Filters judge, count and rank the same on every platform
+        run: |
+          exe=build/sieve
+          [ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
+          printf '[text]\nmode = compact\nfilters = words-v2\n' > words2.ini
+          printf '[text]\nmode = compact\nfilters = words-v2, max-run-v1\n' > mixed.ini
+          $exe filters --filters words2.ini | tr -d '\r' | grep -q "^survivors    190011992984255955985337560 "
+          $exe filters --filters mixed.ini | tr -d '\r' | grep -q "words-v2 can rank, but not together with max-run-v1"
+          out=$($exe check --length 32 --filters words2.ini "It was the best of times" | tr -d '\r')
+          echo "$out"
+          echo "$out" | grep -q "words-v1 *FAIL"
+          echo "$out" | grep -q "words-v2 *pass"
+          k=$(echo "$out" | awk '/survivor number/ {print $(NF-2)}')
+          test "$k" = "100485593897630338697104005"
+          test "$($exe read --length 32 --mode positional --filters words2.ini --survivor "$k" 2>/dev/null | tr -d '\r' | sed 's/ *$//')" = "it was the best of times"
+          test "$($exe read --length 32 --mode positional --filters words2.ini --survivor 1000000 2>/dev/null | tr -d '\r' | sed 's/ *$//')" = " a a a a a a a a a a a aah seize"
+
       - name: Hallway renders, and its doors keep the corridor position (Linux, no display)
         if: runner.os == 'Linux'
         env:
@@ -95,6 +112,18 @@ jobs:
           $H --menu --press "Down,Down,Down,Right,PageUp" --screenshot menu2.png | grep -q "saved menu2.png"
           $H --menu --length 4000000000 --video-width 100000 --video-frames 100000 --screenshot menu3.png | grep -q "saved menu3.png"
           test -s menu.png && test -s menu2.png && test -s menu3.png
+          # Filter modes: compact shelves only survivors (warped text lands on a shelf, not in hand),
+          # an unrankable stack falls back to hide, and the filter overlay renders.
+          printf '[text]\nmode = compact\nfilters = words-v2\n' > words2.ini
+          printf '[text]\nmode = compact\nfilters = words-v2, max-run-v1\n' > mixed.ini
+          printf '[text]\nmode = mark\nfilters = words-v1\n' > mark.ini
+          out=$($H --filters words2.ini --warp "$W" --walk "0,0" --screenshot compact.png)
+          echo "$out"
+          echo "$out" | grep -q "filters: 1 compact (190011...7560 (27 digits) survivors), tile 785043...1125 (24 digits)"
+          $H --filters mixed.ini --walk "0,0" --screenshot mixed.png | grep -q "filters: 2 hide (compact: words-v2 can rank, but not together with max-run-v1)"
+          $H --filters mark.ini --length 3 --walk "0,0" --screenshot mark.png | grep -q "filters: 1 mark"
+          $H --menu --filters words2.ini --press "F" --screenshot overlay.png | grep -q "saved overlay.png"
+          test -s compact.png && test -s mixed.png && test -s mark.png && test -s overlay.png
 
       - name: Reference oracle reproduces the committed vectors
         run: |
@@ -104,6 +133,7 @@ jobs:
           python3 sieve_ref.py canon-vectors | diff - ../tests/vectors_canon.tsv
           python3 sieve_ref.py image-vectors | diff - ../tests/vectors_image_v1.tsv
           python3 sieve_ref.py guided-vectors | diff - ../tests/vectors_guided_v1.tsv
+          python3 sieve_ref.py filter-vectors | diff - ../tests/vectors_filters_v1.tsv
 
       - name: The pinned model rebuilds byte for byte from its corpus (Linux)
         if: runner.os == 'Linux'

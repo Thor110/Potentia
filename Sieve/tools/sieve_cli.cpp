@@ -8,6 +8,8 @@
 //   sieve dicts  [--hash FILE]
 //   sieve version
 //   sieve models
+//   sieve filters [--line LINE] [line options] [--filters INI]
+//   sieve check   [--line LINE] [line options] [--filters INI] (TEXT... | --file PATH)
 //   sieve train   --out FILE [--corpus MANIFEST] [--texts DIR] [--alphabet A] [--order K] [--min-count M]
 //   sieve measure [--model ID|PATH] [--length L] [FILE... | --corpus MANIFEST --texts DIR [--role test|train|all]]
 //   sieve sift  [--dict ID|PATH] [--lengths SPEC] [--brute-max N] [--pruned-max N] [--threads T] [--csv PATH]
@@ -17,6 +19,7 @@
 #include "cli/args.hpp"
 #include "cli/dictionaries.hpp"
 #include "cli/help.hpp"
+#include "cli/filter_config.hpp"
 #include "cli/lines.hpp"
 #include "cli/models.hpp"
 
@@ -71,6 +74,13 @@ void print_header(const Line& line)
     std::cout << "line         " << to_string(line.kind) << "\n"
               << "space        " << line.space.id() << "\n";
 }
+
+FilterConfig load_filter_config(const Args& a)
+{
+    return FilterConfig::load(a.has("filters") ? fs::path(a.get("filters")) : FilterConfig::default_path());
+}
+
+std::string filters_path(const Args& a) { return a.has("filters") ? a.get("filters") : FilterConfig::default_path().string(); }
 
 // ---------------------------------------------------------------- info
 
@@ -268,6 +278,21 @@ int cmd_read(const Args& a)
     if (!a.has("mode")) throw std::invalid_argument("missing --mode positional|scrambled|guided");
     const std::string mode = a.get("mode");
     if (a.has("at")) return read_at(line, a, mode);
+    if (a.has("survivor"))
+    {
+        // The K-th unit (from 0) that passes the line's filter stack, in address order.
+        const FilterStack st = build_stack(line, load_filter_config(a).of(line.kind));
+        if (st.empty()) throw std::invalid_argument("--survivor needs ticked filters (see: sieve filters)");
+        if (!st.ranker()) throw std::invalid_argument("this stack cannot rank its survivors: " + st.compact_blocker());
+        const BigUint k = BigUint::from_decimal(a.get("survivor"));
+        if (k >= st.ranker()->count()) throw std::out_of_range("there are only " + st.ranker()->count().to_decimal() + " survivors");
+        const auto digits = st.ranker()->unrank(k);
+        std::cerr << "survivor " << k.to_decimal() << " of " << st.ranker()->count().to_decimal() << ", address "
+                  << line.space.hex_of(line.space.address_digits(digits, address_mode_from_string(mode))) << "\n";
+        if (line.kind == LineKind::Text) std::cout << utf8_encode(line.space.text_of(digits)) << "\n";
+        else std::cout << preview(line, digits) << "\n";
+        return 0;
+    }
     if (a.positional.size() != 1) throw std::invalid_argument("give exactly one ADDRESS");
     std::vector<uint32_t> digits;
     if (mode == "guided")
@@ -690,10 +715,92 @@ int cmd_measure(const Args& a)
     return 0;
 }
 
+// ---------------------------------------------------------------- filters
+
+int cmd_filters(const Args& a)
+{
+    const Line line = make_line(a.has("length") || a.get("line", "text") != "text" ? a : [&] {
+        Args b = a;
+        b.opts["length"] = "32";
+        return b;
+    }());
+    const FilterConfig cfg = load_filter_config(a);
+    const LineFilters& lf = cfg.of(line.kind);
+    const FilterLine fl = filter_line(line);
+    std::cout << "line         " << to_string(line.kind) << "  (" << line.space.id() << ")\n"
+              << "settings     " << filters_path(a) << "\n"
+              << "mode         " << to_string(lf.mode) << "\n\n";
+    const auto list = filters_for(fl);
+    if (list.empty()) std::cout << "No filters for this line yet.\n";
+    for (const FilterSpec* f : list)
+    {
+        std::cout << (lf.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << "\n";
+        print_indented(f->description, "      ");
+        const auto vit = lf.values.find(f->name());
+        for (const auto& p : f->params)
+        {
+            const std::string v = param_value(*f, vit == lf.values.end() ? FilterValues{} : vit->second, p.key);
+            std::cout << "      " << p.key << " = " << (v.empty() ? "(default)" : v) << "   " << p.description << "\n";
+        }
+        if (!f->implies.empty())
+        {
+            std::cout << "      implies:";
+            for (const auto& i : f->implies) std::cout << " " << i;
+            std::cout << "\n";
+        }
+    }
+    const FilterStack st = build_stack(line, lf);
+    if (!st.empty())
+    {
+        std::cout << "\nstack        " << st.id().substr(0, 16) << "...  " << st.provenance() << "\n";
+        if (st.ranker()) std::cout << "survivors    " << st.ranker()->count().to_decimal() << " (exact; compact mode available)\n";
+        else std::cout << "compact      unavailable: " << st.compact_blocker() << "\n";
+    }
+    return 0;
+}
+
+int cmd_check(const Args& a)
+{
+    const Line line = make_line(a);
+    const FilterConfig cfg = load_filter_config(a);
+    const LineFilters& lf = cfg.of(line.kind);
+    const WarpInput w = read_warp_input(line, a);
+    // Every filter available for the line, with its settings, whether ticked or not.
+    const FilterLine fl = filter_line(line);
+    std::vector<std::pair<std::string, FilterStack>> each;
+    for (const FilterSpec* f : filters_for(fl))
+    {
+        LineFilters one = lf;
+        one.enabled = {f->name()};
+        each.emplace_back(f->name(), build_stack(line, one));
+    }
+    const FilterStack st = build_stack(line, lf);
+    print_header(line);
+    std::cout << "canon        " << w.report.front() << "\n"
+              << "stack        " << (st.empty() ? std::string("(none ticked)") : st.id().substr(0, 16) + "...  " + st.provenance()) << "\n";
+    for (size_t i = 0; i < w.units.size(); ++i)
+    {
+        const auto& u = w.units[i];
+        std::cout << "\nunit " << i + 1 << "/" << w.units.size() << "  " << preview(line, u) << "\n";
+        for (const auto& [name, one] : each)
+            std::cout << "  " << (lf.is_enabled(name) ? "[x] " : "[ ] ") << name << std::string(std::max<size_t>(1, 24 - name.size()), ' ')
+                      << (one.passes(u) ? "pass" : "FAIL") << "\n";
+        if (!st.empty())
+        {
+            const int fail = st.first_failure(u);
+            std::cout << "  stack: " << (fail < 0 ? "passes" : "fails at " + st.filter_name(size_t(fail)));
+            if (fail < 0 && st.ranker()) std::cout << ", survivor number " << st.ranker()->rank(u).to_decimal() << " of " << st.ranker()->count().to_decimal();
+            std::cout << "\n";
+        }
+    }
+    return 0;
+}
+
 bool is_command(const std::string& name)
 {
     return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" ||
-           name == "version" || name == "models" || name == "train" || name == "measure";
+           name == "version" || name == "models" || name == "train" || name == "measure" ||
+           name == "filters" || name == "check";
 }
 
 } // namespace
@@ -733,6 +840,8 @@ int main(int argc, char** argv)
         if (a.command == "models") return cmd_models();
         if (a.command == "train") return cmd_train(a);
         if (a.command == "measure") return cmd_measure(a);
+        if (a.command == "filters") return cmd_filters(a);
+        if (a.command == "check") return cmd_check(a);
         std::cerr << "unknown command '" << a.command << "'\n\n";
         print_usage();
         return 1;

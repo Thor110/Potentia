@@ -144,6 +144,7 @@ Each line is presented as a **single hallway**: an endless corridor with a shelf
 - **Padding.** When `N` is not a multiple of 128, the last tile of each copy ends in empty shelf space, so every copy starts on a fresh tile. A line whose size is a power of two, at least 128, has no padding, and when every line's size is a power of two the loops **nest**: each line's start line falls on a start line of every smaller line. `sieve info` reports how each line fits.
 - **Start line.** The beginning of each copy is marked by a checkered strip across the floor and a checkered banner overhead, in the line's two colours. Where every line begins a copy at once (always at tile 0, and wherever else their loops coincide) the start line is doubled.
 - **Setup menu.** Before entering, the reader sets each line's shape, with no upper limit: the state spaces are meant to scale without end. A map draws the four lines side by side, one copy each, as bars whose length is the line's size in bits. The longest line fills the height, so no bar leaves the screen, and there is a minimum bar length. Only the machine limits what can be opened. The menu warns when an address would be slow to work with, and refuses when one would not fit in memory. Those thresholds describe the hardware, not the design.
+- **Filters.** A magnifying glass beside each line's title in the setup menu opens that line's filter list over the map: the display mode (§9), every filter the line offers with a tickbox and its description, and the parameters of each ticked filter. A footer gives the stack's state. Where the stack can count its survivors exactly, the map shows them as a filled bar inside the line's bar, labelled with the survivors' size in bits (log2 of their count).
 - **Views:**
   - **Guided view** (default, entropy-ordered): shelf length ∝ probability. Meaningful units fill long runs; noise is too thin to occupy floor space. Only shelved units (§9) are shown.
   - **Raw view** (diagnostic): fixed-width units, every unit shown, noise everywhere. This is Borges' library, and the contrast with the guided view is the thesis made visible.
@@ -282,6 +283,50 @@ The two axes express cases the single ladder could not: content that is noise bu
 | A pasted paragraph of Dickens | S2 / A2 | Located instantly by warp. |
 | A fluent biography of a person who never existed | S2 / A1 or A0 | Coherence is not evidence. |
 
+### 8.5 The Filtration Stack (as built)
+
+The structure tests of §8.1 are built as **filters**: small, self-contained modules, each deciding whether one unit passes. Today's filters are S0/S1 tests; S2 tests and the anchoring axis (§8.2) will join the same stack.
+
+**Modules.** Filters are compiled in. Every filter is registered in one list (`core/src/filters/builtin.cpp`); adding one takes a new source file and one line there. A filter has an id and a version, and is named `id-vN` (`words-v2`). **A registered version never changes.** A changed filter is registered as the next version beside the old one, so every recorded result stays reproducible. A bare id (`words`) means its newest version. Each filter declares:
+
+- the lines it applies to;
+- its parameters (integers with a range and step, or registry ids such as a dictionary or model), each with a default;
+- which other filters every one of its survivors also passes (`implies`, used by compact mode below);
+- optionally a **ranker**, which counts its survivors exactly at any unit length and converts between a survivor and its position among the survivors in address order, without visiting the others.
+
+**Exactness.** Every decision is made in integer arithmetic, so all machines and the reference oracle agree bit for bit. Logarithms use `lg(x) = ⌊log2(x) · 2^16⌋` for 64-bit `x`, computed exactly by repeated squaring. The oracle reproduces each filter independently: verdicts, logarithms, survivor counts and ranks (`tests/vectors_filters_v1.tsv`).
+
+**Filters (as built).** `L` is the unit length, `c` a symbol's count within the unit, `f` a symbol's frequency in the pinned model out of `2^16`.
+
+| Filter | Lines | Passes when | Ranker |
+| :--- | :--- | :--- | :--- |
+| `clean-v1` | text (`lower27`) | no two SPACEs in a row, and at least one letter | yes |
+| `window-v1` | text (`lower27`) | could be cut from running English: whole dictionary words inside, a word's suffix at the left edge, a word's prefix at the right edge (a lone token: any substring of a word). Implies `clean-v1`. | no |
+| `words-v1` | text (`lower27`) | clean, and every token is a dictionary word. Implies `clean-v1`, `window-v1`. | yes |
+| `clean-v2`, `words-v2` | text (`lower27`) | as v1, but a unit may end in two or more SPACEs of padding, in which case the part before them is judged by v1. This admits the last unit of warped text. `words-v2` implies `clean-v2`. | yes |
+| `max-run-v1` | text | no symbol other than SPACE repeated more than `max_run` times in a row (default 3) | no |
+| `symbol-entropy-v1` | every line | `min · L · 2^16 ≤ 1000 · HL ≤ max · L · 2^16`, where `HL = max(0, L·lg(L) − Σ c·lg(c))` (millibits per symbol; defaults 0 and 4400) | no |
+| `model-information-v1` | text, with a model | `1000 · Σ (16·2^16 − lg(f)) ≤ max · L · 2^16`, each symbol's `f` taken in its context as in §4.2 (default max 5000 millibits per symbol) | no |
+| `neighbour-agreement-v1` | image, video | among all horizontally, vertically and (video) frame-to-frame adjacent pixel pairs, at least `min` per thousand share a colour (default 600) | no |
+
+The rankers for `clean` and `words` count with exact tables over word-length histograms of the dictionary's trie. They agree with M1's counts at every length checked, and exhaustively with the filters themselves at small lengths. They are built for units up to 20,000 symbols.
+
+Measured separations (lower27, pinned model, held-out books): English costs at most 4.14 bits per symbol under the model and random letters at least 9.1; at length 1,000 English has symbol entropy about 4.15 bits and random letters about 4.72; English never runs a letter more than 3 times. `model-information` and `symbol-entropy` count padding SPACEs like any other symbol, so a heavily padded unit reads as lower-information than its text alone.
+
+**Stack.** The filters ticked for a line form its stack; a unit passes the stack when it passes every filter. The stack's **provenance** lists every filter's name, parameters and the SHA-256 of the data it uses (`words-v2{dictionary=default sha256=…}; max-run-v1{max_run=3}`, preceded by the line's shape), and the **stack id** is the SHA-256 of that string. Both are recorded with any result. A stack can **rank** when one ticked filter has a ranker and implies every other ticked filter, so its survivors are exactly the stack's.
+
+**Settings.** A plain-text file, `sieve-filters.ini`, next to the executable (or wherever `--filters` points) holds each line's mode, its ticked filters and their parameters:
+
+```
+[text]
+mode = compact
+filters = words-v2
+[text.words-v2]
+dictionary = scowl-en-35
+```
+
+The hallway's setup menu edits and saves it (§5.1); hand edits are welcome. A missing file means nothing is ticked. `sieve filters` lists a line's filters and its stack; `sieve check` runs content through every filter.
+
 ---
 
 ## 9. Shelving
@@ -292,6 +337,17 @@ The address space is complete; the shelves are curated.
 - All other units (S0, S1 unanchored) are **unshelved**. They remain fully addressable and can be reached by warp or address, where they are presented in hand (§6.4).
 - In the guided view, unshelved units already occupy negligible length; omitting them removes the remaining gaps. In the raw view, every unit is shown regardless.
 - Shelving thresholds are part of the pinned parameter set.
+
+**As built** (through the filtration stack of §8.5). Each line has a display mode; mark and hide work in every ordering:
+
+| Mode | Shelves |
+| :--- | :--- |
+| off | every unit, no judging |
+| mark | every unit; units that fail the stack are drawn faint, as a visible record of what the stack rejects |
+| hide | units that fail are left out; the rest keep their places, so the gaps show what was sieved |
+| compact | only survivors, packed together in address order: slot `k` of a loop holds the `k`-th survivor, and a loop is as long as the survivor count |
+
+Compact mode needs the positional ordering and a stack that can rank. Otherwise the hallway falls back to hide and says why. Content reached by warp or address that fails the stack is shown in hand, marked as not on the shelves, together with the filter that rejected it. `sieve read --survivor K` reads the `K`-th survivor, as compact shelves show it.
 
 ---
 
@@ -343,10 +399,11 @@ Implementation (as built):
 
 1. **Core** in C++20 with no dependencies: exact integer arithmetic throughout the address path, SHA-256 (with a hardware path where the CPU has SHA instructions; both paths must give identical digests), the scramble, canonicalisation for every line, and the sieve. The same code serves the command-line tool and, later, the hallway client.
 2. **Independent reference oracle** in Python. It shares no code with the core and generates the conformance vectors; the core must reproduce them bit for bit.
-3. **Conformance suite:** fixed inputs with expected addresses, canonical forms and image quantisations. It runs on Windows, Linux and macOS on every push, which also confirms that every platform produces identical addresses.
-4. **Pinned data:** dictionaries are registered by id and SHA-256 (`data/dictionaries/dictionaries.tsv`) and are refused if their hash no longer matches.
-5. **Models:** the core contains the character model and the exact coder (§4.2). Larger models (for example neural ones, run through existing libraries) can plug in later, provided they emit the same kind of pinned integer tables.
-6. **Hand-tuned code** (SIMD, assembly) only where profiling proves it worthwhile, and only once it passes the full conformance suite.
+3. **Filtration stack** (§8.5): versioned filter modules in the core, one registry, exact integer decisions and survivor rankers. The client only displays their verdicts.
+4. **Conformance suite:** fixed inputs with expected addresses, canonical forms and image quantisations. It runs on Windows, Linux and macOS on every push, which also confirms that every platform produces identical addresses.
+5. **Pinned data:** dictionaries are registered by id and SHA-256 (`data/dictionaries/dictionaries.tsv`) and are refused if their hash no longer matches.
+6. **Models:** the core contains the character model and the exact coder (§4.2). Larger frequency models (longer contexts, more text) can replace it, provided they emit the same kind of pinned integer tables. Models are character-frequency statistics only.
+7. **Hand-tuned code** (SIMD, assembly) only where profiling proves it worthwhile, and only once it passes the full conformance suite.
 
 ---
 
@@ -354,10 +411,10 @@ Implementation (as built):
 
 | # | Milestone | Deliverable | Status |
 | :--- | :--- | :--- | :--- |
-| M1 | Exhaustive sieve | Enumerator + S0/S1 filters over **every** unit: text at lengths 4–8, images at 5×5 and 6×6 1-bit; plot of surviving fraction vs. size | **Text done.** Exact counts to length 1,000, cross-checked by brute force and pruned walk. Images not started: needs image S0/S1 filters. |
+| M1 | Exhaustive sieve | Enumerator + S0/S1 filters over **every** unit: text at lengths 4–8, images at 5×5 and 6×6 1-bit; plot of surviving fraction vs. size | **Text done.** Exact counts to length 1,000, cross-checked by brute force and pruned walk. The M1 filters are now modules of the filtration stack (§8.5), with exact survivor ranking. Images: a first S1 filter (`neighbour-agreement-v1`) exists; exhaustive image counts not started. |
 | M2 | Raw addressing and warp | Positional and scrambled bijections, canonicalisation rules, CLI warp, round-trip tests | **Done**, for all four lines. Includes neighbour stepping. |
 | M3 | Entropy-ordered addressing | Integer arithmetic coder with a small pinned text model; measured bits/char on real text | **Done for text (lower27).** Exact BigUint coder, order-5 pinned model; 1.93 bits/char on held-out Alice, 1.95 on Chesterton. Model rebuilt byte for byte by the oracle; guided vectors checked on every push. Models for the other lines need corpora. |
-| M4 | Hallway prototype | 2D side view: shelves, zoom depth, readout, warp box, in-hand view, guided/raw toggle | **Built directly in 3D** (see M8). The raw and guided views are done: shelves, readout, warp and go-to, in-hand view, ordering toggle (positional, scrambled, guided) and zoom depth. Hiding unshelved units needs classification (§9). |
+| M4 | Hallway prototype | 2D side view: shelves, zoom depth, readout, warp box, in-hand view, guided/raw toggle | **Built directly in 3D** (see M8). The raw and guided views are done: shelves, readout, warp and go-to, in-hand view, ordering toggle (positional, scrambled, guided) and zoom depth. Filtered shelving (§9) is done: mark and hide in every ordering, and compact shelves of survivors only in positional order. |
 | M5 | Doors | Image and symbolic audio lines; fractional door mapping with return paths | **Done.** Exact door mapping in the core, with a return-path stack in the hallway. |
 | M6 | Anchor Registry | Local, signed, append-only Registry with review workflow; anchored units shelved and marked | Not started |
 | M7 | Paragraph-scale sampling | Classification and sampling at `UNIT_LENGTH` ≈ 1,000; extrapolation checked against M1 | Not started |

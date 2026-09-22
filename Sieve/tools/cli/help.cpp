@@ -126,12 +126,18 @@ const std::vector<Page>& pages()
           {"--zoom D", "Guided --around and --at: books are 2^-D of the line apart. Default: the length in\n"
                        "bits of the unit's own address. Smaller D = zoomed out (the most probable\n"
                        "routes); larger D = zoomed in (neighbours differ only near the end)."},
+          {"--survivor K", "Instead of an ADDRESS: the K-th unit (counting from 0, in positional order) that\n"
+                           "passes the line's ticked filters, as compact mode shelves them. Needs a stack\n"
+                           "that can rank (see `sieve help filters`). Prints the unit's address as well."},
+          {"--filters PATH", "The filter settings for --survivor. Default: sieve-filters.ini next to the\n"
+                             "executable."},
           kShort},
          {{"sieve read --length 32 --mode scrambled 007b30165818bf0311497600aa52996f9395e27",
            "prints \"it was the best of times\""},
           {"sieve read --length 3 --mode positional 0312", "prints \"abc\""},
           {"sieve read --length 32 --mode guided 8", "the unit halfway along the guided line"},
           {"sieve read --line image --mode positional --at 4626:0", "the image on the shelf at corridor tile 4626, slot 0"},
+          {"sieve read --length 32 --mode positional --survivor 1000000", "the millionth line that passes your filters"},
           {"sieve read --length 32 --mode guided --around 5 --zoom 20 90922", "a zoomed-out shelf of likely lines"},
           {"sieve read --length 32 --mode positional --around 3 <address>", "the shelf and 3 neighbours either side"},
           {"sieve read --line image --mode scrambled <address> --out found.png", "draws it and saves a PNG"},
@@ -252,6 +258,52 @@ const std::vector<Page>& pages()
           {"--role test|train|all", "Which corpus files to measure when no FILE is given. Default test."}},
          {{"sieve measure", "held-out Gutenberg books at paragraph scale"},
           {"sieve measure --length 32 mybook.txt", "your own text, one line of 32 characters at a time"}}},
+
+        {"filters", "List the filters a line offers, which are ticked, and their settings.",
+         "sieve filters [--line LINE] [line options] [--filters PATH]",
+         "Filters judge whether a unit looks like content rather than noise. Each is a versioned,\n"
+         "compiled-in module (words-v1, words-v2, ...): a changed filter is added as a new version\n"
+         "and the old one is kept, so earlier results can always be reproduced. Every decision is\n"
+         "made in exact integer arithmetic, so every machine agrees.\n"
+         "\n"
+         "The filters ticked for a line form its stack: a unit must pass all of them. The stack\n"
+         "and its display mode are chosen in the hallway's setup menu (the magnifying glass beside\n"
+         "each line) and saved in sieve-filters.ini, which you may also edit by hand:\n"
+         "  [text]\n"
+         "  mode = compact              ; off | mark | hide | compact\n"
+         "  filters = words-v2\n"
+         "  [text.words-v2]\n"
+         "  dictionary = scowl-en-35\n"
+         "Modes, for the hallway:\n"
+         "  off      every unit on the shelves, no judging\n"
+         "  mark     books that fail are drawn faint (a record of what the stack rejects)\n"
+         "  hide     books that fail are left out; the shelves keep their places\n"
+         "  compact  only survivors stand on the shelves, packed together in address order.\n"
+         "           Needs one filter that can count and rank its survivors (clean, words) and\n"
+         "           that implies every other ticked filter; otherwise the hallway falls back\n"
+         "           to hide.\n"
+         "This command lists every filter for the line with its description, parameters and\n"
+         "which other filters it implies, then the stack's id (a hash of every filter, version,\n"
+         "parameter and data file) and, where it can be counted, the exact number of survivors.",
+         {kLine, kLineOptions,
+          {"--filters PATH", "The settings file. Default: sieve-filters.ini next to the executable. A missing\n"
+                             "file means nothing is ticked."}},
+         {{"sieve filters", "the text line's filters (at length 32) and what is ticked"},
+          {"sieve filters --length 1000", "the same stack judged at paragraph scale"},
+          {"sieve filters --line image", "the filters the image line offers"}}},
+
+        {"check", "Run content through every filter and show which pass.",
+         "sieve check [--line LINE] [line options] [--filters PATH] (TEXT... | --file PATH)",
+         "Fits the input to the line as warp does, then shows, for each unit, whether it passes\n"
+         "every filter the line offers ([x] marks the ticked ones, with the settings from the\n"
+         "settings file), whether it passes the ticked stack, and, if the stack can rank, which\n"
+         "survivor it is: its place on compact shelves.",
+         {kLine, kLineOptions,
+          {"--filters PATH", "The settings file. Default: sieve-filters.ini next to the executable."},
+          {"--file PATH", "Read the input from a file instead of the command line."}},
+         {{"sieve check --length 32 \"It was the best of times\"", "every text filter's verdict"},
+          {"sieve check --length 1000 --file chapter1.txt", "a whole text, 1000 characters per unit"},
+          {"sieve check --line image --file sprite.png", "the image filters on a picture"}}},
 
         {"version", "Show the tool version and every pinned rule version.",
          "sieve version   (or: sieve --version)",
