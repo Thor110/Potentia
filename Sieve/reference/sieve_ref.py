@@ -928,6 +928,57 @@ def sieved_unit_at(model, rk, length, point):
     return unit
 
 
+class AgreementRank:
+    """neighbour-agreement-v1 survivors by memoised recursion over (cell, disagreements, the last P
+    cells as a tuple): an independent method from the core's limb tables."""
+
+    def __init__(self, w, h, frames, base, min_pm):
+        self.w, self.h, self.fr, self.B = w, h, frames, base
+        self.n = w * h * frames
+        self.P = w * h if frames > 1 else w
+        pairs = h * (w - 1) * frames + w * (h - 1) * frames + w * h * (frames - 1)
+        self.D = pairs - (min_pm * pairs + 999) // 1000
+        self.memo = {}
+
+    def cost(self, i, prev, c):
+        """prev: every cell placed so far (only the last P matter)."""
+        x, y, f = i % self.w, (i // self.w) % self.h, i // (self.w * self.h)
+        k = 0
+        if x > 0 and prev[i - 1] != c:
+            k += 1
+        if y > 0 and prev[i - self.w] != c:
+            k += 1
+        if f > 0 and prev[i - self.w * self.h] != c:
+            k += 1
+        return k
+
+    def count(self, prev, d):
+        i = len(prev)
+        if d > self.D:
+            return 0
+        if i == self.n:
+            return 1
+        key = (i, d, tuple(prev[max(0, i - self.P):]))
+        if key not in self.memo:
+            self.memo[key] = sum(self.count(prev + [c], d + self.cost(i, prev, c)) for c in range(self.B))
+        return self.memo[key]
+
+    def total(self):
+        return self.count([], 0)
+
+    def unrank(self, k):
+        prev, d = [], 0
+        for i in range(self.n):
+            for c in range(self.B):
+                t = self.count(prev + [c], d + self.cost(i, prev, c))
+                if k < t:
+                    d += self.cost(i, prev, c)
+                    prev.append(c)
+                    break
+                k -= t
+        return prev
+
+
 def cmd_compact_vectors(_args):
     """Rankers for the other lines, the survivor shuffle, and the sieved guided line."""
     here = "../data"
@@ -958,6 +1009,17 @@ def cmd_compact_vectors(_args):
         for k in [0, 1, total // 2, total - 1] + [int.from_bytes(bytes(next(g2) for _ in range(32)), "little") % total for _ in range(4)]:
             u = key_unrank(allowed, L, k)
             print(f"rank\tkey-v1\ttonic={tonic},scale={scale}\t{L}\t{total}\t{k}\t{','.join(map(str, u))}")
+    print("# nrank <width> <height> <frames> <colours> <min_permille> <count> <rank> <unit digits>   (neighbour-agreement-v1)")
+    for w, h, fr, B, pm in ((5, 5, 1, 2, 600), (8, 8, 1, 2, 600), (8, 8, 1, 2, 750), (3, 3, 1, 3, 500), (4, 3, 1, 4, 400),
+                            (2, 2, 3, 2, 600), (3, 2, 2, 2, 700)):
+        rk = AgreementRank(w, h, fr, B, pm)
+        sys.setrecursionlimit(10000)
+        total = rk.total()
+        g2 = stream(f"agreement/{w}x{h}x{fr}/{B}/{pm}")
+        for k in [0, 1, total // 2, total - 1] + [int.from_bytes(bytes(next(g2) for _ in range(16)), "little") % total for _ in range(3)]:
+            u = rk.unrank(k)
+            assert f_neighbour_agreement(u, w, h, fr, pm)
+            print(f"nrank\t{w}\t{h}\t{fr}\t{B}\t{pm}\t{total}\t{k}\t{','.join(map(str, u))}")
     model = Model(f"{here}/models/gutenberg-lower27-o5.model")
     d = load_dict(f"{here}/dictionaries/scowl-2020.12.07-en-35.txt")
     words = sorted(d[0])

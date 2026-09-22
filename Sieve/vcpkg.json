@@ -1,6 +1,6 @@
 {
   "name": "sieve",
-  "version-string": "0.9.0",
+  "version-string": "0.9.1",
   "description": "Sieve: the Gallery of Babel core and hallway client",
   "dependencies": [],
   "features": {

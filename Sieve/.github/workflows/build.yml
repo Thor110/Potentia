@@ -82,6 +82,9 @@ jobs:
           printf '[audio]\nmode = compact\nfilters = key-v1\n[audio.key-v1]\ntonic = A\nscale = minor-pentatonic\n[image]\nmode = compact\nfilters = symbol-entropy-v1\n[image.symbol-entropy-v1]\nmax_millibits = 500\n' > lines.ini
           $exe filters --line audio --filters lines.ini | tr -d '\r' | grep -q "^survivors    794071845499378503449051136 "
           $exe filters --line image --filters lines.ini | tr -d '\r' | grep -q "^survivors    322091425582872 "
+          printf '[image]\nmode = compact\nfilters = neighbour-agreement-v1\n' > agree.ini
+          $exe filters --line image --filters agree.ini | tr -d '\r' | grep -q "^survivors    6053792982126620565936264884 "
+          $exe browse --line image --filters agree.ini --compact --count 2 --seed 4 > /dev/null
           $exe browse --line audio --filters lines.ini --compact --count 2 --seed 4 > /dev/null
 
       - name: Hallway renders, and its doors keep the corridor position (Linux, no display)

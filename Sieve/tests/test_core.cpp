@@ -968,6 +968,24 @@ void test_compact(const std::string& dir)
             check_ranker_exhaustive(st, 2, L, ok);
             CHECK(ok);
         }
+    // neighbour-agreement by transfer matrix: pictures and video of several shapes and palettes.
+    {
+        struct Shape { uint32_t base, w, h, frames; };
+        for (const Shape sh : {Shape{2, 1, 1, 1}, Shape{2, 2, 2, 1}, Shape{2, 3, 2, 1}, Shape{2, 4, 3, 1}, Shape{3, 3, 3, 1},
+                               Shape{2, 2, 2, 2}, Shape{3, 2, 1, 3}, Shape{2, 1, 3, 4}, Shape{4, 2, 2, 1}})
+            for (int pm : {0, 500, 600, 750, 1000})
+            {
+                const uint32_t L = sh.w * sh.h * sh.frames;
+                const FilterLine fl{sh.frames > 1 ? "video" : "image", "test", sh.base, L, nullptr, sh.w, sh.h, sh.frames};
+                const FilterStack st(fl, {{find_filter("neighbour-agreement-v1"), {{"min_permille", std::to_string(pm)}}}}, none);
+                bool ok = true;
+                check_ranker_exhaustive(st, sh.base, L, ok);
+                CHECK(ok);
+            }
+        // Too many colours for the width: no ranker (compact falls back to hide).
+        const FilterLine wide{"image", "image/rgb24/10x10", 16777216, 100, nullptr, 10, 10, 1};
+        CHECK(FilterStack(wide, {{find_filter("neighbour-agreement-v1"), {}}}, none).ranker() == nullptr);
+    }
     {
         const FilterLine img{"image", "image/ega16/3x1", 16, 3, nullptr, 3, 1, 1};
         CHECK(FilterStack(img, {{find_filter("symbol-entropy-v1"), {}}}, none).ranker() == nullptr); // 16 colours: no ranker
@@ -1159,6 +1177,19 @@ void test_compact_vectors(const std::string& dir)
             const auto u = digits(f[6]);
             CHECK(rk && rk->unrank(BigUint::from_decimal(f[5])) == u);
             CHECK(rk && rk->rank(u) == BigUint::from_decimal(f[5]));
+            CHECK(st.passes(u));
+        }
+        else if (f[0] == "nrank")
+        {
+            const uint32_t w = uint32_t(std::stoul(f[1])), h = uint32_t(std::stoul(f[2])), fr = uint32_t(std::stoul(f[3])),
+                           B = uint32_t(std::stoul(f[4]));
+            const FilterLine fl{fr > 1 ? "video" : "image", "test", B, w * h * fr, nullptr, w, h, fr};
+            const FilterStack st(fl, {{find_filter("neighbour-agreement-v1"), {{"min_permille", f[5]}}}}, res);
+            const Ranker* rk = st.ranker();
+            const auto u = digits(f[8]);
+            CHECK(rk && rk->count() == BigUint::from_decimal(f[6]));
+            CHECK(rk && rk->unrank(BigUint::from_decimal(f[7])) == u);
+            CHECK(rk && rk->rank(u) == BigUint::from_decimal(f[7]));
             CHECK(st.passes(u));
         }
         else if (f[0] == "sguided")

@@ -296,9 +296,10 @@ const std::vector<Page>& pages()
          "  compact  only survivors stand on the shelves, packed together, in every ordering:\n"
          "           positional by survivor number, scrambled by a keyed shuffle of those\n"
          "           numbers, guided on the guided line restricted to survivors. Needs one\n"
-         "           filter that can count and rank its survivors (clean, words, key, and\n"
-         "           symbol-entropy in black and white) and that implies every other ticked\n"
-         "           filter; otherwise the hallway falls back to hide.\n"
+         "           filter that can count and rank its survivors (clean, words, key,\n"
+         "           neighbour-agreement while colours^width is small, and symbol-entropy in\n"
+         "           black and white) and that implies every other ticked filter; otherwise\n"
+         "           the hallway falls back to hide.\n"
          "This command lists every filter for the line with its description, parameters and\n"
          "which other filters it implies, then the stack's id (a hash of every filter, version,\n"
          "parameter and data file) and, where it can be counted, the exact number of survivors.",

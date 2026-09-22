@@ -186,7 +186,7 @@ FilterStack::FilterStack(const FilterLine& line, const std::vector<Entry>& entri
         size_t r = filters_.size();
         for (size_t i = 0; i < filters_.size() && r == filters_.size(); ++i)
             if (filters_[i]->ranker()) r = i;
-        if (r == filters_.size()) blocker_ = "none of the ticked filters can rank its survivors at this length";
+        if (r == filters_.size()) blocker_ = "none of the ticked filters can rank its survivors at this size";
         else
         {
             std::string extra;

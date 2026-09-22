@@ -187,10 +187,10 @@ Every filter is a separate, versioned module compiled into the core. Every decis
 | `max-run-v1` | text | no letter repeated more than `max_run` times in a row (3) | |
 | `symbol-entropy-v1` | all | the unit's own Shannon entropy per symbol lies within [min, max] | in black and white |
 | `model-information-v1` | text | information under the pinned frequency model is at most `max` bits per symbol (5) | |
-| `neighbour-agreement-v1` | image, video | enough neighbouring pixels (and frames) share a colour | |
+| `neighbour-agreement-v1` | image, video | enough neighbouring pixels (and frames) share a colour | while colours^width is small (video: colours^(width×height)) |
 | `key-v1` | audio | every note is in one key (tonic C…B; major, minor, harmonic minor, major or minor pentatonic, blues); rests always pass | yes |
 
-**Compact** needs a filter that can count and rank its survivors (the Compact column), so it works on every line: words on text, low entropy on black-and-white pictures (mostly one colour), a key on melodies. Any other ticked filter must be one that filter *implies*: `words` implies `clean`, so the two together still compact, but `words` with `max-run` does not. When compact is not possible the hallway falls back to hide, and the top bar says why. Warp to text that fails the stack and it opens in hand marked **NOT ON THE SHELVES**, with the filter that rejected it.
+**Compact** needs a filter that can count and rank its survivors (the Compact column), so it works on every line: words on text, neighbour agreement or low entropy on black-and-white pictures, a key on melodies. Neighbour agreement is counted row by row, remembering the row above (a transfer matrix). The work grows as colours^width, which is inherent to counting pictures by their neighbours. A 10×10 black-and-white picture takes 0.1 s, and small video works. Past the memory limit the line falls back to hide. Any other ticked filter must be one that filter *implies*: `words` implies `clean`, so the two together still compact, but `words` with `max-run` does not. When compact is not possible the hallway falls back to hide, and the top bar says why. Warp to text that fails the stack and it opens in hand marked **NOT ON THE SHELVES**, with the filter that rejected it.
 
 A changed filter never replaces the old one. It is registered as the next version (`words-v2` beside `words-v1`), so a result recorded with a stack's id can always be reproduced. To add a filter, write it in `core/src/filters/` and add one line to `core/src/filters/builtin.cpp`. The oracle and the vectors in `tests/vectors_filters_v1.tsv` should grow with it.
 
@@ -204,6 +204,8 @@ A changed filter never replaces the old one. It is registered as the next versio
 ![Compact in the guided ordering, zoomed out: the likeliest survivors, every one of them whole words](docs/images/hallway-compact-guided.png)
 
 ![Compact on the image line: black-and-white pictures with symbol entropy of at most 0.5 bits, shuffled](docs/images/hallway-compact-image.png)
+
+![Compact on the image line with neighbour-agreement at 700 per thousand: 2.4 × 10^23 of the 2^100 pictures, all blobs rather than static](docs/images/hallway-compact-agreement.png)
 
 ![The text line, scrambled ordering](docs/images/hallway-text.png)
 
@@ -575,7 +577,7 @@ The Python oracle shares no code with the C++ core. It uses native big integers,
 | `vectors_image_v1.tsv` | Image resampling and palette quantisation, all four palettes |
 | `vectors_guided_v1.tsv` | Guided addresses and point decoding under the pinned model. The oracle derives every frequency table from the model file itself. |
 | `vectors_filters_v1.tsv` | Filter verdicts, fixed-point logarithms, and survivor counts and ranks for `clean` and `words` (v1 and v2) |
-| `vectors_compact_v1.tsv` | The survivor shuffle, rankers for black-and-white entropy and `key-v1`, and survivors' addresses and point decoding on the sieved guided line |
+| `vectors_compact_v1.tsv` | The survivor shuffle, rankers for black-and-white entropy, `key-v1` and `neighbour-agreement-v1` (pictures and video, 2–4 colours), and survivors' addresses and point decoding on the sieved guided line |
 
 The oracle also rebuilds the default model from the raw corpus (`sieve_ref.py model-build`) and must produce the same SHA-256 as `sieve train`. The core tests check every tiny space exhaustively: at L = 1–3 the arcs of all 27^L units tile the line exactly, every address is the shortest block that fits, and every address decodes back. The same holds for the sieved guided line over the survivors of `clean` and `words`: no non-survivor has an arc. Every ranker is checked against its filter over every unit of small lengths, and the shuffle is checked as a permutation of every size up to 300.
 
@@ -653,7 +655,7 @@ What the results show:
 ## Next
 
 - **Models for the other lines:** a melody model for the audio line, and small-image statistics for the image line. The model format already takes any alphabet size.
-- **Rankers for more filters,** so more stacks can compact: neighbour agreement for pictures (a transfer-matrix count over rows), and products of two ranking filters.
+- **Rankers for more filters,** so more stacks can compact: products of two ranking filters (neighbour agreement *and* low entropy, say), and cheaper counts for wide or colourful pictures.
 - **More filters:** bigram and trigram checks, rhythm and melody checks for audio, and S2 coherence tests, each as a new versioned module.
 - **M1 (images):** noise filters for tiny images, counted over every 5×5 and 6×6 1-bit picture.
 - **A larger text model** (for example ascii95 with case and punctuation, or a longer context), measured with `sieve measure` against the same held-out books.
