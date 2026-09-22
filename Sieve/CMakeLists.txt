@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(Sieve VERSION 0.9.1 LANGUAGES CXX)
+project(Sieve VERSION 0.10.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -57,6 +57,7 @@ endif()
 
 # Shared by the command-line tool and the hallway: the four lines, file input/output, dictionaries.
 add_library(sieve_lines STATIC
+    tools/cli/book.cpp
     tools/cli/dictionaries.cpp
     tools/cli/filter_config.cpp
     tools/cli/lines.cpp

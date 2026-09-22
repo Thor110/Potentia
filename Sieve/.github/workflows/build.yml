@@ -87,6 +87,32 @@ jobs:
           $exe browse --line image --filters agree.ini --compact --count 2 --seed 4 > /dev/null
           $exe browse --line audio --filters lines.ini --compact --count 2 --seed 4 > /dev/null
 
+      - name: Books bind, unbind and keep their id in every ordering
+        run: |
+          exe=build/sieve
+          [ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
+          T=tests/example_book_source.txt
+          # The committed example reads back to its text, and rebinding its source gives the same record.
+          $exe unbind tests/example_book_v1.book --pages unbound.txt > /dev/null
+          cmp unbound.txt tests/example_book_v1.pages.txt
+          $exe bind --title "A Tale of Two Cities" --cover tests/example_book_cover.png --pages $T --length 400 --mode guided --out again.book
+          cmp again.book tests/example_book_v1.book
+          id=$(awk '$1 == "id" {print $2}' tests/example_book_v1.book)
+          for m in positional scrambled; do
+            $exe bind --title "A Tale of Two Cities" --cover tests/example_book_cover.png --pages $T --length 400 --mode $m --key other --out $m.book
+            test "$(awk '$1 == "id" {print $2}' $m.book)" = "$id"
+            $exe unbind $m.book --pages $m.txt > /dev/null
+            cmp $m.txt tests/example_book_v1.pages.txt
+          done
+          # A changed address is refused.
+          python3 - <<'PY'
+          l = open("scrambled.book").read().split("\n")
+          i = l.index("end") - 1
+          l[i] = l[i][:5] + ("0" if l[i][5] != "0" else "1") + l[i][6:]
+          open("tampered.book", "w").write("\n".join(l))
+          PY
+          ! $exe unbind tampered.book > /dev/null 2>&1
+
       - name: Hallway renders, and its doors keep the corridor position (Linux, no display)
         if: runner.os == 'Linux'
         env:
@@ -159,6 +185,9 @@ jobs:
           python3 sieve_ref.py guided-vectors | diff - ../tests/vectors_guided_v1.tsv
           python3 sieve_ref.py filter-vectors | diff - ../tests/vectors_filters_v1.tsv
           python3 sieve_ref.py compact-vectors | diff - ../tests/vectors_compact_v1.tsv
+          python3 sieve_ref.py book-read ../tests/example_book_v1.book > book.out
+          test "$(head -1 book.out)" = "$(awk '$1 == "id" {print $2}' ../tests/example_book_v1.book)"
+          tail -n +3 book.out | cmp - ../tests/example_book_v1.pages.txt
 
       - name: The pinned model rebuilds byte for byte from its corpus (Linux)
         if: runner.os == 'Linux'

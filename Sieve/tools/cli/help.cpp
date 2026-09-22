@@ -323,6 +323,39 @@ const std::vector<Page>& pages()
           {"sieve check --length 1000 --file chapter1.txt", "a whole text, 1000 characters per unit"},
           {"sieve check --line image --file sprite.png", "the image filters on a picture"}}},
 
+        {"bind", "Bind a title, a cover and pages into a book record.",
+         "sieve bind --out FILE.book [--title TEXT] [--cover PICTURE] [--pages FILE] [--length N] [--mode MODE] [--key K]",
+         "A book is an ordered list of labelled sections, each a run of units on one line: the\n"
+         "title is a page (text), the cover a picture (image), the pages the body text cut into\n"
+         "pages of --length characters. The record (sieve-book-v1, plain text) names each\n"
+         "section's line and shape, how its addresses are written, and lists one address per\n"
+         "unit. Its id is the SHA-256 of the content alone, so the same book written in any\n"
+         "ordering or key has the same id. Every address is read back before the file is\n"
+         "written. In guided order the pages take about 2 bits per character, so the record is\n"
+         "smaller than the text; the cover, which has no guided ordering, is then scrambled.",
+         {{"--out FILE", "The record to write (required)."},
+          {"--title TEXT", "The title, as a page of --title-length characters (default: the page length)."},
+          {"--cover PICTURE", "A picture file (PNG, JPEG, BMP, GIF, TGA), as an image of --cover-width x\n"
+                              "--cover-height (10 x 10) in --cover-palette (mono)."},
+          {"--pages FILE", "The body text, canonicalised as warp does, in pages of --length characters."},
+          {"--length N", "Characters per page. Default 3200 (one page of the libraryofbabel.info library)."},
+          {"--mode MODE", "positional, scrambled (default) or guided: how the addresses are written."},
+          {"--key K", "The key for scrambled addresses. Default: sieve."},
+          {"--alphabet A", "The pages' alphabet (default lower27); --canon v2|v1; --model ID for guided."}},
+         {{"sieve bind --title \"A Tale of Two Cities\" --pages tale.txt --mode guided --out tale.book", "a guided book"},
+          {"sieve bind --pages notes.txt --length 1000 --out notes.book", "pages of 1000 characters, scrambled"}}},
+
+        {"unbind", "Read a book record back: check its id, print or save its sections.",
+         "sieve unbind BOOK [--pages OUT.txt] [--cover OUT.png] [--scale S]",
+         "Recomputes every unit from its address (guided addresses must be the units' own), checks\n"
+         "the content against the book's id, then prints each text section (the title, the pages)\n"
+         "and draws other sections in ASCII. The text comes back canonical: lower case, the\n"
+         "punctuation and line breaks of the original gone, exactly as the book holds it.",
+         {{"--pages OUT.txt", "Save the pages to a file instead of printing them."},
+          {"--cover OUT.png", "Save the cover as a PNG (enlarged --scale times, default 16)."}},
+         {{"sieve unbind tale.book", "print the title and the text"},
+          {"sieve unbind tale.book --pages tale.txt --cover cover.png", "save them"}}},
+
         {"version", "Show the tool version and every pinned rule version.",
          "sieve version   (or: sieve --version)",
          "Prints the version of the tool, the scramble construction, the canonicalisation rules,\n"

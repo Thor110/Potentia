@@ -17,6 +17,7 @@
 // Run "sieve help", "sieve help <command>" or "sieve help lines" for explanations and examples.
 
 #include "cli/args.hpp"
+#include "cli/book.hpp"
 #include "cli/dictionaries.hpp"
 #include "cli/help.hpp"
 #include "cli/filter_config.hpp"
@@ -898,11 +899,140 @@ int cmd_check(const Args& a)
     return 0;
 }
 
+// ---------------------------------------------------------------- books
+
+std::string slurp(const std::string& path)
+{
+    std::ifstream in(std::filesystem::path(path), std::ios::binary);
+    if (!in) throw std::runtime_error("cannot open '" + path + "'");
+    return std::string(std::istreambuf_iterator<char>(in), {});
+}
+
+// The text of a section's units, joined, without the padding at the end.
+std::string section_text(const DecodedSection& d)
+{
+    std::u32string t;
+    for (const auto& u : d.units) t += d.line.space.text_of(u);
+    while (!t.empty() && t.back() == U' ') t.pop_back();
+    return utf8_encode(t);
+}
+
+int cmd_bind(const Args& a)
+{
+    if (!a.has("out")) throw std::invalid_argument("missing --out FILE.book");
+    if (!a.has("pages") && !a.has("title")) throw std::invalid_argument("give --pages FILE and/or --title TEXT");
+    const std::string mode = a.get("mode", "scrambled");
+    const std::string key = a.get("key", "sieve");
+    const uint32_t page_length = a.get_positive("length", 3200);
+    Book b;
+    auto text_shape = [&](uint32_t length) {
+        Args s;
+        s.opts = {{"line", "text"}, {"alphabet", a.get("alphabet", "lower27")}, {"length", std::to_string(length)},
+                  {"canon", a.get("canon", "v2")}, {"key", key}};
+        if (a.has("model")) s.opts["model"] = a.get("model");
+        return s;
+    };
+    auto text_units = [&](const Args& shape, const Args& input) {
+        Args full = shape;
+        if (mode != "guided") full.opts["model"] = "none";
+        const Line line = make_line(full);
+        const WarpInput w = read_warp_input(line, input);
+        std::cerr << "  " << w.report.front() << "\n";
+        return w.units;
+    };
+    if (a.has("title"))
+    {
+        // A title is a page like any other, of its own length (default: the page length).
+        const Args shape = text_shape(a.get_positive("title-length", page_length));
+        Args in;
+        in.positional = {a.get("title")};
+        std::cerr << "title\n";
+        b.sections.push_back(make_section("title", shape, mode, text_units(shape, in)));
+    }
+    if (a.has("cover"))
+    {
+        // A cover is an image. The image line has no guided ordering, so a guided book writes
+        // its cover scrambled.
+        Args shape;
+        shape.opts = {{"line", "image"}, {"width", std::to_string(a.get_positive("cover-width", 10))},
+                      {"height", std::to_string(a.get_positive("cover-height", 10))}, {"palette", a.get("cover-palette", "mono")},
+                      {"key", key}, {"model", "none"}};
+        Args in;
+        in.opts["file"] = a.get("cover");
+        const Line line = make_line(shape);
+        const WarpInput w = read_warp_input(line, in);
+        std::cerr << "cover\n  " << w.report.front() << "\n";
+        b.sections.push_back(make_section("cover", shape, mode == "guided" ? "scrambled" : mode, w.units));
+    }
+    if (a.has("pages"))
+    {
+        const Args shape = text_shape(page_length);
+        Args in;
+        in.opts["file"] = a.get("pages");
+        std::cerr << "pages\n";
+        b.sections.push_back(make_section("pages", shape, mode, text_units(shape, in)));
+    }
+    // Read it back before writing: every address must decode to its unit.
+    const auto decoded = decode_book(b);
+    b.id = book_id(decoded);
+    const std::string record = serialise_book(b);
+    std::ofstream out(std::filesystem::path(a.get("out")), std::ios::binary);
+    out << record;
+    if (!out) throw std::runtime_error("cannot write " + a.get("out"));
+    size_t chars = 0;
+    for (const auto& d : decoded)
+        if (d.line.kind == LineKind::Text) chars += d.units.size() * d.line.space.unit_length();
+    std::cout << "book         " << b.id << "\n";
+    for (const auto& d : decoded)
+        std::cout << "  " << d.section->role << std::string(std::max<size_t>(1, 11 - d.section->role.size()), ' ') << d.units.size()
+                  << " unit(s) on " << d.line.space.id() << ", " << d.section->mode << "\n";
+    std::cout << "record       " << record.size() << " bytes -> " << a.get("out") << "\n";
+    return 0;
+}
+
+int cmd_unbind(const Args& a)
+{
+    if (a.positional.size() != 1) throw std::invalid_argument("give one BOOK file");
+    const Book b = parse_book(slurp(a.positional[0]));
+    const auto decoded = decode_book(b);
+    const std::string id = book_id(decoded);
+    if (id != b.id) throw std::runtime_error("the book's content does not match its id (" + b.id + ")");
+    std::cerr << "book " << id << " (id checked)\n";
+    for (const auto& d : decoded)
+    {
+        const std::string& role = d.section->role;
+        std::cerr << "  " << role << ": " << d.units.size() << " unit(s) on " << d.line.space.id() << ", " << d.section->mode << "\n";
+        if (d.line.kind == LineKind::Text)
+        {
+            const std::string text = section_text(d);
+            if (role == "pages" && a.has("pages"))
+            {
+                std::ofstream out(std::filesystem::path(a.get("pages")), std::ios::binary);
+                out << text << "\n";
+                if (!out) throw std::runtime_error("cannot write " + a.get("pages"));
+                std::cerr << "  saved " << a.get("pages") << "\n";
+            }
+            else std::cout << text << "\n";
+        }
+        else
+        {
+            if (role == "cover" && a.has("cover"))
+            {
+                save_unit(d.line, d.units.front(), a.get("cover"), a.get_positive("scale", 16));
+                std::cerr << "  saved " << a.get("cover") << "\n";
+            }
+            else
+                for (const auto& u : d.units) print_indented(preview(d.line, u), "");
+        }
+    }
+    return 0;
+}
+
 bool is_command(const std::string& name)
 {
     return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" ||
            name == "version" || name == "models" || name == "train" || name == "measure" ||
-           name == "filters" || name == "check";
+           name == "filters" || name == "check" || name == "bind" || name == "unbind";
 }
 
 } // namespace
@@ -944,6 +1074,8 @@ int main(int argc, char** argv)
         if (a.command == "measure") return cmd_measure(a);
         if (a.command == "filters") return cmd_filters(a);
         if (a.command == "check") return cmd_check(a);
+        if (a.command == "bind") return cmd_bind(a);
+        if (a.command == "unbind") return cmd_unbind(a);
         std::cerr << "unknown command '" << a.command << "'\n\n";
         print_usage();
         return 1;

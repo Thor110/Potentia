@@ -1048,6 +1048,76 @@ def cmd_compact_vectors(_args):
             print(f"spoint\t{f}\t{L}\t{h}\t{u}")
 
 
+# -- books (sieve-book-v1): an independent reader. Decodes every section and recomputes the
+#    content id (sieve-book-id-v1).
+BOOK_FIELDS = {"text": ["alphabet", "length", "canon"], "image": ["width", "height", "palette"],
+               "video": ["width", "height", "frames", "palette"], "audio": ["length"]}
+PALETTE_SIZES = {"mono": 2, "ega16": 16, "rgb332": 256, "rgb24": 1 << 24}
+
+
+def book_read(text, model_dir="../data/models"):
+    lines = text.split("\n")
+    assert lines[0] == "sieve-book-v1", "not a book"
+    i, sections = 1, []
+    while lines[i] != "end":
+        role = lines[i].split(" ", 1)[1]
+        kind = lines[i + 1].split(" ", 1)[1]
+        i += 2
+        f = {}
+        for k in BOOK_FIELDS[kind] + ["key", "mode"]:
+            name, _, v = lines[i].partition(" ")
+            assert name == k, (name, k)
+            f[k] = v
+            i += 1
+        model = None
+        if f["mode"] == "guided":
+            _, mid, msha = lines[i].split(" ")
+            model = Model(f"{model_dir}/{mid}.model")
+            assert model.sha256 == msha, "model does not match"
+            i += 1
+        n = int(lines[i].split(" ")[1])
+        addrs = lines[i + 1:i + 1 + n]
+        i += 1 + n
+        if kind == "text":
+            L, sym, base = int(f["length"]), f["alphabet"], None
+        elif kind == "audio":
+            L, sym, base = int(f["length"]), "notes104", 104
+        else:
+            w, h, fr = int(f["width"]), int(f["height"]), int(f.get("frames", 1))
+            L, base = w * h * fr, PALETTE_SIZES[f["palette"]]
+            sym = f"{kind}/{f['palette']}/{w}x{h}" + (f"x{fr}" if kind == "video" else "")
+        sp = Space(sym if kind == "text" else None, L, f["key"], base=base)
+        units = []
+        for a in addrs:
+            if f["mode"] == "guided":
+                S = 16 * L
+                pt = int(a, 16) << (S - 4 * len(a))
+                u = guided_unit_at(model, L, pt)
+                point, bits = guided_code(model, u)
+                assert guided_hex(point, bits, S) == a, "not the unit's own address"
+            else:
+                d = sp._digits(int(a, 16))
+                u = sp.unscramble(d) if f["mode"] == "scrambled" else d
+            units.append(u)
+        sections.append((role, kind, sym, L, sp, units))
+    assert lines[i + 1].startswith("id ")
+    canon = ["sieve-book-id-v1"]
+    for role, kind, sym, L, sp, units in sections:
+        canon += [f"section {role}", f"shape {kind}/{sym}/L{L}", f"units {len(units)}"]
+        canon += [format(sp._value(u), "x").zfill(sp.hex_width) for u in units]
+    book_id = hashlib.sha256(("\n".join(canon) + "\n").encode()).hexdigest()
+    assert book_id == lines[i + 1][3:], "id does not match the content"
+    return book_id, sections
+
+
+def cmd_book_read(args):
+    book_id, sections = book_read(open(args.book, encoding="utf-8").read())
+    print(book_id)
+    for role, kind, sym, L, sp, units in sections:
+        if kind == "text":
+            print("".join(sp.text_of(u) for u in units).rstrip(" "))
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -1074,6 +1144,8 @@ def main():
     s.add_argument("--out", required=True)
     sub.add_parser("filter-vectors")
     sub.add_parser("compact-vectors")
+    s = sub.add_parser("book-read")
+    s.add_argument("book")
     s = sub.add_parser("guided-vectors")
     s.add_argument("--model", default="../data/models/gutenberg-lower27-o5.model")
     args = p.parse_args()
@@ -1096,6 +1168,8 @@ def main():
         cmd_filter_vectors(args)
     elif args.cmd == "compact-vectors":
         cmd_compact_vectors(args)
+    elif args.cmd == "book-read":
+        cmd_book_read(args)
     elif args.cmd == "warp":
         sp = Space(args.alphabet, args.length, args.key)
         for u in canonicalise(" ".join(args.text), args.alphabet, args.length):

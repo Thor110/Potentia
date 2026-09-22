@@ -2,3 +2,5 @@
 # never convert its line endings, on any platform. This file works from a subfolder too.
 data/** -text
 tests/*.tsv -text
+tests/*.book -text
+tests/example_book_*.txt -text

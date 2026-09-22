@@ -532,6 +532,35 @@ shakespeare-macbeth.txt           93070    2.478    2.480     1.92x
 all                              534844    2.033    2.037     2.33x
 ```
 
+### `bind`, `unbind`: books
+
+```
+sieve bind --out FILE.book [--title TEXT] [--cover PICTURE] [--pages FILE] [--length N] [--mode positional|scrambled|guided] [--key K]
+sieve unbind BOOK [--pages OUT.txt] [--cover OUT.png]
+```
+
+A **book** is composed from the lines, the way the project first imagined books of pages:
+- **Sections:** the book is an ordered list of labelled sections. The **title** is a page on the text line, the **cover** is a picture on the image line, and the **pages** are the body text cut into pages of `--length` characters.
+- **The record:** `sieve-book-v1` is plain text. For each section it gives its line and shape, how its addresses are written, and one address per unit.
+- **Identity:** the book's **id** is the SHA-256 of its content alone. The same book written positionally, scrambled or guided, with any key, has the same id.
+- **Checking:** `unbind` recomputes every unit from its address and refuses a book whose content no longer matches its id.
+
+```sh
+sieve bind --title "A Tale of Two Cities" --cover cover.png --pages tale.txt --length 400 --mode guided --out tale.book
+#   book         fc6e6146640e5b02a8779cac3d2eb49d7a8dce02133fd5d9738cf610a0a48268
+#     title      1 unit(s) on lower27/L400/key=sieve/feistel-sha256-v1, guided
+#     cover      1 unit(s) on image/mono/10x10/L100/key=sieve/feistel-sha256-v1, scrambled
+#     pages      3 unit(s) on lower27/L400/key=sieve/feistel-sha256-v1, guided
+#   record       1026 bytes -> tale.book
+sieve unbind tale.book
+#   a tale of two cities
+#   it was the best of times it was the worst of times ...
+```
+
+In guided order the pages cost about **1.8 bits per character**: the three pages of that example take 416 hex digits, against 1,428 scrambled. So a guided record of real text is smaller than the text itself. The cover has no guided ordering, so a guided book writes it scrambled. The text comes back canonical: lower case, with the punctuation and line breaks gone, which is exactly what the book holds.
+
+`tests/example_book_v1.book` is a committed example. CI unbinds it, rebinds its source to the identical record, and has the Python oracle read it independently to the same id and text.
+
 ### `version`: what produced a result
 
 ```
