@@ -23,7 +23,9 @@ Implementation of [SPECIFICATIONS.md](docs/SPECIFICATIONS.md) (v2.0). This cover
 | `reference/sieve_ref.py` | Independent Python oracle; generates every conformance vector file |
 | `tests/` | Core tests and the conformance vectors |
 | `results/` | M1 sieve output (CSV and chart) |
-| `third_party/stb/` | stb_image and stb_image_write (public domain), used only by the tool to read and write image files |
+| `third_party/stb/` | stb_image and stb_image_write (public domain or MIT), used to read and write image files |
+| `third_party_licenses/` | The licence of every third-party component (SDL3 and the parts of it with their own notices, stb, SCOWL, font8x8), with an inventory in its README; copied next to the executables when you build |
+| `data/lang/`, `data/fonts/`, `data/meshes/` | Menu languages, bitmap fonts, and the Real Graphics models (templates in `data/meshes/templates/`) |
 | `.github/workflows/build.yml` | Builds and tests on Windows, Linux and macOS on every push |
 | `docs/SPECIFICATIONS.md` | The specification |
 | `docs/images/` | Hallway screenshots |

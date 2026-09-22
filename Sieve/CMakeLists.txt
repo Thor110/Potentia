@@ -91,7 +91,10 @@ add_custom_target(sieve_data ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/data/lang
             $<TARGET_FILE_DIR:sieve>/lang
-    COMMENT "Copying dictionaries, models and languages next to sieve")
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party_licenses
+            $<TARGET_FILE_DIR:sieve>/third_party_licenses
+    COMMENT "Copying dictionaries, models, languages and third-party licences next to sieve")
 add_dependencies(sieve_data sieve)
 
 # ---------------------------------------------------------------- tests
@@ -151,6 +154,9 @@ if(SIEVE_BUILD_CLIENT)
                 $<TARGET_FILE_DIR:hallway>/fonts
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/meshes
-                $<TARGET_FILE_DIR:hallway>/meshes)
+                $<TARGET_FILE_DIR:hallway>/meshes
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_CURRENT_SOURCE_DIR}/third_party_licenses
+                $<TARGET_FILE_DIR:hallway>/third_party_licenses)
     target_compile_definitions(hallway PRIVATE SIEVE_VERSION="${PROJECT_VERSION}")
 endif()
