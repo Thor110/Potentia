@@ -8,7 +8,6 @@
 #include <atomic>
 #include <fstream>
 #include <map>
-#include <sstream>
 #include <stdexcept>
 #include <thread>
 
@@ -41,38 +40,68 @@ const char* to_string(SieveFilter f)
 
 // ---------------------------------------------------------------- Dictionary
 
-Dictionary Dictionary::load_file(const std::string& path)
+namespace {
+
+struct WordFile
+{
+    std::string bytes;
+    std::vector<std::string> words; // valid, lowercased; may contain duplicates
+    size_t skipped = 0;
+};
+
+WordFile read_word_file(const std::string& path)
 {
     std::ifstream in(path, std::ios::binary);
     if (!in) throw std::runtime_error("cannot open dictionary '" + path + "'");
-    std::stringstream ss;
-    ss << in.rdbuf();
-    const std::string bytes = ss.str();
+    WordFile f;
+    in.seekg(0, std::ios::end);
+    f.bytes.resize(static_cast<size_t>(in.tellg()));
+    in.seekg(0);
+    in.read(f.bytes.data(), static_cast<std::streamsize>(f.bytes.size()));
 
-    std::vector<std::string> words;
-    size_t skipped = 0;
-    std::istringstream lines(bytes);
-    std::string line;
-    while (std::getline(lines, line))
+    const std::string_view all(f.bytes);
+    for (size_t pos = 0; pos < all.size();)
     {
-        size_t a = 0, b = line.size();
-        while (a < b && std::isspace(static_cast<unsigned char>(line[a]))) ++a;
-        while (b > a && std::isspace(static_cast<unsigned char>(line[b - 1]))) --b;
-        std::string w = line.substr(a, b - a);
-        if (w.empty()) continue;
+        size_t end = all.find('\n', pos);
+        if (end == std::string_view::npos) end = all.size();
+        size_t a = pos, b = end;
+        pos = end + 1;
+        while (a < b && std::isspace(static_cast<unsigned char>(all[a]))) ++a;
+        while (b > a && std::isspace(static_cast<unsigned char>(all[b - 1]))) --b;
+        if (a == b) continue;
+        std::string w(all.substr(a, b - a));
         bool ok = true;
         for (char& c : w)
         {
             if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
             if (!is_letter(c)) { ok = false; break; }
         }
-        if (ok) words.push_back(std::move(w));
-        else ++skipped;
+        if (ok) f.words.push_back(std::move(w));
+        else ++f.skipped;
     }
+    return f;
+}
+
+} // namespace
+
+DictionaryFileInfo Dictionary::inspect_file(const std::string& path)
+{
+    WordFile f = read_word_file(path);
+    std::sort(f.words.begin(), f.words.end());
+    DictionaryFileInfo info;
+    info.word_count = static_cast<size_t>(std::unique(f.words.begin(), f.words.end()) - f.words.begin());
+    info.skipped_lines = f.skipped;
+    info.sha256 = Sha256::hex(Sha256::hash(f.bytes));
+    return info;
+}
+
+Dictionary Dictionary::load_file(const std::string& path)
+{
+    WordFile f = read_word_file(path);
     Dictionary d;
-    d.skipped_ = skipped;
-    d.sha256_ = Sha256::hex(Sha256::hash(bytes));
-    d.build(std::move(words));
+    d.skipped_ = f.skipped;
+    d.sha256_ = Sha256::hex(Sha256::hash(f.bytes));
+    d.build(std::move(f.words));
     return d;
 }
 
@@ -94,11 +123,26 @@ void Dictionary::build(std::vector<std::string> words)
         for (char c : w)
             if (!is_letter(c)) throw std::invalid_argument("dictionary words must be a-z only");
     sorted_words_ = words;
+    words_.reserve(words.size());
     words_.insert(words.begin(), words.end());
-    for (const auto& w : words)
-        for (size_t i = 0; i < w.size(); ++i) suffixes_.insert(w.substr(i));
-    sorted_suffixes_.assign(suffixes_.begin(), suffixes_.end());
+    // All distinct suffixes. A word's suffixes are its reversal's prefixes, so with the reversed
+    // words sorted, the new suffixes an entry adds are those longer than its common prefix with
+    // the previous entry: deduplicated without hashing, then sorted once.
+    std::vector<std::string> reversed(words.rbegin(), words.rend());
+    for (auto& r : reversed) std::reverse(r.begin(), r.end());
+    std::sort(reversed.begin(), reversed.end());
+    const std::string* prev = nullptr;
+    for (const auto& r : reversed)
+    {
+        size_t lcp = 0;
+        if (prev)
+            while (lcp < r.size() && lcp < prev->size() && r[lcp] == (*prev)[lcp]) ++lcp;
+        for (size_t k = lcp + 1; k <= r.size(); ++k) sorted_suffixes_.emplace_back(r.rend() - static_cast<std::ptrdiff_t>(k), r.rend());
+        prev = &r;
+    }
     std::sort(sorted_suffixes_.begin(), sorted_suffixes_.end());
+    suffixes_.reserve(sorted_suffixes_.size());
+    suffixes_.insert(sorted_suffixes_.begin(), sorted_suffixes_.end());
 
     // Per-length histograms. In a sorted list, the distinct prefixes contributed by an entry
     // are those longer than its common prefix with the previous entry.

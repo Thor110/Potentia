@@ -63,6 +63,17 @@ public:
     Digits scramble(Digits unit) const;
     Digits unscramble(Digits address) const;
 
+    // The address as digits (the unit itself in positional order, its scramble otherwise), and back.
+    // Callers that need both the hex address and the fraction should compute these once.
+    Digits address_digits(const Digits& unit, AddressMode mode) const;
+    Digits unit_of_address(Digits address, AddressMode mode) const;
+    std::string hex_of(const Digits& address) const;    // zero-padded hex of address digits
+    double fraction_of(const Digits& address) const;    // DISPLAY ONLY, see fraction()
+    // Address digits `offset` places along the loop (pure digit arithmetic, no scrambling).
+    Digits step_address(Digits address, int64_t offset) const;
+    // Parses a hex address into address digits (range-checked; no unscrambling).
+    Digits parse_address(std::string_view hex) const;
+
     // Unit -> hex address, and back. unit_at throws std::out_of_range for addresses
     // outside the space and std::invalid_argument for malformed hex.
     std::string address_of(const Digits& unit, AddressMode mode) const;

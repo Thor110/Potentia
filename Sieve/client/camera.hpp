@@ -66,6 +66,24 @@ public:
         return std::make_pair(std::make_pair(project_camera(ca), project_camera(cb)), (ca.z + cb.z) * 0.5f);
     }
 
+    // Conservative view-frustum test for an axis-aligned box: false only when all eight corners
+    // lie outside one of the near, left, right, top or bottom planes (so nothing of it can show).
+    bool box_visible(Vec3 lo, Vec3 hi) const
+    {
+        const float tx = (w_ * 0.5f) / focal_ * 1.05f, ty = (h_ * 0.5f) / focal_ * 1.05f;
+        int near_out = 0, left = 0, right = 0, below = 0, above = 0;
+        for (int i = 0; i < 8; ++i)
+        {
+            const Vec3 c = to_camera({i & 1 ? hi.x : lo.x, i & 2 ? hi.y : lo.y, i & 4 ? hi.z : lo.z});
+            if (c.z < near_z) ++near_out;
+            if (c.x < -c.z * tx) ++left;
+            if (c.x > c.z * tx) ++right;
+            if (c.y < -c.z * ty) ++below;
+            if (c.y > c.z * ty) ++above;
+        }
+        return near_out < 8 && left < 8 && right < 8 && below < 8 && above < 8;
+    }
+
     // Projects a convex polygon, clipped to the near plane (Sutherland-Hodgman).
     std::vector<Point2> project_polygon(const std::vector<Vec3>& world) const
     {

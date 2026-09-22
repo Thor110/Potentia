@@ -398,6 +398,22 @@ The Python oracle shares no code with the C++ core. It uses native big integers,
 | `vectors_canon.tsv` | Text canonicalisation v1 and v2, including every accented letter in the fold table |
 | `vectors_image_v1.tsv` | Image resampling and palette quantisation, all four palettes |
 
+`sieve_tests` runs every check twice: once on the portable SHA-256 and once on the CPU's SHA instructions (SHA-NI, on x86-64 CPUs that have them), so both paths are held to the same vectors. The fast path is picked automatically at start-up; `sieve version` shows which one this machine uses.
+
+### Performance
+
+Measured on a 2-core x86-64 container with SHA-NI (Release build):
+
+| Task | Before | After |
+| :--- | ---: | ---: |
+| `sieve dicts` (hash and count three dictionaries) | 1.21 s | 0.08 s |
+| `warp` a 1.9 MB book at L = 1000, scrambled | 1.99 s | 0.32 s |
+| `warp` the same book at L = 32, scrambled | 1.38 s | 0.35 s |
+| `read --around 100` at L = 1000, scrambled | 0.30 s | 0.03 s |
+| Load and index `scowl-en-80` | 1.10 s | 0.69 s |
+
+Where it came from: hardware SHA-256; hashing the round function's fixed prefix once per round instead of once per output block; computing each address once and deriving its hex and position from it; stepping neighbours on the address digits so each shelf costs one unscramble instead of three; converting big numbers several digits at a time; and deduplicating dictionary suffixes without a hash set. The hallway caches each book's address, hex and position, and skips tiles that are out of view. None of this changes a single address: every conformance vector is identical.
+
 After an intentional, versioned change, regenerate them:
 
 ```sh
@@ -438,4 +454,5 @@ What the results show:
 ## Next
 
 - **M3:** an integer arithmetic coder with a small pinned character model (entropy-ordered addresses), measured in bits per character on real text.
-- **M4:** the hallway client (SDL3): shelves, zoom depth, readout, warp box, in-hand view and a guided/raw toggle, with doors between the four lines.
+- **M4 (rest):** zoom depth in the hallway, and the guided view once M3 exists.
+- **M1 (images):** noise filters for tiny images, counted over every 5×5 and 6×6 1-bit picture.

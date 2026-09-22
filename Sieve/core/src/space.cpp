@@ -80,18 +80,26 @@ Space::Digits Space::round_function(uint32_t round, const uint32_t* src, size_t 
     const uint32_t n = base_;
     Digits out;
     out.reserve(count);
-    // Hash the common prefix once, then clone the state per block.
-    Sha256 prefix;
+    // The common input, built in one buffer and hashed once; each output block then clones the
+    // hash state and adds only its block counter.
+    auto put_u32 = [](std::string& b, uint32_t v) {
+        const char c[4] = {char(v), char(v >> 8), char(v >> 16), char(v >> 24)};
+        b.append(c, 4);
+    };
+    std::string msg;
+    msg.reserve(40 + key_.size() + 4 * src_len);
     // Domain-separation label: a frozen constant of feistel-sha256-v1 (named before the project
     // became Sieve). Changing it would change every scrambled address, under every key.
-    prefix.update("POTENTIA/FEISTEL/1");
-    prefix.update_u32le(static_cast<uint32_t>(key_.size()));
-    prefix.update(key_);
-    prefix.update_u32le(round);
-    prefix.update_u32le(n);
-    prefix.update_u32le(length_);
-    prefix.update_u32le(static_cast<uint32_t>(src_len));
-    for (size_t i = 0; i < src_len; ++i) prefix.update_u32le(src[i]);
+    msg += "POTENTIA/FEISTEL/1";
+    put_u32(msg, static_cast<uint32_t>(key_.size()));
+    msg += key_;
+    put_u32(msg, round);
+    put_u32(msg, n);
+    put_u32(msg, length_);
+    put_u32(msg, static_cast<uint32_t>(src_len));
+    for (size_t i = 0; i < src_len; ++i) put_u32(msg, src[i]);
+    Sha256 prefix;
+    prefix.update(msg);
 
     for (uint32_t k = 0; out.size() < count; ++k)
     {
@@ -143,28 +151,59 @@ Space::Digits Space::unscramble(Digits d) const
     return d;
 }
 
-std::string Space::address_of(const Digits& unit, AddressMode mode) const
+Space::Digits Space::address_digits(const Digits& unit, AddressMode mode) const
 {
     if (unit.size() != length_) throw std::invalid_argument("digit vector has the wrong length");
     for (uint32_t d : unit)
         if (d >= base_) throw std::invalid_argument("digit out of range for this space");
-    const Digits a = mode == AddressMode::Scrambled ? scramble(unit) : unit;
-    return BigUint::from_digits(a, base_).to_hex(hex_width_);
+    return mode == AddressMode::Scrambled ? scramble(unit) : unit;
 }
 
-Space::Digits Space::unit_at(std::string_view hex, AddressMode mode) const
+Space::Digits Space::unit_of_address(Digits address, AddressMode mode) const
+{
+    if (address.size() != length_) throw std::invalid_argument("digit vector has the wrong length");
+    return mode == AddressMode::Scrambled ? unscramble(std::move(address)) : address;
+}
+
+std::string Space::hex_of(const Digits& address) const
+{
+    return BigUint::from_digits(address, base_).to_hex(hex_width_);
+}
+
+double Space::fraction_of(const Digits& address) const
+{
+    double f = 0.0, scale = 1.0;
+    const double n = base_;
+    // Enough leading digits to fill a double, however small the base.
+    for (size_t i = 0; i < address.size() && scale > 1e-18; ++i)
+    {
+        scale /= n;
+        f += address[i] * scale;
+    }
+    return f;
+}
+
+std::string Space::address_of(const Digits& unit, AddressMode mode) const
+{
+    return hex_of(address_digits(unit, mode));
+}
+
+Space::Digits Space::parse_address(std::string_view hex) const
 {
     const BigUint v = BigUint::from_hex(hex);
     if (v >= size_) throw std::out_of_range("address is outside this space (must be below " +
                                             std::to_string(base_) + "^" + std::to_string(length_) + ")");
-    Digits a = v.to_digits(base_, length_);
-    return mode == AddressMode::Scrambled ? unscramble(std::move(a)) : a;
+    return v.to_digits(base_, length_);
 }
 
-Space::Digits Space::neighbour(const Digits& unit, AddressMode mode, int64_t offset) const
+Space::Digits Space::unit_at(std::string_view hex, AddressMode mode) const
 {
-    if (unit.size() != length_) throw std::invalid_argument("digit vector has the wrong length");
-    Digits a = mode == AddressMode::Scrambled ? scramble(unit) : unit;
+    return unit_of_address(parse_address(hex), mode);
+}
+
+Space::Digits Space::step_address(Digits a, int64_t offset) const
+{
+    if (a.size() != length_) throw std::invalid_argument("digit vector has the wrong length");
     // Add |offset| to (or subtract it from) the address digits, least significant digit last,
     // with the carry or borrow wrapping around the loop.
     const bool forward = offset >= 0;
@@ -188,21 +227,17 @@ Space::Digits Space::neighbour(const Digits& unit, AddressMode mode, int64_t off
         }
     }
     // Remaining step/carry beyond the most significant digit wraps around the loop and is discarded.
-    return mode == AddressMode::Scrambled ? unscramble(std::move(a)) : a;
+    return a;
+}
+
+Space::Digits Space::neighbour(const Digits& unit, AddressMode mode, int64_t offset) const
+{
+    return unit_of_address(step_address(address_digits(unit, mode), offset), mode);
 }
 
 double Space::fraction(const Digits& unit, AddressMode mode) const
 {
-    const Digits a = mode == AddressMode::Scrambled ? scramble(unit) : unit;
-    double f = 0.0, scale = 1.0;
-    const double n = base_;
-    // Enough leading digits to fill a double, however small the base.
-    for (size_t i = 0; i < a.size() && scale > 1e-18; ++i)
-    {
-        scale /= n;
-        f += a[i] * scale;
-    }
-    return f;
+    return fraction_of(address_digits(unit, mode));
 }
 
 Space::Digits door_map(const Space& from, const Space::Digits& unit, AddressMode mode, const Space& to)

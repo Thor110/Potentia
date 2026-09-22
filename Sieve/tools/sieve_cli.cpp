@@ -104,10 +104,11 @@ int cmd_warp(const Args& a)
         for (AddressMode m : {AddressMode::Positional, AddressMode::Scrambled})
         {
             if (mode != "both" && address_mode_from_string(mode) != m) continue;
+            const auto addr = line.space.address_digits(digits, m); // scramble once, reuse below
             char pct[32];
-            std::snprintf(pct, sizeof pct, "%.10f%%", line.space.fraction(digits, m) * 100.0);
+            std::snprintf(pct, sizeof pct, "%.10f%%", line.space.fraction_of(addr) * 100.0);
             std::cout << "  " << to_string(m) << (m == AddressMode::Positional ? "  " : "   ")
-                      << show_address(line.space.address_of(digits, m), abbreviate) << "\n"
+                      << show_address(line.space.hex_of(addr), abbreviate) << "\n"
                       << "  " << std::string(12, ' ') << "at " << pct << " along the line\n";
         }
     }
@@ -122,7 +123,8 @@ int cmd_read(const Args& a)
     if (!a.has("mode")) throw std::invalid_argument("missing --mode positional|scrambled");
     if (a.positional.size() != 1) throw std::invalid_argument("give exactly one ADDRESS");
     const AddressMode m = address_mode_from_string(a.get("mode"));
-    const auto digits = line.space.unit_at(a.positional[0], m);
+    const auto address = line.space.parse_address(a.positional[0]);
+    const auto digits = line.space.unit_of_address(address, m);
     if (a.has("around"))
     {
         // The neighbouring shelves: what the hallway shows either side of this unit.
@@ -130,10 +132,12 @@ int cmd_read(const Args& a)
         const bool multiline = line.kind == LineKind::Image || line.kind == LineKind::Video;
         for (int64_t off = -n; off <= n; ++off)
         {
-            const auto u = off == 0 ? digits : line.space.neighbour(digits, m, off);
+            // Step the address digits and unscramble once per shelf.
+            const auto step = line.space.step_address(address, off);
+            const auto u = off == 0 ? digits : line.space.unit_of_address(step, m);
             char label[24];
             std::snprintf(label, sizeof label, "%+lld", static_cast<long long>(off));
-            const std::string addr = show_address(line.space.address_of(u, m), a.has("short"));
+            const std::string addr = show_address(line.space.hex_of(step), a.has("short"));
             if (multiline)
             {
                 std::cout << (off == 0 ? "> " : "  ") << label << "  " << addr << "\n";
@@ -171,8 +175,8 @@ int cmd_browse(const Args& a)
         // A uniformly random scrambled address is a uniformly random unit.
         std::vector<uint32_t> addr(sp.unit_length());
         for (auto& d : addr) d = digit(rng);
-        const std::string hex = BigUint::from_digits(addr, sp.base()).to_hex(sp.hex_width());
-        const auto unit = sp.unit_at(hex, AddressMode::Scrambled);
+        const std::string hex = sp.hex_of(addr);
+        const auto unit = sp.unit_of_address(std::move(addr), AddressMode::Scrambled);
         if (i) std::cout << "\n";
         if (multiline) print_indented(preview(line, unit), "");
         else std::cout << preview(line, unit) << "\n";
@@ -310,6 +314,9 @@ int cmd_version()
     {
         std::cout << "  default dictionary      (registry not found)\n";
     }
+    std::cout << "\nThis machine:\n"
+              << "  SHA-256                 "
+              << (Sha256::using_hardware() ? "hardware (SHA-NI)" : "portable") << " - both give identical results\n";
     return 0;
 }
 
@@ -319,12 +326,12 @@ int cmd_dicts(const Args& a)
 {
     if (a.has("hash"))
     {
-        const Dictionary d = Dictionary::load_file(a.get("hash"));
+        const DictionaryFileInfo d = Dictionary::inspect_file(a.get("hash"));
         std::cout << "file      " << a.get("hash") << "\n"
-                  << "words     " << d.word_count() << " (" << d.skipped_lines() << " lines skipped: not a-z only)\n"
-                  << "sha256    " << d.sha256() << "\n"
+                  << "words     " << d.word_count << " (" << d.skipped_lines << " lines skipped: not a-z only)\n"
+                  << "sha256    " << d.sha256 << "\n"
                   << "\nRegistry line (edit id, language and description; tab-separated):\n"
-                  << "my-dictionary\t" << fs::path(a.get("hash")).filename().string() << "\ten\tno\t" << d.sha256()
+                  << "my-dictionary\t" << fs::path(a.get("hash")).filename().string() << "\ten\tno\t" << d.sha256
                   << "\tDescription of this word list\n";
         return 0;
     }
@@ -336,8 +343,8 @@ int cmd_dicts(const Args& a)
         if (!fs::exists(e.path)) status = "MISSING FILE";
         else
         {
-            const Dictionary d = Dictionary::load_file(e.path.string());
-            status = d.sha256() == e.sha256 ? std::to_string(d.word_count()) + " words, hash ok" : "HASH MISMATCH";
+            const DictionaryFileInfo d = Dictionary::inspect_file(e.path.string());
+            status = d.sha256 == e.sha256 ? std::to_string(d.word_count) + " words, hash ok" : "HASH MISMATCH";
         }
         std::string id = e.id;
         id.resize(std::max<size_t>(id.size() + 2, 14), ' ');

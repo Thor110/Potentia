@@ -37,6 +37,7 @@ jobs:
         run: |
           exe=build/sieve
           [ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
+          $exe version
           got=$($exe warp --length 32 --mode scrambled "It was the best of times" | awk '/scrambled/ {print $2}')
           echo "scrambled address: $got"
           test "$got" = "007b30165818bf0311497600aa52996f9395e27"

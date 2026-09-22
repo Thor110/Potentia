@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <utility>
 #include <stdexcept>
 
 namespace sieve {
@@ -86,15 +87,41 @@ uint32_t BigUint::divmod_small(uint32_t d)
     return static_cast<uint32_t>(rem);
 }
 
+namespace {
+
+// The largest k with base^k <= 2^32, and base^k itself (as uint64_t, may equal 2^32).
+std::pair<size_t, uint64_t> chunk_of(uint32_t base)
+{
+    size_t k = 1;
+    uint64_t p = base;
+    while (p * base <= (uint64_t(1) << 32)) { p *= base; ++k; }
+    return {k, p};
+}
+
+} // namespace
+
 BigUint BigUint::from_digits(std::span<const uint32_t> digits, uint32_t base)
 {
     if (base < 2) throw std::invalid_argument("base must be at least 2");
+    // Horner's rule, k digits per big multiply: v = v * base^k + (next k digits).
+    const size_t k = chunk_of(base).first;
     BigUint v;
-    for (uint32_t d : digits)
+    for (size_t i = 0; i < digits.size();)
     {
-        if (d >= base) throw std::invalid_argument("digit out of range for base");
-        v.mul_small(base);
-        v.add_small(d);
+        const size_t take = std::min(k, digits.size() - i);
+        uint64_t chunk = 0, scale = 1;
+        for (size_t j = 0; j < take; ++j, ++i)
+        {
+            if (digits[i] >= base) throw std::invalid_argument("digit out of range for base");
+            chunk = chunk * base + digits[i];
+            scale *= base;
+        }
+        if (scale == (uint64_t(1) << 32))
+            v.limbs_.insert(v.limbs_.begin(), 0u); // multiply by exactly 2^32
+        else
+            v.mul_small(static_cast<uint32_t>(scale));
+        v.add_small(static_cast<uint32_t>(chunk));
+        v.trim();
     }
     return v;
 }
@@ -104,10 +131,18 @@ std::vector<uint32_t> BigUint::to_digits(uint32_t base, size_t length) const
     if (base < 2) throw std::invalid_argument("base must be at least 2");
     std::vector<uint32_t> digits(length, 0);
     BigUint v = *this;
-    for (size_t i = length; i-- > 0;)
+    // Peel k digits per big division, using the largest base^k that fits a 32-bit divisor.
+    auto [k, full] = chunk_of(base);
+    if (full == (uint64_t(1) << 32)) { --k; full /= base; }
+    for (size_t i = length; i > 0 && !v.is_zero();)
     {
-        if (v.is_zero()) break;
-        digits[i] = v.divmod_small(base);
+        uint32_t rem = v.divmod_small(static_cast<uint32_t>(full));
+        for (size_t j = 0; j < k && i > 0; ++j)
+        {
+            digits[--i] = rem % base;
+            rem /= base;
+        }
+        if (rem) throw std::out_of_range("value does not fit in the requested number of digits");
     }
     if (!v.is_zero()) throw std::out_of_range("value does not fit in the requested number of digits");
     return digits;
@@ -116,7 +151,11 @@ std::vector<uint32_t> BigUint::to_digits(uint32_t base, size_t length) const
 BigUint BigUint::pow(uint32_t base, uint32_t exponent)
 {
     BigUint v(1);
-    for (uint32_t i = 0; i < exponent; ++i) v.mul_small(base);
+    const auto [k, full] = chunk_of(base);
+    uint32_t e = exponent;
+    if (full < (uint64_t(1) << 32))
+        for (; e >= k; e -= static_cast<uint32_t>(k)) v.mul_small(static_cast<uint32_t>(full));
+    for (; e > 0; --e) v.mul_small(base);
     return v;
 }
 

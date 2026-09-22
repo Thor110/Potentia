@@ -21,6 +21,7 @@
 #include "sieve/biguint.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -31,16 +32,26 @@ namespace sieve {
 enum class SieveFilter { Clean, Window, Words };
 const char* to_string(SieveFilter f);
 
+// Hash and word count of a word-list file, without building any lookup structures.
+struct DictionaryFileInfo
+{
+    std::string sha256;
+    size_t word_count = 0;    // distinct valid words
+    size_t skipped_lines = 0; // non-empty lines containing anything other than a-z
+};
+
 class Dictionary
 {
 public:
+    // Reads the file, hashes it and counts words only (fast; used by `sieve dicts`).
+    static DictionaryFileInfo inspect_file(const std::string& path);
     // One word per line. Lines are trimmed and ASCII-lowercased; lines containing anything
     // other than a–z are skipped (and counted).
     static Dictionary load_file(const std::string& path);
     static Dictionary from_words(const std::vector<std::string>& words);
 
-    bool is_word(std::string_view t) const { return words_.count(std::string(t)) != 0; }
-    bool is_suffix(std::string_view t) const { return suffixes_.count(std::string(t)) != 0; }
+    bool is_word(std::string_view t) const { return words_.find(t) != words_.end(); }
+    bool is_suffix(std::string_view t) const { return suffixes_.find(t) != suffixes_.end(); }
     bool is_word_prefix(std::string_view t) const;
     bool is_substring(std::string_view t) const;
 
@@ -58,8 +69,15 @@ private:
     void build(std::vector<std::string> words);
     static uint32_t at(const std::vector<uint32_t>& v, uint32_t k) { return k < v.size() ? v[k] : 0; }
     std::vector<uint32_t> words_by_len_, prefixes_by_len_, suffixes_by_len_, substrings_by_len_;
-    std::unordered_set<std::string> words_;
-    std::unordered_set<std::string> suffixes_;
+    // Transparent hashing: lookups by string_view without building a std::string.
+    struct Hash
+    {
+        using is_transparent = void;
+        size_t operator()(std::string_view v) const { return std::hash<std::string_view>{}(v); }
+    };
+    using Set = std::unordered_set<std::string, Hash, std::equal_to<>>;
+    Set words_;
+    Set suffixes_;
     std::vector<std::string> sorted_words_;
     std::vector<std::string> sorted_suffixes_;
     size_t skipped_ = 0;

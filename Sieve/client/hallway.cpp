@@ -157,15 +157,24 @@ public:
     Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> lines)
         : window_(window), r_(renderer), lines_(std::move(lines)), tile_geometry_(build_tile())
     {
+        // Bounds of one tile's geometry (plus its doors), for skipping tiles out of view.
+        tile_lo_ = {-kHalfWidth, 0, 0};
+        tile_hi_ = {kHalfWidth, kHeight, kTile};
+        for (const Segment& g : tile_geometry_)
+            for (const Vec3& v : {g.a, g.b})
+            {
+                tile_lo_ = {std::min(tile_lo_.x, v.x), std::min(tile_lo_.y, v.y), std::min(tile_lo_.z, v.z)};
+                tile_hi_ = {std::max(tile_hi_.x, v.x), std::max(tile_hi_.y, v.y), std::max(tile_hi_.z, v.z)};
+            }
     }
 
     // ---- state changes
 
-    void set_line(int li) { li_ = li; cache_.clear(); }
-    void set_mode(AddressMode m) { mode_ = m; cache_.clear(); }
+    void set_line(int li) { li_ = li; invalidate(); }
+    void set_mode(AddressMode m) { mode_ = m; invalidate(); }
     AddressMode mode() const { return mode_; }
     Camera& camera() { return cam_; }
-    void set_tile(int64_t t) { tile_ = t; cache_.clear(); }
+    void set_tile(int64_t t) { tile_ = t; }
 
     const Line& line() const { return lines_[size_t(li_)]; }
     const Theme& theme() const { return kThemes[li_]; }
@@ -174,7 +183,7 @@ public:
     {
         base_ = std::move(base);
         tile_ = 0;
-        cache_.clear();
+        invalidate();
     }
     void forget_doors() { crossings_.clear(); }
 
@@ -195,13 +204,35 @@ public:
         message_until_ = SDL_GetTicks() + 6000;
     }
 
-    const Space::Digits& unit_at(int64_t offset)
+    // Everything the hallway shows about one book, computed once. Books are addressed by their
+    // offset from the base unit: the address digits are stepped (no scrambling) and unscrambled
+    // once, and the hex and fraction come from the same address digits.
+    struct Book
     {
+        Space::Digits unit, address;
+        std::string hex;
+        double fraction = 0;
+    };
+
+    const Book& book(int64_t offset)
+    {
+        const Space& sp = line().space;
+        if (dirty_)
+        {
+            base_address_ = sp.address_digits(base_, mode_);
+            dirty_ = false;
+        }
         auto it = cache_.find(offset);
         if (it != cache_.end()) return it->second;
         if (cache_.size() > 512) cache_.clear();
-        return cache_.emplace(offset, offset == 0 ? base_ : line().space.neighbour(base_, mode_, offset)).first->second;
+        Book b;
+        b.address = sp.step_address(base_address_, offset);
+        b.unit = offset == 0 ? base_ : sp.unit_of_address(b.address, mode_);
+        b.hex = sp.hex_of(b.address);
+        b.fraction = sp.fraction_of(b.address);
+        return cache_.emplace(offset, std::move(b)).first->second;
     }
+    const Space::Digits& unit_at(int64_t offset) { return book(offset).unit; }
 
     bool warp(const std::string& input)
     {
@@ -315,7 +346,6 @@ public:
     void jump_tiles(int64_t n)
     {
         tile_ += n;
-        cache_.clear();
         message("jumped " + std::to_string(n) + " tiles (" + std::to_string(n * kBooksPerTile) + " units)");
     }
 
@@ -332,15 +362,16 @@ public:
             set_line(c.from_line);
             base_ = c.from_base;
             tile_ = c.from_tile;
+            invalidate();
             cam_.pos.x = emerge; // out of the door you originally went through
             message(std::string("back in the ") + theme().name + " line, exactly where you left it");
             return;
         }
         const int to = side == Side::Left ? (li_ + 1) % 4 : (li_ + 3) % 4;
-        const Space::Digits here = unit_at(tile_ * kBooksPerTile);
+        const Book& here = book(tile_ * kBooksPerTile);
         Crossing c{li_, base_, tile_, side, to};
-        const Space::Digits there = door_map(line().space, here, mode_, lines_[size_t(to)].space);
-        const double f = line().space.fraction(here, mode_);
+        const Space::Digits there = door_map(line().space, here.unit, mode_, lines_[size_t(to)].space);
+        const double f = here.fraction;
         set_line(to);
         set_base(there);
         cam_.pos.x = emerge;
@@ -425,7 +456,6 @@ public:
         case SDLK_LEFTBRACKET: jump_tiles(-1000000); break;
         case SDLK_HOME:
             tile_ = 0;
-            cache_.clear();
             face_first_book();
             message("back to the start of this walk");
             break;
@@ -456,10 +486,10 @@ public:
     // One-line summary of where you are (for scripted walks and testing).
     std::string status()
     {
-        const Space::Digits& here = unit_at(tile_ * kBooksPerTile);
+        const Book& here = book(tile_ * kBooksPerTile);
         return std::string(theme().name) + " line, tile " + std::to_string(tile_) + ", x " +
-               std::to_string(cam_.pos.x) + ", " + percent(line().space.fraction(here, mode_)) + " along, first book " +
-               short_address(line().space.address_of(here, mode_)) + (message_.empty() ? "" : "  | " + message_);
+               std::to_string(cam_.pos.x) + ", " + percent(here.fraction) + " along, first book " +
+               short_address(here.hex) + (message_.empty() ? "" : "  | " + message_);
     }
 
     // ---- drawing
@@ -477,10 +507,18 @@ public:
         hover_ = pick_book(cam_.pos, cam_.forward(), tile_, 5.0f);
 
         constexpr int kBack = 6, kAhead = 7;
+        // Only tiles that can appear on screen are drawn (usually about half of them).
+        bool visible[kBack + kAhead + 1];
+        for (int t = -kBack; t <= kAhead; ++t)
+        {
+            const Vec3 shift{0, 0, t * kTile};
+            visible[t + kBack] = cam_.box_visible(tile_lo_ + shift, tile_hi_ + shift);
+        }
         // Doors: solid black.
         for (int t = -kBack; t <= kAhead; ++t)
             for (float sx : {-1.0f, 1.0f})
             {
+                if (!visible[t + kBack]) continue;
                 const float z0 = t * kTile, x = sx * kHalfWidth;
                 fill({{x, 0, z0 + kDoorStart}, {x, 0, z0 + kDoorEnd}, {x, kDoorTop, z0 + kDoorEnd}, {x, kDoorTop, z0 + kDoorStart}},
                      SDL_Color{0, 0, 0, 255});
@@ -499,6 +537,7 @@ public:
         std::vector<std::vector<SDL_FPoint>> buckets(kBuckets);
         for (int t = -kBack; t <= kAhead; ++t)
         {
+            if (!visible[t + kBack]) continue;
             const float z0 = t * kTile;
             for (const Segment& s : tile_geometry_)
             {
@@ -592,7 +631,7 @@ public:
         panel(-1, -1, W + 2, 44);
         const std::string where = std::string(th.name) + " LINE   " + to_string(mode_) + "   tile " +
                                   std::to_string(tile_) + "   " +
-                                  percent(line().space.fraction(unit_at(tile_ * kBooksPerTile), mode_)) + " along";
+                                  percent(book(tile_ * kBooksPerTile).fraction) + " along";
         text(10, 7, where, 2, ink);
         text(10, 28, line().space.id() + "   doors: left wall -> " + kThemes[(li_ + 1) % 4].name +
                          ", right wall -> " + kThemes[(li_ + 3) % 4].name, 1, ink);
@@ -600,7 +639,8 @@ public:
         // The book you are looking at.
         if (hover_ && !in_hand_)
         {
-            const Space::Digits& u = unit_at(hover_->offset());
+            const Book& bk = book(hover_->offset());
+            const Space::Digits& u = bk.unit;
             const float ph = line().kind == LineKind::Image || line().kind == LineKind::Video ? 150 : 96;
             panel(10, H - ph - 44, std::min(W - 20, 900.0f), ph);
             char label[160];
@@ -610,9 +650,9 @@ public:
             float y = H - ph - 36;
             text(20, y, label, 2, ink);
             y += 22;
-            text(20, y, "address " + short_address(line().space.address_of(u, mode_)), 1, ink);
+            text(20, y, "address " + short_address(bk.hex), 1, ink);
             y += 12;
-            text(20, y, percent(line().space.fraction(u, mode_)) + " along the line      E / click: take it off the shelf", 1, ink);
+            text(20, y, percent(bk.fraction) + " along the line      E / click: take it off the shelf", 1, ink);
             y += 16;
             if (line().kind == LineKind::Image || line().kind == LineKind::Video) draw_pixels(u, 20, y, 60, 0);
             else text(20, y, wrap(one_line_preview(u), size_t(std::max(20.0f, (std::min(W - 20, 900.0f) - 40) / 16)))[0], 2, ink);
@@ -642,12 +682,13 @@ public:
     {
         const Theme& th = theme();
         const SDL_Color ink = th.edge;
-        const Space::Digits& u = unit_at(*in_hand_);
+        const Book& bk = book(*in_hand_);
+        const Space::Digits& u = bk.unit;
         const float pw = std::min(W - 40, 1000.0f), ph = std::min(H - 120, 640.0f);
         const float x = (W - pw) / 2, y = 50;
         panel(x, y, pw, ph);
         float cy = y + 12;
-        text(x + 14, cy, "IN HAND   offset " + std::to_string(*in_hand_) + "   " + percent(line().space.fraction(u, mode_)) +
+        text(x + 14, cy, "IN HAND   offset " + std::to_string(*in_hand_) + "   " + percent(bk.fraction) +
                              " along", 2, ink);
         cy += 28;
         const size_t cols2 = size_t((pw - 28) / 16), cols1 = size_t((pw - 28) / 8);
@@ -687,7 +728,7 @@ public:
         text(x + 14, cy, "address (" + std::string(to_string(mode_)) + ")", 1, ink);
         cy += 12;
         int shown = 0;
-        for (const auto& l : wrap(line().space.address_of(u, mode_), cols1))
+        for (const auto& l : wrap(bk.hex, cols1))
         {
             if (++shown > 6) { text(x + 14, cy, "...", 1, ink); break; }
             text(x + 14, cy, l, 1, ink);
@@ -719,12 +760,20 @@ private:
     SDL_Renderer* r_;
     std::vector<Line> lines_;
     std::vector<Segment> tile_geometry_;
+    Vec3 tile_lo_, tile_hi_;
     Camera cam_;
     int li_ = 0;
     AddressMode mode_ = AddressMode::Positional;
     Space::Digits base_;
     int64_t tile_ = 0;
-    std::unordered_map<int64_t, Space::Digits> cache_;
+    std::unordered_map<int64_t, Book> cache_;
+    Space::Digits base_address_; // base_'s address digits in mode_ (valid unless dirty_)
+    bool dirty_ = true;
+    void invalidate()
+    {
+        dirty_ = true;
+        cache_.clear();
+    }
     std::optional<BookSlot> hover_;
     std::optional<int64_t> in_hand_;
     std::vector<Space::Digits> trail_;

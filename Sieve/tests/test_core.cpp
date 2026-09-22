@@ -54,6 +54,15 @@ void test_sha256()
     Sha256 s;
     for (size_t i = 0; i < million.size(); i += 777) s.update(std::string_view(million).substr(i, 777));
     CHECK(Sha256::hex(s.finish()) == "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0");
+    // Padding boundaries (one or two final blocks).
+    CHECK(Sha256::hex(Sha256::hash(std::string(55, 'x'))) == "d5e285683cd4efc02d021a5c62014694958901005d6f71e89e0989fac77e4072");
+    CHECK(Sha256::hex(Sha256::hash(std::string(56, 'x'))) == "04c26261370ee7541549d16dee320c723e3fd14671e66a099afe0a377c16888e");
+    CHECK(Sha256::hex(Sha256::hash(std::string(63, 'x'))) == "75220b47218278e656f2013bb8f0c455a25eaf01e86c64924e9d48d89776d6f2");
+    CHECK(Sha256::hex(Sha256::hash(std::string(64, 'x'))) == "7ce100971f64e7001e8fe5a51973ecdfe1ced42befe7ee8d5fd6219506b5393c");
+    CHECK(Sha256::hex(Sha256::hash(std::string(65, 'x'))) == "9537c5fdf120482f7d58d25e9ed583f52c02b4e304ea814db1633ad565aed7e9");
+    CHECK(Sha256::hex(Sha256::hash(std::string(119, 'x'))) == "000b48d4edf0fa7bee3c6236ecd2785baa5db4eeb8bb54341b029e0d9fa5fb0c");
+    CHECK(Sha256::hex(Sha256::hash(std::string(120, 'x'))) == "13f05a0b594787f5ecd315edc96141bd3243203d1b7d4f0836f37308b276ba98");
+    CHECK(Sha256::hex(Sha256::hash(std::string(128, 'x'))) == "24da1b81d0b16df6428eee73c69fcb2a93c76bc6df706f0c6670fe6bfe800464");
 }
 
 void test_utf8()
@@ -76,6 +85,31 @@ void test_biguint()
     CHECK(BigUint::from_hex("FF") == BigUint(255));
     CHECK(throws([] { BigUint::from_hex("xyz"); }));
     CHECK(throws([] { BigUint(256).to_hex(1); }));
+
+    // Chunked conversions against a naive digit-at-a-time Horner/peel, across bases where the
+    // chunk size and edge cases differ (powers of two, base^k == 2^32, one-digit chunks).
+    {
+        std::mt19937 r(7);
+        for (uint32_t base : {2u, 3u, 4u, 16u, 27u, 95u, 104u, 255u, 256u, 65535u, 65536u, 65537u, 16777216u, 4294967295u})
+            for (int t = 0; t < 20; ++t)
+            {
+                std::vector<uint32_t> d(1 + r() % 90);
+                for (auto& x : d) x = t == 0 ? base - 1 : static_cast<uint32_t>(r() % base);
+                BigUint naive;
+                for (uint32_t x : d) { naive.mul_small(base); naive.add_small(x); }
+                CHECK(BigUint::from_digits(d, base) == naive);
+                CHECK(naive.to_digits(base, d.size()) == d);
+                CHECK(throws([&] { (void)naive.to_digits(base, d.size() - 1); }) ==
+                      !(d.front() == 0));
+            }
+        for (uint32_t base : {2u, 27u, 256u, 16777216u})
+            for (uint32_t e : {0u, 1u, 5u, 13u, 40u})
+            {
+                BigUint naive(1);
+                for (uint32_t i = 0; i < e; ++i) naive.mul_small(base);
+                CHECK(BigUint::pow(base, e) == naive);
+            }
+    }
 
     std::mt19937 rng(1);
     for (int i = 0; i < 200; ++i)
@@ -464,9 +498,7 @@ void test_sieve()
     CHECK(prefix_tree_nodes(2).to_decimal() == "757"); // 1 + 27 + 729
 }
 
-} // namespace
-
-int main(int argc, char** argv)
+void run_all(int argc, char** argv)
 {
     test_sha256();
     test_utf8();
@@ -487,7 +519,26 @@ int main(int argc, char** argv)
         test_canon_vectors(dir + "vectors_canon.tsv");
         test_image_vectors(dir + "vectors_image_v1.tsv");
     }
-    else { std::cerr << "usage: sieve_tests <tests directory>\n"; ++g_failures; }
+}
+
+} // namespace
+
+int main(int argc, char** argv)
+{
+    if (argc < 2) { std::cerr << "usage: sieve_tests <tests directory>\n"; return 1; }
+
+    // Everything runs on the portable SHA-256 path, then again on SHA-NI where the CPU has it.
+    Sha256::use_hardware(false);
+    run_all(argc, argv);
+    std::cout << "portable SHA-256: " << g_checks << " checks, " << g_failures << " failures\n";
+    if (Sha256::hardware_available())
+    {
+        const int before = g_checks;
+        Sha256::use_hardware(true);
+        run_all(argc, argv);
+        std::cout << "hardware SHA-256: " << g_checks - before << " checks, " << g_failures << " failures\n";
+    }
+    else std::cout << "hardware SHA-256: not available on this CPU\n";
 
     std::cout << g_checks << " checks, " << g_failures << " failures\n";
     return g_failures ? 1 : 0;

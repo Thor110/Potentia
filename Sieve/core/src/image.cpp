@@ -142,16 +142,18 @@ std::vector<uint32_t> canonicalise_frame(const RgbaImage& img, const ImageFormat
     };
     const uint64_t den = sw * sh;
     std::vector<uint32_t> digits(tw * th);
-    std::vector<std::pair<uint64_t, uint64_t>> ox, oy;
+    // Column overlaps are the same for every target row: work them out once.
+    std::vector<std::vector<std::pair<uint64_t, uint64_t>>> columns(tw);
+    for (uint64_t x = 0; x < tw; ++x) overlaps(sw, tw, x, columns[x]);
+    std::vector<std::pair<uint64_t, uint64_t>> oy;
     for (uint64_t y = 0; y < th; ++y)
     {
         overlaps(sh, th, y, oy);
         for (uint64_t x = 0; x < tw; ++x)
         {
-            overlaps(sw, tw, x, ox);
             uint64_t sum[3] = {0, 0, 0};
             for (const auto& [sy, wy] : oy)
-                for (const auto& [sx, wx] : ox)
+                for (const auto& [sx, wx] : columns[x])
                 {
                     const uint64_t w = wx * wy;
                     const uint8_t* p = &rgb[(sy * sw + sx) * 3];

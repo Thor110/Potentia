@@ -307,7 +307,7 @@ Curator governance (appointment, removal, disputes) is defined separately from t
 
 Implementation (as built):
 
-1. **Core** in C++20 with no dependencies: exact integer arithmetic throughout the address path, SHA-256, the scramble, canonicalisation for every line, and the sieve. The same code serves the command-line tool and, later, the hallway client.
+1. **Core** in C++20 with no dependencies: exact integer arithmetic throughout the address path, SHA-256 (with a hardware path where the CPU has SHA instructions; both paths must give identical digests), the scramble, canonicalisation for every line, and the sieve. The same code serves the command-line tool and, later, the hallway client.
 2. **Independent reference oracle** in Python. It shares no code with the core and generates the conformance vectors; the core must reproduce them bit for bit.
 3. **Conformance suite:** fixed inputs with expected addresses, canonical forms and image quantisations. It runs on Windows, Linux and macOS on every push, which also confirms that every platform produces identical addresses.
 4. **Pinned data:** dictionaries are registered by id and SHA-256 (`data/dictionaries/dictionaries.tsv`) and are refused if their hash no longer matches.
