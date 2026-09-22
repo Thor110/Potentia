@@ -68,6 +68,21 @@ jobs:
           test "$k" = "100485593897630338697104005"
           test "$($exe read --length 32 --mode positional --filters words2.ini --survivor "$k" 2>/dev/null | tr -d '\r' | sed 's/ *$//')" = "it was the best of times"
           test "$($exe read --length 32 --mode positional --filters words2.ini --survivor 1000000 2>/dev/null | tr -d '\r' | sed 's/ *$//')" = " a a a a a a a a a a a aah seize"
+          # Compact in every ordering: warp gives the compact addresses, read takes them back.
+          out=$($exe warp --length 32 --filters words2.ini --compact "It was the best of times" 2>/dev/null | tr -d '\r')
+          echo "$out"
+          for m in positional scrambled guided; do
+            addr=$(echo "$out" | awk -v m=$m '/compact/ {seen = 1; next} seen && $1 == m {print $2; exit}')
+            echo "compact $m: $addr"
+            test "$($exe read --length 32 --mode $m --filters words2.ini --compact "$addr" 2>/dev/null | tr -d '\r' | sed 's/ *$//')" = "it was the best of times"
+          done
+          echo "$out" | grep -q "scrambled   1db41d1685abd564b15405"
+          echo "$out" | grep -q "guided      9116ae0428ea154  (58 bits"
+          # The other lines: melodies in a key, black-and-white pictures of low entropy.
+          printf '[audio]\nmode = compact\nfilters = key-v1\n[audio.key-v1]\ntonic = A\nscale = minor-pentatonic\n[image]\nmode = compact\nfilters = symbol-entropy-v1\n[image.symbol-entropy-v1]\nmax_millibits = 500\n' > lines.ini
+          $exe filters --line audio --filters lines.ini | tr -d '\r' | grep -q "^survivors    794071845499378503449051136 "
+          $exe filters --line image --filters lines.ini | tr -d '\r' | grep -q "^survivors    322091425582872 "
+          $exe browse --line audio --filters lines.ini --compact --count 2 --seed 4 > /dev/null
 
       - name: Hallway renders, and its doors keep the corridor position (Linux, no display)
         if: runner.os == 'Linux'
@@ -117,12 +132,18 @@ jobs:
           printf '[text]\nmode = compact\nfilters = words-v2\n' > words2.ini
           printf '[text]\nmode = compact\nfilters = words-v2, max-run-v1\n' > mixed.ini
           printf '[text]\nmode = mark\nfilters = words-v1\n' > mark.ini
+          printf '[audio]\nmode = compact\nfilters = key-v1\n[audio.key-v1]\ntonic = A\nscale = minor-pentatonic\n[image]\nmode = compact\nfilters = symbol-entropy-v1\n[image.symbol-entropy-v1]\nmax_millibits = 500\n' > lines.ini
           out=$($H --filters words2.ini --warp "$W" --walk "0,0" --screenshot compact.png)
           echo "$out"
           echo "$out" | grep -q "filters: 1 compact (190011...7560 (27 digits) survivors), tile 785043...1125 (24 digits)"
           $H --filters mixed.ini --walk "0,0" --screenshot mixed.png | grep -q "filters: 2 hide (compact: words-v2 can rank, but not together with max-run-v1)"
           $H --filters mark.ini --length 3 --walk "0,0" --screenshot mark.png | grep -q "filters: 1 mark"
           $H --menu --filters words2.ini --press "F" --screenshot overlay.png | grep -q "saved overlay.png"
+          # Compact in the scrambled and guided orderings, and on the image and audio lines.
+          $H --filters words2.ini --mode scrambled --warp "$W" --walk "0,0" --screenshot cs.png | head -1 | grep -q "TEXT line, scrambled, filters: 1 compact"
+          $H --filters words2.ini --mode guided --warp "$W" --walk "0,0" --screenshot cg.png | head -1 | grep -q "TEXT line, guided zoom 58, filters: 1 compact"
+          $H --filters lines.ini --line image --mode scrambled --walk "0,0" --screenshot ci.png | head -1 | grep -q "IMAGE line, scrambled, filters: 1 compact (322091425582872 survivors)"
+          $H --filters lines.ini --line audio --walk "0,0" --screenshot ca.png | head -1 | grep -q "AUDIO line, positional, filters: 1 compact"
           test -s compact.png && test -s mixed.png && test -s mark.png && test -s overlay.png
 
       - name: Reference oracle reproduces the committed vectors
@@ -134,6 +155,7 @@ jobs:
           python3 sieve_ref.py image-vectors | diff - ../tests/vectors_image_v1.tsv
           python3 sieve_ref.py guided-vectors | diff - ../tests/vectors_guided_v1.tsv
           python3 sieve_ref.py filter-vectors | diff - ../tests/vectors_filters_v1.tsv
+          python3 sieve_ref.py compact-vectors | diff - ../tests/vectors_compact_v1.tsv
 
       - name: The pinned model rebuilds byte for byte from its corpus (Linux)
         if: runner.os == 'Linux'

@@ -21,6 +21,17 @@
 //
 // Guided decoding is sampling from the model: a random point decodes to text the model finds
 // plausible. Fluency is therefore evidence of nothing (§4.2 warning).
+//
+// Sieved ("sieve-restrict-v1"): given a filter stack's ranker (sieve/filter.hpp), each step's
+// table keeps only the symbols that can still lead to a survivor (the ranker's walk is alive
+// after them). If every symbol can, the model's table is used unchanged. Otherwise, with a_s the
+// model's frequency of each live symbol, D their sum and N' their number, the table is
+//     f_s = 1 + floor((T - N') a_s / D)   for live s,   f_s = 0 for the rest,
+// and the T - sum(f) units left over go one each to the live symbols with the largest
+// remainders (T - N') a_s mod D, ties to the lowest symbol: the model's own quantisation rule,
+// applied to the live symbols. The arcs then tile [0, 1) with survivors only, each as wide as
+// the model finds it likely among the survivors that share its beginning, and a survivor's
+// address is never longer than its unsieved one by more than the rounding.
 #pragma once
 
 #include "sieve/biguint.hpp"
@@ -35,6 +46,9 @@
 namespace sieve {
 
 inline constexpr const char* kGuidedVersion = "guided-ac-v1";
+inline constexpr const char* kSieveRestrictVersion = "sieve-restrict-v1";
+
+class Ranker;
 
 class GuidedLine
 {
@@ -42,8 +56,13 @@ public:
     using Digits = std::vector<uint32_t>;
 
     GuidedLine(std::shared_ptr<const CharModel> model, uint32_t unit_length);
+    // The sieved line of a stack's survivors. `sieve` must outlive this object and have the
+    // same unit length and symbols as the model.
+    GuidedLine(std::shared_ptr<const CharModel> model, uint32_t unit_length, const Ranker* sieve);
 
     const CharModel& model() const { return *model_; }
+    const std::shared_ptr<const CharModel>& model_ptr() const { return model_; }
+    const Ranker* sieve() const { return sieve_; }
     uint32_t unit_length() const { return length_; }
     size_t scale_bits() const { return scale_; } // S = 16 L: points are integers in [0, 2^S)
 
@@ -51,6 +70,7 @@ public:
     {
         BigUint low, width;
     };
+    // Throws std::invalid_argument if the line is sieved and the unit is not a survivor.
     Interval interval(const Digits& unit) const;
 
     struct Code
@@ -78,7 +98,13 @@ public:
     double information_bits(const Interval& iv) const;
 
 private:
+    // The cumulative table for the next symbol after unit[0..i), in walk state `state` (sieved
+    // lines). Returns the model's table, or `buf` filled with the restricted one.
+    const uint32_t* table(std::span<const uint32_t> history, uint64_t state, std::vector<uint32_t>& buf) const;
+    uint64_t advance(uint64_t state, uint32_t symbol) const;
+
     std::shared_ptr<const CharModel> model_;
+    const Ranker* sieve_ = nullptr;
     uint32_t length_;
     size_t scale_;
 };

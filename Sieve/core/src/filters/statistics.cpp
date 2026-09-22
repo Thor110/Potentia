@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <map>
+#include <memory>
 #include <stdexcept>
 
 namespace sieve {
@@ -43,20 +44,31 @@ private:
 class SymbolEntropy : public Filter
 {
 public:
-    SymbolEntropy(int64_t min_mb, int64_t max_mb) : min_(min_mb), max_(max_mb)
+    SymbolEntropy(int64_t min_mb, int64_t max_mb, uint32_t base, uint32_t length) : min_(min_mb), max_(max_mb)
     {
         provenance_ = "min_millibits=" + std::to_string(min_mb) + " max_millibits=" + std::to_string(max_mb);
+        if (base == 2 && length <= kMaxBinaryRankLength) ranker_ = std::make_unique<BinaryRanker>(*this, length);
     }
     bool passes(std::span<const uint32_t> u) const override
     {
         if (u.empty()) return true;
         std::map<uint32_t, uint64_t> counts;
         for (uint32_t s : u) ++counts[s];
-        const uint64_t L = u.size();
+        std::vector<uint64_t> c;
+        for (const auto& [s, n] : counts) c.push_back(n);
+        return passes_counts(c, u.size());
+    }
+    const Ranker* ranker() const override { return ranker_.get(); }
+
+    // The test itself depends only on how often each symbol occurs.
+    bool passes_counts(const std::vector<uint64_t>& counts, uint64_t L) const
+    {
+        if (L == 0) return true;
         // HL = L*lg(L) - sum c*lg(c), in BigUint (never negative in exact arithmetic; floors
         // can make it dip below zero by less than L, so it is clamped).
         BigUint plus = mul(BigUint(L), uint64_t(log2_q16(L))), minus;
-        for (const auto& [s, c] : counts) minus += mul(BigUint(c), uint64_t(log2_q16(c)));
+        for (uint64_t c : counts)
+            if (c) minus += mul(BigUint(c), uint64_t(log2_q16(c)));
         BigUint hl;
         if (plus >= minus)
         {
@@ -71,6 +83,50 @@ public:
     }
 
 private:
+    // Two symbols (black-and-white pictures): the entropy depends only on how many 1s a unit
+    // has, so the survivors are the units whose count of 1s is in an allowed set K, and
+    //   completions(j ones so far, r left) = sum over k in K of C(r, k - j).
+    // Binomials are built fresh for each call, so ranking costs grow with the cube of the
+    // length; above this length compact is not offered (a hardware limit, not a design one).
+    static constexpr uint32_t kMaxBinaryRankLength = 2048;
+    class BinaryRanker : public Ranker
+    {
+    public:
+        BinaryRanker(const SymbolEntropy& f, uint32_t L) : L_(L), allowed_(L + 1)
+        {
+            for (uint32_t k = 0; k <= L; ++k) allowed_[k] = f.passes_counts({uint64_t(L - k), uint64_t(k)}, L);
+            set_count();
+        }
+        uint32_t length() const override { return L_; }
+        uint32_t base() const override { return 2; }
+        State start() const override { return 0; }
+        State next(State j, uint32_t c) const override { return c == 0 ? j : c == 1 ? j + 1 : kDead; }
+        BigUint completions(State j, uint32_t r) const override
+        {
+            BigUint total, binom(1); // C(r, m), m = 0, 1, ...
+            for (uint32_t m = 0; m <= r; ++m)
+            {
+                if (j + m <= L_ && allowed_[size_t(j + m)]) total += binom;
+                if (m < r)
+                {
+                    binom.mul_small(r - m);
+                    binom.divmod_small(m + 1);
+                }
+            }
+            return total;
+        }
+        bool alive(State j, uint32_t r) const override
+        {
+            for (uint64_t k = j; k <= j + r && k <= L_; ++k)
+                if (allowed_[size_t(k)]) return true;
+            return false;
+        }
+
+    private:
+        uint32_t L_;
+        std::vector<bool> allowed_;
+    };
+
     static BigUint mul(BigUint a, uint64_t b)
     {
         BigUint lo = a, hi = a;
@@ -81,6 +137,7 @@ private:
         return lo;
     }
     int64_t min_, max_;
+    std::unique_ptr<Ranker> ranker_;
 };
 
 // ---------------------------------------------------------------- model-information
@@ -129,7 +186,7 @@ void add_statistics_filters(std::vector<FilterSpec>& out)
     run.id = "max-run";
     run.title = "max-run";
     run.description = "No letter repeated more than max_run times in a row (English never exceeded 3 in the held-out books).";
-    run.params = {{"max_run", "longest run of one letter allowed", FilterParam::Kind::Integer, "3", 1, 1000000, 1}};
+    run.params = {{"max_run", "longest run of one letter allowed", FilterParam::Kind::Integer, "3", 1, 1000000, 1, {}}};
     run.applies = is_text;
     run.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) {
         const auto space = l.alphabet->digit_of(U' ');
@@ -141,13 +198,14 @@ void add_statistics_filters(std::vector<FilterSpec>& out)
     ent.id = "symbol-entropy";
     ent.title = "symbol-entropy";
     ent.description = "Shannon entropy of the unit's own symbol frequencies, in bits per symbol, within [min, max]. "
-                      "Separates text from noise on long units (English ~4.1, random letters ~4.7 at length 1000).";
-    ent.params = {{"min_millibits", "lowest entropy allowed, in 1/1000 bits per symbol", FilterParam::Kind::Integer, "0", 0, 32000, 50},
-                  {"max_millibits", "highest entropy allowed, in 1/1000 bits per symbol", FilterParam::Kind::Integer, "4400", 0, 32000, 50}};
+                      "Separates text from noise on long units (English ~4.1, random letters ~4.7 at length 1000). "
+                      "In black and white (at most 1 bit), low values keep mostly-one-colour pictures; can rank (compact) there.";
+    ent.params = {{"min_millibits", "lowest entropy allowed, in 1/1000 bits per symbol", FilterParam::Kind::Integer, "0", 0, 32000, 50, {}},
+                  {"max_millibits", "highest entropy allowed, in 1/1000 bits per symbol", FilterParam::Kind::Integer, "4400", 0, 32000, 50, {}}};
     ent.applies = [](const FilterLine&) { return true; };
-    ent.make = [](const FilterLine&, const FilterValues& v, const FilterResources&) {
+    ent.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) {
         const FilterSpec& s = *find_filter("symbol-entropy-v1");
-        return std::make_unique<SymbolEntropy>(param_int(s, v, "min_millibits"), param_int(s, v, "max_millibits"));
+        return std::make_unique<SymbolEntropy>(param_int(s, v, "min_millibits"), param_int(s, v, "max_millibits"), l.base, l.length);
     };
     out.push_back(ent);
 
@@ -156,8 +214,8 @@ void add_statistics_filters(std::vector<FilterSpec>& out)
     info.title = "model-information";
     info.description = "Information content under the pinned frequency model, at most max bits per symbol. "
                        "English ~1.9-4.1, random letters 9 or more.";
-    info.params = {{"model", "registered model id (empty: the alphabet's default)", FilterParam::Kind::Text, "", 0, 0, 1},
-                   {"max_millibits", "most information allowed, in 1/1000 bits per symbol", FilterParam::Kind::Integer, "5000", 1, 16000, 100}};
+    info.params = {{"model", "registered model id (empty: the alphabet's default)", FilterParam::Kind::Text, "", 0, 0, 1, {}},
+                   {"max_millibits", "most information allowed, in 1/1000 bits per symbol", FilterParam::Kind::Integer, "5000", 1, 16000, 100, {}}};
     info.applies = is_text;
     info.make = [](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
         const FilterSpec& s = *find_filter("model-information-v1");

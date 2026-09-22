@@ -66,51 +66,21 @@ public:
                 cnt_[4][r] = BigUint(1);
             }
         }
+        set_count();
     }
-    const BigUint& count() const override { return cnt_[0][L_]; }
-
-    std::vector<uint32_t> unrank(const BigUint& k0) const override
+    uint32_t length() const override { return L_; }
+    uint32_t base() const override { return 27; }
+    State start() const override { return 0; }
+    State next(State s, uint32_t c) const override
     {
-        if (k0 >= count()) throw std::out_of_range("rank beyond the survivors");
-        BigUint k = k0;
-        std::vector<uint32_t> u(L_);
-        int s = 0;
-        for (uint32_t i = 0; i < L_; ++i)
-        {
-            const uint32_t r = L_ - i;
-            for (uint32_t c = 0; c <= 26; ++c)
-            {
-                const int t = next(s, c);
-                if (t < 0) continue;
-                const BigUint& n = cnt_[size_t(t)][r - 1];
-                if (k < n) { u[i] = c; s = t; break; }
-                k -= n;
-            }
-        }
-        return u;
+        if (c > 26) return kDead;
+        if (c == 0) return s == 0 ? 1 : s == 2 ? 3 : (padding_ && (s == 3 || s == 4)) ? 4 : kDead;
+        return s == 4 ? kDead : 2;
     }
-
-    BigUint rank(std::span<const uint32_t> unit) const override
-    {
-        BigUint k;
-        int s = 0;
-        for (uint32_t i = 0; i < L_; ++i)
-        {
-            const uint32_t r = L_ - i;
-            for (uint32_t c = 0; c < unit[i]; ++c)
-                if (const int t = next(s, c); t >= 0) k += cnt_[size_t(t)][r - 1];
-            s = next(s, unit[i]);
-            if (s < 0) throw std::invalid_argument("unit does not pass clean");
-        }
-        return k;
-    }
+    BigUint completions(State s, uint32_t r) const override { return cnt_[size_t(s)][r]; }
+    bool alive(State s, uint32_t r) const override { return !cnt_[size_t(s)][r].is_zero(); }
 
 private:
-    int next(int s, uint32_t c) const
-    {
-        if (c == 0) return s == 0 ? 1 : s == 2 ? 3 : (padding_ && (s == 3 || s == 4)) ? 4 : -1;
-        return s == 4 ? -1 : 2;
-    }
     uint32_t L_;
     bool padding_;
     std::vector<std::vector<BigUint>> cnt_;
@@ -197,60 +167,65 @@ public:
             A_[r] = F(0, r);
             if (padding) A_[r].add_small(1); // v2: the rest is padding
         }
-        total_ = F(0, L);
-        if (L >= 1) total_ += F(0, L - 1); // a leading SPACE
+        set_count();
     }
 
-    const BigUint& count() const override { return total_; }
-
-    std::vector<uint32_t> unrank(const BigUint& k0) const override
+    uint32_t length() const override { return L_; }
+    uint32_t base() const override { return 27; }
+    State start() const override { return pack(kStart, 0); }
+    State next(State st, uint32_t c) const override
     {
-        if (k0 >= total_) throw std::out_of_range("rank beyond the survivors");
-        BigUint k = k0;
-        std::vector<uint32_t> u(L_);
-        State s{kStart, 0};
-        for (uint32_t i = 0; i < L_; ++i)
+        if (c > 26) return kDead;
+        const Kind kind = kind_of(st);
+        const uint32_t node = node_of(st);
+        if (c == 0)
         {
-            const uint32_t r = L_ - i;
-            for (uint32_t c = 0; c <= 26; ++c)
-            {
-                State t;
-                if (!next(s, c, t)) continue;
-                const BigUint n = after(t, r - 1);
-                if (k < n) { u[i] = c; s = t; break; }
-                k -= n;
-            }
+            if (kind == kStart) return pack(kSpaceNoLetter, 0);
+            if (kind == kWord && nodes_[node].word) return pack(kSpaceAfterWord, 0);
+            if (padding_ && (kind == kSpaceAfterWord || kind == kPadding)) return pack(kPadding, 0);
+            return kDead;
         }
-        return u;
+        if (kind == kPadding) return kDead;
+        const uint32_t child = find(kind == kWord ? node : 0, c);
+        return child == kNone ? kDead : pack(kWord, child);
     }
-
-    BigUint rank(std::span<const uint32_t> unit) const override
+    BigUint completions(State st, uint32_t r) const override
     {
-        BigUint k;
-        State s{kStart, 0};
-        for (uint32_t i = 0; i < L_; ++i)
+        switch (kind_of(st))
         {
-            const uint32_t r = L_ - i;
-            for (uint32_t c = 0; c < unit[i]; ++c)
-            {
-                State t;
-                if (next(s, c, t)) k += after(t, r - 1);
-            }
-            State t;
-            if (!next(s, unit[i], t)) throw std::invalid_argument("unit does not pass words");
-            s = t;
+        case kStart:
+        {
+            BigUint t = F(0, r);
+            if (r >= 1) t += F(0, r - 1); // a leading SPACE
+            return t;
         }
-        return k;
+        case kSpaceNoLetter: return F(0, r);
+        case kSpaceAfterWord: return A_[r];
+        case kPadding: return BigUint(1);
+        case kWord: return F(node_of(st), r);
+        }
+        return BigUint();
+    }
+    // F(n, r) > 0 without big-number arithmetic.
+    bool alive(State st, uint32_t r) const override
+    {
+        switch (kind_of(st))
+        {
+        case kStart: return live_F(0, r) || (r >= 1 && live_F(0, r - 1));
+        case kSpaceNoLetter: return live_F(0, r);
+        case kSpaceAfterWord: return !A_[r].is_zero();
+        case kPadding: return true;
+        case kWord: return live_F(node_of(st), r);
+        }
+        return false;
     }
 
 private:
     static constexpr uint32_t kNone = 0xFFFFFFFFu;
     enum Kind { kStart, kSpaceNoLetter, kWord, kSpaceAfterWord, kPadding };
-    struct State
-    {
-        Kind kind;
-        uint32_t node;
-    };
+    static State pack(Kind k, uint32_t node) { return (State(node) << 3) | State(k); }
+    static Kind kind_of(State s) { return Kind(s & 7); }
+    static uint32_t node_of(State s) { return uint32_t(s >> 3); }
     struct Node
     {
         std::vector<std::pair<uint8_t, uint32_t>> children;
@@ -279,33 +254,13 @@ private:
         return total;
     }
 
-    bool next(State s, uint32_t c, State& t) const
+    bool live_F(uint32_t n, uint32_t r) const
     {
-        if (c == 0)
-        {
-            if (s.kind == kStart) { t = {kSpaceNoLetter, 0}; return true; }
-            if (s.kind == kWord && nodes_[s.node].word) { t = {kSpaceAfterWord, 0}; return true; }
-            if (padding_ && (s.kind == kSpaceAfterWord || s.kind == kPadding)) { t = {kPadding, 0}; return true; }
-            return false;
-        }
-        if (s.kind == kPadding) return false;
-        const uint32_t from = s.kind == kWord ? s.node : 0;
-        const uint32_t child = find(from, c);
-        if (child == kNone) return false;
-        t = {kWord, child};
-        return true;
-    }
-
-    BigUint after(State t, uint32_t r) const
-    {
-        switch (t.kind)
-        {
-        case kSpaceNoLetter: return F(0, r);
-        case kSpaceAfterWord: return A_[r];
-        case kPadding: return BigUint(1);
-        case kWord: return F(t.node, r);
-        default: return BigUint();
-        }
+        const auto& h = hist_[n];
+        if (r < h.size() && h[r]) return true;
+        for (uint32_t m = 0; m < h.size() && m + 1 <= r; ++m)
+            if (h[m] && !A_[r - m - 1].is_zero()) return true;
+        return false;
     }
 
     uint32_t L_;
@@ -313,7 +268,6 @@ private:
     std::vector<Node> nodes_;
     std::vector<std::vector<uint32_t>> hist_;
     std::vector<BigUint> A_;
-    BigUint total_;
 };
 
 std::unique_ptr<Filter> make_m1(SieveFilter kind, bool padding, const FilterLine& line, const FilterValues& values, const FilterResources& res,
@@ -349,7 +303,7 @@ std::unique_ptr<Filter> make_m1(SieveFilter kind, const FilterLine& line, const 
 
 void add_text_m1_filters(std::vector<FilterSpec>& out)
 {
-    const FilterParam dict{"dictionary", "registered dictionary id (empty: the default)", FilterParam::Kind::Text, "", 0, 0, 1};
+    const FilterParam dict{"dictionary", "registered dictionary id (empty: the default)", FilterParam::Kind::Text, "", 0, 0, 1, {}};
     FilterSpec clean;
     clean.id = "clean";
     clean.title = "clean";

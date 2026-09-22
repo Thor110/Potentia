@@ -292,7 +292,7 @@ The structure tests of §8.1 are built as **filters**: small, self-contained mod
 - the lines it applies to;
 - its parameters (integers with a range and step, or registry ids such as a dictionary or model), each with a default;
 - which other filters every one of its survivors also passes (`implies`, used by compact mode below);
-- optionally a **ranker**, which counts its survivors exactly at any unit length and converts between a survivor and its position among the survivors in address order, without visiting the others.
+- optionally a **ranker**, which counts its survivors exactly at any unit length and converts between a survivor and its position among the survivors in address order, without visiting the others. A ranker is a walk through a finite set of states, one symbol at a time: `next(state, symbol)` is the state after the symbol (or dead), and `completions(state, r)` counts the ways to finish with `r` more symbols so that the unit passes. Counting, ranking and unranking follow from these two for every ranker alike, and so does the sieved guided line (§9).
 
 **Exactness.** Every decision is made in integer arithmetic, so all machines and the reference oracle agree bit for bit. Logarithms use `lg(x) = ⌊log2(x) · 2^16⌋` for 64-bit `x`, computed exactly by repeated squaring. The oracle reproduces each filter independently: verdicts, logarithms, survivor counts and ranks (`tests/vectors_filters_v1.tsv`).
 
@@ -305,11 +305,12 @@ The structure tests of §8.1 are built as **filters**: small, self-contained mod
 | `words-v1` | text (`lower27`) | clean, and every token is a dictionary word. Implies `clean-v1`, `window-v1`. | yes |
 | `clean-v2`, `words-v2` | text (`lower27`) | as v1, but a unit may end in two or more SPACEs of padding, in which case the part before them is judged by v1. This admits the last unit of warped text. `words-v2` implies `clean-v2`. | yes |
 | `max-run-v1` | text | no symbol other than SPACE repeated more than `max_run` times in a row (default 3) | no |
-| `symbol-entropy-v1` | every line | `min · L · 2^16 ≤ 1000 · HL ≤ max · L · 2^16`, where `HL = max(0, L·lg(L) − Σ c·lg(c))` (millibits per symbol; defaults 0 and 4400) | no |
+| `symbol-entropy-v1` | every line | `min · L · 2^16 ≤ 1000 · HL ≤ max · L · 2^16`, where `HL = max(0, L·lg(L) − Σ c·lg(c))` (millibits per symbol; defaults 0 and 4400) | two-symbol lines (black-and-white images and video), up to length 2,048 |
 | `model-information-v1` | text, with a model | `1000 · Σ (16·2^16 − lg(f)) ≤ max · L · 2^16`, each symbol's `f` taken in its context as in §4.2 (default max 5000 millibits per symbol) | no |
 | `neighbour-agreement-v1` | image, video | among all horizontally, vertically and (video) frame-to-frame adjacent pixel pairs, at least `min` per thousand share a colour (default 600) | no |
+| `key-v1` | audio | every note's pitch class is in the scale on the tonic (parameters `tonic` C…B and `scale`: major, minor, harmonic-minor, major-pentatonic, minor-pentatonic, blues); rests always pass | yes |
 
-The rankers for `clean` and `words` count with exact tables over word-length histograms of the dictionary's trie. They agree with M1's counts at every length checked, and exhaustively with the filters themselves at small lengths. They are built for units up to 20,000 symbols.
+The rankers for `clean` and `words` count with exact tables over word-length histograms of the dictionary's trie. They agree with M1's counts at every length checked, and exhaustively with the filters themselves at small lengths. They are built for units up to 20,000 symbols. On two symbols, symbol entropy depends only on the number `k` of 1s, so its survivors are the units whose `k` lies in an allowed set `K`, and `completions(j ones, r) = Σ_{k∈K} C(r, k − j)`. `key-v1` judges each position alone, so with `a` allowed symbols `completions = a^r`. The length limits are hardware limits, not design ones.
 
 Measured separations (lower27, pinned model, held-out books): English costs at most 4.14 bits per symbol under the model and random letters at least 9.1; at length 1,000 English has symbol entropy about 4.15 bits and random letters about 4.72; English never runs a letter more than 3 times. `model-information` and `symbol-entropy` count padding SPACEs like any other symbol, so a heavily padded unit reads as lower-information than its text alone.
 
@@ -347,7 +348,19 @@ The address space is complete; the shelves are curated.
 | hide | units that fail are left out; the rest keep their places, so the gaps show what was sieved |
 | compact | only survivors, packed together in address order: slot `k` of a loop holds the `k`-th survivor, and a loop is as long as the survivor count |
 
-Compact mode needs the positional ordering and a stack that can rank. Otherwise the hallway falls back to hide and says why. Content reached by warp or address that fails the stack is shown in hand, marked as not on the shelves, together with the filter that rejected it. `sieve read --survivor K` reads the `K`-th survivor, as compact shelves show it.
+Compact mode needs a stack that can rank; otherwise the hallway falls back to hide and says why. It works in every ordering, each with its own compact form over the `N` survivors (numbered `0 … N−1` in positional order):
+
+| Ordering | Compact address of survivor `k` |
+| :--- | :--- |
+| positional | `k`, its survivor number |
+| scrambled | `shuffle(k)`, a keyed permutation of `[0, N)` (`shuffle-sha256-v1`, below) |
+| guided | its address on the guided line restricted to survivors (`sieve-restrict-v1`, below) |
+
+Compact positional and scrambled addresses are hex numbers below `N`, zero-padded to the width `N − 1` needs. Content reached by warp or address that fails the stack is shown in hand, marked as not on the shelves, together with the filter that rejected it. The command line takes `--compact` on `warp`, `read` and `browse`, and `read --survivor K` reads the `K`-th survivor.
+
+**`shuffle-sha256-v1`.** A permutation of `[0, N)`, keyed by the line's key and the stack id. Let `b = max(2, bitlength(N − 1))`, and split a value `x < 2^b` into its high `⌈b/2⌉` bits `H` and low `⌊b/2⌋` bits `Lo`. Eight Feistel rounds `r = 0 … 7`: even rounds `Lo ^= F(r, H)`, odd rounds `H ^= F(r, Lo)`. `F(r, v)` is the leading bits, read big-endian, of `SHA-256(m ‖ 0) ‖ SHA-256(m ‖ 1) ‖ …`, where the block counters are u32 little-endian. `m` is `"SIEVE/SHUFFLE/1"` followed by, each prefixed with its u32 little-endian length, the key, the stack id and `N` in lowercase hex; then `r` as u32 little-endian and `v` in lowercase hex, length-prefixed. A result of `N` or more is permuted again (cycle walking) until it falls below `N`. Because `2^b ≤ 2N`, that takes at most two passes on average. `N = 1` is the identity.
+
+**`sieve-restrict-v1`.** The guided line (§4.2.2) restricted to survivors. At each step the ranker's walk decides which next symbols can still lead to a survivor. If all can, the model's table is used unchanged. Otherwise the table keeps only those live symbols, with `a_s` their model frequencies, `D = Σ a_s` and `N'` their number, and requantises them with the model's own rule (§4.2.1): `f_s = 1 + ⌊(T − N') a_s / D⌋`, with the leftover units going one each to the largest remainders `(T − N') a_s mod D`, ties to the lowest symbol. Dead symbols get 0. The arcs then tile `[0, 1)` with survivors only, and no point decodes to anything else. Each survivor's arc is as wide as the model finds it among the survivors sharing its beginning, and its address still obeys `−log2 P' ≤ b < −log2 P' + 2` under the restricted probabilities `P'`.
 
 ---
 
@@ -414,7 +427,7 @@ Implementation (as built):
 | M1 | Exhaustive sieve | Enumerator + S0/S1 filters over **every** unit: text at lengths 4–8, images at 5×5 and 6×6 1-bit; plot of surviving fraction vs. size | **Text done.** Exact counts to length 1,000, cross-checked by brute force and pruned walk. The M1 filters are now modules of the filtration stack (§8.5), with exact survivor ranking. Images: a first S1 filter (`neighbour-agreement-v1`) exists; exhaustive image counts not started. |
 | M2 | Raw addressing and warp | Positional and scrambled bijections, canonicalisation rules, CLI warp, round-trip tests | **Done**, for all four lines. Includes neighbour stepping. |
 | M3 | Entropy-ordered addressing | Integer arithmetic coder with a small pinned text model; measured bits/char on real text | **Done for text (lower27).** Exact BigUint coder, order-5 pinned model; 1.93 bits/char on held-out Alice, 1.95 on Chesterton. Model rebuilt byte for byte by the oracle; guided vectors checked on every push. Models for the other lines need corpora. |
-| M4 | Hallway prototype | 2D side view: shelves, zoom depth, readout, warp box, in-hand view, guided/raw toggle | **Built directly in 3D** (see M8). The raw and guided views are done: shelves, readout, warp and go-to, in-hand view, ordering toggle (positional, scrambled, guided) and zoom depth. Filtered shelving (§9) is done: mark and hide in every ordering, and compact shelves of survivors only in positional order. |
+| M4 | Hallway prototype | 2D side view: shelves, zoom depth, readout, warp box, in-hand view, guided/raw toggle | **Built directly in 3D** (see M8). The raw and guided views are done: shelves, readout, warp and go-to, in-hand view, ordering toggle (positional, scrambled, guided) and zoom depth. Filtered shelving (§9) is done in every ordering: mark, hide, and compact shelves of survivors only (positional, shuffled, and on the sieved guided line). Compact works on every line with a ranking filter: text, black-and-white images and video, and audio. |
 | M5 | Doors | Image and symbolic audio lines; fractional door mapping with return paths | **Done.** Exact door mapping in the core, with a return-path stack in the hallway. |
 | M6 | Anchor Registry | Local, signed, append-only Registry with review workflow; anchored units shelved and marked | Not started |
 | M7 | Paragraph-scale sampling | Classification and sampling at `UNIT_LENGTH` ≈ 1,000; extrapolation checked against M1 | Not started |

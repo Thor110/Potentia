@@ -19,6 +19,7 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
 """
 import argparse
 import hashlib
+import math
 import struct
 import sys
 import unicodedata
@@ -787,6 +788,204 @@ def cmd_filter_vectors(_args):
             print(f"rank\t{f}-v{v}\t{L}\t{total}\t{k}\t{u}")
 
 
+# -- compact orderings (SPECIFICATIONS 8.5, 9): rankers on the other lines, the survivor shuffle,
+#    and the sieved guided line, each written from its definition.
+def entropy_allowed(L, lo, hi):
+    """Two symbols: the numbers of 1s whose units pass symbol-entropy-v1."""
+    return [k for k in range(L + 1) if f_symbol_entropy([1] * k + [0] * (L - k), lo, hi)]
+
+
+class BinaryEntropyRank:
+    def __init__(self, L, lo, hi):
+        self.L, self.allowed = L, set(entropy_allowed(L, lo, hi))
+
+    def after(self, ones, r):
+        return sum(math.comb(r, k - ones) for k in self.allowed if ones <= k <= ones + r)
+
+    def total(self):
+        return self.after(0, self.L)
+
+    def unrank(self, k):
+        out, ones = [], 0
+        for i in range(self.L):
+            n0 = self.after(ones, self.L - i - 1)
+            if k < n0:
+                out.append(0)
+            else:
+                k -= n0
+                out.append(1)
+                ones += 1
+        return out
+
+
+NOTE_TONICS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+NOTE_SCALES = {"major": [0, 2, 4, 5, 7, 9, 11], "minor": [0, 2, 3, 5, 7, 8, 10], "harmonic-minor": [0, 2, 3, 5, 7, 8, 11],
+               "major-pentatonic": [0, 2, 4, 7, 9], "minor-pentatonic": [0, 3, 5, 7, 10], "blues": [0, 3, 5, 6, 7, 10]}
+
+
+def key_allowed(tonic, scale):
+    """notes104 symbols in the key: pitch index d // 4 (0 = rest, 1 = C4 ... 25 = C6)."""
+    t = NOTE_TONICS.index(tonic)
+    pcs = {(t + x) % 12 for x in NOTE_SCALES[scale]}
+    return [d for d in range(104) if d // 4 == 0 or (d // 4 - 1) % 12 in pcs]
+
+
+def key_unrank(allowed, L, k):
+    a, out = len(allowed), []
+    for i in range(L):
+        q, k = divmod(k, a ** (L - 1 - i))
+        out.append(allowed[q])
+    return out
+
+
+def shuffle_f(key, domain, n, rnd, src, bits):
+    lp = lambda b: len(b).to_bytes(4, "little") + b
+    msg = b"SIEVE/SHUFFLE/1" + lp(key.encode()) + lp(domain.encode()) + lp(format(n, "x").encode()) + rnd.to_bytes(4, "little") + lp(format(src, "x").encode())
+    out, k = b"", 0
+    while len(out) * 8 < bits:
+        out += hashlib.sha256(msg + k.to_bytes(4, "little")).digest()
+        k += 1
+    return int.from_bytes(out, "big") >> (len(out) * 8 - bits)
+
+
+def shuffle(key, domain, n, k, inverse=False):
+    """shuffle-sha256-v1: an 8-round Feistel over max(2, bitlen(n-1)) bits, cycle-walked below n."""
+    if n == 1:
+        return k
+    b = max(2, (n - 1).bit_length())
+    lob = b // 2
+    x = k
+    while True:
+        hi, lo = x >> lob, x & ((1 << lob) - 1)
+        for r in (range(7, -1, -1) if inverse else range(8)):
+            if r % 2 == 0:
+                lo ^= shuffle_f(key, domain, n, r, hi, lob)
+            else:
+                hi ^= shuffle_f(key, domain, n, r, lo, b - lob)
+        x = (hi << lob) | lo
+        if x < n:
+            return x
+
+
+def restrict(f, live):
+    """sieve-restrict-v1: the model's quantisation rule over the live symbols only."""
+    if len(live) == len(f):
+        return f
+    d = sum(f[s] for s in live)
+    spread = TOTAL - len(live)
+    g = [0] * len(f)
+    rem = [0] * len(f)
+    for s in live:
+        g[s] = 1 + spread * f[s] // d
+        rem[s] = spread * f[s] % d
+    for s in sorted(live, key=lambda s: (-rem[s], s))[:TOTAL - sum(g)]:
+        g[s] += 1
+    assert sum(g) == TOTAL
+    return g
+
+
+def sieved_table(model, rk, prefix, state):
+    """The next-symbol table after `prefix`, keeping only symbols from which a survivor can still be reached."""
+    f = model.table(prefix)
+    live = [s for s in range(model.n) if (t := rk.step(state, s)) is not None and rk.count(t, rk.L - len(prefix) - 1) > 0]
+    return restrict(f, live)
+
+
+def sieved_interval(model, rk, unit):
+    low, width, state = 0, 1, ("start",)
+    for i, s in enumerate(unit):
+        f = sieved_table(model, rk, unit[:i], state)
+        assert f[s] > 0, "not a survivor"
+        low = low * TOTAL + sum(f[:s]) * width
+        width *= f[s]
+        state = rk.step(state, s)
+    return low, width
+
+
+def sieved_code(model, rk, unit):
+    S = 16 * len(unit)
+    low, width = sieved_interval(model, rk, unit)
+    for t in range(S, -1, -1):
+        m = -(-low // (1 << t))
+        if (m + 1) << t <= low + width:
+            return m << t, S - t
+
+
+def sieved_unit_at(model, rk, length, point):
+    unit, low, width, state = [], 0, 1, ("start",)
+    for i in range(length):
+        f = sieved_table(model, rk, unit, state)
+        scale = TOTAL ** (length - 1 - i)
+        cum = 0
+        for s in range(model.n):
+            if (low * TOTAL + (cum + f[s]) * width) * scale > point:
+                break
+            cum += f[s]
+        unit.append(s)
+        low = low * TOTAL + cum * width
+        width *= f[s]
+        state = rk.step(state, s)
+    return unit
+
+
+def cmd_compact_vectors(_args):
+    """Rankers for the other lines, the survivor shuffle, and the sieved guided line."""
+    here = "../data"
+    print("# sieve compact conformance vectors v1 (shuffle-sha256-v1, sieve-restrict-v1 over guided-ac-v1,")
+    print("#   symbol-entropy-v1 on two symbols, key-v1), dictionary scowl-en-35, model gutenberg-lower27-o5")
+    print("# shuffle <n> <key> <domain> <k> <forward(k)>")
+    g = stream("shuffle")
+    for n in [1, 2, 3, 5, 17, 256, 257, 1000, 27 ** 5, 2 ** 64 + 13, 27 ** 40 - 7]:
+        ks = sorted({0, n - 1, n // 2} | {int.from_bytes(bytes(next(g) for _ in range(40)), "little") % n for _ in range(3)})
+        for key, dom in (("sieve", "test"), ("other", "0f52d47d")):
+            for k in ks:
+                j = shuffle(key, dom, n, k)
+                assert shuffle(key, dom, n, j, inverse=True) == k
+                print(f"shuffle\t{n}\t{key}\t{dom}\t{k}\t{j}")
+    print("# rank <filter> <params> <length> <count> <rank> <unit digits, comma-separated>")
+    for L, lo, hi in ((25, 0, 700), (100, 0, 500), (100, 600, 1000), (200, 0, 900)):
+        rk = BinaryEntropyRank(L, lo, hi)
+        total = rk.total()
+        g2 = stream(f"entropy/{L}/{lo}/{hi}")
+        for k in [0, 1, total // 2, total - 1] + [int.from_bytes(bytes(next(g2) for _ in range(32)), "little") % total for _ in range(4)]:
+            u = rk.unrank(k)
+            assert f_symbol_entropy(u, lo, hi)
+            print(f"rank\tsymbol-entropy-v1\tmin_millibits={lo},max_millibits={hi}\t{L}\t{total}\t{k}\t{','.join(map(str, u))}")
+    for L, tonic, scale in ((16, "C", "major"), (16, "D", "blues"), (40, "A#", "harmonic-minor")):
+        allowed = key_allowed(tonic, scale)
+        total = len(allowed) ** L
+        g2 = stream(f"key/{L}/{tonic}/{scale}")
+        for k in [0, 1, total // 2, total - 1] + [int.from_bytes(bytes(next(g2) for _ in range(32)), "little") % total for _ in range(4)]:
+            u = key_unrank(allowed, L, k)
+            print(f"rank\tkey-v1\ttonic={tonic},scale={scale}\t{L}\t{total}\t{k}\t{','.join(map(str, u))}")
+    model = Model(f"{here}/models/gutenberg-lower27-o5.model")
+    d = load_dict(f"{here}/dictionaries/scowl-2020.12.07-en-35.txt")
+    words = sorted(d[0])
+    sym = ALPHABETS["lower27"]
+    print("# sguided <filter> <length> <unit> <bits> <hex>   (the survivor's address on the sieved guided line)")
+    print("# spoint <filter> <length> <hex point> <unit>      (the survivor whose sieved arc holds the point)")
+    for f, L in (("words-v2", 16), ("clean-v2", 16), ("words-v1", 12)):
+        rk = WordsRank(words, L, clean=f.startswith("clean"), padding=f.endswith("v2"))
+        texts = ["it was the best", "call me ishmael", "the end", "a", "zoo", "an ant in a tin"]
+        g3 = stream(f"sguided/{f}/{L}")
+        units = [canonicalise(t, "lower27", L)[0] for t in texts]
+        units += ["".join(sym[c] for c in rk.unrank(int.from_bytes(bytes(next(g3) for _ in range(16)), "little") % rk.total())) for _ in range(4)]
+        for u in units:
+            digits = [sym.index(c) for c in u]
+            ok = (passes if f.endswith("v1") else passes_v2)(u, f.split("-")[0], d)
+            if not ok:
+                continue
+            point, bits = sieved_code(model, rk, digits)
+            print(f"sguided\t{f}\t{L}\t{u}\t{bits}\t{guided_hex(point, bits, 16 * L)}")
+        for _ in range(5):
+            S = 16 * L
+            h = format(int.from_bytes(bytes(next(g3) for _ in range(S // 8)), "big"), "0%dx" % (S // 4))[:8]
+            point = int(h, 16) << (S - 32)
+            u = "".join(sym[c] for c in sieved_unit_at(model, rk, L, point))
+            assert (passes if f.endswith("v1") else passes_v2)(u, f.split("-")[0], d)
+            print(f"spoint\t{f}\t{L}\t{h}\t{u}")
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -812,6 +1011,7 @@ def main():
     s.add_argument("--min-count", type=int, default=8)
     s.add_argument("--out", required=True)
     sub.add_parser("filter-vectors")
+    sub.add_parser("compact-vectors")
     s = sub.add_parser("guided-vectors")
     s.add_argument("--model", default="../data/models/gutenberg-lower27-o5.model")
     args = p.parse_args()
@@ -832,6 +1032,8 @@ def main():
         cmd_guided_vectors(args)
     elif args.cmd == "filter-vectors":
         cmd_filter_vectors(args)
+    elif args.cmd == "compact-vectors":
+        cmd_compact_vectors(args)
     elif args.cmd == "warp":
         sp = Space(args.alphabet, args.length, args.key)
         for u in canonicalise(" ".join(args.text), args.alphabet, args.length):

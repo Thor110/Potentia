@@ -63,17 +63,45 @@ struct FilterParam
     Kind kind = Kind::Integer;
     std::string default_value;
     int64_t min = 0, max = 0, step = 1; // Integer only
+    std::vector<std::string> choices;   // Text only: the allowed values, if a fixed list
 };
 using FilterValues = std::map<std::string, std::string>; // key -> value; missing keys take defaults
 
 // Counts and ranks the units that pass a filter, in address (positional) order.
+//
+// A ranker is a walk along a unit, one symbol at a time, through a finite set of states: from a
+// state, next(state, symbol) is the state after that symbol (or kDead when no survivor can
+// continue that way), and completions(state, r) is the number of ways to finish with r more
+// symbols so that the whole unit passes. From these alone, the base class counts the survivors,
+// ranks and unranks them, and the guided coder can restrict itself to the symbols that still
+// lead to a survivor (sieve/guided.hpp).
 class Ranker
 {
 public:
+    using State = uint64_t;
+    static constexpr State kDead = ~State(0);
+
     virtual ~Ranker() = default;
-    virtual const BigUint& count() const = 0;                          // survivors at this length
-    virtual std::vector<uint32_t> unrank(const BigUint& k) const = 0;  // k < count()
-    virtual BigUint rank(std::span<const uint32_t> unit) const = 0;    // unit must pass
+    virtual uint32_t length() const = 0;  // unit length
+    virtual uint32_t base() const = 0;    // symbols per position
+    virtual State start() const = 0;
+    virtual State next(State s, uint32_t symbol) const = 0;
+    virtual BigUint completions(State s, uint32_t remaining) const = 0;
+    // completions(s, remaining) > 0; rankers override it when that is cheaper to decide.
+    virtual bool alive(State s, uint32_t remaining) const { return !completions(s, remaining).is_zero(); }
+
+    const BigUint& count() const { return count_; }                  // survivors at this length
+    std::vector<uint32_t> unrank(const BigUint& k) const;             // k < count()
+    BigUint rank(std::span<const uint32_t> unit) const;               // unit must pass
+    // Whether the unit is a survivor, by walking it (agrees with the filter's own test).
+    bool accepts(std::span<const uint32_t> unit) const;
+
+protected:
+    // Derived constructors call this last: count() = completions(start(), length()).
+    void set_count() { count_ = completions(start(), length()); }
+
+private:
+    BigUint count_;
 };
 
 class Filter

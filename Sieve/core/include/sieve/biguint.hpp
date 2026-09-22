@@ -47,6 +47,7 @@ public:
     BigUint& operator-=(const BigUint& other); // throws std::underflow_error if other > *this
     BigUint& operator<<=(size_t bits);
     BigUint& operator>>=(size_t bits);          // floor division by 2^bits
+    BigUint& operator^=(const BigUint& other);  // bitwise exclusive or
     // value / 2^bits as a double. DISPLAY ONLY (approximate), never used for addressing.
     double ratio_to_power_of_two(size_t bits) const;
     void mul_small(uint32_t m);

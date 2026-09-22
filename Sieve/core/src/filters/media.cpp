@@ -47,7 +47,7 @@ void add_media_filters(std::vector<FilterSpec>& out)
     n.title = "neighbour-agreement";
     n.description = "At least min_permille of neighbouring pixels (and frames) share a colour. "
                     "Pure noise sits at chance (500 in black and white).";
-    n.params = {{"min_permille", "agreeing neighbours required, per thousand", FilterParam::Kind::Integer, "600", 0, 1000, 10}};
+    n.params = {{"min_permille", "agreeing neighbours required, per thousand", FilterParam::Kind::Integer, "600", 0, 1000, 10, {}}};
     n.applies = [](const FilterLine& l) { return (l.kind == "image" || l.kind == "video") && l.width && l.height; };
     n.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) {
         return std::make_unique<NeighbourAgreement>(l.width, l.height, l.frames ? l.frames : 1,

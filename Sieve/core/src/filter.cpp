@@ -46,7 +46,14 @@ std::string param_value(const FilterSpec& spec, const FilterValues& values, cons
         if (p.key == key)
         {
             const auto it = values.find(key);
-            return it == values.end() ? p.default_value : it->second;
+            const std::string& v = it == values.end() ? p.default_value : it->second;
+            if (!p.choices.empty() && std::find(p.choices.begin(), p.choices.end(), v) == p.choices.end())
+            {
+                std::string list;
+                for (const auto& c : p.choices) list += (list.empty() ? "" : ", ") + c;
+                throw std::invalid_argument(spec.name() + ": " + key + " must be one of " + list + ", got '" + v + "'");
+            }
+            return v;
         }
     throw std::logic_error(spec.name() + " has no parameter '" + key + "'");
 }
@@ -62,6 +69,89 @@ int64_t param_int(const FilterSpec& spec, const FilterValues& values, const std:
         if (p.key == key && (n < p.min || n > p.max))
             throw std::invalid_argument(spec.name() + ": " + key + " must be " + std::to_string(p.min) + ".." + std::to_string(p.max));
     return n;
+}
+
+// ---------------------------------------------------------------- Ranker
+
+namespace {
+
+// Within one step of a walk many symbols lead to the same state (every letter after a letter, in
+// clean): their completion counts are computed once.
+class StepCounts
+{
+public:
+    const BigUint& get(const Ranker& r, Ranker::State t, uint32_t remaining)
+    {
+        for (const auto& [st, n] : seen_)
+            if (st == t) return n;
+        seen_.emplace_back(t, r.completions(t, remaining));
+        return seen_.back().second;
+    }
+
+private:
+    std::vector<std::pair<Ranker::State, BigUint>> seen_;
+};
+
+} // namespace
+
+std::vector<uint32_t> Ranker::unrank(const BigUint& k0) const
+{
+    if (k0 >= count()) throw std::out_of_range("rank beyond the survivors");
+    BigUint k = k0;
+    const uint32_t L = length(), B = base();
+    std::vector<uint32_t> u(L);
+    State s = start();
+    for (uint32_t i = 0; i < L; ++i)
+    {
+        StepCounts counts;
+        bool placed = false;
+        for (uint32_t c = 0; c < B && !placed; ++c)
+        {
+            const State t = next(s, c);
+            if (t == kDead) continue;
+            const BigUint& n = counts.get(*this, t, L - i - 1);
+            if (k < n)
+            {
+                u[i] = c;
+                s = t;
+                placed = true;
+            }
+            else k -= n;
+        }
+        if (!placed) throw std::logic_error("ranker counts are inconsistent");
+    }
+    return u;
+}
+
+BigUint Ranker::rank(std::span<const uint32_t> unit) const
+{
+    const uint32_t L = length();
+    if (unit.size() != L) throw std::invalid_argument("unit has the wrong length");
+    BigUint k;
+    State s = start();
+    for (uint32_t i = 0; i < L; ++i)
+    {
+        StepCounts counts;
+        for (uint32_t c = 0; c < unit[i]; ++c)
+            if (const State t = next(s, c); t != kDead) k += counts.get(*this, t, L - i - 1);
+        s = next(s, unit[i]);
+        if (s == kDead) throw std::invalid_argument("unit is not a survivor");
+    }
+    if (!alive(s, 0)) throw std::invalid_argument("unit is not a survivor");
+    return k;
+}
+
+bool Ranker::accepts(std::span<const uint32_t> unit) const
+{
+    if (unit.size() != length()) return false;
+    State s = start();
+    for (uint32_t c : unit)
+    {
+        if (c >= base()) return false;
+        s = next(s, c);
+        if (s == kDead) return false;
+    }
+    return alive(s, 0);
 }
 
 FilterStack::FilterStack(const FilterLine& line, const std::vector<Entry>& entries, const FilterResources& resources)

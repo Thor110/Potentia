@@ -460,7 +460,7 @@ const Menu::StackInfo& Menu::stack_info(int i)
             const sieve::BigUint& n = st.ranker()->count();
             info.survivor_bits = n.is_zero() ? 0 : n.log10_approx() / std::log10(2.0);
             info.status = "survivors: " + (n.log10_approx() < 15 ? n.to_decimal() : "~10^" + fixed(n.log10_approx(), 1)) +
-                          " (exact); compact available";
+                          (n.is_zero() ? " (exact): nothing to shelve" : " (exact); compact in every ordering");
         }
         else info.status = "survivors not countable exactly: " + st.compact_blocker();
     }

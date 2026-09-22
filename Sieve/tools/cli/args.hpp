@@ -12,7 +12,7 @@ namespace sieve::cli {
 // Options that are switches (take no value).
 inline bool is_flag(const std::string& key)
 {
-    return key == "short" || key == "help" || key == "take" || key == "menu" || key == "no-menu";
+    return key == "short" || key == "help" || key == "take" || key == "menu" || key == "no-menu" || key == "compact";
 }
 
 struct Args

@@ -27,6 +27,7 @@
 #include "cli/lines.hpp"
 
 #include "sieve/audio.hpp"
+#include "sieve/compact.hpp"
 #include "sieve/corridor.hpp"
 #include "sieve/guided.hpp"
 #include "sieve/image.hpp"
@@ -177,6 +178,13 @@ public:
             try
             {
                 stacks_[i] = build_stack(lines_[size_t(i)], filters.lines[i]);
+                const Ranker* rk = stacks_[i].ranker();
+                if (rk && !rk->count().is_zero())
+                {
+                    const Line& ln = lines_[size_t(i)];
+                    compact_[i] = std::make_unique<CompactLine>(*rk, ln.space.key(), stacks_[i].id(),
+                                                                ln.guided ? ln.guided->model_ptr() : nullptr);
+                }
             }
             catch (const std::exception& e)
             {
@@ -207,7 +215,12 @@ public:
     const Theme& theme() const { return kThemes[li_]; }
     Camera& camera() { return cam_; }
     bool guided_on() const { return guided_ && line().guided != nullptr; }
-    const GuidedLine& guided() const { return *line().guided; }
+    // The guided line in use: in compact mode, the one restricted to survivors.
+    const GuidedLine& guided() const
+    {
+        return effective_mode() == FilterMode::Compact ? *compact_[li_]->guided() : *line().guided;
+    }
+    const CompactLine& compact() const { return *compact_[li_]; }
     std::string ordering_name() const { return guided_on() ? "guided" : to_string(mode_); }
 
     void set_line(int li)
@@ -243,18 +256,17 @@ public:
     // ---- filters
     //
     // Each line has a stack and a mode: off, mark (failing books dimmed), hide (failing books
-    // left out, every address where it was) or compact (only survivors, in address order, closed
-    // up). Compact needs positional order and a stack that can rank its survivors; otherwise the
-    // line hides instead.
+    // left out, every address where it was) or compact (only survivors, closed up, in every
+    // ordering: positional by survivor number, scrambled by a keyed shuffle of those numbers,
+    // guided on the guided line restricted to survivors). Compact needs a stack that can rank its
+    // survivors; otherwise the line hides instead.
     FilterMode effective_mode(int i) const
     {
         const FilterStack& st = stacks_[i];
         if (st.empty()) return FilterMode::Off;
         const FilterMode m = modes_[i];
         if (m != FilterMode::Compact) return m;
-        const bool guided_here = guided_ && lines_[size_t(i)].guided;
-        if (!st.ranker() || st.ranker()->count().is_zero() || guided_here || mode_ != AddressMode::Positional) return FilterMode::Hide;
-        return FilterMode::Compact;
+        return compact_[i] ? FilterMode::Compact : FilterMode::Hide;
     }
     FilterMode effective_mode() const { return effective_mode(li_); }
     const FilterStack& stack() const { return stacks_[li_]; }
@@ -266,14 +278,14 @@ public:
         std::string s = "filters: " + std::to_string(st.size()) + " " + to_string(m);
         if (m == FilterMode::Compact) s += " (" + short_number(st.ranker()->count().to_decimal()) + " survivors)";
         else if (modes_[li_] == FilterMode::Compact)
-            s += guided_on() || mode_ != AddressMode::Positional ? " (compact needs positional order)" : " (compact: " + st.compact_blocker() + ")";
+            s += st.ranker() ? " (compact: no unit survives)" : " (compact: " + st.compact_blocker() + ")";
         return s;
     }
     // How many units line i has in its loop, in the current ordering and filter mode.
     BigUint units_of(int i) const
     {
-        if (effective_mode(i) == FilterMode::Compact) return stacks_[i].ranker()->count();
         if (guided_ && lines_[size_t(i)].guided) return BigUint::pow(2, zoom_);
+        if (effective_mode(i) == FilterMode::Compact) return compact_[i]->count();
         return lines_[size_t(i)].space.size();
     }
 
@@ -305,7 +317,8 @@ public:
         std::string own_hex;  //   the unit's own address
         bool passes = true;   // passes the line's filter stack
         std::string failed_by; // the first filter it fails
-        bool survivor = false; // compact: index is its survivor number
+        bool survivor = false; // compact: a survivor, and its number (its place in positional order)
+        BigUint survivor_number;
     };
 
     const Book& book(int64_t dt, uint32_t slot)
@@ -321,14 +334,17 @@ public:
         {
             b.index = *idx;
             const Space& sp = line().space;
-            if (effective_mode() == FilterMode::Compact)
+            const bool compact_here = effective_mode() == FilterMode::Compact;
+            if (compact_here && !guided_on())
             {
-                // Only survivors stand here, in address order: slot i holds survivor number i.
-                b.unit = stack().ranker()->unrank(b.index);
+                // Only survivors stand here: slot i holds the survivor whose compact address is i
+                // (its survivor number, or in scrambled order a keyed shuffle of it).
+                const CompactLine& cl = compact();
+                b.unit = cl.unit_at(b.index, mode_);
                 b.survivor = true;
-                const auto address = sp.address_digits(b.unit, AddressMode::Positional);
-                b.hex = sp.hex_of(address);
-                b.fraction = sp.fraction_of(address);
+                b.survivor_number = mode_ == AddressMode::Positional ? b.index : cl.ranker().rank(b.unit);
+                b.hex = cl.hex_of(b.index);
+                b.fraction = b.index.is_zero() ? 0.0 : std::pow(10.0, b.index.log10_approx() - cl.count().log10_approx());
             }
             else if (guided_on())
             {
@@ -342,6 +358,11 @@ public:
                 const auto c = g.code(b.unit);
                 b.bits = c.bits;
                 b.own_hex = c.hex;
+                if (compact_here)
+                {
+                    b.survivor = true;
+                    b.survivor_number = compact().ranker().rank(b.unit);
+                }
             }
             else
             {
@@ -373,6 +394,7 @@ public:
             i >>= g.scale_bits() - zoom_;
             return i;
         }
+        if (effective_mode() == FilterMode::Compact) return compact().index_of(unit, mode_);
         return BigUint::from_digits(line().space.address_digits(unit, mode_), line().space.base());
     }
 
@@ -396,8 +418,6 @@ public:
                 in_hand_where_ = "NOT ON THE SHELVES: fails " + b.failed_by;
                 return;
             }
-            place(stack().ranker()->rank(unit), open);
-            return;
         }
         place(index_of(unit), open);
     }
@@ -563,14 +583,7 @@ public:
                 index = point;
                 index >>= g.scale_bits() - zoom_;
             }
-            else if (effective_mode() == FilterMode::Compact)
-            {
-                // An address names a unit; its place among the survivors is its rank.
-                trail_.clear();
-                go_to_unit(line().space.unit_of_address(line().space.parse_address(input), mode_), true);
-                message("went to " + input);
-                return true;
-            }
+            else if (effective_mode() == FilterMode::Compact) index = compact().parse(input); // a compact address, as the books show
             else index = BigUint::from_digits(line().space.parse_address(input), line().space.base());
             trail_.clear();
             place(index, true);
@@ -999,10 +1012,10 @@ public:
                                     " bits/char; raw " + b2 + ")",
                          1, ink);
                 }
-                else text(20, y, "address " + short_address(bk.hex), 1, ink);
+                else text(20, y, std::string(bk.survivor ? "compact address " : "address ") + short_address(bk.hex), 1, ink);
                 y += 12;
                 std::string verdict;
-                if (bk.survivor) verdict = "survivor number " + short_number(bk.index.to_decimal()) + "   ";
+                if (bk.survivor) verdict = "survivor number " + short_number(bk.survivor_number.to_decimal()) + "   ";
                 else if (!stack().empty()) verdict = bk.passes ? "passes the filters   " : "FAILS " + bk.failed_by + "   ";
                 text(20, y, verdict + percent(bk.fraction) + " along the loop      E / click: take it off the shelf", 1, ink);
                 y += 16;
@@ -1077,7 +1090,8 @@ public:
         }
         }
         cy = std::max(cy, y + ph - 110);
-        text(x + 14, cy, bk.guided ? "address (guided, " + std::to_string(bk.bits) + " bits)" : "address (" + std::string(to_string(mode_)) + ")", 1, ink);
+        const std::string kind = bk.survivor ? "compact address (" : "address (";
+        text(x + 14, cy, bk.guided ? kind + "guided, " + std::to_string(bk.bits) + " bits)" : kind + std::string(to_string(mode_)) + ")", 1, ink);
         cy += 12;
         int shown = 0;
         for (const auto& l : wrap(bk.guided ? bk.own_hex : bk.hex, cols1))
@@ -1184,6 +1198,7 @@ private:
     Uint64 message_until_ = 0;
     bool menu_requested_ = false;
     FilterStack stacks_[4];
+    std::unique_ptr<CompactLine> compact_[4]; // survivors in every ordering, where the stack can rank
     FilterMode modes_[4] = {FilterMode::Off, FilterMode::Off, FilterMode::Off, FilterMode::Off};
     Synth synth_;
 };
@@ -1212,7 +1227,8 @@ const char* kUsage =
     "  A setup menu opens first: adjust every line's state space and see the four lines as a map.\n"
     "  The magnifying glass beside a line's title (or F) opens its filters: tick filters, set\n"
     "  their parameters, and choose the mode: off, mark (failures faint), hide (failures left\n"
-    "  out) or compact (only survivors, packed together). Saved to the --filters file.\n"
+    "  out) or compact (only survivors, packed together, in every ordering). Saved to the\n"
+    "  --filters file. In compact mode, G takes a compact address, as the books show it.\n"
     "  --no-menu           go straight into the hallway (F1 opens the menu from the hallway)\n"
     "  --menu              with --screenshot: a picture of the menu (--press keys go to the menu)\n"
     "  --filters PATH      filter settings (default: sieve-filters.ini next to the executable)\n\n"

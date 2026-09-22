@@ -311,6 +311,14 @@ BigUint& BigUint::operator<<=(size_t bits)
     return *this;
 }
 
+BigUint& BigUint::operator^=(const BigUint& other)
+{
+    if (limbs_.size() < other.limbs_.size()) limbs_.resize(other.limbs_.size(), 0);
+    for (size_t i = 0; i < other.limbs_.size(); ++i) limbs_[i] ^= other.limbs_[i];
+    trim();
+    return *this;
+}
+
 BigUint& BigUint::operator>>=(size_t bits)
 {
     const size_t whole = bits / 32, part = bits % 32;

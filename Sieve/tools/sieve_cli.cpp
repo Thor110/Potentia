@@ -24,6 +24,7 @@
 #include "cli/models.hpp"
 
 #include "sieve/audio.hpp"
+#include "sieve/compact.hpp"
 #include "sieve/corridor.hpp"
 #include "sieve/guided.hpp"
 #include "sieve/image.hpp"
@@ -165,6 +166,35 @@ BigUint random_point(const GuidedLine& g, std::mt19937_64& rng)
     return p;
 }
 
+// --compact: the line's survivors under the ticked filter stack (--filters), in every ordering.
+struct Compact
+{
+    FilterStack stack;
+    std::unique_ptr<CompactLine> line;
+};
+std::unique_ptr<Compact> make_compact(const Line& line, const Args& a)
+{
+    auto c = std::make_unique<Compact>();
+    c->stack = build_stack(line, load_filter_config(a).of(line.kind));
+    if (c->stack.empty()) throw std::invalid_argument("--compact needs ticked filters (see: sieve filters)");
+    if (!c->stack.ranker()) throw std::invalid_argument("this stack cannot rank its survivors: " + c->stack.compact_blocker());
+    c->line = std::make_unique<CompactLine>(*c->stack.ranker(), line.space.key(), c->stack.id(), line.guided ? line.guided->model_ptr() : nullptr);
+    std::cerr << "compact: " << c->line->count().to_decimal() << " survivors of " << c->stack.provenance() << "\n";
+    return c;
+}
+
+// A uniformly random number below n (64 extra random bits make the bias negligible).
+BigUint random_below(const BigUint& n, std::mt19937_64& rng)
+{
+    BigUint v;
+    for (size_t b = 0; b < n.bit_length() + 64; b += 32)
+    {
+        v <<= 32;
+        v.add_small(static_cast<uint32_t>(rng()));
+    }
+    return BigUint::mod(v, n);
+}
+
 // ---------------------------------------------------------------- warp
 
 int cmd_warp(const Args& a)
@@ -174,6 +204,7 @@ int cmd_warp(const Args& a)
     const bool abbreviate = a.has("short");
 
     const WarpInput w = read_warp_input(line, a);
+    const auto compact = a.has("compact") ? make_compact(line, a) : nullptr;
     print_header(line);
     if (modes.guided) std::cout << "model        " << line.model_id << " (" << line.guided->model().sha256().substr(0, 16) << "...)\n";
     std::cout << "canon        " << w.report.front() << "\n";
@@ -203,6 +234,26 @@ int cmd_warp(const Args& a)
             std::cout << "  guided      " << show_address(c.hex, abbreviate) << "\n"
                       << "  " << std::string(12, ' ') << c.bits << " bits: " << fixed(per, 2) << " bits/symbol (raw "
                       << fixed(raw_bits, 2) << "), at " << percent(g.fraction(c.point)) << " along the guided line\n";
+        }
+        if (compact)
+        {
+            const CompactLine& cl = *compact->line;
+            const int fail = compact->stack.first_failure(digits);
+            if (fail >= 0)
+            {
+                std::cout << "  compact     not a survivor: fails " << compact->stack.filter_name(size_t(fail)) << "\n";
+                continue;
+            }
+            const BigUint k = cl.index_of(digits, AddressMode::Positional);
+            std::cout << "  compact     survivor number " << k.to_decimal() << " of " << cl.count().to_decimal() << "\n";
+            if (modes.positional) std::cout << "    positional  " << show_address(cl.hex_of(k), abbreviate) << "\n";
+            if (modes.scrambled) std::cout << "    scrambled   " << show_address(cl.hex_of(cl.index_of(digits, AddressMode::Scrambled)), abbreviate) << "\n";
+            if (modes.guided && cl.guided())
+            {
+                const auto c = cl.guided()->code(digits);
+                std::cout << "    guided      " << show_address(c.hex, abbreviate) << "  (" << c.bits << " bits: "
+                          << fixed(double(c.bits) / digits.size(), 2) << " bits/symbol)\n";
+            }
         }
     }
     return 0;
@@ -234,6 +285,7 @@ int read_at(const Line& line, const Args& a, const std::string& mode)
     const uint32_t slot = uint32_t(std::stoul(at.substr(colon + 1)));
     if (slot >= kBooksPerTile) throw std::invalid_argument("SLOT must be 0.." + std::to_string(kBooksPerTile - 1));
     const bool guided = mode == "guided";
+    const auto compact = a.has("compact") ? make_compact(line, a) : nullptr;
     uint32_t zoom = 0;
     if (guided)
     {
@@ -241,7 +293,7 @@ int read_at(const Line& line, const Args& a, const std::string& mode)
         if (!a.has("zoom")) throw std::invalid_argument("--mode guided --at needs --zoom D (books 2^-D apart), as shown in the hallway");
         zoom = a.get_positive("zoom", 20);
     }
-    const LineLoop loop(guided ? BigUint::pow(2, zoom) : line.space.size());
+    const LineLoop loop(guided ? BigUint::pow(2, zoom) : compact ? compact->line->count() : line.space.size());
     const auto index = loop.unit_index(loop.loop_tile(tile), slot);
     if (!index)
     {
@@ -251,10 +303,16 @@ int read_at(const Line& line, const Args& a, const std::string& mode)
     std::vector<uint32_t> digits;
     if (guided)
     {
+        const GuidedLine& g = compact ? *compact->line->guided() : *line.guided;
         BigUint point = *index;
-        point <<= line.guided->scale_bits() - zoom;
-        digits = line.guided->unit_at(point);
-        std::cerr << "point " << line.guided->hex_of(point, zoom) << "\n";
+        point <<= g.scale_bits() - zoom;
+        digits = g.unit_at(point);
+        std::cerr << "point " << g.hex_of(point, zoom) << "\n";
+    }
+    else if (compact)
+    {
+        digits = compact->line->unit_at(*index, address_mode_from_string(mode));
+        std::cerr << "compact address " << compact->line->hex_of(*index) << "\n";
     }
     else
     {
@@ -294,10 +352,39 @@ int cmd_read(const Args& a)
         return 0;
     }
     if (a.positional.size() != 1) throw std::invalid_argument("give exactly one ADDRESS");
+    const auto compact = a.has("compact") ? make_compact(line, a) : nullptr;
     std::vector<uint32_t> digits;
-    if (mode == "guided")
+    if (compact && mode != "guided")
     {
-        const GuidedLine& g = need_guided(line);
+        // A compact address: the survivor number (positional) or its shuffle (scrambled).
+        const CompactLine& cl = *compact->line;
+        const AddressMode m = address_mode_from_string(mode);
+        const BigUint index = cl.parse(a.positional[0]);
+        digits = cl.unit_at(index, m);
+        std::cerr << "survivor number " << (m == AddressMode::Positional ? index : cl.ranker().rank(digits)).to_decimal() << " of "
+                  << cl.count().to_decimal() << "\n";
+        if (a.has("around"))
+        {
+            const int64_t n = a.get_u32("around", 0);
+            for (int64_t off = -n; off <= n; ++off)
+            {
+                // Neighbouring compact addresses, around the loop of survivors.
+                BigUint i = index;
+                if (off >= 0) i += BigUint(uint64_t(off));
+                else
+                {
+                    i += cl.count();
+                    i -= BigUint(uint64_t(-off));
+                }
+                i = BigUint::mod(i, cl.count());
+                print_shelf_row(line, off, cl.unit_at(i, m), show_address(cl.hex_of(i), a.has("short")));
+            }
+        }
+    }
+    else if (mode == "guided")
+    {
+        const GuidedLine& g = compact ? *compact->line->guided() : need_guided(line);
+        if (compact && !compact->line->guided()) need_guided(line);
         const BigUint point = g.point_of(a.positional[0]);
         digits = g.unit_at(point);
         const auto own = g.code(digits);
@@ -370,6 +457,7 @@ int cmd_browse(const Args& a)
     if (a.has("seed")) rng.seed(a.get_u32("seed", 0));
     std::uniform_int_distribution<uint32_t> digit(0, sp.base() - 1);
     const bool multiline = line.kind == LineKind::Image || line.kind == LineKind::Video;
+    const auto compact = a.has("compact") ? make_compact(line, a) : nullptr;
     if (mode == "guided")
         std::cerr << "random points on the guided line: text the model finds likely. It is fluent by\n"
                      "construction, which is evidence of nothing (SPECIFICATIONS 4.2).\n\n";
@@ -377,10 +465,20 @@ int cmd_browse(const Args& a)
     {
         std::vector<uint32_t> unit;
         std::string label;
-        if (mode == "guided")
+        if (compact && mode != "guided")
         {
-            // A uniformly random point is a sample from the model.
-            const GuidedLine& g = need_guided(line);
+            // A uniformly random compact address is a uniformly random survivor.
+            const CompactLine& cl = *compact->line;
+            const BigUint j = random_below(cl.count(), rng);
+            unit = cl.unit_at(j, AddressMode::Scrambled);
+            label = "  compact scrambled " + show_address(cl.hex_of(j), abbreviate) + "  (survivor number " +
+                    cl.ranker().rank(unit).to_decimal() + ")";
+        }
+        else if (mode == "guided")
+        {
+            // A uniformly random point is a sample from the model (restricted to survivors with --compact).
+            if (compact && !compact->line->guided()) need_guided(line);
+            const GuidedLine& g = compact ? *compact->line->guided() : need_guided(line);
             unit = g.unit_at(random_point(g, rng));
             const auto c = g.code(unit);
             label = "  guided " + show_address(c.hex, abbreviate) + "  (" + std::to_string(c.bits) + " bits)";
@@ -521,7 +619,11 @@ int cmd_version()
     for (const auto& id : palette_ids()) std::cout << id << " ";
     std::cout << "\n  note symbols            " << kNotesSymbolsId << "\n"
               << "  guided addresses        " << kGuidedVersion << " over " << kCharModelFormat << " (" << kSmoothing << ", total 2^"
-              << kModelTotalBits << ")\n";
+              << kModelTotalBits << ")\n"
+              << "  compact orderings       " << kShuffleVersion << " (scrambled), " << kSieveRestrictVersion << " (guided)\n"
+              << "  filters                 ";
+    for (const auto& f : filter_registry()) std::cout << f.name() << " ";
+    std::cout << "\n";
     try
     {
         const ModelRegistry mr = load_model_registry();

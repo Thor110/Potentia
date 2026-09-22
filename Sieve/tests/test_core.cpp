@@ -4,6 +4,7 @@
 #include "sieve/audio.hpp"
 #include "sieve/biguint.hpp"
 #include "sieve/canon.hpp"
+#include "sieve/compact.hpp"
 #include "sieve/corridor.hpp"
 #include "sieve/filter.hpp"
 #include "sieve/intlog.hpp"
@@ -932,6 +933,252 @@ void test_filters(const std::string& dir)
 }
 
 // Filter vectors from the Python oracle (independent implementations of every filter and ranker).
+// Every ranker, exhaustively: rank is the position among the survivors in address order,
+// unrank inverts it, the walk accepts exactly what the filter passes, and alive() agrees with
+// completions().
+void check_ranker_exhaustive(const FilterStack& st, uint32_t base, uint32_t L, bool& ok)
+{
+    const Ranker* rk = st.ranker();
+    if (!rk) { ok = false; return; }
+    uint64_t total = 1;
+    for (uint32_t i = 0; i < L; ++i) total *= base;
+    uint64_t k = 0;
+    for (uint64_t i = 0; i < total; ++i)
+    {
+        const auto u = BigUint(i).to_digits(base, L);
+        const bool pass = st.passes(u);
+        ok = ok && rk->accepts(u) == pass;
+        if (!pass) continue;
+        ok = ok && rk->rank(u) == BigUint(k) && rk->unrank(BigUint(k)) == u;
+        ++k;
+    }
+    ok = ok && rk->count() == BigUint(k);
+}
+
+void test_compact(const std::string& dir)
+{
+    // Rankers on the other lines: black-and-white entropy (image, video) and key (audio).
+    TestResources none(nullptr, nullptr);
+    for (uint32_t L : {1u, 2u, 5u, 9u, 12u})
+        for (auto [lo, hi] : {std::pair<int, int>{0, 500}, {0, 900}, {600, 1000}, {950, 32000}})
+        {
+            const FilterLine img{"image", "image/mono/" + std::to_string(L) + "x1", 2, L, nullptr, L, 1, 1};
+            const FilterStack st(img, {{find_filter("symbol-entropy-v1"), {{"min_millibits", std::to_string(lo)}, {"max_millibits", std::to_string(hi)}}}}, none);
+            bool ok = true;
+            check_ranker_exhaustive(st, 2, L, ok);
+            CHECK(ok);
+        }
+    {
+        const FilterLine img{"image", "image/ega16/3x1", 16, 3, nullptr, 3, 1, 1};
+        CHECK(FilterStack(img, {{find_filter("symbol-entropy-v1"), {}}}, none).ranker() == nullptr); // 16 colours: no ranker
+    }
+    for (uint32_t L : {1u, 2u, 3u})
+        for (const char* scale : {"major", "minor-pentatonic", "blues"})
+        {
+            const FilterLine au{"audio", kNotesSymbolsId, kNoteSymbols, L, nullptr, 0, 0, 0};
+            const FilterStack st(au, {{find_filter("key-v1"), {{"tonic", "D"}, {"scale", scale}}}}, none);
+            bool ok = true;
+            check_ranker_exhaustive(st, kNoteSymbols, L, ok);
+            CHECK(ok);
+        }
+    {
+        // C major: C4q passes, C#4q fails, rests pass; E minor pentatonic has 5 notes per octave.
+        const FilterLine au{"audio", kNotesSymbolsId, kNoteSymbols, 4, nullptr, 0, 0, 0};
+        const FilterStack cmaj(au, {{find_filter("key-v1"), {}}}, none);
+        CHECK(cmaj.passes(std::vector<uint32_t>{1 * 4 + 1, 0, 3, 13 * 4 + 2}));
+        CHECK(!cmaj.passes(std::vector<uint32_t>{2 * 4 + 1, 0, 0, 0}));
+        const FilterStack em(au, {{find_filter("key-v1"), {{"tonic", "E"}, {"scale", "minor-pentatonic"}}}}, none);
+        // Pitches C4..C6: 25 semitones; E minor pentatonic (E G A B D) has 10 of them, plus the rest: 11 pitches, 4 durations.
+        CHECK(em.ranker()->count() == BigUint::pow(44, 4));
+        CHECK(throws([&] { FilterStack(au, {{find_filter("key-v1"), {{"tonic", "H"}}}}, none); }));
+    }
+
+    // The survivor shuffle is a permutation of [0, N) for every N, and its inverse undoes it.
+    {
+        bool ok = true;
+        for (uint32_t n = 1; n <= 300; ++n)
+        {
+            const Shuffle sh(BigUint(n), "sieve", "test");
+            std::vector<bool> seen(n);
+            for (uint32_t k = 0; k < n; ++k)
+            {
+                const BigUint j = sh.forward(BigUint(k));
+                ok = ok && j < BigUint(n) && !seen[j.low_bits(32)] && sh.inverse(j) == BigUint(k);
+                if (j < BigUint(n)) seen[j.low_bits(32)] = true;
+            }
+        }
+        CHECK(ok);
+        // Different keys and domains shuffle differently; a huge N round-trips.
+        const Shuffle a(BigUint(1000000), "sieve", "x"), b(BigUint(1000000), "other", "x"), c(BigUint(1000000), "sieve", "y");
+        CHECK(!(a.forward(BigUint(5)) == b.forward(BigUint(5))) || !(a.forward(BigUint(6)) == b.forward(BigUint(6))));
+        CHECK(!(a.forward(BigUint(5)) == c.forward(BigUint(5))) || !(a.forward(BigUint(6)) == c.forward(BigUint(6))));
+        BigUint big = BigUint::pow(27, 300);
+        big -= BigUint(12345);
+        const Shuffle h(big, "sieve", "big");
+        const BigUint k = BigUint::pow(3, 500);
+        CHECK(h.inverse(h.forward(k)) == k);
+    }
+
+    // The sieved guided line: exhaustive at L = 1..3 with a small model and dictionary. The arcs of
+    // the survivors tile [0, 2^S) in order, every survivor's address decodes to it, points only
+    // ever decode to survivors, and a non-survivor has no arc.
+    const auto m = small_model();
+    auto small = std::make_shared<const Dictionary>(Dictionary::from_words({"a", "an", "ant", "i", "in", "tan", "it", "was"}));
+    TestResources small_res(small, nullptr);
+    for (const char* name : {"clean-v2", "words-v2", "words-v1"})
+        for (uint32_t L = 1; L <= 3; ++L)
+        {
+            const FilterStack st(text_line(L), {{find_filter(name), {}}}, small_res);
+            const CompactLine cl(*st.ranker(), "sieve", st.id(), m);
+            const GuidedLine& g = *cl.guided();
+            BigUint expected;
+            bool tiled = true, decodes = true, refuses = true, orders = true;
+            uint64_t k = 0;
+            const uint64_t total = uint64_t(std::pow(27.0, L) + 0.5);
+            for (uint64_t i = 0; i < total; ++i)
+            {
+                const auto u = BigUint(i).to_digits(27, L);
+                if (!st.passes(u))
+                {
+                    refuses = refuses && throws([&] { (void)g.interval(u); }) && throws([&] { (void)cl.index_of(u, AddressMode::Positional); });
+                    continue;
+                }
+                const auto iv = g.interval(u);
+                tiled = tiled && iv.low == expected && !iv.width.is_zero();
+                expected = iv.low;
+                expected += iv.width;
+                const auto c = g.code_of(iv);
+                decodes = decodes && g.unit_at(c.point) == u && g.unit_at(iv.low) == u;
+                // Compact positional is the survivor number; scrambled round-trips.
+                orders = orders && cl.index_of(u, AddressMode::Positional) == BigUint(k) &&
+                         cl.unit_at(cl.index_of(u, AddressMode::Scrambled), AddressMode::Scrambled) == u;
+                ++k;
+            }
+            BigUint full(1);
+            full <<= g.scale_bits();
+            CHECK(tiled);
+            CHECK(expected == full);
+            CHECK(decodes);
+            CHECK(refuses);
+            CHECK(orders);
+        }
+
+    // At full scale: the pinned model and words-v2. Warped text keeps (nearly) its guided address
+    // length, and noise has none.
+    auto scowl = std::make_shared<const Dictionary>(Dictionary::load_file(dir + "../data/dictionaries/scowl-2020.12.07-en-60.txt"));
+    auto model = std::make_shared<const CharModel>(CharModel::load_file(dir + "../data/models/gutenberg-lower27-o5.model"));
+    TestResources res(scowl, model);
+    const FilterStack st(text_line(32), {{find_filter("words-v2"), {}}}, res);
+    const CompactLine cl(*st.ranker(), "sieve", st.id(), model);
+    const GuidedLine plain(model, 32);
+    const auto u = digits27("it was the best of times        ");
+    const auto sieved = cl.guided()->code(u), unsieved = plain.code(u);
+    CHECK(cl.guided()->unit_at(sieved.point) == u);
+    CHECK(sieved.bits <= unsieved.bits + 2);
+    CHECK(throws([&] { (void)cl.guided()->code(digits27("qzx vvk                         ")); }));
+    std::mt19937_64 rng(11);
+    bool all_survive = true;
+    for (int i = 0; i < 100; ++i)
+    {
+        BigUint p;
+        for (int w = 0; w < 16; ++w)
+        {
+            p <<= 32;
+            p.add_small(uint32_t(rng()));
+        }
+        all_survive = all_survive && st.passes(cl.guided()->unit_at(p));
+    }
+    CHECK(all_survive);
+    // Compact scrambled round-trips at full scale.
+    const BigUint j = cl.index_of(u, AddressMode::Scrambled);
+    CHECK(cl.unit_at(j, AddressMode::Scrambled) == u);
+    CHECK(cl.parse(cl.hex_of(j)) == j);
+    CHECK(cl.hex_of(j).size() == cl.hex_width());
+}
+
+// Compact vectors from the oracle: the survivor shuffle, rankers on the other lines, and the
+// sieved guided line (words and clean with scowl-en-35 and the pinned model).
+void test_compact_vectors(const std::string& dir)
+{
+    std::ifstream in(dir + "vectors_compact_v1.tsv");
+    CHECK(bool(in));
+    std::string line;
+    auto dict = std::make_shared<const Dictionary>(Dictionary::load_file(dir + "../data/dictionaries/scowl-2020.12.07-en-35.txt"));
+    auto model = std::make_shared<const CharModel>(CharModel::load_file(dir + "../data/models/gutenberg-lower27-o5.model"));
+    TestResources res(dict, model);
+    auto values = [](const std::string& spec) {
+        FilterValues v;
+        std::stringstream ss(spec);
+        std::string kv;
+        while (std::getline(ss, kv, ','))
+            if (const size_t eq = kv.find('='); eq != std::string::npos) v[kv.substr(0, eq)] = kv.substr(eq + 1);
+        return v;
+    };
+    auto digits = [](const std::string& list) {
+        std::vector<uint32_t> d;
+        std::stringstream ss(list);
+        std::string x;
+        while (std::getline(ss, x, ',')) d.push_back(uint32_t(std::stoul(x)));
+        return d;
+    };
+    std::map<std::string, std::unique_ptr<FilterStack>> stacks; // sieved guided lines, by filter and length
+    std::map<std::string, std::unique_ptr<CompactLine>> lines;
+    auto compact = [&](const std::string& filter, uint32_t L) -> const GuidedLine& {
+        const std::string k = filter + "/" + std::to_string(L);
+        if (!lines.count(k))
+        {
+            stacks[k] = std::make_unique<FilterStack>(text_line(L), std::vector<FilterStack::Entry>{{find_filter(filter), {}}}, res);
+            lines[k] = std::make_unique<CompactLine>(*stacks[k]->ranker(), "sieve", stacks[k]->id(), model);
+        }
+        return *lines[k]->guided();
+    };
+    int n = 0;
+    while (std::getline(in, line))
+    {
+        if (line.empty() || line[0] == '#') continue;
+        std::vector<std::string> f;
+        std::stringstream ss(line);
+        std::string x;
+        while (std::getline(ss, x, '\t')) f.push_back(x);
+        ++n;
+        if (f[0] == "shuffle")
+        {
+            const Shuffle sh(BigUint::from_decimal(f[1]), f[2], f[3]);
+            const BigUint k = BigUint::from_decimal(f[4]), j = BigUint::from_decimal(f[5]);
+            CHECK(sh.forward(k) == j);
+            CHECK(sh.inverse(j) == k);
+        }
+        else if (f[0] == "rank")
+        {
+            const uint32_t L = uint32_t(std::stoul(f[3]));
+            const FilterLine fl = f[1] == "key-v1" ? FilterLine{"audio", kNotesSymbolsId, kNoteSymbols, L, nullptr, 0, 0, 0}
+                                                   : FilterLine{"image", "image/mono/" + std::to_string(L) + "x1", 2, L, nullptr, L, 1, 1};
+            const FilterStack st(fl, {{find_filter(f[1]), values(f[2])}}, res);
+            const Ranker* rk = st.ranker();
+            CHECK(rk && rk->count() == BigUint::from_decimal(f[4]));
+            const auto u = digits(f[6]);
+            CHECK(rk && rk->unrank(BigUint::from_decimal(f[5])) == u);
+            CHECK(rk && rk->rank(u) == BigUint::from_decimal(f[5]));
+            CHECK(st.passes(u));
+        }
+        else if (f[0] == "sguided")
+        {
+            const GuidedLine& g = compact(f[1], uint32_t(std::stoul(f[2])));
+            const auto c = g.code(digits27(f[3]));
+            CHECK(std::to_string(c.bits) == f[4]);
+            CHECK(c.hex == f[5]);
+            CHECK(g.unit_at(g.point_of(f[5])) == digits27(f[3]));
+        }
+        else if (f[0] == "spoint")
+        {
+            const GuidedLine& g = compact(f[1], uint32_t(std::stoul(f[2])));
+            CHECK(g.unit_at(g.point_of(f[3])) == digits27(f[4]));
+        }
+        else CHECK(false);
+    }
+    std::cout << "compact vectors checked: " << n << "\n";
+}
+
 void test_filter_vectors(const std::string& dir)
 {
     std::ifstream in(dir + "vectors_filters_v1.tsv");
@@ -1017,6 +1264,8 @@ void run_all(int argc, char** argv)
         test_guided_vectors(dir);
         test_filters(dir);
         test_filter_vectors(dir);
+        test_compact(dir);
+        test_compact_vectors(dir);
     }
 }
 

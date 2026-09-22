@@ -1,5 +1,9 @@
 #include "sieve/guided.hpp"
 
+#include "sieve/filter.hpp"
+
+#include <algorithm>
+
 #include <cmath>
 #include <span>
 #include <stdexcept>
@@ -36,16 +40,69 @@ GuidedLine::GuidedLine(std::shared_ptr<const CharModel> model, uint32_t unit_len
     if (unit_length == 0) throw std::invalid_argument("unit length must be at least 1");
 }
 
+GuidedLine::GuidedLine(std::shared_ptr<const CharModel> model, uint32_t unit_length, const Ranker* sieve)
+    : GuidedLine(std::move(model), unit_length)
+{
+    sieve_ = sieve;
+    if (sieve_ && (sieve_->length() != unit_length || sieve_->base() != model_->base()))
+        throw std::invalid_argument("the sieve's unit shape does not match the guided line");
+    if (sieve_ && sieve_->count().is_zero()) throw std::invalid_argument("no unit survives the sieve");
+}
+
+uint64_t GuidedLine::advance(uint64_t state, uint32_t symbol) const
+{
+    return sieve_ ? sieve_->next(state, symbol) : 0;
+}
+
+const uint32_t* GuidedLine::table(std::span<const uint32_t> history, uint64_t state, std::vector<uint32_t>& buf) const
+{
+    const uint32_t* cum = model_->cumulative(history);
+    if (!sieve_) return cum;
+    const uint32_t N = model_->base();
+    const uint32_t remaining = length_ - uint32_t(history.size()) - 1;
+    std::vector<uint32_t> live;
+    for (uint32_t s = 0; s < N; ++s)
+    {
+        const Ranker::State t = sieve_->next(state, s);
+        if (t != Ranker::kDead && sieve_->alive(t, remaining)) live.push_back(s);
+    }
+    if (live.size() == N) return cum;
+    if (live.empty()) throw std::logic_error("sieved guided line reached a dead end");
+    uint64_t D = 0;
+    for (uint32_t s : live) D += cum[s + 1] - cum[s];
+    const uint64_t spread = kModelTotal - live.size();
+    std::vector<uint32_t> f(N, 0);
+    std::vector<uint64_t> rem(N, 0);
+    uint64_t used = 0;
+    for (uint32_t s : live)
+    {
+        const uint64_t x = spread * (cum[s + 1] - cum[s]);
+        f[s] = uint32_t(1 + x / D);
+        rem[s] = x % D;
+        used += f[s];
+    }
+    std::vector<uint32_t> order = live;
+    std::stable_sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) { return rem[a] > rem[b]; });
+    for (uint64_t k = 0; used < kModelTotal; ++k, ++used) ++f[order[size_t(k)]];
+    buf.assign(N + 1, 0);
+    for (uint32_t s = 0; s < N; ++s) buf[s + 1] = buf[s] + f[s];
+    return buf.data();
+}
+
 GuidedLine::Interval GuidedLine::interval(const Digits& unit) const
 {
     if (unit.size() != length_) throw std::invalid_argument("digit vector has the wrong length");
     const uint32_t N = model_->base();
     Interval iv{BigUint(), BigUint(1)};
+    uint64_t state = sieve_ ? sieve_->start() : 0;
+    std::vector<uint32_t> buf;
     for (size_t i = 0; i < unit.size(); ++i)
     {
         const uint32_t s = unit[i];
         if (s >= N) throw std::invalid_argument("digit out of range for this model");
-        const uint32_t* cum = model_->cumulative(std::span<const uint32_t>(unit.data(), i));
+        const uint32_t* cum = table(std::span<const uint32_t>(unit.data(), i), state, buf);
+        if (cum[s + 1] == cum[s]) throw std::invalid_argument("the unit does not pass the sieve");
+        state = advance(state, s);
         iv.low <<= kModelTotalBits;
         if (cum[s])
         {
@@ -91,12 +148,14 @@ GuidedLine::Digits GuidedLine::unit_at(const BigUint& point) const
     const uint32_t N = model_->base();
     Digits unit(length_);
     BigUint rest = point, width(1);
+    uint64_t state = sieve_ ? sieve_->start() : 0;
+    std::vector<uint32_t> buf;
     for (size_t i = 0; i < length_; ++i)
     {
         const size_t shift = kModelTotalBits * (length_ - 1 - i);
         BigUint top = rest;
         top >>= shift;
-        const uint32_t* cum = model_->cumulative(std::span<const uint32_t>(unit.data(), i));
+        const uint32_t* cum = table(std::span<const uint32_t>(unit.data(), i), state, buf);
         // Largest s with cum[s] * width <= top.
         uint32_t lo = 0, hi = N - 1;
         while (lo < hi)
@@ -108,6 +167,7 @@ GuidedLine::Digits GuidedLine::unit_at(const BigUint& point) const
             else hi = mid - 1;
         }
         unit[i] = lo;
+        state = advance(state, lo);
         if (cum[lo])
         {
             BigUint t = width;

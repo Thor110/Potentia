@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(Sieve VERSION 0.8.0 LANGUAGES CXX)
+project(Sieve VERSION 0.9.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -20,8 +20,10 @@ add_library(sieve_core STATIC
     core/src/audio.cpp
     core/src/biguint.cpp
     core/src/canon.cpp
+    core/src/compact.cpp
     core/src/corridor.cpp
     core/src/filter.cpp
+    core/src/filters/audio.cpp
     core/src/filters/builtin.cpp
     core/src/filters/media.cpp
     core/src/filters/statistics.cpp

@@ -58,6 +58,14 @@ const Option kShort = {"--short",
                        "Abbreviate long addresses on screen as start...end (N digits). Use the full\n"
                        "address (without --short) when you want to read it back later."};
 
+const Option kCompact = {"--compact",
+                         "Work on the line's survivors only: the units that pass the ticked filters (see\n"
+                         "`sieve help filters`), as the hallway's compact mode shelves them. Each ordering\n"
+                         "has a compact form: positional numbers the survivors 0..N-1 in address order,\n"
+                         "scrambled shuffles those numbers with the key, and guided restricts the guided\n"
+                         "line to survivors. Needs a stack that can rank its survivors. Uses --filters PATH\n"
+                         "(default: sieve-filters.ini next to the executable)."};
+
 const std::vector<Page>& pages()
 {
     static const std::vector<Page> list = {
@@ -76,7 +84,7 @@ const std::vector<Page>& pages()
           {"sieve info --line video", "every 8-frame 5x5 black-and-white animation"}}},
 
         {"warp", "Give some content and get the address where it lives.",
-         "sieve warp [--line LINE] [line options] [--key K] [--mode MODE] [--short] (TEXT... | --file PATH)",
+         "sieve warp [--line LINE] [line options] [--key K] [--mode MODE] [--compact] [--short] (TEXT... | --file PATH)",
          "Fits the input to the line with fixed, versioned rules, reports every change it made,\n"
          "then prints the address of each unit plus a preview of what is on that shelf.\n"
          "  text   TEXT or --file. Lower-cased, accents folded, punctuation turned into spaces,\n"
@@ -91,8 +99,10 @@ const std::vector<Page>& pages()
           {"--mode MODE", "positional, scrambled, guided or all (default all: every ordering the line has;\n"
                           "\"both\" is accepted too). " + kModeText},
           kShort,
-          {"--file PATH", "Read the input from a file instead of the command line."}},
+          {"--file PATH", "Read the input from a file instead of the command line."},
+          kCompact},
          {{"sieve warp --length 32 \"It was the best of times\"", "every address of one line of text"},
+          {"sieve warp --length 32 --compact \"It was the best of times\"", "also its survivor number and compact addresses"},
           {"sieve warp --length 1000 --mode guided --file chapter1.txt", "guided addresses: about 2 bits per character"},
           {"sieve warp --length 32 --mode scrambled --short \"It was the best of times\"", "just the scrambled one, abbreviated"},
           {"sieve warp --length 1000 --file chapter1.txt", "a whole text file, 1000 characters per unit"},
@@ -102,7 +112,7 @@ const std::vector<Page>& pages()
           {"sieve warp --line video --file walk.gif", "an animation as 8 frames of 5x5"}}},
 
         {"read", "Give an address and get back what is stored there.",
-         "sieve read [--line LINE] [line options] [--key K] --mode MODE [--out PATH] [--scale S] (ADDRESS | --at TILE:SLOT)",
+         "sieve read [--line LINE] [line options] [--key K] --mode MODE [--compact] [--out PATH] [--scale S] (ADDRESS | --at TILE:SLOT | --survivor K)",
          "The reverse of warp. ADDRESS is the hex string warp or browse printed. Every option that\n"
          "shaped the address (--line, the line options, --key, --mode) must match, or you will read\n"
          "a different unit: every address in range holds something. Text is printed; images and\n"
@@ -129,8 +139,9 @@ const std::vector<Page>& pages()
           {"--survivor K", "Instead of an ADDRESS: the K-th unit (counting from 0, in positional order) that\n"
                            "passes the line's ticked filters, as compact mode shelves them. Needs a stack\n"
                            "that can rank (see `sieve help filters`). Prints the unit's address as well."},
-          {"--filters PATH", "The filter settings for --survivor. Default: sieve-filters.ini next to the\n"
-                             "executable."},
+          {"--filters PATH", "The filter settings for --survivor and --compact. Default: sieve-filters.ini next\n"
+                             "to the executable."},
+          kCompact,
           kShort},
          {{"sieve read --length 32 --mode scrambled 007b30165818bf0311497600aa52996f9395e27",
            "prints \"it was the best of times\""},
@@ -138,13 +149,15 @@ const std::vector<Page>& pages()
           {"sieve read --length 32 --mode guided 8", "the unit halfway along the guided line"},
           {"sieve read --line image --mode positional --at 4626:0", "the image on the shelf at corridor tile 4626, slot 0"},
           {"sieve read --length 32 --mode positional --survivor 1000000", "the millionth line that passes your filters"},
+          {"sieve read --length 32 --mode scrambled --compact <compact address>", "a survivor, by its compact address"},
+          {"sieve read --length 32 --mode guided --compact --around 3 --zoom 30 8", "survivors along the sieved guided line"},
           {"sieve read --length 32 --mode guided --around 5 --zoom 20 90922", "a zoomed-out shelf of likely lines"},
           {"sieve read --length 32 --mode positional --around 3 <address>", "the shelf and 3 neighbours either side"},
           {"sieve read --line image --mode scrambled <address> --out found.png", "draws it and saves a PNG"},
           {"sieve read --line audio --mode scrambled <address> --out tune.mid", "prints the notes and saves a MIDI file"}}},
 
         {"browse", "Pull random units off the shelves.",
-         "sieve browse [--line LINE] [line options] [--key K] [--mode scrambled|guided] [--count N] [--seed S] [--short]",
+         "sieve browse [--line LINE] [line options] [--key K] [--mode scrambled|guided] [--count N] [--seed S] [--compact] [--short]",
          "Picks uniformly random addresses and shows what is there. This is what wandering the raw\n"
          "Library of Babel is like: almost everything is noise. Each result shows its scrambled\n"
          "address, so you can read or save it later.\n"
@@ -155,10 +168,12 @@ const std::vector<Page>& pages()
           {"--mode scrambled|guided", "Which ordering to pick from. Default scrambled."},
           {"--count N", "How many units to show. Default 5."},
           {"--seed S", "Repeatable choices: the same seed gives the same units."},
+          kCompact,
           kShort},
          {{"sieve browse --length 32", "five random 32-character lines of text"},
           {"sieve browse --length 80 --count 20 --alphabet babel29", "twenty lines of Borges' library"},
           {"sieve browse --length 64 --mode guided", "five random points on the guided line"},
+          {"sieve browse --length 32 --compact", "five uniformly random survivors of your filters"},
           {"sieve browse --line image --count 3", "three random 10x10 images, drawn in ASCII"},
           {"sieve browse --line audio", "five random melodies"}}},
 
@@ -278,10 +293,12 @@ const std::vector<Page>& pages()
          "  off      every unit on the shelves, no judging\n"
          "  mark     books that fail are drawn faint (a record of what the stack rejects)\n"
          "  hide     books that fail are left out; the shelves keep their places\n"
-         "  compact  only survivors stand on the shelves, packed together in address order.\n"
-         "           Needs one filter that can count and rank its survivors (clean, words) and\n"
-         "           that implies every other ticked filter; otherwise the hallway falls back\n"
-         "           to hide.\n"
+         "  compact  only survivors stand on the shelves, packed together, in every ordering:\n"
+         "           positional by survivor number, scrambled by a keyed shuffle of those\n"
+         "           numbers, guided on the guided line restricted to survivors. Needs one\n"
+         "           filter that can count and rank its survivors (clean, words, key, and\n"
+         "           symbol-entropy in black and white) and that implies every other ticked\n"
+         "           filter; otherwise the hallway falls back to hide.\n"
          "This command lists every filter for the line with its description, parameters and\n"
          "which other filters it implies, then the stack's id (a hash of every filter, version,\n"
          "parameter and data file) and, where it can be counted, the exact number of survivors.",

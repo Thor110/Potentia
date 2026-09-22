@@ -153,7 +153,10 @@ What limits a line in practice is the machine. An address is one number held in 
   - **off:** every book on the shelves.
   - **mark:** books that fail are drawn faint. Good for record keeping and tests: you see exactly what the stack rejects.
   - **hide:** books that fail are left out and the rest keep their places. Good for walking along and browsing.
-  - **compact:** only survivors stand on the shelves, packed together in address order. Slot *k* of a loop is the *k*-th survivor, and the loop is exactly as long as the survivor count.
+  - **compact:** only survivors stand on the shelves, packed together, in **every ordering**, and the loop is exactly as long as the survivor count:
+    - **Positional:** slot *k* holds survivor number *k*.
+    - **Scrambled:** the survivor numbers are shuffled with the key, so neighbours are unrelated survivors.
+    - **Guided:** the guided line is restricted to survivors. Every symbol that could not lead to a survivor is removed from the model's tables as the coder goes, so every point on the line is a survivor, and likely survivors own the long stretches.
 - **Filters**, each with a tickbox and a description.
 - **Parameters**, shown under a filter when it is ticked. Numbers step with Left/Right; a dictionary or model cycles through the registered ones.
 
@@ -182,11 +185,12 @@ Every filter is a separate, versioned module compiled into the core. Every decis
 | `words-v1` | text | every token is a dictionary word | yes |
 | `clean-v2`, `words-v2` | text | as v1, but the unit may end in SPACE padding, as the last unit of warped text does | yes |
 | `max-run-v1` | text | no letter repeated more than `max_run` times in a row (3) | |
-| `symbol-entropy-v1` | all | the unit's own Shannon entropy per symbol lies within [min, max] | |
+| `symbol-entropy-v1` | all | the unit's own Shannon entropy per symbol lies within [min, max] | in black and white |
 | `model-information-v1` | text | information under the pinned frequency model is at most `max` bits per symbol (5) | |
 | `neighbour-agreement-v1` | image, video | enough neighbouring pixels (and frames) share a colour | |
+| `key-v1` | audio | every note is in one key (tonic C…B; major, minor, harmonic minor, major or minor pentatonic, blues); rests always pass | yes |
 
-**Compact** needs a filter that can count and rank its survivors (the "yes" column), and the positional ordering; mark and hide work in every ordering. Any other ticked filter must be one that filter *implies*: `words` implies `clean`, so the two together still compact, but `words` with `max-run` does not. When compact is not possible the hallway falls back to hide, and the top bar says why. Warp to text that fails the stack and it opens in hand marked **NOT ON THE SHELVES**, with the filter that rejected it.
+**Compact** needs a filter that can count and rank its survivors (the Compact column), so it works on every line: words on text, low entropy on black-and-white pictures (mostly one colour), a key on melodies. Any other ticked filter must be one that filter *implies*: `words` implies `clean`, so the two together still compact, but `words` with `max-run` does not. When compact is not possible the hallway falls back to hide, and the top bar says why. Warp to text that fails the stack and it opens in hand marked **NOT ON THE SHELVES**, with the filter that rejected it.
 
 A changed filter never replaces the old one. It is registered as the next version (`words-v2` beside `words-v1`), so a result recorded with a stack's id can always be reproduced. To add a filter, write it in `core/src/filters/` and add one line to `core/src/filters/builtin.cpp`. The oracle and the vectors in `tests/vectors_filters_v1.tsv` should grow with it.
 
@@ -196,6 +200,10 @@ A changed filter never replaces the old one. It is registered as the next versio
 | hide | ![Hide](docs/images/hallway-hide.png) |
 
 ![Compact: only units that pass words-v2, with warped text on its shelf as survivor number 100485...4005](docs/images/hallway-compact.png)
+
+![Compact in the guided ordering, zoomed out: the likeliest survivors, every one of them whole words](docs/images/hallway-compact-guided.png)
+
+![Compact on the image line: black-and-white pictures with symbol entropy of at most 0.5 bits, shuffled](docs/images/hallway-compact-image.png)
 
 ![The text line, scrambled ordering](docs/images/hallway-text.png)
 
@@ -439,7 +447,7 @@ sieve filters [--line LINE] [line options] [--filters PATH]
 sieve check   [--line LINE] [line options] [--filters PATH] (TEXT... | --file PATH)
 ```
 
-`filters` lists every filter a line offers: which are ticked, their descriptions and parameters, and what each implies. It ends with the stack's provenance and id, and either the exact survivor count or why compact is unavailable. `check` fits content to the line as `warp` does. For each unit it shows every filter's verdict, whether the unit passes the ticked stack, and, if the stack can rank, its **survivor number**: its place on compact shelves. `read --survivor K` goes the other way:
+`filters` lists every filter a line offers: which are ticked, their descriptions and parameters, and what each implies. It ends with the stack's provenance and id, and either the exact survivor count or why compact is unavailable. `check` fits content to the line as `warp` does. For each unit it shows every filter's verdict, whether the unit passes the ticked stack, and, if the stack can rank, its **survivor number**: its place on compact shelves. `read --survivor K` goes the other way. `--compact` on `warp`, `read` and `browse` works in the compact orderings: `warp --compact` adds a survivor's compact addresses, `read --compact` reads one, and `browse --compact` picks uniformly random survivors, or with `--mode guided` samples the model restricted to survivors:
 
 ```sh
 sieve filters --filters words2.ini
@@ -450,6 +458,13 @@ sieve check --length 32 --filters words2.ini "It was the best of times"
 #   stack: passes, survivor number 100485593897630338697104005 of 190011992984255955985337560
 sieve read --length 32 --mode positional --filters words2.ini --survivor 100485593897630338697104005
 #   it was the best of times
+sieve warp --length 32 --filters words2.ini --compact "It was the best of times"
+#   compact     survivor number 100485593897630338697104005 of 190011992984255955985337560
+#     positional  531ea6f5da80e1ed6b8a85
+#     scrambled   1db41d1685abd564b15405
+#     guided      9116ae0428ea154  (58 bits: 1.81 bits/symbol)
+sieve browse --length 32 --filters words2.ini --compact --count 1 --seed 1
+#   "red oi spore swiz pot is auk fin"
 ```
 
 ### `dicts`: the dictionary registry
@@ -559,8 +574,10 @@ The Python oracle shares no code with the C++ core. It uses native big integers,
 | `vectors_canon.tsv` | Text canonicalisation v1 and v2, including every accented letter in the fold table |
 | `vectors_image_v1.tsv` | Image resampling and palette quantisation, all four palettes |
 | `vectors_guided_v1.tsv` | Guided addresses and point decoding under the pinned model. The oracle derives every frequency table from the model file itself. |
+| `vectors_filters_v1.tsv` | Filter verdicts, fixed-point logarithms, and survivor counts and ranks for `clean` and `words` (v1 and v2) |
+| `vectors_compact_v1.tsv` | The survivor shuffle, rankers for black-and-white entropy and `key-v1`, and survivors' addresses and point decoding on the sieved guided line |
 
-The oracle also rebuilds the default model from the raw corpus (`sieve_ref.py model-build`) and must produce the same SHA-256 as `sieve train`. The core tests check every tiny space exhaustively: at L = 1–3 the arcs of all 27^L units tile the line exactly, every address is the shortest block that fits, and every address decodes back.
+The oracle also rebuilds the default model from the raw corpus (`sieve_ref.py model-build`) and must produce the same SHA-256 as `sieve train`. The core tests check every tiny space exhaustively: at L = 1–3 the arcs of all 27^L units tile the line exactly, every address is the shortest block that fits, and every address decodes back. The same holds for the sieved guided line over the survivors of `clean` and `words`: no non-survivor has an arc. Every ranker is checked against its filter over every unit of small lengths, and the shuffle is checked as a permutation of every size up to 300.
 
 `sieve_tests` runs every check twice: once on the portable SHA-256 and once on the CPU's SHA instructions (SHA-NI, on x86-64 CPUs that have them), so both paths are held to the same vectors. The fast path is picked automatically at start-up; `sieve version` shows which one this machine uses.
 
@@ -636,7 +653,7 @@ What the results show:
 ## Next
 
 - **Models for the other lines:** a melody model for the audio line, and small-image statistics for the image line. The model format already takes any alphabet size.
-- **Compact in the other orderings:** mark and hide work in every ordering, but compact needs positional order. The guided view could close up failing arcs the same way.
-- **More filters:** rankers for more of them (so more stacks can compact), bigram and trigram checks, and S2 coherence tests, each as a new versioned module.
+- **Rankers for more filters,** so more stacks can compact: neighbour agreement for pictures (a transfer-matrix count over rows), and products of two ranking filters.
+- **More filters:** bigram and trigram checks, rhythm and melody checks for audio, and S2 coherence tests, each as a new versioned module.
 - **M1 (images):** noise filters for tiny images, counted over every 5×5 and 6×6 1-bit picture.
 - **A larger text model** (for example ascii95 with case and punctuation, or a longer context), measured with `sieve measure` against the same held-out books.
