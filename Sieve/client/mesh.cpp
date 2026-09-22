@@ -4,9 +4,14 @@
 
 #include <algorithm>
 #include <cmath>
+#include <condition_variable>
+#include <cstdint>
 #include <fstream>
+#include <functional>
 #include <map>
+#include <mutex>
 #include <sstream>
+#include <thread>
 #include <utility>
 
 namespace hallway {
@@ -158,52 +163,6 @@ std::shared_ptr<const Mesh> load_model(const std::string& model, const std::stri
     return m;
 }
 
-std::shared_ptr<const Mesh> slice_z(const Mesh& mesh, float pitch)
-{
-    auto out = std::make_shared<Mesh>(mesh);
-    out->tris.clear();
-    std::vector<Vec3> poly, next;
-    for (const MeshTri& t : mesh.tris)
-    {
-        const float zmin = std::min({t.p[0].z, t.p[1].z, t.p[2].z}), zmax = std::max({t.p[0].z, t.p[1].z, t.p[2].z});
-        const int k0 = int(std::floor(zmin / pitch + 1e-4f)), k1 = int(std::floor(zmax / pitch - 1e-4f));
-        if (k0 >= k1 || k1 - k0 > 4096)
-        {
-            out->tris.push_back(t); // within one slab
-            continue;
-        }
-        for (int k = k0; k <= k1; ++k)
-        {
-            // Clip the triangle to the slab lo <= z <= hi (two half-planes), then fan it.
-            const float lo = float(k) * pitch, hi = float(k + 1) * pitch;
-            poly.assign(t.p, t.p + 3);
-            for (int side = 0; side < 2 && poly.size() >= 3; ++side)
-            {
-                next.clear();
-                auto inside = [&](const Vec3& p) { return side == 0 ? p.z >= lo : p.z <= hi; };
-                const float plane = side == 0 ? lo : hi;
-                for (size_t i = 0; i < poly.size(); ++i)
-                {
-                    const Vec3 a = poly[i], b = poly[(i + 1) % poly.size()];
-                    if (inside(a)) next.push_back(a);
-                    if (inside(a) != inside(b)) next.push_back(a + (b - a) * ((plane - a.z) / (b.z - a.z)));
-                }
-                poly.swap(next);
-            }
-            for (size_t i = 1; i + 1 < poly.size(); ++i)
-            {
-                MeshTri piece = t;
-                piece.p[0] = poly[0];
-                piece.p[1] = poly[i];
-                piece.p[2] = poly[i + 1];
-                const Vec3 c = cross(piece.p[1] - piece.p[0], piece.p[2] - piece.p[0]);
-                if (dot(c, c) > 1e-12f) out->tris.push_back(piece);
-            }
-        }
-    }
-    return out;
-}
-
 std::shared_ptr<const Mesh> facing_x(const Mesh& mesh)
 {
     auto out = std::make_shared<Mesh>(mesh);
@@ -214,25 +173,109 @@ std::shared_ptr<const Mesh> facing_x(const Mesh& mesh)
     return out;
 }
 
+// A few worker threads, each drawing one band of the screen; the calling thread takes a band too.
+struct MeshBatch::Pool
+{
+    explicit Pool(unsigned workers)
+    {
+        for (unsigned i = 0; i < workers; ++i) threads.emplace_back([this, i] { run(i + 1); });
+    }
+    ~Pool()
+    {
+        {
+            std::lock_guard<std::mutex> lock(mu);
+            stop = true;
+        }
+        wake.notify_all();
+        for (auto& t : threads) t.join();
+    }
+    // Runs job(band) for bands 0 .. bands-1, band 0 on this thread; returns when all are done.
+    void run_all(const std::function<void(unsigned)>& f)
+    {
+        {
+            std::lock_guard<std::mutex> lock(mu);
+            job = &f;
+            ++generation;
+            pending = unsigned(threads.size());
+        }
+        wake.notify_all();
+        f(0);
+        std::unique_lock<std::mutex> lock(mu);
+        done.wait(lock, [this] { return pending == 0; });
+        job = nullptr;
+    }
+    unsigned bands() const { return unsigned(threads.size()) + 1; }
+
+private:
+    void run(unsigned band)
+    {
+        uint64_t seen = 0;
+        for (;;)
+        {
+            const std::function<void(unsigned)>* f = nullptr;
+            {
+                std::unique_lock<std::mutex> lock(mu);
+                wake.wait(lock, [&] { return stop || generation != seen; });
+                if (stop) return;
+                seen = generation;
+                f = job;
+            }
+            (*f)(band);
+            std::lock_guard<std::mutex> lock(mu);
+            if (--pending == 0) done.notify_one();
+        }
+    }
+    std::vector<std::thread> threads;
+    std::mutex mu;
+    std::condition_variable wake, done;
+    const std::function<void(unsigned)>* job = nullptr;
+    uint64_t generation = 0;
+    unsigned pending = 0;
+    bool stop = false;
+};
+
+MeshBatch::MeshBatch()
+{
+    const unsigned hw = std::max(1u, std::thread::hardware_concurrency());
+    pool_ = std::make_unique<Pool>(std::min(hw, 8u) - 1);
+}
+
+MeshBatch::~MeshBatch() { release(); }
+
+void MeshBatch::release()
+{
+    if (texture_) SDL_DestroyTexture(texture_);
+    texture_ = nullptr;
+    texture_owner_ = nullptr;
+    tex_w_ = tex_h_ = 0;
+}
+
 void MeshBatch::begin(const Camera& cam, SDL_Color background, int width, int height)
 {
     cam_ = &cam;
     bg_ = {background.r / 255.0f, background.g / 255.0f, background.b / 255.0f, 1.0f};
-    w_ = float(width);
-    h_ = float(height);
+    bg_argb_ = 0xFF000000u | uint32_t(background.r) << 16 | uint32_t(background.g) << 8 | uint32_t(background.b);
+    w_ = std::max(1, width);
+    h_ = std::max(1, height);
     tris_.clear();
 }
 
-void MeshBatch::emit(const std::vector<Point2>& poly, float depth, SDL_FColor c)
+void MeshBatch::push(const Vec3* c, uint32_t colour, float bias)
 {
-    for (size_t k = 1; k + 1 < poly.size(); ++k)
+    Tri t;
+    t.colour = colour;
+    for (int i = 0; i < 3; ++i)
     {
-        Tri t;
-        t.depth = depth;
-        const Point2 q[3] = {poly[0], poly[k], poly[k + 1]};
-        for (int i = 0; i < 3; ++i) t.v[i] = {{q[i].x, q[i].y}, c, {0, 0}};
-        tris_.push_back(t);
+        const Point2 p = cam_->project_camera(c[i]);
+        t.x[i] = p.x;
+        t.y[i] = p.y;
+        t.iz[i] = (1.0f + bias) / c[i].z;
     }
+    t.ymin = std::min({t.y[0], t.y[1], t.y[2]});
+    t.ymax = std::max({t.y[0], t.y[1], t.y[2]});
+    if (t.ymax < 0 || t.ymin > float(h_)) return;
+    if (std::max({t.x[0], t.x[1], t.x[2]}) < 0 || std::min({t.x[0], t.x[1], t.x[2]}) > float(w_)) return;
+    tris_.push_back(t);
 }
 
 void MeshBatch::add(const Mesh& mesh, const Placement& at)
@@ -243,7 +286,7 @@ void MeshBatch::add(const Mesh& mesh, const Placement& at)
         if (at.mirror_x) p.x = -p.x;
         return p + at.offset;
     };
-    std::vector<Point2> poly;
+    Vec3 in[4], out[4];
     for (const MeshTri& t : mesh.tris)
     {
         const Vec3 a = place(t.p[0]), b = place(t.p[1]), c = place(t.p[2]);
@@ -254,46 +297,118 @@ void MeshBatch::add(const Mesh& mesh, const Placement& at)
         const Vec3 centre = (a + b + c) * (1.0f / 3.0f);
         const Vec3 to_eye = cam.pos - centre;
         if (dot(n, to_eye) <= 0) continue;
-        const Vec3 ca = cam.to_camera(a), cb = cam.to_camera(b), cc = cam.to_camera(c);
-        if (ca.z < cam.near_z && cb.z < cam.near_z && cc.z < cam.near_z) continue;
-        // Shading: a light at the eye, plus some ambient; then fog into the background.
+        in[0] = cam.to_camera(a);
+        in[1] = cam.to_camera(b);
+        in[2] = cam.to_camera(c);
+        const float nz = cam.near_z;
+        if (in[0].z < nz && in[1].z < nz && in[2].z < nz) continue;
+        // Shading: a light from the eye, plus some ambient; then fog into the background.
         const float dist = std::sqrt(dot(to_eye, to_eye));
-        const float lambert = std::clamp(dot(n, to_eye * (1.0f / std::max(dist, 1e-4f))), 0.0f, 1.0f);
+        // Lit along the view direction rather than towards each face's centre, so the two halves of
+        // a flat quad come out exactly the same shade.
+        const float lambert = std::clamp(-dot(n, cam.forward()), 0.0f, 1.0f);
         const float shade = 0.35f + 0.65f * lambert;
         const float fog = std::clamp(std::max((dist - 10.0f) / 45.0f, at.dim), 0.0f, 1.0f);
-        const SDL_FColor col{t.kd.r * shade * (1 - fog) + bg_.r * fog, t.kd.g * shade * (1 - fog) + bg_.g * fog,
-                             t.kd.b * shade * (1 - fog) + bg_.b * fog, 1.0f};
-        const float depth = (ca.z + cb.z + cc.z) / 3.0f;
-        if (ca.z >= cam.near_z && cb.z >= cam.near_z && cc.z >= cam.near_z)
+        auto channel = [&](float k, float bg) { return uint32_t(std::clamp(k * shade * (1 - fog) + bg * fog, 0.0f, 1.0f) * 255.0f + 0.5f); };
+        const uint32_t colour = 0xFF000000u | channel(t.kd.r, bg_.r) << 16 | channel(t.kd.g, bg_.g) << 8 | channel(t.kd.b, bg_.b);
+        if (in[0].z >= nz && in[1].z >= nz && in[2].z >= nz)
         {
-            const Point2 pa = cam.project_camera(ca), pb = cam.project_camera(cb), pc = cam.project_camera(cc);
-            auto near_view = [&](Point2 p) { return p.x > -w_ && p.x < 2 * w_ && p.y > -h_ && p.y < 2 * h_; };
-            if (near_view(pa) && near_view(pb) && near_view(pc))
-            {
-                Tri tr;
-                tr.depth = depth;
-                tr.v[0] = {{pa.x, pa.y}, col, {0, 0}};
-                tr.v[1] = {{pb.x, pb.y}, col, {0, 0}};
-                tr.v[2] = {{pc.x, pc.y}, col, {0, 0}};
-                tris_.push_back(tr);
-                continue;
-            }
+            push(in, colour, at.depth_bias);
+            continue;
         }
-        // Crossing the near plane or far off screen: clip it (rare, so the allocations are fine).
-        poly = cam.project_polygon({a, b, c});
-        if (poly.size() >= 3) emit(poly, depth, col);
+        // Crossing the near plane: clip to z >= near (a triangle becomes one or two).
+        int m = 0;
+        for (int i = 0; i < 3; ++i)
+        {
+            const Vec3 p = in[i], q = in[(i + 1) % 3];
+            if (p.z >= nz) out[m++] = p;
+            if ((p.z >= nz) != (q.z >= nz)) out[m++] = p + (q - p) * ((nz - p.z) / (q.z - p.z));
+        }
+        for (int i = 1; i + 1 < m; ++i)
+        {
+            const Vec3 tri[3] = {out[0], out[i], out[i + 1]};
+            push(tri, colour, at.depth_bias);
+        }
+    }
+}
+
+// Rows y0 .. y1-1: clear them, then fill every triangle that reaches them. A pixel is covered
+// when its centre is inside the triangle (so neighbouring triangles never both draw an edge
+// pixel, and leave no gaps); 1/z is planar in screen space, so it is interpolated exactly.
+void MeshBatch::raster_band(int y0, int y1)
+{
+    const int W = w_;
+    std::fill(colour_.begin() + std::ptrdiff_t(y0) * W, colour_.begin() + std::ptrdiff_t(y1) * W, bg_argb_);
+    std::fill(depth_.begin() + std::ptrdiff_t(y0) * W, depth_.begin() + std::ptrdiff_t(y1) * W, 0.0f);
+    for (const Tri& t : tris_)
+    {
+        if (t.ymax < float(y0) || t.ymin > float(y1)) continue;
+        // The plane of 1/z over the screen: iz = A x + B y + C.
+        const float x0 = t.x[0], yy0 = t.y[0], x1 = t.x[1], yy1 = t.y[1], x2 = t.x[2], yy2 = t.y[2];
+        const float det = (x1 - x0) * (yy2 - yy0) - (x2 - x0) * (yy1 - yy0);
+        if (std::fabs(det) < 1e-6f) continue;
+        const float d1 = t.iz[1] - t.iz[0], d2 = t.iz[2] - t.iz[0];
+        const float A = (d1 * (yy2 - yy0) - d2 * (yy1 - yy0)) / det;
+        const float B = (d2 * (x1 - x0) - d1 * (x2 - x0)) / det;
+        const float C = t.iz[0] - A * x0 - B * yy0;
+        const int ya = std::max(y0, int(std::ceil(t.ymin - 0.5f))), yb = std::min(y1 - 1, int(std::ceil(t.ymax - 0.5f)) - 1);
+        for (int y = ya; y <= yb; ++y)
+        {
+            const float yc = float(y) + 0.5f;
+            // Where the row crosses the triangle's edges.
+            float xl = 1e30f, xr = -1e30f;
+            for (int e = 0; e < 3; ++e)
+            {
+                const float ax = t.x[e], ay = t.y[e], bx = t.x[(e + 1) % 3], by = t.y[(e + 1) % 3];
+                if ((ay <= yc) == (by <= yc)) continue; // this edge does not cross the row
+                const float x = ax + (bx - ax) * (yc - ay) / (by - ay);
+                xl = std::min(xl, x);
+                xr = std::max(xr, x);
+            }
+            if (xl > xr) continue;
+            const int xa = std::max(0, int(std::ceil(xl - 0.5f))), xb = std::min(W - 1, int(std::ceil(xr - 0.5f)) - 1);
+            if (xa > xb) continue;
+            float iz = A * (float(xa) + 0.5f) + B * yc + C;
+            uint32_t* cp = colour_.data() + size_t(y) * size_t(W);
+            float* dp = depth_.data() + size_t(y) * size_t(W);
+            for (int x = xa; x <= xb; ++x, iz += A)
+                if (iz > dp[x])
+                {
+                    dp[x] = iz;
+                    cp[x] = t.colour;
+                }
+        }
     }
 }
 
 void MeshBatch::draw(SDL_Renderer* r)
 {
-    order_.resize(tris_.size());
-    for (uint32_t i = 0; i < uint32_t(tris_.size()); ++i) order_[i] = {tris_[i].depth, i};
-    std::sort(order_.begin(), order_.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
-    verts_.resize(tris_.size() * 3);
-    for (size_t i = 0; i < order_.size(); ++i) std::copy(tris_[order_[i].second].v, tris_[order_[i].second].v + 3, verts_.begin() + std::ptrdiff_t(i * 3));
+    const size_t n = size_t(w_) * size_t(h_);
+    if (colour_.size() != n)
+    {
+        colour_.assign(n, 0);
+        depth_.assign(n, 0.0f);
+    }
+    // Bands of rows, one per thread.
+    const unsigned bands = pool_->bands();
+    pool_->run_all([&](unsigned b) {
+        const int y0 = int(int64_t(h_) * b / bands), y1 = int(int64_t(h_) * (b + 1) / bands);
+        if (y1 > y0) raster_band(y0, y1);
+    });
     drawn_ = tris_.size();
-    if (!verts_.empty()) SDL_RenderGeometry(r, nullptr, verts_.data(), int(verts_.size()), nullptr, 0);
+    if (texture_ && (texture_owner_ != r || tex_w_ != w_ || tex_h_ != h_)) release();
+    if (!texture_)
+    {
+        texture_ = SDL_CreateTexture(r, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w_, h_);
+        if (!texture_) return;
+        SDL_SetTextureBlendMode(texture_, SDL_BLENDMODE_NONE);
+        SDL_SetTextureScaleMode(texture_, SDL_SCALEMODE_NEAREST);
+        texture_owner_ = r;
+        tex_w_ = w_;
+        tex_h_ = h_;
+    }
+    SDL_UpdateTexture(texture_, nullptr, colour_.data(), w_ * 4);
+    SDL_RenderTexture(r, texture_, nullptr, nullptr);
 }
 
 } // namespace hallway

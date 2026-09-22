@@ -235,9 +235,8 @@ public:
     {
         bool loaded = false;
         std::shared_ptr<const Mesh> hallway, bookshelf, book, marker;
-        // Near the camera the bookcase is cut into one slab per slot so it sorts against the books;
-        // further away the whole case and just the books' spines and tops are enough.
-        std::shared_ptr<const Mesh> bookshelf_near, book_far;
+        // Books more than a tile away: just their spines and tops (the rest cannot be seen there).
+        std::shared_ptr<const Mesh> book_far;
     };
 
     Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> lines, const FilterConfig& filters, uint32_t book_pages)
@@ -1199,7 +1198,6 @@ public:
             m.hallway = load_model("hallway", medium);
             m.bookshelf = load_model("bookshelf", medium);
             m.book = load_model("book", medium);
-            if (m.bookshelf) m.bookshelf_near = slice_z(*m.bookshelf, kBookPitch);
             if (m.book) m.book_far = facing_x(*m.book);
             m.marker = load_model("marker", medium);
             m.loaded = true;
@@ -1211,33 +1209,33 @@ public:
         return m;
     }
 
-    // Every visible tile's models, in three batches: the hallway, the start markers, then the
-    // bookcases and books together (each batch sorted far to near; see mesh.hpp).
+    // Every visible tile's models, drawn with a depth buffer (see MeshBatch in mesh.hpp).
     void draw_models(const Models& md, const bool* visible, int back, int ahead, int w, int h)
     {
         const Theme& th = theme();
-        hall_batch_.begin(cam_, th.bg, w, h);
-        marker_batch_.begin(cam_, th.bg, w, h);
-        thing_batch_.begin(cam_, th.bg, w, h);
+        models_batch_.begin(cam_, th.bg, w, h);
         const bool varied = sizes_vary();
         const FilterMode fm = effective_mode();
         for (int t = -back; t <= ahead; ++t)
         {
             if (!visible[t + back]) continue;
             const float z0 = float(t) * kTile;
-            if (md.hallway) hall_batch_.add(*md.hallway, {{0, 0, z0}});
+            if (md.hallway) models_batch_.add(*md.hallway, {{0, 0, z0}});
             if (md.marker && offset_loop_tile(t).is_zero())
             {
-                marker_batch_.add(*md.marker, {{0, 0, z0}});
-                if (all_start(t)) marker_batch_.add(*md.marker, {{0, 0, z0 + 1.0f}}); // every line starts here
+                // Pulled a little nearer than the floor it lies on, so the floor never shows through.
+                Placement at{{0, 0, z0}};
+                at.depth_bias = 0.002f;
+                models_batch_.add(*md.marker, at);
+                at.offset.z += 1.0f; // every line starts here: a second strip
+                if (all_start(t)) models_batch_.add(*md.marker, at);
             }
             // Tiles more than one away from the camera's are far enough for the simpler models.
             const bool near = t >= -1 && t <= 1;
             if (md.bookshelf)
             {
-                const Mesh& shelf = near ? *md.bookshelf_near : *md.bookshelf;
-                thing_batch_.add(shelf, {{0, 0, z0}});
-                thing_batch_.add(shelf, {{0, 0, z0}, 1.0f, true});
+                models_batch_.add(*md.bookshelf, {{0, 0, z0}});
+                models_batch_.add(*md.bookshelf, {{0, 0, z0}, 1.0f, true});
             }
             if (!md.book) continue;
             const Mesh& book_mesh = near ? *md.book : *md.book_far;
@@ -1262,13 +1260,11 @@ public:
                     continue;
                 // Records and tapes keep their size; pages, pictures and books take the slot's height.
                 const float scale = varied ? book_height(b.row, b.col, true) / kUniformBookHeight : 1.0f;
-                thing_batch_.add(book_mesh, {{sx * kCaseFront, y0, zc}, scale, right, dim});
+                models_batch_.add(book_mesh, {{sx * kCaseFront, y0, zc}, scale, right, dim});
             }
         }
-        hall_batch_.draw(r_);
-        marker_batch_.draw(r_);
-        thing_batch_.draw(r_);
-        fps_tris_ = hall_batch_.drawn() + marker_batch_.drawn() + thing_batch_.drawn();
+        models_batch_.draw(r_);
+        fps_tris_ = models_batch_.drawn();
     }
 
     // Geometry Edge Glow: under each edge, a soft band in the edge's colour that fades to nothing
@@ -1637,6 +1633,8 @@ public:
     }
 
     bool menu_requested() const { return menu_requested_; }
+    // Frees textures that belong to the renderer; call before destroying it.
+    void release_textures() { models_batch_.release(); }
     // From the main menu's settings: mouse look, and the graphics options (Geometry Edge Glow and
     // Real Graphics are recorded here for the renderer; both are off by default).
     void set_controls(int sensitivity_percent, bool invert_y)
@@ -1728,7 +1726,7 @@ private:
     std::vector<Line> lines_;
     std::vector<Segment> tile_geometry_, hall_geometry_, case_geometry_; // all, hallway only, bookcases only
     Models models_[kLines]; // Real Graphics, per line
-    MeshBatch hall_batch_, marker_batch_, thing_batch_;
+    MeshBatch models_batch_;
     std::vector<std::array<Segment, 4>> book_geometry_[2]; // [0] uniform, [1] varied heights
     Vec3 tile_lo_, tile_hi_;
     Camera cam_;
@@ -1997,7 +1995,7 @@ int run(const Args& a)
     if (!window) throw std::runtime_error(std::string("cannot open a window: ") + SDL_GetError());
     SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
     if (!renderer) throw std::runtime_error(std::string("cannot create a renderer: ") + SDL_GetError());
-    SDL_SetRenderVSync(renderer, 1);
+    SDL_SetRenderVSync(renderer, app.vsync ? 1 : 0);
     if (!shot && !a.has("size") && app.fullscreen) apply_video(window, app);
     auto finish = [&] {
         release_fonts(); // glyph textures belong to the renderer
@@ -2061,6 +2059,7 @@ int run(const Args& a)
         hall->render();
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         std::cout << "saved " << a.get("screenshot") << "\n";
+        hall->release_textures();
         return finish();
     }
 

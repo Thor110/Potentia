@@ -10,15 +10,14 @@
 // too, that part stays wireframe. Only what Wavefront .obj/.mtl files need for flat colour is
 // read: v, vn, f (any polygon, split into a fan), mtllib, usemtl, newmtl and Kd.
 //
-// Drawing: SDL's renderer has no depth buffer, so every visible triangle is shaded, sorted far to
-// near and drawn in one batch (the painter's algorithm). Faces turned away from the camera are
-// skipped, and colour fades into the line's background with distance, like the wireframe.
+// Drawing: see MeshBatch, a small depth-buffered rasteriser (SDL's renderer keeps no depth).
 #pragma once
 
 #include "camera.hpp"
 
 #include <SDL3/SDL.h>
 
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -46,11 +45,6 @@ std::shared_ptr<const Mesh> load_obj(const std::filesystem::path& path);
 // The model for a line: <model>-<medium>.obj, else the template, else null (stays wireframe).
 std::shared_ptr<const Mesh> load_model(const std::string& model, const std::string& medium);
 
-// The mesh cut into slabs `pitch` metres long along Z (at z = k * pitch), so that sorting far to
-// near works where parts overlap on screen: a 6 m shelf board sorts slot by slot against the
-// books standing on it. Only faces that cross a slab boundary are cut, and only there.
-std::shared_ptr<const Mesh> slice_z(const Mesh& mesh, float pitch);
-
 // A cheap stand-in for a distant copy: only the faces turned towards +X (a book's spine, the
 // side you see from the corridor, for the left wall) and up (its top).
 std::shared_ptr<const Mesh> facing_x(const Mesh& mesh);
@@ -62,35 +56,55 @@ struct Placement
     Vec3 offset;
     float scale_y = 1;
     bool mirror_x = false;
-    float dim = 0; // 0 = full colour, 1 = the background (like the wireframe's mark mode)
+    float dim = 0;        // 0 = full colour, 1 = the background (like the wireframe's mark mode)
+    float depth_bias = 0; // pulls it this fraction nearer, so a decal on a surface wins (the marker)
 };
 
-// Collects triangles from many meshes, then draws them sorted far to near. The hallway, the
-// markers and the shelves with their books go in three batches, drawn in that order: from inside
-// the corridor its floor, walls and ceiling can never hide anything, and a marker lies on the floor.
+// A depth-buffered rasteriser for the models. SDL's renderer draws triangles but keeps no depth,
+// so sorting them far to near can go wrong where parts are close (a book and the board it stands
+// on). This draws them itself, keeping each pixel's nearest depth, into an image that is then
+// shown with one texture. Faces turned away from the camera are skipped; every face has one
+// colour, lit from the eye and fading into the background with distance like the wireframe.
+// The screen is cut into bands drawn by worker threads.
 class MeshBatch
 {
 public:
+    MeshBatch();
+    ~MeshBatch();
+    MeshBatch(const MeshBatch&) = delete;
+    MeshBatch& operator=(const MeshBatch&) = delete;
+
     void begin(const Camera& cam, SDL_Color background, int width, int height);
     void add(const Mesh& mesh, const Placement& at);
+    // Rasterises everything added and draws it over the whole render target.
     void draw(SDL_Renderer* r);
-    size_t triangles() const { return tris_.size(); }
     size_t drawn() const { return drawn_; } // triangles in the last draw
+    // Frees the texture; call before destroying the renderer.
+    void release();
 
 private:
     struct Tri
     {
-        float depth;
-        SDL_Vertex v[3];
+        float x[3], y[3], iz[3]; // screen position and 1 / camera depth of each corner
+        uint32_t colour;         // ARGB
+        float ymin, ymax;
     };
-    void emit(const std::vector<Point2>& poly, float depth, SDL_FColor c);
+    void push(const Vec3* cam3, uint32_t colour, float bias);
+    void raster_band(int y0, int y1);
+
     const Camera* cam_ = nullptr;
     SDL_FColor bg_{};
-    float w_ = 1, h_ = 1;
+    uint32_t bg_argb_ = 0xFF000000u;
+    int w_ = 1, h_ = 1;
     std::vector<Tri> tris_;
-    std::vector<std::pair<float, uint32_t>> order_; // depth, index: sorting these is cheaper than the triangles
-    std::vector<SDL_Vertex> verts_;
+    std::vector<uint32_t> colour_;
+    std::vector<float> depth_;
+    SDL_Texture* texture_ = nullptr;
+    SDL_Renderer* texture_owner_ = nullptr;
+    int tex_w_ = 0, tex_h_ = 0;
     size_t drawn_ = 0;
+    struct Pool;
+    std::unique_ptr<Pool> pool_;
 };
 
 } // namespace hallway

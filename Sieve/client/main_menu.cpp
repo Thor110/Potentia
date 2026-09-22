@@ -46,7 +46,7 @@ std::vector<MainMenu::Item> MainMenu::items() const
     case Screen::Settings:
         return {{Kind::Action, "graphics"}, {Kind::Action, "controls"}, {Kind::Action, "language"}, {Kind::Action, "back"}};
     case Screen::Graphics:
-        return {{Kind::Choice, "resolution"}, {Kind::Toggle, "fullscreen"}, {Kind::Toggle, "edge_glow"}, {Kind::Toggle, "real_graphics"}, {Kind::Toggle, "fps_counter"},
+        return {{Kind::Choice, "resolution"}, {Kind::Toggle, "fullscreen"}, {Kind::Toggle, "vsync"}, {Kind::Toggle, "edge_glow"}, {Kind::Toggle, "real_graphics"}, {Kind::Toggle, "fps_counter"},
                 {Kind::Action, "back"}};
     case Screen::Controls: return {{Kind::Number, "mouse_sensitivity"}, {Kind::Toggle, "invert_mouse_y"}, {Kind::Action, "back"}};
     case Screen::Language: return {{Kind::Choice, "language_choice"}, {Kind::Action, "back"}};
@@ -59,6 +59,7 @@ std::string MainMenu::value_of(const Item& it) const
     auto onoff = [](bool b) { return tr(b ? "value.on" : "value.off"); };
     if (it.id == "resolution") return s_.resolution.w > 0 ? s_.resolution.str() : tr("value.none");
     if (it.id == "fullscreen") return onoff(s_.fullscreen);
+    if (it.id == "vsync") return onoff(s_.vsync);
     if (it.id == "edge_glow") return onoff(s_.edge_glow);
     if (it.id == "real_graphics") return onoff(s_.real_graphics);
     if (it.id == "fps_counter") return onoff(s_.fps_counter);
@@ -158,6 +159,11 @@ void MainMenu::change(int dir)
         {
             s_.fullscreen = !s_.fullscreen;
             apply_video(window_, s_);
+        }
+        else if (it.id == "vsync")
+        {
+            s_.vsync = !s_.vsync;
+            SDL_SetRenderVSync(r_, s_.vsync ? 1 : 0);
         }
         else if (it.id == "edge_glow") s_.set_edge_glow(!s_.edge_glow);
         else if (it.id == "real_graphics") s_.set_real_graphics(!s_.real_graphics);

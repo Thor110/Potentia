@@ -5,6 +5,7 @@
 //   [graphics]
 //   resolution = 1600x900       ; chosen on first start from the display (see detect_display)
 //   fullscreen = off
+//   vsync = on                  ; wait for the display (no tearing; frame rate capped at its refresh)
 //   edge_glow = off             ; Geometry Edge Glow
 //   real_graphics = off         ; Real Graphics (at most one of these two is on)
 //   fps_counter = off           ; frames per second, top right of the hallway
@@ -46,6 +47,7 @@ struct AppSettings
 {
     Resolution resolution;       // {0, 0}: not chosen yet
     bool fullscreen = false;
+    bool vsync = true;           // wait for the display's refresh
     bool edge_glow = false;      // Geometry Edge Glow
     bool real_graphics = false;  // Real Graphics
     bool fps_counter = false;    // show frames per second in the hallway

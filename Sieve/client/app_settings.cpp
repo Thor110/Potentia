@@ -122,6 +122,7 @@ AppSettings AppSettings::load(const fs::path& path)
                 if (std::sscanf(value.c_str(), "%dx%d", &w, &h) == 2 && w >= 320 && h >= 200 && w <= 16384 && h <= 16384) s.resolution = {w, h};
             }
             else if (key == "fullscreen") s.fullscreen = on_off(value, false);
+            else if (key == "vsync") s.vsync = on_off(value, true);
             else if (key == "edge_glow") s.edge_glow = on_off(value, false);
             else if (key == "real_graphics") s.real_graphics = on_off(value, false);
             else if (key == "fps_counter") s.fps_counter = on_off(value, false);
@@ -147,6 +148,7 @@ bool AppSettings::save(const fs::path& path) const
       << "\n[graphics]\n"
       << "resolution = " << (resolution.w > 0 ? resolution.str() : std::string()) << "\n"
       << "fullscreen = " << on_off(fullscreen) << "\n"
+      << "vsync = " << on_off(vsync) << "   ; off: frames as fast as they can be drawn (may tear)\n"
       << "edge_glow = " << on_off(edge_glow) << "       ; Geometry Edge Glow\n"
       << "real_graphics = " << on_off(real_graphics) << "   ; Real Graphics (only one of the two is on)\n"
       << "fps_counter = " << on_off(fps_counter) << "\n"
