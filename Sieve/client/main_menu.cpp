@@ -47,7 +47,7 @@ std::vector<MainMenu::Item> MainMenu::items() const
     case Screen::Settings:
         return {{Kind::Action, "graphics"}, {Kind::Action, "controls"}, {Kind::Action, "language"}, {Kind::Action, "back"}};
     case Screen::Graphics:
-        return {{Kind::Choice, "resolution"}, {Kind::Toggle, "fullscreen"}, {Kind::Toggle, "vsync"}, {Kind::Toggle, "edge_glow"}, {Kind::Toggle, "real_graphics"}, {Kind::Toggle, "door_portals"}, {Kind::Toggle, "fps_counter"},
+        return {{Kind::Choice, "resolution"}, {Kind::Toggle, "fullscreen"}, {Kind::Toggle, "vsync"}, {Kind::Toggle, "edge_glow"}, {Kind::Toggle, "real_graphics"}, {Kind::Toggle, "door_portals"}, {Kind::Number, "model_cache"}, {Kind::Toggle, "fps_counter"},
                 {Kind::Action, "back"}};
     case Screen::Controls: return {{Kind::Number, "mouse_sensitivity"}, {Kind::Toggle, "invert_mouse_y"}, {Kind::Action, "back"}};
     case Screen::Language: return {{Kind::Choice, "language_choice"}, {Kind::Action, "back"}};
@@ -64,6 +64,9 @@ std::string MainMenu::value_of(const Item& it) const
     if (it.id == "edge_glow") return onoff(s_.edge_glow);
     if (it.id == "real_graphics") return onoff(s_.real_graphics);
     if (it.id == "door_portals") return onoff(s_.door_portals);
+    if (it.id == "model_cache")
+        return trf("value.model_cache", {std::to_string(s_.model_cache_mb),
+                                         std::to_string(size_t(s_.model_cache_mb) * 1024 * 1024 / (64 * 64 * 4))});
     if (it.id == "fps_counter") return onoff(s_.fps_counter);
     if (it.id == "mouse_sensitivity") return std::to_string(s_.mouse_sensitivity) + "%";
     if (it.id == "invert_mouse_y") return onoff(s_.invert_mouse_y);
@@ -175,7 +178,8 @@ void MainMenu::change(int dir)
         save();
         return;
     case Kind::Number:
-        s_.mouse_sensitivity = std::clamp(s_.mouse_sensitivity + dir * 10, 10, 400);
+        if (it.id == "model_cache") s_.model_cache_mb = std::clamp(s_.model_cache_mb + dir * 8, 8, 512);
+        else s_.mouse_sensitivity = std::clamp(s_.mouse_sensitivity + dir * 10, 10, 400);
         save();
         return;
     case Kind::Choice: open_list(it); return;

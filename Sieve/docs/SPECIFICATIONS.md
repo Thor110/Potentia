@@ -53,7 +53,11 @@ The Gallery consists of **four lines**, one per modality. Each line is a one-dim
 
 Rules:
 
-- Unicode alphabets are **pinned to a specific Unicode version** and contain only assigned, printable codepoints. Surrogates, noncharacters and unassigned codepoints are excluded.
+- An alphabet is an **ordered list of Unicode code point ranges**, and those ranges are its digit order: digit 0 is the first code point of the first range, and the digits run on through each range in turn. The order is **pinned** — it is what every address on a line means — so an alphabet's ranges may never be edited once published. A correction is a new alphabet, or a new block, under a new id, exactly as a changed filter is a new version.
+- Alphabets built from named Unicode blocks order their code points **ascending**, so digit 0 is the lowest they hold. The alphabets pinned before that rule keep the order they were pinned with: `lower27` and `ascii95` are ascending anyway; `babel29` is not, because it follows libraryofbabel.info's order (space, a–z, comma, period).
+- Blocks may be **stacked** (`greek+cyrillic`), as may raw ranges (`u+0370-u+03ff`). Stacked code points are unioned, sorted and deduplicated, so blocks that overlap never give a symbol twice and the order the parts are written in does not change the result. `sieve alphabets` lists the blocks; `sieve alphabets --spec SPEC` works one out.
+- **Surrogates** (U+D800–U+DFFF), noncharacters and unassigned code points may be included. They are code points like any other for addressing, counting, filtering and drawing — a surrogate draws as the replacement glyph — but surrogates have **no UTF-8 encoding**, so a unit holding one has no text form: it cannot be warped in from text or written into a `.book` file. Sieving them out is a filter's job, not the alphabet's.
+- `ascii96` is the printable ASCII with **U+000A** added, so a unit can hold a file whose line breaks are part of what it says. `canon-text-v2` keeps whitespace the alphabet holds itself and drops a carriage return where the alphabet holds a line feed, so either line ending canonicalises the same way; padding is digit 0, which is the space for every alphabet pinned before `ascii96` and the line feed for that one.
 - Every quantity (space size, meaningful estimate, filter survival rate) is computed and reported **per parameter set**.
 - Line lengths **do not need to match**. Doors map between lines by fractional position (§7).
 
@@ -427,7 +431,25 @@ Curator governance (appointment, removal, disputes) is defined separately from t
 
 ---
 
-## 12. Architecture and Implementation
+## 12. The Models Line
+
+A fifth unit line: every possible mesh of one shape. A model is **V vertices and F triangles**, with each coordinate one of **C** steps across [-1, 1] and each face naming three vertices, so the line holds
+
+    N = C^(3V) * V^(3F)
+
+models. `modelspace-v1` numbers them as one mixed-radix number, most significant first: every coordinate (base C), then every face index (base V); `scrambled` is that index through `shuffle-sha256-v1`, keyed and domain-separated by the space id, exactly as the books line is. The default shape (V = 8, F = 12, C = 16) is 2^204 models, and a cube is one of them.
+
+**The grid is cell-centred.** C is a power of two and coordinate *d* is exactly `(2d + 1 - C) / C`, so the grid is symmetric about the origin, runs from `-1 + 1/C` to `1 - 1/C`, and every coordinate is a terminating decimal with `log2(C)` places. The origin itself lies between two cells, as a pixel grid of even width has no centre pixel. A cube fitted to the line comes back symmetric.
+
+**Canonical `.obj`.** Each model has one exact text form: `v` lines of three signed fixed-width decimals, then `f` lines of three zero-padded 1-based indices, separated by single spaces, line feeds only, nothing optional. It has **no two spaces in a row anywhere** — signs are written as `+` or `-`, and indices are padded with zeros rather than spaces — because `canon-text-v2` collapses runs of spaces. That is deliberate: the form is designed to survive the text line.
+
+**One object, two lines.** Because the form is exact and fixed-width, a model of `obj_length()` characters is also one unit of an **`ascii96`** text line of that length (§3). Warping the `.obj` onto that line and reading it back gives the same file byte for byte, and warping that file back onto the models line gives the same model address. A single object therefore has an address on the models line and an address on the pages line, and they agree — which is what joins the symbolic lines to the spatial ones. The default shape's `.obj` is 304 characters, so the cube fits on a single page.
+
+**Fitting a mesh.** Any `.obj` lands somewhere on the line: it is centred, scaled so its longest side fills the grid, and each coordinate binned to its cell. Vertices past V and faces past F are dropped and counted, a mesh with too few faces is filled out, and indices naming a vertex the line does not have are clamped. `sieve mesh` does all of this and reports every change, as `warp` does for the other lines.
+
+**Filters** are future work, and they fall in three tiers: local per-face constraints such as distinct indices, which rank exactly; small-V constraints such as "every vertex is used", which rank exactly as a state machine whose state is the set of vertices used so far (256 states at V = 8); and whole-mesh properties — watertight, manifold, non-self-intersecting, convex — which judge but do not rank, and so run in `mark` or `hide` mode like any other unrankable filter.
+
+## 13. Architecture and Implementation
 
 - **Core** (headless): addressing, canonicalisation, classification, door mapping and Registry access, exposed through a narrow interface and a command-line tool.
 - **Client** (the hallway): rendering and input only. It asks the core what is at a position and **never decides content itself**, so it can be replaced without touching the core.
@@ -444,7 +466,7 @@ Implementation (as built):
 
 ---
 
-## 13. Milestones
+## 14. Milestones
 
 | # | Milestone | Deliverable | Status |
 | :--- | :--- | :--- | :--- |

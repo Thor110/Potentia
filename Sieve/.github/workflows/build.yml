@@ -40,6 +40,7 @@ jobs:
 
       - name: Same addresses on every platform
         run: |
+          q() { grep -c "$@" > /dev/null; }
           exe=build/sieve
           [ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
           $exe version
@@ -52,6 +53,21 @@ jobs:
           $exe sift --lengths 1-8 --brute-max 4 --pruned-max 5 > /dev/null
           $exe models
           if $exe models | grep -Eq "MISMATCH|MISSING|UNREADABLE"; then exit 1; fi
+          # Alphabets: built in, stacked from Unicode blocks, and a line that can hold a file.
+          $exe alphabets > /dev/null
+          $exe alphabets --spec greek+cyrillic | tr -d '\r' | q "^symbols   400"
+          # Stacking is a union, in any order: the same alphabet however it is asked for.
+          test "$($exe alphabets --spec cyrillic+greek | tr -d '\r' | sed -n 1p)" = "$($exe alphabets --spec greek+cyrillic | tr -d '\r' | sed -n 1p)"
+          $exe alphabets --spec all-emojis+emoticons | tr -d '\r' | q "^symbols   2048"
+          $exe alphabets --spec ascii+surrogates | tr -d '\r' | q "have no text form"
+          $exe alphabets --spec ascii96 | tr -d '\r' | q "^digit 0   U+000A"
+          # An .obj keeps its line breaks through the ascii96 line, from either line ending.
+          printf 'v 0.5 0.5\nf 1 2 3\n' > obj.txt
+          printf 'v 0.5 0.5\r\nf 1 2 3\r\n' > objcrlf.txt
+          a=$($exe warp --alphabet ascii96 --length 32 --mode positional --file obj.txt | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          b=$($exe warp --alphabet ascii96 --length 32 --mode positional --file objcrlf.txt | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          test "$a" = "$b"
+          $exe read --alphabet ascii96 --length 32 --mode positional "$a" | tr -d '\r' | sed -n 2p | q "^f 1 2 3$"
           got=$($exe warp --length 32 --mode guided "It was the best of times" | tr -d '\r' | awk '$1 == "guided" {print $2}')
           echo "guided address: $got"
           test "$got" = "90922c700685e28"
@@ -94,6 +110,49 @@ jobs:
           $exe filters --line image --filters agree.ini | tr -d '\r' | q "^survivors    6053792982126620565936264884 "
           $exe browse --line image --filters agree.ini --compact --count 2 --seed 4 > /dev/null
           $exe browse --line audio --filters lines.ini --compact --count 2 --seed 4 > /dev/null
+
+      - name: A model is one object with an address on two lines
+        run: |
+          q() { grep -c "$@" > /dev/null; }
+          exe=build/sieve
+          [ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
+          $exe mesh | tr -d '\r' | q "^space        models/V8/F12/C16/key=sieve/modelspace-v1"
+          $exe mesh | tr -d '\r' | q "^as text      304 characters"
+          # A cube in, its address out, and the same cube back.
+          printf 'v -1 -1 -1\nv 1 -1 -1\nv 1 1 -1\nv -1 1 -1\nv -1 -1 1\nv 1 -1 1\nv 1 1 1\nv -1 1 1\n' > cube.obj
+          printf 'f 1 2 3\nf 1 3 4\nf 5 7 6\nf 5 8 7\nf 1 5 6\nf 1 6 2\nf 2 6 7\nf 2 7 3\nf 3 7 8\nf 3 8 4\nf 4 8 5\nf 4 5 1\n' >> cube.obj
+          a=$($exe mesh --warp cube.obj 2>/dev/null | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          echo "cube: $a"
+          test "$a" = "000f00ff00f000ff0ffff0ff0504e6b3e128a4dc725baedf8e0"
+          $exe mesh --read "$a" --out round.obj 2>/dev/null
+          # Symmetric on the grid, and no two spaces in a row anywhere in the canonical form.
+          sed -n 1p round.obj | tr -d '\r' | q "^v -0.9375 -0.9375 -0.9375$"
+          sed -n 2p round.obj | tr -d '\r' | q "^v +0.9375 -0.9375 -0.9375$"
+          if grep -c "  " round.obj > /dev/null; then exit 1; fi
+          test "$(wc -c < round.obj | tr -d ' ')" = "304"
+          # The same file as a unit of an ascii96 text line, and back, byte for byte.
+          t=$($exe warp --alphabet ascii96 --length 304 --mode positional --file round.obj | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          $exe read --alphabet ascii96 --length 304 --mode positional "$t" --out viatext.obj > /dev/null
+          cmp round.obj viatext.obj
+          b=$($exe mesh --warp viatext.obj 2>/dev/null | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          test "$a" = "$b"
+          # Browsing the line, and a shape it cannot have.
+          $exe mesh --browse 2 --seed 4 > /dev/null
+          # And the same line in the hallway: a sixth door, the cube in hand, green on clay.
+          H=build/hallway
+          [ -f build/Release/hallway.exe ] && H=build/Release/hallway.exe
+          $H --no-menu --line models --walk "0,0" --screenshot models.png | sed -n 1p | q "^MODELS line, positional"
+          out=$($H --no-menu --line models --goto "$a" --walk "0,0" --take --screenshot cube.png)
+          echo "$out"
+          echo "$out" | q "8/8 vertices used"
+          $H --no-menu --line books --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door6.png | sed -n 1p | q "^MODELS line"
+          $H --no-menu --line models --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door7.png | sed -n 1p | q "^PAGES line"
+          # The crates render their models onto their faces, and the cache has a budget.
+          $H --no-menu --line models --model-cache 8 --walk "0,0" --bench 12 --screenshot crates.png 2>&1 | q "^bench: 12 frames"
+          $H --main-menu --settings mc.ini --press "Down,Return,Return,Down,Down,Down,Down,Down,Down,Right,Right" --screenshot mc.png > /dev/null
+          grep -q "^model_cache_mb = 80" mc.ini
+          test -s models.png && test -s cube.png && test -s crates.png
+          if $exe mesh --coords 12 > /dev/null 2>&1; then exit 1; fi
 
       - name: Books bind, unbind and keep their id in every ordering
         run: |
@@ -161,10 +220,11 @@ jobs:
           # Guided order: M cycles to it and - zooms out; all five doors lead back to the same book.
           $H --warp "$W" --press "M,M,-" --screenshot keys.png | tail -2 | sed -n 1p | q "PAGES line, guided zoom 57"
           start=$($H --mode guided --warp "$W" --zoom 20 --walk "0,0" --screenshot start.png | book)
-          out=$($H --mode guided --warp "$W" --zoom 20 --pose 0,7,-90,0 --walk "-2.3,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0" --screenshot guided.png)
+          out=$($H --mode guided --warp "$W" --zoom 20 --pose 0,7,-90,0 --walk "-2.3,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0" --screenshot guided.png)
           echo "$out"
           echo "$out" | q "VIDEO line"
           echo "$out" | q "BOOKS line"
+          echo "$out" | q "MODELS line"
           echo "$out" | tail -2 | sed -n 1p | q "PAGES line, guided"
           test "$(echo "$out" | tail -2 | book)" = "$start"
           # Loops: a 2-character line is 729 units = 6 tiles, so tile 6 starts the second copy,
@@ -253,6 +313,8 @@ jobs:
           python sieve_ref.py vectors       | diff - ../tests/vectors_v1.tsv
           python sieve_ref.py digit-vectors | diff - ../tests/vectors_digits_v1.tsv
           python sieve_ref.py canon-vectors | diff - ../tests/vectors_canon.tsv
+          python sieve_ref.py alphabet-vectors | diff - ../tests/vectors_alphabets_v1.tsv
+          python sieve_ref.py model-vectors | diff - ../tests/vectors_models_v1.tsv
           python sieve_ref.py image-vectors | diff - ../tests/vectors_image_v1.tsv
           python sieve_ref.py guided-vectors | diff - ../tests/vectors_guided_v1.tsv
           python sieve_ref.py filter-vectors | diff - ../tests/vectors_filters_v1.tsv

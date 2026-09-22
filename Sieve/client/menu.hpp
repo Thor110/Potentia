@@ -43,6 +43,8 @@ struct Settings
     uint32_t video_w = 5, video_h = 5, frames = 8;
     std::string video_palette = "mono";
     uint32_t book_pages = 4; // books: a cover (image line), a title and this many pages (pages line)
+    // models: V vertices and F triangles, each coordinate one of C steps across [-1, 1]
+    uint32_t model_vertices = 8, model_faces = 12, model_coords = 16;
 
     static Settings from_args(const sieve::cli::Args& a);
     // Writes these settings into `a` (as the hallway's own options), keeping everything else.
@@ -86,6 +88,18 @@ private:
         int part = -1; // books: 0 cover, 1 title, 2 pages
     };
     std::vector<ORow> overlay_rows() const;
+
+    // The alphabet picker (A): the built-in alphabets, then every Unicode block, which can be
+    // stacked. Its own overlay, because it is a list of a hundred rather than a tree of filters.
+    void open_alphabets();
+    std::vector<std::string> alpha_rows() const; // "" separators, built-in ids, then block ids
+    std::vector<std::string> alpha_stack() const; // the parts of the current spec
+    void alpha_choose(int row);
+    void alpha_key(SDL_Keycode key);
+    void render_alphabets(float W, float H);
+    bool alpha_open_ = false;
+    int arow_ = 0, ascroll_ = 0;
+    std::vector<std::pair<SDL_FRect, int>> arow_rects_;
     void overlay_key(SDL_Keycode key, bool shift);
     void overlay_change(int dir, bool big);
     void render_overlay(float W, float H);

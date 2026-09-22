@@ -6,6 +6,8 @@
 //   sieve browse [--line LINE] [line options] [--key K] [--count N] [--short]
 //   sieve read   ... ADDRESS --around N      (the N units either side)
 //   sieve dicts  [--hash FILE]
+//   sieve alphabets [--spec SPEC]
+//   sieve mesh   [--vertices V] [--faces F] [--coords C] [--warp FILE | --read ADDR | --browse N]
 //   sieve version
 //   sieve models
 //   sieve filters [--line LINE] [line options] [--filters INI]
@@ -30,6 +32,7 @@
 #include "sieve/corridor.hpp"
 #include "sieve/guided.hpp"
 #include "sieve/image.hpp"
+#include "sieve/modelspace.hpp"
 #include "sieve/sha256.hpp"
 #include "sieve/sieve.hpp"
 #include "sieve/utf8.hpp"
@@ -41,6 +44,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <iterator>
 #include <random>
@@ -692,6 +696,209 @@ int cmd_dicts(const Args& a)
     return 0;
 }
 
+// ---------------------------------------------------------------- the models line
+
+// Reads a Wavefront .obj: "v x y z" and "f" faces of any arity, split into a fan. Indices may be
+// negative (counting back from the newest vertex), and may carry /vt/vn, which is ignored here:
+// the models line holds geometry, and a texture is an address on the image line.
+struct ObjMesh
+{
+    std::vector<ModelSpace::Vertex> verts;
+    std::vector<ModelSpace::Face> faces;
+};
+
+ObjMesh read_obj(const std::string& path)
+{
+    std::ifstream in(path);
+    if (!in) throw std::invalid_argument("cannot read " + path);
+    ObjMesh m;
+    std::string line;
+    while (std::getline(in, line))
+    {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        std::istringstream ls(line);
+        std::string tag;
+        if (!(ls >> tag)) continue;
+        if (tag == "v")
+        {
+            ModelSpace::Vertex v;
+            if (ls >> v.x >> v.y >> v.z) m.verts.push_back(v);
+        }
+        else if (tag == "f")
+        {
+            std::vector<uint32_t> idx;
+            std::string tok;
+            while (ls >> tok)
+            {
+                const std::string first = tok.substr(0, tok.find('/'));
+                if (first.empty()) continue;
+                long n = 0;
+                try { n = std::stol(first); } catch (...) { continue; }
+                if (n < 0) n = long(m.verts.size()) + n; // -1 is the newest vertex
+                else --n;                                 // .obj counts from 1
+                if (n >= 0) idx.push_back(uint32_t(n));
+            }
+            for (size_t i = 2; i < idx.size(); ++i) m.faces.push_back({idx[0], idx[i - 1], idx[i]});
+        }
+    }
+    if (m.verts.empty()) throw std::invalid_argument(path + " has no vertices");
+    return m;
+}
+
+ModelSpace make_model_space(const Args& a)
+{
+    return ModelSpace(a.get_positive("vertices", 8), a.get_positive("faces", 12), a.get_positive("coords", 16),
+                      a.get("key", "sieve"));
+}
+
+// A short readable summary of a model: its bounding box on the grid and its first faces.
+std::string mesh_preview(const ModelSpace& sp, const ModelSpace::Parts& p)
+{
+    const auto verts = sp.mesh_of(p);
+    const auto faces = sp.faces_of(p);
+    uint32_t used = 0, degenerate = 0;
+    std::vector<bool> seen(sp.vertices(), false);
+    for (const auto& f : faces)
+    {
+        seen[f.a] = seen[f.b] = seen[f.c] = true;
+        if (f.a == f.b || f.b == f.c || f.a == f.c) ++degenerate;
+    }
+    for (bool b : seen)
+        if (b) ++used;
+    std::string out = "  " + std::to_string(sp.vertices()) + " vertices (" + std::to_string(used) + " used), " +
+                      std::to_string(sp.face_count()) + " faces (" + std::to_string(degenerate) + " degenerate)\n";
+    for (uint32_t i = 0; i < std::min<uint32_t>(3, sp.vertices()); ++i)
+        out += "  v" + std::to_string(i + 1) + " " + fixed(double(verts[i].x), 4) + " " + fixed(double(verts[i].y), 4) + " " +
+               fixed(double(verts[i].z), 4) + "\n";
+    if (sp.vertices() > 3) out += "  ...\n";
+    return out;
+}
+
+int cmd_mesh(const Args& a)
+{
+    const ModelSpace sp = make_model_space(a);
+    auto shape = [&] {
+        std::cout << "line         models\n"
+                  << "space        " << sp.id() << "\n"
+                  << "unit         " << sp.vertices() << " vertices on a grid of " << sp.coords() << " points per axis, "
+                  << sp.face_count() << " triangles\n";
+    };
+    // --read ADDRESS: the model at an address, as canonical .obj.
+    if (a.has("read"))
+    {
+        const AddressMode m = address_mode_from_string(a.get("mode", "positional"));
+        const ModelSpace::Parts p = sp.parts_at(sp.parse(a.get("read")), m);
+        const std::string obj = sp.to_obj(p);
+        if (a.has("out"))
+        {
+            std::ofstream out(a.get("out"), std::ios::binary);
+            out << obj;
+            if (!out) throw std::invalid_argument("cannot write " + a.get("out"));
+            std::cerr << "wrote " << a.get("out") << " (" << obj.size() << " bytes)\n";
+        }
+        else std::cout << obj;
+        std::cerr << mesh_preview(sp, p);
+        return 0;
+    }
+    // --warp FILE: where a mesh lives on this line.
+    if (a.has("warp"))
+    {
+        const ObjMesh mesh = read_obj(a.get("warp"));
+        const ModelSpace::Fitted fit = sp.fit(mesh.verts, mesh.faces);
+        shape();
+        std::cout << "fitted       " << mesh.verts.size() << " vertices in, " << mesh.faces.size() << " triangles in; scaled by "
+                  << fixed(double(fit.scale), 4) << "\n";
+        if (fit.vertices_dropped) std::cout << "             " << fit.vertices_dropped << " vertices dropped (past --vertices)\n";
+        if (fit.faces_dropped) std::cout << "             " << fit.faces_dropped << " faces dropped (past --faces)\n";
+        if (fit.faces_added) std::cout << "             " << fit.faces_added << " filler faces added\n";
+        if (fit.indices_clamped) std::cout << "             " << fit.indices_clamped << " indices clamped into range\n";
+        for (const char* m : {"positional", "scrambled"})
+        {
+            const BigUint k = sp.index_of(fit.parts, address_mode_from_string(m));
+            std::cout << "  " << std::setw(11) << std::left << m << show_address(sp.hex_of(k), a.has("short")) << "\n";
+        }
+        std::cout << mesh_preview(sp, fit.parts);
+        return 0;
+    }
+    // --browse N: models off the shelf.
+    if (a.has("browse"))
+    {
+        const uint32_t n = a.get_positive("browse", 5);
+        std::mt19937_64 rng(a.has("seed") ? a.get_u32("seed", 0) : std::random_device{}());
+        const AddressMode m = address_mode_from_string(a.get("mode", "positional"));
+        for (uint32_t i = 0; i < n; ++i)
+        {
+            const BigUint k = random_below(sp.size(), rng);
+            std::cout << show_address(sp.hex_of(k), a.has("short")) << "\n" << mesh_preview(sp, sp.parts_at(k, m));
+        }
+        return 0;
+    }
+    shape();
+    std::cout << "models       ~10^" << std::floor(sp.size().log10_approx() * 100) / 100 << "\n"
+              << "address      " << sp.size().bit_length() << " bits, " << sp.hex_width() << " hex digits\n";
+    if (sp.size().log10_approx() < 60) std::cout << "exact        " << sp.size().to_decimal() << "\n";
+    std::cout << "as text      " << sp.obj_length() << " characters of canonical .obj, so a page of that length on an\n"
+              << "             ascii96 line holds the same model (see: sieve help alphabets)\n";
+    {
+        const LineLoop loop(sp.size());
+        std::cout << "hallway      one loop is "
+                  << (loop.tiles().log10_approx() < 30 ? loop.tiles().to_decimal()
+                                                       : "~10^" + std::to_string(int(loop.tiles().log10_approx())))
+                  << " tiles of " << kBooksPerTile << " models\n";
+    }
+    return 0;
+}
+
+// ---------------------------------------------------------------- alphabets
+
+int cmd_alphabets(const Args& a)
+{
+    auto hex = [](char32_t c) {
+        std::string s;
+        for (int i = 20; i >= 0; i -= 4)
+        {
+            const int d = int(c >> i) & 15;
+            if (!s.empty() || d || i <= 12) s += "0123456789ABCDEF"[d];
+        }
+        return "U+" + s;
+    };
+    // One alphabet in detail: what a spec works out to, before a line is built with it.
+    if (a.has("spec"))
+    {
+        const sieve::Alphabet& al = sieve::alphabet_of(a.get("spec"));
+        std::cout << "alphabet  " << al.id() << "\n"
+                  << "symbols   " << al.size() << "\n"
+                  << "holds     " << al.description() << "\n";
+        for (const sieve::CodeRange& r : al.ranges())
+            std::cout << "range     " << hex(r.first) << " - " << hex(r.last) << "  (" << r.count() << ")\n";
+        std::cout << "digit 0   " << hex(al.symbol(0)) << "\n";
+        if (!al.text_is_encodable())
+            std::cout << "note      holds surrogates: units over it can be addressed and drawn, but have no text form\n";
+        return 0;
+    }
+    std::cout << "Built in, pinned with the specification:\n\n";
+    for (const std::string& id : sieve::alphabet_ids())
+    {
+        const sieve::Alphabet& al = sieve::alphabet_by_id(id);
+        std::string name = id;
+        name.resize(std::max<size_t>(name.size() + 2, 12), ' ');
+        std::cout << "  " << name << std::setw(8) << al.size() << "  " << al.description() << "\n";
+    }
+    std::cout << "\nUnicode blocks, to use on their own or stacked with '+':\n\n";
+    for (const sieve::Block& b : sieve::blocks())
+    {
+        std::string id(b.id);
+        id.resize(std::max<size_t>(id.size() + 2, 34), ' ');
+        std::cout << "  " << id << std::setw(8) << b.range.count() << "  " << hex(b.range.first) << " - " << hex(b.range.last)
+                  << "\n    " << b.name << ". " << b.description << "\n";
+    }
+    std::cout << "\nStack them with '+', in any order: --alphabet greek+cyrillic. A raw range works too\n"
+                 "(--alphabet u+0370-u+03ff), and stacked code points are unioned, so blocks that\n"
+                 "overlap never give a symbol twice. To see what a stack works out to:\n"
+                 "  sieve alphabets --spec greek+cyrillic\n";
+    return 0;
+}
+
 // ---------------------------------------------------------------- models
 
 int cmd_models()
@@ -744,7 +951,7 @@ int cmd_train(const Args& a)
     if (!a.has("out")) throw std::invalid_argument("missing --out FILE (the model to write)");
     const Corpus corpus = load_corpus(default_corpus(a));
     const fs::path dir = a.get("texts", "corpus/gutenberg");
-    const Alphabet& alpha = alphabet_by_id(a.get("alphabet", "lower27"));
+    const Alphabet& alpha = alphabet_of(a.get("alphabet", "lower27"));
     ModelParams p;
     p.symbols_id = alpha.id();
     p.base = alpha.size();
@@ -779,7 +986,7 @@ int cmd_train(const Args& a)
 
 int cmd_measure(const Args& a)
 {
-    const Alphabet& alpha = alphabet_by_id(a.get("alphabet", "lower27"));
+    const Alphabet& alpha = alphabet_of(a.get("alphabet", "lower27"));
     const LoadedModel lm = resolve_model(a.get("model"), alpha.id());
     if (!lm.model) throw std::invalid_argument("no model for alphabet " + alpha.id() + " (see: sieve models)");
     const uint32_t length = a.get_positive("length", 1000);
@@ -1171,7 +1378,7 @@ int cmd_unbind(const Args& a)
 
 bool is_command(const std::string& name)
 {
-    return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" ||
+    return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" ||
            name == "version" || name == "models" || name == "train" || name == "measure" ||
            name == "filters" || name == "check" || name == "bind" || name == "unbind";
 }
@@ -1218,6 +1425,8 @@ int main(int argc, char** argv)
         if (a.command == "browse") return cmd_browse(a);
         if (a.command == "sift" || a.command == "sieve") return cmd_sieve(a); // "sieve" kept as an alias
         if (a.command == "dicts") return cmd_dicts(a);
+        if (a.command == "alphabets") return cmd_alphabets(a);
+        if (a.command == "mesh") return cmd_mesh(a);
         if (a.command == "version") return cmd_version();
         if (a.command == "models") return cmd_models();
         if (a.command == "train") return cmd_train(a);

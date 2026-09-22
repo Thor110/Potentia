@@ -17,6 +17,7 @@ find_package(Threads REQUIRED)
 # ---------------------------------------------------------------- core (no dependencies)
 add_library(sieve_core STATIC
     core/src/alphabet.cpp
+    core/src/unicode_blocks.cpp
     core/src/audio.cpp
     core/src/biguint.cpp
     core/src/booksieve.cpp
@@ -24,6 +25,7 @@ add_library(sieve_core STATIC
     core/src/canon.cpp
     core/src/compact.cpp
     core/src/corridor.cpp
+    core/src/modelspace.cpp
     core/src/filter.cpp
     core/src/filters/audio.cpp
     core/src/filters/builtin.cpp

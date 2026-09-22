@@ -26,7 +26,7 @@ namespace hallway {
 
 namespace {
 
-const std::vector<std::string> kLines = {"text", "image", "audio", "video", "books"};
+const std::vector<std::string> kLines = {"text", "image", "audio", "video", "books", "models"};
 const std::vector<std::string> kModes = {"positional", "scrambled", "guided"};
 const std::vector<std::string> kAlphabets = {"lower27", "babel29", "ascii95"};
 const std::vector<std::string> kCanons = {"v2", "v1"};
@@ -42,7 +42,7 @@ std::string cycle(const std::vector<std::string>& v, const std::string& cur, int
 }
 
 uint32_t palette_size(const std::string& id) { return sieve::palette_by_id(id).size(); }
-uint32_t alphabet_size(const std::string& id) { return sieve::alphabet_by_id(id).size(); }
+uint32_t alphabet_size(const std::string& id) { return sieve::alphabet_of(id).size(); }
 
 // a * b * c, stopping at UINT64_MAX instead of wrapping (settings go up to 2^32 - 1 each).
 uint64_t positions(uint64_t a, uint64_t b, uint64_t c = 1)
@@ -98,6 +98,9 @@ Settings Settings::from_args(const sieve::cli::Args& a)
     s.frames = parse_u32(a, "video-frames", s.frames);
     s.video_palette = a.get("video-palette", s.video_palette);
     s.book_pages = parse_u32(a, "book-pages", s.book_pages);
+    s.model_vertices = parse_u32(a, "vertices", s.model_vertices);
+    s.model_faces = parse_u32(a, "faces", s.model_faces);
+    s.model_coords = parse_u32(a, "coords", s.model_coords);
     return s;
 }
 
@@ -120,6 +123,9 @@ void Settings::apply(sieve::cli::Args& a) const
     a.opts["video-frames"] = std::to_string(frames);
     a.opts["video-palette"] = video_palette;
     a.opts["book-pages"] = std::to_string(book_pages);
+    a.opts["vertices"] = std::to_string(model_vertices);
+    a.opts["faces"] = std::to_string(model_faces);
+    a.opts["coords"] = std::to_string(model_coords);
 }
 
 LineSize line_size(uint32_t base, uint64_t length)
@@ -222,6 +228,10 @@ void Menu::adjust(int dir, int step)
     case 13: num(s_.frames); break;
     case 14: s_.video_palette = cycle(kPalettes, s_.video_palette, dir); break;
     case 15: num(s_.book_pages); break;
+    case 16: num(s_.model_vertices); break;
+    case 17: num(s_.model_faces); break;
+    // The coordinate grid must be a power of two, so it doubles and halves.
+    case 18: s_.model_coords = std::clamp(dir > 0 ? s_.model_coords * 2 : s_.model_coords / 2, 2u, 4096u); break;
     default: break;
     }
 }
@@ -244,6 +254,27 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
     SDL_ConvertEventToRenderCoordinates(r_, &e);
     if (e.type == SDL_EVENT_QUIT) { done = true; result = Result::Quit; return; }
     auto inside = [](const SDL_FRect& r, float x, float y) { return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h; };
+    if (e.type == SDL_EVENT_MOUSE_WHEEL && alpha_open_)
+    {
+        const int last = std::max(0, int(alpha_rows().size()) - 1);
+        arow_ = std::clamp(arow_ - int(e.wheel.y), 0, last);
+        while (arow_ > 0 && alpha_rows()[size_t(arow_)].empty()) arow_ += e.wheel.y > 0 ? -1 : 1;
+        arow_ = std::clamp(arow_, 0, last);
+        return;
+    }
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && alpha_open_)
+    {
+        const float mx = e.button.x, my = e.button.y;
+        if (!inside(box_, mx, my)) { alpha_open_ = false; return; }
+        for (const auto& [rect, i] : arow_rects_)
+            if (inside(rect, mx, my))
+            {
+                arow_ = i;
+                alpha_choose(i);
+                break;
+            }
+        return;
+    }
     if (e.type == SDL_EVENT_MOUSE_WHEEL && overlay_ >= 0)
     {
         const int last = std::max(0, int(overlay_rows().size()) - 1);
@@ -272,6 +303,11 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
             if (inside(magnifier_[i], mx, my)) open_filters(i);
         return;
     }
+    if (alpha_open_)
+    {
+        if (e.type == SDL_EVENT_KEY_DOWN) alpha_key(e.key.key);
+        return;
+    }
     if (overlay_ >= 0)
     {
         if (e.type == SDL_EVENT_KEY_DOWN) overlay_key(e.key.key, (e.key.mod & SDL_KMOD_SHIFT) != 0);
@@ -296,6 +332,10 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
     case SDLK_PAGEDOWN: adjust(-1, 0); break;
     case SDLK_BACKSPACE:
         if (row_ == 2 && !s_.key.empty()) s_.key.pop_back();
+        break;
+    case SDLK_A:
+        // The alphabet picker: the built-ins, then every Unicode block, to stack as you like.
+        open_alphabets();
         break;
     case SDLK_F:
         // The filters of the line whose settings are selected.
@@ -367,7 +407,7 @@ void Menu::render()
     // Settings.
     struct Row
     {
-        int section; // -1: none; 0-4: the line (its colour); 5: START
+        int section; // -1: none; 0-4 and 6: the line (its colour); 5: START
         std::string label, value;
     };
     auto n = [](uint32_t v) { return std::to_string(v); };
@@ -389,6 +429,9 @@ void Menu::render()
         {-1, tr("setup.frames"), n(s_.frames)},
         {-1, tr("setup.palette"), trf("setup.palette.value", {s_.video_palette, n(palette_size(s_.video_palette))})},
         {4, tr("setup.book_pages"), trf("setup.book_pages.value", {n(s_.book_pages)})},
+        {6, tr("setup.model_vertices"), n(s_.model_vertices)},
+        {-1, tr("setup.model_faces"), n(s_.model_faces)},
+        {-1, tr("setup.model_coords"), trf("setup.model_coords.value", {n(s_.model_coords)})},
         {-1, tr("setup.enter"), ""},
     };
     float y = 80;
@@ -399,8 +442,9 @@ void Menu::render()
         {
             y += 8;
             const int li = r.section;
-            const std::string head = li == 5 ? tr("setup.start") : tr(li == 4 ? kBooksTheme.key : kThemes[li].key);
-            text(r_, 20, y, head, 2, li < 4 ? kThemes[li].edge : li == 4 ? menu_ink(kBooksTheme) : white);
+            const Theme* th = li == 4 ? &kBooksTheme : li == 6 ? &kModelsTheme : li < 4 ? &kThemes[li] : nullptr;
+            const std::string head = th ? tr(th->key) : tr("setup.start");
+            text(r_, 20, y, head, 2, th ? (li == 4 ? menu_ink(kBooksTheme) : th->edge) : white);
             y += 20;
         }
         if (i == row_)
@@ -488,7 +532,8 @@ void Menu::render()
             if (ticked) text(r_, x, label + 82, clip(trf("map.ticked", {std::to_string(ticked)})), 1, th.edge);
         }
     }
-    if (overlay_ >= 0) render_overlay(W, H);
+    if (alpha_open_) render_alphabets(W, H);
+    else if (overlay_ >= 0) render_overlay(W, H);
 }
 
 
@@ -501,7 +546,7 @@ sieve::FilterLine Menu::filter_line_of(int i) const
     {
     case 0:
     {
-        const sieve::Alphabet& a = sieve::alphabet_by_id(s_.alphabet);
+        const sieve::Alphabet& a = sieve::alphabet_of(s_.alphabet);
         f = {"text", a.id(), a.size(), s_.length, &a, 0, 0, 0};
         break;
     }
@@ -773,6 +818,193 @@ void Menu::overlay_key(SDL_Keycode key, bool shift)
     default: break;
     }
     orow_ = std::clamp(orow_, 0, int(overlay_rows().size()) - 1);
+}
+
+// ---------------------------------------------------------------- the alphabet picker
+
+void Menu::open_alphabets()
+{
+    alpha_open_ = true;
+    arow_ = 0;
+    ascroll_ = 0;
+    // Start on whatever is chosen, so the list opens where you left it.
+    const std::vector<std::string> rows = alpha_rows();
+    const std::vector<std::string> stack = alpha_stack();
+    for (size_t i = 0; i < rows.size(); ++i)
+        if (!rows[i].empty() && (rows[i] == s_.alphabet || (!stack.empty() && rows[i] == stack.front()))) { arow_ = int(i); break; }
+}
+
+// The rows: the built-in alphabets, a blank, then every Unicode block, in the table's order.
+std::vector<std::string> Menu::alpha_rows() const
+{
+    std::vector<std::string> rows = sieve::alphabet_ids();
+    rows.emplace_back();
+    for (const std::string& id : sieve::block_ids()) rows.push_back(id);
+    return rows;
+}
+
+// The current setting split on '+', which for a built-in is just its id.
+std::vector<std::string> Menu::alpha_stack() const
+{
+    std::vector<std::string> parts;
+    size_t start = 0;
+    for (size_t i = 0; i <= s_.alphabet.size(); ++i)
+    {
+        const bool end = i == s_.alphabet.size();
+        const bool sep = !end && s_.alphabet[i] == '+' && !(i > 0 && (s_.alphabet[i - 1] == 'u' || s_.alphabet[i - 1] == 'U'));
+        if (!end && !sep) continue;
+        if (i > start) parts.push_back(s_.alphabet.substr(start, i - start));
+        start = i + 1;
+    }
+    return parts;
+}
+
+// A built-in replaces the whole setting; a block is ticked into the stack or out of it. The last
+// block unticked falls back to lower27, since a line must have an alphabet.
+void Menu::alpha_choose(int row)
+{
+    const std::vector<std::string> rows = alpha_rows();
+    if (row < 0 || row >= int(rows.size()) || rows[size_t(row)].empty()) return;
+    const std::string& id = rows[size_t(row)];
+    if (sieve::block_by_id(id) == nullptr)
+    {
+        s_.alphabet = id;
+        return;
+    }
+    std::vector<std::string> stack = alpha_stack();
+    // Ticking a block when a built-in is chosen starts a fresh stack with just that block.
+    if (stack.size() == 1 && sieve::block_by_id(stack.front()) == nullptr) stack.clear();
+    const auto at = std::find(stack.begin(), stack.end(), id);
+    if (at != stack.end()) stack.erase(at);
+    else stack.push_back(id);
+    if (stack.empty())
+    {
+        s_.alphabet = "lower27";
+        return;
+    }
+    std::sort(stack.begin(), stack.end());
+    stack.erase(std::unique(stack.begin(), stack.end()), stack.end());
+    std::string spec;
+    for (const std::string& p : stack)
+    {
+        if (!spec.empty()) spec += '+';
+        spec += p;
+    }
+    s_.alphabet = spec;
+}
+
+void Menu::alpha_key(SDL_Keycode key)
+{
+    const int n = int(alpha_rows().size());
+    auto step = [&](int dir) {
+        do arow_ = (arow_ + n + dir) % n;
+        while (alpha_rows()[size_t(arow_)].empty());
+    };
+    switch (key)
+    {
+    case SDLK_UP: step(-1); break;
+    case SDLK_DOWN: step(1); break;
+    case SDLK_PAGEUP: for (int i = 0; i < 8; ++i) step(-1); break;
+    case SDLK_PAGEDOWN: for (int i = 0; i < 8; ++i) step(1); break;
+    case SDLK_HOME: arow_ = 0; break;
+    case SDLK_END: arow_ = n - 1; break;
+    case SDLK_SPACE:
+    case SDLK_RIGHT:
+    case SDLK_RETURN:
+    case SDLK_KP_ENTER: alpha_choose(arow_); break;
+    case SDLK_LEFT: alpha_choose(arow_); break;
+    case SDLK_A:
+    case SDLK_ESCAPE: alpha_open_ = false; break;
+    default: break;
+    }
+    arow_ = std::clamp(arow_, 0, n - 1);
+}
+
+void Menu::render_alphabets(float W, float H)
+{
+    const SDL_Color white{255, 255, 255, 255}, grey{150, 150, 150, 255};
+    box_ = {600, 70, W - 614, H - 124};
+    SDL_SetRenderDrawColor(r_, 0, 0, 0, 250);
+    SDL_RenderFillRect(r_, &box_);
+    SDL_SetRenderDrawColor(r_, 255, 255, 255, 255);
+    SDL_RenderRect(r_, &box_);
+    const SDL_FRect inner{box_.x + 2, box_.y + 2, box_.w - 4, box_.h - 4};
+    SDL_RenderRect(r_, &inner);
+    const float x = box_.x + 14;
+    const size_t cols = size_t((box_.w - 60) / 8);
+    text(r_, x, box_.y + 10, tr("alphabets.title"), 2, kThemes[0].edge);
+    text(r_, x, box_.y + 32, tr("alphabets.intro"), 1, grey);
+
+    const std::vector<std::string> rows = alpha_rows();
+    const std::vector<std::string> stack = alpha_stack();
+    struct Item
+    {
+        std::vector<std::string> lines;
+        float h;
+    };
+    std::vector<Item> items;
+    for (const std::string& id : rows)
+    {
+        Item it;
+        if (id.empty()) it.lines = {"-- " + tr("alphabets.blocks") + " --"};
+        else if (const sieve::Block* b = sieve::block_by_id(id))
+        {
+            const bool on = std::find(stack.begin(), stack.end(), id) != stack.end();
+            it.lines = {std::string(on ? "[x] " : "[ ] ") + id + "   " + std::string(b->name) + "   " +
+                        trf("alphabets.count", {std::to_string(b->range.count())})};
+            std::string d(tr_or("block." + id, std::string(b->description)));
+            while (!d.empty())
+            {
+                size_t cut = d.size() <= cols - 4 ? d.size() : d.rfind(' ', cols - 4);
+                if (cut == std::string::npos || cut == 0) cut = std::min(d.size(), cols - 4);
+                it.lines.push_back("    " + d.substr(0, cut));
+                d = d.substr(std::min(d.size(), cut + 1));
+            }
+        }
+        else
+        {
+            const sieve::Alphabet& a = sieve::alphabet_by_id(id);
+            it.lines = {std::string(s_.alphabet == id ? "(*) " : "( ) ") + id + "   " +
+                            trf("alphabets.count", {std::to_string(a.size())}),
+                        "    " + tr_or("alphabet." + id, a.description())};
+        }
+        it.h = float(it.lines.size()) * 12 + 8;
+        items.push_back(it);
+    }
+    const float top = box_.y + 54, bottom = box_.y + box_.h - 44;
+    ascroll_ = std::clamp(ascroll_, 0, std::max(0, int(items.size()) - 1));
+    if (arow_ < ascroll_) ascroll_ = arow_;
+    for (;;)
+    {
+        float h = 0;
+        for (int i = ascroll_; i <= arow_ && i < int(items.size()); ++i) h += items[size_t(i)].h;
+        if (h <= bottom - top || ascroll_ >= arow_) break;
+        ++ascroll_;
+    }
+    arow_rects_.clear();
+    float y = top;
+    for (int i = ascroll_; i < int(items.size()); ++i)
+    {
+        const Item& it = items[size_t(i)];
+        if (y + it.h > bottom) break;
+        const SDL_FRect r{box_.x + 6, y - 3, box_.w - 12, it.h};
+        arow_rects_.emplace_back(r, i);
+        if (i == arow_)
+        {
+            SDL_SetRenderDrawColor(r_, 255, 255, 255, 40);
+            SDL_RenderFillRect(r_, &r);
+        }
+        for (size_t k = 0; k < it.lines.size(); ++k)
+            text(r_, x, y + float(k) * 12, (k == 0 && i == arow_ ? "> " : "  ") + it.lines[k], 1, k == 0 ? white : grey);
+        y += it.h;
+    }
+    if (ascroll_ > 0) text(r_, box_.x + box_.w - 90, top - 12, tr("filters.more_above"), 1, grey);
+    // What the setting works out to, which is the thing worth watching while ticking blocks.
+    const sieve::Alphabet& chosen = sieve::alphabet_of(s_.alphabet);
+    std::string status = trf("alphabets.status", {chosen.id(), std::to_string(chosen.size())});
+    if (!chosen.text_is_encodable()) status += "  " + tr("alphabets.surrogates");
+    text(r_, x, box_.y + box_.h - 36, status.substr(0, cols), 1, white);
+    text(r_, x, box_.y + box_.h - 20, tr("alphabets.footer"), 1, grey);
 }
 
 void Menu::render_overlay(float W, float H)

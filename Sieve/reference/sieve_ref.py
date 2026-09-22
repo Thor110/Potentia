@@ -25,11 +25,51 @@ import sys
 import unicodedata
 from fractions import Fraction
 
+# Pinned symbol alphabets. The order of the symbols IS the digit order, and babel29's is
+# libraryofbabel.info's, which is not code point order.
 ALPHABETS = {
     "lower27": " " + "abcdefghijklmnopqrstuvwxyz",
     "babel29": " " + "abcdefghijklmnopqrstuvwxyz" + ",.",
     "ascii95": "".join(chr(c) for c in range(0x20, 0x7F)),
+    "ascii96": "\n" + "".join(chr(c) for c in range(0x20, 0x7F)),
 }
+
+# A few named Unicode blocks, written out here from the standard rather than read from the C++
+# table, so a vector over one of them checks that table rather than trusting it.
+BLOCKS = {
+    "greek": (0x0370, 0x03FF),
+    "cyrillic": (0x0400, 0x04FF),
+    "hiragana": (0x3040, 0x309F),
+    "katakana": (0x30A0, 0x30FF),
+    "ascii": (0x0020, 0x007E),
+    "surrogates": (0xD800, 0xDFFF),
+    "all-emojis": (0x1F300, 0x1FAFF),
+}
+
+
+def alphabet(spec):
+    """A built-in id, or blocks and u+XXXX[-u+YYYY] ranges stacked with '+': the union of their
+    code points, ascending. Mirrors sieve::alphabet_of."""
+    if spec in ALPHABETS:
+        return ALPHABETS[spec]
+    parts, cur = [], ""
+    for i, c in enumerate(spec):
+        if c == "+" and not cur[-1:].lower() == "u":
+            parts.append(cur)
+            cur = ""
+        else:
+            cur += c
+    parts.append(cur)
+    points = set()
+    for part in parts:
+        if part in BLOCKS:
+            lo, hi = BLOCKS[part]
+        else:
+            bits = [b for b in part.replace("u+", " ").replace("U+", " ").split("-") if b.strip()]
+            lo = int(bits[0], 16)
+            hi = int(bits[1], 16) if len(bits) > 1 else lo
+        points.update(range(lo, hi + 1))
+    return "".join(chr(c) for c in sorted(points))
 ROUNDS = 8
 WHITESPACE = {"\t", "\n", "\x0b", "\x0c", "\r", " ", "\xa0"}
 
@@ -37,7 +77,7 @@ WHITESPACE = {"\t", "\n", "\x0b", "\x0c", "\r", " ", "\xa0"}
 class Space:
     def __init__(self, alphabet_id, length, key="sieve", base=None):
         # A text space (alphabet_id) or, with base=N, a space over N abstract symbols.
-        self.symbols = ALPHABETS[alphabet_id] if alphabet_id else None
+        self.symbols = alphabet(alphabet_id) if alphabet_id else None
         self.n = base if base else len(self.symbols)
         self.length = length
         self.key = key.encode("utf-8")
@@ -140,12 +180,16 @@ def fold_letter(c):
 
 def canonicalise(text, alphabet_id, length, version="v2"):
     """canon-text-v1 or canon-text-v2. Returns the list of units."""
-    symbols = ALPHABETS[alphabet_id]
+    symbols = alphabet(alphabet_id)
     fold = not any("A" <= c <= "Z" for c in symbols)
     kept = []
     for orig in text:
         if orig in WHITESPACE:
-            expanded = " "
+            # Whitespace the alphabet holds itself stays as it is (ascii96's line feed); a
+            # carriage return is dropped there, so either line ending canonicalises the same.
+            if orig == "\r" and "\n" in symbols:
+                continue
+            expanded = orig if orig in symbols else " "
         elif version == "v2" and orig in TRANSLITERATE:
             expanded = TRANSLITERATE[orig]
         elif version == "v2" and fold_letter(orig):
@@ -169,7 +213,8 @@ def canonicalise(text, alphabet_id, length, version="v2"):
     while canon and canon[-1] == " ":
         canon.pop()
     s = "".join(canon)
-    return [s[i:i + length].ljust(length) for i in range(0, len(s), length)]
+    pad = symbols[0]  # digit 0: the space for every alphabet pinned before ascii96
+    return [s[i:i + length].ljust(length, pad) for i in range(0, len(s), length)]
 
 
 # -- image line (canon-image-v1), written independently with exact fractions
@@ -362,10 +407,128 @@ def cmd_canon_vectors(_args):
     print("# version\talphabet\tlength\tinput_hex\tunits_hex")
     for text in inputs:
         for version in ("v1", "v2"):
-            for alpha, L in (("lower27", 16), ("babel29", 24), ("ascii95", 20)):
+            for alpha, L in (("lower27", 16), ("babel29", 24), ("ascii95", 20), ("ascii96", 20)):
                 units = canonicalise(text, alpha, L, version)
                 uh = ",".join(u.encode("utf-8").hex() for u in units)
                 print(f"{version}\t{alpha}\t{L}\t{text.encode('utf-8').hex()}\t{uh}")
+
+
+class ModelSpace:
+    """The models line (modelspace-v1), written independently of the C++.
+
+    V vertices of 3 coordinates on a grid of C cells across [-1, 1], then F faces of 3 vertex
+    indices, read as one mixed-radix number, most significant first."""
+
+    def __init__(self, vertices=8, faces=12, coords=16, key="sieve"):
+        assert vertices >= 3 and faces >= 1
+        assert 2 <= coords <= 4096 and coords & (coords - 1) == 0
+        self.v, self.f, self.c, self.key = vertices, faces, coords, key
+        self.decimals = coords.bit_length() - 1
+        self.size = coords ** (3 * vertices) * vertices ** (3 * faces)
+        self.hex_width = max(1, ((self.size - 1).bit_length() + 3) // 4)
+        self.id = f"models/V{vertices}/F{faces}/C{coords}/key={key}/modelspace-v1"
+
+    def index_of(self, verts, faces, mode="positional"):
+        assert len(verts) == 3 * self.v and len(faces) == 3 * self.f
+        n = 0
+        for d in verts:
+            assert 0 <= d < self.c
+            n = n * self.c + d
+        for d in faces:
+            assert 0 <= d < self.v
+            n = n * self.v + d
+        return shuffle(self.key, self.id, self.size, n) if mode == "scrambled" else n
+
+    def parts_at(self, index, mode="positional"):
+        assert 0 <= index < self.size
+        n = shuffle(self.key, self.id, self.size, index, inverse=True) if mode == "scrambled" else index
+        faces = [0] * (3 * self.f)
+        for i in range(3 * self.f - 1, -1, -1):
+            n, faces[i] = divmod(n, self.v)
+        verts = [0] * (3 * self.v)
+        for i in range(3 * self.v - 1, -1, -1):
+            n, verts[i] = divmod(n, self.c)
+        return verts, faces
+
+    def coord(self, d):
+        """Exactly (2d + 1 - C) / C, as a Fraction."""
+        return Fraction(2 * d + 1 - self.c, self.c)
+
+    def coord_text(self, d):
+        x = self.coord(d)
+        units = x * 10 ** self.decimals
+        assert units.denominator == 1, "the grid is not a terminating decimal"
+        units = int(units)
+        sign = "-" if units < 0 else "+"
+        mag = abs(units)
+        whole, frac = divmod(mag, 10 ** self.decimals)
+        return f"{sign}{whole}.{frac:0{self.decimals}d}"
+
+    def to_obj(self, verts, faces):
+        """The canonical .obj: fixed width, line feeds only, and no two spaces in a row, so it
+        survives canon-text-v2 on an ascii96 line unchanged."""
+        width = len(str(self.v))
+        out = []
+        for i in range(self.v):
+            out.append("v " + " ".join(self.coord_text(verts[3 * i + k]) for k in range(3)))
+        for i in range(self.f):
+            out.append("f " + " ".join(f"{faces[3 * i + k] + 1:0{width}d}" for k in range(3)))
+        return "\n".join(out) + "\n"
+
+    def obj_length(self):
+        return self.v * (2 + 3 * (self.decimals + 3) + 2 + 1) + self.f * (2 + 3 * len(str(self.v)) + 2 + 1)
+
+
+def cmd_model_vectors(_args):
+    """Models line vectors: shape, key, mode, vertex digits, face digits, address, .obj sha256."""
+    print("# sieve models line vectors (modelspace-v1)")
+    print("# vertices\tfaces\tcoords\tkey\tmode\tverts\tfaces_digits\taddress\tobj_sha256")
+    shapes = [(8, 12, 16, "sieve"), (8, 12, 16, "alt-key"), (4, 2, 4, "sieve"), (3, 1, 2, "sieve"),
+              (12, 20, 64, "sieve")]
+    for v, f, c, key in shapes:
+        sp = ModelSpace(v, f, c, key)
+        g = stream(f"{sp.id}")
+        cases = []
+        cases.append(([0] * (3 * v), [0] * (3 * f)))
+        cases.append(([c - 1] * (3 * v), [v - 1] * (3 * f)))
+        for _ in range(3):
+            cases.append(([next(g) % c for _ in range(3 * v)], [next(g) % v for _ in range(3 * f)]))
+        for verts, faces in cases:
+            obj = sp.to_obj(verts, faces)
+            assert len(obj) == sp.obj_length()
+            assert "  " not in obj, "the canonical form must have no two spaces in a row"
+            for mode in ("positional", "scrambled"):
+                k = sp.index_of(verts, faces, mode)
+                assert sp.parts_at(k, mode) == (verts, faces)
+                addr = f"{k:0{sp.hex_width}x}"
+                vs = ",".join(str(d) for d in verts)
+                fs = ",".join(str(d) for d in faces)
+                print(f"{v}\t{f}\t{c}\t{key}\t{mode}\t{vs}\t{fs}\t{addr}\t{hashlib.sha256(obj.encode()).hexdigest()}")
+
+
+def cmd_alphabet_vectors(_args):
+    """Alphabets built from Unicode blocks and ranges: spec, size, length, key, unit, addresses.
+
+    The unit is written as its code points, not as UTF-8, because these lines can hold line
+    feeds and surrogates - the very things a text form cannot carry."""
+    print("# sieve alphabet vectors (stacked blocks and ranges)")
+    print("# spec\tsize\tlength\tkey\tunit_cp\tpositional\tscrambled")
+    specs = ["ascii96", "greek", "cyrillic+greek", "greek+cyrillic", "hiragana+katakana",
+             "ascii+surrogates", "u+0370-u+03ff", "all-emojis", "u+00e9+u+00fc"]
+    for spec in specs:
+        syms = alphabet(spec)
+        for L in (1, 4, 16):
+            for key in ("sieve", "alt-key"):
+                sp = Space(spec, L, key)
+                g = stream(f"{spec}/{L}/{key}")
+                units = [syms[0] * L, syms[-1] * L]
+                for _ in range(3):
+                    units.append("".join(syms[next(g) % sp.n] for _ in range(L)))
+                for u in units:
+                    cp = ",".join(f"{ord(c):04x}" for c in u)
+                    pos, scr = sp.address_of(u, "positional"), sp.address_of(u, "scrambled")
+                    assert sp.unit_at(pos, "positional") == u and sp.unit_at(scr, "scrambled") == u
+                    print(f"{spec}\t{sp.n}\t{L}\t{key}\t{cp}\t{pos}\t{scr}")
 
 
 def cmd_image_vectors(_args):
@@ -560,7 +723,7 @@ def cmd_model_build(args):
     manifest_sha = hashlib.sha256(open(args.corpus, "rb").read()).hexdigest()
     name = args.corpus.replace("\\", "/").split("/")[-1]
     corpus = f"{name} sha256={manifest_sha} train_files={files} canon=canon-text-v2"
-    head, kept = build_model(text, ALPHABETS[args.alphabet], args.order, args.min_count, corpus)
+    head, kept = build_model(text, alphabet(args.alphabet), args.order, args.min_count, corpus)
     data = write_model(args.alphabet, head, kept)
     open(args.out, "wb").write(data)
     print(hashlib.sha256(data).hexdigest(), args.out)
@@ -569,7 +732,7 @@ def cmd_model_build(args):
 def cmd_guided_vectors(args):
     """Guided address vectors: length, unit (digits), code bits, code (hex); and points -> units."""
     model = Model(args.model)
-    sym = ALPHABETS[model.symbols]
+    sym = alphabet(model.symbols)
     print(f"# sieve guided conformance vectors v1 (guided-ac-v1, sieve-charmodel-v1, witten-bell-v1)")
     print(f"# model sha256 {model.sha256}")
     print("# kind\tlength\tunit\tbits\taddress")
@@ -1375,6 +1538,8 @@ def main():
     sub.add_parser("vectors")
     sub.add_parser("digit-vectors")
     sub.add_parser("canon-vectors")
+    sub.add_parser("alphabet-vectors")
+    sub.add_parser("model-vectors")
     sub.add_parser("image-vectors")
     s = sub.add_parser("model-build")
     s.add_argument("--corpus", default="../data/models/corpus/gutenberg-nltk.tsv")
@@ -1399,6 +1564,10 @@ def main():
         cmd_digit_vectors(args)
     elif args.cmd == "canon-vectors":
         cmd_canon_vectors(args)
+    elif args.cmd == "alphabet-vectors":
+        cmd_alphabet_vectors(args)
+    elif args.cmd == "model-vectors":
+        cmd_model_vectors(args)
     elif args.cmd == "image-vectors":
         cmd_image_vectors(args)
     elif args.cmd == "sieve":

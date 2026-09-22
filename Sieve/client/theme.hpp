@@ -22,6 +22,10 @@ inline constexpr Theme kThemes[4] = {
     {{140, 0, 0, 255}, {255, 255, 0, 255}, "VIDEO", "VIDEO", "line.video"},
 };
 
+// The models line (SPECIFICATIONS §12): clay behind green wireframe, because a mesh is drawn
+// as lines and a mesh is modelled in clay.
+inline constexpr Theme kModelsTheme = {{140, 120, 0, 255}, {0, 255, 0, 255}, "MODELS", "MODELS", "line.models"};
+
 // The books line (SPECIFICATIONS §11): a cover from the image line, a title and pages from the
 // pages line.
 inline constexpr Theme kBooksTheme = {{150, 150, 150, 255}, {0, 0, 0, 255}, "BOOKS", "BOOKS", "line.books"}; // grey, black edges

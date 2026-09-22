@@ -265,10 +265,21 @@ CanonResult canonicalise_text(std::string_view utf8, const Alphabet& alphabet, u
     {
         // Steps 1-3: produce one or more candidate characters.
         expanded.clear();
+        // Whitespace the alphabet can hold itself is kept as it is: an alphabet with a line feed
+        // (ascii96) is meant to carry text whose line breaks are part of the unit, so folding
+        // them to spaces would lose the structure. No alphabet pinned before ascii96 holds any
+        // whitespace but the space, so this leaves every one of them exactly as it was.
         if (is_whitespace(original))
         {
-            if (original != U' ') ++r.whitespace_mapped;
-            expanded.push_back(U' ');
+            // On an alphabet that holds the line feed, a carriage return is dropped, so text
+            // arriving with either line ending canonicalises the same way.
+            if (original == U'\r' && alphabet.contains(U'\n')) ++r.whitespace_mapped;
+            else
+            {
+                const char32_t as = alphabet.contains(original) ? original : U' ';
+                if (as != original) ++r.whitespace_mapped;
+                expanded.push_back(as);
+            }
         }
         else if (version == CanonVersion::V2)
         {
@@ -336,8 +347,10 @@ CanonResult canonicalise_text(std::string_view utf8, const Alphabet& alphabet, u
         std::u32string unit = canon.substr(i, unit_length);
         if (unit.size() < unit_length)
         {
+            // Padding is digit 0, which for every alphabet pinned before ascii96 is the space.
+            // On ascii96 it is the line feed, so a short .obj is padded with blank lines.
             r.padding = unit_length - unit.size();
-            unit.append(r.padding, U' ');
+            unit.append(r.padding, alphabet.symbol(0));
         }
         r.units.push_back(std::move(unit));
     }

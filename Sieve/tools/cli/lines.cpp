@@ -98,7 +98,8 @@ Line make_line(const Args& a)
     {
     case LineKind::Text:
     {
-        const Alphabet& alpha = alphabet_by_id(a.get("alphabet", "lower27"));
+        // A built-in id, or Unicode blocks and ranges stacked with '+' (see sieve alphabets).
+        const Alphabet& alpha = alphabet_of(a.get("alphabet", "lower27"));
         Line line{kind, &alpha, canon_version_from_string(a.get("canon", "v2")), {},
                   Space(alpha, a.require_positive("length"), key), nullptr, {}};
         if (a.get("model") != "none")
@@ -172,7 +173,12 @@ WarpInput read_warp_input(const Line& line, const Args& a)
         if (c.separated) w.report.push_back(count_line("became spaces", c.separated, codepoint_list(c.separated_examples)));
         if (c.dropped) w.report.push_back(count_line("removed", c.dropped, codepoint_list(c.dropped_examples)));
         if (c.spaces_collapsed) w.report.push_back(count_line("spaces collapsed", c.spaces_collapsed));
-        if (c.padding) w.report.push_back(count_line("padding", c.padding, "spaces on the last unit"));
+        if (c.padding)
+            w.report.push_back(count_line("padding", c.padding,
+                                          std::string(line.alphabet->contains(U'\n') && line.alphabet->symbol(0) == U'\n'
+                                                          ? "line feeds"
+                                                          : "spaces") +
+                                              " on the last unit"));
         for (const auto& u : c.units) w.units.push_back(line.space.digits_of(u));
         break;
     }
@@ -259,7 +265,11 @@ void save_unit(const Line& line, const std::vector<uint32_t>& digits, const std:
     {
         std::ofstream out(std::filesystem::path(path), std::ios::binary);
         if (!out) throw std::runtime_error("cannot write '" + path + "'");
-        out << utf8_encode(line.space.text_of(digits)) << "\n";
+        // Exactly the unit. A trailing newline is added only where the alphabet cannot hold one
+        // itself, as a courtesy so the file does not end mid-line; on an alphabet that can (see
+        // ascii96), the file IS the unit, byte for byte, and adding anything would spoil that.
+        out << utf8_encode(line.space.text_of(digits));
+        if (!line.alphabet || !line.alphabet->contains(U'\n')) out << "\n";
         return;
     }
     case LineKind::Audio:

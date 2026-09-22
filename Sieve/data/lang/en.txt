@@ -13,11 +13,11 @@ language.name = English
 
 ; ---- main menu
 main.title = Potentia : Sieve : Gallery of Babel Dimensions
-main.subtitle = Every possible text, picture, melody, film and book, on one endless corridor of shelves.
+main.subtitle = Every possible text, picture, melody, film, book and mesh, on one endless corridor of shelves.
 item.start = Start Sieve
 item.settings = Settings
 item.exit = Exit Sieve
-help.start = Set up the five lines, then walk into the hallway.
+help.start = Set up the six lines, then walk into the hallway.
 help.settings = Graphics, controls and language.
 help.exit = Close Sieve.
 
@@ -46,6 +46,9 @@ help.edge_glow = A soft glow along the edges of the wireframe geometry.\nTurning
 help.real_graphics = Draw the corridor with real models instead of wireframe.\nTurning it on turns Geometry Edge Glow off. Off by default, to keep Sieve light.
 item.door_portals = Door Portals
 help.door_portals = Fill the doorways with procedural data noise in the colour of the line they lead to,\nfading to black at the frame. Turning Real Graphics on turns this on too; nothing turns it off.
+item.model_cache = Model Image Cache
+help.model_cache = Memory for the models line's crate faces. A crate you look at has its model drawn onto its\nfront, and its neighbours follow a few a frame, spreading along the shelf; this is how many of\nthose pictures are kept before the ones seen longest ago are dropped.
+value.model_cache = {0} MB ({1} crates)
 item.fps_counter = FPS Counter
 help.fps_counter = Frames per second in the top right corner of the hallway: the average over the last half\nsecond, its slowest frame and, with Real Graphics, how many triangles each frame draws.
 
@@ -56,7 +59,7 @@ item.invert_mouse_y = Invert mouse Y
 help.mouse_sensitivity = How far the view turns as the mouse moves (Left and Right change it by 10%).
 help.invert_mouse_y = Moving the mouse forward looks down instead of up.
 controls.keys.title = KEYS
-controls.keys = W A S D|move\nMouse|look around\nShift|run\nE / left click|take a book off the shelf (you stand still while holding it), or put it back\nT|warp: find a text, picture, notes or book file\nG|go to an address, a percentage or @tile\nM|ordering: positional, scrambled, guided\n- / =|zoom out / in (guided ordering; Shift: 8x)\nWheel, PgUp/PgDn, [ ]|jump 1, 1000, 1000000 tiles\nHome|back to tile 0, where every line starts\nN / B|next / previous page, or unit of a warped trail\nP|play an audio book you are holding\nF1|the setup menu\nTab|free or capture the mouse\nEsc|put a book back, or free the mouse\nCtrl+Q|quit
+controls.keys = W A S D|move\nMouse|look around\nShift|run\nE / left click|take a book off the shelf (you stand still while holding it), or put it back\nT|warp: find a text, picture, notes or book file\nG|go to an address, a percentage or @tile\nM|ordering: positional, scrambled, guided\n- / =|zoom out / in (guided ordering; Shift: 8x)\nWheel, PgUp/PgDn, [ ]|jump 1, 1000, 1000000 tiles\nHome|back to tile 0, where every line starts\nN / B|next / previous page, or unit of a warped trail\nP|play an audio book you are holding\nMouse, A / D, R|turn a model you are holding, or set it upright again\nF1|the setup menu\nTab|free or capture the mouse\nEsc|put a book back, or free the mouse\nCtrl+Q|quit
 
 ; ---- language
 screen.language = SETTINGS > LANGUAGE
@@ -77,6 +80,8 @@ line.image = IMAGE
 line.audio = AUDIO
 line.video = VIDEO
 line.books = BOOKS
+line.models = MODELS
+model.summary = {0}/{1} vertices used, {2}/{3} faces are triangles
 ordering.positional = positional
 ordering.scrambled = scrambled
 ordering.guided = guided
@@ -86,7 +91,7 @@ mode.hide = hide
 mode.compact = compact
 
 ; ---- setup menu (Start Sieve)
-setup.title = SIEVE - set up the five lines
+setup.title = SIEVE - set up the six lines
 setup.subtitle = Every possible unit of each line has a book. Change a line's shape to change its state space.
 setup.start = START
 setup.line = line
@@ -95,7 +100,14 @@ setup.key = key
 setup.length = length
 setup.length.value = {0} characters
 setup.alphabet = alphabet
-setup.alphabet.value = {0} ({1} symbols)
+setup.alphabet.value = {0} ({1} symbols)   A: choose
+alphabets.title = ALPHABET
+alphabets.intro = The symbols a unit of text is made of. Tick blocks to stack them.
+alphabets.blocks = Unicode blocks --
+alphabets.count = {0} symbols
+alphabets.status = alphabet {0}, {1} symbols
+alphabets.surrogates = holds surrogates: addressable and drawn, but with no text form
+alphabets.footer = Up/Down choose  Space/Enter pick or tick  wheel scroll  Esc/A close
 setup.canon = warp rules
 setup.model = model
 setup.model.default = default (guided ordering available)
@@ -109,6 +121,10 @@ setup.notes = notes
 setup.frames = frames
 setup.book_pages = pages per book
 setup.book_pages.value = {0} (plus a title page and a cover)
+setup.model_vertices = vertices
+setup.model_faces = triangles
+setup.model_coords = grid
+setup.model_coords.value = {0} steps per axis (a power of two)
 setup.enter = >> ENTER THE HALLWAY <<
 setup.footer1 = Up/Down choose   Left/Right change (Shift x10, Ctrl x100)   PgUp/PgDn double/halve
 setup.footer2 = type to edit the key   F or the magnifying glass: a line's filters   Enter walk in   Esc main menu

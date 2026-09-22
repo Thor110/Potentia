@@ -39,10 +39,12 @@
 #include "sieve/corridor.hpp"
 #include "sieve/guided.hpp"
 #include "sieve/image.hpp"
+#include "sieve/modelspace.hpp"
 #include "sieve/utf8.hpp"
 
 #include <algorithm>
 #include <array>
+#include <climits>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -68,12 +70,15 @@ constexpr float kPi = 3.14159265358979f;
 
 constexpr LineKind kLineOrder[4] = {LineKind::Text, LineKind::Image, LineKind::Audio, LineKind::Video};
 // The corridor's lines: the four above, then books (made of pages and a picture).
-constexpr int kLines = 5;
-constexpr int kBooksLine = 4;
+constexpr int kLines = 6;
+constexpr int kBooksLine = 4, kModelsLine = 5;
 // Tiles drawn behind and ahead of the one you are in (and kept in the book cache).
 constexpr int kCacheBack = 6, kCacheAhead = 7;
 constexpr int kBuckets = 12; // distance fades of the wireframe
-const Theme& theme_of(int li) { return li == kBooksLine ? kBooksTheme : kThemes[li]; }
+const Theme& theme_of(int li)
+{
+    return li == kBooksLine ? kBooksTheme : li == kModelsLine ? kModelsTheme : kThemes[li];
+}
 
 SDL_Color mix(SDL_Color a, SDL_Color b, float t)
 {
@@ -170,6 +175,8 @@ std::vector<std::string> wrap_words(std::string s, size_t width)
     return out;
 }
 
+// For the console readout only, which scripts read line by line and terminals may not be able
+// to show. Text drawn in the hallway keeps its own characters: the font falls back per glyph.
 std::string ascii(const std::string& utf8)
 {
     std::string out;
@@ -244,11 +251,20 @@ public:
         std::shared_ptr<const Mesh> book_far;
     };
 
-    Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> lines, const FilterConfig& filters, uint32_t book_pages)
+    // The models line's shape, which is not a Line: V vertices, F triangles, a grid of C steps.
+    struct ModelShape
+    {
+        uint32_t vertices = 8, faces = 12, coords = 16;
+    };
+
+    Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> lines, const FilterConfig& filters, uint32_t book_pages,
+            ModelShape shape)
         : window_(window), r_(renderer), lines_(std::move(lines)), tile_geometry_(build_tile()), hall_geometry_(build_tile(true, false)), case_geometry_(build_tile(false, true)), book_geometry_{build_books(false), build_books(true)}
     {
         // The books line: a cover from the image line, a title and book_pages pages from the pages line.
         books_ = std::make_unique<BookSpace>(lines_[1].space, lines_[0].space, book_pages);
+        // The models line: V vertices and F triangles on a grid of C steps (SPECIFICATIONS §12).
+        model_space_ = std::make_unique<ModelSpace>(shape.vertices, shape.faces, shape.coords, lines_[0].space.key());
         // Each line's filter stack and mode (sieve-filters.ini, edited in the setup menu).
         for (int i = 0; i < 4; ++i)
         {
@@ -312,13 +328,17 @@ public:
     // or empty padding. Doors change the line and keep the position.
 
     // The current line's units (the four unit lines; the books line has its own BookSpace).
-    const Line& line() const { return lines_[size_t(on_books() ? 0 : li_)]; }
+    // The models line has no Line of its own (it is not made of one alphabet), so it borrows the
+    // pages line's, as the books line does, for the few things that ask about a Line.
+    const Line& line() const { return lines_[size_t(on_books() || on_models() ? 0 : li_)]; }
     bool on_books() const { return li_ == kBooksLine; }
+    bool on_models() const { return li_ == kModelsLine; }
     // The current line's medium, and whether its books vary in size: pages, pictures and books do;
     // records (audio) and tapes (video) are all one size, as the real things are (world.hpp).
     Media media() const
     {
         if (on_books()) return Media::Books;
+        if (on_models()) return Media::Models;
         switch (line().kind)
         {
         case LineKind::Image: return Media::Image;
@@ -330,7 +350,7 @@ public:
     bool sizes_vary() const { return media_sizes_vary(media()); }
     const Theme& theme() const { return theme_of(li_); }
     Camera& camera() { return cam_; }
-    bool guided_on() const { return !on_books() && guided_ && line().guided != nullptr; }
+    bool guided_on() const { return !on_books() && !on_models() && guided_ && line().guided != nullptr; }
     // The guided line in use: in compact mode, the one restricted to survivors.
     const GuidedLine& guided() const
     {
@@ -370,7 +390,16 @@ public:
             const int64_t lo = -int64_t(kCacheBack) * int64_t(kBooksPerTile), hi = int64_t(kCacheAhead + 1) * int64_t(kBooksPerTile);
             for (auto& [key, b] : cache_)
                 if (key - by >= lo && key - by < hi) shifted.emplace(key - by, std::move(b));
+            // The rendered crate faces move with them: the same models, d tiles closer.
+            std::unordered_map<int64_t, CrateFace> moved;
+            for (auto& [key, cf] : crate_)
+            {
+                if (key - by >= lo && key - by < hi) moved.emplace(key - by, cf);
+                else if (cf.tex) SDL_DestroyTexture(cf.tex);
+            }
+            crate_ = std::move(moved);
         }
+        else clear_crate_faces(); // too far to be the same shelves: start the field again
         cache_ = std::move(shifted);
         refresh_labels();
     }
@@ -400,7 +429,12 @@ public:
     const FilterStack& stack() const { return stacks_[li_]; }
     // The books line compacts when every part with filters can rank its survivors, and some survive.
     bool books_compact() const { return book_sieve_ && book_sieve_->can_rank() && !book_sieve_->count().is_zero(); }
-    bool has_filters() const { return on_books() ? book_sieve_ && !book_sieve_->empty() : !stack().empty(); }
+    // The models line has no filters yet (SPECIFICATIONS §12 sets out the three tiers to come).
+    bool has_filters() const
+    {
+        if (on_models()) return false;
+        return on_books() ? book_sieve_ && !book_sieve_->empty() : !stack().empty();
+    }
     // The filters' part of the readout, worked out when the line or its settings change (the
     // survivor count is a big number, too slow to write out every frame).
     const std::string& filter_status() const { return filter_status_; }
@@ -430,6 +464,7 @@ public:
     // How many units line i has in its loop, in the current ordering and filter mode.
     BigUint units_of(int i) const
     {
+        if (i == kModelsLine) return model_space_->size();
         if (i == kBooksLine) return effective_mode(i) == FilterMode::Compact ? book_sieve_->count() : books_->size();
         if (guided_ && lines_[size_t(i)].guided) return BigUint::pow(2, zoom_);
         if (effective_mode(i) == FilterMode::Compact) return compact_[i]->count();
@@ -458,6 +493,7 @@ public:
             all_loop_tiles_[i] = all_loops_[i].loop_tile(tile_);
         }
         cache_.clear();
+        clear_crate_faces();
         filter_status_ = compute_filter_status();
         refresh_labels();
     }
@@ -477,7 +513,8 @@ public:
         std::string failed_by; // the first filter it fails
         bool survivor = false; // compact: a survivor, and its number (its place in positional order)
         BigUint survivor_number;
-        std::optional<BookSpace::Parts> parts; // the books line: cover, title and pages
+        std::optional<BookSpace::Parts> parts;       // the books line: cover, title and pages
+        std::optional<ModelSpace::Parts> model;      // the models line: vertices and faces
     };
 
     const Book& book(int64_t dt, uint32_t slot)
@@ -517,6 +554,13 @@ public:
                     }
                 }
             }
+            else if (on_models())
+            {
+                b.model = model_space_->parts_at(b.index, mode_);
+                b.hex = model_space_->hex_of(b.index);
+                b.fraction =
+                    b.index.is_zero() ? 0.0 : std::pow(10.0, b.index.log10_approx() - model_space_->size().log10_approx());
+            }
             else if (compact_here && !guided_on())
             {
                 // Only survivors stand here: slot i holds the survivor whose compact address is i
@@ -553,7 +597,7 @@ public:
                 b.hex = sp.hex_of(address);
                 b.fraction = sp.fraction_of(address);
             }
-            if (!on_books() && !b.survivor && !stack().empty())
+            if (!on_books() && !on_models() && !b.survivor && !stack().empty())
             {
                 const int fail = stack().first_failure(b.unit);
                 b.passes = fail < 0;
@@ -837,6 +881,7 @@ public:
                 index = point;
                 index >>= g.scale_bits() - zoom_;
             }
+            else if (on_models()) index = model_space_->parse(input);
             else if (on_books()) index = effective_mode() == FilterMode::Compact ? book_sieve_->parse(input) : books_->parse(input);
             else if (effective_mode() == FilterMode::Compact) index = compact().parse(input); // a compact address, as the books show
             else index = BigUint::from_digits(line().space.parse_address(input), line().space.base());
@@ -963,10 +1008,19 @@ public:
             }
             return;
         }
-        if (e.type == SDL_EVENT_MOUSE_MOTION && SDL_GetWindowRelativeMouseMode(window_) && !in_hand_)
+        if (e.type == SDL_EVENT_MOUSE_MOTION && SDL_GetWindowRelativeMouseMode(window_))
         {
-            cam_.yaw += e.motion.xrel * look_;
-            cam_.pitch = std::clamp(cam_.pitch - e.motion.yrel * look_ * (invert_y_ ? -1.0f : 1.0f), -1.45f, 1.45f);
+            // Holding a model, the mouse turns the model instead of you: it is in your hands.
+            if (in_hand_ && in_hand_->model)
+            {
+                model_spin_ += e.motion.xrel * 0.008f;
+                model_tilt_ = std::clamp(model_tilt_ + e.motion.yrel * 0.008f * (invert_y_ ? -1.0f : 1.0f), -1.5f, 1.5f);
+            }
+            else if (!in_hand_)
+            {
+                cam_.yaw += e.motion.xrel * look_;
+                cam_.pitch = std::clamp(cam_.pitch - e.motion.yrel * look_ * (invert_y_ ? -1.0f : 1.0f), -1.45f, 1.45f);
+            }
         }
         if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
         {
@@ -1023,6 +1077,15 @@ public:
         case SDLK_B:
             if (in_hand_ && in_hand_->parts) turn_page(-1);
             else step_trail(-1);
+            break;
+        case SDLK_A:
+            if (in_hand_ && in_hand_->model) model_spin_ -= 0.15f;
+            break;
+        case SDLK_D:
+            if (in_hand_ && in_hand_->model) model_spin_ += 0.15f;
+            break;
+        case SDLK_R:
+            if (in_hand_ && in_hand_->model) { model_spin_ = 0.6f; model_tilt_ = 0.35f; }
             break;
         case SDLK_P:
             if (in_hand_ && !on_books() && line().kind == LineKind::Audio)
@@ -1101,6 +1164,21 @@ public:
         {
             where += percent(first.fraction) + " along, first book " + short_address(first.hex);
             if (first.parts) where += " \"" + ascii(utf8_encode(line().space.text_of(first.parts->title))) + "\"";
+            else if (first.model)
+            {
+                const auto fs = model_space_->faces_of(*first.model);
+                std::vector<bool> seen(model_space_->vertices(), false);
+                uint32_t used = 0, degenerate = 0;
+                for (const auto& f : fs)
+                {
+                    seen[f.a] = seen[f.b] = seen[f.c] = true;
+                    if (f.a == f.b || f.b == f.c || f.a == f.c) ++degenerate;
+                }
+                for (bool b : seen)
+                    if (b) ++used;
+                where += " " + std::to_string(used) + "/" + std::to_string(model_space_->vertices()) + " vertices used, " +
+                         std::to_string(degenerate) + " degenerate faces";
+            }
             else if (line().kind == LineKind::Text) where += " \"" + ascii(utf8_encode(line().space.text_of(first.unit))) + "\"";
             if (first.guided) where += " (" + std::to_string(first.bits) + " bits)";
         }
@@ -1213,6 +1291,8 @@ public:
                 for (const Segment& s : book_geometry_[sizes_vary()][k]) add(s, z0, dim);
             }
         }
+        // The models line: the rendered face of every crate in view, and a few more rendered.
+        if (on_models()) draw_crate_faces(visible, kBack, kAhead);
         if (edge_glow_ && !md) draw_glow(buckets);
         for (int i = 0; i < kBuckets; ++i)
         {
@@ -1234,6 +1314,7 @@ public:
         case Media::Audio: return "audio";
         case Media::Video: return "video";
         case Media::Books: return "books";
+        case Media::Models: return "models";
         default: return "pages";
         }
     }
@@ -1425,6 +1506,78 @@ public:
         return t;
     }
 
+    // One lattice node of the portal's cloud, 0..255. `seed` separates the octaves.
+    static float noise_at(int x, int y, uint32_t seed)
+    {
+        uint32_t h = uint32_t(x) * 0x9E3779B1u ^ uint32_t(y) * 0x85EBCA77u ^ seed * 0x27D4EB2Fu;
+        h ^= h >> 15;
+        h *= 0x2545F491u;
+        h ^= h >> 13;
+        return float(h >> 24);
+    }
+
+    // One octave of the portal's cloud: value noise on a lattice `size` cells apart, read along a
+    // row. The two nodes on the right become the two on the left as the row crosses into the next
+    // node, so a row of cells costs two hashes per node rather than four per cell.
+    struct Octave
+    {
+        // Quintic easing: its slope is zero at both ends, so neighbouring cells of the lattice
+        // blend without the crease that makes plain smoothstep look like a grid of squares.
+        static float ease(float t) { return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f); }
+
+        // The easing is the same handful of values over and over (one per cell of a node), so it
+        // is worked out once, and the lattice is stepped rather than divided into.
+        void init(int lattice, uint32_t s)
+        {
+            size = std::min(lattice, int(eased_.size()));
+            seed = s;
+            for (int i = 0; i < size; ++i) eased_[size_t(i)] = ease(float(i) / float(size));
+        }
+        // `yq` is the row in 1/256 of a cell, so the cloud can drift by less than a whole cell.
+        void row(uint32_t yq)
+        {
+            const uint32_t node = uint32_t(size) * 256;
+            gy_ = int(yq / node);
+            ty_ = ease(float(yq % node) * (1.0f / float(node)));
+        }
+        // The first cell of a row: the only division either octave does per row.
+        void start(int cx)
+        {
+            gx_ = cx / size;
+            sub_ = cx - gx_ * size;
+            h00_ = noise_at(gx_, gy_, seed);
+            h01_ = noise_at(gx_, gy_ + 1, seed);
+            h10_ = noise_at(gx_ + 1, gy_, seed);
+            h11_ = noise_at(gx_ + 1, gy_ + 1, seed);
+        }
+        float value() const
+        {
+            const float tx = eased_[size_t(sub_)];
+            const float top = h00_ + (h10_ - h00_) * tx, bot = h01_ + (h11_ - h01_) * tx;
+            return top + (bot - top) * ty_;
+        }
+        // On to the next cell; crossing into the next node, the two values on the right become
+        // the two on the left, so a row costs two hashes per node rather than four per cell.
+        void step()
+        {
+            if (++sub_ < size) return;
+            sub_ = 0;
+            ++gx_;
+            h00_ = h10_;
+            h01_ = h11_;
+            h10_ = noise_at(gx_ + 1, gy_, seed);
+            h11_ = noise_at(gx_ + 1, gy_ + 1, seed);
+        }
+
+        int size = 6;
+        uint32_t seed = 0;
+
+    private:
+        int gy_ = 0, gx_ = 0, sub_ = 0;
+        float ty_ = 0, h00_ = 0, h10_ = 0, h01_ = 0, h11_ = 0;
+        std::array<float, 32> eased_{};
+    };
+
     // The line's own colour for its portal: whichever of its two is the brighter, so every line
     // reads (white for PAGES, cyan for IMAGE, amber for AUDIO, yellow for VIDEO, grey for BOOKS).
     static SDL_Color portal_colour(const Theme& th)
@@ -1512,7 +1665,17 @@ public:
         std::vector<uint32_t>& px = portal_.px;
         px.assign(size_t(nw) * size_t(nh), 0u);
         const uint32_t frame = portal_frame_;
-        const uint32_t drift = frame >> 1, churn = frame >> 3; // a curtain, streaming and reshuffling
+        // The field is a smooth cloud with a little grain on it, not raw static: the cloud is
+        // value noise on a lattice one node every kCloud cells, drifting downwards a quarter of a
+        // cell a frame, and the grain is the old per-cell hash at a fifth of the strength. Pure
+        // per-cell noise at full contrast flickers hard enough to be painful to look at.
+        Octave coarse, fine;
+        coarse.init(18, 1);
+        fine.init(6, 2);
+        const uint32_t drift = frame * 64, churn = frame >> 3; // the cloud flows, the grain stirs
+        // Top to bottom across the door itself, so the shading does not slide about when the
+        // door is clipped by the edge of the screen.
+        const float span = std::max(1.0f, hiy - loy);
         // The colour at each of 256 brightnesses, so the inner loop is integer work and one lookup.
         const SDL_Color col = portal_colour(dest);
         uint32_t ramp[256];
@@ -1546,6 +1709,13 @@ public:
             const int eb = std::min(nw, int(std::floor((xr - float(x0)) / kGrain - 0.5f)) + 1);
             if (sb >= eb) continue;
             uint32_t* row_px = px.data() + size_t(by) * size_t(nw) + size_t(sb);
+            // This row's place on each cloud lattice, and the gentle top-to-bottom shading.
+            const uint32_t yq = (uint32_t(cy0 + by) << 8) + drift;
+            coarse.row(yq);
+            fine.row(yq);
+            coarse.start(cx0 + sb);
+            fine.start(cx0 + sb);
+            const float shade = 1.0f - 0.34f * std::clamp((fy - loy) / span, 0.0f, 1.0f);
             // The distance to the frame, stepped along the row: one add per edge per cell.
             float d[8], dd[8];
             const size_t ne = std::min<size_t>(edges.size(), 8);
@@ -1555,7 +1725,9 @@ public:
                 d[k] = edges[k].nx * fx + edges[k].ny * fy + edges[k].c;
                 dd[k] = edges[k].nx * kGrain;
             }
-            for (int bx = sb; bx < eb; ++bx, ++row_px)
+            // The octaves step with the loop, so a cell skipped for being outside the door or
+            // behind a bookcase still moves them on and the cloud stays where it belongs.
+            for (int bx = sb; bx < eb; ++bx, ++row_px, coarse.step(), fine.step())
             {
                 float near = d[0];
                 for (size_t k = 1; k < ne; ++k) near = std::min(near, d[k]);
@@ -1569,14 +1741,18 @@ public:
                 // How far in from the frame, 0..255, then smoothed so the field has no hard rim.
                 const float t = near * inv_fall;
                 const uint32_t f = kSmooth[t >= 1.0f ? 255 : uint32_t(t * 255.0f)];
-                // The noise: an integer hash of the cell and the frame, streaming downwards.
-                uint32_t hsh = uint32_t(cx0 + bx) * 0x9E3779B1u ^ (uint32_t(cy0 + by) + drift) * 0x85EBCA77u ^ churn * 0xC2B2AE3Du;
+                const int cxi = cx0 + bx;
+                // Two octaves of cloud: broad shapes with finer ones inside them.
+                const float cloud = coarse.value() * 0.62f + fine.value() * 0.38f;
+                // The grain on top of it, at a fifth of the strength.
+                uint32_t hsh = uint32_t(cxi) * 0x9E3779B1u ^ uint32_t(cy0 + by) * 0x85EBCA77u ^ churn * 0xC2B2AE3Du;
                 hsh ^= hsh >> 15;
                 hsh *= 0x2545F491u;
                 hsh ^= hsh >> 13;
-                const uint32_t g = hsh >> 24;
-                // Squared, so the grain is mostly dark with bright specks rather than grey mush.
-                *row_px = ramp[(f * ((g * g) >> 8)) >> 8];
+                // Lifted off black and held short of white, so the field reads as lit rather than
+                // as sparks; the fade to the frame still takes it all the way down.
+                const float v = (34.0f + (cloud * 0.79f + float(hsh >> 24) * 0.21f) * 0.72f) * shade;
+                *row_px = ramp[(f * uint32_t(std::clamp(v, 0.0f, 255.0f))) >> 8];
             }
         }
         if (!any) return;
@@ -1679,6 +1855,7 @@ public:
 
     std::string one_line_preview(const Space::Digits& u)
     {
+        if (on_models()) return ""; // a model is drawn, not written out: see draw_model
         if (line().kind == LineKind::Text) return "\"" + ascii(utf8_encode(line().space.text_of(u))) + "\"";
         if (line().kind == LineKind::Audio) return notes_to_notation(u);
         return "";
@@ -1736,7 +1913,7 @@ public:
         text(10, 7, fit(where, W - 20, 2), 2, ink);
         const std::string loop = trf("hud.loop", {loop_label_}) +
                                  (loop_.fills_whole_tiles() ? std::string() : " " + trf("hud.loop.padding", {std::to_string(loop_.padding())}));
-        text(10, 28, fit((on_books() ? books_->id() : line().space.id()) + (guided_on() ? "   " + trf("hud.model", {line().model_id}) : std::string()) + "   " +
+        text(10, 28, fit((on_books() ? books_->id() : on_models() ? model_space_->id() : line().space.id()) + (guided_on() ? "   " + trf("hud.model", {line().model_id}) : std::string()) + "   " +
                          loop + "   " + filter_status() + "   " +
                          trf("hud.doors", {tr(theme_of((li_ + 1) % kLines).key), tr(theme_of((li_ + kLines - 1) % kLines).key)}), W - 20, 1),
              1, ink);
@@ -1775,10 +1952,11 @@ public:
                 {
                     // A book: its cover and its title.
                     draw_pixels(bk.parts->cover, 20, y, 60, 0);
-                    const std::string title = ascii(utf8_encode(line().space.text_of(bk.parts->title)));
+                    const std::string title = utf8_encode(line().space.text_of(bk.parts->title));
                     const auto rows = wrap_words(title, size_t(std::max(20.0f, (std::min(W - 20, 900.0f) - 110) / 16)));
                     for (size_t r = 0; r < rows.size() && r < 3; ++r) text(96, y + float(r) * 20, rows[r], 2, ink);
                 }
+                else if (bk.model) text(20, y, model_line_summary(*bk.model), 2, ink);
                 else if (line().kind == LineKind::Image || line().kind == LineKind::Video) draw_pixels(u, 20, y, 60, 0);
                 else text(20, y, wrap(one_line_preview(u), size_t(std::max(20.0f, (std::min(W - 20, 900.0f) - 40) / 16)))[0], 2, ink);
             }
@@ -1805,6 +1983,290 @@ public:
              1, ink);
     }
 
+    // ---- crate faces
+    //
+    // On the models line every slot holds the same crate, because a mesh cannot be read at a
+    // hundred and twenty-eight to a tile. Instead, the crate you are looking at has its model
+    // rendered to a small flat image and printed on its front, and then its neighbours do the
+    // same, a few a frame, spreading outward along the shelf until the cache is full. The cache
+    // holds whatever the budget in Settings > Graphics allows and drops the least recently seen.
+
+    static constexpr int kCrateFace = 64;                 // pixels square, one image per crate
+    static constexpr size_t kCrateBytes = size_t(kCrateFace) * kCrateFace * 4;
+    static constexpr int kCratesPerFrame = 3;             // rendered anew each frame, at most
+
+    // The model of one crate, drawn small: faces back to front, shaded by depth, on nothing.
+    void render_crate_face(const ModelSpace::Parts& p, std::vector<uint32_t>& px) const
+    {
+        px.assign(size_t(kCrateFace) * kCrateFace, 0u);
+        const auto verts = model_space_->mesh_of(p);
+        const auto faces = model_space_->faces_of(p);
+        const Theme& th = theme_of(kModelsLine);
+        const float ca = std::cos(model_spin_), sa = std::sin(model_spin_);
+        const float ct = std::cos(model_tilt_), st = std::sin(model_tilt_);
+        const float half = float(kCrateFace) * 0.5f, r = float(kCrateFace) * 0.30f;
+        auto project = [&](const ModelSpace::Vertex& v) {
+            const float x = v.x * ca + v.z * sa, z = -v.x * sa + v.z * ca;
+            const float y = v.y * ct - z * st, depth = v.y * st + z * ct;
+            const float k = 1.0f / (2.4f - depth * 0.45f);
+            return std::array<float, 3>{half + x * r * k * 2.4f, half - y * r * k * 2.4f, depth};
+        };
+        std::vector<std::pair<float, size_t>> order;
+        order.reserve(faces.size());
+        for (size_t i = 0; i < faces.size(); ++i)
+        {
+            const auto& f = faces[i];
+            if (f.a == f.b || f.b == f.c || f.a == f.c) continue; // a degenerate face has no face
+            order.emplace_back((project(verts[f.a])[2] + project(verts[f.b])[2] + project(verts[f.c])[2]) / 3.0f, i);
+        }
+        std::sort(order.begin(), order.end());
+        for (const auto& [depth, i] : order)
+        {
+            const auto& f = faces[i];
+            const auto a = project(verts[f.a]), b = project(verts[f.b]), c = project(verts[f.c]);
+            const float t = std::clamp(0.30f + depth * 0.55f, 0.10f, 1.0f);
+            const uint32_t argb = 0xFF000000u | (uint32_t(float(th.edge.r) * t) << 16) |
+                                  (uint32_t(float(th.edge.g) * t) << 8) | uint32_t(float(th.edge.b) * t);
+            fill_triangle(px, a, b, c, argb);
+        }
+    }
+
+    // A flat triangle into the crate's little image. Small and rare enough not to need more.
+    static void fill_triangle(std::vector<uint32_t>& px, const std::array<float, 3>& a, const std::array<float, 3>& b,
+                              const std::array<float, 3>& c, uint32_t argb)
+    {
+        const float minx = std::min({a[0], b[0], c[0]}), maxx = std::max({a[0], b[0], c[0]});
+        const float miny = std::min({a[1], b[1], c[1]}), maxy = std::max({a[1], b[1], c[1]});
+        const int x0 = std::max(0, int(minx)), x1 = std::min(kCrateFace - 1, int(maxx) + 1);
+        const int y0 = std::max(0, int(miny)), y1 = std::min(kCrateFace - 1, int(maxy) + 1);
+        const float area = (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]);
+        if (std::fabs(area) < 1e-6f) return;
+        const float inv = 1.0f / area;
+        for (int y = y0; y <= y1; ++y)
+            for (int x = x0; x <= x1; ++x)
+            {
+                const float fx = float(x) + 0.5f, fy = float(y) + 0.5f;
+                const float w0 = ((b[0] - a[0]) * (fy - a[1]) - (fx - a[0]) * (b[1] - a[1])) * inv;
+                const float w1 = ((fx - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (fy - a[1])) * inv;
+                if (w0 < 0 || w1 < 0 || w0 + w1 > 1) continue;
+                px[size_t(y) * kCrateFace + size_t(x)] = argb;
+            }
+    }
+
+    void clear_crate_faces()
+    {
+        for (auto& [key, cf] : crate_)
+            if (cf.tex) SDL_DestroyTexture(cf.tex);
+        crate_.clear();
+    }
+
+    // How many images the budget allows: the slider is megabytes, which is what costs.
+    size_t crate_capacity() const { return std::max<size_t>(8, size_t(crate_budget_mb_) * 1024 * 1024 / kCrateBytes); }
+
+    // The image for one crate, if it is already rendered. `allow` lets this frame render it.
+    SDL_Texture* crate_face(int64_t dt, uint32_t slot, bool allow, std::vector<uint32_t>& scratch)
+    {
+        const int64_t key = dt * int64_t(kBooksPerTile) + slot;
+        if (auto it = crate_.find(key); it != crate_.end())
+        {
+            it->second.used = portal_frame_;
+            return it->second.tex;
+        }
+        if (!allow) return nullptr;
+        const Book& b = book(dt, slot);
+        if (b.empty || !b.model) return nullptr;
+        render_crate_face(*b.model, scratch);
+        SDL_Texture* tex = SDL_CreateTexture(r_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, kCrateFace, kCrateFace);
+        if (!tex) return nullptr;
+        SDL_UpdateTexture(tex, nullptr, scratch.data(), kCrateFace * 4);
+        SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_LINEAR);
+        // Room for it: the crate seen longest ago goes first.
+        while (crate_.size() >= crate_capacity())
+        {
+            auto oldest = crate_.begin();
+            for (auto it = crate_.begin(); it != crate_.end(); ++it)
+                if (it->second.used < oldest->second.used) oldest = it;
+            if (oldest->second.tex) SDL_DestroyTexture(oldest->second.tex);
+            crate_.erase(oldest);
+        }
+        crate_.emplace(key, CrateFace{tex, portal_frame_});
+        return tex;
+    }
+
+    // Prints the rendered images on the crates in view, and renders a few more, spreading out
+    // from the crate under the crosshair (or from the nearest one ahead when you look at nothing).
+    void draw_crate_faces(const bool* visible, int back, int ahead)
+    {
+        int64_t seed_tile = 0;
+        uint32_t seed_slot = kBooksPerTile / 2;
+        if (hover_)
+        {
+            seed_tile = hover_->tile;
+            seed_slot = hover_->slot();
+        }
+        // The crates in view, nearest the seed first, so the field fills outward as you look.
+        struct Want { int64_t order; int64_t dt; uint32_t slot; };
+        std::vector<Want> want;
+        for (int t = -back; t <= ahead; ++t)
+        {
+            if (!visible[t + back]) continue;
+            const uint32_t books = books_in_tile(t);
+            for (uint32_t k = 0; k < books; ++k)
+            {
+                const int64_t dtile = t - seed_tile, dslot = int64_t(k) - int64_t(seed_slot);
+                want.push_back({std::llabs(dtile) * 256 + std::llabs(dslot), t, k});
+            }
+        }
+        std::sort(want.begin(), want.end(), [](const Want& a, const Want& b) { return a.order < b.order; });
+        int budget = kCratesPerFrame;
+        std::vector<SDL_Vertex> verts;
+        for (const Want& w : want)
+        {
+            SDL_Texture* tex = crate_face(w.dt, w.slot, budget > 0, crate_scratch_);
+            if (!tex)
+            {
+                if (budget > 0) --budget; // a slot with nothing to draw still costs its turn
+                continue;
+            }
+            const BookSlot bs = BookSlot::of(w.dt, w.slot);
+            Vec3 f[4];
+            book_face(float(w.dt) * kTile, bs.side, bs.row, bs.col, f, sizes_vary());
+            draw_face_image(tex, f, verts);
+        }
+    }
+
+    // One crate's image on its front face. The quad is split into a grid and every grid point is
+    // projected, so the picture keeps its perspective instead of skewing across two triangles.
+    void draw_face_image(SDL_Texture* tex, const Vec3 quad[4], std::vector<SDL_Vertex>& verts)
+    {
+        constexpr int kGrid = 2; // cells per side
+        Vec3 corner[4];
+        for (int i = 0; i < 4; ++i)
+        {
+            corner[i] = cam_.to_camera(quad[i]);
+            if (corner[i].z < cam_.near_z + 0.01f) return; // partly behind you: leave it be
+        }
+        Point2 p[kGrid + 1][kGrid + 1];
+        for (int i = 0; i <= kGrid; ++i)
+            for (int j = 0; j <= kGrid; ++j)
+            {
+                const float u = float(j) / kGrid, v = float(i) / kGrid;
+                // Bilinear in camera space, then projected: exact perspective at every grid point.
+                const Vec3 top = corner[0] + (corner[1] - corner[0]) * u;
+                const Vec3 bot = corner[3] + (corner[2] - corner[3]) * u;
+                p[i][j] = cam_.project_camera(top + (bot - top) * v);
+            }
+        const SDL_FColor white{1, 1, 1, 1};
+        verts.clear();
+        for (int i = 0; i < kGrid; ++i)
+            for (int j = 0; j < kGrid; ++j)
+            {
+                const float u0 = float(j) / kGrid, u1 = float(j + 1) / kGrid;
+                const float v0 = float(i) / kGrid, v1 = float(i + 1) / kGrid;
+                const SDL_Vertex a{{p[i][j].x, p[i][j].y}, white, {u0, v0}};
+                const SDL_Vertex b{{p[i][j + 1].x, p[i][j + 1].y}, white, {u1, v0}};
+                const SDL_Vertex c{{p[i + 1][j + 1].x, p[i + 1][j + 1].y}, white, {u1, v1}};
+                const SDL_Vertex d{{p[i + 1][j].x, p[i + 1][j].y}, white, {u0, v1}};
+                for (const SDL_Vertex& v : {a, b, c, a, c, d}) verts.push_back(v);
+            }
+        SDL_RenderGeometry(r_, tex, verts.data(), int(verts.size()), nullptr, 0);
+    }
+
+    // A model in hand: its wireframe, turned by the mouse or by A and D, and its .obj text beside
+    // it. The mesh is small enough (a few dozen triangles) to draw as lines with the painter's
+    // algorithm; the shelf copy is a crate, which is what the render cache fills in.
+    float draw_model(const ModelSpace::Parts& p, float x, float y, float pw, float bottom)
+    {
+        const Theme& th = theme();
+        const auto verts = model_space_->mesh_of(p);
+        const auto faces = model_space_->faces_of(p);
+        const float box = std::min(pw * 0.5f, bottom - y - 20);
+        if (box < 40) return y;
+        const float cx = x + 14 + box * 0.5f, cy = y + box * 0.5f, r = box * 0.34f;
+        // Turn about the upright axis, and tip a little so the shape reads as solid.
+        const float ca = std::cos(model_spin_), sa = std::sin(model_spin_);
+        const float ct = std::cos(model_tilt_), st = std::sin(model_tilt_);
+        auto project = [&](const ModelSpace::Vertex& v) {
+            const float px = v.x * ca + v.z * sa;
+            const float pz = -v.x * sa + v.z * ca;
+            const float py = v.y * ct - pz * st;
+            const float depth = v.y * st + pz * ct;
+            // A gentle perspective, so turning it reads as turning.
+            const float k = 1.0f / (2.4f - depth * 0.45f);
+            return std::array<float, 3>{cx + px * r * k * 2.4f, cy - py * r * k * 2.4f, depth};
+        };
+        // Faces back to front, drawn as filled triangles under their own edges.
+        std::vector<std::pair<float, size_t>> order;
+        order.reserve(faces.size());
+        for (size_t i = 0; i < faces.size(); ++i)
+        {
+            const auto& f = faces[i];
+            order.emplace_back((project(verts[f.a])[2] + project(verts[f.b])[2] + project(verts[f.c])[2]) / 3.0f, i);
+        }
+        std::sort(order.begin(), order.end());
+        std::vector<SDL_Vertex> fill;
+        for (const auto& [depth, i] : order)
+        {
+            const auto& f = faces[i];
+            if (f.a == f.b || f.b == f.c || f.a == f.c) continue; // a degenerate face has no face
+            const auto a3 = project(verts[f.a]), b3 = project(verts[f.b]), c3 = project(verts[f.c]);
+            // Nearer faces a little brighter, so the shape has depth without a light.
+            const float t = std::clamp(0.35f + depth * 0.5f, 0.12f, 0.85f);
+            const SDL_FColor fc{th.edge.r / 255.0f * t, th.edge.g / 255.0f * t, th.edge.b / 255.0f * t, 0.55f};
+            fill.clear();
+            for (const auto& v3 : {a3, b3, c3}) fill.push_back({{v3[0], v3[1]}, fc, {0, 0}});
+            SDL_RenderGeometry(r_, nullptr, fill.data(), 3, nullptr, 0);
+            SDL_SetRenderDrawColor(r_, th.edge.r, th.edge.g, th.edge.b, 200);
+            SDL_RenderLine(r_, a3[0], a3[1], b3[0], b3[1]);
+            SDL_RenderLine(r_, b3[0], b3[1], c3[0], c3[1]);
+            SDL_RenderLine(r_, c3[0], c3[1], a3[0], a3[1]);
+        }
+        // The .obj text of the very same model, beside it: the two lines this object lives on.
+        const float tx = x + 14 + box + 20;
+        const size_t cols = size_t(std::max(12.0f, (pw - 48 - box) / 8));
+        float ty = y;
+        uint32_t shown = 0;
+        for (const std::string& l : split_lines(model_space_->to_obj(p)))
+        {
+            if (ty > bottom - 14) { text(tx, ty, "...", 1, th.edge); break; }
+            text(tx, ty, fit(l, float(cols) * 8, 1), 1, ++shown <= model_space_->vertices() ? th.edge : mix(th.edge, th.bg, 0.35f));
+            ty += 11;
+        }
+        return std::max(y + box, ty) + 6;
+    }
+
+    // One line about a model, for the shelf row and the readout.
+    std::string model_line_summary(const ModelSpace::Parts& p) const
+    {
+        const auto fs = model_space_->faces_of(p);
+        std::vector<bool> seen(model_space_->vertices(), false);
+        uint32_t used = 0, degenerate = 0;
+        for (const auto& f : fs)
+        {
+            seen[f.a] = seen[f.b] = seen[f.c] = true;
+            if (f.a == f.b || f.b == f.c || f.a == f.c) ++degenerate;
+        }
+        for (bool b : seen)
+            if (b) ++used;
+        return trf("model.summary", {std::to_string(used), std::to_string(model_space_->vertices()),
+                                     std::to_string(model_space_->face_count() - degenerate),
+                                     std::to_string(model_space_->face_count())});
+    }
+
+    static std::vector<std::string> split_lines(const std::string& s)
+    {
+        std::vector<std::string> out;
+        size_t start = 0;
+        for (size_t i = 0; i <= s.size(); ++i)
+            if (i == s.size() || s[i] == '\n')
+            {
+                if (i > start) out.push_back(s.substr(start, i - start));
+                start = i + 1;
+            }
+        return out;
+    }
+
     void draw_in_hand(float W, float H)
     {
         const Theme& th = theme();
@@ -1818,11 +2280,12 @@ public:
         text(x + 14, cy, fit(tr("hand.title") + "   " + in_hand_where_ + "   " + trf("hud.along", {percent(bk.fraction)}), pw - 28, 2), 2, ink);
         cy += 28;
         const size_t cols2 = size_t((pw - 28) / 16), cols1 = size_t((pw - 28) / 8);
-        if (bk.parts) cy = draw_book(*bk.parts, x, cy, pw, y + ph - 110);
+        if (bk.model) cy = draw_model(*bk.model, x, cy, pw, y + ph - 110);
+        else if (bk.parts) cy = draw_book(*bk.parts, x, cy, pw, y + ph - 110);
         else switch (line().kind)
         {
         case LineKind::Text:
-            for (const auto& l : wrap(ascii(utf8_encode(line().space.text_of(u))), cols2))
+            for (const auto& l : wrap(utf8_encode(line().space.text_of(u)), cols2))
             {
                 text(x + 14, cy, l, 2, ink);
                 cy += 20;
@@ -1877,7 +2340,7 @@ public:
         const size_t tcols = size_t(std::max(10.0f, (x + pw - 14 - tx) / 16));
         text(tx, cy, tr("hand.title_label"), 1, ink);
         float ty = cy + 14;
-        const auto title = wrap_words(ascii(utf8_encode(line().space.text_of(p.title))), tcols);
+        const auto title = wrap_words(utf8_encode(line().space.text_of(p.title)), tcols);
         for (size_t r = 0; r < title.size() && r < 6; ++r, ty += 20) text(tx, ty, title[r], 2, ink);
         if (title.size() > 6) text(tx, ty, "...", 2, ink);
         cy += cover + 14;
@@ -1890,7 +2353,7 @@ public:
         text(x + 14, cy, trf("hand.page", {std::to_string(book_page_ + 1), std::to_string(n)}), 1, ink);
         cy += 14;
         // The page at the largest scale that fits.
-        const std::string page = ascii(utf8_encode(line().space.text_of(p.pages[size_t(book_page_)])));
+        const std::string page = utf8_encode(line().space.text_of(p.pages[size_t(book_page_)]));
         for (float scale : {2.0f, 1.0f})
         {
             const size_t cols = size_t((pw - 28) / (8 * scale));
@@ -1914,6 +2377,7 @@ public:
     void release_textures()
     {
         models_batch_.release();
+        clear_crate_faces();
         if (portal_.tex)
         {
             SDL_DestroyTexture(portal_.tex);
@@ -1935,6 +2399,18 @@ public:
         invert_y_ = invert_y;
     }
     void set_fps_counter(bool on) { fps_counter_ = on; }
+    void set_model_cache(int megabytes)
+    {
+        crate_budget_mb_ = uint32_t(std::clamp(megabytes, 8, 512));
+        while (crate_.size() > crate_capacity())
+        {
+            auto oldest = crate_.begin();
+            for (auto it = crate_.begin(); it != crate_.end(); ++it)
+                if (it->second.used < oldest->second.used) oldest = it;
+            if (oldest->second.tex) SDL_DestroyTexture(oldest->second.tex);
+            crate_.erase(oldest);
+        }
+    }
     void set_graphics(bool edge_glow, bool real_graphics, bool door_portals)
     {
         edge_glow_ = edge_glow;
@@ -2041,7 +2517,8 @@ private:
     std::string tile_label_, loop_label_; // the readout's short forms of tile_ and the loop length
     LineLoop loop_{BigUint(1)};
     BigUint loop_tile_;   // tile_ mod loop_.tiles()
-    LineLoop all_loops_[kLines] = {LineLoop(BigUint(1)), LineLoop(BigUint(1)), LineLoop(BigUint(1)), LineLoop(BigUint(1)), LineLoop(BigUint(1))};
+    LineLoop all_loops_[kLines] = {LineLoop(BigUint(1)), LineLoop(BigUint(1)), LineLoop(BigUint(1)),
+                                   LineLoop(BigUint(1)), LineLoop(BigUint(1)), LineLoop(BigUint(1))};
     BigUint all_loop_tiles_[kLines];
     std::unordered_map<int64_t, Book> cache_;
     std::optional<BookSlot> hover_;
@@ -2065,6 +2542,17 @@ private:
     struct PortalCache { SDL_Texture* tex = nullptr; int w = 0, h = 0; std::vector<uint32_t> px; };
     PortalCache portal_;
     bool door_portals_ = false;
+    // A model in hand turns about the upright axis; the mouse or A and D drive it.
+    float model_spin_ = 0.6f, model_tilt_ = 0.35f;
+    // The crates whose models have been rendered to an image, and when each was last in view.
+    struct CrateFace
+    {
+        SDL_Texture* tex = nullptr;
+        uint32_t used = 0;
+    };
+    std::unordered_map<int64_t, CrateFace> crate_;
+    std::vector<uint32_t> crate_scratch_;
+    uint32_t crate_budget_mb_ = 64;
     uint32_t portal_frame_ = 0;
     // FPS counter: frames and time since the shown figures were last updated (twice a second).
     bool fps_counter_ = false;
@@ -2076,8 +2564,10 @@ private:
     BookStacks book_stacks_;
     std::unique_ptr<BookSieve> book_sieve_; // null if the books' filters failed to build
     std::unique_ptr<CompactLine> compact_[kLines]; // survivors in every ordering, where the stack can rank
-    FilterMode modes_[kLines] = {FilterMode::Off, FilterMode::Off, FilterMode::Off, FilterMode::Off, FilterMode::Off};
+    FilterMode modes_[kLines] = {FilterMode::Off, FilterMode::Off, FilterMode::Off,
+                                 FilterMode::Off, FilterMode::Off, FilterMode::Off};
     std::unique_ptr<BookSpace> books_; // the books line
+    std::unique_ptr<ModelSpace> model_space_; // the models line (Models above is Real Graphics)
     int book_page_ = 0;                // the page open in a book in hand
     Synth synth_;
 };
@@ -2129,6 +2619,7 @@ const char* kUsage =
     "  --edge-glow         draw with Geometry Edge Glow (or --settings a file that has it on)\n"
     "  --real-graphics     draw with Real Graphics: the models in the meshes folder\n"
     "  --door-portals      fill the doorways with procedural data noise (Real Graphics turns this on)\n"
+    "  --model-cache MB    memory for the models line's rendered crate faces (8-512, default 64)\n"
     "  --fps-counter       show the FPS counter\n"
     "  --bench N           before the screenshot, time N frames and print the frame rate\n\n"
     "Controls: WASD move, mouse look, Shift run, E or click take a book, T warp, G go to,\n"
@@ -2199,6 +2690,7 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
     std::vector<Line> lines = make_lines(a);
     int start_line = 0;
     if (a.get("line") == "books") start_line = kBooksLine;
+    else if (a.get("line") == "models") start_line = kModelsLine;
     else
     {
         const LineKind wanted = line_from_string(a.get("line", "text")); // "pages" is the text line
@@ -2206,9 +2698,13 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
             if (wanted == kLineOrder[i]) start_line = i;
     }
     const bool text_has_model = lines[0].guided != nullptr;
-    const LineKind start_kind = start_line == kBooksLine ? LineKind::Image : lines[size_t(start_line)].kind;
+    // Books and models are not made of one alphabet, so neither starts with the text greeting.
+    const LineKind start_kind =
+        start_line == kBooksLine || start_line == kModelsLine ? LineKind::Image : lines[size_t(start_line)].kind;
 
-    auto hall = std::make_unique<Hallway>(window, renderer, std::move(lines), filters, a.has("book-pages") ? a.get_u32("book-pages", 4) : 4);
+    const Hallway::ModelShape shape{a.get_positive("vertices", 8), a.get_positive("faces", 12), a.get_positive("coords", 16)};
+    auto hall = std::make_unique<Hallway>(window, renderer, std::move(lines), filters,
+                                          a.has("book-pages") ? a.get_u32("book-pages", 4) : 4, shape);
     hall->set_line(start_line);
     if (a.has("mode"))
     {
@@ -2227,7 +2723,9 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
     else if (a.has("goto")) hall->go_to(a.get("goto"));
     else if (start_kind == LineKind::Text)
     {
-        hall->warp("welcome to the sieve");
+        // The greeting is Latin letters, so on an alphabet that cannot hold them (Greek, kana,
+        // hieroglyphs) nothing survives canonicalisation: start halfway along instead.
+        if (!hall->warp("welcome to the sieve")) hall->go_to("50%");
         hall->put_back();
     }
     else
@@ -2363,6 +2861,7 @@ int run(const Args& a)
             // Real Graphics on means exactly that, since nothing may turn them off but you.
             const bool portals = app.door_portals || a.has("real-graphics") || a.has("door-portals");
             hall->set_graphics(glow && !real, real, portals);
+            hall->set_model_cache(a.has("model-cache") ? int(a.get_u32("model-cache", 64)) : app.model_cache_mb);
             hall->set_fps_counter(app.fps_counter || a.has("fps-counter"));
             // On stderr: stdout is where the readout goes, which scripts read line by line.
             std::cerr << "graphics: edge glow " << (glow && !real ? "on" : "off") << ", real graphics " << (real ? "on" : "off")
@@ -2428,6 +2927,7 @@ int run(const Args& a)
         auto hall = make_hallway(window, renderer, ha, first, filters);
         hall->set_controls(app.mouse_sensitivity, app.invert_mouse_y);
         hall->set_graphics(app.edge_glow, app.real_graphics, app.door_portals);
+        hall->set_model_cache(app.model_cache_mb);
         hall->set_fps_counter(app.fps_counter);
         first = false;
         SDL_SetWindowRelativeMouseMode(window, true);

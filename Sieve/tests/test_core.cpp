@@ -5,6 +5,7 @@
 #include "sieve/biguint.hpp"
 #include "sieve/booksieve.hpp"
 #include "sieve/bookspace.hpp"
+#include "sieve/modelspace.hpp"
 #include "sieve/canon.hpp"
 #include "sieve/compact.hpp"
 #include "sieve/corridor.hpp"
@@ -511,7 +512,7 @@ void test_canon_vectors(const std::string& path)
         ++n;
     }
     std::cout << "canonicalisation vectors checked: " << n << "\n";
-    CHECK(n == 60); // a truncated or emptied vector file must fail, not pass quietly
+    CHECK(n == 80); // a truncated or emptied vector file must fail, not pass quietly
     CHECK(n > 50);
 }
 
@@ -574,6 +575,169 @@ void test_audio()
     const std::string midi = notes_to_midi(r.units[0]);
     CHECK(midi.substr(0, 4) == "MThd" && midi.substr(14, 4) == "MTrk");
     CHECK(static_cast<unsigned char>(midi[midi.size() - 3]) == 0xFF && midi.substr(midi.size() - 2) == std::string("\x2F\x00", 2));
+}
+
+// Alphabets built from Unicode blocks and ranges. The units are written as code points, not as
+// UTF-8, because these lines can hold line feeds and surrogates, which a text form cannot carry.
+// The models line, against the Python oracle's vectors: the shape's size and addresses in both
+// orderings, and the SHA-256 of the canonical .obj text of each model.
+void test_model_vectors(const std::string& path)
+{
+    std::ifstream in(path);
+    CHECK(in.good());
+    std::string line;
+    int n = 0;
+    while (std::getline(in, line))
+    {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line.empty() || line[0] == '#') continue;
+        std::vector<std::string> f;
+        size_t start = 0;
+        for (size_t i = 0; i <= line.size(); ++i)
+            if (i == line.size() || line[i] == '\t') { f.push_back(line.substr(start, i - start)); start = i + 1; }
+        CHECK(f.size() == 9);
+        if (f.size() != 9) continue;
+        auto digits = [](const std::string& s) {
+            std::vector<uint32_t> d;
+            size_t p = 0;
+            for (size_t i = 0; i <= s.size(); ++i)
+                if (i == s.size() || s[i] == ',') { d.push_back(uint32_t(std::stoul(s.substr(p, i - p)))); p = i + 1; }
+            return d;
+        };
+        const ModelSpace sp(uint32_t(std::stoul(f[0])), uint32_t(std::stoul(f[1])), uint32_t(std::stoul(f[2])), f[3]);
+        const AddressMode m = f[4] == "scrambled" ? AddressMode::Scrambled : AddressMode::Positional;
+        ModelSpace::Parts p;
+        p.verts = digits(f[5]);
+        p.faces = digits(f[6]);
+        const bool addr_ok = sp.hex_of(sp.index_of(p, m)) == f[7];
+        const bool back_ok = sp.parts_at(sp.parse(f[7]), m) == p;
+        const std::string obj = sp.to_obj(p);
+        const bool obj_ok = Sha256::hex(Sha256::hash(obj)) == f[8] && obj.size() == sp.obj_length() &&
+                            obj.find("  ") == std::string::npos && sp.from_obj(obj) == p;
+        CHECK(addr_ok && back_ok && obj_ok);
+        if (!(addr_ok && back_ok && obj_ok))
+            std::cerr << "  model vector mismatch: V" << f[0] << " F" << f[1] << " C" << f[2] << " " << f[4] << "\n";
+        ++n;
+    }
+    std::cout << "model vectors checked: " << n << "\n";
+    CHECK(n == 50); // a truncated or emptied vector file must fail, not pass quietly
+}
+
+void test_modelspace()
+{
+    const ModelSpace sp(8, 12, 16);
+    CHECK(sp.id() == "models/V8/F12/C16/key=sieve/modelspace-v1");
+    CHECK(sp.decimals() == 4);
+    // N = 16^24 * 8^36 = 2^96 * 2^108 = 2^204.
+    CHECK(sp.size() == BigUint::pow(2, 204));
+    CHECK(sp.obj_length() == 8 * 26 + 12 * 8);
+
+    // Address zero: every coordinate at the low end of the grid, every face (1, 1, 1).
+    const ModelSpace::Parts zero = sp.parts_at(BigUint(0), AddressMode::Positional);
+    CHECK(zero.verts.size() == 24 && zero.faces.size() == 36);
+    CHECK(std::all_of(zero.verts.begin(), zero.verts.end(), [](uint32_t d) { return d == 0; }));
+    const std::string obj0 = sp.to_obj(zero);
+    CHECK(obj0.size() == sp.obj_length());
+    CHECK(obj0.substr(0, 27) == "v -0.9375 -0.9375 -0.9375\nv");
+    CHECK(sp.from_obj(obj0) == zero);
+
+    // Digits, address and canonical text all agree, in both orderings.
+    for (uint32_t seed = 1; seed <= 40; ++seed)
+    {
+        ModelSpace::Parts p;
+        uint32_t x = seed * 2654435761u;
+        auto next = [&] { x ^= x << 13; x ^= x >> 17; x ^= x << 5; return x; };
+        for (uint32_t i = 0; i < 24; ++i) p.verts.push_back(next() % 16);
+        for (uint32_t i = 0; i < 36; ++i) p.faces.push_back(next() % 8);
+        for (AddressMode m : {AddressMode::Positional, AddressMode::Scrambled})
+        {
+            const BigUint k = sp.index_of(p, m);
+            CHECK(k < sp.size());
+            CHECK(sp.parts_at(k, m) == p);
+            CHECK(sp.hex_of(k).size() == sp.hex_width());
+        }
+        const std::string obj = sp.to_obj(p);
+        CHECK(obj.size() == sp.obj_length());
+        CHECK(sp.from_obj(obj) == p);
+        // The mesh reads back on the grid it was written from.
+        const auto mesh = sp.mesh_of(p);
+        CHECK(mesh.size() == 8);
+        for (uint32_t i = 0; i < 8; ++i)
+            CHECK(std::fabs(mesh[i].x - (2.0f * float(p.verts[size_t(i) * 3]) + 1.0f - 16.0f) / 16.0f) < 1e-6f);
+    }
+
+    // A cube fitted to the line comes back as a cube, centred and scaled to the grid.
+    std::vector<ModelSpace::Vertex> cube;
+    for (int i = 0; i < 8; ++i)
+        cube.push_back({i & 1 ? 3.0f : 1.0f, i & 2 ? 3.0f : 1.0f, i & 4 ? 3.0f : 1.0f});
+    std::vector<ModelSpace::Face> tris;
+    for (uint32_t i = 0; i < 12; ++i) tris.push_back({i % 8, (i + 1) % 8, (i + 2) % 8});
+    const ModelSpace::Fitted fitted = sp.fit(cube, tris);
+    CHECK(fitted.vertices_dropped == 0 && fitted.faces_dropped == 0 && fitted.faces_added == 0);
+    const auto back = sp.mesh_of(fitted.parts);
+    // The cube is symmetric on the grid: the two extremes are equal and opposite.
+    CHECK(std::fabs(back[0].x + 0.9375f) < 1e-6f && std::fabs(back[7].x - 0.9375f) < 1e-6f);
+    CHECK(sp.faces_of(fitted.parts)[3].a == 3);
+    // Too few vertices and faces: the rest are the origin and a filler face.
+    const ModelSpace::Fitted thin = sp.fit({{0, 0, 0}, {1, 0, 0}, {0, 1, 0}}, {{0, 1, 2}});
+    CHECK(thin.faces_added == 11 && thin.parts.verts[23] == 8);
+    // Too many: the extras are dropped and counted.
+    cube.push_back({0, 0, 0});
+    tris.push_back({0, 1, 2});
+    const ModelSpace::Fitted fat = sp.fit(cube, tris);
+    CHECK(fat.vertices_dropped == 1 && fat.faces_dropped == 1);
+
+    // Shapes the line cannot have.
+    CHECK(throws([] { ModelSpace(2, 1, 16); }));
+    CHECK(throws([] { ModelSpace(8, 0, 16); }));
+    CHECK(throws([] { ModelSpace(8, 12, 12); }));  // not a power of two
+    CHECK(throws([] { ModelSpace(8, 12, 8192); })); // past the grid limit
+    // Text that is not the canonical form.
+    CHECK(throws([&] { sp.from_obj(obj0.substr(1)); }));
+    CHECK(throws([&] { ModelSpace(8, 12, 16).from_obj(std::string(obj0.size(), 'x')); }));
+    // A different shape is a different line, and its addresses are a different width.
+    const ModelSpace other(8, 12, 32);
+    CHECK(other.id() != sp.id() && other.size() > sp.size() && other.decimals() == 5);
+}
+
+void test_alphabet_vectors(const std::string& path)
+{
+    std::ifstream in(path);
+    CHECK(in.good());
+    std::string line;
+    int n = 0;
+    while (std::getline(in, line))
+    {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line.empty() || line[0] == '#') continue;
+        std::vector<std::string> f;
+        size_t start = 0;
+        for (size_t i = 0; i <= line.size(); ++i)
+            if (i == line.size() || line[i] == '\t') { f.push_back(line.substr(start, i - start)); start = i + 1; }
+        CHECK(f.size() == 7);
+        if (f.size() != 7) continue;
+        const Alphabet& al = alphabet_of(f[0]);
+        const bool size_ok = al.size() == std::stoul(f[1]);
+        // The unit, as comma-separated hex code points.
+        std::u32string unit;
+        for (size_t i = 0, p = 0; i <= f[4].size(); ++i)
+            if (i == f[4].size() || f[4][i] == ',')
+            {
+                unit.push_back(char32_t(std::stoul(f[4].substr(p, i - p), nullptr, 16)));
+                p = i + 1;
+            }
+        const Space sp(al, static_cast<uint32_t>(std::stoul(f[2])), f[3]);
+        const auto d = sp.digits_of(unit);
+        const bool pos_ok = sp.address_of(d, AddressMode::Positional) == f[5];
+        const bool scr_ok = sp.address_of(d, AddressMode::Scrambled) == f[6];
+        const bool back_ok = sp.unit_at(f[5], AddressMode::Positional) == d && sp.unit_at(f[6], AddressMode::Scrambled) == d;
+        CHECK(size_ok && pos_ok && scr_ok && back_ok);
+        if (!(size_ok && pos_ok && scr_ok && back_ok))
+            std::cerr << "  alphabet vector mismatch: " << f[0] << " L=" << f[2] << " key=" << f[3] << "\n";
+        ++n;
+    }
+    std::cout << "alphabet vectors checked: " << n << "\n";
+    CHECK(n == 270); // a truncated or emptied vector file must fail, not pass quietly
 }
 
 void test_vectors(const std::string& path)
@@ -1762,12 +1926,15 @@ void run_all(int argc, char** argv)
     test_audio();
     test_model();
     test_guided();
+    test_modelspace();
     if (argc > 1)
     {
         const std::string dir = std::string(argv[1]) + "/";
         test_vectors(dir + "vectors_v1.tsv");
         test_digit_vectors(dir + "vectors_digits_v1.tsv");
         test_canon_vectors(dir + "vectors_canon.tsv");
+        test_alphabet_vectors(dir + "vectors_alphabets_v1.tsv");
+        test_model_vectors(dir + "vectors_models_v1.tsv");
         test_image_vectors(dir + "vectors_image_v1.tsv");
         test_guided_vectors(dir);
         test_filters(dir);

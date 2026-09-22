@@ -43,7 +43,7 @@ const Option kLine = {"--line text|image|audio|video",
 
 const Option kLineOptions = {
     "line options",
-    "text   --length L (required)  --alphabet lower27|babel29|ascii95  --canon v2|v1\n"
+    "text   --length L (required)  --alphabet SPEC (lower27)  --canon v2|v1\n"
     "       --model ID|PATH|none  (guided ordering; default: the alphabet's default model)\n"
     "image  --width W (10)  --height H (10)  --palette mono|ega16|rgb332|rgb24 (mono)\n"
     "audio  --length N note events (16)\n"
@@ -212,6 +212,76 @@ const std::vector<Page>& pages()
           {"sieve sift --dict my_words.txt", "your own word list, without registering it"},
           {"sieve sift --lengths 1-7 --brute-max 6 --pruned-max 7", "maximum cross-checking (slow)"}}},
 
+        {"alphabets", "List the symbol alphabets a text line can use, and the Unicode blocks they stack from.",
+         "sieve alphabets [--spec SPEC]",
+         "A text line's alphabet decides both what its units can say and how big the line is: the\n"
+         "space holds B^L units for B symbols and length L. --alphabet takes any of these:\n"
+         "\n"
+         "  a built-in id       lower27, babel29, ascii95, ascii96\n"
+         "  a Unicode block     greek, cyrillic, hiragana, egyptian-hieroglyphs, ...\n"
+         "  a raw range         u+0370-u+03ff, or a single code point u+00e9\n"
+         "  any of those with '+'   greek+cyrillic, ascii+all-emojis\n"
+         "\n"
+         "Stacked parts are unioned, so blocks that overlap never give a symbol twice, and the\n"
+         "order you write them in does not matter: greek+cyrillic and cyrillic+greek are the same\n"
+         "alphabet with the same name. A smaller alphabet is not only a smaller line: every exact\n"
+         "ranker steps through B symbols at each position, so the alphabet decides how much work\n"
+         "counting and ranking a filter stack costs.\n"
+         "\n"
+         "An alphabet's digit order is pinned. Digit 0 is the first code point of its first range,\n"
+         "and for a stack that is the lowest code point it holds. The built-ins keep the order they\n"
+         "were pinned with: babel29 follows libraryofbabel.info (space, a-z, comma, period), which\n"
+         "is not code point order. A correction to a block is a new block under a new id, never an\n"
+         "edit, because every address on a line depends on what its alphabet holds.\n"
+         "\n"
+         "Surrogates (U+D800-U+DFFF) may be stacked in like anything else. They can be addressed,\n"
+         "counted, filtered and drawn, as the replacement glyph, but they have no UTF-8 encoding,\n"
+         "so units holding one cannot be warped in from text or written into a .book file.\n"
+         "\n"
+         "ascii96 is the printable ASCII with the line feed added, so a unit can hold a file whose\n"
+         "line breaks are part of what it says rather than of how it is shown.",
+         {{"--spec SPEC", "Work out one alphabet: its symbols, its ranges, and what digit 0 is."}},
+         {{"sieve alphabets", "every built-in alphabet and every block, with descriptions"},
+          {"sieve alphabets --spec greek+cyrillic", "what a stack works out to"},
+          {"sieve info --alphabet ascii96 --length 400", "a page that can hold an .obj file"},
+          {"sieve browse --alphabet hiragana --length 16 --count 5", "five units of kana"}}},
+
+        {"mesh", "The models line: every possible mesh of one shape, and the .obj text of each.",
+         "sieve mesh [--vertices V] [--faces F] [--coords C] [--key K] [--warp FILE | --read ADDR | --browse N]",
+         "A model of this line is V vertices and F triangles. Each coordinate is one of C steps\n"
+         "across [-1, 1], and each face names three vertices, so the line holds\n"
+         "\n"
+         "    N = C^(3V) * V^(3F)\n"
+         "\n"
+         "models. With the defaults (8 vertices, 12 triangles, a grid of 16) that is 2^204, and a\n"
+         "cube is one of them.\n"
+         "\n"
+         "C is a power of two, so a coordinate is exactly (2d + 1 - C) / C: a terminating decimal\n"
+         "with log2(C) places. That makes the canonical .obj text of a model exact and of a fixed\n"
+         "width, and it reads back to the same address. The form has no two spaces in a row\n"
+         "anywhere (signs are written, indices are zero-padded), because canon-text-v2 collapses\n"
+         "runs of spaces: the point is that the same model can be warped onto an ascii96 text line\n"
+         "of that length and come back byte for byte. A model is one object with an address on two\n"
+         "lines, which is how the models line joins the pages line.\n"
+         "\n"
+         "Warping a mesh in centres it and scales it so its longest side fills the grid, then\n"
+         "rounds each coordinate to the nearest cell. Vertices and faces past V and F are dropped,\n"
+         "and a mesh with too few faces is filled out, so any .obj lands somewhere on the line.",
+         {{"--vertices V", "Vertices per model (8)."},
+          {"--faces F", "Triangles per model (12)."},
+          {"--coords C", "Steps per axis, a power of two from 2 to 4096 (16)."},
+          {"--key K", "Seeds the scrambled ordering, as on the other lines."},
+          {"--warp FILE", "Where an .obj file lives on this line."},
+          {"--read ADDR", "The model at an address, as canonical .obj (--out FILE to save it)."},
+          {"--browse N", "N models off the shelf (--seed S to repeat a run)."},
+          {"--mode MODE", "positional or scrambled, for --read and --browse (positional)."},
+          {"--out FILE", "With --read, write the .obj there instead of to the screen."}},
+         {{"sieve mesh", "how big the default models line is"},
+          {"sieve mesh --vertices 24 --faces 44 --coords 64", "a bigger shape"},
+          {"sieve mesh --warp cube.obj", "the address of a cube"},
+          {"sieve mesh --read ADDR --out model.obj", "save the model at an address"},
+          {"sieve mesh --browse 3 --seed 1", "three models off the shelf"}}},
+
         {"dicts", "List the registered dictionaries, or hash a new one for registration.",
          "sieve dicts [--hash FILE]",
          "Dictionaries are listed in data/dictionaries/dictionaries.tsv (the build copies the folder\n"
@@ -255,7 +325,7 @@ const std::vector<Page>& pages()
          {{"--out FILE", "Where to write the model (required)."},
           {"--corpus MANIFEST", "Default data/models/corpus/gutenberg-nltk.tsv."},
           {"--texts DIR", "Folder holding the corpus files. Default corpus/gutenberg."},
-          {"--alphabet A", "lower27 (default), babel29 or ascii95."},
+          {"--alphabet A", "Which symbols to train over: lower27 (default), or any spec from sieve alphabets."},
           {"--order K", "Longest context, in symbols. Default 5."},
           {"--min-count M", "Keep a context only if seen at least M times. Default 8."}},
          {{"sieve train --out data/models/gutenberg-lower27-o5.model", "rebuild the default model exactly"},
@@ -450,7 +520,7 @@ void print_usage()
     {
         if (p.name == "lines") continue;
         std::string name = p.name;
-        name.resize(9, ' ');
+        name.resize(11, ' ');
         std::cout << "  " << name << p.summary << "\n";
     }
     std::cout << "\nLines (choose with --line): text (default), image, audio, video.\n"
