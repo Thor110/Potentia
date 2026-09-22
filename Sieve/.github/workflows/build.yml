@@ -24,6 +24,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The reference oracle: the same Python on every platform, as `python`.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
@@ -38,19 +43,19 @@ jobs:
           exe=build/sieve
           [ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
           $exe version
-          got=$($exe warp --length 32 --mode scrambled "It was the best of times" | awk '/scrambled/ {print $2}')
+          got=$($exe warp --length 32 --mode scrambled "It was the best of times" | tr -d '\r' | awk '/scrambled/ {print $2}')
           echo "scrambled address: $got"
           test "$got" = "007b30165818bf0311497600aa52996f9395e27"
-          test "$($exe read --length 32 --mode scrambled "$got" | sed 's/ *$//')" = "it was the best of times"
+          test "$($exe read --length 32 --mode scrambled "$got" | tr -d '\r' | sed 's/ *$//')" = "it was the best of times"
           $exe dicts
-          ! $exe dicts | grep -q "MISMATCH\|MISSING"
+          if $exe dicts | grep -Eq "MISMATCH|MISSING"; then exit 1; fi
           $exe sift --lengths 1-8 --brute-max 4 --pruned-max 5 > /dev/null
           $exe models
-          ! $exe models | grep -q "MISMATCH\|MISSING\|UNREADABLE"
-          got=$($exe warp --length 32 --mode guided "It was the best of times" | awk '$1 == "guided" {print $2}')
+          if $exe models | grep -Eq "MISMATCH|MISSING|UNREADABLE"; then exit 1; fi
+          got=$($exe warp --length 32 --mode guided "It was the best of times" | tr -d '\r' | awk '$1 == "guided" {print $2}')
           echo "guided address: $got"
           test "$got" = "90922c700685e28"
-          test "$($exe read --length 32 --mode guided "$got" | sed 's/ *$//')" = "it was the best of times"
+          test "$($exe read --length 32 --mode guided "$got" | tr -d '\r' | sed 's/ *$//')" = "it was the best of times"
 
       - name: Filters judge, count and rank the same on every platform
         run: |
@@ -58,16 +63,16 @@ jobs:
           [ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
           printf '[text]\nmode = compact\nfilters = words-v2\n' > words2.ini
           printf '[text]\nmode = compact\nfilters = words-v2, max-run-v1\n' > mixed.ini
-          $exe filters --filters words2.ini | tr -d '\r' | grep -q "^survivors    190011992984255955985337560 "
+          $exe filters --filters words2.ini | tr -d '\r' | grep -q "^survivors    3037669199976796308182197712 "
           $exe filters --filters mixed.ini | tr -d '\r' | grep -q "words-v2 can rank, but not together with max-run-v1"
           out=$($exe check --length 32 --filters words2.ini "It was the best of times" | tr -d '\r')
           echo "$out"
           echo "$out" | grep -q "words-v1 *FAIL"
           echo "$out" | grep -q "words-v2 *pass"
           k=$(echo "$out" | awk '/survivor number/ {print $(NF-2)}')
-          test "$k" = "100485593897630338697104005"
+          test "$k" = "1533066303779775957571202953"
           test "$($exe read --length 32 --mode positional --filters words2.ini --survivor "$k" 2>/dev/null | tr -d '\r' | sed 's/ *$//')" = "it was the best of times"
-          test "$($exe read --length 32 --mode positional --filters words2.ini --survivor 1000000 2>/dev/null | tr -d '\r' | sed 's/ *$//')" = " a a a a a a a a a a a aah seize"
+          test "$($exe read --length 32 --mode positional --filters words2.ini --survivor 1000000 2>/dev/null | tr -d '\r' | sed 's/ *$//')" = " a a a a a a a a a a a a maim pt"
           # Compact in every ordering: warp gives the compact addresses, read takes them back.
           out=$($exe warp --length 32 --filters words2.ini --compact "It was the best of times" 2>/dev/null | tr -d '\r')
           echo "$out"
@@ -76,8 +81,8 @@ jobs:
             echo "compact $m: $addr"
             test "$($exe read --length 32 --mode $m --filters words2.ini --compact "$addr" 2>/dev/null | tr -d '\r' | sed 's/ *$//')" = "it was the best of times"
           done
-          echo "$out" | grep -q "scrambled   1db41d1685abd564b15405"
-          echo "$out" | grep -q "guided      9116ae0428ea154  (58 bits"
+          echo "$out" | grep -q "scrambled   2afad38e8cb58c79243f9f6"
+          echo "$out" | grep -q "guided      90b25da06c4d36a  (59 bits"
           # The other lines: melodies in a key, black-and-white pictures of low entropy.
           printf '[audio]\nmode = compact\nfilters = key-v1\n[audio.key-v1]\ntonic = A\nscale = minor-pentatonic\n[image]\nmode = compact\nfilters = symbol-entropy-v1\n[image.symbol-entropy-v1]\nmax_millibits = 500\n' > lines.ini
           $exe filters --line audio --filters lines.ini | tr -d '\r' | grep -q "^survivors    794071845499378503449051136 "
@@ -105,13 +110,20 @@ jobs:
             cmp $m.txt tests/example_book_v1.pages.txt
           done
           # A changed address is refused.
-          python3 - <<'PY'
+          python - <<'PY'
           l = open("scrambled.book").read().split("\n")
           i = l.index("end") - 1
           l[i] = l[i][:5] + ("0" if l[i][5] != "0" else "1") + l[i][6:]
           open("tampered.book", "w").write("\n".join(l))
           PY
-          ! $exe unbind tampered.book > /dev/null 2>&1
+          if $exe unbind tampered.book > /dev/null 2>&1; then exit 1; fi
+          # Book filters: the title as one page, the pages as one continuous text, so the word cut
+          # by each page break is judged whole and the real book survives.
+          printf '[books]\nmode = compact\n[books.title]\nfilters = title-v1\n[books.pages]\nfilters = words-v2\n' > books.ini
+          out=$($exe check --book tests/example_book_v1.book --filters books.ini | tr -d '\r')
+          echo "$out" | tail -4
+          echo "$out" | grep -q "^book: passes, survivor number "
+          $exe filters --line books --length 400 --book-pages 3 --filters books.ini | tr -d '\r' | grep -q "^survivors    [0-9]* books"
 
       - name: Hallway renders, and its doors keep the corridor position (Linux, no display)
         if: runner.os == 'Linux'
@@ -136,12 +148,13 @@ jobs:
           echo "$out"
           echo "$out" | tail -2 | head -1 | grep -q "PAGES line"
           test "$(echo "$out" | tail -2 | book)" = "$next"
-          # Guided order: M cycles to it and - zooms out; all four doors lead back to the same book.
+          # Guided order: M cycles to it and - zooms out; all five doors lead back to the same book.
           $H --warp "$W" --press "M,M,-" --screenshot keys.png | tail -2 | head -1 | grep -q "PAGES line, guided zoom 57"
           start=$($H --mode guided --warp "$W" --zoom 20 --walk "0,0" --screenshot start.png | book)
-          out=$($H --mode guided --warp "$W" --zoom 20 --pose 0,7,-90,0 --walk "-2.3,0;-4.2,0;-4.2,0;-4.2,0" --screenshot guided.png)
+          out=$($H --mode guided --warp "$W" --zoom 20 --pose 0,7,-90,0 --walk "-2.3,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0" --screenshot guided.png)
           echo "$out"
           echo "$out" | grep -q "VIDEO line"
+          echo "$out" | grep -q "BOOKS line"
           echo "$out" | tail -2 | head -1 | grep -q "PAGES line, guided"
           test "$(echo "$out" | tail -2 | book)" = "$start"
           # Loops: a 2-character line is 729 units = 6 tiles, so tile 6 starts the second copy,
@@ -156,6 +169,33 @@ jobs:
           $H --menu --press "Down,Down,Down,Right,PageUp" --screenshot menu2.png | grep -q "saved menu2.png"
           $H --menu --length 4000000000 --video-width 100000 --video-frames 100000 --screenshot menu3.png | grep -q "saved menu3.png"
           test -s menu.png && test -s menu2.png && test -s menu3.png
+          # Books: the fifth line. Its books are a cover, a title and pages; the committed example
+          # book opens on its shelf when the lines have its shape, and page N turns.
+          $H --line books --walk "0,0" --screenshot books.png | head -1 | grep -q "BOOKS line, positional, filters: none"
+          out=$($H --line books --length 400 --book-pages 3 --warp tests/example_book_v1.book --walk "0,0" --press N --screenshot book-open.png)
+          echo "$out"
+          echo "$out" | head -1 | grep -q '"a tale of two cities'
+          echo "$out" | grep -q "opened the book"
+          $H --line books --warp tests/example_book_v1.book --walk "0,0" --screenshot book-wrong.png | head -1 | grep -q "in the menu to the book's shape"
+          $H --line books --mode scrambled --walk "0,0" --take --screenshot book-hand.png | head -1 | grep -q "BOOKS line, scrambled"
+          printf '[books]\nmode = compact\n[books.title]\nfilters = title-v1\n[books.pages]\nfilters = words-v2\n' > books.ini
+          $H --filters books.ini --line books --length 400 --book-pages 3 --warp tests/example_book_v1.book --walk "0,0" --screenshot book-compact.png | head -1 | grep -q "surviving books"
+          $H --filters books.ini --line books --length 400 --book-pages 3 --mode scrambled --walk "0,0" --take --screenshot book-compact2.png | head -1 | grep -q "BOOKS line, scrambled, filters: 0+1+1 compact"
+          $H --menu --screenshot menu5.png | grep -q "saved menu5.png"
+          # The main menu, its settings screens and a language file with gaps (English fills them).
+          $H --main-menu --screenshot main.png | grep -q "saved main.png"
+          $H --line image --edge-glow --walk "0,0" --screenshot glow.png | grep -q "saved glow.png"
+          $H --main-menu --press "Down,Return,Return,Return" --screenshot main-res.png | grep -q "saved"
+          $H --main-menu --settings app.ini --press "Down,Return,Return,Down,Down,Return,Down,Return" --screenshot main-gfx.png > /dev/null
+          grep -q "^edge_glow = off" app.ini && grep -q "^real_graphics = on" app.ini
+          mkdir -p lt/data/lang && cp data/lang/en.txt lt/data/lang/ && printf 'language.name = Test\nitem.start = START TEST\n' > lt/data/lang/tt.txt
+          (cd lt && ../$H --main-menu --language tt --screenshot ../main-tt.png | grep -q "saved")
+          # The language's font: sieve8x8 draws accented and Greek letters; a missing font is reported.
+          mkdir -p lt/data/fonts && cp data/fonts/sieve8x8.hex lt/data/fonts/
+          printf 'font = sieve8x8\nlanguage.name = Fran\xc3\xa7ais\nitem.start = D\xc3\xa9marrer Sieve\n' > lt/data/lang/fr.txt
+          (cd lt && ../$H --main-menu --language fr --screenshot ../main-fr.png 2>&1 | grep -v "not found" | grep -q "saved")
+          printf 'font = nosuchfont\nitem.start = X\n' > lt/data/lang/xx.txt
+          (cd lt && ../$H --main-menu --language xx --screenshot ../main-xx.png 2>&1 | grep -q "font 'nosuchfont' not found")
           # Filter modes: compact shelves only survivors (warped text lands on a shelf, not in hand),
           # an unrankable stack falls back to hide, and the filter overlay renders.
           printf '[text]\nmode = compact\nfilters = words-v2\n' > words2.ini
@@ -164,13 +204,13 @@ jobs:
           printf '[audio]\nmode = compact\nfilters = key-v1\n[audio.key-v1]\ntonic = A\nscale = minor-pentatonic\n[image]\nmode = compact\nfilters = symbol-entropy-v1\n[image.symbol-entropy-v1]\nmax_millibits = 500\n' > lines.ini
           out=$($H --filters words2.ini --warp "$W" --walk "0,0" --screenshot compact.png)
           echo "$out"
-          echo "$out" | grep -q "filters: 1 compact (190011...7560 (27 digits) survivors), tile 785043...1125 (24 digits)"
+          echo "$out" | grep -q "filters: 1 compact (303766...7712 (28 digits) survivors), tile 119770...5023 (26 digits)"
           $H --filters mixed.ini --walk "0,0" --screenshot mixed.png | grep -q "filters: 2 hide (compact: words-v2 can rank, but not together with max-run-v1)"
           $H --filters mark.ini --length 3 --walk "0,0" --screenshot mark.png | grep -q "filters: 1 mark"
           $H --menu --filters words2.ini --press "F" --screenshot overlay.png | grep -q "saved overlay.png"
           # Compact in the scrambled and guided orderings, and on the image and audio lines.
           $H --filters words2.ini --mode scrambled --warp "$W" --walk "0,0" --screenshot cs.png | head -1 | grep -q "PAGES line, scrambled, filters: 1 compact"
-          $H --filters words2.ini --mode guided --warp "$W" --walk "0,0" --screenshot cg.png | head -1 | grep -q "PAGES line, guided zoom 58, filters: 1 compact"
+          $H --filters words2.ini --mode guided --warp "$W" --walk "0,0" --screenshot cg.png | head -1 | grep -q "PAGES line, guided zoom 59, filters: 1 compact"
           $H --filters lines.ini --line image --mode scrambled --walk "0,0" --screenshot ci.png | head -1 | grep -q "IMAGE line, scrambled, filters: 1 compact (322091425582872 survivors)"
           $H --filters lines.ini --line audio --walk "0,0" --screenshot ca.png | head -1 | grep -q "AUDIO line, positional, filters: 1 compact"
           test -s compact.png && test -s mixed.png && test -s mark.png && test -s overlay.png
@@ -178,24 +218,26 @@ jobs:
       - name: Reference oracle reproduces the committed vectors
         run: |
           cd reference
-          python3 sieve_ref.py vectors       | diff - ../tests/vectors_v1.tsv
-          python3 sieve_ref.py digit-vectors | diff - ../tests/vectors_digits_v1.tsv
-          python3 sieve_ref.py canon-vectors | diff - ../tests/vectors_canon.tsv
-          python3 sieve_ref.py image-vectors | diff - ../tests/vectors_image_v1.tsv
-          python3 sieve_ref.py guided-vectors | diff - ../tests/vectors_guided_v1.tsv
-          python3 sieve_ref.py filter-vectors | diff - ../tests/vectors_filters_v1.tsv
-          python3 sieve_ref.py compact-vectors | diff - ../tests/vectors_compact_v1.tsv
-          python3 sieve_ref.py book-read ../tests/example_book_v1.book > book.out
+          python sieve_ref.py vectors       | diff - ../tests/vectors_v1.tsv
+          python sieve_ref.py digit-vectors | diff - ../tests/vectors_digits_v1.tsv
+          python sieve_ref.py canon-vectors | diff - ../tests/vectors_canon.tsv
+          python sieve_ref.py image-vectors | diff - ../tests/vectors_image_v1.tsv
+          python sieve_ref.py guided-vectors | diff - ../tests/vectors_guided_v1.tsv
+          python sieve_ref.py filter-vectors | diff - ../tests/vectors_filters_v1.tsv
+          python sieve_ref.py compact-vectors | diff - ../tests/vectors_compact_v1.tsv
+          python sieve_ref.py book-vectors | diff - ../tests/vectors_books_v1.tsv
+          python sieve_ref.py book-filter-vectors | diff - ../tests/vectors_book_filters_v1.tsv
+          python sieve_ref.py book-read ../tests/example_book_v1.book > book.out
           test "$(head -1 book.out)" = "$(awk '$1 == "id" {print $2}' ../tests/example_book_v1.book)"
           tail -n +3 book.out | cmp - ../tests/example_book_v1.pages.txt
 
       - name: The pinned model rebuilds byte for byte from its corpus (Linux)
         if: runner.os == 'Linux'
         run: |
-          python3 tools/fetch_corpus.py
+          python tools/fetch_corpus.py
           pinned=$(awk -F'\t' '$1 == "gutenberg-lower27-o5" {print $5}' data/models/models.tsv)
           build/sieve train --out rebuilt.model
           test "$(sha256sum rebuilt.model | cut -d' ' -f1)" = "$pinned"
-          (cd reference && python3 sieve_ref.py model-build --out ../oracle.model)
+          (cd reference && python sieve_ref.py model-build --out ../oracle.model)
           test "$(sha256sum oracle.model | cut -d' ' -f1)" = "$pinned"
           build/sieve measure

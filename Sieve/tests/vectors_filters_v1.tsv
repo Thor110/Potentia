@@ -1,4 +1,4 @@
-# sieve filter conformance vectors v1 (clean-v1 window-v1 words-v1 clean-v2 words-v2 max-run-v1 symbol-entropy-v1
+# sieve filter conformance vectors v1 (clean-v1 window-v1 words-v1 clean-v2 words-v2 window-v2 title-v1 max-run-v1 symbol-entropy-v1
 #   model-information-v1 neighbour-agreement-v1), dictionary scowl-en-35, model gutenberg-lower27-o5
 # dictionary scowl-2020.12.07-en-35.txt
 # log2 <x> <floor(log2(x)*65536)>
@@ -24,6 +24,10 @@ verdict	window-v1	dictionary=scowl-en-35	8	it was t	1
 verdict	words-v1	dictionary=scowl-en-35	8	it was t	0
 verdict	clean-v2	dictionary=scowl-en-35	8	it was t	1
 verdict	words-v2	dictionary=scowl-en-35	8	it was t	0
+verdict	window-v2	dictionary=scowl-en-35	8	it was t	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	8	it was t	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	8	it was t	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	8	it was t	0
 verdict	max-run-v1	max_run=2	8	it was t	1
 verdict	max-run-v1	max_run=3	8	it was t	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	it was t	1
@@ -37,6 +41,10 @@ verdict	window-v1	dictionary=scowl-en-35	8	the quic	1
 verdict	words-v1	dictionary=scowl-en-35	8	the quic	0
 verdict	clean-v2	dictionary=scowl-en-35	8	the quic	1
 verdict	words-v2	dictionary=scowl-en-35	8	the quic	0
+verdict	window-v2	dictionary=scowl-en-35	8	the quic	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	8	the quic	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	8	the quic	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	8	the quic	0
 verdict	max-run-v1	max_run=2	8	the quic	1
 verdict	max-run-v1	max_run=3	8	the quic	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	the quic	1
@@ -50,6 +58,10 @@ verdict	window-v1	dictionary=scowl-en-35	8	qzxj vvk	0
 verdict	words-v1	dictionary=scowl-en-35	8	qzxj vvk	0
 verdict	clean-v2	dictionary=scowl-en-35	8	qzxj vvk	1
 verdict	words-v2	dictionary=scowl-en-35	8	qzxj vvk	0
+verdict	window-v2	dictionary=scowl-en-35	8	qzxj vvk	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	8	qzxj vvk	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	8	qzxj vvk	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	8	qzxj vvk	0
 verdict	max-run-v1	max_run=2	8	qzxj vvk	1
 verdict	max-run-v1	max_run=3	8	qzxj vvk	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	qzxj vvk	1
@@ -63,6 +75,10 @@ verdict	window-v1	dictionary=scowl-en-35	8	a b     	0
 verdict	words-v1	dictionary=scowl-en-35	8	a b     	0
 verdict	clean-v2	dictionary=scowl-en-35	8	a b     	1
 verdict	words-v2	dictionary=scowl-en-35	8	a b     	0
+verdict	window-v2	dictionary=scowl-en-35	8	a b     	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	8	a b     	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	8	a b     	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	8	a b     	0
 verdict	max-run-v1	max_run=2	8	a b     	1
 verdict	max-run-v1	max_run=3	8	a b     	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	a b     	1
@@ -76,6 +92,10 @@ verdict	window-v1	dictionary=scowl-en-35	8	an ant  	0
 verdict	words-v1	dictionary=scowl-en-35	8	an ant  	0
 verdict	clean-v2	dictionary=scowl-en-35	8	an ant  	1
 verdict	words-v2	dictionary=scowl-en-35	8	an ant  	1
+verdict	window-v2	dictionary=scowl-en-35	8	an ant  	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	8	an ant  	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	8	an ant  	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	8	an ant  	1
 verdict	max-run-v1	max_run=2	8	an ant  	1
 verdict	max-run-v1	max_run=3	8	an ant  	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	an ant  	1
@@ -89,6 +109,10 @@ verdict	window-v1	dictionary=scowl-en-35	8	aaaa bbb	0
 verdict	words-v1	dictionary=scowl-en-35	8	aaaa bbb	0
 verdict	clean-v2	dictionary=scowl-en-35	8	aaaa bbb	1
 verdict	words-v2	dictionary=scowl-en-35	8	aaaa bbb	0
+verdict	window-v2	dictionary=scowl-en-35	8	aaaa bbb	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	8	aaaa bbb	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	8	aaaa bbb	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	8	aaaa bbb	0
 verdict	max-run-v1	max_run=2	8	aaaa bbb	0
 verdict	max-run-v1	max_run=3	8	aaaa bbb	0
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	aaaa bbb	1
@@ -102,6 +126,10 @@ verdict	window-v1	dictionary=scowl-en-35	8	zzz     	0
 verdict	words-v1	dictionary=scowl-en-35	8	zzz     	0
 verdict	clean-v2	dictionary=scowl-en-35	8	zzz     	1
 verdict	words-v2	dictionary=scowl-en-35	8	zzz     	0
+verdict	window-v2	dictionary=scowl-en-35	8	zzz     	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	8	zzz     	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	8	zzz     	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	8	zzz     	0
 verdict	max-run-v1	max_run=2	8	zzz     	0
 verdict	max-run-v1	max_run=3	8	zzz     	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	zzz     	1
@@ -115,6 +143,10 @@ verdict	window-v1	dictionary=scowl-en-35	8	call me 	1
 verdict	words-v1	dictionary=scowl-en-35	8	call me 	1
 verdict	clean-v2	dictionary=scowl-en-35	8	call me 	1
 verdict	words-v2	dictionary=scowl-en-35	8	call me 	1
+verdict	window-v2	dictionary=scowl-en-35	8	call me 	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	8	call me 	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	8	call me 	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	8	call me 	1
 verdict	max-run-v1	max_run=2	8	call me 	1
 verdict	max-run-v1	max_run=3	8	call me 	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	call me 	1
@@ -128,6 +160,10 @@ verdict	window-v1	dictionary=scowl-en-35	8	xylophon	1
 verdict	words-v1	dictionary=scowl-en-35	8	xylophon	0
 verdict	clean-v2	dictionary=scowl-en-35	8	xylophon	1
 verdict	words-v2	dictionary=scowl-en-35	8	xylophon	0
+verdict	window-v2	dictionary=scowl-en-35	8	xylophon	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	8	xylophon	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	8	xylophon	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	8	xylophon	0
 verdict	max-run-v1	max_run=2	8	xylophon	1
 verdict	max-run-v1	max_run=3	8	xylophon	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	xylophon	1
@@ -141,6 +177,10 @@ verdict	window-v1	dictionary=scowl-en-35	8	tan tan 	1
 verdict	words-v1	dictionary=scowl-en-35	8	tan tan 	1
 verdict	clean-v2	dictionary=scowl-en-35	8	tan tan 	1
 verdict	words-v2	dictionary=scowl-en-35	8	tan tan 	1
+verdict	window-v2	dictionary=scowl-en-35	8	tan tan 	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	8	tan tan 	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	8	tan tan 	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	8	tan tan 	1
 verdict	max-run-v1	max_run=2	8	tan tan 	1
 verdict	max-run-v1	max_run=3	8	tan tan 	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	tan tan 	1
@@ -154,6 +194,10 @@ verdict	window-v1	dictionary=scowl-en-35	8	hello wo	1
 verdict	words-v1	dictionary=scowl-en-35	8	hello wo	0
 verdict	clean-v2	dictionary=scowl-en-35	8	hello wo	1
 verdict	words-v2	dictionary=scowl-en-35	8	hello wo	0
+verdict	window-v2	dictionary=scowl-en-35	8	hello wo	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	8	hello wo	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	8	hello wo	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	8	hello wo	0
 verdict	max-run-v1	max_run=2	8	hello wo	1
 verdict	max-run-v1	max_run=3	8	hello wo	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	hello wo	1
@@ -167,6 +211,10 @@ verdict	window-v1	dictionary=scowl-en-35	8	lorem ip	0
 verdict	words-v1	dictionary=scowl-en-35	8	lorem ip	0
 verdict	clean-v2	dictionary=scowl-en-35	8	lorem ip	1
 verdict	words-v2	dictionary=scowl-en-35	8	lorem ip	0
+verdict	window-v2	dictionary=scowl-en-35	8	lorem ip	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	8	lorem ip	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	8	lorem ip	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	8	lorem ip	0
 verdict	max-run-v1	max_run=2	8	lorem ip	1
 verdict	max-run-v1	max_run=3	8	lorem ip	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	lorem ip	1
@@ -180,6 +228,10 @@ verdict	window-v1	dictionary=scowl-en-35	8	hgdctca 	0
 verdict	words-v1	dictionary=scowl-en-35	8	hgdctca 	0
 verdict	clean-v2	dictionary=scowl-en-35	8	hgdctca 	1
 verdict	words-v2	dictionary=scowl-en-35	8	hgdctca 	0
+verdict	window-v2	dictionary=scowl-en-35	8	hgdctca 	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	8	hgdctca 	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	8	hgdctca 	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	8	hgdctca 	0
 verdict	max-run-v1	max_run=2	8	hgdctca 	1
 verdict	max-run-v1	max_run=3	8	hgdctca 	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	hgdctca 	1
@@ -193,6 +245,10 @@ verdict	window-v1	dictionary=scowl-en-35	8	qgafnkmy	0
 verdict	words-v1	dictionary=scowl-en-35	8	qgafnkmy	0
 verdict	clean-v2	dictionary=scowl-en-35	8	qgafnkmy	1
 verdict	words-v2	dictionary=scowl-en-35	8	qgafnkmy	0
+verdict	window-v2	dictionary=scowl-en-35	8	qgafnkmy	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	8	qgafnkmy	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	8	qgafnkmy	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	8	qgafnkmy	0
 verdict	max-run-v1	max_run=2	8	qgafnkmy	1
 verdict	max-run-v1	max_run=3	8	qgafnkmy	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	qgafnkmy	1
@@ -206,6 +262,10 @@ verdict	window-v1	dictionary=scowl-en-35	8	zbfdicas	0
 verdict	words-v1	dictionary=scowl-en-35	8	zbfdicas	0
 verdict	clean-v2	dictionary=scowl-en-35	8	zbfdicas	1
 verdict	words-v2	dictionary=scowl-en-35	8	zbfdicas	0
+verdict	window-v2	dictionary=scowl-en-35	8	zbfdicas	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	8	zbfdicas	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	8	zbfdicas	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	8	zbfdicas	0
 verdict	max-run-v1	max_run=2	8	zbfdicas	1
 verdict	max-run-v1	max_run=3	8	zbfdicas	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	zbfdicas	1
@@ -219,6 +279,10 @@ verdict	window-v1	dictionary=scowl-en-35	8	lsjakgg 	0
 verdict	words-v1	dictionary=scowl-en-35	8	lsjakgg 	0
 verdict	clean-v2	dictionary=scowl-en-35	8	lsjakgg 	1
 verdict	words-v2	dictionary=scowl-en-35	8	lsjakgg 	0
+verdict	window-v2	dictionary=scowl-en-35	8	lsjakgg 	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	8	lsjakgg 	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	8	lsjakgg 	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	8	lsjakgg 	0
 verdict	max-run-v1	max_run=2	8	lsjakgg 	1
 verdict	max-run-v1	max_run=3	8	lsjakgg 	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	lsjakgg 	1
@@ -232,6 +296,10 @@ verdict	window-v1	dictionary=scowl-en-35	8	ndfm hr 	0
 verdict	words-v1	dictionary=scowl-en-35	8	ndfm hr 	0
 verdict	clean-v2	dictionary=scowl-en-35	8	ndfm hr 	1
 verdict	words-v2	dictionary=scowl-en-35	8	ndfm hr 	0
+verdict	window-v2	dictionary=scowl-en-35	8	ndfm hr 	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	8	ndfm hr 	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	8	ndfm hr 	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	8	ndfm hr 	0
 verdict	max-run-v1	max_run=2	8	ndfm hr 	1
 verdict	max-run-v1	max_run=3	8	ndfm hr 	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	ndfm hr 	1
@@ -245,6 +313,10 @@ verdict	window-v1	dictionary=scowl-en-35	8	ryqjpdpk	0
 verdict	words-v1	dictionary=scowl-en-35	8	ryqjpdpk	0
 verdict	clean-v2	dictionary=scowl-en-35	8	ryqjpdpk	1
 verdict	words-v2	dictionary=scowl-en-35	8	ryqjpdpk	0
+verdict	window-v2	dictionary=scowl-en-35	8	ryqjpdpk	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	8	ryqjpdpk	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	8	ryqjpdpk	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	8	ryqjpdpk	0
 verdict	max-run-v1	max_run=2	8	ryqjpdpk	1
 verdict	max-run-v1	max_run=3	8	ryqjpdpk	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	ryqjpdpk	1
@@ -258,6 +330,10 @@ verdict	window-v1	dictionary=scowl-en-35	8	        	0
 verdict	words-v1	dictionary=scowl-en-35	8	        	0
 verdict	clean-v2	dictionary=scowl-en-35	8	        	0
 verdict	words-v2	dictionary=scowl-en-35	8	        	0
+verdict	window-v2	dictionary=scowl-en-35	8	        	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	8	        	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	8	        	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	8	        	0
 verdict	max-run-v1	max_run=2	8	        	1
 verdict	max-run-v1	max_run=3	8	        	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	        	1
@@ -271,6 +347,10 @@ verdict	window-v1	dictionary=scowl-en-35	8	ant     	0
 verdict	words-v1	dictionary=scowl-en-35	8	ant     	0
 verdict	clean-v2	dictionary=scowl-en-35	8	ant     	1
 verdict	words-v2	dictionary=scowl-en-35	8	ant     	1
+verdict	window-v2	dictionary=scowl-en-35	8	ant     	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	8	ant     	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	8	ant     	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	8	ant     	1
 verdict	max-run-v1	max_run=2	8	ant     	1
 verdict	max-run-v1	max_run=3	8	ant     	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	ant     	1
@@ -284,6 +364,10 @@ verdict	window-v1	dictionary=scowl-en-35	8	 an     	0
 verdict	words-v1	dictionary=scowl-en-35	8	 an     	0
 verdict	clean-v2	dictionary=scowl-en-35	8	 an     	1
 verdict	words-v2	dictionary=scowl-en-35	8	 an     	1
+verdict	window-v2	dictionary=scowl-en-35	8	 an     	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	8	 an     	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	8	 an     	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	8	 an     	1
 verdict	max-run-v1	max_run=2	8	 an     	1
 verdict	max-run-v1	max_run=3	8	 an     	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	 an     	1
@@ -297,6 +381,10 @@ verdict	window-v1	dictionary=scowl-en-35	8	tan  x  	0
 verdict	words-v1	dictionary=scowl-en-35	8	tan  x  	0
 verdict	clean-v2	dictionary=scowl-en-35	8	tan  x  	0
 verdict	words-v2	dictionary=scowl-en-35	8	tan  x  	0
+verdict	window-v2	dictionary=scowl-en-35	8	tan  x  	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	8	tan  x  	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	8	tan  x  	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	8	tan  x  	0
 verdict	max-run-v1	max_run=2	8	tan  x  	1
 verdict	max-run-v1	max_run=3	8	tan  x  	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	tan  x  	1
@@ -310,6 +398,10 @@ verdict	window-v1	dictionary=scowl-en-35	8	i       	0
 verdict	words-v1	dictionary=scowl-en-35	8	i       	0
 verdict	clean-v2	dictionary=scowl-en-35	8	i       	1
 verdict	words-v2	dictionary=scowl-en-35	8	i       	0
+verdict	window-v2	dictionary=scowl-en-35	8	i       	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	8	i       	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	8	i       	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	8	i       	0
 verdict	max-run-v1	max_run=2	8	i       	1
 verdict	max-run-v1	max_run=3	8	i       	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	i       	1
@@ -323,6 +415,10 @@ verdict	window-v1	dictionary=scowl-en-35	8	xqz     	0
 verdict	words-v1	dictionary=scowl-en-35	8	xqz     	0
 verdict	clean-v2	dictionary=scowl-en-35	8	xqz     	1
 verdict	words-v2	dictionary=scowl-en-35	8	xqz     	0
+verdict	window-v2	dictionary=scowl-en-35	8	xqz     	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	8	xqz     	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	8	xqz     	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	8	xqz     	0
 verdict	max-run-v1	max_run=2	8	xqz     	1
 verdict	max-run-v1	max_run=3	8	xqz     	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	8	xqz     	1
@@ -336,6 +432,10 @@ verdict	window-v1	dictionary=scowl-en-35	32	it was the best of times        	0
 verdict	words-v1	dictionary=scowl-en-35	32	it was the best of times        	0
 verdict	clean-v2	dictionary=scowl-en-35	32	it was the best of times        	1
 verdict	words-v2	dictionary=scowl-en-35	32	it was the best of times        	1
+verdict	window-v2	dictionary=scowl-en-35	32	it was the best of times        	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	32	it was the best of times        	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	32	it was the best of times        	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	32	it was the best of times        	1
 verdict	max-run-v1	max_run=2	32	it was the best of times        	1
 verdict	max-run-v1	max_run=3	32	it was the best of times        	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	it was the best of times        	1
@@ -349,6 +449,10 @@ verdict	window-v1	dictionary=scowl-en-35	32	the quick brown fox             	0
 verdict	words-v1	dictionary=scowl-en-35	32	the quick brown fox             	0
 verdict	clean-v2	dictionary=scowl-en-35	32	the quick brown fox             	1
 verdict	words-v2	dictionary=scowl-en-35	32	the quick brown fox             	1
+verdict	window-v2	dictionary=scowl-en-35	32	the quick brown fox             	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	32	the quick brown fox             	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	32	the quick brown fox             	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	32	the quick brown fox             	1
 verdict	max-run-v1	max_run=2	32	the quick brown fox             	1
 verdict	max-run-v1	max_run=3	32	the quick brown fox             	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	the quick brown fox             	1
@@ -362,6 +466,10 @@ verdict	window-v1	dictionary=scowl-en-35	32	qzxj vvkw pqpq zzzz             	0
 verdict	words-v1	dictionary=scowl-en-35	32	qzxj vvkw pqpq zzzz             	0
 verdict	clean-v2	dictionary=scowl-en-35	32	qzxj vvkw pqpq zzzz             	1
 verdict	words-v2	dictionary=scowl-en-35	32	qzxj vvkw pqpq zzzz             	0
+verdict	window-v2	dictionary=scowl-en-35	32	qzxj vvkw pqpq zzzz             	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	32	qzxj vvkw pqpq zzzz             	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	32	qzxj vvkw pqpq zzzz             	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	32	qzxj vvkw pqpq zzzz             	0
 verdict	max-run-v1	max_run=2	32	qzxj vvkw pqpq zzzz             	0
 verdict	max-run-v1	max_run=3	32	qzxj vvkw pqpq zzzz             	0
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	qzxj vvkw pqpq zzzz             	1
@@ -375,6 +483,10 @@ verdict	window-v1	dictionary=scowl-en-35	32	a b                             	0
 verdict	words-v1	dictionary=scowl-en-35	32	a b                             	0
 verdict	clean-v2	dictionary=scowl-en-35	32	a b                             	1
 verdict	words-v2	dictionary=scowl-en-35	32	a b                             	0
+verdict	window-v2	dictionary=scowl-en-35	32	a b                             	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	32	a b                             	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	32	a b                             	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	32	a b                             	0
 verdict	max-run-v1	max_run=2	32	a b                             	1
 verdict	max-run-v1	max_run=3	32	a b                             	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	a b                             	1
@@ -388,6 +500,10 @@ verdict	window-v1	dictionary=scowl-en-35	32	an ant                          	0
 verdict	words-v1	dictionary=scowl-en-35	32	an ant                          	0
 verdict	clean-v2	dictionary=scowl-en-35	32	an ant                          	1
 verdict	words-v2	dictionary=scowl-en-35	32	an ant                          	1
+verdict	window-v2	dictionary=scowl-en-35	32	an ant                          	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	32	an ant                          	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	32	an ant                          	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	32	an ant                          	1
 verdict	max-run-v1	max_run=2	32	an ant                          	1
 verdict	max-run-v1	max_run=3	32	an ant                          	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	an ant                          	1
@@ -401,6 +517,10 @@ verdict	window-v1	dictionary=scowl-en-35	32	aaaa bbb                        	0
 verdict	words-v1	dictionary=scowl-en-35	32	aaaa bbb                        	0
 verdict	clean-v2	dictionary=scowl-en-35	32	aaaa bbb                        	1
 verdict	words-v2	dictionary=scowl-en-35	32	aaaa bbb                        	0
+verdict	window-v2	dictionary=scowl-en-35	32	aaaa bbb                        	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	32	aaaa bbb                        	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	32	aaaa bbb                        	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	32	aaaa bbb                        	0
 verdict	max-run-v1	max_run=2	32	aaaa bbb                        	0
 verdict	max-run-v1	max_run=3	32	aaaa bbb                        	0
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	aaaa bbb                        	1
@@ -414,6 +534,10 @@ verdict	window-v1	dictionary=scowl-en-35	32	zzz                             	0
 verdict	words-v1	dictionary=scowl-en-35	32	zzz                             	0
 verdict	clean-v2	dictionary=scowl-en-35	32	zzz                             	1
 verdict	words-v2	dictionary=scowl-en-35	32	zzz                             	0
+verdict	window-v2	dictionary=scowl-en-35	32	zzz                             	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	32	zzz                             	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	32	zzz                             	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	32	zzz                             	0
 verdict	max-run-v1	max_run=2	32	zzz                             	0
 verdict	max-run-v1	max_run=3	32	zzz                             	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	zzz                             	1
@@ -427,6 +551,10 @@ verdict	window-v1	dictionary=scowl-en-35	32	call me ishmael                 	0
 verdict	words-v1	dictionary=scowl-en-35	32	call me ishmael                 	0
 verdict	clean-v2	dictionary=scowl-en-35	32	call me ishmael                 	1
 verdict	words-v2	dictionary=scowl-en-35	32	call me ishmael                 	0
+verdict	window-v2	dictionary=scowl-en-35	32	call me ishmael                 	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	32	call me ishmael                 	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	32	call me ishmael                 	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	32	call me ishmael                 	0
 verdict	max-run-v1	max_run=2	32	call me ishmael                 	1
 verdict	max-run-v1	max_run=3	32	call me ishmael                 	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	call me ishmael                 	1
@@ -440,6 +568,10 @@ verdict	window-v1	dictionary=scowl-en-35	32	xylophone                       	0
 verdict	words-v1	dictionary=scowl-en-35	32	xylophone                       	0
 verdict	clean-v2	dictionary=scowl-en-35	32	xylophone                       	1
 verdict	words-v2	dictionary=scowl-en-35	32	xylophone                       	1
+verdict	window-v2	dictionary=scowl-en-35	32	xylophone                       	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	32	xylophone                       	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	32	xylophone                       	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	32	xylophone                       	1
 verdict	max-run-v1	max_run=2	32	xylophone                       	1
 verdict	max-run-v1	max_run=3	32	xylophone                       	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	xylophone                       	1
@@ -453,6 +585,10 @@ verdict	window-v1	dictionary=scowl-en-35	32	tan tan tan                     	0
 verdict	words-v1	dictionary=scowl-en-35	32	tan tan tan                     	0
 verdict	clean-v2	dictionary=scowl-en-35	32	tan tan tan                     	1
 verdict	words-v2	dictionary=scowl-en-35	32	tan tan tan                     	1
+verdict	window-v2	dictionary=scowl-en-35	32	tan tan tan                     	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	32	tan tan tan                     	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	32	tan tan tan                     	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	32	tan tan tan                     	1
 verdict	max-run-v1	max_run=2	32	tan tan tan                     	1
 verdict	max-run-v1	max_run=3	32	tan tan tan                     	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	tan tan tan                     	1
@@ -466,6 +602,10 @@ verdict	window-v1	dictionary=scowl-en-35	32	hello world                     	0
 verdict	words-v1	dictionary=scowl-en-35	32	hello world                     	0
 verdict	clean-v2	dictionary=scowl-en-35	32	hello world                     	1
 verdict	words-v2	dictionary=scowl-en-35	32	hello world                     	1
+verdict	window-v2	dictionary=scowl-en-35	32	hello world                     	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	32	hello world                     	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	32	hello world                     	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	32	hello world                     	1
 verdict	max-run-v1	max_run=2	32	hello world                     	1
 verdict	max-run-v1	max_run=3	32	hello world                     	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	hello world                     	1
@@ -479,6 +619,10 @@ verdict	window-v1	dictionary=scowl-en-35	32	lorem ipsum dolor               	0
 verdict	words-v1	dictionary=scowl-en-35	32	lorem ipsum dolor               	0
 verdict	clean-v2	dictionary=scowl-en-35	32	lorem ipsum dolor               	1
 verdict	words-v2	dictionary=scowl-en-35	32	lorem ipsum dolor               	0
+verdict	window-v2	dictionary=scowl-en-35	32	lorem ipsum dolor               	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	32	lorem ipsum dolor               	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	32	lorem ipsum dolor               	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	32	lorem ipsum dolor               	0
 verdict	max-run-v1	max_run=2	32	lorem ipsum dolor               	1
 verdict	max-run-v1	max_run=3	32	lorem ipsum dolor               	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	lorem ipsum dolor               	1
@@ -492,6 +636,10 @@ verdict	window-v1	dictionary=scowl-en-35	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	0
 verdict	words-v1	dictionary=scowl-en-35	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	0
 verdict	clean-v2	dictionary=scowl-en-35	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	1
 verdict	words-v2	dictionary=scowl-en-35	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	0
+verdict	window-v2	dictionary=scowl-en-35	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	0
 verdict	max-run-v1	max_run=2	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	0
 verdict	max-run-v1	max_run=3	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	1
@@ -505,6 +653,10 @@ verdict	window-v1	dictionary=scowl-en-35	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	0
 verdict	words-v1	dictionary=scowl-en-35	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	0
 verdict	clean-v2	dictionary=scowl-en-35	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	1
 verdict	words-v2	dictionary=scowl-en-35	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	0
+verdict	window-v2	dictionary=scowl-en-35	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	0
 verdict	max-run-v1	max_run=2	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	1
 verdict	max-run-v1	max_run=3	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	1
@@ -518,6 +670,10 @@ verdict	window-v1	dictionary=scowl-en-35	32	sbururkrhhytogl orjraiengirtul x	0
 verdict	words-v1	dictionary=scowl-en-35	32	sbururkrhhytogl orjraiengirtul x	0
 verdict	clean-v2	dictionary=scowl-en-35	32	sbururkrhhytogl orjraiengirtul x	1
 verdict	words-v2	dictionary=scowl-en-35	32	sbururkrhhytogl orjraiengirtul x	0
+verdict	window-v2	dictionary=scowl-en-35	32	sbururkrhhytogl orjraiengirtul x	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	32	sbururkrhhytogl orjraiengirtul x	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	32	sbururkrhhytogl orjraiengirtul x	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	32	sbururkrhhytogl orjraiengirtul x	0
 verdict	max-run-v1	max_run=2	32	sbururkrhhytogl orjraiengirtul x	1
 verdict	max-run-v1	max_run=3	32	sbururkrhhytogl orjraiengirtul x	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	sbururkrhhytogl orjraiengirtul x	1
@@ -531,6 +687,10 @@ verdict	window-v1	dictionary=scowl-en-35	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
 verdict	words-v1	dictionary=scowl-en-35	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
 verdict	clean-v2	dictionary=scowl-en-35	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
 verdict	words-v2	dictionary=scowl-en-35	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
+verdict	window-v2	dictionary=scowl-en-35	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
 verdict	max-run-v1	max_run=2	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	1
 verdict	max-run-v1	max_run=3	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	1
@@ -544,6 +704,10 @@ verdict	window-v1	dictionary=scowl-en-35	32	ttomsryknypp gevazvtjpvirrswwstb	0
 verdict	words-v1	dictionary=scowl-en-35	32	ttomsryknypp gevazvtjpvirrswwstb	0
 verdict	clean-v2	dictionary=scowl-en-35	32	ttomsryknypp gevazvtjpvirrswwstb	1
 verdict	words-v2	dictionary=scowl-en-35	32	ttomsryknypp gevazvtjpvirrswwstb	0
+verdict	window-v2	dictionary=scowl-en-35	32	ttomsryknypp gevazvtjpvirrswwstb	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	32	ttomsryknypp gevazvtjpvirrswwstb	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	32	ttomsryknypp gevazvtjpvirrswwstb	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	32	ttomsryknypp gevazvtjpvirrswwstb	0
 verdict	max-run-v1	max_run=2	32	ttomsryknypp gevazvtjpvirrswwstb	1
 verdict	max-run-v1	max_run=3	32	ttomsryknypp gevazvtjpvirrswwstb	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	ttomsryknypp gevazvtjpvirrswwstb	1
@@ -557,6 +721,10 @@ verdict	window-v1	dictionary=scowl-en-35	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	0
 verdict	words-v1	dictionary=scowl-en-35	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	0
 verdict	clean-v2	dictionary=scowl-en-35	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	1
 verdict	words-v2	dictionary=scowl-en-35	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	0
+verdict	window-v2	dictionary=scowl-en-35	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	0
 verdict	max-run-v1	max_run=2	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	1
 verdict	max-run-v1	max_run=3	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	1
@@ -570,6 +738,10 @@ verdict	window-v1	dictionary=scowl-en-35	32	                                	0
 verdict	words-v1	dictionary=scowl-en-35	32	                                	0
 verdict	clean-v2	dictionary=scowl-en-35	32	                                	0
 verdict	words-v2	dictionary=scowl-en-35	32	                                	0
+verdict	window-v2	dictionary=scowl-en-35	32	                                	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	32	                                	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	32	                                	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	32	                                	0
 verdict	max-run-v1	max_run=2	32	                                	1
 verdict	max-run-v1	max_run=3	32	                                	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	                                	1
@@ -583,6 +755,10 @@ verdict	window-v1	dictionary=scowl-en-35	32	ant                             	0
 verdict	words-v1	dictionary=scowl-en-35	32	ant                             	0
 verdict	clean-v2	dictionary=scowl-en-35	32	ant                             	1
 verdict	words-v2	dictionary=scowl-en-35	32	ant                             	1
+verdict	window-v2	dictionary=scowl-en-35	32	ant                             	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	32	ant                             	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	32	ant                             	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	32	ant                             	1
 verdict	max-run-v1	max_run=2	32	ant                             	1
 verdict	max-run-v1	max_run=3	32	ant                             	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	ant                             	1
@@ -596,6 +772,10 @@ verdict	window-v1	dictionary=scowl-en-35	32	 an                             	0
 verdict	words-v1	dictionary=scowl-en-35	32	 an                             	0
 verdict	clean-v2	dictionary=scowl-en-35	32	 an                             	1
 verdict	words-v2	dictionary=scowl-en-35	32	 an                             	1
+verdict	window-v2	dictionary=scowl-en-35	32	 an                             	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	32	 an                             	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	32	 an                             	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	32	 an                             	1
 verdict	max-run-v1	max_run=2	32	 an                             	1
 verdict	max-run-v1	max_run=3	32	 an                             	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	 an                             	1
@@ -609,6 +789,10 @@ verdict	window-v1	dictionary=scowl-en-35	32	tan  x                          	0
 verdict	words-v1	dictionary=scowl-en-35	32	tan  x                          	0
 verdict	clean-v2	dictionary=scowl-en-35	32	tan  x                          	0
 verdict	words-v2	dictionary=scowl-en-35	32	tan  x                          	0
+verdict	window-v2	dictionary=scowl-en-35	32	tan  x                          	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	32	tan  x                          	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	32	tan  x                          	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	32	tan  x                          	0
 verdict	max-run-v1	max_run=2	32	tan  x                          	1
 verdict	max-run-v1	max_run=3	32	tan  x                          	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	tan  x                          	1
@@ -622,6 +806,10 @@ verdict	window-v1	dictionary=scowl-en-35	32	i                               	0
 verdict	words-v1	dictionary=scowl-en-35	32	i                               	0
 verdict	clean-v2	dictionary=scowl-en-35	32	i                               	1
 verdict	words-v2	dictionary=scowl-en-35	32	i                               	0
+verdict	window-v2	dictionary=scowl-en-35	32	i                               	1
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	32	i                               	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	32	i                               	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	32	i                               	0
 verdict	max-run-v1	max_run=2	32	i                               	1
 verdict	max-run-v1	max_run=3	32	i                               	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	i                               	1
@@ -635,6 +823,10 @@ verdict	window-v1	dictionary=scowl-en-35	32	xqz                             	0
 verdict	words-v1	dictionary=scowl-en-35	32	xqz                             	0
 verdict	clean-v2	dictionary=scowl-en-35	32	xqz                             	1
 verdict	words-v2	dictionary=scowl-en-35	32	xqz                             	0
+verdict	window-v2	dictionary=scowl-en-35	32	xqz                             	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=4	32	xqz                             	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=12	32	xqz                             	0
+verdict	title-v1	dictionary=scowl-en-35,max_length=24	32	xqz                             	0
 verdict	max-run-v1	max_run=2	32	xqz                             	1
 verdict	max-run-v1	max_run=3	32	xqz                             	1
 verdict	symbol-entropy-v1	min_millibits=0,max_millibits=4400	32	xqz                             	1
@@ -750,3 +942,64 @@ rank	words-v2	12	3682384805	1535016112	fond moss ax
 rank	words-v2	12	3682384805	709797739	an spear pan
 rank	words-v2	12	3682384805	3386203215	tree pit ale
 rank	words-v2	12	3682384805	980349618	bug lax easy
+rank	window-v1	8	50199885	0	 a a a a
+rank	window-v1	8	50199885	1	 a a a b
+rank	window-v1	8	50199885	25099942	lost sac
+rank	window-v1	8	50199885	50199884	zzying z
+rank	window-v1	8	50199885	35580681	raps wov
+rank	window-v1	8	50199885	13394089	etch gru
+rank	window-v1	8	50199885	23533983	lar erec
+rank	window-v1	8	50199885	39436626	sin mu c
+rank	window-v1	8	50199885	30320189	oak oh d
+rank	window-v1	8	50199885	17072899	h dug og
+rank	window-v2	8	51868952	0	 a      
+rank	window-v2	8	51868952	1	 a a    
+rank	window-v2	8	51868952	25934476	loud fed
+rank	window-v2	8	51868952	51868951	zzying z
+rank	window-v2	8	51868952	24703836	led sola
+rank	window-v2	8	51868952	51314736	z in ank
+rank	window-v2	8	51868952	49463909	x maze e
+rank	window-v2	8	51868952	10530497	dpoles o
+rank	window-v2	8	51868952	41045264	sm workf
+rank	window-v2	8	51868952	35164807	ph on ag
+rank	window-v1	12	61578697298	0	 a a a a a a
+rank	window-v1	12	61578697298	1	 a a a a a b
+rank	window-v1	12	61578697298	30789348649	ls a ups udd
+rank	window-v1	12	61578697298	61578697297	zzying zucch
+rank	window-v1	12	61578697298	14957664060	emlin ox amu
+rank	window-v1	12	61578697298	36915863249	o rod mod re
+rank	window-v1	12	61578697298	43086328075	r he pas foi
+rank	window-v1	12	61578697298	11722650290	did go sludg
+rank	window-v1	12	61578697298	16852705928	ey aye roles
+rank	window-v1	12	61578697298	51732376710	ts snub then
+rank	window-v2	12	63594356515	0	 a          
+rank	window-v2	12	63594356515	1	 a a        
+rank	window-v2	12	63594356515	31797178257	ls be ma lyr
+rank	window-v2	12	63594356515	63594356514	zzying zucch
+rank	window-v2	12	63594356515	1828803129	 shun ho hut
+rank	window-v2	12	63594356515	43734381612	ppal tee fas
+rank	window-v2	12	63594356515	22209213115	hel deli hei
+rank	window-v2	12	63594356515	2502791901	a pit mat aa
+rank	window-v2	12	63594356515	7977912974	bo pi boo es
+rank	window-v2	12	63594356515	56056761746	unk ma rer  
+# trank <max_length> <length> <count> <rank> <unit>   (title-v1)
+trank	12	32	3682384805	0	 a                              
+trank	12	32	3682384805	1	 a a                            
+trank	12	32	3682384805	1841192402	hoax zip if                     
+trank	12	32	3682384805	3682384804	zucchinis we                    
+trank	12	32	3682384805	3482169404	vex weer sex                    
+trank	12	32	3682384805	2682008551	pal ply prim                    
+trank	12	32	3682384805	165010742	 flue hot mu                    
+trank	12	32	3682384805	1462264395	fed on moo a                    
+trank	12	32	3682384805	2753787630	pi ice bawls                    
+trank	12	32	3682384805	2167413489	lice job dig                    
+trank	20	32	5220270394822026	0	 a                              
+trank	20	32	5220270394822026	1	 a a                            
+trank	20	32	5220270394822026	2610135197411013	hit scar pus aim map            
+trank	20	32	5220270394822026	5220270394822025	zucchinis zucchinis             
+trank	20	32	5220270394822026	3101317812948209	lied foul blitz wake            
+trank	20	32	5220270394822026	4593938870900429	sues ply or booth is            
+trank	20	32	5220270394822026	1015605703627530	am sins tuft awe pun            
+trank	20	32	5220270394822026	110004786598297	 boy for wry plots              
+trank	20	32	5220270394822026	2754612069645891	if hey get let gown             
+trank	20	32	5220270394822026	3941509332571707	pie per buoy tea mys            

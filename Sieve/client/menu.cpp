@@ -1,5 +1,7 @@
 #include "menu.hpp"
 
+#include "font.hpp"
+#include "strings.hpp"
 #include "theme.hpp"
 
 #include "cli/dictionaries.hpp"
@@ -24,7 +26,7 @@ namespace hallway {
 
 namespace {
 
-const std::vector<std::string> kLines = {"text", "image", "audio", "video"};
+const std::vector<std::string> kLines = {"text", "image", "audio", "video", "books"};
 const std::vector<std::string> kModes = {"positional", "scrambled", "guided"};
 const std::vector<std::string> kAlphabets = {"lower27", "babel29", "ascii95"};
 const std::vector<std::string> kCanons = {"v2", "v1"};
@@ -50,13 +52,7 @@ uint32_t parse_u32(const sieve::cli::Args& a, const char* key, uint32_t def) { r
 constexpr double kSlowBits = 4.0e6;    // above this, opening a line takes noticeable time
 constexpr double kTooLargeBits = 8.0e9; // above this, one address would need a gigabyte
 
-void text(SDL_Renderer* r, float x, float y, const std::string& s, float scale, SDL_Color c)
-{
-    SDL_SetRenderScale(r, scale, scale);
-    SDL_SetRenderDrawColor(r, c.r, c.g, c.b, c.a);
-    SDL_RenderDebugText(r, x / scale, y / scale, s.c_str());
-    SDL_SetRenderScale(r, 1, 1);
-}
+void text(SDL_Renderer* r, float x, float y, const std::string& s, float scale, SDL_Color c) { draw_text(r, x, y, s, scale, c); }
 
 std::string fixed(double v, int d)
 {
@@ -88,6 +84,7 @@ Settings Settings::from_args(const sieve::cli::Args& a)
     s.video_h = parse_u32(a, "video-height", s.video_h);
     s.frames = parse_u32(a, "video-frames", s.frames);
     s.video_palette = a.get("video-palette", s.video_palette);
+    s.book_pages = parse_u32(a, "book-pages", s.book_pages);
     return s;
 }
 
@@ -109,6 +106,7 @@ void Settings::apply(sieve::cli::Args& a) const
     a.opts["video-height"] = std::to_string(video_h);
     a.opts["video-frames"] = std::to_string(frames);
     a.opts["video-palette"] = video_palette;
+    a.opts["book-pages"] = std::to_string(book_pages);
 }
 
 LineSize line_size(uint32_t base, uint64_t length)
@@ -131,12 +129,43 @@ LineSize line_size(uint32_t base, uint64_t length)
 
 // ---------------------------------------------------------------- menu
 
-std::array<LineSize, 4> Menu::line_sizes() const
+std::array<LineSize, 5> Menu::line_sizes() const
 {
-    return {line_size(alphabet_size(s_.alphabet), s_.length),
-            line_size(palette_size(s_.image_palette), uint64_t(s_.image_w) * s_.image_h),
-            line_size(kNoteSymbols, s_.notes),
-            line_size(palette_size(s_.video_palette), uint64_t(s_.video_w) * s_.video_h * s_.frames)};
+    const LineSize page = line_size(alphabet_size(s_.alphabet), s_.length);
+    const LineSize image = line_size(palette_size(s_.image_palette), uint64_t(s_.image_w) * s_.image_h);
+    // Books: a cover, a title and book_pages pages, so |cover| * |page|^(pages + 1) books. The
+    // padding follows from both factors mod 128.
+    LineSize books;
+    const uint64_t parts = uint64_t(s_.book_pages) + 1;
+    books.bits = image.bits + double(parts) * page.bits;
+    {
+        auto modpow = [](uint64_t b, uint64_t e) {
+            uint64_t m = 1;
+            for (b %= sieve::kBooksPerTile; e; e >>= 1, b = b * b % sieve::kBooksPerTile)
+                if (e & 1) m = m * b % sieve::kBooksPerTile;
+            return m;
+        };
+        const uint64_t m = modpow(palette_size(s_.image_palette), uint64_t(s_.image_w) * s_.image_h) *
+                           modpow(alphabet_size(s_.alphabet), parts * s_.length) % sieve::kBooksPerTile;
+        books.padding = uint32_t((sieve::kBooksPerTile - m) % sieve::kBooksPerTile); // books.bits >= 7 always
+        const double log10 = books.bits * std::log10(2.0);
+        books.units = "cov*pg^" + std::to_string(parts) + " = ~10^" + fixed(log10, 1);
+    }
+    std::array<LineSize, 5> out{page, image, line_size(kNoteSymbols, s_.notes),
+                                line_size(palette_size(s_.video_palette), uint64_t(s_.video_w) * s_.video_h * s_.frames), books};
+    // A unit has at most 2^32 - 1 positions: a larger picture cannot be opened at all.
+    const uint64_t kMaxPositions = 0xFFFFFFFFull;
+    if (uint64_t(s_.image_w) * s_.image_h > kMaxPositions) out[1].bits = out[4].bits = HUGE_VAL;
+    if (uint64_t(s_.video_w) * s_.video_h * s_.frames > kMaxPositions) out[3].bits = HUGE_VAL;
+    return out;
+}
+
+// The colour to write a line's name in on the menu's black background: its edge colour, or its
+// background colour when the edges are too dark to read (books: black edges on grey).
+SDL_Color menu_ink(const Theme& th)
+{
+    const int lum = (th.edge.r * 3 + th.edge.g * 6 + th.edge.b) / 10;
+    return lum < 60 ? th.bg : th.edge;
 }
 
 bool Menu::too_large() const
@@ -151,7 +180,7 @@ Menu::Menu(SDL_Window* window, SDL_Renderer* renderer, Settings settings, sieve:
 {
 }
 
-int Menu::row_count() const { return 16; }
+int Menu::row_count() const { return 17; }
 
 void Menu::adjust(int dir, int step)
 {
@@ -179,6 +208,7 @@ void Menu::adjust(int dir, int step)
     case 12: num(s_.video_h); break;
     case 13: num(s_.frames); break;
     case 14: s_.video_palette = cycle(kPalettes, s_.video_palette, dir); break;
+    case 15: num(s_.book_pages); break;
     default: break;
     }
 }
@@ -194,14 +224,18 @@ void Menu::press(SDL_Keycode key, SDL_Keymod mod)
     handle(e, done, r);
 }
 
-void Menu::handle(const SDL_Event& e, bool& done, Result& result)
+void Menu::handle(const SDL_Event& event, bool& done, Result& result)
 {
+    // Mouse positions in the menu's own coordinates (it may be drawn scaled: see render).
+    SDL_Event e = event;
+    SDL_ConvertEventToRenderCoordinates(r_, &e);
     if (e.type == SDL_EVENT_QUIT) { done = true; result = Result::Quit; return; }
     auto inside = [](const SDL_FRect& r, float x, float y) { return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h; };
     if (e.type == SDL_EVENT_MOUSE_WHEEL && overlay_ >= 0)
     {
-        oscroll_ = std::max(0, oscroll_ - int(e.wheel.y));
-        orow_ = std::max(orow_, oscroll_);
+        const int last = std::max(0, int(overlay_rows().size()) - 1);
+        oscroll_ = std::clamp(oscroll_ - int(e.wheel.y), 0, last);
+        orow_ = std::clamp(std::max(orow_, oscroll_), 0, last);
         return;
     }
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
@@ -218,7 +252,7 @@ void Menu::handle(const SDL_Event& e, bool& done, Result& result)
                 }
             return;
         }
-        for (int i = 0; i < 4; ++i)
+        for (int i = 0; i < 5; ++i)
             if (inside(magnifier_[i], mx, my)) open_filters(i);
         return;
     }
@@ -249,7 +283,8 @@ void Menu::handle(const SDL_Event& e, bool& done, Result& result)
         break;
     case SDLK_F:
         // The filters of the line whose settings are selected.
-        if (row_ != 2) open_filters(row_ >= 7 && row_ <= 9 ? 1 : row_ == 10 ? 2 : row_ >= 11 && row_ <= 14 ? 3 : 0);
+        // Rows 0-2 (start, ordering, key) and ENTER belong to no line; F on them does nothing.
+        if (row_ >= 3 && row_ <= 15) open_filters(row_ >= 7 && row_ <= 9 ? 1 : row_ == 10 ? 2 : row_ == 15 ? 4 : row_ >= 11 ? 3 : 0);
         break;
     case SDLK_RETURN:
     case SDLK_KP_ENTER:
@@ -261,7 +296,7 @@ void Menu::handle(const SDL_Event& e, bool& done, Result& result)
         break;
     case SDLK_ESCAPE:
         done = true;
-        result = Result::Quit;
+        result = Result::Back;
         break;
     default: break;
     }
@@ -281,56 +316,70 @@ Menu::Result Menu::run()
         SDL_RenderPresent(r_);
     }
     SDL_StopTextInput(window_);
+    SDL_SetRenderLogicalPresentation(r_, 0, 0, SDL_LOGICAL_PRESENTATION_DISABLED); // the hallway draws at full size
     return result;
 }
 
 void Menu::render()
 {
+    // The menu needs about 1240x700 (settings on the left, five bars on the right). In a smaller
+    // window it is drawn at that size and scaled down to fit, instead of running off the edge.
+    constexpr int kMinW = 1240, kMinH = 700;
     int w = 0, h = 0;
-    SDL_GetCurrentRenderOutputSize(r_, &w, &h);
+    SDL_GetRenderOutputSize(r_, &w, &h);
+    if (w < kMinW || h < kMinH)
+    {
+        w = std::max(w, kMinW);
+        h = std::max(h, kMinH);
+        SDL_SetRenderLogicalPresentation(r_, w, h, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+    }
+    else SDL_SetRenderLogicalPresentation(r_, 0, 0, SDL_LOGICAL_PRESENTATION_DISABLED);
     const float W = float(w), H = float(h);
     const SDL_Color white{255, 255, 255, 255}, grey{150, 150, 150, 255};
     SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
     SDL_RenderClear(r_);
     SDL_SetRenderDrawBlendMode(r_, SDL_BLENDMODE_BLEND);
 
-    text(r_, 20, 16, "SIEVE - set up the four lines", 3, white);
-    text(r_, 20, 48, "Every possible unit of each line has a book. Change a line's shape to change its state space.", 1, grey);
+    text(r_, 20, 16, tr("setup.title"), 3, white);
+    text(r_, 20, 48, tr("setup.subtitle"), 1, grey);
 
     // Settings.
     struct Row
     {
-        const char* section;
+        int section; // -1: none; 0-4: the line (its colour); 5: START
         std::string label, value;
     };
+    auto n = [](uint32_t v) { return std::to_string(v); };
+    const std::string start_key = s_.start_line == "text" ? "line.pages" : "line." + s_.start_line;
     const std::vector<Row> rows = {
-        {"START", "line", s_.start_line == "text" ? "pages" : s_.start_line},
-        {nullptr, "ordering", s_.mode},
-        {nullptr, "key", s_.key + (row_ == 2 ? "_" : "")},
-        {"PAGES", "length", std::to_string(s_.length) + " characters"},
-        {nullptr, "alphabet", s_.alphabet + " (" + std::to_string(alphabet_size(s_.alphabet)) + " symbols)"},
-        {nullptr, "warp rules", "canon-text-" + s_.canon},
-        {nullptr, "model", s_.model ? "default (guided ordering available)" : "none"},
-        {"IMAGE", "width", std::to_string(s_.image_w) + " px"},
-        {nullptr, "height", std::to_string(s_.image_h) + " px"},
-        {nullptr, "palette", s_.image_palette + " (" + std::to_string(palette_size(s_.image_palette)) + " colours)"},
-        {"AUDIO", "notes", std::to_string(s_.notes)},
-        {"VIDEO", "width", std::to_string(s_.video_w) + " px"},
-        {nullptr, "height", std::to_string(s_.video_h) + " px"},
-        {nullptr, "frames", std::to_string(s_.frames)},
-        {nullptr, "palette", s_.video_palette + " (" + std::to_string(palette_size(s_.video_palette)) + " colours)"},
-        {nullptr, ">> ENTER THE HALLWAY <<", ""},
+        {5, tr("setup.line"), tr(start_key)},
+        {-1, tr("setup.ordering"), tr("ordering." + s_.mode)},
+        {-1, tr("setup.key"), s_.key + (row_ == 2 ? "_" : "")},
+        {0, tr("setup.length"), trf("setup.length.value", {n(s_.length)})},
+        {-1, tr("setup.alphabet"), trf("setup.alphabet.value", {s_.alphabet, n(alphabet_size(s_.alphabet))})},
+        {-1, tr("setup.canon"), "canon-text-" + s_.canon},
+        {-1, tr("setup.model"), tr(s_.model ? "setup.model.default" : "setup.model.none")},
+        {1, tr("setup.width"), trf("setup.px", {n(s_.image_w)})},
+        {-1, tr("setup.height"), trf("setup.px", {n(s_.image_h)})},
+        {-1, tr("setup.palette"), trf("setup.palette.value", {s_.image_palette, n(palette_size(s_.image_palette))})},
+        {2, tr("setup.notes"), n(s_.notes)},
+        {3, tr("setup.width"), trf("setup.px", {n(s_.video_w)})},
+        {-1, tr("setup.height"), trf("setup.px", {n(s_.video_h)})},
+        {-1, tr("setup.frames"), n(s_.frames)},
+        {-1, tr("setup.palette"), trf("setup.palette.value", {s_.video_palette, n(palette_size(s_.video_palette))})},
+        {4, tr("setup.book_pages"), trf("setup.book_pages.value", {n(s_.book_pages)})},
+        {-1, tr("setup.enter"), ""},
     };
     float y = 80;
     for (int i = 0; i < int(rows.size()); ++i)
     {
         const Row& r = rows[size_t(i)];
-        if (r.section)
+        if (r.section >= 0)
         {
             y += 8;
-            const std::string sec = r.section;
-            const int li = sec == "PAGES" ? 0 : sec == "IMAGE" ? 1 : sec == "AUDIO" ? 2 : sec == "VIDEO" ? 3 : 4;
-            text(r_, 20, y, r.section, 2, li < 4 ? kThemes[li].edge : white);
+            const int li = r.section;
+            const std::string head = li == 5 ? tr("setup.start") : tr(li == 4 ? kBooksTheme.key : kThemes[li].key);
+            text(r_, 20, y, head, 2, li < 4 ? kThemes[li].edge : li == 4 ? menu_ink(kBooksTheme) : white);
             y += 20;
         }
         if (i == row_)
@@ -343,28 +392,33 @@ void Menu::render()
         text(r_, 200, y, r.value, 1, i == row_ ? white : grey);
         y += 18;
     }
-    text(r_, 20, H - 40, "Up/Down choose   Left/Right change (Shift x10, Ctrl x100)   PgUp/PgDn double/halve", 1, grey);
-    text(r_, 20, H - 26, "type to edit the key   F or the magnifying glass: a line's filters   Enter walk in   Esc quit", 1, grey);
-    if (too_large())
-        text(r_, 20, H - 60, "A line is too large for this machine to open (one address would need over a gigabyte).", 1, white);
+    text(r_, 20, H - 40, tr("setup.footer1"), 1, grey);
+    text(r_, 20, H - 26, tr("setup.footer2"), 1, grey);
+    if (too_large()) text(r_, 20, H - 60, tr("setup.too_large"), 1, white);
 
     // The map: one bar per line, length proportional to its size in bits.
     const auto sizes = line_sizes();
     // The longest line spans the full height: nothing can leave the screen, however large.
     double scale_bits = 1;
-    for (const auto& z : sizes) scale_bits = std::max(scale_bits, z.bits);
-    const float x0 = 620, pitch = std::max(150.0f, (W - x0 - 20) / 4);
+    for (const auto& z : sizes)
+        if (std::isfinite(z.bits)) scale_bits = std::max(scale_bits, z.bits);
+    const float x0 = 620, pitch = std::max(124.0f, (W - x0 - 20) / 5);
     const float label = 118, top = 216, bottom = H - 60, span = bottom - top, min_bar = 12;
-    text(r_, x0, 80, "MAP  (length = size in bits; one copy each)", 1, white);
-    text(r_, x0, 92, "scale: the longest line fills the height (" + fixed(scale_bits, 0) + " bits)", 1, grey);
-    for (int i = 0; i < 4; ++i)
+    text(r_, x0, 80, tr("map.title"), 1, white);
+    text(r_, x0, 92, trf("map.scale", {fixed(scale_bits, 0)}), 1, grey);
+    for (int i = 0; i < 5; ++i)
     {
-        const Theme& th = kThemes[i];
+        const bool books = i == 4;
+        Theme th = books ? kBooksTheme : kThemes[i];
+        const SDL_Color ink = menu_ink(th);
         const float x = x0 + i * pitch;
-        const LineSize& z = sizes[i];
+        const LineSize& z = sizes[size_t(i)];
         // Labels above the bar, so a full-length bar never runs into them.
-        const size_t cols = size_t(std::max(8.0f, (i == 3 ? W - x - 8 : pitch - 8) / 8));
-        auto clip = [&](const std::string& t) { return t.size() <= cols ? t : t.substr(0, cols - 2) + ".."; };
+        const size_t cols = size_t(std::max(8.0f, (i == 4 ? W - x - 8 : pitch - 8) / 8));
+        auto clip = [&](const std::string& t) { return text_cells(t) <= cols ? t : fit_cells(t, cols - 2) + ".."; };
+        const SDL_Color edge = th.edge;
+        th.edge = ink; // labels in a readable colour; the bar keeps the line's own edges
+        {
         // Magnifying glass: opens this line's filters.
         magnifier_[i] = {x - 2, label - 2, 20, 20};
         SDL_SetRenderDrawColor(r_, th.edge.r, th.edge.g, th.edge.b, 255);
@@ -375,21 +429,22 @@ void Menu::render()
         }
         SDL_RenderLine(r_, x + 10, label + 10, x + 15, label + 15);
         SDL_RenderLine(r_, x + 11, label + 10, x + 16, label + 15);
-        text(r_, x + 22, label, th.title, 2, th.edge);
+        text(r_, x + 22, label, tr(th.key), 2, th.edge);
+        }
         const size_t caret = z.units.find(" = ");
-        text(r_, x, label + 22, clip(z.units.substr(0, caret) + " units"), 1, th.edge);
+        text(r_, x, label + 22, clip(trf("map.units", {z.units.substr(0, caret)})), 1, th.edge);
         text(r_, x, label + 34, clip(z.units.substr(caret + 3)), 1, th.edge);
-        text(r_, x, label + 46, clip(fixed(z.bits, 0) + " bits"), 1, th.edge);
-        text(r_, x, label + 58, clip("~10^" + fixed(std::max(0.0, z.bits * std::log10(2.0) - std::log10(128.0)), 1) + " tiles"), 1, th.edge);
-        text(r_, x, label + 70, clip(z.padding ? std::to_string(z.padding) + " empty slots" : "fills whole tiles"), 1, th.edge);
-        if (z.bits > kTooLargeBits) text(r_, x, label - 14, clip("TOO LARGE TO OPEN"), 1, white);
-        else if (z.bits > kSlowBits) text(r_, x, label - 14, clip("large: slow to open"), 1, grey);
+        text(r_, x, label + 46, clip(trf("map.bits", {fixed(z.bits, 0)})), 1, th.edge);
+        text(r_, x, label + 58, clip(trf("map.tiles", {fixed(std::max(0.0, z.bits * std::log10(2.0) - std::log10(128.0)), 1)})), 1, th.edge);
+        text(r_, x, label + 70, clip(z.padding ? trf("map.empty_slots", {std::to_string(z.padding)}) : tr("map.whole_tiles")), 1, th.edge);
+        if (z.bits > kTooLargeBits) text(r_, x, label - 14, clip(tr("map.too_large")), 1, white);
+        else if (z.bits > kSlowBits) text(r_, x, label - 14, clip(tr("map.slow")), 1, grey);
         // The bar: the line's own two colours; never shorter than min_bar, never past the bottom.
-        const float len = std::clamp(float(z.bits / scale_bits) * span, min_bar, span);
+        const float len = std::isfinite(z.bits) ? std::clamp(float(z.bits / scale_bits) * span, min_bar, span) : span;
         const SDL_FRect bar{x + 8, top, 40, len};
         SDL_SetRenderDrawColor(r_, th.bg.r, th.bg.g, th.bg.b, 255);
         SDL_RenderFillRect(r_, &bar);
-        SDL_SetRenderDrawColor(r_, th.edge.r, th.edge.g, th.edge.b, 255);
+        SDL_SetRenderDrawColor(r_, edge.r, edge.g, edge.b, 255);
         SDL_RenderRect(r_, &bar);
         const SDL_FRect inner{x + 9, top + 1, 38, len - 2};
         SDL_RenderRect(r_, &inner);
@@ -401,10 +456,16 @@ void Menu::render()
             const SDL_FRect sv{x + 14, top + 2, 28, slen};
             SDL_SetRenderDrawColor(r_, th.edge.r, th.edge.g, th.edge.b, 200);
             SDL_RenderFillRect(r_, &sv);
-            text(r_, x, label + 82, clip("survivors ~" + fixed(info.survivor_bits, 0) + " bits"), 1, th.edge);
+            text(r_, x, label + 82, clip(trf("map.survivors", {fixed(info.survivor_bits, 0)})), 1, th.edge);
         }
-        else if (!cfg_.lines[i].enabled.empty())
-            text(r_, x, label + 82, clip(std::to_string(cfg_.lines[i].enabled.size()) + " filters ticked"), 1, th.edge);
+        else
+        {
+            size_t ticked = 0;
+            if (books)
+                for (const auto& part : cfg_.books.parts) ticked += part.enabled.size();
+            else ticked = cfg_.lines[i].enabled.size();
+            if (ticked) text(r_, x, label + 82, clip(trf("map.ticked", {std::to_string(ticked)})), 1, th.edge);
+        }
     }
     if (overlay_ >= 0) render_overlay(W, H);
 }
@@ -436,8 +497,34 @@ sieve::FilterLine Menu::filter_line_of(int i) const
     return f;
 }
 
+sieve::FilterLine Menu::book_part_line(int part) const
+{
+    if (part == 0) return filter_line_of(1);
+    sieve::FilterLine f = filter_line_of(0);
+    if (part == 2) f.length = uint32_t(std::min<uint64_t>(uint64_t(f.length) * s_.book_pages, UINT32_MAX));
+    return f;
+}
+
+sieve::cli::LineFilters& Menu::filters_of(const ORow& row)
+{
+    return overlay_ == 4 ? cfg_.books.parts[std::max(0, row.part)] : cfg_.lines[overlay_];
+}
+
+const sieve::cli::LineFilters& Menu::filters_of(const ORow& row) const
+{
+    return overlay_ == 4 ? cfg_.books.parts[std::max(0, row.part)] : cfg_.lines[overlay_];
+}
+
+sieve::cli::FilterMode& Menu::mode_of(int line) { return line == 4 ? cfg_.books.mode : cfg_.lines[line].mode; }
+
 const Menu::StackInfo& Menu::stack_info(int i)
 {
+    if (i == 4) return book_stack_info();
+    if (line_sizes()[size_t(i)].bits > kTooLargeBits)
+    {
+        info_[i] = StackInfo{"too large", tr("status.too_large"), -1};
+        return info_[i];
+    }
     const sieve::FilterLine fl = filter_line_of(i);
     const sieve::cli::LineFilters& lf = cfg_.lines[i];
     std::string key = fl.symbols_id + "/" + std::to_string(fl.length) + "/" + to_string(lf.mode) + ":";
@@ -449,25 +536,98 @@ const Menu::StackInfo& Menu::stack_info(int i)
     info = StackInfo{key, "", -1};
     if (line_sizes()[size_t(i)].bits > kTooLargeBits)
     {
-        info.status = "line too large to open";
+        info.status = tr("status.too_large");
         return info;
     }
     try
     {
         const sieve::FilterStack st = sieve::cli::build_stack(fl, lf);
-        if (st.empty()) info.status = "no filters ticked: every unit is shelved";
+        if (st.empty()) info.status = tr("status.none_units");
         else if (st.ranker())
         {
             const sieve::BigUint& n = st.ranker()->count();
             info.survivor_bits = n.is_zero() ? 0 : n.log10_approx() / std::log10(2.0);
-            info.status = "survivors: " + (n.log10_approx() < 15 ? n.to_decimal() : "~10^" + fixed(n.log10_approx(), 1)) +
-                          (n.is_zero() ? " (exact): nothing to shelve" : " (exact); compact in every ordering");
+            info.status = trf(n.is_zero() ? "status.survivors_none" : "status.survivors",
+                              {n.log10_approx() < 15 ? n.to_decimal() : "~10^" + fixed(n.log10_approx(), 1)});
         }
-        else info.status = "survivors not countable exactly: " + st.compact_blocker();
+        else info.status = trf("status.not_countable", {st.compact_blocker()});
     }
     catch (const std::exception& e)
     {
-        info.status = std::string("error: ") + e.what();
+        info.status = trf("status.error", {e.what()});
+    }
+    return info;
+}
+
+// The books line: survivors = cover survivors * title survivors * body survivors, each part
+// counted exactly where its stack can rank (a part with no filters keeps all its units).
+const Menu::StackInfo& Menu::book_stack_info()
+{
+    StackInfo& info = info_[4];
+    if (line_sizes()[4].bits > kTooLargeBits)
+    {
+        info = StackInfo{"too large", tr("status.too_large"), -1};
+        return info;
+    }
+    std::string key = std::string("books/") + to_string(cfg_.books.mode) + "/";
+    for (int part = 0; part < 3; ++part)
+    {
+        const sieve::FilterLine fl = book_part_line(part);
+        const sieve::cli::LineFilters& lf = cfg_.books.parts[part];
+        key += fl.symbols_id + "/" + std::to_string(fl.length) + ":";
+        for (const auto& n : lf.enabled) key += n + ",";
+        for (const auto& [n, vals] : lf.values)
+            for (const auto& [k, v] : vals) key += n + "." + k + "=" + v + ";";
+        key += "|";
+    }
+    if (info.key == key) return info;
+    info = StackInfo{key, "", -1};
+    static const char* const names[3] = {"cover", "title", "pages"};
+    try
+    {
+        double bits = 0, log10 = 0;
+        bool exact = true, any = false, none_survive = false;
+        std::string blocker;
+        for (int part = 0; part < 3; ++part)
+        {
+            const sieve::FilterLine fl = book_part_line(part);
+            const sieve::cli::LineFilters& lf = cfg_.books.parts[part];
+            const double all = double(fl.length) * std::log2(double(fl.base));
+            if (lf.enabled.empty() || (part == 2 && s_.book_pages == 0))
+            {
+                bits += all;
+                continue;
+            }
+            const sieve::FilterStack st = sieve::cli::build_stack(fl, lf);
+            if (st.empty()) { bits += all; continue; }
+            any = true;
+            if (!st.ranker())
+            {
+                exact = false;
+                if (blocker.empty()) blocker = std::string(names[part]) + ": " + st.compact_blocker();
+                continue;
+            }
+            const sieve::BigUint& n = st.ranker()->count();
+            if (n.is_zero()) none_survive = true;
+            else bits += n.log10_approx() / std::log10(2.0);
+        }
+        log10 = bits * std::log10(2.0);
+        if (!any) info.status = tr("status.none_books");
+        else if (!exact) info.status = trf("status.not_countable", {blocker});
+        else if (none_survive)
+        {
+            info.survivor_bits = 0;
+            info.status = trf("status.survivors_none", {"0"});
+        }
+        else
+        {
+            info.survivor_bits = bits;
+            info.status = trf("status.books", {fixed(log10, 1)});
+        }
+    }
+    catch (const std::exception& e)
+    {
+        info.status = trf("status.error", {e.what()});
     }
     return info;
 }
@@ -475,6 +635,21 @@ const Menu::StackInfo& Menu::stack_info(int i)
 std::vector<Menu::ORow> Menu::overlay_rows() const
 {
     std::vector<ORow> rows{{ORow::Kind::Mode, "", ""}};
+    if (overlay_ == 4)
+    {
+        for (int part = 0; part < 3; ++part)
+        {
+            rows.push_back({ORow::Kind::Header, "", "", part});
+            const sieve::cli::LineFilters& lf = cfg_.books.parts[part];
+            for (const sieve::FilterSpec* f : sieve::filters_for(book_part_line(part)))
+            {
+                rows.push_back({ORow::Kind::Filter, f->name(), "", part});
+                if (lf.is_enabled(f->name()))
+                    for (const auto& p : f->params) rows.push_back({ORow::Kind::Param, f->name(), p.key, part});
+            }
+        }
+        return rows;
+    }
     const sieve::cli::LineFilters& lf = cfg_.lines[overlay_];
     for (const sieve::FilterSpec* f : sieve::filters_for(filter_line_of(overlay_)))
     {
@@ -502,16 +677,18 @@ void Menu::overlay_change(int dir, bool big)
     const auto rows = overlay_rows();
     if (orow_ < 0 || orow_ >= int(rows.size())) return;
     const ORow& row = rows[size_t(orow_)];
-    sieve::cli::LineFilters& lf = cfg_.lines[overlay_];
+    sieve::cli::LineFilters& lf = filters_of(row);
     using sieve::cli::FilterMode;
     switch (row.kind)
     {
+    case ORow::Kind::Header: return;
     case ORow::Kind::Mode:
     {
         const FilterMode order[4] = {FilterMode::Off, FilterMode::Mark, FilterMode::Hide, FilterMode::Compact};
+        FilterMode& mode = mode_of(overlay_);
         int m = 0;
-        while (order[m] != lf.mode) ++m;
-        lf.mode = order[((m + dir) % 4 + 4) % 4];
+        while (order[m] != mode) ++m;
+        mode = order[((m + dir) % 4 + 4) % 4];
         break;
     }
     case ORow::Kind::Filter: lf.set_enabled(row.filter, !lf.is_enabled(row.filter)); break;
@@ -539,7 +716,7 @@ void Menu::overlay_change(int dir, bool big)
                     for (const auto& e : sieve::cli::load_registry().entries) choices.push_back(e.id);
                 if (p->key == "model")
                     for (const auto& e : sieve::cli::load_model_registry().entries)
-                        if (e.symbols == filter_line_of(overlay_).symbols_id) choices.push_back(e.id);
+                        if (e.symbols == (overlay_ == 4 ? book_part_line(row.part) : filter_line_of(overlay_)).symbols_id) choices.push_back(e.id);
             }
             catch (const std::exception&)
             {
@@ -580,7 +757,8 @@ void Menu::overlay_key(SDL_Keycode key, bool shift)
 void Menu::render_overlay(float W, float H)
 {
     const SDL_Color white{255, 255, 255, 255}, grey{150, 150, 150, 255};
-    const Theme& th = kThemes[overlay_];
+    const Theme& th = overlay_ == 4 ? kBooksTheme : kThemes[overlay_];
+    const SDL_Color title_ink = overlay_ == 4 ? menu_ink(kBooksTheme) : th.edge;
     box_ = {600, 70, W - 614, H - 124};
     SDL_SetRenderDrawColor(r_, 0, 0, 0, 250);
     SDL_RenderFillRect(r_, &box_);
@@ -590,10 +768,10 @@ void Menu::render_overlay(float W, float H)
     SDL_RenderRect(r_, &inner);
     const float x = box_.x + 14;
     const size_t cols = size_t((box_.w - 60) / 8);
-    text(r_, x, box_.y + 10, std::string(th.title) + " FILTERS", 2, th.edge);
-    text(r_, x, box_.y + 32, "A unit is shelved only if it passes every ticked filter.", 1, grey);
+    text(r_, x, box_.y + 10, trf("filters.title", {tr(th.key)}), 2, title_ink);
+    text(r_, x, box_.y + 32, tr(overlay_ == 4 ? "filters.intro.books" : "filters.intro"), 1, grey);
 
-    const sieve::cli::LineFilters& lf = cfg_.lines[overlay_];
+    const sieve::cli::FilterMode mode = overlay_ == 4 ? cfg_.books.mode : cfg_.lines[overlay_].mode;
     const auto rows = overlay_rows();
     // Layout: each row's height, then scroll so the selected row stays in view.
     struct Item
@@ -605,14 +783,29 @@ void Menu::render_overlay(float W, float H)
     for (const ORow& row : rows)
     {
         Item it;
+        const sieve::cli::LineFilters& lf = filters_of(row);
         if (row.kind == ORow::Kind::Mode)
-            it.lines = {"display mode: " + std::string(to_string(lf.mode)), "    off: every book   mark: failures drawn faint",
-                        "    hide: failures left out   compact: only survivors, closed up"};
+            it.lines = {trf("filters.mode", {tr(std::string("mode.") + to_string(mode))}), "    " + tr("filters.mode.help1"),
+                        "    " + tr("filters.mode.help2")};
+        else if (row.kind == ORow::Kind::Header)
+        {
+            static const char* const heads[3] = {"filters.part.cover", "filters.part.title", "filters.part.pages"};
+            const std::string head = heads[row.part];
+            std::string sub = row.part == 2 ? trf(head + ".help", {std::to_string(uint64_t(s_.book_pages) * s_.length)}) : tr(head + ".help");
+            it.lines = {"-- " + tr(head) + " --"};
+            while (!sub.empty())
+            {
+                size_t cut = sub.size() <= cols - 4 ? sub.size() : sub.rfind(' ', cols - 4);
+                if (cut == std::string::npos || cut == 0) cut = std::min(sub.size(), cols - 4);
+                it.lines.push_back("    " + sub.substr(0, cut));
+                sub = sub.substr(std::min(sub.size(), cut + 1));
+            }
+        }
         else if (row.kind == ORow::Kind::Filter)
         {
             const sieve::FilterSpec* f = sieve::find_filter(row.filter);
             it.lines = {std::string(lf.is_enabled(row.filter) ? "[x] " : "[ ] ") + f->name()};
-            std::string d = f->description;
+            std::string d = tr_or("filter." + f->name(), f->description);
             while (!d.empty())
             {
                 size_t cut = d.size() <= cols - 4 ? d.size() : d.rfind(' ', cols - 4);
@@ -629,8 +822,8 @@ void Menu::render_overlay(float W, float H)
             try { v = sieve::param_value(*f, vit == lf.values.end() ? sieve::FilterValues{} : vit->second, row.key); } catch (...) {}
             std::string desc;
             for (const auto& p : f->params)
-                if (p.key == row.key) desc = p.description;
-            it.lines = {"      " + row.key + " = " + (v.empty() ? "(default)" : v) + "     " + desc};
+                if (p.key == row.key) desc = tr_or("filter." + f->name() + "." + p.key, p.description);
+            it.lines = {"      " + row.key + " = " + (v.empty() ? tr("filters.default") : v) + "     " + desc};
         }
         it.h = float(it.lines.size()) * 12 + 8;
         items.push_back(it);
@@ -663,11 +856,11 @@ void Menu::render_overlay(float W, float H)
             text(r_, x, y + float(k) * 12, (k == 0 && i == orow_ ? "> " : "  ") + it.lines[k], 1, k == 0 ? white : grey);
         y += it.h;
     }
-    if (oscroll_ > 0) text(r_, box_.x + box_.w - 90, top - 12, "more above", 1, grey);
+    if (oscroll_ > 0) text(r_, box_.x + box_.w - 90, top - 12, tr("filters.more_above"), 1, grey);
     if (y < bottom && false) {}
     const StackInfo& info = stack_info(overlay_);
     text(r_, x, box_.y + box_.h - 36, info.status.substr(0, cols), 1, white);
-    text(r_, x, box_.y + box_.h - 20, "Up/Down choose  Space/Right tick or change  Left back  wheel scroll  Esc/F close", 1, grey);
+    text(r_, x, box_.y + box_.h - 20, tr("filters.footer"), 1, grey);
 }
 
 } // namespace hallway

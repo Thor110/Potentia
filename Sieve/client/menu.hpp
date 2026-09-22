@@ -10,7 +10,9 @@
 //
 // A magnifying glass beside each line's title (or F on that line's settings) opens its filter
 // list over the map: the display mode, every filter with a tickbox and description, and each
-// ticked filter's parameters. The choices are saved to sieve-filters.ini. Where the stack can
+// ticked filter's parameters. The books line's list has three groups: the cover (a picture), the
+// title (one page) and the pages (all of a book's pages read as one text), under one display
+// mode. The choices are saved to sieve-filters.ini. Where the stack can
 // count its survivors exactly, the map shows them as a filled bar inside the line's bar.
 #pragma once
 
@@ -40,6 +42,7 @@ struct Settings
     uint32_t notes = 16;
     uint32_t video_w = 5, video_h = 5, frames = 8;
     std::string video_palette = "mono";
+    uint32_t book_pages = 4; // books: a cover (image line), a title and this many pages (pages line)
 
     static Settings from_args(const sieve::cli::Args& a);
     // Writes these settings into `a` (as the hallway's own options), keeping everything else.
@@ -60,7 +63,7 @@ class Menu
 public:
     Menu(SDL_Window* window, SDL_Renderer* renderer, Settings settings, sieve::cli::FilterConfig filters, std::string filters_path);
 
-    enum class Result { Enter, Quit };
+    enum class Result { Enter, Quit, Back }; // Back: Esc, to the main menu
     Result run();                                  // interactive: until Enter or quit
     void press(SDL_Keycode key, SDL_Keymod mod);   // one key, as if typed (scripting)
     void render();
@@ -70,7 +73,7 @@ public:
 
 private:
     void handle(const SDL_Event& e, bool& done, Result& result);
-    std::array<LineSize, 4> line_sizes() const;
+    std::array<LineSize, 5> line_sizes() const; // pages, image, audio, video, books
     bool too_large() const; // a line this machine cannot open
     void adjust(int dir, int step);
     int row_count() const;
@@ -78,14 +81,19 @@ private:
     // The filter overlay.
     struct ORow
     {
-        enum class Kind { Mode, Filter, Param } kind;
+        enum class Kind { Mode, Header, Filter, Param } kind;
         std::string filter, key;
+        int part = -1; // books: 0 cover, 1 title, 2 pages
     };
     std::vector<ORow> overlay_rows() const;
     void overlay_key(SDL_Keycode key, bool shift);
     void overlay_change(int dir, bool big);
     void render_overlay(float W, float H);
     sieve::FilterLine filter_line_of(int line) const;
+    sieve::FilterLine book_part_line(int part) const; // books: the line a part's filters see
+    sieve::cli::LineFilters& filters_of(const ORow& row);
+    const sieve::cli::LineFilters& filters_of(const ORow& row) const;
+    sieve::cli::FilterMode& mode_of(int line);
     struct StackInfo
     {
         std::string key;      // settings it was computed for
@@ -93,6 +101,7 @@ private:
         double survivor_bits = -1; // exact survivors (log2), or -1
     };
     const StackInfo& stack_info(int line);
+    const StackInfo& book_stack_info();
     void save_filters();
 
     SDL_Window* window_;
@@ -104,8 +113,8 @@ private:
     int overlay_ = -1; // line whose filters are open, or -1
     int orow_ = 0;
     int oscroll_ = 0;
-    StackInfo info_[4];
-    SDL_FRect magnifier_[4] = {};
+    StackInfo info_[5];
+    SDL_FRect magnifier_[5] = {};
     SDL_FRect box_ = {};
     std::vector<std::pair<SDL_FRect, int>> row_rects_; // overlay rows on screen
 };

@@ -25,7 +25,46 @@ std::string trim(std::string s)
     return s.substr(a, b - a + 1);
 }
 
+const char* kBookParts[3] = {"cover", "title", "pages"};
+
+void read_filters(LineFilters& lf, const std::string& value)
+{
+    lf.enabled.clear();
+    std::stringstream ss(value);
+    std::string name;
+    while (std::getline(ss, name, ','))
+    {
+        if (!trim(name).empty() && !lf.is_enabled(trim(name))) lf.enabled.push_back(trim(name));
+    }
+}
+
+void write_filters(std::ostream& o, const LineFilters& lf)
+{
+    o << "filters = ";
+    for (size_t k = 0; k < lf.enabled.size(); ++k) o << (k ? ", " : "") << lf.enabled[k];
+    o << "\n";
+}
+
+void write_values(std::ostream& o, const std::string& prefix, const LineFilters& lf)
+{
+    for (const auto& [name, vals] : lf.values)
+    {
+        if (vals.empty()) continue;
+        o << "\n[" << prefix << "." << name << "]\n";
+        for (const auto& [k, v] : vals) o << k << " = " << v << "\n";
+    }
+}
+
 } // namespace
+
+const char* BookFilters::part_name(int i) { return kBookParts[i]; }
+
+int BookFilters::part_index(const std::string& name)
+{
+    for (int i = 0; i < 3; ++i)
+        if (name == kBookParts[i]) return i;
+    return -1;
+}
 
 const char* to_string(FilterMode m)
 {
@@ -76,10 +115,16 @@ FilterConfig FilterConfig::load(const fs::path& path)
     while (std::getline(in, line))
     {
         ++line_no;
-        const size_t semi = line.find(';');
-        if (semi != std::string::npos) line = line.substr(0, semi);
         line = trim(line);
-        if (line.empty()) continue;
+        // Comments: a line starting with ';' or '#', or ' ;' after a value (a ';' or '#' inside a
+        // value, as in a file name, is kept).
+        if (line.empty() || line[0] == ';' || line[0] == '#') continue;
+        for (size_t i = 1; i < line.size(); ++i)
+            if (line[i] == ';' && (line[i - 1] == ' ' || line[i - 1] == '\t'))
+            {
+                line = trim(line.substr(0, i));
+                break;
+            }
         if (line.front() == '[')
         {
             if (line.back() != ']') throw std::runtime_error(path.string() + " line " + std::to_string(line_no) + ": bad section");
@@ -91,20 +136,32 @@ FilterConfig FilterConfig::load(const fs::path& path)
         const std::string key = trim(line.substr(0, eq)), value = trim(line.substr(eq + 1));
         const size_t dot = section.find('.');
         const std::string line_name = section.substr(0, dot);
+        if (line_name == "books")
+        {
+            const std::string where = path.string() + ": unknown key '" + key + "' in [" + section + "]";
+            if (dot == std::string::npos)
+            {
+                if (key != "mode") throw std::runtime_error(where);
+                c.books.mode = filter_mode_from_string(value);
+                continue;
+            }
+            const std::string rest = section.substr(dot + 1);
+            const size_t dot2 = rest.find('.');
+            const int pi = BookFilters::part_index(rest.substr(0, dot2));
+            if (pi < 0) throw std::runtime_error(path.string() + ": unknown section [" + section + "] (the books line has cover, title and pages)");
+            LineFilters& lf = c.books.parts[pi];
+            if (dot2 != std::string::npos) lf.values[rest.substr(dot2 + 1)][key] = value;
+            else if (key == "filters") read_filters(lf, value);
+            else throw std::runtime_error(where);
+            continue;
+        }
         const auto li = std::find(std::begin(kSections), std::end(kSections), line_name) - std::begin(kSections);
         if (li >= 4) throw std::runtime_error(path.string() + ": unknown section [" + section + "]");
         LineFilters& lf = c.lines[li];
         if (dot == std::string::npos)
         {
             if (key == "mode") lf.mode = filter_mode_from_string(value);
-            else if (key == "filters")
-            {
-                lf.enabled.clear();
-                std::stringstream ss(value);
-                std::string name;
-                while (std::getline(ss, name, ','))
-                    if (!trim(name).empty()) lf.enabled.push_back(trim(name));
-            }
+            else if (key == "filters") read_filters(lf, value);
             else throw std::runtime_error(path.string() + ": unknown key '" + key + "' in [" + section + "]");
         }
         else lf.values[section.substr(dot + 1)][key] = value;
@@ -123,15 +180,18 @@ void FilterConfig::save(const fs::path& path) const
     for (int i = 0; i < 4; ++i)
     {
         const LineFilters& lf = lines[i];
-        o << "\n[" << kSections[i] << "]\nmode = " << to_string(lf.mode) << "\nfilters = ";
-        for (size_t k = 0; k < lf.enabled.size(); ++k) o << (k ? ", " : "") << lf.enabled[k];
-        o << "\n";
-        for (const auto& [name, vals] : lf.values)
-        {
-            if (vals.empty()) continue;
-            o << "\n[" << kSections[i] << "." << name << "]\n";
-            for (const auto& [k, v] : vals) o << k << " = " << v << "\n";
-        }
+        o << "\n[" << kSections[i] << "]\nmode = " << to_string(lf.mode) << "\n";
+        write_filters(o, lf);
+        write_values(o, kSections[i], lf);
+    }
+    o << "\n; The books line: one mode; the title is judged as one page, the cover as a picture, and the\n"
+      << "; pages as one continuous text (a word cut by a page break is judged whole).\n"
+      << "[books]\nmode = " << to_string(books.mode) << "\n";
+    for (int i = 0; i < 3; ++i)
+    {
+        o << "\n[books." << kBookParts[i] << "]\n";
+        write_filters(o, books.parts[i]);
+        write_values(o, std::string("books.") + kBookParts[i], books.parts[i]);
     }
     std::ofstream out(path, std::ios::binary);
     out << o.str();
@@ -194,6 +254,22 @@ FilterStack build_stack(const FilterLine& fl, const LineFilters& settings)
     }
     static const AppResources resources;
     return FilterStack(fl, entries, resources);
+}
+
+BookStacks build_book_stacks(const Line& cover, const Line& page, uint32_t pages, const BookFilters& settings)
+{
+    BookStacks b;
+    b.cover = build_stack(cover, settings.parts[0]);
+    b.title = build_stack(page, settings.parts[1]);
+    if (pages > 0)
+    {
+        FilterLine body = filter_line(page);
+        const uint64_t n = uint64_t(pages) * body.length;
+        if (n > 0xffffffffull) throw std::invalid_argument("the books' pages are too long to filter as one text");
+        body.length = uint32_t(n);
+        b.pages = build_stack(body, settings.parts[2]);
+    }
+    return b;
 }
 
 } // namespace sieve::cli

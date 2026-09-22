@@ -80,6 +80,7 @@ namespace {
 class StepCounts
 {
 public:
+    explicit StepCounts(uint32_t base) { seen_.reserve(base); } // references stay valid: no regrowth
     const BigUint& get(const Ranker& r, Ranker::State t, uint32_t remaining)
     {
         for (const auto& [st, n] : seen_)
@@ -103,7 +104,7 @@ std::vector<uint32_t> Ranker::unrank(const BigUint& k0) const
     State s = start();
     for (uint32_t i = 0; i < L; ++i)
     {
-        StepCounts counts;
+        StepCounts counts(B);
         bool placed = false;
         for (uint32_t c = 0; c < B && !placed; ++c)
         {
@@ -131,7 +132,8 @@ BigUint Ranker::rank(std::span<const uint32_t> unit) const
     State s = start();
     for (uint32_t i = 0; i < L; ++i)
     {
-        StepCounts counts;
+        if (unit[i] >= base()) throw std::invalid_argument("unit is not a survivor");
+        StepCounts counts(base());
         for (uint32_t c = 0; c < unit[i]; ++c)
             if (const State t = next(s, c); t != kDead) k += counts.get(*this, t, L - i - 1);
         s = next(s, unit[i]);
@@ -154,7 +156,24 @@ bool Ranker::accepts(std::span<const uint32_t> unit) const
     return alive(s, 0);
 }
 
+namespace {
+
+// Entry j is implied by entry i when i's spec lists j's name among its implications and they agree
+// on every parameter they share (words with one dictionary does not imply window with another).
+bool implied_by(const FilterStack::Entry& i, const FilterStack::Entry& j)
+{
+    const auto& imp = i.spec->implies;
+    if (std::find(imp.begin(), imp.end(), j.spec->name()) == imp.end()) return false;
+    for (const auto& pj : j.spec->params)
+        for (const auto& pi : i.spec->params)
+            if (pi.key == pj.key && param_value(*i.spec, i.values, pi.key) != param_value(*j.spec, j.values, pj.key)) return false;
+    return true;
+}
+
+} // namespace
+
 FilterStack::FilterStack(const FilterLine& line, const std::vector<Entry>& entries, const FilterResources& resources)
+    : length_(line.length)
 {
     provenance_ = line.kind + "/" + line.symbols_id + "/L" + std::to_string(line.length);
     for (const auto& e : entries)
@@ -172,11 +191,7 @@ FilterStack::FilterStack(const FilterLine& line, const std::vector<Entry>& entri
         if (!filters_[i]->ranker()) continue;
         bool covers = true;
         for (size_t j = 0; j < entries.size(); ++j)
-        {
-            if (j == i) continue;
-            const auto& imp = entries[i].spec->implies;
-            if (std::find(imp.begin(), imp.end(), names_[j]) == imp.end()) covers = false;
-        }
+            if (j != i && !implied_by(entries[i], entries[j])) covers = false;
         if (covers) compact_ = filters_[i]->ranker();
     }
     if (filters_.empty()) blocker_ = "no filters ticked";
@@ -190,9 +205,8 @@ FilterStack::FilterStack(const FilterLine& line, const std::vector<Entry>& entri
         else
         {
             std::string extra;
-            const auto& imp = entries[r].spec->implies;
             for (size_t j = 0; j < names_.size(); ++j)
-                if (j != r && std::find(imp.begin(), imp.end(), names_[j]) == imp.end()) extra += (extra.empty() ? "" : ", ") + names_[j];
+                if (j != r && !implied_by(entries[r], entries[j])) extra += (extra.empty() ? "" : ", ") + names_[j];
             blocker_ = names_[r] + " can rank, but not together with " + extra;
         }
     }
@@ -200,6 +214,8 @@ FilterStack::FilterStack(const FilterLine& line, const std::vector<Entry>& entri
 
 int FilterStack::first_failure(std::span<const uint32_t> unit) const
 {
+    if (filters_.empty()) return -1;
+    if (unit.size() != length_) throw std::invalid_argument("unit has the wrong length for this filter stack");
     for (size_t i = 0; i < filters_.size(); ++i)
         if (!filters_[i]->passes(unit)) return int(i);
     return -1;

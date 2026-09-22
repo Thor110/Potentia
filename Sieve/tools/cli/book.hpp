@@ -35,6 +35,8 @@
 #include "args.hpp"
 #include "lines.hpp"
 
+#include "sieve/bookspace.hpp"
+
 #include <string>
 #include <string_view>
 #include <vector>
@@ -79,6 +81,12 @@ std::vector<DecodedSection> decode_book(const Book& b);
 
 // The content id of decoded sections.
 std::string book_id(const std::vector<DecodedSection>& sections);
+
+// A decoded record as a book of a books line: its cover must be on the line's cover symbols, its
+// title and pages on the line's pages (same symbols and length), with at most the line's number
+// of pages. A missing cover or title is blank (all zero digits); missing pages are blank pages.
+// Throws std::invalid_argument naming the part that does not fit.
+BookSpace::Parts record_parts(const std::vector<DecodedSection>& sections, const BookSpace& space);
 
 std::string serialise_book(const Book& b); // computes nothing: writes b.id as given
 Book parse_book(std::string_view text);    // strict; does not decode

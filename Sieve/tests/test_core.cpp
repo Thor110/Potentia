@@ -3,6 +3,8 @@
 #include "sieve/alphabet.hpp"
 #include "sieve/audio.hpp"
 #include "sieve/biguint.hpp"
+#include "sieve/booksieve.hpp"
+#include "sieve/bookspace.hpp"
 #include "sieve/canon.hpp"
 #include "sieve/compact.hpp"
 #include "sieve/corridor.hpp"
@@ -85,6 +87,92 @@ void test_utf8()
 
 void test_biguint()
 {
+    // Multiplication and long division: a = q * b + r, 0 <= r < b, for random sizes (including
+    // the cases algorithm D must correct), checked against repeated small operations.
+    {
+        std::mt19937_64 rng(23);
+        auto rnd = [&](size_t limbs, bool edge) {
+            BigUint v;
+            for (size_t i = 0; i < limbs; ++i)
+            {
+                v <<= 32;
+                v.add_small(edge ? (rng() % 3 == 0 ? 0xFFFFFFFFu : rng() % 3 == 0 ? 0u : uint32_t(rng())) : uint32_t(rng()));
+            }
+            return v;
+        };
+        bool ok = true;
+        for (int t = 0; t < 3000; ++t)
+        {
+            const bool edge = t % 2;
+            BigUint a = rnd(1 + rng() % 12, edge), b = rnd(1 + rng() % 6, edge);
+            if (b.is_zero()) b = BigUint(7);
+            BigUint q, r;
+            BigUint::divmod(a, b, q, r);
+            BigUint back = BigUint::mul(q, b);
+            back += r;
+            ok = ok && back == a && r < b;
+        }
+        CHECK(ok);
+        // mul agrees with mul_small on one-limb factors, and with pow.
+        BigUint x = BigUint::from_hex("123456789abcdef0fedcba9876543210");
+        BigUint y = x;
+        y.mul_small(0xdeadbeef);
+        CHECK(BigUint::mul(x, BigUint(0xdeadbeef)) == y);
+        CHECK(BigUint::mul(BigUint::pow(27, 40), BigUint::pow(27, 60)) == BigUint::pow(27, 100));
+        BigUint q, r;
+        BigUint::divmod(BigUint::pow(27, 100), BigUint::pow(27, 60), q, r);
+        CHECK(q == BigUint::pow(27, 40) && r.is_zero());
+    }
+
+    // Fast paths agree with the generic ones: power-of-two bases (bits placed directly), pow by
+    // shifting, linear hex parsing, and mod when a < 2m.
+    {
+        std::mt19937_64 rng(17);
+        bool ok = true;
+        for (uint32_t base : {2u, 4u, 8u, 16u, 256u, 65536u, 1u << 31, 3u, 27u, 104u})
+            for (size_t len : {1u, 5u, 31u, 32u, 33u, 200u})
+            {
+                std::vector<uint32_t> d(len);
+                for (auto& x : d) x = uint32_t(rng() % base);
+                const BigUint v = BigUint::from_digits(d, base);
+                // Generic Horner, one digit at a time.
+                BigUint h;
+                for (uint32_t x : d)
+                {
+                    if (base == (1u << 31)) { h <<= 31; }
+                    else h.mul_small(base);
+                    h.add_small(x);
+                }
+                ok = ok && v == h && v.to_digits(base, len) == d;
+                ok = ok && throws([&] { (void)BigUint::pow(base, uint32_t(len)).to_digits(base, len); });
+            }
+        CHECK(ok);
+        for (uint32_t base : {2u, 16u, 256u, 3u})
+        {
+            BigUint slow(1);
+            for (int e = 0; e < 300; ++e) slow.mul_small(base);
+            CHECK(BigUint::pow(base, 300) == slow);
+        }
+        CHECK(BigUint::pow(0, 0) == BigUint(1));
+        CHECK(BigUint::pow(0, 5).is_zero());
+        CHECK(BigUint::pow(1, 1000) == BigUint(1));
+        std::string hex = "1";
+        for (int i = 0; i < 99; ++i) hex += "0123456789abcdef"[rng() % 16];
+        CHECK(BigUint::from_hex(hex).to_hex() == hex);
+        CHECK(BigUint::from_hex("00ff") == BigUint(255));
+        const BigUint m = BigUint::from_hex("123456789abcdef123456789");
+        BigUint a = m;
+        a += BigUint::from_hex("fedcba987654321");
+        CHECK(BigUint::mod(a, m) == BigUint::from_hex("fedcba987654321"));
+        BigUint big = m;
+        big <<= 70;
+        big.add_small(12345);
+        BigUint expect = BigUint::mod(big, m); // shift-and-subtract path
+        BigUint check = big;
+        while (check >= m) { BigUint t = m; size_t sh = check.bit_length() - m.bit_length(); t <<= sh; if (t > check) { t = m; t <<= sh - 1; } check -= t; }
+        CHECK(expect == check);
+    }
+
     const BigUint p = BigUint::pow(27, 13);
     CHECK(p.to_decimal() == "4052555153018976267");
     CHECK(BigUint::pow(2, 100).to_hex() == "10000000000000000000000000");
@@ -770,6 +858,8 @@ std::vector<uint32_t> digits27(const std::string& t)
     return d;
 }
 
+void check_ranker_exhaustive(const FilterStack& st, uint32_t base, uint32_t L, bool& ok);
+
 void test_filters(const std::string& dir)
 {
     // Exact logarithms.
@@ -783,7 +873,7 @@ void test_filters(const std::string& dir)
     CHECK(find_filter("words") == find_filter("words-v2")); // the newest version
     CHECK(find_filter("words-v1") != find_filter("words-v2"));
     CHECK(find_filter("nonsense") == nullptr);
-    CHECK(filters_for(text_line(8)).size() == 8);
+    CHECK(filters_for(text_line(8)).size() == 10);
     const FilterLine image{"image", "image/mono/10x10", 2, 100, nullptr, 10, 10, 1};
     CHECK(filters_for(image).size() == 2); // symbol-entropy, neighbour-agreement
 
@@ -791,7 +881,7 @@ void test_filters(const std::string& dir)
     // survivors in address order, and unrank inverts it.
     auto small = std::make_shared<const Dictionary>(Dictionary::from_words({"a", "an", "ant", "i", "in", "tan"}));
     TestResources small_res(small, nullptr);
-    for (const char* name : {"clean-v1", "words-v1", "clean-v2", "words-v2"})
+    for (const char* name : {"clean-v1", "words-v1", "clean-v2", "words-v2", "window-v1", "window-v2"})
         for (uint32_t L = 1; L <= 4; ++L)
         {
             const FilterStack st(text_line(L), {{find_filter(name), {}}}, small_res);
@@ -810,6 +900,47 @@ void test_filters(const std::string& dir)
             }
             CHECK(ok);
             CHECK(rk->count() == BigUint(k));
+        }
+
+    // Window rankers with words longer than the unit and shared suffixes (the edge token is then a
+    // cut word), exhaustively at L = 5 (14 million units, so on a 3-letter alphabet slice only:
+    // every unit over the symbols SPACE, a, n, t).
+    {
+        auto d = std::make_shared<const Dictionary>(Dictionary::from_words({"a", "an", "ant", "tan", "nat", "natant", "tartan", "at"}));
+        TestResources dres(d, nullptr);
+        for (const char* name : {"window-v1", "window-v2"})
+            for (uint32_t L : {5u, 6u})
+            {
+                const FilterStack st(text_line(L), {{find_filter(name), {}}}, dres);
+                const Ranker* rk = st.ranker();
+                const uint32_t sym[4] = {0, 1, 14, 20}; // SPACE a n t
+                bool ok = rk != nullptr;
+                uint64_t total = 1;
+                for (uint32_t i = 0; i < L; ++i) total *= 4;
+                for (uint64_t i = 0; ok && i < total; ++i)
+                {
+                    std::vector<uint32_t> u(L);
+                    uint64_t x = i;
+                    for (uint32_t k = L; k-- > 0; x /= 4) u[k] = sym[x % 4];
+                    const bool pass = st.passes(u);
+                    ok = ok && rk->accepts(u) == pass;
+                    if (pass) ok = ok && rk->unrank(rk->rank(u)) == u;
+                }
+                CHECK(ok);
+            }
+    }
+
+    // title-v1: words in the first max_length symbols, then SPACEs; exhaustively at small sizes.
+    for (uint32_t L = 1; L <= 4; ++L)
+        for (const char* max : {"1", "2", "3", "9"})
+        {
+            const FilterStack st(text_line(L), {{find_filter("title-v1"), {{"max_length", max}}}}, small_res);
+            bool ok = true;
+            check_ranker_exhaustive(st, 27, L, ok);
+            CHECK(ok);
+            // Every title is a words-v2 unit (so the two can be ticked together and still rank).
+            const FilterStack both(text_line(L), {{find_filter("title-v1"), {{"max_length", max}}}, {find_filter("words-v2"), {}}}, small_res);
+            CHECK(both.ranker() != nullptr && both.ranker()->count() == st.ranker()->count());
         }
 
     // Version 2 allows trailing SPACE padding and nothing else new: a v2 survivor either passes
@@ -889,6 +1020,32 @@ void test_filters(const std::string& dir)
         CHECK(w2.passes(u));
         CHECK(w2.ranker()->unrank(w2.ranker()->rank(u)) == u);
         CHECK(w1.ranker()->count() < w2.ranker()->count());
+    }
+
+    // Review fixes: words with one dictionary does not imply window with another (compact would
+    // otherwise list non-survivors); an empty "word" is not a word.
+    {
+        struct TwoDicts : FilterResources
+        {
+            std::shared_ptr<const Dictionary> a = std::make_shared<const Dictionary>(Dictionary::from_words({"a", "an", "ant"}));
+            std::shared_ptr<const Dictionary> b = std::make_shared<const Dictionary>(Dictionary::from_words({"i", "in"}));
+            std::shared_ptr<const Dictionary> dictionary(const std::string& id) const override { return id == "b" ? b : a; }
+            std::shared_ptr<const CharModel> model(const std::string&, const std::string&) const override { return nullptr; }
+        } two;
+        const FilterStack mixed(text_line(4), {{find_filter("words-v1"), {{"dictionary", "a"}}}, {find_filter("window-v1"), {{"dictionary", "b"}}}}, two);
+        CHECK(mixed.ranker() == nullptr);
+        const FilterStack same(text_line(4), {{find_filter("words-v1"), {{"dictionary", "a"}}}, {find_filter("window-v1"), {{"dictionary", "a"}}}}, two);
+        CHECK(same.ranker() != nullptr);
+        auto with_empty = std::make_shared<const Dictionary>(Dictionary::from_words({"", "a"}));
+        TestResources er(with_empty, nullptr);
+        bool ok = true;
+        for (uint32_t L = 1; L <= 3; ++L)
+        {
+            const FilterStack st(text_line(L), {{find_filter("words-v1"), {}}}, er);
+            check_ranker_exhaustive(st, 27, L, ok);
+        }
+        CHECK(ok);
+        CHECK(throws([&] { (void)FilterStack(text_line(4), {{find_filter("words-v1"), {}}}, er).passes(digits27("abc")); }));
     }
 
     // Stacks: compact needs one ranking filter implying the rest.
@@ -1210,6 +1367,228 @@ void test_compact_vectors(const std::string& dir)
     std::cout << "compact vectors checked: " << n << "\n";
 }
 
+// The books line: every book of a tiny shape, in both orderings, is a bijection with [0, N).
+void test_bookspace()
+{
+    const Space cover("image/mono/2x1", 2, 2, "sieve");
+    const Space page(alphabet_by_id("lower27"), 1, "sieve");
+    for (uint32_t pages : {0u, 1u, 2u})
+    {
+        const BookSpace bs(cover, page, pages);
+        uint64_t n = 4;
+        for (uint32_t i = 0; i <= pages; ++i) n *= 27;
+        CHECK(bs.size() == BigUint(n));
+        bool ok = true;
+        std::vector<bool> seen(n);
+        for (uint64_t k = 0; k < n; ++k)
+        {
+            const auto pos = bs.parts_at(BigUint(k), AddressMode::Positional);
+            ok = ok && bs.index_of(pos, AddressMode::Positional) == BigUint(k);
+            const auto scr = bs.parts_at(BigUint(k), AddressMode::Scrambled);
+            const BigUint back = bs.index_of(scr, AddressMode::Scrambled);
+            ok = ok && back == BigUint(k);
+            const uint32_t j = bs.index_of(scr, AddressMode::Positional).low_bits(32);
+            ok = ok && !seen[j];
+            seen[j] = true;
+        }
+        CHECK(ok);
+    }
+    // Positional order: the cover is most significant, the last page least.
+    const BookSpace bs(cover, page, 2);
+    BookSpace::Parts p{{1, 0}, {3}, {{0}, {5}}};
+    CHECK(bs.index_of(p, AddressMode::Positional) == BigUint(((2 * 27 + 3) * 27 + 0) * 27 + 5));
+    CHECK(bs.hex_of(BigUint(5)).size() == bs.hex_width());
+    CHECK(throws([&] { (void)bs.parse("ffffffffff"); }));
+    // At full scale: a 10x10 cover, 32-character pages, four of them; scrambled round-trips.
+    const Space big_cover("image/mono/10x10", 2, 100, "sieve");
+    const Space big_page(alphabet_by_id("lower27"), 32, "sieve");
+    const BookSpace big(big_cover, big_page, 4);
+    BookSpace::Parts q;
+    q.cover.assign(100, 1);
+    q.title = digits27("a tale of two cities            ");
+    for (const char* t : {"it was the best of times it was ", "the worst of times it was the ag", "e of wisdom it was the age of fo", "olishness                       "})
+        q.pages.push_back(digits27(t));
+    const BigUint a = big.index_of(q, AddressMode::Scrambled);
+    CHECK(big.parts_at(a, AddressMode::Scrambled) == q);
+    CHECK(big.parse(big.hex_of(a)) == a);
+}
+
+void test_booksieve()
+{
+    // Tiny shapes, checked against brute force: a 2x2 two-colour cover, pages of L = 2 letters,
+    // one or two of them. Count = the product of each part's brute-force survivors; unrank walks
+    // the survivors in increasing positional address, and rank inverts it.
+    auto small = std::make_shared<const Dictionary>(Dictionary::from_words({"a", "an", "ant", "i", "in", "tan"}));
+    TestResources res(small, nullptr);
+    const Space cover("image/mono/2x2", 2, 4, "sieve");
+    const Space page(alphabet_by_id("lower27"), 2, "sieve");
+    const FilterLine image{"image", "image/mono/2x2", 2, 4, nullptr, 2, 2, 1};
+    auto brute = [](const FilterStack& st, uint32_t base, uint32_t n) {
+        uint64_t total = 1, c = 0;
+        for (uint32_t i = 0; i < n; ++i) total *= base;
+        for (uint64_t v = 0; v < total; ++v)
+        {
+            std::vector<uint32_t> u(n);
+            uint64_t x = v;
+            for (uint32_t i = n; i-- > 0; x /= base) u[i] = uint32_t(x % base);
+            if (st.passes(u)) ++c;
+        }
+        return c;
+    };
+    for (uint32_t P : {1u, 2u})
+    {
+        const BookSpace bs(cover, page, P);
+        const FilterStack none;
+        const FilterStack cv(image, {{find_filter("neighbour-agreement-v1"), {{"min_permille", "1000"}}}}, res);
+        const FilterStack ti(text_line(2), {{find_filter("title-v1"), {}}}, res);
+        const FilterStack pg(text_line(2 * P), {{find_filter("words-v2"), {}}}, res);
+        for (int mask = 0; mask < 8; ++mask)
+        {
+            const FilterStack& c = mask & 1 ? cv : none;
+            const FilterStack& t = mask & 2 ? ti : none;
+            const FilterStack& b = mask & 4 ? pg : none;
+            const BookSieve s(bs, c, t, b);
+            CHECK(s.empty() == (mask == 0));
+            CHECK(s.can_rank());
+            const uint64_t n = (c.empty() ? 16 : brute(c, 2, 4)) * (t.empty() ? 729 : brute(t, 27, 2)) *
+                               (b.empty() ? (P == 1 ? 729 : 531441) : brute(b, 27, 2 * P));
+            CHECK(s.count() == BigUint(n));
+            if (n > 20000) continue;
+            bool ok = true;
+            BigUint prev;
+            for (uint64_t k = 0; k < n; ++k)
+            {
+                const auto parts = s.unrank(BigUint(k));
+                ok = ok && s.first_failure(parts).empty() && s.rank(parts) == BigUint(k);
+                const BigUint at = bs.index_of(parts, AddressMode::Positional);
+                ok = ok && (k == 0 || prev < at);
+                prev = at;
+            }
+            CHECK(ok);
+        }
+    }
+    // A word cut by the page break is judged whole: "an|t " passes words-v2 on the body.
+    const BookSpace bs(cover, page, 2);
+    const FilterStack none;
+    const FilterStack pg(text_line(4), {{find_filter("words-v2"), {}}}, res);
+    const BookSieve s(bs, none, none, pg);
+    BookSpace::Parts p{{0, 0, 0, 0}, digits27("zz"), {digits27("an"), digits27("t ")}};
+    CHECK(s.first_failure(p).empty());
+    p.pages[1] = digits27("q ");
+    CHECK(s.first_failure(p) == "pages: words-v2");
+    CHECK(throws([&] { (void)s.rank(p); }));
+    CHECK(throws([&] { (void)s.unrank(s.count()); }));
+    CHECK(throws([&] { (void)s.first_failure(BookSpace::Parts{{0, 0, 0}, digits27("zz"), {digits27("an"), digits27("t ")}}); }));
+    // Compact addresses: a bijection on [0, N) in both orderings, with a fixed domain.
+    const FilterStack ti(text_line(2), {{find_filter("title-v1"), {}}}, res);
+    const BookSieve c(bs, none, ti, pg);
+    CHECK(c.domain().rfind("books-compact-v1/books/", 0) == 0);
+    const uint64_t n = c.count().low_bits(32);
+    CHECK(c.count() == BigUint(n) && n > 0 && n < 200000);
+    std::vector<bool> seen(n);
+    bool ok = true;
+    for (uint64_t k = 0; k < n; ++k)
+    {
+        const auto q = c.parts_at(BigUint(k), AddressMode::Scrambled);
+        ok = ok && c.index_of(q, AddressMode::Scrambled) == BigUint(k);
+        const uint64_t j = c.index_of(q, AddressMode::Positional).low_bits(32);
+        ok = ok && j < n && !seen[j];
+        if (j < n) seen[j] = true;
+        ok = ok && c.parts_at(BigUint(k), AddressMode::Positional) == c.unrank(BigUint(k));
+    }
+    CHECK(ok);
+    CHECK(c.parse(c.hex_of(BigUint(n - 1))) == BigUint(n - 1));
+    CHECK(throws([&] { (void)c.parse(c.hex_of(BigUint(n))); }));
+}
+
+void test_book_vectors(const std::string& dir)
+{
+    std::ifstream in(dir + "vectors_books_v1.tsv");
+    CHECK(bool(in));
+    std::string line;
+    int n = 0;
+    while (std::getline(in, line))
+    {
+        if (line.empty() || line[0] == '#') continue;
+        std::vector<std::string> f;
+        std::stringstream ss(line);
+        std::string x;
+        while (std::getline(ss, x, '\t')) f.push_back(x);
+        while (f.size() < 13) f.push_back("");
+        const Space cover(f[1], uint32_t(std::stoul(f[2])), uint32_t(std::stoul(f[3])), f[7]);
+        const Space page(alphabet_by_id(f[4]), uint32_t(std::stoul(f[5])), f[7]);
+        const BookSpace bs(cover, page, uint32_t(std::stoul(f[6])));
+        const AddressMode m = address_mode_from_string(f[8]);
+        BookSpace::Parts p;
+        for (char c : f[10]) p.cover.push_back(uint32_t(c - '0'));
+        p.title = digits27(f[11]);
+        std::stringstream ps(f[12]);
+        std::string pg;
+        while (std::getline(ps, pg, '|')) p.pages.push_back(digits27(pg));
+        const BigUint k = BigUint::from_hex(f[9]);
+        CHECK(bs.parts_at(k, m) == p);
+        CHECK(bs.hex_of(bs.index_of(p, m)) == f[9]);
+        ++n;
+    }
+    std::cout << "book vectors checked: " << n << "\n";
+}
+
+void test_book_filter_vectors(const std::string& dir)
+{
+    std::ifstream in(dir + "vectors_book_filters_v1.tsv");
+    CHECK(bool(in));
+    auto dict = std::make_shared<const Dictionary>(Dictionary::load_file(dir + "../data/dictionaries/scowl-2020.12.07-en-35.txt"));
+    TestResources res(dict, nullptr);
+    struct Case
+    {
+        std::unique_ptr<BookSpace> space;
+        FilterStack cover, title, pages;
+        std::unique_ptr<BookSieve> sieve;
+        uint32_t L = 0, P = 0;
+    };
+    std::map<std::string, Case> cases;
+    std::string line;
+    int n = 0;
+    while (std::getline(in, line))
+    {
+        if (line.empty() || line[0] == '#') continue;
+        std::vector<std::string> f;
+        std::stringstream ss(line);
+        std::string x;
+        while (std::getline(ss, x, '\t')) f.push_back(x);
+        if (f[0] == "bookdomain")
+        {
+            Case& c = cases[f[1]];
+            const uint32_t W = uint32_t(std::stoul(f[2])), H = uint32_t(std::stoul(f[3]));
+            c.L = uint32_t(std::stoul(f[4]));
+            c.P = uint32_t(std::stoul(f[5]));
+            const std::string sym = "image/mono/" + f[2] + "x" + f[3];
+            c.space = std::make_unique<BookSpace>(Space(sym, 2, W * H, "sieve"), Space(alphabet_by_id("lower27"), c.L, "sieve"), c.P);
+            const FilterLine image{"image", sym, 2, W * H, nullptr, W, H, 1};
+            if (f[6] != "-") c.cover = FilterStack(image, {{find_filter(f[6]), {}}}, res);
+            if (f[7] != "-") c.title = FilterStack(text_line(c.L), {{find_filter("title-v1"), {{"dictionary", "scowl-en-35"}, {"max_length", f[7]}}}}, res);
+            if (f[8] != "-") c.pages = FilterStack(text_line(c.L * c.P), {{find_filter(f[8]), {{"dictionary", "scowl-en-35"}}}}, res);
+            c.sieve = std::make_unique<BookSieve>(*c.space, c.cover, c.title, c.pages);
+            CHECK(c.sieve->count().to_decimal() == f[9]);
+            CHECK(c.sieve->domain() == f[10]);
+            continue;
+        }
+        const Case& c = cases.at(f[1]);
+        const AddressMode m = address_mode_from_string(f[2]);
+        BookSpace::Parts p;
+        for (char ch : f[4]) p.cover.push_back(uint32_t(ch - '0'));
+        p.title = digits27(f[5]);
+        std::stringstream ps(f[6]);
+        std::string pg;
+        while (std::getline(ps, pg, '|')) p.pages.push_back(digits27(pg));
+        const BigUint a = BigUint::from_hex(f[3]);
+        CHECK(c.sieve->parts_at(a, m) == p);
+        CHECK(c.sieve->hex_of(c.sieve->index_of(p, m)) == f[3]);
+        ++n;
+    }
+    std::cout << "book filter vectors checked: " << n << "\n";
+}
+
 void test_filter_vectors(const std::string& dir)
 {
     std::ifstream in(dir + "vectors_filters_v1.tsv");
@@ -1256,6 +1635,14 @@ void test_filter_vectors(const std::string& dir)
             for (char c : f[5]) px.push_back(uint32_t(c - '0'));
             CHECK(st.passes(px) == (f[6] == "1"));
         }
+        else if (f[0] == "trank")
+        {
+            const FilterStack st(text_line(uint32_t(std::stoul(f[2]))), {{find_filter("title-v1"), {{"max_length", f[1]}}}}, res);
+            const Ranker* rk = st.ranker();
+            CHECK(rk && rk->count() == BigUint::from_decimal(f[3]));
+            CHECK(rk && rk->unrank(BigUint::from_decimal(f[4])) == digits27(f[5]));
+            CHECK(rk && rk->rank(digits27(f[5])) == BigUint::from_decimal(f[4]));
+        }
         else if (f[0] == "rank")
         {
             const FilterStack st(text_line(uint32_t(std::stoul(f[2]))), {{find_filter(f[1]), {}}}, res);
@@ -1297,6 +1684,10 @@ void run_all(int argc, char** argv)
         test_filter_vectors(dir);
         test_compact(dir);
         test_compact_vectors(dir);
+        test_bookspace();
+        test_booksieve();
+        test_book_vectors(dir);
+        test_book_filter_vectors(dir);
     }
 }
 

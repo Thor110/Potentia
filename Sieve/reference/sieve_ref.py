@@ -727,6 +727,82 @@ class WordsRank:
         return out
 
 
+class WindowRank:
+    """Rank/unrank of window survivors (v1, or v2 with padding) by memoised recursion over an
+    automaton built from plain sets of substrings, suffixes and prefixes of the words: an
+    independent method from the core's trie and suffix-range histograms."""
+
+    def __init__(self, d, L, padding=False):
+        self.words, self.prefixes, self.suffixes, self.substrings = d
+        self.L, self.padding = L, padding
+        self.memo = {}
+
+    def step(self, st, c):
+        ch = " abcdefghijklmnopqrstuvwxyz"[c]
+        k = st[0]
+        if k in ("pp", "pad"):
+            return ("pad",) if ch == " " else None
+        if ch == " ":
+            if k == "start":
+                return ("sp0",)
+            if k == "sp":
+                return ("pad",) if self.padding else None
+            if k == "sp0":
+                return None
+            whole = st[1] in (self.suffixes if k == "edge" else self.words)
+            if whole:
+                return ("sp",)
+            return ("pp",) if self.padding else None
+        if k == "start":
+            return ("edge", ch) if ch in self.substrings else None
+        if k == "edge":
+            p = st[1] + ch
+            return ("edge", p) if p in self.substrings else None
+        p = (st[1] if k == "w" else "") + ch
+        return ("w", p) if p in self.prefixes else None
+
+    def accept(self, st):
+        return st[0] in ("edge", "w", "sp", "pad")
+
+    def count(self, st, r):
+        key = (st, r)
+        if key not in self.memo:
+            if r == 0:
+                v = 1 if self.accept(st) else 0
+            else:
+                v = 0
+                for c in range(27):
+                    t = self.step(st, c)
+                    if t is not None:
+                        v += self.count(t, r - 1)
+            self.memo[key] = v
+        return self.memo[key]
+
+    def total(self):
+        return self.count(("start",), self.L)
+
+    def unrank(self, k):
+        st, out = ("start",), []
+        for i in range(self.L):
+            for c in range(27):
+                t = self.step(st, c)
+                if t is None:
+                    continue
+                n = self.count(t, self.L - i - 1)
+                if k < n:
+                    out.append(c)
+                    st = t
+                    break
+                k -= n
+        return out
+
+
+def passes_title(u, max_length, d):
+    """title-v1: words (as words-v2) in the first N = min(max_length, L) symbols, then SPACEs."""
+    n = min(max_length, len(u))
+    return u[n:].strip(" ") == "" and passes_v2(u[:n], "words", d)
+
+
 def passes_v2(u, filt, d):
     """clean-v2 / words-v2: as v1, but two or more trailing SPACEs are padding (the prefix is judged)."""
     t = u.rstrip(" ")
@@ -740,7 +816,7 @@ def cmd_filter_vectors(_args):
     dict_file = "scowl-2020.12.07-en-35.txt"
     d = load_dict(f"{here}/dictionaries/{dict_file}")
     sym = ALPHABETS["lower27"]
-    print("# sieve filter conformance vectors v1 (clean-v1 window-v1 words-v1 clean-v2 words-v2 max-run-v1 symbol-entropy-v1")
+    print("# sieve filter conformance vectors v1 (clean-v1 window-v1 words-v1 clean-v2 words-v2 window-v2 title-v1 max-run-v1 symbol-entropy-v1")
     print("#   model-information-v1 neighbour-agreement-v1), dictionary scowl-en-35, model gutenberg-lower27-o5")
     print(f"# dictionary {dict_file}")
     print("# log2 <x> <floor(log2(x)*65536)>")
@@ -759,8 +835,10 @@ def cmd_filter_vectors(_args):
             digits = [sym.index(c) for c in u]
             for f in ("clean", "window", "words"):
                 print(f"verdict\t{f}-v1\tdictionary=scowl-en-35\t{L}\t{u}\t{int(passes(u, f, d))}")
-            for f in ("clean", "words"):
+            for f in ("clean", "words", "window"):
                 print(f"verdict\t{f}-v2\tdictionary=scowl-en-35\t{L}\t{u}\t{int(passes_v2(u, f, d))}")
+            for mx in (4, 12, 24):
+                print(f"verdict\ttitle-v1\tdictionary=scowl-en-35,max_length={mx}\t{L}\t{u}\t{int(passes_title(u, mx, d))}")
             for mr in (2, 3):
                 print(f"verdict\tmax-run-v1\tmax_run={mr}\t{L}\t{u}\t{int(f_max_run(digits, mr))}")
             for lo, hi in ((0, 4400), (2000, 3900), (3500, 32000)):
@@ -786,6 +864,23 @@ def cmd_filter_vectors(_args):
             u = "".join(sym[c] for c in rk.unrank(k))
             assert (passes if v == 1 else passes_v2)(u, f, d)
             print(f"rank\t{f}-v{v}\t{L}\t{total}\t{k}\t{u}")
+    for v, L in ((1, 8), (2, 8), (1, 12), (2, 12)):
+        rk = WindowRank(d, L, padding=(v == 2))
+        total = rk.total()
+        g2 = stream(f"rank/window-v{v}/{L}")
+        for k in [0, 1, total // 2, total - 1] + [int.from_bytes(bytes(next(g2) for _ in range(16)), "little") % total for _ in range(6)]:
+            u = "".join(sym[c] for c in rk.unrank(k))
+            assert (passes if v == 1 else passes_v2)(u, "window", d)
+            print(f"rank\twindow-v{v}\t{L}\t{total}\t{k}\t{u}")
+    print("# trank <max_length> <length> <count> <rank> <unit>   (title-v1)")
+    for mx, L in ((12, 32), (20, 32)):
+        rk = WordsRank(words, mx, padding=True)
+        total = rk.total()
+        g2 = stream(f"rank/title/{mx}/{L}")
+        for k in [0, 1, total // 2, total - 1] + [int.from_bytes(bytes(next(g2) for _ in range(16)), "little") % total for _ in range(6)]:
+            u = "".join(sym[c] for c in rk.unrank(k)).ljust(L)
+            assert passes_title(u, mx, d)
+            print(f"trank\t{mx}\t{L}\t{total}\t{k}\t{u}")
 
 
 # -- compact orderings (SPECIFICATIONS 8.5, 9): rankers on the other lines, the survivor shuffle,
@@ -1056,27 +1151,50 @@ PALETTE_SIZES = {"mono": 2, "ega16": 16, "rgb332": 256, "rgb24": 1 << 24}
 
 
 def book_read(text, model_dir="../data/models"):
+    """Decodes a book record and checks its id. Raises ValueError on anything malformed (never
+    assert: python -O would drop those checks)."""
+    def need(cond, msg):
+        if not cond:
+            raise ValueError(msg)
+
+    def field(i, key):
+        name, sep, value = lines[i].partition(" ")
+        need(name == key and sep, f"book line {i + 1}: expected '{key} ...'")
+        return value
+
     lines = text.split("\n")
-    assert lines[0] == "sieve-book-v1", "not a book"
+    need(lines and lines[0] == "sieve-book-v1", "not a sieve-book-v1 record")
+    models = {}
+    for row in open(f"{model_dir}/models.tsv", encoding="utf-8"):
+        cols = row.rstrip("\n").split("\t")
+        if cols and not cols[0].startswith("#") and len(cols) >= 5:
+            models[cols[0]] = (cols[1], cols[4])  # id -> (file, sha256)
     i, sections = 1, []
-    while lines[i] != "end":
-        role = lines[i].split(" ", 1)[1]
-        kind = lines[i + 1].split(" ", 1)[1]
+    while True:
+        need(i < len(lines), "the book ends early")
+        if lines[i] == "end":
+            break
+        role = field(i, "section")
+        kind = field(i + 1, "line")
+        need(kind in BOOK_FIELDS, f"book line {i + 2}: unknown line '{kind}'")
         i += 2
         f = {}
         for k in BOOK_FIELDS[kind] + ["key", "mode"]:
-            name, _, v = lines[i].partition(" ")
-            assert name == k, (name, k)
-            f[k] = v
+            f[k] = field(i, k)
             i += 1
+        need(f["mode"] in ("positional", "scrambled", "guided"), "bad mode")
         model = None
         if f["mode"] == "guided":
-            _, mid, msha = lines[i].split(" ")
-            model = Model(f"{model_dir}/{mid}.model")
-            assert model.sha256 == msha, "model does not match"
+            mid, _, msha = field(i, "model").partition(" ")
+            need(mid in models, f"unknown model '{mid}'")
+            model = Model(f"{model_dir}/{models[mid][0]}")
+            need(model.sha256 == msha == models[mid][1], "model does not match")
             i += 1
-        n = int(lines[i].split(" ")[1])
+        units = field(i, "units")
+        need(units.isdigit(), "bad unit count")
+        n = int(units)
         addrs = lines[i + 1:i + 1 + n]
+        need(len(addrs) == n, "the book ends early")
         i += 1 + n
         if kind == "text":
             L, sym, base = int(f["length"]), f["alphabet"], None
@@ -1089,24 +1207,26 @@ def book_read(text, model_dir="../data/models"):
         sp = Space(sym if kind == "text" else None, L, f["key"], base=base)
         units = []
         for a in addrs:
+            need(a and all(c in "0123456789abcdef" for c in a), "not a lowercase hex address")
             if f["mode"] == "guided":
                 S = 16 * L
                 pt = int(a, 16) << (S - 4 * len(a))
                 u = guided_unit_at(model, L, pt)
                 point, bits = guided_code(model, u)
-                assert guided_hex(point, bits, S) == a, "not the unit's own address"
+                need(guided_hex(point, bits, S) == a, "not the unit's own address")
             else:
+                need(len(a) == sp.hex_width, "an address of the wrong width")
                 d = sp._digits(int(a, 16))
                 u = sp.unscramble(d) if f["mode"] == "scrambled" else d
             units.append(u)
         sections.append((role, kind, sym, L, sp, units))
-    assert lines[i + 1].startswith("id ")
+    written = field(i + 1, "id")
     canon = ["sieve-book-id-v1"]
     for role, kind, sym, L, sp, units in sections:
         canon += [f"section {role}", f"shape {kind}/{sym}/L{L}", f"units {len(units)}"]
         canon += [format(sp._value(u), "x").zfill(sp.hex_width) for u in units]
     book_id = hashlib.sha256(("\n".join(canon) + "\n").encode()).hexdigest()
-    assert book_id == lines[i + 1][3:], "id does not match the content"
+    need(book_id == written, "id does not match the content")
     return book_id, sections
 
 
@@ -1118,7 +1238,117 @@ def cmd_book_read(args):
             print("".join(sp.text_of(u) for u in units).rstrip(" "))
 
 
+# -- the books line (bookspace-v1): cover, title, pages as one mixed-radix number; scrambled
+#    through shuffle-sha256-v1 over the whole book count.
+def book_space_id(cover_sym, cover_len, page_sym, page_len, pages, key):
+    return f"books/{cover_sym}/L{cover_len}+{page_sym}/L{page_len}x{pages + 1}/key={key}/bookspace-v1"
+
+
+def book_index(cover, cover_base, title, pages, page_base):
+    v = 0
+    for d in cover:
+        v = v * cover_base + d
+    for part in [title] + pages:
+        for d in part:
+            v = v * page_base + d
+    return v
+
+
+def book_parts(v, cover_base, cover_len, page_base, page_len, pages):
+    def take(n, b):
+        nonlocal v
+        out = []
+        for _ in range(n):
+            v, r = divmod(v, b)
+            out.append(r)
+        return out[::-1]
+    ps = [take(page_len, page_base) for _ in range(pages)][::-1]
+    title = take(page_len, page_base)
+    cover = take(cover_len, cover_base)
+    assert v == 0
+    return cover, title, ps
+
+
+def cmd_book_vectors(_args):
+    """Books-line addresses: positional (mixed radix) and scrambled (shuffle over the book count)."""
+    print("# sieve books-line vectors v1 (bookspace-v1 over shuffle-sha256-v1)")
+    print("# book <cover symbols> <cover colours> <cover length> <page alphabet> <page length> <pages> <key> <mode> <address> <cover digits> <title> <pages, | between>")
+    sym = ALPHABETS["lower27"]
+    g = stream("books")
+    for cw, ch, L, P, key in ((2, 1, 1, 2, "sieve"), (4, 4, 8, 3, "sieve"), (10, 10, 32, 4, "sieve"), (10, 10, 32, 4, "other"), (5, 5, 64, 0, "sieve")):
+        cover_sym, cover_len = f"image/mono/{cw}x{ch}", cw * ch
+        n = 2 ** cover_len * 27 ** (L * (P + 1))
+        dom = book_space_id(cover_sym, cover_len, "lower27", L, P, key)
+        width = max(1, ((n - 1).bit_length() + 3) // 4)
+        for mode in ("positional", "scrambled"):
+            for k in [0, n - 1, n // 3] + [int.from_bytes(bytes(next(g) for _ in range(width)), "little") % n for _ in range(3)]:
+                pos = shuffle(key, dom, n, k, inverse=True) if mode == "scrambled" else k
+                cover, title, pages = book_parts(pos, 2, cover_len, 27, L, P)
+                assert book_index(cover, 2, title, pages, 27) == pos
+                txt = lambda d: "".join(sym[x] for x in d)
+                print(f"book\t{cover_sym}\t2\t{cover_len}\tlower27\t{L}\t{P}\t{key}\t{mode}\t{format(k, 'x').zfill(width)}\t"
+                      f"{''.join(map(str, cover))}\t{txt(title)}\t{'|'.join(txt(p) for p in pages)}")
+
+
+def cmd_book_filter_vectors(_args):
+    """Book filters (books-compact-v1): surviving books counted, unranked and shuffled, each part by
+    its own independent ranker, the pages judged as one text."""
+    here = "../data"
+    dict_file = "scowl-2020.12.07-en-35.txt"
+    raw = open(f"{here}/dictionaries/{dict_file}", "rb").read()
+    dsha = hashlib.sha256(raw).hexdigest()
+    words = load_dict(f"{here}/dictionaries/{dict_file}")[0]
+    sym = ALPHABETS["lower27"]
+    txt = lambda d: "".join(sym[x] for x in d)
+    sha = lambda t: hashlib.sha256(t.encode()).hexdigest()
+    print("# sieve book-filter vectors v1 (books-compact-v1 over bookspace-v1 and shuffle-sha256-v1)")
+    print(f"# dictionary {dict_file}; cover image/mono/WxH; pages lower27 of length L; key sieve")
+    print("# bookdomain <case> <W> <H> <L> <P> <cover filter|-> <title max_length|-> <pages filter|-> <count> <domain>")
+    print("# bookfilter <case> <mode> <address> <cover digits> <title> <pages, | between>")
+    g = stream("book-filters")
+    cases = [(3, 2, 8, 2, True, 4, True), (3, 2, 8, 2, False, 4, True), (2, 2, 6, 3, True, None, True), (3, 2, 8, 2, True, 6, False)]
+    for ci, (W, H, L, P, cover_on, tmax, pages_on) in enumerate(cases):
+        key = "sieve"
+        clen = W * H
+        parts = []  # (count, unrank, provenance or None)
+        if cover_on:
+            ar = AgreementRank(W, H, 1, 2, 600)
+            parts.append((ar.total(), ar.unrank, f"image/image/mono/{W}x{H}/L{clen}; neighbour-agreement-v1{{min_permille=600}}"))
+        else:
+            parts.append((2 ** clen, lambda k, n=clen: [(k >> (n - 1 - i)) & 1 for i in range(n)], None))
+        if tmax is not None:
+            n = min(tmax, L)
+            wr = WordsRank(words, n, padding=True)
+            parts.append((wr.total(), lambda k, wr=wr, n=n: wr.unrank(k) + [0] * (L - n),
+                          f"text/lower27/L{L}; title-v1{{dictionary=scowl-en-35 sha256={dsha} max_length={tmax}}}"))
+        else:
+            parts.append((27 ** L, lambda k: [(k // 27 ** (L - 1 - i)) % 27 for i in range(L)], None))
+        if pages_on:
+            br = WordsRank(words, P * L, padding=True)
+            parts.append((br.total(), br.unrank, f"text/lower27/L{P * L}; words-v2{{dictionary=scowl-en-35 sha256={dsha}}}"))
+        else:
+            parts.append((27 ** (P * L), lambda k: [(k // 27 ** (P * L - 1 - i)) % 27 for i in range(P * L)], None))
+        nc, nt, nb = (x[0] for x in parts)
+        n = nc * nt * nb
+        dom = "books-compact-v1/" + book_space_id(f"image/mono/{W}x{H}", clen, "lower27", L, P, key) + "".join(
+            "/" + (sha(x[2]) if x[2] else "-") for x in parts)
+        print(f"bookdomain\t{ci}\t{W}\t{H}\t{L}\t{P}\t{'neighbour-agreement-v1' if cover_on else '-'}\t"
+              f"{tmax if tmax is not None else '-'}\t{'words-v2' if pages_on else '-'}\t{n}\t{dom}")
+        width = max(1, ((n - 1).bit_length() + 3) // 4)
+        for mode in ("positional", "scrambled"):
+            for a in [0, n - 1, n // 2] + [int.from_bytes(bytes(next(g) for _ in range(width + 2)), "little") % n for _ in range(3)]:
+                k = shuffle(key, dom, n, a, inverse=True) if mode == "scrambled" else a
+                rest, kb = divmod(k, nb)
+                kc, kt = divmod(rest, nt)
+                cover, title, body = parts[0][1](kc), parts[1][1](kt), parts[2][1](kb)
+                pages = [body[i * L:(i + 1) * L] for i in range(P)]
+                print(f"bookfilter\t{ci}\t{mode}\t{format(a, 'x').zfill(width)}\t{''.join(map(str, cover))}\t{txt(title)}\t"
+                      f"{'|'.join(txt(p) for p in pages)}")
+
+
 def main():
+    # Vectors are compared byte for byte: always write "\n" line endings and UTF-8, on every platform.
+    sys.stdout.reconfigure(newline="\n", encoding="utf-8")
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
     for name in ("warp", "read"):
@@ -1144,6 +1374,8 @@ def main():
     s.add_argument("--out", required=True)
     sub.add_parser("filter-vectors")
     sub.add_parser("compact-vectors")
+    sub.add_parser("book-vectors")
+    sub.add_parser("book-filter-vectors")
     s = sub.add_parser("book-read")
     s.add_argument("book")
     s = sub.add_parser("guided-vectors")
@@ -1168,6 +1400,10 @@ def main():
         cmd_filter_vectors(args)
     elif args.cmd == "compact-vectors":
         cmd_compact_vectors(args)
+    elif args.cmd == "book-vectors":
+        cmd_book_vectors(args)
+    elif args.cmd == "book-filter-vectors":
+        cmd_book_filter_vectors(args)
     elif args.cmd == "book-read":
         cmd_book_read(args)
     elif args.cmd == "warp":

@@ -120,6 +120,9 @@ Line make_line(const Args& a)
         f.width = a.get_positive("width", video ? 5 : 10);
         f.height = a.get_positive("height", video ? 5 : 10);
         f.frames = video ? a.get_positive("frames", 8) : 1;
+        if (uint64_t(f.width) * f.height * f.frames > 0xFFFFFFFFull)
+            throw std::invalid_argument("a picture of " + std::to_string(uint64_t(f.width) * f.height * f.frames) +
+                                        " pixels is more than one unit can hold (2^32 - 1 positions)");
         f.palette = &palette_by_id(a.get("palette", "mono"));
         return Line{kind, nullptr, kDefaultCanon, f, Space(f.symbols_id(), f.palette->size(), f.unit_length(), key), nullptr, {}};
     }

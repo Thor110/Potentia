@@ -1,0 +1,230 @@
+font = sieve8x8          ; the font for this language: a file in the fonts folder (data/fonts)
+; Sieve language file: English (the fallback for every other language).
+;
+; To add a language, copy this file to <code>.txt (fr.txt, de.txt, ...), keep every key on the
+; left of '=' and translate the text on the right. Keys you leave out show in English.
+; The first line names the font: sieve8x8 covers ASCII, Latin-1 (French, German, Spanish,
+; Italian, Portuguese, Dutch, Nordic), Greek and hiragana; any font in Unifont's .hex format
+; can be added to the fonts folder and named here.
+; "\n" is a line break. "{0}", "{1}" are filled in by the program. Put a value in double
+; quotes to keep spaces at its start or end. Save as UTF-8.
+
+language.name = English
+
+; ---- main menu
+main.title = Potentia : Sieve : Gallery of Babel Dimensions
+main.subtitle = Every possible text, picture, melody, film and book, on one endless corridor of shelves.
+item.start = Start Sieve
+item.settings = Settings
+item.exit = Exit Sieve
+help.start = Set up the five lines, then walk into the hallway.
+help.settings = Graphics, controls and language.
+help.exit = Close Sieve.
+
+; ---- settings
+screen.settings = SETTINGS
+item.graphics = Graphics
+item.controls = Controls
+item.language = Language
+item.back = Back
+help.graphics = Resolution, fullscreen and how the geometry is drawn.
+help.controls = Mouse and keys.
+help.language = The language of the menus.
+help.back = Back to the previous screen.
+
+; ---- graphics
+screen.graphics = SETTINGS > GRAPHICS
+item.resolution = Resolution
+item.fullscreen = Fullscreen
+item.edge_glow = Geometry Edge Glow
+item.real_graphics = Real Graphics
+help.resolution = The window size. The list holds your display's modes; it was set from your display the first time Sieve started.
+help.fullscreen = Fill the screen at the chosen resolution.
+help.edge_glow = A soft glow along the edges of the wireframe geometry.\nTurning it on turns Real Graphics off. Off by default, to keep Sieve light.
+help.real_graphics = Draw the corridor with real models instead of wireframe.\nTurning it on turns Geometry Edge Glow off. Off by default, to keep Sieve light.
+
+; ---- controls
+screen.controls = SETTINGS > CONTROLS
+item.mouse_sensitivity = Mouse sensitivity
+item.invert_mouse_y = Invert mouse Y
+help.mouse_sensitivity = How far the view turns as the mouse moves (Left and Right change it by 10%).
+help.invert_mouse_y = Moving the mouse forward looks down instead of up.
+controls.keys.title = KEYS
+controls.keys = W A S D|move\nMouse|look around\nShift|run\nE / left click|take a book off the shelf, or put it back\nT|warp: find a text, picture, notes or book file\nG|go to an address, a percentage or @tile\nM|ordering: positional, scrambled, guided\n- / =|zoom out / in (guided ordering; Shift: 8x)\nWheel, PgUp/PgDn, [ ]|jump 1, 1000, 1000000 tiles\nHome|back to tile 0, where every line starts\nN / B|next / previous page, or unit of a warped trail\nP|play an audio book you are holding\nF1|the setup menu\nTab|free or capture the mouse\nEsc|put a book back, or free the mouse\nCtrl+Q|quit
+
+; ---- language
+screen.language = SETTINGS > LANGUAGE
+item.language_choice = Language
+help.language_choice = Languages are text files in the lang folder: copy en.txt to add one.
+
+; ---- values and footers
+value.on = On
+value.off = Off
+value.none = (not set)
+value.desktop = (desktop)
+menu.footer = Up/Down choose   Enter select   Left/Right change   Esc back   (the mouse works too)
+menu.footer.list = Up/Down choose   Enter pick   Esc close   (wheel scrolls)
+
+; ---- the lines and their words (setup menu, map, hallway)
+line.pages = PAGES
+line.image = IMAGE
+line.audio = AUDIO
+line.video = VIDEO
+line.books = BOOKS
+ordering.positional = positional
+ordering.scrambled = scrambled
+ordering.guided = guided
+mode.off = off
+mode.mark = mark
+mode.hide = hide
+mode.compact = compact
+
+; ---- setup menu (Start Sieve)
+setup.title = SIEVE - set up the five lines
+setup.subtitle = Every possible unit of each line has a book. Change a line's shape to change its state space.
+setup.start = START
+setup.line = line
+setup.ordering = ordering
+setup.key = key
+setup.length = length
+setup.length.value = {0} characters
+setup.alphabet = alphabet
+setup.alphabet.value = {0} ({1} symbols)
+setup.canon = warp rules
+setup.model = model
+setup.model.default = default (guided ordering available)
+setup.model.none = none
+setup.width = width
+setup.height = height
+setup.px = {0} px
+setup.palette = palette
+setup.palette.value = {0} ({1} colours)
+setup.notes = notes
+setup.frames = frames
+setup.book_pages = pages per book
+setup.book_pages.value = {0} (plus a title page and a cover)
+setup.enter = >> ENTER THE HALLWAY <<
+setup.footer1 = Up/Down choose   Left/Right change (Shift x10, Ctrl x100)   PgUp/PgDn double/halve
+setup.footer2 = type to edit the key   F or the magnifying glass: a line's filters   Enter walk in   Esc main menu
+setup.too_large = A line is too large for this machine to open (one address would need over a gigabyte).
+
+; ---- the map
+map.title = MAP  (length = size in bits; one copy each)
+map.scale = scale: the longest line fills the height ({0} bits)
+map.units = {0} units
+map.bits = {0} bits
+map.tiles = ~10^{0} tiles
+map.empty_slots = {0} empty slots
+map.whole_tiles = fills whole tiles
+map.too_large = TOO LARGE TO OPEN
+map.slow = large: slow to open
+map.survivors = survivors ~{0} bits
+map.ticked = {0} filters ticked
+
+; ---- the filter lists (magnifying glass)
+filters.title = {0} FILTERS
+filters.intro = A unit is shelved only if it passes every ticked filter.
+filters.intro.books = A book is shelved only if its cover, title and pages pass their ticked filters.
+filters.mode = display mode: {0}
+filters.mode.help1 = off: every book   mark: failures drawn faint
+filters.mode.help2 = hide: failures left out   compact: only survivors, closed up
+filters.part.cover = COVER
+filters.part.cover.help = a picture of the IMAGE line
+filters.part.title = TITLE
+filters.part.title.help = one page of the PAGES line
+filters.part.pages = PAGES
+filters.part.pages.help = all of a book's pages read as one text, so a word cut by a page break is judged whole ({0} characters)
+filters.default = (default)
+filters.more_above = more above
+filters.footer = Up/Down choose  Space/Right tick or change  Left back  wheel scroll  Esc/F close
+; A filter's description and its parameters' can be translated too: filter.<name> and
+; filter.<name>.<parameter> (e.g. filter.words-v2 = ..., filter.title-v1.max_length = ...).
+; Left out, they show the English text built into Sieve.
+status.too_large = line too large to open
+status.none_units = no filters ticked: every unit is shelved
+status.none_books = no filters ticked: every book is shelved
+status.survivors = survivors: {0} (exact); compact in every ordering
+status.survivors_none = survivors: {0} (exact): nothing to shelve
+status.books = surviving books: ~10^{0} (exact); compact in every ordering
+status.not_countable = survivors not countable exactly: {0}
+status.error = error: {0}
+
+; ---- the hallway: top bar, the book you look at, the book in hand, messages
+hud.line = {0} LINE
+hud.zoom = zoom 2^-{0}
+hud.tile = tile
+hud.padding = (end of loop: padding)
+hud.along = {0} along
+hud.loop = loop {0} tiles
+hud.loop.padding = (+{0} empty slots)
+hud.model = model {0}
+hud.doors = doors: left -> {0}, right -> {1}
+hud.filters.none = filters: none
+hud.filters = filters: {0} {1}
+hud.filters.units = " ({0} survivors)"
+hud.filters.books = " ({0} surviving books)"
+hud.filters.no_unit = " (compact: no unit survives)"
+hud.filters.no_book = " (compact: no book survives)"
+hud.filters.blocked = " (compact: {0})"
+hud.slot.left = left wall, shelf {0}, book {1}   slot {2}
+hud.slot.right = right wall, shelf {0}, book {1}   slot {2}
+hud.empty_slot = empty shelf space: the loop ends in this tile; the start line follows
+hud.point = point {0}   own address {1} bits ({2} bits/char; raw {3})
+hud.address = address {0}
+hud.compact_address = compact address {0}
+hud.survivor = survivor number {0}
+hud.passes = passes the filters
+hud.fails = FAILS {0}
+hud.along_loop = {0} along the loop      E / click: take it off the shelf
+hud.keys1 = "WASD move  Shift run  E take  T warp  G go to  M ordering  "
+hud.keys.zoom = "-/= zoom  "
+hud.keys2 = "wheel/PgUp/[ ] jump  Home start  "
+hud.keys.page = N/B page
+hud.keys.trail = N/B trail
+hud.keys3 = "  F1 menu  Tab mouse  Ctrl+Q quit"
+prompt.warp.book = "WARP to book file > "
+prompt.warp.picture = "WARP to picture file > "
+prompt.warp.notes = "WARP to notes > "
+prompt.warp.text = "WARP to text > "
+prompt.goto = "GO TO address, percent or @tile > "
+hand.title = IN HAND
+hand.where = tile {0}, slot {1}
+hand.not_shelved = NOT ON THE SHELVES: fails {0}
+hand.play = P: play    Esc: stop and put back
+hand.frame = frame {0}/{1}
+hand.address = address ({0})
+hand.address.guided = address (guided, {0} bits)
+hand.compact_address = compact address ({0})
+hand.compact_address.guided = compact address (guided, {0} bits)
+hand.keys = E / click / Esc: put it back
+hand.keys.book = N / B: turn the page    E / click / Esc: put it back
+hand.title_label = TITLE
+hand.no_pages = (no pages: set BOOKS pages in the menu)
+hand.page = PAGE {0} OF {1}
+msg.cannot_show = cannot show a book here: {0}
+msg.book_shape = {0} (set IMAGE, PAGES and BOOKS in the menu to the book's shape)
+msg.ordering.books_positional = ordering: {0} (neighbours differ in the last page)
+msg.ordering.books_scrambled = ordering: {0} (neighbours are unrelated books)
+msg.ordering.positional = ordering: {0} (neighbours share their beginning)
+msg.ordering.scrambled = ordering: {0} (neighbours are unrelated)
+msg.ordering.guided = ordering: {0} (each book is a point 2^-zoom along; likely text owns long stretches; - and = zoom)
+msg.zoom.press_m = zoom is for the guided ordering: press M until it says guided
+msg.zoom.no_model = zoom is for the guided ordering, which only the pages line has (with a model)
+msg.zoom.out = zoom 2^-{0}: books {1} of the line apart (zoomed out: the likeliest ways on)
+msg.zoom.in = zoom 2^-{0}: books {1} of the line apart (zoomed in)
+msg.opened_book = opened the book {0}   (N / B: turn the pages)
+msg.warp.empty = nothing left after canonicalisation
+msg.warped = warped: {0}
+msg.warped.trail = warped: {0}   (N / B: next / previous unit of the trail)
+msg.warp.failed = warp failed: {0}
+msg.goto.empty = nothing to go to
+msg.goto.tile = went to corridor tile {0}
+msg.goto.percent = write a percentage like 50% or 36.25% (up to 7 decimals)
+msg.goto.below100 = a percentage must be below 100%
+msg.goto.done = went to {0}
+msg.goto.failed = go to failed: {0}
+msg.trail = unit {0} of {1} of the trail
+msg.jumped = jumped {0} tiles ({1} books)
+msg.door = through the door into the {0} line, at the same corridor tile {1}
+msg.playing = playing
+msg.home = corridor tile 0: the start line of every line

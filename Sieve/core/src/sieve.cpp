@@ -119,6 +119,7 @@ void Dictionary::build(std::vector<std::string> words)
 {
     std::sort(words.begin(), words.end());
     words.erase(std::unique(words.begin(), words.end()), words.end());
+    if (!words.empty() && words.front().empty()) words.erase(words.begin()); // an empty "word" is not a word
     for (const auto& w : words)
         for (char c : w)
             if (!is_letter(c)) throw std::invalid_argument("dictionary words must be a-z only");

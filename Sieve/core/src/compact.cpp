@@ -32,6 +32,7 @@ Shuffle::Shuffle(BigUint n, std::string key, std::string domain) : n_(std::move(
     top -= BigUint(1);
     bits_ = std::max<size_t>(2, top.bit_length());
     lo_bits_ = bits_ / 2;
+    n_hex_ = n_.to_hex();
 }
 
 BigUint Shuffle::round_value(uint32_t round, const BigUint& src, size_t bits) const
@@ -39,27 +40,28 @@ BigUint Shuffle::round_value(uint32_t round, const BigUint& src, size_t bits) co
     std::string msg = "SIEVE/SHUFFLE/1";
     put_str(msg, key_);
     put_str(msg, domain_);
-    put_str(msg, n_.to_hex());
+    put_str(msg, n_hex_);
     const char r[4] = {char(round), char(round >> 8), char(round >> 16), char(round >> 24)};
     msg.append(r, 4);
     put_str(msg, src.to_hex());
     Sha256 prefix;
     prefix.update(msg);
-    BigUint out;
-    size_t have = 0;
-    for (uint32_t k = 0; have < bits; ++k)
+    // The digest stream, read big-endian: collected as hex and parsed once (linear time).
+    static const char* digits = "0123456789abcdef";
+    std::string hex;
+    hex.reserve((bits + 255) / 256 * 64);
+    for (uint32_t k = 0; hex.size() * 4 < bits; ++k)
     {
         Sha256 h = prefix;
         h.update_u32le(k);
-        const auto d = h.finish();
-        for (uint8_t byte : d)
+        for (uint8_t byte : h.finish())
         {
-            out <<= 8;
-            out.add_small(byte);
+            hex.push_back(digits[byte >> 4]);
+            hex.push_back(digits[byte & 15]);
         }
-        have += 256;
     }
-    out >>= have - bits;
+    BigUint out = BigUint::from_hex(hex);
+    out >>= hex.size() * 4 - bits;
     return out;
 }
 
@@ -110,8 +112,15 @@ CompactLine::CompactLine(const Ranker& ranker, const std::string& key, const std
 
 BigUint CompactLine::index_of(std::span<const uint32_t> unit, AddressMode m) const
 {
-    if (!ranker_->accepts(unit)) throw std::invalid_argument("the unit does not pass the filters");
-    const BigUint k = ranker_->rank(unit);
+    BigUint k;
+    try
+    {
+        k = ranker_->rank(unit); // throws for anything that is not a survivor
+    }
+    catch (const std::invalid_argument&)
+    {
+        throw std::invalid_argument("the unit does not pass the filters");
+    }
     return m == AddressMode::Scrambled ? shuffle_.forward(k) : k;
 }
 

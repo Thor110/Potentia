@@ -289,6 +289,15 @@ const std::vector<Page>& pages()
          "  filters = words-v2\n"
          "  [text.words-v2]\n"
          "  dictionary = scowl-en-35\n"
+         "The books line has one mode and a stack for each part: the cover (a picture), the\n"
+         "title (one page) and the pages, read as one continuous text so that a word cut by a\n"
+         "page break is judged whole:\n"
+         "  [books]\n"
+         "  mode = compact\n"
+         "  [books.title]\n"
+         "  filters = title-v1\n"
+         "  [books.pages]\n"
+         "  filters = words-v2\n"
          "Modes, for the hallway:\n"
          "  off      every unit on the shelves, no judging\n"
          "  mark     books that fail are drawn faint (a record of what the stack rejects)\n"
@@ -308,20 +317,28 @@ const std::vector<Page>& pages()
                              "file means nothing is ticked."}},
          {{"sieve filters", "the text line's filters (at length 32) and what is ticked"},
           {"sieve filters --length 1000", "the same stack judged at paragraph scale"},
-          {"sieve filters --line image", "the filters the image line offers"}}},
+          {"sieve filters --line image", "the filters the image line offers"},
+          {"sieve filters --line books --length 400 --book-pages 3", "the books line's three stacks and surviving books"}}},
 
         {"check", "Run content through every filter and show which pass.",
-         "sieve check [--line LINE] [line options] [--filters PATH] (TEXT... | --file PATH)",
+         "sieve check [--line LINE] [line options] [--filters PATH] (TEXT... | --file PATH | --book FILE)",
          "Fits the input to the line as warp does, then shows, for each unit, whether it passes\n"
          "every filter the line offers ([x] marks the ticked ones, with the settings from the\n"
          "settings file), whether it passes the ticked stack, and, if the stack can rank, which\n"
-         "survivor it is: its place on compact shelves.",
+         "survivor it is: its place on compact shelves.\n"
+         "\n"
+         "With --book, a book record (sieve bind) is judged by the books line's filters instead:\n"
+         "its cover, its title and all its pages as one text. The books line takes the record's\n"
+         "own shape (as many pages as it has, or --book-pages N); a passing book gets its\n"
+         "survivor number and its compact addresses on the books line.",
          {kLine, kLineOptions,
           {"--filters PATH", "The settings file. Default: sieve-filters.ini next to the executable."},
-          {"--file PATH", "Read the input from a file instead of the command line."}},
+          {"--file PATH", "Read the input from a file instead of the command line."},
+          {"--book FILE", "Judge a book record by the [books] filters."}},
          {{"sieve check --length 32 \"It was the best of times\"", "every text filter's verdict"},
           {"sieve check --length 1000 --file chapter1.txt", "a whole text, 1000 characters per unit"},
-          {"sieve check --line image --file sprite.png", "the image filters on a picture"}}},
+          {"sieve check --line image --file sprite.png", "the image filters on a picture"},
+          {"sieve check --book tests/example_book_v1.book", "a whole book: cover, title and pages"}}},
 
         {"bind", "Bind a title, a cover and pages into a book record.",
          "sieve bind --out FILE.book [--title TEXT] [--cover PICTURE] [--pages FILE] [--length N] [--mode MODE] [--key K]",
@@ -470,6 +487,30 @@ bool print_help(const std::string& name)
         return true;
     }
     return false;
+}
+
+std::vector<std::string> documented_options(const std::string& command)
+{
+    std::vector<std::string> out;
+    auto scan = [&](const std::string& t) {
+        for (size_t i = t.find("--"); i != std::string::npos; i = t.find("--", i + 2))
+        {
+            size_t j = i + 2;
+            while (j < t.size() && ((t[j] >= 'a' && t[j] <= 'z') || (t[j] >= '0' && t[j] <= '9') || t[j] == '-')) ++j;
+            if (j > i + 2) out.push_back(t.substr(i + 2, j - i - 2));
+        }
+    };
+    for (const auto& p : pages())
+    {
+        if (p.name != command) continue;
+        scan(p.usage);
+        scan(p.about);
+        for (const auto& o : p.options) scan(o.flag + " " + o.text);
+        for (const auto& e : p.examples) scan(e.first);
+        scan(kLine.flag + " " + kLineOptions.text + " " + kKey.flag);
+        for (const char* common : {"help", "filters", "line", "key", "model"}) out.push_back(common);
+    }
+    return out;
 }
 
 } // namespace sieve::cli

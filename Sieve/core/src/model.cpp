@@ -167,6 +167,7 @@ void CharModel::finish()
             n += n_s;
         }
         if (n + N >= (uint64_t(1) << 32)) throw std::runtime_error("model file: a context count is too large");
+        if (k > 0 && c.counts.empty()) throw std::runtime_error("model file: a stored context must have counts");
         for (uint32_t s : c.symbols)
             if (s >= N) throw std::runtime_error("model file: context symbol out of range");
 

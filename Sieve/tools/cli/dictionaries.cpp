@@ -8,6 +8,8 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#elif defined(__APPLE__)
+#include <mach-o/dyld.h>
 #endif
 
 namespace sieve::cli {
@@ -22,6 +24,14 @@ fs::path executable_dir()
     if (n == 0 || n >= buf.size()) return {};
     buf.resize(n);
     return fs::path(buf).parent_path();
+#elif defined(__APPLE__)
+    uint32_t size = 0;
+    _NSGetExecutablePath(nullptr, &size);
+    std::string buf(size, '\0');
+    if (_NSGetExecutablePath(buf.data(), &size) != 0) return {};
+    std::error_code ec;
+    const fs::path p = fs::weakly_canonical(fs::path(buf.c_str()), ec);
+    return ec ? fs::path(buf.c_str()).parent_path() : p.parent_path();
 #else
     std::error_code ec;
     const fs::path p = fs::read_symlink("/proc/self/exe", ec);

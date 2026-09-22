@@ -31,9 +31,15 @@ const std::vector<Scale>& scales()
 class KeyRanker : public Ranker
 {
 public:
-    KeyRanker(std::vector<bool> allowed, uint32_t L) : allowed_(std::move(allowed)), L_(L)
+    KeyRanker(std::vector<bool> allowed, uint32_t L) : allowed_(std::move(allowed)), L_(L), index_(allowed_.size(), -1)
     {
-        for (bool b : allowed_) a_ += b ? 1 : 0;
+        for (uint32_t s = 0; s < allowed_.size(); ++s)
+            if (allowed_[s])
+            {
+                index_[s] = int32_t(symbols_.size());
+                symbols_.push_back(s);
+            }
+        a_ = uint32_t(symbols_.size());
         set_count();
     }
     uint32_t length() const override { return L_; }
@@ -42,10 +48,32 @@ public:
     State next(State, uint32_t c) const override { return c < allowed_.size() && allowed_[c] ? 0 : kDead; }
     BigUint completions(State, uint32_t r) const override { return BigUint::pow(a_, r); }
     bool alive(State, uint32_t) const override { return a_ > 0; }
+    // Every position is independent: a survivor is a base-a number whose digits are the
+    // positions of its symbols among the allowed ones.
+    BigUint rank(std::span<const uint32_t> unit) const override
+    {
+        if (unit.size() != L_) throw std::invalid_argument("unit has the wrong length");
+        std::vector<uint32_t> d(L_);
+        for (size_t i = 0; i < L_; ++i)
+        {
+            if (unit[i] >= index_.size() || index_[unit[i]] < 0) throw std::invalid_argument("unit is not a survivor");
+            d[i] = uint32_t(index_[unit[i]]);
+        }
+        return a_ >= 2 ? BigUint::from_digits(d, a_) : BigUint();
+    }
+    std::vector<uint32_t> unrank(const BigUint& k) const override
+    {
+        if (k >= count()) throw std::out_of_range("rank beyond the survivors");
+        std::vector<uint32_t> d = a_ >= 2 ? k.to_digits(a_, L_) : std::vector<uint32_t>(L_, 0);
+        for (auto& x : d) x = symbols_[x];
+        return d;
+    }
 
 private:
     std::vector<bool> allowed_;
     uint32_t L_;
+    std::vector<int32_t> index_;   // symbol -> its place among the allowed ones, or -1
+    std::vector<uint32_t> symbols_; // the allowed symbols, ascending
     uint32_t a_ = 0;
 };
 

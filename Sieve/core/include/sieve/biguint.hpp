@@ -53,8 +53,11 @@ public:
     void mul_small(uint32_t m);
     void add_small(uint32_t a);
     uint32_t divmod_small(uint32_t d); // divides in place, returns remainder
-    // a mod m for any m >= 1 (shift-and-subtract; a mask when m is a power of two).
+    // a mod m for any m >= 1 (a mask when m is a power of two, else long division).
     static BigUint mod(const BigUint& a, const BigUint& m);
+    // a * b (schoolbook), and a = q * b + r with 0 <= r < b (Knuth's algorithm D). b >= 1.
+    static BigUint mul(const BigUint& a, const BigUint& b);
+    static void divmod(const BigUint& a, const BigUint& b, BigUint& q, BigUint& r);
 
     friend int compare(const BigUint& a, const BigUint& b);
     friend bool operator<(const BigUint& a, const BigUint& b) { return compare(a, b) < 0; }

@@ -65,6 +65,9 @@ std::vector<RgbaImage> load_image_frames(const std::string& path)
 void write_png(const std::string& path, uint32_t width, uint32_t height, const std::vector<Rgb>& pixels, uint32_t scale)
 {
     if (scale == 0) scale = 1;
+    // The PNG writer takes int sizes, and the whole image is held in memory: keep it under 2^30 bytes.
+    if (uint64_t(width) * scale * 3 > 0x7FFFFFFFull || uint64_t(width) * scale * height * scale * 3 > (uint64_t(1) << 30))
+        throw std::invalid_argument("the picture would be too large to save at scale " + std::to_string(scale) + " (use a smaller --scale)");
     if (pixels.size() != size_t(width) * height) throw std::invalid_argument("pixel count does not match size");
     const uint32_t W = width * scale, H = height * scale;
     std::vector<uint8_t> rgb(size_t(W) * H * 3);

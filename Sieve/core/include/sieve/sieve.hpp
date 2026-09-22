@@ -63,6 +63,7 @@ public:
 
     size_t word_count() const { return sorted_words_.size(); }
     const std::vector<std::string>& words() const { return sorted_words_; } // sorted, distinct
+    const std::vector<std::string>& suffixes() const { return sorted_suffixes_; } // every distinct suffix of a word, sorted
     size_t skipped_lines() const { return skipped_; }
     const std::string& sha256() const { return sha256_; }
 

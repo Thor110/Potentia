@@ -8,6 +8,12 @@
 //   filters = words-v1, model-information-v1
 //   [text.model-information-v1]
 //   max_millibits = 4000
+//   [books]
+//   mode = compact
+//   [books.title]               ; the books line: title (one page), cover (a picture) and
+//   filters = title-v1          ; pages (all pages read as one text)
+//   [books.pages]
+//   filters = words-v2
 //
 // The hallway's setup menu edits and saves it; hand edits are welcome. A missing file means
 // every line has no filters and mode off.
@@ -37,9 +43,19 @@ struct LineFilters
     void set_enabled(const std::string& name, bool on);
 };
 
+// The books line: one mode, and a stack for each part. The parts' own modes are unused.
+struct BookFilters
+{
+    FilterMode mode = FilterMode::Off;
+    LineFilters parts[3]; // cover, title, pages
+    static const char* part_name(int i);
+    static int part_index(const std::string& name); // -1 if unknown
+};
+
 struct FilterConfig
 {
     LineFilters lines[4]; // text, image, audio, video
+    BookFilters books;
     LineFilters& of(LineKind k) { return lines[int(k)]; }
     const LineFilters& of(LineKind k) const { return lines[int(k)]; }
 
@@ -60,5 +76,13 @@ FilterLine filter_line(const Line& line);
 // The line's stack from its settings (filters that do not apply to this line are skipped).
 FilterStack build_stack(const Line& line, const LineFilters& settings);
 FilterStack build_stack(const FilterLine& line, const LineFilters& settings);
+
+// The books line's stacks: the cover on the cover (image) line, the title on one page, and the
+// pages on all pages read as one text (P * L symbols; no stack when P = 0).
+struct BookStacks
+{
+    FilterStack cover, title, pages;
+};
+BookStacks build_book_stacks(const Line& cover, const Line& page, uint32_t pages, const BookFilters& settings);
 
 } // namespace sieve::cli

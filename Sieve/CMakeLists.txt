@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(Sieve VERSION 0.10.0 LANGUAGES CXX)
+project(Sieve VERSION 0.12.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -19,6 +19,8 @@ add_library(sieve_core STATIC
     core/src/alphabet.cpp
     core/src/audio.cpp
     core/src/biguint.cpp
+    core/src/booksieve.cpp
+    core/src/bookspace.cpp
     core/src/canon.cpp
     core/src/compact.cpp
     core/src/corridor.cpp
@@ -69,18 +71,28 @@ add_executable(sieve
     tools/sieve_cli.cpp
     tools/cli/help.cpp)
 target_link_libraries(sieve PRIVATE sieve_lines)
+if(WIN32)
+    # UTF-8 command lines on Windows (the manifest sets the process code page).
+    target_sources(sieve PRIVATE tools/utf8.manifest)
+endif()
 target_compile_definitions(sieve PRIVATE SIEVE_VERSION="${PROJECT_VERSION}")
 
 # Copy the bundled dictionaries and models next to the executable, so they work from any
 # folder and in every configuration (Debug, Release, ...).
-add_custom_command(TARGET sieve POST_BUILD
+# Runs on every build (not only when sieve relinks), so a changed registry or word list always
+# reaches the executable's folder.
+add_custom_target(sieve_data ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/data/dictionaries
             $<TARGET_FILE_DIR:sieve>/dictionaries
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/data/models
             $<TARGET_FILE_DIR:sieve>/models
-    COMMENT "Copying dictionaries and models next to sieve")
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/data/lang
+            $<TARGET_FILE_DIR:sieve>/lang
+    COMMENT "Copying dictionaries, models and languages next to sieve")
+add_dependencies(sieve_data sieve)
 
 # ---------------------------------------------------------------- tests
 if(SIEVE_BUILD_TESTS)
@@ -111,16 +123,30 @@ if(SIEVE_BUILD_CLIENT)
     endif()
 
     add_executable(hallway
+        client/app_settings.cpp
+        client/font.cpp
         client/hallway.cpp
+        client/main_menu.cpp
         client/menu.cpp
+        client/strings.cpp
         client/synth.cpp
         client/world.cpp)
     target_link_libraries(hallway PRIVATE sieve_lines SDL3::SDL3)
+    if(WIN32)
+        target_sources(hallway PRIVATE tools/utf8.manifest)
+    endif()
     add_custom_command(TARGET hallway POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/dictionaries
                 $<TARGET_FILE_DIR:hallway>/dictionaries
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/models
-                $<TARGET_FILE_DIR:hallway>/models)
+                $<TARGET_FILE_DIR:hallway>/models
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/lang
+                $<TARGET_FILE_DIR:hallway>/lang
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/fonts
+                $<TARGET_FILE_DIR:hallway>/fonts)
+    target_compile_definitions(hallway PRIVATE SIEVE_VERSION="${PROJECT_VERSION}")
 endif()

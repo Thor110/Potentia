@@ -3,7 +3,9 @@
 #include "sieve/filter.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
+#include <new>
 
 namespace sieve {
 
@@ -125,14 +127,11 @@ private:
         width_.resize(n_ + 1);
         bmax_.resize(n_ + 1);
         offset_.resize(n_ + 2);
-        // Widths: B^(n - i) needs this many limbs; the rest of the plan follows.
-        BigUint all(1);
+        // Widths: an entry at cell i is at most B^(n - i), which has floor((n - i) log2 B) + 1 bits;
+        // this bound (with a margin for rounding) may reserve one limb more than needed, never less.
+        const double lg = std::log2(double(B_));
         std::vector<uint32_t> w(n_ + 1);
-        for (uint64_t r = 0; r <= n_; ++r)
-        {
-            w[size_t(n_ - r)] = uint32_t(std::max<size_t>(1, (all.bit_length() + 31) / 32));
-            all.mul_small(B_);
-        }
+        for (uint64_t r = 0; r <= n_; ++r) w[size_t(n_ - r)] = uint32_t(std::floor((double(r) * lg + 1) / 32 + 1e-6)) + 1;
         // Pairs remaining, from the end.
         std::vector<uint64_t> rem(n_ + 1, 0);
         const uint64_t frame = uint64_t(w_) * h_;
@@ -148,7 +147,14 @@ private:
             if (total > kMaxLimbs) return false;
         }
         offset_[size_t(n_ + 1)] = total;
-        pool_.assign(size_t(total), 0);
+        try
+        {
+            pool_.assign(size_t(total), 0);
+        }
+        catch (const std::bad_alloc&)
+        {
+            return false; // not enough memory on this machine: no ranker (compact falls back to hide)
+        }
         return true;
     }
 

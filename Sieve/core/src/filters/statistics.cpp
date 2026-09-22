@@ -86,8 +86,9 @@ private:
     // Two symbols (black-and-white pictures): the entropy depends only on how many 1s a unit
     // has, so the survivors are the units whose count of 1s is in an allowed set K, and
     //   completions(j ones so far, r left) = sum over k in K of C(r, k - j).
-    // Binomials are built fresh for each call, so ranking costs grow with the cube of the
-    // length; above this length compact is not offered (a hardware limit, not a design one).
+    // rank and unrank walk the unit once, keeping C(r, k - j) for every k in K and stepping each
+    // to the next position with one small multiply and divide, instead of rebuilding binomial
+    // rows at every position. Above this length compact is not offered (a hardware limit).
     static constexpr uint32_t kMaxBinaryRankLength = 2048;
     class BinaryRanker : public Ranker
     {
@@ -122,7 +123,84 @@ private:
             return false;
         }
 
+        BigUint rank(std::span<const uint32_t> unit) const override
+        {
+            if (unit.size() != L_) throw std::invalid_argument("unit has the wrong length");
+            Walk w(*this);
+            BigUint k;
+            for (uint32_t i = 0; i < L_; ++i)
+            {
+                if (unit[i] > 1) throw std::invalid_argument("unit is not a survivor");
+                if (unit[i] == 1) k += w.sum(); // every survivor with a 0 here comes first
+                w.step(unit[i]);
+            }
+            if (!allowed_[w.ones]) throw std::invalid_argument("unit is not a survivor");
+            return k;
+        }
+        std::vector<uint32_t> unrank(const BigUint& k) const override
+        {
+            if (k >= count()) throw std::out_of_range("survivor number beyond the count");
+            Walk w(*this);
+            BigUint rest = k;
+            std::vector<uint32_t> out(L_);
+            for (uint32_t i = 0; i < L_; ++i)
+            {
+                const BigUint zeros = w.sum();
+                if (rest >= zeros)
+                {
+                    rest -= zeros;
+                    out[i] = 1;
+                }
+                w.step(out[i]);
+            }
+            return out;
+        }
+
     private:
+        // Before position i, with j ones so far: val[t] = C(r, K[t] - j), r = L - 1 - i (the
+        // positions after i), so sum() counts the survivors that put a 0 at position i.
+        struct Walk
+        {
+            explicit Walk(const BinaryRanker& b) : L(b.L_)
+            {
+                for (uint32_t k = 0; k <= L; ++k)
+                    if (b.allowed_[k]) K.push_back(k);
+                val.resize(K.size());
+                if (L == 0) return;
+                BigUint c(1); // C(L - 1, m)
+                size_t t = 0;
+                for (uint32_t m = 0; m <= L - 1 && t < K.size(); ++m)
+                {
+                    while (t < K.size() && K[t] < m) ++t;
+                    if (t < K.size() && K[t] == m) val[t++] = c;
+                    c.mul_small(L - 1 - m);
+                    c.divmod_small(m + 1);
+                }
+            }
+            BigUint sum() const
+            {
+                BigUint s;
+                for (const auto& v : val) s += v;
+                return s;
+            }
+            void step(uint32_t d)
+            {
+                const uint32_t r = L - 1 - i++;
+                ones += d;
+                if (r == 0) return;
+                for (size_t t = 0; t < K.size(); ++t)
+                {
+                    if (val[t].is_zero()) continue; // zeros stay zero
+                    const int64_t m = int64_t(K[t]) - int64_t(ones - d);
+                    // d = 0: C(r - 1, m) = C(r, m) (r - m) / r;  d = 1: C(r - 1, m - 1) = C(r, m) m / r
+                    val[t].mul_small(uint32_t(d == 0 ? r - m : m));
+                    val[t].divmod_small(r);
+                }
+            }
+            uint32_t L, i = 0, ones = 0;
+            std::vector<uint32_t> K;
+            std::vector<BigUint> val;
+        };
         uint32_t L_;
         std::vector<bool> allowed_;
     };
@@ -221,6 +299,8 @@ void add_statistics_filters(std::vector<FilterSpec>& out)
         const FilterSpec& s = *find_filter("model-information-v1");
         const std::string id = param_value(s, v, "model");
         auto m = r.model(id, l.symbols_id);
+        if (m->base() != l.base) throw std::invalid_argument("model-information: the model has " + std::to_string(m->base()) +
+                                                            " symbols, the line has " + std::to_string(l.base));
         return std::make_unique<ModelInformation>(m, param_int(s, v, "max_millibits"), id.empty() ? "default" : id);
     };
     out.push_back(info);

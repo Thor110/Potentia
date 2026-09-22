@@ -4,7 +4,7 @@
 
 Sieve grew out of the Gallery of Babel in **Potentia**. Potentia itself, the alignment thesis and the preservation of AI models, lives in the parent repository. Sieve is the search-space engine and its hallway.
 
-Implementation of [SPECIFICATIONS.md](docs/SPECIFICATIONS.md) (v2.0). This covers **M1** (the exhaustive sieve), **M2** (raw addressing and warp), **M3** for text (entropy-ordered "guided" addresses from a pinned model), and the first version of all four lines: **text, image, audio and video**.
+Implementation of [SPECIFICATIONS.md](docs/SPECIFICATIONS.md) (v2.0). This covers **M1** (the exhaustive sieve), **M2** (raw addressing and warp), **M3** for text (entropy-ordered "guided" addresses from a pinned model), the first version of all four unit lines (**text, image, audio and video**), and **books** composed from them.
 
 **Concept and architecture by Edward James Gordon.**
 
@@ -14,7 +14,7 @@ Implementation of [SPECIFICATIONS.md](docs/SPECIFICATIONS.md) (v2.0). This cover
 | :--- | :--- |
 | `core/` | Dependency-free C++20 library: alphabets, palettes, notes, exact big integers, SHA-256, address map, canonicalisation, sieve, guided coder, the filtration stack (`core/src/filters/`) |
 | `tools/sieve_cli.cpp`, `tools/cli/` | The `sieve` command-line tool |
-| `client/` | The `hallway`: a 3D wireframe walk along the four lines (SDL3) |
+| `client/` | The `hallway`: a 3D wireframe walk along the five lines: pages, image, audio, video and books (SDL3) |
 | `tools/plot_sieve.py` | Plots sieve results (needs matplotlib) |
 | `tools/build_dictionary.py` | Rebuilds the English dictionaries from SCOWL |
 | `data/dictionaries/` | The dictionary registry (`dictionaries.tsv`) and pinned English word lists (SCOWL 2020.12.07) |
@@ -117,7 +117,7 @@ Size of each space with the default options:
 hallway [options]          (hallway --help for the full list)
 ```
 
-All four lines share **one endless corridor** lined with bookcases. **Every book is one unit**, and the address increases as you walk forward:
+All five lines (the four unit lines and books) share **one endless corridor** lined with bookcases. **Every book is one unit**, and the address increases as you walk forward:
 - Each tile of corridor holds **128 book slots** (4 shelves of 16 on each wall): the left wall first, then the right wall.
 - 128 is a power of two, and the code refuses to build if it isn't (`sieve/corridor.hpp`).
 - On each wall the books run shelf by shelf from the top, and along each shelf in the direction you are walking.
@@ -128,15 +128,38 @@ All four lines share **one endless corridor** lined with bookcases. **Every book
 - **Power-of-two sizes:** a line whose size is a power of two (at least 128) fills its tiles exactly. When every line's size is a power of two, the loops nest.
 - **Checking the fit:** `sieve info` tells you how a line fits.
 - **The start line:** where each copy begins, a **checkered start line** crosses the floor and hangs overhead.
-- **The double flag:** where all four lines start together, the start line is doubled. That is always so at corridor tile 0, where **Home** takes you.
+- **The double flag:** where all five lines start together, the start line is doubled. That is always so at corridor tile 0, where **Home** takes you.
+
+**Books, the fifth line.** Beyond video, a door leads to **BOOKS**, in grey with black edges. Each book is a cover (a picture of the image line), a title (a page of the pages line) and a number of pages, set in the menu under BOOKS as "pages per book". So the books line holds every possible book of that shape:
+- **Positional order:** neighbouring books differ only in their last page.
+- **Scrambled order:** a keyed shuffle of the whole line, so neighbours are unrelated books.
+- **Reading:** take a book off the shelf to open it: the cover beside the title, then the pages. **N** and **B** turn the pages.
+- **Opening a record:** **T** (or `--warp`) opens a book record made with `sieve bind`, when its shape matches. The page length must equal PAGES length, the cover must match the IMAGE line, and there must be no more pages than pages per book. Otherwise the message says what to set.
+- **Filters:** the magnifying glass beside BOOKS in the menu. A book has three stacks: the **cover** (image filters), the **title** (judged as one page; `title-v1` asks for whole words followed by blank space) and the **pages**, judged as **one continuous text**, so a word cut in two by a page break is judged whole. With `title-v1` on the title and `words-v2` or `window-v2` on the pages, compact mode shelves only books of real words, in every ordering, and the example record opens on its shelf. `sieve check --book FILE` shows how a record fares.
+
+```sh
+hallway --line books --length 400 --book-pages 3 --warp tests/example_book_v1.book   # opens the example book
+```
+
+![A book in hand: the example record, opened on its shelf](docs/images/hallway-book.png)
+
+![A random book from the scrambled books line](docs/images/hallway-book-random.png)
 
 The lines are astronomically long, so to see a whole loop, try a 2-character text line: `hallway --length 2` gives 729 units, which is 6 tiles with 39 empty slots.
 
 ![The double start line at corridor tile 0](docs/images/hallway-start-line.png)
 
-**The setup menu.** The hallway opens with a menu where you can set every line's shape: text length, alphabet, warp rules and model; image size and palette; audio notes; video size, frames and palette; plus the key, the starting line and the ordering. Enter walks in, and **F1** in the hallway brings the menu back.
+**The main menu.** The hallway opens on the main menu, **Potentia : Sieve : Gallery of Babel Dimensions**, with three choices: **Start Sieve**, **Settings** and **Exit Sieve**. Use the arrow keys and Enter, or the mouse. Esc goes back one screen. Settings has three pages:
+- **Graphics:** the resolution, as a drop-down list of your display's modes, plus fullscreen. The first time Sieve starts, it picks the largest size with your desktop's shape that leaves room around the window. There are also two toggles for drawing experiments, **Geometry Edge Glow** and **Real Graphics**. Turning one on turns the other off; both can be off, and both start off, so Sieve stays light. **Geometry Edge Glow** draws a soft band in each edge's colour under every edge of the wireframe, in two layers that fade out to either side. It is thinner and fainter in the distance, brightens light edges on the dark lines, and darkens the black edges on the grey books line (`hallway --edge-glow` for a screenshot). **Real Graphics** is saved, but nothing draws it yet.
+- **Controls:** mouse sensitivity, invert mouse Y, and the list of keys.
+- **Language:** a drop-down of the language files in `lang/` (`data/lang` in the source). Each file is plain UTF-8 text with `key = value` lines, for example `item.start = Start Sieve`. Every piece of on-screen text reads from it: the main menu, the setup menu and its map, the filter lists, and the hallway's panels and messages. A filter's description can be translated with `filter.<name> = ...`; left out, the English built into Sieve is shown. To add a language, copy `en.txt` to a new code (`fr.txt`) and translate the right-hand sides. Any key you leave out shows in English, so a half-done translation still works.
+- **Fonts:** the first line of a language file names its font, `font = sieve8x8`. A font is a file in `fonts/` (`data/fonts`) in GNU Unifont's `.hex` format. The built-in `sieve8x8` is an 8x8 font made from font8x8 (public domain) by `tools/build_font.py`. It covers ASCII, Latin-1 (French, German, Spanish, Italian, Portuguese, Dutch, the Nordic languages), Greek, box drawing and hiragana. A character the font lacks is drawn as `?`. Scripts beyond that, such as Cyrillic, Polish or Czech letters, or Chinese, need a font that has them. The screens are laid out for 8-pixel-tall text, so a 16-pixel font like Unifont is drawn at half size for now.
 
-Beside the settings, a **map** draws the four lines side by side, one copy each:
+Every choice is applied at once and saved to `sieve-hallway.ini` next to the executable (`--settings PATH` for another file). **Start Sieve** opens the setup menu.
+
+**The setup menu.** Start Sieve opens a menu where you can set every line's shape: text length, alphabet, warp rules and model; image size and palette; audio notes; video size, frames and palette; plus the key, the starting line and the ordering. Enter walks in, and **F1** in the hallway brings the menu back.
+
+Beside the settings, a **map** draws the five lines side by side, one copy each:
 - Each bar's length is the line's size in bits (log2 of its number of units). The real sizes differ by factors far too large to draw literally.
 - The **longest line always fills the height**, so no bar can leave the screen however large the settings grow.
 - Every bar has a minimum length, so even a tiny line stays visible next to a huge one.
@@ -217,7 +240,7 @@ A changed filter never replaces the old one. It is registered as the next versio
 | image | blue | cyan |
 | audio | green | amber |
 | video | red | yellow |
-| books (planned) | grey | black |
+| books | grey | black |
 
 The hallway and the setup menu call the text line **PAGES**, since each of its units is a page; `--line pages` works as another name for `--line text`.
 
@@ -279,6 +302,7 @@ hallway --pose 0,7,-90,0 --walk "-2.3,0;2.5,0" --screenshot door.png   # through
 hallway --pose 0,7,-90,0 --walk "-2.3,0;-0.8,0;0,8;1.5,0" --screenshot loop.png   # through, one tile along, back
 hallway --length 2 --goto @0 --pose 0,5,180,-14 --screenshot start.png   # the double start line
 hallway --menu --screenshot menu.png                                      # the setup menu (--press keys go to the menu)
+hallway --main-menu --press "Down,Return,Return" --screenshot gfx.png     # the main menu (here: Settings > Graphics)
 hallway --warp "it was the best of times" --press "M,M,-,-" --screenshot g.png   # keys, as if typed
 ```
 
@@ -419,7 +443,7 @@ For each unit length, counts **exactly** how many `lower27` units pass three fil
 
 | Option | Meaning |
 | :--- | :--- |
-| `--dict ID\|PATH` | A registered dictionary (see `dicts` below): `scowl-en-35`, `scowl-en-60` (default) or `scowl-en-80`; `35`, `60` and `80` also work. Its SHA-256 is checked before use. A value containing `/` or `\` or ending in `.txt` is read as a file path instead, unchecked. |
+| `--dict ID\|PATH` | A registered dictionary (see `dicts` below): `scowl-en-35`, `scowl-en-60` or `scowl-en-80`, or the same sizes with proper names, `scowl-en-35-names`, `scowl-en-60-names` (default) and `scowl-en-80-names`; `35`, `60` and `80` also work (the lists without names). Its SHA-256 is checked before use. A value containing `/` or `\` or ending in `.txt` is read as a file path instead, unchecked. |
 | `--lengths SPEC` | Numbers and ranges, e.g. `1-32,64,100,1000`. Default `1-12`. |
 | `--brute-max N` | Also check up to length N by visiting every unit. Default 5. On 2 cores, N=6 takes ~30 s and N=7 ~10–15 min. |
 | `--pruned-max N` | Also check up to length N by pruned tree walk. Default 6. On 2 cores, N=7 takes ~15 s and N=8 ~2 min. |
@@ -456,20 +480,20 @@ sieve check   [--line LINE] [line options] [--filters PATH] (TEXT... | --file PA
 
 ```sh
 sieve filters --filters words2.ini
-#   survivors    190011992984255955985337560 (exact; compact mode available)
+#   survivors    3037669199976796308182197712 (exact; compact mode available)
 sieve check --length 32 --filters words2.ini "It was the best of times"
 #   [ ] words-v1                FAIL
 #   [x] words-v2                pass
-#   stack: passes, survivor number 100485593897630338697104005 of 190011992984255955985337560
-sieve read --length 32 --mode positional --filters words2.ini --survivor 100485593897630338697104005
+#   stack: passes, survivor number 1533066303779775957571202953 of 3037669199976796308182197712
+sieve read --length 32 --mode positional --filters words2.ini --survivor 1533066303779775957571202953
 #   it was the best of times
 sieve warp --length 32 --filters words2.ini --compact "It was the best of times"
-#   compact     survivor number 100485593897630338697104005 of 190011992984255955985337560
-#     positional  531ea6f5da80e1ed6b8a85
-#     scrambled   1db41d1685abd564b15405
-#     guided      9116ae0428ea154  (58 bits: 1.81 bits/symbol)
+#   compact     survivor number 1533066303779775957571202953 of 3037669199976796308182197712
+#     positional  4f41f6adb2a88bdbd07ef89
+#     scrambled   2afad38e8cb58c79243f9f6
+#     guided      90b25da06c4d36a  (59 bits: 1.84 bits/symbol)
 sieve browse --length 32 --filters words2.ini --compact --count 1 --seed 1
-#   "red oi spore swiz pot is auk fin"
+#   "most moot nam been fer vats dusk"
 ```
 
 ### `dicts`: the dictionary registry
@@ -494,11 +518,19 @@ registry  data/dictionaries/dictionaries.tsv
 
   scowl-en-35   en  40201 words, hash ok
     SCOWL 2020.12.07 size 35: common English words, British and American spellings
-* scowl-en-60   en  79645 words, hash ok
+  scowl-en-60   en  79645 words, hash ok
     SCOWL 2020.12.07 size 60: SCOWL's recommended spell-check size
   scowl-en-80   en  251174 words, hash ok
     SCOWL 2020.12.07 size 80: large, includes rare words
+  scowl-en-35-names  en  40326 words, hash ok
+    SCOWL 2020.12.07 size 35 with capitalised words and proper names (case kept)
+* scowl-en-60-names  en  88986 words, hash ok
+    SCOWL 2020.12.07 size 60 with capitalised words and proper names (case kept): England, Dickens
+  scowl-en-80-names  en  281180 words, hash ok
+    SCOWL 2020.12.07 size 80 with capitalised words and proper names (case kept)
 ```
+
+The `-names` lists keep SCOWL's capitals (`England`); the lower-case alphabets read them as lower case, so one list serves every alphabet. They are the default because real books name people and places. They also bring in abbreviations and symbols SCOWL lists in capitals (`Zn`, `Pt`, `Gs`), so short gibberish tokens pass a little more often than with the plain lists.
 
 ### `models`, `train`, `measure`: the models behind guided addresses (M3)
 
@@ -526,10 +558,10 @@ With no files, it measures the three books held out of training:
 
 ```
 text                            symbols   stream   guided    vs raw
-carroll-alice.txt                134371    1.929    1.932     2.46x
-chesterton-thursday.txt          307403    1.944    1.948     2.44x
-shakespeare-macbeth.txt           93070    2.478    2.480     1.92x
-all                              534844    2.033    2.037     2.33x
+carroll-alice.txt                134371    1.929    1.934     2.46x
+chesterton-thursday.txt          307403    1.944    1.950     2.44x
+shakespeare-macbeth.txt           93070    2.478    2.482     1.92x
+all                              534844    2.033    2.039     2.33x
 ```
 
 ### `bind`, `unbind`: books
@@ -608,7 +640,9 @@ The Python oracle shares no code with the C++ core. It uses native big integers,
 | `vectors_canon.tsv` | Text canonicalisation v1 and v2, including every accented letter in the fold table |
 | `vectors_image_v1.tsv` | Image resampling and palette quantisation, all four palettes |
 | `vectors_guided_v1.tsv` | Guided addresses and point decoding under the pinned model. The oracle derives every frequency table from the model file itself. |
-| `vectors_filters_v1.tsv` | Filter verdicts, fixed-point logarithms, and survivor counts and ranks for `clean` and `words` (v1 and v2) |
+| `vectors_filters_v1.tsv` | Filter verdicts, fixed-point logarithms, and survivor counts and ranks for `clean`, `words` and `window` (v1 and v2) and `title-v1` |
+| `vectors_books_v1.tsv` | Books-line addresses: cover, title and pages as one mixed-radix number, and its shuffle |
+| `vectors_book_filters_v1.tsv` | Book filters: surviving books counted from each part's survivors, the pages judged as one text, and their compact addresses in both orderings |
 | `vectors_compact_v1.tsv` | The survivor shuffle, rankers for black-and-white entropy, `key-v1` and `neighbour-agreement-v1` (pictures and video, 2–4 colours), and survivors' addresses and point decoding on the sieved guided line |
 
 The oracle also rebuilds the default model from the raw corpus (`sieve_ref.py model-build`) and must produce the same SHA-256 as `sieve train`. The core tests check every tiny space exhaustively: at L = 1–3 the arcs of all 27^L units tile the line exactly, every address is the shortest block that fits, and every address decodes back. The same holds for the sieved guided line over the survivors of `clean` and `words`: no non-survivor has an arc. Every ranker is checked against its filter over every unit of small lengths, and the shuffle is checked as a permutation of every size up to 300.
@@ -634,6 +668,7 @@ After an intentional, versioned change, regenerate them:
 ```sh
 cd reference
 python3 sieve_ref.py vectors       > ../tests/vectors_v1.tsv
+python3 sieve_ref.py book-filter-vectors > ../tests/vectors_book_filters_v1.tsv
 python3 sieve_ref.py digit-vectors > ../tests/vectors_digits_v1.tsv
 python3 sieve_ref.py canon-vectors > ../tests/vectors_canon.tsv
 python3 sieve_ref.py image-vectors > ../tests/vectors_image_v1.tsv
@@ -642,7 +677,7 @@ python3 sieve_ref.py guided-vectors > ../tests/vectors_guided_v1.tsv
 
 ## M1 results
 
-These use the default dictionary (SCOWL size 60, 79,645 words). Survivor counts are exact and agree with brute force up to L = 6 and with the pruned walk up to L = 7.
+These use SCOWL size 60 without names (`scowl-en-60`, 79,645 words; the default before 0.12). Survivor counts are exact and agree with brute force up to L = 6 and with the pruned walk up to L = 7.
 
 ![M1 sieve](results/m1_sieve_scowl60.png)
 

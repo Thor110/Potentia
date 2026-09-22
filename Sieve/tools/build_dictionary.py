@@ -20,6 +20,13 @@ Getting SCOWL (one time, needs git, make and perl):
 Then:
     python3 tools/build_dictionary.py --scowl scowl-src/scowl/final --size 60 \\
         --out data/dictionaries/scowl-2020.12.07-en-60.txt
+
+With --names, the list also takes SCOWL's capitalised words and proper names (upper and
+proper-names, e.g. "England", "Dickens") and keeps every word's case as SCOWL writes it:
+    python3 tools/build_dictionary.py --scowl scowl-src/scowl/final --size 60 --names \\
+        --out data/dictionaries/scowl-2020.12.07-en-60-names.txt
+Sieve reads such a list folded to lower case for the lower-case alphabets ("England" matches
+"england"), and the capitals stay in the file for filters that respect case.
 """
 import argparse
 import hashlib
@@ -36,22 +43,26 @@ def main():
     p.add_argument("--scowl", required=True, help="path to SCOWL's built 'final' directory")
     p.add_argument("--size", type=int, required=True, choices=LEVELS, help="largest SCOWL size level to include")
     p.add_argument("--out", required=True, help="output word list (one word per line)")
+    p.add_argument("--names", action="store_true", help="also capitalised words and proper names, case kept")
     args = p.parse_args()
 
     words, files_used = set(), 0
+    kinds = ("words", "upper", "proper-names") if args.names else ("words",)
+    pattern = "[A-Za-z]+" if args.names else "[a-z]+"
     for cat in CATEGORIES:
-        for level in LEVELS:
-            if level > args.size:
-                continue
-            path = os.path.join(args.scowl, f"{cat}-words.{level}")
-            if not os.path.exists(path):
-                continue
-            files_used += 1
-            with open(path, encoding="latin-1") as f:  # SCOWL final lists are ISO-8859-1
-                for line in f:
-                    w = line.strip()
-                    if re.fullmatch("[a-z]+", w) and (len(w) > 1 or w in ("a", "i")):
-                        words.add(w)
+        for kind in kinds:
+            for level in LEVELS:
+                if level > args.size:
+                    continue
+                path = os.path.join(args.scowl, f"{cat}-{kind}.{level}")
+                if not os.path.exists(path):
+                    continue
+                files_used += 1
+                with open(path, encoding="latin-1") as f:  # SCOWL final lists are ISO-8859-1
+                    for line in f:
+                        w = line.strip()
+                        if re.fullmatch(pattern, w) and (len(w) > 1 or w in ("a", "i", "I")):
+                            words.add(w)
     if not files_used:
         sys.exit(f"no SCOWL word files found in {args.scowl}")
 

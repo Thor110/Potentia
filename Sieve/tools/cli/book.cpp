@@ -2,6 +2,7 @@
 
 #include "sieve/sha256.hpp"
 
+#include <algorithm>
 #include <sstream>
 #include <stdexcept>
 
@@ -27,6 +28,16 @@ bool valid_role(const std::string& r)
     if (r.empty() || !(r[0] >= 'a' && r[0] <= 'z')) return false;
     for (char c : r)
         if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-')) return false;
+    return true;
+}
+
+// A model named by its registry id (never a file path, which would not mean the same on
+// another machine).
+bool registry_model_id(const std::string& id)
+{
+    if (id.empty() || id == "file" || (id.size() > 6 && id.substr(id.size() - 6) == ".model")) return false;
+    for (char c : id)
+        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.')) return false;
     return true;
 }
 
@@ -77,6 +88,8 @@ BookSection make_section(const std::string& role, const Args& shape, const std::
     Args a;
     a.opts["line"] = to_string(line_from_string(shape.get("line", "text")));
     a.opts["key"] = shape.get("key", "sieve");
+    if (a.opts["key"].empty() || a.opts["key"].find_first_of("\r\n") != std::string::npos)
+        throw std::invalid_argument("a book's key must be one line of text");
     Args full = shape;
     if (mode != "guided") full.opts["model"] = "none";
     const Line line = make_line(full);
@@ -94,6 +107,8 @@ BookSection make_section(const std::string& role, const Args& shape, const std::
     if (mode == "guided")
     {
         if (!line.guided) throw std::invalid_argument("guided order needs a text line with a model (see: sieve models)");
+        if (!registry_model_id(line.model_id))
+            throw std::invalid_argument("a book's guided pages need a registered model (see: sieve models), not a model file");
         s.model_id = line.model_id;
         s.model_sha256 = line.guided->model().sha256();
         for (const auto& u : units) s.addresses.push_back(line.guided->code(u).hex);
@@ -119,7 +134,13 @@ std::vector<DecodedSection> decode_book(const Book& b)
                     throw std::invalid_argument("section '" + s.role + "': " + addr + " is a point inside a unit's arc, not the unit's own address");
                 d.units.push_back(std::move(u));
             }
-            else d.units.push_back(d.line.space.unit_at(addr, address_mode_from_string(s.mode)));
+            else
+            {
+                if (addr.size() != d.line.space.hex_width())
+                    throw std::invalid_argument("section '" + s.role + "': addresses on this line are " + std::to_string(d.line.space.hex_width()) +
+                                                " hex digits, not " + std::to_string(addr.size()));
+                d.units.push_back(d.line.space.unit_at(addr, address_mode_from_string(s.mode)));
+            }
         }
         out.push_back(std::move(d));
     }
@@ -138,6 +159,41 @@ std::string book_id(const std::vector<DecodedSection>& sections)
         for (const auto& u : d.units) o << d.line.space.address_of(u, AddressMode::Positional) << "\n";
     }
     return Sha256::hex(Sha256::hash(o.str()));
+}
+
+BookSpace::Parts record_parts(const std::vector<DecodedSection>& sections, const BookSpace& space)
+{
+    const Space& page = space.page_space();
+    const Space& cover = space.cover_space();
+    BookSpace::Parts p;
+    p.cover.assign(cover.unit_length(), 0);
+    p.title.assign(page.unit_length(), 0);
+    for (const auto& d : sections)
+    {
+        const std::string& role = d.section->role;
+        const Space& sp = d.line.space;
+        if ((role == "cover" || role == "title") && d.units.size() != 1)
+            throw std::invalid_argument("its " + role + " must be exactly one unit (it has " + std::to_string(d.units.size()) + ")");
+        if (role == "cover")
+        {
+            if (sp.symbols_id() != cover.symbols_id())
+                throw std::invalid_argument("its cover is " + sp.symbols_id() + ", not " + cover.symbols_id());
+            p.cover = d.units.front();
+        }
+        else if (role == "title" || role == "pages")
+        {
+            if (sp.symbols_id() != page.symbols_id() || sp.unit_length() != page.unit_length())
+                throw std::invalid_argument("its " + role + (role == "title" ? " is on " : " are ") + sp.symbols_id() + " pages of " +
+                                            std::to_string(sp.unit_length()) + " characters, not " + page.symbols_id() + " pages of " +
+                                            std::to_string(page.unit_length()));
+            if (role == "title") p.title = d.units.front();
+            else p.pages = d.units;
+        }
+    }
+    if (p.pages.size() > space.pages())
+        throw std::invalid_argument("it has " + std::to_string(p.pages.size()) + " pages, more than the line's " + std::to_string(space.pages()));
+    p.pages.resize(space.pages(), Space::Digits(page.unit_length(), 0));
+    return p;
 }
 
 std::string serialise_book(const Book& b)
@@ -201,10 +257,10 @@ Book parse_book(std::string_view text)
             if (sp == std::string::npos) throw std::invalid_argument("book line " + std::to_string(line_no) + ": expected 'model ID SHA256'");
             s.model_id = m.substr(0, sp);
             s.model_sha256 = m.substr(sp + 1);
+            if (s.model_sha256.size() != 64 || !valid_hex(s.model_sha256) || !registry_model_id(s.model_id))
+                throw std::invalid_argument("book line " + std::to_string(line_no) + ": expected 'model ID SHA256' with a registered model id and its 64-digit hash");
         }
-        const std::string n = field("units");
-        if (n.empty() || n.find_first_not_of("0123456789") != std::string::npos) throw std::invalid_argument("book line " + std::to_string(line_no) + ": bad unit count");
-        const unsigned long long count = std::stoull(n);
+        const unsigned long long count = parse_whole(field("units"), "book line " + std::to_string(line_no) + ": units");
         for (unsigned long long k = 0; k < count; ++k)
         {
             const std::string a = next();
@@ -214,9 +270,16 @@ Book parse_book(std::string_view text)
         b.sections.push_back(std::move(s));
     }
     b.id = field("id");
+    if (b.id.size() != 64 || !valid_hex(b.id)) throw std::invalid_argument("book line " + std::to_string(line_no) + ": the id must be 64 hex digits");
     std::string rest;
     while (std::getline(in, rest))
         if (!rest.empty() && rest != "\r") throw std::invalid_argument("text after the book's id line");
+    // Strict: only the canonical spelling of every field is accepted (no "+0400", no double
+    // spaces, no other names for a line), so one book has exactly one record in each ordering.
+    std::string normal(text);
+    normal.erase(std::remove(normal.begin(), normal.end(), '\r'), normal.end());
+    while (normal.size() > 1 && normal.back() == '\n' && normal[normal.size() - 2] == '\n') normal.pop_back();
+    if (serialise_book(b) != normal) throw std::invalid_argument("the book record is not in canonical form (see: sieve help bind)");
     return b;
 }
 

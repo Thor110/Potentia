@@ -24,6 +24,7 @@
 #include "cli/lines.hpp"
 #include "cli/models.hpp"
 
+#include "sieve/booksieve.hpp"
 #include "sieve/audio.hpp"
 #include "sieve/compact.hpp"
 #include "sieve/corridor.hpp"
@@ -79,6 +80,9 @@ void print_header(const Line& line)
 
 FilterConfig load_filter_config(const Args& a)
 {
+    // A file named with --filters must exist (a typo would otherwise mean "nothing ticked").
+    if (a.has("filters") && !fs::exists(fs::path(a.get("filters"))))
+        throw std::invalid_argument("no filter settings file at " + a.get("filters"));
     return FilterConfig::load(a.has("filters") ? fs::path(a.get("filters")) : FilterConfig::default_path());
 }
 
@@ -283,7 +287,7 @@ int read_at(const Line& line, const Args& a, const std::string& mode)
     const size_t colon = at.find(':');
     if (colon == std::string::npos) throw std::invalid_argument("--at expects TILE:SLOT, for example 4626:0 or -1:127");
     const TileIndex tile = TileIndex::parse(at.substr(0, colon));
-    const uint32_t slot = uint32_t(std::stoul(at.substr(colon + 1)));
+    const uint32_t slot = uint32_t(parse_whole(at.substr(colon + 1), "--at SLOT"));
     if (slot >= kBooksPerTile) throw std::invalid_argument("SLOT must be 0.." + std::to_string(kBooksPerTile - 1));
     const bool guided = mode == "guided";
     const auto compact = a.has("compact") ? make_compact(line, a) : nullptr;
@@ -293,6 +297,8 @@ int read_at(const Line& line, const Args& a, const std::string& mode)
         need_guided(line);
         if (!a.has("zoom")) throw std::invalid_argument("--mode guided --at needs --zoom D (books 2^-D apart), as shown in the hallway");
         zoom = a.get_positive("zoom", 20);
+        if (zoom > line.guided->scale_bits())
+            throw std::invalid_argument("--zoom is finer than the line (" + std::to_string(line.guided->scale_bits()) + " bits)");
     }
     const LineLoop loop(guided ? BigUint::pow(2, zoom) : compact ? compact->line->count() : line.space.size());
     const auto index = loop.unit_index(loop.loop_tile(tile), slot);
@@ -511,10 +517,11 @@ std::vector<uint32_t> parse_lengths(const std::string& spec)
     while (std::getline(ss, part, ','))
     {
         const auto dash = part.find('-');
-        const uint32_t a = static_cast<uint32_t>(std::stoul(part.substr(0, dash)));
-        const uint32_t b = dash == std::string::npos ? a : static_cast<uint32_t>(std::stoul(part.substr(dash + 1)));
+        // Lengths up to a million: far beyond what sift can count in any reasonable time.
+        const uint64_t a = parse_whole(part.substr(0, dash), "--lengths", 1000000);
+        const uint64_t b = dash == std::string::npos ? a : parse_whole(part.substr(dash + 1), "--lengths", 1000000);
         if (a < 1 || b < a) throw std::invalid_argument("bad length range '" + part + "'");
-        for (uint32_t L = a; L <= b; ++L) out.push_back(L);
+        for (uint64_t L = a; L <= b; ++L) out.push_back(uint32_t(L));
     }
     if (out.empty()) throw std::invalid_argument("no lengths given");
     return out;
@@ -721,10 +728,20 @@ int cmd_models()
 
 // ---------------------------------------------------------------- train
 
+// The corpus manifest: --corpus, else the repository's copy (from the project folder), else the
+// copy the build places next to the executable.
+std::string default_corpus(const Args& a)
+{
+    if (a.has("corpus")) return a.get("corpus");
+    const fs::path here = "data/models/corpus/gutenberg-nltk.tsv";
+    if (fs::exists(here)) return here.string();
+    return (executable_dir() / "models" / "corpus" / "gutenberg-nltk.tsv").string();
+}
+
 int cmd_train(const Args& a)
 {
     if (!a.has("out")) throw std::invalid_argument("missing --out FILE (the model to write)");
-    const Corpus corpus = load_corpus(a.get("corpus", "data/models/corpus/gutenberg-nltk.tsv"));
+    const Corpus corpus = load_corpus(default_corpus(a));
     const fs::path dir = a.get("texts", "corpus/gutenberg");
     const Alphabet& alpha = alphabet_by_id(a.get("alphabet", "lower27"));
     ModelParams p;
@@ -779,7 +796,7 @@ int cmd_measure(const Args& a)
     if (inputs.empty())
     {
         // The corpus's held-out files: text the model has never seen.
-        const Corpus corpus = load_corpus(a.get("corpus", "data/models/corpus/gutenberg-nltk.tsv"));
+        const Corpus corpus = load_corpus(default_corpus(a));
         const fs::path dir = a.get("texts", "corpus/gutenberg");
         const std::string role = a.get("role", "test");
         for (const auto& f : corpus.files)
@@ -820,9 +837,13 @@ int cmd_measure(const Args& a)
 
 // ---------------------------------------------------------------- filters
 
+int cmd_check_book(const Args& a);
+int cmd_filters_books(const Args& a);
+
 int cmd_filters(const Args& a)
 {
-    const Line line = make_line(a.has("length") || a.get("line", "text") != "text" ? a : [&] {
+    if (a.get("line", "text") == "books") return cmd_filters_books(a);
+    const Line line = make_line(a.has("length") || line_from_string(a.get("line", "text")) != LineKind::Text ? a : [&] {
         Args b = a;
         b.opts["length"] = "32";
         return b;
@@ -864,6 +885,7 @@ int cmd_filters(const Args& a)
 
 int cmd_check(const Args& a)
 {
+    if (a.has("book")) return cmd_check_book(a);
     const Line line = make_line(a);
     const FilterConfig cfg = load_filter_config(a);
     const LineFilters& lf = cfg.of(line.kind);
@@ -920,7 +942,7 @@ std::string section_text(const DecodedSection& d)
 int cmd_bind(const Args& a)
 {
     if (!a.has("out")) throw std::invalid_argument("missing --out FILE.book");
-    if (!a.has("pages") && !a.has("title")) throw std::invalid_argument("give --pages FILE and/or --title TEXT");
+    if (!a.has("pages") && !a.has("title") && !a.has("cover")) throw std::invalid_argument("give --title TEXT, --cover PICTURE and/or --pages FILE");
     const std::string mode = a.get("mode", "scrambled");
     const std::string key = a.get("key", "sieve");
     const uint32_t page_length = a.get_positive("length", 3200);
@@ -976,6 +998,8 @@ int cmd_bind(const Args& a)
     const auto decoded = decode_book(b);
     b.id = book_id(decoded);
     const std::string record = serialise_book(b);
+    // And read back the very text that will be written (a key with a line break, say, would not).
+    if (book_id(decode_book(parse_book(record))) != b.id) throw std::runtime_error("the record does not read back as the same book");
     std::ofstream out(std::filesystem::path(a.get("out")), std::ios::binary);
     out << record;
     if (!out) throw std::runtime_error("cannot write " + a.get("out"));
@@ -987,6 +1011,115 @@ int cmd_bind(const Args& a)
         std::cout << "  " << d.section->role << std::string(std::max<size_t>(1, 11 - d.section->role.size()), ' ') << d.units.size()
                   << " unit(s) on " << d.line.space.id() << ", " << d.section->mode << "\n";
     std::cout << "record       " << record.size() << " bytes -> " << a.get("out") << "\n";
+    return 0;
+}
+
+// The books line's lines: the cover (image) line and the page (text) line, from the options.
+std::pair<Line, Line> book_lines(const Args& a)
+{
+    Args c = a, t = a;
+    c.opts["line"] = "image";
+    c.opts["model"] = "none";
+    t.opts["line"] = "text";
+    if (!t.has("length")) t.opts["length"] = "3200";
+    return {make_line(c), make_line(t)};
+}
+
+void print_book_stacks(const BookStacks& st, const BookSieve& sieve)
+{
+    const char* names[3] = {"cover", "title", "pages"};
+    const FilterStack* parts[3] = {&st.cover, &st.title, &st.pages};
+    for (int i = 0; i < 3; ++i)
+    {
+        const FilterStack& s = *parts[i];
+        std::cout << names[i] << std::string(13 - std::string(names[i]).size(), ' ')
+                  << (s.empty() ? std::string("(none ticked)") : s.id().substr(0, 16) + "...  " + s.provenance()) << "\n";
+    }
+    if (sieve.empty()) return;
+    if (sieve.can_rank()) std::cout << "survivors    " << sieve.count().to_decimal() << " books (exact; compact mode available)\n";
+    else std::cout << "compact      unavailable: " << sieve.blocker() << "\n";
+}
+
+int cmd_filters_books(const Args& a)
+{
+    const auto [cover, page] = book_lines(a);
+    const uint32_t pages = a.has("book-pages") ? a.get_positive("book-pages", 4) : 4;
+    const FilterConfig cfg = load_filter_config(a);
+    const BookSpace space(cover.space, page.space, pages);
+    std::cout << "line         books  (" << space.id() << ")\n"
+              << "settings     " << filters_path(a) << "\n"
+              << "mode         " << to_string(cfg.books.mode) << "\n";
+    const char* heads[3] = {"COVER: a picture of the image line", "TITLE: one page of the text line",
+                            "PAGES: all pages read as one text"};
+    for (int i = 0; i < 3; ++i)
+    {
+        FilterLine fl = filter_line(i == 0 ? cover : page);
+        if (i == 2) fl.length = uint32_t(std::min<uint64_t>(uint64_t(fl.length) * pages, UINT32_MAX));
+        const LineFilters& lf = cfg.books.parts[i];
+        std::cout << "\n" << heads[i] << " (" << fl.length << " symbols)\n";
+        for (const FilterSpec* f : filters_for(fl)) std::cout << "  " << (lf.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << "\n";
+    }
+    const BookStacks st = build_book_stacks(cover, page, pages, cfg.books);
+    const BookSieve sieve(space, st.cover, st.title, st.pages);
+    std::cout << "\n";
+    print_book_stacks(st, sieve);
+    return 0;
+}
+
+// A book record judged by the books line's filters. The line takes the record's own shape: its
+// cover's picture, its pages' length, and as many pages as it has (or --book-pages).
+int cmd_check_book(const Args& a)
+{
+    const Book b = parse_book(slurp(a.get("book")));
+    const auto decoded = decode_book(b);
+    if (book_id(decoded) != b.id) throw std::runtime_error("the book's content does not match its id (" + b.id + ")");
+    auto [cover, page] = book_lines(a);
+    size_t record_pages = 0;
+    for (const auto& d : decoded)
+    {
+        if (d.section->role == "cover") cover = d.line;
+        else if (d.section->role == "title" || d.section->role == "pages")
+        {
+            page = d.line;
+            if (d.section->role == "pages") record_pages = d.units.size();
+        }
+    }
+    const uint32_t pages = a.has("book-pages") ? a.get_positive("book-pages", 4) : uint32_t(std::max<size_t>(1, record_pages));
+    const FilterConfig cfg = load_filter_config(a);
+    const BookSpace space(cover.space, page.space, pages);
+    const BookSpace::Parts parts = record_parts(decoded, space);
+    const BookStacks st = build_book_stacks(cover, page, pages, cfg.books);
+    const BookSieve sieve(space, st.cover, st.title, st.pages);
+    std::cout << "book         " << b.id << "\n"
+              << "line         " << space.id() << "\n"
+              << "settings     " << filters_path(a) << "\n";
+    print_book_stacks(st, sieve);
+    // Every filter each part is offered, ticked or not, with the part's settings.
+    const char* names[3] = {"cover", "title", "pages"};
+    const std::vector<uint32_t> body = BookSieve::body(parts);
+    const std::vector<uint32_t>* units[3] = {&parts.cover, &parts.title, &body};
+    for (int i = 0; i < 3; ++i)
+    {
+        FilterLine fl = filter_line(i == 0 ? cover : page);
+        if (i == 2) fl.length = uint32_t(body.size());
+        if (fl.length == 0) continue;
+        std::cout << "\n" << names[i] << "\n";
+        for (const FilterSpec* f : filters_for(fl))
+        {
+            LineFilters one = cfg.books.parts[i];
+            one.enabled = {f->name()};
+            const FilterStack s = build_stack(fl, one);
+            std::cout << "  " << (cfg.books.parts[i].is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name()
+                      << std::string(std::max<size_t>(1, 24 - f->name().size()), ' ') << (s.passes(*units[i]) ? "pass" : "FAIL") << "\n";
+        }
+    }
+    const std::string fail = sieve.first_failure(parts);
+    std::cout << "\nbook: " << (sieve.empty() ? std::string("no filters ticked") : fail.empty() ? std::string("passes") : "fails at " + fail);
+    if (!sieve.empty() && fail.empty() && sieve.can_rank())
+        std::cout << ", survivor number " << sieve.rank(parts).to_decimal() << " of " << sieve.count().to_decimal() << "\n"
+                  << "compact      positional " << sieve.hex_of(sieve.index_of(parts, AddressMode::Positional)) << "\n"
+                  << "             scrambled  " << sieve.hex_of(sieve.index_of(parts, AddressMode::Scrambled));
+    std::cout << "\n";
     return 0;
 }
 
@@ -1016,7 +1149,8 @@ int cmd_unbind(const Args& a)
         }
         else
         {
-            if (role == "cover" && a.has("cover"))
+            if (role == "cover" && a.has("cover") && d.units.empty()) std::cerr << "  the cover section is empty: nothing to save\n";
+            else if (role == "cover" && a.has("cover"))
             {
                 save_unit(d.line, d.units.front(), a.get("cover"), a.get_positive("scale", 16));
                 std::cerr << "  saved " << a.get("cover") << "\n";
@@ -1062,6 +1196,15 @@ int main(int argc, char** argv)
         }
         const Args a = parse_args(argc, argv);
         if (a.help && print_help(a.command == "sieve" ? "sift" : a.command)) return 0;
+        // A mistyped option would otherwise be ignored without a word.
+        {
+            const auto known = documented_options(a.command == "sieve" ? "sift" : a.command);
+            if (!known.empty())
+                for (const auto& [key, value] : a.opts)
+                    if (std::find(known.begin(), known.end(), key) == known.end())
+                        std::cerr << "warning: --" << key << " is not an option of 'sieve " << a.command << "' (see: sieve help " << a.command
+                                  << "); ignored\n";
+        }
         if (a.command == "info") return cmd_info(a);
         if (a.command == "warp") return cmd_warp(a);
         if (a.command == "read") return cmd_read(a);
@@ -1083,7 +1226,8 @@ int main(int argc, char** argv)
     catch (const std::exception& e)
     {
         std::cerr << "error: " << e.what() << "\n";
-        if (argc >= 2 && is_command(argv[1])) std::cerr << "(see: sieve help " << argv[1] << ")\n";
+        if (argc >= 2 && is_command(argv[1]))
+            std::cerr << "(see: sieve help " << (std::string(argv[1]) == "sieve" ? "sift" : argv[1]) << ")\n";
         return 1;
     }
 }

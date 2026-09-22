@@ -1,7 +1,8 @@
 # Sieve dictionary registry. One dictionary per line, tab-separated.
 #
 #   id           Name used with --dict (letters, digits, - and _).
-#   file         Word list in this folder: one word per line, a-z only for the lower27 line.
+#   file         Word list in this folder: one word per line, letters A-Z and a-z only. The
+#                lower-case alphabets read capitals as lower case ("England" matches "england").
 #   language     Language code (e.g. en). Informational for now; later lines will select by it.
 #   default      "yes" on exactly one line: the dictionary used when --dict is not given.
 #   sha256       SHA-256 of the file. The file is refused if it does not match, so a result
@@ -13,5 +14,8 @@
 #
 # id	file	language	default	sha256	description
 scowl-en-35	scowl-2020.12.07-en-35.txt	en	no	fa4dfcfc6e792cf3b308d041b02955bd1fddb8559a220a6e52666abba59d02d1	SCOWL 2020.12.07 size 35: common English words, British and American spellings
-scowl-en-60	scowl-2020.12.07-en-60.txt	en	yes	51ecd4eed87c71ca0de28627fb7f6646a7802d782e665a86848eccfba4cd8353	SCOWL 2020.12.07 size 60: SCOWL's recommended spell-check size
+scowl-en-60	scowl-2020.12.07-en-60.txt	en	no	51ecd4eed87c71ca0de28627fb7f6646a7802d782e665a86848eccfba4cd8353	SCOWL 2020.12.07 size 60: SCOWL's recommended spell-check size
 scowl-en-80	scowl-2020.12.07-en-80.txt	en	no	47810b49e2abe0ce884aaea5e6c637f0d78bce9736f2e345087bcc3c00fafec4	SCOWL 2020.12.07 size 80: large, includes rare words
+scowl-en-35-names	scowl-2020.12.07-en-35-names.txt	en	no	7882f5a01bfc020f99b5fcaf96e3436210a1224a4565e04b648aa9cd25653f0f	SCOWL 2020.12.07 size 35 with capitalised words and proper names (case kept)
+scowl-en-60-names	scowl-2020.12.07-en-60-names.txt	en	yes	2b929f8e21c0ee57140482b7c4a18e23836b890ef8200ee83d21458bc8961ba4	SCOWL 2020.12.07 size 60 with capitalised words and proper names (case kept): England, Dickens
+scowl-en-80-names	scowl-2020.12.07-en-80-names.txt	en	no	d4aece883446c883591ad8c47ef265af945497fa4105aef6ccc30fd7dbfe2cba	SCOWL 2020.12.07 size 80 with capitalised words and proper names (case kept)

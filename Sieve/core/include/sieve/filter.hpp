@@ -91,8 +91,10 @@ public:
     virtual bool alive(State s, uint32_t remaining) const { return !completions(s, remaining).is_zero(); }
 
     const BigUint& count() const { return count_; }                  // survivors at this length
-    std::vector<uint32_t> unrank(const BigUint& k) const;             // k < count()
-    BigUint rank(std::span<const uint32_t> unit) const;               // unit must pass
+    // The generic walks below work for every ranker; a ranker may override them with a faster
+    // method that gives the same answers (key-v1 ranks as a plain base-a number).
+    virtual std::vector<uint32_t> unrank(const BigUint& k) const;     // k < count()
+    virtual BigUint rank(std::span<const uint32_t> unit) const;       // unit must pass
     // Whether the unit is a survivor, by walking it (agrees with the filter's own test).
     bool accepts(std::span<const uint32_t> unit) const;
 
@@ -172,6 +174,7 @@ public:
 private:
     std::vector<std::unique_ptr<Filter>> filters_;
     std::vector<std::string> names_;
+    uint32_t length_ = 0;
     const Ranker* compact_ = nullptr;
     std::string blocker_;
     std::string provenance_, id_;

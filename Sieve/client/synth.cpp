@@ -1,5 +1,6 @@
 #include "synth.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 namespace hallway {
@@ -29,9 +30,12 @@ std::string Synth::play(const std::vector<uint32_t>& notes)
     stream_ = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr);
     if (!stream_) return std::string("audio unavailable: ") + SDL_GetError();
 
+    // At most ten minutes of sound (a line's melodies can be as long as the menu allows).
+    constexpr size_t kMaxSamples = size_t(kRate) * 600;
     std::vector<float> pcm;
     for (uint32_t d : notes)
     {
+        if (pcm.size() >= kMaxSamples) break;
         const uint32_t pitch = d / 4;
         const int samples = int(kSeconds[d % 4] * kRate);
         const float freq = pitch ? 440.0f * std::pow(2.0f, (float(60 + int(pitch) - 1) - 69.0f) / 12.0f) : 0.0f;
@@ -48,6 +52,7 @@ std::string Synth::play(const std::vector<uint32_t>& notes)
             pcm.push_back(v);
         }
     }
+    pcm.resize(std::min(pcm.size(), kMaxSamples));
     SDL_PutAudioStreamData(stream_, pcm.data(), int(pcm.size() * sizeof(float)));
     SDL_FlushAudioStream(stream_);
     SDL_ResumeAudioStreamDevice(stream_);

@@ -9,10 +9,24 @@
 
 namespace sieve::cli {
 
+// A whole number written with decimal digits only (no sign, no spaces), at most `max`.
+inline uint64_t parse_whole(const std::string& v, const std::string& what, uint64_t max = 0xFFFFFFFFull)
+{
+    if (v.empty() || v.size() > 20 || v.find_first_not_of("0123456789") != std::string::npos)
+        throw std::invalid_argument(what + " expects a whole number, got '" + v + "'");
+    uint64_t n = 0;
+    for (char c : v)
+    {
+        if (n > (max - uint64_t(c - '0')) / 10) throw std::invalid_argument(what + " is too large (at most " + std::to_string(max) + "): '" + v + "'");
+        n = n * 10 + uint64_t(c - '0');
+    }
+    return n;
+}
+
 // Options that are switches (take no value).
 inline bool is_flag(const std::string& key)
 {
-    return key == "short" || key == "help" || key == "take" || key == "menu" || key == "no-menu" || key == "compact";
+    return key == "short" || key == "help" || key == "take" || key == "menu" || key == "main-menu" || key == "edge-glow" || key == "no-menu" || key == "compact";
 }
 
 struct Args
@@ -31,13 +45,7 @@ struct Args
     uint32_t get_u32(const std::string& k, uint32_t def) const
     {
         if (!has(k)) return def;
-        const std::string v = get(k);
-        size_t used = 0;
-        unsigned long n = 0;
-        try { n = std::stoul(v, &used); } catch (const std::exception&) { used = 0; }
-        if (used != v.size() || v.empty() || n > 0xFFFFFFFFul)
-            throw std::invalid_argument("--" + k + " expects a whole number, got '" + v + "'");
-        return static_cast<uint32_t>(n);
+        return static_cast<uint32_t>(parse_whole(get(k), "--" + k));
     }
     uint32_t get_positive(const std::string& k, uint32_t def) const
     {

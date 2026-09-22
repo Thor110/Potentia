@@ -89,6 +89,15 @@ uint32_t BigUint::divmod_small(uint32_t d)
 
 namespace {
 
+// log2(base) if base is a power of two (2, 4, ..., 2^31), else 0.
+unsigned pow2_shift(uint32_t base)
+{
+    if (base < 2 || (base & (base - 1))) return 0;
+    unsigned s = 0;
+    while ((1u << s) != base) ++s;
+    return s;
+}
+
 // The largest k with base^k <= 2^32, and base^k itself (as uint64_t, may equal 2^32).
 std::pair<size_t, uint64_t> chunk_of(uint32_t base)
 {
@@ -103,6 +112,23 @@ std::pair<size_t, uint64_t> chunk_of(uint32_t base)
 BigUint BigUint::from_digits(std::span<const uint32_t> digits, uint32_t base)
 {
     if (base < 2) throw std::invalid_argument("base must be at least 2");
+    if (const unsigned sh = pow2_shift(base))
+    {
+        // A power-of-two base: the digits are the bits, placed directly (linear time).
+        BigUint v;
+        v.limbs_.assign((digits.size() * sh + 31) / 32, 0);
+        size_t bit = 0;
+        for (size_t i = digits.size(); i-- > 0; bit += sh)
+        {
+            const uint32_t d = digits[i];
+            if (d >= base) throw std::invalid_argument("digit out of range for base");
+            const size_t w = bit / 32, o = bit % 32;
+            v.limbs_[w] |= d << o;
+            if (o + sh > 32) v.limbs_[w + 1] |= d >> (32 - o);
+        }
+        v.trim();
+        return v;
+    }
     // Horner's rule, k digits per big multiply: v = v * base^k + (next k digits).
     const size_t k = chunk_of(base).first;
     BigUint v;
@@ -130,6 +156,22 @@ std::vector<uint32_t> BigUint::to_digits(uint32_t base, size_t length) const
 {
     if (base < 2) throw std::invalid_argument("base must be at least 2");
     std::vector<uint32_t> digits(length, 0);
+    if (const unsigned sh = pow2_shift(base))
+    {
+        // A power-of-two base: read the bits directly (linear time).
+        if (bit_length() > uint64_t(length) * sh) throw std::out_of_range("value does not fit in the requested number of digits");
+        const uint32_t mask = base - 1;
+        size_t bit = 0;
+        for (size_t i = length; i-- > 0; bit += sh)
+        {
+            const size_t w = bit / 32, o = bit % 32;
+            if (w >= limbs_.size()) break;
+            uint64_t word = limbs_[w];
+            if (w + 1 < limbs_.size()) word |= uint64_t(limbs_[w + 1]) << 32;
+            digits[i] = uint32_t(word >> o) & mask;
+        }
+        return digits;
+    }
     BigUint v = *this;
     // Peel k digits per big division, using the largest base^k that fits a 32-bit divisor.
     auto [k, full] = chunk_of(base);
@@ -150,7 +192,13 @@ std::vector<uint32_t> BigUint::to_digits(uint32_t base, size_t length) const
 
 BigUint BigUint::pow(uint32_t base, uint32_t exponent)
 {
+    if (base < 2) return BigUint(base == 0 && exponent > 0 ? 0 : 1); // 0^0 = 1
     BigUint v(1);
+    if (const unsigned sh = pow2_shift(base))
+    {
+        v <<= size_t(exponent) * sh; // 2^(sh * exponent)
+        return v;
+    }
     const auto [k, full] = chunk_of(base);
     uint32_t e = exponent;
     if (full < (uint64_t(1) << 32))
@@ -179,17 +227,20 @@ std::string BigUint::to_hex(size_t width) const
 BigUint BigUint::from_hex(std::string_view hex)
 {
     if (hex.empty()) throw std::invalid_argument("empty hex string");
+    // Eight hex digits per limb, from the least significant end (linear time).
     BigUint v;
-    for (char c : hex)
+    v.limbs_.assign((hex.size() + 7) / 8, 0);
+    for (size_t i = 0; i < hex.size(); ++i)
     {
+        const char c = hex[hex.size() - 1 - i];
         uint32_t d;
         if (c >= '0' && c <= '9') d = static_cast<uint32_t>(c - '0');
         else if (c >= 'a' && c <= 'f') d = static_cast<uint32_t>(c - 'a' + 10);
         else if (c >= 'A' && c <= 'F') d = static_cast<uint32_t>(c - 'A' + 10);
         else throw std::invalid_argument(std::string("invalid hex digit '") + c + "'");
-        v.mul_small(16);
-        v.add_small(d);
+        v.limbs_[i / 8] |= d << (4 * (i % 8));
     }
+    v.trim();
     return v;
 }
 
@@ -247,15 +298,117 @@ BigUint BigUint::mod(const BigUint& a, const BigUint& m)
         r.trim();
         return r;
     }
-    // Shift-and-subtract, one bit of a at a time.
-    BigUint r;
-    for (size_t i = a.bit_length(); i-- > 0;)
+    // a < 2m (the common case: a sum of two residues, a position one loop past the end).
     {
-        r <<= 1;
-        if (a.bit(i)) r.add_small(1);
-        if (r >= m) r -= m;
+        BigUint once = a;
+        once -= m;
+        if (once < m) return once;
     }
+    BigUint q, r;
+    divmod(a, m, q, r);
     return r;
+}
+
+BigUint BigUint::mul(const BigUint& a, const BigUint& b)
+{
+    if (a.is_zero() || b.is_zero()) return BigUint();
+    BigUint p;
+    p.limbs_.assign(a.limbs_.size() + b.limbs_.size(), 0);
+    for (size_t i = 0; i < a.limbs_.size(); ++i)
+    {
+        uint64_t carry = 0;
+        const uint64_t x = a.limbs_[i];
+        for (size_t j = 0; j < b.limbs_.size(); ++j)
+        {
+            const uint64_t t = x * b.limbs_[j] + p.limbs_[i + j] + carry;
+            p.limbs_[i + j] = static_cast<uint32_t>(t);
+            carry = t >> 32;
+        }
+        size_t k = i + b.limbs_.size();
+        while (carry)
+        {
+            const uint64_t t = uint64_t(p.limbs_[k]) + carry;
+            p.limbs_[k++] = static_cast<uint32_t>(t);
+            carry = t >> 32;
+        }
+    }
+    p.trim();
+    return p;
+}
+
+void BigUint::divmod(const BigUint& a, const BigUint& b, BigUint& q, BigUint& r)
+{
+    if (b.is_zero()) throw std::domain_error("division by zero");
+    if (a < b)
+    {
+        q = BigUint();
+        r = a;
+        return;
+    }
+    if (b.limbs_.size() == 1)
+    {
+        q = a;
+        r = BigUint(q.divmod_small(b.limbs_[0]));
+        return;
+    }
+    // Knuth, TAOCP vol. 2, 4.3.1, algorithm D, with 32-bit digits.
+    const size_t n = b.limbs_.size(), m = a.limbs_.size() - n;
+    unsigned s = 0;
+    for (uint32_t top = b.limbs_.back(); !(top & 0x80000000u); top <<= 1) ++s;
+    // Normalise: shift so the divisor's top bit is set.
+    std::vector<uint32_t> v(n), u(a.limbs_.size() + 1);
+    for (size_t i = n; i-- > 0;)
+        v[i] = (b.limbs_[i] << s) | (s && i ? b.limbs_[i - 1] >> (32 - s) : 0);
+    u[a.limbs_.size()] = s ? a.limbs_.back() >> (32 - s) : 0;
+    for (size_t i = a.limbs_.size(); i-- > 0;)
+        u[i] = (a.limbs_[i] << s) | (s && i ? a.limbs_[i - 1] >> (32 - s) : 0);
+    std::vector<uint32_t> qd(m + 1, 0);
+    const uint64_t B = uint64_t(1) << 32;
+    for (size_t j = m + 1; j-- > 0;)
+    {
+        // Estimate the quotient digit from the top two digits, then correct it.
+        const uint64_t num = (uint64_t(u[j + n]) << 32) | u[j + n - 1];
+        uint64_t qhat = num / v[n - 1], rhat = num % v[n - 1];
+        while (qhat >= B || qhat * v[n - 2] > ((rhat << 32) | u[j + n - 2]))
+        {
+            --qhat;
+            rhat += v[n - 1];
+            if (rhat >= B) break;
+        }
+        // Multiply and subtract.
+        int64_t borrow = 0;
+        uint64_t carry = 0;
+        for (size_t i = 0; i < n; ++i)
+        {
+            const uint64_t p = qhat * v[i] + carry;
+            carry = p >> 32;
+            const int64_t t = int64_t(u[i + j]) - int64_t(p & 0xFFFFFFFFu) + borrow;
+            u[i + j] = static_cast<uint32_t>(t);
+            borrow = t >> 32;
+        }
+        const int64_t t = int64_t(u[j + n]) - int64_t(carry) + borrow;
+        u[j + n] = static_cast<uint32_t>(t);
+        if (t < 0)
+        {
+            // qhat was one too large: add the divisor back.
+            --qhat;
+            uint64_t c = 0;
+            for (size_t i = 0; i < n; ++i)
+            {
+                const uint64_t sum = uint64_t(u[i + j]) + v[i] + c;
+                u[i + j] = static_cast<uint32_t>(sum);
+                c = sum >> 32;
+            }
+            u[j + n] = static_cast<uint32_t>(uint64_t(u[j + n]) + c);
+        }
+        qd[j] = static_cast<uint32_t>(qhat);
+    }
+    q.limbs_ = std::move(qd);
+    q.trim();
+    // Unnormalise the remainder.
+    r.limbs_.assign(n, 0);
+    for (size_t i = 0; i < n; ++i) r.limbs_[i] = (u[i] >> s) | (s && i + 1 < u.size() ? u[i + 1] << (32 - s) : 0);
+    r.trim();
 }
 
 size_t BigUint::bit_length() const

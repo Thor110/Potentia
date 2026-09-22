@@ -1,5 +1,7 @@
 #include "sieve/sha256.hpp"
 
+#include <atomic>
+
 #include <algorithm>
 #include <cstring>
 
@@ -133,12 +135,15 @@ void blocks_shani(uint32_t* h, const uint8_t* p, size_t blocks)
 
 using BlocksFn = void (*)(uint32_t*, const uint8_t*, size_t);
 
-BlocksFn g_blocks =
+// Atomic: switching paths (tests do) while other threads hash is well defined. Both paths give
+// the same digests, so a thread that reads either one is correct.
+std::atomic<BlocksFn> g_blocks{
 #if SIEVE_SHA_X86
-    cpu_has_sha() ? blocks_shani : blocks_portable;
+    cpu_has_sha() ? blocks_shani : blocks_portable
 #else
-    blocks_portable;
+    blocks_portable
 #endif
+};
 
 } // namespace
 
@@ -161,7 +166,7 @@ bool Sha256::use_hardware(bool enable)
     return using_hardware();
 }
 
-bool Sha256::using_hardware() { return g_blocks != blocks_portable; }
+bool Sha256::using_hardware() { return g_blocks.load(std::memory_order_relaxed) != blocks_portable; }
 
 Sha256::Sha256()
     : h_{0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19}
@@ -181,12 +186,12 @@ void Sha256::update(std::span<const uint8_t> data)
         p += take;
         n -= take;
         if (buf_len_ < 64) return;
-        g_blocks(h_.data(), buf_.data(), 1);
+        g_blocks.load(std::memory_order_relaxed)(h_.data(), buf_.data(), 1);
         buf_len_ = 0;
     }
     if (n >= 64)
     {
-        g_blocks(h_.data(), p, n / 64);
+        g_blocks.load(std::memory_order_relaxed)(h_.data(), p, n / 64);
         p += n / 64 * 64;
         n %= 64;
     }
