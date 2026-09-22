@@ -1,32 +1,23 @@
 // Sieve hallway — the setup menu shown before you enter.
 //
-// Every line's state space can be adjusted, and a map shows the four lines side by side as bars,
-// one copy each (no looping). Bar length is proportional to the line's size in bits (log2 of its
-// number of units), because the sizes differ by factors far too large for a literal drawing.
-// By default the scale is fixed to the largest state space the menu's limits allow, so no bar
-// ever runs off the screen and every bar keeps the same proportion whatever you change; a bar
-// never gets shorter than a minimum, so even a tiny line stays visible. S switches to a scale
-// that fits the current settings instead.
+// Every line's state space can be adjusted, with no limits beyond what a setting can store
+// (2^32 - 1): the state spaces are meant to scale without end. A map shows the four lines side by
+// side as bars, one copy each (no looping). Bar length is proportional to the line's size in bits
+// (log2 of its number of units), because the sizes differ by factors far too large for a literal
+// drawing. The longest line always spans the map's full height, so no bar can run off the screen
+// however large the settings grow, and a bar never gets shorter than a minimum, so even a tiny
+// line stays visible next to a huge one.
 #pragma once
 
 #include "cli/args.hpp"
 
 #include <SDL3/SDL.h>
 
+#include <array>
 #include <cstdint>
 #include <string>
 
 namespace hallway {
-
-// The menu's limits: they define the largest state space, and so the fixed scale of the map.
-struct Limits
-{
-    static constexpr uint32_t kTextLength = 3200; // one Babel page
-    static constexpr uint32_t kImageSide = 64;
-    static constexpr uint32_t kNotes = 1024;
-    static constexpr uint32_t kVideoSide = 32;
-    static constexpr uint32_t kVideoFrames = 64;
-};
 
 struct Settings
 {
@@ -70,6 +61,8 @@ public:
 
 private:
     void handle(const SDL_Event& e, bool& done, Result& result);
+    std::array<LineSize, 4> line_sizes() const;
+    bool too_large() const; // a line this machine cannot open
     void adjust(int dir, int step);
     int row_count() const;
 
@@ -77,7 +70,6 @@ private:
     SDL_Renderer* r_;
     Settings s_;
     int row_ = 0;
-    bool fit_ = false; // false: scale fixed to the limits' maximum; true: fit the current settings
 };
 
 } // namespace hallway

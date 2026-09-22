@@ -7,6 +7,9 @@
 #include "sieve/image.hpp"
 
 #include <algorithm>
+#include <array>
+#include <climits>
+#include <cstdint>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
@@ -36,15 +39,11 @@ uint32_t alphabet_size(const std::string& id) { return sieve::alphabet_by_id(id)
 
 uint32_t parse_u32(const sieve::cli::Args& a, const char* key, uint32_t def) { return a.has(key) ? a.get_positive(key, def) : def; }
 
-// The largest state space the limits allow, in bits: the fixed scale of the map.
-double max_bits()
-{
-    const double text = Limits::kTextLength * std::log2(95.0);
-    const double image = double(Limits::kImageSide) * Limits::kImageSide * 24;
-    const double audio = Limits::kNotes * std::log2(double(kNoteSymbols));
-    const double video = double(Limits::kVideoSide) * Limits::kVideoSide * Limits::kVideoFrames * 24;
-    return std::max({text, image, audio, video});
-}
+// What this machine can open. The design has no limit; these only describe the hardware of the
+// day, and a future machine only needs them raised. An address of this many bits is one number
+// held in memory; the arithmetic on it grows with the square of its length.
+constexpr double kSlowBits = 4.0e6;    // above this, opening a line takes noticeable time
+constexpr double kTooLargeBits = 8.0e9; // above this, one address would need a gigabyte
 
 void text(SDL_Renderer* r, float x, float y, const std::string& s, float scale, SDL_Color c)
 {
@@ -71,17 +70,17 @@ Settings Settings::from_args(const sieve::cli::Args& a)
     s.start_line = a.get("line", s.start_line);
     s.mode = a.get("mode", s.mode);
     s.key = a.get("key", s.key);
-    s.length = std::min(parse_u32(a, "length", s.length), Limits::kTextLength);
+    s.length = parse_u32(a, "length", s.length);
     s.alphabet = a.get("alphabet", s.alphabet);
     s.canon = a.get("canon", s.canon);
     s.model = a.get("model") != "none";
-    s.image_w = std::min(parse_u32(a, "image-width", s.image_w), Limits::kImageSide);
-    s.image_h = std::min(parse_u32(a, "image-height", s.image_h), Limits::kImageSide);
+    s.image_w = parse_u32(a, "image-width", s.image_w);
+    s.image_h = parse_u32(a, "image-height", s.image_h);
     s.image_palette = a.get("image-palette", s.image_palette);
-    s.notes = std::min(parse_u32(a, "notes", s.notes), Limits::kNotes);
-    s.video_w = std::min(parse_u32(a, "video-width", s.video_w), Limits::kVideoSide);
-    s.video_h = std::min(parse_u32(a, "video-height", s.video_h), Limits::kVideoSide);
-    s.frames = std::min(parse_u32(a, "video-frames", s.frames), Limits::kVideoFrames);
+    s.notes = parse_u32(a, "notes", s.notes);
+    s.video_w = parse_u32(a, "video-width", s.video_w);
+    s.video_h = parse_u32(a, "video-height", s.video_h);
+    s.frames = parse_u32(a, "video-frames", s.frames);
     s.video_palette = a.get("video-palette", s.video_palette);
     return s;
 }
@@ -126,34 +125,50 @@ LineSize line_size(uint32_t base, uint64_t length)
 
 // ---------------------------------------------------------------- menu
 
+std::array<LineSize, 4> Menu::line_sizes() const
+{
+    return {line_size(alphabet_size(s_.alphabet), s_.length),
+            line_size(palette_size(s_.image_palette), uint64_t(s_.image_w) * s_.image_h),
+            line_size(kNoteSymbols, s_.notes),
+            line_size(palette_size(s_.video_palette), uint64_t(s_.video_w) * s_.video_h * s_.frames)};
+}
+
+bool Menu::too_large() const
+{
+    for (const auto& z : line_sizes())
+        if (z.bits > kTooLargeBits) return true;
+    return false;
+}
+
 Menu::Menu(SDL_Window* window, SDL_Renderer* renderer, Settings settings) : window_(window), r_(renderer), s_(std::move(settings)) {}
 
 int Menu::row_count() const { return 16; }
 
 void Menu::adjust(int dir, int step)
 {
-    auto num = [&](uint32_t& v, uint32_t hi) {
+    // No upper limit but what a setting can hold: the state spaces are meant to grow without end.
+    auto num = [&](uint32_t& v) {
         int64_t n = int64_t(v);
         if (step == 0) n = dir > 0 ? n * 2 : n / 2; // PgUp/PgDn: double or halve (towards powers of two)
         else n += int64_t(dir) * step;
-        v = uint32_t(std::clamp<int64_t>(n, 1, hi));
+        v = uint32_t(std::clamp<int64_t>(n, 1, int64_t(UINT32_MAX)));
     };
     switch (row_)
     {
     case 0: s_.start_line = cycle(kLines, s_.start_line, dir); break;
     case 1: s_.mode = cycle(kModes, s_.mode, dir); break;
     case 2: break; // key: typed
-    case 3: num(s_.length, Limits::kTextLength); break;
+    case 3: num(s_.length); break;
     case 4: s_.alphabet = cycle(kAlphabets, s_.alphabet, dir); break;
     case 5: s_.canon = cycle(kCanons, s_.canon, dir); break;
     case 6: s_.model = !s_.model; break;
-    case 7: num(s_.image_w, Limits::kImageSide); break;
-    case 8: num(s_.image_h, Limits::kImageSide); break;
+    case 7: num(s_.image_w); break;
+    case 8: num(s_.image_h); break;
     case 9: s_.image_palette = cycle(kPalettes, s_.image_palette, dir); break;
-    case 10: num(s_.notes, Limits::kNotes); break;
-    case 11: num(s_.video_w, Limits::kVideoSide); break;
-    case 12: num(s_.video_h, Limits::kVideoSide); break;
-    case 13: num(s_.frames, Limits::kVideoFrames); break;
+    case 10: num(s_.notes); break;
+    case 11: num(s_.video_w); break;
+    case 12: num(s_.video_h); break;
+    case 13: num(s_.frames); break;
     case 14: s_.video_palette = cycle(kPalettes, s_.video_palette, dir); break;
     default: break;
     }
@@ -190,15 +205,13 @@ void Menu::handle(const SDL_Event& e, bool& done, Result& result)
     case SDLK_RIGHT: adjust(1, step); break;
     case SDLK_PAGEUP: adjust(1, 0); break;
     case SDLK_PAGEDOWN: adjust(-1, 0); break;
-    case SDLK_S:
-        if (row_ != 2) fit_ = !fit_;
-        break;
     case SDLK_BACKSPACE:
         if (row_ == 2 && !s_.key.empty()) s_.key.pop_back();
         break;
     case SDLK_RETURN:
     case SDLK_KP_ENTER:
         if (s_.key.empty()) s_.key = "sieve";
+        if (too_large()) break; // the map says which line; nothing to open on this machine
         done = true;
         result = Result::Enter;
         break;
@@ -287,40 +300,36 @@ void Menu::render()
         y += 18;
     }
     text(r_, 20, H - 40, "Up/Down choose   Left/Right change (Shift x10, Ctrl x100)   PgUp/PgDn double/halve", 1, grey);
-    text(r_, 20, H - 26, "S map scale   type to edit the key   Enter walk in   Esc quit", 1, grey);
+    text(r_, 20, H - 26, "type to edit the key   Enter walk in   Esc quit", 1, grey);
+    if (too_large())
+        text(r_, 20, H - 60, "A line is too large for this machine to open (one address would need over a gigabyte).", 1, white);
 
     // The map: one bar per line, length proportional to its size in bits.
-    const LineSize sizes[4] = {
-        line_size(alphabet_size(s_.alphabet), s_.length),
-        line_size(palette_size(s_.image_palette), uint64_t(s_.image_w) * s_.image_h),
-        line_size(kNoteSymbols, s_.notes),
-        line_size(palette_size(s_.video_palette), uint64_t(s_.video_w) * s_.video_h * s_.frames),
-    };
-    double scale_bits = max_bits();
-    if (fit_)
-    {
-        scale_bits = 1;
-        for (const auto& z : sizes) scale_bits = std::max(scale_bits, z.bits);
-    }
+    const auto sizes = line_sizes();
+    // The longest line spans the full height: nothing can leave the screen, however large.
+    double scale_bits = 1;
+    for (const auto& z : sizes) scale_bits = std::max(scale_bits, z.bits);
     const float x0 = 620, pitch = std::max(150.0f, (W - x0 - 20) / 4);
     const float label = 118, top = 200, bottom = H - 60, span = bottom - top, min_bar = 12;
     text(r_, x0, 80, "MAP  (length = size in bits; one copy each)", 1, white);
-    text(r_, x0, 92, fit_ ? "scale: fitted to these settings (S: fixed)"
-                          : "scale: fixed to the largest the limits allow, " + fixed(scale_bits, 0) + " bits (S: fit)",
-         1, grey);
+    text(r_, x0, 92, "scale: the longest line fills the height (" + fixed(scale_bits, 0) + " bits)", 1, grey);
     for (int i = 0; i < 4; ++i)
     {
         const Theme& th = kThemes[i];
         const float x = x0 + i * pitch;
         const LineSize& z = sizes[i];
         // Labels above the bar, so a full-length bar never runs into them.
+        const size_t cols = size_t(std::max(8.0f, (i == 3 ? W - x - 8 : pitch - 8) / 8));
+        auto clip = [&](const std::string& t) { return t.size() <= cols ? t : t.substr(0, cols - 2) + ".."; };
         text(r_, x, label, th.name, 2, th.edge);
         const size_t caret = z.units.find(" = ");
-        text(r_, x, label + 22, z.units.substr(0, caret) + " units", 1, th.edge);
-        text(r_, x, label + 34, z.units.substr(caret + 3), 1, th.edge);
-        text(r_, x, label + 46, fixed(z.bits, 0) + " bits", 1, th.edge);
-        text(r_, x, label + 58, "~10^" + fixed(std::max(0.0, z.bits * std::log10(2.0) - std::log10(128.0)), 1) + " tiles", 1, th.edge);
-        text(r_, x, label + 70, z.padding ? std::to_string(z.padding) + " empty slots" : "fills whole tiles", 1, th.edge);
+        text(r_, x, label + 22, clip(z.units.substr(0, caret) + " units"), 1, th.edge);
+        text(r_, x, label + 34, clip(z.units.substr(caret + 3)), 1, th.edge);
+        text(r_, x, label + 46, clip(fixed(z.bits, 0) + " bits"), 1, th.edge);
+        text(r_, x, label + 58, clip("~10^" + fixed(std::max(0.0, z.bits * std::log10(2.0) - std::log10(128.0)), 1) + " tiles"), 1, th.edge);
+        text(r_, x, label + 70, clip(z.padding ? std::to_string(z.padding) + " empty slots" : "fills whole tiles"), 1, th.edge);
+        if (z.bits > kTooLargeBits) text(r_, x, label - 14, clip("TOO LARGE TO OPEN"), 1, white);
+        else if (z.bits > kSlowBits) text(r_, x, label - 14, clip("large: slow to open"), 1, grey);
         // The bar: the line's own two colours; never shorter than min_bar, never past the bottom.
         const float len = std::clamp(float(z.bits / scale_bits) * span, min_bar, span);
         const SDL_FRect bar{x + 8, top, 40, len};

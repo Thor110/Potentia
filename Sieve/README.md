@@ -138,14 +138,15 @@ The lines are astronomically long, so to see a whole loop, try a 2-character tex
 
 Beside the settings, a **map** draws the four lines side by side, one copy each:
 - Each bar's length is the line's size in bits (log2 of its number of units). The real sizes differ by factors far too large to draw literally.
-- The scale is **fixed to the largest state space the menu allows**, so no bar can ever leave the screen, and a bar keeps its length when you change the other lines. At the maximum video setting (32×32, 64 frames, 24-bit colour) the video bar fills the height exactly.
-- Every bar has a minimum length, so even a tiny line stays visible.
-- **S** switches to a scale fitted to the current settings, which shows their proportions better. At the defaults, every line is a few hundred bits against a maximum of 1.5 million, so all four bars sit at the minimum on the fixed scale.
+- The **longest line always fills the height**, so no bar can leave the screen however large the settings grow.
+- Every bar has a minimum length, so even a tiny line stays visible next to a huge one.
 - Each line also shows its units, bits, tiles per copy, and padding.
 
-The menu's limits: text up to 3,200 characters (a Babel page), images up to 64×64, audio up to 1,024 notes, video up to 32×32 with 64 frames. Left/Right change a setting (Shift ×10, Ctrl ×100), PgUp/PgDn double or halve it, which is quick for reaching powers of two. `--no-menu` skips the menu.
+**No limits.** The state spaces are meant to scale without end. Each setting goes up to the largest value it can store (over 4 billion). Left/Right change a setting (Shift ×10, Ctrl ×100), and PgUp/PgDn double or halve it, which is quick for reaching powers of two.
 
-![The setup menu, fitted scale](docs/images/hallway-menu.png)
+What limits a line in practice is the machine. An address is one number held in memory, and the arithmetic on it grows with the square of its length. The menu marks a line "large: slow to open" beyond 4 million bits per address (about 840,000 lower27 characters). It refuses to open one beyond 8 billion bits, where a single address would need a gigabyte. Both thresholds are single constants in `client/menu.cpp`, there to be raised as machines grow. `--no-menu` skips the menu.
+
+![The setup menu](docs/images/hallway-menu.png)
 
 ![The text line, scrambled ordering](docs/images/hallway-text.png)
 
@@ -214,7 +215,7 @@ hallway --line image --warp sprite.png --take --screenshot in-hand.png
 hallway --pose 0,7,-90,0 --walk "-2.3,0;2.5,0" --screenshot door.png   # through a door and back
 hallway --pose 0,7,-90,0 --walk "-2.3,0;-0.8,0;0,8;1.5,0" --screenshot loop.png   # through, one tile along, back
 hallway --length 2 --goto @0 --pose 0,5,180,-14 --screenshot start.png   # the double start line
-hallway --menu --press S --screenshot menu.png                            # the setup menu (keys go to the menu)
+hallway --menu --screenshot menu.png                                      # the setup menu (--press keys go to the menu)
 hallway --warp "it was the best of times" --press "M,M,-,-" --screenshot g.png   # keys, as if typed
 ```
 
