@@ -10,6 +10,8 @@
 #include <windows.h>
 #elif defined(__APPLE__)
 #include <mach-o/dyld.h>
+#include <cstdint>
+#include <utility>
 #endif
 
 namespace sieve::cli {

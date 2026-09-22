@@ -5,10 +5,12 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <memory>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace hallway {

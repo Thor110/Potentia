@@ -1,0 +1,41 @@
+# Materials for hallway.obj: placeholder colours, one material per part.
+
+# floor
+newmtl floor
+Kd 0.100 0.100 0.100
+Ka 0 0 0
+Ks 0 0 0
+d 1
+illum 1
+
+# ceiling
+newmtl ceiling
+Kd 0.120 0.120 0.120
+Ka 0 0 0
+Ks 0 0 0
+d 1
+illum 1
+
+# walls and the doorway's reveal
+newmtl wall
+Kd 0.200 0.200 0.200
+Ka 0 0 0
+Ks 0 0 0
+d 1
+illum 1
+
+# door frames
+newmtl door_frame
+Kd 0.450 0.450 0.450
+Ka 0 0 0
+Ks 0 0 0
+d 1
+illum 1
+
+# doors (black in the wireframe)
+newmtl door
+Kd 0.000 0.000 0.000
+Ka 0 0 0
+Ks 0 0 0
+d 1
+illum 1

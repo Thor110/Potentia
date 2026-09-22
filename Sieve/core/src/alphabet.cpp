@@ -1,6 +1,7 @@
 #include "sieve/alphabet.hpp"
 
 #include <stdexcept>
+#include <utility>
 
 namespace sieve {
 

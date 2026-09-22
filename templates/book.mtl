@@ -1,0 +1,25 @@
+# Materials for book.obj: placeholder colours, one material per part.
+
+# the spine (faces the corridor)
+newmtl book_spine
+Kd 0.600 0.100 0.100
+Ka 0 0 0
+Ks 0 0 0
+d 1
+illum 1
+
+# front and back covers
+newmtl book_cover
+Kd 0.500 0.080 0.080
+Ka 0 0 0
+Ks 0 0 0
+d 1
+illum 1
+
+# the page block
+newmtl book_pages
+Kd 0.900 0.880 0.800
+Ka 0 0 0
+Ks 0 0 0
+d 1
+illum 1

@@ -3,6 +3,7 @@
 #include "sieve/sha256.hpp"
 
 #include <stdexcept>
+#include <utility>
 
 namespace sieve {
 

@@ -128,6 +128,7 @@ if(SIEVE_BUILD_CLIENT)
         client/hallway.cpp
         client/main_menu.cpp
         client/menu.cpp
+        client/mesh.cpp
         client/strings.cpp
         client/synth.cpp
         client/world.cpp)
@@ -147,6 +148,9 @@ if(SIEVE_BUILD_CLIENT)
                 $<TARGET_FILE_DIR:hallway>/lang
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/fonts
-                $<TARGET_FILE_DIR:hallway>/fonts)
+                $<TARGET_FILE_DIR:hallway>/fonts
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/meshes
+                $<TARGET_FILE_DIR:hallway>/meshes)
     target_compile_definitions(hallway PRIVATE SIEVE_VERSION="${PROJECT_VERSION}")
 endif()

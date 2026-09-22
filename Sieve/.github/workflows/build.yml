@@ -185,6 +185,9 @@ jobs:
           # The main menu, its settings screens and a language file with gaps (English fills them).
           $H --main-menu --screenshot main.png | grep -q "saved main.png"
           $H --line image --edge-glow --walk "0,0" --screenshot glow.png | grep -q "saved glow.png"
+          # Real Graphics: every line loads the templates (no per-line models are committed yet).
+          out=$($H --line audio --real-graphics --walk "0,0" --screenshot real.png 2>&1)
+          echo "$out" | grep -q "real graphics for the audio line: hallway=hallway.obj bookshelf=bookshelf.obj book=book.obj marker=marker.obj"
           $H --main-menu --press "Down,Return,Return,Return" --screenshot main-res.png | grep -q "saved"
           $H --main-menu --settings app.ini --press "Down,Return,Return,Down,Down,Return,Down,Return" --screenshot main-gfx.png > /dev/null
           grep -q "^edge_glow = off" app.ini && grep -q "^real_graphics = on" app.ini

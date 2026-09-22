@@ -50,15 +50,25 @@ struct BookSlot
     }
 };
 
-// Height of a book's spine: varies a little per slot so shelves do not look like a grid.
-float book_height(int row, int col);
+// The kinds of media on the shelves, one per line.
+enum class Media { Pages, Image, Audio, Video, Books };
+
+// Whether a line's books vary in size from slot to slot. Pages, pictures (canvases) and books do;
+// audio (a record) and video (a tape) must not, since the real things come in one size. This is
+// the one switch for it: the wireframe follows it, and so must any Real Graphics models.
+constexpr bool media_sizes_vary(Media m) { return m != Media::Audio && m != Media::Video; }
+
+// Height of a book's spine: varies a little per slot so shelves do not look like a grid, unless
+// `varied` is false (then every book is kUniformBookHeight).
+inline constexpr float kUniformBookHeight = 0.40f;
+float book_height(int row, int col, bool varied = true);
 
 // The four corners of a book's spine (the face towards the corridor) in world space, for a tile
 // whose start is at z = tile_z.
-void book_face(float tile_z, Side side, int row, int col, Vec3 out[4]);
+void book_face(float tile_z, Side side, int row, int col, Vec3 out[4], bool varied = true);
 
 // The book the ray hits within `reach` metres, if any. `cam_z` is local to the player's tile and
 // `player_tile` is that tile's index.
-std::optional<BookSlot> pick_book(Vec3 origin, Vec3 dir, int64_t player_tile, float reach);
+std::optional<BookSlot> pick_book(Vec3 origin, Vec3 dir, int64_t player_tile, float reach, bool varied = true);
 
 } // namespace hallway

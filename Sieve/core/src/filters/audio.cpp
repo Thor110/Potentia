@@ -4,6 +4,9 @@
 #include "sieve/filter.hpp"
 
 #include <array>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace sieve {
 

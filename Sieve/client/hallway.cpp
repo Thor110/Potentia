@@ -17,6 +17,7 @@
 
 #include "camera.hpp"
 #include "font.hpp"
+#include "mesh.hpp"
 #include "app_settings.hpp"
 #include "main_menu.hpp"
 #include "menu.hpp"
@@ -82,9 +83,11 @@ struct Segment
     Vec3 a, b;
 };
 
-std::vector<Segment> build_tile()
+// One tile's edges: the hallway (floor, ceiling, walls, door frames, floor marks) and/or the two
+// bookcases. Real Graphics replaces each part with its model when there is one.
+std::vector<Segment> build_tile(bool hallway = true, bool shelves = true)
 {
-    std::vector<Segment> s;
+    std::vector<Segment> s, hall, cases;
     auto rect = [&](Vec3 p0, Vec3 p1, Vec3 p2, Vec3 p3) {
         s.push_back({p0, p1}); s.push_back({p1, p2}); s.push_back({p2, p3}); s.push_back({p3, p0});
     };
@@ -92,10 +95,11 @@ std::vector<Segment> build_tile()
     {
         const float wall = sx * kHalfWidth, face = sx * kCaseFront;
         // Floor and ceiling edges along the tile, and the frame across its start.
-        s.push_back({{wall, 0, 0}, {wall, 0, kTile}});
-        s.push_back({{wall, kHeight, 0}, {wall, kHeight, kTile}});
-        s.push_back({{wall, 0, 0}, {wall, kHeight, 0}});
+        hall.push_back({{wall, 0, 0}, {wall, 0, kTile}});
+        hall.push_back({{wall, kHeight, 0}, {wall, kHeight, kTile}});
+        hall.push_back({{wall, 0, 0}, {wall, kHeight, 0}});
         // Bookcase: front outline, depth edges back to the wall, shelf boards.
+        s.clear();
         const float top = kRowTop + 0.2f;
         rect({face, 0, 0}, {face, 0, kShelfEnd}, {face, top, kShelfEnd}, {face, top, 0});
         for (float z : {0.0f, kShelfEnd})
@@ -106,14 +110,20 @@ std::vector<Segment> build_tile()
             s.push_back({{face, y, 0}, {face, y, kShelfEnd}});
         }
         // (Books are drawn separately, slot by slot: see Hallway::build_books.)
+        cases.insert(cases.end(), s.begin(), s.end());
         // Door frame.
+        s.clear();
         rect({wall, 0, kDoorStart}, {wall, 0, kDoorEnd}, {wall, kDoorTop, kDoorEnd}, {wall, kDoorTop, kDoorStart});
+        hall.insert(hall.end(), s.begin(), s.end());
     }
-    s.push_back({{-kHalfWidth, 0, 0}, {kHalfWidth, 0, 0}});
-    s.push_back({{-kHalfWidth, kHeight, 0}, {kHalfWidth, kHeight, 0}});
+    hall.push_back({{-kHalfWidth, 0, 0}, {kHalfWidth, 0, 0}});
+    hall.push_back({{-kHalfWidth, kHeight, 0}, {kHalfWidth, kHeight, 0}});
     // Centre-line marks on the floor give a sense of motion.
-    for (float z = 0.5f; z < kTile; z += 2.0f) s.push_back({{0, 0, z}, {0, 0, z + 0.6f}});
-    return s;
+    for (float z = 0.5f; z < kTile; z += 2.0f) hall.push_back({{0, 0, z}, {0, 0, z + 0.6f}});
+    std::vector<Segment> out;
+    if (hallway) out = hall;
+    if (shelves) out.insert(out.end(), cases.begin(), cases.end());
+    return out;
 }
 
 // ---------------------------------------------------------------- text helpers
@@ -220,8 +230,15 @@ bool save_render(SDL_Renderer* r, const std::string& path)
 class Hallway
 {
 public:
+    // Real Graphics: a line's models (null where a file is missing: that part stays wireframe).
+    struct Models
+    {
+        bool loaded = false;
+        std::shared_ptr<const Mesh> hallway, bookshelf, book, marker;
+    };
+
     Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> lines, const FilterConfig& filters, uint32_t book_pages)
-        : window_(window), r_(renderer), lines_(std::move(lines)), tile_geometry_(build_tile()), book_geometry_(build_books())
+        : window_(window), r_(renderer), lines_(std::move(lines)), tile_geometry_(build_tile()), hall_geometry_(build_tile(true, false)), case_geometry_(build_tile(false, true)), book_geometry_{build_books(false), build_books(true)}
     {
         // The books line: a cover from the image line, a title and book_pages pages from the pages line.
         books_ = std::make_unique<BookSpace>(lines_[1].space, lines_[0].space, book_pages);
@@ -290,6 +307,20 @@ public:
     // The current line's units (the four unit lines; the books line has its own BookSpace).
     const Line& line() const { return lines_[size_t(on_books() ? 0 : li_)]; }
     bool on_books() const { return li_ == kBooksLine; }
+    // The current line's medium, and whether its books vary in size: pages, pictures and books do;
+    // records (audio) and tapes (video) are all one size, as the real things are (world.hpp).
+    Media media() const
+    {
+        if (on_books()) return Media::Books;
+        switch (line().kind)
+        {
+        case LineKind::Image: return Media::Image;
+        case LineKind::Audio: return Media::Audio;
+        case LineKind::Video: return Media::Video;
+        default: return Media::Pages;
+        }
+    }
+    bool sizes_vary() const { return media_sizes_vary(media()); }
     const Theme& theme() const { return theme_of(li_); }
     Camera& camera() { return cam_; }
     bool guided_on() const { return !on_books() && guided_ && line().guided != nullptr; }
@@ -633,7 +664,7 @@ public:
     {
         const BookSlot b = BookSlot::of(0, slot);
         Vec3 f[4];
-        book_face(0, b.side, b.row, b.col, f);
+        book_face(0, b.side, b.row, b.col, f, sizes_vary());
         const Vec3 centre = (f[0] + f[2]) * 0.5f;
         const float sx = b.side == Side::Left ? 1.0f : -1.0f;
         cam_.pos = {0.3f * sx, 1.6f, centre.z + 1.2f};
@@ -815,7 +846,8 @@ public:
 
     void update(float dt, const bool* keys)
     {
-        if (input_ != Input::None) return;
+        // Holding a book, you stand still: walking or turning under an open book is disorienting.
+        if (input_ != Input::None || in_hand_) return;
         const float speed = (keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT]) ? 9.0f : 3.0f;
         const Vec3 fwd = {std::sin(cam_.yaw), 0, std::cos(cam_.yaw)};
         const Vec3 right = {std::cos(cam_.yaw), 0, -std::sin(cam_.yaw)};
@@ -848,6 +880,11 @@ public:
 
     void jump_tiles(int64_t n)
     {
+        if (in_hand_)
+        {
+            message(tr("msg.holding"));
+            return;
+        }
         move_tiles(n);
         message(trf("msg.jumped", {std::to_string(n), std::to_string(n * int64_t(kBooksPerTile))}));
     }
@@ -908,7 +945,7 @@ public:
             }
             return;
         }
-        if (e.type == SDL_EVENT_MOUSE_MOTION && SDL_GetWindowRelativeMouseMode(window_))
+        if (e.type == SDL_EVENT_MOUSE_MOTION && SDL_GetWindowRelativeMouseMode(window_) && !in_hand_)
         {
             cam_.yaw += e.motion.xrel * look_;
             cam_.pitch = std::clamp(cam_.pitch - e.motion.yrel * look_ * (invert_y_ ? -1.0f : 1.0f), -1.45f, 1.45f);
@@ -1045,7 +1082,7 @@ public:
         SDL_RenderClear(r_);
         SDL_SetRenderDrawBlendMode(r_, SDL_BLENDMODE_BLEND);
 
-        hover_ = pick_book(cam_.pos, cam_.forward(), 0, 5.0f);
+        hover_ = pick_book(cam_.pos, cam_.forward(), 0, 5.0f, sizes_vary());
         if (hover_ && effective_mode() == FilterMode::Hide && !book(hover_->tile, hover_->slot()).passes) hover_.reset();
 
         constexpr int kBack = 6, kAhead = 7;
@@ -1056,18 +1093,24 @@ public:
             const Vec3 shift{0, 0, t * kTile};
             visible[t + kBack] = cam_.box_visible(tile_lo_ + shift, tile_hi_ + shift);
         }
+        // Real Graphics: the line's models, where it has them; the rest stays wireframe.
+        const Models* md = real_graphics_ ? &models() : nullptr;
+        const bool real_hall = md && md->hallway, real_cases = md && md->bookshelf, real_books = md && md->book,
+                   real_marker = md && md->marker;
+        if (md) draw_models(*md, visible, kBack, kAhead, w, h);
         // Doors: solid black. Start lines: checkered, where a loop of this line begins.
         for (int t = -kBack; t <= kAhead; ++t)
         {
             if (!visible[t + kBack]) continue;
             const float z0 = t * kTile;
+            if (!real_hall)
             for (float sx : {-1.0f, 1.0f})
             {
                 const float x = sx * kHalfWidth;
                 fill({{x, 0, z0 + kDoorStart}, {x, 0, z0 + kDoorEnd}, {x, kDoorTop, z0 + kDoorEnd}, {x, kDoorTop, z0 + kDoorStart}},
                      SDL_Color{0, 0, 0, 255});
             }
-            if (offset_loop_tile(t).is_zero())
+            if (!real_marker && offset_loop_tile(t).is_zero())
             {
                 draw_start_line(z0);
                 if (all_start(t)) draw_start_line(z0 + 1.0f); // every line starts here: a double flag
@@ -1077,7 +1120,7 @@ public:
         if (hover_ && !book(hover_->tile, hover_->slot()).empty)
         {
             Vec3 f[4];
-            book_face(float(hover_->tile) * kTile, hover_->side, hover_->row, hover_->col, f);
+            book_face(float(hover_->tile) * kTile, hover_->side, hover_->row, hover_->col, f, sizes_vary());
             SDL_Color c = th.edge;
             c.a = 110;
             fill({f[0], f[1], f[2], f[3]}, c);
@@ -1098,8 +1141,10 @@ public:
         {
             if (!visible[t + kBack]) continue;
             const float z0 = t * kTile;
-            for (const Segment& s : tile_geometry_) add(s, z0);
-            const uint32_t books = books_in_tile(t);
+            for (const Segment& s : real_hall ? (real_cases ? std::vector<Segment>{} : case_geometry_)
+                                              : (real_cases ? hall_geometry_ : tile_geometry_))
+                add(s, z0);
+            const uint32_t books = real_books ? 0 : books_in_tile(t);
             const FilterMode fm = effective_mode();
             for (uint32_t k = 0; k < books; ++k)
             {
@@ -1112,10 +1157,10 @@ public:
                         if (fm == FilterMode::Hide) continue;
                         dim = 0.8f;
                     }
-                for (const Segment& s : book_geometry_[k]) add(s, z0, dim);
+                for (const Segment& s : book_geometry_[sizes_vary()][k]) add(s, z0, dim);
             }
         }
-        if (edge_glow_) draw_glow(buckets);
+        if (edge_glow_ && !md) draw_glow(buckets);
         for (int i = 0; i < kBuckets; ++i)
         {
             const SDL_Color c = mix(th.edge, th.bg, float(i) / kBuckets);
@@ -1124,6 +1169,95 @@ public:
             for (size_t k = 0; k + 1 < b.size(); k += 2) SDL_RenderLine(r_, b[k].x, b[k].y, b[k + 1].x, b[k + 1].y);
         }
         draw_hud(w, h);
+    }
+
+    // ---- Real Graphics
+
+    static const char* media_name(Media m)
+    {
+        switch (m)
+        {
+        case Media::Image: return "image";
+        case Media::Audio: return "audio";
+        case Media::Video: return "video";
+        case Media::Books: return "books";
+        default: return "pages";
+        }
+    }
+
+    // The current line's models, loaded the first time they are needed.
+    const Models& models()
+    {
+        Models& m = models_[li_];
+        if (!m.loaded)
+        {
+            const std::string medium = media_name(media());
+            m.hallway = load_model("hallway", medium);
+            m.bookshelf = load_model("bookshelf", medium, 0.25f); // split so books and boards sort well
+            m.book = load_model("book", medium, 0.5f);
+            m.marker = load_model("marker", medium);
+            m.loaded = true;
+            std::cerr << "real graphics for the " << medium << " line:";
+            for (const auto& [name, mesh] : {std::pair{"hallway", m.hallway}, {"bookshelf", m.bookshelf}, {"book", m.book}, {"marker", m.marker}})
+                std::cerr << " " << name << "=" << (mesh ? std::filesystem::path(mesh->source).filename().string() : std::string("wireframe"));
+            std::cerr << "\n";
+        }
+        return m;
+    }
+
+    // Every visible tile's models, in three batches: the hallway, the start markers, then the
+    // bookcases and books together (each batch sorted far to near; see mesh.hpp).
+    void draw_models(const Models& md, const bool* visible, int back, int ahead, int w, int h)
+    {
+        const Theme& th = theme();
+        hall_batch_.begin(cam_, th.bg, w, h);
+        marker_batch_.begin(cam_, th.bg, w, h);
+        thing_batch_.begin(cam_, th.bg, w, h);
+        const bool varied = sizes_vary();
+        const FilterMode fm = effective_mode();
+        for (int t = -back; t <= ahead; ++t)
+        {
+            if (!visible[t + back]) continue;
+            const float z0 = float(t) * kTile;
+            if (md.hallway) hall_batch_.add(*md.hallway, {{0, 0, z0}});
+            if (md.marker && offset_loop_tile(t).is_zero())
+            {
+                marker_batch_.add(*md.marker, {{0, 0, z0}});
+                if (all_start(t)) marker_batch_.add(*md.marker, {{0, 0, z0 + 1.0f}}); // every line starts here
+            }
+            if (md.bookshelf)
+            {
+                thing_batch_.add(*md.bookshelf, {{0, 0, z0}});
+                thing_batch_.add(*md.bookshelf, {{0, 0, z0}, 1.0f, true});
+            }
+            if (!md.book) continue;
+            const uint32_t books = books_in_tile(t);
+            for (uint32_t k = 0; k < books; ++k)
+            {
+                float dim = 0;
+                if (fm == FilterMode::Mark || fm == FilterMode::Hide)
+                    if (!book(t, k).passes)
+                    {
+                        if (fm == FilterMode::Hide) continue;
+                        dim = 0.8f;
+                    }
+                const BookSlot b = BookSlot::of(0, k);
+                const float y0 = kRowTop - float(b.row + 1) * kRowHeight + 0.02f;
+                const float zc = z0 + float(b.col) * kBookPitch + kBookPitch * 0.5f;
+                const bool right = b.side == Side::Right;
+                const float sx = right ? 1.0f : -1.0f;
+                // Skip books that cannot be on screen (their slot's box).
+                if (!cam_.box_visible({right ? kCaseFront - 0.4f : -kHalfWidth, y0, zc - kBookPitch * 0.5f},
+                                      {right ? kHalfWidth : -kCaseFront + 0.4f, y0 + 0.55f, zc + kBookPitch * 0.5f}))
+                    continue;
+                // Records and tapes keep their size; pages, pictures and books take the slot's height.
+                const float scale = varied ? book_height(b.row, b.col, true) / kUniformBookHeight : 1.0f;
+                thing_batch_.add(*md.book, {{sx * kCaseFront, y0, zc}, scale, right, dim});
+            }
+        }
+        hall_batch_.draw(r_);
+        marker_batch_.draw(r_);
+        thing_batch_.draw(r_);
     }
 
     // Geometry Edge Glow: under each edge, a soft band in the edge's colour that fades to nothing
@@ -1177,8 +1311,8 @@ public:
         }
     }
 
-    // A checkered strip across the floor and a checkered banner overhead at z0: the start (and
-    // end) of a loop of the current line.
+    // A checkered strip across the floor at z0: the start (and end) of a loop of the current line.
+    // Where every line starts together there are two strips, a metre apart.
     void draw_start_line(float z0)
     {
         const Theme& th = theme();
@@ -1191,8 +1325,6 @@ public:
                 const float x0 = -kHalfWidth + i * sq, x1 = x0 + sq;
                 const float za = z0 - sq + row * sq, zb = za + sq;
                 fill({{x0, 0.001f, za}, {x1, 0.001f, za}, {x1, 0.001f, zb}, {x0, 0.001f, zb}}, c);
-                const float ya = kHeight - (row + 1) * sq, yb = ya + sq;
-                fill({{x0, ya, z0}, {x1, ya, z0}, {x1, yb, z0}, {x0, yb, z0}}, c);
             }
     }
 
@@ -1474,6 +1606,7 @@ public:
     {
         edge_glow_ = edge_glow;
         real_graphics_ = real_graphics;
+        for (Models& m : models_) m = Models{}; // reloaded on first use (picks up edited files)
     }
     void put_back() { in_hand_.reset(); }
 
@@ -1533,14 +1666,15 @@ private:
     }
 
     // The books of one tile, slot by slot (4 edges each), drawn separately so padding can be bare.
-    static std::vector<std::array<Segment, 4>> build_books()
+    // `varied`: heights vary from slot to slot; else every book is the same size (audio, video).
+    static std::vector<std::array<Segment, 4>> build_books(bool varied)
     {
         std::vector<std::array<Segment, 4>> out(kBooksPerTile);
         for (uint32_t k = 0; k < uint32_t(kBooksPerTile); ++k)
         {
             const BookSlot b = BookSlot::of(0, k);
             Vec3 f[4];
-            book_face(0, b.side, b.row, b.col, f);
+            book_face(0, b.side, b.row, b.col, f, varied);
             out[k] = {Segment{f[0], f[1]}, Segment{f[1], f[2]}, Segment{f[2], f[3]}, Segment{f[3], f[0]}};
         }
         return out;
@@ -1549,8 +1683,10 @@ private:
     SDL_Window* window_;
     SDL_Renderer* r_;
     std::vector<Line> lines_;
-    std::vector<Segment> tile_geometry_;
-    std::vector<std::array<Segment, 4>> book_geometry_;
+    std::vector<Segment> tile_geometry_, hall_geometry_, case_geometry_; // all, hallway only, bookcases only
+    Models models_[kLines]; // Real Graphics, per line
+    MeshBatch hall_batch_, marker_batch_, thing_batch_;
+    std::vector<std::array<Segment, 4>> book_geometry_[2]; // [0] uniform, [1] varied heights
     Vec3 tile_lo_, tile_hi_;
     Camera cam_;
     int li_ = 0;
@@ -1631,7 +1767,8 @@ const char* kUsage =
     "  --take              take the book you are looking at off the shelf\n"
     "  --walk DX,DZ;...    walk these distances in metres first (doors work as when walking)\n"
     "  --press K,K,...     then press these keys (e.g. M,M,-,Shift+=), printing where you are\n"
-    "  --edge-glow         draw with Geometry Edge Glow (or --settings a file that has it on)\n\n"
+    "  --edge-glow         draw with Geometry Edge Glow (or --settings a file that has it on)\n"
+    "  --real-graphics     draw with Real Graphics: the models in the meshes folder\n\n"
     "Controls: WASD move, mouse look, Shift run, E or click take a book, T warp, G go to,\n"
     "M switch ordering (positional, scrambled, guided), - and = zoom out/in (guided; Shift: 8x),\n"
     "wheel/PgUp/PgDn/[ ] jump 1/1000/1000000 tiles, Home to corridor tile 0 (every line's start line),\n"
@@ -1850,7 +1987,7 @@ int run(const Args& a)
     if (shot)
     {
         auto hall = make_hallway(window, renderer, a, true, filters);
-        hall->set_graphics(app.edge_glow || a.has("edge-glow"), app.real_graphics);
+        hall->set_graphics(app.edge_glow || a.has("edge-glow"), app.real_graphics || a.has("real-graphics"));
         hall->render(); // computes what you are looking at
         if (a.has("take")) hall->take_hovered();
         hall->render();

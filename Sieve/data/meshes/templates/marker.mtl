@@ -1,0 +1,17 @@
+# Materials for marker.obj: placeholder colours, one material per part.
+
+# light squares (the line's edge colour in the wireframe)
+newmtl marker_light
+Kd 1.000 1.000 1.000
+Ka 0 0 0
+Ks 0 0 0
+d 1
+illum 1
+
+# dark squares (the line's background colour)
+newmtl marker_dark
+Kd 0.000 0.000 0.000
+Ka 0 0 0
+Ks 0 0 0
+d 1
+illum 1

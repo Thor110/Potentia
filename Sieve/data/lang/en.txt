@@ -50,7 +50,7 @@ item.invert_mouse_y = Invert mouse Y
 help.mouse_sensitivity = How far the view turns as the mouse moves (Left and Right change it by 10%).
 help.invert_mouse_y = Moving the mouse forward looks down instead of up.
 controls.keys.title = KEYS
-controls.keys = W A S D|move\nMouse|look around\nShift|run\nE / left click|take a book off the shelf, or put it back\nT|warp: find a text, picture, notes or book file\nG|go to an address, a percentage or @tile\nM|ordering: positional, scrambled, guided\n- / =|zoom out / in (guided ordering; Shift: 8x)\nWheel, PgUp/PgDn, [ ]|jump 1, 1000, 1000000 tiles\nHome|back to tile 0, where every line starts\nN / B|next / previous page, or unit of a warped trail\nP|play an audio book you are holding\nF1|the setup menu\nTab|free or capture the mouse\nEsc|put a book back, or free the mouse\nCtrl+Q|quit
+controls.keys = W A S D|move\nMouse|look around\nShift|run\nE / left click|take a book off the shelf (you stand still while holding it), or put it back\nT|warp: find a text, picture, notes or book file\nG|go to an address, a percentage or @tile\nM|ordering: positional, scrambled, guided\n- / =|zoom out / in (guided ordering; Shift: 8x)\nWheel, PgUp/PgDn, [ ]|jump 1, 1000, 1000000 tiles\nHome|back to tile 0, where every line starts\nN / B|next / previous page, or unit of a warped trail\nP|play an audio book you are holding\nF1|the setup menu\nTab|free or capture the mouse\nEsc|put a book back, or free the mouse\nCtrl+Q|quit
 
 ; ---- language
 screen.language = SETTINGS > LANGUAGE
@@ -228,3 +228,4 @@ msg.jumped = jumped {0} tiles ({1} books)
 msg.door = through the door into the {0} line, at the same corridor tile {1}
 msg.playing = playing
 msg.home = corridor tile 0: the start line of every line
+msg.holding = you stand still while holding a book: put it back first (E, a click or Esc)

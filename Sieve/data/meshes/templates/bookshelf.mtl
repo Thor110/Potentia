@@ -1,0 +1,17 @@
+# Materials for bookshelf.obj: placeholder colours, one material per part.
+
+# the case and its boards
+newmtl shelf_wood
+Kd 0.350 0.250 0.150
+Ka 0 0 0
+Ks 0 0 0
+d 1
+illum 1
+
+# the back panel
+newmtl shelf_back
+Kd 0.180 0.130 0.080
+Ka 0 0 0
+Ks 0 0 0
+d 1
+illum 1
