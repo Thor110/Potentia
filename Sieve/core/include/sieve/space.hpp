@@ -101,12 +101,6 @@ private:
     size_t hex_width_;
 };
 
-// Door mapping (SPECIFICATIONS §7.1). Returns the unit of `to` whose address (in `mode`) sits at
-// the same fractional position as `unit`'s address in `from`:  b = floor(a * M / N), where
-// N = |from| and M = |to|. Exact: both sizes are powers of small bases, so the product and quotient
-// are done digit by digit with no rounding. When both spaces have the same size it is a bijection.
-Space::Digits door_map(const Space& from, const Space::Digits& unit, AddressMode mode, const Space& to);
-
 // The address at a fraction p / 10^decimals of the way along a space (for "go to 36.5%").
 Space::Digits unit_at_fraction(const Space& space, uint64_t numerator, uint32_t decimals, AddressMode mode);
 

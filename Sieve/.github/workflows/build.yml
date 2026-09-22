@@ -45,19 +45,55 @@ jobs:
           $exe dicts
           ! $exe dicts | grep -q "MISMATCH\|MISSING"
           $exe sift --lengths 1-8 --brute-max 4 --pruned-max 5 > /dev/null
+          $exe models
+          ! $exe models | grep -q "MISMATCH\|MISSING\|UNREADABLE"
+          got=$($exe warp --length 32 --mode guided "It was the best of times" | awk '$1 == "guided" {print $2}')
+          echo "guided address: $got"
+          test "$got" = "90922c700685e28"
+          test "$($exe read --length 32 --mode guided "$got" | sed 's/ *$//')" = "it was the best of times"
 
-      - name: Hallway renders and its doors round-trip (Linux, no display)
+      - name: Hallway renders, and its doors keep the corridor position (Linux, no display)
         if: runner.os == 'Linux'
         env:
           SDL_VIDEO_DRIVER: offscreen
           SDL_RENDER_DRIVER: software
         run: |
-          build/hallway --screenshot hallway.png --size 640x360
+          H=build/hallway
+          W="it was the best of times"
+          book() { grep -o 'first book [0-9a-f.]*' | tail -1; }
+          $H --screenshot hallway.png --size 640x360
           test -s hallway.png
-          out=$(build/hallway --pose 0,7,-90,0 --walk "-2.3,0;2.5,0" --screenshot door.png)
+          here=$($H --warp "$W" --walk "0,0" --screenshot a.png | book)
+          next=$($H --warp "$W" --tile 1 --walk "0,0" --screenshot b.png | book)
+          # Through a door and straight back: exactly where you were.
+          out=$($H --warp "$W" --pose 0,7,-90,0 --walk "-2.3,0;2.5,0" --screenshot door.png)
           echo "$out"
-          echo "$out" | grep -q "through the door into the IMAGE line"
-          echo "$out" | grep -q "back in the TEXT line"
+          echo "$out" | head -1 | grep -q "through the door into the IMAGE line"
+          test "$(echo "$out" | tail -2 | book)" = "$here"
+          # Through a door, one tile along, back through the door there: one tile along in text.
+          out=$($H --warp "$W" --pose 0,7,-90,0 --walk "-2.3,0;-0.8,0;0,8;1.5,0" --screenshot loop.png)
+          echo "$out"
+          echo "$out" | tail -2 | head -1 | grep -q "TEXT line"
+          test "$(echo "$out" | tail -2 | book)" = "$next"
+          # Guided order: M cycles to it and - zooms out; all four doors lead back to the same book.
+          $H --warp "$W" --press "M,M,-" --screenshot keys.png | tail -2 | head -1 | grep -q "TEXT line, guided zoom 57"
+          start=$($H --mode guided --warp "$W" --zoom 20 --walk "0,0" --screenshot start.png | book)
+          out=$($H --mode guided --warp "$W" --zoom 20 --pose 0,7,-90,0 --walk "-2.3,0;-4.2,0;-4.2,0;-4.2,0" --screenshot guided.png)
+          echo "$out"
+          echo "$out" | grep -q "VIDEO line"
+          echo "$out" | tail -2 | head -1 | grep -q "TEXT line, guided"
+          test "$(echo "$out" | tail -2 | book)" = "$start"
+          # Loops: a 2-character line is 729 units = 6 tiles, so tile 6 starts the second copy,
+          # and the CLI reads the same corridor places the hallway shows.
+          $H --length 2 --goto @6 --walk "0,0" --screenshot loop6.png | grep -q "first book 000 "
+          test "$(build/sieve read --length 2 --mode positional --at 6:0 2>/dev/null)" = "  "
+          test "$(build/sieve read --length 2 --mode positional --at -1:127 2>/dev/null)" = "(empty: padding at the end of a loop)"
+          build/sieve info --length 2 | grep -q "39 empty slots"
+          build/sieve info --line image | grep -q "fills whole tiles exactly"
+          # The setup menu renders (fixed and fitted scale), and scripted keys reach it.
+          $H --menu --screenshot menu.png | grep -q "saved menu.png"
+          $H --menu --press "S,Down,Down,Down,Right" --screenshot menu2.png | grep -q "saved menu2.png"
+          test -s menu.png && test -s menu2.png
 
       - name: Reference oracle reproduces the committed vectors
         run: |
@@ -66,3 +102,15 @@ jobs:
           python3 sieve_ref.py digit-vectors | diff - ../tests/vectors_digits_v1.tsv
           python3 sieve_ref.py canon-vectors | diff - ../tests/vectors_canon.tsv
           python3 sieve_ref.py image-vectors | diff - ../tests/vectors_image_v1.tsv
+          python3 sieve_ref.py guided-vectors | diff - ../tests/vectors_guided_v1.tsv
+
+      - name: The pinned model rebuilds byte for byte from its corpus (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          python3 tools/fetch_corpus.py
+          pinned=$(awk -F'\t' '$1 == "gutenberg-lower27-o5" {print $5}' data/models/models.tsv)
+          build/sieve train --out rebuilt.model
+          test "$(sha256sum rebuilt.model | cut -d' ' -f1)" = "$pinned"
+          (cd reference && python3 sieve_ref.py model-build --out ../oracle.model)
+          test "$(sha256sum oracle.model | cut -d' ' -f1)" = "$pinned"
+          build/sieve measure

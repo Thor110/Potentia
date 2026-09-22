@@ -4,15 +4,21 @@
 #include "sieve/audio.hpp"
 #include "sieve/biguint.hpp"
 #include "sieve/canon.hpp"
+#include "sieve/corridor.hpp"
+#include "sieve/guided.hpp"
+#include "sieve/model.hpp"
 #include "sieve/image.hpp"
 #include "sieve/sha256.hpp"
 #include "sieve/sieve.hpp"
 #include "sieve/space.hpp"
 #include "sieve/utf8.hpp"
 
+#include <cmath>
 #include <cstdio>
 #include <fstream>
 #include <iostream>
+#include <map>
+#include <memory>
 #include <random>
 #include <set>
 #include <sstream>
@@ -220,37 +226,74 @@ void test_neighbour()
     CHECK(big.neighbour(far, AddressMode::Positional, -(int64_t(1) << 40)) == zero);
 }
 
-void test_door_map()
+void test_fraction()
 {
-    const Space text(alphabet_by_id("lower27"), 3), same("other27", 27, 3);
-    const Space bits("image/mono/4x4", 2, 16); // 65536 units
-    for (AddressMode m : {AddressMode::Positional, AddressMode::Scrambled})
-    {
-        // Same size: a bijection that keeps the address.
-        const auto u = text.digits_of(U"abc");
-        const auto v = door_map(text, u, m, same);
-        CHECK(same.address_of(v, m) == text.address_of(u, m));
-        CHECK(door_map(same, v, m, text) == u);
-    }
-    // Different sizes: floor(a * 65536 / 19683), checked with plain integers.
-    for (uint64_t a : {0ull, 1ull, 786ull, 9841ull, 19682ull})
-    {
-        const auto u = text.unit_at(BigUint(a).to_hex(4), AddressMode::Positional);
-        const auto v = door_map(text, u, AddressMode::Positional, bits);
-        CHECK(std::stoull(BigUint::from_hex(bits.address_of(v, AddressMode::Positional)).to_decimal()) == a * 65536 / 19683);
-    }
-    // Paragraph-scale text to a full-colour image and back lands within one text unit's span.
-    const Space para(alphabet_by_id("lower27"), 1000), img("image/rgb24/10x10", 16777216u, 100);
-    const auto u = para.digits_of(std::u32string(500, U'm') + std::u32string(500, U'q'));
-    const auto there = door_map(para, u, AddressMode::Positional, img);
-    const auto back = door_map(img, there, AddressMode::Positional, para);
-    CHECK(para.fraction(back, AddressMode::Positional) <= para.fraction(u, AddressMode::Positional));
-    CHECK(std::abs(para.fraction(back, AddressMode::Positional) - para.fraction(u, AddressMode::Positional)) < 1e-12);
-
+    const Space text(alphabet_by_id("lower27"), 3);
     CHECK(text.address_of(unit_at_fraction(text, 5, 1, AddressMode::Positional), AddressMode::Positional) ==
           BigUint(19683 / 2).to_hex(4));                                                    // 50%
     CHECK(text.address_of(unit_at_fraction(text, 0, 0, AddressMode::Positional), AddressMode::Positional) == "0000");
     CHECK(throws([&] { unit_at_fraction(text, 10, 1, AddressMode::Positional); }));          // 100% is not on the line
+}
+
+void test_corridor()
+{
+    // BigUint helpers used by the corridor.
+    std::mt19937_64 r(11);
+    for (int i = 0; i < 300; ++i)
+    {
+        const uint64_t a = r() >> (r() % 60), m = 1 + (r() >> (r() % 63 + 1));
+        CHECK(BigUint::mod(BigUint(a), BigUint(m)) == BigUint(a % m));
+    }
+    CHECK(BigUint::mod(BigUint::pow(2, 200), BigUint::pow(2, 7)).is_zero());
+    CHECK(BigUint::mod(BigUint::pow(27, 32), BigUint(128)) == BigUint(uint64_t(BigUint::pow(27, 32).low_bits(7))));
+    CHECK(BigUint::from_decimal("4052555153018976267") == BigUint::pow(27, 13));
+    CHECK(throws([] { BigUint::from_decimal("12a"); }));
+
+    // Signed tiles.
+    TileIndex t = TileIndex::of(2);
+    t += -5;
+    CHECK(t.to_decimal() == "-3");
+    t += 3;
+    CHECK(t.to_decimal() == "0" && !t.negative);
+    CHECK(TileIndex::parse("-42") == TileIndex::of(-42));
+
+    // A power-of-two line fills whole tiles; others are padded at the end of each copy.
+    const LineLoop image(BigUint::pow(2, 100));
+    CHECK(image.fills_whole_tiles());
+    CHECK(image.tiles() == BigUint::pow(2, 93));
+    const LineLoop tiny(BigUint(27 * 27)); // lower27 at length 2: 729 units = 5 tiles + 89
+    CHECK(tiny.tiles() == BigUint(6));
+    CHECK(tiny.padding() == 6 * 128 - 729);
+    CHECK(tiny.unit_index(BigUint(5), 88) == std::optional<BigUint>(BigUint(728)));
+    CHECK(!tiny.unit_index(BigUint(5), 89));
+    // Loops: tile 6 is the start of the second copy, tile -1 the last tile of the copy before.
+    CHECK(tiny.loop_tile(TileIndex::of(6)).is_zero());
+    CHECK(tiny.loop_tile(TileIndex::of(-1)) == BigUint(5));
+    CHECK(tiny.loop_tile(TileIndex::of(-6)).is_zero());
+    CHECK(tiny.loop_tile(TileIndex::of(13)) == BigUint(1));
+    // Warp position: a unit's slot in the first copy.
+    CHECK(LineLoop::tile_of(BigUint(728)) == TileIndex::of(5));
+    CHECK(LineLoop::slot_of(BigUint(728)) == 88);
+
+    // The two-door loop: text and image share the position, so going through a door, one tile
+    // along, and back through the next door lands one tile along in text too, at any sizes.
+    const LineLoop text(BigUint::pow(27, 32));
+    const TileIndex start = TileIndex::of(123456789);
+    const BigUint text_here = text.loop_tile(start);
+    const BigUint text_next = text.loop_tile(start + 1);
+    BigUint expect = text_here;
+    expect.add_small(1);
+    CHECK(text_next == expect);
+    BigUint image_next = image.loop_tile(start);
+    image_next.add_small(1);
+    CHECK(image.loop_tile(start + 1) == image_next);
+    // Nesting: with power-of-two sizes, every start line of the bigger line is one of the smaller's.
+    const LineLoop small(BigUint::pow(2, 20)), big(BigUint::pow(2, 30));
+    for (int64_t c : {1, 2, 7})
+    {
+        const TileIndex s = TileIndex::of(c * (int64_t(1) << (30 - 7)));
+        CHECK(big.loop_tile(s).is_zero() && small.loop_tile(s).is_zero());
+    }
 }
 
 void test_canon()
@@ -498,6 +541,206 @@ void test_sieve()
     CHECK(prefix_tree_nodes(2).to_decimal() == "757"); // 1 + 27 + 729
 }
 
+
+// A small lower27 model trained on a few sentences, for exhaustive checks at tiny lengths.
+std::shared_ptr<const CharModel> small_model(uint32_t order = 3, uint32_t min_count = 2)
+{
+    const std::string text =
+        "it was the best of times it was the worst of times it was the age of wisdom it was the age of "
+        "foolishness it was the epoch of belief it was the epoch of incredulity it was the season of light";
+    const Alphabet& a = alphabet_by_id("lower27");
+    std::vector<uint32_t> stream;
+    for (char c : text) stream.push_back(*a.digit_of(char32_t(c)));
+    ModelParams p{"lower27", 27, order, min_count, 0u, "test sentences"};
+    return std::make_shared<const CharModel>(CharModel::train(stream, p));
+}
+
+void test_model()
+{
+    const auto m = small_model();
+    // Every table is a full distribution over 27 symbols summing to 2^16, each entry >= 1.
+    for (const std::vector<uint32_t>& h : std::vector<std::vector<uint32_t>>{{}, {20}, {20, 8}, {20, 8, 5}, {0, 0}, {7, 0, 0}})
+    {
+        const uint32_t* cum = m->cumulative(h);
+        bool ok = cum[0] == 0 && cum[27] == kModelTotal;
+        for (int s = 0; s < 27; ++s) ok = ok && cum[s + 1] > cum[s];
+        CHECK(ok);
+    }
+    // After "th", 'e' is the likeliest next symbol; the padding context strongly predicts SPACE.
+    {
+        const uint32_t* cum = m->cumulative(std::vector<uint32_t>{20, 8});
+        uint32_t best = 0;
+        for (uint32_t s = 1; s < 27; ++s)
+            if (cum[s + 1] - cum[s] > cum[best + 1] - cum[best]) best = s;
+        CHECK(best == 5);
+        const uint32_t* pad = m->cumulative(std::vector<uint32_t>{5, 0, 0});
+        CHECK(pad[1] - pad[0] == kModelTotal - 26);
+    }
+    // The file form round-trips exactly, and is the only accepted spelling.
+    const std::string file = m->serialise();
+    const CharModel back = CharModel::parse(file);
+    CHECK(back.serialise() == file);
+    CHECK(back.sha256() == m->sha256());
+    CHECK(back.context_count() == m->context_count());
+    CHECK(throws([&] { CharModel::parse(file + "\n"); }));
+    std::string altered = file;
+    altered.replace(altered.find("min_count 2"), 11, "min_count 02");
+    CHECK(throws([&] { CharModel::parse(altered); }));
+}
+
+void test_guided()
+{
+    const auto m = small_model();
+    const Alphabet& a = alphabet_by_id("lower27");
+    // Exhaustive at L = 1..3: the intervals of all 27^L units tile [0, 2^S) in dictionary order,
+    // every unit's address lies inside its own interval, is the shortest fraction that does,
+    // decodes back to the unit, and no two units share one.
+    for (uint32_t L = 1; L <= 3; ++L)
+    {
+        const GuidedLine g(m, L);
+        Space sp(a, L);
+        const uint64_t count = uint64_t(std::pow(27.0, L) + 0.5);
+        BigUint expected_low;
+        std::set<std::string> codes;
+        bool tiled = true, inside = true, shortest = true, decodes = true;
+        for (uint64_t i = 0; i < count; ++i)
+        {
+            const auto unit = BigUint(i).to_digits(27, L);
+            const auto iv = g.interval(unit);
+            tiled = tiled && iv.low == expected_low;
+            expected_low = iv.low;
+            expected_low += iv.width;
+            const auto c = g.code_of(iv);
+            BigUint hi = iv.low;
+            hi += iv.width;
+            inside = inside && iv.low <= c.point && c.point < hi;
+            // The block of 2^-bits at the address lies inside the arc, and no block one bit
+            // coarser fits anywhere in it.
+            {
+                const size_t t = g.scale_bits() - c.bits;
+                BigUint end = c.point, block(1);
+                block <<= t;
+                end += block;
+                inside = inside && end <= hi;
+                if (t < g.scale_bits())
+                {
+                    BigUint coarse = BigUint(1);
+                    coarse <<= t + 1;
+                    BigUint up = coarse;
+                    up -= BigUint(1);
+                    up += iv.low;
+                    up >>= t + 1;
+                    up <<= t + 1;
+                    up += coarse;
+                    shortest = shortest && up > hi;
+                }
+            }
+            decodes = decodes && g.unit_at(c.point) == unit && g.unit_at(g.point_of(c.hex)) == unit;
+            codes.insert(c.hex);
+        }
+        BigUint full(1);
+        full <<= g.scale_bits();
+        CHECK(tiled);
+        CHECK(expected_low == full);
+        CHECK(inside);
+        CHECK(shortest);
+        CHECK(decodes);
+        CHECK(codes.size() == count);
+    }
+    // Longer units: round trip, and the address costs about the model's information content.
+    const GuidedLine g(m, 40);
+    auto digits = [&](const std::string& t) {
+        std::vector<uint32_t> d;
+        for (char c : t) d.push_back(*a.digit_of(char32_t(c)));
+        d.resize(40, 0);
+        return d;
+    };
+    const auto likely = digits("it was the best of times it was the wors");
+    const auto noise = digits("qzxv jjkw pqpq zzzz xkcd vvvv wqwq kkkk ");
+    const auto cl = g.code(likely), cn = g.code(noise);
+    CHECK(g.unit_at(cl.point) == likely);
+    CHECK(g.unit_at(cn.point) == noise);
+    CHECK(cl.bits < 40);          // memorised text is nearly free
+    CHECK(cn.bits > 6 * cl.bits); // noise is expensive
+    const double info = g.information_bits(g.interval(likely));
+    CHECK(double(cl.bits) >= info - 1e-9 && double(cl.bits) < info + 2.0); // -log2 P <= bits < -log2 P + 2
+    // Padding costs almost nothing after its first SPACE.
+    const auto short_text = digits("it was");
+    CHECK(g.code(short_text).bits < 60);
+    // Any point decodes; random points land inside the arc of the unit they decode to.
+    std::mt19937_64 rng(3);
+    bool ok = true;
+    for (int i = 0; i < 200; ++i)
+    {
+        BigUint p;
+        for (size_t b = 0; b < g.scale_bits(); b += 32)
+        {
+            p <<= 32;
+            p.add_small(uint32_t(rng()));
+        }
+        p >>= (g.scale_bits() + 31) / 32 * 32 - g.scale_bits();
+        const auto u = g.unit_at(p);
+        const auto iv = g.interval(u);
+        BigUint hi = iv.low;
+        hi += iv.width;
+        ok = ok && iv.low <= p && p < hi;
+    }
+    CHECK(ok);
+    // Stepping wraps around the line exactly.
+    BigUint one(1);
+    const BigUint last = g.step(BigUint(), -1, 8);
+    CHECK(g.step(last, 1, 8).is_zero());
+    CHECK(g.step(BigUint(), 256, 8).is_zero());
+    CHECK(g.hex_of(g.step(BigUint(), 128, 8), 1) == "8");
+    CHECK(g.hex_of(g.step(BigUint(), 128, 8), 8) == "80");
+    CHECK(g.point_of("8") == g.step(BigUint(), 1, 1));
+    CHECK(throws([&] { (void)g.point_of("xyz"); }));
+}
+
+// Guided vectors from the Python oracle, which derives every table itself from the model file.
+void test_guided_vectors(const std::string& dir)
+{
+    std::ifstream in(dir + "vectors_guided_v1.tsv");
+    CHECK(bool(in));
+    std::string line, sha;
+    std::getline(in, line);
+    std::getline(in, line);
+    const std::string tag = "# model sha256 ";
+    CHECK(line.rfind(tag, 0) == 0);
+    sha = line.substr(tag.size());
+    const auto model = std::make_shared<const CharModel>(CharModel::load_file(dir + "../data/models/gutenberg-lower27-o5.model"));
+    CHECK(model->sha256() == sha);
+    const Alphabet& a = alphabet_by_id("lower27");
+    std::map<uint32_t, std::unique_ptr<GuidedLine>> lines;
+    int n = 0;
+    while (std::getline(in, line))
+    {
+        if (line.empty() || line[0] == '#') continue;
+        std::vector<std::string> f;
+        std::stringstream ss(line);
+        std::string x;
+        while (std::getline(ss, x, '\t')) f.push_back(x);
+        CHECK(f.size() == 5);
+        if (f.size() != 5) continue;
+        const uint32_t L = uint32_t(std::stoul(f[1]));
+        auto& g = lines[L];
+        if (!g) g = std::make_unique<GuidedLine>(model, L);
+        std::vector<uint32_t> unit;
+        for (char c : f[2]) unit.push_back(*a.digit_of(char32_t(c)));
+        CHECK(unit.size() == L);
+        if (f[0] == "code")
+        {
+            const auto c = g->code(unit);
+            CHECK(std::to_string(c.bits) == f[3]);
+            CHECK(c.hex == f[4]);
+            CHECK(g->unit_at(g->point_of(f[4])) == unit);
+        }
+        else CHECK(g->unit_at(g->point_of(f[4])) == unit);
+        ++n;
+    }
+    std::cout << "guided vectors checked: " << n << "\n";
+}
+
 void run_all(int argc, char** argv)
 {
     test_sha256();
@@ -506,11 +749,14 @@ void run_all(int argc, char** argv)
     test_space_basics();
     test_scramble_bijection();
     test_neighbour();
-    test_door_map();
+    test_fraction();
+    test_corridor();
     test_canon();
     test_sieve();
     test_image();
     test_audio();
+    test_model();
+    test_guided();
     if (argc > 1)
     {
         const std::string dir = std::string(argv[1]) + "/";
@@ -518,6 +764,7 @@ void run_all(int argc, char** argv)
         test_digit_vectors(dir + "vectors_digits_v1.tsv");
         test_canon_vectors(dir + "vectors_canon.tsv");
         test_image_vectors(dir + "vectors_image_v1.tsv");
+        test_guided_vectors(dir);
     }
 }
 

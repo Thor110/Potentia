@@ -10,6 +10,8 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
     python3 sieve_ref.py digit-vectors  > ../tests/vectors_digits_v1.tsv
     python3 sieve_ref.py canon-vectors  > ../tests/vectors_canon.tsv
     python3 sieve_ref.py image-vectors  > ../tests/vectors_image_v1.tsv
+    python3 sieve_ref.py guided-vectors > ../tests/vectors_guided_v1.tsv
+    python3 sieve_ref.py model-build --out /tmp/check.model   # rebuilds the pinned model
     python3 sieve_ref.py warp --length 32 "Some text"
     python3 sieve_ref.py read --length 32 --mode scrambled <hex>
     python3 sieve_ref.py sieve --dict words.txt --max 4
@@ -382,6 +384,223 @@ def cmd_image_vectors(_args):
             print(f"{pid}\t{sw}\t{sh}\t{tw}\t{th}\t{bytes(rgba).hex()}\t{','.join(map(str, digits))}")
 
 
+# -- entropy-ordered addressing (sieve-charmodel-v1, witten-bell-v1, guided-ac-v1), written
+#    independently of the C++ core: plain dicts, Python integers, no shared code.
+TOTAL = 1 << 16
+MODEL_HEADER = ["symbols", "base", "order", "min_count", "total", "smoothing", "padding",
+                "trained_symbols", "corpus", "contexts"]
+
+
+def corpus_manifest(path):
+    rows = []
+    for line in open(path, encoding="utf-8"):
+        line = line.rstrip("\r\n")
+        if line and not line.startswith("#"):
+            rows.append(line.split("\t"))
+    return rows
+
+
+def training_text(manifest, texts, alphabet_id):
+    """The train files in manifest order, each canonicalised (canon-text-v2), joined by one SPACE."""
+    parts = []
+    for name, enc, role, sha in corpus_manifest(manifest):
+        if role != "train":
+            continue
+        raw = open(f"{texts}/{name}", "rb").read()
+        assert hashlib.sha256(raw).hexdigest() == sha, name
+        text = raw.decode("latin-1" if enc == "latin-1" else "utf-8")
+        s = "".join(canonicalise(text, alphabet_id, 1))
+        if s:
+            parts.append(s)
+    return " ".join(parts), sum(1 for _ in parts)
+
+
+def build_model(stream, symbols, order, min_count, corpus):
+    """Counts every context of up to `order` symbols; keeps those seen >= min_count times whose parent is kept."""
+    n = len(symbols)
+    idx = {c: i for i, c in enumerate(symbols)}
+    digits = [idx[c] for c in stream]
+    counts = {}
+    for t in range(len(digits)):
+        for k in range(0, min(order, t) + 1):
+            ctx = tuple(digits[t - k:t])
+            row = counts.get(ctx)
+            if row is None:
+                row = counts[ctx] = [0] * n
+            row[digits[t]] += 1
+    kept = []
+    keep = set()
+    for ctx in sorted(counts, key=lambda c: (len(c), c)):
+        if ctx and (sum(counts[ctx]) < min_count or ctx[1:] not in keep):
+            continue
+        keep.add(ctx)
+        kept.append((ctx, [(s, c) for s, c in enumerate(counts[ctx]) if c]))
+    pad = idx.get(" ")
+    head = {"symbols": None, "base": n, "order": order, "min_count": min_count, "total": TOTAL,
+            "smoothing": "witten-bell-v1", "padding": "none" if pad is None else pad,
+            "trained_symbols": len(digits), "corpus": corpus, "contexts": len(kept)}
+    return head, kept
+
+
+def write_model(alphabet_id, head, kept):
+    head = dict(head, symbols=alphabet_id)
+    out = ["sieve-charmodel-v1"] + [f"{k} {head[k]}" for k in MODEL_HEADER]
+    for ctx, row in kept:
+        c = "".join(f"{d:02x}" for d in ctx) if ctx else "-"
+        out.append(c + "\t" + " ".join(f"{s}:{n}" for s, n in row))
+    return ("\n".join(out) + "\n").encode("utf-8")
+
+
+class Model:
+    """Loads a model file and derives every frequency table exactly as SPECIFICATIONS 4.2 says."""
+
+    def __init__(self, path):
+        raw = open(path, "rb").read()
+        self.sha256 = hashlib.sha256(raw).hexdigest()
+        lines = raw.decode("utf-8").split("\n")
+        assert lines[0] == "sieve-charmodel-v1" and lines[-1] == ""
+        head = {}
+        for key, line in zip(MODEL_HEADER, lines[1:11]):
+            k, _, v = line.partition(" ")
+            assert k == key, (k, key)
+            head[key] = v
+        self.n = int(head["base"])
+        self.order = int(head["order"])
+        self.symbols = head["symbols"]
+        pad = None if head["padding"] == "none" else int(head["padding"])
+        assert int(head["total"]) == TOTAL and head["smoothing"] == "witten-bell-v1"
+        self.tables = {}
+        for line in lines[11:-1]:
+            c, row = line.split("\t")
+            ctx = () if c == "-" else tuple(int(c[i:i + 2], 16) for i in range(0, len(c), 2))
+            counts = [0] * self.n
+            for item in row.split(" "):
+                s, v = item.split(":")
+                counts[int(s)] = int(v)
+            total = sum(counts)
+            if not ctx:
+                a, d = [x + 1 for x in counts], total + self.n
+            else:
+                parent = self.tables[ctx[1:]]
+                u = sum(1 for x in counts if x)
+                a = [counts[s] * TOTAL + u * parent[s] for s in range(self.n)]
+                d = (total + u) * TOTAL
+            self.tables[ctx] = self.quantise(a, d)
+        assert len(self.tables) == int(head["contexts"])
+        if pad is not None and self.order >= 2:
+            self.tables[(pad, pad)] = [TOTAL - (self.n - 1) if s == pad else 1 for s in range(self.n)]
+
+    def quantise(self, a, d):
+        free = TOTAL - self.n
+        f = [1 + free * x // d for x in a]
+        rem = [free * x % d for x in a]
+        for s in sorted(range(self.n), key=lambda s: (-rem[s], s))[:TOTAL - sum(f)]:
+            f[s] += 1
+        assert sum(f) == TOTAL and min(f) >= 1
+        return f
+
+    def table(self, history):
+        h = tuple(history[max(0, len(history) - self.order):])
+        while h not in self.tables:
+            h = h[1:]
+        return self.tables[h]
+
+
+def guided_interval(model, unit):
+    low, width = 0, 1
+    for i, s in enumerate(unit):
+        f = model.table(unit[:i])
+        low = low * TOTAL + sum(f[:s]) * width
+        width *= f[s]
+    return low, width
+
+
+def guided_code(model, unit):
+    """(point, bits): the lowest of the largest aligned blocks inside the unit's arc."""
+    S = 16 * len(unit)
+    low, width = guided_interval(model, unit)
+    high = low + width
+    for t in range(S, -1, -1):
+        m = -(-low // (1 << t))
+        if (m + 1) << t <= high:
+            return m << t, S - t
+    raise AssertionError("no block fits")
+
+
+def guided_hex(point, bits, S):
+    if bits == 0:
+        return "0"
+    nh = (bits + 3) // 4
+    return format(point >> (S - 4 * nh), "0%dx" % nh)
+
+
+def guided_unit_at(model, length, point):
+    """The unit whose arc contains the point: walk down the tree, choosing the child arc that holds it."""
+    unit = []
+    low, width = 0, 1  # the arc so far, in units of TOTAL^-depth
+    for i in range(length):
+        f = model.table(unit)
+        scale = TOTAL ** (length - 1 - i)  # from depth i+1 units to points
+        cum = 0
+        for s in range(model.n):
+            if (low * TOTAL + (cum + f[s]) * width) * scale > point:
+                break
+            cum += f[s]
+        unit.append(s)
+        low = low * TOTAL + cum * width
+        width *= f[s]
+        assert low * scale <= point < (low + width) * scale
+    return unit
+
+
+def cmd_model_build(args):
+    text, files = training_text(args.corpus, args.texts, args.alphabet)
+    manifest_sha = hashlib.sha256(open(args.corpus, "rb").read()).hexdigest()
+    name = args.corpus.replace("\\", "/").split("/")[-1]
+    corpus = f"{name} sha256={manifest_sha} train_files={files} canon=canon-text-v2"
+    head, kept = build_model(text, ALPHABETS[args.alphabet], args.order, args.min_count, corpus)
+    data = write_model(args.alphabet, head, kept)
+    open(args.out, "wb").write(data)
+    print(hashlib.sha256(data).hexdigest(), args.out)
+
+
+def cmd_guided_vectors(args):
+    """Guided address vectors: length, unit (digits), code bits, code (hex); and points -> units."""
+    model = Model(args.model)
+    sym = ALPHABETS[model.symbols]
+    print(f"# sieve guided conformance vectors v1 (guided-ac-v1, sieve-charmodel-v1, witten-bell-v1)")
+    print(f"# model sha256 {model.sha256}")
+    print("# kind\tlength\tunit\tbits\taddress")
+    cases = []
+    for text in ("it was the best of times it was the worst of times", "the library of babel",
+                 "call me ishmael", "qzxj vvkw pqpq zzz", "a", ""):
+        for L in (1, 8, 32, 100):
+            units = canonicalise(text, model.symbols, L) or [" " * L]
+            cases.append((L, units[0]))
+    for L in (3, 16, 64):
+        g = stream(f"guided/{L}")
+        cases.append((L, "".join(sym[next(g) % model.n] for _ in range(L))))
+        cases.append((L, " " * L))
+        cases.append((L, sym[-1] * L))
+    for L, u in cases:
+        d = [sym.index(c) for c in u]
+        point, bits = guided_code(model, d)
+        h = guided_hex(point, bits, 16 * L)
+        assert guided_unit_at(model, L, point) == d
+        print(f"code\t{L}\t{u}\t{bits}\t{h}")
+    # Points: arbitrary hex fractions decode to the unit whose arc holds them.
+    for L in (4, 32, 100):
+        g = stream(f"guided-points/{L}")
+        for k in range(6):
+            nh = [1, 3, 8, 16, 40, 4 * L + 2][k]
+            h = "".join("0123456789abcdef"[next(g) % 16] for _ in range(nh))
+            S = 16 * L
+            v = int(h, 16)
+            point = v << (S - 4 * nh) if 4 * nh <= S else v >> (4 * nh - S)
+            u = "".join(sym[s] for s in guided_unit_at(model, L, point))
+            print(f"point\t{L}\t{u}\t-\t{h}")
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -399,6 +618,15 @@ def main():
     sub.add_parser("digit-vectors")
     sub.add_parser("canon-vectors")
     sub.add_parser("image-vectors")
+    s = sub.add_parser("model-build")
+    s.add_argument("--corpus", default="../data/models/corpus/gutenberg-nltk.tsv")
+    s.add_argument("--texts", default="../corpus/gutenberg")
+    s.add_argument("--alphabet", default="lower27")
+    s.add_argument("--order", type=int, default=5)
+    s.add_argument("--min-count", type=int, default=8)
+    s.add_argument("--out", required=True)
+    s = sub.add_parser("guided-vectors")
+    s.add_argument("--model", default="../data/models/gutenberg-lower27-o5.model")
     args = p.parse_args()
 
     if args.cmd == "vectors":
@@ -411,6 +639,10 @@ def main():
         cmd_image_vectors(args)
     elif args.cmd == "sieve":
         cmd_sieve(args)
+    elif args.cmd == "model-build":
+        cmd_model_build(args)
+    elif args.cmd == "guided-vectors":
+        cmd_guided_vectors(args)
     elif args.cmd == "warp":
         sp = Space(args.alphabet, args.length, args.key)
         for u in canonicalise(" ".join(args.text), args.alphabet, args.length):

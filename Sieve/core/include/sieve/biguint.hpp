@@ -31,8 +31,12 @@ public:
     static BigUint from_hex(std::string_view hex);
 
     std::string to_decimal() const;
+    // Decimal digits only. Throws on anything else.
+    static BigUint from_decimal(std::string_view dec);
 
     size_t bit_length() const;
+    bool bit(size_t i) const; // bit i (0 = least significant)
+    uint32_t low_bits(unsigned n) const; // value mod 2^n, n <= 32
     bool is_zero() const { return limbs_.empty(); }
     bool is_power_of_two() const;
 
@@ -40,13 +44,22 @@ public:
     double log10_approx() const;
 
     BigUint& operator+=(const BigUint& other);
+    BigUint& operator-=(const BigUint& other); // throws std::underflow_error if other > *this
+    BigUint& operator<<=(size_t bits);
+    BigUint& operator>>=(size_t bits);          // floor division by 2^bits
+    // value / 2^bits as a double. DISPLAY ONLY (approximate), never used for addressing.
+    double ratio_to_power_of_two(size_t bits) const;
     void mul_small(uint32_t m);
     void add_small(uint32_t a);
     uint32_t divmod_small(uint32_t d); // divides in place, returns remainder
+    // a mod m for any m >= 1 (shift-and-subtract; a mask when m is a power of two).
+    static BigUint mod(const BigUint& a, const BigUint& m);
 
     friend int compare(const BigUint& a, const BigUint& b);
     friend bool operator<(const BigUint& a, const BigUint& b) { return compare(a, b) < 0; }
     friend bool operator>=(const BigUint& a, const BigUint& b) { return compare(a, b) >= 0; }
+    friend bool operator<=(const BigUint& a, const BigUint& b) { return compare(a, b) <= 0; }
+    friend bool operator>(const BigUint& a, const BigUint& b) { return compare(a, b) > 0; }
     friend bool operator==(const BigUint& a, const BigUint& b) { return compare(a, b) == 0; }
 
 private:

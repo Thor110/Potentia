@@ -1,0 +1,54 @@
+# sieve guided conformance vectors v1 (guided-ac-v1, sieve-charmodel-v1, witten-bell-v1)
+# model sha256 dff72d8a00e53f08aaf273c23242e44785e121792f4d33a1b6335f45ef5dd4a3
+# kind	length	unit	bits	address
+code	1	i	5	88
+code	8	it was t	15	9092
+code	32	it was the best of times it was 	53	90922c7006a748
+code	100	it was the best of times it was the worst of times                                                  	101	90922c7006a75737defd060b68
+code	1	t	5	e0
+code	8	the libr	22	e5fb94
+code	32	the library of babel            	61	e5fb99c1eacf7158
+code	100	the library of babel                                                                                	61	e5fb99c1eacf7158
+code	1	c	7	46
+code	8	call me 	22	4560c4
+code	32	call me ishmael                 	53	4560c6d19873c8
+code	100	call me ishmael                                                                                     	53	4560c6d19873c8
+code	1	q	12	c35
+code	8	qzxj vvk	110	c370fffb6a8b93c425b1c924b7bc
+code	32	qzxj vvkw pqpq zzz              	245	c370fffb6a8b93c425b1c924b7c62426aacdfa7f8eed2e375852574ffd7fc0
+code	100	qzxj vvkw pqpq zzz                                                                                  	245	c370fffb6a8b93c425b1c924b7c62426aacdfa7f8eed2e375852574ffd7fc0
+code	1	a	5	38
+code	8	a       	25	3117000
+code	32	a                               	25	3117000
+code	100	a                                                                                                   	25	3117000
+code	1	 	3	0
+code	8	        	19	00000
+code	32	                                	19	00000
+code	100	                                                                                                    	19	00000
+code	3	xqx	35	fbc5e8b74
+code	3	   	19	00000
+code	3	zzz	24	ffffff
+code	16	ga rfkjclyjxg fo	157	72ffc1c470d1422fa02fbb1d5d4f803493631670
+code	16	                	19	00000
+code	16	zzzzzzzzzzzzzzzz	147	ffffffffffffffffffffffffffffffffffffe
+code	64	vslfmqvaywu hmjmypasmfttvtknmpryxegcug igkjcnitntvoztxjynlhrljxg	755	f6ef20d0e02908bbcd38baa5184b3ed288070cf681840c002c58bd1bf3a7b984baa930f9bc75c4570f97db78f4a57c7c398adc726c876a6e5757c3c4279d7ed491fc9eff63b1f632f466c0e08113a716ec8bfa9ca761dfa688872634c66ec
+code	64	                                                                	19	00000
+code	64	zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz	598	fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc
+point	4	s br	-	d
+point	4	 alt	-	01d
+point	4	e th	-	5a9fe68f
+point	4	d ta	-	4dfd26dec8b0026e
+point	4	ve h	-	f549b57aa23b2054ef08f9c4aceaa679e6bdf379
+point	4	ved 	-	f5abef4c026c084645
+point	32	 word white and the children qui	-	3
+point	32	 that i have broad blinded from 	-	246
+point	32	d he turned his more men of the 	-	4b986d12
+point	32	ee many ideas saith the invitati	-	6052ec1a80d9cdb5
+point	32	bery well in hear issue after th	-	435ce61661f6136f44024ec307b135ece2e45442
+point	32	scribed him and one and be asher	-	d4f542a31ac394dbfa89e960a3410bd61486db942d0f5c636f7dfadc30ab3777f5f19ca8904cef7dd0096559f2bb29d103fb520240c68e190cc305ac9c7731c5f1
+point	100	ed with pleasure you that me down the sea had been lewdnessed shoot up to tell you i knowing with im	-	6
+point	100	 altar boats which is boats had been heart divine eyes fallen she enrietta and sojournes of the thin	-	01d
+point	100	me from the achsafed the will set savage over and now sought to noah unto the very persuaded desire 	-	9f004b06
+point	100	de of furning so inattention heavened god and the got there tears deceiving before not alone some fo	-	50455f94ac2fe8c7
+point	100	e to present willing men and noment among that there afflicted me me exchange cross wherein the lord	-	5b5f560aa00422221c8de1f6d0fb62df431d1613
+point	100	d o thought side this mind with had been bullock eat one he many objects which oar in traver and the	-	4cf9abeaa235576b1106504d68a5397bb3756aeec6ad6499bed62265cffe26fa773adc3cf4193152fde73bc6a2ae03a2c3f9aa2c39176c377e7c4c409685c1b4c6f659c4be6ddc21e41df4d9bc4065e2d8e4a1baa23e0af661a61f54c0f9d374eef9ca3f3c13b8992c7a83bd43af0b07943c8d7f243b4e9e2d44d3ecbff62432fb85e913e0eba00405d316026fa0e21002019ecc4687dbebf9adfaa5f002a409ce48b55061a83ee5b27c6ce30df95eac23cf460f5ba9baa74b181af8dd7dccd56f4137761f796c04e7

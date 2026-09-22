@@ -5,9 +5,11 @@
 
 #include "sieve/alphabet.hpp"
 #include "sieve/canon.hpp"
+#include "sieve/guided.hpp"
 #include "sieve/image.hpp"
 #include "sieve/space.hpp"
 
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -25,12 +27,16 @@ struct Line
     CanonVersion canon = kDefaultCanon;  // text
     ImageFormat image;                   // image, video
     Space space;
+    // Text lines with a model (see sieve models): the guided, entropy-ordered view of the same
+    // units. Null when the alphabet has no model or --model none was given.
+    std::shared_ptr<const GuidedLine> guided;
+    std::string model_id;
 
     // Human-readable description of the symbols a unit is made of.
     std::string describe_symbols() const;
 };
 
-// Builds the line and its space from --line and the line's own options.
+// Builds the line and its space from --line and the line's own options (and --model).
 Line make_line(const Args& a);
 
 struct WarpInput

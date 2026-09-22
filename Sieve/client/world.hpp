@@ -1,14 +1,17 @@
 // Sieve hallway — the corridor tile: bookcases, doors and books, and picking a book by ray.
 //
 // One tile is drawn once and repeated along +z forever. Each tile holds kBooksPerTile consecutive
-// units: first the left wall, then the right wall; on each wall shelf by shelf from the top, and
-// along each shelf in +z order. So the address always increases as you walk forward.
+// book slots (128, a power of two; see sieve/corridor.hpp): first the left wall, then the right
+// wall; on each wall shelf by shelf from the top, and along each shelf in +z order. So the
+// address always increases as you walk forward.
 //
 //   z:  0 ........ 6.0 | 6.4 door 7.6 | 8.0 (next tile)
 //       bookcase         black door
 #pragma once
 
 #include "camera.hpp"
+
+#include "sieve/corridor.hpp"
 
 #include <cstdint>
 #include <optional>
@@ -21,22 +24,30 @@ inline constexpr float kCaseFront = 1.65f;  // bookcase faces at x = -1.65 and +
 inline constexpr float kTile = 8.0f;
 inline constexpr float kShelfEnd = 6.0f;    // bookcase spans z 0..6 of each tile
 inline constexpr float kDoorStart = 6.4f, kDoorEnd = 7.6f, kDoorTop = 2.2f;
-inline constexpr int kRows = 5;
-inline constexpr int kCols = 20;
-inline constexpr float kRowTop = 2.65f, kRowHeight = 0.48f;
-inline constexpr float kBookPitch = kShelfEnd / kCols, kBookWidth = 0.26f;
+inline constexpr int kRows = 4;
+inline constexpr int kCols = 16;
+inline constexpr float kRowTop = 2.65f, kRowHeight = 0.55f;
+inline constexpr float kBookPitch = kShelfEnd / kCols, kBookWidth = 0.28f;
 inline constexpr int kBooksPerWall = kRows * kCols;
-inline constexpr int kBooksPerTile = 2 * kBooksPerWall;
+using sieve::kBooksPerTile; // 128, defined by the corridor
+// The shelves must hold exactly the corridor's tile, which must be a power of two, so that
+// power-of-two line sizes fill whole tiles and their loops nest (sieve/corridor.hpp).
+static_assert(2 * kBooksPerWall == int(kBooksPerTile), "the shelves must hold exactly one corridor tile");
+static_assert((kBooksPerTile & (kBooksPerTile - 1)) == 0, "books per tile must be a power of two");
 inline constexpr float kWalkLimit = 1.45f;  // how close to a wall you may walk, except in a doorway
 
 enum class Side { Left = 0, Right = 1 };
 
 struct BookSlot
 {
-    int64_t tile; // tile index, relative to the walk's base tile
+    int64_t tile; // tile, relative to the tile the player is in
     Side side;
     int row, col;
-    int64_t offset() const { return tile * kBooksPerTile + int64_t(side) * kBooksPerWall + row * kCols + col; }
+    uint32_t slot() const { return uint32_t(int(side) * kBooksPerWall + row * kCols + col); } // 0..127 within the tile
+    static BookSlot of(int64_t tile, uint32_t slot)
+    {
+        return {tile, slot < uint32_t(kBooksPerWall) ? Side::Left : Side::Right, int(slot % kBooksPerWall) / kCols, int(slot % kCols)};
+    }
 };
 
 // Height of a book's spine: varies a little per slot so shelves do not look like a grid.

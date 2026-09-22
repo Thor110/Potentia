@@ -35,6 +35,7 @@ Text estimates assume ~1 bit/char of real information in meaningful English (Sha
 - Meaningful fraction of Babel books: ~**10^-1,439,146**.
 - Physical ceiling on computation (Lloyd): ~**10^120** operations for the observable universe.
 - Conclusion: filtering removes almost all of the space, but the remainder is unenumerable beyond small unit lengths. The design prioritises **navigation, location and verification** over enumeration.
+- Measured (M3): the pinned order-5 character model codes held-out English at **1.93–1.95 bits/char** (2.48 for Shakespeare). By that model, a 1,000-character paragraph is one of about 2^1,930 ≈ 10^581 plausible ones, against 10^1,431 raw. A better model moves this towards Shannon's figure.
 
 ---
 
@@ -89,9 +90,35 @@ Every unit on a line has exactly one address, and every address decodes to exact
 
 - Addresses are produced by **arithmetic coding driven by the line's pinned model**.
 - The interval `[0, 1)` is divided so that probable (meaningful) units occupy wide arcs and noise occupies vanishingly thin ones.
-- A meaningful unit's address length ≈ its information content (~1 bit/char for English, vs ~4.75 in raw mode).
+- A meaningful unit's address length ≈ its information content (measured: ~1.9 bits/char for English with the default model, vs 4.75 in raw mode).
 
 **Warning:** entropy-ordered decoding is equivalent to sampling from the model. A random address decodes to fluent output that **carries no evidence of being real**.
+
+#### 4.2.1 Model (`sieve-charmodel-v1`, smoothing `witten-bell-v1`)
+
+A model gives, for every history, an integer frequency table over the `N` symbols that sums to `T = 2^16`, with every entry at least 1, so that every unit keeps a nonzero share of the line.
+
+- **File.** A text file: a fixed header (`symbols`, `base`, `order`, `min_count`, `total`, `smoothing`, `padding`, `trained_symbols`, `corpus`, `contexts`, in that order), then one line per stored context: the context as two hex digits per symbol, oldest first (`-` for the empty context), a TAB, and `symbol:count` pairs in ascending symbol order. Contexts are sorted by length, then by symbols. A file has exactly one spelling (a reader re-writes it and refuses any difference), so its SHA-256 identifies the model.
+- **Training.** Count how often each symbol follows each context of up to `ORDER` symbols in the training stream. Store the empty context, and every other context seen at least `MIN_COUNT` times whose parent (the context minus its oldest symbol) is stored.
+- **Tables**, parents first. With `n_s` the stored counts, `n` their sum, `u` the number of symbols with `n_s > 0` and `parent_s` the parent's finished table:
+  - empty context: `a_s = n_s + 1`, `D = n + N`
+  - other contexts: `a_s = n_s·T + u·parent_s`, `D = (n + u)·T`
+  - then `f_s = 1 + ⌊(T − N)·a_s / D⌋`, and the `T − Σf` units left over go one each to the symbols with the largest remainders `(T − N)·a_s mod D`, ties to the lowest symbol.
+- **Padding.** If the header names a padding symbol `p` (SPACE for text), the context `p p` has the fixed table `f_p = T − (N − 1)`, 1 elsewhere. Canonical text never contains two SPACEs in a row, so they only occur as the padding of a last unit, which then costs almost nothing.
+- **Lookup.** The table for a history is that of its longest suffix, at most `ORDER` symbols, that is stored. A unit's history starts empty.
+- **Default model** `gutenberg-lower27-o5`: order 5, min count 8, 101,294 contexts, trained on 10,510,198 symbols from 15 public-domain Project Gutenberg books (the NLTK selection, `data/models/corpus/gutenberg-nltk.tsv`). Three further books are held out for measurement.
+
+#### 4.2.2 Coder (`guided-ac-v1`)
+
+With the table `F_i` for the history `u_0…u_{i−1}` and its cumulative `C_i`:
+
+`low_0 = 0, w_0 = 1;  low_{i+1} = low_i·T + C_i(u_i)·w_i;  w_{i+1} = w_i·F_i(u_i)`
+
+The unit's arc is `[low_L, low_L + w_L)` in `[0, 2^S)`, `S = 16·L`. The arcs of all `N^L` units tile the line exactly, in positional (dictionary) order, each as wide as its probability.
+
+- **Point.** Any binary fraction in `[0, 1)`. Every point lies in exactly one arc, so every point decodes to exactly one unit.
+- **Address.** The shortest aligned block `[m/2^b, (m+1)/2^b)` that fits inside the unit's arc (the lowest, if two fit), written as `m/2^b` in `⌈b/4⌉` hexadecimal fraction digits. Then `−log2 P(u) ≤ b < −log2 P(u) + 2`: the address length is the unit's information content to within two bits, and the addresses form a prefix code. Units and addresses are in one-to-one correspondence; any other hex string is still a valid point, which reads the unit whose arc contains it.
+- **Example.** `"it was the best of times"` at `L = 32`: raw 152 bits, guided `90922c700685e28` (58 bits, 1.81 bits/char).
 
 ### 4.3 Determinism
 
@@ -101,6 +128,7 @@ Encoding and decoding must be **bit-for-bit identical** on every machine.
 - The arithmetic coder uses integer or fixed-point arithmetic with fully specified rounding.
 - Model outputs are **quantised to integer frequency tables** before entering the coder.
 - Models (weights, tokenizer, quantisation) are pinned by **cryptographic hash**. Changing a model changes every entropy-ordered address on that line, so models are versioned, never silently replaced.
+- A model's training is itself reproducible: the corpus manifest pins every file by SHA-256, and training the same corpus with the same options gives the same file byte for byte. The reference oracle rebuilds the default model independently and must match its hash.
 
 ---
 
@@ -112,6 +140,10 @@ Each line is presented as a **single hallway**: an endless corridor with a shelf
 
 - **Shelf, door, repeat.** Shelving runs continuously; doors (§7) appear at fixed intervals.
 - **Sides:** left and right shelves hold consecutive halves of the local range.
+- **One corridor for all lines.** The four lines share a single endless corridor, numbered by one signed position in **tiles of 128 book slots**. 128 is a power of two, and the implementation enforces this at compile time. Each line **repeats** along the corridor: a line of `N` units spans `⌈N / 128⌉` tiles per copy, and copy `c` begins at tile `c·⌈N / 128⌉`. Within a copy, slot `i` holds the unit whose raw address is `i`, or, in the guided view at zoom `d`, the point `i / 2^d`, so a guided loop has `2^d` books.
+- **Padding.** When `N` is not a multiple of 128, the last tile of each copy ends in empty shelf space, so every copy starts on a fresh tile. A line whose size is a power of two, at least 128, has no padding, and when every line's size is a power of two the loops **nest**: each line's start line falls on a start line of every smaller line. `sieve info` reports how each line fits.
+- **Start line.** The beginning of each copy is marked by a checkered strip across the floor and a checkered banner overhead, in the line's two colours. Where every line begins a copy at once (always at tile 0, and wherever else their loops coincide) the start line is doubled.
+- **Setup menu.** Before entering, the reader sets each line's shape. A map draws the four lines side by side, one copy each, as bars whose length is the line's size in bits. The scale is fixed to the largest state space the menu's limits allow, so no bar leaves the screen. There is a minimum bar length, and the scale can be switched to fit the current settings.
 - **Views:**
   - **Guided view** (default, entropy-ordered): shelf length ∝ probability. Meaningful units fill long runs; noise is too thin to occupy floor space. Only shelved units (§9) are shown.
   - **Raw view** (diagnostic): fixed-width units, every unit shown, noise everywhere. This is Borges' library, and the contrast with the guided view is the thesis made visible.
@@ -124,9 +156,11 @@ The hallway is navigable at any scale through **zoom depth** `d`:
 - Walking into a segment expands it into its next symbol. At `d = UNIT_LENGTH`, segments are individual units (books).
 - In the guided view, segment length ∝ the prefix's total probability, so at every depth the routes towards meaning are wide and routes into noise are hairlines. Structurally this is a trie; physically it remains one hallway.
 
+**As built** (guided view): depth is counted in bits of the guided line rather than in symbols. At depth `d`, consecutive books are points `2^−d` apart, and each shows the unit whose arc contains its point. A probable unit owns a long arc, so it fills many books when zoomed in. Zoomed out, each book is the likeliest unit in its `2^−d` slice, so the shelves read as the most probable continuations. Warping sets `d` to the length of the unit's address, which puts the unit exactly on a book.
+
 ### 5.3 Readout
 
-The client always displays: line, view, zoom depth, current address (truncated, expandable) and fractional position.
+The client always displays: line, view, zoom depth, current address (truncated, expandable) and fractional position. It also shows the corridor tile, and the loop's length in tiles with its padding. A tile and slot (`TILE:SLOT`) identify a place on the corridor for every line at once (`sieve read --at`).
 
 ### 5.4 Appearance
 
@@ -139,7 +173,7 @@ The hallway is a wireframe. Each line has exactly two colours, a solid backgroun
 | Audio | green | amber |
 | Video | red | yellow |
 
-One tile of geometry (a bookcase and a door on each wall) is built once and repeated along the corridor. Edges fade towards the background with distance. Each tile holds 200 consecutive units: the left wall, then the right, shelf by shelf from the top, in walking order along each shelf.
+One tile of geometry (a bookcase and a door on each wall) is built once and repeated along the corridor. Edges fade towards the background with distance. Each tile holds 128 consecutive slots (4 shelves of 16 books on each wall): the left wall, then the right, shelf by shelf from the top, in walking order along each shelf. Padding slots have no book.
 
 ---
 
@@ -170,6 +204,9 @@ Input longer than one unit becomes a **sequence of addresses**. The warp lands o
 
 ### 6.4 Arrival
 
+- **Where:** every unit appears once in each copy of its line along the corridor. A warp (or go-to) always goes to the **first copy**, where the corridor position equals the unit's address. A warp is therefore fully determined by what is warped to, including what lies through every door afterwards.
+- **What:** the reader lands facing the unit, and it opens in hand.
+
 - **Shelved unit:** the reader arrives at its shelf position.
 - **Unshelved unit:** the unit is presented **in hand**, as a book the reader is holding, with its address and classification, but with no shelf position and nowhere to be returned to. Units never physically leave the shelves; the in-hand view is a separate presentation.
 
@@ -181,15 +218,12 @@ Doors connect the four lines in a cycle: **Text → Image → Audio → Video �
 
 ### 7.1 Mapping
 
-A door maps by **fractional position**. For a unit at address `a` on a line of size `N`, the door leads to address
+A door keeps the reader's **corridor position** (§5.1) and changes only the line that reads it. On the target line, the reader stands in the same tile and faces the same slot, which holds whatever unit that line has there: its tile `t mod ⌈M / 128⌉`.
 
-`b = ⌊a × M / N⌋` on the target line of size `M`,
-
-computed with exact integer arithmetic. In entropy-ordered mode, the fraction is the lower bound of the unit's coded interval, decoded on the target line.
-
-- When source and target lines have the **same bit length**, the door is a bijection: the same bits, read by a different decoder.
-- When lengths differ, the mapping is many-to-one in one direction. The client therefore records the **return path**: stepping back through the door the reader just used always returns them to their exact origin. Every door passed is kept on a stack, so a whole chain of doors can be retraced exactly; a warp starts a fresh walk and clears it.
+- Every door lines up with a door in every other line, at every tile. Going through a door, walking `k` tiles and going back through the door there puts the reader `k` tiles along from where they left. Stepping straight back through the same door returns them exactly, with nothing to remember.
+- Lines of different sizes repeat at different rates, so many places on a large line share one unit of a smaller line, and the reverse. Sizes can change without breaking any door. When sizes are powers of two, the repeats nest.
 - Doors sit in the walls: the left wall's doors lead to the next line in the cycle, the right wall's to the previous one. The reader comes in through the opposite wall's door.
+- Doors do not preserve the fraction along a line. An earlier design mapped `b = ⌊a × M / N⌋`, but moving one tile on a small line then jumped astronomically on a large one, so walking between lines was not navigable.
 
 ### 7.2 What Doors Demonstrate
 
@@ -311,7 +345,7 @@ Implementation (as built):
 2. **Independent reference oracle** in Python. It shares no code with the core and generates the conformance vectors; the core must reproduce them bit for bit.
 3. **Conformance suite:** fixed inputs with expected addresses, canonical forms and image quantisations. It runs on Windows, Linux and macOS on every push, which also confirms that every platform produces identical addresses.
 4. **Pinned data:** dictionaries are registered by id and SHA-256 (`data/dictionaries/dictionaries.tsv`) and are refused if their hash no longer matches.
-5. **Models as pluggable scorers** (M3 onwards), run through existing libraries, with quantised integer outputs passed to the core.
+5. **Models:** the core contains the character model and the exact coder (§4.2). Larger models (for example neural ones, run through existing libraries) can plug in later, provided they emit the same kind of pinned integer tables.
 6. **Hand-tuned code** (SIMD, assembly) only where profiling proves it worthwhile, and only once it passes the full conformance suite.
 
 ---
@@ -322,12 +356,12 @@ Implementation (as built):
 | :--- | :--- | :--- | :--- |
 | M1 | Exhaustive sieve | Enumerator + S0/S1 filters over **every** unit: text at lengths 4–8, images at 5×5 and 6×6 1-bit; plot of surviving fraction vs. size | **Text done.** Exact counts to length 1,000, cross-checked by brute force and pruned walk. Images not started: needs image S0/S1 filters. |
 | M2 | Raw addressing and warp | Positional and scrambled bijections, canonicalisation rules, CLI warp, round-trip tests | **Done**, for all four lines. Includes neighbour stepping. |
-| M3 | Entropy-ordered addressing | Integer arithmetic coder with a small pinned text model; measured bits/char on real text | Not started |
-| M4 | Hallway prototype | 2D side view: shelves, zoom depth, readout, warp box, in-hand view, guided/raw toggle | **Built directly in 3D** (see M8). The raw view is done: shelves, readout, warp and go-to, in-hand view, ordering toggle. Zoom depth and the guided view are still to come; the guided view needs M3. |
+| M3 | Entropy-ordered addressing | Integer arithmetic coder with a small pinned text model; measured bits/char on real text | **Done for text (lower27).** Exact BigUint coder, order-5 pinned model; 1.93 bits/char on held-out Alice, 1.95 on Chesterton. Model rebuilt byte for byte by the oracle; guided vectors checked on every push. Models for the other lines need corpora. |
+| M4 | Hallway prototype | 2D side view: shelves, zoom depth, readout, warp box, in-hand view, guided/raw toggle | **Built directly in 3D** (see M8). The raw and guided views are done: shelves, readout, warp and go-to, in-hand view, ordering toggle (positional, scrambled, guided) and zoom depth. Hiding unshelved units needs classification (§9). |
 | M5 | Doors | Image and symbolic audio lines; fractional door mapping with return paths | **Done.** Exact door mapping in the core, with a return-path stack in the hallway. |
 | M6 | Anchor Registry | Local, signed, append-only Registry with review workflow; anchored units shelved and marked | Not started |
 | M7 | Paragraph-scale sampling | Classification and sampling at `UNIT_LENGTH` ≈ 1,000; extrapolation checked against M1 | Not started |
-| M8 | 3D hallway | 3D client over the same core interface | **Raw view done.** Wireframe SDL3 client over the core: books, doors, the four line colours, warp, playback of audio books. |
+| M8 | 3D hallway | 3D client over the same core interface | **Raw and guided views done.** Wireframe SDL3 client over the core: books, doors, the four line colours, warp, zoom, playback of audio books. |
 
 ### 13.1 Deferred
 

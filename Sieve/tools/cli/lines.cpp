@@ -1,5 +1,7 @@
 #include "lines.hpp"
 
+#include "models.hpp"
+
 #include "image_io.hpp"
 
 #include "sieve/audio.hpp"
@@ -97,8 +99,18 @@ Line make_line(const Args& a)
     case LineKind::Text:
     {
         const Alphabet& alpha = alphabet_by_id(a.get("alphabet", "lower27"));
-        return Line{kind, &alpha, canon_version_from_string(a.get("canon", "v2")), {},
-                    Space(alpha, a.require_positive("length"), key)};
+        Line line{kind, &alpha, canon_version_from_string(a.get("canon", "v2")), {},
+                  Space(alpha, a.require_positive("length"), key), nullptr, {}};
+        if (a.get("model") != "none")
+        {
+            const LoadedModel m = resolve_model(a.get("model"), alpha.id());
+            if (m.model)
+            {
+                line.guided = std::make_shared<const GuidedLine>(m.model, line.space.unit_length());
+                line.model_id = m.id;
+            }
+        }
+        return line;
     }
     case LineKind::Image:
     case LineKind::Video:
@@ -109,10 +121,10 @@ Line make_line(const Args& a)
         f.height = a.get_positive("height", video ? 5 : 10);
         f.frames = video ? a.get_positive("frames", 8) : 1;
         f.palette = &palette_by_id(a.get("palette", "mono"));
-        return Line{kind, nullptr, kDefaultCanon, f, Space(f.symbols_id(), f.palette->size(), f.unit_length(), key)};
+        return Line{kind, nullptr, kDefaultCanon, f, Space(f.symbols_id(), f.palette->size(), f.unit_length(), key), nullptr, {}};
     }
     case LineKind::Audio:
-        return Line{kind, nullptr, kDefaultCanon, {}, Space(kNotesSymbolsId, kNoteSymbols, a.get_positive("length", 16), key)};
+        return Line{kind, nullptr, kDefaultCanon, {}, Space(kNotesSymbolsId, kNoteSymbols, a.get_positive("length", 16), key), nullptr, {}};
     }
     throw std::logic_error("unhandled line");
 }

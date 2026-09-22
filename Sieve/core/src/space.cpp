@@ -240,17 +240,6 @@ double Space::fraction(const Digits& unit, AddressMode mode) const
     return fraction_of(address_digits(unit, mode));
 }
 
-Space::Digits door_map(const Space& from, const Space::Digits& unit, AddressMode mode, const Space& to)
-{
-    if (unit.size() != from.unit_length()) throw std::invalid_argument("digit vector has the wrong length");
-    const Space::Digits a = mode == AddressMode::Scrambled ? from.scramble(unit) : unit;
-    BigUint v = BigUint::from_digits(a, from.base());
-    for (uint32_t i = 0; i < to.unit_length(); ++i) v.mul_small(to.base());       // a * M
-    for (uint32_t i = 0; i < from.unit_length(); ++i) v.divmod_small(from.base()); // floor(. / N), one base at a time
-    Space::Digits b = v.to_digits(to.base(), to.unit_length());
-    return mode == AddressMode::Scrambled ? to.unscramble(std::move(b)) : b;
-}
-
 Space::Digits unit_at_fraction(const Space& space, uint64_t numerator, uint32_t decimals, AddressMode mode)
 {
     BigUint limit(1);

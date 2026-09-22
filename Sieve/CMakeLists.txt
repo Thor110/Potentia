@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(Sieve VERSION 0.4.1 LANGUAGES CXX)
+project(Sieve VERSION 0.7.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -20,6 +20,9 @@ add_library(sieve_core STATIC
     core/src/audio.cpp
     core/src/biguint.cpp
     core/src/canon.cpp
+    core/src/corridor.cpp
+    core/src/guided.cpp
+    core/src/model.cpp
     core/src/image.cpp
     core/src/sha256.cpp
     core/src/sieve.cpp
@@ -47,7 +50,8 @@ endif()
 # Shared by the command-line tool and the hallway: the four lines, file input/output, dictionaries.
 add_library(sieve_lines STATIC
     tools/cli/dictionaries.cpp
-    tools/cli/lines.cpp)
+    tools/cli/lines.cpp
+    tools/cli/models.cpp)
 target_include_directories(sieve_lines PUBLIC tools)
 target_link_libraries(sieve_lines PUBLIC sieve_core sieve_image_io)
 
@@ -57,13 +61,16 @@ add_executable(sieve
 target_link_libraries(sieve PRIVATE sieve_lines)
 target_compile_definitions(sieve PRIVATE SIEVE_VERSION="${PROJECT_VERSION}")
 
-# Copy the bundled dictionaries next to the executable, so `sieve sift` works from any
+# Copy the bundled dictionaries and models next to the executable, so they work from any
 # folder and in every configuration (Debug, Release, ...).
 add_custom_command(TARGET sieve POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/data/dictionaries
             $<TARGET_FILE_DIR:sieve>/dictionaries
-    COMMENT "Copying dictionaries next to sieve")
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/data/models
+            $<TARGET_FILE_DIR:sieve>/models
+    COMMENT "Copying dictionaries and models next to sieve")
 
 # ---------------------------------------------------------------- tests
 if(SIEVE_BUILD_TESTS)
@@ -95,11 +102,15 @@ if(SIEVE_BUILD_CLIENT)
 
     add_executable(hallway
         client/hallway.cpp
+        client/menu.cpp
         client/synth.cpp
         client/world.cpp)
     target_link_libraries(hallway PRIVATE sieve_lines SDL3::SDL3)
     add_custom_command(TARGET hallway POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/dictionaries
-                $<TARGET_FILE_DIR:hallway>/dictionaries)
+                $<TARGET_FILE_DIR:hallway>/dictionaries
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/models
+                $<TARGET_FILE_DIR:hallway>/models)
 endif()

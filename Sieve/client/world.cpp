@@ -10,7 +10,7 @@ float book_height(int row, int col)
     h ^= h >> 13;
     h *= 0x5bd1e995u;
     h ^= h >> 15;
-    return 0.30f + 0.10f * float(h % 1000u) / 1000.0f; // 0.30 .. 0.40 m
+    return 0.34f + 0.12f * float(h % 1000u) / 1000.0f; // 0.34 .. 0.46 m
 }
 
 void book_face(float tile_z, Side side, int row, int col, Vec3 out[4])

@@ -1,0 +1,12 @@
+# Sieve model registry. One model per line, tab-separated.
+#
+#   id           Name used with --model (letters, digits, - and _).
+#   file         Model file in this folder (sieve-charmodel-v1; see SPECIFICATIONS 4.2).
+#   symbols      The alphabet it models (lower27, babel29, ascii95).
+#   default      yes for the one model used for that alphabet when --model is not given.
+#   sha256       SHA-256 of the file. A model that no longer matches is refused, because every
+#                guided address depends on every count in it.
+#   description  One line, shown by sieve models.
+#
+# To add a model: build it with sieve train (it prints a ready-made line), then add the line.
+gutenberg-lower27-o5	gutenberg-lower27-o5.model	lower27	yes	dff72d8a00e53f08aaf273c23242e44785e121792f4d33a1b6335f45ef5dd4a3	Order-5 lower27 model of 15 Project Gutenberg books (corpus/gutenberg-nltk.tsv), about 1.9 bits per character on held-out text

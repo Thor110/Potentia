@@ -3,3 +3,4 @@ out/
 .vs/
 vcpkg_installed/
 __pycache__/
+corpus/

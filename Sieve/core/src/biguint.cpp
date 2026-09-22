@@ -208,6 +208,56 @@ std::string BigUint::to_decimal() const
     return s;
 }
 
+bool BigUint::bit(size_t i) const
+{
+    const size_t limb = i / 32;
+    return limb < limbs_.size() && ((limbs_[limb] >> (i % 32)) & 1u) != 0;
+}
+
+uint32_t BigUint::low_bits(unsigned n) const
+{
+    if (n > 32) throw std::invalid_argument("low_bits takes at most 32 bits");
+    const uint32_t v = limbs_.empty() ? 0 : limbs_[0];
+    return n == 32 ? v : v & ((1u << n) - 1);
+}
+
+BigUint BigUint::from_decimal(std::string_view dec)
+{
+    if (dec.empty()) throw std::invalid_argument("empty decimal number");
+    BigUint v;
+    for (char c : dec)
+    {
+        if (c < '0' || c > '9') throw std::invalid_argument("invalid decimal digit '" + std::string(1, c) + "'");
+        v.mul_small(10);
+        v.add_small(uint32_t(c - '0'));
+    }
+    return v;
+}
+
+BigUint BigUint::mod(const BigUint& a, const BigUint& m)
+{
+    if (m.is_zero()) throw std::domain_error("modulo by zero");
+    if (a < m) return a;
+    if (m.is_power_of_two())
+    {
+        const size_t bits = m.bit_length() - 1;
+        BigUint r = a;
+        r.limbs_.resize(std::min(r.limbs_.size(), (bits + 31) / 32));
+        if (bits % 32 && !r.limbs_.empty() && r.limbs_.size() == (bits + 31) / 32) r.limbs_.back() &= (1u << (bits % 32)) - 1;
+        r.trim();
+        return r;
+    }
+    // Shift-and-subtract, one bit of a at a time.
+    BigUint r;
+    for (size_t i = a.bit_length(); i-- > 0;)
+    {
+        r <<= 1;
+        if (a.bit(i)) r.add_small(1);
+        if (r >= m) r -= m;
+    }
+    return r;
+}
+
 size_t BigUint::bit_length() const
 {
     if (limbs_.empty()) return 0;
@@ -224,6 +274,71 @@ bool BigUint::is_power_of_two() const
         if (limbs_[i]) return false;
     const uint32_t top = limbs_.back();
     return (top & (top - 1)) == 0;
+}
+
+BigUint& BigUint::operator-=(const BigUint& other)
+{
+    if (compare(*this, other) < 0) throw std::underflow_error("BigUint subtraction would go below zero");
+    int64_t borrow = 0;
+    for (size_t i = 0; i < limbs_.size(); ++i)
+    {
+        int64_t t = int64_t(limbs_[i]) - borrow - (i < other.limbs_.size() ? int64_t(other.limbs_[i]) : 0);
+        borrow = t < 0 ? 1 : 0;
+        if (t < 0) t += int64_t(1) << 32;
+        limbs_[i] = static_cast<uint32_t>(t);
+        if (!borrow && i >= other.limbs_.size()) break;
+    }
+    trim();
+    return *this;
+}
+
+BigUint& BigUint::operator<<=(size_t bits)
+{
+    if (limbs_.empty() || bits == 0) return *this;
+    const size_t whole = bits / 32, part = bits % 32;
+    if (part)
+    {
+        uint32_t carry = 0;
+        for (auto& limb : limbs_)
+        {
+            const uint32_t next = limb >> (32 - part);
+            limb = (limb << part) | carry;
+            carry = next;
+        }
+        if (carry) limbs_.push_back(carry);
+    }
+    limbs_.insert(limbs_.begin(), whole, 0u);
+    return *this;
+}
+
+BigUint& BigUint::operator>>=(size_t bits)
+{
+    const size_t whole = bits / 32, part = bits % 32;
+    if (whole >= limbs_.size()) { limbs_.clear(); return *this; }
+    limbs_.erase(limbs_.begin(), limbs_.begin() + static_cast<std::ptrdiff_t>(whole));
+    if (part)
+    {
+        for (size_t i = 0; i < limbs_.size(); ++i)
+        {
+            const uint32_t hi = i + 1 < limbs_.size() ? limbs_[i + 1] : 0;
+            limbs_[i] = (limbs_[i] >> part) | (hi << (32 - part));
+        }
+    }
+    trim();
+    return *this;
+}
+
+double BigUint::ratio_to_power_of_two(size_t bits) const
+{
+    if (limbs_.empty()) return 0.0;
+    // Top 64 bits as the mantissa is ample for a double.
+    const size_t len = bit_length();
+    BigUint top = *this;
+    size_t dropped = 0;
+    if (len > 64) { dropped = len - 64; top >>= dropped; }
+    double m = 0.0;
+    for (size_t i = top.limbs_.size(); i-- > 0;) m = m * 4294967296.0 + top.limbs_[i];
+    return std::ldexp(m, static_cast<int>(dropped) - static_cast<int>(bits));
 }
 
 int compare(const BigUint& a, const BigUint& b)

@@ -1,0 +1,4 @@
+# Pinned data is hashed byte for byte (SHA-256 in the registries and vector files), so Git must
+# never convert its line endings, on any platform. This file works from a subfolder too.
+data/** -text
+tests/*.tsv -text

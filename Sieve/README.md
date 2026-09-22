@@ -4,7 +4,7 @@
 
 Sieve grew out of the Gallery of Babel in **Potentia**. Potentia itself, the alignment thesis and the preservation of AI models, lives in the parent repository. Sieve is the search-space engine and its hallway.
 
-Implementation of [SPECIFICATIONS.md](docs/SPECIFICATIONS.md) (v2.0). This covers **M1** (the exhaustive sieve), **M2** (raw addressing and warp), and the first version of all four lines: **text, image, audio and video**.
+Implementation of [SPECIFICATIONS.md](docs/SPECIFICATIONS.md) (v2.0). This covers **M1** (the exhaustive sieve), **M2** (raw addressing and warp), **M3** for text (entropy-ordered "guided" addresses from a pinned model), and the first version of all four lines: **text, image, audio and video**.
 
 **Concept and architecture by Edward James Gordon.**
 
@@ -18,6 +18,8 @@ Implementation of [SPECIFICATIONS.md](docs/SPECIFICATIONS.md) (v2.0). This cover
 | `tools/plot_sieve.py` | Plots sieve results (needs matplotlib) |
 | `tools/build_dictionary.py` | Rebuilds the English dictionaries from SCOWL |
 | `data/dictionaries/` | The dictionary registry (`dictionaries.tsv`) and pinned English word lists (SCOWL 2020.12.07) |
+| `data/models/` | The model registry (`models.tsv`), the pinned text model, and the training corpus manifest (`corpus/gutenberg-nltk.tsv`) |
+| `tools/fetch_corpus.py` | Downloads the training corpus into `corpus/` (not stored in the repository) and checks every file's hash |
 | `reference/sieve_ref.py` | Independent Python oracle; generates every conformance vector file |
 | `tests/` | Core tests and the conformance vectors |
 | `results/` | M1 sieve output (CSV and chart) |
@@ -63,6 +65,7 @@ The build is warning-free at `/W4` and `-Wall -Wextra -Wpedantic`, and it copies
 - **Address:** a unit's position in the space, written in hex. Every unit has exactly one address, and every address in range holds exactly one unit.
 - **Positional ordering:** the address *is* the content, read as a number. Units with the same beginning sit side by side.
 - **Scrambled ordering:** the content passes through a fixed, reversible shuffle first, so neighbouring addresses hold unrelated units, as in Borges' library.
+- **Guided ordering** (text): each unit gets a stretch of the line as long as a pinned model thinks it likely. Meaningful text gets short addresses (about 2 bits per character instead of 4.75) and noise gets long ones. See *Guided addresses* below.
 
 Getting help from the tool itself:
 
@@ -114,10 +117,35 @@ Size of each space with the default options:
 hallway [options]          (hallway --help for the full list)
 ```
 
-Each line is an endless corridor lined with bookcases. **Every book is one unit**, and the address increases as you walk forward:
-- Each tile of corridor holds 200 consecutive units: the left wall first, then the right wall.
+All four lines share **one endless corridor** lined with bookcases. **Every book is one unit**, and the address increases as you walk forward:
+- Each tile of corridor holds **128 book slots** (4 shelves of 16 on each wall): the left wall first, then the right wall.
+- 128 is a power of two, and the code refuses to build if it isn't (`sieve/corridor.hpp`).
 - On each wall the books run shelf by shelf from the top, and along each shelf in the direction you are walking.
 - One tile of geometry is built once and repeated forever.
+
+**Loops and the start line.** Each line **repeats** along the corridor. One copy of a line of N units spans ⌈N / 128⌉ tiles, and slot *i* of a copy holds the unit whose address is *i*.
+- **Padding:** if N isn't a multiple of 128, the last tile of each copy ends in bare shelf, so every copy starts on a fresh tile.
+- **Power-of-two sizes:** a line whose size is a power of two (at least 128) fills its tiles exactly. When every line's size is a power of two, the loops nest.
+- **Checking the fit:** `sieve info` tells you how a line fits.
+- **The start line:** where each copy begins, a **checkered start line** crosses the floor and hangs overhead.
+- **The double flag:** where all four lines start together, the start line is doubled. That is always so at corridor tile 0, where **Home** takes you.
+
+The lines are astronomically long, so to see a whole loop, try a 2-character text line: `hallway --length 2` gives 729 units, which is 6 tiles with 39 empty slots.
+
+![The double start line at corridor tile 0](docs/images/hallway-start-line.png)
+
+**The setup menu.** The hallway opens with a menu where you can set every line's shape: text length, alphabet, warp rules and model; image size and palette; audio notes; video size, frames and palette; plus the key, the starting line and the ordering. Enter walks in, and **F1** in the hallway brings the menu back.
+
+Beside the settings, a **map** draws the four lines side by side, one copy each:
+- Each bar's length is the line's size in bits (log2 of its number of units). The real sizes differ by factors far too large to draw literally.
+- The scale is **fixed to the largest state space the menu allows**, so no bar can ever leave the screen, and a bar keeps its length when you change the other lines. At the maximum video setting (32×32, 64 frames, 24-bit colour) the video bar fills the height exactly.
+- Every bar has a minimum length, so even a tiny line stays visible.
+- **S** switches to a scale fitted to the current settings, which shows their proportions better. At the defaults, every line is a few hundred bits against a maximum of 1.5 million, so all four bars sit at the minimum on the fixed scale.
+- Each line also shows its units, bits, tiles per copy, and padding.
+
+The menu's limits: text up to 3,200 characters (a Babel page), images up to 64×64, audio up to 1,024 notes, video up to 32×32 with 64 frames. Left/Right change a setting (Shift ×10, Ctrl ×100), PgUp/PgDn double or halve it, which is quick for reaching powers of two. `--no-menu` skips the menu.
+
+![The setup menu, fitted scale](docs/images/hallway-menu.png)
 
 ![The text line, scrambled ordering](docs/images/hallway-text.png)
 
@@ -130,9 +158,13 @@ Each line is an endless corridor lined with bookcases. **Every book is one unit*
 | audio | green | amber |
 | video | red | yellow |
 
-**Doors.** The walls repeat shelf, door, shelf. A black door in the **left** wall leads to the **next** line (text → image → audio → video → text). A door in the **right** wall leads to the **previous** line. You arrive at the same fractional position along the new line, and come in through the opposite door, in the new line's colours.
+**Doors.** The walls repeat shelf, door, shelf. A black door in the **left** wall leads to the **next** line (text → image → audio → video → text). A door in the **right** wall leads to the **previous** line. You come in through the opposite door, in the new line's colours.
 
-Walk back through the door you came in by and you return to *exactly* where you were. Every door you pass is remembered, so a whole chain of doors can be retraced exactly.
+A door **keeps your corridor position** and only changes which line reads it:
+- Every door lines up with a door in every other line.
+- Go through a door, walk *k* tiles, go back through the door there, and you are *k* tiles along from where you left.
+- Step straight back through the same door and you are exactly where you were.
+- Lines of different sizes simply repeat at different rates. Many places on a big line share one unit of a smaller line, and the reverse.
 
 ![A door in the video line](docs/images/hallway-door.png)
 
@@ -149,12 +181,14 @@ Walk back through the door you came in by and you return to *exactly* where you 
 | W A S D / arrows | Walk and turn. **Shift** runs. |
 | Mouse | Look around. **Tab** frees or captures the mouse. |
 | E / left click | Take the book you are looking at off the shelf, or put it back |
-| T | **Warp:** type text, notes, or a picture file path (for image and video), then Enter. You land in front of it; it is the first book on the left wall. Ctrl+V pastes. |
-| G | **Go to** a hex address, or a percentage such as `50%` or `36.25%` |
+| T | **Warp:** type text, notes, or a picture file path (for image and video), then Enter. You land facing it, in the first copy of the line (where your position equals its address), and it opens in hand. Ctrl+V pastes. |
+| G | **Go to** a hex address or a percentage such as `50%` or `36.25%` (these open the book too), or `@T` for corridor tile T |
 | N / B | Next or previous unit of a warp that made a trail of several units |
-| M | Switch between positional and scrambled ordering |
+| M | Switch ordering: positional → scrambled → guided (text) → positional |
+| - / = | Guided ordering: zoom out / in by one bit (**Shift**: 8 bits) |
 | Mouse wheel · PgUp/PgDn · [ ] | Jump 1 · 1,000 · 1,000,000 tiles along the line |
-| Home | Back to the start of this walk |
+| Home | Corridor tile 0: the start line of every line (the double flag) |
+| F1 | Back to the setup menu |
 | P | Play an audio book you are holding |
 | Esc | Close a panel or input, or free the mouse |
 | Ctrl+Q | Quit |
@@ -163,14 +197,14 @@ Walk back through the door you came in by and you return to *exactly* where you 
 
 | Line | Options |
 | :--- | :--- |
-| text | `--length` (32), `--alphabet`, `--canon` |
+| text | `--length` (32), `--alphabet`, `--canon`, `--model` |
 | image | `--image-width`, `--image-height`, `--image-palette` |
 | audio | `--notes` (16) |
 | video | `--video-width`, `--video-height`, `--video-frames`, `--video-palette` |
 
 It also takes:
-- `--key`, `--mode positional|scrambled` and `--line` for the starting line.
-- `--warp INPUT` or `--goto ADDRESS|P%` to set where you start.
+- `--key`, `--mode positional|scrambled|guided` and `--line` for the starting line.
+- `--warp INPUT` or `--goto ADDRESS|P%|@T` to set where you start, `--zoom D` for the guided zoom, and `--tile N` to move N tiles along from there.
 
 **Screenshots and scripted walks** (used by the automatic tests too):
 
@@ -178,11 +212,24 @@ It also takes:
 hallway --screenshot shot.png --size 1280x720 --pose X,Z,YAW,PITCH
 hallway --line image --warp sprite.png --take --screenshot in-hand.png
 hallway --pose 0,7,-90,0 --walk "-2.3,0;2.5,0" --screenshot door.png   # through a door and back
+hallway --pose 0,7,-90,0 --walk "-2.3,0;-0.8,0;0,8;1.5,0" --screenshot loop.png   # through, one tile along, back
+hallway --length 2 --goto @0 --pose 0,5,180,-14 --screenshot start.png   # the double start line
+hallway --menu --press S --screenshot menu.png                            # the setup menu (keys go to the menu)
+hallway --warp "it was the best of times" --press "M,M,-,-" --screenshot g.png   # keys, as if typed
 ```
 
 On a machine without a display, set `SDL_VIDEO_DRIVER=offscreen` and `SDL_RENDER_DRIVER=software`.
 
-**What it shows so far.** This is the raw view: every unit has a book, and noise fills the shelves, as in Borges' library. The guided view, where shelf length follows probability so that meaning fills the corridor, needs the entropy-ordered addresses of M3.
+**The guided view.** Press **M** until the top bar says `guided` (or start with `--mode guided`). Now each book is a *point* on the entropy-ordered line, and the books are `2^-zoom` of the line apart. Each book holds the unit whose stretch of the line contains its point. Likely text owns long stretches, so the shelves are readable almost everywhere. Noise is still on the line, but it occupies hairline stretches that the books rarely land on.
+
+- Warping puts the unit on a book and sets the zoom to the length of its address. Neighbouring books then differ only near the end.
+- **-** zooms out. At `2^-24`, every book is the likeliest line in its slice, so the wall reads as a list of plausible continuations of where you are.
+- **=** zooms back in.
+- The panel shows the book's point, and the length of the unit's own address in bits: its information content, to within two bits.
+
+![The guided view, zoomed out to 2^-24](docs/images/hallway-guided.png)
+
+Doors work the same in guided order. At zoom *d* the guided loop is 2^*d* books long, and the lines without a model (image, audio, video) keep their raw ordering.
 
 ## Commands
 
@@ -208,7 +255,8 @@ Fits the input to the line with fixed, versioned rules (see *Canonicalisation* b
 
 | Option | Meaning |
 | :--- | :--- |
-| `--mode MODE` | `positional`, `scrambled` or `both` (default). |
+| `--mode MODE` | `positional`, `scrambled`, `guided` or `all` (default: every ordering the line has; `both` also works). |
+| `--model ID\|PATH\|none` | Text: the model for guided addresses. Default: the alphabet's default model (see `models`). |
 | `--short` | Abbreviate long addresses as `start...end (N digits)`. |
 | `--file PATH` | Read the input from a file. |
 
@@ -235,6 +283,8 @@ unit 1/1  "it was the best of times        "
               at 36.0811572947% along the line
   scrambled   007b30165818bf0311497600aa52996f9395e27
               at 2.6985270978% along the line
+  guided      90922c700685e28
+              58 bits: 1.81 bits/symbol (raw 4.75), at 56.4730431890% along the guided line
 ```
 
 ### `read`: give an address, get the content
@@ -247,16 +297,21 @@ This is the reverse of `warp`. Every option that shaped the address must match; 
 
 | Option | Meaning |
 | :--- | :--- |
-| `--mode MODE` | **Required.** `positional` or `scrambled`. |
+| `--mode MODE` | **Required.** `positional`, `scrambled` or `guided`. A guided address is any hex fraction (`8` is halfway): it reads the unit whose stretch of the line contains that point. |
 | `--out PATH` | Also save the unit: `.png` for images and video (frames side by side), `.mid` for audio, a text file for text. |
 | `--scale S` | Enlarge each pixel to S×S in the saved PNG. Default 16. |
 | `--around N` | Also show the N units on either side: what the hallway shows around this shelf. The line loops, so the last address is followed by the first. |
+| `--zoom D` | Guided `--around` and `--at`: the books are `2^-D` of the line apart. Default (for `--around`): the length of the unit's own address. |
+| `--at TILE:SLOT` | Instead of an address: the book at that place on the hallway's shared corridor (the tile number the hallway shows, and slot 0–127). |
 
 ```sh
 sieve read --length 32 --mode scrambled 007b30165818bf0311497600aa52996f9395e27   # "it was the best of times"
 sieve read --line image --mode scrambled <address> --out found.png
 sieve read --line audio --mode scrambled <address> --out tune.mid
 sieve read --length 12 --mode positional --around 3 <address>
+sieve read --length 32 --mode guided 90922c700685e28                    # "it was the best of times"
+sieve read --length 32 --mode guided --around 4 --zoom 20 90922         # a zoomed-out guided shelf
+sieve read --line image --mode positional --at 4627:0                    # what the hallway shows at tile 4627, slot 0
 ```
 
 With `--around`, positional order shows that neighbours differ only at the end. Scrambled order shows that they are unrelated:
@@ -270,14 +325,17 @@ With `--around`, positional order shows that neighbours differ only at the end. 
 ### `browse`: pull random units off the shelves
 
 ```
-sieve browse [--line LINE] [line options] [--key K] [--count N] [--short]
+sieve browse [--line LINE] [line options] [--key K] [--mode scrambled|guided] [--count N] [--seed S] [--short]
 ```
 
 ```sh
 sieve browse --length 32
+sieve browse --length 64 --mode guided        # random points on the guided line
 sieve browse --line image --count 3
 sieve browse --line audio
 ```
+
+A random scrambled address is a uniformly random unit, so it is noise. A random *guided* point is a sample from the model, so it reads like text: `"great piedro had lifted on that in had made no come are and the "`. That is what the guided line is built to do, and it is why fluency is never evidence that a text is real.
 
 ### `sift`: how much of the text space survives each noise filter (M1)
 
@@ -351,13 +409,45 @@ registry  data/dictionaries/dictionaries.tsv
     SCOWL 2020.12.07 size 80: large, includes rare words
 ```
 
+### `models`, `train`, `measure`: the models behind guided addresses (M3)
+
+```
+sieve models
+sieve train   --out FILE [--corpus MANIFEST] [--texts DIR] [--alphabet A] [--order K] [--min-count M]
+sieve measure [--model ID|PATH] [--length L] [FILE... | --corpus MANIFEST --texts DIR [--role test|train|all]]
+```
+
+Models are registered in `data/models/models.tsv` and pinned by SHA-256, like dictionaries. Every guided address depends on every count in the model, so a changed file is refused. `sieve models` lists and checks them.
+
+`sieve train` rebuilds a model from a corpus manifest, which lists each file with its encoding, role (`train` or `test`) and SHA-256. The same corpus and options always give the same file, byte for byte:
+
+```sh
+python3 tools/fetch_corpus.py                                   # the 18 Project Gutenberg books
+sieve train --out /tmp/check.model                              # sha256 dff72d8a... = the pinned model
+sieve measure                                                   # bits per character on the held-out books
+```
+
+`sieve measure` reports two figures in bits per character:
+- `stream`: the model's information content, coding the text as one long history.
+- `guided`: the real cost of guided addresses when the text is cut into units.
+
+With no files, it measures the three books held out of training:
+
+```
+text                            symbols   stream   guided    vs raw
+carroll-alice.txt                134371    1.929    1.932     2.46x
+chesterton-thursday.txt          307403    1.944    1.948     2.44x
+shakespeare-macbeth.txt           93070    2.478    2.480     1.92x
+all                              534844    2.033    2.037     2.33x
+```
+
 ### `version`: what produced a result
 
 ```
 sieve version        (or: sieve --version)
 ```
 
-Prints the tool version, the scramble construction, every canonicalisation rule version, the alphabets and palettes, and the default dictionary with its SHA-256. Record this alongside any result you publish, so it can be reproduced exactly.
+Prints the tool version, the scramble construction, every canonicalisation rule version, the alphabets and palettes, the guided coder and model format, and the default dictionary and model with their SHA-256. Record this alongside any result you publish, so it can be reproduced exactly.
 
 ## Canonicalisation
 
@@ -397,6 +487,9 @@ The Python oracle shares no code with the C++ core. It uses native big integers,
 | `vectors_digits_v1.tsv` | Addresses over 2, 16, 104, 256 and 16,777,216 symbols (the image, audio and video lines) |
 | `vectors_canon.tsv` | Text canonicalisation v1 and v2, including every accented letter in the fold table |
 | `vectors_image_v1.tsv` | Image resampling and palette quantisation, all four palettes |
+| `vectors_guided_v1.tsv` | Guided addresses and point decoding under the pinned model. The oracle derives every frequency table from the model file itself. |
+
+The oracle also rebuilds the default model from the raw corpus (`sieve_ref.py model-build`) and must produce the same SHA-256 as `sieve train`. The core tests check every tiny space exhaustively: at L = 1–3 the arcs of all 27^L units tile the line exactly, every address is the shortest block that fits, and every address decodes back.
 
 `sieve_tests` runs every check twice: once on the portable SHA-256 and once on the CPU's SHA instructions (SHA-NI, on x86-64 CPUs that have them), so both paths are held to the same vectors. The fast path is picked automatically at start-up; `sieve version` shows which one this machine uses.
 
@@ -422,6 +515,7 @@ python3 sieve_ref.py vectors       > ../tests/vectors_v1.tsv
 python3 sieve_ref.py digit-vectors > ../tests/vectors_digits_v1.tsv
 python3 sieve_ref.py canon-vectors > ../tests/vectors_canon.tsv
 python3 sieve_ref.py image-vectors > ../tests/vectors_image_v1.tsv
+python3 sieve_ref.py guided-vectors > ../tests/vectors_guided_v1.tsv
 ```
 
 ## M1 results
@@ -451,8 +545,26 @@ What the results show:
 - **What survives is word salad, not English.** It carries about 2.7 bits per character, where English carries about 1. Closing that gap at paragraph scale is roughly another 510 orders of magnitude, which is the job of the language-model stage (M3).
 - **Pruning blocks off noise without visiting it.** At L = 7 the pruned walk explores 10^-2.8 (0.17%) of the prefix tree to find every surviving unit exactly, and that fraction falls as L grows.
 
+## M3 results
+
+Guided addresses under the default model (`gutenberg-lower27-o5`: order 5, 101,294 contexts, 10.5 million training characters).
+
+| | Bits per character | 1,000-character paragraph |
+| :--- | ---: | ---: |
+| Raw (every unit equally likely) | 4.75 | 4,755 bits, one of 10^1,431 |
+| After the M1 dictionary sieve (`words`, SCOWL 60) | 2.69 | one of 10^811 |
+| Guided, held-out Alice in Wonderland | 1.93 | ~1,930 bits, one of ~10^581 |
+| Shannon's estimate for English | 0.6–1.3 | one of 10^181–10^391 |
+
+What the results show:
+
+- **The model does the job the dictionary could not.** Word salad that passes the M1 sieve still carries 2.69 bits per character. The model gets real English to 1.93, which removes another ~230 orders of magnitude at paragraph scale.
+- **Address length is information.** A guided address is never shorter than the unit's information content and never more than 2 bits longer, so short addresses always mean probable text.
+- **Most of the rest is model quality, not addressing.** The coder is exact, and a better model plugs into the same format. The remaining gap to Shannon's estimate is what a larger (for example neural) model would close.
+
 ## Next
 
-- **M3:** an integer arithmetic coder with a small pinned character model (entropy-ordered addresses), measured in bits per character on real text.
-- **M4 (rest):** zoom depth in the hallway, and the guided view once M3 exists.
+- **Models for the other lines:** a melody model for the audio line, and small-image statistics for the image line. The model format already takes any alphabet size.
+- **Shelving (§9):** classify units so that the guided view can leave noise off the shelves entirely.
 - **M1 (images):** noise filters for tiny images, counted over every 5×5 and 6×6 1-bit picture.
+- **A larger text model** (for example ascii95 with case and punctuation, or a neural scorer with quantised outputs), measured with `sieve measure` against the same held-out books.

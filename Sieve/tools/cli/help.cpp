@@ -30,7 +30,11 @@ const std::string kModeText =
     "  positional  The address is the content itself, read as a number. Units that share a\n"
     "              beginning sit next to each other (\"this is a\" beside \"this is b\").\n"
     "  scrambled   The content is shuffled by a fixed, reversible permutation first, so\n"
-    "              neighbouring addresses hold unrelated units, as in Borges' library.";
+    "              neighbouring addresses hold unrelated units, as in Borges' library.\n"
+    "  guided      (text, with a model) Entropy-ordered: each unit takes a stretch of the line\n"
+    "              as long as the model thinks it likely, so meaningful text gets short addresses\n"
+    "              (about 2 bits per character instead of 4.75) and noise gets long ones. The\n"
+    "              address length is the unit's information content, to within 2 bits.";
 
 const Option kLine = {"--line text|image|audio|video",
                       "Which line (kind of content) to work on. Default: text. Each line has its own\n"
@@ -39,6 +43,7 @@ const Option kLine = {"--line text|image|audio|video",
 const Option kLineOptions = {
     "line options",
     "text   --length L (required)  --alphabet lower27|babel29|ascii95  --canon v2|v1\n"
+    "       --model ID|PATH|none  (guided ordering; default: the alphabet's default model)\n"
     "image  --width W (10)  --height H (10)  --palette mono|ega16|rgb332|rgb24 (mono)\n"
     "audio  --length N note events (16)\n"
     "video  --width W (5)  --height H (5)  --frames F (8)  --palette ... (mono)\n"
@@ -83,10 +88,12 @@ const std::vector<Page>& pages()
          "         missing frames are filled with black.\n"
          "Put multi-word text in quotes.",
          {kLine, kLineOptions, kKey,
-          {"--mode MODE", "positional, scrambled or both (default both). " + kModeText},
+          {"--mode MODE", "positional, scrambled, guided or all (default all: every ordering the line has;\n"
+                          "\"both\" is accepted too). " + kModeText},
           kShort,
           {"--file PATH", "Read the input from a file instead of the command line."}},
-         {{"sieve warp --length 32 \"It was the best of times\"", "both addresses of one line of text"},
+         {{"sieve warp --length 32 \"It was the best of times\"", "every address of one line of text"},
+          {"sieve warp --length 1000 --mode guided --file chapter1.txt", "guided addresses: about 2 bits per character"},
           {"sieve warp --length 32 --mode scrambled --short \"It was the best of times\"", "just the scrambled one, abbreviated"},
           {"sieve warp --length 1000 --file chapter1.txt", "a whole text file, 1000 characters per unit"},
           {"sieve warp --line image --file sprite.png", "a picture as a 10x10 black-and-white image"},
@@ -95,38 +102,57 @@ const std::vector<Page>& pages()
           {"sieve warp --line video --file walk.gif", "an animation as 8 frames of 5x5"}}},
 
         {"read", "Give an address and get back what is stored there.",
-         "sieve read [--line LINE] [line options] [--key K] --mode MODE [--out PATH] [--scale S] ADDRESS",
+         "sieve read [--line LINE] [line options] [--key K] --mode MODE [--out PATH] [--scale S] (ADDRESS | --at TILE:SLOT)",
          "The reverse of warp. ADDRESS is the hex string warp or browse printed. Every option that\n"
          "shaped the address (--line, the line options, --key, --mode) must match, or you will read\n"
          "a different unit: every address in range holds something. Text is printed; images and\n"
          "video are drawn in ASCII; audio is printed as notes. --out saves the unit as a file.",
          {kLine, kLineOptions, kKey,
-          {"--mode MODE", "positional or scrambled (required). " + kModeText},
+          {"--mode MODE", "positional, scrambled or guided (required). " + kModeText + "\n"
+                          "A guided ADDRESS is any hex fraction (\"8\" is halfway along); it reads the unit whose\n"
+                          "stretch of the line contains that point."},
           {"--out PATH", "Also save the unit: .png for image and video (frames side by side), .mid for\n"
                          "audio (a playable MIDI file), a .txt file for text."},
           {"--scale S", "Enlarge each pixel to SxS in the saved PNG. Default 16."},
           {"--around N", "Also show the N units on either side, in the chosen ordering: what the hallway\n"
                          "shows around this shelf. In positional order the neighbours differ only at\n"
                          "the end; in scrambled order they are unrelated. The line loops, so the last\n"
-                         "address is followed by the first."},
+                         "address is followed by the first. In guided order the books are points 2^-D\n"
+                         "apart (see --zoom), so zooming out shows the likeliest ways to continue."},
+          {"--at TILE:SLOT", "Instead of an ADDRESS: the book at that place on the hallway's shared corridor\n"
+                             "(the tile number the hallway shows, and slot 0-127 within it). Each line repeats\n"
+                             "along the corridor, so every tile holds something on every line. Guided order\n"
+                             "needs --zoom as well."},
+          {"--zoom D", "Guided --around and --at: books are 2^-D of the line apart. Default: the length in\n"
+                       "bits of the unit's own address. Smaller D = zoomed out (the most probable\n"
+                       "routes); larger D = zoomed in (neighbours differ only near the end)."},
           kShort},
          {{"sieve read --length 32 --mode scrambled 007b30165818bf0311497600aa52996f9395e27",
            "prints \"it was the best of times\""},
           {"sieve read --length 3 --mode positional 0312", "prints \"abc\""},
+          {"sieve read --length 32 --mode guided 8", "the unit halfway along the guided line"},
+          {"sieve read --line image --mode positional --at 4626:0", "the image on the shelf at corridor tile 4626, slot 0"},
+          {"sieve read --length 32 --mode guided --around 5 --zoom 20 90922", "a zoomed-out shelf of likely lines"},
           {"sieve read --length 32 --mode positional --around 3 <address>", "the shelf and 3 neighbours either side"},
           {"sieve read --line image --mode scrambled <address> --out found.png", "draws it and saves a PNG"},
           {"sieve read --line audio --mode scrambled <address> --out tune.mid", "prints the notes and saves a MIDI file"}}},
 
         {"browse", "Pull random units off the shelves.",
-         "sieve browse [--line LINE] [line options] [--key K] [--count N] [--short]",
+         "sieve browse [--line LINE] [line options] [--key K] [--mode scrambled|guided] [--count N] [--seed S] [--short]",
          "Picks uniformly random addresses and shows what is there. This is what wandering the raw\n"
          "Library of Babel is like: almost everything is noise. Each result shows its scrambled\n"
-         "address, so you can read or save it later.",
+         "address, so you can read or save it later.\n"
+         "With --mode guided (text) it picks random points on the guided line instead, which is\n"
+         "sampling from the model: the result reads like text, because that is what the line is\n"
+         "built to do. Fluency is not evidence that a text is real.",
          {kLine, kLineOptions, kKey,
+          {"--mode scrambled|guided", "Which ordering to pick from. Default scrambled."},
           {"--count N", "How many units to show. Default 5."},
+          {"--seed S", "Repeatable choices: the same seed gives the same units."},
           kShort},
          {{"sieve browse --length 32", "five random 32-character lines of text"},
           {"sieve browse --length 80 --count 20 --alphabet babel29", "twenty lines of Borges' library"},
+          {"sieve browse --length 64 --mode guided", "five random points on the guided line"},
           {"sieve browse --line image --count 3", "three random 10x10 images, drawn in ASCII"},
           {"sieve browse --line audio", "five random melodies"}}},
 
@@ -185,10 +211,53 @@ const std::vector<Page>& pages()
           {"sieve dicts --hash data/dictionaries/my-words.txt", "prepare a new dictionary for the registry"},
           {"sieve sift --dict my-dictionary", "use it once registered"}}},
 
+        {"models", "List the registered models used for guided (entropy-ordered) addresses.",
+         "sieve models",
+         "Models are listed in data/models/models.tsv (the build copies the folder next to the\n"
+         "executable), pinned by SHA-256 like dictionaries: every guided address depends on every\n"
+         "count in the model, so a changed file is refused. One model per alphabet is the default;\n"
+         "text commands use it unless given --model ID, --model FILE.model or --model none.",
+         {},
+         {{"sieve models", "list models, check their files and hashes"},
+          {"sieve warp --length 32 --model none \"hello\"", "skip the model (raw addresses only)"}}},
+
+        {"train", "Build a model from a pinned corpus (milestone M3).",
+         "sieve train --out FILE [--corpus MANIFEST] [--texts DIR] [--alphabet A] [--order K] [--min-count M]",
+         "Reads the corpus manifest (file, encoding, role, SHA-256 per line), checks every file,\n"
+         "canonicalises the \"train\" files with canon-text-v2 and joins them with one SPACE. Then it\n"
+         "counts how often each symbol follows each context of up to K symbols, keeps the contexts\n"
+         "seen at least M times, and writes the counts as a model file. The same corpus and options\n"
+         "always give the same file, byte for byte (the Python oracle checks this). It prints the\n"
+         "file's SHA-256 and a line to paste into data/models/models.tsv.\n"
+         "Fetch the default corpus first with: python3 tools/fetch_corpus.py",
+         {{"--out FILE", "Where to write the model (required)."},
+          {"--corpus MANIFEST", "Default data/models/corpus/gutenberg-nltk.tsv."},
+          {"--texts DIR", "Folder holding the corpus files. Default corpus/gutenberg."},
+          {"--alphabet A", "lower27 (default), babel29 or ascii95."},
+          {"--order K", "Longest context, in symbols. Default 5."},
+          {"--min-count M", "Keep a context only if seen at least M times. Default 8."}},
+         {{"sieve train --out data/models/gutenberg-lower27-o5.model", "rebuild the default model exactly"},
+          {"sieve train --alphabet ascii95 --out my-ascii.model", "a model that keeps case and punctuation"}}},
+
+        {"measure", "Measure a model in bits per character on real text.",
+         "sieve measure [--model ID|PATH] [--alphabet A] [--length L] [FILE... | --corpus MANIFEST --texts DIR [--role R]]",
+         "Canonicalises each text and reports two figures in bits per symbol:\n"
+         "  stream  the model's information content, coding the text as one long history\n"
+         "  guided  the real cost of guided addresses when the text is cut into units of L\n"
+         "and how many times shorter the guided addresses are than raw ones (log2 of the alphabet\n"
+         "size per symbol). With no files it measures the corpus's held-out \"test\" files, text\n"
+         "the model never saw in training.",
+         {{"--model ID|PATH", "Default: the alphabet's default model."},
+          {"--length L", "Unit length for the guided figure. Default 1000."},
+          {"--role test|train|all", "Which corpus files to measure when no FILE is given. Default test."}},
+         {{"sieve measure", "held-out Gutenberg books at paragraph scale"},
+          {"sieve measure --length 32 mybook.txt", "your own text, one line of 32 characters at a time"}}},
+
         {"version", "Show the tool version and every pinned rule version.",
          "sieve version   (or: sieve --version)",
          "Prints the version of the tool, the scramble construction, the canonicalisation rules,\n"
-         "the alphabets and palettes, and the default dictionary with its SHA-256. Record this\n"
+         "the alphabets and palettes, the guided coder, and the default dictionary and model with\n"
+         "their SHA-256. Record this\n"
          "alongside any result you publish so it can be reproduced exactly.",
          {},
          {{"sieve version", "print everything that determines an address"}}},
@@ -260,7 +329,7 @@ void print_usage()
     {
         if (p.name == "lines") continue;
         std::string name = p.name;
-        name.resize(8, ' ');
+        name.resize(9, ' ');
         std::cout << "  " << name << p.summary << "\n";
     }
     std::cout << "\nLines (choose with --line): text (default), image, audio, video.\n"
@@ -272,7 +341,9 @@ void print_usage()
                  "  sieve read --length 32 --mode scrambled <address printed above>\n"
                  "  sieve browse --line image --count 3\n"
                  "  sieve warp --line audio \"E4q D4q C4q D4q E4h\"\n"
-                 "  sieve sift\n";
+                 "  sieve sift\n"
+                 "  sieve browse --length 64 --mode guided\n"
+                 "  sieve measure\n";
 }
 
 bool print_help(const std::string& name)
