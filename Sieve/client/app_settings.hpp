@@ -8,6 +8,7 @@
 //   vsync = on                  ; wait for the display (no tearing; frame rate capped at its refresh)
 //   edge_glow = off             ; Geometry Edge Glow
 //   real_graphics = off         ; Real Graphics (at most one of these two is on)
+//   door_portals = off          ; the doorways filled with procedural data noise
 //   fps_counter = off           ; frames per second, top right of the hallway
 //   [controls]
 //   mouse_sensitivity = 100     ; percent
@@ -50,12 +51,15 @@ struct AppSettings
     bool vsync = true;           // wait for the display's refresh
     bool edge_glow = false;      // Geometry Edge Glow
     bool real_graphics = false;  // Real Graphics
+    bool door_portals = false;   // Door Portals: procedural data noise in the doorways
     bool fps_counter = false;    // show frames per second in the hallway
     int mouse_sensitivity = 100; // percent, 10..400
     bool invert_mouse_y = false;
     std::string language = "en";
 
-    // Geometry Edge Glow and Real Graphics exclude each other; both may be off.
+    // Geometry Edge Glow and Real Graphics exclude each other; both may be off. Turning Real
+    // Graphics on also turns Door Portals on, which is otherwise free to be set either way:
+    // nothing ever turns it off for you.
     void set_edge_glow(bool on);
     void set_real_graphics(bool on);
 

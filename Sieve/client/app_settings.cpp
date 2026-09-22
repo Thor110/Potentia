@@ -85,7 +85,11 @@ void AppSettings::set_edge_glow(bool on)
 void AppSettings::set_real_graphics(bool on)
 {
     real_graphics = on;
-    if (on) edge_glow = false;
+    if (on)
+    {
+        edge_glow = false;
+        door_portals = true; // it comes with Real Graphics, but stands on its own afterwards
+    }
 }
 
 fs::path AppSettings::default_path()
@@ -125,6 +129,7 @@ AppSettings AppSettings::load(const fs::path& path)
             else if (key == "vsync") s.vsync = on_off(value, true);
             else if (key == "edge_glow") s.edge_glow = on_off(value, false);
             else if (key == "real_graphics") s.real_graphics = on_off(value, false);
+            else if (key == "door_portals") s.door_portals = on_off(value, false);
             else if (key == "fps_counter") s.fps_counter = on_off(value, false);
         }
         else if (section == "controls")
@@ -151,6 +156,7 @@ bool AppSettings::save(const fs::path& path) const
       << "vsync = " << on_off(vsync) << "   ; off: frames as fast as they can be drawn (may tear)\n"
       << "edge_glow = " << on_off(edge_glow) << "       ; Geometry Edge Glow\n"
       << "real_graphics = " << on_off(real_graphics) << "   ; Real Graphics (only one of the two is on)\n"
+      << "door_portals = " << on_off(door_portals) << "    ; Door Portals: procedural data noise in the doorways\n"
       << "fps_counter = " << on_off(fps_counter) << "\n"
       << "\n[controls]\n"
       << "mouse_sensitivity = " << mouse_sensitivity << "   ; percent\n"

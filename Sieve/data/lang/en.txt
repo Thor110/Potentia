@@ -44,6 +44,8 @@ item.vsync = VSync
 help.vsync = Wait for the display before showing each frame: no tearing, and the frame rate stops at the\ndisplay's refresh rate. Off: frames as fast as they can be drawn (the FPS counter shows the real figure).
 help.edge_glow = A soft glow along the edges of the wireframe geometry.\nTurning it on turns Real Graphics off. Off by default, to keep Sieve light.
 help.real_graphics = Draw the corridor with real models instead of wireframe.\nTurning it on turns Geometry Edge Glow off. Off by default, to keep Sieve light.
+item.door_portals = Door Portals
+help.door_portals = Fill the doorways with procedural data noise in the colour of the line they lead to,\nfading to black at the frame. Turning Real Graphics on turns this on too; nothing turns it off.
 item.fps_counter = FPS Counter
 help.fps_counter = Frames per second in the top right corner of the hallway: the average over the last half\nsecond, its slowest frame and, with Real Graphics, how many triangles each frame draws.
 

@@ -201,7 +201,11 @@ jobs:
           echo "$out" | q "real graphics for the audio line: hallway=hallway.obj bookshelf=bookshelf.obj book=book.obj marker=marker.obj"
           out=$($H --real-graphics --fps-counter --bench 5 --walk "0,0" --screenshot fps.png 2>&1)
           echo "$out" | q "^bench: 5 frames"
-          echo "$out" | q "graphics: edge glow off, real graphics on, fps counter on"
+          echo "$out" | q "graphics: edge glow off, real graphics on, door portals on, fps counter on"
+          # Door Portals: Real Graphics brings them, and they also stand alone with the wireframe.
+          $H --line image --door-portals --walk "0,0" --screenshot portal.png 2>&1 | q "door portals on"
+          $H --line image --edge-glow --walk "0,0" --screenshot noportal.png 2>&1 | q "door portals off"
+          test -s portal.png && test -s noportal.png
           $H --main-menu --press "Down,Return,Return,Return" --screenshot main-res.png | q "saved"
           # Settings, Graphics, then VSync off, Geometry Edge Glow on, Real Graphics on — which
           # turns the glow back off, the two being mutually exclusive. From a settings file that
@@ -211,6 +215,7 @@ jobs:
           grep -q "^vsync = off" app.ini
           grep -q "^edge_glow = off" app.ini
           grep -q "^real_graphics = on" app.ini
+          grep -q "^door_portals = on" app.ini   # Real Graphics brings Door Portals with it
           mkdir -p lt/data/lang && cp data/lang/en.txt lt/data/lang/ && printf 'language.name = Test\nitem.start = START TEST\n' > lt/data/lang/tt.txt
           (cd lt && ../$H --main-menu --language tt --screenshot ../main-tt.png) | q "main menu: language tt, font sieve8x8"
           # The language's font: sieve8x8 draws accented and Greek letters; a missing font is reported.

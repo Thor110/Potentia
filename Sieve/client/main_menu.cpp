@@ -47,7 +47,7 @@ std::vector<MainMenu::Item> MainMenu::items() const
     case Screen::Settings:
         return {{Kind::Action, "graphics"}, {Kind::Action, "controls"}, {Kind::Action, "language"}, {Kind::Action, "back"}};
     case Screen::Graphics:
-        return {{Kind::Choice, "resolution"}, {Kind::Toggle, "fullscreen"}, {Kind::Toggle, "vsync"}, {Kind::Toggle, "edge_glow"}, {Kind::Toggle, "real_graphics"}, {Kind::Toggle, "fps_counter"},
+        return {{Kind::Choice, "resolution"}, {Kind::Toggle, "fullscreen"}, {Kind::Toggle, "vsync"}, {Kind::Toggle, "edge_glow"}, {Kind::Toggle, "real_graphics"}, {Kind::Toggle, "door_portals"}, {Kind::Toggle, "fps_counter"},
                 {Kind::Action, "back"}};
     case Screen::Controls: return {{Kind::Number, "mouse_sensitivity"}, {Kind::Toggle, "invert_mouse_y"}, {Kind::Action, "back"}};
     case Screen::Language: return {{Kind::Choice, "language_choice"}, {Kind::Action, "back"}};
@@ -63,6 +63,7 @@ std::string MainMenu::value_of(const Item& it) const
     if (it.id == "vsync") return onoff(s_.vsync);
     if (it.id == "edge_glow") return onoff(s_.edge_glow);
     if (it.id == "real_graphics") return onoff(s_.real_graphics);
+    if (it.id == "door_portals") return onoff(s_.door_portals);
     if (it.id == "fps_counter") return onoff(s_.fps_counter);
     if (it.id == "mouse_sensitivity") return std::to_string(s_.mouse_sensitivity) + "%";
     if (it.id == "invert_mouse_y") return onoff(s_.invert_mouse_y);
@@ -168,6 +169,7 @@ void MainMenu::change(int dir)
         }
         else if (it.id == "edge_glow") s_.set_edge_glow(!s_.edge_glow);
         else if (it.id == "real_graphics") s_.set_real_graphics(!s_.real_graphics);
+        else if (it.id == "door_portals") s_.door_portals = !s_.door_portals;
         else if (it.id == "fps_counter") s_.fps_counter = !s_.fps_counter;
         else if (it.id == "invert_mouse_y") s_.invert_mouse_y = !s_.invert_mouse_y;
         save();

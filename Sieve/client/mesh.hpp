@@ -79,6 +79,12 @@ public:
     // Rasterises everything added and draws it over the whole render target.
     void draw(SDL_Renderer* r);
     size_t drawn() const { return drawn_; } // triangles in the last draw
+    // The depth the last draw() left behind: 1 / camera depth for each pixel, row by row, larger
+    // being nearer. Anything drawn over the models afterwards (the door portals) tests against
+    // it so the models still hide what is behind them. Null before the first draw.
+    const float* depth() const { return depth_.empty() ? nullptr : depth_.data(); }
+    int width() const { return w_; }
+    int height() const { return h_; }
     // Frees the texture; call before destroying the renderer.
     void release();
 

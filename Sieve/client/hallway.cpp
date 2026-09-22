@@ -1114,6 +1114,7 @@ public:
         int w = 0, h = 0;
         SDL_GetCurrentRenderOutputSize(r_, &w, &h);
         cam_.update(w, h);
+        ++portal_frame_;
         const Theme& th = theme();
         SDL_SetRenderDrawColor(r_, th.bg.r, th.bg.g, th.bg.b, 255);
         SDL_RenderClear(r_);
@@ -1135,18 +1136,30 @@ public:
         const Models* md = real_graphics_ ? &models() : nullptr;
         const bool real_hall = md && md->hallway, real_cases = md && md->bookshelf, real_books = md && md->book,
                    real_marker = md && md->marker;
-        if (md && (real_hall || real_cases || real_books || real_marker)) draw_models(*md, visible, kBack, kAhead, w, h);
+        bool models_drawn = false;
+        if (md && (real_hall || real_cases || real_books || real_marker))
+        {
+            draw_models(*md, visible, kBack, kAhead, w, h);
+            models_drawn = true;
+        }
+        // The portals are drawn over that image, so they test against its depth (see draw_portal).
+        const float* depth = models_drawn ? models_batch_.depth() : nullptr;
         // Doors: solid black. Start lines: checkered, where a loop of this line begins.
-        for (int t = -kBack; t <= kAhead; ++t)
+        // Far tile first, so a nearer door's black face covers the one behind it.
+        for (int t = kAhead; t >= -kBack; --t)
         {
             if (!visible[t + kBack]) continue;
             const float z0 = t * kTile;
-            if (!real_hall)
             for (float sx : {-1.0f, 1.0f})
             {
                 const float x = sx * kHalfWidth;
-                fill({{x, 0, z0 + kDoorStart}, {x, 0, z0 + kDoorEnd}, {x, kDoorTop, z0 + kDoorEnd}, {x, kDoorTop, z0 + kDoorStart}},
-                     SDL_Color{0, 0, 0, 255});
+                const std::vector<Vec3> door = {{x, 0, z0 + kDoorStart}, {x, 0, z0 + kDoorEnd}, {x, kDoorTop, z0 + kDoorEnd}, {x, kDoorTop, z0 + kDoorStart}};
+                if (!real_hall) fill(door, SDL_Color{0, 0, 0, 255});
+                // A door leads to the next line on the left wall and the previous one on the
+                // right (cross()), so each portal takes the colour of the line behind it.
+                if (door_portals_)
+                    draw_portal(door, theme_of(sx < 0 ? (li_ + 1) % kLines : (li_ + kLines - 1) % kLines),
+                                depth, models_batch_.width(), models_batch_.height());
             }
             if (!real_marker && offset_loop_tile(t).is_zero())
             {
@@ -1381,6 +1394,211 @@ public:
         for (size_t i = 1; i + 1 < pts.size(); ++i)
             for (size_t k : {size_t(0), i, i + 1}) v.push_back({{pts[k].x, pts[k].y}, fc, {0, 0}});
         SDL_RenderGeometry(r_, nullptr, v.data(), int(v.size()), nullptr, 0);
+    }
+
+    // ---- Door Portals
+    //
+    // A doorway is 99.99% un-sieved entropy seen edge on, so it is drawn as entropy: procedural
+    // data noise in the colour of the line it leads to, fading to black at the frame so it reads
+    // as a field held inside the door rather than a hole in the wall.
+    //
+    // The noise is an integer hash of the screen pixel and the frame — no trigonometry, no
+    // random number generator, a handful of instructions per pixel — rasterised straight into a
+    // small buffer covering the door's part of the screen and uploaded as one texture. Cost is
+    // the doors' area in pixels, so a door across the corridor costs almost nothing.
+
+    // One noise cell is this many screen pixels square. Two keeps the grain visible on a big
+    // display, reads as data rather than television snow, and costs a quarter of per-pixel noise.
+    static constexpr int kGrain = 2;
+    // Smoothstep as 256 steps, so the fade costs a lookup rather than three multiplies.
+    static const std::array<uint32_t, 256>& smooth_table()
+    {
+        static const std::array<uint32_t, 256> t = [] {
+            std::array<uint32_t, 256> a{};
+            for (int i = 0; i < 256; ++i)
+            {
+                const float f = float(i) / 255.0f;
+                a[size_t(i)] = uint32_t(255.0f * f * f * (3.0f - 2.0f * f) + 0.5f);
+            }
+            return a;
+        }();
+        return t;
+    }
+
+    // The line's own colour for its portal: whichever of its two is the brighter, so every line
+    // reads (white for PAGES, cyan for IMAGE, amber for AUDIO, yellow for VIDEO, grey for BOOKS).
+    static SDL_Color portal_colour(const Theme& th)
+    {
+        auto luma = [](SDL_Color c) { return 2 * int(c.r) + 5 * int(c.g) + int(c.b); };
+        return luma(th.edge) >= luma(th.bg) ? th.edge : th.bg;
+    }
+
+    // `depth` is the models' depth buffer when Real Graphics drew this frame, else null: the
+    // portal is drawn over that image, so without it a door far down the corridor would show
+    // through the bookcases between you and it.
+    void draw_portal(const std::vector<Vec3>& quad, const Theme& dest, const float* depth, int dw, int dh)
+    {
+        const std::vector<Point2> pts = cam_.project_polygon(quad);
+        if (pts.size() < 3) return;
+        int ow = 0, oh = 0;
+        SDL_GetCurrentRenderOutputSize(r_, &ow, &oh);
+        float lox = pts[0].x, hix = pts[0].x, loy = pts[0].y, hiy = pts[0].y;
+        for (const Point2& p : pts)
+        {
+            lox = std::min(lox, p.x); hix = std::max(hix, p.x);
+            loy = std::min(loy, p.y); hiy = std::max(hiy, p.y);
+        }
+        // The box is snapped down to the grain, so the noise cells sit on one fixed screen lattice
+        // and the grain does not crawl as the door moves across the screen.
+        const int x1 = std::clamp(int(std::ceil(hix)) + 1, 0, ow), y1 = std::clamp(int(std::ceil(hiy)) + 1, 0, oh);
+        const int x0 = std::clamp(int(std::floor(lox)), 0, ow) / kGrain * kGrain;
+        const int y0 = std::clamp(int(std::floor(loy)), 0, oh) / kGrain * kGrain;
+        const int bw = x1 - x0, bh = y1 - y0;
+        if (bw <= 0 || bh <= 0) return;
+        const int nw = (bw + kGrain - 1) / kGrain, nh = (bh + kGrain - 1) / kGrain;
+
+        // Each edge as the line nx*x + ny*y + c, positive inside (the winding decides the sign)
+        // and scaled to pixels, so the smallest of them is the distance to the door frame.
+        float area2 = 0;
+        for (size_t i = 0, n = pts.size(); i < n; ++i)
+        {
+            const Point2 a = pts[i], b = pts[(i + 1) % n];
+            area2 += a.x * b.y - b.x * a.y;
+        }
+        const float wind = area2 < 0 ? -1.0f : 1.0f;
+        struct Edge { float nx, ny, c; };
+        std::vector<Edge> edges;
+        edges.reserve(pts.size());
+        for (size_t i = 0, n = pts.size(); i < n; ++i)
+        {
+            const Point2 a = pts[i], b = pts[(i + 1) % n];
+            float ex = b.x - a.x, ey = b.y - a.y;
+            const float len = std::sqrt(ex * ex + ey * ey);
+            if (len < 1e-4f) continue; // a degenerate edge says nothing about the inside
+            ex /= len; ey /= len;
+            // Distance from the line through a and b, positive on the inward side.
+            edges.push_back({-wind * ey, wind * ex, wind * (ey * a.x - ex * a.y)});
+        }
+        if (edges.size() < 3) return;
+        // The fade reaches this far in from the frame, in pixels: a share of the door on screen,
+        // so a distant door is not all fade and a door in your face is not all noise.
+        const float fall = std::clamp(0.16f * float(std::min(bw, bh)), 1.5f, 96.0f);
+        const float inv_fall = 1.0f / fall;
+        const std::array<uint32_t, 256>& kSmooth = smooth_table();
+
+        // 1 / camera depth over the screen for the door's own plane: planar there, so three
+        // numbers describe it. The door is a flat quad, so any three of its corners give it.
+        float zA = 0, zB = 0, zC = 0;
+        bool test_depth = depth && dw == ow && dh == oh;
+        if (test_depth)
+        {
+            const Vec3 c0 = cam_.to_camera(quad[0]), c1 = cam_.to_camera(quad[1]), c2 = cam_.to_camera(quad[2]);
+            const Vec3 n = hallway::cross(c1 - c0, c2 - c0);
+            const float d = dot(n, c0);
+            const float f = cam_.focal();
+            const Point2 mid = cam_.centre();
+            if (std::fabs(d) < 1e-6f || f <= 0) test_depth = false;
+            else
+            {
+                zA = n.x / (f * d);
+                zB = -n.y / (f * d);
+                zC = n.z / d - zA * mid.x - zB * mid.y;
+            }
+        }
+        // The door sits in the wall and the model's own door face is 6 cm behind it, so a small
+        // margin keeps the portal from being rejected by the surface it belongs to.
+        constexpr float kNearer = 1.002f;
+
+        std::vector<uint32_t>& px = portal_.px;
+        px.assign(size_t(nw) * size_t(nh), 0u);
+        const uint32_t frame = portal_frame_;
+        const uint32_t drift = frame >> 1, churn = frame >> 3; // a curtain, streaming and reshuffling
+        // The colour at each of 256 brightnesses, so the inner loop is integer work and one lookup.
+        const SDL_Color col = portal_colour(dest);
+        uint32_t ramp[256];
+        for (int i = 0; i < 256; ++i)
+            ramp[i] = 0xFF000000u | (uint32_t(col.r * i / 255) << 16) | (uint32_t(col.g * i / 255) << 8) | uint32_t(col.b * i / 255);
+        const int cx0 = x0 / kGrain, cy0 = y0 / kGrain; // this door's first cell on the lattice
+        bool any = false; // a door wholly behind a bookcase is not uploaded or drawn at all
+        for (int by = 0; by < nh; ++by)
+        {
+            const int y = y0 + by * kGrain;
+            // The span of this scanline inside the polygon: every edge either bounds it on the
+            // left or on the right, depending on which way it runs.
+            float xl = float(x0), xr = float(x1);
+            bool empty = false;
+            const float fy = float(y) + 0.5f * kGrain;
+            for (const Edge& e : edges)
+            {
+                const float row = e.ny * fy + e.c;
+                if (std::fabs(e.nx) < 1e-6f)
+                {
+                    if (row < 0) { empty = true; break; }
+                    continue;
+                }
+                const float cut = -row / e.nx;      // where this edge crosses the scanline
+                if (e.nx > 0) xl = std::max(xl, cut); // inside lies to the right of it
+                else xr = std::min(xr, cut);          // and to the left of this one
+            }
+            if (empty) continue;
+            // The cells of this row whose centres are inside the door.
+            const int sb = std::max(0, int(std::ceil((xl - float(x0)) / kGrain - 0.5f)));
+            const int eb = std::min(nw, int(std::floor((xr - float(x0)) / kGrain - 0.5f)) + 1);
+            if (sb >= eb) continue;
+            uint32_t* row_px = px.data() + size_t(by) * size_t(nw) + size_t(sb);
+            // The distance to the frame, stepped along the row: one add per edge per cell.
+            float d[8], dd[8];
+            const size_t ne = std::min<size_t>(edges.size(), 8);
+            const float fx = float(x0 + sb * kGrain) + 0.5f * kGrain;
+            for (size_t k = 0; k < ne; ++k)
+            {
+                d[k] = edges[k].nx * fx + edges[k].ny * fy + edges[k].c;
+                dd[k] = edges[k].nx * kGrain;
+            }
+            for (int bx = sb; bx < eb; ++bx, ++row_px)
+            {
+                float near = d[0];
+                for (size_t k = 1; k < ne; ++k) near = std::min(near, d[k]);
+                for (size_t k = 0; k < ne; ++k) d[k] += dd[k];
+                if (near <= 0) continue;
+                const int sx = x0 + bx * kGrain, sy = y;
+                // Hidden by a model in front of it? (The cell's centre stands for the cell.)
+                if (test_depth && depth[size_t(sy) * size_t(dw) + size_t(sx)] > (zA * float(sx) + zB * float(sy) + zC) * kNearer)
+                    continue;
+                any = true;
+                // How far in from the frame, 0..255, then smoothed so the field has no hard rim.
+                const float t = near * inv_fall;
+                const uint32_t f = kSmooth[t >= 1.0f ? 255 : uint32_t(t * 255.0f)];
+                // The noise: an integer hash of the cell and the frame, streaming downwards.
+                uint32_t hsh = uint32_t(cx0 + bx) * 0x9E3779B1u ^ (uint32_t(cy0 + by) + drift) * 0x85EBCA77u ^ churn * 0xC2B2AE3Du;
+                hsh ^= hsh >> 15;
+                hsh *= 0x2545F491u;
+                hsh ^= hsh >> 13;
+                const uint32_t g = hsh >> 24;
+                // Squared, so the grain is mostly dark with bright specks rather than grey mush.
+                *row_px = ramp[(f * ((g * g) >> 8)) >> 8];
+            }
+        }
+        if (!any) return;
+        if (!portal_.tex || portal_.w < nw || portal_.h < nh)
+        {
+            if (portal_.tex) SDL_DestroyTexture(portal_.tex);
+            portal_.w = std::max(portal_.w, nw);
+            portal_.h = std::max(portal_.h, nh);
+            portal_.tex = SDL_CreateTexture(r_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, portal_.w, portal_.h);
+            if (portal_.tex)
+            {
+                SDL_SetTextureBlendMode(portal_.tex, SDL_BLENDMODE_BLEND);
+                SDL_SetTextureScaleMode(portal_.tex, SDL_SCALEMODE_NEAREST);
+            }
+        }
+        if (!portal_.tex) return;
+        const SDL_Rect area{0, 0, nw, nh};
+        SDL_UpdateTexture(portal_.tex, &area, px.data(), nw * 4);
+        // Nearest-neighbour back up to the grain: one noise cell becomes one kGrain square.
+        const SDL_FRect src{0, 0, float(nw), float(nh)};
+        const SDL_FRect dst{float(x0), float(y0), float(nw * kGrain), float(nh * kGrain)};
+        SDL_RenderTexture(r_, portal_.tex, &src, &dst);
     }
 
     // Text cut to fit `width` pixels at `scale` (8 pixels per character at scale 1).
@@ -1696,6 +1914,12 @@ public:
     void release_textures()
     {
         models_batch_.release();
+        if (portal_.tex)
+        {
+            SDL_DestroyTexture(portal_.tex);
+            portal_.tex = nullptr;
+            portal_.w = portal_.h = 0;
+        }
         for (PictureCache& c : picture_)
             if (c.tex)
             {
@@ -1711,10 +1935,11 @@ public:
         invert_y_ = invert_y;
     }
     void set_fps_counter(bool on) { fps_counter_ = on; }
-    void set_graphics(bool edge_glow, bool real_graphics)
+    void set_graphics(bool edge_glow, bool real_graphics, bool door_portals)
     {
         edge_glow_ = edge_glow;
         real_graphics_ = real_graphics;
+        door_portals_ = door_portals;
         for (Models& m : models_) m = Models{}; // reloaded on first use (picks up edited files)
     }
     void put_back() { in_hand_.reset(); }
@@ -1835,6 +2060,12 @@ private:
     std::vector<std::vector<SDL_FPoint>> edge_buckets_;
     bool invert_y_ = false;
     bool edge_glow_ = false, real_graphics_ = false;
+    // Door Portals: one streaming texture, as big as the largest door drawn so far, and the
+    // buffer the noise is rasterised into. The frame number drives the noise.
+    struct PortalCache { SDL_Texture* tex = nullptr; int w = 0, h = 0; std::vector<uint32_t> px; };
+    PortalCache portal_;
+    bool door_portals_ = false;
+    uint32_t portal_frame_ = 0;
     // FPS counter: frames and time since the shown figures were last updated (twice a second).
     bool fps_counter_ = false;
     Uint64 fps_since_ = 0, fps_last_ = 0;
@@ -1897,6 +2128,7 @@ const char* kUsage =
     "  --press K,K,...     then press these keys (e.g. M,M,-,Shift+=), printing where you are\n"
     "  --edge-glow         draw with Geometry Edge Glow (or --settings a file that has it on)\n"
     "  --real-graphics     draw with Real Graphics: the models in the meshes folder\n"
+    "  --door-portals      fill the doorways with procedural data noise (Real Graphics turns this on)\n"
     "  --fps-counter       show the FPS counter\n"
     "  --bench N           before the screenshot, time N frames and print the frame rate\n\n"
     "Controls: WASD move, mouse look, Shift run, E or click take a book, T warp, G go to,\n"
@@ -1998,7 +2230,13 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
         hall->warp("welcome to the sieve");
         hall->put_back();
     }
-    else hall->go_to("50%");
+    else
+    {
+        // Halfway along, and on the shelf: going to an address hands you the unit, and holding
+        // one holds you still, so starting a line holding a record would start it unable to move.
+        hall->go_to("50%");
+        hall->put_back();
+    }
     if (!scripted) return hall;
 
     if (a.has("zoom")) hall->zoom_to(a.get_positive("zoom", 20));
@@ -2118,12 +2356,17 @@ int run(const Args& a)
     if (shot)
     {
         auto hall = make_hallway(window, renderer, a, true, filters);
-        hall->set_graphics(app.edge_glow || a.has("edge-glow"), app.real_graphics || a.has("real-graphics"));
-        hall->set_fps_counter(app.fps_counter || a.has("fps-counter"));
         {
             const bool glow = app.edge_glow || a.has("edge-glow"), real = app.real_graphics || a.has("real-graphics");
+            // --real-graphics brings Door Portals with it, as turning it on in the menu does. The
+            // saved setting is taken as it stands: a settings file that turns portals off with
+            // Real Graphics on means exactly that, since nothing may turn them off but you.
+            const bool portals = app.door_portals || a.has("real-graphics") || a.has("door-portals");
+            hall->set_graphics(glow && !real, real, portals);
+            hall->set_fps_counter(app.fps_counter || a.has("fps-counter"));
             // On stderr: stdout is where the readout goes, which scripts read line by line.
             std::cerr << "graphics: edge glow " << (glow && !real ? "on" : "off") << ", real graphics " << (real ? "on" : "off")
+                      << ", door portals " << (portals ? "on" : "off")
                       << ", fps counter " << (app.fps_counter || a.has("fps-counter") ? "on" : "off") << "\n";
         }
         if (a.has("bench"))
@@ -2184,7 +2427,7 @@ int run(const Args& a)
             for (const char* k : {"warp", "goto", "zoom", "tile", "pose", "walk", "press"}) ha.opts.erase(k);
         auto hall = make_hallway(window, renderer, ha, first, filters);
         hall->set_controls(app.mouse_sensitivity, app.invert_mouse_y);
-        hall->set_graphics(app.edge_glow, app.real_graphics);
+        hall->set_graphics(app.edge_glow, app.real_graphics, app.door_portals);
         hall->set_fps_counter(app.fps_counter);
         first = false;
         SDL_SetWindowRelativeMouseMode(window, true);

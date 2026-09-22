@@ -55,6 +55,8 @@ public:
         return {dot(r, right_), dot(r, up_), dot(r, fwd_)};
     }
     Point2 project_camera(Vec3 c) const { return {w_ * 0.5f + c.x / c.z * focal_, h_ * 0.5f - c.y / c.z * focal_}; }
+    float focal() const { return focal_; }
+    Point2 centre() const { return {w_ * 0.5f, h_ * 0.5f}; }
 
     // Projects a world segment, clipped to the near plane. Also returns the depth of its midpoint.
     std::optional<std::pair<std::pair<Point2, Point2>, float>> project_segment(Vec3 a, Vec3 b) const
