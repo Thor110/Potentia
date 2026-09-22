@@ -264,17 +264,25 @@ void MeshBatch::push(const Vec3* c, uint32_t colour, float bias)
 {
     Tri t;
     t.colour = colour;
+    float iz[3];
     for (int i = 0; i < 3; ++i)
     {
         const Point2 p = cam_->project_camera(c[i]);
         t.x[i] = p.x;
         t.y[i] = p.y;
-        t.iz[i] = (1.0f + bias) / c[i].z;
+        iz[i] = (1.0f + bias) / c[i].z;
     }
     t.ymin = std::min({t.y[0], t.y[1], t.y[2]});
     t.ymax = std::max({t.y[0], t.y[1], t.y[2]});
     if (t.ymax < 0 || t.ymin > float(h_)) return;
     if (std::max({t.x[0], t.x[1], t.x[2]}) < 0 || std::min({t.x[0], t.x[1], t.x[2]}) > float(w_)) return;
+    // The plane of 1/z, once per triangle (not once per band that draws it).
+    const float det = (t.x[1] - t.x[0]) * (t.y[2] - t.y[0]) - (t.x[2] - t.x[0]) * (t.y[1] - t.y[0]);
+    if (std::fabs(det) < 1e-6f) return; // edge-on: no area
+    const float d1 = iz[1] - iz[0], d2 = iz[2] - iz[0];
+    t.A = (d1 * (t.y[2] - t.y[0]) - d2 * (t.y[1] - t.y[0])) / det;
+    t.B = (d2 * (t.x[1] - t.x[0]) - d1 * (t.x[2] - t.x[0])) / det;
+    t.C = iz[0] - t.A * t.x[0] - t.B * t.y[0];
     tris_.push_back(t);
 }
 
@@ -337,20 +345,13 @@ void MeshBatch::add(const Mesh& mesh, const Placement& at)
 // pixel, and leave no gaps); 1/z is planar in screen space, so it is interpolated exactly.
 void MeshBatch::raster_band(int y0, int y1)
 {
-    const int W = w_;
-    std::fill(colour_.begin() + std::ptrdiff_t(y0) * W, colour_.begin() + std::ptrdiff_t(y1) * W, bg_argb_);
+    const int W = w_, P = pitch_;
+    std::fill(pixels_ + std::ptrdiff_t(y0) * P, pixels_ + std::ptrdiff_t(y1) * P, bg_argb_);
     std::fill(depth_.begin() + std::ptrdiff_t(y0) * W, depth_.begin() + std::ptrdiff_t(y1) * W, 0.0f);
     for (const Tri& t : tris_)
     {
         if (t.ymax < float(y0) || t.ymin > float(y1)) continue;
-        // The plane of 1/z over the screen: iz = A x + B y + C.
-        const float x0 = t.x[0], yy0 = t.y[0], x1 = t.x[1], yy1 = t.y[1], x2 = t.x[2], yy2 = t.y[2];
-        const float det = (x1 - x0) * (yy2 - yy0) - (x2 - x0) * (yy1 - yy0);
-        if (std::fabs(det) < 1e-6f) continue;
-        const float d1 = t.iz[1] - t.iz[0], d2 = t.iz[2] - t.iz[0];
-        const float A = (d1 * (yy2 - yy0) - d2 * (yy1 - yy0)) / det;
-        const float B = (d2 * (x1 - x0) - d1 * (x2 - x0)) / det;
-        const float C = t.iz[0] - A * x0 - B * yy0;
+        const float A = t.A, B = t.B, C = t.C;
         const int ya = std::max(y0, int(std::ceil(t.ymin - 0.5f))), yb = std::min(y1 - 1, int(std::ceil(t.ymax - 0.5f)) - 1);
         for (int y = ya; y <= yb; ++y)
         {
@@ -359,8 +360,15 @@ void MeshBatch::raster_band(int y0, int y1)
             float xl = 1e30f, xr = -1e30f;
             for (int e = 0; e < 3; ++e)
             {
-                const float ax = t.x[e], ay = t.y[e], bx = t.x[(e + 1) % 3], by = t.y[(e + 1) % 3];
+                float ax = t.x[e], ay = t.y[e], bx = t.x[(e + 1) % 3], by = t.y[(e + 1) % 3];
                 if ((ay <= yc) == (by <= yc)) continue; // this edge does not cross the row
+                // The same edge is shared by the neighbouring triangle, walked the other way:
+                // order its ends so both compute the very same crossing (no cracks).
+                if (ay > by || (ay == by && ax > bx))
+                {
+                    std::swap(ax, bx);
+                    std::swap(ay, by);
+                }
                 const float x = ax + (bx - ax) * (yc - ay) / (by - ay);
                 xl = std::min(xl, x);
                 xr = std::max(xr, x);
@@ -368,15 +376,18 @@ void MeshBatch::raster_band(int y0, int y1)
             if (xl > xr) continue;
             const int xa = std::max(0, int(std::ceil(xl - 0.5f))), xb = std::min(W - 1, int(std::ceil(xr - 0.5f)) - 1);
             if (xa > xb) continue;
-            float iz = A * (float(xa) + 0.5f) + B * yc + C;
-            uint32_t* cp = colour_.data() + size_t(y) * size_t(W);
+            const float row = B * yc + C + A * 0.5f;
+            uint32_t* cp = pixels_ + size_t(y) * size_t(P);
             float* dp = depth_.data() + size_t(y) * size_t(W);
-            for (int x = xa; x <= xb; ++x, iz += A)
+            for (int x = xa; x <= xb; ++x)
+            {
+                const float iz = A * float(x) + row; // evaluated, not accumulated: no drift on long spans
                 if (iz > dp[x])
                 {
                     dp[x] = iz;
                     cp[x] = t.colour;
                 }
+            }
         }
     }
 }
@@ -384,18 +395,7 @@ void MeshBatch::raster_band(int y0, int y1)
 void MeshBatch::draw(SDL_Renderer* r)
 {
     const size_t n = size_t(w_) * size_t(h_);
-    if (colour_.size() != n)
-    {
-        colour_.assign(n, 0);
-        depth_.assign(n, 0.0f);
-    }
-    // Bands of rows, one per thread.
-    const unsigned bands = pool_->bands();
-    pool_->run_all([&](unsigned b) {
-        const int y0 = int(int64_t(h_) * b / bands), y1 = int(int64_t(h_) * (b + 1) / bands);
-        if (y1 > y0) raster_band(y0, y1);
-    });
-    drawn_ = tris_.size();
+    if (depth_.size() != n) depth_.assign(n, 0.0f);
     if (texture_ && (texture_owner_ != r || tex_w_ != w_ || tex_h_ != h_)) release();
     if (!texture_)
     {
@@ -407,7 +407,20 @@ void MeshBatch::draw(SDL_Renderer* r)
         tex_w_ = w_;
         tex_h_ = h_;
     }
+    // Into our own image, then one upload: writing into the texture's memory (SDL_LockTexture)
+    // measured several times slower with the software renderer, which is the slowest case anyway.
+    if (colour_.size() != n) colour_.assign(n, 0);
+    pixels_ = colour_.data();
+    pitch_ = w_;
+    // Bands of rows, one per thread.
+    const unsigned bands = pool_->bands();
+    pool_->run_all([&](unsigned b) {
+        const int y0 = int(int64_t(h_) * b / bands), y1 = int(int64_t(h_) * (b + 1) / bands);
+        if (y1 > y0) raster_band(y0, y1);
+    });
+    drawn_ = tris_.size();
     SDL_UpdateTexture(texture_, nullptr, colour_.data(), w_ * 4);
+    pixels_ = nullptr;
     SDL_RenderTexture(r, texture_, nullptr, nullptr);
 }
 

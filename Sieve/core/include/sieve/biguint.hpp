@@ -20,6 +20,9 @@ public:
 
     // Digits are most-significant first, each < base.
     static BigUint from_digits(std::span<const uint32_t> digits, uint32_t base);
+    // The value's own base 2^32 limbs, least significant first: exact and O(n), where building
+    // the same value with repeated shift-and-add would be O(n^2).
+    static BigUint from_limbs(std::span<const uint32_t> limbs);
     // Returns exactly `length` digits, most-significant first. Throws if the value does not fit.
     std::vector<uint32_t> to_digits(uint32_t base, size_t length) const;
 
@@ -56,6 +59,7 @@ public:
     // a mod m for any m >= 1 (a mask when m is a power of two, else long division).
     static BigUint mod(const BigUint& a, const BigUint& m);
     // a * b (schoolbook), and a = q * b + r with 0 <= r < b (Knuth's algorithm D). b >= 1.
+    // (q or r may be the same object as a or b.)
     static BigUint mul(const BigUint& a, const BigUint& b);
     static void divmod(const BigUint& a, const BigUint& b, BigUint& q, BigUint& r);
 

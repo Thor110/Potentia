@@ -13,6 +13,7 @@
 #include "sieve/filter.hpp"
 
 #include <algorithm>
+#include <memory>
 #include <mutex>
 #include <unordered_map>
 #include <stdexcept>
@@ -433,8 +434,8 @@ public:
         case kWord: return G(node_of(st), r, false);
         case kEdge:
         {
-            const Hist& h = edge_hist(lo_of(st), depth_of(st));
-            return combine(h.sub, h.suf, r, 0);
+            const auto h = edge_hist(lo_of(st), depth_of(st));
+            return combine(h->sub, h->suf, r, 0);
         }
         }
         return BigUint();
@@ -484,14 +485,16 @@ private:
     }
 
     // Sub[m], Suf[m] for the suffixes beginning with the first d letters of suffix lo.
-    const Hist& edge_hist(uint32_t lo, uint32_t d) const
+    // (Shared pointers: another thread may clear the cache while this one still reads its entry.)
+    std::shared_ptr<const Hist> edge_hist(uint32_t lo, uint32_t d) const
     {
         const uint64_t key = (uint64_t(lo) << 8) | d;
         std::lock_guard<std::mutex> lock(mu_);
         if (auto it = cache_.find(key); it != cache_.end()) return it->second;
         if (cache_.size() > 200000) cache_.clear();
         const auto& S = *suf_;
-        Hist h;
+        auto made = std::make_shared<Hist>();
+        Hist& h = *made;
         h.sub.assign(1, 1); // the token itself
         for (size_t i = lo; i < S.size() && (i == lo || lcp_[i] >= d); ++i)
         {
@@ -504,7 +507,7 @@ private:
             for (size_t k = from + 1; k <= len; ++k) ++h.sub[k - d];
         }
         h.suf.resize(h.sub.size(), 0);
-        return cache_.emplace(key, std::move(h)).first->second;
+        return cache_.emplace(key, std::move(made)).first->second;
     }
 
     // D[r] + sum_{m >= m0} W[m] B(r-m-1) + pad * sum_{m0 <= m <= r-2} (D[m] - W[m]).
@@ -539,7 +542,7 @@ private:
     std::vector<uint8_t> lcp_;
     std::vector<BigUint> B_;
     mutable std::mutex mu_;
-    mutable std::unordered_map<uint64_t, Hist> cache_;
+    mutable std::unordered_map<uint64_t, std::shared_ptr<const Hist>> cache_;
 };
 
 // ---------------------------------------------------------------- title
@@ -569,12 +572,14 @@ public:
     BigUint completions(State s, uint32_t) const override
     {
         const uint32_t p = pos_of(s);
+        if (N_ == 0) return BigUint(); // a title needs at least one letter: nothing passes at length 0
         if (p >= N_) return BigUint(1);
         return inner_->completions(inner_of(s), N_ - p);
     }
     bool alive(State s, uint32_t) const override
     {
         const uint32_t p = pos_of(s);
+        if (N_ == 0) return false;
         return p >= N_ || inner_->alive(inner_of(s), N_ - p);
     }
 

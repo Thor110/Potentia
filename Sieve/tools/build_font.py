@@ -30,6 +30,7 @@ def rows_of(path):
 
 
 def main():
+    sys.stdout.reconfigure(newline="\n", encoding="utf-8")  # the same bytes on every platform
     folder = sys.argv[1] if len(sys.argv) > 1 else "."
     glyphs = {}
     for name, first in SOURCES:

@@ -34,7 +34,8 @@ std::vector<std::string> split_lines(const std::string& s)
 
 MainMenu::MainMenu(SDL_Window* window, SDL_Renderer* renderer, AppSettings& settings, std::filesystem::path settings_path,
                    DisplayInfo display)
-    : window_(window), r_(renderer), s_(settings), path_(std::move(settings_path)), display_(std::move(display))
+    : window_(window), r_(renderer), s_(settings), path_(std::move(settings_path)), display_(std::move(display)),
+      langs_(available_languages()) // read once: the list is drawn every frame
 {
 }
 
@@ -67,7 +68,7 @@ std::string MainMenu::value_of(const Item& it) const
     if (it.id == "invert_mouse_y") return onoff(s_.invert_mouse_y);
     if (it.id == "language_choice")
     {
-        for (const auto& l : available_languages())
+        for (const auto& l : langs_)
             if (l.code == language_code()) return l.name;
         return language_code();
     }
@@ -86,7 +87,7 @@ std::vector<std::string> MainMenu::list_labels() const
         for (const Resolution& r : display_.modes)
             out.push_back(r.str() + (r == display_.desktop ? "  " + tr("value.desktop") : std::string()));
     else if (list_ == "language_choice")
-        for (const auto& l : available_languages()) out.push_back(l.name);
+        for (const auto& l : langs_) out.push_back(l.name);
     return out;
 }
 
@@ -101,7 +102,7 @@ void MainMenu::open_list(const Item& it)
     }
     else
     {
-        const auto langs = available_languages();
+        const auto& langs = langs_;
         for (size_t i = 0; i < langs.size(); ++i)
             if (langs[i].code == language_code()) list_row_ = int(i);
     }
@@ -117,7 +118,7 @@ void MainMenu::choose_from_list(int index)
     }
     else if (list_ == "language_choice")
     {
-        const auto langs = available_languages();
+        const auto& langs = langs_;
         if (index >= 0 && index < int(langs.size()) && set_language(langs[size_t(index)].code)) s_.language = langs[size_t(index)].code;
     }
     list_.clear();
@@ -222,7 +223,12 @@ void MainMenu::handle(const SDL_Event& event)
             keep_visible();
         }
         else if (e.type == SDL_EVENT_MOUSE_WHEEL)
-            list_top_ = std::clamp(list_top_ - int(e.wheel.y), 0, std::max(0, count - kListRows));
+        {
+            wheel_ += e.wheel.y; // touchpads send fractions of a notch
+            const int notches = int(wheel_);
+            wheel_ -= float(notches);
+            list_top_ = std::clamp(list_top_ - notches, 0, std::max(0, count - kListRows));
+        }
         else if (e.type == SDL_EVENT_MOUSE_MOTION)
         {
             for (const auto& [r, i] : list_rects_)
@@ -275,7 +281,12 @@ MainMenu::Result MainMenu::run()
     while (!done_)
     {
         SDL_Event e;
-        while (SDL_PollEvent(&e)) handle(e);
+        // Wait for input (up to a frame), so the menu does not spin a core when VSync is off.
+        if (SDL_WaitEventTimeout(&e, 16))
+        {
+            handle(e);
+            while (SDL_PollEvent(&e)) handle(e);
+        }
         render();
         SDL_RenderPresent(r_);
     }

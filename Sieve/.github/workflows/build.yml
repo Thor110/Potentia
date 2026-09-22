@@ -59,16 +59,19 @@ jobs:
 
       - name: Filters judge, count and rank the same on every platform
         run: |
+          # q PATTERN: like grep -q, but reads all its input, so the command before it never
+          # gets SIGPIPE (the steps run with pipefail).
+          q() { grep -c "$@" > /dev/null; }
           exe=build/sieve
           [ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
           printf '[text]\nmode = compact\nfilters = words-v2\n' > words2.ini
           printf '[text]\nmode = compact\nfilters = words-v2, max-run-v1\n' > mixed.ini
-          $exe filters --filters words2.ini | tr -d '\r' | grep -q "^survivors    3037669199976796308182197712 "
-          $exe filters --filters mixed.ini | tr -d '\r' | grep -q "words-v2 can rank, but not together with max-run-v1"
+          $exe filters --filters words2.ini | tr -d '\r' | q "^survivors    3037669199976796308182197712 "
+          $exe filters --filters mixed.ini | tr -d '\r' | q "words-v2 can rank, but not together with max-run-v1"
           out=$($exe check --length 32 --filters words2.ini "It was the best of times" | tr -d '\r')
           echo "$out"
-          echo "$out" | grep -q "words-v1 *FAIL"
-          echo "$out" | grep -q "words-v2 *pass"
+          echo "$out" | q "words-v1 *FAIL"
+          echo "$out" | q "words-v2 *pass"
           k=$(echo "$out" | awk '/survivor number/ {print $(NF-2)}')
           test "$k" = "1533066303779775957571202953"
           test "$($exe read --length 32 --mode positional --filters words2.ini --survivor "$k" 2>/dev/null | tr -d '\r' | sed 's/ *$//')" = "it was the best of times"
@@ -81,19 +84,22 @@ jobs:
             echo "compact $m: $addr"
             test "$($exe read --length 32 --mode $m --filters words2.ini --compact "$addr" 2>/dev/null | tr -d '\r' | sed 's/ *$//')" = "it was the best of times"
           done
-          echo "$out" | grep -q "scrambled   2afad38e8cb58c79243f9f6"
-          echo "$out" | grep -q "guided      90b25da06c4d36a  (59 bits"
+          echo "$out" | q "scrambled   2afad38e8cb58c79243f9f6"
+          echo "$out" | q "guided      90b25da06c4d36a  (59 bits"
           # The other lines: melodies in a key, black-and-white pictures of low entropy.
           printf '[audio]\nmode = compact\nfilters = key-v1\n[audio.key-v1]\ntonic = A\nscale = minor-pentatonic\n[image]\nmode = compact\nfilters = symbol-entropy-v1\n[image.symbol-entropy-v1]\nmax_millibits = 500\n' > lines.ini
-          $exe filters --line audio --filters lines.ini | tr -d '\r' | grep -q "^survivors    794071845499378503449051136 "
-          $exe filters --line image --filters lines.ini | tr -d '\r' | grep -q "^survivors    322091425582872 "
+          $exe filters --line audio --filters lines.ini | tr -d '\r' | q "^survivors    794071845499378503449051136 "
+          $exe filters --line image --filters lines.ini | tr -d '\r' | q "^survivors    322091425582872 "
           printf '[image]\nmode = compact\nfilters = neighbour-agreement-v1\n' > agree.ini
-          $exe filters --line image --filters agree.ini | tr -d '\r' | grep -q "^survivors    6053792982126620565936264884 "
+          $exe filters --line image --filters agree.ini | tr -d '\r' | q "^survivors    6053792982126620565936264884 "
           $exe browse --line image --filters agree.ini --compact --count 2 --seed 4 > /dev/null
           $exe browse --line audio --filters lines.ini --compact --count 2 --seed 4 > /dev/null
 
       - name: Books bind, unbind and keep their id in every ordering
         run: |
+          # q PATTERN: like grep -q, but reads all its input, so the command before it never
+          # gets SIGPIPE (the steps run with pipefail).
+          q() { grep -c "$@" > /dev/null; }
           exe=build/sieve
           [ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
           T=tests/example_book_source.txt
@@ -122,8 +128,9 @@ jobs:
           printf '[books]\nmode = compact\n[books.title]\nfilters = title-v1\n[books.pages]\nfilters = words-v2\n' > books.ini
           out=$($exe check --book tests/example_book_v1.book --filters books.ini | tr -d '\r')
           echo "$out" | tail -4
-          echo "$out" | grep -q "^book: passes, survivor number "
-          $exe filters --line books --length 400 --book-pages 3 --filters books.ini | tr -d '\r' | grep -q "^survivors    [0-9]* books"
+          echo "$out" | q "^book: passes, survivor number 18219131502697305122077923717432538631140150329658"
+          echo "$out" | q "scrambled  19d1fa4fa0d76f9f2d6b01ef5aa4bfc9959be451"
+          $exe filters --line books --length 400 --book-pages 3 --filters books.ini | tr -d '\r' | q "^survivors    2186621054492622425964839597190822589524897221183860035461407467124"
 
       - name: Hallway renders, and its doors keep the corridor position (Linux, no display)
         if: runner.os == 'Linux'
@@ -131,6 +138,9 @@ jobs:
           SDL_VIDEO_DRIVER: offscreen
           SDL_RENDER_DRIVER: software
         run: |
+          # q PATTERN: like grep -q, but reads all its input, so the command before it never
+          # gets SIGPIPE (the steps run with pipefail).
+          q() { grep -c "$@" > /dev/null; }
           H=build/hallway
           W="it was the best of times"
           book() { grep -o 'first book [0-9a-f.]*' | tail -1; }
@@ -141,65 +151,78 @@ jobs:
           # Through a door and straight back: exactly where you were.
           out=$($H --warp "$W" --pose 0,7,-90,0 --walk "-2.3,0;2.5,0" --screenshot door.png)
           echo "$out"
-          echo "$out" | head -1 | grep -q "through the door into the IMAGE line"
+          echo "$out" | sed -n 1p | q "through the door into the IMAGE line"
           test "$(echo "$out" | tail -2 | book)" = "$here"
           # Through a door, one tile along, back through the door there: one tile along in text.
           out=$($H --warp "$W" --pose 0,7,-90,0 --walk "-2.3,0;-0.8,0;0,8;1.5,0" --screenshot loop.png)
           echo "$out"
-          echo "$out" | tail -2 | head -1 | grep -q "PAGES line"
+          echo "$out" | tail -2 | sed -n 1p | q "PAGES line"
           test "$(echo "$out" | tail -2 | book)" = "$next"
           # Guided order: M cycles to it and - zooms out; all five doors lead back to the same book.
-          $H --warp "$W" --press "M,M,-" --screenshot keys.png | tail -2 | head -1 | grep -q "PAGES line, guided zoom 57"
+          $H --warp "$W" --press "M,M,-" --screenshot keys.png | tail -2 | sed -n 1p | q "PAGES line, guided zoom 57"
           start=$($H --mode guided --warp "$W" --zoom 20 --walk "0,0" --screenshot start.png | book)
           out=$($H --mode guided --warp "$W" --zoom 20 --pose 0,7,-90,0 --walk "-2.3,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0" --screenshot guided.png)
           echo "$out"
-          echo "$out" | grep -q "VIDEO line"
-          echo "$out" | grep -q "BOOKS line"
-          echo "$out" | tail -2 | head -1 | grep -q "PAGES line, guided"
+          echo "$out" | q "VIDEO line"
+          echo "$out" | q "BOOKS line"
+          echo "$out" | tail -2 | sed -n 1p | q "PAGES line, guided"
           test "$(echo "$out" | tail -2 | book)" = "$start"
           # Loops: a 2-character line is 729 units = 6 tiles, so tile 6 starts the second copy,
           # and the CLI reads the same corridor places the hallway shows.
-          $H --length 2 --goto @6 --walk "0,0" --screenshot loop6.png | grep -q "first book 000 "
+          $H --length 2 --goto @6 --walk "0,0" --screenshot loop6.png | q "first book 000 "
           test "$(build/sieve read --length 2 --mode positional --at 6:0 2>/dev/null)" = "  "
           test "$(build/sieve read --length 2 --mode positional --at -1:127 2>/dev/null)" = "(empty: padding at the end of a loop)"
-          build/sieve info --length 2 | grep -q "39 empty slots"
-          build/sieve info --line image | grep -q "fills whole tiles exactly"
+          build/sieve info --length 2 | q "39 empty slots"
+          build/sieve info --line image | q "fills whole tiles exactly"
           # The setup menu renders at ordinary and enormous sizes, and scripted keys reach it.
-          $H --menu --screenshot menu.png | grep -q "saved menu.png"
-          $H --menu --press "Down,Down,Down,Right,PageUp" --screenshot menu2.png | grep -q "saved menu2.png"
-          $H --menu --length 4000000000 --video-width 100000 --video-frames 100000 --screenshot menu3.png | grep -q "saved menu3.png"
+          $H --menu --screenshot menu.png | q "saved menu.png"
+          $H --menu --press "Down,Down,Down,Right,PageUp" --screenshot menu2.png | q "saved menu2.png"
+          $H --menu --length 4000000000 --video-width 100000 --video-frames 100000 --screenshot menu3.png | q "saved menu3.png"
           test -s menu.png && test -s menu2.png && test -s menu3.png
           # Books: the fifth line. Its books are a cover, a title and pages; the committed example
           # book opens on its shelf when the lines have its shape, and page N turns.
-          $H --line books --walk "0,0" --screenshot books.png | head -1 | grep -q "BOOKS line, positional, filters: none"
+          $H --line books --walk "0,0" --screenshot books.png | sed -n 1p | q "BOOKS line, positional, filters: none"
           out=$($H --line books --length 400 --book-pages 3 --warp tests/example_book_v1.book --walk "0,0" --press N --screenshot book-open.png)
           echo "$out"
-          echo "$out" | head -1 | grep -q '"a tale of two cities'
-          echo "$out" | grep -q "opened the book"
-          $H --line books --warp tests/example_book_v1.book --walk "0,0" --screenshot book-wrong.png | head -1 | grep -q "in the menu to the book's shape"
-          $H --line books --mode scrambled --walk "0,0" --take --screenshot book-hand.png | head -1 | grep -q "BOOKS line, scrambled"
+          echo "$out" | sed -n 1p | q '"a tale of two cities'
+          echo "$out" | q "opened the book"
+          $H --line books --warp tests/example_book_v1.book --walk "0,0" --screenshot book-wrong.png | sed -n 1p | q "in the menu to the book's shape"
+          $H --line books --mode scrambled --walk "0,0" --take --screenshot book-hand.png | sed -n 1p | q "BOOKS line, scrambled"
           printf '[books]\nmode = compact\n[books.title]\nfilters = title-v1\n[books.pages]\nfilters = words-v2\n' > books.ini
-          $H --filters books.ini --line books --length 400 --book-pages 3 --warp tests/example_book_v1.book --walk "0,0" --screenshot book-compact.png | head -1 | grep -q "surviving books"
-          $H --filters books.ini --line books --length 400 --book-pages 3 --mode scrambled --walk "0,0" --take --screenshot book-compact2.png | head -1 | grep -q "BOOKS line, scrambled, filters: 0+1+1 compact"
-          $H --menu --screenshot menu5.png | grep -q "saved menu5.png"
+          $H --filters books.ini --line books --length 400 --book-pages 3 --warp tests/example_book_v1.book --walk "0,0" --screenshot book-compact.png | sed -n 1p | q "surviving books"
+          $H --filters books.ini --line books --length 400 --book-pages 3 --mode scrambled --walk "0,0" --take --screenshot book-compact2.png | sed -n 1p | q "BOOKS line, scrambled, filters: 0+1+1 compact"
+          $H --menu --screenshot menu5.png | q "saved menu5.png"
           # The main menu, its settings screens and a language file with gaps (English fills them).
-          $H --main-menu --screenshot main.png | grep -q "saved main.png"
-          $H --line image --edge-glow --walk "0,0" --screenshot glow.png | grep -q "saved glow.png"
-          # Real Graphics: every line loads the templates (no per-line models are committed yet).
+          $H --main-menu --screenshot main.png | q "saved main.png"
+          $H --line image --edge-glow --walk "0,0" --screenshot glow.png 2>&1 | q "graphics: edge glow on, real graphics off"
+          # Real Graphics: every line loads the templates. (Committing a per-line model, e.g.
+          # data/meshes/book-audio.obj, changes this line: update it then.)
           out=$($H --line audio --real-graphics --walk "0,0" --screenshot real.png 2>&1)
-          echo "$out" | grep -q "real graphics for the audio line: hallway=hallway.obj bookshelf=bookshelf.obj book=book.obj marker=marker.obj"
-          $H --real-graphics --fps-counter --bench 5 --walk "0,0" --screenshot fps.png | grep -q "^bench: 5 frames"
-          $H --main-menu --press "Down,Return,Return,Return" --screenshot main-res.png | grep -q "saved"
-          $H --main-menu --settings app.ini --press "Down,Return,Return,Down,Down,Return,Down,Return" --screenshot main-gfx.png > /dev/null
-          grep -q "^edge_glow = off" app.ini && grep -q "^real_graphics = on" app.ini
+          echo "$out" | q "real graphics for the audio line: hallway=hallway.obj bookshelf=bookshelf.obj book=book.obj marker=marker.obj"
+          out=$($H --real-graphics --fps-counter --bench 5 --walk "0,0" --screenshot fps.png 2>&1)
+          echo "$out" | q "^bench: 5 frames"
+          echo "$out" | q "graphics: edge glow off, real graphics on, fps counter on"
+          $H --main-menu --press "Down,Return,Return,Return" --screenshot main-res.png | q "saved"
+          # Settings, Graphics, then VSync off, Geometry Edge Glow on, Real Graphics on — which
+          # turns the glow back off, the two being mutually exclusive. From a settings file that
+          # does not exist yet, so the toggles start from their defaults whatever ran before.
+          rm -f app.ini
+          $H --main-menu --settings app.ini --press "Down,Return,Return,Down,Down,Return,Down,Return,Down,Return" --screenshot main-gfx.png > /dev/null
+          grep -q "^vsync = off" app.ini
+          grep -q "^edge_glow = off" app.ini
+          grep -q "^real_graphics = on" app.ini
           mkdir -p lt/data/lang && cp data/lang/en.txt lt/data/lang/ && printf 'language.name = Test\nitem.start = START TEST\n' > lt/data/lang/tt.txt
-          (cd lt && ../$H --main-menu --language tt --screenshot ../main-tt.png | grep -q "saved")
+          (cd lt && ../$H --main-menu --language tt --screenshot ../main-tt.png) | q "main menu: language tt, font sieve8x8"
           # The language's font: sieve8x8 draws accented and Greek letters; a missing font is reported.
           mkdir -p lt/data/fonts && cp data/fonts/sieve8x8.hex lt/data/fonts/
           printf 'font = sieve8x8\nlanguage.name = Fran\xc3\xa7ais\nitem.start = D\xc3\xa9marrer Sieve\n' > lt/data/lang/fr.txt
-          (cd lt && ../$H --main-menu --language fr --screenshot ../main-fr.png 2>&1 | grep -v "not found" | grep -q "saved")
+          out=$(cd lt && ../$H --main-menu --language fr --screenshot ../main-fr.png 2>&1)
+          echo "$out" | q "main menu: language fr, font sieve8x8"
+          if echo "$out" | grep -c "not found" > /dev/null; then exit 1; fi
           printf 'font = nosuchfont\nitem.start = X\n' > lt/data/lang/xx.txt
-          (cd lt && ../$H --main-menu --language xx --screenshot ../main-xx.png 2>&1 | grep -q "font 'nosuchfont' not found")
+          out=$(cd lt && ../$H --main-menu --language xx --screenshot ../main-xx.png 2>&1)
+          echo "$out" | q "font 'nosuchfont' not found"
+          echo "$out" | q "main menu: language xx, font sieve8x8"
           # Filter modes: compact shelves only survivors (warped text lands on a shelf, not in hand),
           # an unrankable stack falls back to hide, and the filter overlay renders.
           printf '[text]\nmode = compact\nfilters = words-v2\n' > words2.ini
@@ -208,15 +231,15 @@ jobs:
           printf '[audio]\nmode = compact\nfilters = key-v1\n[audio.key-v1]\ntonic = A\nscale = minor-pentatonic\n[image]\nmode = compact\nfilters = symbol-entropy-v1\n[image.symbol-entropy-v1]\nmax_millibits = 500\n' > lines.ini
           out=$($H --filters words2.ini --warp "$W" --walk "0,0" --screenshot compact.png)
           echo "$out"
-          echo "$out" | grep -q "filters: 1 compact (303766...7712 (28 digits) survivors), tile 119770...5023 (26 digits)"
-          $H --filters mixed.ini --walk "0,0" --screenshot mixed.png | grep -q "filters: 2 hide (compact: words-v2 can rank, but not together with max-run-v1)"
-          $H --filters mark.ini --length 3 --walk "0,0" --screenshot mark.png | grep -q "filters: 1 mark"
-          $H --menu --filters words2.ini --press "F" --screenshot overlay.png | grep -q "saved overlay.png"
+          echo "$out" | q "filters: 1 compact (303766...7712 (28 digits) survivors), tile 119770...5023 (26 digits)"
+          $H --filters mixed.ini --walk "0,0" --screenshot mixed.png | q "filters: 2 hide (compact: words-v2 can rank, but not together with max-run-v1)"
+          $H --filters mark.ini --length 3 --walk "0,0" --screenshot mark.png | q "filters: 1 mark"
+          $H --menu --filters words2.ini --press "F" --screenshot overlay.png | q "saved overlay.png"
           # Compact in the scrambled and guided orderings, and on the image and audio lines.
-          $H --filters words2.ini --mode scrambled --warp "$W" --walk "0,0" --screenshot cs.png | head -1 | grep -q "PAGES line, scrambled, filters: 1 compact"
-          $H --filters words2.ini --mode guided --warp "$W" --walk "0,0" --screenshot cg.png | head -1 | grep -q "PAGES line, guided zoom 59, filters: 1 compact"
-          $H --filters lines.ini --line image --mode scrambled --walk "0,0" --screenshot ci.png | head -1 | grep -q "IMAGE line, scrambled, filters: 1 compact (322091425582872 survivors)"
-          $H --filters lines.ini --line audio --walk "0,0" --screenshot ca.png | head -1 | grep -q "AUDIO line, positional, filters: 1 compact"
+          $H --filters words2.ini --mode scrambled --warp "$W" --walk "0,0" --screenshot cs.png | sed -n 1p | q "PAGES line, scrambled, filters: 1 compact"
+          $H --filters words2.ini --mode guided --warp "$W" --walk "0,0" --screenshot cg.png | sed -n 1p | q "PAGES line, guided zoom 59, filters: 1 compact"
+          $H --filters lines.ini --line image --mode scrambled --walk "0,0" --screenshot ci.png | sed -n 1p | q "IMAGE line, scrambled, filters: 1 compact (322091425582872 survivors)"
+          $H --filters lines.ini --line audio --walk "0,0" --screenshot ca.png | sed -n 1p | q "AUDIO line, positional, filters: 1 compact"
           test -s compact.png && test -s mixed.png && test -s mark.png && test -s overlay.png
 
       - name: Reference oracle reproduces the committed vectors

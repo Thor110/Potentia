@@ -483,6 +483,7 @@ void test_digit_vectors(const std::string& path)
         ++n;
     }
     std::cout << "digit vectors checked: " << n << "\n";
+    CHECK(n == 120); // a truncated or emptied vector file must fail, not pass quietly
     CHECK(n > 100);
 }
 
@@ -510,6 +511,7 @@ void test_canon_vectors(const std::string& path)
         ++n;
     }
     std::cout << "canonicalisation vectors checked: " << n << "\n";
+    CHECK(n == 60); // a truncated or emptied vector file must fail, not pass quietly
     CHECK(n > 50);
 }
 
@@ -533,6 +535,7 @@ void test_image_vectors(const std::string& path)
         ++n;
     }
     std::cout << "image vectors checked: " << n << "\n";
+    CHECK(n == 36); // a truncated or emptied vector file must fail, not pass quietly
     CHECK(n > 30);
 }
 
@@ -599,6 +602,7 @@ void test_vectors(const std::string& path)
         ++n;
     }
     std::cout << "conformance vectors checked: " << n << "\n";
+    CHECK(n == 160); // a truncated or emptied vector file must fail, not pass quietly
     CHECK(n > 100);
 }
 
@@ -830,6 +834,7 @@ void test_guided_vectors(const std::string& dir)
         ++n;
     }
     std::cout << "guided vectors checked: " << n << "\n";
+    CHECK(n == 51); // a truncated or emptied vector file must fail, not pass quietly
 }
 
 // Resources for filter tests: one dictionary and the default model.
@@ -1365,6 +1370,7 @@ void test_compact_vectors(const std::string& dir)
         else CHECK(false);
     }
     std::cout << "compact vectors checked: " << n << "\n";
+    CHECK(n == 246); // a truncated or emptied vector file must fail, not pass quietly
 }
 
 // The books line: every book of a tiny shape, in both orderings, is a bijection with [0, N).
@@ -1398,7 +1404,7 @@ void test_bookspace()
     BookSpace::Parts p{{1, 0}, {3}, {{0}, {5}}};
     CHECK(bs.index_of(p, AddressMode::Positional) == BigUint(((2 * 27 + 3) * 27 + 0) * 27 + 5));
     CHECK(bs.hex_of(BigUint(5)).size() == bs.hex_width());
-    CHECK(throws([&] { (void)bs.parse("ffffffffff"); }));
+    CHECK(throws([&] { (void)bs.parse("fffff"); })); // five digits, as wide as the line's addresses, but past its end
     // At full scale: a 10x10 cover, 32-character pages, four of them; scrambled round-trips.
     const Space big_cover("image/mono/10x10", 2, 100, "sieve");
     const Space big_page(alphabet_by_id("lower27"), 32, "sieve");
@@ -1498,7 +1504,88 @@ void test_booksieve()
     }
     CHECK(ok);
     CHECK(c.parse(c.hex_of(BigUint(n - 1))) == BigUint(n - 1));
-    CHECK(throws([&] { (void)c.parse(c.hex_of(BigUint(n))); }));
+    CHECK(throws([&] { (void)c.parse(BigUint(n).to_hex()); }));
+}
+
+// Checks added in the 0.12 review: the fast rank/unrank paths at their limits, compact books with
+// a part that cannot rank, and the implications title-v1 and words-v2 rely on.
+void test_review_additions()
+{
+    TestResources none(nullptr, nullptr);
+    // Black-and-white entropy at its limit: the fast walk agrees with the generic one, both ways.
+    {
+        const FilterLine img{"image", "image/mono/2048x1", 2, 2048, nullptr, 2048, 1, 1};
+        const FilterStack st(img, {{find_filter("symbol-entropy-v1"), {{"max_millibits", "500"}}}}, none);
+        const Ranker* rk = st.ranker();
+        CHECK(rk != nullptr);
+        if (rk)
+        {
+            bool ok = true;
+            BigUint k;
+            for (int i = 0; i < 6; ++i)
+            {
+                // 0, N-1, and a spread of survivor numbers in between (from SHA-256, mod N).
+                if (i == 0) k = BigUint();
+                else if (i == 1) { k = rk->count(); k -= BigUint(1); }
+                else k = BigUint::mod(BigUint::from_hex(Sha256::hex(Sha256::hash("entropy/" + std::to_string(i)))), rk->count());
+                const auto u = rk->unrank(k);
+                ok = ok && u == rk->Ranker::unrank(k) && rk->rank(u) == k && rk->Ranker::rank(u) == k && st.passes(u);
+            }
+            CHECK(ok);
+            std::vector<uint32_t> ones(2048, 1); // all one colour at the other end: entropy 0, survives
+            CHECK(!throws([&] { (void)rk->rank(ones); }));
+            std::vector<uint32_t> half(2048, 0);
+            for (size_t i = 0; i < half.size(); i += 2) half[i] = 1; // one bit per symbol: fails max 0.5
+            CHECK(throws([&] { (void)rk->rank(half); }));
+        }
+        const FilterLine img2{"image", "image/mono/2049x1", 2, 2049, nullptr, 2049, 1, 1};
+        CHECK(FilterStack(img2, {{find_filter("symbol-entropy-v1"), {}}}, none).ranker() == nullptr);
+    }
+    // clean-v2 at paragraph length: round trips through the slimmed tables.
+    {
+        const FilterStack st(text_line(1000), {{find_filter("clean-v2"), {}}}, none);
+        const Ranker* rk = st.ranker();
+        CHECK(rk != nullptr);
+        bool ok = rk != nullptr;
+        for (int i = 0; ok && i < 5; ++i)
+        {
+            BigUint k = i == 0 ? BigUint() : BigUint::mod(BigUint::from_hex(Sha256::hex(Sha256::hash("clean/" + std::to_string(i)))), rk->count());
+            if (i == 4) { k = rk->count(); k -= BigUint(1); }
+            const auto u = rk->unrank(k);
+            ok = ok && rk->rank(u) == k && st.passes(u) && rk->accepts(u);
+        }
+        CHECK(ok);
+    }
+    // Implications: title-v1 and words-v2 each imply window-v2, so ticking both still compacts,
+    // with exactly the stronger filter's survivors.
+    {
+        auto small = std::make_shared<const Dictionary>(Dictionary::from_words({"a", "an", "ant", "i", "in", "tan"}));
+        TestResources res(small, nullptr);
+        for (const char* strong : {"title-v1", "words-v2"})
+        {
+            const FilterStack one(text_line(6), {{find_filter(strong), {}}}, res);
+            const FilterStack both(text_line(6), {{find_filter(strong), {}}, {find_filter("window-v2"), {}}}, res);
+            CHECK(one.ranker() != nullptr && both.ranker() != nullptr);
+            if (one.ranker() && both.ranker()) CHECK(one.ranker()->count() == both.ranker()->count());
+        }
+        // A book whose pages stack cannot rank: no compact books, and it says why.
+        const Space cover("image/mono/2x2", 2, 4, "sieve");
+        const Space page(alphabet_by_id("lower27"), 2, "sieve");
+        const BookSpace bs(cover, page, 2);
+        const FilterStack none_stack;
+        const FilterStack pages(text_line(4), {{find_filter("max-run-v1"), {}}}, res);
+        const BookSieve s(bs, none_stack, none_stack, pages);
+        CHECK(!s.can_rank());
+        CHECK(s.blocker().rfind("pages: ", 0) == 0);
+        CHECK(throws([&] { (void)s.unrank(BigUint()); }));
+        CHECK(throws([&] { (void)s.parts_at(BigUint(), AddressMode::Positional); }));
+        // Filtering still works without ranking.
+        BookSpace::Parts p{{0, 0, 0, 0}, digits27("an"), {digits27("aa"), digits27("aa")}};
+        CHECK(s.first_failure(p) == "pages: max-run-v1");
+        // A title of length 0 has no survivors (it needs a letter).
+        const FilterStack t0(text_line(0), {{find_filter("title-v1"), {}}}, res);
+        CHECK(t0.ranker() == nullptr || t0.ranker()->count().is_zero());
+    }
 }
 
 void test_book_vectors(const std::string& dir)
@@ -1531,6 +1618,7 @@ void test_book_vectors(const std::string& dir)
         ++n;
     }
     std::cout << "book vectors checked: " << n << "\n";
+    CHECK(n == 60); // a truncated or emptied vector file must fail, not pass quietly
 }
 
 void test_book_filter_vectors(const std::string& dir)
@@ -1587,6 +1675,7 @@ void test_book_filter_vectors(const std::string& dir)
         ++n;
     }
     std::cout << "book filter vectors checked: " << n << "\n";
+    CHECK(n == 48); // a truncated or emptied vector file must fail, not pass quietly
 }
 
 void test_filter_vectors(const std::string& dir)
@@ -1654,6 +1743,7 @@ void test_filter_vectors(const std::string& dir)
         else { CHECK(false); }
     }
     std::cout << "filter vectors checked: " << n << "\n";
+    CHECK(n == 997); // a truncated or emptied vector file must fail, not pass quietly
 }
 
 void run_all(int argc, char** argv)
@@ -1686,6 +1776,7 @@ void run_all(int argc, char** argv)
         test_compact_vectors(dir);
         test_bookspace();
         test_booksieve();
+        test_review_additions();
         test_book_vectors(dir);
         test_book_filter_vectors(dir);
     }

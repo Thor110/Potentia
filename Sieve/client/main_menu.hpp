@@ -7,6 +7,7 @@
 #pragma once
 
 #include "app_settings.hpp"
+#include "strings.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -59,6 +60,8 @@ private:
     int list_row_ = 0, list_top_ = 0;
     std::vector<std::pair<SDL_FRect, int>> item_rects_, list_rects_;
     SDL_FRect list_box_{};
+    std::vector<LanguageInfo> langs_; // the language files found when the menu opened
+    float wheel_ = 0;                 // wheel movement not yet whole notches
 };
 
 } // namespace hallway

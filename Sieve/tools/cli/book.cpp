@@ -180,6 +180,13 @@ BookSpace::Parts record_parts(const std::vector<DecodedSection>& sections, const
                 throw std::invalid_argument("its cover is " + sp.symbols_id() + ", not " + cover.symbols_id());
             p.cover = d.units.front();
         }
+        else if (role == "title" && sp.symbols_id() == page.symbols_id() && sp.unit_length() < page.unit_length())
+        {
+            // A title bound shorter than a page (bind --title-length) is the same title followed
+            // by blank space (padding is digit 0 in every alphabet).
+            p.title = d.units.front();
+            p.title.resize(page.unit_length(), 0);
+        }
         else if (role == "title" || role == "pages")
         {
             if (sp.symbols_id() != page.symbols_id() || sp.unit_length() != page.unit_length())

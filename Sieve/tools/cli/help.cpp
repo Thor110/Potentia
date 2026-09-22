@@ -38,7 +38,8 @@ const std::string kModeText =
 
 const Option kLine = {"--line text|image|audio|video",
                       "Which line (kind of content) to work on. Default: text. Each line has its own\n"
-                      "options below; `sieve help lines` explains them in full."};
+                      "options below; `sieve help lines` explains them in full. (`sieve filters` also\n"
+                      "takes --line books: the books line's cover, title and pages stacks.)"};
 
 const Option kLineOptions = {
     "line options",

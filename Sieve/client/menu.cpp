@@ -44,6 +44,19 @@ std::string cycle(const std::vector<std::string>& v, const std::string& cur, int
 uint32_t palette_size(const std::string& id) { return sieve::palette_by_id(id).size(); }
 uint32_t alphabet_size(const std::string& id) { return sieve::alphabet_by_id(id).size(); }
 
+// a * b * c, stopping at UINT64_MAX instead of wrapping (settings go up to 2^32 - 1 each).
+uint64_t positions(uint64_t a, uint64_t b, uint64_t c = 1)
+{
+    uint64_t r = a;
+    for (uint64_t f : {b, c})
+    {
+        if (f != 0 && r > UINT64_MAX / f) return UINT64_MAX;
+        r *= f;
+    }
+    return r;
+}
+uint32_t clamp32(uint64_t v) { return uint32_t(std::min<uint64_t>(v, UINT32_MAX)); }
+
 uint32_t parse_u32(const sieve::cli::Args& a, const char* key, uint32_t def) { return a.has(key) ? a.get_positive(key, def) : def; }
 
 // What this machine can open. The design has no limit; these only describe the hardware of the
@@ -152,11 +165,11 @@ std::array<LineSize, 5> Menu::line_sizes() const
         books.units = "cov*pg^" + std::to_string(parts) + " = ~10^" + fixed(log10, 1);
     }
     std::array<LineSize, 5> out{page, image, line_size(kNoteSymbols, s_.notes),
-                                line_size(palette_size(s_.video_palette), uint64_t(s_.video_w) * s_.video_h * s_.frames), books};
+                                line_size(palette_size(s_.video_palette), positions(s_.video_w, s_.video_h, s_.frames)), books};
     // A unit has at most 2^32 - 1 positions: a larger picture cannot be opened at all.
     const uint64_t kMaxPositions = 0xFFFFFFFFull;
     if (uint64_t(s_.image_w) * s_.image_h > kMaxPositions) out[1].bits = out[4].bits = HUGE_VAL;
-    if (uint64_t(s_.video_w) * s_.video_h * s_.frames > kMaxPositions) out[3].bits = HUGE_VAL;
+    if (positions(s_.video_w, s_.video_h, s_.frames) > kMaxPositions) out[3].bits = HUGE_VAL;
     return out;
 }
 
@@ -234,7 +247,10 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
     if (e.type == SDL_EVENT_MOUSE_WHEEL && overlay_ >= 0)
     {
         const int last = std::max(0, int(overlay_rows().size()) - 1);
-        oscroll_ = std::clamp(oscroll_ - int(e.wheel.y), 0, last);
+        wheel_ += e.wheel.y; // touchpads send fractions of a notch
+        const int notches = int(wheel_);
+        wheel_ -= float(notches);
+        oscroll_ = std::clamp(oscroll_ - notches, 0, last);
         orow_ = std::clamp(std::max(orow_, oscroll_), 0, last);
         return;
     }
@@ -311,7 +327,12 @@ Menu::Result Menu::run()
     while (!done)
     {
         SDL_Event e;
-        while (SDL_PollEvent(&e)) handle(e, done, result);
+        // Wait for input (up to a frame), so the menu does not spin a core when VSync is off.
+        if (SDL_WaitEventTimeout(&e, 16))
+        {
+            handle(e, done, result);
+            while (SDL_PollEvent(&e)) handle(e, done, result);
+        }
         render();
         SDL_RenderPresent(r_);
     }
@@ -486,12 +507,12 @@ sieve::FilterLine Menu::filter_line_of(int i) const
     }
     case 1:
         f = {"image", "image/" + s_.image_palette + "/" + std::to_string(s_.image_w) + "x" + std::to_string(s_.image_h),
-             palette_size(s_.image_palette), s_.image_w * s_.image_h, nullptr, s_.image_w, s_.image_h, 1};
+             palette_size(s_.image_palette), clamp32(positions(s_.image_w, s_.image_h)), nullptr, s_.image_w, s_.image_h, 1};
         break;
     case 2: f = {"audio", sieve::kNotesSymbolsId, kNoteSymbols, s_.notes, nullptr, 0, 0, 0}; break;
     default:
         f = {"video", "video/" + s_.video_palette + "/" + std::to_string(s_.video_w) + "x" + std::to_string(s_.video_h) + "x" + std::to_string(s_.frames),
-             palette_size(s_.video_palette), s_.video_w * s_.video_h * s_.frames, nullptr, s_.video_w, s_.video_h, s_.frames};
+             palette_size(s_.video_palette), clamp32(positions(s_.video_w, s_.video_h, s_.frames)), nullptr, s_.video_w, s_.video_h, s_.frames};
         break;
     }
     return f;

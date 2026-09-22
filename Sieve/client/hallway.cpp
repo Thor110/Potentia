@@ -48,8 +48,10 @@
 #include <fstream>
 #include <cstdio>
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -68,6 +70,9 @@ constexpr LineKind kLineOrder[4] = {LineKind::Text, LineKind::Image, LineKind::A
 // The corridor's lines: the four above, then books (made of pages and a picture).
 constexpr int kLines = 5;
 constexpr int kBooksLine = 4;
+// Tiles drawn behind and ahead of the one you are in (and kept in the book cache).
+constexpr int kCacheBack = 6, kCacheAhead = 7;
+constexpr int kBuckets = 12; // distance fades of the wireframe
 const Theme& theme_of(int li) { return li == kBooksLine ? kBooksTheme : kThemes[li]; }
 
 SDL_Color mix(SDL_Color a, SDL_Color b, float t)
@@ -356,11 +361,16 @@ public:
         tile_ += d;
         loop_tile_ = offset_loop_tile(d);
         for (int i = 0; i < kLines; ++i) all_loop_tiles_[i] = offset_loop_tile(all_loops_[i], all_loop_tiles_[i], d);
-        // Keep the books already worked out: they are the same books, d tiles closer.
+        // Keep the books already worked out that are still near enough to be drawn: they are the
+        // same books, d tiles closer. (Books left behind are dropped, so the cache stays small.)
         std::unordered_map<int64_t, Book> shifted;
-        const int64_t by = d * int64_t(kBooksPerTile);
         if (d > -16 && d < 16)
-            for (auto& [key, b] : cache_) shifted.emplace(key - by, std::move(b));
+        {
+            const int64_t by = d * int64_t(kBooksPerTile);
+            const int64_t lo = -int64_t(kCacheBack) * int64_t(kBooksPerTile), hi = int64_t(kCacheAhead + 1) * int64_t(kBooksPerTile);
+            for (auto& [key, b] : cache_)
+                if (key - by >= lo && key - by < hi) shifted.emplace(key - by, std::move(b));
+        }
         cache_ = std::move(shifted);
         refresh_labels();
     }
@@ -391,7 +401,10 @@ public:
     // The books line compacts when every part with filters can rank its survivors, and some survive.
     bool books_compact() const { return book_sieve_ && book_sieve_->can_rank() && !book_sieve_->count().is_zero(); }
     bool has_filters() const { return on_books() ? book_sieve_ && !book_sieve_->empty() : !stack().empty(); }
-    std::string filter_status() const
+    // The filters' part of the readout, worked out when the line or its settings change (the
+    // survivor count is a big number, too slow to write out every frame).
+    const std::string& filter_status() const { return filter_status_; }
+    std::string compute_filter_status() const
     {
         if (on_books())
         {
@@ -434,6 +447,8 @@ public:
 
     void rebase()
     {
+        // The guided zoom can never be finer than the line's own precision (16 bits per character).
+        if (lines_[0].guided) zoom_ = std::clamp<uint32_t>(zoom_, 1, uint32_t(std::min<size_t>(lines_[0].guided->scale_bits(), UINT32_MAX)));
         loop_ = LineLoop(units_of(li_));
         loop_tile_ = loop_.loop_tile(tile_);
         // Every line's loop too, for the double flag where all four start together.
@@ -443,6 +458,7 @@ public:
             all_loop_tiles_[i] = all_loops_[i].loop_tile(tile_);
         }
         cache_.clear();
+        filter_status_ = compute_filter_status();
         refresh_labels();
     }
 
@@ -957,8 +973,27 @@ public:
             if (!SDL_GetWindowRelativeMouseMode(window_)) SDL_SetWindowRelativeMouseMode(window_, true);
             else if (e.button.button == SDL_BUTTON_LEFT) take_or_return();
         }
-        if (e.type == SDL_EVENT_MOUSE_WHEEL && e.wheel.y != 0) jump_tiles(e.wheel.y > 0 ? 1 : -1);
+        if (e.type == SDL_EVENT_MOUSE_WHEEL)
+        {
+            // Touchpads send fractions of a notch: a tile per whole notch, however it arrives.
+            wheel_ += e.wheel.y;
+            const int notches = int(wheel_);
+            if (notches != 0)
+            {
+                wheel_ -= float(notches);
+                jump_tiles(notches);
+            }
+        }
         if (e.type != SDL_EVENT_KEY_DOWN) return;
+        // Held keys repeat only for what is meant to repeat (jumps, zoom, pages); a held E would
+        // otherwise take a book and put it back again and again.
+        if (e.key.repeat)
+            switch (e.key.key)
+            {
+            case SDLK_PAGEUP: case SDLK_PAGEDOWN: case SDLK_LEFTBRACKET: case SDLK_RIGHTBRACKET:
+            case SDLK_MINUS: case SDLK_KP_MINUS: case SDLK_EQUALS: case SDLK_KP_PLUS: case SDLK_N: case SDLK_B: break;
+            default: return;
+            }
         switch (e.key.key)
         {
         case SDLK_ESCAPE:
@@ -1087,7 +1122,7 @@ public:
         hover_ = pick_book(cam_.pos, cam_.forward(), 0, 5.0f, sizes_vary());
         if (hover_ && effective_mode() == FilterMode::Hide && !book(hover_->tile, hover_->slot()).passes) hover_.reset();
 
-        constexpr int kBack = 6, kAhead = 7;
+        constexpr int kBack = kCacheBack, kAhead = kCacheAhead;
         // Only tiles that can appear on screen are drawn (usually about half of them).
         bool visible[kBack + kAhead + 1];
         for (int t = -kBack; t <= kAhead; ++t)
@@ -1100,7 +1135,7 @@ public:
         const Models* md = real_graphics_ ? &models() : nullptr;
         const bool real_hall = md && md->hallway, real_cases = md && md->bookshelf, real_books = md && md->book,
                    real_marker = md && md->marker;
-        if (md) draw_models(*md, visible, kBack, kAhead, w, h);
+        if (md && (real_hall || real_cases || real_books || real_marker)) draw_models(*md, visible, kBack, kAhead, w, h);
         // Doors: solid black. Start lines: checkered, where a loop of this line begins.
         for (int t = -kBack; t <= kAhead; ++t)
         {
@@ -1129,8 +1164,10 @@ public:
             fill({f[0], f[1], f[2], f[3]}, c);
         }
         // Every edge, faded towards the background with distance. Padding slots have no book.
-        constexpr int kBuckets = 12;
-        std::vector<std::vector<SDL_FPoint>> buckets(kBuckets);
+        // (The buckets are kept between frames, so their memory is reused.)
+        std::vector<std::vector<SDL_FPoint>>& buckets = edge_buckets_;
+        buckets.resize(kBuckets);
+        for (auto& b : buckets) b.clear();
         // `faint` is the least fade an edge gets (0 = full strength, 1 = background).
         auto add = [&](const Segment& s, float z0, float faint = 0) {
             const auto p = cam_.project_segment({s.a.x, s.a.y, s.a.z + z0}, {s.b.x, s.b.y, s.b.z + z0});
@@ -1144,9 +1181,9 @@ public:
         {
             if (!visible[t + kBack]) continue;
             const float z0 = t * kTile;
-            for (const Segment& s : real_hall ? (real_cases ? std::vector<Segment>{} : case_geometry_)
-                                              : (real_cases ? hall_geometry_ : tile_geometry_))
-                add(s, z0);
+            static const std::vector<Segment> none;
+            const std::vector<Segment>& edges = real_hall ? (real_cases ? none : case_geometry_) : (real_cases ? hall_geometry_ : tile_geometry_);
+            for (const Segment& s : edges) add(s, z0);
             const uint32_t books = real_books ? 0 : books_in_tile(t);
             const FilterMode fm = effective_mode();
             for (uint32_t k = 0; k < books; ++k)
@@ -1372,21 +1409,41 @@ public:
     }
     void draw_pixels(const Space::Digits& unit, const ImageFormat& f, float x, float y, float size, int frame)
     {
-        const auto px = render_image(unit, f);
         const float cell = size / float(std::max(f.width, f.height));
         const size_t base = size_t(frame) * f.width * f.height;
         // One texture, scaled with nearest-neighbour sampling (one rectangle per pixel costs a draw
-        // call per pixel); per-pixel rectangles only if the texture cannot be made.
+        // call per pixel); per-pixel rectangles only if the texture cannot be made. The picture in
+        // front of you and the one in hand rarely change, so their textures are kept between frames.
         static_assert(sizeof(Rgb) == 3, "Rgb must be packed RGB24");
-        if (SDL_Texture* tex = SDL_CreateTexture(r_, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STATIC, int(f.width), int(f.height)))
+        PictureCache& c = picture_[&f == &lines_[1].image && on_books() ? 1 : 0];
+        const bool same = c.tex && c.unit == unit && c.frame == frame && c.w == f.width && c.h == f.height;
+        if (!same)
         {
-            SDL_UpdateTexture(tex, nullptr, px.data() + base, int(f.width * 3));
-            SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_NEAREST);
+            if (c.tex && (c.w != f.width || c.h != f.height))
+            {
+                SDL_DestroyTexture(c.tex);
+                c.tex = nullptr;
+            }
+            if (!c.tex) c.tex = SDL_CreateTexture(r_, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STATIC, int(f.width), int(f.height));
+            if (c.tex)
+            {
+                const auto px = render_image(unit, f);
+                SDL_UpdateTexture(c.tex, nullptr, px.data() + base, int(f.width * 3));
+                SDL_SetTextureScaleMode(c.tex, SDL_SCALEMODE_NEAREST);
+                c.unit = unit;
+                c.frame = frame;
+                c.w = f.width;
+                c.h = f.height;
+            }
+        }
+        if (c.tex)
+        {
             const SDL_FRect dst{x, y, f.width * cell, f.height * cell};
-            SDL_RenderTexture(r_, tex, nullptr, &dst);
-            SDL_DestroyTexture(tex);
+            SDL_RenderTexture(r_, c.tex, nullptr, &dst);
         }
         else
+        {
+        const auto px = render_image(unit, f);
         for (uint32_t py = 0; py < f.height; ++py)
             for (uint32_t pxi = 0; pxi < f.width; ++pxi)
             {
@@ -1395,6 +1452,7 @@ public:
                 const SDL_FRect cellr{x + pxi * cell, y + py * cell, cell, cell};
                 SDL_RenderFillRect(r_, &cellr);
             }
+        }
         const Theme& th = theme();
         SDL_SetRenderDrawColor(r_, th.edge.r, th.edge.g, th.edge.b, 255);
         const SDL_FRect border{x - 1, y - 1, f.width * cell + 2, f.height * cell + 2};
@@ -1633,8 +1691,18 @@ public:
     }
 
     bool menu_requested() const { return menu_requested_; }
+    ~Hallway() { release_textures(); }
     // Frees textures that belong to the renderer; call before destroying it.
-    void release_textures() { models_batch_.release(); }
+    void release_textures()
+    {
+        models_batch_.release();
+        for (PictureCache& c : picture_)
+            if (c.tex)
+            {
+                SDL_DestroyTexture(c.tex);
+                c.tex = nullptr;
+            }
+    }
     // From the main menu's settings: mouse look, and the graphics options (Geometry Edge Glow and
     // Real Graphics are recorded here for the renderer; both are off by default).
     void set_controls(int sensitivity_percent, bool invert_y)
@@ -1727,6 +1795,16 @@ private:
     std::vector<Segment> tile_geometry_, hall_geometry_, case_geometry_; // all, hallway only, bookcases only
     Models models_[kLines]; // Real Graphics, per line
     MeshBatch models_batch_;
+    // The last picture drawn in each of the two places one can appear (on the shelf you are
+    // looking at, and in your hand), so an unchanged picture is not rebuilt every frame.
+    struct PictureCache
+    {
+        SDL_Texture* tex = nullptr;
+        Space::Digits unit;
+        int frame = -1;
+        uint32_t w = 0, h = 0;
+    };
+    PictureCache picture_[2];
     std::vector<std::array<Segment, 4>> book_geometry_[2]; // [0] uniform, [1] varied heights
     Vec3 tile_lo_, tile_hi_;
     Camera cam_;
@@ -1752,6 +1830,9 @@ private:
     Uint64 message_until_ = 0;
     bool menu_requested_ = false;
     float look_ = 0.0025f; // radians per pixel of mouse movement
+    float wheel_ = 0;      // mouse wheel movement not yet turned into whole tiles
+    std::string filter_status_;
+    std::vector<std::vector<SDL_FPoint>> edge_buckets_;
     bool invert_y_ = false;
     bool edge_glow_ = false, real_graphics_ = false;
     // FPS counter: frames and time since the shown figures were last updated (twice a second).
@@ -2019,6 +2100,7 @@ int run(const Args& a)
             for (const auto& [key, mod] : parse_presses(a.get("press"))) mm.press(key, mod);
         mm.render();
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
+        std::cout << "main menu: language " << language_code() << ", font " << font_name() << "\n";
         std::cout << "saved " << a.get("screenshot") << "\n";
         return finish();
     }
@@ -2038,6 +2120,12 @@ int run(const Args& a)
         auto hall = make_hallway(window, renderer, a, true, filters);
         hall->set_graphics(app.edge_glow || a.has("edge-glow"), app.real_graphics || a.has("real-graphics"));
         hall->set_fps_counter(app.fps_counter || a.has("fps-counter"));
+        {
+            const bool glow = app.edge_glow || a.has("edge-glow"), real = app.real_graphics || a.has("real-graphics");
+            // On stderr: stdout is where the readout goes, which scripts read line by line.
+            std::cerr << "graphics: edge glow " << (glow && !real ? "on" : "off") << ", real graphics " << (real ? "on" : "off")
+                      << ", fps counter " << (app.fps_counter || a.has("fps-counter") ? "on" : "off") << "\n";
+        }
         if (a.has("bench"))
         {
             // Frame timing: render N frames (turning slowly, so nothing is cached between them).
@@ -2060,6 +2148,7 @@ int run(const Args& a)
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         std::cout << "saved " << a.get("screenshot") << "\n";
         hall->release_textures();
+        hall.reset(); // before SDL goes (its audio stream, its textures)
         return finish();
     }
 

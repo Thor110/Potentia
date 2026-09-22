@@ -176,6 +176,7 @@ Sha256::Sha256()
 void Sha256::update(std::span<const uint8_t> data)
 {
     total_len_ += data.size();
+    if (data.empty()) return; // (memcpy from a null pointer is undefined even for 0 bytes)
     const uint8_t* p = data.data();
     size_t n = data.size();
     if (buf_len_)

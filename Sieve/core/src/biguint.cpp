@@ -109,6 +109,14 @@ std::pair<size_t, uint64_t> chunk_of(uint32_t base)
 
 } // namespace
 
+BigUint BigUint::from_limbs(std::span<const uint32_t> limbs)
+{
+    BigUint v;
+    v.limbs_.assign(limbs.begin(), limbs.end());
+    v.trim();
+    return v;
+}
+
 BigUint BigUint::from_digits(std::span<const uint32_t> digits, uint32_t base)
 {
     if (base < 2) throw std::invalid_argument("base must be at least 2");
@@ -338,6 +346,15 @@ BigUint BigUint::mul(const BigUint& a, const BigUint& b)
 
 void BigUint::divmod(const BigUint& a, const BigUint& b, BigUint& q, BigUint& r)
 {
+    if (&q == &a || &q == &b || &r == &a || &r == &b || &q == &r)
+    {
+        // Outputs sharing storage with the inputs: work on copies.
+        BigUint qq, rr;
+        divmod(BigUint(a), BigUint(b), qq, rr);
+        q = std::move(qq);
+        r = std::move(rr);
+        return;
+    }
     if (b.is_zero()) throw std::domain_error("division by zero");
     if (a < b)
     {

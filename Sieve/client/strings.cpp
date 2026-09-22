@@ -45,7 +45,7 @@ Table load_file(const fs::path& path)
         std::string value = trim(line.substr(eq + 1));
         // "Quoted" keeps spaces at either end (and anything after the closing quote is ignored).
         if (value.size() >= 2 && value.front() == '"' && value.find('"', 1) != std::string::npos)
-            value = value.substr(1, value.rfind('"') - 1);
+            value = value.substr(1, value.find('"', 1) - 1);
         // A comment after an unquoted value needs a space before its ';'.
         else for (size_t i = 1; i < value.size(); ++i)
             if (value[i] == ';' && (value[i - 1] == ' ' || value[i - 1] == '\t'))

@@ -1158,6 +1158,7 @@ def book_read(text, model_dir="../data/models"):
             raise ValueError(msg)
 
     def field(i, key):
+        need(i < len(lines), f"the book ends early (expected '{key} ...')")
         name, sep, value = lines[i].partition(" ")
         need(name == key and sep, f"book line {i + 1}: expected '{key} ...'")
         return value
@@ -1202,6 +1203,7 @@ def book_read(text, model_dir="../data/models"):
             L, sym, base = int(f["length"]), "notes104", 104
         else:
             w, h, fr = int(f["width"]), int(f["height"]), int(f.get("frames", 1))
+            need(f["palette"] in PALETTE_SIZES, f"unknown palette '{f['palette']}'")
             L, base = w * h * fr, PALETTE_SIZES[f["palette"]]
             sym = f"{kind}/{f['palette']}/{w}x{h}" + (f"x{fr}" if kind == "video" else "")
         sp = Space(sym if kind == "text" else None, L, f["key"], base=base)
@@ -1297,7 +1299,8 @@ def cmd_book_filter_vectors(_args):
     dict_file = "scowl-2020.12.07-en-35.txt"
     raw = open(f"{here}/dictionaries/{dict_file}", "rb").read()
     dsha = hashlib.sha256(raw).hexdigest()
-    words = load_dict(f"{here}/dictionaries/{dict_file}")[0]
+    dct = load_dict(f"{here}/dictionaries/{dict_file}")
+    words = dct[0]
     sym = ALPHABETS["lower27"]
     txt = lambda d: "".join(sym[x] for x in d)
     sha = lambda t: hashlib.sha256(t.encode()).hexdigest()
@@ -1341,6 +1344,14 @@ def cmd_book_filter_vectors(_args):
                 rest, kb = divmod(k, nb)
                 kc, kt = divmod(rest, nt)
                 cover, title, body = parts[0][1](kc), parts[1][1](kt), parts[2][1](kb)
+                # Every row must be a surviving book, checked by the filters themselves (not asserts:
+                # python -O would drop those).
+                if cover_on and not f_neighbour_agreement(cover, W, H, 1, 600):
+                    raise ValueError("cover does not pass")
+                if tmax is not None and not passes_title(txt(title), tmax, dct):
+                    raise ValueError("title does not pass")
+                if pages_on and not passes_v2(txt(body), "words", dct):
+                    raise ValueError("pages do not pass")
                 pages = [body[i * L:(i + 1) * L] for i in range(P)]
                 print(f"bookfilter\t{ci}\t{mode}\t{format(a, 'x').zfill(width)}\t{''.join(map(str, cover))}\t{txt(title)}\t"
                       f"{'|'.join(txt(p) for p in pages)}")

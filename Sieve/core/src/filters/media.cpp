@@ -70,13 +70,8 @@ public:
     {
         const auto [i, d, p] = unpack(s);
         const uint32_t* e = entry(i, p, D_ - d);
-        BigUint v;
-        for (uint32_t k = width_[size_t(i)]; k-- > 0;)
-        {
-            v <<= 32;
-            v.add_small(e[k]);
-        }
-        return v;
+        // The table already holds the count as base 2^32 limbs, least significant first.
+        return BigUint::from_limbs({e, size_t(width_[size_t(i)])});
     }
     bool alive(State s, uint32_t) const override
     {

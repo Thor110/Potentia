@@ -2,6 +2,7 @@
 
 #include "sieve/sha256.hpp"
 
+#include <algorithm>
 #include <stdexcept>
 
 namespace sieve {
@@ -33,18 +34,22 @@ Shuffle::Shuffle(BigUint n, std::string key, std::string domain) : n_(std::move(
     bits_ = std::max<size_t>(2, top.bit_length());
     lo_bits_ = bits_ / 2;
     n_hex_ = n_.to_hex();
-}
-
-BigUint Shuffle::round_value(uint32_t round, const BigUint& src, size_t bits) const
-{
+    // Every round's input starts the same way; hash that part once. (For a books line N has
+    // hundreds of hex digits, hashed 16 or more times per address otherwise.)
     std::string msg = "SIEVE/SHUFFLE/1";
     put_str(msg, key_);
     put_str(msg, domain_);
     put_str(msg, n_hex_);
+    prefix_.update(msg);
+}
+
+BigUint Shuffle::round_value(uint32_t round, const BigUint& src, size_t bits) const
+{
+    std::string msg;
     const char r[4] = {char(round), char(round >> 8), char(round >> 16), char(round >> 24)};
     msg.append(r, 4);
     put_str(msg, src.to_hex());
-    Sha256 prefix;
+    Sha256 prefix = prefix_;
     prefix.update(msg);
     // The digest stream, read big-endian: collected as hex and parsed once (linear time).
     static const char* digits = "0123456789abcdef";

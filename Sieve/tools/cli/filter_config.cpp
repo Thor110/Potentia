@@ -55,6 +55,36 @@ void write_values(std::ostream& o, const std::string& prefix, const LineFilters&
     }
 }
 
+// Filters by their full names: "title" and "title-v1" (the newest version) are one filter, in the
+// ticked list and in parameter sections alike, and it is ticked once.
+void canonicalise(LineFilters& lf)
+{
+    auto full = [](const std::string& n) {
+        const FilterSpec* f = find_filter(n);
+        return f ? f->name() : n;
+    };
+    std::vector<std::string> names;
+    for (const auto& n : lf.enabled)
+        if (std::find(names.begin(), names.end(), full(n)) == names.end()) names.push_back(full(n));
+    lf.enabled = std::move(names);
+    std::map<std::string, FilterValues> values;
+    for (const auto& [n, vals] : lf.values)
+        for (const auto& [k, v] : vals) values[full(n)][k] = v;
+    lf.values = std::move(values);
+}
+
+FilterMode mode_at(const std::string& value, const fs::path& path, int line_no)
+{
+    try
+    {
+        return filter_mode_from_string(value);
+    }
+    catch (const std::invalid_argument& e)
+    {
+        throw std::runtime_error(path.string() + " line " + std::to_string(line_no) + ": " + e.what());
+    }
+}
+
 } // namespace
 
 const char* BookFilters::part_name(int i) { return kBookParts[i]; }
@@ -142,7 +172,7 @@ FilterConfig FilterConfig::load(const fs::path& path)
             if (dot == std::string::npos)
             {
                 if (key != "mode") throw std::runtime_error(where);
-                c.books.mode = filter_mode_from_string(value);
+                c.books.mode = mode_at(value, path, line_no);
                 continue;
             }
             const std::string rest = section.substr(dot + 1);
@@ -160,12 +190,14 @@ FilterConfig FilterConfig::load(const fs::path& path)
         LineFilters& lf = c.lines[li];
         if (dot == std::string::npos)
         {
-            if (key == "mode") lf.mode = filter_mode_from_string(value);
+            if (key == "mode") lf.mode = mode_at(value, path, line_no);
             else if (key == "filters") read_filters(lf, value);
             else throw std::runtime_error(path.string() + ": unknown key '" + key + "' in [" + section + "]");
         }
         else lf.values[section.substr(dot + 1)][key] = value;
     }
+    for (auto& lf : c.lines) canonicalise(lf);
+    for (auto& lf : c.books.parts) canonicalise(lf);
     return c;
 }
 

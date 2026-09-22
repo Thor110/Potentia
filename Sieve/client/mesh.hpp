@@ -85,8 +85,9 @@ public:
 private:
     struct Tri
     {
-        float x[3], y[3], iz[3]; // screen position and 1 / camera depth of each corner
-        uint32_t colour;         // ARGB
+        float x[3], y[3];  // screen position of each corner
+        float A, B, C;     // 1 / camera depth over the screen: A x + B y + C (it is planar there)
+        uint32_t colour;   // ARGB
         float ymin, ymax;
     };
     void push(const Vec3* cam3, uint32_t colour, float bias);
@@ -97,7 +98,9 @@ private:
     uint32_t bg_argb_ = 0xFF000000u;
     int w_ = 1, h_ = 1;
     std::vector<Tri> tris_;
-    std::vector<uint32_t> colour_;
+    std::vector<uint32_t> colour_; // the image the bands draw into, uploaded in one go
+    uint32_t* pixels_ = nullptr;   // colour_.data() while the bands are running
+    int pitch_ = 0;                // pixels per row there
     std::vector<float> depth_;
     SDL_Texture* texture_ = nullptr;
     SDL_Renderer* texture_owner_ = nullptr;

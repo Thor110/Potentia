@@ -34,14 +34,14 @@ BigUint book_count(const Space& cover, const Space& page, uint32_t pages)
 {
     BigUint n(1);
     mul_pow(n, cover.base(), cover.unit_length());
-    mul_pow(n, page.base(), uint64_t(pages + 1) * page.unit_length());
+    mul_pow(n, page.base(), (uint64_t(pages) + 1) * page.unit_length());
     return n;
 }
 
 std::string shape_id(const Space& cover, const Space& page, uint32_t pages)
 {
     return "books/" + cover.symbols_id() + "/L" + std::to_string(cover.unit_length()) + "+" + page.symbols_id() + "/L" +
-           std::to_string(page.unit_length()) + "x" + std::to_string(pages + 1) + "/key=" + page.key() + "/" + kBookSpaceVersion;
+           std::to_string(page.unit_length()) + "x" + std::to_string(uint64_t(pages) + 1) + "/key=" + page.key() + "/" + kBookSpaceVersion;
 }
 
 } // namespace

@@ -42,6 +42,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <random>
 #include <sstream>
 #include <stdexcept>
@@ -1075,16 +1076,19 @@ int cmd_check_book(const Args& a)
     if (book_id(decoded) != b.id) throw std::runtime_error("the book's content does not match its id (" + b.id + ")");
     auto [cover, page] = book_lines(a);
     size_t record_pages = 0;
+    bool have_pages = false;
     for (const auto& d : decoded)
     {
         if (d.section->role == "cover") cover = d.line;
-        else if (d.section->role == "title" || d.section->role == "pages")
+        else if (d.section->role == "pages")
         {
-            page = d.line;
-            if (d.section->role == "pages") record_pages = d.units.size();
+            page = d.line; // the pages set the page shape (a title may be bound shorter)
+            record_pages = d.units.size();
+            have_pages = true;
         }
+        else if (d.section->role == "title" && !have_pages) page = d.line;
     }
-    const uint32_t pages = a.has("book-pages") ? a.get_positive("book-pages", 4) : uint32_t(std::max<size_t>(1, record_pages));
+    const uint32_t pages = a.has("book-pages") ? a.get_positive("book-pages", 4) : uint32_t(record_pages);
     const FilterConfig cfg = load_filter_config(a);
     const BookSpace space(cover.space, page.space, pages);
     const BookSpace::Parts parts = record_parts(decoded, space);
@@ -1116,9 +1120,12 @@ int cmd_check_book(const Args& a)
     const std::string fail = sieve.first_failure(parts);
     std::cout << "\nbook: " << (sieve.empty() ? std::string("no filters ticked") : fail.empty() ? std::string("passes") : "fails at " + fail);
     if (!sieve.empty() && fail.empty() && sieve.can_rank())
-        std::cout << ", survivor number " << sieve.rank(parts).to_decimal() << " of " << sieve.count().to_decimal() << "\n"
-                  << "compact      positional " << sieve.hex_of(sieve.index_of(parts, AddressMode::Positional)) << "\n"
-                  << "             scrambled  " << sieve.hex_of(sieve.index_of(parts, AddressMode::Scrambled));
+    {
+        const BigUint k = sieve.rank(parts); // ranked once; both compact addresses follow from k
+        std::cout << ", survivor number " << k.to_decimal() << " of " << sieve.count().to_decimal() << "\n"
+                  << "compact      positional " << sieve.hex_of(sieve.index_of_rank(k, AddressMode::Positional)) << "\n"
+                  << "             scrambled  " << sieve.hex_of(sieve.index_of_rank(k, AddressMode::Scrambled));
+    }
     std::cout << "\n";
     return 0;
 }

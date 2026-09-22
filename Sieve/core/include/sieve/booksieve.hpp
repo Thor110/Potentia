@@ -50,6 +50,7 @@ public:
 
     // Compact addresses (can_rank() and count() > 0): survivor k at position k, or shuffled.
     BigUint index_of(const BookSpace::Parts& p, AddressMode m) const; // throws if it does not pass
+    BigUint index_of_rank(const BigUint& k, AddressMode m) const;     // the same, from a survivor number
     BookSpace::Parts parts_at(const BigUint& index, AddressMode m) const;
     size_t hex_width() const { return hex_width_; }
     std::string hex_of(const BigUint& index) const { return index.to_hex(hex_width_); }

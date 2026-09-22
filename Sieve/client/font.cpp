@@ -164,14 +164,17 @@ char32_t next_cp(const std::string& s, size_t& i)
 {
     const unsigned char c = static_cast<unsigned char>(s[i++]);
     if (c < 0x80) return c;
-    int n = c >= 0xF0 ? 3 : c >= 0xE0 ? 2 : c >= 0xC0 ? 1 : -1;
+    // Lead bytes C2..F4 only: C0/C1 would be overlong, F5 and up beyond U+10FFFF.
+    const int n = c >= 0xF5 ? -1 : c >= 0xF0 ? 3 : c >= 0xE0 ? 2 : c >= 0xC2 ? 1 : -1;
     if (n < 0) return 0xFFFD;
     char32_t cp = c & (0x3F >> n);
-    for (; n > 0; --n)
+    for (int k = 0; k < n; ++k)
     {
         if (i >= s.size() || (static_cast<unsigned char>(s[i]) & 0xC0) != 0x80) return 0xFFFD;
         cp = (cp << 6) | (static_cast<unsigned char>(s[i++]) & 0x3F);
     }
+    static constexpr char32_t kMin[4] = {0, 0x80, 0x800, 0x10000};
+    if (cp < kMin[n] || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) return 0xFFFD; // overlong, too big, surrogate
     return cp;
 }
 

@@ -23,6 +23,7 @@
 #include "sieve/biguint.hpp"
 #include "sieve/filter.hpp"
 #include "sieve/guided.hpp"
+#include "sieve/sha256.hpp"
 #include "sieve/space.hpp"
 
 #include <memory>
@@ -50,6 +51,7 @@ private:
     size_t bits_ = 0, lo_bits_ = 0;
     std::string key_, domain_;
     std::string n_hex_; // N in hex, part of every round's input
+    Sha256 prefix_;     // the hash state after the input every round shares (label, key, domain, N)
 };
 
 // A line's survivors in every ordering. The ranker must outlive this object.

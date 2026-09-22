@@ -113,6 +113,7 @@ private:
     int overlay_ = -1; // line whose filters are open, or -1
     int orow_ = 0;
     int oscroll_ = 0;
+    float wheel_ = 0; // wheel movement not yet whole notches
     StackInfo info_[5];
     SDL_FRect magnifier_[5] = {};
     SDL_FRect box_ = {};

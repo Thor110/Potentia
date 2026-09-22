@@ -10,7 +10,9 @@ BookSieve::BookSieve(const BookSpace& space, const FilterStack& cover, const Fil
 {
     const Space& c = space.cover_space();
     const Space& p = space.page_space();
-    const uint32_t body = uint32_t(uint64_t(space.pages()) * p.unit_length());
+    const uint64_t body64 = uint64_t(space.pages()) * p.unit_length();
+    if (body64 > 0xFFFFFFFFull) throw std::length_error("the books' pages are too long to filter as one text");
+    const uint32_t body = uint32_t(body64);
     parts_[0] = {&cover, {}, c.base(), c.unit_length()};
     parts_[1] = {&title, {}, p.base(), p.unit_length()};
     parts_[2] = {&pages, {}, p.base(), body};
@@ -43,9 +45,12 @@ std::string BookSieve::domain() const
     return std::string(kBooksCompactVersion) + "/" + space_->id() + "/" + part(cover_) + "/" + part(title_) + "/" + part(pages_);
 }
 
-BigUint BookSieve::index_of(const BookSpace::Parts& p, AddressMode m) const
+BigUint BookSieve::index_of(const BookSpace::Parts& p, AddressMode m) const { return index_of_rank(rank(p), m); }
+
+BigUint BookSieve::index_of_rank(const BigUint& k, AddressMode m) const
 {
-    const BigUint k = rank(p);
+    if (!shuffle_) throw std::logic_error("no compact books here");
+    if (k >= count_) throw std::out_of_range("beyond the surviving books");
     return m == AddressMode::Scrambled ? shuffle_->forward(k) : k;
 }
 
