@@ -73,6 +73,7 @@ Settings Settings::from_args(const sieve::cli::Args& a)
 {
     Settings s;
     s.start_line = a.get("line", s.start_line);
+    if (s.start_line == "pages") s.start_line = "text"; // another name for the text line
     s.mode = a.get("mode", s.mode);
     s.key = a.get("key", s.key);
     s.length = parse_u32(a, "length", s.length);
@@ -303,10 +304,10 @@ void Menu::render()
         std::string label, value;
     };
     const std::vector<Row> rows = {
-        {"START", "line", s_.start_line},
+        {"START", "line", s_.start_line == "text" ? "pages" : s_.start_line},
         {nullptr, "ordering", s_.mode},
         {nullptr, "key", s_.key + (row_ == 2 ? "_" : "")},
-        {"TEXT", "length", std::to_string(s_.length) + " characters"},
+        {"PAGES", "length", std::to_string(s_.length) + " characters"},
         {nullptr, "alphabet", s_.alphabet + " (" + std::to_string(alphabet_size(s_.alphabet)) + " symbols)"},
         {nullptr, "warp rules", "canon-text-" + s_.canon},
         {nullptr, "model", s_.model ? "default (guided ordering available)" : "none"},
@@ -328,7 +329,7 @@ void Menu::render()
         {
             y += 8;
             const std::string sec = r.section;
-            const int li = sec == "TEXT" ? 0 : sec == "IMAGE" ? 1 : sec == "AUDIO" ? 2 : sec == "VIDEO" ? 3 : 4;
+            const int li = sec == "PAGES" ? 0 : sec == "IMAGE" ? 1 : sec == "AUDIO" ? 2 : sec == "VIDEO" ? 3 : 4;
             text(r_, 20, y, r.section, 2, li < 4 ? kThemes[li].edge : white);
             y += 20;
         }
@@ -374,7 +375,7 @@ void Menu::render()
         }
         SDL_RenderLine(r_, x + 10, label + 10, x + 15, label + 15);
         SDL_RenderLine(r_, x + 11, label + 10, x + 16, label + 15);
-        text(r_, x + 22, label, th.name, 2, th.edge);
+        text(r_, x + 22, label, th.title, 2, th.edge);
         const size_t caret = z.units.find(" = ");
         text(r_, x, label + 22, clip(z.units.substr(0, caret) + " units"), 1, th.edge);
         text(r_, x, label + 34, clip(z.units.substr(caret + 3)), 1, th.edge);
@@ -589,7 +590,7 @@ void Menu::render_overlay(float W, float H)
     SDL_RenderRect(r_, &inner);
     const float x = box_.x + 14;
     const size_t cols = size_t((box_.w - 60) / 8);
-    text(r_, x, box_.y + 10, std::string(th.name) + " FILTERS", 2, th.edge);
+    text(r_, x, box_.y + 10, std::string(th.title) + " FILTERS", 2, th.edge);
     text(r_, x, box_.y + 32, "A unit is shelved only if it passes every ticked filter.", 1, grey);
 
     const sieve::cli::LineFilters& lf = cfg_.lines[overlay_];

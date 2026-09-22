@@ -83,11 +83,11 @@ const char* to_string(LineKind k)
 
 LineKind line_from_string(std::string_view s)
 {
-    if (s == "text") return LineKind::Text;
+    if (s == "text" || s == "pages") return LineKind::Text; // its units are pages
     if (s == "image") return LineKind::Image;
     if (s == "audio") return LineKind::Audio;
     if (s == "video") return LineKind::Video;
-    throw std::invalid_argument("unknown line '" + std::string(s) + "' (text|image|audio|video)");
+    throw std::invalid_argument("unknown line '" + std::string(s) + "' (text or pages|image|audio|video)");
 }
 
 Line make_line(const Args& a)

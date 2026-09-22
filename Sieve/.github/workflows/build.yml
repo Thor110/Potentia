@@ -108,15 +108,15 @@ jobs:
           # Through a door, one tile along, back through the door there: one tile along in text.
           out=$($H --warp "$W" --pose 0,7,-90,0 --walk "-2.3,0;-0.8,0;0,8;1.5,0" --screenshot loop.png)
           echo "$out"
-          echo "$out" | tail -2 | head -1 | grep -q "TEXT line"
+          echo "$out" | tail -2 | head -1 | grep -q "PAGES line"
           test "$(echo "$out" | tail -2 | book)" = "$next"
           # Guided order: M cycles to it and - zooms out; all four doors lead back to the same book.
-          $H --warp "$W" --press "M,M,-" --screenshot keys.png | tail -2 | head -1 | grep -q "TEXT line, guided zoom 57"
+          $H --warp "$W" --press "M,M,-" --screenshot keys.png | tail -2 | head -1 | grep -q "PAGES line, guided zoom 57"
           start=$($H --mode guided --warp "$W" --zoom 20 --walk "0,0" --screenshot start.png | book)
           out=$($H --mode guided --warp "$W" --zoom 20 --pose 0,7,-90,0 --walk "-2.3,0;-4.2,0;-4.2,0;-4.2,0" --screenshot guided.png)
           echo "$out"
           echo "$out" | grep -q "VIDEO line"
-          echo "$out" | tail -2 | head -1 | grep -q "TEXT line, guided"
+          echo "$out" | tail -2 | head -1 | grep -q "PAGES line, guided"
           test "$(echo "$out" | tail -2 | book)" = "$start"
           # Loops: a 2-character line is 729 units = 6 tiles, so tile 6 starts the second copy,
           # and the CLI reads the same corridor places the hallway shows.
@@ -143,8 +143,8 @@ jobs:
           $H --filters mark.ini --length 3 --walk "0,0" --screenshot mark.png | grep -q "filters: 1 mark"
           $H --menu --filters words2.ini --press "F" --screenshot overlay.png | grep -q "saved overlay.png"
           # Compact in the scrambled and guided orderings, and on the image and audio lines.
-          $H --filters words2.ini --mode scrambled --warp "$W" --walk "0,0" --screenshot cs.png | head -1 | grep -q "TEXT line, scrambled, filters: 1 compact"
-          $H --filters words2.ini --mode guided --warp "$W" --walk "0,0" --screenshot cg.png | head -1 | grep -q "TEXT line, guided zoom 58, filters: 1 compact"
+          $H --filters words2.ini --mode scrambled --warp "$W" --walk "0,0" --screenshot cs.png | head -1 | grep -q "PAGES line, scrambled, filters: 1 compact"
+          $H --filters words2.ini --mode guided --warp "$W" --walk "0,0" --screenshot cg.png | head -1 | grep -q "PAGES line, guided zoom 58, filters: 1 compact"
           $H --filters lines.ini --line image --mode scrambled --walk "0,0" --screenshot ci.png | head -1 | grep -q "IMAGE line, scrambled, filters: 1 compact (322091425582872 survivors)"
           $H --filters lines.ini --line audio --walk "0,0" --screenshot ca.png | head -1 | grep -q "AUDIO line, positional, filters: 1 compact"
           test -s compact.png && test -s mixed.png && test -s mark.png && test -s overlay.png

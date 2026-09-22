@@ -217,6 +217,9 @@ A changed filter never replaces the old one. It is registered as the next versio
 | image | blue | cyan |
 | audio | green | amber |
 | video | red | yellow |
+| books (planned) | grey | black |
+
+The hallway and the setup menu call the text line **PAGES**, since each of its units is a page; `--line pages` works as another name for `--line text`.
 
 **Doors.** The walls repeat shelf, door, shelf. A black door in the **left** wall leads to the **next** line (text → image → audio → video → text). A door in the **right** wall leads to the **previous** line. You come in through the opposite door, in the new line's colours.
 

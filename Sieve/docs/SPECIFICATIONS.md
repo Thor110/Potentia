@@ -173,6 +173,9 @@ The hallway is a wireframe. Each line has exactly two colours, a solid backgroun
 | Image | blue | cyan |
 | Audio | green | amber |
 | Video | red | yellow |
+| Books (planned, §11) | grey | black |
+
+The text line's units are pages, so the hallway and the setup menu call it PAGES; `--line pages` is accepted as another name for `--line text`.
 
 One tile of geometry (a bookcase and a door on each wall) is built once and repeated along the corridor. Edges fade towards the background with distance. Each tile holds 128 consecutive slots (4 shelves of 16 books on each wall): the left wall, then the right, shelf by shelf from the top, in walking order along each shelf. Padding slots have no book.
 

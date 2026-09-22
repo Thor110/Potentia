@@ -1209,7 +1209,7 @@ const char* kUsage =
     "hallway - walk the Sieve's four lines in 3D\n\n"
     "Usage: hallway [options]\n\n"
     "Lines (the same meaning as in the sieve tool):\n"
-    "  --line text|image|audio|video  line to start in (default text)\n"
+    "  --line pages|image|audio|video  line to start in (default pages; text also works)\n"
     "  --length L          text: characters per book (default 32)\n"
     "  --alphabet ID       text: lower27 (default), babel29, ascii95\n"
     "  --canon v2|v1       text: warp rules (default v2)\n"
@@ -1307,10 +1307,9 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
 {
     std::vector<Line> lines = make_lines(a);
     int start_line = 0;
+    const LineKind wanted = line_from_string(a.get("line", "text")); // "pages" is the text line
     for (int i = 0; i < 4; ++i)
-        if (a.get("line", "text") == to_string(kLineOrder[i])) start_line = i;
-    if (a.has("line") && a.get("line") != to_string(kLineOrder[start_line]))
-        throw std::invalid_argument("unknown line '" + a.get("line") + "'");
+        if (wanted == kLineOrder[i]) start_line = i;
     const bool text_has_model = lines[0].guided != nullptr;
     const LineKind start_kind = lines[size_t(start_line)].kind;
 
