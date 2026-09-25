@@ -149,9 +149,15 @@ jobs:
           $H --no-menu --line models --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door7.png | sed -n 1p | q "^PAGES line"
           # The crates render their models onto their faces, and the cache has a budget.
           $H --no-menu --line models --model-cache 8 --walk "0,0" --bench 12 --screenshot crates.png 2>&1 | q "^bench: 12 frames"
+          # From a settings file that does not exist yet, so the slider starts at its default.
+          rm -f mc.ini
           $H --main-menu --settings mc.ini --press "Down,Return,Return,Down,Down,Down,Down,Down,Down,Right,Right" --screenshot mc.png > /dev/null
           grep -q "^model_cache_mb = 80" mc.ini
-          test -s models.png && test -s cube.png && test -s crates.png
+          # A different shape is a different line, and the setup menu draws all six of them.
+          $exe mesh --vertices 12 --faces 20 --coords 64 | tr -d '\r' | q "^space        models/V12/F20/C64/key=sieve/modelspace-v1"
+          $H --no-menu --line models --vertices 12 --faces 20 --coords 64 --walk "0,0" --screenshot shape.png | sed -n 1p | q "^MODELS line"
+          $H --menu --vertices 12 --faces 20 --coords 64 --screenshot map6.png | q "saved map6.png"
+          test -s models.png && test -s cube.png && test -s crates.png && test -s map6.png
           if $exe mesh --coords 12 > /dev/null 2>&1; then exit 1; fi
 
       - name: Books bind, unbind and keep their id in every ordering

@@ -75,7 +75,7 @@ public:
 
 private:
     void handle(const SDL_Event& e, bool& done, Result& result);
-    std::array<LineSize, 5> line_sizes() const; // pages, image, audio, video, books
+    std::array<LineSize, 6> line_sizes() const; // pages, image, audio, video, books, models
     bool too_large() const; // a line this machine cannot open
     void adjust(int dir, int step);
     int row_count() const;
@@ -128,8 +128,8 @@ private:
     int orow_ = 0;
     int oscroll_ = 0;
     float wheel_ = 0; // wheel movement not yet whole notches
-    StackInfo info_[5];
-    SDL_FRect magnifier_[5] = {};
+    StackInfo info_[6]; // one per line of the map; the last is the models line, which has no filters
+    SDL_FRect magnifier_[5] = {}; // one per line with filters; the models line has none yet
     SDL_FRect box_ = {};
     std::vector<std::pair<SDL_FRect, int>> row_rects_; // overlay rows on screen
 };

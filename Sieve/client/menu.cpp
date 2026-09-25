@@ -148,7 +148,7 @@ LineSize line_size(uint32_t base, uint64_t length)
 
 // ---------------------------------------------------------------- menu
 
-std::array<LineSize, 5> Menu::line_sizes() const
+std::array<LineSize, 6> Menu::line_sizes() const
 {
     const LineSize page = line_size(alphabet_size(s_.alphabet), s_.length);
     const LineSize image = line_size(palette_size(s_.image_palette), uint64_t(s_.image_w) * s_.image_h);
@@ -170,8 +170,24 @@ std::array<LineSize, 5> Menu::line_sizes() const
         const double log10 = books.bits * std::log10(2.0);
         books.units = "cov*pg^" + std::to_string(parts) + " = ~10^" + fixed(log10, 1);
     }
-    std::array<LineSize, 5> out{page, image, line_size(kNoteSymbols, s_.notes),
-                                line_size(palette_size(s_.video_palette), positions(s_.video_w, s_.video_h, s_.frames)), books};
+    // Models: C^(3V) coordinates times V^(3F) face indices, so the bits add and the padding is
+    // the product of the two mod 128.
+    LineSize models;
+    {
+        const LineSize coords = line_size(s_.model_coords, 3ull * s_.model_vertices);
+        const LineSize faces = line_size(s_.model_vertices, 3ull * s_.model_faces);
+        models.bits = coords.bits + faces.bits;
+        const uint64_t m = (sieve::kBooksPerTile - coords.padding) % sieve::kBooksPerTile *
+                           ((sieve::kBooksPerTile - faces.padding) % sieve::kBooksPerTile) % sieve::kBooksPerTile;
+        models.padding = uint32_t((sieve::kBooksPerTile - m) % sieve::kBooksPerTile);
+        const double log10 = models.bits * std::log10(2.0);
+        models.units = std::to_string(s_.model_coords) + "^" + std::to_string(3ull * s_.model_vertices) + "*" +
+                       std::to_string(s_.model_vertices) + "^" + std::to_string(3ull * s_.model_faces) +
+                       (log10 < 15 ? " = " + fixed(std::pow(10.0, log10), 0) : " = ~10^" + fixed(log10, 1));
+    }
+    std::array<LineSize, 6> out{page, image, line_size(kNoteSymbols, s_.notes),
+                                line_size(palette_size(s_.video_palette), positions(s_.video_w, s_.video_h, s_.frames)), books,
+                                models};
     // A unit has at most 2^32 - 1 positions: a larger picture cannot be opened at all.
     const uint64_t kMaxPositions = 0xFFFFFFFFull;
     if (uint64_t(s_.image_w) * s_.image_h > kMaxPositions) out[1].bits = out[4].bits = HUGE_VAL;
@@ -467,35 +483,37 @@ void Menu::render()
     double scale_bits = 1;
     for (const auto& z : sizes)
         if (std::isfinite(z.bits)) scale_bits = std::max(scale_bits, z.bits);
-    const float x0 = 620, pitch = std::max(124.0f, (W - x0 - 20) / 5);
+    const float x0 = 620, pitch = std::max(104.0f, (W - x0 - 20) / 6);
     const float label = 118, top = 216, bottom = H - 60, span = bottom - top, min_bar = 12;
     text(r_, x0, 80, tr("map.title"), 1, white);
     text(r_, x0, 92, trf("map.scale", {fixed(scale_bits, 0)}), 1, grey);
-    for (int i = 0; i < 5; ++i)
+    for (int i = 0; i < 6; ++i)
     {
-        const bool books = i == 4;
-        Theme th = books ? kBooksTheme : kThemes[i];
+        Theme th = i == 4 ? kBooksTheme : i == 5 ? kModelsTheme : kThemes[i];
         const SDL_Color ink = menu_ink(th);
         const float x = x0 + i * pitch;
         const LineSize& z = sizes[size_t(i)];
         // Labels above the bar, so a full-length bar never runs into them.
-        const size_t cols = size_t(std::max(8.0f, (i == 4 ? W - x - 8 : pitch - 8) / 8));
+        const size_t cols = size_t(std::max(8.0f, (i == 5 ? W - x - 8 : pitch - 8) / 8));
         auto clip = [&](const std::string& t) { return text_cells(t) <= cols ? t : fit_cells(t, cols - 2) + ".."; };
         const SDL_Color edge = th.edge;
         th.edge = ink; // labels in a readable colour; the bar keeps the line's own edges
+        // Magnifying glass: opens this line's filters. The models line has none yet, so it has
+        // no glass, and its name starts where the others' names do.
+        if (i < 5)
         {
-        // Magnifying glass: opens this line's filters.
-        magnifier_[i] = {x - 2, label - 2, 20, 20};
-        SDL_SetRenderDrawColor(r_, th.edge.r, th.edge.g, th.edge.b, 255);
-        for (int k = 0; k < 16; ++k)
-        {
-            const float a0 = float(k) / 16 * 6.2831853f, a1 = float(k + 1) / 16 * 6.2831853f;
-            SDL_RenderLine(r_, x + 6 + 5 * std::cos(a0), label + 6 + 5 * std::sin(a0), x + 6 + 5 * std::cos(a1), label + 6 + 5 * std::sin(a1));
+            magnifier_[i] = {x - 2, label - 2, 20, 20};
+            SDL_SetRenderDrawColor(r_, th.edge.r, th.edge.g, th.edge.b, 255);
+            for (int k = 0; k < 16; ++k)
+            {
+                const float a0 = float(k) / 16 * 6.2831853f, a1 = float(k + 1) / 16 * 6.2831853f;
+                SDL_RenderLine(r_, x + 6 + 5 * std::cos(a0), label + 6 + 5 * std::sin(a0), x + 6 + 5 * std::cos(a1),
+                               label + 6 + 5 * std::sin(a1));
+            }
+            SDL_RenderLine(r_, x + 10, label + 10, x + 15, label + 15);
+            SDL_RenderLine(r_, x + 11, label + 10, x + 16, label + 15);
         }
-        SDL_RenderLine(r_, x + 10, label + 10, x + 15, label + 15);
-        SDL_RenderLine(r_, x + 11, label + 10, x + 16, label + 15);
         text(r_, x + 22, label, tr(th.key), 2, th.edge);
-        }
         const size_t caret = z.units.find(" = ");
         text(r_, x, label + 22, clip(trf("map.units", {z.units.substr(0, caret)})), 1, th.edge);
         text(r_, x, label + 34, clip(z.units.substr(caret + 3)), 1, th.edge);
@@ -526,9 +544,9 @@ void Menu::render()
         else
         {
             size_t ticked = 0;
-            if (books)
+            if (i == 4)
                 for (const auto& part : cfg_.books.parts) ticked += part.enabled.size();
-            else ticked = cfg_.lines[i].enabled.size();
+            else if (i < 4) ticked = cfg_.lines[i].enabled.size(); // the models line has no filters yet
             if (ticked) text(r_, x, label + 82, clip(trf("map.ticked", {std::to_string(ticked)})), 1, th.edge);
         }
     }
@@ -586,6 +604,13 @@ sieve::cli::FilterMode& Menu::mode_of(int line) { return line == 4 ? cfg_.books.
 const Menu::StackInfo& Menu::stack_info(int i)
 {
     if (i == 4) return book_stack_info();
+    // The models line has no filters yet (SPECIFICATIONS §12 sets out the tiers to come), so
+    // there is nothing to count and nothing to say.
+    if (i == 5)
+    {
+        info_[5] = StackInfo{"models", "", -1};
+        return info_[5];
+    }
     if (line_sizes()[size_t(i)].bits > kTooLargeBits)
     {
         info_[i] = StackInfo{"too large", tr("status.too_large"), -1};
