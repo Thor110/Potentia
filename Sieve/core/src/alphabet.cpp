@@ -78,11 +78,21 @@ const std::vector<Alphabet>& registry()
         Alphabet("ascii95", "printable ASCII U+0020-U+007E", {{U' ', U'~'}}),
         Alphabet("ascii96", "line feed + printable ASCII: text that can hold a file, such as an .obj",
                  {one(U'\n'), {U' ', U'~'}}),
+        // One symbol per byte value, in byte order: digit d is byte d. A file of N bytes is one
+        // unit of a line of length N, and the unit's address is the file's bytes read as one
+        // number. Nothing is folded, dropped or collapsed over it (canon-bytes-v1).
+        Alphabet("bytes256", "U+0000-U+00FF: one symbol per byte value, so any file is a unit",
+                 {{char32_t(0), char32_t(0xFF)}}),
     };
     return alphabets;
 }
 
 } // namespace
+
+bool holds_all_bytes(const Alphabet& a)
+{
+    return a.ranges().size() == 1 && a.ranges()[0].first == char32_t(0) && a.ranges()[0].last == char32_t(0xFF);
+}
 
 const Alphabet& alphabet_by_id(std::string_view id)
 {

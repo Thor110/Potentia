@@ -26,7 +26,11 @@
 
 namespace sieve {
 
-enum class CanonVersion { V1, V2 };
+// "canon-bytes-v1" is the identity, for an alphabet that holds every byte value (bytes256):
+// each byte of the input is the symbol of the same value. Nothing is folded, transliterated,
+// dropped or collapsed, because on such a line every byte means itself and a file has to come
+// back byte for byte. A last unit short of the length is padded with NUL.
+enum class CanonVersion { V1, V2, Bytes };
 inline constexpr CanonVersion kDefaultCanon = CanonVersion::V2;
 
 const char* to_string(CanonVersion v);                     // "canon-text-v1" | "canon-text-v2"
@@ -52,5 +56,9 @@ struct CanonResult
 
 CanonResult canonicalise_text(std::string_view utf8, const Alphabet& alphabet, uint32_t unit_length,
                               CanonVersion version = kDefaultCanon);
+
+// canon-bytes-v1: `raw` byte by byte, each byte the symbol of its own value. The alphabet must
+// hold every byte (holds_all_bytes), or this throws.
+CanonResult canonicalise_bytes(std::string_view raw, const Alphabet& alphabet, uint32_t unit_length);
 
 } // namespace sieve

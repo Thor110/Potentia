@@ -236,13 +236,49 @@ void note_example(std::u32string& examples, char32_t c)
 
 } // namespace
 
-const char* to_string(CanonVersion v) { return v == CanonVersion::V1 ? "canon-text-v1" : "canon-text-v2"; }
+const char* to_string(CanonVersion v)
+{
+    return v == CanonVersion::V1 ? "canon-text-v1" : v == CanonVersion::Bytes ? "canon-bytes-v1" : "canon-text-v2";
+}
 
 CanonVersion canon_version_from_string(std::string_view s)
 {
     if (s == "v1" || s == "canon-text-v1") return CanonVersion::V1;
     if (s == "v2" || s == "canon-text-v2") return CanonVersion::V2;
-    throw std::invalid_argument("unknown canonicalisation version '" + std::string(s) + "' (v1|v2)");
+    if (s == "bytes" || s == "canon-bytes-v1") return CanonVersion::Bytes;
+    throw std::invalid_argument("unknown canonicalisation version '" + std::string(s) + "' (v1|v2|bytes)");
+}
+
+// canon-bytes-v1. There is nothing to canonicalise: on a line whose alphabet holds every byte
+// value, each byte already means itself, and folding or collapsing anything would stop a file
+// coming back the way it went in. So this only cuts the bytes into units and pads the last one.
+CanonResult canonicalise_bytes(std::string_view raw, const Alphabet& alphabet, uint32_t unit_length)
+{
+    if (unit_length == 0) throw std::invalid_argument("unit length must be at least 1");
+    if (!holds_all_bytes(alphabet))
+        throw std::invalid_argument("canon-bytes-v1 needs an alphabet holding every byte (bytes256)");
+    CanonResult r;
+    r.version = CanonVersion::Bytes;
+    r.input_codepoints = raw.size();
+    r.canonical_length = raw.size();
+    std::u32string unit;
+    unit.reserve(unit_length);
+    for (unsigned char c : raw)
+    {
+        unit.push_back(char32_t(c));
+        if (unit.size() == unit_length)
+        {
+            r.units.push_back(unit);
+            unit.clear();
+        }
+    }
+    if (!unit.empty() || r.units.empty())
+    {
+        r.padding = unit_length - unit.size();
+        unit.append(r.padding, char32_t(0)); // NUL, which is digit 0 of the alphabet
+        r.units.push_back(unit);
+    }
+    return r;
 }
 
 CanonResult canonicalise_text(std::string_view utf8, const Alphabet& alphabet, uint32_t unit_length, CanonVersion version)

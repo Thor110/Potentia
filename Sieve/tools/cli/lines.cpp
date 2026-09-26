@@ -162,7 +162,11 @@ WarpInput read_warp_input(const Line& line, const Args& a)
     {
         const std::string input = a.has("file") ? read_file(a.get("file")) : joined_positional(a);
         if (input.empty()) throw std::invalid_argument("nothing to warp: give TEXT or --file PATH");
-        const CanonResult c = canonicalise_text(input, *line.alphabet, line.space.unit_length(), line.canon);
+        // On a line that holds every byte, the input is bytes rather than text: reading it as
+        // UTF-8 would refuse most files, and folding anything would stop it coming back.
+        const bool bytes = holds_all_bytes(*line.alphabet);
+        const CanonResult c = bytes ? canonicalise_bytes(input, *line.alphabet, line.space.unit_length())
+                                    : canonicalise_text(input, *line.alphabet, line.space.unit_length(), line.canon);
         w.report.push_back(std::string(to_string(c.version)) + ": " + std::to_string(c.input_codepoints) +
                            " codepoints in, " + std::to_string(c.canonical_length) + " symbols out, " +
                            std::to_string(c.units.size()) + " unit(s)");
@@ -175,7 +179,8 @@ WarpInput read_warp_input(const Line& line, const Args& a)
         if (c.spaces_collapsed) w.report.push_back(count_line("spaces collapsed", c.spaces_collapsed));
         if (c.padding)
             w.report.push_back(count_line("padding", c.padding,
-                                          std::string(line.alphabet->contains(U'\n') && line.alphabet->symbol(0) == U'\n'
+                                          std::string(bytes ? "NUL bytes"
+                                                      : line.alphabet->contains(U'\n') && line.alphabet->symbol(0) == U'\n'
                                                           ? "line feeds"
                                                           : "spaces") +
                                               " on the last unit"));
@@ -265,6 +270,13 @@ void save_unit(const Line& line, const std::vector<uint32_t>& digits, const std:
     {
         std::ofstream out(std::filesystem::path(path), std::ios::binary);
         if (!out) throw std::runtime_error("cannot write '" + path + "'");
+        // On a line that holds every byte, a digit is a byte: the file is the unit exactly, and
+        // nothing may be encoded or appended.
+        if (line.alphabet && holds_all_bytes(*line.alphabet))
+        {
+            for (uint32_t d : digits) out.put(char(static_cast<unsigned char>(d)));
+            return;
+        }
         // Exactly the unit. A trailing newline is added only where the alphabet cannot hold one
         // itself, as a courtesy so the file does not end mid-line; on an alphabet that can (see
         // ascii96), the file IS the unit, byte for byte, and adding anything would spoil that.

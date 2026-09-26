@@ -214,6 +214,13 @@ std::string ascii(const std::string& utf8)
     return out;
 }
 
+std::string fixed(double v, int d)
+{
+    char b[48];
+    std::snprintf(b, sizeof b, "%.*f", d, v);
+    return b;
+}
+
 std::string percent(double f)
 {
     char buf[48];
@@ -444,8 +451,8 @@ public:
         std::unordered_map<int64_t, Book> shifted;
         if (d > -16 && d < 16)
         {
-            const int64_t by = d * int64_t(kBooksPerTile);
-            const int64_t lo = -int64_t(kCacheBack) * int64_t(kBooksPerTile), hi = int64_t(kCacheAhead + 1) * int64_t(kBooksPerTile);
+            const int64_t by = d * int64_t(sieve::books_per_tile());
+            const int64_t lo = -int64_t(kCacheBack) * int64_t(sieve::books_per_tile()), hi = int64_t(kCacheAhead + 1) * int64_t(sieve::books_per_tile());
             for (auto& [key, b] : cache_)
                 if (key - by >= lo && key - by < hi) shifted.emplace(key - by, std::move(b));
             // The rendered crate faces move with them: the same models, d tiles closer.
@@ -525,7 +532,7 @@ public:
         // Binary is not counted yet: it stands for everything the other six do not address, and
         // its size is not a number we have. One loop tile keeps the shared machinery happy; every
         // place that would read a unit out of it is guarded by on_binary() instead.
-        if (i == kBinaryLine) return BigUint(uint64_t(kBooksPerTile));
+        if (i == kBinaryLine) return BigUint(uint64_t(sieve::books_per_tile()));
         if (i == kModelsLine) return model_space_->size();
         if (i == kBooksLine) return effective_mode(i) == FilterMode::Compact ? book_sieve_->count() : books_->size();
         if (guided_ && lines_[size_t(i)].guided) return BigUint::pow(2, zoom_);
@@ -581,7 +588,7 @@ public:
 
     const Book& book(int64_t dt, uint32_t slot)
     {
-        const int64_t key = dt * int64_t(kBooksPerTile) + slot;
+        const int64_t key = dt * int64_t(sieve::books_per_tile()) + slot;
         auto it = cache_.find(key);
         if (it != cache_.end()) return it->second;
         if (cache_.size() > 4096) cache_.clear(); // more than a screenful (14 tiles of 128 books)
@@ -710,6 +717,7 @@ public:
                 b.passes = false;
                 b.failed_by = stack().filter_name(size_t(fail));
                 in_hand_ = b;
+                hand_tab_ = 0;
                 in_hand_where_ = trf("hand.not_shelved", {b.failed_by});
                 return;
             }
@@ -736,6 +744,7 @@ public:
                 b.failed_by = fail;
                 drop_in_hand();
                 in_hand_ = b;
+                hand_tab_ = 0;
                 in_hand_where_ = trf("hand.not_shelved", {fail});
                 book_page_ = 0;
                 return;
@@ -779,6 +788,7 @@ public:
         if (open)
         {
             in_hand_ = book(0, slot);
+            hand_tab_ = 0;
             in_hand_where_ = trf("hand.where", {tile_label_, std::to_string(slot)});
         }
     }
@@ -1025,7 +1035,7 @@ public:
             return;
         }
         move_tiles(n);
-        message(trf("msg.jumped", {std::to_string(n), std::to_string(n * int64_t(kBooksPerTile))}));
+        message(trf("msg.jumped", {std::to_string(n), std::to_string(n * int64_t(sieve::books_per_tile()))}));
     }
 
     // A door keeps your corridor position and changes the line reading it: left wall to the next
@@ -1164,6 +1174,10 @@ public:
         case SDLK_D:
             if (in_hand_ && in_hand_->model) model_spin_ += 0.15f;
             break;
+        case SDLK_C:
+            // The item page's tabs: the thing itself, then what it costs to name it.
+            if (in_hand_) hand_tab_ = (hand_tab_ + 1) % 2;
+            break;
         case SDLK_R:
             if (in_hand_ && in_hand_->model) { model_spin_ = 0.6f; model_tilt_ = 0.35f; }
             break;
@@ -1214,6 +1228,7 @@ public:
         const Book& b = book(hover_->tile, hover_->slot());
         if (b.empty) return;
         in_hand_ = b;
+        hand_tab_ = 0;
         book_page_ = 0;
         TileIndex t = tile_;
         t += hover_->tile;
@@ -1479,7 +1494,7 @@ public:
             {
                 // One wall, one bookcase, on the binary line; both walls everywhere else.
                 if (!on_binary() || bs == 0) models_batch_.add(*md.bookshelf, {{0, 0, z0}});
-                if (!on_binary() || bs == 1) models_batch_.add(*md.bookshelf, {{0, 0, z0}, 1.0f, true});
+                if (!on_binary() || bs == 1) models_batch_.add(*md.bookshelf, {{0, 0, z0}, 1.0f, 1.0f, true});
             }
             if (!md.book) continue;
             const Mesh& book_mesh = near ? *md.book : *md.book_far;
@@ -1495,16 +1510,19 @@ public:
                     }
                 const BookSlot b = BookSlot::of(0, k);
                 const float y0 = kRowTop - float(b.row + 1) * kRowHeight + 0.02f;
-                const float zc = z0 + float(b.col) * kBookPitch + kBookPitch * 0.5f;
+                const float zc = z0 + float(b.col) * book_pitch() + book_pitch() * 0.5f;
                 const bool right = b.side == Side::Right;
                 const float sx = right ? 1.0f : -1.0f;
                 // Skip books that cannot be on screen (their slot's box).
-                if (!cam_.box_visible({right ? kCaseFront - 0.4f : -kHalfWidth, y0, zc - kBookPitch * 0.5f},
-                                      {right ? kHalfWidth : -kCaseFront + 0.4f, y0 + 0.55f, zc + kBookPitch * 0.5f}))
+                if (!cam_.box_visible({right ? kCaseFront - 0.4f : -kHalfWidth, y0, zc - book_pitch() * 0.5f},
+                                      {right ? kHalfWidth : -kCaseFront + 0.4f, y0 + 0.55f, zc + book_pitch() * 0.5f}))
                     continue;
-                // Records and tapes keep their size; pages, pictures and books take the slot's height.
-                const float scale = varied ? book_height(b.row, b.col, true) / kUniformBookHeight : 1.0f;
-                models_batch_.add(book_mesh, {{sx * kCaseFront, y0, zc}, scale, right, dim});
+                // Everything on a shelf is scaled to its slot, keeping its proportions, so more
+                // to a tile means smaller items rather than squashed ones. On top of that, pages,
+                // pictures and books take their slot's own height, where records and tapes do not
+                // -- a record is one size whatever else changes (world.hpp: media_sizes_vary).
+                const float tall = varied ? book_height(b.row, b.col, true) / (kUniformBookHeight * shelf_scale()) : 1.0f;
+                models_batch_.add(book_mesh, {{sx * kCaseFront, y0, zc}, shelf_scale(), tall, right, dim});
             }
         }
         models_batch_.draw(r_);
@@ -1922,12 +1940,19 @@ public:
     }
 
     // Where line i stands in its own loop, 0 at the start of a copy and approaching 1 at its end.
+    //
+    // Measured in units rather than in tiles, so it is the same number the readout writes as a
+    // percentage. The two differ whenever a loop does not fill its last tile: three tiles into a
+    // six-tile loop of 729 units is not half way along it, it is 384/729 of the way.
     double line_fraction(int i) const
     {
-        const BigUint& tiles = all_loops_[size_t(i)].tiles();
         const BigUint& at = all_loop_tiles_[size_t(i)];
-        if (tiles.is_zero() || at.is_zero()) return 0.0;
-        const double f = std::pow(10.0, at.log10_approx() - tiles.log10_approx());
+        if (at.is_zero()) return 0.0;
+        const BigUint units = units_of(i);
+        if (units.is_zero()) return 0.0;
+        BigUint first = at; // the first unit of the tile you are in
+        first <<= sieve::books_per_tile_bits();
+        const double f = std::pow(10.0, first.log10_approx() - units.log10_approx());
         return std::clamp(f, 0.0, 1.0);
     }
 
@@ -1990,10 +2015,12 @@ public:
         text(cx - text_width(deg, 1) / 2, by + bh - row + 4, deg, 1, ink);
     }
 
-    void panel(float x, float y, float w, float h)
+    // `alpha`: the readout's panels let a little of the corridor through, but the item page is
+    // something you stop and read, so it is drawn solid.
+    void panel(float x, float y, float w, float h, Uint8 alpha = 230)
     {
         const Theme& th = theme();
-        SDL_SetRenderDrawColor(r_, th.bg.r, th.bg.g, th.bg.b, 230);
+        SDL_SetRenderDrawColor(r_, th.bg.r, th.bg.g, th.bg.b, alpha);
         const SDL_FRect box{x, y, w, h};
         SDL_RenderFillRect(r_, &box);
         SDL_SetRenderDrawColor(r_, th.edge.r, th.edge.g, th.edge.b, 255);
@@ -2117,12 +2144,13 @@ public:
                               tile_label_ +
                               (first.empty ? "   " + tr("hud.padding") : "   " + trf("hud.along", {percent(first.fraction)}));
         text(10, 7, fit(where, W - 20, 2), 2, ink);
+        const std::string per_tile = "   " + trf("hud.per_tile", {std::to_string(sieve::books_per_tile())});
         const std::string loop = on_binary() ? tr("hud.no_loop")
                                              : trf("hud.loop", {loop_label_}) + (loop_.fills_whole_tiles()
                                                                                      ? std::string()
                                                                                      : " " + trf("hud.loop.padding", {std::to_string(loop_.padding())}));
         text(10, 28, fit((on_books() ? books_->id() : on_models() ? model_space_->id() : on_binary() ? tr("hud.binary_id") : line().space.id()) + (guided_on() ? "   " + trf("hud.model", {line().model_id}) : std::string()) + "   " +
-                         loop + "   " + filter_status() + "   " +
+                         loop + per_tile + "   " + filter_status() + "   " +
                          (on_binary() ? trf("hud.door_one", {tr(theme_of(binary_shelf_ == 0 ? (li_ + 1) % kLines : (li_ + kLines - 1) % kLines).key)})
                                       : trf("hud.doors", {tr(theme_of((li_ + 1) % kLines).key), tr(theme_of((li_ + kLines - 1) % kLines).key)})),
                          W - 20, 1),
@@ -2380,20 +2408,24 @@ public:
     // same, a few a frame, spreading outward along the shelf until the cache is full. The cache
     // holds whatever the budget in Settings > Graphics allows and drops the least recently seen.
 
-    static constexpr int kCrateFace = 64;                 // pixels square, one image per crate
-    static constexpr size_t kCrateBytes = size_t(kCrateFace) * kCrateFace * 4;
+    // How big one of those pictures is drawn, in pixels square: Pre-rendered Image Tile Cache
+    // Size in the setup menu's MODELS section. Bigger is a sharper crate face and four times the
+    // memory each time it doubles, so it trades against how many the cache holds.
+    int crate_px_ = 64;
+    size_t crate_bytes() const { return size_t(crate_px_) * size_t(crate_px_) * 4; }
     static constexpr int kCratesPerFrame = 3;             // rendered anew each frame, at most
 
     // The model of one crate, drawn small: faces back to front, shaded by depth, on nothing.
     void render_crate_face(const ModelSpace::Parts& p, std::vector<uint32_t>& px) const
     {
-        px.assign(size_t(kCrateFace) * kCrateFace, 0u);
+        const int n = crate_px_;
+        px.assign(size_t(n) * size_t(n), 0u);
         const auto verts = model_space_->mesh_of(p);
         const auto faces = model_space_->faces_of(p);
         const Theme& th = theme_of(kModelsLine);
         const float ca = std::cos(model_spin_), sa = std::sin(model_spin_);
         const float ct = std::cos(model_tilt_), st = std::sin(model_tilt_);
-        const float half = float(kCrateFace) * 0.5f, r = float(kCrateFace) * 0.30f;
+        const float half = float(n) * 0.5f, r = float(n) * 0.30f;
         auto project = [&](const ModelSpace::Vertex& v) {
             const float x = v.x * ca + v.z * sa, z = -v.x * sa + v.z * ca;
             const float y = v.y * ct - z * st, depth = v.y * st + z * ct;
@@ -2416,18 +2448,18 @@ public:
             const float t = std::clamp(0.30f + depth * 0.55f, 0.10f, 1.0f);
             const uint32_t argb = 0xFF000000u | (uint32_t(float(th.edge.r) * t) << 16) |
                                   (uint32_t(float(th.edge.g) * t) << 8) | uint32_t(float(th.edge.b) * t);
-            fill_triangle(px, a, b, c, argb);
+            fill_triangle(px, n, a, b, c, argb);
         }
     }
 
     // A flat triangle into the crate's little image. Small and rare enough not to need more.
-    static void fill_triangle(std::vector<uint32_t>& px, const std::array<float, 3>& a, const std::array<float, 3>& b,
+    static void fill_triangle(std::vector<uint32_t>& px, int n, const std::array<float, 3>& a, const std::array<float, 3>& b,
                               const std::array<float, 3>& c, uint32_t argb)
     {
         const float minx = std::min({a[0], b[0], c[0]}), maxx = std::max({a[0], b[0], c[0]});
         const float miny = std::min({a[1], b[1], c[1]}), maxy = std::max({a[1], b[1], c[1]});
-        const int x0 = std::max(0, int(minx)), x1 = std::min(kCrateFace - 1, int(maxx) + 1);
-        const int y0 = std::max(0, int(miny)), y1 = std::min(kCrateFace - 1, int(maxy) + 1);
+        const int x0 = std::max(0, int(minx)), x1 = std::min(n - 1, int(maxx) + 1);
+        const int y0 = std::max(0, int(miny)), y1 = std::min(n - 1, int(maxy) + 1);
         const float area = (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]);
         if (std::fabs(area) < 1e-6f) return;
         const float inv = 1.0f / area;
@@ -2438,7 +2470,7 @@ public:
                 const float w0 = ((b[0] - a[0]) * (fy - a[1]) - (fx - a[0]) * (b[1] - a[1])) * inv;
                 const float w1 = ((fx - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (fy - a[1])) * inv;
                 if (w0 < 0 || w1 < 0 || w0 + w1 > 1) continue;
-                px[size_t(y) * kCrateFace + size_t(x)] = argb;
+                px[size_t(y) * size_t(n) + size_t(x)] = argb;
             }
     }
 
@@ -2450,12 +2482,12 @@ public:
     }
 
     // How many images the budget allows: the slider is megabytes, which is what costs.
-    size_t crate_capacity() const { return std::max<size_t>(8, size_t(crate_budget_mb_) * 1024 * 1024 / kCrateBytes); }
+    size_t crate_capacity() const { return std::max<size_t>(8, size_t(crate_budget_mb_) * 1024 * 1024 / crate_bytes()); }
 
     // The image for one crate, if it is already rendered. `allow` lets this frame render it.
     SDL_Texture* crate_face(int64_t dt, uint32_t slot, bool allow, std::vector<uint32_t>& scratch)
     {
-        const int64_t key = dt * int64_t(kBooksPerTile) + slot;
+        const int64_t key = dt * int64_t(sieve::books_per_tile()) + slot;
         if (auto it = crate_.find(key); it != crate_.end())
         {
             it->second.used = portal_frame_;
@@ -2465,9 +2497,9 @@ public:
         const Book& b = book(dt, slot);
         if (b.empty || !b.model) return nullptr;
         render_crate_face(*b.model, scratch);
-        SDL_Texture* tex = SDL_CreateTexture(r_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, kCrateFace, kCrateFace);
+        SDL_Texture* tex = SDL_CreateTexture(r_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, crate_px_, crate_px_);
         if (!tex) return nullptr;
-        SDL_UpdateTexture(tex, nullptr, scratch.data(), kCrateFace * 4);
+        SDL_UpdateTexture(tex, nullptr, scratch.data(), crate_px_ * 4);
         SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
         SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_LINEAR);
         // Room for it: the crate seen longest ago goes first.
@@ -2488,7 +2520,7 @@ public:
     void draw_crate_faces(const bool* visible, int back, int ahead)
     {
         int64_t seed_tile = 0;
-        uint32_t seed_slot = kBooksPerTile / 2;
+        uint32_t seed_slot = sieve::books_per_tile() / 2;
         if (hover_)
         {
             seed_tile = hover_->tile;
@@ -2666,10 +2698,29 @@ public:
         const Space::Digits& u = bk.unit;
         const float pw = std::min(W - 40, 1000.0f), ph = std::min(H - 120, 640.0f);
         const float x = (W - pw) / 2, y = 50;
-        panel(x, y, pw, ph);
+        panel(x, y, pw, ph, 255);
         float cy = y + 12;
         text(x + 14, cy, fit(tr("hand.title") + "   " + in_hand_where_ + "   " + trf("hud.along", {percent(bk.fraction)}), pw - 28, 2), 2, ink);
         cy += 28;
+        // Two tabs: the thing itself, and what it costs to name it. C moves between them.
+        {
+            float tx = x + 14;
+            for (int t = 0; t < 2; ++t)
+            {
+                const std::string label = tr(t == 0 ? "hand.tab.item" : "hand.tab.cost");
+                const float tw = text_width(label, 1) + 16;
+                if (t == hand_tab_)
+                {
+                    SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 60);
+                    const SDL_FRect box{tx, cy - 3, tw, 16};
+                    SDL_RenderFillRect(r_, &box);
+                }
+                text(tx + 8, cy, label, 1, ink);
+                tx += tw + 6;
+            }
+            cy += 22;
+        }
+        if (hand_tab_ == 1) { draw_cost(bk, x, cy, pw, y + ph); return; }
         const size_t cols2 = size_t((pw - 28) / 16), cols1 = size_t((pw - 28) / 8);
         if (bk.model) cy = draw_model(*bk.model, x, cy, pw, y + ph - 110);
         else if (bk.parts) cy = draw_book(*bk.parts, x, cy, pw, y + ph - 110);
@@ -2718,7 +2769,77 @@ public:
             text(x + 14, cy, l, 1, ink);
             cy += 10;
         }
-        text(x + 14, y + ph - 16, tr(bk.parts ? "hand.keys.book" : "hand.keys"), 1, ink);
+        text(x + 14, y + ph - 16, tr(bk.parts ? "hand.keys.book" : bk.model ? "hand.keys.model" : "hand.keys"), 1, ink);
+    }
+
+    // COST: what it costs to name the thing in your hand.
+    //
+    // There is one number underneath all of this -- the unit's index, somewhere in [0, N) -- and
+    // every row is that same number written a different way. The point of showing them together
+    // is that the first three are the same length: an address in a bijection is the content, not
+    // a handle on it. Only the guided ordering is shorter, and only when the content is likely
+    // under the model, which is why its percentage doubles as a measure of how text-like the
+    // thing in your hand is.
+    void draw_cost(const Book& bk, float x, float cy, float pw, float bottom)
+    {
+        const Theme& th = theme();
+        const SDL_Color ink = th.edge, dim = mix(th.edge, th.bg, 0.45f);
+        const BigUint& n = on_books() ? books_->size() : on_models() ? model_space_->size() : line().space.size();
+        const double bits = n.log10_approx() * 3.321928094887362;
+        auto row = [&](const std::string& what, double b, const std::string& written, const std::string& note) {
+            text(x + 14, cy, what, 1, ink);
+            text(x + 260, cy, trf("cost.bits", {fixed(b, 0)}), 1, ink);
+            text(x + 380, cy, written, 1, ink);
+            if (bits > 0) text(x + 500, cy, trf("cost.percent", {fixed(b / bits * 100.0, 1)}), 1, b < bits * 0.995 ? ink : dim);
+            if (!note.empty()) text(x + 580, cy, note, 1, dim);
+            cy += 14;
+        };
+        auto digits_in = [](double b, double per) { return std::to_string(int(std::ceil(b / per))); };
+
+        text(x + 14, cy, tr("cost.head"), 1, dim);
+        cy += 18;
+        row(tr("cost.unit"), bits, trf("cost.chars", {digits_in(bits, 4)}), tr("cost.unit.note"));
+        cy += 6;
+        row(tr("ordering.positional"), bits, trf("cost.chars", {digits_in(bits, 4)}), tr("cost.same"));
+        row(tr("ordering.scrambled"), bits, trf("cost.chars", {digits_in(bits, 4)}), tr("cost.shuffled"));
+        // The guided length for this unit, whatever ordering you are walking in. It exists only
+        // on a text line with a model behind it.
+        if (!on_books() && !on_models() && !on_binary() && line().guided)
+        {
+            try
+            {
+                const auto code = line().guided->code(bk.unit);
+                row(tr("ordering.guided"), double(code.bits), trf("cost.chars", {std::to_string(code.hex.size())}),
+                    double(code.bits) < bits * 0.9 ? tr("cost.likely") : tr("cost.unlikely"));
+            }
+            catch (const std::exception&)
+            {
+            }
+        }
+        cy += 10;
+        // The other half of a written-down key: the shape that gives the address its meaning.
+        const std::string spec = (on_books() ? books_->id() : on_models() ? model_space_->id() : line().space.id());
+        text(x + 14, cy, tr("cost.spec"), 1, dim);
+        cy += 14;
+        for (const auto& l : wrap(spec, size_t((pw - 28) / 8)))
+        {
+            text(x + 14, cy, l, 1, ink);
+            cy += 12;
+        }
+        text(x + 14, cy, trf("cost.spec.len", {std::to_string(spec.size())}), 1, dim);
+        cy += 20;
+        // How long the address is in each of the ways it could be written. Sieve writes hex; the
+        // others are here because the choice is open and this is the measurement that settles it.
+        text(x + 14, cy, tr("cost.written"), 1, dim);
+        cy += 14;
+        for (const auto& [name, per] : {std::pair<const char*, double>{"hex", 4.0}, {"base32", 5.0}, {"base64", 6.0},
+                                        {"base85", 6.409390936137702}})
+        {
+            text(x + 14, cy, name, 1, ink);
+            text(x + 260, cy, trf("cost.chars", {digits_in(bits, per)}), 1, ink);
+            cy += 12;
+        }
+        text(x + 14, bottom - 16, tr("hand.keys.cost"), 1, ink);
     }
 
     // A book open in hand: the cover beside the title, then the current page. Returns the height used.
@@ -2797,6 +2918,15 @@ public:
     }
     void set_fps_counter(bool on) { fps_counter_ = on; }
     void set_angle_decimals(int d) { angle_decimals_ = std::clamp(d, 0, 8); }
+    // How big a crate's picture is drawn (the setup menu's MODELS section). Changing it throws
+    // the cache away, because every picture in it is the wrong size now.
+    void set_crate_px(uint32_t px)
+    {
+        const int n = int(std::clamp<uint32_t>(px, 16, 512));
+        if (n == crate_px_) return;
+        crate_px_ = n;
+        clear_crate_faces();
+    }
     void set_model_cache(int megabytes)
     {
         crate_budget_mb_ = uint32_t(std::clamp(megabytes, 8, 512));
@@ -2817,6 +2947,9 @@ public:
         for (Models& m : models_) m = Models{}; // reloaded on first use (picks up edited files)
     }
     void put_back() { in_hand_.reset(); }
+    // The item page: 0 the thing itself, 1 what it costs to name it. Always back to the thing
+    // when something new is picked up -- the page is about what is in your hands now.
+    int hand_tab_ = 0;
 
 private:
     // The loop tile of the tile dt away from yours. Only needs a full modulo for small loops;
@@ -2869,18 +3002,18 @@ private:
     uint32_t books_in_tile(int64_t dt) const
     {
         if (on_binary()) return 0; // the shelves stand empty: nothing out there is catalogued yet
-        if (loop_.fills_whole_tiles()) return kBooksPerTile;
+        if (loop_.fills_whole_tiles()) return sieve::books_per_tile();
         BigUint lt = offset_loop_tile(dt);
         lt.add_small(1);
-        return lt == loop_.tiles() ? kBooksPerTile - loop_.padding() : kBooksPerTile;
+        return lt == loop_.tiles() ? sieve::books_per_tile() - loop_.padding() : sieve::books_per_tile();
     }
 
     // The books of one tile, slot by slot (4 edges each), drawn separately so padding can be bare.
     // `varied`: heights vary from slot to slot; else every book is the same size (audio, video).
     static std::vector<std::array<Segment, 4>> build_books(bool varied)
     {
-        std::vector<std::array<Segment, 4>> out(kBooksPerTile);
-        for (uint32_t k = 0; k < uint32_t(kBooksPerTile); ++k)
+        std::vector<std::array<Segment, 4>> out(sieve::books_per_tile());
+        for (uint32_t k = 0; k < uint32_t(sieve::books_per_tile()); ++k)
         {
             const BookSlot b = BookSlot::of(0, k);
             Vec3 f[4];
@@ -3031,6 +3164,9 @@ const char* kUsage =
     "  --real-graphics     draw with Real Graphics: the models in the meshes folder\n"
     "  --door-portals      fill the doorways with procedural data noise (Real Graphics turns this on)\n"
     "  --model-cache MB    memory for the models line's rendered crate faces (8-512, default 64)\n"
+    "  --model-tile PX     how big each of those pictures is drawn, square (16-512, default 64)\n"
+    "  --items-per-wall N  units on one tile of the corridor (128 or 256; changes no address,\n"
+    "                      only the tile and slot that name a unit's place in the corridor)\n"
     "  --fps-counter       show the FPS counter\n"
     "  --bench N           before the screenshot, time N frames and print the frame rate\n\n"
     "Controls: WASD move, mouse look, Shift run, E or click take a book, T warp, G go to,\n"
@@ -3098,6 +3234,9 @@ std::vector<std::pair<SDL_Keycode, SDL_Keymod>> parse_presses(const std::string&
 std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer, const Args& a, bool scripted,
                                       const FilterConfig& filters)
 {
+    // The corridor's tile size, before any line's loop is worked out from it. It changes no
+    // address: only the tile and slot that name a unit's place in the corridor (corridor.hpp).
+    if (a.has("items-per-wall")) sieve::set_books_per_tile(a.get_u32("items-per-wall", 128));
     std::vector<Line> lines = make_lines(a);
     int start_line = 0;
     if (a.get("line") == "books") start_line = kBooksLine;
@@ -3276,6 +3415,7 @@ int run(const Args& a)
             hall->set_graphics(glow && !real, real, portals);
             hall->set_model_cache(a.has("model-cache") ? int(a.get_u32("model-cache", 64)) : app.model_cache_mb);
             hall->set_angle_decimals(app.angle_decimals);
+            hall->set_crate_px(a.get_u32("model-tile", 64));
             hall->set_fps_counter(app.fps_counter || a.has("fps-counter"));
             // On stderr: stdout is where the readout goes, which scripts read line by line.
             std::cerr << "graphics: edge glow " << (glow && !real ? "on" : "off") << ", real graphics " << (real ? "on" : "off")
@@ -3343,6 +3483,7 @@ int run(const Args& a)
         hall->set_graphics(app.edge_glow, app.real_graphics, app.door_portals);
         hall->set_model_cache(app.model_cache_mb);
         hall->set_angle_decimals(app.angle_decimals);
+        hall->set_crate_px(ha.get_u32("model-tile", 64));
         hall->set_fps_counter(app.fps_counter);
         first = false;
         SDL_SetWindowRelativeMouseMode(window, true);

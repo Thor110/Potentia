@@ -24,11 +24,21 @@
 
 namespace sieve {
 
-// Book slots per tile. Must be a power of two, so that power-of-two line sizes fill whole tiles.
-inline constexpr uint32_t kBooksPerTile = 128;
-inline constexpr unsigned kBooksPerTileBits = 7;
-static_assert(kBooksPerTile == (1u << kBooksPerTileBits), "kBooksPerTile must be 2^kBooksPerTileBits");
-static_assert((kBooksPerTile & (kBooksPerTile - 1)) == 0, "kBooksPerTile must be a power of two");
+// Book slots per tile: how the one address of a unit is cut into a corridor coordinate, as
+// tile = index >> bits and slot = index & mask. Must be a power of two, so that the split is
+// exact and a power-of-two line fills whole tiles.
+//
+// It is a setting (the setup menu's GLOBAL section), not a constant, because how many units
+// stand on a wall is a choice about the corridor and not about the lines. **It does not change
+// any address**: the unit's index is what it always was, and only the tile and slot that name
+// its place in the corridor differ. A tile number written down under one setting therefore
+// means something else under another, which is why the readout and `sieve info` both say which
+// is in force.
+//
+// Set once at start-up, before any LineLoop is built, and never afterwards.
+uint32_t books_per_tile();
+unsigned books_per_tile_bits();
+void set_books_per_tile(uint32_t n); // throws std::invalid_argument unless n is a power of two in 2..4096
 
 // A tile number on the corridor: any integer, as sign and magnitude.
 struct TileIndex

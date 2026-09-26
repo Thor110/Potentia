@@ -4,6 +4,26 @@
 #include <utility>
 
 namespace sieve {
+namespace {
+// The corridor's tile size, and its log2. One value for the whole process: the corridor is
+// shared by every line, so they cannot disagree about how it is divided.
+uint32_t g_books_per_tile = 128;
+unsigned g_books_per_tile_bits = 7;
+} // namespace
+
+uint32_t books_per_tile() { return g_books_per_tile; }
+unsigned books_per_tile_bits() { return g_books_per_tile_bits; }
+
+void set_books_per_tile(uint32_t n)
+{
+    if (n < 2 || n > 4096 || (n & (n - 1)))
+        throw std::invalid_argument("books per tile must be a power of two between 2 and 4096");
+    unsigned bits = 0;
+    while ((1u << bits) != n) ++bits;
+    g_books_per_tile = n;
+    g_books_per_tile_bits = bits;
+}
+
 
 TileIndex TileIndex::of(int64_t t)
 {
@@ -50,12 +70,12 @@ LineLoop::LineLoop(BigUint units) : units_(std::move(units))
 {
     if (units_.is_zero()) throw std::invalid_argument("a line needs at least one unit");
     tiles_ = units_;
-    tiles_ >>= kBooksPerTileBits;
-    const uint32_t rem = units_.low_bits(kBooksPerTileBits);
+    tiles_ >>= books_per_tile_bits();
+    const uint32_t rem = units_.low_bits(books_per_tile_bits());
     if (rem)
     {
         tiles_.add_small(1);
-        padding_ = kBooksPerTile - rem;
+        padding_ = books_per_tile() - rem;
     }
 }
 
@@ -70,9 +90,9 @@ BigUint LineLoop::loop_tile(const TileIndex& t) const
 
 std::optional<BigUint> LineLoop::unit_index(const BigUint& loop_tile, uint32_t slot) const
 {
-    if (slot >= kBooksPerTile) throw std::out_of_range("slot outside the tile");
+    if (slot >= books_per_tile()) throw std::out_of_range("slot outside the tile");
     BigUint i = loop_tile;
-    i <<= kBooksPerTileBits;
+    i <<= books_per_tile_bits();
     i.add_small(slot);
     if (i >= units_) return std::nullopt;
     return i;
@@ -82,10 +102,10 @@ TileIndex LineLoop::tile_of(const BigUint& unit_index)
 {
     TileIndex t;
     t.magnitude = unit_index;
-    t.magnitude >>= kBooksPerTileBits;
+    t.magnitude >>= books_per_tile_bits();
     return t;
 }
 
-uint32_t LineLoop::slot_of(const BigUint& unit_index) { return unit_index.low_bits(kBooksPerTileBits); }
+uint32_t LineLoop::slot_of(const BigUint& unit_index) { return unit_index.low_bits(books_per_tile_bits()); }
 
 } // namespace sieve

@@ -134,6 +134,10 @@ Encoding and decoding must be **bit-for-bit identical** on every machine.
 - Models (weights, tokenizer, quantisation) are pinned by **cryptographic hash**. Changing a model changes every entropy-ordered address on that line, so models are versioned, never silently replaced.
 - A model's training is itself reproducible: the corpus manifest pins every file by SHA-256, and training the same corpus with the same options gives the same file byte for byte. The reference oracle rebuilds the default model independently and must match its hash.
 
+**The big integer itself.** `BigUint` holds a value as little-endian limbs of **2^64**, and every operation on the address path goes through it, so its arithmetic is pinned like every other rule: the reference oracle works the answers out with Python's own arbitrary-precision integers, sharing no code with the core, and the core must reproduce them exactly (`tests/vectors_biguint_v1.tsv`). The vectors run from a limb or two up past a page and include the boundaries where a carry or a borrow crosses a limb, which is where an implementation of this kind goes wrong if it is going to.
+
+A limb of 2^64 needs 128-bit products and a 128-bit numerator for division. Where the compiler offers a 128-bit integer that is used; where it does not, the same answers are built from 32-bit halves with 64-bit intermediates. Both are exact and both are tested — `SIEVE_BIGUINT_PORTABLE` forces the second so it is exercised even on compilers that have the first. Nothing about the limb width is visible in an address: it is how the number is held, not what the number is.
+
 ---
 
 ## 5. The Hallway
@@ -144,6 +148,7 @@ Each line is presented as a **single hallway**: an endless corridor with a shelf
 
 - **Shelf, door, repeat.** Shelving runs continuously; doors (§7) appear at fixed intervals.
 - **Sides:** left and right shelves hold consecutive halves of the local range.
+- **Tile size is a setting, and it is not part of an address.** How many units stand on one tile — 128 by default, 256 offered in the menu, any power of two from 2 to 4096 on the command line — decides only how a unit's index is cut into a corridor coordinate (`tile = index >> bits`, `slot = index & mask`). The index itself, and therefore every address, is untouched. A *tile number* is therefore only meaningful alongside the setting that produced it, and both the hallway's readout and `sieve info` state it.
 - **One corridor for all lines.** The four lines, and the books line composed from them (§11), share a single endless corridor, numbered by one signed position in **tiles of 128 book slots**. 128 is a power of two, and the implementation enforces this at compile time. Each line **repeats** along the corridor: a line of `N` units spans `⌈N / 128⌉` tiles per copy, and copy `c` begins at tile `c·⌈N / 128⌉`. Within a copy, slot `i` holds the unit whose raw address is `i`, or, in the guided view at zoom `d`, the point `i / 2^d`, so a guided loop has `2^d` books.
 - **Padding.** When `N` is not a multiple of 128, the last tile of each copy ends in empty shelf space, so every copy starts on a fresh tile. A line whose size is a power of two, at least 128, has no padding, and when every line's size is a power of two the loops **nest**: each line's start line falls on a start line of every smaller line. `sieve info` reports how each line fits.
 - **Start line.** The beginning of each copy is marked by a checkered strip across the floor, in the line's two colours. Where every line begins a copy at once (always at tile 0, and wherever else their loops coincide) the start line is doubled (a second strip a metre further on).
@@ -448,6 +453,16 @@ models. `modelspace-v1` numbers them as one mixed-radix number, most significant
 **Fitting a mesh.** Any `.obj` lands somewhere on the line: it is centred, scaled so its longest side fills the grid, and each coordinate binned to its cell. Vertices past V and faces past F are dropped and counted, a mesh with too few faces is filled out, and indices naming a vertex the line does not have are clamped. `sieve mesh` does all of this and reports every change, as `warp` does for the other lines.
 
 **Filters** are future work, and they fall in three tiers: local per-face constraints such as distinct indices, which rank exactly; small-V constraints such as "every vertex is used", which rank exactly as a state machine whose state is the set of vertices used so far (256 states at V = 8); and whole-mesh properties — watertight, manifold, non-self-intersecting, convex — which judge but do not rank, and so run in `mark` or `hide` mode like any other unrankable filter.
+
+### 12.1a The bytes256 alphabet
+
+`bytes256` is the 256 code points U+0000-U+00FF in code point order, so **digit d is byte d**. A file of N bytes is exactly one unit of a `bytes256` line of length N.
+
+**`canon-bytes-v1`** is the identity, and is used for any alphabet holding every byte value. Nothing is transliterated, folded, dropped or collapsed, because on such a line every byte already means itself and a file has to come back byte for byte. A last unit short of the length is padded with NUL, which is digit 0.
+
+Content for such a line is read and written as **raw bytes**: warping does not decode UTF-8 (most files are not valid UTF-8), and `--out` writes bytes without encoding or a trailing newline.
+
+It is the only alphabet that packs exactly: 256 symbols is 8 bits each, so a unit's address in positional order is its own bytes read as one number, and its hex form is the file's hex dump. That makes it the clearest demonstration of what §6 means by an address being a bijection: the address of a 100 KB file is 200,000 hex digits, because it *is* the file. Addresses of that length do not fit on a command line, so `read` accepts `--address-file PATH`.
 
 ### 12.1 The binary line
 

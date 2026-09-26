@@ -222,6 +222,15 @@ boundary. Needs 5.2 first, and needs there to be anchors to plot.
 movement covers distance, fine movement tweaks the low digits; at range the shelves collapse into
 density bands. A navigation UI for addresses that already exist.
 
+**5.12 A junction is a line, not a room.** The unsolved navigation problem is a hallway that forks
+a million ways: you cannot draw a million doors, and a list is not a place. But an ordered set of
+categories is exactly what every line already is, so a junction should be a *ring* — a round room
+whose wall carries the doors, which rotates past you as you scroll, with the compass showing where
+you are in it and how far round it goes. A million forks then costs nothing to stand in, because
+only the dozen doors near your angle are ever drawn, and finding one is the same act as finding a
+book: warp to its number, or filter the ring down and walk what survives. It needs no new
+machinery — a loop, a position and an angle are all built.
+
 **5.10 A scene description, so people can lay the gallery out themselves.** JSON plus `.obj`:
 which lines exist, where their rings go, what furniture stands between them. Everything the backend
 knows, rendered wherever someone wants it. Large, and the right shape for it is not obvious yet.
@@ -399,3 +408,96 @@ terminal you can type into.
 
 **9.7 Disclosure.** Anyone happy to consume AI-assisted work will not mind being told; anyone who
 prefers human-made work deserves the right to choose. Which means saying so, here, about this.
+
+---
+
+## 10. Loose ends
+
+Small, concrete things said once in the Gemini conversation and not followed up. Kept because they
+are cheap and because they are the sort of thing that is lost otherwise.
+
+**Interface**
+
+- The media panel is see-through and should not be.
+- Something renders behind one of the menus during a transition. Never pinned down.
+- The loop marker could be a floating checkered gate you walk through rather than a floor strip.
+  The grammar is settled either way: one strip is a line's start, two a metre apart is where every
+  line starts together.
+- Portal signs: a plain rectangle above each doorway naming the line it leads to, either neon in
+  that line's colour or bubble letters carrying the portal's own shimmer. Try the second first.
+- Shimmer on an item: on the crosshair and on select for certain; on walking past, undecided.
+- A shelf's items could face outward on the outside of the ring or inward. Both should exist as a
+  graphics toggle; which way you face only reorders how the lines are listed in the readout.
+- Presets above START, greyed out when a preset would cross the machine's limits.
+- Key remapping, explicitly the lowest priority: Controls stays a read-only list read from the
+  language file.
+- Menu items centred vertically as well as horizontally, with the help slot sized for the longest
+  help on that screen so the block does not jump as you move down it.
+- Auto-DLC toggle: "X new repositories detected" on startup, pulling newly published repos.
+- A record player on a table beside every AUDIO doorway and a television beside every VIDEO one.
+  Not functional. "It is a lot of TVs but why not."
+- The diagnostic views, with a slot deliberately left empty: Code, Keys, Mixed, Future. The system
+  key alone toggles in and out; bare function keys slide between them; Tab cycles. It needs a speed
+  control, because at full rate it is an unreadable blur — modelled on the 1-0 speed keys and
+  slider in the 1998 *War of the Worlds* RTS.
+
+**Navigation**
+
+- The Mirror: a mirror in a room that opens the map for where you are standing, "like opening a
+  Wikipedia article on the room you are in".
+- An interactive portal where you pick the line to travel to, with the one you came from kept as
+  the default return.
+- Wheel scrolling already moves through tiles, and shift scrolls faster. The same mechanism should
+  move through the forks at a junction — see §5.12 for the shape that makes that work.
+- Warp by content: paste a paragraph and be taken to its address. Built for text; worth a button.
+- A warp-to-start, which is the only realistic way anyone ever sees a loop marker.
+- Telescopes at the edge that really do pull the camera out to see the whole structure.
+- A coin toss into the drop that mints one permanent seed per machine.
+- Multi-pane views were considered and rejected: "it feels like it would be a headache to look at".
+
+**Numbers and defaults already fixed**
+
+- Book heights vary 0.34–0.46 m on pages, image and books; audio and video are fixed at 0.40 m,
+  because records and cassettes come in one size. A slot is 0.375 m along a shelf, 0.50 m between
+  boards, 0.35 m deep; a corridor tile is 8 m; the marker is a 16 x 2 checkered strip.
+- Four models are needed — hallway with door frame, bookcase, book, marker — plus the per-line
+  variants: record, canvas, sheet of paper, cassette, book, crate.
+- A page is cut at 3,200 characters by default. A book's id is the SHA-256 of its content alone.
+- The noise fraction, written down because it was asked for twice: 10^-1,439,146, about 1.44
+  million nines.
+- The dial to test against: 6 characters (~10^8.6), 8 (~10^11.5), 12 (~10^17), 100 (~10^143),
+  1,000 (~10^1,431). Exhaustive checking starts at 6-8, where everything can be counted.
+
+**Process**
+
+- The old README moves to a `Previous` folder rather than being versioned, and it is written by
+  hand, because an outsider's view of the project is still possible to fake but not for long.
+- The final documentation pass waits until the visuals are done, because "that last task is usually
+  the sort of thing that gets skipped or only half done".
+- There is a pile of loose notes — `engine-idea`, `nextclaude2` through `claude5`,
+  `downloaderfriendidea`, `state-space-near-zero-...` — that has never been reconciled with the
+  repository.
+- Nothing has ever run on GitHub's Windows or macOS runners, only Linux.
+- The first release is to be the archive's first verified anchor, every key tagged
+  `sieve-build-release-v1`.
+
+---
+
+## 11. Questions that never got an answer
+
+- **Which way do the shelves face, and where does the wall change sides?** Asked four or five
+  times across the conversation and never settled. Currently: both walls everywhere except the
+  binary line. Parked deliberately.
+- **Should the pages line move to `babel29` or `ascii95`,** so books hold sentences rather than
+  word streams? `lower27` throws away every capital and every mark of punctuation.
+- **Does the `scowl-en-60-names` side effect matter?** It has 130 two-letter tokens where the plain
+  list had 69, so `zn`, `tb` and `pt` now pass and stand among real words on a compact shelf. The
+  fix is a new dictionary version; the call was never made.
+- **What is the vertex ceiling for models,** and what makes a textured triangle not noise? The
+  hardest filter question on that line and it has no answer yet.
+- **Which font comes next** — Cyrillic, Polish and Czech need a taller one, and the 8-pixel layouts
+  have to be reworked before any of them read properly.
+- **Which media types cross paths in the state space?** A cheap experiment, named and never run.
+- **How much would the reducer actually save** on a real corpus? Never measured, and it is the
+  number that decides whether the key idea is worth anything (see §0).
+- **The licence.** Still nothing in the repository.

@@ -158,13 +158,54 @@ jobs:
           $H --menu --vertices 12 --faces 20 --coords 64 --screenshot map6.png | q "saved map6.png"
           # The setup menu's last three rows: find my limits, reset, and the way in. Finding the
           # limits changes every shape; resetting puts them all back.
-          down19=$(python -c "print(','.join(['Down']*19))")
-          $H --menu --press "$down19" --screenshot plain.png > /dev/null
-          $H --menu --press "$down19,Return" --screenshot lim.png > /dev/null
-          $H --menu --press "$down19,Return,Down,Return,Up" --screenshot res.png > /dev/null
+          # Up from the first row wraps to the last, so three Ups land on find-my-limits whatever
+          # else is in the list: the last three rows are always find-my-limits, reset, the way in.
+          toend="Up,Up,Up"
+          $H --menu --press "$toend" --screenshot plain.png > /dev/null
+          $H --menu --press "$toend,Return" --screenshot lim.png > /dev/null
+          $H --menu --press "$toend,Return,Down,Return,Up" --screenshot res.png > /dev/null
           # Finding the limits changes the shapes; resetting puts them back exactly as they were.
           if cmp -s plain.png lim.png; then exit 1; fi
           cmp -s plain.png res.png
+          # The setup menu's rows are numbered, and F on a row opens that line's filters, so the
+          # mapping has to be pinned or a row inserted anywhere above silently opens the wrong
+          # line's list. Each row here ticks a mode and the saved file says which line it was.
+          # Closing the overlay is what writes it, which also covers that path.
+          for pair in "4 text" "8 image" "11 audio" "12 video" "16 books"; do
+            set -- $pair
+            rm -f row$1.ini
+            downs=$(python -c "print(','.join(['Down']*$1))")
+            $H --menu --filters row$1.ini --press "$downs,F,Space,Escape" --screenshot row$1.png > /dev/null
+            grep -A1 "^\[$2\]" row$1.ini | q "mode = mark"
+          done
+          # And the rows above and below those belong to no line, so F on them opens nothing.
+          rm -f none.ini
+          $H --menu --filters none.ini --press "F,Space,Escape" --screenshot none.png > /dev/null
+          if grep -q "mode = mark" none.ini; then exit 1; fi
+          # Items per wall: the corridor's tile size is a setting. It changes no address -- the
+          # same unit, at the same percentage along the same line -- only the tile and slot that
+          # name where it stands, and at 256 a tile the tile number is half what it was.
+          a=$($H --no-menu --walk "0,0" --screenshot t128.png | sed -n 1p)
+          b=$($H --no-menu --items-per-wall 256 --walk "0,0" --screenshot t256.png | sed -n 1p)
+          echo "$a"; echo "$b"
+          echo "$a" | q "85.9326950016% along"
+          echo "$b" | q "85.9326950016% along"
+          # ...and it is the same book, with the same address, on both.
+          test "$(echo "$a" | book)" = "$(echo "$b" | book)"
+          if [ "$(echo "$a" | sed -n 's/.*tile \([0-9.]*\).*/\1/p')" = "$(echo "$b" | sed -n 's/.*tile \([0-9.]*\).*/\1/p')" ]; then exit 1; fi
+          # What stands in a slot is scaled to the slot, so twice as many to a tile is half-size
+          # items rather than items running into each other: an item must be narrower than the
+          # pitch at every size, or the crosshair cannot tell two of them apart.
+          python -c "shelf=6.0; base=shelf/16; bad=[n for n in (128,256,512,1024) if not 0.28*min(1.0,(shelf/(n//8))/base) < shelf/(n//8)]; assert not bad, bad; print('slots fit at every tile size')"
+          $H --no-menu --items-per-wall 256 --take --screenshot take256.png | q "saved take256.png"
+          # The pictures on the crate faces have a size of their own, and it is thrown away and
+          # redrawn when it changes rather than being stretched.
+          $H --no-menu --line models --model-tile 128 --walk "0,0" --bench 8 --screenshot tile128.png 2>&1 | q "^bench: 8 frames"
+          test -s t128.png && test -s t256.png && test -s tile128.png
+          # The item page has two tabs: the thing itself, and what it costs to name it. On a text
+          # line the guided row is shorter than the other two exactly when the unit reads as text.
+          $H --no-menu --warp "it was the best of times" --press "E,C" --screenshot cost.png > /dev/null
+          test -s cost.png
           # The compass: the degree readout beside the percentage, to the precision set in Graphics.
           $H --no-menu --line pages --goto "25%" --walk "0,0" --screenshot comp.png | sed -n 1p | q "25.0000000000% along"
           test -s comp.png
@@ -194,6 +235,45 @@ jobs:
           test -s edge.png
           test -s models.png && test -s cube.png && test -s crates.png && test -s map6.png
           if $exe mesh --coords 12 > /dev/null 2>&1; then exit 1; fi
+
+      - name: BigUint's arithmetic also builds and passes without a 128-bit integer type
+        if: runner.os == 'Linux'
+        run: |
+          # Every limb operation has two implementations: one using the compiler's 128-bit
+          # integer, and one built from 32-bit halves for compilers that have no such type.
+          # The second is the one nothing would otherwise exercise, so it is built and run here
+          # against the same vectors.
+          cmake -S . -B build-portable -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-DSIEVE_BIGUINT_PORTABLE"
+          cmake --build build-portable --target sieve_tests --parallel
+          ./build-portable/sieve_tests tests | tail -1 | grep -q ", 0 failures"
+
+      - name: A file is one unit of the bytes256 line, and its address is its own bytes
+        run: |
+          q() { grep -c "$@" > /dev/null; }
+          exe=build/sieve
+          [ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
+          # bytes256 holds every byte value in byte order, so canonicalisation is the identity
+          # (canon-bytes-v1) and a file of N bytes is exactly one unit of a line of length N.
+          $exe alphabets | tr -d '\r' | q "bytes256"
+          python -c "open('four.bin','wb').write(bytes([0xde,0xad,0xbe,0xef]))"
+          out=$($exe warp --alphabet bytes256 --length 4 --file four.bin)
+          echo "$out"
+          echo "$out" | q "canon-bytes-v1"
+          # The positional address IS the file, read as one number.
+          echo "$out" | q "deadbeef"
+          $exe read --alphabet bytes256 --length 4 --mode positional deadbeef --out back.bin > /dev/null
+          cmp four.bin back.bin
+          # A file-sized address is far too long for a command line, so it can come from a file.
+          python -c "d=open('$exe','rb').read()[:20000]; open('big.bin','wb').write(d); open('big.hex','w').write(d.hex())"
+          $exe read --alphabet bytes256 --length 20000 --mode positional --address-file big.hex --out back2.bin > /dev/null
+          cmp big.bin back2.bin
+          # Nothing is folded away: a file of every byte value comes back unchanged.
+          python -c "open('all.bin','wb').write(bytes(range(256)))"
+          python -c "open('all.hex','w').write(bytes(range(256)).hex())"
+          $exe read --alphabet bytes256 --length 256 --mode positional --address-file all.hex --out allback.bin > /dev/null
+          cmp all.bin allback.bin
+          # ...and the address it prints for that file is exactly that hex dump.
+          $exe warp --alphabet bytes256 --length 256 --file all.bin | tr -d '\r' | q "000102030405"
 
       - name: Books bind, unbind and keep their id in every ordering
         run: |

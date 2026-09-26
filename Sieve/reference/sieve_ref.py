@@ -6,6 +6,7 @@ canonicalisation and the M1 sieve filters. It uses Python's native big integers
 and hashlib, sharing no code with the C++ core. The C++ core must agree with it
 bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
 
+    python3 sieve_ref.py biguint-vectors > ../tests/vectors_biguint_v1.tsv
     python3 sieve_ref.py vectors        > ../tests/vectors_v1.tsv
     python3 sieve_ref.py digit-vectors  > ../tests/vectors_digits_v1.tsv
     python3 sieve_ref.py canon-vectors  > ../tests/vectors_canon.tsv
@@ -369,6 +370,67 @@ def stream(seed):
         for b in hashlib.sha256(f"{seed}/{k}".encode()).digest():
             yield b
         k += 1
+
+
+def cmd_biguint_vectors(_args):
+    """BigUint vectors: an operation, its operands and its exact result, from Python's own integers.
+
+    The address path rests entirely on BigUint, so its arithmetic is pinned the same way every
+    other rule is: Python works the answers out with its own arbitrary-precision integers, which
+    share no code with the C++, and the C++ has to reproduce them exactly. Sizes run from a limb
+    or two up past a page, and include the boundaries where a carry or a borrow crosses a limb,
+    which is where a big-integer implementation goes wrong if it is going to.
+    """
+    print("# sieve biguint vectors (exact arithmetic, SPECIFICATIONS 4.3)")
+    print("# op\ta\tb\tresult      (a and b hex, result hex unless the op says otherwise)")
+    g = stream("biguint/v1")
+
+    def rnd(bits):
+        n = int.from_bytes(bytes(next(g) for _ in range((bits + 7) // 8)), "little")
+        n |= 1 << (bits - 1)
+        return n & ((1 << bits) - 1)
+
+    # Sizes: a limb, either side of a limb boundary, an address, a paragraph, a page.
+    values = [0, 1, 2, 255, 256, (1 << 32) - 1, 1 << 32, (1 << 32) + 1, (1 << 64) - 1, 1 << 64,
+              (1 << 64) + 1, (1 << 96) - 1, (1 << 128) - 1]
+    for bits in (17, 31, 32, 33, 63, 64, 65, 127, 129, 152, 1000, 4755):
+        values.append(rnd(bits))
+    # Every pair of the small and boundary values, and the big ones against a handful, so the
+    # file stays a sensible size while still exercising long operands both ways round.
+    small = values[:-2]
+    big = values[-2:]
+    pairs = [(a, b) for a in small for b in small]
+    for x in big:
+        for y in (0, 1, values[5], values[8], values[12], small[-1], x):
+            pairs.append((x, y))
+            pairs.append((y, x))
+
+    def row(op, a, b, result):
+        print(f"{op}\t{a:x}\t{b:x}\t{result}")
+
+    for a, b in pairs:
+        row("add", a, b, f"{a + b:x}")
+        if a >= b: row("sub", a, b, f"{a - b:x}")
+        row("mul", a, b, f"{a * b:x}")
+        if b: row("divmod", a, b, f"{a // b:x},{a % b:x}")
+        row("xor", a, b, f"{a ^ b:x}")
+        row("cmp", a, b, "-1" if a < b else "1" if a > b else "0")
+    for a in values:
+        row("bits", a, 0, str(a.bit_length()))
+        for s in (0, 1, 31, 32, 33, 64, 65, 200):
+            row(f"shl{s}", a, 0, f"{a << s:x}")
+            row(f"shr{s}", a, 0, f"{a >> s:x}")
+        row("dec", a, 0, str(a))
+        for base in (2, 16, 27, 104, 256, 1000):
+            # to_digits over the smallest number of digits that holds it, then back.
+            n = 1
+            while base ** n <= a: n += 1
+            digits = []
+            v = a
+            for _ in range(n):
+                digits.append(v % base)
+                v //= base
+            row(f"digits{base}", a, 0, ",".join(str(d) for d in reversed(digits)))
 
 
 def cmd_digit_vectors(_args):
@@ -1536,6 +1598,7 @@ def main():
     s.add_argument("--dict", required=True)
     s.add_argument("--max", type=int, default=4)
     sub.add_parser("vectors")
+    sub.add_parser("biguint-vectors")
     sub.add_parser("digit-vectors")
     sub.add_parser("canon-vectors")
     sub.add_parser("alphabet-vectors")
@@ -1560,6 +1623,8 @@ def main():
 
     if args.cmd == "vectors":
         cmd_vectors(args)
+    elif args.cmd == "biguint-vectors":
+        cmd_biguint_vectors(args)
     elif args.cmd == "digit-vectors":
         cmd_digit_vectors(args)
     elif args.cmd == "canon-vectors":

@@ -107,7 +107,7 @@ int cmd_info(const Args& a)
     {
         const LineLoop loop(sp.size());
         std::cout << "hallway      one loop is " << (loop.tiles().log10_approx() < 30 ? loop.tiles().to_decimal() : "~10^" + std::to_string(int(loop.tiles().log10_approx())))
-                  << " tiles of " << kBooksPerTile << " books; "
+                  << " tiles of " << sieve::books_per_tile() << " books; "
                   << (loop.fills_whole_tiles() ? std::string("fills whole tiles exactly")
                                                : "its last tile has " + std::to_string(loop.padding()) +
                                                      " empty slots (a size that is a power of two, at least 128, would have none)")
@@ -293,7 +293,7 @@ int read_at(const Line& line, const Args& a, const std::string& mode)
     if (colon == std::string::npos) throw std::invalid_argument("--at expects TILE:SLOT, for example 4626:0 or -1:127");
     const TileIndex tile = TileIndex::parse(at.substr(0, colon));
     const uint32_t slot = uint32_t(parse_whole(at.substr(colon + 1), "--at SLOT"));
-    if (slot >= kBooksPerTile) throw std::invalid_argument("SLOT must be 0.." + std::to_string(kBooksPerTile - 1));
+    if (slot >= sieve::books_per_tile()) throw std::invalid_argument("SLOT must be 0.." + std::to_string(sieve::books_per_tile() - 1));
     const bool guided = mode == "guided";
     const auto compact = a.has("compact") ? make_compact(line, a) : nullptr;
     uint32_t zoom = 0;
@@ -342,6 +342,8 @@ int read_at(const Line& line, const Args& a, const std::string& mode)
     return 0;
 }
 
+std::string slurp(const std::string& path); // defined below, with the book commands
+
 int cmd_read(const Args& a)
 {
     const Line line = make_line(a);
@@ -363,7 +365,20 @@ int cmd_read(const Args& a)
         else std::cout << preview(line, digits) << "\n";
         return 0;
     }
-    if (a.positional.size() != 1) throw std::invalid_argument("give exactly one ADDRESS");
+    // An address of a file-sized unit is far too long for a command line -- a 100 KB file on a
+    // bytes256 line has a 200,000 digit address -- so it can be given in a file instead.
+    std::string given;
+    if (a.has("address-file"))
+    {
+        if (!a.positional.empty()) throw std::invalid_argument("give an ADDRESS or --address-file PATH, not both");
+        given = slurp(a.get("address-file"));
+        while (!given.empty() && (given.back() == '\n' || given.back() == '\r' || given.back() == ' ')) given.pop_back();
+    }
+    else
+    {
+        if (a.positional.size() != 1) throw std::invalid_argument("give exactly one ADDRESS (or --address-file PATH)");
+        given = a.positional[0];
+    }
     const auto compact = a.has("compact") ? make_compact(line, a) : nullptr;
     std::vector<uint32_t> digits;
     if (compact && mode != "guided")
@@ -371,7 +386,7 @@ int cmd_read(const Args& a)
         // A compact address: the survivor number (positional) or its shuffle (scrambled).
         const CompactLine& cl = *compact->line;
         const AddressMode m = address_mode_from_string(mode);
-        const BigUint index = cl.parse(a.positional[0]);
+        const BigUint index = cl.parse(given);
         digits = cl.unit_at(index, m);
         std::cerr << "survivor number " << (m == AddressMode::Positional ? index : cl.ranker().rank(digits)).to_decimal() << " of "
                   << cl.count().to_decimal() << "\n";
@@ -397,7 +412,7 @@ int cmd_read(const Args& a)
     {
         const GuidedLine& g = compact ? *compact->line->guided() : need_guided(line);
         if (compact && !compact->line->guided()) need_guided(line);
-        const BigUint point = g.point_of(a.positional[0]);
+        const BigUint point = g.point_of(given);
         digits = g.unit_at(point);
         const auto own = g.code(digits);
         if (!(own.point == point))
@@ -426,7 +441,7 @@ int cmd_read(const Args& a)
     else
     {
         const AddressMode m = address_mode_from_string(mode);
-        const auto address = line.space.parse_address(a.positional[0]);
+        const auto address = line.space.parse_address(given);
         digits = line.space.unit_of_address(address, m);
         if (a.has("around"))
         {
@@ -844,7 +859,7 @@ int cmd_mesh(const Args& a)
         std::cout << "hallway      one loop is "
                   << (loop.tiles().log10_approx() < 30 ? loop.tiles().to_decimal()
                                                        : "~10^" + std::to_string(int(loop.tiles().log10_approx())))
-                  << " tiles of " << kBooksPerTile << " models\n";
+                  << " tiles of " << sieve::books_per_tile() << " models\n";
     }
     return 0;
 }

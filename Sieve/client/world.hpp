@@ -25,15 +25,24 @@ inline constexpr float kTile = 8.0f;
 inline constexpr float kShelfEnd = 6.0f;    // bookcase spans z 0..6 of each tile
 inline constexpr float kDoorStart = 6.4f, kDoorEnd = 7.6f, kDoorTop = 2.2f;
 inline constexpr int kRows = 4;
-inline constexpr int kCols = 16;
 inline constexpr float kRowTop = 2.65f, kRowHeight = 0.55f;
-inline constexpr float kBookPitch = kShelfEnd / kCols, kBookWidth = 0.28f;
-inline constexpr int kBooksPerWall = kRows * kCols;
-using sieve::kBooksPerTile; // 128, defined by the corridor
-// The shelves must hold exactly the corridor's tile, which must be a power of two, so that
-// power-of-two line sizes fill whole tiles and their loops nest (sieve/corridor.hpp).
-static_assert(2 * kBooksPerWall == int(kBooksPerTile), "the shelves must hold exactly one corridor tile");
-static_assert((kBooksPerTile & (kBooksPerTile - 1)) == 0, "books per tile must be a power of two");
+// What stands in a slot is scaled to the slot, uniformly. Scaling only along the shelf would
+// squash a record or a cassette; a record is round whatever else changes, so everything that
+// goes on a shelf -- a book, a sheet, a canvas, a cassette, a crate -- keeps its proportions and
+// simply gets smaller. A sixteen-column shelf is the shape everything was drawn for, so that is
+// the scale of one; a thirty-two column shelf is half of it. Never larger than one: a wider slot
+// is left as air, because an item grown past the row it stands in would burst out of the case.
+inline constexpr float kBookWidth = 0.28f;  // at a scale of one
+inline constexpr float kBasePitch = kShelfEnd / 16;
+// The shelves hold exactly one corridor tile, split between the two walls and then between four
+// rows, so how many stand along a row follows from the corridor's tile size (sieve/corridor.hpp)
+// rather than being fixed here. At 128 to a tile that is 16 to a row, as it always was; at 256
+// it is 32, and they are packed closer together along the same shelf.
+inline int books_per_wall() { return int(sieve::books_per_tile() / 2); }
+inline int cols() { return books_per_wall() / kRows; }
+inline float book_pitch() { return kShelfEnd / float(cols()); }
+inline float shelf_scale() { return book_pitch() < kBasePitch ? book_pitch() / kBasePitch : 1.0f; }
+inline float book_width() { return kBookWidth * shelf_scale(); }
 inline constexpr float kWalkLimit = 1.45f;  // how close to a wall you may walk, except in a doorway
 
 // The binary line: the seventh line, and the one the other six are bounded by.
@@ -61,10 +70,11 @@ struct BookSlot
     int64_t tile; // tile, relative to the tile the player is in
     Side side;
     int row, col;
-    uint32_t slot() const { return uint32_t(int(side) * kBooksPerWall + row * kCols + col); } // 0..127 within the tile
+    uint32_t slot() const { return uint32_t(int(side) * books_per_wall() + row * cols() + col); } // within the tile
     static BookSlot of(int64_t tile, uint32_t slot)
     {
-        return {tile, slot < uint32_t(kBooksPerWall) ? Side::Left : Side::Right, int(slot % kBooksPerWall) / kCols, int(slot % kCols)};
+        return {tile, slot < uint32_t(books_per_wall()) ? Side::Left : Side::Right,
+                int(slot % uint32_t(books_per_wall())) / cols(), int(slot) % cols()};
     }
 };
 

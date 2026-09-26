@@ -336,6 +336,7 @@ void MeshBatch::add(const Mesh& mesh, const Placement& at)
 {
     const Camera& cam = *cam_;
     auto place = [&](Vec3 p) {
+        p = p * at.scale;
         p.y *= at.scale_y;
         if (at.mirror_x) p.x = -p.x;
         return p + at.offset;

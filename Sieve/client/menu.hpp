@@ -45,6 +45,11 @@ struct Settings
     uint32_t book_pages = 4; // books: a cover (image line), a title and this many pages (pages line)
     // models: V vertices and F triangles, each coordinate one of C steps across [-1, 1]
     uint32_t model_vertices = 8, model_faces = 12, model_coords = 16;
+    // How big the picture on the front of a crate is drawn, pixels square (a power of two).
+    uint32_t model_tile = 64;
+    // Global, because the corridor is shared: how many units stand on one tile's two walls.
+    // A power of two, so a power-of-two line fills whole tiles (sieve/corridor.hpp).
+    uint32_t items_per_wall = 128;
 
     static Settings from_args(const sieve::cli::Args& a);
     // Writes these settings into `a` (as the hallway's own options), keeping everything else.
@@ -93,7 +98,7 @@ private:
     void adjust(int dir, int step);
     // 0-18 are the settings rows, in the order render() lists them and adjust() switches on;
     // 19 is ENTER THE HALLWAY, which is the only row that opens the hallway.
-    static constexpr int kLimitsRow = 19, kResetRow = 20, kEnterRow = 21;
+    static constexpr int kLimitsRow = 21, kResetRow = 22, kEnterRow = 23;
     int row_count() const;
 
     // The filter overlay.

@@ -81,7 +81,14 @@ std::vector<std::string> block_ids();
 //   babel29  — space + a–z + comma + period (libraryofbabel.info character set)
 //   ascii95  — printable ASCII U+0020–U+007E
 //   ascii96  — line feed + printable ASCII (text that can hold a file, such as an .obj)
+//   bytes256 — U+0000-U+00FF: one symbol per byte value, so a file of N bytes is one unit of
+//              a line of length N, exactly and reversibly, with nothing folded or dropped
 std::vector<std::string> alphabet_ids();
+
+// True if an alphabet is exactly the 256 code points U+0000-U+00FF in that order, so that digit
+// d is byte d. Content for such a line is read and written as raw bytes rather than as UTF-8
+// text, and canonicalisation over it is the identity (see canon.hpp: canon-bytes-v1).
+bool holds_all_bytes(const Alphabet& a);
 
 // A built-in id ("lower27"), or blocks and ranges stacked with '+' ("greek+cyrillic",
 // "latin-1-supplement+u+0370-u+03ff"). A stack's code points are unioned, sorted ascending and

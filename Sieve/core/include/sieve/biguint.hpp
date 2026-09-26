@@ -20,8 +20,9 @@ public:
 
     // Digits are most-significant first, each < base.
     static BigUint from_digits(std::span<const uint32_t> digits, uint32_t base);
-    // The value's own base 2^32 limbs, least significant first: exact and O(n), where building
-    // the same value with repeated shift-and-add would be O(n^2).
+    // A value from 32-bit words, least significant first: exact and O(n), where building the
+    // same value with repeated shift-and-add would be O(n^2). The words are 32 bits because that
+    // is how a SHA-256 digest arrives; a limb holds two of them.
     static BigUint from_limbs(std::span<const uint32_t> limbs);
     // Returns exactly `length` digits, most-significant first. Throws if the value does not fit.
     std::vector<uint32_t> to_digits(uint32_t base, size_t length) const;
@@ -72,7 +73,12 @@ public:
 
 private:
     void trim();
-    std::vector<uint32_t> limbs_; // little-endian base 2^32, no trailing zero limbs
+    // Whole-limb helpers for the base conversions. Not public: outside the implementation a
+    // small operand is a uint32_t, as it has always been.
+    void mul_limb(uint64_t m);
+    void add_limb(uint64_t a);
+    uint64_t divmod_limb(uint64_t d);
+    std::vector<uint64_t> limbs_; // little-endian base 2^64, no trailing zero limbs
 };
 
 } // namespace sieve

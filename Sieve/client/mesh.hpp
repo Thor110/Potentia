@@ -57,10 +57,14 @@ std::shared_ptr<const Mesh> half_x(const Mesh& mesh, float sign, float at);
 std::shared_ptr<const Mesh> box_mesh(Vec3 lo, Vec3 hi, SDL_FColor kd);
 std::filesystem::path mesh_folder();
 
-// Where and how one copy of a mesh is drawn: scaled in Y, mirrored in X or not, then moved.
+// Where and how one copy of a mesh is drawn: scaled all over, then in Y, mirrored in X or not,
+// then moved. `scale` keeps a thing's proportions -- it is how an item is fitted to a smaller
+// slot when a tile holds more of them -- where `scale_y` deliberately does not, since a book's
+// height varies from slot to slot but its width and depth do not.
 struct Placement
 {
     Vec3 offset;
+    float scale = 1;
     float scale_y = 1;
     bool mirror_x = false;
     float dim = 0;        // 0 = full colour, 1 = the background (like the wireframe's mark mode)

@@ -127,6 +127,8 @@ Settings Settings::from_args(const sieve::cli::Args& a)
     s.model_vertices = parse_u32(a, "vertices", s.model_vertices);
     s.model_faces = parse_u32(a, "faces", s.model_faces);
     s.model_coords = parse_u32(a, "coords", s.model_coords);
+    s.model_tile = parse_u32(a, "model-tile", s.model_tile);
+    s.items_per_wall = parse_u32(a, "items-per-wall", s.items_per_wall);
     return s;
 }
 
@@ -152,6 +154,8 @@ void Settings::apply(sieve::cli::Args& a) const
     a.opts["vertices"] = std::to_string(model_vertices);
     a.opts["faces"] = std::to_string(model_faces);
     a.opts["coords"] = std::to_string(model_coords);
+    a.opts["model-tile"] = std::to_string(model_tile);
+    a.opts["items-per-wall"] = std::to_string(items_per_wall);
 }
 
 LineSize line_size(uint32_t base, uint64_t length)
@@ -159,14 +163,14 @@ LineSize line_size(uint32_t base, uint64_t length)
     LineSize z;
     z.bits = double(length) * std::log2(double(base));
     // base^length mod 128, by repeated squaring; padding fills the last tile to 128 slots.
-    uint64_t m = 1, b = base % sieve::kBooksPerTile;
-    for (uint64_t e = length; e; e >>= 1, b = b * b % sieve::kBooksPerTile)
-        if (e & 1) m = m * b % sieve::kBooksPerTile;
+    uint64_t m = 1, b = base % sieve::books_per_tile();
+    for (uint64_t e = length; e; e >>= 1, b = b * b % sieve::books_per_tile())
+        if (e & 1) m = m * b % sieve::books_per_tile();
     const bool tiny = z.bits < 7; // fewer units than one tile
     uint64_t exact = 1;
     if (tiny)
         for (uint64_t i = 0; i < length; ++i) exact *= base;
-    z.padding = tiny ? uint32_t(sieve::kBooksPerTile - exact) : uint32_t((sieve::kBooksPerTile - m) % sieve::kBooksPerTile);
+    z.padding = tiny ? uint32_t(sieve::books_per_tile() - exact) : uint32_t((sieve::books_per_tile() - m) % sieve::books_per_tile());
     const double log10 = z.bits * std::log10(2.0);
     z.units = std::to_string(base) + "^" + std::to_string(length) + (log10 < 15 ? " = " + fixed(std::pow(10.0, log10), 0) : " = ~10^" + fixed(log10, 1));
     return z;
@@ -186,13 +190,13 @@ std::array<LineSize, 6> Menu::line_sizes() const
     {
         auto modpow = [](uint64_t b, uint64_t e) {
             uint64_t m = 1;
-            for (b %= sieve::kBooksPerTile; e; e >>= 1, b = b * b % sieve::kBooksPerTile)
-                if (e & 1) m = m * b % sieve::kBooksPerTile;
+            for (b %= sieve::books_per_tile(); e; e >>= 1, b = b * b % sieve::books_per_tile())
+                if (e & 1) m = m * b % sieve::books_per_tile();
             return m;
         };
         const uint64_t m = modpow(palette_size(s_.image_palette), uint64_t(s_.image_w) * s_.image_h) *
-                           modpow(alphabet_size(s_.alphabet), parts * s_.length) % sieve::kBooksPerTile;
-        books.padding = uint32_t((sieve::kBooksPerTile - m) % sieve::kBooksPerTile); // books.bits >= 7 always
+                           modpow(alphabet_size(s_.alphabet), parts * s_.length) % sieve::books_per_tile();
+        books.padding = uint32_t((sieve::books_per_tile() - m) % sieve::books_per_tile()); // books.bits >= 7 always
         const double log10 = books.bits * std::log10(2.0);
         books.units = "cov*pg^" + std::to_string(parts) + " = ~10^" + fixed(log10, 1);
     }
@@ -203,9 +207,9 @@ std::array<LineSize, 6> Menu::line_sizes() const
         const LineSize coords = line_size(s_.model_coords, 3ull * s_.model_vertices);
         const LineSize faces = line_size(s_.model_vertices, 3ull * s_.model_faces);
         models.bits = coords.bits + faces.bits;
-        const uint64_t m = (sieve::kBooksPerTile - coords.padding) % sieve::kBooksPerTile *
-                           ((sieve::kBooksPerTile - faces.padding) % sieve::kBooksPerTile) % sieve::kBooksPerTile;
-        models.padding = uint32_t((sieve::kBooksPerTile - m) % sieve::kBooksPerTile);
+        const uint64_t m = (sieve::books_per_tile() - coords.padding) % sieve::books_per_tile() *
+                           ((sieve::books_per_tile() - faces.padding) % sieve::books_per_tile()) % sieve::books_per_tile();
+        models.padding = uint32_t((sieve::books_per_tile() - m) % sieve::books_per_tile());
         const double log10 = models.bits * std::log10(2.0);
         models.units = std::to_string(s_.model_coords) + "^" + std::to_string(3ull * s_.model_vertices) + "*" +
                        std::to_string(s_.model_vertices) + "^" + std::to_string(3ull * s_.model_faces) +
@@ -365,26 +369,31 @@ void Menu::adjust(int dir, int step)
     };
     switch (row_)
     {
+    // GLOBAL: what belongs to the corridor rather than to any one line.
     case 0: s_.start_line = cycle(kLines, s_.start_line, dir); break;
     case 1: s_.mode = cycle(kModes, s_.mode, dir); break;
     case 2: break; // key: typed
-    case 3: num(s_.length); break;
-    case 4: s_.alphabet = cycle(kAlphabets, s_.alphabet, dir); break;
-    case 5: s_.canon = cycle(kCanons, s_.canon, dir); break;
-    case 6: s_.model = !s_.model; break;
-    case 7: num(s_.image_w); break;
-    case 8: num(s_.image_h); break;
-    case 9: s_.image_palette = cycle(kPalettes, s_.image_palette, dir); break;
-    case 10: num(s_.notes); break;
-    case 11: num(s_.video_w); break;
-    case 12: num(s_.video_h); break;
-    case 13: num(s_.frames); break;
-    case 14: s_.video_palette = cycle(kPalettes, s_.video_palette, dir); break;
-    case 15: num(s_.book_pages); break;
-    case 16: num(s_.model_vertices); break;
-    case 17: num(s_.model_faces); break;
+    // Items per wall: the two values that use a whole byte well (see setup.items_per_wall).
+    case 3: s_.items_per_wall = s_.items_per_wall == 128 ? 256u : 128u; break;
+    case 4: num(s_.length); break;
+    case 5: s_.alphabet = cycle(kAlphabets, s_.alphabet, dir); break;
+    case 6: s_.canon = cycle(kCanons, s_.canon, dir); break;
+    case 7: s_.model = !s_.model; break;
+    case 8: num(s_.image_w); break;
+    case 9: num(s_.image_h); break;
+    case 10: s_.image_palette = cycle(kPalettes, s_.image_palette, dir); break;
+    case 11: num(s_.notes); break;
+    case 12: num(s_.video_w); break;
+    case 13: num(s_.video_h); break;
+    case 14: num(s_.frames); break;
+    case 15: s_.video_palette = cycle(kPalettes, s_.video_palette, dir); break;
+    case 16: num(s_.book_pages); break;
+    case 17: num(s_.model_vertices); break;
+    case 18: num(s_.model_faces); break;
     // The coordinate grid must be a power of two, so it doubles and halves.
-    case 18: s_.model_coords = std::clamp(dir > 0 ? s_.model_coords * 2 : s_.model_coords / 2, 2u, 4096u); break;
+    case 19: s_.model_coords = std::clamp(dir > 0 ? s_.model_coords * 2 : s_.model_coords / 2, 2u, 4096u); break;
+    // A picture is square and a power of two, so it doubles and halves like the grid.
+    case 20: s_.model_tile = std::clamp(dir > 0 ? s_.model_tile * 2 : s_.model_tile / 2, 16u, 512u); break;
     default: break;
     }
 }
@@ -492,9 +501,9 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         break;
     case SDLK_F:
         // The filters of the line whose settings are selected.
-        // Rows 0-2 (start, ordering, key), the models rows and ENTER belong to no filterable
-        // line, so F on them does nothing.
-        if (row_ >= 3 && row_ <= 15) open_filters(row_ >= 7 && row_ <= 9 ? 1 : row_ == 10 ? 2 : row_ == 15 ? 4 : row_ >= 11 ? 3 : 0);
+        // Rows 4-7 pages, 8-10 image, 11 audio, 12-15 video, 16 books. The GLOBAL rows above
+        // and the models rows below belong to no filterable line, so F on them does nothing.
+        if (row_ >= 4 && row_ <= 16) open_filters(row_ >= 8 && row_ <= 10 ? 1 : row_ == 11 ? 2 : row_ == 16 ? 4 : row_ >= 12 ? 3 : 0);
         break;
     case SDLK_RETURN:
     case SDLK_KP_ENTER:
@@ -567,7 +576,7 @@ void Menu::render()
     // Settings.
     struct Row
     {
-        int section; // -1: none; 0-4 and 6: the line (its colour); 5: START
+        int section; // -1: none; 0-4 and 6: the line (its colour); 5: GLOBAL
         std::string label, value;
     };
     auto n = [](uint32_t v) { return std::to_string(v); };
@@ -576,6 +585,7 @@ void Menu::render()
         {5, tr("setup.line"), tr(start_key)},
         {-1, tr("setup.ordering"), tr("ordering." + s_.mode)},
         {-1, tr("setup.key"), s_.key + (row_ == 2 ? "_" : "")},
+        {-1, tr("setup.items_per_wall"), trf("setup.items_per_wall.value", {n(s_.items_per_wall), n(s_.items_per_wall / 2)})},
         {0, tr("setup.length"), trf("setup.length.value", {n(s_.length)})},
         {-1, tr("setup.alphabet"), trf("setup.alphabet.value", {s_.alphabet, n(alphabet_size(s_.alphabet))})},
         {-1, tr("setup.canon"), "canon-text-" + s_.canon},
@@ -592,6 +602,7 @@ void Menu::render()
         {6, tr("setup.model_vertices"), n(s_.model_vertices)},
         {-1, tr("setup.model_faces"), n(s_.model_faces)},
         {-1, tr("setup.model_coords"), trf("setup.model_coords.value", {n(s_.model_coords)})},
+        {-1, tr("setup.model_tile"), trf("setup.model_tile.value", {n(s_.model_tile), n(s_.model_tile)})},
         {-2, tr("setup.limits"), trf("setup.limits.value", {std::to_string(machine_budget().positions)})},
         {-1, tr("setup.reset"), ""},
         {-1, tr("setup.enter"), ""},
@@ -605,22 +616,24 @@ void Menu::render()
         if (r.section == -2) y = std::max(y + 14, H - 118);
         if (r.section >= 0)
         {
-            y += 8;
+            y += 4;
             const int li = r.section;
             const Theme* th = li == 4 ? &kBooksTheme : li == 6 ? &kModelsTheme : li < 4 ? &kThemes[li] : nullptr;
             const std::string head = th ? tr(th->key) : tr("setup.start");
             text(r_, 20, y, head, 2, th ? (li == 4 ? menu_ink(kBooksTheme) : th->edge) : white);
-            y += 20;
+            y += 18;
         }
         if (i == row_)
         {
             SDL_SetRenderDrawColor(r_, 255, 255, 255, 40);
-            const SDL_FRect sel{14, y - 4, 560, 18};
+            const SDL_FRect sel{14, y - 3, 600, 16};
             SDL_RenderFillRect(r_, &sel);
         }
         text(r_, 24, y, std::string(i == row_ ? "> " : "  ") + r.label, 1, white);
-        text(r_, 200, y, r.value, 1, i == row_ ? white : grey);
-        y += 18;
+        // The value column starts clear of the longest label, and the rows are tight enough
+        // that the whole list still fits above the three actions at the foot of it.
+        text(r_, 320, y, r.value, 1, i == row_ ? white : grey);
+        y += 16;
     }
     text(r_, 20, H - 40, tr("setup.footer1"), 1, grey);
     text(r_, 20, H - 26, tr("setup.footer2"), 1, grey);
@@ -919,6 +932,7 @@ std::vector<Menu::ORow> Menu::overlay_rows() const
         }
         return rows;
     }
+    if (overlay_ < 0 || overlay_ >= 4) return rows; // closed: no line to list
     const sieve::cli::LineFilters& lf = cfg_.lines[overlay_];
     for (const sieve::FilterSpec* f : sieve::filters_for(filter_line_of(overlay_)))
     {
@@ -1017,7 +1031,8 @@ void Menu::overlay_key(SDL_Keycode key, bool shift)
     case SDLK_F:
         save_filters();
         overlay_ = -1;
-        break;
+        orow_ = 0;
+        return; // closed: overlay_rows() has no line to read any more, so nothing below applies
     default: break;
     }
     orow_ = std::clamp(orow_, 0, int(overlay_rows().size()) - 1);
