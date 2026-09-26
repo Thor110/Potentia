@@ -221,6 +221,17 @@ std::string percent(double f)
     return buf;
 }
 
+// The same position as an angle. Every line is a loop, so where you stand in it is a bearing:
+// 0 degrees is where the loop starts and finishes, and it comes round to 0 again. How many
+// decimal places is Angle Precision in Settings > Graphics.
+std::string degrees(double f, int decimals)
+{
+    char fmt[16], buf[48];
+    std::snprintf(fmt, sizeof fmt, "%%.%df", std::clamp(decimals, 0, 8));
+    std::snprintf(buf, sizeof buf, fmt, f * 360.0);
+    return std::string(buf) + "\xc2\xb0";
+}
+
 // ---------------------------------------------------------------- the hallway
 
 enum class Input { None, Warp, Goto };
@@ -1889,6 +1900,96 @@ public:
     // Text in the language's font (8 pixels per cell at scale 1; see font.hpp).
     void text(float x, float y, const std::string& s, float scale, SDL_Color c) { draw_text(r_, x, y, s, scale, c); }
 
+    // The compass. Every line is a loop, so the corridor is a set of concentric circles: binary
+    // outermost, then the six it bounds, then binary again innermost, because binary wraps around
+    // the outside of the others and is met from either end. A needle runs from the middle out to
+    // the ring you are standing on, at the angle you stand at; every other ring carries a mark at
+    // its own angle, because each line loops at its own rate and they only agree at zero. Zero is
+    // at the top, where every loop starts and finishes.
+    //
+    // This reads the same corridor position the rest of the hallway does, so nothing here decides
+    // anything: it is the readout drawn round instead of along.
+    static SDL_Color ring_ink(const Theme& t, SDL_Color on)
+    {
+        auto lum = [](SDL_Color c) { return (c.r * 3 + c.g * 6 + c.b) / 10; };
+        const int b = lum(on);
+        const SDL_Color pick = std::abs(lum(t.edge) - b) >= std::abs(lum(t.bg) - b) ? t.edge : t.bg;
+        if (std::abs(lum(pick) - b) >= 40) return pick;
+        // Both of a line's colours sit too close to the panel behind it: lift it until it reads.
+        const float k = b < 128 ? 1.0f : -1.0f;
+        auto f = [k](Uint8 v) { return Uint8(std::clamp(float(v) + k * 90.0f, 0.0f, 255.0f)); };
+        return {f(pick.r), f(pick.g), f(pick.b), 255};
+    }
+
+    // Where line i stands in its own loop, 0 at the start of a copy and approaching 1 at its end.
+    double line_fraction(int i) const
+    {
+        const BigUint& tiles = all_loops_[size_t(i)].tiles();
+        const BigUint& at = all_loop_tiles_[size_t(i)];
+        if (tiles.is_zero() || at.is_zero()) return 0.0;
+        const double f = std::pow(10.0, at.log10_approx() - tiles.log10_approx());
+        return std::clamp(f, 0.0, 1.0);
+    }
+
+    void draw_compass(float W, float H)
+    {
+        const Theme& th = theme();
+        const float r_out = 92, pad = 15, row = 20;
+        const float bw = 2 * r_out + 2 * pad, bh = bw + row;
+        const float bx = W - bw - 10, by = H - bh - 30;
+        panel(bx, by, bw, bh);
+        const float cx = bx + bw / 2, cy = by + pad + r_out;
+        // Rings from the outside in: binary, the six in door order, binary again. The picture is
+        // the corridor read from one edge to the other, bent into circles.
+        const int kRings = kLines + 1;
+        const float step = (r_out - 12) / float(kRings - 1);
+        for (int k = 0; k < kRings; ++k)
+        {
+            const int line = k == 0 || k == kRings - 1 ? kBinaryLine : k - 1;
+            const float rad = r_out - float(k) * step;
+            const bool here = line == li_ && (line != kBinaryLine || k == 0);
+            const SDL_Color c = ring_ink(theme_of(line), th.bg);
+            SDL_SetRenderDrawColor(r_, c.r, c.g, c.b, here ? 255 : 190);
+            const int segs = std::max(32, int(rad * 1.4f));
+            for (int j = 0; j < segs; ++j)
+            {
+                const float a0 = float(j) / segs * 6.2831853f, a1 = float(j + 1) / segs * 6.2831853f;
+                auto arc = [&](float d) {
+                    SDL_RenderLine(r_, cx + (rad + d) * std::sin(a0), cy - (rad + d) * std::cos(a0),
+                                   cx + (rad + d) * std::sin(a1), cy - (rad + d) * std::cos(a1));
+                };
+                arc(0);
+                if (here) { arc(-1); arc(1); }
+            }
+            // Where that line stands in its own loop. They only agree at zero.
+            if (line == kBinaryLine) continue;
+            const float a = float(line_fraction(line)) * 6.2831853f;
+            SDL_SetRenderDrawColor(r_, c.r, c.g, c.b, 255);
+            const SDL_FRect dot{cx + rad * std::sin(a) - 2, cy - rad * std::cos(a) - 2, 5, 5};
+            SDL_RenderFillRect(r_, &dot);
+        }
+        const SDL_Color ink = th.edge;
+        // Zero at the top, where every loop starts and finishes.
+        SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 255);
+        SDL_RenderLine(r_, cx, cy - r_out - 2, cx, cy - r_out - 11);
+        text(cx + 6, cy - r_out - 15, tr("hud.zero"), 1, ink);
+        // The needle. It runs the whole radius so the bearing is easy to read off, and is drawn
+        // bright as far as the ring you are standing on, faint beyond it.
+        const int mine = on_binary() ? 0 : li_ + 1;
+        const float rad = r_out - float(mine) * step;
+        const float a = on_binary() ? 0.0f : float(line_fraction(li_)) * 6.2831853f;
+        const float sn = std::sin(a), cs = std::cos(a);
+        SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 80);
+        SDL_RenderLine(r_, cx + rad * sn, cy - rad * cs, cx + (r_out + 2) * sn, cy - (r_out + 2) * cs);
+        SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 255);
+        for (float d : {-0.5f, 0.5f}) SDL_RenderLine(r_, cx + d, cy, cx + d + rad * sn, cy - rad * cs);
+        const SDL_FRect at{cx + rad * sn - 3, cy - rad * cs - 3, 7, 7};
+        SDL_RenderFillRect(r_, &at);
+        // And the same bearing written out, to whatever precision Settings > Graphics asks for.
+        const std::string deg = on_binary() ? tr("hud.no_angle") : degrees(line_fraction(li_), angle_decimals_);
+        text(cx - text_width(deg, 1) / 2, by + bh - row + 4, deg, 1, ink);
+    }
+
     void panel(float x, float y, float w, float h)
     {
         const Theme& th = theme();
@@ -2090,6 +2191,8 @@ public:
              tr("hud.keys1") + (guided_on() ? tr("hud.keys.zoom") : std::string()) + tr("hud.keys2") +
                  tr(in_hand_ && in_hand_->parts ? "hud.keys.page" : "hud.keys.trail") + tr("hud.keys3"),
              1, ink);
+        // Last, so nothing else in the readout is drawn over it.
+        draw_compass(float(W), float(H));
     }
 
     // ---- the Binary Edge
@@ -2693,6 +2796,7 @@ public:
         invert_y_ = invert_y;
     }
     void set_fps_counter(bool on) { fps_counter_ = on; }
+    void set_angle_decimals(int d) { angle_decimals_ = std::clamp(d, 0, 8); }
     void set_model_cache(int megabytes)
     {
         crate_budget_mb_ = uint32_t(std::clamp(megabytes, 8, 512));
@@ -2862,6 +2966,7 @@ private:
     uint32_t portal_frame_ = 0;
     // FPS counter: frames and time since the shown figures were last updated (twice a second).
     bool fps_counter_ = false;
+    int angle_decimals_ = 1; // Settings > Graphics: decimal places on the compass's degree readout
     Uint64 fps_since_ = 0, fps_last_ = 0;
     int fps_frames_ = 0;
     double fps_shown_ = 0, fps_ms_ = 0, fps_worst_ = 0, fps_worst_now_ = 0;
@@ -3170,6 +3275,7 @@ int run(const Args& a)
             const bool portals = app.door_portals || a.has("real-graphics") || a.has("door-portals");
             hall->set_graphics(glow && !real, real, portals);
             hall->set_model_cache(a.has("model-cache") ? int(a.get_u32("model-cache", 64)) : app.model_cache_mb);
+            hall->set_angle_decimals(app.angle_decimals);
             hall->set_fps_counter(app.fps_counter || a.has("fps-counter"));
             // On stderr: stdout is where the readout goes, which scripts read line by line.
             std::cerr << "graphics: edge glow " << (glow && !real ? "on" : "off") << ", real graphics " << (real ? "on" : "off")
@@ -3236,6 +3342,7 @@ int run(const Args& a)
         hall->set_controls(app.mouse_sensitivity, app.invert_mouse_y);
         hall->set_graphics(app.edge_glow, app.real_graphics, app.door_portals);
         hall->set_model_cache(app.model_cache_mb);
+        hall->set_angle_decimals(app.angle_decimals);
         hall->set_fps_counter(app.fps_counter);
         first = false;
         SDL_SetWindowRelativeMouseMode(window, true);

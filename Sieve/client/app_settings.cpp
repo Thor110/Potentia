@@ -130,6 +130,10 @@ AppSettings AppSettings::load(const fs::path& path)
             else if (key == "edge_glow") s.edge_glow = on_off(value, false);
             else if (key == "real_graphics") s.real_graphics = on_off(value, false);
             else if (key == "door_portals") s.door_portals = on_off(value, false);
+            else if (key == "angle_decimals")
+            {
+                try { s.angle_decimals = std::clamp(std::stoi(value), 0, 8); } catch (...) {}
+            }
             else if (key == "model_cache_mb")
             {
                 try { s.model_cache_mb = std::clamp(std::stoi(value), 8, 512); } catch (...) {}
@@ -162,6 +166,7 @@ bool AppSettings::save(const fs::path& path) const
       << "real_graphics = " << on_off(real_graphics) << "   ; Real Graphics (only one of the two is on)\n"
       << "door_portals = " << on_off(door_portals) << "    ; Door Portals: procedural data noise in the doorways\n"
       << "model_cache_mb = " << model_cache_mb << "   ; the models line: memory for rendered crate faces\n"
+      << "angle_decimals = " << angle_decimals << "   ; decimal places on the compass's degree readout\n"
       << "fps_counter = " << on_off(fps_counter) << "\n"
       << "\n[controls]\n"
       << "mouse_sensitivity = " << mouse_sensitivity << "   ; percent\n"

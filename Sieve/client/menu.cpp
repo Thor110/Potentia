@@ -65,6 +65,20 @@ uint32_t parse_u32(const sieve::cli::Args& a, const char* key, uint32_t def) { r
 constexpr double kSlowBits = 4.0e6;    // above this, opening a line takes noticeable time
 constexpr double kTooLargeBits = 8.0e9; // above this, one address would need a gigabyte
 
+// What *this* machine can open, rather than what any machine could. Two things bound it, and a
+// shape has to satisfy both:
+//
+//   bits      one address is a single number held in memory, and the arithmetic on it grows with
+//             the square of its length. A two hundred and fifty-sixth of installed memory is the
+//             share one address is given.
+//   positions the hallway keeps a few thousand whole units in its cache -- a unit's characters,
+//             pixels, notes or coordinates -- so the length of a unit, not of its address, is
+//             usually what actually runs the machine out of memory first. A quarter of installed
+//             memory is the share that cache is given.
+//
+// Neither is a limit of the design. Both only describe the machine of the day, and a bigger one
+// finds bigger numbers with the same arithmetic.
+
 void text(SDL_Renderer* r, float x, float y, const std::string& s, float scale, SDL_Color c) { draw_text(r, x, y, s, scale, c); }
 
 std::string fixed(double v, int d)
@@ -75,6 +89,18 @@ std::string fixed(double v, int d)
 }
 
 } // namespace
+
+Budget machine_budget()
+{
+    const int mb = SDL_GetSystemRAM(); // 0 if SDL cannot tell
+    if (mb <= 0) return {};            // no idea: be careful rather than generous
+    const double bytes = double(mb) * 1024.0 * 1024.0;
+    Budget b;
+    b.bits = std::min(kTooLargeBits, bytes * 8.0 / 256.0);
+    // A quarter of memory, four thousand units cached, four bytes a position.
+    b.positions = uint64_t(std::min(bytes * 0.25 / (4096.0 * 4.0), 4.0e9));
+    return b;
+}
 
 // ---------------------------------------------------------------- settings
 
@@ -208,6 +234,115 @@ bool Menu::too_large() const
     for (const auto& z : line_sizes())
         if (z.bits > kTooLargeBits) return true;
     return false;
+}
+
+// Which line, if any, is beyond what this machine can open. -1 if none.
+int Menu::over_budget() const
+{
+    const Budget b = machine_budget();
+    const auto sizes = line_sizes();
+    const uint64_t pos[6] = {s_.length,
+                             uint64_t(s_.image_w) * s_.image_h,
+                             s_.notes,
+                             positions(s_.video_w, s_.video_h, s_.frames),
+                             uint64_t(s_.book_pages + 1) * s_.length + uint64_t(s_.image_w) * s_.image_h,
+                             3ull * s_.model_vertices + 3ull * s_.model_faces};
+    for (int i = 0; i < 6; ++i)
+        if (!(sizes[size_t(i)].bits <= b.bits) || pos[i] > b.positions) return i; // catches infinities too
+    return -1;
+}
+
+// Find my limits: set every line to the largest shape this machine can open.
+//
+// It costs nothing to work out -- a line's size in bits and the length of one of its units are
+// both closed-form from its shape -- so this doubles each shape until it is over budget and then
+// walks it back, rather than generating anything. The books line is last because it is made of
+// the other two: its size follows from the pages and image lines, so it takes whatever pages per
+// book is left over, and if even one page will not fit the pages line comes down until it does.
+void Menu::find_limits()
+{
+    const Budget b = machine_budget();
+    auto fits = [&](int i) {
+        return over_budget_line(i, b);
+    };
+    auto grow = [&](uint32_t& v, int line) {
+        v = 1;
+        if (!fits(line)) return; // even the smallest is too much on this machine
+        while (v < (UINT32_MAX >> 1))
+        {
+            const uint32_t was = v;
+            v *= 2;
+            if (!fits(line)) { v = was; break; }
+        }
+        // Then a few linear steps, so the answer is not always a power of two.
+        const uint32_t step = std::max(1u, v / 16);
+        while (v < UINT32_MAX - step)
+        {
+            const uint32_t was = v;
+            v += step;
+            if (!fits(line)) { v = was; break; }
+        }
+    };
+    // The pages and image lines are grown together, because the books line is made of both and
+    // has to fit as well: a book is a cover from the image line, a title and its pages from the
+    // pages line. Growing one to its own limit first would leave the other with nothing, so they
+    // take turns, and each step is only kept if its own line and the books line both still fit.
+    s_.book_pages = 1;
+    s_.length = s_.image_w = s_.image_h = 1;
+    for (bool moved = true; moved;)
+    {
+        moved = false;
+        const uint32_t was_len = s_.length;
+        s_.length = was_len + std::max(1u, was_len / 8);
+        if (!fits(0) || !fits(4)) s_.length = was_len;
+        else moved = true;
+        const uint32_t was_px = s_.image_w;
+        s_.image_w = s_.image_h = was_px + std::max(1u, was_px / 8);
+        if (!fits(1) || !fits(4)) s_.image_w = s_.image_h = was_px;
+        else moved = true;
+    }
+    // Then as many pages to a book as what is left allows.
+    while (s_.book_pages < 0xFFFF)
+    {
+        const uint32_t was = s_.book_pages;
+        ++s_.book_pages;
+        if (!fits(4)) { s_.book_pages = was; break; }
+    }
+    grow(s_.notes, 2);
+    grow(s_.frames, 3);
+    // Vertices and faces grow together, so a mesh gets both rather than all of one.
+    s_.model_vertices = s_.model_faces = 1;
+    for (bool moved = true; moved;)
+    {
+        moved = false;
+        for (uint32_t* v : {&s_.model_vertices, &s_.model_faces})
+        {
+            const uint32_t was = *v;
+            *v = was + std::max(1u, was / 8);
+            if (!fits(5)) *v = was;
+            else moved = true;
+        }
+    }
+}
+
+// Does line i fit inside `b` as the settings stand?
+bool Menu::over_budget_line(int i, const Budget& b) const
+{
+    const auto sizes = line_sizes();
+    const uint64_t pos[6] = {s_.length,
+                             uint64_t(s_.image_w) * s_.image_h,
+                             s_.notes,
+                             positions(s_.video_w, s_.video_h, s_.frames),
+                             uint64_t(s_.book_pages + 1) * s_.length + uint64_t(s_.image_w) * s_.image_h,
+                             3ull * s_.model_vertices + 3ull * s_.model_faces};
+    return sizes[size_t(i)].bits <= b.bits && pos[i] <= b.positions;
+}
+
+void Menu::reset_settings()
+{
+    const std::string key = s_.key; // the key names the shuffle, not the shape: it is kept
+    s_ = Settings{};
+    s_.key = key;
 }
 
 Menu::Menu(SDL_Window* window, SDL_Renderer* renderer, Settings settings, sieve::cli::FilterConfig filters, std::string filters_path)
@@ -365,6 +500,9 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
     case SDLK_KP_ENTER:
         // The way in is the last row, chosen like any other: Enter anywhere else does nothing,
         // so a stray Return while setting a line up never drops you into the hallway.
+        // Find my limits and Reset act where they stand; only the last row is the way in.
+        if (row_ == kLimitsRow) { find_limits(); break; }
+        if (row_ == kResetRow) { reset_settings(); break; }
         if (row_ != kEnterRow) break;
         if (s_.key.empty()) s_.key = "sieve";
         if (too_large()) break; // the map says which line; nothing to open on this machine
@@ -454,13 +592,17 @@ void Menu::render()
         {6, tr("setup.model_vertices"), n(s_.model_vertices)},
         {-1, tr("setup.model_faces"), n(s_.model_faces)},
         {-1, tr("setup.model_coords"), trf("setup.model_coords.value", {n(s_.model_coords)})},
-        {-2, tr("setup.enter"), ""}, // -2: a gap above it, so it is not read as a models row
+        {-2, tr("setup.limits"), trf("setup.limits.value", {std::to_string(machine_budget().positions)})},
+        {-1, tr("setup.reset"), ""},
+        {-1, tr("setup.enter"), ""},
     };
     float y = 80;
     for (int i = 0; i < int(rows.size()); ++i)
     {
         const Row& r = rows[size_t(i)];
-        if (r.section == -2) y += 14; // the way in stands apart from the line it follows
+        // The three actions sit at the foot of the list, clear of the settings above and the
+        // footer below, so the list can grow without them ever running into either.
+        if (r.section == -2) y = std::max(y + 14, H - 118);
         if (r.section >= 0)
         {
             y += 8;
@@ -482,7 +624,13 @@ void Menu::render()
     }
     text(r_, 20, H - 40, tr("setup.footer1"), 1, grey);
     text(r_, 20, H - 26, tr("setup.footer2"), 1, grey);
-    if (too_large()) text(r_, 20, H - 60, tr("setup.too_large"), 1, white);
+    if (too_large()) text(r_, 20, H - 54, tr("setup.too_large"), 1, white);
+    else if (const int over = over_budget(); over >= 0)
+    {
+        // Not a limit of the design: a limit of this machine, named so it can be reduced.
+        const Theme& th = over == 4 ? kBooksTheme : over == 5 ? kModelsTheme : kThemes[over];
+        text(r_, 20, H - 54, trf("setup.over_budget", {tr(th.key)}), 1, SDL_Color{255, 80, 80, 255});
+    }
 
     // The map: one bar per line, length proportional to its size in bits.
     const auto sizes = line_sizes();

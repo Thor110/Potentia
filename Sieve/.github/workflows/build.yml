@@ -156,6 +156,18 @@ jobs:
           $exe mesh --vertices 12 --faces 20 --coords 64 | tr -d '\r' | q "^space        models/V12/F20/C64/key=sieve/modelspace-v1"
           $H --no-menu --line models --vertices 12 --faces 20 --coords 64 --walk "0,0" --screenshot shape.png | sed -n 1p | q "^MODELS line"
           $H --menu --vertices 12 --faces 20 --coords 64 --screenshot map6.png | q "saved map6.png"
+          # The setup menu's last three rows: find my limits, reset, and the way in. Finding the
+          # limits changes every shape; resetting puts them all back.
+          down19=$(python -c "print(','.join(['Down']*19))")
+          $H --menu --press "$down19" --screenshot plain.png > /dev/null
+          $H --menu --press "$down19,Return" --screenshot lim.png > /dev/null
+          $H --menu --press "$down19,Return,Down,Return,Up" --screenshot res.png > /dev/null
+          # Finding the limits changes the shapes; resetting puts them back exactly as they were.
+          if cmp -s plain.png lim.png; then exit 1; fi
+          cmp -s plain.png res.png
+          # The compass: the degree readout beside the percentage, to the precision set in Graphics.
+          $H --no-menu --line pages --goto "25%" --walk "0,0" --screenshot comp.png | sed -n 1p | q "25.0000000000% along"
+          test -s comp.png
           # The binary line: one wall of empty shelves, and on the other side the edge, the short
           # wall and the rain falling off it. It draws with whatever font is present, so it works
           # with Sieve's own small one.

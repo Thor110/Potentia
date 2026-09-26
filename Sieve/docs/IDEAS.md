@@ -1,252 +1,401 @@
 # Ideas
 
-A triage of the 546-turn Gemini conversation, plus anything else that has come up and is not yet
-built. It is not a plan and not a promise. Each item says what it is, where it came from, and
-whether it is a defect, a feature, an open question or a piece of framing.
+A triage of the long Gemini conversation — all three parts — plus anything else that has come up
+and is not yet built. It is not a plan and not a promise. Each item says what it is and whether it
+is a defect, a feature, an open question, or framing.
 
-Nothing here is a commitment. The ordering inside each section is roughly by how much it is worth.
-
----
-
-## 1. Defects and corrections (do these first)
-
-**1.1 Entropy is measured against the wrong space.** `symbol-entropy-v1` and friends score a unit
-against a fixed symbol count, but the alphabet is now chosen by the user and can be anything from
-27 symbols to the whole of Unicode. A page drawn from `lower27` judged against a 21-bit code point
-space gives a meaningless reading. Every alphabet needs to carry its own entropy baseline, and the
-filter needs to use it. This is a correctness bug, not a feature.
-
-**1.2 Padding is counted as content.** `model-information` and `symbol-entropy` count a unit's
-trailing padding spaces as real characters, so a short text padded out to the unit length scores
-as *more* text-like than the same text alone. Known, unfixed.
-
-**1.3 The cased dictionary lets short gibberish through.** Folding one cased list to lower case at
-load also folds SCOWL's abbreviations and chemical symbols, so the names list has 130 two-letter
-tokens where the plain list had 69, and "zn" and "tb" now pass. Fix: a dictionary version that
-keeps proper names and drops short all-caps tokens.
-
-**1.4 Colour is carrying semantic load with no accessibility pass.** Six lines, the Edge, filter
-verdicts and the map all encode meaning in hue. Nothing has been checked against protanopia,
-deuteranopia, tritanopia or achromatopsia, and no indicator has a non-colour fallback.
-
-**1.5 Layouts are built for 8-pixel text.** Unifont and every other 16-pixel font draws at half
-size, so CJK and much of Cyrillic are unreadable in the menus. Supporting them means reworking the
-layouts for taller text first, not adding more fonts.
+Nothing here is a commitment. Within each section the order is roughly by how much it is worth.
 
 ---
 
-## 2. Filters that do not exist yet
+## 0. One correction first, because a lot depends on it
 
-**2.1 An `.obj` structural filter.** A zero-allocation token scanner, three checks: every line
-starts with a recognised prefix (`v vt vn f # o g usemtl`) followed by whitespace; vector lines
-parse as numbers; face indices are positive and no larger than the vertex count declared so far.
-It rejects almost everything on the first character. This is the filter that makes the models
-anchor mean something — it is what lets the `pages` line be *searched* for meshes rather than only
-checked against one.
+A large part of the third conversation is built on the idea that an address is much smaller than
+the thing it addresses — a "genesis key" for a 50 GB install, archive.org backed up to one key.
+That part is not true, and it is worth being exact about why, because what is left after the
+correction is still good.
 
-**2.2 A dedicated `.obj` alphabet.** Digits, `.`, `-`, `/`, whitespace and the handful of keyword
-letters. Cutting the space in the mapping layer before the filter layer ever runs is much cheaper
-than filtering, and it is a few lines of alphabet spec.
+**In a bijection, the address is the content.** There are 256^N files of N bytes. Any scheme that
+gives each one its own address needs at least 8N bits of address. In Sieve's positional ordering
+this is not even an inequality: the address *is* the file's bytes read as one integer. Scrambled
+ordering permutes those bytes and changes nothing. So the key for a 50 GB folder is 50 GB.
 
-**2.3 Punctuation filters for `babel29` and `ascii95`.** Punctuation must follow a word and be
-followed by a space; for `ascii95`, a capital after a full stop. Both are countable by the same
-word-trie machinery `words-v2` already uses. This matters more than it sounds: `lower27` throws
-away case and punctuation, so the books line currently holds *word streams, not sentences*.
+**Splitting the address into room and item saves nothing.** `index = room × 256 + item` costs
+`log2(rooms) + 8` bits. Fixing the item to one byte takes 8 bits off the item and puts 8 bits onto
+the room. The total is invariant. All the size is in the room number and always was.
 
-**2.4 Model-line filters.** Three tiers are already specified in §12 and none are built: local
-per-face constraints (rank exactly), small-V constraints such as "every vertex is used" (rank as a
-state machine, 256 states at V=8), and whole-mesh properties — watertight, manifold, convex —
-which judge but cannot rank, so they run in `mark`/`hide` like any other unrankable filter.
+**But the idea works if you reduce first.** The saving does not come from addressing; it comes
+from *compression*, and then addressing costs nothing extra on top. Address the short program that
+generates a file rather than the file, and the key is as small as that program is. This is exactly
+what the guided ordering already does on the pages line: a guided book record is about 1.8 bits per
+character, so it really is smaller than the text it encodes, while the same book positionally
+addressed is not. The honest statement is:
 
-**2.5 Ranking for more than two colours.** Image compact mode only ranks two-colour pictures,
-because entropy there depends only on the popcount. Everything with a real palette is unrankable,
-which is why compact image mode keeps sparse pictures rather than structured ones.
+> A key is as small as the content is compressible, and no smaller. Sieve's contribution is not
+> that the key is small — it is that the key is *canonical*: one name per artefact, derived from
+> the artefact, identical for everyone who has it, with no registry to consult.
 
----
+That is worth having on its own. It gives deduplication for free (§4.2), it makes an install
+reproducible and checkable, and for content Sieve *generates* — a mesh, a page, a melody — the
+address genuinely is the whole thing and there is no file to ship at all. That part is already
+built and is the real version of the idea.
 
-## 3. Open questions (maths, not code)
+Two smaller corrections in the same family:
 
-**3.1 Exact counting under a model.** Counting every page whose information under the order-5
-model stays inside a bit budget needs a DP over (context × bits spent × position) and is
-infeasible at page length. Two honest routes: lean on guided ordering and do not count, or build a
-filter over a *deliberately tiny* model — letter pairs, costs rounded to whole eighth-bits — that
-is exactly countable for short pages. Worth doing the small one, if only to see the shape.
-
-**3.2 The two-metric view.** Plot candidates on two independent axes — entropy against structure
-density, say — rather than thresholding either alone. Uniform noise collapses into a dense,
-predictable cluster; isolated structure sits off the curve. This is the buildable version of
-"one dimension has no angles, so cross it over itself", and it is a scoring mode over rankers that
-already exist.
-
-**3.3 Calibrate by shrinking the space.** Tune the stack against a large space, then shrink it
-until every survivor can be read by hand. The survivors that are merely well-organised gibberish
-are exactly where the heuristics leak. A test protocol, not a metaphor: it maps straight onto the
-existing `--length` and alphabet controls.
-
-**3.4 Mapping barren ranges.** Once filters have done their work, exhaustively search the surviving
-fraction for ranges that are provably empty and store them as a skip list. The safety rule is the
-important half and is not negotiable: never exclude a range without having exhaustively searched
-it, because a false exclusion erases a real work permanently.
+- **A bijective address is not a tamper seal.** Anyone who changes a file can compute the changed
+  file's address just as cheaply and rewrite the manifest. Authenticity needs a *signature over*
+  the manifest, and then it is an ordinary signed Merkle tree — which is a fine thing to build, but
+  it gets nothing from the generative layer.
+- **Generating is slower than reading.** Unranking N bytes of bignum is strictly more work than
+  reading N bytes off an NVMe drive. "Installation becomes compute-bound rather than a storage
+  wait" is a cost, not a feature — unless the reduction in §1 has made the thing being transported
+  much smaller, which is the whole point again.
 
 ---
 
-## 4. Features worth building
+## 1. The reducer
 
-**4.1 Ingest through the game-format parsers.** There are working decoders for several games'
-formats already. Piping their output — level geometry, textures, PCM, strings — through
-canonicalisation and onto the right line produces a large corpus of *real, verified anchors*. That
-is precisely what every filter in §2 and §3 needs in order to be calibrated at all, and it is the
-only idea in the whole transcript that produces one out of work already done.
+The strongest new thread in the third conversation, and it stands on its own whether or not
+anything else is built. Take a file and find the shortest program that reproduces it exactly.
 
-**4.2 File ingest at a content-derived address.** Drop a real file in; it lands at the address
-derived from its own bytes, with a small record beside it (name, size, type, time) and a pointer
-to the payload. Dropping it twice lands on the same slot, so deduplication is structural rather
-than a check. This is what turns the hallway from a viewer into an archive. Corollary worth
-keeping: spawn the player's own files on the nearest shelf the first time they walk in — it proves
-the addressing is real better than any amount of README.
+**1.1 It is grammar induction, and it has a literature.** What is described — find repeating byte
+strings, replace them with rules, then rescan the remainder — is *grammar-based compression*
+(Sequitur, Re-Pair). It infers a context-free grammar whose start symbol expands to the file, so
+repeats inside repeats become recursive rules rather than a flat dictionary. Start there rather
+than from scratch.
 
-**4.3 Ambient audio sampled from where you stand.** Warp the current tile's position into the
-audio line and pass it through `key-v1` so the result is in a valid key. Continuous in-key ambient,
-generated from your actual coordinate, out of three things that already exist. Cheapest
-atmosphere-per-line-of-code in the list.
+**1.2 Use a rolling hash and a suffix array.** Comparing every block against every block is not
+O(1); it is quadratic at best. Rabin–Karp rolling hashes make the sliding window O(1) per byte, and
+a suffix array or suffix automaton gives *all* maximal repeats in one pass instead of a descending
+max-to-min loop. That puts the whole pass at O(N log N).
 
-**4.4 Generalise the preview bake.** The crate-face queue (reticle priority, flood fill outward,
-per-frame budget, LRU cache) is written for models. One interface where each slot type supplies a
-cheap 2D draw would give the same thing to every line: first lines of text for `pages`/`books`,
-downsampled picture for `image`, waveform for `audio`, wireframe for `models`.
+**1.3 A bit-level pass after the byte-level one.** Retro formats pack 5-bit colour channels and
+3-bit flags across byte boundaries, so byte-aligned scanning structurally cannot see those
+patterns. Worth having for the very files this would be pointed at first.
 
-**4.5 A memory prober.** Watch RAM and VRAM, drop cached previews at the thresholds, without
-disturbing position tracking. Needed the moment 4.4 exists.
+**1.4 Round-trip before committing.** Every candidate reduction is executed and bit-compared
+against the original before the original is discarded; any mismatch throws the rule away. This is
+where the Python oracle earns its keep a second time.
 
-**4.6 A shareable coordinate string and a `LOCATE` command.** One string naming line, shape and
-address, typed in to sweep there. Trivial, and it is how anything found gets passed to anyone else.
+**1.5 What it is not.** Kolmogorov complexity itself is uncomputable — there is no procedure that
+finds the shortest program, only ones that find short programs. And a minimal program reproduces
+*one* bitstring; there is no free resolution dial attached to it, because changing a resolution
+parameter changes the output, which changes the address, which makes it a different object. See
+§3.1 for the version of that idea that might actually be true.
 
-**4.7 Telescope view.** Interpolate the camera from first person out to an orbit of the whole
-structure; coarse movement moves far, fine movement tweaks the low digits; at range the shelves
-collapse into density bands. A navigation UI for addresses that already exist.
+---
 
-**4.8 Wearables and props from the model space.** Model a hat, warp it to get its address, and
-equipping it is instantiating the mesh at that address. Items shared as addresses rather than
-files. The same mechanism covers any prop.
+## 2. Defects and corrections
 
-**4.9 LOD as nested spaces.** Low-poly variants live in shorter digit spaces, high-poly in longer
-ones, so detail is a property of which space is addressed rather than a separate asset pipeline.
-Open question inside it: whether an object's LOD chain is derivable or has to be bound like a book.
+**2.1 Entropy is measured against the wrong space.** The filters score a unit against a fixed
+symbol count, but the alphabet is user-chosen and runs from 27 symbols to the whole of Unicode. A
+page drawn from `lower27` judged against a 21-bit code point space gives a meaningless reading.
+Every alphabet needs its own entropy baseline. A correctness bug, not a feature.
 
-**4.10 Reels — video as a composition, not a line.** F frames of W×H is the same set of
+**2.2 Padding is counted as content.** `model-information` and `symbol-entropy` count trailing
+padding spaces as real characters, so a padded page scores as *more* text-like than its text alone.
+
+**2.3 The cased dictionary lets short gibberish through.** Folding one cased list to lower case
+also folds SCOWL's abbreviations and chemical symbols, so "zn" and "tb" now pass. Fix: a version
+that keeps proper names and drops short all-caps tokens.
+
+**2.4 No colour-blindness pass.** Seven lines, filter verdicts and the map all encode meaning in
+hue, with no non-colour fallback and no simulation check.
+
+**2.5 Layouts are built for 8-pixel text.** Unifont draws at half size, so CJK and much of Cyrillic
+are unreadable in the menus. Supporting them means reworking the layouts first, not adding fonts.
+
+---
+
+## 3. Open questions
+
+**3.1 Progressive ordering — the best unanswered question in the whole conversation.** Can a line
+be ordered so that *truncating* an address gives a legitimate coarser version of the same item? For
+images that is what progressive JPEG and SPIHT do; for meshes it is what subdivision surfaces do.
+If it can be done exactly, then one address carries every level of detail, "LOD from a key" becomes
+true rather than wishful, and a slow machine can stop reading early and still get something real.
+If it cannot, then a low-poly variant is simply different content with a different address and the
+LOD idea is dead. Nobody asked this question in 700 turns and it is the one with teeth.
+
+**3.2 Exact counting under a model.** Counting every page whose information under the order-5 model
+stays inside a bit budget needs a DP over (context × bits spent × position) and is infeasible at
+page length. Two honest routes: lean on guided ordering and do not count, or build a filter over a
+*deliberately tiny* model — letter pairs, costs rounded to whole eighth-bits — that is exactly
+countable for short pages. Worth doing the small one to see the shape.
+
+**3.3 The two-metric view.** Plot candidates on two independent axes — entropy against structure
+density — rather than thresholding either alone. Uniform noise collapses into a dense predictable
+cluster; isolated structure sits off the curve. This is the buildable version of "one dimension has
+no angles, so cross it over itself", and it is a scoring mode over rankers that already exist.
+
+**3.4 Calibrate by shrinking the space.** Tune the stack against a large space, then shrink it until
+every survivor can be read by hand. The survivors that are merely well-organised gibberish are
+exactly where the heuristics leak. A test protocol, not a metaphor.
+
+**3.5 Mapping barren ranges.** Exhaustively search the surviving fraction for ranges that are
+provably empty and store them as a skip list. The safety rule is the important half: never exclude
+a range without having exhaustively searched it, because a false exclusion erases a real work
+permanently.
+
+---
+
+## 4. Manifests, installs and anchors
+
+What survives §0 — and most of it survives.
+
+**4.1 A directory walker that emits a manifest.** Point the CLI at a folder; it walks the tree,
+records the structure, filenames and sizes, and gets each file's key. Then it takes the key of the
+manifest itself. Buildable now, useful now, and it is the honest core of the genesis-key idea:
+one canonical, self-verifying description of a tree. Add total size to the manifest so an install
+can refuse before it starts.
+
+**4.2 Deduplication comes free.** Identical files land on the same key, so a tree never stores the
+same bytes twice. This is content-addressed storage — which is real and worth having — and it is
+the part of the OS story that actually works.
+
+**4.3 The first release as the first anchor.** Build the release, walk it, emit the manifest, tag
+every key `sieve-build-release-v1`. The CLI reproduces its own release build from its own manifest
+as a post-build step, which is both a conformance test and the first entry in the archive. This is
+a good idea and it does not depend on the key being small — it depends on the key being canonical,
+which it is.
+
+**4.4 Chunking, and why it matters twice.** Split a large file into fixed-size pieces, each its own
+unit on its own line. It makes generation multi-threadable, it makes a big file tractable on a
+small machine, and it is the only way an install can proceed in pieces rather than all at once.
+
+**4.5 Real file types out of the CLI.** Already partly there: `read --out` writes `.png` for image
+and video, `.mid` for audio, `.txt` for text, and `mesh --out` writes `.obj`. Worth finishing —
+`.wav`, and a frame sequence rather than frames side by side — so any address can be handed to any
+other program.
+
+**4.6 A signed manifest, if tamper-checking is wanted.** Ordinary Merkle tree plus a signature.
+Says nothing about the generative layer, works perfectly well, and is the only thing that would
+actually stop a modified file passing (see §0).
+
+**4.7 The CLI already is a server backend.** The 3D client only asks the core what is at a position;
+nothing about that is graphical. Turning it into a service is multi-threading and transport, not
+architecture. The wireframe mode means it stays usable on a terminal in a server room.
+
+---
+
+## 5. The hallway's shape
+
+**5.1 One wall of shelves, everywhere.** The binary line is one-sided now, and the argument for
+doing the same to the other six is good: there is only one address space, and a double-sided
+corridor draws it twice. Open question to settle: what the empty side becomes — blank wall, the
+portals, or something else. Worth trying on one line before committing.
+
+**5.2 Rings instead of runs.** *The readout half is built.* Every line already loops, so where you
+stand in one is a bearing: the compass in the corner draws the corridor as concentric circles —
+binary outermost, the six it bounds, binary again innermost — with a needle at your angle on the
+line you are on, a mark on every other ring at its own angle, and the bearing written out to
+whatever precision **Angle Precision** in Settings > Graphics asks for. Zero is at the top, where
+every loop starts and finishes.
+
+What is *not* done is the world itself: the corridor is still a straight run. Turning it into an
+actual circle would drop the double start line (a circle needs no telling where it began) and is
+the larger half of this.
+
+**5.3 Signs above the portals.** Neon-style lettering in the destination line's colour above each
+doorway. Small, and it fixes real navigation confusion.
+
+**5.4 The warp animation.** On a warp: face the shelf, slide along three bookcases, through the
+portal, along three more, and stop facing the item. Turn the world around the player rather than
+snapping the camera — that is the standard fix for transition disorientation and costs nothing.
+It also hides the moment the shelf changes side.
+
+**5.5 Accelerating scroll.** The wheel already moves by tiles; give it an acceleration curve so a
+fast spin compresses distance, which is the only way browsing stays possible once the fork count is
+unbounded.
+
+**5.6 Shimmer on the item under the crosshair.** Small, and it makes the interactable thing obvious.
+
+**5.7 Metadata and links on an item in hand.** When a unit has been catalogued, show what is known
+about it and let its links be followed — a warp at the touch of a hyperlink. This is the feature
+that turns the hallway from a viewer into an archive, and it needs §4.1 first.
+
+**5.8 The toroidal map.** A rotatable 3D overlay of the whole library: each line a ring, shaded
+with its own two colours, anchors as points, links as edges, the binary line as the inner and outer
+boundary. Needs 5.2 first, and needs there to be anchors to plot.
+
+**5.9 Telescope view.** Interpolate from first person out to an orbit of the structure; coarse
+movement covers distance, fine movement tweaks the low digits; at range the shelves collapse into
+density bands. A navigation UI for addresses that already exist.
+
+**5.10 A scene description, so people can lay the gallery out themselves.** JSON plus `.obj`:
+which lines exist, where their rings go, what furniture stands between them. Everything the backend
+knows, rendered wherever someone wants it. Large, and the right shape for it is not obvious yet.
+
+**5.11 A vetting gate for anything user-placed.** If people can leave objects in the space, a human
+has to approve them, and there needs to be a hard cap per person. Decide this before the feature,
+not after.
+
+---
+
+## 6. Limits and settings
+
+**6.1–6.4 Limits and reset.** *Built.* `FIND MY LIMITS` in the setup menu sets every line to the
+largest shape this machine can open; `RESET EVERY SHAPE` puts them all back. Two things bound a
+shape and both are checked: the length of one address, which is a single number held in memory and
+whose arithmetic grows with the square of its length (a 256th of installed memory), and the length
+of one *unit*, because the hallway caches a few thousand whole units and that is usually what runs
+a machine out of memory first (a quarter of installed memory across four thousand of them). Both
+are closed-form from the shape, so the search generates nothing. A red line names any line that is
+over, rather than a general refusal. Pages and image grow in step, because the books line is made
+of both and has to fit too.
+
+Neither number is a limit of the design. They describe the machine of the day, and a bigger one
+finds bigger numbers with the same arithmetic.
+
+**6.5 Global parameters, and entries per shelf.** A shelf holds 128 units because 128 is a power of
+two and the code asserts it. Making it a setting (128, 256, …) is possible, and 256 makes an item
+number exactly one byte. The cost is that it changes what "tile N" means, so every address written
+down under one setting is misread under another — which makes it a *versioned* parameter, not a
+free one. Worth doing only with that clearly stated, and probably worth doing.
+
+**6.6 Adaptive word width.** Let the machinery move between 8/16/32/64-bit words per line as the
+shape demands. This is an implementation matter inside `BigUint` rather than a user setting, and it
+should never change an address.
+
+---
+
+## 7. Features from earlier in the conversation, still standing
+
+**7.1 Ingest through the game-format parsers.** Working decoders for several games' formats already
+exist. Piping their output — level geometry, textures, PCM, strings — through canonicalisation and
+onto the right line produces a corpus of *real, verified anchors*, which is exactly what every
+filter in §2 and §3 needs in order to be calibrated at all. The best unbuilt item in the whole
+conversation, because it manufactures that corpus out of work already done.
+
+**7.2 File ingest at a content-derived address.** Drop a file in; it lands at the address derived
+from its bytes, with a small record beside it. Dropping it twice lands on the same slot. Corollary:
+spawn the player's own files on the nearest shelf the first time they walk in — it proves the
+addressing is real better than any amount of README.
+
+**7.3 An `.obj` structural filter.** A zero-allocation token scanner: every line starts with a
+recognised prefix, vector lines parse as numbers, face indices are positive and within the vertex
+count declared so far. It rejects almost everything on the first character, and it is what lets the
+pages line be *searched* for meshes rather than only checked against one.
+
+**7.4 A dedicated `.obj` alphabet.** Digits, `.`, `-`, `/`, whitespace and the keyword letters.
+Cutting the space in the mapping layer before the filter layer runs is far cheaper than filtering.
+
+**7.5 Punctuation filters for `babel29` and `ascii95`.** Punctuation follows a word and is followed
+by a space; for `ascii95`, a capital after a full stop. Countable with the word trie that already
+exists. This matters: `lower27` throws away case and punctuation, so the books line currently holds
+word streams, not sentences.
+
+**7.6 Model-line filters.** Three tiers are specified in §12 and none are built: local per-face
+constraints (rank exactly), small-V constraints such as "every vertex is used" (rank as a state
+machine, 256 states at V=8), and whole-mesh properties — watertight, manifold, convex — which judge
+but cannot rank, so they run in `mark`/`hide`.
+
+**7.7 Ranking beyond two colours.** Image compact mode only ranks two-colour pictures, because
+entropy there depends only on the popcount. Everything with a real palette is unrankable, which is
+why compact image mode keeps sparse pictures rather than structured ones.
+
+**7.8 Ambient audio sampled from where you stand.** Warp the current tile's position into the audio
+line and pass it through `key-v1` so the result is in a valid key. Continuous in-key ambient from
+your actual coordinate, out of three things that already exist. The cheapest real win in the list.
+
+**7.9 Generalise the preview bake.** The crate-face queue — reticle priority, flood fill outward,
+per-frame budget, LRU — is written for models. One interface where each slot type supplies a cheap
+2D draw gives the same thing to every line.
+
+**7.10 A memory prober.** Watch RAM and VRAM, drop cached previews at the thresholds, without
+disturbing position tracking. Needed the moment 7.9 exists.
+
+**7.11 Predictive prefetch.** Warm the next two or three steps along the direction of travel, and
+give frequently-walked paths a larger share of the cache, so the thing you are about to reach for
+is already there.
+
+**7.12 Reels — video as a composition, not a line.** F frames of W×H is the same set of
 possibilities as F image units in a row, so the video line adds bundling and no content. A reel is
-frame rate, image shape, a list of frame addresses, audio shape and a list of audio addresses.
-A still scene stores one address and a count; filters and compact mode work per frame on the image
-line; and one mechanism covers book, album, comic and reel so no further category is ever needed.
-The honest cost: frame-to-frame coherence moves up a level — a given reel can be judged, but every
-possible reel cannot be counted or shelved. Nothing achievable is lost, because exact temporal
-counting needs the whole previous frame as state, which is the wall the video line already hit.
+frame rate, image shape, a list of frame addresses, audio shape, a list of audio addresses. A still
+scene stores one address and a count; filters work per frame on the image line; and one mechanism
+covers book, album, comic and reel so no further category is ever needed. The honest cost:
+frame-to-frame coherence moves up a level — a given reel can be judged, but every possible reel
+cannot be counted, because exact temporal counting needs the whole previous frame as state.
 
-**4.11 Branching end-caps.** Each line's corridor ends divide into categories and sub-categories,
-indefinitely, each staying its own 1D line with the same forward/back traversal. Doors remain the
-only cross-domain link. Later, where two deep sub-corridors are strongly related, they could
-interlock in a shared room without either losing its identity — but that needs a concrete
-relatedness metric before it is anything but a picture.
+**7.13 Branching end-caps.** Each line's ends divide into categories and sub-categories,
+indefinitely, each staying its own 1D line. Doors remain the only cross-domain link.
 
-**4.12 Rings as physical hyperlinks.** A circular cross-section interrupting a corridor, holding
-the "see also" doors. The distance walked stays behind you, so following a link gives spatial
-memory instead of fifty tabs.
-
-**4.13 A category definition file.** A small declarative file naming which lines are active, how
-addresses map and what is locked, which the engine instantiates. It is really a generalisation of
-the filter-stack config, and it would let people publish a sieve as one artefact.
-
-**4.14 Agents as scouts, downstream of the filters.** Headless sweeps over the *filtered* space
+**7.14 Agents as scouts, downstream of the filters.** Headless sweeps over the *filtered* space
 logging where noise collapses into valid syntax; a vision model watching the preview queue and
-stopping the camera when geometry happens to look like something. The honest limit: at these sizes
-a blind sweep finds nothing, so an agent is only useful after filters have cut the space, or as a
-labeller producing training data for new filters.
+stopping when the geometry looks like something. The honest limit: a blind sweep at these sizes
+finds nothing, so an agent is only useful after filters have cut the space, or as a labeller
+producing training data for new filters.
 
-**4.15 Small physical touches.** A short wall that morphs into a visible energy grid up close, so
-what stops you stepping off the edge is a thing rather than an invisible collider. The Sieve as a
-held object that sifts a shelf radius. A hat that toggles the rain overlay.
-
----
-
-## 5. Things to be careful of
-
-These came up in the transcript stated confidently and are wrong or overstated. Recorded so they
-do not come back around.
-
-- **Addressing is not compression.** The address of an ingested N-byte file is about N bytes, so
-  "if the drive dies the address regenerates the file" is true for generated units at a given
-  shape and false for anything ingested. Same error under "all file sizes shrink dramatically".
-  The one real exception is the guided ordering, where a book record genuinely is smaller than the
-  text it encodes (~1.8 bits/char) — worth stating next to the rule, because the two look
-  contradictory and are not.
-- **The π scheme does not work.** Collapsing a file's integer value through coupled modular
-  equations to two small residuals plus a step counter, then inverting it, is ruled out by
-  counting: 2^N inputs cannot map losslessly onto a bounded pair. The simpler θ = 2π·F mapping *is*
-  a bijection but buys nothing — the angular precision needed is exactly the file's bit length, so
-  it is the address respelled in radians. Keep the telescope (4.7) and the locate string (4.6);
-  drop the maths under them. Likewise "every file is in π": normality is unproven, and even
-  granting it, the index of a substring is no shorter than the substring.
-- **Similar things are not nearby.** Under positional or scrambled ordering a one-byte difference
-  lands arbitrarily far away; prefix ordering puts "This is" next to "Thin ice", not "That is", at
-  any unit length. Locality needs an explicit locality-preserving structure — LSH, SimHash, Morton
-  coding — which would be a *separate index alongside* the address, never fields stapled into the
-  address itself, because the address is already a bijection and cannot carry metadata without
-  ceasing to be one. Also: "invert the LCG to solve for the seed" does not apply here; the mapping
-  is Feistel/SHA and is built to resist exactly that.
-- **The six lines are not orthogonal axes.** They are alternative readers of one shared position
-  counter along one straight line. Anything phrased as ℤ⁶ lattice slicing is a misreading.
-- **A retrieval boundary does not fix generation.** Querying an addressed space grounds an
-  agent's *citations*; it does nothing to any model's weights. The defensible claim is narrower
-  and better: making a trajectory addressable makes the divergence point locatable after the fact.
-- **The licence wording.** "AGPL with a non-commercial restriction" is not AGPL and is not an
-  open-source licence by any standard definition — a field-of-use restriction makes it
-  source-available. That may be exactly the right choice, but it should be named accurately and
-  the AGPL name should not be on it. No licence at all is worse: it means all rights reserved by
-  default *and* no permission for anyone to fork it. Sieve still has no licence file. Separately,
-  whether user-ingested content can be redistributed is a real design question with a real answer
-  needed before any ingest ships.
-- **Mods as vectors is elegant and overstated.** Treating a mod as `base + v` rather than a file
-  overwrite is a genuinely interesting reframe, but "different axes can never conflict" ignores
-  semantic coupling: two mods touching disjoint variables routinely break each other through a
-  shared invariant.
-- **The multiverse cluster is out of scope.** Roughly forty turns of hypervisor, emulators,
-  cross-game randomisers and n-dimensional run categories. Two things are worth extracting — the
-  category definition file (4.13) and the stated position that it deserves to be recorded as an
-  idea rather than built. It belongs in a separate speculative document, not in this repo.
+**7.15 Small physical touches.** A short wall that becomes a visible energy grid up close. The
+Sieve as a held object that sifts a shelf radius. A hat that toggles the rain.
 
 ---
 
-## 6. Framing worth writing down
+## 8. Things to be careful of
 
-**6.1 The epistemic fence.** Meaning is not a property of a bitstream; it is a relation between a
+Recorded so they do not come back around.
+
+- **Addressing is not compression.** §0. The one real exception is guided ordering, where the
+  record genuinely is smaller than the text — because that ordering *is* a compressor.
+- **A key is not a signature.** §0.
+- **Splitting an address into coordinates saves nothing.** §0.
+- **LOD does not come out of an address** unless §3.1 has an answer.
+- **There is nothing to bisect.** Binary search needs a way to ask "is my target above or below
+  here" without holding the target. In this space the only handle on the target is its content, and
+  if you have the content you already have the file. A "50/50 beacon" has nothing to aim at.
+- **The barrier is informational, not computational.** "All configurations contain all things, so
+  this is only an efficiency problem" — no path optimisation reduces the number of bits needed to
+  say which of 256^N items you meant.
+- **Reducing a file does not move it.** An address in a fixed ordering is a function of content
+  alone; there is no centre for low-complexity things to drift toward.
+- **Dimensionality is not a hardware setting.** How many dimensions a space has is fixed by the
+  shape of the content; hardware decides how much gets rendered, nothing more.
+- **"Manifold", "Clifford torus" and "Möbius" are decoration here.** Worth keeping from that
+  stretch is exactly one true thing: curves that appear to cross in a 3D projection need not cross
+  in the space itself. The rest has no chart, metric or dimension attached.
+- **The licence.** "AGPL with a non-commercial restriction" is not AGPL and is not an open-source
+  licence — a field-of-use restriction makes it source-available. That may be the right choice, but
+  it should be named accurately. No licence is worse: all rights reserved *and* nobody may fork it.
+  Sieve still has no licence file. Separately, whether user-ingested content can be redistributed
+  needs an answer before any ingest ships.
+- **Mods as vectors is elegant and overstated.** `base + v` instead of a file overwrite is an
+  interesting reframe, but "different axes can never conflict" ignores semantic coupling.
+- **The multiverse cluster and the OS are separate documents.** Roughly forty turns of hypervisor
+  and emulators, and ninety of Framework OS. Two things survive: the category definition file, and
+  the stated position that they deserve recording rather than building.
+
+---
+
+## 9. Framing worth writing down
+
+**9.1 The epistemic fence.** Meaning is not a property of a bitstream; it is a relation between a
 bitstream and a decoder. Without a known grammar, protocol or anchor, high-entropy ciphertext is
 indistinguishable from noise — so the engine must classify it as noise *by default*. The
 alternative is that everything is potentially meaningful, nothing is filtered, and the system
 degenerates into exhaustive enumeration, which is a novelty rather than a tool. This is the
 load-bearing axiom under the whole filtration stack and it should be stated as one.
 
-**6.2 The inversion.** The question is not how much is in the library. It is how much of it is
-noise we can ignore, how we identify it, and how we define meaningful content. The system is a
-lens, not a catalogue.
+**9.2 The inversion.** The question is not how much is in the library. It is how much of it is
+noise we can ignore, how we identify it, and how we define meaningful content. A lens, not a
+catalogue.
 
-**6.3 Selection is the creative act.** In a space this size nobody invents anything; they navigate,
-filter and curate. Cartographers, not authors. This is the honest description of what the
-filtration stack *is*, and it pairs with 6.1.
+**9.3 Selection is the creative act.** In a space this size nobody invents anything; they navigate,
+filter and curate. Writing is excavation. Cartographers, not authors.
 
-**6.4 Why a library and not a generator.** A generator that happens to emit something valid loses
+**9.4 Why a library and not a generator.** A generator that happens to emit something valid loses
 it the moment you press the button again, unless you write it to disk — which defeats the premise.
-An addressed library gives you a place you can leave, return to, and hand to someone else. This is
-the cleanest one-paragraph justification of the project and belongs in the README.
+An addressed library gives you a place you can leave, return to, and hand to someone else. The
+cleanest one-paragraph justification of the project, and it belongs in the README.
 
-**6.5 The scale anchor.** ~10^1,834,097 books; ~10^394,951 meaningful at one bit per character;
+**9.5 The scale anchor.** ~10^1,834,097 books; ~10^394,951 meaningful at one bit per character;
 filtering removes about 1.44 million orders of magnitude, and what is left is still ~394,800 orders
-beyond Lloyd's limit. Which is exactly why the design is navigate-and-verify and never enumerate.
+beyond Lloyd's limit. Which is exactly why the design is navigate-and-verify, never enumerate.
 
-**6.6 The lineage, and the distinction.** Llull's rotating discs, Swift's Lagado engine, Lasswitz's
-*The Universal Library* (1901, which Borges cited), then Borges in 1941. Verify the dates
-independently before publishing any of it. The distinction to draw is dimensional scope: the same
-combinatorial argument applied to text, audio, images, video, geometry and books at once, with
-exact addressing and a terminal you can actually type into.
+**9.6 The lineage, and the distinction.** Llull's rotating discs, Swift's Lagado engine, Lasswitz's
+*The Universal Library* (1901, which Borges cited), then Borges in 1941. Verify the dates before
+publishing any of it. The distinction to draw is dimensional scope: the same combinatorial argument
+applied to text, audio, images, video, geometry and books at once, with exact addressing and a
+terminal you can type into.
 
-**6.7 Disclosure.** Anyone happy to consume AI-assisted work will not mind being told; anyone who
+**9.7 Disclosure.** Anyone happy to consume AI-assisted work will not mind being told; anyone who
 prefers human-made work deserves the right to choose. Which means saying so, here, about this.

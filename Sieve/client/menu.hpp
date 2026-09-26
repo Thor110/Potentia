@@ -60,6 +60,15 @@ struct LineSize
 };
 LineSize line_size(uint32_t base, uint64_t length);
 
+// What this machine can open: the longest address it can hold, and the longest unit the hallway
+// can keep a cache of. A shape has to satisfy both (menu.cpp: machine_budget).
+struct Budget
+{
+    double bits = 4.0e6;
+    uint64_t positions = 1u << 16;
+};
+Budget machine_budget();
+
 class Menu
 {
 public:
@@ -76,11 +85,15 @@ public:
 private:
     void handle(const SDL_Event& e, bool& done, Result& result);
     std::array<LineSize, 6> line_sizes() const; // pages, image, audio, video, books, models
-    bool too_large() const; // a line this machine cannot open
+    bool too_large() const;
+    int over_budget() const;   // which line is beyond this machine, or -1
+    bool over_budget_line(int i, const Budget& b) const;
+    void find_limits();        // set every line to the largest shape this machine can open
+    void reset_settings();     // every shape back to its default // a line this machine cannot open
     void adjust(int dir, int step);
     // 0-18 are the settings rows, in the order render() lists them and adjust() switches on;
     // 19 is ENTER THE HALLWAY, which is the only row that opens the hallway.
-    static constexpr int kEnterRow = 19;
+    static constexpr int kLimitsRow = 19, kResetRow = 20, kEnterRow = 21;
     int row_count() const;
 
     // The filter overlay.

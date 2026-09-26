@@ -10,6 +10,7 @@
 //   real_graphics = off         ; Real Graphics (at most one of these two is on)
 //   door_portals = off          ; the doorways filled with procedural data noise
 //   model_cache_mb = 64         ; memory for the rendered faces of the models line's crates
+//   angle_decimals = 1          ; decimal places on the compass's degree readout
 //   fps_counter = off           ; frames per second, top right of the hallway
 //   [controls]
 //   mouse_sensitivity = 100     ; percent
@@ -54,6 +55,7 @@ struct AppSettings
     bool real_graphics = false;  // Real Graphics
     bool door_portals = false;   // Door Portals: procedural data noise in the doorways
     int model_cache_mb = 64;     // the models line: memory for rendered crate faces, 8..512
+    int angle_decimals = 1;      // decimal places on the compass's degree readout, 0..8
     bool fps_counter = false;    // show frames per second in the hallway
     int mouse_sensitivity = 100; // percent, 10..400
     bool invert_mouse_y = false;
