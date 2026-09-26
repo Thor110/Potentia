@@ -1,0 +1,3 @@
+font = sieve8x8
+language.name = Français
+item.start = Démarrer Sieve

@@ -28,6 +28,10 @@ const std::string& font_name();
 // Draws UTF-8 text with its top-left corner at (x, y), at `scale` (1 = 8-pixel cells).
 void draw_text(SDL_Renderer* r, float x, float y, const std::string& utf8, float scale, SDL_Color c);
 // Width in pixels at `scale`, and in 8-pixel cells (rounded up).
+// True if the current font (or its fallback) can actually draw this code point. The Binary
+// Edge asks before it rains a character, so the rain never falls as rows of question marks.
+bool font_has(char32_t cp);
+
 float text_width(const std::string& utf8, float scale);
 size_t text_cells(const std::string& utf8);
 // The longest prefix of `utf8` that fits in `cells` cells (never splits a character).

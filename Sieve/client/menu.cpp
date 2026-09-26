@@ -26,7 +26,7 @@ namespace hallway {
 
 namespace {
 
-const std::vector<std::string> kLines = {"text", "image", "audio", "video", "books", "models"};
+const std::vector<std::string> kLines = {"text", "image", "audio", "video", "books", "models", "binary"};
 const std::vector<std::string> kModes = {"positional", "scrambled", "guided"};
 const std::vector<std::string> kAlphabets = {"lower27", "babel29", "ascii95"};
 const std::vector<std::string> kCanons = {"v2", "v1"};
@@ -215,7 +215,9 @@ Menu::Menu(SDL_Window* window, SDL_Renderer* renderer, Settings settings, sieve:
 {
 }
 
-int Menu::row_count() const { return 17; }
+// The settings rows, then ENTER THE HALLWAY last. adjust() switches on the same numbering, and
+// the rows are built in the same order in render(); kEnterRow keeps all three in step.
+int Menu::row_count() const { return kEnterRow + 1; }
 
 void Menu::adjust(int dir, int step)
 {
@@ -355,11 +357,15 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         break;
     case SDLK_F:
         // The filters of the line whose settings are selected.
-        // Rows 0-2 (start, ordering, key) and ENTER belong to no line; F on them does nothing.
+        // Rows 0-2 (start, ordering, key), the models rows and ENTER belong to no filterable
+        // line, so F on them does nothing.
         if (row_ >= 3 && row_ <= 15) open_filters(row_ >= 7 && row_ <= 9 ? 1 : row_ == 10 ? 2 : row_ == 15 ? 4 : row_ >= 11 ? 3 : 0);
         break;
     case SDLK_RETURN:
     case SDLK_KP_ENTER:
+        // The way in is the last row, chosen like any other: Enter anywhere else does nothing,
+        // so a stray Return while setting a line up never drops you into the hallway.
+        if (row_ != kEnterRow) break;
         if (s_.key.empty()) s_.key = "sieve";
         if (too_large()) break; // the map says which line; nothing to open on this machine
         save_filters();
@@ -448,12 +454,13 @@ void Menu::render()
         {6, tr("setup.model_vertices"), n(s_.model_vertices)},
         {-1, tr("setup.model_faces"), n(s_.model_faces)},
         {-1, tr("setup.model_coords"), trf("setup.model_coords.value", {n(s_.model_coords)})},
-        {-1, tr("setup.enter"), ""},
+        {-2, tr("setup.enter"), ""}, // -2: a gap above it, so it is not read as a models row
     };
     float y = 80;
     for (int i = 0; i < int(rows.size()); ++i)
     {
         const Row& r = rows[size_t(i)];
+        if (r.section == -2) y += 14; // the way in stands apart from the line it follows
         if (r.section >= 0)
         {
             y += 8;
@@ -483,24 +490,37 @@ void Menu::render()
     double scale_bits = 1;
     for (const auto& z : sizes)
         if (std::isfinite(z.bits)) scale_bits = std::max(scale_bits, z.bits);
-    const float x0 = 620, pitch = std::max(104.0f, (W - x0 - 20) / 6);
+    // The binary line takes a column at each end, because that is where it is:
+    //
+    //     binary | pages image audio video books models | binary
+    //
+    // It is one line drawn twice, not two: it wraps around the outside of the other six, and
+    // which end of the corridor you meet it at decides which side of it the edge is on. It is
+    // drawn like any other line, with its own two colours and a bar of the same width. Its size
+    // is not counted yet (SPECIFICATIONS §12.1), so its bar fills the height and says so.
+    const float x0 = 620, pitch = std::max(80.0f, (W - x0 - 20) / 8);
     const float label = 118, top = 216, bottom = H - 60, span = bottom - top, min_bar = 12;
+    // Line names are drawn at double size where a column is wide enough to hold one.
+    const int name_scale = pitch >= 110 ? 2 : 1;
     text(r_, x0, 80, tr("map.title"), 1, white);
     text(r_, x0, 92, trf("map.scale", {fixed(scale_bits, 0)}), 1, grey);
-    for (int i = 0; i < 6; ++i)
+    for (int c = 0; c < 8; ++c)
     {
-        Theme th = i == 4 ? kBooksTheme : i == 5 ? kModelsTheme : kThemes[i];
+        const bool binary = c == 0 || c == 7;
+        const int i = c - 1; // which of the six, when it is one of them
+        Theme th = binary ? kBinaryTheme : i == 4 ? kBooksTheme : i == 5 ? kModelsTheme : kThemes[i];
         const SDL_Color ink = menu_ink(th);
-        const float x = x0 + i * pitch;
-        const LineSize& z = sizes[size_t(i)];
+        const float x = x0 + float(c) * pitch;
+        static const LineSize kUncounted{HUGE_VAL, 0, ""};
+        const LineSize& z = binary ? kUncounted : sizes[size_t(i)];
         // Labels above the bar, so a full-length bar never runs into them.
-        const size_t cols = size_t(std::max(8.0f, (i == 5 ? W - x - 8 : pitch - 8) / 8));
+        const size_t cols = size_t(std::max(8.0f, pitch - 8) / 8);
         auto clip = [&](const std::string& t) { return text_cells(t) <= cols ? t : fit_cells(t, cols - 2) + ".."; };
         const SDL_Color edge = th.edge;
         th.edge = ink; // labels in a readable colour; the bar keeps the line's own edges
-        // Magnifying glass: opens this line's filters. The models line has none yet, so it has
-        // no glass, and its name starts where the others' names do.
-        if (i < 5)
+        // Magnifying glass: opens this line's filters. The models and binary lines have none
+        // yet, so they have no glass, and their names start where the others' names do.
+        if (!binary && i < 5)
         {
             magnifier_[i] = {x - 2, label - 2, 20, 20};
             SDL_SetRenderDrawColor(r_, th.edge.r, th.edge.g, th.edge.b, 255);
@@ -513,15 +533,24 @@ void Menu::render()
             SDL_RenderLine(r_, x + 10, label + 10, x + 15, label + 15);
             SDL_RenderLine(r_, x + 11, label + 10, x + 16, label + 15);
         }
-        text(r_, x + 22, label, tr(th.key), 2, th.edge);
-        const size_t caret = z.units.find(" = ");
-        text(r_, x, label + 22, clip(trf("map.units", {z.units.substr(0, caret)})), 1, th.edge);
-        text(r_, x, label + 34, clip(z.units.substr(caret + 3)), 1, th.edge);
-        text(r_, x, label + 46, clip(trf("map.bits", {fixed(z.bits, 0)})), 1, th.edge);
-        text(r_, x, label + 58, clip(trf("map.tiles", {fixed(std::max(0.0, z.bits * std::log10(2.0) - std::log10(128.0)), 1)})), 1, th.edge);
-        text(r_, x, label + 70, clip(z.padding ? trf("map.empty_slots", {std::to_string(z.padding)}) : tr("map.whole_tiles")), 1, th.edge);
-        if (z.bits > kTooLargeBits) text(r_, x, label - 14, clip(tr("map.too_large")), 1, white);
-        else if (z.bits > kSlowBits) text(r_, x, label - 14, clip(tr("map.slow")), 1, grey);
+        text(r_, x + 22, label, tr(th.key), name_scale, th.edge);
+        if (binary)
+        {
+            // Not counted: it stands for everything the other six do not address.
+            text(r_, x, label + 22, clip(tr("map.infinite")), 1, th.edge);
+            text(r_, x, label + 34, clip(tr("map.uncounted")), 1, th.edge);
+        }
+        else
+        {
+            const size_t caret = z.units.find(" = ");
+            text(r_, x, label + 22, clip(trf("map.units", {z.units.substr(0, caret)})), 1, th.edge);
+            text(r_, x, label + 34, clip(z.units.substr(caret + 3)), 1, th.edge);
+            text(r_, x, label + 46, clip(trf("map.bits", {fixed(z.bits, 0)})), 1, th.edge);
+            text(r_, x, label + 58, clip(trf("map.tiles", {fixed(std::max(0.0, z.bits * std::log10(2.0) - std::log10(128.0)), 1)})), 1, th.edge);
+            text(r_, x, label + 70, clip(z.padding ? trf("map.empty_slots", {std::to_string(z.padding)}) : tr("map.whole_tiles")), 1, th.edge);
+            if (z.bits > kTooLargeBits) text(r_, x, label - 14, clip(tr("map.too_large")), 1, white);
+            else if (z.bits > kSlowBits) text(r_, x, label - 14, clip(tr("map.slow")), 1, grey);
+        }
         // The bar: the line's own two colours; never shorter than min_bar, never past the bottom.
         const float len = std::isfinite(z.bits) ? std::clamp(float(z.bits / scale_bits) * span, min_bar, span) : span;
         const SDL_FRect bar{x + 8, top, 40, len};
@@ -531,6 +560,7 @@ void Menu::render()
         SDL_RenderRect(r_, &bar);
         const SDL_FRect inner{x + 9, top + 1, 38, len - 2};
         SDL_RenderRect(r_, &inner);
+        if (binary) continue; // no filters and nothing counted, so no survivor bar
         // What survives the ticked filters, where it can be counted exactly: a filled bar inside.
         const StackInfo& info = stack_info(i);
         if (info.survivor_bits >= 0)

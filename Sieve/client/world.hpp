@@ -36,6 +36,24 @@ static_assert(2 * kBooksPerWall == int(kBooksPerTile), "the shelves must hold ex
 static_assert((kBooksPerTile & (kBooksPerTile - 1)) == 0, "books per tile must be a power of two");
 inline constexpr float kWalkLimit = 1.45f;  // how close to a wall you may walk, except in a doorway
 
+// The binary line: the seventh line, and the one the other six are bounded by.
+//
+//     binary | pages  image  audio  video  books  models | binary
+//
+// It is exactly the same space as any other tile of corridor — the same width, the same height,
+// the same bookcase — with one difference: it has only one side. One wall carries the shelves; in
+// place of the other the floor simply ends, at a short wall no higher than your waist, and past
+// that there is nothing. Green rain falls off that edge for ever.
+//
+// It is where the looping stops. The six lines used to wrap into each other through the doors;
+// now they start and finish here. Its one wall carries its one door, and which side of it you see
+// the drop on depends on which end of the corridor you walked out of, because it is one line met
+// from either end. Nothing out there is addressed, ordered or filtered, and the shelves stand
+// empty because cataloguing what is in the drop is a job for people.
+inline constexpr float kEdgeRail = kHalfWidth;  // the floor ends where the missing wall would be
+inline constexpr float kEdgeRailTop = 0.95f;    // how high the short wall standing on it is
+inline constexpr float kEdgeDrop = 26.0f;       // how far the rain falls past the floor
+
 enum class Side { Left = 0, Right = 1 };
 
 struct BookSlot

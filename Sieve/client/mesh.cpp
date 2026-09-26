@@ -173,6 +173,52 @@ std::shared_ptr<const Mesh> facing_x(const Mesh& mesh)
     return out;
 }
 
+// One side of a corridor mesh removed: every triangle that lies in the wall at `sign * x` goes,
+// leaving the floor, the ceiling and the other wall. Used for the binary line, which is an
+// ordinary tile of corridor with one side missing (world.hpp). The test is the whole triangle
+// standing out at that side, so a floor or ceiling panel that merely reaches the wall is kept.
+std::shared_ptr<const Mesh> half_x(const Mesh& mesh, float sign, float at)
+{
+    auto out = std::make_shared<Mesh>(mesh);
+    out->tris.clear();
+    for (const MeshTri& t : mesh.tris)
+    {
+        const bool in_wall = t.p[0].x * sign >= at && t.p[1].x * sign >= at && t.p[2].x * sign >= at;
+        if (!in_wall) out->tris.push_back(t);
+    }
+    if (out->tris.empty()) out->tris = mesh.tris;
+    out->lo = {1e9f, 1e9f, 1e9f};
+    out->hi = {-1e9f, -1e9f, -1e9f};
+    for (const MeshTri& t : out->tris)
+        for (const Vec3& v : t.p)
+        {
+            out->lo = {std::min(out->lo.x, v.x), std::min(out->lo.y, v.y), std::min(out->lo.z, v.z)};
+            out->hi = {std::max(out->hi.x, v.x), std::max(out->hi.y, v.y), std::max(out->hi.z, v.z)};
+        }
+    return out;
+}
+
+// A box, as two triangles a face: the short wall on the binary line's open edge.
+std::shared_ptr<const Mesh> box_mesh(Vec3 lo, Vec3 hi, SDL_FColor kd)
+{
+    auto out = std::make_shared<Mesh>();
+    out->source = "(generated)";
+    out->lo = lo;
+    out->hi = hi;
+    auto quad = [&](Vec3 a, Vec3 b, Vec3 c, Vec3 d, Vec3 n) {
+        out->tris.push_back({{a, b, c}, n, kd});
+        out->tris.push_back({{a, c, d}, n, kd});
+    };
+    const Vec3 l = lo, h = hi;
+    quad({l.x, l.y, l.z}, {l.x, h.y, l.z}, {l.x, h.y, h.z}, {l.x, l.y, h.z}, {-1, 0, 0});
+    quad({h.x, l.y, h.z}, {h.x, h.y, h.z}, {h.x, h.y, l.z}, {h.x, l.y, l.z}, {1, 0, 0});
+    quad({l.x, h.y, l.z}, {h.x, h.y, l.z}, {h.x, h.y, h.z}, {l.x, h.y, h.z}, {0, 1, 0});
+    quad({l.x, l.y, l.z}, {l.x, l.y, h.z}, {h.x, l.y, h.z}, {h.x, l.y, l.z}, {0, -1, 0});
+    quad({l.x, l.y, l.z}, {h.x, l.y, l.z}, {h.x, h.y, l.z}, {l.x, h.y, l.z}, {0, 0, -1});
+    quad({l.x, l.y, h.z}, {l.x, h.y, h.z}, {h.x, h.y, h.z}, {h.x, l.y, h.z}, {0, 0, 1});
+    return out;
+}
+
 // A few worker threads, each drawing one band of the screen; the calling thread takes a band too.
 struct MeshBatch::Pool
 {

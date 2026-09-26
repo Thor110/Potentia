@@ -30,4 +30,10 @@ inline constexpr Theme kModelsTheme = {{140, 120, 0, 255}, {0, 255, 0, 255}, "MO
 // pages line.
 inline constexpr Theme kBooksTheme = {{150, 150, 150, 255}, {0, 0, 0, 255}, "BOOKS", "BOOKS", "line.books"}; // grey, black edges
 
+// The binary line (SPECIFICATIONS §12.1): black, with green edges and green text. It is an
+// ordinary line with two colours like any other; what is unusual about it is its shape, not its
+// palette — one wall of shelves, and on the other side the edge and the drop.
+inline constexpr Theme kBinaryTheme = {{0, 0, 0, 255}, {32, 220, 80, 255}, "BINARY", "BINARY", "line.binary"};
+inline constexpr SDL_Color kEdgeInk = kBinaryTheme.edge; // the rain off the edge
+
 } // namespace hallway

@@ -147,7 +147,7 @@ Each line is presented as a **single hallway**: an endless corridor with a shelf
 - **One corridor for all lines.** The four lines, and the books line composed from them (§11), share a single endless corridor, numbered by one signed position in **tiles of 128 book slots**. 128 is a power of two, and the implementation enforces this at compile time. Each line **repeats** along the corridor: a line of `N` units spans `⌈N / 128⌉` tiles per copy, and copy `c` begins at tile `c·⌈N / 128⌉`. Within a copy, slot `i` holds the unit whose raw address is `i`, or, in the guided view at zoom `d`, the point `i / 2^d`, so a guided loop has `2^d` books.
 - **Padding.** When `N` is not a multiple of 128, the last tile of each copy ends in empty shelf space, so every copy starts on a fresh tile. A line whose size is a power of two, at least 128, has no padding, and when every line's size is a power of two the loops **nest**: each line's start line falls on a start line of every smaller line. `sieve info` reports how each line fits.
 - **Start line.** The beginning of each copy is marked by a checkered strip across the floor, in the line's two colours. Where every line begins a copy at once (always at tile 0, and wherever else their loops coincide) the start line is doubled (a second strip a metre further on).
-- **Setup menu.** Before entering, the reader sets each line's shape, with no upper limit: the state spaces are meant to scale without end. A map draws the five lines side by side, one copy each, as bars whose length is the line's size in bits. The longest line fills the height, so no bar leaves the screen, and there is a minimum bar length. Only the machine limits what can be opened. The menu warns when an address would be slow to work with, and refuses when one would not fit in memory. Those thresholds describe the hardware, not the design.
+- **Setup menu.** Before entering, the reader sets each line's shape, with no upper limit: the state spaces are meant to scale without end. A map draws the lines side by side, one copy each, as bars whose length is the line's size in bits, with the binary line at each end (§12.1) since that is where it runs. The longest line fills the height, so no bar leaves the screen, and there is a minimum bar length. Only the machine limits what can be opened. The menu warns when an address would be slow to work with, and refuses when one would not fit in memory. Those thresholds describe the hardware, not the design.
 - **Filters.** A magnifying glass beside each line's title in the setup menu opens that line's filter list over the map: the display mode (§9), every filter the line offers with a tickbox and its description, and the parameters of each ticked filter. A footer gives the stack's state. Where the stack can count its survivors exactly, the map shows them as a filled bar inside the line's bar, labelled with the survivors' size in bits (log2 of their count).
 - **Views:**
   - **Guided view** (default, entropy-ordered): shelf length ∝ probability. Meaningful units fill long runs; noise is too thin to occupy floor space. Only shelved units (§9) are shown.
@@ -232,7 +232,7 @@ Input longer than one unit becomes a **sequence of addresses**. The warp lands o
 
 ## 7. Doors
 
-Doors connect the four lines in a cycle: **Text → Image → Audio → Video → Text**.
+Doors connect the lines in order, and the binary line (§12.1) is the end of the run at both sides: **binary → Text → Image → Audio → Video → Books → Models → binary**. Left goes to the next line and right to the previous one; binary has one wall, so it has one door.
 
 ### 7.1 Mapping
 
@@ -448,6 +448,20 @@ models. `modelspace-v1` numbers them as one mixed-radix number, most significant
 **Fitting a mesh.** Any `.obj` lands somewhere on the line: it is centred, scaled so its longest side fills the grid, and each coordinate binned to its cell. Vertices past V and faces past F are dropped and counted, a mesh with too few faces is filled out, and indices naming a vertex the line does not have are clamped. `sieve mesh` does all of this and reports every change, as `warp` does for the other lines.
 
 **Filters** are future work, and they fall in three tiers: local per-face constraints such as distinct indices, which rank exactly; small-V constraints such as "every vertex is used", which rank exactly as a state machine whose state is the set of vertices used so far (256 states at V = 8); and whole-mesh properties — watertight, manifold, non-self-intersecting, convex — which judge but do not rank, and so run in `mark` or `hide` mode like any other unrankable filter.
+
+### 12.1 The binary line
+
+The seventh line, and the one the other six are bounded by:
+
+    binary | pages  image  audio  video  books  models | binary
+
+It is listed twice because it is met from either end, but it is **one line**, not two. It wraps around the outside of the other six — a single closed loop, in binary, around everything they address — so which end of the corridor you walk out of decides which side of it the edge is on.
+
+**Shape.** It is the **same space** as any other tile of corridor — the same width, the same height, the same bookcase — and an ordinary line in every respect the engine cares about: its own two colours (black, with green edges and green text), its own place in the door order, its own column on the map. The one difference is that it has **one side**. One wall carries the bookcases; in place of the other the floor ends, at a short wall no higher than your waist, and past that there is nothing. Green rain falls off that edge for ever, filling the opening from the ceiling down and passing behind the wall — characters from every Unicode block, and now and then a code point written out as the surrogate pair it is stored as.
+
+**Doors.** Its one wall carries its one door, so the six lines **no longer loop into one another**: they start and finish at binary. Walking left out of `pages` runs `image`, `audio`, `video`, `books`, `models`, and then binary, where the corridor ends. Walking right out of `pages` reaches binary directly, from the other side. Either way the door you came in by is the door you leave by, because there is only one wall to put a door in.
+
+**Size.** Not counted, deliberately, and the map says so. Its shelves stand **empty**: nothing out there is addressed, ordered or filtered yet. What is on them, and how it is addressed, is open — the obvious candidate is every file of a fixed length in base 256, which would make it an ordinary line with an ordinary state space, but it could equally be where real data is put by the people who catalogue it. Until that is decided the line exists, is walkable, and holds nothing.
 
 ## 13. Architecture and Implementation
 

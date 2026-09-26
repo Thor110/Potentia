@@ -219,6 +219,13 @@ bool set_font(const std::string& name)
 
 const std::string& font_name() { return g_name; }
 
+bool font_has(char32_t cp)
+{
+    for (Font* f : {g_font.get(), g_fallback.get()})
+        if (f && f->glyphs.count(cp)) return true;
+    return false;
+}
+
 float text_width(const std::string& s, float scale)
 {
     float w = 0;

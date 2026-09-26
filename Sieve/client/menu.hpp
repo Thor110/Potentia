@@ -78,6 +78,9 @@ private:
     std::array<LineSize, 6> line_sizes() const; // pages, image, audio, video, books, models
     bool too_large() const; // a line this machine cannot open
     void adjust(int dir, int step);
+    // 0-18 are the settings rows, in the order render() lists them and adjust() switches on;
+    // 19 is ENTER THE HALLWAY, which is the only row that opens the hallway.
+    static constexpr int kEnterRow = 19;
     int row_count() const;
 
     // The filter overlay.

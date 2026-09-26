@@ -14,7 +14,7 @@ Implementation of [SPECIFICATIONS.md](docs/SPECIFICATIONS.md) (v2.0). This cover
 | :--- | :--- |
 | `core/` | Dependency-free C++20 library: alphabets, palettes, notes, exact big integers, SHA-256, address map, canonicalisation, sieve, guided coder, the filtration stack (`core/src/filters/`) |
 | `tools/sieve_cli.cpp`, `tools/cli/` | The `sieve` command-line tool |
-| `client/` | The `hallway`: a 3D wireframe walk along the five lines: pages, image, audio, video and books (SDL3) |
+| `client/` | The `hallway`: a 3D wireframe walk along the lines: pages, image, audio, video, books, models and binary (SDL3) |
 | `tools/plot_sieve.py` | Plots sieve results (needs matplotlib) |
 | `tools/build_dictionary.py` | Rebuilds the English dictionaries from SCOWL |
 | `data/dictionaries/` | The dictionary registry (`dictionaries.tsv`) and pinned English word lists (SCOWL 2020.12.07) |
@@ -28,6 +28,7 @@ Implementation of [SPECIFICATIONS.md](docs/SPECIFICATIONS.md) (v2.0). This cover
 | `data/lang/`, `data/fonts/`, `data/meshes/` | Menu languages, bitmap fonts, and the Real Graphics models (templates in `data/meshes/templates/`) |
 | `.github/workflows/build.yml` | Builds and tests on Windows, Linux and macOS on every push |
 | `docs/SPECIFICATIONS.md` | The specification |
+| `docs/IDEAS.md` | What is not built yet: defects, filters, open questions, and what to be careful of |
 | `docs/images/` | Hallway screenshots |
 
 ## Build
@@ -163,11 +164,27 @@ Every choice is applied at once and saved to `sieve-hallway.ini` next to the exe
 
 In the hallway the models line is green wireframe on clay. Every slot holds the same **crate**, because a mesh cannot be read at a hundred and twenty-eight to a tile — so the crate you are looking at has its model rendered to a small flat image and printed on its front, and then its neighbours do the same, a few a frame, spreading outward along the shelf. The pictures are kept in a cache whose size is **Model Image Cache** in Settings > Graphics (8–512 MB, shown as both megabytes and crates; 64 MB is about four thousand). Walking keeps the ones still nearby and drops the rest, and the crate seen longest ago goes first when the budget is full. Take a crate off the shelf (**E**) and the model itself is in your hands: turn it with the mouse, or **A** and **D**, **R** to set it upright, with its `.obj` text beside it — the same text that is a page on the `ascii96` line.
 
+**The binary line.** A seventh line, and the one the other six are bounded by:
+
+    binary | pages  image  audio  video  books  models | binary
+
+It is listed at both ends because it is met from either end, but it is one line, not two. It wraps around the outside of the other six — a single closed loop, in binary, around everything they address — so which end of the corridor you walk out of decides which side of it you see the edge on.
+
+It is the **same space** as any other tile of corridor — the same width, the same height, the same bookcase — and an ordinary line in every respect the engine cares about: its own two colours (black, with green edges), its own place in the door order, its own column on the map. The one difference is that it has **one side**. One wall carries the shelves, which stand empty; in place of the other the floor simply ends, at a short wall no higher than your waist, and past that there is nothing. Green rain falls off that edge for ever, filling the opening from the ceiling down and disappearing behind the wall — characters drawn from every Unicode block Sieve knows, with a bright head and a fading tail, and now and then a column that writes a code point out as the **surrogate pair** it is stored as: the code point, then its high half, then its low half, which is the forward pass down the column and the backward one read up it.
+
+Its one wall carries its one door, so the six lines no longer loop into one another — they **start and finish** at binary. Walking left out of PAGES runs IMAGE, AUDIO, VIDEO, BOOKS, MODELS and then binary, where the corridor ends; walking right out of PAGES reaches binary directly, from the other side.
+
+Its size is not counted, deliberately, and the map says so. Its shelves stand empty: nothing out there is addressed, ordered or filtered yet. What goes on them, and how it is addressed, is open — every file of a fixed length in base 256 would make it an ordinary line with an ordinary state space, and equally it could be where real data is put by the people who catalogue it. For now the line exists, is walkable, and holds nothing.
+
+![The binary line: one wall of empty shelves, and on the other side the edge, the short wall and the rain](docs/images/hallway-edge.png)
+
+The rain only ever falls as characters the font can actually draw, so it never becomes rows of question marks: with Sieve's own `sieve8x8` it is Latin and Greek, and with **Unifont** it is most of Unicode. Unifont is not stored in this repository — it is GPLv2+ while Sieve's own font is public domain, and a project should pick its own licences — so `python tools/fetch_unifont.py` fetches it into `data/fonts/unifont.hex`, each part checked against a pinned SHA-256, exactly as `fetch_corpus.py` fetches the training corpus. Name it on a language file's first line (`font = unifont`) to use it. The rain is redrawn every third frame into one texture and mapped onto the opening with the same perspective grid the crates use, so it lies in the world rather than facing you; each tile takes two of the texture's four panels, side by side, so the glyphs stay about square and the corridor does not repeat as you walk. It costs about 5 ms a frame with the software renderer, nearly all of it the alpha blend, and far less with a real one.
+
 **Alphabets.** A text line's alphabet is an ordered list of Unicode code point ranges, and those ranges are its digit order: digit 0 is the first code point of the first range. Four are built in — `lower27` (space + a–z), `babel29` (libraryofbabel.info's set, in its order), `ascii95` (printable ASCII) and `ascii96` (printable ASCII with the line feed, so a unit can hold a file whose line breaks are part of what it says). Beyond those, about a hundred named Unicode blocks can be used on their own or **stacked** with `+`: `--alphabet greek+cyrillic`, `--alphabet ascii+all-emojis`, or a raw range, `--alphabet u+0370-u+03ff`. Stacked code points are unioned, sorted and deduplicated, so blocks that overlap never give a symbol twice and the order you write them in does not matter — `greek+cyrillic` and `cyrillic+greek` are the same alphabet with the same name. `sieve alphabets` lists every block with its range and a description of what it is; `sieve alphabets --spec greek+cyrillic` works one out. In the setup menu, **A** opens the same list to tick through. A smaller alphabet is not only a smaller line: every exact ranker steps through B symbols at each position, so the alphabet decides how much work counting and ranking a filter stack costs. Surrogates (U+D800–U+DFFF) can be stacked in like anything else — they are addressable, countable, filterable and drawn as the replacement glyph, but they have no UTF-8 encoding, so a unit holding one has no text form to warp in from or write into a `.book`. An alphabet's ranges are pinned, since every address on a line depends on what its alphabet holds: a correction is a new id, never an edit.
 
 **The setup menu.** Start Sieve opens a menu where you can set every line's shape: text length, alphabet, warp rules and model; image size and palette; audio notes; video size, frames and palette; plus the key, the starting line and the ordering. Enter walks in, and **F1** in the hallway brings the menu back.
 
-Beside the settings, a **map** draws the five lines side by side, one copy each:
+Beside the settings, a **map** draws the lines side by side, one copy each, with the binary line at each end because that is where it runs:
 - Each bar's length is the line's size in bits (log2 of its number of units). The real sizes differ by factors far too large to draw literally.
 - The **longest line always fills the height**, so no bar can leave the screen however large the settings grow.
 - Every bar has a minimum length, so even a tiny line stays visible next to a huge one.

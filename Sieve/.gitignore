@@ -4,3 +4,7 @@ out/
 vcpkg_installed/
 __pycache__/
 corpus/
+
+# GNU Unifont, fetched by tools/fetch_unifont.py (GPLv2+ with the font embedding exception).
+# Not part of Sieve: run the script to get it.
+data/fonts/unifont.hex

@@ -48,6 +48,13 @@ std::shared_ptr<const Mesh> load_model(const std::string& model, const std::stri
 // A cheap stand-in for a distant copy: only the faces turned towards +X (a book's spine, the
 // side you see from the corridor, for the left wall) and up (its top).
 std::shared_ptr<const Mesh> facing_x(const Mesh& mesh);
+
+// A corridor mesh with one side removed, for the binary line's one-sided tile: `sign` is which
+// side goes, `at` how far out a triangle must stand to count as being in that wall.
+std::shared_ptr<const Mesh> half_x(const Mesh& mesh, float sign, float at);
+
+// A solid box (the short wall on the binary line's open edge).
+std::shared_ptr<const Mesh> box_mesh(Vec3 lo, Vec3 hi, SDL_FColor kd);
 std::filesystem::path mesh_folder();
 
 // Where and how one copy of a mesh is drawn: scaled in Y, mirrored in X or not, then moved.

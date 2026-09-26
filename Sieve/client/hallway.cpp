@@ -70,14 +70,26 @@ constexpr float kPi = 3.14159265358979f;
 
 constexpr LineKind kLineOrder[4] = {LineKind::Text, LineKind::Image, LineKind::Audio, LineKind::Video};
 // The corridor's lines: the four above, then books (made of pages and a picture).
-constexpr int kLines = 6;
-constexpr int kBooksLine = 4, kModelsLine = 5;
+// The corridor's lines, in door order: the four unit lines, books, models, and then binary,
+// which is the line the others are bounded by. Walking left goes to the next line and right to
+// the previous one, so the sequence runs
+//
+//     binary | pages  image  audio  video  books  models | binary
+//
+// with binary at both ends: the six no longer loop into one another, they start and finish at
+// it. Binary is one line, not two -- it wraps around the outside of the other six, and which
+// side of it you see the edge on depends on which end you walked out of (see binary_shelf_).
+constexpr int kLines = 7;
+constexpr int kBooksLine = 4, kModelsLine = 5, kBinaryLine = 6;
+// The short wall on the binary line's open edge, under Real Graphics: dark, so the drop past it
+// is what the eye goes to.
+constexpr SDL_FColor kRailColour{0.42f, 0.44f, 0.42f, 1.0f};
 // Tiles drawn behind and ahead of the one you are in (and kept in the book cache).
 constexpr int kCacheBack = 6, kCacheAhead = 7;
 constexpr int kBuckets = 12; // distance fades of the wireframe
 const Theme& theme_of(int li)
 {
-    return li == kBooksLine ? kBooksTheme : li == kModelsLine ? kModelsTheme : kThemes[li];
+    return li == kBooksLine ? kBooksTheme : li == kModelsLine ? kModelsTheme : li == kBinaryLine ? kBinaryTheme : kThemes[li];
 }
 
 SDL_Color mix(SDL_Color a, SDL_Color b, float t)
@@ -95,7 +107,9 @@ struct Segment
 
 // One tile's edges: the hallway (floor, ceiling, walls, door frames, floor marks) and/or the two
 // bookcases. Real Graphics replaces each part with its model when there is one.
-std::vector<Segment> build_tile(bool hallway = true, bool shelves = true)
+// `only`: 0 for both walls, or -1 / +1 for just that one. The binary line has one wall, because
+// its other side is the edge (build_edge below), so it is built with only = -1 or +1.
+std::vector<Segment> build_tile(bool hallway = true, bool shelves = true, int only = 0)
 {
     std::vector<Segment> s, hall, cases;
     auto rect = [&](Vec3 p0, Vec3 p1, Vec3 p2, Vec3 p3) {
@@ -103,6 +117,7 @@ std::vector<Segment> build_tile(bool hallway = true, bool shelves = true)
     };
     for (float sx : {-1.0f, 1.0f})
     {
+        if (only != 0 && sx != float(only)) continue;
         const float wall = sx * kHalfWidth, face = sx * kCaseFront;
         // Floor and ceiling edges along the tile, and the frame across its start.
         hall.push_back({{wall, 0, 0}, {wall, 0, kTile}});
@@ -134,6 +149,21 @@ std::vector<Segment> build_tile(bool hallway = true, bool shelves = true)
     if (hallway) out = hall;
     if (shelves) out.insert(out.end(), cases.begin(), cases.end());
     return out;
+}
+
+// The open side of one tile of the binary line (world.hpp). The space is an ordinary tile of
+// corridor; this is what stands where its other wall would have been -- a short wall on the last
+// edge of the floor, and past that nothing. `sx` is which side that is; the shelves are opposite.
+std::vector<Segment> build_edge(float sx)
+{
+    std::vector<Segment> s;
+    const float rail = sx * kEdgeRail;
+    // The short wall: along the tile at the top, up each end, and posts in between.
+    s.push_back({{rail, kEdgeRailTop, 0}, {rail, kEdgeRailTop, kTile}});
+    s.push_back({{rail, 0, 0}, {rail, kEdgeRailTop, 0}});
+    s.push_back({{rail, 0, kTile}, {rail, kEdgeRailTop, kTile}});
+    for (float z = kTile / 6; z < kTile - 0.01f; z += kTile / 6) s.push_back({{rail, 0, z}, {rail, kEdgeRailTop, z}});
+    return s;
 }
 
 // ---------------------------------------------------------------- text helpers
@@ -249,6 +279,9 @@ public:
         std::shared_ptr<const Mesh> hallway, bookshelf, book, marker;
         // Books more than a tile away: just their spines and tops (the rest cannot be seen there).
         std::shared_ptr<const Mesh> book_far;
+        // The binary line: the same tile with one side taken out ([0] the right side gone, [1]
+        // the left), and the short wall that stands on the edge where it went.
+        std::shared_ptr<const Mesh> half[2], rail[2];
     };
 
     // The models line's shape, which is not a Line: V vertices, F triangles, a grid of C steps.
@@ -259,7 +292,10 @@ public:
 
     Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> lines, const FilterConfig& filters, uint32_t book_pages,
             ModelShape shape)
-        : window_(window), r_(renderer), lines_(std::move(lines)), tile_geometry_(build_tile()), hall_geometry_(build_tile(true, false)), case_geometry_(build_tile(false, true)), book_geometry_{build_books(false), build_books(true)}
+        : window_(window), r_(renderer), lines_(std::move(lines)), tile_geometry_(build_tile()), hall_geometry_(build_tile(true, false)), case_geometry_(build_tile(false, true)),
+          bin_tile_{build_tile(true, true, -1), build_tile(true, true, 1)}, bin_hall_{build_tile(true, false, -1), build_tile(true, false, 1)},
+          bin_case_{build_tile(false, true, -1), build_tile(false, true, 1)}, edge_geometry_{build_edge(1), build_edge(-1)},
+          book_geometry_{build_books(false), build_books(true)}
     {
         // The books line: a cover from the image line, a title and book_pages pages from the pages line.
         books_ = std::make_unique<BookSpace>(lines_[1].space, lines_[0].space, book_pages);
@@ -330,15 +366,26 @@ public:
     // The current line's units (the four unit lines; the books line has its own BookSpace).
     // The models line has no Line of its own (it is not made of one alphabet), so it borrows the
     // pages line's, as the books line does, for the few things that ask about a Line.
-    const Line& line() const { return lines_[size_t(on_books() || on_models() ? 0 : li_)]; }
+    const Line& line() const { return lines_[size_t(on_books() || on_models() || on_binary() ? 0 : li_)]; }
     bool on_books() const { return li_ == kBooksLine; }
     bool on_models() const { return li_ == kModelsLine; }
+    // The binary line. It has no state space of its own yet -- its shelves stand empty, and how
+    // they are addressed is still to be worked out (SPECIFICATIONS §12.1) -- so like the books
+    // and models lines it borrows the pages line's Line for the few things that ask about one.
+    bool on_binary() const { return li_ == kBinaryLine; }
+    // Which wall of the binary line carries the shelves. The other side is the edge and the drop.
+    // It is the wall you came in through, so which side you see the drop on depends on which end
+    // of the corridor you walked out of: binary wraps around the outside of the other six lines,
+    // and you meet it from either end.
+    int shelf_side() const { return binary_shelf_; } // 0: shelves left, drop right. 1: the mirror.
+    float drop_sign() const { return binary_shelf_ == 0 ? 1.0f : -1.0f; }
     // The current line's medium, and whether its books vary in size: pages, pictures and books do;
     // records (audio) and tapes (video) are all one size, as the real things are (world.hpp).
     Media media() const
     {
         if (on_books()) return Media::Books;
         if (on_models()) return Media::Models;
+        if (on_binary()) return Media::Pages;
         switch (line().kind)
         {
         case LineKind::Image: return Media::Image;
@@ -350,7 +397,7 @@ public:
     bool sizes_vary() const { return media_sizes_vary(media()); }
     const Theme& theme() const { return theme_of(li_); }
     Camera& camera() { return cam_; }
-    bool guided_on() const { return !on_books() && !on_models() && guided_ && line().guided != nullptr; }
+    bool guided_on() const { return !on_books() && !on_models() && !on_binary() && guided_ && line().guided != nullptr; }
     // The guided line in use: in compact mode, the one restricted to survivors.
     const GuidedLine& guided() const
     {
@@ -432,7 +479,7 @@ public:
     // The models line has no filters yet (SPECIFICATIONS §12 sets out the three tiers to come).
     bool has_filters() const
     {
-        if (on_models()) return false;
+        if (on_models() || on_binary()) return false;
         return on_books() ? book_sieve_ && !book_sieve_->empty() : !stack().empty();
     }
     // The filters' part of the readout, worked out when the line or its settings change (the
@@ -464,6 +511,10 @@ public:
     // How many units line i has in its loop, in the current ordering and filter mode.
     BigUint units_of(int i) const
     {
+        // Binary is not counted yet: it stands for everything the other six do not address, and
+        // its size is not a number we have. One loop tile keeps the shared machinery happy; every
+        // place that would read a unit out of it is guarded by on_binary() instead.
+        if (i == kBinaryLine) return BigUint(uint64_t(kBooksPerTile));
         if (i == kModelsLine) return model_space_->size();
         if (i == kBooksLine) return effective_mode(i) == FilterMode::Compact ? book_sieve_->count() : books_->size();
         if (guided_ && lines_[size_t(i)].guided) return BigUint::pow(2, zoom_);
@@ -924,21 +975,35 @@ public:
         if (dot(move, move) > 0) move_by(normalize(move) * (speed * dt));
     }
 
+    // How far left and right you may walk. Normally a wall on either side; on the binary line the
+    // drop side has no wall, so you can walk out onto the walkway as far as the short wall, and
+    // there is no door out there -- its one door is in its one wall of shelves.
+    float walk_lo() const { return on_binary() && drop_sign() < 0 ? -(kEdgeRail - 0.35f) : -kWalkLimit; }
+    float walk_hi() const { return on_binary() && drop_sign() > 0 ? kEdgeRail - 0.35f : kWalkLimit; }
+
     void move_by(Vec3 d)
     {
-        auto in_door = [](float z) { return z > kDoorStart + 0.15f && z < kDoorEnd - 0.15f; };
+        // A doorway lets you through the wall; the binary line's open side has no wall and no
+        // door, so out there the short wall stops you wherever you are along the tile.
+        auto in_door = [this](float x, float z) {
+            if (on_binary() && x * drop_sign() > 0) return false;
+            return z > kDoorStart + 0.15f && z < kDoorEnd - 0.15f;
+        };
+        const float lo = walk_lo(), hi = walk_hi();
         Vec3 p = cam_.pos + d;
         // Walls stop you except in a doorway; once in a doorway you cannot slide along inside the wall.
-        if (std::fabs(p.x) > kWalkLimit && !in_door(p.z))
+        if ((p.x < lo || p.x > hi) && !in_door(p.x, p.z))
         {
-            if (std::fabs(cam_.pos.x) > kWalkLimit) p.z = cam_.pos.z;
-            else p.x = std::clamp(p.x, -kWalkLimit, kWalkLimit);
+            if (cam_.pos.x < lo || cam_.pos.x > hi) p.z = cam_.pos.z;
+            else p.x = std::clamp(p.x, lo, hi);
         }
         cam_.pos = p;
         while (cam_.pos.z >= kTile) { cam_.pos.z -= kTile; move_tiles(1); }
         while (cam_.pos.z < 0) { cam_.pos.z += kTile; move_tiles(-1); }
-        if (cam_.pos.x < -(kHalfWidth + 0.05f)) cross(Side::Left);
-        else if (cam_.pos.x > kHalfWidth + 0.05f) cross(Side::Right);
+        // The door is in the wall, and on the binary line there is only one wall.
+        const bool left_door = !on_binary() || binary_shelf_ == 0, right_door = !on_binary() || binary_shelf_ == 1;
+        if (cam_.pos.x < -(kHalfWidth + 0.05f) && left_door) cross(Side::Left);
+        else if (cam_.pos.x > kHalfWidth + 0.05f && right_door) cross(Side::Right);
     }
 
     void jump_tiles(int64_t n)
@@ -958,6 +1023,10 @@ public:
     {
         const int to = side == Side::Left ? (li_ + 1) % kLines : (li_ + kLines - 1) % kLines;
         cam_.pos.x = (kHalfWidth - 0.1f) * (side == Side::Left ? 1.0f : -1.0f);
+        // You come out of binary's one wall of shelves, so that is the wall you came in through,
+        // and the drop is on the other side. Which is why the edge is on your left at one end of
+        // the corridor and on your right at the other: it is the same line, met from either end.
+        if (to == kBinaryLine) binary_shelf_ = side == Side::Left ? 1 : 0;
         drop_in_hand();
         trail_.clear(); // a warped trail belongs to the line it was warped on
         set_line(to);
@@ -1198,7 +1267,8 @@ public:
         SDL_RenderClear(r_);
         SDL_SetRenderDrawBlendMode(r_, SDL_BLENDMODE_BLEND);
 
-        hover_ = pick_book(cam_.pos, cam_.forward(), 0, 5.0f, sizes_vary());
+        // Nothing stands on the binary line's shelves, so there is nothing to look at or take.
+        hover_ = on_binary() ? std::nullopt : pick_book(cam_.pos, cam_.forward(), 0, 5.0f, sizes_vary());
         if (hover_ && effective_mode() == FilterMode::Hide && !book(hover_->tile, hover_->slot()).passes) hover_.reset();
 
         constexpr int kBack = kCacheBack, kAhead = kCacheAhead;
@@ -1230,6 +1300,9 @@ public:
             const float z0 = t * kTile;
             for (float sx : {-1.0f, 1.0f})
             {
+                // The binary line has one wall, so it has one door: nothing to draw on the side
+                // the floor ends at.
+                if (on_binary() && sx == drop_sign()) continue;
                 const float x = sx * kHalfWidth;
                 const std::vector<Vec3> door = {{x, 0, z0 + kDoorStart}, {x, 0, z0 + kDoorEnd}, {x, kDoorTop, z0 + kDoorEnd}, {x, kDoorTop, z0 + kDoorStart}};
                 if (!real_hall) fill(door, SDL_Color{0, 0, 0, 255});
@@ -1273,8 +1346,15 @@ public:
             if (!visible[t + kBack]) continue;
             const float z0 = t * kTile;
             static const std::vector<Segment> none;
-            const std::vector<Segment>& edges = real_hall ? (real_cases ? none : case_geometry_) : (real_cases ? hall_geometry_ : tile_geometry_);
+            const int b = binary_shelf_;
+            const std::vector<Segment>& edges =
+                on_binary() ? (real_hall ? (real_cases ? none : bin_case_[b]) : (real_cases ? bin_hall_[b] : bin_tile_[b]))
+                            : (real_hall ? (real_cases ? none : case_geometry_) : (real_cases ? hall_geometry_ : tile_geometry_));
             for (const Segment& s : edges) add(s, z0);
+            // The binary line's open side: the short wall on the last edge of the floor. Under
+            // Real Graphics it is a solid model instead (draw_models), so it is not drawn twice.
+            if (on_binary() && !real_hall)
+                for (const Segment& s : edge_geometry_[b]) add(s, z0);
             const uint32_t books = real_books ? 0 : books_in_tile(t);
             const FilterMode fm = effective_mode();
             for (uint32_t k = 0; k < books; ++k)
@@ -1290,6 +1370,13 @@ public:
                     }
                 for (const Segment& s : book_geometry_[sizes_vary()][k]) add(s, z0, dim);
             }
+        }
+        // The binary line: the rain falling off its edge. Only there -- the other six lines are
+        // bounded by it, they do not contain it.
+        if (on_binary())
+        {
+            render_rain();
+            draw_binary_edge(visible, kBack, kAhead, real_hall);
         }
         // The models line: the rendered face of every crate in view, and a few more rendered.
         if (on_models()) draw_crate_faces(visible, kBack, kAhead);
@@ -1331,6 +1418,15 @@ public:
             m.book = load_model("book", medium);
             if (m.book) m.book_far = facing_x(*m.book);
             m.marker = load_model("marker", medium);
+            if (li_ == kBinaryLine && m.hallway)
+                for (int k = 0; k < 2; ++k)
+                {
+                    const float sign = k == 0 ? 1.0f : -1.0f;
+                    m.half[k] = half_x(*m.hallway, sign, kHalfWidth - 0.3f);
+                    const float x = sign * kEdgeRail;
+                    m.rail[k] = box_mesh({std::min(x, x - sign * 0.12f), 0, 0},
+                                         {std::max(x, x - sign * 0.12f), kEdgeRailTop, kTile}, kRailColour);
+                }
             m.loaded = true;
             std::cerr << "real graphics for the " << medium << " line:";
             for (const auto& [name, mesh] : {std::pair{"hallway", m.hallway}, {"bookshelf", m.bookshelf}, {"book", m.book}, {"marker", m.marker}})
@@ -1351,7 +1447,12 @@ public:
         {
             if (!visible[t + back]) continue;
             const float z0 = float(t) * kTile;
-            if (md.hallway) models_batch_.add(*md.hallway, {{0, 0, z0}});
+            // The binary line is the same tile of corridor with one side taken out, and a short
+            // wall standing where it went. Everything else about it is an ordinary tile.
+            const int bs = binary_shelf_;
+            if (on_binary() && md.half[bs]) models_batch_.add(*md.half[bs], {{0, 0, z0}});
+            else if (md.hallway) models_batch_.add(*md.hallway, {{0, 0, z0}});
+            if (on_binary() && md.rail[bs]) models_batch_.add(*md.rail[bs], {{0, 0, z0}});
             if (md.marker && offset_loop_tile(t).is_zero())
             {
                 // Pulled a little nearer than the floor it lies on, so the floor never shows through.
@@ -1365,8 +1466,9 @@ public:
             const bool near = t >= -1 && t <= 1;
             if (md.bookshelf)
             {
-                models_batch_.add(*md.bookshelf, {{0, 0, z0}});
-                models_batch_.add(*md.bookshelf, {{0, 0, z0}, 1.0f, true});
+                // One wall, one bookcase, on the binary line; both walls everywhere else.
+                if (!on_binary() || bs == 0) models_batch_.add(*md.bookshelf, {{0, 0, z0}});
+                if (!on_binary() || bs == 1) models_batch_.add(*md.bookshelf, {{0, 0, z0}, 1.0f, true});
             }
             if (!md.book) continue;
             const Mesh& book_mesh = near ? *md.book : *md.book_far;
@@ -1855,6 +1957,7 @@ public:
 
     std::string one_line_preview(const Space::Digits& u)
     {
+        if (on_binary()) return ""; // its shelves stand empty
         if (on_models()) return ""; // a model is drawn, not written out: see draw_model
         if (line().kind == LineKind::Text) return "\"" + ascii(utf8_encode(line().space.text_of(u))) + "\"";
         if (line().kind == LineKind::Audio) return notes_to_notation(u);
@@ -1906,16 +2009,22 @@ public:
         // Top bar: where you are.
         panel(-1, -1, W + 2, 44);
         const Book& first = book(0, 0);
-        const std::string where = trf("hud.line", {tr(th.key)}) + "   " + ordering_name() +
-                                  (guided_on() ? "  " + trf("hud.zoom", {std::to_string(zoom_)}) : std::string()) + "   " + tr("hud.tile") + " " +
-                                  tile_label_ +
-                                  (first.empty ? "   " + tr("hud.padding") : "   " + trf("hud.along", {percent(first.fraction)}));
+        const std::string where =
+            on_binary() ? trf("hud.line", {tr(th.key)}) + "   " + tr("hud.infinite") + "   " + tr("hud.tile") + " " + tile_label_
+                        : trf("hud.line", {tr(th.key)}) + "   " + ordering_name() +
+                              (guided_on() ? "  " + trf("hud.zoom", {std::to_string(zoom_)}) : std::string()) + "   " + tr("hud.tile") + " " +
+                              tile_label_ +
+                              (first.empty ? "   " + tr("hud.padding") : "   " + trf("hud.along", {percent(first.fraction)}));
         text(10, 7, fit(where, W - 20, 2), 2, ink);
-        const std::string loop = trf("hud.loop", {loop_label_}) +
-                                 (loop_.fills_whole_tiles() ? std::string() : " " + trf("hud.loop.padding", {std::to_string(loop_.padding())}));
-        text(10, 28, fit((on_books() ? books_->id() : on_models() ? model_space_->id() : line().space.id()) + (guided_on() ? "   " + trf("hud.model", {line().model_id}) : std::string()) + "   " +
+        const std::string loop = on_binary() ? tr("hud.no_loop")
+                                             : trf("hud.loop", {loop_label_}) + (loop_.fills_whole_tiles()
+                                                                                     ? std::string()
+                                                                                     : " " + trf("hud.loop.padding", {std::to_string(loop_.padding())}));
+        text(10, 28, fit((on_books() ? books_->id() : on_models() ? model_space_->id() : on_binary() ? tr("hud.binary_id") : line().space.id()) + (guided_on() ? "   " + trf("hud.model", {line().model_id}) : std::string()) + "   " +
                          loop + "   " + filter_status() + "   " +
-                         trf("hud.doors", {tr(theme_of((li_ + 1) % kLines).key), tr(theme_of((li_ + kLines - 1) % kLines).key)}), W - 20, 1),
+                         (on_binary() ? trf("hud.door_one", {tr(theme_of(binary_shelf_ == 0 ? (li_ + 1) % kLines : (li_ + kLines - 1) % kLines).key)})
+                                      : trf("hud.doors", {tr(theme_of((li_ + 1) % kLines).key), tr(theme_of((li_ + kLines - 1) % kLines).key)})),
+                         W - 20, 1),
              1, ink);
 
         // The book you are looking at.
@@ -1981,6 +2090,183 @@ public:
              tr("hud.keys1") + (guided_on() ? tr("hud.keys.zoom") : std::string()) + tr("hud.keys2") +
                  tr(in_hand_ && in_hand_->parts ? "hud.keys.page" : "hud.keys.trail") + tr("hud.keys3"),
              1, ink);
+    }
+
+    // ---- the Binary Edge
+    //
+    // Down each outer side of the corridor runs a half-hallway (world.hpp): an empty bookcase
+    // against the inner wall, a walkway, a short wall, and then the floor ends. Off that edge
+    // falls rain: columns of characters drawn from every Unicode block Sieve knows
+    // (sieve/alphabet.hpp), which is the whole of what could be written and has not been. It is
+    // green because that is what this is. The shelves facing it are empty because nothing out
+    // there has been catalogued yet, and cataloguing it is a job for people.
+    //
+    // The rain is drawn into a texture, then mapped onto the curtain hanging off each tile's
+    // edge with the same perspective grid the crate faces use, so it lies in the world rather
+    // than facing the camera. Four tiles' worth sit side by side in the texture and each tile
+    // and band takes one of them, so nothing repeats as you walk.
+    // (theme.hpp: kEdgeInk, the one colour the edge is drawn in, here and on the setup map.)
+
+    static constexpr int kRainCell = 16;   // one character cell in the rain texture
+    static constexpr int kRainCols = 28;   // characters across one tile of wall
+    static constexpr int kRainRows = 22;   // and down it
+    static constexpr int kRainPanels = 4;  // side by side, so neighbouring tiles differ
+
+    // The characters the rain can fall as: code points from every block, kept only if the font
+    // can actually draw them. With Sieve's own small font that is Latin and Greek; with Unifont
+    // (tools/fetch_unifont.py) it is most of what Unicode has.
+    const std::vector<char32_t>& rain_glyphs()
+    {
+        if (!rain_pool_.empty() && rain_font_ == font_name()) return rain_pool_;
+        rain_font_ = font_name();
+        rain_pool_.clear();
+        for (const sieve::Block& b : sieve::blocks())
+        {
+            // A sample from each block, so no one block can flood the rain: the big CJK and
+            // emoji blocks would otherwise be almost all of it.
+            const uint32_t span = b.range.count();
+            const uint32_t step = std::max<uint32_t>(1, span / 48);
+            for (uint32_t c = b.range.first; c <= b.range.last; c += step)
+                if (font_has(char32_t(c))) rain_pool_.push_back(char32_t(c));
+        }
+        // Nothing drawable at all (a font with no glyphs): fall back to plain hex digits, which
+        // is what the edge is underneath anyway.
+        if (rain_pool_.empty())
+            for (char32_t c = U'0'; c <= U'9'; ++c) rain_pool_.push_back(c);
+        return rain_pool_;
+    }
+
+    // One cell of one column. A column is either characters or, now and then, the surrogate pair
+    // of an astral code point written out: the code point, then its high and low halves, which
+    // is the forward pass and, read back up the column, the backward one. Nothing here is
+    // addressed or stored; the edge is a view of what has not been catalogued.
+    std::string rain_cell(uint32_t col, uint32_t row, uint32_t seed) const
+    {
+        const uint32_t h = hash3(col, row, seed);
+        return std::string(1, "0123456789ABCDEF"[h & 15]);
+    }
+
+    static uint32_t hash3(uint32_t a, uint32_t b, uint32_t c)
+    {
+        uint32_t h = a * 0x9E3779B1u ^ b * 0x85EBCA77u ^ c * 0xC2B2AE3Du;
+        h ^= h >> 15;
+        h *= 0x2545F491u;
+        h ^= h >> 13;
+        return h;
+    }
+
+    // The rain, into its own texture. Redrawn every frame: it is a few hundred glyphs.
+    void render_rain()
+    {
+        const int w = kRainCols * kRainCell * kRainPanels, h = kRainRows * kRainCell;
+        if (!rain_tex_)
+        {
+            rain_tex_ = SDL_CreateTexture(r_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, w, h);
+            if (!rain_tex_) return;
+            SDL_SetTextureBlendMode(rain_tex_, SDL_BLENDMODE_BLEND);
+            SDL_SetTextureScaleMode(rain_tex_, SDL_SCALEMODE_LINEAR);
+        }
+        // Rain is a curtain, not an animation anyone reads: redrawing it every third frame
+        // looks the same and costs a third as much.
+        if (rain_tex_ && rain_at_ != 0 && portal_frame_ - rain_at_ < 3) return;
+        rain_at_ = portal_frame_;
+        SDL_Texture* const was = SDL_GetRenderTarget(r_);
+        if (!SDL_SetRenderTarget(r_, rain_tex_)) return;
+        SDL_SetRenderDrawColor(r_, 0, 0, 0, 0);
+        SDL_RenderClear(r_);
+        const std::vector<char32_t>& pool = rain_glyphs();
+        const SDL_Color ink = kEdgeInk;
+        const uint32_t frame = portal_frame_;
+        for (int p = 0; p < kRainPanels; ++p)
+            for (int c = 0; c < kRainCols; ++c)
+            {
+                const uint32_t col = uint32_t(p * kRainCols + c);
+                const uint32_t seed = hash3(col, 0, 0x5EED);
+                // Each column falls at its own speed and has its own length and its own start.
+                const uint32_t speed = 3 + (seed & 7);
+                const int len = 7 + int((seed >> 4) & 15);
+                // One in six columns writes a surrogate pair instead of characters.
+                const bool pair = (seed >> 9) % 6 == 0;
+                const int head = int(((frame * speed) / 16 + (seed >> 12)) % uint32_t(kRainRows + len));
+                for (int k = 0; k < len; ++k)
+                {
+                    const int row = head - k;
+                    if (row < 0 || row >= kRainRows) continue;
+                    // The head is bright and the tail fades, as rain does.
+                    const float t = 1.0f - float(k) / float(len);
+                    const float b = 0.35f + 0.65f * t;
+                    SDL_Color ch = k == 0 ? SDL_Color{255, 255, 255, 255}
+                                          : SDL_Color{Uint8(float(ink.r) * b), Uint8(float(ink.g) * b),
+                                                      Uint8(float(ink.b) * b), Uint8(90.0f + 165.0f * t)};
+                    std::string cell;
+                    if (pair)
+                    {
+                        // An astral code point and the two halves it is written as in UTF-16.
+                        const char32_t cp = 0x10000 + (hash3(col, uint32_t(row) / 3, 0xA57A) % 0xFFFF);
+                        const uint32_t v = uint32_t(cp) - 0x10000;
+                        const uint32_t hi = 0xD800 + (v >> 10), lo = 0xDC00 + (v & 0x3FF);
+                        static const char* const kHex = "0123456789ABCDEF";
+                        const uint32_t which = uint32_t(row) % 3 == 0 ? uint32_t(cp) : uint32_t(row) % 3 == 1 ? hi : lo;
+                        cell = std::string(1, kHex[(which >> (4 * (3 - uint32_t(row) % 4))) & 15]);
+                    }
+                    else
+                    {
+                        const char32_t cp = pool[hash3(col, uint32_t(row), frame / 24) % pool.size()];
+                        cell = utf8_encode(std::u32string(1, cp));
+                    }
+                    draw_text(r_, float(col * kRainCell), float(row * kRainCell), cell, 2, ch);
+                }
+            }
+        SDL_SetRenderTarget(r_, was);
+    }
+
+    // The rain, falling off the edge. It hangs in the opening itself -- the full height of the
+    // space, from the ceiling down to the floor -- and what falls past the floor is behind the
+    // floor, so there is nothing to draw down there. Each tile takes two panels of the texture
+    // side by side, which keeps the glyphs about square and stops the corridor repeating.
+    static constexpr int kRainSlices = 2;
+
+    void draw_binary_edge(const bool* visible, int back, int ahead, bool real)
+    {
+        if (!rain_tex_) return;
+        std::vector<SDL_Vertex> verts;
+        const float sx = drop_sign(), x = sx * kEdgeRail;
+        const float slice = kTile / kRainSlices;
+        for (int t = -back; t <= ahead; ++t)
+        {
+            if (!visible[t + back]) continue;
+            const float z0 = float(t) * kTile;
+            for (int k = 0; k < kRainSlices; ++k)
+            {
+                const int panel = int(((t * kRainSlices + k) % kRainPanels + kRainPanels) % kRainPanels);
+                const float u0 = float(panel) / kRainPanels, u1 = float(panel + 1) / kRainPanels;
+                const float za = z0 + float(k) * slice, zb = za + slice;
+                // Wound so the rain reads the same way round on both sides.
+                const Vec3 quad[4] = {{x, kHeight, sx < 0 ? za : zb},
+                                      {x, kHeight, sx < 0 ? zb : za},
+                                      {x, 0, sx < 0 ? zb : za},
+                                      {x, 0, sx < 0 ? za : zb}};
+                draw_face_image(rain_tex_, quad, verts, u0, u1);
+            }
+        }
+        // The short wall stands in front of the bottom of that curtain, and the rain is blitted
+        // over the models rather than depth-tested against them, so its two faces are laid back
+        // over the top, near tile last. Above the wall the opening is clear and the rain shows;
+        // below it, the rain is behind the wall, as it should be.
+        auto rail_colour = [](float lit) {
+            auto c = [lit](float v) { return Uint8(std::min(255.0f, v * 255.0f * lit)); };
+            return SDL_Color{c(kRailColour.r), c(kRailColour.g), c(kRailColour.b), 255};
+        };
+        const SDL_Color face = real ? rail_colour(0.38f) : theme().bg;
+        const float inner = sx * (kEdgeRail - 0.12f), outer = x;
+        for (int t = ahead; t >= -back; --t)
+        {
+            if (!visible[t + back]) continue;
+            const float z0 = float(t) * kTile, z1 = z0 + kTile;
+            fill({{inner, 0, z0}, {inner, 0, z1}, {inner, kEdgeRailTop, z1}, {inner, kEdgeRailTop, z0}}, face);
+            fill({{inner, kEdgeRailTop, z0}, {inner, kEdgeRailTop, z1}, {outer, kEdgeRailTop, z1}, {outer, kEdgeRailTop, z0}},
+                 real ? rail_colour(0.62f) : face);
+        }
     }
 
     // ---- crate faces
@@ -2138,7 +2424,8 @@ public:
 
     // One crate's image on its front face. The quad is split into a grid and every grid point is
     // projected, so the picture keeps its perspective instead of skewing across two triangles.
-    void draw_face_image(SDL_Texture* tex, const Vec3 quad[4], std::vector<SDL_Vertex>& verts)
+    void draw_face_image(SDL_Texture* tex, const Vec3 quad[4], std::vector<SDL_Vertex>& verts, float uu0 = 0,
+                         float uu1 = 1)
     {
         constexpr int kGrid = 2; // cells per side
         Vec3 corner[4];
@@ -2162,7 +2449,8 @@ public:
         for (int i = 0; i < kGrid; ++i)
             for (int j = 0; j < kGrid; ++j)
             {
-                const float u0 = float(j) / kGrid, u1 = float(j + 1) / kGrid;
+                const float u0 = uu0 + (uu1 - uu0) * float(j) / kGrid;
+                const float u1 = uu0 + (uu1 - uu0) * float(j + 1) / kGrid;
                 const float v0 = float(i) / kGrid, v1 = float(i + 1) / kGrid;
                 const SDL_Vertex a{{p[i][j].x, p[i][j].y}, white, {u0, v0}};
                 const SDL_Vertex b{{p[i][j + 1].x, p[i][j + 1].y}, white, {u1, v0}};
@@ -2378,6 +2666,12 @@ public:
     {
         models_batch_.release();
         clear_crate_faces();
+        if (rain_tex_)
+        {
+            SDL_DestroyTexture(rain_tex_);
+            rain_tex_ = nullptr;
+            rain_at_ = 0;
+        }
         if (portal_.tex)
         {
             SDL_DestroyTexture(portal_.tex);
@@ -2428,7 +2722,8 @@ private:
     // True if tile dt away is the start of a loop on all four lines at once.
     bool all_start(int64_t dt) const
     {
-        for (int i = 0; i < kLines; ++i)
+        // Binary is left out: it has no loop to start, so it would mark every tile.
+        for (int i = 0; i < kBinaryLine; ++i)
             if (!offset_loop_tile(all_loops_[i], all_loop_tiles_[i], dt).is_zero()) return false;
         return true;
     }
@@ -2469,6 +2764,7 @@ private:
     // How many books tile dt holds: all of them, except the last tile of a padded loop.
     uint32_t books_in_tile(int64_t dt) const
     {
+        if (on_binary()) return 0; // the shelves stand empty: nothing out there is catalogued yet
         if (loop_.fills_whole_tiles()) return kBooksPerTile;
         BigUint lt = offset_loop_tile(dt);
         lt.add_small(1);
@@ -2494,6 +2790,10 @@ private:
     SDL_Renderer* r_;
     std::vector<Line> lines_;
     std::vector<Segment> tile_geometry_, hall_geometry_, case_geometry_; // all, hallway only, bookcases only
+    // The same three for the binary line, which has one wall, and its open side: [0] shelves on
+    // the left and the drop on the right, [1] the mirror of that.
+    std::vector<Segment> bin_tile_[2], bin_hall_[2], bin_case_[2], edge_geometry_[2];
+    int binary_shelf_ = 0;
     Models models_[kLines]; // Real Graphics, per line
     MeshBatch models_batch_;
     // The last picture drawn in each of the two places one can appear (on the shelf you are
@@ -2517,7 +2817,7 @@ private:
     std::string tile_label_, loop_label_; // the readout's short forms of tile_ and the loop length
     LineLoop loop_{BigUint(1)};
     BigUint loop_tile_;   // tile_ mod loop_.tiles()
-    LineLoop all_loops_[kLines] = {LineLoop(BigUint(1)), LineLoop(BigUint(1)), LineLoop(BigUint(1)),
+    LineLoop all_loops_[kLines] = {LineLoop(BigUint(1)), LineLoop(BigUint(1)), LineLoop(BigUint(1)), LineLoop(BigUint(1)),
                                    LineLoop(BigUint(1)), LineLoop(BigUint(1)), LineLoop(BigUint(1))};
     BigUint all_loop_tiles_[kLines];
     std::unordered_map<int64_t, Book> cache_;
@@ -2550,6 +2850,12 @@ private:
         SDL_Texture* tex = nullptr;
         uint32_t used = 0;
     };
+    // The Binary Edge: the rain's texture, and the characters the current font can draw.
+    SDL_Texture* rain_tex_ = nullptr;
+    std::vector<char32_t> rain_pool_;
+    std::string rain_font_;
+    uint32_t rain_at_ = 0; // the frame the rain was last drawn
+
     std::unordered_map<int64_t, CrateFace> crate_;
     std::vector<uint32_t> crate_scratch_;
     uint32_t crate_budget_mb_ = 64;
@@ -2578,7 +2884,7 @@ const char* kUsage =
     "hallway - walk the Sieve's five lines in 3D\n\n"
     "Usage: hallway [options]\n\n"
     "Lines (the same meaning as in the sieve tool):\n"
-    "  --line pages|image|audio|video|books  line to start in (default pages; text also works)\n"
+    "  --line pages|image|audio|video|books|models|binary  line to start in (default pages)\n"
     "  --length L          text: characters per book (default 32)\n"
     "  --alphabet ID       text: lower27 (default), babel29, ascii95\n"
     "  --canon v2|v1       text: warp rules (default v2)\n"
@@ -2691,6 +2997,7 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
     int start_line = 0;
     if (a.get("line") == "books") start_line = kBooksLine;
     else if (a.get("line") == "models") start_line = kModelsLine;
+    else if (a.get("line") == "binary") start_line = kBinaryLine;
     else
     {
         const LineKind wanted = line_from_string(a.get("line", "text")); // "pages" is the text line
@@ -2699,8 +3006,9 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
     }
     const bool text_has_model = lines[0].guided != nullptr;
     // Books and models are not made of one alphabet, so neither starts with the text greeting.
-    const LineKind start_kind =
-        start_line == kBooksLine || start_line == kModelsLine ? LineKind::Image : lines[size_t(start_line)].kind;
+    const LineKind start_kind = start_line == kBooksLine || start_line == kModelsLine || start_line == kBinaryLine
+                                    ? LineKind::Image
+                                    : lines[size_t(start_line)].kind;
 
     const Hallway::ModelShape shape{a.get_positive("vertices", 8), a.get_positive("faces", 12), a.get_positive("coords", 16)};
     auto hall = std::make_unique<Hallway>(window, renderer, std::move(lines), filters,

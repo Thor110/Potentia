@@ -146,7 +146,6 @@ jobs:
           echo "$out"
           echo "$out" | q "8/8 vertices used"
           $H --no-menu --line books --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door6.png | sed -n 1p | q "^MODELS line"
-          $H --no-menu --line models --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door7.png | sed -n 1p | q "^PAGES line"
           # The crates render their models onto their faces, and the cache has a budget.
           $H --no-menu --line models --model-cache 8 --walk "0,0" --bench 12 --screenshot crates.png 2>&1 | q "^bench: 12 frames"
           # From a settings file that does not exist yet, so the slider starts at its default.
@@ -157,6 +156,30 @@ jobs:
           $exe mesh --vertices 12 --faces 20 --coords 64 | tr -d '\r' | q "^space        models/V12/F20/C64/key=sieve/modelspace-v1"
           $H --no-menu --line models --vertices 12 --faces 20 --coords 64 --walk "0,0" --screenshot shape.png | sed -n 1p | q "^MODELS line"
           $H --menu --vertices 12 --faces 20 --coords 64 --screenshot map6.png | q "saved map6.png"
+          # The binary line: one wall of empty shelves, and on the other side the edge, the short
+          # wall and the rain falling off it. It draws with whatever font is present, so it works
+          # with Sieve's own small one.
+          python -c "import ast,sys; ast.parse(open('tools/fetch_unifont.py').read())"
+          $H --no-menu --line binary --pose "0,1.7,4,0" --bench 8 --screenshot edge.png 2>&1 | q "^bench: 8 frames"
+          # It has no loop, nothing on its shelves, and no filters.
+          $H --no-menu --line binary --walk "0,0" --screenshot bin.png | sed -n 1p | q "^BINARY line"
+          # The six lines no longer loop into one another: they start and finish at binary.
+          # Left out of models is binary; right out of binary is models again.
+          $H --no-menu --line models --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door7.png | sed -n 1p | q "^BINARY line"
+          $H --no-menu --line models --pose "-1.7,7.0,0,0" --walk "-1,0;4.2,0" --screenshot door8.png | sed -n 2p | q "^MODELS line"
+          $H --no-menu --line pages --pose "1.7,7.0,0,0" --walk "1,0" --screenshot door9.png | sed -n 1p | q "^BINARY line"
+          # Binary's other side is the drop: the short wall stops you at the edge of the floor.
+          # No door, no crossing, whatever the doorway is doing at that z.
+          $H --no-menu --line models --pose "-1.7,7.0,0,0" --walk "-1,0;-9,0" --screenshot walk.png | sed -n 2p | q "^BINARY line.*x -1.650000"
+          # There is no setting for it: not in Settings > Graphics, not in a settings file that
+          # Graphics has just written, and not on the command line.
+          rm -f be.ini
+          $H --main-menu --settings be.ini --press "Down,Return,Return,Down,Down,Down,Return" --screenshot be.png > /dev/null
+          grep -q "^edge_glow = on" be.ini
+          if grep -q "binary" be.ini; then exit 1; fi
+          if $H --help 2>&1 | grep -q "binary-edge"; then exit 1; fi
+          test -s walk.png
+          test -s edge.png
           test -s models.png && test -s cube.png && test -s crates.png && test -s map6.png
           if $exe mesh --coords 12 > /dev/null 2>&1; then exit 1; fi
 
@@ -223,15 +246,19 @@ jobs:
           echo "$out"
           echo "$out" | tail -2 | sed -n 1p | q "PAGES line"
           test "$(echo "$out" | tail -2 | book)" = "$next"
-          # Guided order: M cycles to it and - zooms out; all five doors lead back to the same book.
+          # Guided order: M cycles to it and - zooms out; every door keeps the corridor position.
           $H --warp "$W" --press "M,M,-" --screenshot keys.png | tail -2 | sed -n 1p | q "PAGES line, guided zoom 57"
           start=$($H --mode guided --warp "$W" --zoom 20 --walk "0,0" --screenshot start.png | book)
-          out=$($H --mode guided --warp "$W" --zoom 20 --pose 0,7,-90,0 --walk "-2.3,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0" --screenshot guided.png)
+          # The corridor end to end and back: six doors left from pages reach binary, which is
+          # where the run finishes, and six right brings you back to the same book on pages.
+          out=$($H --mode guided --warp "$W" --zoom 20 --pose 0,7,-90,0 --walk "-2.3,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0" --screenshot guided.png)
           echo "$out"
           echo "$out" | q "VIDEO line"
           echo "$out" | q "BOOKS line"
           echo "$out" | q "MODELS line"
-          echo "$out" | tail -2 | sed -n 1p | q "PAGES line, guided"
+          echo "$out" | q "BINARY line"
+          echo "$out" | sed -n 6p | q "^BINARY line"
+          echo "$out" | tail -2 | sed -n 1p | q "^PAGES line"
           test "$(echo "$out" | tail -2 | book)" = "$start"
           # Loops: a 2-character line is 729 units = 6 tiles, so tile 6 starts the second copy,
           # and the CLI reads the same corridor places the hallway shows.

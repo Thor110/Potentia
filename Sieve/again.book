@@ -1,0 +1,34 @@
+sieve-book-v1
+section title
+line text
+alphabet lower27
+length 400
+canon canon-text-v2
+key sieve
+mode guided
+model gutenberg-lower27-o5 dff72d8a00e53f08aaf273c23242e44785e121792f4d33a1b6335f45ef5dd4a3
+units 1
+31de3f7793ef71e8
+section cover
+line image
+width 10
+height 10
+palette mono
+key sieve
+mode scrambled
+units 1
+1f5ab9d93de71b3357a869bba
+section pages
+line text
+alphabet lower27
+length 400
+canon canon-text-v2
+key sieve
+mode guided
+model gutenberg-lower27-o5 dff72d8a00e53f08aaf273c23242e44785e121792f4d33a1b6335f45ef5dd4a3
+units 3
+90922c7006a75737defd0d80661df9c77bc02caed7438d9ee72bf653cf76249f04f69108021c6634a3d11418fd005879c7ff89a1a45e4a961bb4dcc18960bd093f41669ae075dcf0fb199a352094b79493b3f109b142873
+f838396a42b45b75bb8e6910a179092d00bec5c889d638a4eee03737bc5969c7ed32fe56096cd84c8043f31de80ef7965fd0e65da0836ce7e714724a62dedf7fcb94ee5f1598ec64f421097fb782c5cabfd2773778f6579435a9c8d0
+3c5290c95d5133f711a4758fe4c09d5024c57dfc5d604b12f0c23e998
+end
+id fc6e6146640e5b02a8779cac3d2eb49d7a8dce02133fd5d9738cf610a0a48268
