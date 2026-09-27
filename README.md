@@ -53,7 +53,7 @@ The fourth model (Llama 3.2) achieved a higher refusal rate on the fictitious en
 
 # Sieve
 
-*The Gallery of Babel: every possible text, picture, melody and animation of a fixed size, each at exactly one address, sifted so that meaning can be found.*
+*The Gallery of Babel: every possible text, picture, melody, animation, model and file, each at exactly one address, sifted so that meaning can be found.*
 
 Sieve is the search-space engine behind Potentia's Gallery of Babel, and its hallway.
 
