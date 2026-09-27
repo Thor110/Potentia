@@ -34,7 +34,7 @@ struct Comparison
     uint64_t lzma2 = 0;          // everything as one stream
     uint64_t address_bytes = 0;  // the addresses as numbers, in bytes, added up
     uint64_t address_hex = 0;    // the addresses written in hex, in characters, added up
-    uint64_t manifest = 0;       // a folder: the manifest's own size (0 for one file)
+    uint64_t manifest = 0;       // a folder: the manifest's own size (0 for one file); with an installer, its v3 manifest's
     uint64_t manifest_deflate = 0, manifest_lzma2 = 0; // an installer's manifest, compressed
     uint64_t installer_hex = 0;  // the installer: the manifest's address, in hex
     uint64_t installer_raw = 0;  // and as raw bytes, as sieve-install reads it

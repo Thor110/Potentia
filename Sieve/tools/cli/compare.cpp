@@ -59,7 +59,7 @@ std::string comparison_table(const Comparison& c)
         t += row("manifest", c.manifest, "the tree's structure, sizes and SHA-256s, which the addresses do not carry");
     if (c.installer_hex)
     {
-        t += row("manifest, with addresses", c.manifest, "v2: the structure and every file's address");
+        t += row("installer's manifest", c.manifest, "v3: the structure, then every file's bytes");
         t += row("  zip of it (deflate)", c.manifest_deflate, "the installer's manifest compressed");
         t += row("  7z of it (LZMA2)", c.manifest_lzma2, "");
         t += row("installer, raw bytes", c.installer_raw, "the manifest's address: one number for the whole tree");

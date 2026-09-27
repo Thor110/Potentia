@@ -14,7 +14,7 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
     python3 sieve_ref.py bytes-vectors  > ../tests/vectors_bytes_v1.tsv
     python3 sieve_ref.py titled-vectors > ../tests/vectors_titled_v1.tsv
     python3 sieve_ref.py binary-vectors > ../tests/vectors_binary_v1.tsv
-    python3 sieve_ref.py manifest ../tests/manifest_fixture [--addresses DIR] [--with-addresses]   # sieve-manifest-v1/v2
+    python3 sieve_ref.py manifest ../tests/manifest_fixture [--addresses DIR] [--with-addresses | --with-contents]   # sieve-manifest-v1/v2/v3
     python3 sieve_ref.py image-vectors  > ../tests/vectors_image_v1.tsv
     python3 sieve_ref.py guided-vectors > ../tests/vectors_guided_v1.tsv
     python3 sieve_ref.py filter-vectors > ../tests/vectors_filters_v1.tsv
@@ -1780,7 +1780,9 @@ def cmd_manifest(args):
     """sieve-manifest-v1 (SPECIFICATIONS §12.2), from its definition: the folder walked to the bottom,
     links skipped, every folder ('/' at the end) and file (size, SHA-256) listed by its path relative to
     the root, UTF-8 with '/', sorted by the paths' bytes. With --addresses DIR, checks every file's
-    address written there (DIR/<path>.hex) against binary-v1 and prints nothing else."""
+    address written there (DIR/<path>.hex) against binary-v1 and prints nothing else. --with-addresses
+    gives v2 (each file's address in its line); --with-contents gives v3, an installer's manifest: the
+    listing under 'sieve-manifest-v3', then every file's bytes one after another in the listing's order."""
     import os
     root = os.path.abspath(args.folder)
     entries, files, total = [], 0, 0
@@ -1811,8 +1813,9 @@ def cmd_manifest(args):
                 bad += 1
                 print(f"address mismatch: {path}", file=sys.stderr)
         sys.exit(1 if bad else 0)
-    v2 = args.with_addresses  # an installer's manifest: every file's binary-v1 address beside its hash
-    out = [f"sieve-manifest-v{2 if v2 else 1}", f"root {os.path.basename(root)}", f"files {files}", f"bytes {total}"]
+    v2 = args.with_addresses  # every file's binary-v1 address beside its hash
+    v3 = args.with_contents   # an installer's manifest: the listing, then every file's bytes in order
+    out = [f"sieve-manifest-v{3 if v3 else 2 if v2 else 1}", f"root {os.path.basename(root)}", f"files {files}", f"bytes {total}"]
     for path, data in entries:
         if data is None:
             out.append(f"d\t{path}")
@@ -1821,6 +1824,10 @@ def cmd_manifest(args):
             out.append(f"f\t{len(data)}\t{hashlib.sha256(data).hexdigest()}\t{addr}{path}")
     out.append("end")
     sys.stdout.buffer.write(("\n".join(out) + "\n").encode("utf-8"))
+    if v3:
+        for _, data in entries:
+            if data is not None:
+                sys.stdout.buffer.write(data)
 
 
 def cmd_book_filter_vectors(_args):
@@ -1928,6 +1935,7 @@ def main():
     s.add_argument("folder")
     s.add_argument("--addresses")
     s.add_argument("--with-addresses", action="store_true")
+    s.add_argument("--with-contents", action="store_true")
     sub.add_parser("book-filter-vectors")
     s = sub.add_parser("book-read")
     s.add_argument("book")

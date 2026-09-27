@@ -25,15 +25,22 @@
 // somewhere else rather than content of its own. The addresses themselves are not in a v1
 // manifest: each is the file, and would make the manifest as large as the tree it describes.
 //
-// An installer's manifest, "sieve-manifest-v2", is v1 with every file's address in it, between
-// its SHA-256 and its path:
+// "sieve-manifest-v2" is v1 with every file's address in it, between its SHA-256 and its path:
 //
 //     f	<size>	<sha256>	<address>	<path>
 //
-// It holds everything needed to put the tree back, so the tree's whole content is in it and it is
-// larger than the tree (two hex digits a byte, and more). Its own address, one number, is then
-// the whole installation: `sieve install` reads that number back into the manifest, and the
-// manifest into the files, checking each against its SHA-256 before it is written.
+// a listing for reading, twice the tree's size and more (two hex digits a byte). Installers were
+// once made from it, which made them twice as large as they need be; they are not any more.
+//
+// An installer's manifest, "sieve-manifest-v3", is the v1 text under its own first line, and then,
+// straight after "end" and its line feed, the raw bytes of every file one after another, in the
+// manifest's order: file k is the `size` bytes after the files before it. Nothing separates them
+// and nothing more follows; the sizes say where each ends. It holds everything needed to put the
+// tree back, so it is the tree's size and the text's, no more: the least an address of the tree
+// can be without compressing it first. Its own address, one number, is then the whole
+// installation: `sieve install` reads that number back into the manifest, and the manifest into
+// the files, checking each against its size and SHA-256 before anything is written. (A v2
+// manifest's address still installs: its files come from their addresses.)
 #pragma once
 
 #include "sieve/biguint.hpp"
@@ -43,12 +50,14 @@
 #include <filesystem>
 #include <functional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace sieve::cli {
 
 inline constexpr const char* kManifestVersion = "sieve-manifest-v1";
-inline constexpr const char* kInstallManifestVersion = "sieve-manifest-v2";
+inline constexpr const char* kAddressManifestVersion = "sieve-manifest-v2";
+inline constexpr const char* kInstallManifestVersion = "sieve-manifest-v3";
 
 std::vector<uint8_t> read_file_bytes(const std::filesystem::path& file);
 
@@ -74,13 +83,20 @@ struct Manifest
     std::vector<ManifestEntry> entries;  // sorted by path
     uint64_t files = 0, bytes = 0;
     uint64_t skipped = 0;                // symbolic links and other entries that are not files
-    bool with_addresses = false;         // v2: an installer's manifest
-    std::string text() const;            // the canonical form above
-    static Manifest parse(const std::string& text); // v1 or v2; throws if it is neither
+    bool with_addresses = false;         // v2: every file's address in its line
+    bool with_contents = false;          // v3: an installer's manifest, every file's bytes after the text
+    std::vector<uint8_t> contents;       // v3: those bytes, in manifest order
+    std::string text() const;            // the canonical text above (for v3, its text part)
+    std::vector<uint8_t> file() const;   // the whole manifest as a file: the text, and for v3 the contents
+    static Manifest parse(std::string_view whole); // v1, v2 or v3; throws if it is none of them
 };
 
 // Every file's address put into the manifest, making it v2. Reads every file again.
 void add_addresses(Manifest& m, const std::filesystem::path& root);
+// Every file's bytes put after the manifest, making it v3, an installer's. Reads every file again
+// and checks it against the size and SHA-256 the walk found, so a file changed in between is
+// refused rather than installed wrong.
+void add_contents(Manifest& m, const std::filesystem::path& root);
 
 // Walks `root` to the bottom. Throws on anything it cannot read, or a path that cannot be written
 // in the manifest (one with a tab or a line break in it).
@@ -93,10 +109,12 @@ Manifest walk_folder(const std::filesystem::path& root);
 BigUint read_address_file(const std::filesystem::path& file, bool hex);
 void write_address_file(const std::filesystem::path& file, const BigUint& address, bool hex);
 
-// The manifest an installer holds, read back from it and checked to be an installer's (v2).
+// The manifest an installer holds, read back from it and checked to be one that can install (v3,
+// or the older v2).
 Manifest manifest_of_installer(const BigUint& address);
 
-// Puts a v2 manifest's tree into `dest`. Every file is read back from its address and checked
+// Puts a v3 (or v2) manifest's tree into `dest`. Every file is cut from the contents (v3) or read
+// back from its address (v2), and checked
 // against its size and SHA-256 before anything is written, so a bad installer leaves `dest` as
 // it was; files already there are refused unless `force`. `progress` is told of each file as it
 // is checked (phase 0) and written (phase 1). If `cancel` becomes true, what was written so far is

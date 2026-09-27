@@ -267,6 +267,7 @@ title.null = Null Title
 # The binary line's files.
 hud.binary.bytes = {0} bytes:
 hand.binary.bytes = a file of {0} bytes
+hand.binary.kind = kind (from its first bytes): {0}
 hand.binary.empty = the empty file: no bytes at all, the first file on the line
 hand.binary.more = ... and {0} bytes more
 msg.warped.file = warped: a file of {0} bytes

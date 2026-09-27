@@ -186,7 +186,7 @@ It is the **same space** as any other tile of corridor — the same width, the s
 
 Its one wall carries its one door, so the six lines no longer loop into one another — they **start and finish** at binary. Walking left out of PAGES runs IMAGE, AUDIO, VIDEO, BOOKS, MODELS and then binary, where the corridor ends; walking right out of PAGES reaches binary directly, from the other side.
 
-Its shelves hold **every file up to N bytes long**, the empty file first (BINARY in the setup menu, `--binary-length`, default 32). Files are numbered shortest first and then by their bytes, so a file's address is its own hex dump plus `0101...01`, one `01` per byte. Each file has a title and a cover, as audio and video do; in hand it is a hex dump. **T** takes a path and warps to that file (or, if it names no file, to the bytes of what you typed). Its files stand on the one wall. The room is always the same way round: coming in from models you are turned to face the other way along it, and its door leads back to where you came from.
+Its shelves hold **every file up to N bytes long**, the empty file first (BINARY in the setup menu, `--binary-length`, default 32). Files are numbered shortest first and then by their bytes, so a file's address is its own hex dump plus `0101...01`, one `01` per byte. Each file has a title, and on its front, drawn large, what kind of file it is, read from its own first bytes (ZIP, PNG, EXE, PDF, TXT, EMPTY, or ? when unknown); in hand it is a hex dump. **T** takes a path and warps to that file, with the file's name as its title (or, if it names no file, to the bytes of what you typed); the File Locator's "Go to it" does the same. Its files stand on the one wall. The room is always the same way round: coming in from models you are turned to face the other way along it, and its door leads back to where you came from.
 
 **FIND MY LIMITS focus** (GLOBAL): FIND MY LIMITS grows every line, or only the one chosen here, leaving the others as they are.
 
@@ -662,11 +662,11 @@ A file's place on the binary line is its hex dump plus `0101...01`, one `01` per
 ### `install`: a folder from one address
 
 ```sh
-sieve locate release --installer release.install.hex --compare   # the installer: one address
-sieve install release.install.hex --to C:/Programs/Sieve        # the folder put back from it
+sieve locate release --installer release.sieve --compare   # the installer: one address
+sieve install release.sieve --to C:/Programs/Sieve            # the folder put back from it
 ```
 
-An installer's manifest (`sieve-manifest-v2`) carries every file's address as well as the folder structure, so the whole tree is in it; its own address is the installer. `install` reads it back, checks every file against its size and SHA-256 before writing any, and will not replace files without `--force`. With `--compare`, `locate` also shows the installer's manifest compressed.
+An installer's manifest (`sieve-manifest-v3`) is the folder structure followed by every file's raw bytes, so the whole tree is in it at its own size plus a short listing; its own address is the installer. (`--with-addresses` writes `sieve-manifest-v2` instead, a listing with every file's address in hex; installers made from v2 before still install.) `install` reads it back, checks every file against its size and SHA-256 before writing any, and will not replace files without `--force`. With `--compare`, `locate` also shows the installer's manifest compressed.
 
 ### `sieve-install`: the installer
 

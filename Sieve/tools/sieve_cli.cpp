@@ -1404,20 +1404,31 @@ int cmd_locate(const Args& a)
     }
     if (!fs::is_directory(target)) throw std::invalid_argument(arg + " is neither a file nor a folder");
     Manifest m = walk_folder(target);
-    // An installer's manifest carries every file's address (v2), and the installer is its address.
-    const bool installer = a.has("installer") || a.has("with-addresses");
-    if (installer) add_addresses(m, target);
+    // Which manifest: v2 lists every file's address (--with-addresses); an installer's (v3) has
+    // every file's bytes after its text, and the installer is its address; otherwise v1.
+    const bool installer = a.has("installer");
+    if (a.has("with-addresses")) add_addresses(m, target);
+    else if (installer) add_contents(m, target);
     const std::string text = m.text();
-    const std::vector<uint8_t> mbytes(text.begin(), text.end());
+    const std::vector<uint8_t> mbytes = m.file();
+    // An installer is always made from v3, whichever manifest is written out.
+    Manifest inst;
+    if (installer && !m.with_contents)
+    {
+        inst = m;
+        add_contents(inst, target);
+    }
+    const std::vector<uint8_t> ibytes = !installer ? std::vector<uint8_t>{} : m.with_contents ? mbytes : inst.file();
     const BigUint maddr = binary_address(mbytes);
-    // The manifest to --manifest, or to standard output; what it says about itself to standard
-    // error when the manifest is on standard output, so the two never mix.
+    // The manifest to --manifest, or to standard output (a v3 manifest's text part only: its
+    // files' bytes are no use on a terminal); what it says about itself to standard error when
+    // the manifest is on standard output, so the two never mix.
     std::ostream* info = &std::cout;
     if (a.has("manifest"))
     {
         const std::string o = a.get("manifest");
         std::ofstream out(fs::path(std::u8string(o.begin(), o.end())), std::ios::binary);
-        out << text;
+        out.write(reinterpret_cast<const char*>(mbytes.data()), std::streamsize(mbytes.size()));
         if (!out) throw std::runtime_error("cannot write " + o);
     }
     else
@@ -1429,8 +1440,8 @@ int cmd_locate(const Args& a)
     for (const auto& e : m.entries) dirs += e.dir ? 1 : 0;
     *info << "folder    " << u8(target) << ": " << m.files << " files, " << dirs << " folders, " << m.bytes << " bytes";
     if (m.skipped) *info << " (" << m.skipped << " links and other entries skipped)";
-    *info << "\nmanifest  " << (m.with_addresses ? kInstallManifestVersion : kManifestVersion) << ", " << text.size() << " bytes" << (a.has("manifest") ? ", written to " + a.get("manifest") : std::string())
-          << "\nsha256    " << sha256_hex(mbytes) << "  (the tree's identity)\n"
+    *info << "\nmanifest  " << text.substr(0, text.find('\n')) << ", " << mbytes.size() << " bytes" << (a.has("manifest") ? ", written to " + a.get("manifest") : std::string())
+          << "\nsha256    " << sha256_hex(mbytes) << (m.with_addresses || m.with_contents ? "\n" : "  (the tree's identity)\n")
           << "address   " << (maddr.is_zero() ? 1 : maddr.to_hex().size()) << " hex digits: the manifest's own place on the binary line\n";
     // Every file's address, as <DIR>/<path>.hex, and the comparison over all of them.
     const fs::path root = fs::absolute(target).lexically_normal();
@@ -1466,11 +1477,12 @@ int cmd_locate(const Args& a)
         }
         if (a.has("addresses")) *info << "addresses " << m.files << " files' addresses written under " << d << "\n";
     }
-    if (installer && a.has("installer"))
+    const BigUint iaddr = installer ? (m.with_contents ? maddr : binary_address(ibytes)) : BigUint();
+    if (installer)
     {
         const std::string o = a.get("installer");
-        write_address_file(fs::path(std::u8string(o.begin(), o.end())), maddr, a.has("hex"));
-        *info << "installer " << o << ": the address of the manifest, which holds every file's address, as "
+        write_address_file(fs::path(std::u8string(o.begin(), o.end())), iaddr, a.has("hex"));
+        *info << "installer " << o << ": the address of the installer's manifest (v3: the listing, then every file's bytes), as "
               << (a.has("hex") ? "hex" : "raw bytes") << "; install it with\n"
               << "          sieve-install " << o << "   (or: sieve install " << o << (a.has("hex") ? " --hex" : "") << " --to FOLDER)\n";
     }
@@ -1480,11 +1492,12 @@ int cmd_locate(const Args& a)
         cmp.manifest = text.size();
         if (installer)
         {
-            // The manifest itself, compressed: does an installer's manifest ever get smaller?
-            cmp.manifest_deflate = deflate_size(mbytes);
-            cmp.manifest_lzma2 = lzma2_size(mbytes);
-            cmp.installer_hex = maddr.is_zero() ? 1 : maddr.to_hex().size();
-            cmp.installer_raw = address_bytes(maddr);
+            // The installer's manifest itself, compressed: the tree's bytes and a little text.
+            cmp.manifest = ibytes.size();
+            cmp.manifest_deflate = deflate_size(ibytes);
+            cmp.manifest_lzma2 = lzma2_size(ibytes);
+            cmp.installer_hex = iaddr.is_zero() ? 1 : iaddr.to_hex().size();
+            cmp.installer_raw = address_bytes(iaddr);
         }
         *info << "\n" << comparison_table(cmp);
     }

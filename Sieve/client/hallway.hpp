@@ -401,6 +401,11 @@ public:
         // and its address in hex (each as large as the file) are worked out when something asks,
         // for the one item looked at or held (file_of, hex_of below).
         bool is_file = false;
+        // Its size and its first bytes (up to 16), worked out with its title from the top of the
+        // number, without converting the whole file: what the shelf and the hover panel show, and
+        // what file_type() reads its kind from.
+        uint64_t file_size = 0;
+        std::vector<uint8_t> head;
         Space::Digits title, cover;                  // a titled line: its title, and its cover if it has one
     };
 
@@ -408,6 +413,12 @@ public:
     // A book's address in hex, and a binary file's bytes: kept on the book where they are small,
     // worked out on demand where they are not (the binary line), remembering the last one asked.
     std::string hex_of(const Book& b);
+    // What kind of file this is, from its first bytes (its signature, as the file itself says):
+    // ZIP, PNG, EXE, ... TXT for readable text, EMPTY, or "?" for anything else.
+    static std::string file_type(const std::vector<uint8_t>& head, uint64_t size);
+    // A filename as a title on the binary line: canonicalised as text is warped, cut to the title
+    // length. Blank without titles.
+    Space::Digits title_for_name(const std::string& name) const;
     const BinarySpace::Bytes& file_of(const Book& b);
     BigUint memo_index_;
     std::string memo_hex_;
@@ -628,7 +639,8 @@ public:
     void draw_pixels(const Space::Digits& unit, const ImageFormat& f, float x, float y, float size, int frame);
 
     std::string one_line_preview(const Space::Digits& u);
-    static std::string binary_preview(const BinarySpace::Bytes& f, size_t most);
+    // Its size and first bytes; f may be only the head of a file of `size` bytes (the default: all of it).
+    static std::string binary_preview(const BinarySpace::Bytes& f, size_t most, uint64_t size = UINT64_MAX);
     float draw_file(const BinarySpace::Bytes& f, float x, float cy, float pw, float bottom);
 
     void draw_hud(int w, int h);

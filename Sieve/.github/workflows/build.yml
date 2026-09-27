@@ -368,7 +368,9 @@ jobs:
           test ! -e fx_broken
           # The File Locator (pause menu): a folder measured, and a file walked to on the binary line.
           $H --no-menu --locate tests/manifest_fixture --screenshot locate.png | q "saved locate.png"
-          $H --no-menu --binary-length 64 --locate tests/manifest_fixture/a.txt --press "Return" --screenshot locate2.png | tail -2 | sed -n 1p | q "^BINARY line"
+          $H --no-menu --binary-length 64 --locate tests/manifest_fixture/a.txt --press "Return" --screenshot locate2.png | tail -2 | sed -n 1p | tee l2.txt | q "^BINARY line"
+          # Its kind, read from its first bytes.
+          grep -q " TXT " l2.txt
           # Past the budget: a 100 KB file, twice the BINARY length, is still reached by pressing
           # Go to it twice; the line is made long enough, positional, and only the room is kept.
           head -c 100000 /dev/urandom > big.bin
@@ -502,15 +504,29 @@ jobs:
           python sieve_ref.py manifest ../tests/manifest_fixture | cmp - fixture.manifest
           python sieve_ref.py manifest ../tests/manifest_fixture --addresses addr
           grep -q "7z (LZMA2" locate.out
-          # The installer: a v2 manifest (the oracle's, to the byte), its address, and the folder
-          # put back from that one address, identical to the original.
-          $S locate ../tests/manifest_fixture --manifest fixture2.manifest --installer fixture.sieve > /dev/null
+          # A v2 manifest (every file's address listed) is the oracle's to the byte.
+          $S locate ../tests/manifest_fixture --manifest fixture2.manifest --with-addresses > /dev/null
           python sieve_ref.py manifest ../tests/manifest_fixture --with-addresses | cmp - fixture2.manifest
-          # The installer is the manifest's address as raw bytes: exactly the manifest's size here.
-          test "$(wc -c < fixture.sieve)" = "$(wc -c < fixture2.manifest)"
+          # The installer: a v3 manifest (the listing, then every file's bytes; the oracle's, to the
+          # byte), its address, and the folder put back from that one address, identical.
+          $S locate ../tests/manifest_fixture --manifest fixture3.manifest --installer fixture.sieve > /dev/null
+          python sieve_ref.py manifest ../tests/manifest_fixture --with-contents | cmp - fixture3.manifest
+          # The installer is the manifest's address as raw bytes: exactly the manifest's size here,
+          # which is the files' bytes and the listing, no more.
+          test "$(wc -c < fixture.sieve)" = "$(wc -c < fixture3.manifest)"
+          test "$(wc -c < fixture3.manifest)" = "$(( $(python sieve_ref.py manifest ../tests/manifest_fixture | wc -c) + $(awk '$1 == "bytes" {print $2}' fixture.manifest) ))"
           rm -rf installed
           $S install fixture.sieve --to installed > /dev/null
           diff -r ../tests/manifest_fixture installed
+          # An older installer, of a v2 manifest, still installs.
+          python -c "
+          import sys; sys.path.insert(0, '.')
+          from sieve_ref import binary_index
+          d = open('fixture2.manifest', 'rb').read(); a = binary_index(d)
+          open('fixture_v2.sieve', 'wb').write(a.to_bytes((a.bit_length() + 7) // 8, 'big'))"
+          rm -rf installed2
+          $S install fixture_v2.sieve --to installed2 > /dev/null
+          diff -r ../tests/manifest_fixture installed2
           test "$($S locate ../tests/manifest_fixture/a.txt | awk '$1 == "sha256" {print $2}')" = "$(python -c "import hashlib;print(hashlib.sha256(open('../tests/manifest_fixture/a.txt','rb').read()).hexdigest())")"
 
       - name: The pinned model rebuilds byte for byte from its corpus (Linux)

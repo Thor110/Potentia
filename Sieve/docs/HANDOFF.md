@@ -296,12 +296,16 @@ Measured here (and note: xz's liblzma, built inside the project, does not pass o
 folder, so CMake adds it to `sieve_compare` by hand; a system `lzma.h` hid that on Linux): the `sieve` executable (1.86 MB) is 44% under deflate, 34% under LZMA2, and 100%
 as an address; `data/meshes` 31%, 15% and 100%, and its manifest 2.2 KB.
 
-**The installer** (Edward's design): a v2 manifest carries the folder structure and every file's
-address; the installer is that manifest's own address, one number (`sieve locate FOLDER
---installer OUT.hex`), and `sieve install OUT.hex --to FOLDER` puts the tree back, checking every
-file before writing any. With `--compare` the installer's manifest is compressed too, to see
-whether it ever gets smaller: for `data/meshes` it is 205% of the folder, 25% zipped and 19% under
-7z, against 15% for 7z of the files themselves. The fixture round-trips in CI.
+**The installer** (Edward's design): a v3 manifest carries the folder structure and then every
+file's raw bytes, one after another in the listing's order; the installer is that manifest's own
+address, one number (`sieve locate FOLDER --installer OUT.sieve`), and `sieve install OUT.sieve
+--to FOLDER` puts the tree back, checking every file before writing any. It was first built on v2
+(every file's address in hex in the listing), which made an installer twice the tree's size:
+Edward's first real test, a folder holding the 5,056,573-byte `Sieve.zip`, gave a 10,113,286-byte
+installer. On v3 the same folder gives 5,056,712 bytes, the zip and its 139-byte listing, the
+least possible without compressing first. v2 stays as `--with-addresses` (a listing to read), and
+a v2 installer still installs. With `--compare` the installer's manifest is compressed too. The
+fixture round-trips in CI, v2 and v3 both, each manifest the oracle's to the byte.
 
 **Installer files are raw bytes** (`NAME.sieve`, `--hex` for hex): the manifest's address as a
 number in base 256, exactly the manifest's size, readable as the manifest shifted up by one per
@@ -324,7 +328,14 @@ address can be saved. A folder shows its manifest's identity and the comparison 
 manifest compressed too), and saves as a manifest or an installer (`.sieve`). The work runs on a
 worker thread; `--locate PATH` opens it for scripted runs and CI.
 
-**Past the budget.** A binary file on the shelf keeps only its place, title and cover; its bytes
+**A file's front.** A binary file has a title and no cover. Its front shows, large, what kind of
+file it is, from its own first bytes (`Hallway::file_type`: ZIP, PNG, EXE, PDF, TXT, EMPTY, ? ...),
+and its size. Those bytes, up to 16, come from the top of the number with one borrow
+(`file_head`, hallway.cpp), not from working the file out. A file reached from a path (the
+locator's Go to it, T with a path) has its file name as its title (`title_for_name`). A picture of
+one's own choosing is to be a separate layer of metadata (anchors), never part of the address.
+
+**Past the budget.** A binary file on the shelf keeps only its place, title and first bytes; its bytes
 and its hex are worked out for the one item looked at or held (`file_of`, `hex_of`, remembering
 the last). The setup menu's first Enter over the budget says what going in anyway means, and a
 second goes in **thin**: only the room you stand in keeps items and pictures (`set_thin`,

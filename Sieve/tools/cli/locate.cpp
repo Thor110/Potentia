@@ -92,7 +92,7 @@ std::string manifest_path(const fs::path& p, const fs::path& root)
 
 std::string Manifest::text() const
 {
-    std::string t = std::string(with_addresses ? kInstallManifestVersion : kManifestVersion) + "\n";
+    std::string t = std::string(with_contents ? kInstallManifestVersion : with_addresses ? kAddressManifestVersion : kManifestVersion) + "\n";
     t += "root " + root + "\n";
     t += "files " + std::to_string(files) + "\n";
     t += "bytes " + std::to_string(bytes) + "\n";
@@ -105,6 +105,16 @@ std::string Manifest::text() const
     }
     t += "end\n";
     return t;
+}
+
+std::vector<uint8_t> Manifest::file() const
+{
+    const std::string t = text();
+    std::vector<uint8_t> out;
+    out.reserve(t.size() + contents.size());
+    out.insert(out.end(), t.begin(), t.end());
+    if (with_contents) out.insert(out.end(), contents.begin(), contents.end());
+    return out;
 }
 
 Manifest walk_folder(const fs::path& root_in)
@@ -170,17 +180,42 @@ void add_addresses(Manifest& m, const std::filesystem::path& root_in)
     m.with_addresses = true;
 }
 
-Manifest Manifest::parse(const std::string& text)
+void add_contents(Manifest& m, const std::filesystem::path& root_in)
 {
-    // Line by line, exactly as text() writes it; anything else is refused rather than guessed at.
-    std::vector<std::string> lines;
-    for (size_t at = 0; at < text.size();)
+    const fs::path root = fs::absolute(root_in).lexically_normal();
+    m.contents.clear();
+    m.contents.reserve(size_t(m.bytes));
+    for (const ManifestEntry& e : m.entries)
     {
-        const size_t nl = text.find('\n', at);
-        if (nl == std::string::npos) throw std::runtime_error("manifest: the last line has no line feed");
-        lines.push_back(text.substr(at, nl - at));
-        at = nl + 1;
+        if (e.dir) continue;
+        const auto b = read_file_bytes(root / fs::path(std::u8string(e.path.begin(), e.path.end())));
+        if (b.size() != e.size || sha256_hex(b) != e.sha256) throw std::runtime_error(e.path + " changed while the folder was being read");
+        m.contents.insert(m.contents.end(), b.begin(), b.end());
     }
+    m.with_contents = true;
+    m.with_addresses = false;
+}
+
+Manifest Manifest::parse(std::string_view whole)
+{
+    // Line by line, exactly as text() writes it, up to and including "end"; anything else is
+    // refused rather than guessed at. After "end" a v3 manifest has its files' bytes, and the
+    // others nothing.
+    std::vector<std::string> lines;
+    size_t after = std::string_view::npos;
+    for (size_t at = 0; at < whole.size();)
+    {
+        const size_t nl = whole.find('\n', at);
+        if (nl == std::string_view::npos) throw std::runtime_error("manifest: the last line has no line feed");
+        lines.emplace_back(whole.substr(at, nl - at));
+        at = nl + 1;
+        if (lines.back() == "end")
+        {
+            after = at;
+            break;
+        }
+    }
+    if (after == std::string_view::npos) throw std::runtime_error("manifest: no 'end'");
     Manifest m;
     auto field = [](const std::string& line, const char* key) {
         const std::string k = std::string(key) + " ";
@@ -188,12 +223,14 @@ Manifest Manifest::parse(const std::string& text)
         return line.substr(k.size());
     };
     if (lines.size() < 5) throw std::runtime_error("manifest: too short");
-    if (lines[0] == kInstallManifestVersion) m.with_addresses = true;
+    if (lines[0] == kAddressManifestVersion) m.with_addresses = true;
+    else if (lines[0] == kInstallManifestVersion) m.with_contents = true;
     else if (lines[0] != kManifestVersion) throw std::runtime_error("not a sieve manifest (" + lines[0].substr(0, 40) + ")");
+    if (m.with_contents) m.contents.assign(whole.begin() + std::ptrdiff_t(after), whole.end());
+    else if (after != whole.size()) throw std::runtime_error("manifest: something after 'end'");
     m.root = field(lines[1], "root");
     m.files = std::stoull(field(lines[2], "files"));
     m.bytes = std::stoull(field(lines[3], "bytes"));
-    if (lines.back() != "end") throw std::runtime_error("manifest: no 'end'");
     for (size_t i = 4; i + 1 < lines.size(); ++i)
     {
         std::vector<std::string> f;
@@ -231,6 +268,13 @@ Manifest Manifest::parse(const std::string& text)
         }
         if (bad) throw std::runtime_error("manifest: refused path " + e.path);
         m.entries.push_back(std::move(e));
+    }
+    if (m.with_contents)
+    {
+        uint64_t sum = 0;
+        for (const ManifestEntry& e : m.entries) sum += e.dir ? 0 : e.size;
+        if (sum != m.bytes || m.contents.size() != m.bytes)
+            throw std::runtime_error("manifest: its files' bytes are not the size its lines add up to");
     }
     return m;
 }
@@ -274,8 +318,8 @@ void write_address_file(const fs::path& file, const BigUint& address, bool hex)
 Manifest manifest_of_installer(const BigUint& address)
 {
     const auto bytes = file_at(address);
-    Manifest m = Manifest::parse(std::string(bytes.begin(), bytes.end()));
-    if (!m.with_addresses) throw std::runtime_error("that is a manifest without the files' addresses (v1): nothing to install from");
+    Manifest m = Manifest::parse(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+    if (!m.with_addresses && !m.with_contents) throw std::runtime_error("that is a manifest without the files in it (v1): nothing to install from");
     return m;
 }
 
@@ -283,17 +327,26 @@ bool install_tree(const Manifest& m, const fs::path& dest, bool force, const Ins
 {
     auto cancelled = [cancel] { return cancel && cancel->load(); };
     auto path_of = [&](const std::string& p) { return dest / fs::path(std::u8string(p.begin(), p.end())); };
-    // Phase 0: every file read back from its address and checked, before anything is written.
+    // Phase 0: every file cut from the contents (v3) or read back from its address (v2) and
+    // checked, before anything is written.
     std::vector<std::pair<const ManifestEntry*, std::vector<uint8_t>>> files;
     for (const ManifestEntry& e : m.entries)
         if (!e.dir) files.emplace_back(&e, std::vector<uint8_t>{});
+    size_t at = 0;
     for (size_t i = 0; i < files.size(); ++i)
     {
         if (cancelled()) return false;
         const ManifestEntry& e = *files[i].first;
-        auto bytes = file_at(e.address == "0" ? BigUint() : BigUint::from_hex(e.address));
+        std::vector<uint8_t> bytes;
+        if (m.with_contents)
+        {
+            if (m.contents.size() - at < e.size) throw std::runtime_error("the installer ends before " + e.path);
+            bytes.assign(m.contents.begin() + std::ptrdiff_t(at), m.contents.begin() + std::ptrdiff_t(at + e.size));
+            at += size_t(e.size);
+        }
+        else bytes = file_at(e.address == "0" ? BigUint() : BigUint::from_hex(e.address));
         if (bytes.size() != e.size || sha256_hex(bytes) != e.sha256)
-            throw std::runtime_error("the address of " + e.path + " does not give its file (size or SHA-256)");
+            throw std::runtime_error("the installer does not give " + e.path + " (its size or SHA-256 is wrong)");
         if (fs::exists(path_of(e.path)) && !force) throw std::runtime_error(e.path + " is already there");
         files[i].second = std::move(bytes);
         if (progress) progress(0, i + 1, files.size(), e.path);

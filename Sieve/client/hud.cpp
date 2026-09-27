@@ -178,16 +178,17 @@ void Hallway::draw_pixels(const Space::Digits& unit, const ImageFormat& f, float
 
 // A file, as a line of text: how long it is and its first bytes in hex. A hex dump rather than
 // the bytes as characters, because most files are not text and a byte is not a character.
-std::string Hallway::binary_preview(const BinarySpace::Bytes& f, size_t most)
+std::string Hallway::binary_preview(const BinarySpace::Bytes& f, size_t most, uint64_t size)
 {
-    std::string s = trf("hud.binary.bytes", {std::to_string(f.size())});
+    if (size == UINT64_MAX) size = f.size();
+    std::string s = trf("hud.binary.bytes", {std::to_string(size)});
     char b[4];
     for (size_t i = 0; i < f.size() && i < most; ++i)
     {
         std::snprintf(b, sizeof b, " %02x", f[i]);
         s += b;
     }
-    if (f.size() > most) s += " ...";
+    if (size > std::min<uint64_t>(most, f.size())) s += " ...";
     return s;
 }
 
@@ -342,7 +343,8 @@ void Hallway::draw_hud(int w, int h)
                 else if (has_titles()) draw_null_title(tx, y, 2);
                 const float below = y + 26;
                 const float room = panel_w - tx;
-                if (bk.is_file) text(tx, below, fit(binary_preview(file_of(bk), 24), room, 1), 1, ink);
+                if (bk.is_file) // its kind and first bytes, known without working out the rest of it
+                    text(tx, below, fit(file_type(bk.head, bk.file_size) + "  " + binary_preview(bk.head, 16, bk.file_size), room, 1), 1, ink);
                 else if (bk.model) text(tx, below, fit(model_line_summary(*bk.model), room, 2), 2, ink);
                 else if (covered) text(tx, below, fit(one_line_preview(u), room, 1), 1, ink); // a video's cover stands for it
                 else if (line().kind == LineKind::Image || line().kind == LineKind::Video) draw_pixels(u, 20, below, 60, 0);
@@ -522,7 +524,11 @@ void Hallway::draw_in_hand(float W, float H)
     const size_t cols2 = size_t((pw - 28) / 16), cols1 = size_t((pw - 28) / 8);
     if (bk.model) cy = draw_model(*bk.model, x, cy, pw, y + ph - 110);
     else if (bk.parts) cy = draw_book(*bk.parts, x, cy, pw, y + ph - 110);
-    else if (bk.is_file) cy = draw_file(file_of(bk), x, cy, pw, y + ph - 110);
+    else if (bk.is_file)
+    {
+        text(x + 14, cy, trf("hand.binary.kind", {file_type(bk.head, bk.file_size)}), 2, theme().edge);
+        cy = draw_file(file_of(bk), x, cy + 24, pw, y + ph - 110);
+    }
     else switch (line().kind)
     {
     case LineKind::Text:

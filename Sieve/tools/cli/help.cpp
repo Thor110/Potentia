@@ -452,16 +452,18 @@ const std::vector<Page>& pages()
          "--compare sets the sizes side by side: the original, zip's deflate and 7z's LZMA2 (the\n"
          "compressors at their strongest, without their archives' headers), and the addresses as\n"
          "numbers and as hex, each as a share of the original. An address is never smaller than\n"
-         "the file: addressing is not compression. An installer's manifest (sieve-manifest-v2)\n"
-         "carries every file's address as well, so the whole tree is in it; its own address, one\n"
-         "number, is the installer, which sieve install puts back into a folder.",
+         "the file: addressing is not compression. An installer's manifest (sieve-manifest-v3)\n"
+         "is the listing followed by every file's raw bytes, so the whole tree is in it at its own\n"
+         "size; its address, one number, is the installer, which sieve install puts back into a\n"
+         "folder. (sieve-manifest-v2, --with-addresses, lists every file's address in hex instead.)",
          {{"--out FILE", "A file: write its whole address, in hex, here."},
           {"--manifest FILE", "A folder: write the manifest here (else to standard output)."},
           {"--addresses DIR", "A folder: write every file's address as DIR/<its path>.hex."},
-          {"--with-addresses", "A folder: an installer's manifest (v2), every file's address in it."},
-          {"--installer OUT.sieve", "A folder: write the installer, the address of its v2 manifest as raw\n"
-                                    "bytes (--hex: as hex); implies --with-addresses. --compare then also\n"
-                                    "compresses that manifest. sieve-install opens it."},
+          {"--with-addresses", "A folder: a v2 manifest, every file's address in it, in hex."},
+          {"--installer OUT.sieve", "A folder: write the installer, the address of its v3 manifest (the\n"
+                                    "listing, then every file's bytes) as raw bytes (--hex: as hex);\n"
+                                    "--manifest then writes that v3 manifest. --compare also compresses\n"
+                                    "it. sieve-install opens it."},
           {"--hex", "Write the installer in hex rather than raw bytes."},
           {"--compare", "Compare the sizes: original, zip, 7z, and the address."}},
          {{"sieve locate sieve.exe --compare", "where the executable is, and what zip and 7z make of it"},
@@ -471,8 +473,9 @@ const std::vector<Page>& pages()
         {"install", "Put a folder back from its installer: one address.",
          "sieve install INSTALLER.sieve --to FOLDER [--force] [--hex]",
          "The command-line form of sieve-install. Reads the installer (the address of a\n"
-         "sieve-manifest-v2 as raw bytes, made with sieve locate --installer; --hex for one written in hex)\n"
-         "--installer) back into the manifest, and every file's address in it back into the file.\n"
+         "sieve-manifest-v3 as raw bytes, made with sieve locate --installer; --hex for one written\n"
+         "in hex) back into the manifest, and cuts every file from the bytes after its listing.\n"
+         "(An older installer, of a v2 manifest, reads every file back from its address.)\n"
          "Every file is checked against its size and SHA-256 before anything is written, so a bad\n"
          "address leaves the folder untouched. Files already there are refused unless --force.",
          {{"--to FOLDER", "Where to put the tree (required). Created if it is not there."},

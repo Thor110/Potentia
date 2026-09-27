@@ -4,6 +4,8 @@
 
 #include "hallway.hpp"
 
+#include <cstring>
+
 namespace hallway::hall {
 
 Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> lines, const FilterConfig& filters, uint32_t book_pages,
@@ -38,7 +40,8 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
             "models/V" + std::to_string(shape.vertices) + "/F" + std::to_string(shape.faces) + "/C" + std::to_string(shape.coords), key);
         // The binary line: every file up to binary_bytes, titled, with a cover as audio and video have.
         binary_space_ = std::make_unique<BinarySpace>(std::max<uint64_t>(1, shape.binary_bytes), key);
-        titled_[kBinaryLine] = std::make_unique<TitledSpace>(title, lines_[1].space, binary_space_->size(), binary_space_->shape(), key);
+        // (No cover: a file's kind is read from its own first bytes instead, and shown on its front.)
+        titled_[kBinaryLine] = std::make_unique<TitledSpace>(title, std::nullopt, binary_space_->size(), binary_space_->shape(), key);
     }
     // Each line's filter stack and mode (sieve-filters.ini, edited in the setup menu).
     for (int i = 0; i < 4; ++i)
@@ -269,6 +272,42 @@ void Hallway::rebase()
     refresh_labels();
 }
 
+// The first bytes of the file at a positional binary-v1 address, and its length, without
+// converting the whole file. The file of L bytes is v - 0101...01 (L ones), so its first n bytes
+// are the top of that difference: the top of v less n ones, less one more if the part of v below
+// them is smaller than the ones below them (a borrow).
+static std::vector<uint8_t> file_head(const BigUint& v, size_t most, uint64_t& size)
+{
+    auto ones = [](size_t n) {
+        std::string h;
+        h.reserve(2 * n);
+        for (size_t i = 0; i < n; ++i) h += "01";
+        return n ? BigUint::from_hex(h) : BigUint();
+    };
+    BigUint t = v;
+    t.mul_small(255);
+    t.add_small(1);
+    const size_t length = (t.bit_length() - 1) / 8;
+    size = length;
+    if (length == 0) return {};
+    const size_t n = std::min(most, length), shift = 8 * (length - n);
+    BigUint top = v;
+    top >>= shift;
+    BigUint below = top;
+    below <<= shift;
+    BigUint low = v;
+    low -= below;
+    BigUint head = top;
+    head -= ones(n);
+    if (low < ones(length - n)) head -= BigUint(1);
+    const std::string h = head.to_hex(2 * n);
+    std::vector<uint8_t> out(n);
+    auto nib = [](char c) { return uint8_t(c <= '9' ? c - '0' : c - 'a' + 10); };
+    for (size_t i = 0; i < n; ++i) out[i] = uint8_t(nib(h[2 * i]) << 4 | nib(h[2 * i + 1]));
+    return out;
+}
+
+
 const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
 {
     const int64_t key = dt * int64_t(sieve::books_per_tile()) + slot;
@@ -322,8 +361,8 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
                 const TitledSpace& ts = *titled_[kBinaryLine];
                 const TitledSpace::Parts tp = ts.parts_at(b.index, mode_);
                 b.title = tp.title;
-                b.cover = tp.cover;
                 b.is_file = true; // its bytes and hex on demand: file_of(), hex_of()
+                b.head = file_head(tp.content, 16, b.file_size);
                 b.fraction = b.index.is_zero() ? 0.0 : std::pow(10.0, b.index.log10_approx() - ts.size().log10_approx());
             }
         }
@@ -657,13 +696,16 @@ bool Hallway::warp(const std::string& input)
             std::error_code ec;
             // The typed text is UTF-8; the path is built from it as UTF-8, so Windows finds the file too.
             const std::filesystem::path path(std::u8string(input.begin(), input.end()));
+            Space::Digits title = titled_[kBinaryLine]->blank_title();
             if (std::filesystem::is_regular_file(path, ec))
             {
                 std::ifstream in(path, std::ios::binary);
                 bytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+                const std::u8string name = path.filename().u8string();
+                title = title_for_name(std::string(name.begin(), name.end())); // its name is its title
             }
             else bytes.assign(input.begin(), input.end());
-            go_to_file(bytes, true);
+            go_to_file(bytes, true, &title);
             trail_.clear();
             message(trf("msg.warped.file", {std::to_string(bytes.size())}));
             return true;
@@ -1082,7 +1124,7 @@ std::string Hallway::status()
             where += " " + std::to_string(used) + "/" + std::to_string(model_space_->vertices()) + " vertices used, " +
                      std::to_string(degenerate) + " degenerate faces";
         }
-        else if (first.is_file) where += " " + binary_preview(file_of(first), 16);
+        else if (first.is_file) where += " " + file_type(first.head, first.file_size) + " " + binary_preview(first.head, 16, first.file_size);
         else if (line().kind == LineKind::Text) where += " \"" + ascii(utf8_encode(line().space.text_of(first.unit))) + "\"";
         if (first.guided) where += " (" + std::to_string(first.bits) + " bits)";
     }
@@ -1632,6 +1674,60 @@ BigUint Hallway::unit_of_pos(const BigUint& pos) const
     return unit;
 }
 
+// Signatures ("magic numbers"): what a file's first bytes say it is. Longest and most specific
+// first; two-byte ones (MZ, BM) last, since two bytes happen by chance once in 65,536 files.
+std::string Hallway::file_type(const std::vector<uint8_t>& h, uint64_t size)
+{
+    if (size == 0) return "EMPTY";
+    auto starts = [&](std::initializer_list<int> sig, size_t at = 0) {
+        if (h.size() < at + sig.size()) return false;
+        size_t i = at;
+        for (int b : sig)
+            if (h[i++] != uint8_t(b)) return false;
+        return true;
+    };
+    auto text_at = [&](const char* s, size_t at = 0) {
+        const size_t n = std::strlen(s);
+        return h.size() >= at + n && std::memcmp(h.data() + at, s, n) == 0;
+    };
+    if (starts({0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A})) return "PNG";
+    if (starts({'7', 'z', 0xBC, 0xAF, 0x27, 0x1C})) return "7Z";
+    if (starts({0xFD, '7', 'z', 'X', 'Z', 0x00})) return "XZ";
+    if (text_at("sieve-manifest")) return "MANIFEST";
+    if (text_at("sieve-book")) return "BOOK";
+    if (text_at("GIF87a") || text_at("GIF89a")) return "GIF";
+    if (text_at("RIFF") && text_at("WAVE", 8)) return "WAV";
+    if (text_at("RIFF") && text_at("AVI ", 8)) return "AVI";
+    if (text_at("RIFF") && text_at("WEBP", 8)) return "WEBP";
+    if (text_at("ftyp", 4)) return "MP4";
+    if (starts({'P', 'K', 0x03, 0x04}) || starts({'P', 'K', 0x05, 0x06})) return "ZIP";
+    if (starts({0x7F, 'E', 'L', 'F'})) return "ELF";
+    if (text_at("%PDF")) return "PDF";
+    if (text_at("Rar!")) return "RAR";
+    if (text_at("OggS")) return "OGG";
+    if (text_at("fLaC")) return "FLAC";
+    if (starts({0xFF, 0xD8, 0xFF})) return "JPG";
+    if (text_at("ID3")) return "MP3";
+    if (text_at("BZh")) return "BZ2";
+    if (starts({0x1F, 0x8B})) return "GZ";
+    if (text_at("MZ")) return "EXE";
+    if (text_at("BM")) return "BMP";
+    // Readable text: printable ASCII, whitespace, or UTF-8's bytes above 127, all through what
+    // is known of it (a file may of course stop being text past its first bytes).
+    bool text = true;
+    for (uint8_t b : h) text = text && (b >= 0x20 || b == '\t' || b == '\n' || b == '\r') && b != 0x7F;
+    return text ? "TXT" : "?";
+}
+
+Space::Digits Hallway::title_for_name(const std::string& name) const
+{
+    const TitledSpace& ts = *titled_[kBinaryLine];
+    if (!ts.title_space() || !lines_[0].alphabet) return ts.blank_title();
+    const Space& t = *ts.title_space();
+    const CanonResult c = canonicalise_text(name, *lines_[0].alphabet, t.unit_length(), lines_[0].canon);
+    return c.units.empty() ? ts.blank_title() : t.digits_of(c.units[0]);
+}
+
 std::string Hallway::hex_of(const Book& b)
 {
     if (!b.is_file) return b.hex;
@@ -1674,7 +1770,7 @@ void Hallway::set_binary_length(uint64_t bytes)
     const std::string key = lines_[0].space.key();
     const TitledSpace& old = *titled_[kBinaryLine];
     binary_space_ = std::make_unique<BinarySpace>(std::max<uint64_t>(1, bytes), key);
-    titled_[kBinaryLine] = std::make_unique<TitledSpace>(old.title_space(), old.cover_space(), binary_space_->size(), binary_space_->shape(), key);
+    titled_[kBinaryLine] = std::make_unique<TitledSpace>(old.title_space(), std::nullopt, binary_space_->size(), binary_space_->shape(), key);
     memo_hex_ok_ = memo_file_ok_ = false;
     rebase();
 }

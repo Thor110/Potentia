@@ -119,13 +119,12 @@ void Hallway::locator_analyse(const std::string& path, bool sync)
                     all.insert(all.end(), bytes.begin(), bytes.end());
                 }
                 c.lzma2 = cli::lzma2_size(all);
-                // The installer's manifest (every address in it), compressed, and the installer.
+                // The installer's manifest (v3: every file's bytes after it), compressed, and the installer.
                 cli::Manifest with = r.manifest;
-                cli::add_addresses(with, p);
-                const std::string text = with.text();
-                const std::vector<uint8_t> mb(text.begin(), text.end());
+                cli::add_contents(with, p);
+                const std::vector<uint8_t> mb = with.file();
                 const BigUint ma = cli::binary_address(mb);
-                c.manifest = text.size();
+                c.manifest = mb.size();
                 c.manifest_deflate = cli::deflate_size(mb);
                 c.manifest_lzma2 = cli::lzma2_size(mb);
                 c.installer_hex = ma.is_zero() ? 1 : ma.to_hex().size();
@@ -179,9 +178,8 @@ void Hallway::locator_save(const std::string& to)
             else
             {
                 cli::Manifest with = r.manifest;
-                cli::add_addresses(with, from_u8(r.path));
-                const std::string text = with.text();
-                cli::write_address_file(out, cli::binary_address(std::vector<uint8_t>(text.begin(), text.end())), false);
+                cli::add_contents(with, from_u8(r.path));
+                cli::write_address_file(out, cli::binary_address(with.file()), false);
                 done = trf("loc.saved.installer", {to});
             }
         }
@@ -224,7 +222,8 @@ void Hallway::locator_go()
         drop_in_hand();
         set_line(kBinaryLine);
     }
-    go_to_file(bytes, true);
+    const Space::Digits title = title_for_name(u8(from_u8(loc_result_.path).filename())); // its name is its title
+    go_to_file(bytes, true, &title);
     message(trf(past ? "loc.went_past" : "msg.warped.file", {std::to_string(bytes.size())}));
 }
 

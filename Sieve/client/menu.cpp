@@ -307,17 +307,17 @@ std::array<LineSize, 7> Menu::line_sizes() const
         return z;
     };
     // Binary: every file of 0..N bytes, (256^(N+1) - 1) / 255 of them (SPECIFICATIONS §12.1), a
-    // hair over 8N bits; titled, with a cover. Its files stand on one wall, half a tile's slots,
+    // hair over 8N bits; titled, without a cover. Its files stand on one wall, half a tile's slots,
     // and since 256 is a multiple of every wall's slot count the count is 1 mod the wall, so the
-    // empty slots at the end of a loop follow from the title and the cover alone.
+    // empty slots at the end of a loop follow from the title alone.
     LineSize binary;
     {
         const uint64_t per = sieve::books_per_tile(), wall = per / 2;
         const auto rem = [per](const LineSize& x) { return (per - x.padding) % per; };
-        binary.bits = 8.0 * double(s_.binary_bytes) + std::log2(256.0 / 255.0) + title.bits + image.bits;
-        const uint64_t m = rem(title) * rem(image) % wall;
+        binary.bits = 8.0 * double(s_.binary_bytes) + std::log2(256.0 / 255.0) + title.bits; // a title, no cover (its kind is read from its bytes)
+        const uint64_t m = rem(title) % wall;
         binary.padding = uint32_t((wall - m) % wall);
-        binary.units = "cov*title*files<=" + std::to_string(s_.binary_bytes) + "B = ~10^" + fixed(binary.bits * std::log10(2.0), 1);
+        binary.units = "title*files<=" + std::to_string(s_.binary_bytes) + "B = ~10^" + fixed(binary.bits * std::log10(2.0), 1);
     }
     std::array<LineSize, 7> out{titled(page, false), titled(image, false), titled(line_size(kNoteSymbols, s_.notes), true),
                                 titled(line_size(palette_size(s_.video_palette), positions(s_.video_w, s_.video_h, s_.frames)), true),
@@ -368,12 +368,12 @@ double Menu::line_cache_bytes(int i) const
                              positions(s_.video_w, s_.video_h, s_.frames) + t + cover,
                              uint64_t(s_.book_pages + 1) * s_.length + cover,
                              3ull * s_.model_vertices + 3ull * s_.model_faces + t,
-                             (uint64_t(s_.binary_bytes) + 3) / 4 + t + cover};
+                             (uint64_t(s_.binary_bytes) + 3) / 4 + t};
     const double units = std::min(kCachedUnits, 14.0 * double(s_.items_per_wall));
     // A binary file is kept lazily (hallway.hpp, Book::is_file): only its place on the line, a
-    // number as long as the file, and its title and cover; its bytes and hex only for the one
+    // number as long as the file, its title, and its first sixteen bytes; its bytes and hex only for the one
     // looked at. And only half a tile's slots hold files.
-    if (i == 6) return units / 2 * (double(s_.binary_bytes) + 4.0 * double(s_.title_length + cover) + 256.0) + 3.0 * double(s_.binary_bytes);
+    if (i == 6) return units / 2 * (double(s_.binary_bytes) + 4.0 * double(s_.title_length) + 16.0 + 256.0) + 3.0 * double(s_.binary_bytes);
     return units * (4.0 * double(pos[i]) + 0.375 * sizes[size_t(i)].bits + 256.0);
 }
 
@@ -385,7 +385,7 @@ double Menu::graphics_mb_needed() const { return double(model_cache_mb()) + clos
 int Menu::display_px_line(int i) const
 {
     const double title = double(s_.title_length);
-    // (Binary, 6, carries a title and a cover, as audio and video do.)
+    // (Binary, 6, carries a title, and its kind drawn large below it, which the letters do not size.)
     const DisplayText t = i == 0 ? display_text_pages(double(s_.length), title)
                           : i == 4 ? display_text_books(double(s_.length))
                                    : display_text_titled(title);

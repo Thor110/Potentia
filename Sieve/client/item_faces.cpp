@@ -229,14 +229,32 @@ Hallway::Painter Hallway::face_painter(const Book& b) const
     }
     if (b.is_file)
     {
-        // A file: its title and cover, as a record or a film shows them.
-        const Space::Digits cover = b.cover;
-        const ImageFormat cf = lines_[1].image;
+        // A file: its title across the top, and below it, large, what kind of file it is, read
+        // from its own first bytes (ZIP, PNG, TXT, ... or "?"), so the label is right whatever its
+        // title says. Its size beneath, small. Nothing here is part of its address.
+        const std::u32string kind = utf8_decode(file_type(b.head, b.file_size));
+        const std::u32string size = utf8_decode(std::to_string(b.file_size) + (b.file_size == 1 ? " byte" : " bytes"));
         const std::u32string title = utf8_decode(title_text(b));
+        const bool titled = has_titles();
         const SDL_Color c = theme_of(li_).edge;
-        const uint32_t ground = argb({Uint8(c.r / 3), Uint8(c.g / 3), Uint8(c.b / 3), 255});
-        return [cover, cf, title, ground, nw, lp](std::vector<uint32_t>& px, int w, int h) {
-            paint_cover_front(px, w, h, title, cover, cf, ground, argb({235, 225, 205, 255}), nw, lp);
+        const uint32_t ground = argb({Uint8(c.r / 3), Uint8(c.g / 3), Uint8(c.b / 3), 255}), ink = argb({235, 225, 205, 255});
+        return [kind, size, title, titled, ground, ink, nw, lp](std::vector<uint32_t>& px, int w, int h) {
+            px.assign(size_t(w) * size_t(h), ground);
+            const int top = paint_title_band(px, w, h, title, titled, 0xFF1C1C1Cu, ink, nw, lp);
+            // One line of square cells, as wide as fits in four fifths of the width and half the
+            // height left, centred. Always letters, never the bars paint_text falls back to: the
+            // label is a few characters and drawn large.
+            const float room_w = float(w) * 0.8f, room_h = float(h - top);
+            const float cell = std::max(1.0f, std::min(room_w / float(std::max<size_t>(3, kind.size())), room_h * 0.5f));
+            const float x0 = (float(w) - cell * float(kind.size())) * 0.5f, y0 = float(top) + (room_h - cell) * 0.45f;
+            for (size_t i = 0; i < kind.size(); ++i) paint_glyph(px.data(), w, h, x0 + float(i) * cell, y0, cell, cell, kind[i], ink);
+            const float small = std::max(1.0f, std::min(cell / 4.0f, float(w) * 0.9f / float(size.size())));
+            if (small >= lp)
+            {
+                const float sx = (float(w) - small * float(size.size())) * 0.5f, sy = y0 + cell * 1.15f;
+                for (size_t i = 0; i < size.size(); ++i)
+                    if (size[i] != U' ') paint_glyph(px.data(), w, h, sx + float(i) * small, sy, small, small, size[i], ink);
+            }
         };
     }
     if (b.unit.empty()) return {};

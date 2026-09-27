@@ -2,9 +2,9 @@
 // behind it.
 //
 // An installer made with `sieve locate FOLDER --installer NAME.sieve` is the address of the
-// folder's installer manifest (sieve-manifest-v2), stored as raw bytes: one number, which read
-// back is the manifest, which holds the folder structure and every file's own address, which read
-// back is the file. This program does only that. It opens the .sieve file (given on the command
+// folder's installer manifest (sieve-manifest-v3), stored as raw bytes: one number, which read
+// back is the manifest, which holds the folder structure and then every file's bytes, one after
+// another. This program does only that. It opens the .sieve file (given on the command
 // line, dropped on the window, or the one lying beside the program), says what it will install
 // and where, and on Install reads every file back and checks each against its SHA-256 before it
 // writes any, so a damaged installer leaves nothing behind; Cancel part way removes what was
