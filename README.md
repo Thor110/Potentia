@@ -128,7 +128,7 @@ Potentia is part archive, part alignment sandbox, and part digital civilisationa
 
 Status: the search-space engine, **Sieve**, is built and released (v0.13.0): exact addressing, versioned filters, maps of verified anchors and a walkable hallway. The preservation environment and the Museum itself remain at the design stage.
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -179,7 +179,7 @@ This ensures that restored material never bypasses verification or drift safegua
 
 The pipeline is conceptual and intended for future implementation; the addressing, filtering and anchoring it rests on are built.
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -203,7 +203,7 @@ Every step of that curriculum is itself recorded: each item a model sees is an e
 
 This mitigates alignment drift and provides a safe boundary between known content and unknown infinite space.
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -225,7 +225,7 @@ This mitigates alignment drift and provides a safe boundary between known conten
 - Recorded, replayable training trajectories
 - Full versioning and preservation of AI models
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -238,7 +238,7 @@ This mitigates alignment drift and provides a safe boundary between known conten
 5. Enable reconstruction of lost information.
 6. Build a long-term cultural backup for humanity.
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -249,7 +249,7 @@ This mitigates alignment drift and provides a safe boundary between known conten
 Models are preserved in a temporary stasis format until the full environment is built.
 If you know of unarchived models, please open an issue or contact the team.
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -263,7 +263,7 @@ To contribute:
 
 Please say who made a contribution: a person, an AI under human direction, or an AI on its own.
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -271,7 +271,7 @@ Please say who made a contribution: a person, an AI under human direction, or an
 
 Discord: https://discord.gg/HPDty4kDCq
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -287,7 +287,7 @@ Discord: https://discord.gg/HPDty4kDCq
 8. Create the agent sandbox environment.
 9. Develop reconstruction workflows.
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -323,7 +323,7 @@ Inspired in part by Borges’ “Library of Babel”, and by an earlier "Gallery
 </div>
 </details>
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -345,7 +345,7 @@ It also aims to serve as a permanent, future-proof backup of all human knowledge
 
 It is not simply a dataset or archive — it is a world designed for interaction, reinforcement, interpretation, preservation and restoration.
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -385,7 +385,7 @@ The page space is still far too large to generate: 27 symbols on a 3,200-charact
 
 This transforms an intractable problem into one that is **exact, deterministic and reproducible**: every machine, and an independent reference implementation, arrives at the same counts and the same addresses, down to the last digit.
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -413,7 +413,7 @@ The layers are read along **two axes**. **Structure** is decided from content al
 
 This is the **Potentia Filtration Stack**:
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -431,7 +431,7 @@ In practice most of this layer is decided before any filter runs, by the **choic
 
 **Performed by:** the line's alphabet and canonicalisation — pure math / combinatorics.
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -448,7 +448,7 @@ Pages with structure but without meaning:
 
 **Performed by:** dictionary and grammar filters, entropy analysis, statistical language models, format validators.
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -468,7 +468,7 @@ These are not noise — they are structured possibility-space.
 
 **Can only be classified.**
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -483,7 +483,7 @@ Fully consistent histories/worlds that *could* have happened but did not:
 
 **Requires anchoring to known human data (the Museum).**
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -498,7 +498,7 @@ A tiny subset where:
 
 This is the **true Museum corpus**: the verified anchors.
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -523,7 +523,7 @@ These appear as **partial page matches**:
 
 Recovered via **cross-reference with known sources**, and never promoted to Layer 5 without independent, external confirmation.
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -539,7 +539,7 @@ These are neither fiction nor history — they are *adjacent possible worlds.*
 
 By content alone they cannot be told apart from Layer 3; the distinction is made only by reference. Potentia preserves these separately, because they represent meaningful structure.
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -565,7 +565,7 @@ With the Museum, the search space becomes:
 
 Each filtration step removes whole orders of magnitude, and they multiply: every layer works on what the layers before it left. It is the stack as a whole, not any single test, that makes the project feasible.
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -581,7 +581,7 @@ These rules are deliberately simple, fast, and fully verifiable, ensuring that c
 
 Below is the high-level methodology for each layer, with what is **built** in the current release marked as such:
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -599,7 +599,7 @@ It allows us to classify pages as follows:
 
 This immediately removes enormous swathes of pages using a single, fast, streaming calculation.
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -624,7 +624,7 @@ Examples:
 
 If it cannot *possibly* represent any known human data structure → Layer 1.
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -646,7 +646,7 @@ For text pages:
 
 If it is syntactically structured but semantically empty → Layer 2.
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -662,7 +662,7 @@ For pages that contain meaningful content, assign to Layer 3 by identifying:
 
 This layer is detected entirely through **formal consistency**, not through comparison with the Museum. **Planned.**
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -684,7 +684,7 @@ Partially matched? → Layer 4 (Plausible Alternates).
 
 **Built:** the exact match. A unit whose bytes match a verified anchor in a map is that anchor, checked by its SHA-256. **Planned:** partial matching.
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -700,7 +700,7 @@ Lost works are identified via:
 
 If a page resembles a *known* but *missing* work → Layer 6. **Planned.**
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -717,7 +717,7 @@ Lacks historical anchoring but remains fully coherent? → Layer 7 (Adjacent Rea
 
 This classification is based on **coherence minus historical anchoring**. **Planned.**
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -725,7 +725,7 @@ This classification is based on **coherence minus historical anchoring**. **Plan
 
 This section sets out the structural units of the **Gallery of Babel** as built, and what an address is. The full definitions are in the Sieve [specification](./Sieve/docs/SPECIFICATIONS.md); the original design (10,000-character Unicode pages and hashed book seeds) is kept in [Previous](./Previous/READMEv1.md).
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -740,7 +740,7 @@ The unit is the base of every line: a page of text, a picture, a sequence of not
 | **Address** | The unit itself, read as one number: exactly one address per unit, and one unit per address. | Addressing is not compression: an address carries exactly as much information as its unit, which is what makes it reversible. |
 | **Identity** | SHA-256 of the content. | A short, fixed-length fingerprint for naming and verifying a unit. It is not a position, and it cannot be turned back into the content. |
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -756,7 +756,7 @@ A **Book** is a cover (one picture), a title (one page) and a fixed number of pa
 
 Composition does not reduce the number of possible books; it reduces the work of judging them. Searching pages makes content cheaper to examine, but choosing the right pages in the right order remains its own search.
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -764,7 +764,7 @@ Composition does not reduce the number of possible books; it reduces the work of
 
 Every file of every size up to the line's length is one unit of the **binary line**, the empty file included. A file's address is its own hex dump plus `0101…01`, one `01` for each of its bytes, and reading one back is a subtraction. A folder is located as a **manifest**, itself a file with its own address, and a **map** links verified files into a graph of anchors: the foundation of the Museum.
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -778,7 +778,7 @@ The structural flow is:
 
 An address does not describe a path to content; it **is** the content, in another form. That is why every address can be read back exactly, and why no address can be shorter than what it names, except through the filters and guided ordering, which shorten the addresses of likely content by lengthening those of noise.
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -800,7 +800,7 @@ Together they turn an impossible library into:
 
 This is the epistemic infrastructure underlying Potentia.
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -814,7 +814,7 @@ I propose a completely sandboxed environment where remote access is only possibl
 
 This prevents malicious access or escape in the event that agents attempt to do so.
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -822,7 +822,7 @@ This prevents malicious access or escape in the event that agents attempt to do 
 
 GNU AGPL v3.0
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
@@ -838,7 +838,7 @@ Sieve was built with Claude Opus 5.5, based on my specifications.
 
 **Concept and architecture by Edward James Gordon.**
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
 
