@@ -441,7 +441,7 @@ const std::vector<Page>& pages()
 
         {"locate", "A file's place on the binary line, or a folder's manifest.",
          "sieve locate FILE [--out ADDRESS.hex] [--compare]\n"
-         "  sieve locate FOLDER [--manifest OUT] [--addresses DIR] [--with-addresses] [--installer OUT.sieve [--hex]] [--compare]",
+         "  sieve locate FOLDER [--manifest OUT] [--addresses DIR] [--with-addresses] [--installer OUT.sieve [--hex]] [--program OUT.exe] [--compare]",
          "A file is one unit of the binary line (every file up to N bytes, binary-v1): its\n"
          "positional address is its own hex dump plus 0101...01, one 01 for each of its bytes.\n"
          "The address depends only on the file, not on the line's length, so it is the file's\n"
@@ -464,18 +464,23 @@ const std::vector<Page>& pages()
                                     "listing, then every file's bytes) as raw bytes (--hex: as hex);\n"
                                     "--manifest then writes that v3 manifest. --compare also compresses\n"
                                     "it. sieve-install opens it."},
+          {"--program OUT.exe", "A folder: an installer program, one file to hand to someone: a copy of\n"
+                                "sieve-install (it must be beside sieve) with the installer attached to\n"
+                                "its end. Run, it installs the folder."},
           {"--hex", "Write the installer in hex rather than raw bytes."},
           {"--compare", "Compare the sizes: original, zip, 7z, and the address."}},
          {{"sieve locate sieve.exe --compare", "where the executable is, and what zip and 7z make of it"},
           {"sieve locate release --manifest release.manifest --compare", "the manifest of a release folder"},
-          {"sieve locate release --installer release.sieve --compare", "an installer for it, and its sizes"}}},
+          {"sieve locate release --installer release.sieve --compare", "an installer for it, and its sizes"},
+          {"sieve locate release --program release-setup.exe", "an installer program for it"}}},
 
         {"install", "Put a folder back from its installer: one address.",
-         "sieve install INSTALLER.sieve --to FOLDER [--force] [--hex]",
+         "sieve install INSTALLER.sieve|PROGRAM.exe --to FOLDER [--force] [--hex]",
          "The command-line form of sieve-install. Reads the installer (the address of a\n"
          "sieve-manifest-v3 as raw bytes, made with sieve locate --installer; --hex for one written\n"
          "in hex) back into the manifest, and cuts every file from the bytes after its listing.\n"
-         "(An older installer, of a v2 manifest, reads every file back from its address.)\n"
+         "(An older installer, of a v2 manifest, reads every file back from its address.) An\n"
+         "installer program made with --program installs the same way.\n"
          "Every file is checked against its size and SHA-256 before anything is written, so a bad\n"
          "address leaves the folder untouched. Files already there are refused unless --force.",
          {{"--to FOLDER", "Where to put the tree (required). Created if it is not there."},

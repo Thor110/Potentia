@@ -49,6 +49,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -108,6 +109,28 @@ Manifest walk_folder(const std::filesystem::path& root);
 // its manifest's address as raw bytes, conventionally named <name>.sieve.
 BigUint read_address_file(const std::filesystem::path& file, bool hex);
 void write_address_file(const std::filesystem::path& file, const BigUint& address, bool hex);
+
+// An installer program: a copy of sieve-install with an installer attached to its end, one file
+// to hand to someone. Programs are read from their start, so what follows the program itself is
+// left alone by the system that runs it; sieve-install looks at its own end for it:
+//
+//     <sieve-install, as built> <the installer: the address as raw bytes> <its length: 8 bytes,
+//     least significant first> "sieve-attached-1"
+//
+// A program that already has one attached has it replaced, not a second added.
+inline constexpr char kAttachedMagic[] = "sieve-attached-1"; // 16 bytes, no terminator used
+
+// The running program's own file (for sieve-install, to find what is attached to it; for sieve
+// and the hallway, to find the sieve-install beside them).
+std::filesystem::path own_executable(const char* argv0);
+// The sieve-install program beside `dir`, if there is one.
+std::optional<std::filesystem::path> installer_program_beside(const std::filesystem::path& dir);
+// Writes `program` (sieve-install) with `address` attached as `out`, marked runnable.
+void write_installer_program(const std::filesystem::path& program, const BigUint& address, const std::filesystem::path& out);
+// The address attached to a program, if it has one.
+std::optional<BigUint> attached_address(const std::filesystem::path& program);
+// An address from its raw bytes (base 256, most significant first; no bytes is 0).
+BigUint address_of_raw(const std::vector<uint8_t>& bytes);
 
 // The manifest an installer holds, read back from it and checked to be one that can install (v3,
 // or the older v2).

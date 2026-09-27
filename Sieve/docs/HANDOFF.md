@@ -320,6 +320,19 @@ every file, writes them with a progress bar, and on Cancel removes what it wrote
 included (`install_tree` in `tools/cli/locate.cpp`, shared with `sieve install`). `--to`,
 `--yes` and `--screenshot FILE.bmp` run it unattended; CI does, on the Linux runner.
 
+**Installer programs** (one file to hand to someone): `sieve locate FOLDER --program OUT`, or the
+locator's "Make an installer..." when the name is not `.sieve`, copies the `sieve-install` beside
+the tool and attaches the installer to its end: `<program> <installer, raw> <length, 8 bytes LE>
+"sieve-attached-1"`. Systems run a program from its start and ignore what follows it, so it runs
+as sieve-install, which first looks at its own end (`own_executable`, `attached_address`), then
+at its command line, then beside itself. A program that already has one attached has it
+replaced. `sieve install` reads programs too. SDL is linked statically into sieve-install when
+a static SDL target exists; with only a shared one the program also needs `SDL3.dll`, and
+`--program` says so. Edward's TEST folder: a 3.69 MB sieve-install (Linux) + 5,056,712 + 24 =
+8,750,408 bytes. Not yet: an icon, code signing (Windows SmartScreen warns about unsigned programs
+from the internet), or checking the attached installer against a checksum before reading it
+(install_tree checks every file anyway).
+
 **The File Locator in the hallway** (pause menu, `client/file_locator.cpp`): the tool's own locator
 and comparison in a window. Choose a file or folder with the system's pickers (F, D) or drop one
 on the window. A file shows its size, SHA-256, address and comparison, and "Go to it" puts you on

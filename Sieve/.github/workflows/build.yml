@@ -366,6 +366,19 @@ jobs:
           head -c 100 fx.sieve > broken.sieve
           if build/sieve-install broken.sieve --to fx_broken --yes; then exit 1; fi
           test ! -e fx_broken
+          # An installer program: sieve-install with the installer attached, run on its own, and
+          # read by sieve install; exactly the program, the installer and a 24-byte trailer; and
+          # made from a program that already has one attached, the old one replaced, not added to.
+          build/sieve locate tests/manifest_fixture --program fx-installer > /dev/null
+          rm -rf fx_prog fx_prog2
+          ./fx-installer --to fx_prog --yes
+          diff -r tests/manifest_fixture fx_prog
+          build/sieve install fx-installer --to fx_prog2 > /dev/null
+          diff -r tests/manifest_fixture fx_prog2
+          test "$(wc -c < fx-installer)" = "$(( $(wc -c < build/sieve-install) + $(wc -c < fx.sieve) + 24 ))"
+          rm -rf again && mkdir again && cp build/sieve again/ && cp fx-installer again/sieve-install
+          again/sieve locate tests/manifest_fixture --program fx-again > /dev/null
+          cmp fx-installer fx-again
           # The File Locator (pause menu): a folder measured, and a file walked to on the binary line.
           $H --no-menu --locate tests/manifest_fixture --screenshot locate.png | q "saved locate.png"
           $H --no-menu --binary-length 64 --locate tests/manifest_fixture/a.txt --press "Return" --screenshot locate2.png | tail -2 | sed -n 1p | tee l2.txt | q "^BINARY line"

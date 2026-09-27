@@ -234,10 +234,16 @@ if(SIEVE_BUILD_CLIENT)
     target_compile_definitions(hallway PRIVATE SIEVE_VERSION="${PROJECT_VERSION}")
 
     # sieve-install: the installer, a window of its own over the locator's install code. It needs
-    # no data files (SDL's own font), so it is one executable and the .sieve file it installs.
-    # On Windows it is a windowed program, without a console.
+    # no data files (SDL's own font), so it is one executable, and an installer program is it with
+    # the installer attached. SDL is linked statically where a static SDL is to be had, so that
+    # program is one file; with only a shared SDL it also needs SDL3.dll beside it (sieve locate
+    # --program says so). On Windows it is a windowed program, without a console.
     add_executable(sieve-install WIN32 client/installer_main.cpp)
-    target_link_libraries(sieve-install PRIVATE sieve_locate SDL3::SDL3)
+    if(TARGET SDL3::SDL3-static)
+        target_link_libraries(sieve-install PRIVATE sieve_locate SDL3::SDL3-static)
+    else()
+        target_link_libraries(sieve-install PRIVATE sieve_locate SDL3::SDL3)
+    endif()
     if(WIN32)
         target_sources(sieve-install PRIVATE tools/utf8.manifest)
     endif()

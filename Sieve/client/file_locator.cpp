@@ -179,8 +179,22 @@ void Hallway::locator_save(const std::string& to)
             {
                 cli::Manifest with = r.manifest;
                 cli::add_contents(with, from_u8(r.path));
-                cli::write_address_file(out, cli::binary_address(with.file()), false);
-                done = trf("loc.saved.installer", {to});
+                const BigUint address = cli::binary_address(with.file());
+                // Named .sieve: the installer on its own. Anything else: an installer program,
+                // sieve-install with the installer attached, one file to hand to someone.
+                if (out.extension() == ".sieve")
+                {
+                    cli::write_address_file(out, address, false);
+                    done = trf("loc.saved.installer", {to});
+                }
+                else
+                {
+                    const char* base = SDL_GetBasePath();
+                    const auto stub = cli::installer_program_beside(base ? from_u8(base) : fs::current_path());
+                    if (!stub) throw std::runtime_error(tr("loc.no_installer_program"));
+                    cli::write_installer_program(*stub, address, out);
+                    done = trf("loc.saved.program", {to});
+                }
             }
         }
         catch (const std::exception& e)
@@ -264,13 +278,19 @@ void Hallway::locator_event(const SDL_Event& e)
     else if (pressed == "go") locator_go();
     else
     {
-        // A save: 1 the address (hex), 2 the manifest, 3 the installer (raw bytes).
+        // A save: 1 the address (hex), 2 the manifest, 3 the installer: an installer program by
+        // default (sieve-install with it attached), or on its own if named .sieve.
         loc_save_what_ = pressed == "save_address" ? 1 : pressed == "save_manifest" ? 2 : 3;
         const fs::path from = from_u8(loc_result_.path);
-        const std::string name = u8(from.filename()) + (loc_save_what_ == 1 ? ".hex" : loc_save_what_ == 2 ? ".manifest" : ".sieve");
+#ifdef _WIN32
+        const char* program = " installer.exe";
+#else
+        const char* program = "-installer";
+#endif
+        const std::string name = u8(from.filename()) + (loc_save_what_ == 1 ? ".hex" : loc_save_what_ == 2 ? ".manifest" : program);
         const std::string start = u8(from.parent_path() / from_u8(name));
-        static const SDL_DialogFileFilter kInstaller[] = {{"Sieve installer", "sieve"}};
-        SDL_ShowSaveFileDialog(save_to, this, window_, loc_save_what_ == 3 ? kInstaller : nullptr, loc_save_what_ == 3 ? 1 : 0,
+        static const SDL_DialogFileFilter kInstaller[] = {{"Installer program", "exe"}, {"Sieve installer (needs sieve-install)", "sieve"}};
+        SDL_ShowSaveFileDialog(save_to, this, window_, loc_save_what_ == 3 ? kInstaller : nullptr, loc_save_what_ == 3 ? 2 : 0,
                                start.c_str());
     }
 }

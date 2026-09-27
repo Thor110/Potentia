@@ -5,8 +5,16 @@
 #include "sieve/sha256.hpp"
 
 #include <algorithm>
+#include <cstring>
 #include <fstream>
 #include <stdexcept>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 namespace sieve::cli {
 
@@ -288,6 +296,11 @@ BigUint read_address_file(const fs::path& file, bool hex)
         h.erase(std::remove_if(h.begin(), h.end(), [](char c) { return c == '\n' || c == '\r' || c == ' '; }), h.end());
         return h.empty() ? BigUint() : BigUint::from_hex(h);
     }
+    return address_of_raw(bytes);
+}
+
+BigUint address_of_raw(const std::vector<uint8_t>& bytes)
+{
     static constexpr char kHex[] = "0123456789abcdef";
     std::string h;
     h.reserve(bytes.size() * 2);
@@ -297,6 +310,95 @@ BigUint read_address_file(const fs::path& file, bool hex)
         h += kHex[b & 15];
     }
     return h.empty() ? BigUint() : BigUint::from_hex(h);
+}
+
+fs::path own_executable(const char* argv0)
+{
+#ifdef _WIN32
+    std::wstring w(1024, L'\0');
+    for (;;)
+    {
+        const DWORD n = GetModuleFileNameW(nullptr, w.data(), DWORD(w.size()));
+        if (n == 0) break;
+        if (n < w.size())
+        {
+            w.resize(n);
+            return fs::path(w);
+        }
+        w.resize(w.size() * 2);
+    }
+#else
+    std::error_code ec;
+    const fs::path self = fs::read_symlink("/proc/self/exe", ec);
+    if (!ec) return self;
+#endif
+    return fs::absolute(fs::path(argv0 ? argv0 : ""));
+}
+
+std::optional<fs::path> installer_program_beside(const fs::path& dir)
+{
+    for (const char* name : {"sieve-install.exe", "sieve-install"})
+    {
+        std::error_code ec;
+        if (fs::is_regular_file(dir / name, ec)) return dir / name;
+    }
+    return std::nullopt;
+}
+
+namespace {
+
+constexpr size_t kMagic = sizeof(kAttachedMagic) - 1, kTrailer = 8 + kMagic;
+
+// Where the program itself ends: its whole length, or where what is attached to it begins.
+uint64_t program_length(const std::vector<uint8_t>& f, uint64_t* attached = nullptr)
+{
+    if (attached) *attached = 0;
+    if (f.size() < kTrailer || std::memcmp(f.data() + f.size() - kMagic, kAttachedMagic, kMagic) != 0) return f.size();
+    uint64_t n = 0;
+    for (int i = 7; i >= 0; --i) n = n << 8 | f[f.size() - kTrailer + size_t(i)];
+    if (n > f.size() - kTrailer) throw std::runtime_error("the installer attached to the program is damaged (its length is wrong)");
+    if (attached) *attached = n;
+    return f.size() - kTrailer - n;
+}
+
+} // namespace
+
+void write_installer_program(const fs::path& program, const BigUint& address, const fs::path& out)
+{
+    const auto p = read_file_bytes(program);
+    const uint64_t length = program_length(p);
+    std::vector<uint8_t> raw;
+    if (!address.is_zero())
+    {
+        std::string h = address.to_hex();
+        if (h.size() % 2) h.insert(h.begin(), '0');
+        auto nib = [](char c) { return uint8_t(c <= '9' ? c - '0' : c - 'a' + 10); };
+        raw.resize(h.size() / 2);
+        for (size_t i = 0; i < raw.size(); ++i) raw[i] = uint8_t(nib(h[2 * i]) << 4 | nib(h[2 * i + 1]));
+    }
+    {
+        std::ofstream o(out, std::ios::binary);
+        o.write(reinterpret_cast<const char*>(p.data()), std::streamsize(length));
+        o.write(reinterpret_cast<const char*>(raw.data()), std::streamsize(raw.size()));
+        uint64_t n = raw.size();
+        for (int i = 0; i < 8; ++i, n >>= 8) o.put(char(n & 0xFF));
+        o.write(kAttachedMagic, std::streamsize(kMagic));
+        if (!o) throw std::runtime_error("cannot write " + out.generic_string());
+    }
+    // Runnable where that is a permission (it is not on Windows, where .exe says so).
+    std::error_code ec;
+    fs::permissions(out, fs::perms::owner_exec | fs::perms::group_exec | fs::perms::others_exec, fs::perm_options::add, ec);
+}
+
+std::optional<BigUint> attached_address(const fs::path& program)
+{
+    std::error_code ec;
+    if (!fs::is_regular_file(program, ec)) return std::nullopt;
+    const auto f = read_file_bytes(program);
+    uint64_t n = 0;
+    const uint64_t at = program_length(f, &n);
+    if (at == f.size()) return std::nullopt; // nothing attached
+    return address_of_raw(std::vector<uint8_t>(f.begin() + std::ptrdiff_t(at), f.begin() + std::ptrdiff_t(at + n)));
 }
 
 void write_address_file(const fs::path& file, const BigUint& address, bool hex)

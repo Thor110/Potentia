@@ -1360,6 +1360,9 @@ int cmd_check_book(const Args& a)
 }
 
 // locate: a file's place on the binary line, or a folder's manifest (SPECIFICATIONS §12.2).
+// The program as it was run, for finding what lies beside it (sieve-install, for --program).
+const char* g_argv0 = nullptr;
+
 int cmd_locate(const Args& a)
 {
     namespace fs = std::filesystem;
@@ -1406,7 +1409,7 @@ int cmd_locate(const Args& a)
     Manifest m = walk_folder(target);
     // Which manifest: v2 lists every file's address (--with-addresses); an installer's (v3) has
     // every file's bytes after its text, and the installer is its address; otherwise v1.
-    const bool installer = a.has("installer");
+    const bool installer = a.has("installer") || a.has("program");
     if (a.has("with-addresses")) add_addresses(m, target);
     else if (installer) add_contents(m, target);
     const std::string text = m.text();
@@ -1478,7 +1481,21 @@ int cmd_locate(const Args& a)
         if (a.has("addresses")) *info << "addresses " << m.files << " files' addresses written under " << d << "\n";
     }
     const BigUint iaddr = installer ? (m.with_contents ? maddr : binary_address(ibytes)) : BigUint();
-    if (installer)
+    if (a.has("program"))
+    {
+        // The installer attached to a copy of sieve-install: one program to hand to someone.
+        const std::string o = a.get("program");
+        const auto stub = installer_program_beside(own_executable(g_argv0).parent_path());
+        if (!stub) throw std::runtime_error("--program needs sieve-install beside sieve (build it with the client)");
+        write_installer_program(*stub, iaddr, fs::path(std::u8string(o.begin(), o.end())));
+        *info << "program   " << o << ": sieve-install with the installer attached (" << fs::file_size(fs::path(std::u8string(o.begin(), o.end())))
+              << " bytes); run it to install\n";
+        std::error_code ec;
+        if (fs::exists(stub->parent_path() / "SDL3.dll", ec))
+            *info << "          note: this sieve-install uses SDL3.dll, so the program needs SDL3.dll beside it too;\n"
+                     "          build with a static SDL (the fetched one is) for a program that stands alone\n";
+    }
+    if (a.has("installer"))
     {
         const std::string o = a.get("installer");
         write_address_file(fs::path(std::u8string(o.begin(), o.end())), iaddr, a.has("hex"));
@@ -1510,14 +1527,18 @@ int cmd_install(const Args& a)
     namespace fs = std::filesystem;
     if (a.positional.empty() || !a.has("to")) throw std::invalid_argument("install needs an address file and --to FOLDER (see: sieve help install)");
     const std::string in = a.positional[0], to = a.get("to");
-    const BigUint address = read_address_file(fs::path(std::u8string(in.begin(), in.end())), a.has("hex"));
+    const fs::path in_path(std::u8string(in.begin(), in.end()));
+    // An installer program (sieve-install with one attached) installs as its installer does.
+    const auto attached = a.has("hex") ? std::nullopt : attached_address(in_path);
+    const BigUint address = attached ? *attached : read_address_file(in_path, a.has("hex"));
     const Manifest m = manifest_of_installer(address);
     std::cout << "manifest  " << m.root << ": " << m.files << " files, " << m.bytes << " bytes\n";
     const fs::path dest(std::u8string(to.begin(), to.end()));
     install_tree(m, dest, a.has("force"), [&](int phase, size_t done, size_t total, const std::string& path) {
         if (phase == 1) std::cout << "  " << done << "/" << total << "  " << path << "\n";
     });
-    std::cout << "installed " << m.files << " files into " << to << ", every one checked against its SHA-256\n";
+    std::cout << "installed " << m.files << (m.files == 1 ? " file into " : " files into ") << to
+              << (m.files == 1 ? ", checked against its SHA-256\n" : ", every one checked against its SHA-256\n");
     return 0;
 }
 
@@ -1571,6 +1592,7 @@ bool is_command(const std::string& name)
 
 int main(int argc, char** argv)
 {
+    g_argv0 = argv[0];
     try
     {
         if (argc < 2)

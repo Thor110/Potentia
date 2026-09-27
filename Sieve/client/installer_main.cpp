@@ -5,7 +5,8 @@
 // folder's installer manifest (sieve-manifest-v3), stored as raw bytes: one number, which read
 // back is the manifest, which holds the folder structure and then every file's bytes, one after
 // another. This program does only that. It opens the .sieve file (given on the command
-// line, dropped on the window, or the one lying beside the program), says what it will install
+// line, attached to this program's own end (an installer program: sieve locate --program), dropped
+// on the window, or the one lying beside the program), says what it will install
 // and where, and on Install reads every file back and checks each against its SHA-256 before it
 // writes any, so a damaged installer leaves nothing behind; Cancel part way removes what was
 // written. It carries the core's addressing and the manifest code and nothing else: no
@@ -42,6 +43,8 @@ std::string u8(const fs::path& p)
 }
 
 fs::path from_u8(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
+
+std::string files_n(uint64_t n) { return std::to_string(n) + (n == 1 ? " file" : " files"); }
 
 std::string human_bytes(uint64_t n)
 {
@@ -111,6 +114,7 @@ struct Installer
     std::mutex dialog_mx;
     std::optional<std::string> chosen;
 
+    // An installer file, or a program with one attached (an installer program, or this one).
     void open(const fs::path& file)
     {
         source = file;
@@ -118,7 +122,8 @@ struct Installer
         error.clear();
         try
         {
-            manifest = manifest_of_installer(read_address_file(file, false));
+            const auto attached = attached_address(file);
+            manifest = manifest_of_installer(attached ? *attached : read_address_file(file, false));
             screen = Screen::Ready;
             // Where it goes unless you say otherwise: a folder of its own name in your documents.
             const char* docs = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
@@ -242,7 +247,22 @@ int main(int argc, char** argv)
     }
     SDL_SetRenderVSync(r, 1);
     Installer in;
+    // What to install: the file named, else the installer attached to this program itself (an
+    // installer program, made with sieve locate --program or the File Locator), else the one
+    // .sieve file beside it.
+    const fs::path self = own_executable(argc > 0 ? argv[0] : nullptr);
+    std::optional<BigUint> mine;
+    try
+    {
+        if (file_arg.empty()) mine = attached_address(self);
+    }
+    catch (const std::exception& e)
+    {
+        in.error = e.what();
+    }
     if (!file_arg.empty()) in.open(from_u8(file_arg));
+    else if (mine) in.open(self);
+    else if (!in.error.empty()) {}
     else if (auto beside = installer_beside_me()) in.open(*beside);
     else in.error = "no installer: drop a .sieve file on this window, or open one with this program";
     if (!to_arg.empty()) in.dest = to_arg;
@@ -337,7 +357,7 @@ int main(int argc, char** argv)
         {
             const Manifest& m = *in.manifest;
             row(80, "Installs", m.root);
-            row(104, "Contents", std::to_string(m.files) + " files, " + human_bytes(m.bytes));
+            row(104, "Contents", files_n(m.files) + ", " + human_bytes(m.bytes));
             row(128, "From", tail(u8(in.source.filename()), 60));
             if (in.screen == Screen::Ready)
             {
@@ -391,7 +411,7 @@ int main(int argc, char** argv)
                 else if (in.screen == Screen::Done)
                 {
                     text(r, 24, 196, "Installed.", 2, kAccent);
-                    text(r, 24, 228, std::to_string(in.manifest->files) + " files, every one checked against its SHA-256.", 1.5f, kInk);
+                    text(r, 24, 228, files_n(in.manifest->files) + (in.manifest->files == 1 ? ", checked against its SHA-256." : ", every one checked against its SHA-256."), 1.5f, kInk);
                     buttons.push_back({{W - 164, H - 60, 140, 40}, "Finish"});
                 }
                 else if (in.screen == Screen::Cancelled)
