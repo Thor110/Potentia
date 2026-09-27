@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(Sieve VERSION 0.12.0 LANGUAGES CXX)
+project(Sieve VERSION 0.13.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -123,6 +123,15 @@ endif()
 
 # The locator and the installer's code (no compressors: sieve-install links this alone), and the
 # comparison, which is the only part that needs them.
+# Sieve's icon as a Windows resource (data/icons, made by tools/make_icon.py), for every program.
+if(WIN32)
+    set(SIEVE_ICON_FILE ${CMAKE_CURRENT_SOURCE_DIR}/data/icons/sieve.ico)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/data/icons/sieve.rc.in ${CMAKE_BINARY_DIR}/sieve_icon.rc @ONLY)
+    set(SIEVE_ICON_RC ${CMAKE_BINARY_DIR}/sieve_icon.rc)
+else()
+    set(SIEVE_ICON_RC "")
+endif()
+
 add_library(sieve_locate STATIC tools/cli/locate.cpp tools/cli/map.cpp)
 target_include_directories(sieve_locate PUBLIC tools)
 target_link_libraries(sieve_locate PUBLIC sieve_core)
@@ -135,7 +144,8 @@ endif()
 
 add_executable(sieve
     tools/sieve_cli.cpp
-    tools/cli/help.cpp)
+    tools/cli/help.cpp
+    ${SIEVE_ICON_RC})
 target_link_libraries(sieve PRIVATE sieve_lines sieve_locate sieve_compare)
 if(WIN32)
     # UTF-8 command lines on Windows (the manifest sets the process code page).
@@ -147,7 +157,23 @@ target_compile_definitions(sieve PRIVATE SIEVE_VERSION="${PROJECT_VERSION}")
 # folder and in every configuration (Debug, Release, ...).
 # Runs on every build (not only when sieve relinks), so a changed registry or word list always
 # reaches the executable's folder.
+# Potentia's licence, which covers Sieve, is kept one folder up (the Potentia repository's root):
+# copied beside the programs as potentia-license.txt, so every build and every release carries it.
+set(SIEVE_POTENTIA_LICENSE ${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE)
+set(SIEVE_LICENSE_COPY "")
+if(EXISTS ${SIEVE_POTENTIA_LICENSE})
+    set(SIEVE_LICENSE_COPY COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SIEVE_POTENTIA_LICENSE}
+                           $<TARGET_FILE_DIR:sieve>/potentia-license.txt)
+else()
+    message(WARNING "No LICENSE one folder up (${SIEVE_POTENTIA_LICENSE}): the build carries no potentia-license.txt, and a release must not be made from it")
+endif()
 add_custom_target(sieve_data ALL
+    ${SIEVE_LICENSE_COPY}
+    # The maps shipped: everything in data/maps (sieve.map, the sealed map of the release, and any
+    # other map put there). Maps made in the hallway under other names are left as they are.
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/data/maps
+            $<TARGET_FILE_DIR:sieve>/maps
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/data/dictionaries
             $<TARGET_FILE_DIR:sieve>/dictionaries
@@ -160,7 +186,7 @@ add_custom_target(sieve_data ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/third_party_licenses
             $<TARGET_FILE_DIR:sieve>/third_party_licenses
-    COMMENT "Copying dictionaries, models, languages and third-party licences next to sieve")
+    COMMENT "Copying the licences, maps, dictionaries, models and languages next to sieve")
 add_dependencies(sieve_data sieve)
 
 # ---------------------------------------------------------------- tests
@@ -192,6 +218,7 @@ if(SIEVE_BUILD_CLIENT)
     endif()
 
     add_executable(hallway
+        ${SIEVE_ICON_RC}
         client/app_main.cpp
         client/app_settings.cpp
         client/binary_edge.cpp
@@ -232,13 +259,7 @@ if(SIEVE_BUILD_CLIENT)
                 $<TARGET_FILE_DIR:hallway>/meshes
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${CMAKE_CURRENT_SOURCE_DIR}/third_party_licenses
-                $<TARGET_FILE_DIR:hallway>/third_party_licenses
-        # The maps shipped (data/maps: the sealed release map), file by file, so that maps made
-        # in the hallway beside them are never touched by a rebuild.
-        COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:hallway>/maps
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${CMAKE_CURRENT_SOURCE_DIR}/data/maps/release.map
-                $<TARGET_FILE_DIR:hallway>/maps/release.map)
+                $<TARGET_FILE_DIR:hallway>/third_party_licenses)
     target_compile_definitions(hallway PRIVATE SIEVE_VERSION="${PROJECT_VERSION}")
 
     # sieve-install: the installer, a window of its own over the locator's install code. It needs
@@ -246,7 +267,7 @@ if(SIEVE_BUILD_CLIENT)
     # the installer attached. SDL is linked statically where a static SDL is to be had, so that
     # program is one file; with only a shared SDL it also needs SDL3.dll beside it (sieve locate
     # --program says so). On Windows it is a windowed program, without a console.
-    add_executable(sieve-install WIN32 client/installer_main.cpp)
+    add_executable(sieve-install WIN32 client/installer_main.cpp ${SIEVE_ICON_RC})
     if(SIEVE_SMALL_INSTALLER)
         # Its own SDL, built once from the same source (or fetched, when SDL came from vcpkg or
         # the system), static, optimised for size, and without what the installer never uses:

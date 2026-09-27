@@ -4,3 +4,6 @@ data/** -text
 tests/*.tsv -text
 tests/*.book -text
 tests/example_book_*.txt -text
+
+# Windows batch files keep CRLF line endings (cmd needs them for call :labels).
+*.bat text eol=crlf

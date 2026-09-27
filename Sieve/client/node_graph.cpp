@@ -59,7 +59,7 @@ fs::path program_dir()
 // as they are there, and nothing else (a build folder holds much more than the program uses).
 const char* const kInstalled[] = {"hallway",        "hallway.exe", "sieve",  "sieve.exe", "sieve-install", "sieve-install.exe",
                                   "dictionaries",   "models",      "lang",   "fonts",     "meshes",        "maps",
-                                  "third_party_licenses"};
+                                  "third_party_licenses", "potentia-license.txt"};
 
 cli::Map installation_map()
 {
@@ -830,15 +830,15 @@ int Hallway::draw_graph(GraphMap* g, SDL_FRect area, float yaw, float pitch, flo
             hot = int(i);
         }
     }
-    auto mark = [&](int i, SDL_Color c, float s) {
+    auto mark = [&](int i, SDL_Color mc, float s) {
         if (i < 0 || i >= int(n)) return;
-        SDL_SetRenderDrawColor(r_, c.r, c.g, c.b, 255);
+        SDL_SetRenderDrawColor(r_, mc.r, mc.g, mc.b, 255);
         const SDL_FRect q{pr[size_t(i)].x - s / 2, pr[size_t(i)].y - s / 2, s, s};
         SDL_RenderRect(r_, &q);
     };
-    auto label = [&](int i, SDL_Color c) {
+    auto label = [&](int i, SDL_Color lc) {
         if (i < 0 || i >= int(n)) return;
-        text(pr[size_t(i)].x + 8, pr[size_t(i)].y - 4, g->map.label(size_t(i)), 1, c);
+        text(pr[size_t(i)].x + 8, pr[size_t(i)].y - 4, g->map.label(size_t(i)), 1, lc);
     };
     // Small maps are labelled throughout; larger ones only where you point and what you chose.
     if (n <= 24)

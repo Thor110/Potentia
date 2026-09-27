@@ -1,0 +1,3 @@
+// Sieve's icon as a Windows resource, for Explorer and the task bar. CMake fills in the path
+// (configure_file), so the resource compiler finds the icon from any build folder.
+1 ICON "@SIEVE_ICON_FILE@"

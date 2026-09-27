@@ -110,6 +110,33 @@ still install. They are simply twice as large as they need to be.
 - For a large release, the fixed cost is small beside the files, and compressing first is what
   counts.
 
+## Making a Sieve release
+
+`tools/make_release.py` makes a release in the one order that works, since every file is named by
+its hash and every hash depends on the step before it:
+
+```sh
+python tools/make_release.py --version 0.13.0                  # build, stage, 7z, instructions, program, map, checks
+python tools/make_release.py --version 0.13.0 --skip-build     # the Release build is already made
+python tools/make_release.py --version 0.13.0 --uncompressed   # installers of the folder itself, not the 7z
+python tools/make_release.py --version 0.13.0 --with-source    # also the source's instructions, named in sieve.map
+```
+
+It stages only what the program uses (the programs, their data folders, `maps/sieve.map`, the
+licences) as the folder `Sieve-<version>` and compresses it first, as `sieve.7z`. From the archive
+it makes `sieve.sieve` and `sieve.exe` (`sieve-setup` on Linux and macOS, where a program has no
+extension), then a sealed `sieve.map` naming both. It then installs each into a scratch folder and compares
+the result byte for byte, and writes `SHA256SUMS.txt` and a `RELEASE-NOTES.md` draft. Publish the
+three files. GitHub adds the tagged commit's source zip by itself.
+
+The trade-off: installers made from the 7z are about a fifth of the size (on Linux, 4.2 MB against
+21.6 MB), but whoever runs them gets a `.7z` to unpack. `--uncompressed` installs a runnable folder
+directly.
+
+It needs Python 3.8+, CMake, 7-Zip, and Potentia's `LICENSE` one folder up. The build copies that
+licence beside the programs as `potentia-license.txt`, and the script refuses to make a release
+without it.
+
 ## Not yet
 
 - An icon for `sieve-install` and for the hallway, before the first release.

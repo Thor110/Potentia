@@ -322,8 +322,8 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
     if (cache_.size() > 4096) cache_.clear(); // more than a screenful (14 tiles of 128 books)
     // Thin: only your own room's books are kept, so a line of huge units keeps a room of them.
     if (thin_ && dt != 0)
-        for (auto it = cache_.begin(); it != cache_.end();)
-            it = it->first / int64_t(sieve::books_per_tile()) != 0 || it->first < 0 ? cache_.erase(it) : std::next(it);
+        for (auto ci = cache_.begin(); ci != cache_.end();)
+            ci = ci->first / int64_t(sieve::books_per_tile()) != 0 || ci->first < 0 ? cache_.erase(ci) : std::next(ci);
     Book b;
     const auto idx = loop_.unit_index(offset_loop_tile(dt), slot);
     if (!idx) b.empty = true;

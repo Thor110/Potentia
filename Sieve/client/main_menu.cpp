@@ -354,7 +354,7 @@ void MainMenu::render()
     // the space between the title and the footer; if it is taller than that, it starts at the top.
     const auto its = items();
     const bool pairs = screen_ == Screen::Graphics || screen_ == Screen::Controls || screen_ == Screen::Language;
-    const float rowh = screen_ == Screen::Main ? 44 : 36, boxw = std::min(W - 60, 760.0f);
+    const float rowh = screen_ == Screen::Main ? 44.0f : 36.0f, boxw = std::min(W - 60, 760.0f);
     size_t help_lines = 0, key_lines = 0;
     if (row_ >= 0 && row_ < int(its.size())) help_lines = split_lines(tr("help." + its[size_t(row_)].id)).size();
     if (screen_ == Screen::Controls) key_lines = split_lines(tr("controls.keys")).size();
@@ -391,7 +391,7 @@ void MainMenu::render()
             SDL_RenderRect(r_, &r);
         }
         const std::string label = tr("item." + it.id);
-        const float scale = screen_ == Screen::Main ? 3 : 2;
+        const float scale = screen_ == Screen::Main ? 3.0f : 2.0f;
         if (!pairs || it.kind == Kind::Action) draw_centred(r_, cx, yy + (screen_ == Screen::Main ? -2 : 2), label, scale, sel ? kWhite : kGrey);
         else
         {

@@ -164,8 +164,8 @@ void Hallway::draw_pixels(const Space::Digits& unit, const ImageFormat& f, float
     for (uint32_t py = 0; py < f.height; ++py)
         for (uint32_t pxi = 0; pxi < f.width; ++pxi)
         {
-            const Rgb c = px[base + size_t(py) * f.width + pxi];
-            SDL_SetRenderDrawColor(r_, c.r, c.g, c.b, 255);
+            const Rgb pc = px[base + size_t(py) * f.width + pxi];
+            SDL_SetRenderDrawColor(r_, pc.r, pc.g, pc.b, 255);
             const SDL_FRect cellr{x + pxi * cell, y + py * cell, cell, cell};
             SDL_RenderFillRect(r_, &cellr);
         }
@@ -337,7 +337,7 @@ void Hallway::draw_hud(int w, int h)
                 // everything inside the panel. Without one, the title and then the thing itself.
                 const float panel_w = std::min(W - 20, 900.0f);
                 const bool covered = !bk.cover.empty();
-                const float tx = covered ? 96 : 20;
+                const float tx = covered ? 96.0f : 20.0f;
                 if (covered) draw_pixels(bk.cover, lines_[1].image, 20, y, 60, 0);
                 if (!title.empty()) text(tx, y, fit("\"" + title + "\"", panel_w - tx, 2), 2, ink);
                 else if (has_titles()) draw_null_title(tx, y, 2);

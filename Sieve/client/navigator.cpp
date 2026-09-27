@@ -247,9 +247,9 @@ void Hallway::draw_navigator(float W, float H)
             text(x, y + 19, std::string(1, nav_hex_[d]), 2, sel ? white : hov ? ink : grey);
             if (sel || hov)
             {
-                const SDL_Color c = sel ? white : ink;
-                arrow(x + kCellW / 2 - 1, y + 6, 1, c);
-                arrow(x + kCellW / 2 - 1, y + 41, -1, c);
+                const SDL_Color ac = sel ? white : ink;
+                arrow(x + kCellW / 2 - 1, y + 6, 1, ac);
+                arrow(x + kCellW / 2 - 1, y + 41, -1, ac);
             }
         }
     }

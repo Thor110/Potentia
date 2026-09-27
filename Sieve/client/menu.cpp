@@ -994,7 +994,7 @@ void Menu::render()
     const float x0 = 620, pitch = std::max(80.0f, (W - x0 - 20) / 8);
     const float label = 118, top = 216, bottom = H - 60, span = bottom - top, min_bar = 12;
     // Line names are drawn at double size where a column is wide enough to hold one.
-    const int name_scale = pitch >= 110 ? 2 : 1;
+    const float name_scale = pitch >= 110 ? 2.0f : 1.0f;
     text(r_, x0, 80, tr("map.title"), 1, white);
     text(r_, x0, 92, trf("map.scale", {fixed(scale_bits, 0)}), 1, grey);
     for (int c = 0; c < 8; ++c)

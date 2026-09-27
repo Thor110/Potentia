@@ -131,7 +131,7 @@ AppSettings AppSettings::load(const fs::path& path)
             if (key == "resolution")
             {
                 int w = 0, h = 0;
-                if (std::sscanf(value.c_str(), "%dx%d", &w, &h) == 2 && w >= 320 && h >= 200 && w <= 16384 && h <= 16384) s.resolution = {w, h};
+                if (parse_size(value, w, h) && w >= 320 && h >= 200 && w <= 16384 && h <= 16384) s.resolution = {w, h};
             }
             else if (key == "fullscreen") s.fullscreen = on_off(value, false);
             else if (key == "vsync") s.vsync = on_off(value, true);

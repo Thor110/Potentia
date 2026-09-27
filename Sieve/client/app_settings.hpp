@@ -21,11 +21,43 @@
 
 #include <SDL3/SDL.h>
 
+#include <charconv>
+#include <cstdlib>
 #include <filesystem>
 #include <string>
 #include <vector>
 
 namespace hallway {
+
+// "WxH" as two whole numbers (a resolution, --size). Parsed with std::from_chars rather than
+// sscanf, which MSVC deprecates.
+inline bool parse_size(const std::string& s, int& w, int& h)
+{
+    const size_t x = s.find('x');
+    if (x == std::string::npos) return false;
+    const auto a = std::from_chars(s.data(), s.data() + x, w);
+    const auto b = std::from_chars(s.data() + x + 1, s.data() + s.size(), h);
+    return a.ec == std::errc() && a.ptr == s.data() + x && b.ec == std::errc() && b.ptr == s.data() + s.size();
+}
+
+// "a,b,..." as exactly n numbers (--pose, --walk).
+inline bool parse_floats(const std::string& s, float* out, size_t n)
+{
+    const char* p = s.c_str();
+    for (size_t i = 0; i < n; ++i)
+    {
+        char* end = nullptr;
+        out[i] = std::strtof(p, &end);
+        if (end == p) return false;
+        p = end;
+        if (i + 1 < n)
+        {
+            if (*p != ',') return false;
+            ++p;
+        }
+    }
+    return *p == 0;
+}
 
 struct Resolution
 {

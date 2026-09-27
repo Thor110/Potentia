@@ -16,6 +16,7 @@
 // success), and --screenshot FILE.bmp writes the window as it stands just before exiting.
 
 #include "cli/locate.hpp"
+#include "window_icon.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -247,6 +248,7 @@ int main(int argc, char** argv)
         return 1;
     }
     SDL_SetRenderVSync(r, 1);
+    set_window_icon(window);
     Installer in;
     // What to install: the file named, else the installer attached to this program itself (an
     // installer program, made with sieve locate --program or the File Locator), else the one

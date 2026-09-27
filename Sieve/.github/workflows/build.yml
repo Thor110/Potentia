@@ -420,7 +420,7 @@ jobs:
           $H --no-menu --map build/maps/finds.map --graph --press "Tab,Tab,Delete" --screenshot anchordel.png | q "saved anchordel.png"
           build/sieve map build/maps/finds.map 2>&1 | q "0 held"
           rm -f build/maps/finds.map
-          $H --no-menu --binary-length 64 --map build/maps/release.map --locate tests/manifest_fixture/a.txt --press "Return,V" --screenshot sealed.png | q "release is read-only"
+          $H --no-menu --binary-length 64 --map build/maps/sieve.map --locate tests/manifest_fixture/a.txt --press "Return,V" --screenshot sealed.png | q "sieve is read-only"
           # The pause menu (Esc): its fourth row is the Navigation System, which opens the navigator.
           $H --warp "$W" --press "Escape,Escape,Down,Down,Down,Return,Escape" --screenshot pause.png | q "saved pause.png"
           out=$($H --warp "$W" --press "X,Home,Up,Return" --screenshot nav.png)
@@ -575,7 +575,7 @@ jobs:
           $S map held1.map --meta "1:source=the fixture folder" --out meta.map 2> /dev/null
           $S map meta.map --meta "1:found=2026-09-27" --out meta.map 2> /dev/null
           python sieve_ref.py map $F/a.txt --held --name default --meta "1:source=the fixture folder" --meta "1:found=2026-09-27" | cmp - meta.map
-          $S map ../data/maps/release.map 2>&1 | grep -c "release (sealed)" > /dev/null
+          $S map ../data/maps/sieve.map 2>&1 | grep -c "sieve (sealed)" > /dev/null
           # A v2 manifest (every file's address listed) is the oracle's to the byte.
           $S locate ../tests/manifest_fixture --manifest fixture2.manifest --with-addresses > /dev/null
           python sieve_ref.py manifest ../tests/manifest_fixture --with-addresses | cmp - fixture2.manifest

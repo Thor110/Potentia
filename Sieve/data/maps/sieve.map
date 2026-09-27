@@ -1,6 +1,6 @@
 sieve-map-v2
-name release
-root release
+name sieve
+root sieve
 sealed yes
 nodes 1
 edges 0

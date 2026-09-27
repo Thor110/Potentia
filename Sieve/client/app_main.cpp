@@ -1,6 +1,7 @@
 // Sieve hallway -- the program: its options, the menus, the screenshot and scripting paths used by
 // the checks, and the event loop. The hallway itself is in hallway.hpp and the files beside it.
 
+#include "window_icon.hpp"
 #include "hallway.hpp"
 
 #include <SDL3/SDL_main.h>
@@ -230,9 +231,9 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
     }
     if (a.has("pose"))
     {
-        float x = 0, z = 0, yaw = 0, pitch = 0;
-        if (std::sscanf(a.get("pose").c_str(), "%f,%f,%f,%f", &x, &z, &yaw, &pitch) != 4)
-            throw std::invalid_argument("--pose expects X,Z,YAW,PITCH");
+        float v[4] = {};
+        if (!hallway::parse_floats(a.get("pose"), v, 4)) throw std::invalid_argument("--pose expects X,Z,YAW,PITCH");
+        const float x = v[0], z = v[1], yaw = v[2], pitch = v[3];
         hall->camera().pos = {x, 1.6f, z};
         hall->camera().yaw = yaw * kPi / 180;
         hall->camera().pitch = pitch * kPi / 180;
@@ -248,9 +249,9 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
         for (size_t start = 0; start < spec.size();)
         {
             const size_t end = std::min(spec.find(';', start), spec.size());
-            float dx = 0, dz = 0;
-            if (std::sscanf(spec.substr(start, end - start).c_str(), "%f,%f", &dx, &dz) != 2)
-                throw std::invalid_argument("--walk expects DX,DZ;DX,DZ;...");
+            float v[2] = {};
+            if (!hallway::parse_floats(spec.substr(start, end - start), v, 2)) throw std::invalid_argument("--walk expects DX,DZ;DX,DZ;...");
+            const float dx = v[0], dz = v[1];
             const int steps = std::max(1, int(std::ceil(std::sqrt(dx * dx + dz * dz) / 0.05f)));
             for (int i = 0; i < steps; ++i)
             {
@@ -280,7 +281,7 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
 int run(const Args& a)
 {
     int w = 1280, h = 720;
-    if (a.has("size") && std::sscanf(a.get("size").c_str(), "%dx%d", &w, &h) != 2)
+    if (a.has("size") && !hallway::parse_size(a.get("size"), w, h))
         throw std::invalid_argument("--size expects WxH, e.g. 1280x720");
     const bool shot = a.has("screenshot");
 
@@ -301,6 +302,7 @@ int run(const Args& a)
     if (shot && app.resolution.w <= 0) app.resolution = {w, h}; // the screenshot's own size
     set_language(a.has("language") ? a.get("language") : app.language);
     SDL_Window* window = SDL_CreateWindow("Sieve - hallway", w, h, SDL_WINDOW_RESIZABLE | (shot ? SDL_WINDOW_HIDDEN : 0));
+    set_window_icon(window);
     if (!window) throw std::runtime_error(std::string("cannot open a window: ") + SDL_GetError());
     SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
     if (!renderer) throw std::runtime_error(std::string("cannot create a renderer: ") + SDL_GetError());

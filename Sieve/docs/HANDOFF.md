@@ -123,7 +123,7 @@ thirty-two-column shelf is half of it; never larger than one.
 | `client/hallway.hpp` | The `Hallway` class and the helpers its parts share (namespace `hallway::hall`). |
 | `client/hallway.cpp` | The corridor itself: lines, position, filters, movement, input, the frame, Real Graphics. |
 | `client/hud.cpp` | Everything in screen space: the compass, the panels, the readout, the item page and COST tab. |
-| `client/door_portal.cpp`, `client/binary_edge.cpp`, `client/crate_faces.cpp` | The doorway noise; the rain and the drop; the models line's crate faces and their render workers. |
+| `client/door_portal.cpp`, `client/binary_edge.cpp`, `client/item_faces.cpp` | The doorway noise; the rain and the drop; every item's face (pages, pictures, covers, crates, files) and their render workers. |
 | `client/app_main.cpp` | Options, the menus, the screenshot and scripting paths, the event loop, `main`. |
 | `client/menu.cpp` | The setup menu, `find_limits()`, the budget model. |
 | `client/mesh.cpp` | The software rasteriser behind Real Graphics. |
@@ -551,10 +551,10 @@ checks are unchanged. The hallway: **V** on any item tab adds the file in hand t
 (`graph_add_anchor`; files only for now; name = the real file name if walked to from one
 (`walked_names_`), else the title plus the kind from its first bytes); [ ] choose the map on any
 tab, and the item page shows it; the viewer's **Remove from map** / Delete (`graph_remove`).
-`read_only()`: This installation and sealed maps. `data/maps/release.map` (sealed, only its root
+`read_only()`: This installation and sealed maps. `data/maps/sieve.map` (sealed, only its root
 until the first release) is the one map shipped; a `default.map` was tried and dropped (below). **At the first release:** make the source archive, then
-`sieve map Sieve-src.7z --name release --seal --out data/maps/release.map` and build; the map
-naming both archives (`sieve map Sieve-src.7z Sieve-<platform>.7z --name release --seal`) goes
+`sieve map Sieve-src.7z --name release --seal --out data/maps/sieve.map` and build; the map
+naming the published files (`sieve map sieve.exe sieve.sieve --name sieve --seal`) goes
 beside the downloads, with its SHA-256 published, since an archive cannot name itself.
 
 **New map, the V toggle, META** (Edward, 27 September 2026). No `default.map`: the node graph's
@@ -567,4 +567,40 @@ writes the same). Anchors are for the binary line only, by design: Edward, "the 
 just for show really; having the binary dimension working is the real win". The superseded
 formats and rules (manifest v2 installers, map v1 beside v2, doors keeping the corridor tile)
 stay documented as the record.
+
+**The first release** (27 September 2026). Published: three files, `sieve.exe`, `sieve.sieve`
+and `sieve.map` (sealed, naming both; Edward's naming, "three identical filenames"; the map is both
+the release's map and Sieve's, so `data/maps/release.map` became `sieve.map` too); the version is
+in the folder they install, `Sieve-<version>`, and in the notes; GitHub's own source zip covers the source,
+so the source's Sieve instructions are optional (`--with-source`, which also makes
+`data/maps/sieve.map` name them). `tools/make_release.py` does it in order and checks it (see
+SIEVE-INSTALL-USAGE.md); tested end to end on the Linux build here, not yet on Windows. Potentia's
+`LICENSE` (one folder up) is copied beside the programs as `potentia-license.txt` by `sieve_data`
+on every build (which now also copies `maps/sieve.map`), is listed in "This installation", and a
+release refuses to go without it. Before the release, Edward (his order): (1) the licence: decided,
+standard AGPLv3 (Potentia's LICENSE, one folder up); (2) icons for the programs and the file types;
+(3) a full test harness run on Windows; (4) the version: 0.13.0 (set in CMakeLists.txt and
+vcpkg.json); (5) the release build, with tools/make_release.py --version 0.13.0.
+
+**The icon** (Edward's choice, 27 September 2026): the minimap itself, design "C" of three: the
+eight rings in door order on a black disc (as the minimap has them on its black panel), pages
+thicker, the needle at 0 degrees with every line's mark; transparent outside the disc, so round.
+`data/icons/` holds only `sieve.ico` (Edward's: 16 to 256 pixels, each shrunk bicubic from the
+256-pixel rendering, which keeps thin lines brighter at 48 and 64 than drawing at those sizes
+does) and `sieve.rc.in` (the Windows resource template CMake fills in, so all three programs carry
+the icon as resource 1 for Explorer). `tools/make_icon.py` turns the .ico's 64-pixel image into
+`client/icon_pixels.h`, the window icon the hallway and sieve-install set at start
+(`client/window_icon.hpp`); `--draw DIR` makes the drawing again (SVGs, PNGs, an .ico) into
+another folder, for a redesign. The resource is proved on the first Windows build. File-type icons
+(.sieve, .map) need registry associations, which an installer that registers types would make;
+not done.
+
+**Windows warnings fixed** (27 September 2026, from Edward's first Release build log): MSVC raised
+14 warnings GCC here does not: `sscanf` (C4996; now `parse_size` / `parse_floats` in
+app_settings.hpp, std::from_chars and strtof), locals shadowing locals (C4456: navigator.cpp,
+hallway.cpp, hud.cpp; and two lambda parameters in node_graph.cpp found by GCC's -Wshadow=local,
+which is the closest check here), and int-to-float initialisations (C4244: main_menu.cpp, hud.cpp,
+menu.cpp). The build itself failed copying `data/maps/release.map`, renamed on Edward's side to
+`sieve.map` (now here too). Worth running `-Wshadow=local` in future before sending code, since
+MSVC's /W4 checks it and this build does not.
 
