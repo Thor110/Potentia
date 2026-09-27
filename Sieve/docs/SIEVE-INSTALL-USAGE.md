@@ -115,8 +115,14 @@ still install. They are simply twice as large as they need to be.
 `tools/make_release.py` makes a release in the one order that works, since every file is named by
 its hash and every hash depends on the step before it:
 
+On Windows, double-click `tools\make_release.bat`: it runs everything with the defaults (the
+version from `CMakeLists.txt`, the Release build in `out\build\x64-Release`) and keeps its window
+open. The files go to `Sieve\release\`, which `.gitignore` keeps out of the repository, so they do
+not show in GitHub Desktop.
+
 ```sh
-python tools/make_release.py --version 0.13.0                  # build, stage, 7z, instructions, program, map, checks
+python tools/make_release.py                                   # build, stage, 7z, instructions, program, map, checks
+python tools/make_release.py --version 0.13.0                  # the same, with the version given
 python tools/make_release.py --version 0.13.0 --skip-build     # the Release build is already made
 python tools/make_release.py --version 0.13.0 --uncompressed   # installers of the folder itself, not the 7z
 python tools/make_release.py --version 0.13.0 --with-source    # also the source's instructions, named in sieve.map
@@ -128,6 +134,14 @@ it makes `sieve.sieve` and `sieve.exe` (`sieve-setup` on Linux and macOS, where 
 extension), then a sealed `sieve.map` naming both. It then installs each into a scratch folder and compares
 the result byte for byte, and writes `SHA256SUMS.txt` and a `RELEASE-NOTES.md` draft. Publish the
 three files. GitHub adds the tagged commit's source zip by itself.
+
+**The source, in the map.** The release also has `sieve.zip`, the Sieve folder's source as the last
+commit has it (`git archive` of the Sieve folder alone, run from the repository's top folder), so
+it holds exactly what is committed, the release script included, and none of the build's or the
+checks' scratch. The script warns if there are changes not committed, since they would not be in
+it: commit first. The published `sieve.map` names `sieve.exe`, `sieve.sieve` and `sieve.zip`.
+Publish all four. (`--map-with FILE` can make the map again afterwards to name another file as
+well, such as GitHub's own source zip of the tag.)
 
 The trade-off: installers made from the 7z are about a fifth of the size (on Linux, 4.2 MB against
 21.6 MB), but whoever runs them gets a `.7z` to unpack. `--uncompressed` installs a runnable folder

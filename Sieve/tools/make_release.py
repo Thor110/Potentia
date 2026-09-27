@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sieve's release, made in the one order that works (docs/SIEVE-INSTALL-USAGE.md, HANDOFF).
+r"""Sieve's release, made in the one order that works (docs/SIEVE-INSTALL-USAGE.md, HANDOFF).
 
 Every file of a release is named by its hash, and every hash depends on the step before it, so the
 order matters and is easy to get wrong by hand:
@@ -15,22 +15,31 @@ order matters and is easy to get wrong by hand:
   5. From the archive: Sieve instructions (sieve.sieve, for anyone with Sieve) and an installer
      program (sieve.exe on Windows, sieve-setup elsewhere, for anyone), made by the release's own
      sieve.
-  6. The published map: sealed, naming both (found beside it), with its own SHA-256 printed, since
-     a map cannot name itself.
-  7. Checks: each published file installed into a scratch folder and compared with the archive,
-     byte for byte; the map read back and every node verified beside it.
-  8. SHA256SUMS.txt and a release-notes draft.
+  6. The source: sieve.zip, the Sieve folder alone as the last Git commit has it (git archive), so
+     it holds the committed source, this script included, and none of the build's clutter.
+  7. The published map: sealed, naming all three (found beside it), with its own SHA-256 printed,
+     since a map cannot name itself.
+  8. Checks: each installer installed into a scratch folder and compared with the archive, byte
+     for byte; the map read back and every node verified beside it.
+  9. SHA256SUMS.txt and a release-notes draft.
 
-Published (the three files, Edward's naming): sieve.exe, sieve.sieve and sieve.map. The version is
+Published (four files, Edward's naming): sieve.exe, sieve.sieve, sieve.zip and sieve.map, the map
+naming the other three. The version is
 in the release folder they install (Sieve-<version>) and in the notes, not in the names. GitHub adds
 the source zip of the tagged commit by itself.
 
 Usage (from the repository root, on the machine the release is for):
 
-  python tools/make_release.py --version 0.13.0
+  tools\make_release.bat                            # Windows: double-click it; everything by default
+  python tools/make_release.py                      # the version from CMakeLists.txt, into release/
   python tools/make_release.py --version 0.13.0 --build-dir out/build/x64-Release --out release
   python tools/make_release.py --version 0.13.0 --skip-build      # the build is already made
   python tools/make_release.py --version 0.13.0 --uncompressed    # install the folder itself
+
+After publishing, make the map again to name GitHub's source zip as well (GitHub makes it only
+once the release is out, so its hash cannot be known before):
+
+  tools\make_release.bat --map-with "C:\Users\...\Downloads\Potentia-0.13.0.zip"
 
 --uncompressed makes the instructions and the program from the release folder rather than the 7z:
 larger to download, but it installs straight to a runnable folder, with no 7-Zip needed to unpack.
@@ -113,18 +122,107 @@ def seven_zip(sz, archive, inputs, cwd):
     run([sz, "a", "-t7z", "-m0=lzma2", "-mx=9", "-ms=on", "-bd", archive] + inputs, cwd=cwd)
 
 
+def source_zip(dest):
+    """The Sieve folder's source as a zip, with Sieve/ as its one top folder. From Git when the
+    folder is in a repository: the last commit's tree of the Sieve folder alone (git archive
+    HEAD:<its path>), so only what is committed goes in, none of the build's or the checks'
+    scratch; with a warning if there are changes not yet committed. Without Git, the folder's
+    files less the build folders and the scratch .gitignore names."""
+    if dest.exists():
+        dest.unlink()
+    inside = subprocess.run(["git", "rev-parse", "--show-prefix"], cwd=ROOT, capture_output=True, text=True)
+    if inside.returncode == 0:
+        prefix = inside.stdout.strip()  # the Sieve folder's path in the repository ("Sieve/", or "")
+        dirty = subprocess.run(["git", "status", "--porcelain", "--", "."], cwd=ROOT, capture_output=True, text=True).stdout
+        if dirty.strip():
+            print("   warning: there are changes not committed; sieve.zip is the last commit, without them:")
+            print("".join(f"     {l}\n" for l in dirty.strip().splitlines()[:10]), end="")
+        # From the repository's top folder: run inside the Sieve folder, git archive would limit the
+        # tree to that folder a second time and find nothing.
+        top = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
+        tree = f"HEAD:{prefix.rstrip('/')}" if prefix else "HEAD"
+        run(["git", "archive", "--format=zip", "--prefix=Sieve/", "-o", dest, tree], cwd=top)
+    else:
+        import zipfile
+        skip = {"out", ".vs", "release", "lt", "__pycache__", ".git"}
+        with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+            for p in sorted(ROOT.rglob("*")):
+                rel = p.relative_to(ROOT)
+                if not p.is_file() or rel.parts[0] in skip or rel.parts[0].startswith("build") or "__pycache__" in rel.parts:
+                    continue
+                z.write(p, "Sieve/" + rel.as_posix())
+        print("   (not a Git repository: the folder's files, less the build folders)")
+    print(f"   {dest.name}: {dest.stat().st_size:,} bytes")
+
+
+def map_with(a, build):
+    """The map again, after the release is published: GitHub makes the release's source zip itself,
+    so its hash is only known once the release is out. Names the published installer and
+    instructions (already in the release folder) and FILE, copied beside them, found by name."""
+    out = a.out.resolve()
+    name = a.name
+    program = out / (f"{name}{EXE}" if EXE else f"{name}-setup")
+    instructions = out / f"{name}.sieve"
+    for f in (program, instructions):
+        if not f.exists():
+            fail(f"{f.name} is not in {out}: make the release first")
+    src = a.map_with.resolve()
+    if not src.is_file():
+        fail(f"{src} is not a file")
+    beside = out / src.name
+    if beside != src:
+        shutil.copy2(src, beside)
+    sieve = build / f"sieve{EXE}"
+    if not sieve.exists():
+        fail(f"sieve{EXE} is not in {build}")
+    step(f"the map again, with {src.name}")
+    mapfile = out / f"{name}.map"
+    run([sieve, "map", program, instructions, beside, "--name", name, "--seal", "--out", mapfile])
+    text = subprocess.run([str(sieve), "map", str(mapfile)], capture_output=True, text=True, check=True).stdout
+    for f in (program, instructions, beside):
+        if sha256(f) not in text:
+            fail(f"{mapfile.name} does not name {f.name}")
+    print(f"   {mapfile.name}: sealed, names all three, by SHA-256")
+    files = [program, instructions, beside, mapfile]
+    sums = "".join(f"{sha256(f)}  {f.name}\n" for f in files)
+    (out / "SHA256SUMS.txt").write_text(sums, encoding="utf-8")
+    print(sums, end="")
+    print(f"\nDone. Upload the new {mapfile.name} to the release (its SHA-256 is above).")
+    print(f"Keep {src.name} as it is: the map names those exact bytes.")
+
+
 def main():
     ap = argparse.ArgumentParser(description="Make Sieve's release files, in order, and check them.")
-    ap.add_argument("--version", required=True, help="the release's version, e.g. 0.13.0")
+    ap.add_argument("--version", default=None, help="the release's version (default: CMakeLists.txt's, e.g. 0.13.0)")
     ap.add_argument("--build-dir", type=Path, default=None, help="the CMake build folder (default: the Release preset's)")
     ap.add_argument("--out", type=Path, default=ROOT / "release", help="where the release files go (default: release/)")
     ap.add_argument("--name", default="sieve", help="the published files' base name (default: sieve)")
     ap.add_argument("--skip-build", action="store_true", help="use the build as it is")
     ap.add_argument("--with-source", action="store_true", help="also make the source's Sieve instructions and name them in sieve.map")
     ap.add_argument("--uncompressed", action="store_true", help="make the installers from the folder, not the 7z")
+    ap.add_argument("--map-with", type=Path, default=None, metavar="FILE",
+                    help="after publishing: make sieve.map again, naming the release's files and FILE too (GitHub's source zip)")
     a = ap.parse_args()
 
+    if not a.version:
+        import re
+        m = re.search(r"project\(Sieve VERSION ([0-9.]+)", (ROOT / "CMakeLists.txt").read_text(encoding="utf-8"))
+        if not m:
+            fail("no version given, and none found in CMakeLists.txt")
+        a.version = m.group(1)
+    print(f"Sieve {a.version}: the release goes to {a.out.resolve()}")
     build = (a.build_dir or default_build_dir()).resolve()
+    if a.map_with:
+        map_with(a, build)
+        return
+    # Building needs CMake on the PATH (Visual Studio's own is only on the PATH in its Developer
+    # PowerShell). Without it, the build already made is used, if there is one.
+    if not a.skip_build and not shutil.which("cmake"):
+        if all((build / f"{p}{EXE}").exists() for p in PROGRAMS):
+            print(f"CMake is not on the PATH: using the build already in {build} (build it in Release first)")
+            a.skip_build = True
+        else:
+            fail(f"CMake is not on the PATH, and there is no build in {build}: build Release in Visual Studio first")
     name = a.name
     folder = f"Sieve-{a.version}"  # the release folder: what the 7z unpacks to, or what installs
     out = a.out.resolve()
@@ -190,12 +288,17 @@ def main():
     program = out / (f"{name}{EXE}" if EXE else f"{name}-setup")  # sieve.exe; elsewhere not the release folder's name
     run([sieve, "locate", carried, "--installer", instructions, "--program", program, "--compare"])
 
-    # 6. The published map, naming both, beside them.
+    # 6. The source, as Git has it at the last commit: the Sieve folder alone, as sieve.zip.
+    step("the source: sieve.zip")
+    source = out / f"{name}.zip"
+    source_zip(source)
+
+    # 7. The published map, naming all three, beside them.
     step("the published map")
     mapfile = out / f"{name}.map"
-    run([sieve, "map", program, instructions, "--name", name, "--seal", "--out", mapfile])
+    run([sieve, "map", program, instructions, source, "--name", name, "--seal", "--out", mapfile])
 
-    # 7. Checks: every published file installs back to what it carries, and the map verifies.
+    # 8. Checks: every published file installs back to what it carries, and the map verifies.
     step("checks")
     with tempfile.TemporaryDirectory() as tmp:
         for i, f in enumerate((instructions, program)):
@@ -210,14 +313,14 @@ def main():
                     fail(f"{f.name} did not install {archive.name} byte for byte")
             print(f"   {f.name}: installs back to what it carries, checked")
     text = subprocess.run([str(sieve), "map", str(mapfile)], capture_output=True, text=True, check=True).stdout
-    for f in (program, instructions):
+    for f in (program, instructions, source):
         if sha256(f) not in text:
             fail(f"{mapfile.name} does not name {f.name}")
-    print(f"   {mapfile.name}: sealed, names both, by SHA-256")
+    print(f"   {mapfile.name}: sealed, names all three, by SHA-256")
 
-    # 8. Sums and notes.
+    # 9. Sums and notes.
     step("SHA256SUMS.txt and the notes")
-    published = [program, instructions, mapfile]
+    published = [program, instructions, source, mapfile]
     sums = "".join(f"{sha256(f)}  {f.name}\n" for f in published)
     (out / "SHA256SUMS.txt").write_text(sums, encoding="utf-8")
     sizes = "\n".join(f"| `{f.name}` | {f.stat().st_size:,} bytes | `{sha256(f)}` |" for f in published)
@@ -236,8 +339,9 @@ file there can be, each with an address, walked through as a library.
 - **`{instructions.name}`**: the same, as Sieve instructions, for anyone who already has Sieve
   (`sieve-install`, `sieve install {instructions.name} --to FOLDER`, or the hallway's File
   Locator).
-- **`{mapfile.name}`**: a sealed map naming both. Put it beside them and open it in the node
-  graph (O) to see them verified. Its own SHA-256 is above.
+- **`{source.name}`**: the source of this release, the Sieve folder as committed.
+- **`{mapfile.name}`**: a sealed map naming the other three. Put it beside them and open it in
+  the node graph (O) to see them verified. Its own SHA-256 is above.
 
 {f"The installers put the `{folder}` folder in place." if a.uncompressed else f"The installers put `{archive.name}` in place (compressed first: a fraction of the size); unpack it with 7-Zip to get the `{folder}` folder."}
 
@@ -248,7 +352,7 @@ in `third_party_licenses/`.
 """
     (out / "RELEASE-NOTES.md").write_text(notes, encoding="utf-8")
     print(sums, end="")
-    print(f"\nDone. Publish these three from {out}:\n  {program.name}\n  {instructions.name}\n  {mapfile.name}")
+    print(f"\nDone. Publish these four from {out}:\n  {program.name}\n  {instructions.name}\n  {source.name}\n  {mapfile.name}")
     print("with RELEASE-NOTES.md as the release's description.")
     if a.with_source:
         print("data/maps/sieve.map changed: commit it (it is what this build carries).")

@@ -604,3 +604,9 @@ menu.cpp). The build itself failed copying `data/maps/release.map`, renamed on E
 `sieve.map` (now here too). Worth running `-Wshadow=local` in future before sending code, since
 MSVC's /W4 checks it and this build does not.
 
+**Release files, final** (Edward, 27 September 2026): `sieve.exe`, `sieve.sieve`, `sieve.zip` (the
+Sieve folder's source at the last commit, `git archive HEAD:<Sieve's path>` run from the
+repository's top folder, since Sieve is a folder in the Potentia repository) and `sieve.map`,
+sealed, naming the other three. `tools/make_release.bat` runs it all with defaults (version from
+CMakeLists.txt; `py -3` first, as a bare `python` on Windows 10/11 can be the Store's stand-in).
+
