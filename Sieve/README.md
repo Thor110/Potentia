@@ -4,9 +4,11 @@
 
 Sieve grew out of the Gallery of Babel in **Potentia**. Potentia itself, the alignment thesis and the preservation of AI models, lives in the parent repository. Sieve is the search-space engine and its hallway.
 
-Implementation of [SPECIFICATIONS.md](docs/SPECIFICATIONS.md) (v2.0). This covers **M1** (the exhaustive sieve), **M2** (raw addressing and warp), **M3** for text (entropy-ordered "guided" addresses from a pinned model), the first version of all four unit lines (**text, image, audio and video**), and **books** composed from them.
+Implementation of [SPECIFICATIONS.md](docs/SPECIFICATIONS.md) (v2.0). This covers **M1** (the exhaustive sieve), **M2** (raw addressing and warp), **M3** for text (entropy-ordered "guided" addresses from a pinned model), and the first version of all seven lines: **pages, image, audio and video**, **books** composed from them, **models** (3D meshes) and **binary** (every file), with maps of verified anchors across them.
 
 **Concept and architecture by Edward James Gordon.**
+
+Special thanks to Claude Opus 5.5 for helping to build out the Sieve system based on my specifications.
 
 ## Layout
 

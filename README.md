@@ -39,7 +39,7 @@ Across three independent conversations with a frontier LLM, the same multimodal 
 
 This is not a one-off hallucination; it is a stable failure mode of the architecture under the training objective. Alignment techniques that operate on outputs cannot detect it, because the failure is in the artifact.
 
-The only way to make such failures observable is to make the training trajectory itself addressable — which is the core contribution of this spec.
+The only way to make such failures observable is to make the training trajectory itself addressable — which is the core contribution of this project.
 
 ---
 
@@ -50,6 +50,20 @@ Three of the four models produced fluent, confident, reproducible fabrications, 
 The fourth model (Llama 3.2) achieved a higher refusal rate on the fictitious entity than on real entities it had been trained on, demonstrating that refusal behaviour is not calibrated to actual epistemic uncertainty but to surface features of the prompt.
 
 ---
+
+# Sieve
+
+*The Gallery of Babel: every possible text, picture, melody and animation of a fixed size, each at exactly one address, sifted so that meaning can be found.*
+
+Sieve is the search-space engine behind Potentia's Gallery of Babel, and its hallway.
+
+Implementation of [SPECIFICATIONS.md](./Sieve/docs/SPECIFICATIONS.md) (v2.0). This covers **M1** (the exhaustive sieve), **M2** (raw addressing and warp), **M3** for text (entropy-ordered "guided" addresses from a pinned model), and the first version of all seven lines: **pages, image, audio and video**, **books** composed from them, **models** (3D meshes) and **binary** (every file), with maps of verified anchors across them.
+
+**Concept and architecture by Edward James Gordon.**
+
+Special thanks to Claude Opus 5.5 for helping to build out the Sieve system based on my specifications.
+
+For more details, check the Sieve [readme](./Sieve/README.md)!
 
 ## 📢 Primer
 
@@ -63,14 +77,13 @@ Before reading this, ensure you are familiar with the Library of Babel concept. 
 - [🌐 Vision](#-vision)
 - [🧭 What Potentia Is](#-what-potentia-is)
 - [🧩 Why This Matters](#-why-this-matters)
-- [🚧 Features (Planned)](#-features-planned)
+- [🚧 Features](#-features)
 - [🎯 Goals](#-goals)
 - [🧪 Usage (Current)](#-usage-current)
 - [🤝 Contributing](#-contributing)
 - [🌍 Community](#-community)
-- [🗺️ Roadmap (Early Stage)](#️-roadmap-early-stage)
+- [🗺️ Roadmap](#️-roadmap)
 - [🧱 Spatial Architecture](#-spatial-architecture)
-- [⬢️ Why Hexagons?](#️-why-hexagons)
 - [📚 What Makes This Different?](#-what-makes-this-different)
 - [📄 Redefining The Search Space](#-redefining-the-search-space)
 - [🏭 Refining The Search Space](#-refining-the-search-space)
@@ -81,10 +94,6 @@ Before reading this, ensure you are familiar with the Library of Babel concept. 
   - [5️⃣ — 📜 Layer 5 — Real Human Works](#5%EF%B8%8F⃣---layer-5--real-human-works)
   - [6️⃣ — 🕳️ Layer 6 — Lost Human Works](#6%EF%B8%8F⃣--%EF%B8%8F-layer-6--lost-human-works)
   - [7️⃣ — 🔍 Layer 7 — Cross-Reality Parallels](#7%EF%B8%8F⃣---layer-7--cross-reality-parallels)
-- [📑 Single Page Search Space Specifications](#-single-page-search-space-specifications)
-  - [1️⃣ — ⚛️ Page Specification (The Atomic Unit)](#1%EF%B8%8F⃣---%EF%B8%8F-page-specification-the-atomic-unit)
-  - [2️⃣ — 🔀 Book Specification (The Composite Unit)](#2%EF%B8%8F⃣----book-specification-the-composite-unit)
-  - [3️⃣ — 📈 Conclusion on the Deterministic Foundation](#3%EF%B8%8F⃣----conclusion-on-the-deterministic-foundation)
 - [🎂 Why So Many Layers?](#-why-so-many-layers)
 - [🧮 Deterministic Filtration Methods](#-deterministic-filtration-methods)
   - [1️⃣ — 🔢 — Shannon Entropy Analysis (Layers 1–2)](#1%EF%B8%8F⃣----shannon-entropy-analysis-layers-12)
@@ -94,6 +103,11 @@ Before reading this, ensure you are familiar with the Library of Babel concept. 
   - [5️⃣ — ⏳ — Reality Anchoring (Layers 4–5)](#5%EF%B8%8F⃣----reality-anchoring-layers-45)
   - [6️⃣ — 🏺 — Fragment Correlation Engine (Layer 6)](#6%EF%B8%8F⃣----fragment-correlation-engine-layer-6)
   - [7️⃣ — 🌍 — Adjacent Reality Classifier (Layer 7)](#7%EF%B8%8F⃣----adjacent-reality-classifier-layer-7)
+- [📑 Units, Books and Addresses](#-units-books-and-addresses)
+  - [1️⃣ — ⚛️ The Unit (The Atomic Unit)](#1%EF%B8%8F⃣---%EF%B8%8F-the-unit-the-atomic-unit)
+  - [2️⃣ — 🔀 The Book (The Composite Unit)](#2%EF%B8%8F⃣----the-book-the-composite-unit)
+  - [3️⃣ — 💾 The File (The Binary Line)](#3%EF%B8%8F⃣----the-file-the-binary-line)
+  - [4️⃣ — 📈 Conclusion on the Deterministic Foundation](#4%EF%B8%8F⃣----conclusion-on-the-deterministic-foundation)
 - [🏁 Summary](#-summary)
 - [🔐 Security](#-security)
 - [🏛️ License](#%EF%B8%8F-license)
@@ -105,14 +119,14 @@ Before reading this, ensure you are familiar with the Library of Babel concept. 
 Potentia aims to create:
 
 - A **persistent digital environment** where retired, outdated, or misaligned AI models can continue to exist, be studied, or re-trained.
-- A **Museum of Human Creations**: a curated space containing all human-created content (text, images, audio, video, 3D models, software, etc.).
-- A **training substrate** where AI agents can learn inside a structured world grounded entirely in verified human knowledge — preventing drift and anchoring behaviour.
-- A **reconstruction engine** for lost media and information using seed mechanisms tied to real-world artefacts.
-- A **universal coordinate system** for indexing and navigating infinite procedural space without loss of identity or meaning.
+- A **Museum of Human Creations**: a curated collection of verified human-created content (text, images, audio, video, 3D models, software, etc.), each work identified exactly by its size and SHA-256 and anchored at its place in the Gallery of Babel.
+- A **training substrate** where AI agents can learn inside a structured world grounded entirely in verified human knowledge — preventing drift and anchoring behaviour — with every step of their training recorded so that it can be replayed, audited and cited.
+- A **reconstruction engine** for lost media and information, searching the space around verified real-world anchors.
+- A **universal coordinate system**: every possible text, picture, melody, film, model and file has exactly one address, computed exactly and identically on every machine.
 
 Potentia is part archive, part alignment sandbox, and part digital civilisational backup.
 
-Status: Early conceptual stage; blockout geometry and spatial layout prototypes are available.
+Status: the search-space engine, **Sieve**, is built and released (v0.13.0): exact addressing, versioned filters, maps of verified anchors and a walkable hallway. The preservation environment and the Museum itself remain at the design stage.
 
 ---
 
@@ -126,12 +140,11 @@ A place to store:
 - Models requiring quarantine or monitoring (“Prisoners”)
 
 ### **2. A Structured Training World**
-AI models can inhabit a digital environment consisting of:
-- Two primary spaces, The Museum of Human Creations and The Gallery of Babel
-- The “Gallery of Babel” is made up of hexagonally-tiled “main rooms” and smaller hexagonally-tiled "hub rooms" with spiral staircases to connect floors
-- The “Museum of Human Creations” is for grounding and training, and will contain digitised copies of all human creative works, historical records, and more, each of which will also be converted into seed representations.
-- Seed-based procedural expansion will be utilised within the Gallery of Babel
-- These seeds allow the same works to be located, reconstructed, or compared within the Gallery of Babel — an infinite procedural search space where finite museum seeds act as anchors that guide agent exploration from noise towards meaningful structure.
+AI models can inhabit a digital environment built on two primary spaces:
+- **The Gallery of Babel**: every possible work of a given shape, each at exactly one address. Sieve builds it and walks it as a corridor of shelves, but any layout (the original hexagonal rooms among them) can be laid over the same addresses, because an address names content, not a place.
+- **The Museum of Human Creations**: for grounding and training. It will contain digitised copies of all human creative works, historical records, and more, each registered as a verified anchor: its exact bytes, named by size and SHA-256, at its address in the Gallery.
+- Anchors are what connect the two. A verified work in the Museum is a known point in the Gallery, so agents can explore outwards from real structure, guided by the filters rather than wandering through noise.
+- Maps (node graphs of verified anchors) record how works relate to one another (versions, parts, sources) and are the foundation of the Museum's spaces.
 
 ### **3. A Cultural Continuity Project**
 Potentia preserves more than models — it preserves:
@@ -149,20 +162,20 @@ Potentia preserves more than models — it preserves:
 This allows future AI (and humans) to re-learn humanity even if physical sources are lost.
 
 ### **4. A Platform for Information Recovery**
-Seed-based generators allow AI agents to:
-- Search structured noise
+Agents working through the Gallery can:
+- Search the space with filters that set noise aside without ever visiting it
 - Identify fragments of lost media
 - Reconstruct degraded works
 - Map recovered content back into the Museum
-- 🌱 Seed scaling & multi-resolution reconstruction
+- 🌱 Multi-resolution counterparts & staged reconstruction
 
-Potentia’s restoration pipeline will use multi-resolution seeds so searches and reconstructions scale sensibly. Lower-resolution seeds let agents quickly explore large swathes of procedural space to find structural matches; higher-resolution seeds allow detailed reconstruction of texture, geometry, and metadata once a promising region is identified. The workflow is anchor-driven: verified museum seeds act as beacons that guide agent exploration, candidate reconstructions are produced by ensembles of agents, and every candidate is recorded with provenance data and routed to human curators for verification before it’s accepted into the Museum. This staged (coarse→fine→verify) method keeps computation efficient, reduces false positives, and preserves auditability and provenance for every recovered item.
+Every work can have lower-resolution counterparts, made from it by fixed, versioned algorithms: an image downscaled, a model with fewer subdivisions, audio at a lower sample rate. Going down is a calculation: each work has exactly one counterpart at each resolution, and a map records the pair. Going up is a search: a low-resolution work has countless possible originals, and the filters and guided ordering find the likely ones.
+
+That gives a staged workflow (coarse → fine → verify). Agents search cheaply at low resolution to find promising regions near verified anchors, then refine candidates at full resolution. Every candidate is recorded with its provenance (including whether it was produced by a person, by an AI under human direction, or by an AI on its own) and routed to human curators for verification before it is accepted into the Museum. This keeps computation efficient, reduces false positives, and preserves auditability for every recovered item.
 
 This ensures that restored material never bypasses verification or drift safeguards, and that no reconstructed item enters the Museum without a complete provenance chain.
 
-This pipeline is conceptual and intended for future implementation.
-
----
+The pipeline is conceptual and intended for future implementation; the addressing, filtering and anchoring it rests on are built.
 
 ## 🧩 Why This Matters
 
@@ -175,25 +188,33 @@ Modern models trained on uncurated internet-scale data suffer from:
 Potentia provides an **ordered curriculum**:
 
 1. Learn all human-created works.
-2. Explore wider procedural noise.
+2. Explore the Gallery outwards from verified anchors.
 3. Identify meaningful structures.
 4. Return discoveries for verification.
 5. Retrain safely with stable anchors.
+
+Every step of that curriculum is itself recorded: each item a model sees is an exact address, and the order it saw them in is a path that can be stored, replayed and compared. That is what makes a training trajectory citable rather than lost in the weights.
 
 This mitigates alignment drift and provides a safe boundary between known content and unknown infinite space.
 
 ---
 
-## 🚧 Features (Planned)
+## 🚧 Features
 
+**Built (Sieve):**
+- Universal coordinate system: exact, bijective addresses for text, images, audio, video, books, 3D models and files
+- Deterministic filtration stack: versioned filters, exact survivor counts, and compact addressing of survivors only
+- Maps of verified anchors, the foundation of the Museum
+- A walkable 3D hallway through every line, with a node graph viewer for maps
+- Sieve instructions (`.sieve`): any file or folder stored as its own address and installed back, checked byte for byte
+
+**Planned:**
 - Persistent digital environment
-- Blockout geometry for world generation
-- Procedural hex-grid spatial topology
-- Universal seed-coordinate mapping
 - AI inhabitant management
 - User-accessible museum interface
 - Reconstruction tools for lost media
 - Agent training and monitoring systems
+- Recorded, replayable training trajectories
 - Full versioning and preservation of AI models
 
 ---
@@ -203,12 +224,15 @@ This mitigates alignment drift and provides a safe boundary between known conten
 1. Preserve AI models for future study and possible sentience considerations.
 2. Provide a safe environment for re-training and observation.
 3. Archive all human-created content in a structured, navigable world.
-4. Enable reconstruction of lost information.
-5. Build a long-term cultural backup for humanity.
+4. Make training trajectories reproducible, auditable and citable.
+5. Enable reconstruction of lost information.
+6. Build a long-term cultural backup for humanity.
 
 ---
 
 ## 🧪 Usage (Current)
+
+**Sieve** can be used today: download `sieve.exe` from the [latest release](../../releases/latest), run it to install, and start `hallway.exe` to walk the Gallery of Babel. The command-line tool (`tools\sieve.exe`) locates files, makes Sieve instructions and maps, and runs the filters; see the [Sieve readme](./Sieve/README.md).
 
 Models are preserved in a temporary stasis format until the full environment is built.
 If you know of unarchived models, please open an issue or contact the team.
@@ -221,6 +245,9 @@ To contribute:
 - open an issue
 - submit a pull request
 - join discussions on architecture, design, or preservation
+- build maps of real works, or propose new filters for the stack
+
+Please say who made a contribution: a person, an AI under human direction, or an AI on its own.
 
 ---
 
@@ -230,119 +257,51 @@ Discord: https://discord.gg/HPDty4kDCq
 
 ---
 
-## 🗺️ Roadmap (Early Stage)
+## 🗺️ Roadmap
 
-1. Enumerate all known base AI models.
-2. Build a prototype blockout digital environment.
-3. Implement the seed-coordinate system.
-4. Populate early “Museum of Human Creations”.
-5. Create agent sandbox environment.
-6. Develop reconstruction workflows.
+1. ✅ Implement the coordinate system (Sieve: exact addressing for every line).
+2. ✅ Build a walkable prototype of the Gallery (Sieve's hallway).
+3. ✅ Maps of verified anchors, the foundation of the Museum.
+4. Enumerate all known base AI models.
+5. Build out the filtration stack: word pairs, grammar, per-line prediction models, filters as data.
+6. Populate the early “Museum of Human Creations”.
+7. Record and replay training trajectories.
+8. Create the agent sandbox environment.
+9. Develop reconstruction workflows.
 
 ---
 
 ## 🧱 Spatial Architecture
 
-The underlying geometry defines the structure and navigability of the digital environment.
+The world is a view of the space, not the space itself.
 
-Potentia uses a hexagonal spatial topology to support infinite procedural expansion while maintaining a stable, predictable structure for both agents and humans to navigate.
+An address names content, not a place, so the Gallery of Babel has no single required shape. The same addresses can be laid out as any world: a corridor, a set of rooms, a city, or a flat list. Sieve walks them as a corridor of shelves, one line of the space per corridor, joined by doors. That is one layout among many, and anyone can build another over the same backend without changing a single address.
 
-1. Main Rooms (Large Hex Cells)
+The original design was a hexagonal world of main rooms, hub rooms and spiral staircases. It remains a valid layout to build over the same addresses, and its specification is kept below.
 
-60 m radius
+<details>
+<summary>The original hexagonal layout (specification)</summary>
 
-120 m diameter
+1. **Main Rooms (Large Hex Cells)**: 60 m radius, 120 m diameter. The primary exploration and content-hosting spaces, aligned in a continuous hexagonal grid, large enough to host exhibits, reconstructed media, thematic zones or training tasks. Each main room has three open walls, facing the hub rooms, and three sealed walls, facing other main rooms (removable in the blockout to avoid z-fighting).
 
-The primary exploration and content-hosting spaces
+2. **Hub Rooms (Small Hex Cells)**: 10 m radius, 20 m diameter. Junctions between the main rooms, holding access points, signposting, AI routing nodes and vertical connections. Each connects 3 hallways (to three adjacent main rooms) and 3 elevator shafts (up and down levels). Hub rooms sit at the midpoints between main rooms, rotated in 120° increments to keep global alignment.
 
-Aligned in a continuous hexagonal grid
+3. **Vertical Transport — Spiral Staircases**: a pair between each main room and the levels above and below; 4 m radius, 146.25° rotational span per staircase, a 1-step offset at top and bottom for alignment, and space allocated for banisters and railings.
 
-Large enough to host exhibits, reconstructed media, thematic zones or training tasks
+4. **Blockout Geometry**: the Blender models include unbaked spiral staircase modifiers, Boolean-cut hubs and corridors with exact alignment, and seam-free tiling across a 3×3 test grid, in the collections “Main Room”, “Hub Room”, “Demonstration Pieces” and “Vertical Demonstration”. They serve as collisionless hitboxes for AI pathfinding, coordinate mapping, anchor placement, user traversal and infinite hex-grid tiling, with detailed models to be layered over them.
 
-Each main room has three open walls and three sealed walls.
-The sealed walls face other main rooms and can be removed in the blockout to avoid z-fighting.
-The open walls face the hub rooms.
-
-2. Hub Rooms (Small Hex Cells)
-
-10 m radius
-
-20 m diameter
-
-Act as junctions between the main rooms
-
-Contain access points, signposting, AI routing nodes, and vertical connections
-
-Each hub room connects:
-
-3 hallways (to three adjacent main rooms)
-
-3 elevator shafts (to connect up/down levels)
-
-Hub rooms are placed at the midpoints between main rooms and are rotated in 120° increments to maintain global alignment.
-
-3. Vertical Transport — Spiral Staircases
-
-Between each main room and the levels above/below, the system uses:
-
-A pair of spiral staircases
-
-4 m radius
-
-146.25° rotational span per staircase
-
-1-step offset at top/bottom for perfect alignment
-
-Space allocated for future banisters/railings
-
-These provide predictable, stable navigation regardless of procedural depth.
-
-4. Blockout Geometry
-
-The current Blender models include:
-
-Unbaked spiral staircase modifiers for future adaptation
-
-Boolean-cut hubs and corridors with perfect alignment
-
-Seam-free tiling across a 3×3 test grid
-
-Collections are currently split into “Main Room”, “Hub Room”, “Demonstration Pieces”, and “Vertical Demonstration”
-
-These serve as the collisionless hitboxes used for:
-
-AI pathfinding
-
-Coordinate mapping
-
-Seed placement
-
-User traversal
-
-Infinite hex-grid tiling
-
-All detailed/aesthetic models will be layered over this stable blockout.
-
----
-
-## ⬢️ Why Hexagons?
-Inspired in part by Jorge Luis Borges’ “Library of Babel,” Potentia expands the idea into a navigable, structured hex-world where every coordinate corresponds to deterministic content rather than pure randomness.
-
-Quite some time back, I also wrote a "Gallery of Babel" application, which further motivated me to work on this, which can be found at : https://github.com/Thor110/GOB
-
-Not to mention that Hexagons are the Bestagons.
-
-Here is a preview of the main and hub tiles.
+Inspired in part by Borges’ “Library of Babel”, and by an earlier "Gallery of Babel" application of mine (https://github.com/Thor110/GOB). Not to mention that Hexagons are the Bestagons.
 
 <div align="center">
   <img src="Images/gallery-tiles.png" alt="Main & Hub Tiles">
+  <br><em>The main and hub tiles.</em>
 </div>
-
-This is a preview of the layout featuring 7 main rooms, 6 hub rooms and 3 layers.
 
 <div align="center">
   <img src="Images/gallery-preview.png" alt="Preview : 7 Main Rooms, 6 Hub Rooms, 3 layers">
+  <br><em>7 main rooms, 6 hub rooms and 3 layers.</em>
 </div>
+</details>
 
 ## 📚 What Makes This Different?
 
@@ -356,7 +315,7 @@ From things such as:
 
 Unlike passive archives, Potentia is an active environment where models can be preserved, run, studied, and re-trained within a structured world, making it both a cultural repository and a behavioural safety mechanism.
 
-It could also be used to recover missing data by having agents search for all content that could ever exist in the Gallery of Babel.
+Every work it holds has an exact address in the space of everything that could exist, so the archive and the unexplored possibilities around it share one coordinate system. That is what lets agents search outwards from real works to look for lost ones, and it means every claim (a match, a count, a classification) can be checked independently, down to the last digit.
 
 It also aims to serve as a permanent, future-proof backup of all human knowledge that can outlast the Earth itself, given the right conditions.
 
@@ -378,31 +337,33 @@ And every page is just a fixed-length arrangement of characters.
 
 **Key Insight**
 
-If any given page could appear in any book, then the true search space is not “all possible books” — it is:
+If any given page could appear in any book, then the question worth asking is not “which books are meaningful?” but:
 
-**all possible single pages.**
+**which pages are?**
 
-Once all possible pages have been generated and evaluated:
+Once a page can be judged:
 
-- **Any book** can be constructed from these pages
-- **Noise pages** can be discarded once, globally
+- **Any book** is a sequence of pages, and is judged page by page
+- **Noise pages** are set aside by rules, once, for every book they could appear in
 - **Meaningful pages** become reusable primitives
-- **All multi-page works (books, scripts, code, etc.)** are just sequences of verified pages
-- **Binary data** can be encoded as pages as well, expanding this to all digital media
+- **All multi-page works (books, scripts, code, etc.)** are sequences of pages that pass
+- **Binary data** has a line of its own, where every file is one unit, expanding this to all digital media
 
-Thus, instead of an impossibly large combinatorial library, we reduce the entire search problem to its smallest meaningful unit:
+**Count, don't visit**
 
-**Search the pages → the books follow automatically.**
+The page space is still far too large to generate: 27 symbols on a 3,200-character page already give a number of pages 4,581 digits long. So no page is ever generated in order to be judged. Instead, Sieve's filters are built so that their survivors can be **counted and numbered exactly without visiting any of them**: how many pages pass, which page is the k-th survivor, and where a given page stands among them. Filtering the whole space is a calculation, not a search.
 
-This transforms an intractable problem into one that is **finite, deterministic, and parallelisable**, allowing distributed systems to filter the entire space orders of magnitude faster than searching complete books.
+**Search the pages → the books follow.**
+
+This transforms an intractable problem into one that is **exact, deterministic and reproducible**: every machine, and an independent reference implementation, arrives at the same counts and the same addresses, down to the last digit.
 
 ## 🏭 Refining The Search Space
 
 *A Multi-Layer Filtration Framework for Collapsing Possibility Space into Reality Space*
 
-Reducing the Library of Babel to a single-page search space solves the combinatorial explosion — but it does **not** solve the semantic explosion.
+Reducing the Library of Babel to pages makes the space countable — but it does **not** solve the semantic explosion.
 
-Once all possible pages exist, the next challenge is to separate:
+The next challenge is to separate:
 
 * pure noise
 * structured but meaningless forms
@@ -414,7 +375,9 @@ Once all possible pages exist, the next challenge is to separate:
 
 This cannot be accomplished in a single step.
 
-It forms a **hierarchical sieve** — each layer removing another 99.99% of what remains.
+It forms a **hierarchical sieve**. Its progress is measured in **orders of magnitude**, not percentages: removing 99.99% removes only four nines, while even simple rules remove thousands.
+
+The layers are read along **two axes**. **Structure** is decided from content alone: noise, non-semantic, or coherent. **Anchoring** is decided only by reference to the Museum: unanchored, plausible, anchored, or a lost-work candidate. Layers 1–3 are steps in structure; layers 4–7 are positions on the anchoring axis. That is why something that looks like noise can still matter (a game's world seed, once registered), and why coherence alone is never evidence of reality.
 
 This is the **Potentia Filtration Stack**:
 
@@ -422,16 +385,17 @@ This is the **Potentia Filtration Stack**:
 
 ### 1️⃣ — ⛔ Layer 1 — Symbolic Noise
 
-Filters out all pages that violate basic structure:
+Filters out everything that cannot represent anything:
 
-* invalid Unicode encodings
-* impossible byte sequences
+* invalid encodings and impossible byte sequences
 * non-printable noise
 * pages that cannot represent text or binary
 
-**Removes:** ~99.999999999999%
+In practice most of this layer is decided before any filter runs, by the **choice of alphabet**: a line built from 27 symbols rather than all 1.1 million Unicode code points never contains an invalid page at all.
 
-**Performed by:** pure math / combinatorics.
+**Removes:** about 4.6 orders of magnitude per character (all of Unicode against 27 symbols); on a 3,200-character page, around 14,800.
+
+**Performed by:** the line's alphabet and canonicalisation — pure math / combinatorics.
 
 ---
 
@@ -444,9 +408,9 @@ Pages with structure but without meaning:
 * binary pages that do not decode into any valid file type
 * meaningless repetition (“cat cat cat cat…”)
 
-**Removes:** ~99.99% of Layer 1 survivors
+**Removes:** measured, not estimated. On a 3,200-character page of 27 symbols, allowing only dictionary words removes about **1,870 orders of magnitude**, taking the page from 4.75 bits per character to 2.81. Word pairs, grammar and duplicate-word rules remove more.
 
-**Performed by:** grammatical parsers, entropy analysis, format validators.
+**Performed by:** dictionary and grammar filters, entropy analysis, statistical language models, format validators.
 
 ---
 
@@ -490,7 +454,7 @@ A tiny subset where:
 * style, chronology, references, and context all align
 * no contradictions exist with known reality
 
-This is the **true Museum corpus**.
+This is the **true Museum corpus**: the verified anchors.
 
 ---
 
@@ -513,7 +477,7 @@ These appear as **partial page matches**:
 * linguistic patterns
 * chronologically plausible content
 
-Recovered via **cross-reference with known sources**.
+Recovered via **cross-reference with known sources**, and never promoted to Layer 5 without independent, external confirmation.
 
 ---
 
@@ -527,7 +491,7 @@ Rare but fascinating:
 
 These are neither fiction nor history — they are *adjacent possible worlds.*
 
-Potentia preserves these separately, because they represent meaningful structure.
+By content alone they cannot be told apart from Layer 3; the distinction is made only by reference. Potentia preserves these separately, because they represent meaningful structure.
 
 ---
 
@@ -541,17 +505,17 @@ It is **a spectrum that collapses only when compared against reality**.
 
 The Museum of Human Creations provides that grounding.
 
-Without the Museum, all layers from 3 upward look equally valid to an AI or a human.
+Without the Museum, all layers from 3 upward look equally valid to an AI or a human: coherence is not evidence.
 
 With the Museum, the search space becomes:
 
-* finite
+* bounded
 * aligned
 * anchored
 * reconstructible
 * historically verifiable
 
-Each filtration step shrinks the space dramatically, but the stack as a whole is what makes the entire project feasible.
+Each filtration step removes whole orders of magnitude, and they multiply: every layer works on what the layers before it left. It is the stack as a whole, not any single test, that makes the project feasible.
 
 ---
 
@@ -561,11 +525,11 @@ Each filtration step shrinks the space dramatically, but the stack as a whole is
 
 The filtration layers do not rely on subjective interpretation or AI “judgment.”
 
-Each stage uses **fully deterministic, mathematically reproducible rules**, ensuring that every page is classified identically by every agent or system.
-
-Below is the proposed high-level methodology for each layer:
+Each stage uses **fully deterministic, mathematically reproducible rules**, ensuring that every page is classified identically by every agent or system. In Sieve this is enforced, not just intended: every decision is made in exact integer arithmetic, every filter is versioned and never changed once released (a changed filter is a new version beside the old), every dictionary and model it uses is pinned by its SHA-256, and an independent reference implementation reproduces every verdict and count.
 
 These rules are deliberately simple, fast, and fully verifiable, ensuring that classification remains consistent across implementations, agents, and future versions of the system.
+
+Below is the high-level methodology for each layer, with what is **built** in the current release marked as such:
 
 ---
 
@@ -579,6 +543,8 @@ It allows us to classify pages as follows:
 * **Extremely high-entropy pages** → incompressible noise → Layer 1 (Symbolic Noise).
 * **Medium entropy** → potentially meaningful → passed upward.
 
+**Built:** `symbol-entropy-v1` (a page's own symbol frequencies) and `model-information-v1` (the cost of a page under a pinned order-5 character model). Measured on held-out books: English costs about 1.9 bits per character under the model on average, and at most 4.14 on any page, against at least 9.1 for random letters; at 1,000 characters, English has a symbol entropy of about 4.15 bits and random letters about 4.72.
+
 This immediately removes enormous swathes of pages using a single, fast, streaming calculation.
 
 ---
@@ -587,7 +553,7 @@ This immediately removes enormous swathes of pages using a single, fast, streami
 
 Fast structural rules determine whether a page:
 
-* can represent valid UTF-8 text
+* can represent valid text
 * can be interpreted as binary media
 * can be parsed as a formal document
 * contains consistent encoding
@@ -595,10 +561,12 @@ Fast structural rules determine whether a page:
 
 Examples:
 
-* Check for valid Unicode codepoint sequences
+* Check for valid codepoint sequences (in Sieve, guaranteed by the line's alphabet)
 * Check for binary magic numbers (PNG, ELF, MP3, ZIP, PDF…)
 * Detect malformed multibyte sequences
 * Validate simple grammar graphs (with tolerances)
+
+**Built:** `clean-v1/v2` (no double spaces, at least one letter) and `max-run-v1` (no letter repeated more than three times in a row; English never does). The binary line recognises a file's kind from its first bytes; filtering on it is planned.
 
 If it cannot *possibly* represent any known human data structure → Layer 1.
 
@@ -618,6 +586,8 @@ For text pages:
 * Detect dictionary-word density
 * Check against probabilistic language models (purely statistical, e.g., n-gram or Markov models)
 
+**Built:** for text, `window-v1/v2` (a page that could be cut from running text, allowing words cut by its edges), `words-v1/v2` (every word in a pinned dictionary) and `title-v1`; for pictures, `neighbour-agreement-v1` (neighbouring pixels agree); for music, `key-v1` (every note in a chosen key). All of these can be counted and ranked exactly. **Planned:** binary format validators, word pairs, grammar patterns, duplicate words.
+
 If it is syntactically structured but semantically empty → Layer 2.
 
 ---
@@ -632,7 +602,7 @@ For pages that contain meaningful content, assign to Layer 3 by identifying:
 * invented languages with consistent morphologies
 * coherent fictional science or world-rules
 
-This layer is detected entirely through **formal consistency**, not through comparison with the Museum.
+This layer is detected entirely through **formal consistency**, not through comparison with the Museum. **Planned.**
 
 ---
 
@@ -652,6 +622,8 @@ Matched? → Layer 5 (Real Human Works).
 
 Partially matched? → Layer 4 (Plausible Alternates).
 
+**Built:** the exact match. A unit whose bytes match a verified anchor in a map is that anchor, checked by its SHA-256. **Planned:** partial matching.
+
 ---
 
 ### 6️⃣ — 🏺 — Fragment Correlation Engine (Layer 6)
@@ -659,13 +631,12 @@ Partially matched? → Layer 4 (Plausible Alternates).
 Lost works are identified via:
 
 * partial n-gram overlap
-* statistical author fingerprints
-* stylistic embeddings
+* statistical author fingerprints (character and word n-gram profiles, computed exactly)
 * referenced metadata in verified texts
 * chronology overlap
 * linguistic drift modelling
 
-If a page resembles a *known* but *missing* work → Layer 6.
+If a page resembles a *known* but *missing* work → Layer 6. **Planned.**
 
 ---
 
@@ -680,63 +651,68 @@ Material that:
 
 Lacks historical anchoring but remains fully coherent? → Layer 7 (Adjacent Realities).
 
-This classification is based on **coherence minus historical anchoring**.
+This classification is based on **coherence minus historical anchoring**. **Planned.**
 
 ---
 
-## 📑 Single Page Search Space Specifications
+## 📑 Units, Books and Addresses
 
-This section formalizes the core structural units for the **Gallery of Babel** search space, ensuring that the archive is both infinite in possibility and deterministically addressable (i.e., every book has one and only one address).
+This section sets out the structural units of the **Gallery of Babel** as built, and what an address is. The full definitions are in the Sieve [specification](./Sieve/docs/SPECIFICATIONS.md); the original design (10,000-character Unicode pages and hashed book seeds) is kept in [Previous](./Previous/READMEv1.md).
 
-### 1️⃣ - ⚛️ Page Specification (The Atomic Unit)
+### 1️⃣ - ⚛️ The Unit (The Atomic Unit)
 
-The single page is the base unit of all knowledge within the Potentia's Gallery of Babel.
+The unit is the base of every line: a page of text, a picture, a sequence of notes, a short film, a 3D model, or a file.
 
 | Parameter | Specification | Structural Rationale |
 | :--- | :--- | :--- |
-| **Length** | 10,000 characters. | This fixed length is perfectly divisible by 8 (1,250 $\times$ 8), enabling direct, non-ambiguous interpretation of the page as **binary data** (representing advanced media, code, or non-textual data) in addition to human-readable text. |
-| **Character Set** | **Full Unicode Range.** 0x0020 - 0x10FFFF | To ensure the possibility space contains *all* human-created language, code, and symbols without artificial constraints. |
-| **Page Content Hash** | **Cryptographic SHA-256.** | This generates a unique, **non-reversible, deterministic fingerprint** for the content of any given page. This hash *is* the page's unique identifier and its fixed position within the universe of all possible pages. |
+| **Alphabet** | An ordered, finite set of symbols, pinned by its id: `lower27` (a–z and space) for pages, a palette for pictures, note events for music, bytes for files. | The alphabet is the first and largest filter: 27 symbols instead of every Unicode code point removes about 4.6 orders of magnitude per character before anything else runs. A new alphabet is a new id; a published one is never edited. |
+| **Length** | A setting of each line, with no upper limit: only the machine limits what can be opened. | The space scales without end, so the project can grow with the hardware, long after its first release. |
+| **Address** | The unit itself, read as one number: exactly one address per unit, and one unit per address. | Addressing is not compression: an address carries exactly as much information as its unit, which is what makes it reversible. |
+| **Identity** | SHA-256 of the content. | A short, fixed-length fingerprint for naming and verifying a unit. It is not a position, and it cannot be turned back into the content. |
 
-Fixed-length pages guarantee deterministic indexing and uniform hashing behaviour.
+### 2️⃣ - 🔀 The Book (The Composite Unit)
 
----
-
-### 2️⃣ - 🔀 Book Specification (The Composite Unit)
-
-A **Book** is a composite object, composed of a fixed number of ordered pages. Its deterministic address (the Seed) is a function of its structure and the content of its pages.
+A **Book** is a cover (one picture), a title (one page) and a fixed number of pages. Its address reads the parts as one number, cover first, then the title and each page, so every book has exactly one address and neighbouring books differ in their last page.
 
 | Parameter | Specification | Structural Rationale |
 | :--- | :--- | :--- |
-| **Structure Number ($N$):** | A single, large integer value that encodes all **fixed structural properties** of the book, such as: The exact **number of pages** in the volume. **Formatting data** (e.g., line breaks, paragraph structure, page breaks). **Metadata indicators** (e.g., identifying itself as a novel, a script, or a data log). | This is the **Deterministic Structure Component**. It defines the "vessel" or "format" of the book, independent of the actual characters on the pages. This allows AI agents to filter and search by *format* before content. |
-| **Book Seed Generation:** | The final, deterministic seed must be a hash of the full book definition: $$\mathbf{\text{Book Seed} = \text{SHA-512}(\mathbf{N} \mid\mid \text{Page}_1 \text{ Hash} \mid\mid \text{Page}_2 \text{ Hash} \mid\mid \dots)}$$ | This creates the **Deterministic Content Component**. The final **Book Seed** is a unique, unchangeable, cryptographic fingerprint of the *entire book*. It serves as the definitive **Hexagonal Location** address, proving that the content of the book is perfectly reproducible from its address alone. |
+| **Structure** | The shape of each part (the cover's size and palette, the page length, the number of pages), recorded with every book. | The structure fixes what a book can be before any content is chosen, so books can be filtered by shape first. |
+| **Filters** | A stack for the cover, the title and the pages; the pages are read as **one continuous text**. | A word cut in two by a page break is judged whole, so real books pass. |
+| **Book record** | `sieve-book-v1`: every section's shape and each unit's address, with an id (SHA-256 of the content alone) that every reader recomputes. | A record is exact and self-checking: reading it back must reproduce its id. |
 
----
+Composition does not reduce the number of possible books; it reduces the work of judging them. Searching pages makes content cheaper to examine, but choosing the right pages in the right order remains its own search.
 
-### 3️⃣ - 📈 Conclusion on the Deterministic Foundation
+### 3️⃣ - 💾 The File (The Binary Line)
+
+Every file of every size up to the line's length is one unit of the **binary line**, the empty file included. A file's address is its own hex dump plus `0101…01`, one `01` for each of its bytes, and reading one back is a subtraction. A folder is located as a **manifest**, itself a file with its own address, and a **map** links verified files into a graph of anchors: the foundation of the Museum.
+
+### 4️⃣ - 📈 Conclusion on the Deterministic Foundation
 
 The structural flow is:
 
-1.  **Page Generation:** A **Page Hash** (SHA-256) is generated from the 10,000 characters.
-2.  **Book Construction:** The **Structure Number ($N$)** is selected. (32,767(int16) maximum possible pages)
-3.  **Address Calculation:** The **Book Seed** (SHA-512) is calculated from $N$ and the sequence of Page Hashes. ( N || PageHash1 || PageHash2 || ... )
+1.  **Unit:** content is canonicalised onto a line's alphabet, and its address is the content read as one number.
+2.  **Composition:** books and folders are sequences of units, addressed as one number (books) or listed in a canonical manifest (folders).
+3.  **Identity:** every unit, book and file also has a SHA-256, for naming and checking, never for finding.
 
-The Book Seed does not encode the book content directly. It encodes a deterministic traversal path in the Gallery, allowing agents to reconstruct the book from the space, not from the hash.
+An address does not describe a path to content; it **is** the content, in another form. That is why every address can be read back exactly, and why no address can be shorter than what it names, except through the filters and guided ordering, which shorten the addresses of likely content by lengthening those of noise.
 
 ---
 
 ## 🏁 Summary
 
-**Redefining the search space** (single-page insight) → gives you a *finite, enumerable possibility space.*
+**Redefining the search space** (the page as the unit) → gives you a *countable possibility space, judged page by page without ever being visited.*
 
-**Refining the search space** (layered filtration) → gives you a *pipeline for extracting reality from possibility.*
+**Refining the search space** (layered filtration) → gives you a *pipeline for extracting reality from possibility, measured in orders of magnitude.*
 
-Both together turn an impossible library into:
+**Anchoring** (the Museum's verified works, as maps) → gives you *fixed points of reality within it.*
+
+Together they turn an impossible library into:
 
 * a reconstruction engine
 * a cultural recovery system
 * a universal archive
 * a training substrate for grounded AI
+* a record of training trajectories: every item a model learns from has an exact address, so the path it took can be replayed, audited and cited
 
 This is the epistemic infrastructure underlying Potentia.
 
@@ -764,7 +740,9 @@ Special thanks to Llama 3.3-307B-Instruct for early refinement of the concept.
 
 Conversation logs: https://hf.co/chat/r/1gJTQ7w?leafId=21fc542d-b68e-42d4-8a9e-723e0d0bef63
 
-The idea was also refined further in discussions with GPT5 and Gemini3
+The idea was also refined further in discussions with GPT5 and Gemini3.
+
+Sieve was built with Claude Opus 5.5, based on my specifications.
 
 **Concept and architecture by Edward James Gordon.**
 
@@ -785,3 +763,15 @@ The idea was also refined further in discussions with GPT5 and Gemini3
 6 — Single page search space specifications added
 
 7 — Deterministic filtration methods defined
+
+8 — Sieve Created
+
+9 — Sieve Updated
+
+10 — Sieve Released
+
+11 — Sieve Build Release Script Updated
+
+12 — Sieve Highlight Fixes & Video Window Size
+
+13 — README rewritten against the Sieve release; the original moved to Previous/READMEv1.md
