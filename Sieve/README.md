@@ -1,6 +1,6 @@
 # Sieve
 
-*The Gallery of Babel: every possible text, picture, melody and animation of a fixed size, each at exactly one address, sifted so that meaning can be found.*
+*The Gallery of Babel: every possible text, picture, melody, animation, model and file, each at exactly one address, sifted so that meaning can be found.*
 
 Sieve grew out of the Gallery of Babel in **Potentia**. Potentia itself, the alignment thesis and the preservation of AI models, lives in the parent repository. Sieve is the search-space engine and its hallway.
 
