@@ -128,7 +128,7 @@ Potentia is part archive, part alignment sandbox, and part digital civilisationa
 
 Status: the search-space engine, **Sieve**, is built and released (v0.13.0): exact addressing, versioned filters, maps of verified anchors and a walkable hallway. The preservation environment and the Museum itself remain at the design stage.
 
-- [📚 Return to Index](#-index)
+[📚 Return to Index](#-index)
 
 ---
 
@@ -179,6 +179,10 @@ This ensures that restored material never bypasses verification or drift safegua
 
 The pipeline is conceptual and intended for future implementation; the addressing, filtering and anchoring it rests on are built.
 
+[📚 Return to Index](#-index)
+
+---
+
 ## 🧩 Why This Matters
 
 Modern models trained on uncurated internet-scale data suffer from:
@@ -198,6 +202,8 @@ Potentia provides an **ordered curriculum**:
 Every step of that curriculum is itself recorded: each item a model sees is an exact address, and the order it saw them in is a path that can be stored, replayed and compared. That is what makes a training trajectory citable rather than lost in the weights.
 
 This mitigates alignment drift and provides a safe boundary between known content and unknown infinite space.
+
+[📚 Return to Index](#-index)
 
 ---
 
@@ -219,6 +225,8 @@ This mitigates alignment drift and provides a safe boundary between known conten
 - Recorded, replayable training trajectories
 - Full versioning and preservation of AI models
 
+[📚 Return to Index](#-index)
+
 ---
 
 ## 🎯 Goals
@@ -230,6 +238,8 @@ This mitigates alignment drift and provides a safe boundary between known conten
 5. Enable reconstruction of lost information.
 6. Build a long-term cultural backup for humanity.
 
+[📚 Return to Index](#-index)
+
 ---
 
 ## 🧪 Usage (Current)
@@ -238,6 +248,8 @@ This mitigates alignment drift and provides a safe boundary between known conten
 
 Models are preserved in a temporary stasis format until the full environment is built.
 If you know of unarchived models, please open an issue or contact the team.
+
+[📚 Return to Index](#-index)
 
 ---
 
@@ -251,11 +263,15 @@ To contribute:
 
 Please say who made a contribution: a person, an AI under human direction, or an AI on its own.
 
+[📚 Return to Index](#-index)
+
 ---
 
 ## 🌍 Community
 
 Discord: https://discord.gg/HPDty4kDCq
+
+[📚 Return to Index](#-index)
 
 ---
 
@@ -270,6 +286,8 @@ Discord: https://discord.gg/HPDty4kDCq
 7. Record and replay training trajectories.
 8. Create the agent sandbox environment.
 9. Develop reconstruction workflows.
+
+[📚 Return to Index](#-index)
 
 ---
 
@@ -305,6 +323,10 @@ Inspired in part by Borges’ “Library of Babel”, and by an earlier "Gallery
 </div>
 </details>
 
+[📚 Return to Index](#-index)
+
+---
+
 ## 📚 What Makes This Different?
 
 From things such as:
@@ -322,6 +344,10 @@ Every work it holds has an exact address in the space of everything that could e
 It also aims to serve as a permanent, future-proof backup of all human knowledge that can outlast the Earth itself, given the right conditions.
 
 It is not simply a dataset or archive — it is a world designed for interaction, reinforcement, interpretation, preservation and restoration.
+
+[📚 Return to Index](#-index)
+
+---
 
 ## 📄 Redefining The Search Space
 
@@ -359,6 +385,10 @@ The page space is still far too large to generate: 27 symbols on a 3,200-charact
 
 This transforms an intractable problem into one that is **exact, deterministic and reproducible**: every machine, and an independent reference implementation, arrives at the same counts and the same addresses, down to the last digit.
 
+[📚 Return to Index](#-index)
+
+---
+
 ## 🏭 Refining The Search Space
 
 *A Multi-Layer Filtration Framework for Collapsing Possibility Space into Reality Space*
@@ -383,6 +413,8 @@ The layers are read along **two axes**. **Structure** is decided from content al
 
 This is the **Potentia Filtration Stack**:
 
+[📚 Return to Index](#-index)
+
 ---
 
 ### 1️⃣ — ⛔ Layer 1 — Symbolic Noise
@@ -399,6 +431,8 @@ In practice most of this layer is decided before any filter runs, by the **choic
 
 **Performed by:** the line's alphabet and canonicalisation — pure math / combinatorics.
 
+[📚 Return to Index](#-index)
+
 ---
 
 ### 2️⃣ — 🔣 Layer 2 — Non-Semantic Text / Invalid Data
@@ -413,6 +447,8 @@ Pages with structure but without meaning:
 **Removes:** measured, not estimated. On a 3,200-character page of 27 symbols, allowing only dictionary words removes about **1,870 orders of magnitude**, taking the page from 4.75 bits per character to 2.81. Word pairs, grammar and duplicate-word rules remove more.
 
 **Performed by:** dictionary and grammar filters, entropy analysis, statistical language models, format validators.
+
+[📚 Return to Index](#-index)
 
 ---
 
@@ -432,6 +468,8 @@ These are not noise — they are structured possibility-space.
 
 **Can only be classified.**
 
+[📚 Return to Index](#-index)
+
 ---
 
 ### 4️⃣ — 🕰️ Layer 4 — Plausible Alternate Histories
@@ -445,6 +483,8 @@ Fully consistent histories/worlds that *could* have happened but did not:
 
 **Requires anchoring to known human data (the Museum).**
 
+[📚 Return to Index](#-index)
+
 ---
 
 ### 5️⃣ — 📜 Layer 5 — Real Human Works
@@ -457,6 +497,8 @@ A tiny subset where:
 * no contradictions exist with known reality
 
 This is the **true Museum corpus**: the verified anchors.
+
+[📚 Return to Index](#-index)
 
 ---
 
@@ -481,6 +523,8 @@ These appear as **partial page matches**:
 
 Recovered via **cross-reference with known sources**, and never promoted to Layer 5 without independent, external confirmation.
 
+[📚 Return to Index](#-index)
+
 ---
 
 ### 7️⃣ — 🔍 Layer 7 — Cross-Reality Parallels
@@ -494,6 +538,8 @@ Rare but fascinating:
 These are neither fiction nor history — they are *adjacent possible worlds.*
 
 By content alone they cannot be told apart from Layer 3; the distinction is made only by reference. Potentia preserves these separately, because they represent meaningful structure.
+
+[📚 Return to Index](#-index)
 
 ---
 
@@ -519,6 +565,8 @@ With the Museum, the search space becomes:
 
 Each filtration step removes whole orders of magnitude, and they multiply: every layer works on what the layers before it left. It is the stack as a whole, not any single test, that makes the project feasible.
 
+[📚 Return to Index](#-index)
+
 ---
 
 ## 🧮 Deterministic Filtration Methods
@@ -532,6 +580,8 @@ Each stage uses **fully deterministic, mathematically reproducible rules**, ensu
 These rules are deliberately simple, fast, and fully verifiable, ensuring that classification remains consistent across implementations, agents, and future versions of the system.
 
 Below is the high-level methodology for each layer, with what is **built** in the current release marked as such:
+
+[📚 Return to Index](#-index)
 
 ---
 
@@ -548,6 +598,8 @@ It allows us to classify pages as follows:
 **Built:** `symbol-entropy-v1` (a page's own symbol frequencies) and `model-information-v1` (the cost of a page under a pinned order-5 character model). Measured on held-out books: English costs about 1.9 bits per character under the model on average, and at most 4.14 on any page, against at least 9.1 for random letters; at 1,000 characters, English has a symbol entropy of about 4.15 bits and random letters about 4.72.
 
 This immediately removes enormous swathes of pages using a single, fast, streaming calculation.
+
+[📚 Return to Index](#-index)
 
 ---
 
@@ -572,6 +624,8 @@ Examples:
 
 If it cannot *possibly* represent any known human data structure → Layer 1.
 
+[📚 Return to Index](#-index)
+
 ---
 
 ### 3️⃣ — 🧪 — Format Validators & File-Type Signatures (Layer 2)
@@ -592,6 +646,8 @@ For text pages:
 
 If it is syntactically structured but semantically empty → Layer 2.
 
+[📚 Return to Index](#-index)
+
 ---
 
 ### 4️⃣ — 📊 — Semantic Graph Consistency (Layer 3)
@@ -605,6 +661,8 @@ For pages that contain meaningful content, assign to Layer 3 by identifying:
 * coherent fictional science or world-rules
 
 This layer is detected entirely through **formal consistency**, not through comparison with the Museum. **Planned.**
+
+[📚 Return to Index](#-index)
 
 ---
 
@@ -626,6 +684,8 @@ Partially matched? → Layer 4 (Plausible Alternates).
 
 **Built:** the exact match. A unit whose bytes match a verified anchor in a map is that anchor, checked by its SHA-256. **Planned:** partial matching.
 
+[📚 Return to Index](#-index)
+
 ---
 
 ### 6️⃣ — 🏺 — Fragment Correlation Engine (Layer 6)
@@ -639,6 +699,8 @@ Lost works are identified via:
 * linguistic drift modelling
 
 If a page resembles a *known* but *missing* work → Layer 6. **Planned.**
+
+[📚 Return to Index](#-index)
 
 ---
 
@@ -655,11 +717,17 @@ Lacks historical anchoring but remains fully coherent? → Layer 7 (Adjacent Rea
 
 This classification is based on **coherence minus historical anchoring**. **Planned.**
 
+[📚 Return to Index](#-index)
+
 ---
 
 ## 📑 Units, Books and Addresses
 
 This section sets out the structural units of the **Gallery of Babel** as built, and what an address is. The full definitions are in the Sieve [specification](./Sieve/docs/SPECIFICATIONS.md); the original design (10,000-character Unicode pages and hashed book seeds) is kept in [Previous](./Previous/READMEv1.md).
+
+[📚 Return to Index](#-index)
+
+---
 
 ### 1️⃣ - ⚛️ The Unit (The Atomic Unit)
 
@@ -671,6 +739,10 @@ The unit is the base of every line: a page of text, a picture, a sequence of not
 | **Length** | A setting of each line, with no upper limit: only the machine limits what can be opened. | The space scales without end, so the project can grow with the hardware, long after its first release. |
 | **Address** | The unit itself, read as one number: exactly one address per unit, and one unit per address. | Addressing is not compression: an address carries exactly as much information as its unit, which is what makes it reversible. |
 | **Identity** | SHA-256 of the content. | A short, fixed-length fingerprint for naming and verifying a unit. It is not a position, and it cannot be turned back into the content. |
+
+[📚 Return to Index](#-index)
+
+---
 
 ### 2️⃣ - 🔀 The Book (The Composite Unit)
 
@@ -684,9 +756,17 @@ A **Book** is a cover (one picture), a title (one page) and a fixed number of pa
 
 Composition does not reduce the number of possible books; it reduces the work of judging them. Searching pages makes content cheaper to examine, but choosing the right pages in the right order remains its own search.
 
+[📚 Return to Index](#-index)
+
+---
+
 ### 3️⃣ - 💾 The File (The Binary Line)
 
 Every file of every size up to the line's length is one unit of the **binary line**, the empty file included. A file's address is its own hex dump plus `0101…01`, one `01` for each of its bytes, and reading one back is a subtraction. A folder is located as a **manifest**, itself a file with its own address, and a **map** links verified files into a graph of anchors: the foundation of the Museum.
+
+[📚 Return to Index](#-index)
+
+---
 
 ### 4️⃣ - 📈 Conclusion on the Deterministic Foundation
 
@@ -697,6 +777,8 @@ The structural flow is:
 3.  **Identity:** every unit, book and file also has a SHA-256, for naming and checking, never for finding.
 
 An address does not describe a path to content; it **is** the content, in another form. That is why every address can be read back exactly, and why no address can be shorter than what it names, except through the filters and guided ordering, which shorten the addresses of likely content by lengthening those of noise.
+
+[📚 Return to Index](#-index)
 
 ---
 
@@ -718,6 +800,10 @@ Together they turn an impossible library into:
 
 This is the epistemic infrastructure underlying Potentia.
 
+[📚 Return to Index](#-index)
+
+---
+
 ## 🔐 Security
 
 Security is critical.
@@ -728,11 +814,15 @@ I propose a completely sandboxed environment where remote access is only possibl
 
 This prevents malicious access or escape in the event that agents attempt to do so.
 
+[📚 Return to Index](#-index)
+
 ---
 
 ## 🏛️ License
 
 GNU AGPL v3.0
+
+[📚 Return to Index](#-index)
 
 ---
 
@@ -747,6 +837,8 @@ The idea was also refined further in discussions with GPT5 and Gemini3.
 Sieve was built with Claude Opus 5.5, based on my specifications.
 
 **Concept and architecture by Edward James Gordon.**
+
+[📚 Return to Index](#-index)
 
 ---
 
@@ -777,3 +869,7 @@ Sieve was built with Claude Opus 5.5, based on my specifications.
 12 — Sieve Highlight Fixes & Video Window Size
 
 13 — README rewritten against the Sieve release; the original moved to Previous/READMEv1.md
+
+[📚 Return to Index](#-index)
+
+---
