@@ -51,7 +51,8 @@ void Hallway::close_navigator(bool go)
 {
     nav_open_ = false;
     SDL_SetWindowRelativeMouseMode(window_, nav_had_mouse_);
-    if (!go) return;
+    if (!go) return; // back to where it was opened from: the hallway, or the pause menu
+    if (pause_open_) close_pause(); // going somewhere leaves the pause too
     trail_.clear();
     place(nav_value_, false);
     message(trf("nav.went", {short_address(nav_hex_)}));

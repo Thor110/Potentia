@@ -490,3 +490,56 @@ to the band of heights that can be seen through the opening at each streak's dis
 
 `docs/IDEAS.md` §11 lists the questions that never got an answer; those are the ones worth
 raising before building anything large.
+
+**The node graph** (`client/node_graph.cpp`, `tools/cli/map.*`, SPECIFICATIONS §12.3): Edward's
+design, 27 September 2026. Maps (`sieve-map-v1`) link verified anchors, real files named by their
+SHA-256; a map from a folder is its manifest with every folder linked to its contents
+(`contains`); relations are free lower-case words, so later ones need no new format. `sieve map`
+writes a map, DOT or GraphML, and the oracle writes the same map (CI compares). The viewer (O,
+the pause menu's third row) is full screen: dropdown of maps ("This installation", made on a
+worker from the programs and data folders beside the hallway; every `maps/*.map`; any opened or
+made), 3D Fruchterman–Reingold layout (300 steps, sampled repulsion above 900 nodes, seeded by
+node id so it always settles the same), drag / arrows to turn, wheel to zoom, click or Tab to
+choose, Enter or double click to walk to a file (its SHA-256 checked first; past the BINARY
+length it asks twice, as the locator does: both go through `walk_to_file`). Made maps are saved
+into `maps/`. The item page has a third tab, SORT: a binary item whose file's SHA-256 a node of
+the current map names is that node (a verified anchor by construction), drawn in its place;
+anything else is a lone point. No "whole state space" graph, by design (Edward): it would be a
+tangle of noise. `--map PATH` and `--graph` script it. Not yet: nodes that are items on the other
+lines (a page, a picture) with their line's setup, relations other than `contains` made from the
+viewer, anchors feeding filters, and bundled maps in a release.
+
+**Pause menu returns, and installing from the locator** (27 September 2026). Every tool opened
+from the pause menu now comes back to it with Esc: the navigator is drawn and handled over it (its
+ENTER goes to the address and leaves the pause), and Restart Sieve's setup menu, on Esc, returns
+to this hallway paused (`back_from_menu`, `restart_from_pause_`); F1 itself still returns to
+walking. The File Locator has **Save Sieve instructions...** (the `.sieve`) and **Make an installer
+program...**, and **Install from Sieve instructions...** (I), which takes a `.sieve` or an
+installer program, asks for a folder, and installs on the worker. "Sieve instructions" is
+Edward's name for the `.sieve` (27 September 2026). The manifest on its own is no longer saved
+from the hallway: it is part of the instructions, for the tools; `sieve locate --manifest` still
+writes it.
+`installable_manifest` (tools/cli/locate.cpp) is the one reader of all three, used by `sieve
+install`, sieve-install and the locator; a v1 manifest is refused (it lists, it does not hold).
+`--install FILE --install-to DIR` scripts the locator's install for CI.
+
+**Single files are handled as folders** (Edward, 27 September 2026). A file's Sieve instructions
+are a folder's holding just it (`manifest_of_file`: root = the file's name, one entry), so the
+locator offers a file the same two saves as a folder (Sieve instructions, installer program;
+"Save its address..." as hex is gone from the hallway), `sieve locate FILE --installer/--program`
+work, and sieve-install puts a single file straight into Documents rather than a folder of its
+name. A bare `.address` was considered and not made: it saves ~130 bytes but has no name and no
+check (every number is a valid file). The oracle's `manifest` takes a file too.
+
+
+
+**Doors keep the angle; the minimap shows where you last stood** (Edward, 27 September 2026).
+Doors used to keep the corridor tile, so a longer line was nearly always at ~0° and a shorter one
+wrapped to an unrelated angle. Now `cross()` maps loop tile t of A to floor(t · T_B / T_A) of B
+(exact BigUint), and a stack of doors taken since you last moved (`door_back_`) makes stepping
+straight back exact, several doors in a row included. `move_tiles` moves only the current line;
+`all_loop_tiles_[i]` is where you last stood on line i (0 until visited), which is what the
+minimap's dots show. `all_start` is now the current line's loop start (every line starts there
+through its doors). CI: 36.25% on pages is 36.25% on images, and back; six doors and back return
+to the same book.
+

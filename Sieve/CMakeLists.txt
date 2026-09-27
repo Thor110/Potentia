@@ -123,7 +123,7 @@ endif()
 
 # The locator and the installer's code (no compressors: sieve-install links this alone), and the
 # comparison, which is the only part that needs them.
-add_library(sieve_locate STATIC tools/cli/locate.cpp)
+add_library(sieve_locate STATIC tools/cli/locate.cpp tools/cli/map.cpp)
 target_include_directories(sieve_locate PUBLIC tools)
 target_link_libraries(sieve_locate PUBLIC sieve_core)
 add_library(sieve_compare STATIC tools/cli/compare.cpp)
@@ -198,6 +198,7 @@ if(SIEVE_BUILD_CLIENT)
         client/item_faces.cpp
         client/door_portal.cpp
         client/file_locator.cpp
+        client/node_graph.cpp
         client/navigator.cpp
         client/pause_menu.cpp
         client/font.cpp

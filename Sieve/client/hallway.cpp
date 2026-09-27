@@ -138,14 +138,17 @@ void Hallway::enable_guided()
     rebase();
 }
 
-// Moves along the corridor by whole tiles (walking, jumping). Every line moves with you.
+// Moves along the corridor by whole tiles (walking, jumping). Only the line you are on: every
+// other line keeps where you last stood on it (the minimap's dots), and a door takes you to the
+// same angle on the next (cross).
 void Hallway::move_tiles(int64_t d)
 {
     if (d == 0) return;
     tile_ += d;
     face_shift_ += d; // a crate's place stays the same number while its key moves
     loop_tile_ = offset_loop_tile(d);
-    for (int i = 0; i < kLines; ++i) all_loop_tiles_[i] = offset_loop_tile(all_loops_[i], all_loop_tiles_[i], d);
+    all_loop_tiles_[li_] = loop_tile_;
+    door_back_.clear(); // moved: the way back is by angle again
     // Keep the books already worked out that are still near enough to be drawn: they are the
     // same books, d tiles closer. (Books left behind are dropped, so the cache stays small.)
     std::unordered_map<int64_t, Book> shifted;
@@ -260,11 +263,14 @@ void Hallway::rebase()
     if (lines_[0].guided) zoom_ = std::clamp<uint32_t>(zoom_, 1, uint32_t(std::min<size_t>(lines_[0].guided->scale_bits(), UINT32_MAX)));
     loop_ = LineLoop(units_of(li_));
     loop_tile_ = loop_.loop_tile(tile_);
-    // Every line's loop too, for the double flag where all four start together.
+    // Every line's loop too, and where you last stood on each: the line you are on is where you
+    // are; the others keep their place (0 until you have been there), brought inside their loop
+    // if a change of ordering or zoom has made it shorter.
     for (int i = 0; i < kLines; ++i)
     {
         all_loops_[i] = LineLoop(units_of(i));
-        all_loop_tiles_[i] = all_loops_[i].loop_tile(tile_);
+        if (i == li_) all_loop_tiles_[i] = loop_tile_;
+        else if (all_loop_tiles_[i] >= all_loops_[i].tiles()) all_loop_tiles_[i] = BigUint::mod(all_loop_tiles_[i], all_loops_[i].tiles());
     }
     cache_.clear();
     clear_faces();
@@ -882,6 +888,28 @@ void Hallway::cross(Side side)
     if (turn) cam_.yaw += 3.14159265f;
     drop_in_hand();
     trail_.clear(); // a warped trail belongs to the line it was warped on
+    // The same angle on the next line: tile t of A's T_A tiles is tile floor(t * T_B / T_A) of B's
+    // T_B, exactly, so it is the same place round the circle to the whole precision of the shorter
+    // line. A shorter line cannot hold every place of a longer one, so going straight back (not
+    // having moved) returns you to exactly the tile you left rather than to the nearest one, and
+    // through several doors in a row, back through each of them in turn (a stack of doors, which
+    // walking along the corridor clears).
+    const BigUint here = loop_tile_;
+    BigUint there;
+    if (!door_back_.empty() && door_back_.back().on_line == li_ && door_back_.back().to_line == to && door_back_.back().on_tile == here)
+    {
+        there = door_back_.back().to_tile;
+        door_back_.pop_back();
+    }
+    else
+    {
+        BigUint q, r;
+        BigUint::divmod(BigUint::mul(here, all_loops_[to].tiles()), loop_.tiles(), q, r);
+        there = q;
+        door_back_.push_back(DoorBack{li_, here, to, there});
+        if (door_back_.size() > 64) door_back_.erase(door_back_.begin());
+    }
+    tile_ = TileIndex{false, there};
     set_line(to);
     message(trf("msg.door", {tr(theme().key), tile_label_}));
 }
@@ -904,19 +932,24 @@ void Hallway::handle(const SDL_Event& e, bool& quit)
 void Hallway::handle_event(const SDL_Event& e, bool& quit)
 {
     if (e.type == SDL_EVENT_QUIT) quit = true;
+    if (graph_open_)
+    {
+        graph_event(e);
+        return;
+    }
     if (loc_open_)
     {
         locator_event(e);
         return;
     }
+    if (nav_open_) // before the pause menu: it may be open over it
+    {
+        navigator_event(e);
+        return;
+    }
     if (pause_open_)
     {
         pause_event(e, quit);
-        return;
-    }
-    if (nav_open_)
-    {
-        navigator_event(e);
         return;
     }
     if (input_ != Input::None)
@@ -947,8 +980,14 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
     }
     if (e.type == SDL_EVENT_MOUSE_MOTION && SDL_GetWindowRelativeMouseMode(window_))
     {
-        // Holding a model, the mouse turns the model instead of you: it is in your hands.
-        if (in_hand_ && in_hand_->model)
+        // Holding a model, the mouse turns the model instead of you: it is in your hands. On the
+        // SORT tab it turns the graph.
+        if (in_hand_ && hand_tab_ == 2)
+        {
+            sort_yaw_ += e.motion.xrel * 0.008f;
+            sort_pitch_ = std::clamp(sort_pitch_ + e.motion.yrel * 0.008f * (invert_y_ ? -1.0f : 1.0f), -1.5f, 1.5f);
+        }
+        else if (in_hand_ && in_hand_->model)
         {
             model_spin_ += e.motion.xrel * 0.008f;
             model_tilt_ = std::clamp(model_tilt_ + e.motion.yrel * 0.008f * (invert_y_ ? -1.0f : 1.0f), -1.5f, 1.5f);
@@ -1000,6 +1039,7 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
     case SDLK_T: open_input(Input::Warp); break;
     case SDLK_G: open_input(Input::Goto); break;
     case SDLK_X: open_navigator(); break;
+    case SDLK_O: open_graph(); break;
     case SDLK_M: cycle_ordering(); break;
     case SDLK_F1:
         menu_requested_ = true;
@@ -1018,14 +1058,26 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
         else step_trail(-1);
         break;
     case SDLK_A:
-        if (in_hand_ && in_hand_->model) model_spin_ -= 0.15f;
+        if (in_hand_ && hand_tab_ == 2) sort_yaw_ -= 0.15f;
+        else if (in_hand_ && in_hand_->model) model_spin_ -= 0.15f;
         break;
     case SDLK_D:
-        if (in_hand_ && in_hand_->model) model_spin_ += 0.15f;
+        if (in_hand_ && hand_tab_ == 2) sort_yaw_ += 0.15f;
+        else if (in_hand_ && in_hand_->model) model_spin_ += 0.15f;
         break;
     case SDLK_C:
-        // The item page's tabs: the thing itself, then what it costs to name it.
-        if (in_hand_) hand_tab_ = (hand_tab_ + 1) % 2;
+        // The item page's tabs: the thing itself, what it costs to name it, and where it stands
+        // in a map (SORT).
+        if (in_hand_)
+        {
+            hand_tab_ = (hand_tab_ + 1) % 3;
+            if (hand_tab_ == 2)
+            {
+                const int node = sort_node(*in_hand_);
+                GraphMap* g = graph_current();
+                if (node >= 0 && g) message(trf("msg.sort.anchor", {std::to_string(node), g->map.nodes[size_t(node)].path, g->title}));
+            }
+        }
         break;
     case SDLK_R:
         if (in_hand_ && in_hand_->model) { model_spin_ = 0.6f; model_tilt_ = 0.35f; }
@@ -1039,8 +1091,14 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
         break;
     case SDLK_PAGEUP: jump_tiles(1000); break;
     case SDLK_PAGEDOWN: jump_tiles(-1000); break;
-    case SDLK_RIGHTBRACKET: jump_tiles(1000000); break;
-    case SDLK_LEFTBRACKET: jump_tiles(-1000000); break;
+    case SDLK_RIGHTBRACKET:
+        if (in_hand_ && hand_tab_ == 2) graph_select(graph_sel_ + 1); // the SORT tab's map
+        else jump_tiles(1000000);
+        break;
+    case SDLK_LEFTBRACKET:
+        if (in_hand_ && hand_tab_ == 2) graph_select(graph_sel_ - 1);
+        else jump_tiles(-1000000);
+        break;
     case SDLK_HOME:
         tile_ = TileIndex{};
         rebase();
@@ -1523,6 +1581,7 @@ void Hallway::draw_face_image(SDL_Texture* tex, const Vec3 quad[4], std::vector<
 Hallway::~Hallway()
 {
     stop_locator();
+    stop_graph();
     stop_face_workers(); // before the model space they read from goes
     release_textures();
 }
@@ -1586,15 +1645,12 @@ void Hallway::set_graphics(bool edge_glow, bool real_graphics, bool door_portals
     for (Models& m : models_) m = Models{}; // reloaded on first use (picks up edited files)
 }
 
-// True if tile dt away is the start of a loop on all seven lines at once, which is what the
-// double start flag marks. Since it needs every line's loop to come round together it is true
-// at the origin and then only at multiples of all seven loop lengths, so in practice you see it
-// where you started and nowhere you can walk to.
+// True if tile dt away is the start of this line's loop, which the double start flag marks: a
+// door there leads to every other line's start too (a door keeps your angle, and 0 is 0 on
+// every line), so every line starts together here, wherever the loop comes round.
 bool Hallway::all_start(int64_t dt) const
 {
-    for (int i = 0; i < kLines; ++i)
-        if (!offset_loop_tile(all_loops_[i], all_loop_tiles_[i], dt).is_zero()) return false;
-    return true;
+    return offset_loop_tile(all_loops_[li_], all_loop_tiles_[li_], dt).is_zero();
 }
 
 BigUint Hallway::offset_loop_tile(const LineLoop& loop, const BigUint& loop_tile, int64_t dt)

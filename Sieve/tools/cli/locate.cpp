@@ -125,6 +125,23 @@ std::vector<uint8_t> Manifest::file() const
     return out;
 }
 
+Manifest manifest_of_file(const fs::path& file)
+{
+    if (!fs::is_regular_file(file)) throw std::runtime_error(file.generic_string() + " is not a file");
+    Manifest m;
+    const std::u8string name = fs::absolute(file).filename().u8string();
+    m.root = std::string(name.begin(), name.end());
+    ManifestEntry e;
+    e.path = m.root;
+    if (e.path.find_first_of("\t\r\n") != std::string::npos) throw std::runtime_error("a name with a tab or a line break in it cannot be listed: " + e.path);
+    e.size = uint64_t(fs::file_size(file));
+    e.sha256 = sha256_file_hex(file);
+    m.entries.push_back(e);
+    m.files = 1;
+    m.bytes = e.size;
+    return m;
+}
+
 Manifest walk_folder(const fs::path& root_in)
 {
     const fs::path root = fs::absolute(root_in).lexically_normal();
@@ -423,6 +440,26 @@ Manifest manifest_of_installer(const BigUint& address)
     Manifest m = Manifest::parse(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
     if (!m.with_addresses && !m.with_contents) throw std::runtime_error("that is a manifest without the files in it (v1): nothing to install from");
     return m;
+}
+
+Manifest installable_manifest(const fs::path& file, bool hex)
+{
+    if (!hex)
+    {
+        if (const auto attached = attached_address(file)) return manifest_of_installer(*attached);
+        std::ifstream in(file, std::ios::binary);
+        char head[16] = {};
+        in.read(head, sizeof head);
+        if (in.gcount() == 16 && std::memcmp(head, "sieve-manifest-v", 16) == 0)
+        {
+            const auto bytes = read_file_bytes(file);
+            Manifest m = Manifest::parse(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+            if (!m.with_addresses && !m.with_contents)
+                throw std::runtime_error("that is a manifest without the files in it (v1): nothing to install from");
+            return m;
+        }
+    }
+    return manifest_of_installer(read_address_file(file, hex));
 }
 
 bool install_tree(const Manifest& m, const fs::path& dest, bool force, const InstallProgress& progress, const std::atomic<bool>* cancel)

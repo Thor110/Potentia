@@ -377,9 +377,10 @@ void Hallway::draw_hud(int w, int h)
          1, ink);
     // Last, so nothing else in the readout is drawn over it.
     draw_compass(float(W), float(H));
-    if (nav_open_) draw_navigator(W, H); // over everything: it is a screen of its own
     if (pause_open_) draw_pause(W, H);
+    if (nav_open_) draw_navigator(W, H); // over everything, the pause menu too: a screen of its own
     if (loc_open_) draw_locator(W, H);
+    if (graph_open_) draw_graph_view(W, H);
 }
 
 // A model in hand: its wireframe, turned by the mouse or by A and D, and its .obj text beside
@@ -491,9 +492,9 @@ void Hallway::draw_in_hand(float W, float H)
     // Two tabs: the thing itself, and what it costs to name it. C moves between them.
     {
         float tx = x + 14;
-        for (int t = 0; t < 2; ++t)
+        for (int t = 0; t < 3; ++t)
         {
-            const std::string label = tr(t == 0 ? "hand.tab.item" : "hand.tab.cost");
+            const std::string label = tr(t == 0 ? "hand.tab.item" : t == 1 ? "hand.tab.cost" : "hand.tab.sort");
             const float tw = text_width(label, 1) + 16;
             if (t == hand_tab_)
             {
@@ -507,6 +508,7 @@ void Hallway::draw_in_hand(float W, float H)
         cy += 22;
     }
     if (hand_tab_ == 1) { draw_cost(bk, x, cy, pw, y + ph); return; }
+    if (hand_tab_ == 2) { draw_sort(bk, x, cy, pw, y + ph - 16); return; }
     // A titled unit's cover and title, above the thing itself.
     if (const std::string title = title_text(bk); has_titles() || !bk.cover.empty())
     {

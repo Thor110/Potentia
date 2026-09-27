@@ -99,6 +99,12 @@ void add_addresses(Manifest& m, const std::filesystem::path& root);
 // refused rather than installed wrong.
 void add_contents(Manifest& m, const std::filesystem::path& root);
 
+// A single file as a manifest: as a folder holding just that file would be, its root named after
+// the file. Sieve instructions for one file are this with the file's bytes after it (add_contents,
+// with the file's own folder as the root), so a file and a folder are installed the same way and a
+// file keeps its name and its SHA-256 check.
+Manifest manifest_of_file(const std::filesystem::path& file);
+
 // Walks `root` to the bottom. Throws on anything it cannot read, or a path that cannot be written
 // in the manifest (one with a tab or a line break in it).
 Manifest walk_folder(const std::filesystem::path& root);
@@ -135,6 +141,13 @@ BigUint address_of_raw(const std::vector<uint8_t>& bytes);
 // The manifest an installer holds, read back from it and checked to be one that can install (v3,
 // or the older v2).
 Manifest manifest_of_installer(const BigUint& address);
+
+// The manifest to install from, whatever the file is: an installer (.sieve, raw bytes, or with
+// `hex` written in hex), an installer program (sieve-install with one attached), or an installer's
+// manifest itself (v3, or v2: it begins "sieve-manifest-v", which no raw address does, since an
+// address is its manifest with every byte one higher). A v1 manifest is refused: it lists the
+// files but does not hold them.
+Manifest installable_manifest(const std::filesystem::path& file, bool hex);
 
 // Puts a v3 (or v2) manifest's tree into `dest`. Every file is cut from the contents (v3) or read
 // back from its address (v2), and checked

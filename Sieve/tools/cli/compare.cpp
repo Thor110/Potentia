@@ -59,11 +59,11 @@ std::string comparison_table(const Comparison& c)
         t += row("manifest", c.manifest, "the tree's structure, sizes and SHA-256s, which the addresses do not carry");
     if (c.installer_hex)
     {
-        t += row("installer's manifest", c.manifest, "v3: the structure, then every file's bytes");
-        t += row("  zip of it (deflate)", c.manifest_deflate, "the installer's manifest compressed");
+        t += row("listing and files", c.manifest, "the folder's listing, then every file's bytes (sieve-manifest-v3)");
+        t += row("  zip of it (deflate)", c.manifest_deflate, "that compressed");
         t += row("  7z of it (LZMA2)", c.manifest_lzma2, "");
-        t += row("installer, raw bytes", c.installer_raw, "the manifest's address: one number for the whole tree");
-        t += row("installer, in hex", c.installer_hex, "the same number written in hex");
+        t += row("Sieve instructions", c.installer_raw, "the .sieve: all of that as one number, its address, in raw bytes");
+        t += row("  the same, in hex", c.installer_hex, "that number written in hex");
     }
     return t;
 }

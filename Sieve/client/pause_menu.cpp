@@ -1,9 +1,13 @@
 // The pause menu: Esc in the hallway (with nothing in your hands) stops the world and offers the
-// ways out of it and the tools beside it. Resume; Restart, the setup menu over the hallway (F1); the Node Graph Viewer, which is listed so its
-// place is known but is not built yet; the Navigation System (the address navigator, also X); the
+// ways out of it and the tools beside it. Resume; Restart, the setup menu over the hallway (F1); the Node Graph Viewer
+// (node_graph.cpp, also O); the Navigation System (the address navigator, also X); the
 // File Locator (file_locator.cpp); Settings, the same screens as the main menu's, opened over the
 // hallway and returning to it; and Exit Sieve, which asks whether you mean the main menu or
 // leaving altogether.
+//
+// Every tool opened from here comes back to it when left (Esc): the node graph, the navigator (whose
+// ENTER goes to the address, and so out of the pause as well), the locator, Settings, and Restart's
+// setup menu when Esc there keeps this hallway.
 //
 // Settings and the main menu are not drawn by the hallway: it asks for them (request()) and ends
 // its loop, and the application opens them and, for Settings, comes back to the same hallway
@@ -22,7 +26,7 @@ struct PauseItem
 };
 
 constexpr PauseItem kPauseItems[] = {
-    {"resume", true}, {"restart", true}, {"graph", false}, {"navigator", true}, {"locator", true}, {"settings", true}, {"exit", true},
+    {"resume", true}, {"restart", true}, {"graph", true}, {"navigator", true}, {"locator", true}, {"settings", true}, {"exit", true},
 };
 constexpr int kPauseCount = int(sizeof kPauseItems / sizeof kPauseItems[0]);
 
@@ -56,16 +60,15 @@ void Hallway::pause_choose(int row, bool& quit)
     if (id == "resume") close_pause();
     else if (id == "restart")
     {
-        // The setup menu, as F1 opens it: Esc there comes back to this hallway as it was.
+        // The setup menu, as F1 opens it: Esc there comes back to this hallway as it was, and to
+        // this pause menu (back_from_menu).
         close_pause();
         menu_requested_ = true;
+        restart_from_pause_ = true;
         quit = true;
     }
-    else if (id == "navigator")
-    {
-        close_pause();
-        open_navigator();
-    }
+    else if (id == "graph") open_graph(); // over the pause menu, which is there again after it
+    else if (id == "navigator") open_navigator(); // over the pause menu: Esc comes back to it, ENTER goes
     else if (id == "locator") open_locator(); // over the pause menu, which is there again after it
     else if (id == "settings")
     {

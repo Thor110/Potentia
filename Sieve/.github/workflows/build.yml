@@ -346,12 +346,13 @@ jobs:
           echo "$out"
           echo "$out" | sed -n 1p | q "through the door into the IMAGE line"
           test "$(echo "$out" | tail -2 | book)" = "$here"
-          # Through a door, one tile along, back through the door there: one tile along in text.
-          out=$($H --warp "$W" --pose 0,7,-90,0 --walk "-2.3,0;-0.8,0;0,8;1.5,0" --screenshot loop.png)
+          # A door keeps your angle: 36.25% along pages is 36.25% along images; one tile along
+          # there and back through the door is still 36.25% (to the readout's ten places), on pages.
+          out=$($H --goto "36.25%" --pose 0,7,-90,0 --walk "-2.3,0;-0.8,0;0,8;1.5,0" --screenshot loop.png)
           echo "$out"
-          echo "$out" | tail -2 | sed -n 1p | q "PAGES line"
-          test "$(echo "$out" | tail -2 | book)" = "$next"
-          # Guided order: M cycles to it and - zooms out; every door keeps the corridor position.
+          echo "$out" | sed -n 1p | q "IMAGE line.* 36.2500000000% along"
+          echo "$out" | tail -2 | sed -n 1p | q "PAGES line.* 36.2500000000% along"
+          # Guided order: M cycles to it and - zooms out.
           $H --warp "$W" --press "M,M,-" --screenshot keys.png | tail -2 | sed -n 1p | q "PAGES line, guided zoom 57"
           # The address navigator: X opens the whole address, Home chooses its first digit, Up turns
           # it (carrying and wrapping), and ENTER goes there, far from where the walk started.
@@ -375,6 +376,10 @@ jobs:
           diff -r tests/manifest_fixture fx_prog
           build/sieve install fx-installer --to fx_prog2 > /dev/null
           diff -r tests/manifest_fixture fx_prog2
+          # The File Locator's Install from an installer, in the hallway: the same folder again.
+          rm -rf fx_gui
+          $H --no-menu --install fx.sieve --install-to fx_gui --screenshot locinstall.png | q "saved locinstall.png"
+          diff -r tests/manifest_fixture fx_gui
           test "$(wc -c < fx-installer)" = "$(( $(wc -c < build/sieve-install) + $(wc -c < fx.sieve) + 24 ))"
           rm -rf again && mkdir again && cp build/sieve again/ && cp fx-installer again/sieve-install
           again/sieve locate tests/manifest_fixture --program fx-again > /dev/null
@@ -388,8 +393,19 @@ jobs:
           # Go to it twice; the line is made long enough, positional, and only the room is kept.
           head -c 100000 /dev/urandom > big.bin
           $H --no-menu --binary-length 1000 --locate big.bin --press "Return,Return" --screenshot big.png | tail -2 | sed -n 1p | q "^BINARY line, positional"
+          # The node graph (O, and the pause menu's third row): the fixture's map, laid out; Tab to
+          # its third node (a.txt) and Enter walk to it on the binary line; and the item page's
+          # SORT tab knows a.txt for a verified anchor of that map, and anything else for a lone point.
+          $H --no-menu --map tests/manifest_fixture --graph --screenshot graph.png | q "saved graph.png"
+          $H --no-menu --binary-length 64 --map tests/manifest_fixture --graph --press "Tab,Tab,Tab,Return" --screenshot graph2.png | tail -2 | sed -n 1p | q "^BINARY line.* TXT 34 bytes"
+          $H --no-menu --binary-length 64 --map tests/manifest_fixture --locate tests/manifest_fixture/a.txt --press "Return,C,C" --screenshot sort.png | tail -2 | sed -n 1p | q "a verified anchor: node 2, a.txt, in manifest_fixture"
+          $H --no-menu --line binary --map tests/manifest_fixture --walk "0,0" --press "E,C,C" --screenshot sort2.png | tail -2 | sed -n 1p > sort2.txt
+          if grep -q "verified anchor" sort2.txt; then exit 1; fi
+          # (--warp starts with the item in your hands: the first Escape puts it down, the second pauses.)
+          $H --warp "$W" --press "Escape,Escape,Down,Down,Return" --screenshot pausegraph.png | q "saved pausegraph.png"
+          $H --no-menu --graph --screenshot installation.png | q "saved installation.png"
           # The pause menu (Esc): its fourth row is the Navigation System, which opens the navigator.
-          $H --warp "$W" --press "Escape,Down,Down,Down,Return,Escape" --screenshot pause.png | q "saved pause.png"
+          $H --warp "$W" --press "Escape,Escape,Down,Down,Down,Return,Escape" --screenshot pause.png | q "saved pause.png"
           out=$($H --warp "$W" --press "X,Home,Up,Return" --screenshot nav.png)
           echo "$out" | tail -2 | sed -n 1p | q "went to 1"
           if [ "$(echo "$out" | tail -2 | book)" = "$here" ]; then exit 1; fi
@@ -517,6 +533,13 @@ jobs:
           python sieve_ref.py manifest ../tests/manifest_fixture | cmp - fixture.manifest
           python sieve_ref.py manifest ../tests/manifest_fixture --addresses addr
           grep -q "7z (LZMA2" locate.out
+          # A map (sieve-map-v1) of the fixture is the oracle's to the byte, reads back to itself,
+          # and is written for other programs as DOT and as well-formed GraphML.
+          $S map ../tests/manifest_fixture --out fixture.map --dot fixture.dot --graphml fixture.graphml > /dev/null
+          python sieve_ref.py map ../tests/manifest_fixture | cmp - fixture.map
+          $S map fixture.map | cmp - fixture.map
+          grep -q '^digraph "manifest_fixture"' fixture.dot
+          python -c "import xml.dom.minidom as m; m.parse('fixture.graphml')"
           # A v2 manifest (every file's address listed) is the oracle's to the byte.
           $S locate ../tests/manifest_fixture --manifest fixture2.manifest --with-addresses > /dev/null
           python sieve_ref.py manifest ../tests/manifest_fixture --with-addresses | cmp - fixture2.manifest
@@ -531,6 +554,24 @@ jobs:
           rm -rf installed
           $S install fixture.sieve --to installed > /dev/null
           diff -r ../tests/manifest_fixture installed
+          # A single file's Sieve instructions: as a folder holding just it, the oracle's v3 manifest
+          # to the byte (seen through its address), installed back as the file under its name.
+          $S locate ../tests/manifest_fixture/a.txt --installer a.sieve > /dev/null
+          python sieve_ref.py manifest ../tests/manifest_fixture/a.txt --with-contents > a3.manifest
+          python -c "
+          import sys
+          o = open('a3.manifest', 'rb').read(); s = open('a.sieve', 'rb').read()
+          n = int.from_bytes(o, 'big') + int('01' * len(o), 16)
+          sys.exit(0 if n.to_bytes((n.bit_length() + 7) // 8, 'big') == s else 1)"
+          rm -rf one_file
+          $S install a.sieve --to one_file > /dev/null
+          cmp one_file/a.txt ../tests/manifest_fixture/a.txt
+          # An installer's manifest installs as it is too (it holds the files); a v1 manifest,
+          # which only lists them, is refused.
+          rm -rf installed3
+          $S install fixture3.manifest --to installed3 > /dev/null
+          diff -r ../tests/manifest_fixture installed3
+          if $S install fixture.manifest --to installed_v1 2> /dev/null; then exit 1; fi
           # An older installer, of a v2 manifest, still installs.
           python -c "
           import sys; sys.path.insert(0, '.')

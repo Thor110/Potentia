@@ -239,6 +239,18 @@ unbounded.
 about it and let its links be followed — a warp at the touch of a hyperlink. This is the feature
 that turns the hallway from a viewer into an archive, and it needs §4.1 first.
 
+**5.8a The node graph, first version: built** (27 September 2026, SPECIFICATIONS §12.3). Maps
+of verified anchors, one at a time, in 3D, and the item page's SORT tab. Edward's notes on where
+it goes next: maps shipped with a release or offered as optional downloads ("if you want map X,
+you get it"); relations beyond `contains` (versions, patches); nodes for items on the other lines;
+and anchors feeding the filters, so verified real content helps build heuristics that find
+meaningful content. A graph of the whole state space was considered and left out: it would be a
+tangle of noise, at the cost of a new limit in the setup menu. It can be added later if wanted.
+On directions like "anchor X, 1,000 rooms right, item 128": they cost as many bits as the
+distance, so they only reach near an anchor (in positional order, files that differ from it only
+in their last few bytes). Edges that are patches between versions are where a map saves real
+data.
+
 **5.8 The toroidal map.** A rotatable 3D overlay of the whole library: each line a ring, shaded
 with its own two colours, anchors as points, links as edges, the binary line as the inner and outer
 boundary. Needs 5.2 first, and needs there to be anchors to plot.

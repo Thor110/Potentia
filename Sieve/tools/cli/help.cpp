@@ -474,13 +474,31 @@ const std::vector<Page>& pages()
           {"sieve locate release --installer release.sieve --compare", "an installer for it, and its sizes"},
           {"sieve locate release --program release-setup.exe", "an installer program for it"}}},
 
+        {"map", "A map: a node graph of verified anchors, from a folder.",
+         "sieve map FOLDER|MAP.map [--out OUT.map] [--dot OUT.dot] [--graphml OUT.graphml] [--name NAME]",
+         "A map links real files to one another (sieve-map-v1): every file and folder in the\n"
+         "folder is a node, each file named by its size and SHA-256, and every folder is linked to\n"
+         "what is directly in it (the relation \"contains\"). A map holds no file's bytes, only which\n"
+         "bytes are meant, so it is small; where the file is on this computer and matches, its node\n"
+         "is a verified anchor, and the hallway's node graph (O) can walk to it on the binary line.\n"
+         "The text is canonical, so the same folder always gives the same map. A map can also be\n"
+         "written for other programs: Graphviz DOT, and GraphML (Gephi, yEd, Cytoscape). Given a\n"
+         "MAP file instead of a folder, it reads it and writes it in the forms asked for.",
+         {{"--out FILE", "Write the map here (else to standard output)."},
+          {"--dot FILE", "Write it as Graphviz DOT."},
+          {"--graphml FILE", "Write it as GraphML."},
+          {"--name NAME", "The map's name (default: the folder's)."}},
+         {{"sieve map release --out maps/release.map", "a map of a release, for the node graph"},
+          {"sieve map maps/release.map --graphml release.graphml", "the same map, for Gephi or yEd"}}},
+
         {"install", "Put a folder back from its installer: one address.",
-         "sieve install INSTALLER.sieve|PROGRAM.exe --to FOLDER [--force] [--hex]",
+         "sieve install INSTALLER.sieve|PROGRAM.exe|MANIFEST --to FOLDER [--force] [--hex]",
          "The command-line form of sieve-install. Reads the installer (the address of a\n"
          "sieve-manifest-v3 as raw bytes, made with sieve locate --installer; --hex for one written\n"
          "in hex) back into the manifest, and cuts every file from the bytes after its listing.\n"
          "(An older installer, of a v2 manifest, reads every file back from its address.) An\n"
-         "installer program made with --program installs the same way.\n"
+         "installer program made with --program installs the same way, and so does an installer's\n"
+         "manifest (v3) itself.\n"
          "Every file is checked against its size and SHA-256 before anything is written, so a bad\n"
          "address leaves the folder untouched. Files already there are refused unless --force.",
          {{"--to FOLDER", "Where to put the tree (required). Created if it is not there."},

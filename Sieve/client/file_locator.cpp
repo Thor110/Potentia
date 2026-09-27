@@ -27,6 +27,15 @@ std::string u8(const fs::path& p)
     return std::string(s.begin(), s.end());
 }
 
+// A single file's Sieve instructions, from the bytes already read: as a folder holding just it.
+cli::Manifest file_instructions(const fs::path& p, const std::vector<uint8_t>& bytes)
+{
+    cli::Manifest m = cli::manifest_of_file(p);
+    m.contents = bytes;
+    m.with_contents = true;
+    return m;
+}
+
 std::string head_tail(const std::string& h, size_t each)
 {
     return h.size() <= 2 * each + 3 ? h : h.substr(0, each) + "..." + h.substr(h.size() - each);
@@ -42,6 +51,18 @@ void SDLCALL save_to(void* user, const char* const* files, int)
 {
     if (!files || !files[0]) return;
     static_cast<Hallway*>(user)->locator_save_to(files[0]);
+}
+
+void SDLCALL install_from(void* user, const char* const* files, int)
+{
+    if (!files || !files[0]) return;
+    static_cast<Hallway*>(user)->locator_install_picked(0, files[0]);
+}
+
+void SDLCALL install_to(void* user, const char* const* files, int)
+{
+    if (!files || !files[0]) return;
+    static_cast<Hallway*>(user)->locator_install_picked(1, files[0]);
 }
 
 } // namespace
@@ -69,6 +90,44 @@ void Hallway::locator_save_to(const std::string& path)
 {
     std::lock_guard<std::mutex> lock(loc_mx_);
     loc_pending_save_ = path;
+}
+
+void Hallway::locator_install_picked(int step, const std::string& path)
+{
+    std::lock_guard<std::mutex> lock(loc_mx_);
+    loc_pending_install_ = std::make_pair(step, path);
+}
+
+// Install from an installer (a .sieve, an installer program, or an installer's manifest) into a
+// folder, on the worker, as sieve install does: every file checked before any is written, and
+// nothing replaced that is already there.
+void Hallway::locator_install(const std::string& from, const std::string& to, bool sync)
+{
+    if (loc_busy_) return;
+    if (loc_worker_.joinable()) loc_worker_.join();
+    loc_busy_ = true;
+    loc_status_ = trf("loc.installing", {to});
+    auto job = [this, from, to] {
+        std::string done;
+        try
+        {
+            const cli::Manifest m = cli::installable_manifest(from_u8(from), false);
+            cli::install_tree(m, from_u8(to), false, [this](int phase, size_t d, size_t t, const std::string& path) {
+                std::lock_guard<std::mutex> lock(loc_mx_);
+                loc_status_ = trf(phase == 0 ? "loc.install.checking" : "loc.install.writing", {std::to_string(d), std::to_string(t), path});
+            });
+            done = m.files == 1 ? trf("loc.installed.one", {to}) : trf("loc.installed", {std::to_string(m.files), to});
+        }
+        catch (const std::exception& e)
+        {
+            done = trf("loc.install_failed", {e.what()});
+        }
+        std::lock_guard<std::mutex> lock(loc_mx_);
+        loc_status_ = done;
+        loc_busy_ = false;
+    };
+    if (sync) job();
+    else loc_worker_ = std::thread(job);
 }
 
 // Reads and measures a file or folder on the worker. `sync`: here and now (scripted runs).
@@ -101,6 +160,15 @@ void Hallway::locator_analyse(const std::string& path, bool sync)
                 c.lzma2 = cli::lzma2_size(r.bytes);
                 c.address_bytes = (a.bit_length() + 7) / 8;
                 c.address_hex = a.is_zero() ? 0 : r.hex.size();
+                // Its Sieve instructions, as a folder's: its name, size and SHA-256, then its bytes.
+                r.manifest = cli::manifest_of_file(p);
+                const std::vector<uint8_t> mb = file_instructions(p, r.bytes).file();
+                const BigUint ma = cli::binary_address(mb);
+                c.manifest = mb.size();
+                c.manifest_deflate = cli::deflate_size(mb);
+                c.manifest_lzma2 = cli::lzma2_size(mb);
+                c.installer_hex = ma.is_zero() ? 1 : ma.to_hex().size();
+                c.installer_raw = (ma.bit_length() + 7) / 8;
             }
             else if (fs::is_directory(p))
             {
@@ -163,26 +231,14 @@ void Hallway::locator_save(const std::string& to)
         try
         {
             const fs::path out = from_u8(to);
-            if (r.kind == LocatorResult::File)
             {
-                cli::write_address_file(out, cli::binary_address(r.bytes), what == 1);
-                done = trf("loc.saved.address", {to});
-            }
-            else if (what == 2)
-            {
-                std::ofstream f(out, std::ios::binary);
-                f << r.manifest.text();
-                if (!f) throw std::runtime_error("cannot write " + to);
-                done = trf("loc.saved.manifest", {to});
-            }
-            else
-            {
-                cli::Manifest with = r.manifest;
-                cli::add_contents(with, from_u8(r.path));
+                // A file's instructions are a folder's holding just it (file_instructions).
+                cli::Manifest with = r.kind == LocatorResult::File ? file_instructions(from_u8(r.path), r.bytes) : r.manifest;
+                if (r.kind != LocatorResult::File) cli::add_contents(with, from_u8(r.path));
                 const BigUint address = cli::binary_address(with.file());
-                // Named .sieve: the installer on its own. Anything else: an installer program,
-                // sieve-install with the installer attached, one file to hand to someone.
-                if (out.extension() == ".sieve")
+                // The installer on its own (for anyone with Sieve: sieve install, or sieve-install),
+                // or an installer program, sieve-install with it attached, one file for anyone.
+                if (what == 4)
                 {
                     cli::write_address_file(out, address, false);
                     done = trf("loc.saved.installer", {to});
@@ -224,6 +280,11 @@ void Hallway::locator_go()
     const auto bytes = loc_result_.bytes;
     close_locator();
     if (pause_open_) close_pause();
+    walk_to_file(bytes, u8(from_u8(loc_result_.path).filename()), past);
+}
+
+void Hallway::walk_to_file(const std::vector<uint8_t>& bytes, const std::string& name, bool past)
+{
     if (past)
     {
         set_thin(true);
@@ -236,7 +297,7 @@ void Hallway::locator_go()
         drop_in_hand();
         set_line(kBinaryLine);
     }
-    const Space::Digits title = title_for_name(u8(from_u8(loc_result_.path).filename())); // its name is its title
+    const Space::Digits title = title_for_name(name); // its name is its title
     go_to_file(bytes, true, &title);
     message(trf(past ? "loc.went_past" : "msg.warped.file", {std::to_string(bytes.size())}));
 }
@@ -265,6 +326,7 @@ void Hallway::locator_event(const SDL_Event& e)
         case SDLK_ESCAPE: pressed = "close"; break;
         case SDLK_F: pressed = "file"; break;
         case SDLK_D: pressed = "folder"; break;
+        case SDLK_I: pressed = "install"; break;
         case SDLK_RETURN:
         case SDLK_KP_ENTER: pressed = loc_result_.kind == LocatorResult::File ? "go" : ""; break;
         default: break;
@@ -276,22 +338,30 @@ void Hallway::locator_event(const SDL_Event& e)
     else if (pressed == "file") SDL_ShowOpenFileDialog(picked, this, window_, nullptr, 0, nullptr, false);
     else if (pressed == "folder") SDL_ShowOpenFolderDialog(picked, this, window_, nullptr, false);
     else if (pressed == "go") locator_go();
+    else if (pressed == "install")
+    {
+        // First the installer, then (install_from, below in draw_locator) the folder to put it in.
+        static const SDL_DialogFileFilter kFrom[] = {{"Sieve instructions", "sieve"}, {"Installer program", "exe"}};
+        SDL_ShowOpenFileDialog(install_from, this, window_, kFrom, 2, nullptr, false);
+    }
     else
     {
-        // A save: 1 the address (hex), 2 the manifest, 3 the installer: an installer program by
-        // default (sieve-install with it attached), or on its own if named .sieve.
-        loc_save_what_ = pressed == "save_address" ? 1 : pressed == "save_manifest" ? 2 : 3;
+        // A save, for a file as for a folder: 3 an installer program (sieve-install with the
+        // instructions attached), 4 the Sieve instructions on their own (.sieve: for anyone who
+        // has Sieve).
+        loc_save_what_ = pressed == "save_program" ? 3 : 4;
         const fs::path from = from_u8(loc_result_.path);
 #ifdef _WIN32
         const char* program = " installer.exe";
 #else
         const char* program = "-installer";
 #endif
-        const std::string name = u8(from.filename()) + (loc_save_what_ == 1 ? ".hex" : loc_save_what_ == 2 ? ".manifest" : program);
+        const std::string name = u8(from.filename()) + (loc_save_what_ == 3 ? program : ".sieve");
         const std::string start = u8(from.parent_path() / from_u8(name));
-        static const SDL_DialogFileFilter kInstaller[] = {{"Installer program", "exe"}, {"Sieve installer (needs sieve-install)", "sieve"}};
-        SDL_ShowSaveFileDialog(save_to, this, window_, loc_save_what_ == 3 ? kInstaller : nullptr, loc_save_what_ == 3 ? 2 : 0,
-                               start.c_str());
+        static const SDL_DialogFileFilter kProgram[] = {{"Installer program", "exe"}};
+        static const SDL_DialogFileFilter kSieve[] = {{"Sieve instructions", "sieve"}};
+        const SDL_DialogFileFilter* filter = loc_save_what_ == 3 ? kProgram : loc_save_what_ == 4 ? kSieve : nullptr;
+        SDL_ShowSaveFileDialog(save_to, this, window_, filter, filter ? 1 : 0, start.c_str());
     }
 }
 
@@ -307,6 +377,18 @@ void Hallway::draw_locator(float W, float H)
         }
         if (pick) locator_analyse(*pick);
         if (save) locator_save(*save);
+        std::optional<std::pair<int, std::string>> inst;
+        {
+            std::lock_guard<std::mutex> lock(loc_mx_);
+            inst.swap(loc_pending_install_);
+        }
+        if (inst && inst->first == 0)
+        {
+            loc_install_src_ = inst->second;
+            loc_status_ = trf("loc.install.where", {inst->second});
+            SDL_ShowOpenFolderDialog(install_to, this, window_, nullptr, false);
+        }
+        else if (inst && inst->first == 1 && !loc_install_src_.empty()) locator_install(loc_install_src_, inst->second);
     }
     const SDL_Color ink = theme().edge, grey{150, 150, 150, 255}, white{255, 255, 255, 255}, red{255, 80, 80, 255};
     SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
@@ -331,6 +413,7 @@ void Hallway::draw_locator(float W, float H)
     const bool busy = loc_busy_;
     button("file", tr("loc.choose_file"), 76, !busy);
     button("folder", tr("loc.choose_folder"), 76, !busy);
+    button("install", tr("loc.install"), 76, !busy);
     float y = 126;
     std::string status;
     {
@@ -384,16 +467,14 @@ void Hallway::draw_locator(float W, float H)
         }
         y += 14;
         bx = 20;
-        if (r.kind == LocatorResult::File)
-        {
-            button("go", tr("loc.go"), y);
-            button("save_address", tr("loc.save_address"), y);
-        }
-        else
-        {
-            button("save_manifest", tr("loc.save_manifest"), y);
-            button("save_installer", tr("loc.save_installer"), y);
-        }
+        // A file can be walked to. A file or a folder can be saved as Sieve instructions (the
+        // .sieve: its listing and its files, as one number) for anyone who has Sieve, or as an
+        // installer program for anyone; a file exactly as a folder holding just it. The listing on
+        // its own (the manifest) is for the tools and the command line (sieve locate --manifest),
+        // and a file's bare address for the command line (sieve locate FILE --out).
+        if (r.kind == LocatorResult::File) button("go", tr("loc.go"), y);
+        button("save_sieve", tr("loc.save_sieve"), y);
+        button("save_program", tr("loc.save_program"), y);
     }
     if (!status.empty()) text(20, H - 58, fit(status, W - 40, 1), 1, busy ? white : ink);
     text(20, H - 26, fit(tr("loc.keys"), W - 40, 1), 1, grey);

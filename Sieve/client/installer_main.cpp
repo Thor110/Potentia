@@ -122,13 +122,14 @@ struct Installer
         error.clear();
         try
         {
-            const auto attached = attached_address(file);
-            manifest = manifest_of_installer(attached ? *attached : read_address_file(file, false));
+            manifest = installable_manifest(file, false); // an installer, a program, or a v3 manifest
             screen = Screen::Ready;
-            // Where it goes unless you say otherwise: a folder of its own name in your documents.
+            // Where it goes unless you say otherwise: a folder of its own name in your documents;
+            // a single file (Sieve instructions for one file), into your documents themselves.
             const char* docs = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
             const fs::path base = docs ? from_u8(docs) : fs::current_path();
-            dest = u8(base / from_u8(manifest->root));
+            const bool one_file = manifest->entries.size() == 1 && !manifest->entries[0].dir && manifest->entries[0].path == manifest->root;
+            dest = one_file ? u8(base) : u8(base / from_u8(manifest->root));
         }
         catch (const std::exception& e)
         {

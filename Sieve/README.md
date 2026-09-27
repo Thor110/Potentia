@@ -134,7 +134,7 @@ All five lines (the four unit lines and books) share **one endless corridor** li
 - **Power-of-two sizes:** a line whose size is a power of two (at least 128) fills its tiles exactly. When every line's size is a power of two, the loops nest.
 - **Checking the fit:** `sieve info` tells you how a line fits.
 - **The start line:** where each copy begins, a **checkered start line** crosses the floor.
-- **The double flag:** where all five lines start together, the start line is doubled: two strips on the floor, a metre apart. That is always so at corridor tile 0, where **Home** takes you.
+- **The double flag:** the start of the line you are on, where every line starts together (a door keeps your angle, and 0 is 0 on every line): two strips on the floor, a metre apart. **Home** takes you there.
 
 **Titles and covers.** Every item on the pages, image, audio, video and models lines has a title, and audio and video items have a cover picture as well, as books do. The title length is a GLOBAL setting in the setup menu (`--title-length`, default 32):
 - A titled unit's address covers its cover, its title and its content, so a titled line is larger than the bare one. Neighbours in positional order share a title and differ in their content.
@@ -194,7 +194,9 @@ Its shelves hold **every file up to N bytes long**, the empty file first (BINARY
 
 The rain only ever falls as characters the font can actually draw, so it never becomes rows of question marks: with Sieve's own `sieve8x8` it is Latin and Greek, and with **Unifont** it is most of Unicode. Unifont is not stored in this repository — it is GPLv2+ while Sieve's own font is public domain, and a project should pick its own licences — so `python tools/fetch_unifont.py` fetches it into `data/fonts/unifont.hex`, each part checked against a pinned SHA-256, exactly as `fetch_corpus.py` fetches the training corpus. Name it on a language file's first line (`font = unifont`) to use it. The rain is redrawn every third frame into one texture and mapped onto the opening with the same perspective grid the crates use, so it lies in the world rather than facing you; each tile takes two of the texture's four panels, side by side, so the glyphs stay about square and the corridor does not repeat as you walk. It costs about 5 ms a frame with the software renderer, nearly all of it the alpha blend, and far less with a real one.
 
-**The item page, and what a thing costs to name.** Take something off a shelf and the page has two tabs: **ITEM**, the thing itself, and **COST**, what it costs to name it. **C** moves between them.
+**The item page, and what a thing costs to name.** Take something off a shelf and the page has three tabs: **ITEM**, the thing itself; **COST**, what it costs to name it; and **SORT**, where it stands in a map (below). **C** moves between them.
+
+**SORT, and maps.** A map (`sieve map FOLDER`, or the node graph's "Make a map from a folder...") links real files and folders, each file named by its SHA-256. It holds no file's bytes, so it is small and can be handed round or bundled with a release. On the SORT tab, a file on the binary line whose bytes a node of the chosen map names is that node, a verified anchor, drawn in its place among the rest; anything else is a lone point. Mouse or A/D turns the graph; [ and ] choose another map.
 
 Every row on the COST tab is the same number written a different way, which is the point:
 
@@ -209,7 +211,7 @@ The first three are the same length because an address in a bijection *is* the c
 
 Below that: the shape spec that has to travel with an address to mean anything, with its own length in characters — often as long as the address itself — and the address's length written in hex, base32, base64 and base85, which is the measurement behind the question of how a key should travel.
 
-**The compass.** Every line is a loop, so where you stand in one is a bearing as well as a percentage. In the corner of the hallway the corridor is drawn as concentric circles — binary outermost, the six lines it bounds, binary again innermost — with a needle at your angle on the line you are on, and a mark on every other ring at its own angle. The bearing is written out underneath to as many decimal places as **Angle Precision** in the setup menu's GLOBAL section asks for (0–8).
+**The compass.** Every line is a loop, so where you stand in one is a bearing as well as a percentage. In the corner of the hallway the corridor is drawn as concentric circles — binary outermost, the six lines it bounds, binary again innermost — with a needle at your angle on the line you are on, and a mark on every other ring where you last stood on that line (0° until you have been there). A door takes you to the same angle on the next line, so going through one lines the next ring's mark up with the needle; stepping straight back returns you exactly to where you were, and several doors in a row unwind in turn. The bearing is written out underneath to as many decimal places as **Angle Precision** in the setup menu's GLOBAL section asks for (0–8).
 
 Zero is at the top, and zero is the same place for every line: corridor tile 0, where all of them begin a copy together and the start line on the floor is doubled. Walk away from it and the marks fan apart, because the lines loop at different rates — the same corridor tile is a different distance into each line's own loop, and the shorter a line's loop the faster its mark comes back round. So the spread between the marks is how differently sized the state spaces are, read at a glance. The measure is in units, not tiles, so it is exactly the number the percentage shows: three tiles into a six-tile loop of 729 units is 384/729 of the way along, which is 189.6°, not 180°.
 
@@ -351,7 +353,8 @@ A door **keeps your corridor position** and only changes which line reads it:
 | G | **Go to** a hex address or a percentage such as `50%` or `36.25%` (these open the book too), or `@T` for corridor tile T |
 | (doors) | Every doorway has a sign over it naming the line it leads to, in that line's colours |
 | F1 | The **setup menu**, over the hallway: Esc goes back to the hallway as it was, ENTER THE HALLWAY walks into a new one with the new settings |
-| Esc | **Pause**: Resume, Navigation System, **File Locator** (a file's place or a folder's manifest, compared with zip and 7z; go to a file on the binary line; save a manifest or make an installer), Settings (the main menu's, over the hallway), Exit Sieve (to the main menu, or out). The Node Graph Viewer is listed but not built yet. With something in your hands, Esc puts it down first |
+| Esc | **Pause**: Resume, Navigation System, **File Locator** (a file's place or a folder's manifest, compared with zip and 7z; go to a file on the binary line; save Sieve instructions (`.sieve`, for anyone with Sieve) or make an installer program (for anyone); install from Sieve instructions), Settings (the main menu's, over the hallway), Exit Sieve (to the main menu, or out). **Node Graph Viewer** (as O). Every tool opened from the pause menu (Restart's setup menu included) comes back to it with Esc. With something in your hands, Esc puts it down first |
+| O | **Node graph**: maps of verified anchors in 3D. Choose a map from the dropdown (**This installation**, the maps in `maps/`, or open or make one from a folder); drag or the arrows turn it, the wheel zooms, click or Tab chooses a node, Enter or a double click walks to a file on the binary line; Export writes GraphML or DOT for other programs |
 | X | **Address navigator**: the whole address of the item you are looking at, full screen, one hex digit at a time. Left/Right (Shift: a row) choose a digit, Up/Down, the wheel or the arrows turn it, carrying and wrapping round the line; type 0-9 a-f to set it; ENTER goes there, Esc leaves |
 | N / B | Next or previous unit of a warp that made a trail of several units |
 | M | Switch ordering: positional → scrambled → guided (text) → positional |
@@ -658,6 +661,16 @@ sieve locate release --manifest release.manifest --addresses release.addresses -
 ```
 
 A file's place on the binary line is its hex dump plus `0101...01`, one `01` per byte, whatever the line's length setting: the file's name in the space, with its SHA-256 as a short identity. A folder is walked to the bottom and written as a manifest: every folder and file, each file's size and SHA-256, sorted by path, in one canonical text, so the same tree always gives the same manifest and the manifest's SHA-256 names the whole tree. `--compare` sets the original size beside zip's deflate and 7z's LZMA2 (at their strongest, without the archives' headers) and the address, as shares of the original. The address is always 100% of the file, since addressing is not compression; the compressors' figures are upper bounds on how far the data can be reduced.
+
+### `map`: a node graph of verified anchors
+
+```sh
+sieve map release --out maps/release.map            # a map of a folder, for the node graph
+sieve map maps/release.map --graphml release.graphml # the same map for Gephi, yEd or Cytoscape
+sieve map release --dot release.dot                  # or for Graphviz
+```
+
+Every file and folder is a node, each file named by its size and SHA-256; every folder is linked to what is directly in it. Put a map in `maps/` beside the hallway and the node graph (O) lists it.
 
 ### `install`: a folder from one address
 

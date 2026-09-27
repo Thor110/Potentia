@@ -15,6 +15,7 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
     python3 sieve_ref.py titled-vectors > ../tests/vectors_titled_v1.tsv
     python3 sieve_ref.py binary-vectors > ../tests/vectors_binary_v1.tsv
     python3 sieve_ref.py manifest ../tests/manifest_fixture [--addresses DIR] [--with-addresses | --with-contents]   # sieve-manifest-v1/v2/v3
+    python3 sieve_ref.py map ../tests/manifest_fixture                # sieve-map-v1
     python3 sieve_ref.py image-vectors  > ../tests/vectors_image_v1.tsv
     python3 sieve_ref.py guided-vectors > ../tests/vectors_guided_v1.tsv
     python3 sieve_ref.py filter-vectors > ../tests/vectors_filters_v1.tsv
@@ -1786,7 +1787,11 @@ def cmd_manifest(args):
     import os
     root = os.path.abspath(args.folder)
     entries, files, total = [], 0, 0
-    for here, dirs, names in os.walk(root, followlinks=False):
+    if os.path.isfile(root):
+        # A single file: as a folder holding just it, the root named after the file (§12.2).
+        data = open(root, "rb").read()
+        entries, files, total = [(os.path.basename(root), data)], 1, len(data)
+    for here, dirs, names in ([] if os.path.isfile(root) else os.walk(root, followlinks=False)):
         for d in list(dirs):
             full = os.path.join(here, d)
             if os.path.islink(full):
@@ -1828,6 +1833,44 @@ def cmd_manifest(args):
         for _, data in entries:
             if data is not None:
                 sys.stdout.buffer.write(data)
+
+
+def cmd_map(args):
+    """sieve-map-v1 (SPECIFICATIONS §12.3), from its definition: the folder's root node './', then
+    every folder ('/' at the end) and file (size, SHA-256) by its path's bytes, links skipped; each
+    node but the root is contained by the folder its path is in; edges sorted by from, then to."""
+    import os
+    root = os.path.abspath(args.folder)
+    items = []
+    for here, dirs, names in os.walk(root, followlinks=False):
+        for d in list(dirs):
+            full = os.path.join(here, d)
+            if os.path.islink(full):
+                dirs.remove(d)
+                continue
+            items.append((os.path.relpath(full, root).replace(os.sep, "/") + "/", None))
+        for n in names:
+            full = os.path.join(here, n)
+            if os.path.islink(full) or not os.path.isfile(full):
+                continue
+            items.append((os.path.relpath(full, root).replace(os.sep, "/"), open(full, "rb").read()))
+    items.sort(key=lambda e: e[0].encode("utf-8"))
+    ids = {"": 0}
+    nodes = ["n\t0\tfolder\t./"]
+    edges = []
+    for i, (path, data) in enumerate(items, start=1):
+        if data is None:
+            nodes.append(f"n\t{i}\tfolder\t{path}")
+            ids[path[:-1]] = i
+        else:
+            nodes.append(f"n\t{i}\tfile\t{len(data)}\t{hashlib.sha256(data).hexdigest()}\t{path}")
+        bare = path[:-1] if path.endswith("/") else path
+        edges.append((ids[bare.rsplit("/", 1)[0] if "/" in bare else ""], i))
+    edges.sort()
+    name = os.path.basename(root)
+    out = ["sieve-map-v1", f"name {name}", f"root {name}", f"nodes {len(nodes)}", f"edges {len(edges)}"] + nodes
+    out += [f"e\t{a}\t{b}\tcontains" for a, b in edges] + ["end"]
+    sys.stdout.buffer.write(("\n".join(out) + "\n").encode("utf-8"))
 
 
 def cmd_book_filter_vectors(_args):
@@ -1936,6 +1979,8 @@ def main():
     s.add_argument("--addresses")
     s.add_argument("--with-addresses", action="store_true")
     s.add_argument("--with-contents", action="store_true")
+    s = sub.add_parser("map")
+    s.add_argument("folder")
     sub.add_parser("book-filter-vectors")
     s = sub.add_parser("book-read")
     s.add_argument("book")
@@ -1977,6 +2022,8 @@ def main():
         cmd_binary_vectors(args)
     elif args.cmd == "manifest":
         cmd_manifest(args)
+    elif args.cmd == "map":
+        cmd_map(args)
     elif args.cmd == "book-vectors":
         cmd_book_vectors(args)
     elif args.cmd == "book-filter-vectors":

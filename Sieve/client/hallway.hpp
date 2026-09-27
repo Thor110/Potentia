@@ -38,6 +38,7 @@
 
 #include "cli/args.hpp"
 #include "cli/book.hpp"
+#include "cli/map.hpp"
 #include "cli/filter_config.hpp"
 #include "cli/image_io.hpp"
 #include "cli/lines.hpp"
@@ -783,6 +784,16 @@ public:
 
     bool menu_requested() const { return menu_requested_; }
     void clear_menu_request() { menu_requested_ = false; } // back from the setup menu without a new hallway
+    // Back from the setup menu to this hallway: to the pause menu if Restart Sieve opened it
+    // (true: the pointer is then free), else to walking.
+    bool back_from_menu()
+    {
+        menu_requested_ = false;
+        if (!restart_from_pause_) return false;
+        restart_from_pause_ = false;
+        open_pause();
+        return true;
+    }
     ~Hallway();
     void release_textures();
     void set_controls(int sensitivity_percent, bool invert_y);
@@ -869,7 +880,17 @@ private:
     BigUint loop_tile_;   // tile_ mod loop_.tiles()
     LineLoop all_loops_[kLines] = {LineLoop(BigUint(1)), LineLoop(BigUint(1)), LineLoop(BigUint(1)), LineLoop(BigUint(1)),
                                    LineLoop(BigUint(1)), LineLoop(BigUint(1)), LineLoop(BigUint(1))};
-    BigUint all_loop_tiles_[kLines];
+    BigUint all_loop_tiles_[kLines]; // where you last stood on each line (the current: where you are)
+    // The doors you came through since you last moved, so that going straight back returns
+    // exactly: each time, you came from `to_tile` of `to_line` to `on_tile` of `on_line`.
+    struct DoorBack
+    {
+        int to_line = 0;
+        BigUint to_tile;
+        int on_line = 0;
+        BigUint on_tile;
+    };
+    std::vector<DoorBack> door_back_;
     double line_fraction_[kLines] = {}; // how far along each line you stand; see refresh_labels()
     std::unordered_map<int64_t, Book> cache_;
     std::optional<BookSlot> hover_;
@@ -884,9 +905,12 @@ private:
 public:
     void open_locator();
     void locate_now(const std::string& path); // scripted: open on it, measured at once
+    void install_now(const std::string& from, const std::string& to) { open_locator(); locator_install(from, to, true); }
     // From the system dialogs' callbacks (any thread): what was chosen, handed to the next frame.
     void locator_picked(const std::string& path);
     void locator_save_to(const std::string& path);
+    void locator_install_picked(int step, const std::string& path); // 0 the installer, 1 where
+    void locator_install(const std::string& from, const std::string& to, bool sync = false);
 
 private:
     struct LocatorResult
@@ -910,10 +934,79 @@ private:
     LocatorResult loc_result_;
     std::string loc_status_;
     std::optional<std::string> loc_pending_pick_, loc_pending_save_;
+    std::optional<std::pair<int, std::string>> loc_pending_install_;
+    std::string loc_install_src_; // the installer chosen, while its folder is being chosen
     int loc_save_what_ = 0;
     bool loc_go_armed_ = false; // Go to it pressed once for a file past the BINARY length
     float loc_mx_pos_ = -1, loc_my_pos_ = -1;
     std::vector<std::pair<SDL_FRect, std::string>> loc_buttons_;
+    // Onto the binary line, in front of a file you have (the locator's Go to it, a map node's):
+    // its name as its title. `past`: longer than the BINARY length, so the line is made to fit.
+    void walk_to_file(const std::vector<uint8_t>& bytes, const std::string& name, bool past);
+
+    // ---- the node graph (node_graph.cpp): maps of verified anchors, O or the pause menu, and
+    // the item page's SORT tab
+public:
+    void open_graph();
+    // Scripted (--map PATH): a map file or a folder, loaded (or made) at once and chosen; with the
+    // viewer open if `open`, its layout settled so a screenshot shows it laid out.
+    void graph_map_now(const std::string& path, bool open);
+    // From the system dialogs' callbacks (any thread).
+    void graph_picked(int what, const std::string& path);
+
+private:
+    struct GraphMap
+    {
+        std::string title;            // as the list shows it
+        std::filesystem::path file;   // the .map it was read from (empty: made here)
+        std::filesystem::path root;   // where its root folder is on this computer
+        bool installation = false;    // "This installation": made from the program's own folder
+        bool ready = false;           // loaded or made (a map being made is not yet)
+        std::string error;
+        cli::Map map;
+        std::vector<std::vector<uint32_t>> adj;  // neighbours, either way along an edge
+        std::vector<uint8_t> present;            // a file node's file is here, at its size
+        std::vector<int8_t> verified;            // -1 not yet checked, 0 no, 1 its SHA-256 matches
+        std::unordered_map<std::string, uint32_t> by_sha; // a file's SHA-256 to its (first) node
+        std::vector<Vec3> pos, vel;              // the layout
+        int steps = 0;                           // layout steps taken
+        void prepare();                          // the above, from the map
+    };
+    void graph_list();                  // what the dropdown offers, found once
+    void graph_select(int i);
+    GraphMap* graph_current();
+    bool graph_step(GraphMap& g, int budget); // a few layout steps; false once settled
+    // The graph drawn into `area`, turned by yaw and pitch, around `focus` (or the whole map);
+    // returns the node under (mx, my), or -1. `lone`: only a single point, for an item in no map.
+    int draw_graph(GraphMap* g, SDL_FRect area, float yaw, float pitch, float zoom, int focus, bool lone, float mx, float my);
+    void graph_event(const SDL_Event& e);
+    void draw_graph_view(float W, float H);
+    void draw_sort(const Book& bk, float x, float cy, float pw, float bottom);
+    int sort_node(const Book& bk);      // the item in hand as a node of the current map, or -1
+    void graph_go(int node);
+    void graph_export(const std::string& to);
+    void graph_make(const std::string& folder, bool sync = false);
+    void graph_poll(); // what the worker and the dialogs have handed over
+    void close_graph();
+    void stop_graph();
+    bool graph_open_ = false;
+    bool graph_listed_ = false;
+    std::vector<GraphMap> graphs_;
+    int graph_sel_ = 0;
+    float graph_yaw_ = 0.6f, graph_pitch_ = 0.3f, graph_zoom_ = 1.0f;
+    float sort_yaw_ = 0.6f, sort_pitch_ = 0.3f;
+    int graph_hot_ = -1, graph_pick_ = -1;
+    bool graph_drop_ = false, graph_drag_ = false, graph_go_armed_ = false;
+    float graph_mx_ = -1, graph_my_ = -1, graph_down_x_ = 0, graph_down_y_ = 0;
+    std::vector<std::pair<SDL_FRect, std::string>> graph_buttons_;
+    std::string graph_status_;
+    // Making a map (walking and hashing a folder) runs on a worker; its result is handed over.
+    std::thread graph_worker_;
+    std::atomic<bool> graph_busy_{false};
+    std::mutex graph_lock_;
+    std::optional<GraphMap> graph_made_;
+    std::optional<std::pair<int, std::string>> graph_pending_;
+    std::unordered_map<std::string, std::string> sort_sha_; // a binary item's index (hex) to its file's SHA-256
 
     // ---- the pause menu (pause_menu.cpp): Esc, with nothing in your hands
 public:
@@ -960,6 +1053,7 @@ private:
     std::string message_;
     Uint64 message_until_ = 0;
     bool menu_requested_ = false;
+    bool restart_from_pause_ = false; // the setup menu was opened by the pause menu's Restart
     float look_ = 0.0025f; // radians per pixel of mouse movement
     float wheel_ = 0;      // mouse wheel movement not yet turned into whole tiles
     std::string filter_status_;

@@ -54,13 +54,30 @@ From the command line:
 sieve locate RELEASE --program "Release installer.exe"   # an installer program: one file to hand out
 sieve locate RELEASE --installer release.sieve           # the installer on its own
 sieve locate RELEASE --installer release.sieve --compare # and the sizes beside zip and 7z
+sieve locate Release.7z --installer release.sieve        # a single file works the same way
 ```
 
 `--program` needs `sieve-install` beside `sieve`, which is where the build puts it. Make
 installer programs from a **Release** build: a Debug `sieve-install` is several times larger.
 
-In the hallway, open the **File Locator** from the pause menu, choose the folder, and use **Make an
-installer...** It makes an installer program unless you give the file a `.sieve` name.
+In the hallway, open the **File Locator** from the pause menu and choose the folder, or a single
+file: a file is handled exactly as a folder holding just that file, and installs as that file,
+under its name. Then:
+
+- **Save Sieve instructions...** gives the `.sieve` on its own: the folder's size plus a few
+  hundred bytes. Send this to anyone who already has Sieve.
+- **Make an installer program...** gives a single program that anyone can run.
+
+The folder's listing on its own (its manifest: names, sizes and SHA-256s) is part of the
+instructions and is for the tools. The command line still writes it (`sieve locate FOLDER
+--manifest OUT`), for checking a copy of a folder.
+
+## What to send
+
+| Send | Size | They need |
+|---|---|---|
+| an installer program | sieve-install + the folder + a few hundred bytes | nothing |
+| Sieve instructions (`.sieve`) | the folder + a few hundred bytes | Sieve (`sieve`, `sieve-install` or the hallway) |
 
 ## Installing
 
@@ -69,7 +86,10 @@ installer...** It makes an installer program unless you give the file a `.sieve`
 - **A `.sieve` file:** put it beside `sieve-install` and run that (it opens the one `.sieve` beside
   it), drop the file on its window, or open the file with it.
 - **From the command line:** `sieve install NAME.sieve --to FOLDER`, which also accepts an
-  installer program. Add `--force` to replace files that are already there.
+  installer program, or an installer's manifest (`sieve-manifest-v3`) itself. Add `--force` to
+  replace files that are already there.
+- **In the hallway:** the File Locator's **Install from Sieve instructions...** (or I) takes a
+  `.sieve` or an installer program, then asks for the folder to put it in.
 - **Unattended:** `sieve-install NAME.sieve --to FOLDER --yes` installs and exits, returning 0 on
   success.
 

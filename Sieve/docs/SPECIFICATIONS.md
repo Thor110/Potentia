@@ -243,10 +243,11 @@ Doors connect the lines in order, and the binary line (§12.1) is the end of the
 
 ### 7.1 Mapping
 
-A door keeps the reader's **corridor position** (§5.1) and changes only the line that reads it. On the target line, the reader stands in the same tile and faces the same slot, which holds whatever unit that line has there: its tile `t mod ⌈M / 128⌉`.
+A door keeps the reader's **angle**: the same share of the way round the line's loop. From tile `t` of line A's loop of `T_A` tiles, the reader arrives at tile `⌊t · T_B / T_A⌋` of line B's loop of `T_B` tiles, computed exactly, so it is the same place round the circle to the full precision of the shorter loop. The reader faces the same slot, and the starts coincide (tile 0 is tile 0 on every line).
 
-- Every door lines up with a door in every other line, at every tile. Going through a door, walking `k` tiles and going back through the door there puts the reader `k` tiles along from where they left. Stepping straight back through the same door returns them exactly, with nothing to remember.
-- Lines of different sizes repeat at different rates, so many places on a large line share one unit of a smaller line, and the reverse. Sizes can change without breaking any door. When sizes are powers of two, the repeats nest.
+- Every line keeps its own place. Walking and jumping move only the line the reader is on, and every other line keeps the place the reader last stood on it: 0 until visited.
+- A shorter line cannot hold every place of a longer one. So **stepping straight back** through a door, without having moved, returns the reader to exactly the tile they left, not the nearest. Doors taken in a row unwind in turn: the hallway keeps a stack of the doors taken since the reader last moved.
+- *Superseded (September 2026):* doors used to keep the corridor tile itself (`t mod ⌈M / 128⌉` on the target line). On a longer line that is nearly always about 0°, and on a shorter one it wraps to an unrelated angle, which is not "the same place on the other line".
 - Doors sit in the walls: the left wall's doors lead to the next line in the cycle, the right wall's to the previous one. The reader comes in through the opposite wall's door.
 - Doors do not preserve the fraction along a line. An earlier design mapped `b = ⌊a × M / N⌋`, but moving one tile on a small line then jumped astronomically on a large one, so walking between lines was not navigable.
 
@@ -509,13 +510,42 @@ Paths are relative to the root, UTF-8, with `/` between their parts; a folder's 
 
 **Address listings (`sieve-manifest-v2`).** v1 with every file's address in it, in hex, between its SHA-256 and its path: `f<TAB><size><TAB><sha256><TAB><address><TAB><path>`, the empty file's address written `0` (`--with-addresses`). Two hex digits a byte, so it is more than twice the tree's size. Installers were first made from v2, which made each one twice as large as it need be; they are made from v3 now, and a v2 installer still installs.
 
-**Installers (`sieve-manifest-v3`).** An installer's manifest is the v1 text with `sieve-manifest-v3` as its first line, and then, straight after `end` and its line feed, the **raw bytes of every file**, one after another in the listing's order, with nothing between them and nothing after: the sizes in the listing say where each file ends, and the bytes must add up to the `bytes` line exactly. It carries the whole tree at its own size plus the listing, which is the least an address of the tree can be without compressing first. Its own address — one number — is the installer: `sieve install` reads that number back into the manifest, cuts every file from the bytes after the listing (for a v2 manifest, reads every address back into its file), checks each against its size and SHA-256 before writing anything, and refuses paths that are absolute, name a drive, use a backslash, or have a part that is `.` or `..`. The oracle writes the same v2 and v3 manifests from this definition (`--with-addresses`, `--with-contents`).
+**Installers (`sieve-manifest-v3`).** An installer's manifest is the v1 text with `sieve-manifest-v3` as its first line, and then, straight after `end` and its line feed, the **raw bytes of every file**, one after another in the listing's order, with nothing between them and nothing after: the sizes in the listing say where each file ends, and the bytes must add up to the `bytes` line exactly. It carries the whole tree at its own size plus the listing, which is the least an address of the tree can be without compressing first. Its own address — one number — is the installer: `sieve install` reads that number back into the manifest, cuts every file from the bytes after the listing (for a v2 manifest, reads every address back into its file), checks each against its size and SHA-256 before writing anything, and refuses paths that are absolute, name a drive, use a backslash, or have a part that is `.` or `..`. The oracle writes the same v2 and v3 manifests from this definition (`--with-addresses`, `--with-contents`). **A single file** has Sieve instructions exactly as a folder holding just it would: a v3 manifest whose root is the file's name and whose one entry is the file, then its bytes (`sieve locate FILE --installer`, `--program`). It installs as that file, under its name, checked against its SHA-256. The listing costs a little over a hundred bytes; a file's bare address (`--out`, in hex) saves those but carries neither its name nor any check, since every number is some file. In the hallway, an installer (the `.sieve`) is called **Sieve instructions**, and the manifest is not offered on its own: it is part of the instructions, for the tools.
 
 **Installer files.** An installer is its manifest's address stored as **raw bytes**: the number in base 256, most significant byte first, with no header, conventionally named `<name>.sieve`. It is exactly as long as the manifest, or one byte longer when adding `0101...01` carries past the first byte, and it reads as the manifest with every byte one higher (`sieve-manifest-v3` begins `tjfwf.nbojgftu.w4`). `--hex` writes and reads the same number in hex instead, at twice the size. `sieve-install` is the installer program: it opens a `.sieve` file, asks where, checks every file, writes them, and on Cancel removes what it wrote.
 
 **Installer programs.** An installer program is a copy of `sieve-install` with an installer attached to its end: the program's own bytes, then the installer's raw bytes, then their count as 8 bytes, least significant first, then the 16 ASCII bytes `sieve-attached-1`. Attaching to a program that already ends in such a trailer replaces what was attached. `sieve-install` run without a file named looks at its own end first; `sieve install` accepts a program as its installer.
 
 **Comparison.** `sieve locate --compare` sets beside the original size what zip's compressor (deflate, zlib level 9, each file on its own) and 7z's (LZMA2, preset 9 extreme, a folder as one solid stream) make of it, without their archives' headers, and the address as a number and in hex, each as a share of the original. The address is never smaller than the file: addressing is not compression. A compressor's figure is an upper bound on how far the data can be reduced, never the limit itself, which (its Kolmogorov complexity) no program can compute.
+
+### 12.3 Maps: node graphs of verified anchors (`sieve-map-v1`)
+
+A **map** links real things in the library. Its nodes are files and folders; a file is named by its size and SHA-256, so a map says exactly which bytes it means, and those bytes are one unit of the binary line (§12.1). Its edges are relations between two nodes. A map holds no file's bytes: a node is a claim that a file with this size and hash exists, and where it was found relative to the map's root. Where the file is on this computer and its SHA-256 matches, the node is a **verified anchor**. Maps are metadata about the space, never part of any address.
+
+The text is canonical, so the same folder always gives the same map:
+
+```
+sieve-map-v1
+name <the map's name>
+root <the root folder's name>
+nodes <N>
+edges <E>
+n<TAB><id><TAB>folder<TAB><path>/
+n<TAB><id><TAB>file<TAB><size><TAB><sha256><TAB><path>
+e<TAB><from><TAB><to><TAB><relation>
+end
+```
+
+Ids count up from 0 in order. The root is node 0, with path `./`. Paths are as in a manifest: UTF-8, `/` between parts, relative to the root, and never absolute, with a drive, a backslash, or a `.` or `..` part. A **map of a folder** lists the root and then the folder's v1 manifest entries in the manifest's order, and links every node but the root to the folder its path is in, with the relation `contains`. Edges are sorted by from, then to, then relation. A relation is any word of lower-case letters and hyphens, so later relations (a newer version, a patch, anything recorded by a tool or a person) are written the same way within v1. `sieve map FOLDER` writes one; the oracle writes the same map from this definition (`sieve_ref.py map`). `--dot` and `--graphml` write it for other programs (Graphviz; Gephi, yEd, Cytoscape).
+
+**In the hallway.** The node graph (O, or the pause menu's third row) shows one map at a time, chosen from a list:
+- "This installation" is made when first chosen, from the programs beside the hallway and the folders the build puts there. The executable being run is the first anchor.
+- Every `.map` in the `maps` folder beside the program is listed.
+- Any map opened or made during the session is added. A map made from a folder is saved into `maps`.
+
+The map is laid out in 3D by force direction (Fruchterman–Reingold: every node repels every other, every edge pulls its ends together, the steps shrink to nothing over 300 steps). It starts from each node's distance from the root, in a direction taken from its id, so the same map always settles the same way. Above 900 nodes, each node is repelled by a sample of 128 others, scaled up. A file node whose file is here can be walked to on the binary line, after its SHA-256 is checked.
+
+The item page's **SORT** tab shows the item in hand against the chosen map. A file on the binary line whose SHA-256 a node names *is* that node, a verified anchor by construction, and is drawn in its place in the map. Anything else is a lone point. The state space as a whole is never drawn as a graph: nearly all of it is noise, and a graph the size of the space would show only a tangle.
 
 ## 13. Architecture and Implementation
 

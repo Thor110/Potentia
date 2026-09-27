@@ -26,6 +26,7 @@
 #include "cli/filter_config.hpp"
 #include "cli/lines.hpp"
 #include "cli/locate.hpp"
+#include "cli/map.hpp"
 #include "cli/models.hpp"
 
 #include "sieve/booksieve.hpp"
@@ -1401,8 +1402,40 @@ int cmd_locate(const Args& a)
             cmp.lzma2 = lzma2_size(bytes);
             cmp.address_bytes = address_bytes(addr);
             cmp.address_hex = addr.is_zero() ? 0 : hex.size();
-            std::cout << "\n" << comparison_table(cmp);
         }
+        // Sieve instructions for the one file, exactly as for a folder holding just it: its name,
+        // size and SHA-256, then its bytes, as one number. And as an installer program.
+        if (a.has("installer") || a.has("program") || a.has("compare"))
+        {
+            Manifest m = manifest_of_file(target);
+            add_contents(m, fs::absolute(target).parent_path());
+            const std::vector<uint8_t> ibytes = m.file();
+            const BigUint iaddr = binary_address(ibytes);
+            if (a.has("installer"))
+            {
+                const std::string o = a.get("installer");
+                write_address_file(fs::path(std::u8string(o.begin(), o.end())), iaddr, a.has("hex"));
+                std::cout << "installer " << o << ": Sieve instructions for the file (its name, size and SHA-256, then its bytes), as "
+                          << (a.has("hex") ? "hex" : "raw bytes") << "\n";
+            }
+            if (a.has("program"))
+            {
+                const std::string o = a.get("program");
+                const auto stub = installer_program_beside(own_executable(g_argv0).parent_path());
+                if (!stub) throw std::runtime_error("--program needs sieve-install beside sieve (build it with the client)");
+                write_installer_program(*stub, iaddr, fs::path(std::u8string(o.begin(), o.end())));
+                std::cout << "program   " << o << ": sieve-install with the instructions attached; run it to install\n";
+            }
+            if (a.has("compare"))
+            {
+                cmp.manifest = ibytes.size();
+                cmp.manifest_deflate = deflate_size(ibytes);
+                cmp.manifest_lzma2 = lzma2_size(ibytes);
+                cmp.installer_hex = iaddr.is_zero() ? 1 : iaddr.to_hex().size();
+                cmp.installer_raw = address_bytes(iaddr);
+            }
+        }
+        if (a.has("compare")) std::cout << "\n" << comparison_table(cmp);
         return 0;
     }
     if (!fs::is_directory(target)) throw std::invalid_argument(arg + " is neither a file nor a folder");
@@ -1521,17 +1554,62 @@ int cmd_locate(const Args& a)
     return 0;
 }
 
+// map: a folder's map (node graph of verified anchors), or a map read back, written as the map
+// itself, as DOT or as GraphML.
+int cmd_map(const Args& a)
+{
+    namespace fs = std::filesystem;
+    if (a.positional.size() != 1) throw std::invalid_argument("map needs a FOLDER or a MAP file (see: sieve help map)");
+    const std::string arg = a.positional[0];
+    const fs::path target(std::u8string(arg.begin(), arg.end()));
+    Map m;
+    if (fs::is_directory(target))
+    {
+        fs::path r = fs::absolute(target).lexically_normal();
+        if (!r.has_filename()) r = r.parent_path();
+        const std::u8string folder_name = r.filename().u8string();
+        m = map_of_folder(target, a.has("name") ? a.get("name") : std::string(folder_name.begin(), folder_name.end()));
+    }
+    else
+    {
+        const auto bytes = read_file_bytes(target);
+        m = Map::parse(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+        if (a.has("name")) m.name = a.get("name");
+    }
+    auto write = [](const std::string& to, const std::string& text) {
+        std::ofstream out(fs::path(std::u8string(to.begin(), to.end())), std::ios::binary);
+        out << text;
+        if (!out) throw std::runtime_error("cannot write " + to);
+    };
+    const std::string text = m.text();
+    size_t files = 0;
+    for (const auto& n : m.nodes) files += n.folder ? 0 : 1;
+    std::ostream* info = &std::cout;
+    if (a.has("out")) write(a.get("out"), text);
+    else if (!a.has("dot") && !a.has("graphml"))
+    {
+        std::cout << text;
+        info = &std::cerr;
+    }
+    if (a.has("dot")) write(a.get("dot"), m.dot());
+    if (a.has("graphml")) write(a.get("graphml"), m.graphml());
+    *info << "map       " << m.name << ": " << m.nodes.size() << " nodes (" << files << " files, " << m.nodes.size() - files
+          << " folders), " << m.edges.size() << " edges\n"
+          << "sha256    " << sha256_hex(std::vector<uint8_t>(text.begin(), text.end())) << "  (the map's identity)\n";
+    if (a.has("out")) *info << "wrote     " << a.get("out") << "\n";
+    if (a.has("dot")) *info << "wrote     " << a.get("dot") << " (Graphviz DOT)\n";
+    if (a.has("graphml")) *info << "wrote     " << a.get("graphml") << " (GraphML)\n";
+    return 0;
+}
+
 // install: a folder put back from one address, the address of its installer's manifest.
 int cmd_install(const Args& a)
 {
     namespace fs = std::filesystem;
     if (a.positional.empty() || !a.has("to")) throw std::invalid_argument("install needs an address file and --to FOLDER (see: sieve help install)");
     const std::string in = a.positional[0], to = a.get("to");
-    const fs::path in_path(std::u8string(in.begin(), in.end()));
-    // An installer program (sieve-install with one attached) installs as its installer does.
-    const auto attached = a.has("hex") ? std::nullopt : attached_address(in_path);
-    const BigUint address = attached ? *attached : read_address_file(in_path, a.has("hex"));
-    const Manifest m = manifest_of_installer(address);
+    // An installer, an installer program, or an installer's manifest itself.
+    const Manifest m = installable_manifest(fs::path(std::u8string(in.begin(), in.end())), a.has("hex"));
     std::cout << "manifest  " << m.root << ": " << m.files << " files, " << m.bytes << " bytes\n";
     const fs::path dest(std::u8string(to.begin(), to.end()));
     install_tree(m, dest, a.has("force"), [&](int phase, size_t done, size_t total, const std::string& path) {
@@ -1643,6 +1721,7 @@ int main(int argc, char** argv)
         if (a.command == "unbind") return cmd_unbind(a);
         if (a.command == "locate") return cmd_locate(a);
         if (a.command == "install") return cmd_install(a);
+        if (a.command == "map") return cmd_map(a);
         std::cerr << "unknown command '" << a.command << "'\n\n";
         print_usage();
         return 1;
