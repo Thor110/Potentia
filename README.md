@@ -870,6 +870,6 @@ Sieve was built with Claude Opus 5.5, based on my specifications.
 
 13 — README rewritten against the Sieve release; the original moved to Previous/READMEv1.md
 
-[📚 Return to Index](#-index)
+<p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
 ---
