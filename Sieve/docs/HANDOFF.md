@@ -326,9 +326,19 @@ the tool and attaches the installer to its end: `<program> <installer, raw> <len
 "sieve-attached-1"`. Systems run a program from its start and ignore what follows it, so it runs
 as sieve-install, which first looks at its own end (`own_executable`, `attached_address`), then
 at its command line, then beside itself. A program that already has one attached has it
-replaced. `sieve install` reads programs too. SDL is linked statically into sieve-install when
-a static SDL target exists; with only a shared one the program also needs `SDL3.dll`, and
-`--program` says so. Edward's TEST folder: a 3.69 MB sieve-install (Linux) + 5,056,712 + 24 =
+replaced. `sieve install` reads programs too.
+
+**sieve-install's own SDL** (`SIEVE_SMALL_INSTALLER`, on by default): every installer program
+carries sieve-install, so it is built on a second SDL of its own (ExternalProject `sdl3_small`,
+from the same source, or fetched when SDL came from vcpkg or the system): static, MinSizeRel
+(Debug in a Debug build, so the runtimes match), without audio, joystick, haptic, HIDAPI,
+sensor, camera, power, GPU, Vulkan or OpenGL, keeping a window, the 2D renderer and the dialogs;
+on GCC/Clang with sections and `--gc-sections -s`. Linux: 3.69 MB to 1.51 MB. Edward's Windows
+sieve-install was 7.29 MB before it. It adds about a minute to the first build. Edward's Windows Release build after it: 4.94 MB (from
+7.29 MB). Proper procedure (compress first, then make the installer) and the plan to move to
+platform installer front ends are in `docs/SIEVE-INSTALL-USAGE.md`. Off, it links
+the hallway's SDL (static if there is a static target; with only a shared one the program also
+needs `SDL3.dll`, and `--program` says so). Edward's TEST folder: a 3.69 MB sieve-install (Linux) + 5,056,712 + 24 =
 8,750,408 bytes. Not yet: an icon, code signing (Windows SmartScreen warns about unsigned programs
 from the internet), or checking the attached installer against a checksum before reading it
 (install_tree checks every file anyway).

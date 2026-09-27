@@ -7,6 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(SIEVE_BUILD_TESTS  "Build the core test suite"            ON)
 option(SIEVE_BUILD_CLIENT "Build the SDL3 hallway client"          ON)
+option(SIEVE_SMALL_INSTALLER "Build sieve-install on a trimmed SDL of its own, for size" ON)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
@@ -239,7 +240,73 @@ if(SIEVE_BUILD_CLIENT)
     # program is one file; with only a shared SDL it also needs SDL3.dll beside it (sieve locate
     # --program says so). On Windows it is a windowed program, without a console.
     add_executable(sieve-install WIN32 client/installer_main.cpp)
-    if(TARGET SDL3::SDL3-static)
+    if(SIEVE_SMALL_INSTALLER)
+        # Its own SDL, built once from the same source (or fetched, when SDL came from vcpkg or
+        # the system), static, optimised for size, and without what the installer never uses:
+        # sound, controllers, haptics, sensors, the camera, power, the GPU API, Vulkan and
+        # OpenGL. It keeps a window, the 2D renderer and the folder dialog. Every copy of the
+        # installer program carries this, so it is worth the minute it takes to build: on Linux
+        # 1.5 MB against 3.7 MB. A Debug build gets a Debug SDL, so the runtimes match.
+        include(ExternalProject)
+        set(SIEVE_SDL_SMALL ${CMAKE_BINARY_DIR}/sdl3-small)
+        if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+            set(SIEVE_SDL_SMALL_TYPE Debug)
+        else()
+            set(SIEVE_SDL_SMALL_TYPE MinSizeRel)
+        endif()
+        if(MSVC)
+            set(SIEVE_SDL_SMALL_LIB ${SIEVE_SDL_SMALL}/lib/SDL3-static.lib)
+            set(SIEVE_SDL_SMALL_CFLAGS "")
+        else()
+            set(SIEVE_SDL_SMALL_LIB ${SIEVE_SDL_SMALL}/lib/libSDL3.a)
+            set(SIEVE_SDL_SMALL_CFLAGS "-ffunction-sections -fdata-sections")
+        endif()
+        if(DEFINED SDL3_SOURCE_DIR AND EXISTS "${SDL3_SOURCE_DIR}/CMakeLists.txt")
+            set(SIEVE_SDL_SMALL_FROM SOURCE_DIR ${SDL3_SOURCE_DIR})
+        else()
+            set(SIEVE_SDL_SMALL_FROM GIT_REPOSITORY https://github.com/libsdl-org/SDL.git GIT_TAG release-3.2.30 GIT_SHALLOW TRUE)
+        endif()
+        ExternalProject_Add(sdl3_small
+            ${SIEVE_SDL_SMALL_FROM}
+            BINARY_DIR ${CMAKE_BINARY_DIR}/sdl3-small-build
+            INSTALL_DIR ${SIEVE_SDL_SMALL}
+            CMAKE_ARGS
+                -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+                -DCMAKE_BUILD_TYPE=${SIEVE_SDL_SMALL_TYPE}
+                -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+                -DCMAKE_C_FLAGS=${SIEVE_SDL_SMALL_CFLAGS}
+                -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+                -DSDL_SHARED=OFF -DSDL_STATIC=ON -DSDL_TEST_LIBRARY=OFF -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF
+                -DSDL_AUDIO=OFF -DSDL_GPU=OFF -DSDL_CAMERA=OFF -DSDL_JOYSTICK=OFF -DSDL_HAPTIC=OFF
+                -DSDL_HIDAPI=OFF -DSDL_POWER=OFF -DSDL_SENSOR=OFF
+                -DSDL_VULKAN=OFF -DSDL_RENDER_VULKAN=OFF -DSDL_RENDER_GPU=OFF -DSDL_OPENGL=OFF -DSDL_OPENGLES=OFF
+                -DSDL_RENDER_D3D12=OFF -DSDL_OPENVR=OFF -DSDL_KMSDRM=OFF
+                -DSDL_DUMMYCAMERA=OFF -DSDL_DISKAUDIO=OFF -DSDL_DUMMYAUDIO=OFF
+            BUILD_BYPRODUCTS ${SIEVE_SDL_SMALL_LIB})
+        file(MAKE_DIRECTORY ${SIEVE_SDL_SMALL}/include)
+        add_library(sieve_sdl_small STATIC IMPORTED)
+        set_target_properties(sieve_sdl_small PROPERTIES
+            IMPORTED_LOCATION ${SIEVE_SDL_SMALL_LIB}
+            INTERFACE_INCLUDE_DIRECTORIES ${SIEVE_SDL_SMALL}/include)
+        if(WIN32)
+            set_property(TARGET sieve_sdl_small PROPERTY INTERFACE_LINK_LIBRARIES
+                kernel32 user32 gdi32 winmm imm32 ole32 oleaut32 version uuid advapi32 setupapi shell32)
+        else()
+            set_property(TARGET sieve_sdl_small PROPERTY INTERFACE_LINK_LIBRARIES m ${CMAKE_DL_LIBS} Threads::Threads)
+        endif()
+        add_dependencies(sieve-install sdl3_small)
+        target_link_libraries(sieve-install PRIVATE sieve_locate sieve_sdl_small)
+        # The installer's own code small too, and what nothing calls left out.
+        if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+            if(MSVC)
+                # (Not /O1: it overrides Release's /O2 with a warning. SDL is where the size is.)
+                target_link_options(sieve-install PRIVATE /OPT:REF /OPT:ICF)
+            else()
+                target_compile_options(sieve-install PRIVATE -Os)
+                target_link_options(sieve-install PRIVATE -Wl,--gc-sections -s)
+            endif()
+        endif()
+    elseif(TARGET SDL3::SDL3-static)
         target_link_libraries(sieve-install PRIVATE sieve_locate SDL3::SDL3-static)
     else()
         target_link_libraries(sieve-install PRIVATE sieve_locate SDL3::SDL3)

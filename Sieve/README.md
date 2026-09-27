@@ -670,9 +670,11 @@ An installer's manifest (`sieve-manifest-v3`) is the folder structure followed b
 
 ### `sieve-install`: the installer
 
+The full guide, including the proper procedure (compress the folder first, then make the installer), is [docs/SIEVE-INSTALL-USAGE.md](docs/SIEVE-INSTALL-USAGE.md).
+
 `sieve locate FOLDER --installer NAME.sieve` makes the installer: one number, stored as raw bytes. `sieve-install` is the program that installs it, a window with the usual steps: what it installs, where (Browse, or type a path), Install, a progress bar, Finish. Put `NAME.sieve` beside `sieve-install` and run it, or drop the file on its window. Every file is checked against its SHA-256 before anything is written, and Cancel removes whatever was written. It needs nothing else: no data files, only the program and the `.sieve` file.
 
-To hand someone **one file**, make an installer program: `sieve locate FOLDER --program "NAME installer.exe"`, or the File Locator's "Make an installer..." (it makes a program unless you name the file `.sieve`). That is a copy of `sieve-install` with the installer attached to its end; run it and it installs, and `sieve install` reads it too. It is the program plus the installer plus 24 bytes. If your `sieve-install` was built against a shared SDL (an `SDL3.dll` beside it), the program needs that DLL beside it as well; the SDL the build fetches for itself is static, and a static SDL is used whenever one is available.
+To hand someone **one file**, make an installer program: `sieve locate FOLDER --program "NAME installer.exe"`, or the File Locator's "Make an installer..." (it makes a program unless you name the file `.sieve`). That is a copy of `sieve-install` with the installer attached to its end; run it and it installs, and `sieve install` reads it too. It is the program plus the installer plus 24 bytes. `sieve-install` is built on a trimmed SDL of its own (static, optimised for size, with no sound, controllers or GPU), which the first build compiles once, so every installer program carries as little as it can: about 1.5 MB on Linux. (`-DSIEVE_SMALL_INSTALLER=OFF` links the hallway's SDL instead; if that is a shared SDL, the program then needs `SDL3.dll` beside it.)
 
 ### `bind`, `unbind`: books
 
