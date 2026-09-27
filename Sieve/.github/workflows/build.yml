@@ -376,6 +376,15 @@ jobs:
           diff -r tests/manifest_fixture fx7
           build/sieve install fx7.sieve --to fx7raw > /dev/null
           cmp tests/manifest_fixture.7z fx7raw/manifest_fixture.7z
+          # A release's layout: sieve and sieve-install in tools/ below the data folders. sieve there
+          # finds the dictionaries and models in the folder above, and still makes installer
+          # programs from the sieve-install beside it.
+          rm -rf layout && mkdir -p layout/tools
+          cp build/sieve build/sieve-install layout/tools/ && cp -r build/dictionaries build/models layout/
+          (cd layout/tools && ./sieve dicts | grep -q "layout/dictionaries/dictionaries.tsv")
+          (cd layout/tools && ./sieve models | grep -q "layout/models/models.tsv")
+          layout/tools/sieve locate tests/manifest_fixture --program layout-installer > /dev/null
+          rm -rf fx_layout && ./layout-installer --to fx_layout --yes && diff -r tests/manifest_fixture fx_layout
           # An installer program: sieve-install with the installer attached, run on its own, and
           # read by sieve install; exactly the program, the installer and a 24-byte trailer; and
           # made from a program that already has one attached, the old one replaced, not added to.

@@ -635,3 +635,16 @@ alone); it adds about 80 KB to the trimmed installer (Linux 1.51 -> 1.59 MB). Th
 sieve-install (unpacked, equal to the fixture) and through `sieve install` (the archive itself).
 Zip could be done the same way later with zlib's inflate, if wanted.
 
+**Release layout: tools\** (Edward, 27 September 2026). So that people start the right program,
+a release puts `hallway` alone at the top and `sieve` and `sieve-install` in `tools\` with a
+`README.txt` (`make_release.py`, `TOOLS`/`TOOLS_NOTE`). The build folder stays flat (Visual Studio
+runs and the CI's `build/sieve` paths unchanged); the programs look in both places:
+`cli::install_dir()` is the program's folder, or the one above it when that is named `tools` and
+has `dictionaries` beside it (used for dictionaries, models, the corpus and `sieve-filters.ini`,
+which the hallway shares); `installer_program_beside(dir)` also looks in `dir/tools`, so the
+hallway's File Locator finds `sieve-install`. "This installation" lists `tools`. The release script
+checks that `tools/sieve` finds the data above it (run from `tools/`, since a `data/` folder where
+it is run is looked at first); CI builds the layout and makes and runs an installer program from
+it. The hallway keeps its name for now (renaming it `Sieve.exe` would clash with the CLI's name in
+the docs).
+

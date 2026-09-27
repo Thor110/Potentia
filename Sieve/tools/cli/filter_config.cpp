@@ -131,7 +131,7 @@ void LineFilters::set_enabled(const std::string& name, bool on)
 
 fs::path FilterConfig::default_path()
 {
-    const fs::path exe = executable_dir();
+    const fs::path exe = install_dir(); // shared with the hallway, from tools\ too
     return (exe.empty() ? fs::path(".") : exe) / "sieve-filters.ini";
 }
 

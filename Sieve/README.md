@@ -61,6 +61,21 @@ Or without presets: `cmake -S . -B build`, then `cmake --build build --config Re
 
 The build is warning-free at `/W4` and `-Wall -Wextra -Wpedantic`, and it copies the bundled dictionaries next to the executable, so every command works from any folder.
 
+**An installed copy** (what a release installs) has one program at the top, so nobody starts the wrong one first:
+
+```
+Sieve\
+  hallway.exe                 the program: start this
+  dictionaries\ models\ lang\ fonts\ meshes\ maps\
+  third_party_licenses\  potentia-license.txt
+  tools\
+    sieve.exe                 the command-line tool (sieve help)
+    sieve-install.exe         the installer, which the File Locator copies to make installer programs
+    README.txt                what these two are
+```
+
+`sieve` in `tools\` finds the dictionaries and models in the folder above; the hallway finds `sieve-install` in `tools\`. A build folder keeps all three programs together, and they work either way.
+
 **Continuous integration:** `.github/workflows/build.yml` builds and tests on Windows, Linux and macOS. It checks that every platform produces the same addresses, and that the Python oracle reproduces the committed vectors. GitHub only reads workflows from the repository root: if this folder is a subfolder of your repository (as in `Potentia/Sieve`), move `.github` up to the repository root. `PROJECT_DIR` in the file is already set to `Sieve`.
 
 ## Key terms

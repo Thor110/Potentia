@@ -97,6 +97,20 @@ Every file is checked against its size and SHA-256 before anything is written, s
 installer leaves the destination as it was. Files already there are refused unless you choose to
 replace them. Cancel part way removes whatever was written, including the folders it made.
 
+**7z archives are unpacked, by the installer only.** When what an installer carries is one 7z
+archive (as a release's does: `sieve.7z`), `sieve-install` unpacks it automatically into a folder
+named after the file, instead of writing the archive itself. Choose `C:\TEST` and `sieve.7z`
+unpacks into `C:\TEST\sieve\`, with its files straight inside it. If everything in the archive
+sits in one top folder (a release's `Sieve-0.13.0\`), that folder is left out, so you get
+`C:\TEST\sieve\hallway.exe` rather than `C:\TEST\sieve\Sieve-0.13.0\hallway.exe`. The window says
+"Unpacks" instead of "Installs" and shows what the archive holds. The archive is checked against its
+SHA-256 before it is opened, and 7z checks each file's CRC as it unpacks; files already there are
+refused unless you tick Replace, and a cancel or a failure removes what was written. It is a 7z by
+its first bytes, not its name. The decoder is the LZMA SDK's (public domain), which reads what
+7-Zip writes by default (LZMA, LZMA2, PPMd, and the BCJ, BCJ2, ARM and Delta filters); an
+encrypted archive is refused. Only the installer does this: `sieve install` and the hallway's
+File Locator give back exactly the file that was located, the archive itself.
+
 Installers made before `sieve-manifest-v3` (v2 manifests, with every file's address written in hex)
 still install. They are simply twice as large as they need to be.
 
@@ -125,23 +139,28 @@ python tools/make_release.py                                   # build, stage, 7
 python tools/make_release.py --version 0.13.0                  # the same, with the version given
 python tools/make_release.py --version 0.13.0 --skip-build     # the Release build is already made
 python tools/make_release.py --version 0.13.0 --uncompressed   # installers of the folder itself, not the 7z
-python tools/make_release.py --version 0.13.0 --with-source    # also the source's instructions, named in sieve.map
 ```
 
-It stages only what the program uses (the programs, their data folders, `maps/sieve.map`, the
-licences) as the folder `Sieve-<version>` and compresses it first, as `sieve.7z`. From the archive
+It stages only what the program uses (the programs, their data folders, an empty `maps`
+folder, the licences; no map is shipped inside the release, since the published map names the
+release's own files) as the folder `Sieve-<version>`, with `hallway` the one program at the top and
+`sieve` and `sieve-install` in `tools\` (with a short `README.txt`, so nobody starts the wrong
+program first; `sieve` there finds the data folders above it, checked), and compresses it first, as `sieve.7z`. From the archive
 it makes `sieve.sieve` and `sieve.exe` (`sieve-setup` on Linux and macOS, where a program has no
 extension), then a sealed `sieve.map` naming both. It then installs each into a scratch folder and compares
 the result byte for byte, and writes `SHA256SUMS.txt` and a `RELEASE-NOTES.md` draft. Publish the
 three files. GitHub adds the tagged commit's source zip by itself.
 
-**The source, in the map.** The release also has `sieve.zip`, the Sieve folder's source as the last
-commit has it (`git archive` of the Sieve folder alone, run from the repository's top folder), so
-it holds exactly what is committed, the release script included, and none of the build's or the
-checks' scratch. The script warns if there are changes not committed, since they would not be in
-it: commit first. The published `sieve.map` names `sieve.exe`, `sieve.sieve` and `sieve.zip`.
-Publish all four. (`--map-with FILE` can make the map again afterwards to name another file as
-well, such as GitHub's own source zip of the tag.)
+**The source, held in the map.** The script also makes `sieve-source.7z`: the Sieve folder's source
+as the last commit has it (`git archive` of the Sieve folder alone, run from the repository's top
+folder), 7-zipped. So it holds exactly what is committed, the release script included, and none
+of the build's or the checks' scratch. The script warns if there are changes not committed, since
+they would not be in it, so commit first. The published `sieve.map` names `sieve.exe` and
+`sieve.sieve` (found beside it) and **holds** `sieve-source.7z` (its bytes inside the map,
+`sieve-map-v2`), so the map is the size of the compressed source. Publish three files: the
+installer, the instructions and the map. The whole Potentia repository, Sieve included, is the
+release's own "Source code" download on GitHub. (`--map-with FILE` can make the map again to name
+another file as well.)
 
 The trade-off: installers made from the 7z are about a fifth of the size (on Linux, 4.2 MB against
 21.6 MB), but whoever runs them gets a `.7z` to unpack. `--uncompressed` installs a runnable folder

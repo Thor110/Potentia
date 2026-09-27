@@ -7,7 +7,10 @@ order matters and is easy to get wrong by hand:
   1. (Nothing: the source's own step is 6, now that the published map holds it.)
   2. The build (Release), with potentia-license.txt beside the programs.
   3. The release folder: only what the program uses (the programs, their data folders, an empty
-     maps folder, the licences), staged by name, never the build folder's own clutter. No map is
+     maps folder, the licences), staged by name, never the build folder's own clutter. The hallway
+     is the one program at the top; sieve and sieve-install go in tools\, with a note saying what
+     they are, so nobody starts the wrong program first. (A build folder keeps them together; the
+     programs look in both places.) No map is
      shipped inside it: the published map names the release's files, so it cannot be one of them.
   4. The folder compressed first (the proper procedure: an installer is never smaller than what it
      carries), as a solid 7z at 7-Zip's strongest.
@@ -66,6 +69,18 @@ EXE = ".exe" if os.name == "nt" else ""
 # installation"): the programs, the folders they read, and the licences. Anything else in a build
 # folder (CMakeFiles, objects, fetched sources, the trimmed SDL) is the build's, not the release's.
 PROGRAMS = ["hallway", "sieve", "sieve-install"]
+TOOLS = ["sieve", "sieve-install"]  # in the release, these go in tools/ below the hallway
+TOOLS_NOTE = """Sieve's tools
+
+These are Sieve's helper programs. To run Sieve, start hallway{exe} in the folder above.
+
+  sieve{exe}          the command-line tool: locating files and folders, Sieve instructions,
+                      maps, filters and models. Run it from a command prompt: sieve help
+  sieve-install{exe}  the installer. The hallway's File Locator copies it to make installer
+                      programs; run on its own, it installs a .sieve file beside it or dropped on it.
+
+Both find the installation's data folders (dictionaries, models) in the folder above.
+"""
 FOLDERS = ["dictionaries", "models", "lang", "fonts", "meshes", "third_party_licenses"]
 FILES = ["potentia-license.txt"]
 
@@ -257,8 +272,11 @@ def main():
     if stage.exists():
         shutil.rmtree(stage)
     stage.mkdir()
+    (stage / "tools").mkdir()
     for p in PROGRAMS:
-        shutil.copy2(build / f"{p}{EXE}", stage)
+        shutil.copy2(build / f"{p}{EXE}", stage / "tools" if p in TOOLS else stage)
+    note = TOOLS_NOTE.format(exe=EXE)
+    (stage / "tools" / "README.txt").write_bytes((note.replace("\n", "\r\n") if os.name == "nt" else note).encode("utf-8"))
     for d in FOLDERS:
         if (build / d).is_dir():
             shutil.copytree(build / d, stage / d)
@@ -307,6 +325,14 @@ def main():
                 if not got.exists() or sha256(got) != sha256(archive):
                     fail(f"{f.name} did not install {archive.name} byte for byte")
             print(f"   {f.name}: installs back to what it carries, checked")
+    # The layout: sieve in tools/ finds the installation's data folders in the folder above.
+    for what, folder_name in (("dicts", "dictionaries"), ("models", "models")):
+        # (run from the tools folder, since a data/ folder where it is run from is looked at first)
+        shown = subprocess.run([str(stage / "tools" / f"sieve{EXE}"), what], capture_output=True, text=True,
+                               cwd=stage / "tools").stdout
+        if str(stage / folder_name) not in shown:
+            fail(f"tools/sieve{EXE} does not find {folder_name} in the folder above it")
+    print(f"   {folder}: hallway{EXE} at the top; sieve and sieve-install in tools/, finding the data above")
     text = subprocess.run([str(sieve), "map", str(mapfile)], capture_output=True, text=True, check=True).stdout
     for f in (program, instructions, source):
         if sha256(f) not in text:

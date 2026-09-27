@@ -21,6 +21,9 @@ data/fonts/unifont.hex
 /fx_installed/
 /fx7/
 /fx7raw/
+/fx_layout/
+/layout/
+/layout-installer
 /*.hex
 /*.png
 /*.ini

@@ -354,11 +354,14 @@ fs::path own_executable(const char* argv0)
 
 std::optional<fs::path> installer_program_beside(const fs::path& dir)
 {
-    for (const char* name : {"sieve-install.exe", "sieve-install"})
-    {
-        std::error_code ec;
-        if (fs::is_regular_file(dir / name, ec)) return dir / name;
-    }
+    // Beside the caller (a build folder, or sieve in tools\), else in the tools folder beside it
+    // (the hallway, at the top of an installation).
+    for (const fs::path& d : {dir, dir / "tools"})
+        for (const char* name : {"sieve-install.exe", "sieve-install"})
+        {
+            std::error_code ec;
+            if (fs::is_regular_file(d / name, ec)) return d / name;
+        }
     return std::nullopt;
 }
 

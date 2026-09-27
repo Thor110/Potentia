@@ -40,4 +40,11 @@ ResolvedDictionary resolve_dictionary(const std::string& value);
 
 std::filesystem::path executable_dir();
 
+// The installation's own folder, where its data folders are: the program's folder, or the one
+// above it when the program is in the installation's tools folder (a release puts sieve and
+// sieve-install in tools\, so that hallway is the one program at the top). Found by the name
+// "tools" and a dictionaries folder beside it; a build folder, with every program together, is its
+// own installation folder.
+std::filesystem::path install_dir();
+
 } // namespace sieve::cli

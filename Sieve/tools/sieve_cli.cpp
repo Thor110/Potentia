@@ -966,7 +966,7 @@ std::string default_corpus(const Args& a)
     if (a.has("corpus")) return a.get("corpus");
     const fs::path here = "data/models/corpus/gutenberg-nltk.tsv";
     if (fs::exists(here)) return here.string();
-    return (executable_dir() / "models" / "corpus" / "gutenberg-nltk.tsv").string();
+    return (install_dir() / "models" / "corpus" / "gutenberg-nltk.tsv").string();
 }
 
 int cmd_train(const Args& a)

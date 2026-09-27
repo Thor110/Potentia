@@ -1,5 +1,6 @@
 #include "dictionaries.hpp"
 
+#include <cctype>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -41,6 +42,17 @@ fs::path executable_dir()
 #endif
 }
 
+fs::path install_dir()
+{
+    const fs::path exe = executable_dir();
+    if (exe.empty()) return exe;
+    std::string name = exe.filename().string();
+    for (char& c : name) c = char(std::tolower(static_cast<unsigned char>(c)));
+    std::error_code ec;
+    if (name == "tools" && fs::is_directory(exe.parent_path() / "dictionaries", ec)) return exe.parent_path();
+    return exe;
+}
+
 const DictionaryEntry& Registry::default_entry() const
 {
     for (const auto& e : entries)
@@ -58,7 +70,7 @@ const DictionaryEntry* Registry::find(const std::string& id) const
 Registry load_registry()
 {
     std::vector<fs::path> folders = {fs::path("data") / "dictionaries"};
-    if (const fs::path exe = executable_dir(); !exe.empty()) folders.push_back(exe / "dictionaries");
+    if (const fs::path exe = install_dir(); !exe.empty()) folders.push_back(exe / "dictionaries");
 
     for (const auto& folder : folders)
     {

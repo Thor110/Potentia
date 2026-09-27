@@ -86,7 +86,7 @@ const ModelEntry* ModelRegistry::default_for(const std::string& symbols) const
 ModelRegistry load_model_registry()
 {
     std::vector<fs::path> folders = {fs::path("data") / "models"};
-    if (const fs::path exe = executable_dir(); !exe.empty()) folders.push_back(exe / "models");
+    if (const fs::path exe = install_dir(); !exe.empty()) folders.push_back(exe / "models");
     for (const auto& folder : folders)
     {
         const fs::path manifest = folder / "models.tsv";

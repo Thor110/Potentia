@@ -129,7 +129,8 @@ inline constexpr char kAttachedMagic[] = "sieve-attached-1"; // 16 bytes, no ter
 // The running program's own file (for sieve-install, to find what is attached to it; for sieve
 // and the hallway, to find the sieve-install beside them).
 std::filesystem::path own_executable(const char* argv0);
-// The sieve-install program beside `dir`, if there is one.
+// The sieve-install program beside `dir`, or in the tools folder in it (an installation, where
+// sieve and sieve-install sit in tools\ below the hallway), if there is one.
 std::optional<std::filesystem::path> installer_program_beside(const std::filesystem::path& dir);
 // Writes `program` (sieve-install) with `address` attached as `out`, marked runnable.
 void write_installer_program(const std::filesystem::path& program, const BigUint& address, const std::filesystem::path& out);
