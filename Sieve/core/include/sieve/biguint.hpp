@@ -27,7 +27,7 @@ public:
     // Returns exactly `length` digits, most-significant first. Throws if the value does not fit.
     std::vector<uint32_t> to_digits(uint32_t base, size_t length) const;
 
-    static BigUint pow(uint32_t base, uint32_t exponent);
+    static BigUint pow(uint32_t base, uint64_t exponent);
 
     // Lowercase hex, zero-padded to `width` characters. Throws if it does not fit.
     std::string to_hex(size_t width = 0) const;
@@ -59,8 +59,9 @@ public:
     uint32_t divmod_small(uint32_t d); // divides in place, returns remainder
     // a mod m for any m >= 1 (a mask when m is a power of two, else long division).
     static BigUint mod(const BigUint& a, const BigUint& m);
-    // a * b (schoolbook), and a = q * b + r with 0 <= r < b (Knuth's algorithm D). b >= 1.
-    // (q or r may be the same object as a or b.)
+    // a * b, and a = q * b + r with 0 <= r < b for b >= 1. Both choose their algorithm by the
+    // operands' lengths (schoolbook or Karatsuba; Knuth's algorithm D or a reciprocal), and every
+    // choice gives the same exact answer. q or r may be the same object as a or b.
     static BigUint mul(const BigUint& a, const BigUint& b);
     static void divmod(const BigUint& a, const BigUint& b, BigUint& q, BigUint& r);
 
@@ -72,6 +73,10 @@ public:
     friend bool operator==(const BigUint& a, const BigUint& b) { return compare(a, b) == 0; }
 
 private:
+    // The division, reciprocal and conversion machinery in biguint.cpp, which works on the limbs
+    // directly and is not part of the interface.
+    friend struct BigUintOps;
+    static void divmod_knuth(const BigUint& a, const BigUint& b, BigUint& q, BigUint& r);
     void trim();
     // Whole-limb helpers for the base conversions. Not public: outside the implementation a
     // small operand is a uint32_t, as it has always been.

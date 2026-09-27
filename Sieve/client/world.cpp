@@ -27,6 +27,22 @@ void book_face(float tile_z, Side side, int row, int col, Vec3 out[4], bool vari
     out[3] = {x, y1, z0};
 }
 
+void picture_face(float tile_z, Side side, int row, int col, float bottom, float top, float half_width, Vec3 out[4], bool varied)
+{
+    const float x = side == Side::Left ? -kCaseFront : kCaseFront;
+    const float base = kRowTop - (row + 1) * kRowHeight + 0.02f; // the shelf board it stands on
+    const float ys = book_height(row, col, varied) / kUniformBookHeight;
+    const float y0 = base + bottom * ys, y1 = base + top * ys;
+    const float zc = tile_z + col * book_pitch() + book_pitch() * 0.5f, hw = half_width * shelf_scale();
+    // Top left, top right, bottom right, bottom left, as you stand facing the wall: facing the
+    // left wall (towards -x) your right is +z, and facing the right wall it is -z.
+    const float zl = side == Side::Left ? zc - hw : zc + hw, zr = side == Side::Left ? zc + hw : zc - hw;
+    out[0] = {x, y1, zl};
+    out[1] = {x, y1, zr};
+    out[2] = {x, y0, zr};
+    out[3] = {x, y0, zl};
+}
+
 std::optional<BookSlot> pick_book(Vec3 origin, Vec3 dir, int64_t player_tile, float reach, bool varied)
 {
     if (std::fabs(dir.x) < 1e-6f) return std::nullopt;

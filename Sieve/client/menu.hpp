@@ -16,6 +16,7 @@
 // count its survivors exactly, the map shows them as a filled bar inside the line's bar.
 #pragma once
 
+#include "app_settings.hpp"
 #include "cli/args.hpp"
 #include "cli/filter_config.hpp"
 
@@ -23,6 +24,7 @@
 
 #include <array>
 #include <cstdint>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -50,6 +52,11 @@ struct Settings
     // Global, because the corridor is shared: how many units stand on one tile's two walls.
     // A power of two, so a power-of-two line fills whole tiles (sieve/corridor.hpp).
     uint32_t items_per_wall = 128;
+    // Global too: how long every line's titles are, in the pages line's alphabet (SPECIFICATIONS
+    // §11, "Titled lines"). The books line keeps a page as its title.
+    uint32_t title_length = 32;
+    uint32_t letters_px = 8;   // the letter size item displays are drawn for; smaller letters are dashes
+    uint32_t closeup_px = 1024; // the widest close-up display (0: none)
 
     static Settings from_args(const sieve::cli::Args& a);
     // Writes these settings into `a` (as the hallway's own options), keeping everything else.
@@ -65,19 +72,27 @@ struct LineSize
 };
 LineSize line_size(uint32_t base, uint64_t length);
 
-// What this machine can open: the longest address it can hold, and the longest unit the hallway
-// can keep a cache of. A shape has to satisfy both (menu.cpp: machine_budget).
+// What this machine can open (menu.cpp: machine_budget). A shape has to fit all three.
 struct Budget
 {
-    double bits = 4.0e6;
-    uint64_t positions = 1u << 16;
+    double bits = 4.0e6;                     // the longest address that opens in kUnitMs, measured here
+    double cache_bytes = 256.0 * 1048576.0;  // what the hallway's cache of units may take
+    double ms_per_unit_at_limit = 50;        // the time `bits` was worked out for
+    double ref_bits = 0, ref_ms = 0;         // the measurement it was worked out from
 };
 Budget machine_budget();
+// Roughly how long one unit with an address of this many bits takes to open here. For the
+// budget's display only: it is an estimate from one measurement, never used to address anything.
+double unit_ms(const Budget& b, double bits);
 
 class Menu
 {
 public:
-    Menu(SDL_Window* window, SDL_Renderer* renderer, Settings settings, sieve::cli::FilterConfig filters, std::string filters_path);
+    // `app` holds the two world settings the setup menu edits (angle precision and the model
+    // image cache) and the graphics memory it budgets against; it is saved to `app_path` after
+    // each change, unless the path is empty.
+    Menu(SDL_Window* window, SDL_Renderer* renderer, Settings settings, sieve::cli::FilterConfig filters, std::string filters_path,
+         AppSettings* app = nullptr, std::filesystem::path app_path = {});
 
     enum class Result { Enter, Quit, Back }; // Back: Esc, to the main menu
     Result run();                                  // interactive: until Enter or quit
@@ -93,12 +108,28 @@ private:
     bool too_large() const;
     int over_budget() const;   // which line is beyond this machine, or -1
     bool over_budget_line(int i, const Budget& b) const;
+    double line_cache_bytes(int i) const;  // what line i's cached units would take in memory
+    double graphics_mb_needed() const;     // the display cache, the close-ups and the world, in megabytes
+    int display_px_line(int i) const;      // what line i's displays are drawn at (display.hpp)
+    double display_mb() const;             // one display on the line whose displays are largest
+    double closeup_mb() const;             // the close-ups at their largest
+    bool graphics_over() const;
+    int model_cache_mb() const { return app_ ? app_->model_cache_mb : 64; }
+    void save_app() const;
+    float draw_budget(float y); // the budget's three bars; returns the y below them
     void find_limits();        // set every line to the largest shape this machine can open
     void reset_settings();     // every shape back to its default // a line this machine cannot open
     void adjust(int dir, int step);
-    // 0-18 are the settings rows, in the order render() lists them and adjust() switches on;
-    // 19 is ENTER THE HALLWAY, which is the only row that opens the hallway.
-    static constexpr int kLimitsRow = 21, kResetRow = 22, kEnterRow = 23;
+    // 0-24 are the settings rows, in the order render() lists them and adjust() switches on;
+    // then FIND MY LIMITS, RESET, and ENTER THE HALLWAY, which is the only row that opens it.
+    // The GLOBAL rows come first; each line's rows are counted from kFirstLineRow, so a row added
+    // to GLOBAL moves them all with one change here.
+    static constexpr int kAngleRow = 4, kTitleRow = 5, kLettersRow = 6, kDisplaySizeRow = 7, kDisplayCacheRow = 8,
+                         kCloseUpRow = 9;
+    static constexpr int kFirstLineRow = 10;
+    static constexpr int kPagesRows = kFirstLineRow, kImageRows = kFirstLineRow + 4, kAudioRow = kFirstLineRow + 7,
+                         kVideoRows = kFirstLineRow + 8, kBooksRow = kFirstLineRow + 12, kModelsRows = kFirstLineRow + 13;
+    static constexpr int kLimitsRow = kModelsRows + 3, kResetRow = kLimitsRow + 1, kEnterRow = kLimitsRow + 2;
     int row_count() const;
 
     // The filter overlay.
@@ -145,6 +176,8 @@ private:
     int row_ = 0;
     sieve::cli::FilterConfig cfg_;
     std::string cfg_path_;
+    AppSettings* app_ = nullptr;
+    std::filesystem::path app_path_;
     int overlay_ = -1; // line whose filters are open, or -1
     int orow_ = 0;
     int oscroll_ = 0;

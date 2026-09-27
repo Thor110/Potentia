@@ -16,6 +16,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <cstdint>
 #include <string>
 
 namespace hallway {
@@ -36,6 +37,13 @@ float text_width(const std::string& utf8, float scale);
 size_t text_cells(const std::string& utf8);
 // The longest prefix of `utf8` that fits in `cells` cells (never splits a character).
 std::string fit_cells(const std::string& utf8, size_t cells);
+
+// Draws one character into an ARGB pixel buffer `w` pixels wide and `h` tall, stretched to fill the
+// cell at (x, y) of size cw x ch with nearest-neighbour sampling: text for pictures drawn off the
+// frame, by the item-face workers, which cannot use the renderer. Reads only the loaded glyph
+// tables, which change with the language and never while a hallway is open. Returns false (and
+// draws nothing) for a character neither the font nor its fallback has.
+bool paint_glyph(uint32_t* px, int w, int h, float x, float y, float cw, float ch, char32_t cp, uint32_t argb);
 
 // Frees the glyph textures; call before destroying the renderer.
 void release_fonts();

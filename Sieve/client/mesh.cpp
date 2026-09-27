@@ -1,3 +1,17 @@
+// Sieve hallway — loading the Real Graphics models, and drawing them.
+//
+// Two halves, and they have little to do with each other. The first reads Wavefront .obj and .mtl
+// files by hand, since the only thing wanted from them is flat-coloured triangles, and builds the
+// derived meshes the corridor needs: a mirror image for the right wall, a half cut away for the
+// binary line's missing side, and a plain box.
+//
+// The second is MeshBatch, a small depth-buffered rasteriser written because SDL's renderer keeps
+// no depth buffer, so triangles handed to it would simply paint over one another in the order they
+// arrived. Triangles are gathered in view space, clipped against the near plane (a triangle that
+// crosses it becomes one or two that do not), projected, and then filled a band of scanlines at a
+// time against a depth buffer of the same size as the window. Nothing here is fast by the
+// standards of a GPU; it is here so that the hallway runs with no graphics driver worth the name,
+// which is also why the wireframe remains the default.
 #include "mesh.hpp"
 
 #include "cli/dictionaries.hpp"
@@ -153,6 +167,40 @@ fs::path mesh_folder()
         if (fs::is_directory(f, ec)) return f;
     }
     return folders.front();
+}
+
+FaceRect load_face_rect(const std::string& medium)
+{
+    FaceRect r;
+    std::ifstream in(mesh_folder() / "faces.ini");
+    std::string line, section;
+    while (std::getline(in, line))
+    {
+        if (const size_t c = line.find(';'); c != std::string::npos) line.erase(c);
+        const size_t a = line.find_first_not_of(" \t\r"), b = line.find_last_not_of(" \t\r");
+        if (a == std::string::npos) continue;
+        line = line.substr(a, b - a + 1);
+        if (line.front() == '[' && line.back() == ']')
+        {
+            section = line.substr(1, line.size() - 2);
+            continue;
+        }
+        const size_t eq = line.find('=');
+        if (section != medium || eq == std::string::npos) continue;
+        std::string key = line.substr(0, eq), value = line.substr(eq + 1);
+        key.erase(key.find_last_not_of(" \t") + 1);
+        try
+        {
+            const float v = std::stof(value);
+            if (key == "bottom") r.bottom = v;
+            else if (key == "top") r.top = v;
+            else if (key == "half_width") r.half_width = v;
+        }
+        catch (...) {} // a value that is not a number leaves the default
+    }
+    // Nonsense (upside down, or no width) is the whole slot rather than no picture.
+    if (!(r.top > r.bottom) || !(r.half_width > 0)) r = FaceRect{};
+    return r;
 }
 
 std::shared_ptr<const Mesh> load_model(const std::string& model, const std::string& medium)

@@ -9,6 +9,11 @@ namespace {
 // shared by every line, so they cannot disagree about how it is divided.
 uint32_t g_books_per_tile = 128;
 unsigned g_books_per_tile_bits = 7;
+// A LineLoop divides its length by the tile size once, when it is built, and keeps the answer. If
+// the tile size changed after that, its stored tile count would be measured in one size and the
+// slot it hands back in another, and the two would quietly disagree. Rather than leave that to a
+// comment, the first LineLoop built latches the setting, and a later change is refused.
+bool g_tile_size_in_use = false;
 } // namespace
 
 uint32_t books_per_tile() { return g_books_per_tile; }
@@ -18,11 +23,14 @@ void set_books_per_tile(uint32_t n)
 {
     if (n < 2 || n > 4096 || (n & (n - 1)))
         throw std::invalid_argument("books per tile must be a power of two between 2 and 4096");
+    if (g_tile_size_in_use && n != g_books_per_tile)
+        throw std::logic_error("the corridor's tile size cannot change once a line has been built");
     unsigned bits = 0;
     while ((1u << bits) != n) ++bits;
     g_books_per_tile = n;
     g_books_per_tile_bits = bits;
 }
+
 
 
 TileIndex TileIndex::of(int64_t t)
@@ -69,6 +77,7 @@ TileIndex TileIndex::parse(std::string_view dec)
 LineLoop::LineLoop(BigUint units) : units_(std::move(units))
 {
     if (units_.is_zero()) throw std::invalid_argument("a line needs at least one unit");
+    g_tile_size_in_use = true; // closes the latch above: the tile size is now baked into tiles_
     tiles_ = units_;
     tiles_ >>= books_per_tile_bits();
     const uint32_t rem = units_.low_bits(books_per_tile_bits());

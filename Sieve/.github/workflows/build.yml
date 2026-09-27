@@ -148,10 +148,18 @@ jobs:
           $H --no-menu --line books --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door6.png | sed -n 1p | q "^MODELS line"
           # The crates render their models onto their faces, and the cache has a budget.
           $H --no-menu --line models --model-cache 8 --walk "0,0" --bench 12 --screenshot crates.png 2>&1 | q "^bench: 12 frames"
-          # From a settings file that does not exist yet, so the slider starts at its default.
+          # The display cache is a world setting, in the setup menu's GLOBAL section (row 8),
+          # in steps of 8 MB, and saved with the application's settings. From a settings file that
+          # does not exist yet, so it starts at its default.
           rm -f mc.ini
-          $H --main-menu --settings mc.ini --press "Down,Return,Return,Down,Down,Down,Down,Down,Down,Right,Right" --screenshot mc.png > /dev/null
+          downs=$(python -c "print(','.join(['Down']*8))")
+          $H --menu --settings mc.ini --press "$downs,Right,Right" --screenshot mc.png > /dev/null
           grep -q "^model_cache_mb = 80" mc.ini
+          # ...and Graphics Memory, which the setup menu's budget keeps it within, is a graphics
+          # setting: Settings, Graphics, then the seventh row.
+          rm -f gm.ini
+          $H --main-menu --settings gm.ini --press "Down,Return,Return,Down,Down,Down,Down,Down,Down,Right" --screenshot gm.png > /dev/null
+          grep -q "^graphics_memory_gb = 5" gm.ini
           # A different shape is a different line, and the setup menu draws all six of them.
           $exe mesh --vertices 12 --faces 20 --coords 64 | tr -d '\r' | q "^space        models/V12/F20/C64/key=sieve/modelspace-v1"
           $H --no-menu --line models --vertices 12 --faces 20 --coords 64 --walk "0,0" --screenshot shape.png | sed -n 1p | q "^MODELS line"
@@ -171,7 +179,7 @@ jobs:
           # mapping has to be pinned or a row inserted anywhere above silently opens the wrong
           # line's list. Each row here ticks a mode and the saved file says which line it was.
           # Closing the overlay is what writes it, which also covers that path.
-          for pair in "4 text" "8 image" "11 audio" "12 video" "16 books"; do
+          for pair in "10 text" "14 image" "17 audio" "18 video" "22 books"; do
             set -- $pair
             rm -f row$1.ini
             downs=$(python -c "print(','.join(['Down']*$1))")
@@ -184,9 +192,10 @@ jobs:
           if grep -q "mode = mark" none.ini; then exit 1; fi
           # Items per wall: the corridor's tile size is a setting. It changes no address -- the
           # same unit, at the same percentage along the same line -- only the tile and slot that
-          # name where it stands, and at 256 a tile the tile number is half what it was.
-          a=$($H --no-menu --walk "0,0" --screenshot t128.png | sed -n 1p)
-          b=$($H --no-menu --items-per-wall 256 --walk "0,0" --screenshot t256.png | sed -n 1p)
+          # name where it stands, and at 256 a tile the tile number is half what it was. Untitled
+          # (title length 0), so the starting page stands well along the line, not at its start.
+          a=$($H --no-menu --title-length 0 --walk "0,0" --screenshot t128.png | sed -n 1p)
+          b=$($H --no-menu --title-length 0 --items-per-wall 256 --walk "0,0" --screenshot t256.png | sed -n 1p)
           echo "$a"; echo "$b"
           echo "$a" | q "85.9326950016% along"
           echo "$b" | q "85.9326950016% along"
@@ -340,6 +349,11 @@ jobs:
           test "$(echo "$out" | tail -2 | book)" = "$next"
           # Guided order: M cycles to it and - zooms out; every door keeps the corridor position.
           $H --warp "$W" --press "M,M,-" --screenshot keys.png | tail -2 | sed -n 1p | q "PAGES line, guided zoom 57"
+          # The address navigator: X opens the whole address, Home chooses its first digit, Up turns
+          # it (carrying and wrapping), and ENTER goes there, far from where the walk started.
+          out=$($H --warp "$W" --press "X,Home,Up,Return" --screenshot nav.png)
+          echo "$out" | tail -2 | sed -n 1p | q "went to 1"
+          if [ "$(echo "$out" | tail -2 | book)" = "$here" ]; then exit 1; fi
           start=$($H --mode guided --warp "$W" --zoom 20 --walk "0,0" --screenshot start.png | book)
           # The corridor end to end and back: six doors left from pages reach binary, which is
           # where the run finishes, and six right brings you back to the same book on pages.
@@ -353,8 +367,9 @@ jobs:
           echo "$out" | tail -2 | sed -n 1p | q "^PAGES line"
           test "$(echo "$out" | tail -2 | book)" = "$start"
           # Loops: a 2-character line is 729 units = 6 tiles, so tile 6 starts the second copy,
-          # and the CLI reads the same corridor places the hallway shows.
-          $H --length 2 --goto @6 --walk "0,0" --screenshot loop6.png | q "first book 000 "
+          # and the CLI reads the same corridor places the hallway shows. The CLI's lines are bare,
+          # and a title length of 0 makes the hallway's the same.
+          $H --length 2 --title-length 0 --goto @6 --walk "0,0" --screenshot loop6.png | q "first book 000 "
           test "$(build/sieve read --length 2 --mode positional --at 6:0 2>/dev/null)" = "  "
           test "$(build/sieve read --length 2 --mode positional --at -1:127 2>/dev/null)" = "(empty: padding at the end of a loop)"
           build/sieve info --length 2 | q "39 empty slots"
@@ -380,10 +395,10 @@ jobs:
           # The main menu, its settings screens and a language file with gaps (English fills them).
           $H --main-menu --screenshot main.png | q "saved main.png"
           $H --line image --edge-glow --walk "0,0" --screenshot glow.png 2>&1 | q "graphics: edge glow on, real graphics off"
-          # Real Graphics: every line loads the templates. (Committing a per-line model, e.g.
-          # data/meshes/book-audio.obj, changes this line: update it then.)
+          # Real Graphics: a line loads its own item model where there is one (data/meshes/book-audio.obj
+          # here) and the templates for the rest.
           out=$($H --line audio --real-graphics --walk "0,0" --screenshot real.png 2>&1)
-          echo "$out" | q "real graphics for the audio line: hallway=hallway.obj bookshelf=bookshelf.obj book=book.obj marker=marker.obj"
+          echo "$out" | q "real graphics for the audio line: hallway=hallway.obj bookshelf=bookshelf.obj book=book-audio.obj marker=marker.obj"
           out=$($H --real-graphics --fps-counter --bench 5 --walk "0,0" --screenshot fps.png 2>&1)
           echo "$out" | q "^bench: 5 frames"
           echo "$out" | q "graphics: edge glow off, real graphics on, door portals on, fps counter on"
@@ -436,8 +451,11 @@ jobs:
         run: |
           cd reference
           python sieve_ref.py vectors       | diff - ../tests/vectors_v1.tsv
+          python sieve_ref.py biguint-vectors | diff - ../tests/vectors_biguint_v1.tsv
+          python sieve_ref.py biguint-large-vectors | diff - ../tests/vectors_biguint_large_v1.tsv
           python sieve_ref.py digit-vectors | diff - ../tests/vectors_digits_v1.tsv
           python sieve_ref.py canon-vectors | diff - ../tests/vectors_canon.tsv
+          python sieve_ref.py bytes-vectors | diff - ../tests/vectors_bytes_v1.tsv
           python sieve_ref.py alphabet-vectors | diff - ../tests/vectors_alphabets_v1.tsv
           python sieve_ref.py model-vectors | diff - ../tests/vectors_models_v1.tsv
           python sieve_ref.py image-vectors | diff - ../tests/vectors_image_v1.tsv
@@ -445,6 +463,7 @@ jobs:
           python sieve_ref.py filter-vectors | diff - ../tests/vectors_filters_v1.tsv
           python sieve_ref.py compact-vectors | diff - ../tests/vectors_compact_v1.tsv
           python sieve_ref.py book-vectors | diff - ../tests/vectors_books_v1.tsv
+          python sieve_ref.py titled-vectors | diff - ../tests/vectors_titled_v1.tsv
           python sieve_ref.py book-filter-vectors | diff - ../tests/vectors_book_filters_v1.tsv
           python sieve_ref.py book-read ../tests/example_book_v1.book > book.out
           test "$(head -1 book.out)" = "$(awk '$1 == "id" {print $2}' ../tests/example_book_v1.book)"

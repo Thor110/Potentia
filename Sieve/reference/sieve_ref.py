@@ -7,9 +7,12 @@ and hashlib, sharing no code with the C++ core. The C++ core must agree with it
 bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
 
     python3 sieve_ref.py biguint-vectors > ../tests/vectors_biguint_v1.tsv
+    python3 sieve_ref.py biguint-large-vectors > ../tests/vectors_biguint_large_v1.tsv
     python3 sieve_ref.py vectors        > ../tests/vectors_v1.tsv
     python3 sieve_ref.py digit-vectors  > ../tests/vectors_digits_v1.tsv
     python3 sieve_ref.py canon-vectors  > ../tests/vectors_canon.tsv
+    python3 sieve_ref.py bytes-vectors  > ../tests/vectors_bytes_v1.tsv
+    python3 sieve_ref.py titled-vectors > ../tests/vectors_titled_v1.tsv
     python3 sieve_ref.py image-vectors  > ../tests/vectors_image_v1.tsv
     python3 sieve_ref.py guided-vectors > ../tests/vectors_guided_v1.tsv
     python3 sieve_ref.py filter-vectors > ../tests/vectors_filters_v1.tsv
@@ -33,6 +36,8 @@ ALPHABETS = {
     "babel29": " " + "abcdefghijklmnopqrstuvwxyz" + ",.",
     "ascii95": "".join(chr(c) for c in range(0x20, 0x7F)),
     "ascii96": "\n" + "".join(chr(c) for c in range(0x20, 0x7F)),
+    # SPECIFICATIONS 12.1a: U+0000-U+00FF in code point order, so digit d is byte d.
+    "bytes256": "".join(chr(c) for c in range(0x100)),
 }
 
 # A few named Unicode blocks, written out here from the standard rather than read from the C++
@@ -216,6 +221,18 @@ def canonicalise(text, alphabet_id, length, version="v2"):
     s = "".join(canon)
     pad = symbols[0]  # digit 0: the space for every alphabet pinned before ascii96
     return [s[i:i + length].ljust(length, pad) for i in range(0, len(s), length)]
+
+
+def canonicalise_bytes(data, alphabet_id, length):
+    """canon-bytes-v1 (SPECIFICATIONS 12.1a): the identity. The bytes are cut into units of
+    `length`, a last unit short of the length is padded with NUL (digit 0), and an empty file is
+    one unit of NULs. Only an alphabet holding every byte value may use it. Returns the units as
+    strings of the code points U+0000-U+00FF, one per byte, which is how the alphabet spells them."""
+    symbols = alphabet(alphabet_id)
+    assert all(chr(b) in symbols for b in range(0x100)), "canon-bytes-v1 needs every byte value"
+    text = "".join(chr(b) for b in data)
+    units = [text[i:i + length] for i in range(0, len(text), length)] or [""]
+    return [u.ljust(length, "\x00") for u in units]
 
 
 # -- image line (canon-image-v1), written independently with exact fractions
@@ -433,6 +450,105 @@ def cmd_biguint_vectors(_args):
             row(f"digits{base}", a, 0, ",".join(str(d) for d in reversed(digits)))
 
 
+def large_operand(spec):
+    """An operand of the large BigUint vectors, from its written form.
+
+    The operands run to hundreds of thousands of bits, so the vectors name them instead of writing
+    them out, and both sides build them from the name:
+
+        r:BITS:TAG      BITS bits read little-endian from the SHA-256 stream of
+                        "biguint-large/v1/TAG" (the stream() above), top bit forced on
+        m:BITS          2^BITS - 1, every bit set, which is where carries run longest
+        s:BITS          2^(BITS-1) + 1, the two ends set and nothing between
+        p:BASE:EXP:D    BASE^EXP + D, for D in -1, 0, 1: every digit BASE-1, or a one and zeros
+    """
+    f = spec.split(":")
+    if f[0] == "r":
+        bits = int(f[1])
+        g = stream("biguint-large/v1/" + f[2])
+        n = int.from_bytes(bytes(next(g) for _ in range((bits + 7) // 8)), "little")
+        return (n & ((1 << bits) - 1)) | (1 << (bits - 1))
+    if f[0] == "m":
+        return (1 << int(f[1])) - 1
+    if f[0] == "s":
+        return (1 << (int(f[1]) - 1)) + 1
+    if f[0] == "p":
+        return int(f[1]) ** int(f[2]) + int(f[3])
+    raise ValueError(spec)
+
+
+def cmd_biguint_large_vectors(_args):
+    """BigUint vectors at the lengths where the fast algorithms run.
+
+    vectors_biguint_v1.tsv stops at 4,755 bits, which is below where multiplication turns to
+    Karatsuba, division to a reciprocal and the base conversions to splitting in halves. These rows
+    go to 400,000 bits, across each of those thresholds and the lopsided shapes between them. The
+    results are far too long to write down, so each row gives the SHA-256 of the result's text in
+    the same form vectors_biguint_v1.tsv would have used; the operands are named, as large_operand()
+    describes, rather than written out.
+    """
+    sys.set_int_max_str_digits(0)
+    print("# sieve large biguint vectors (exact arithmetic, SPECIFICATIONS 4.3)")
+    print("# op\ta\tb\tsha256 of the result text      (operands as reference/sieve_ref.py large_operand())")
+    rows = []
+    # Multiplication: square and lopsided, either side of the Karatsuba threshold (32 limbs), at a
+    # page, at 152,000 bits (a pages-line address) and past it, with all-ones and sparse operands.
+    for a, b in (("r:2000:a", "r:2100:b"), ("r:4000:a", "r:4000:b"), ("r:4100:a", "r:2050:b"),
+                 ("m:40000", "m:40000"), ("s:40000", "s:40000"), ("m:40000", "r:7000:c"),
+                 ("r:152000:a", "r:152000:b"), ("r:152000:a", "r:5000:c"), ("r:152000:a", "r:151937:d"),
+                 ("r:400000:a", "r:400000:b"), ("r:400000:a", "r:10300:c"), ("m:400000", "m:399999"),
+                 ("p:27:30000:-1", "p:27:30000:-1")):
+        rows.append(("mul", a, b))
+    # Division: Knuth's algorithm and Barrett's either side of their thresholds (160 limbs with a
+    # quotient twice as long, 1,000 limbs with one as long), divisors of every shape, exact
+    # quotients, a quotient of one and of nothing.
+    for a, b in (("r:30000:a", "r:10000:b"), ("r:20000:a", "r:10300:b"), ("r:31000:a", "r:10300:b"),
+                 ("r:128000:a", "r:64000:b"), ("r:130000:a", "r:66000:b"), ("r:400000:a", "r:66000:b"),
+                 ("r:400000:a", "r:150000:b"), ("r:304000:a", "r:152000:b"), ("m:304000", "m:152000"),
+                 ("m:304000", "s:152000"), ("s:304000", "m:152000"), ("r:304000:a", "m:100000"),
+                 ("p:27:60000:0", "p:27:30000:0"), ("p:27:60000:-1", "p:27:30000:0"),
+                 ("p:27:60000:1", "p:27:30000:-1"), ("r:152000:a", "r:152000:a"), ("r:152000:b", "r:152000:a")):
+        rows.append(("divmod", a, b))
+    # Conversions: the operand itself (which checks how each side builds it), decimal, and digits
+    # in bases with one digit per limb and many, over random values and over the extremes of a
+    # base (every digit its largest, a one followed by zeros).
+    for a in ("r:152000:a", "p:27:32000:-1", "p:27:32000:0", "p:27:32000:1", "p:10:40000:-1", "p:10:40000:0",
+              "m:152000", "s:152000", "r:400000:a"):
+        rows.append(("hex", a, "-"))
+    for a in ("r:2600:a", "r:152000:a", "p:10:40000:-1", "p:10:40000:0", "m:152000", "r:400000:a"):
+        rows.append(("dec", a, "-"))
+    for base, vals in ((27, ("r:2600:a", "r:152000:a", "p:27:32000:-1", "p:27:32000:0", "p:27:32000:1", "r:400000:a")),
+                       (3, ("r:152000:a", "p:3:90000:-1")), (10, ("r:152000:a",)), (95, ("r:152000:a", "p:95:20000:-1")),
+                       (104, ("r:152000:a",)), (1000, ("r:152000:a",)), (65537, ("r:152000:a", "p:65537:9000:-1")),
+                       (4294967295, ("r:152000:a", "p:4294967295:4000:-1"))):
+        for a in vals:
+            rows.append((f"digits{base}", a, "-"))
+
+    sha = lambda t: hashlib.sha256(t.encode()).hexdigest()
+    for op, sa, sb in rows:
+        a = large_operand(sa)
+        b = None if sb == "-" else large_operand(sb)
+        if op == "mul":
+            out = f"{a * b:x}"
+        elif op == "divmod":
+            out = f"{a // b:x},{a % b:x}"
+        elif op == "hex":
+            out = f"{a:x}"
+        elif op == "dec":
+            out = str(a)
+        else:
+            base = int(op[6:])
+            digits = []
+            v = a
+            while True:
+                v, d = divmod(v, base)
+                digits.append(d)
+                if v == 0:
+                    break
+            out = ",".join(str(d) for d in reversed(digits))
+        print(f"{op}\t{sa}\t{sb}\t{sha(out)}")
+
+
 def cmd_digit_vectors(_args):
     """Address vectors over abstract bases (image palettes, notes, video): base, length, key, digits, pos, scr."""
     print("# sieve digit conformance vectors v1 (feistel-sha256-v1)")
@@ -450,6 +566,39 @@ def cmd_digit_vectors(_args):
                     pos, scr = sp.address_of(d, "positional"), sp.address_of(d, "scrambled")
                     assert sp._digits(int(scr, 16)) == sp.scramble(d)
                     print(f"{base}\t{L}\t{key}\t{','.join(map(str, d))}\t{pos}\t{scr}")
+
+
+def cmd_bytes_vectors(_args):
+    """The binary line: a file as units of a bytes256 line (canon-bytes-v1), and their addresses.
+
+    Each row is an input file, the line it is cut for, the units that come out (as hex, since a
+    file holds tabs, line ends and NULs that a vector file cannot) and each unit's positional and
+    scrambled address. On bytes256 the positional address is the unit's own bytes read as one
+    number, so that column is the hex dump of the unit: the demonstration that the addressing is
+    honest.
+    """
+    print("# sieve binary-line vectors v1 (canon-bytes-v1 over feistel-sha256-v1)")
+    print("# alphabet\tlength\tkey\tfile_hex\tunits_hex\tpositional\tscrambled   (units and addresses comma-separated)")
+    g = stream("bytes/v1")
+    noise = bytes(next(g) for _ in range(1000))
+    files = [
+        b"", b"\x00", b"\xff", b"\xde\xad\xbe\xef", bytes(range(256)),
+        b"tab\there\r\nline\nnul\x00end",           # what text canonicalisation would change
+        "caf\u00e9 \u6771\u4eac".encode("utf-8"),        # UTF-8 that must not be decoded
+        b"\xc0\xaf\xed\xa0\x80\x80",                     # and bytes that are not UTF-8 at all
+        noise,
+    ]
+    for data in files:
+        for alpha, L, key in (("bytes256", 1, "sieve"), ("bytes256", 4, "sieve"), ("bytes256", 7, "other"),
+                              ("bytes256", 256, "sieve")):
+            if L == 1 and len(data) > 16:
+                continue  # a file cut into single bytes adds nothing past a few rows
+            sp = Space(alpha, L, key)
+            units = canonicalise_bytes(data, alpha, L)
+            uh = ",".join(bytes(ord(c) for c in u).hex() for u in units)
+            pos = ",".join(sp.address_of(u, "positional") for u in units)
+            scr = ",".join(sp.address_of(u, "scrambled") for u in units)
+            print(f"{alpha}\t{L}\t{key}\t{data.hex() or '-'}\t{uh}\t{pos}\t{scr}")
 
 
 def cmd_canon_vectors(_args):
@@ -1517,6 +1666,69 @@ def cmd_book_vectors(_args):
                       f"{''.join(map(str, cover))}\t{txt(title)}\t{'|'.join(txt(p) for p in pages)}")
 
 
+# -- titled lines (titled-v1): a cover (some lines), a title and a content index as one
+#    mixed-radix number, cover first; scrambled through shuffle-sha256-v1 over the whole count.
+def titled_space_id(content_shape, title_sym, title_len, cover, key):
+    title_part = f"+title={title_sym}/L{title_len}" if title_len > 0 else ""  # a title length of 0 is no title
+    cover_part = f"+cover={cover[0]}/L{cover[2]}" if cover else ""
+    return f"titled/{content_shape}{title_part}{cover_part}/key={key}/titled-v1"
+
+
+def titled_parts(v, content_size, title_base, title_len, cover):
+    """Positional index -> (cover digits, title digits, content index), per SPECIFICATIONS §11."""
+    def digits(n, base, length):
+        out = []
+        for _ in range(length):
+            n, r = divmod(n, base)
+            out.append(r)
+        assert n == 0
+        return out[::-1]
+    rest, content = divmod(v, content_size)
+    cover_n, title_n = divmod(rest, title_base ** title_len)
+    return (digits(cover_n, cover[1], cover[2]) if cover else []), digits(title_n, title_base, title_len), content
+
+
+def titled_index(cover_d, title_d, content, content_size, title_base, cover):
+    num = lambda ds, b: sum(d * b ** i for i, d in enumerate(reversed(ds)))
+    v = num(cover_d, cover[1]) if cover else 0
+    v = v * title_base ** len(title_d) + num(title_d, title_base)
+    return v * content_size + content
+
+
+def cmd_titled_vectors(_args):
+    """Titled-line addresses: positional (mixed radix, cover first) and scrambled (shuffle over the count)."""
+    print("# sieve titled-line vectors v1 (titled-v1 over shuffle-sha256-v1)")
+    print("# content_shape content_size title_alphabet T cover_symbols cover_base cover_length key mode address cover_digits title_digits content")
+    print("# (sizes, addresses and contents in hex; digits comma-separated; '-' for no cover)")
+    g = stream("titled")
+    models = ModelSpace(4, 2, 4)
+    shapes = (
+        ("lower27/L16", 27 ** 16, "lower27", 8, None, "sieve"),
+        ("notes/L6", 104 ** 6, "lower27", 4, ("image/mono/4x4", 2, 16), "sieve"),
+        ("video/mono/2x2x3/L12", 2 ** 12, "lower27", 2, ("image/mono/2x2", 2, 4), "other"),
+        ("models/V4/F2/C4", models.size, "lower27", 3, None, "sieve"),
+        ("lower27/L4", 27 ** 4, "greek", 5, None, "sieve"),
+        ("lower27/L6", 27 ** 6, "lower27", 0, None, "sieve"),
+        ("notes/L3", 104 ** 3, "lower27", 0, ("image/mono/2x2", 2, 4), "other"),
+    )
+    for content_shape, cs, talpha, T, cover, key in shapes:
+        tb = len(alphabet(talpha))
+        n = (cover[1] ** cover[2] if cover else 1) * tb ** T * cs
+        dom = titled_space_id(content_shape, talpha, T, cover, key)
+        width = max(1, ((n - 1).bit_length() + 3) // 4)
+        for mode in ("positional", "scrambled"):
+            for k in [0, n - 1, n // 3] + [int.from_bytes(bytes(next(g) for _ in range(width)), "little") % n for _ in range(3)]:
+                pos = shuffle(key, dom, n, k, inverse=True) if mode == "scrambled" else k
+                cd, td, content = titled_parts(pos, cs, tb, T, cover)
+                assert titled_index(cd, td, content, cs, tb, cover) == pos
+                assert (shuffle(key, dom, n, pos) if mode == "scrambled" else pos) == k
+                cov = f"{cover[0]}\t{cover[1]}\t{cover[2]}" if cover else "-\t0\t0"
+                if T == 0 and not cover and mode == "positional":
+                    assert pos == content  # no title and no cover: the content's own address
+                print(f"{content_shape}\t{cs:x}\t{talpha}\t{T}\t{cov}\t{key}\t{mode}\t{format(k, 'x').zfill(width)}\t"
+                      f"{','.join(map(str, cd)) or '-'}\t{','.join(map(str, td)) or '-'}\t{content:x}")
+
+
 def cmd_book_filter_vectors(_args):
     """Book filters (books-compact-v1): surviving books counted, unranked and shuffled, each part by
     its own independent ranker, the pages judged as one text."""
@@ -1599,7 +1811,9 @@ def main():
     s.add_argument("--max", type=int, default=4)
     sub.add_parser("vectors")
     sub.add_parser("biguint-vectors")
+    sub.add_parser("biguint-large-vectors")
     sub.add_parser("digit-vectors")
+    sub.add_parser("bytes-vectors")
     sub.add_parser("canon-vectors")
     sub.add_parser("alphabet-vectors")
     sub.add_parser("model-vectors")
@@ -1614,6 +1828,7 @@ def main():
     sub.add_parser("filter-vectors")
     sub.add_parser("compact-vectors")
     sub.add_parser("book-vectors")
+    sub.add_parser("titled-vectors")
     sub.add_parser("book-filter-vectors")
     s = sub.add_parser("book-read")
     s.add_argument("book")
@@ -1625,6 +1840,10 @@ def main():
         cmd_vectors(args)
     elif args.cmd == "biguint-vectors":
         cmd_biguint_vectors(args)
+    elif args.cmd == "biguint-large-vectors":
+        cmd_biguint_large_vectors(args)
+    elif args.cmd == "bytes-vectors":
+        cmd_bytes_vectors(args)
     elif args.cmd == "digit-vectors":
         cmd_digit_vectors(args)
     elif args.cmd == "canon-vectors":
@@ -1645,6 +1864,8 @@ def main():
         cmd_filter_vectors(args)
     elif args.cmd == "compact-vectors":
         cmd_compact_vectors(args)
+    elif args.cmd == "titled-vectors":
+        cmd_titled_vectors(args)
     elif args.cmd == "book-vectors":
         cmd_book_vectors(args)
     elif args.cmd == "book-filter-vectors":

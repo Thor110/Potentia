@@ -86,11 +86,17 @@ public:
     Key(const std::string& tonic, const std::string& scale, uint32_t L) : allowed_(kNoteSymbols)
     {
         provenance_ = "tonic=" + tonic + " scale=" + scale;
+        // Both names arrive validated against the parameter's own list of choices, so in the tool
+        // they cannot be wrong. They are checked again here because a filter is also constructible
+        // straight from code, and a name that is not in the list would otherwise walk off the end
+        // of kTonics or leave the scale pointer null.
         uint32_t t = 0;
-        while (tonic != kTonics[t]) ++t;
+        while (t < kTonics.size() && tonic != kTonics[t]) ++t;
+        if (t == kTonics.size()) throw std::invalid_argument("unknown tonic '" + tonic + "'");
         const Scale* sc = nullptr;
         for (const auto& s : scales())
             if (scale == s.name) sc = &s;
+        if (!sc) throw std::invalid_argument("unknown scale '" + scale + "'");
         std::array<bool, 12> in{};
         for (uint32_t step : sc->steps) in[(t + step) % 12] = true;
         for (uint32_t d = 0; d < kNoteSymbols; ++d)

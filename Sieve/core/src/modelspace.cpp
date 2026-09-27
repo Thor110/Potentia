@@ -8,29 +8,6 @@ namespace sieve {
 
 namespace {
 
-// Digits in chunks: as many as fit a 32-bit multiplier (base^k <= 2^32 - 1), one big-number
-// operation per chunk instead of one per digit.
-uint32_t chunk_digits(uint32_t base)
-{
-    uint32_t k = 1;
-    for (uint64_t p = base; p * base < (uint64_t(1) << 32); p *= base) ++k;
-    return k;
-}
-
-uint32_t small_pow(uint32_t base, uint32_t k)
-{
-    uint64_t p = 1;
-    for (uint32_t i = 0; i < k; ++i) p *= base;
-    return uint32_t(p);
-}
-
-void mul_pow(BigUint& n, uint32_t base, uint64_t e)
-{
-    const uint32_t k = chunk_digits(base), full = small_pow(base, k);
-    for (; e >= k; e -= k) n.mul_small(full);
-    for (; e > 0; --e) n.mul_small(base);
-}
-
 uint32_t log2_of(uint32_t v)
 {
     uint32_t k = 0;
@@ -128,12 +105,12 @@ uint32_t checked_coords(uint32_t vertices, uint32_t faces, uint32_t coords)
     return coords;
 }
 
+// A model's index is its coordinates' digits (base C) followed by its faces' digits (base V):
+// verts * V^(3F) + faces. Packing and unpacking is one conversion of each part, with one
+// multiplication or division between them.
 BigUint model_count(uint32_t v, uint32_t f, uint32_t c)
 {
-    BigUint n(1);
-    mul_pow(n, c, uint64_t(v) * 3);
-    mul_pow(n, v, uint64_t(f) * 3);
-    return n;
+    return BigUint::mul(BigUint::pow(c, uint64_t(v) * 3), BigUint::pow(v, uint64_t(f) * 3));
 }
 
 size_t width_of(const BigUint& n)
@@ -167,48 +144,20 @@ BigUint ModelSpace::index_of(const Parts& p, AddressMode m) const
 {
     if (p.verts.size() != size_t(v_) * 3 || p.faces.size() != size_t(f_) * 3)
         throw std::invalid_argument("the model does not have this line's shape");
-    BigUint value;
-    auto put = [&](const Digits& d, uint32_t base) {
-        const uint32_t k = chunk_digits(base);
-        for (size_t i = 0; i < d.size();)
-        {
-            const size_t take = std::min<size_t>(k, d.size() - i);
-            uint64_t chunk = 0;
-            for (size_t j = 0; j < take; ++j, ++i)
-            {
-                if (d[i] >= base) throw std::invalid_argument("digit out of range");
-                chunk = chunk * base + d[i];
-            }
-            value.mul_small(small_pow(base, uint32_t(take)));
-            value.add_small(uint32_t(chunk));
-        }
-    };
-    put(p.verts, c_);
-    put(p.faces, v_);
+    BigUint value = BigUint::mul(BigUint::from_digits(p.verts, c_), BigUint::pow(v_, p.faces.size()));
+    value += BigUint::from_digits(p.faces, v_);
     return m == AddressMode::Scrambled ? shuffle_.forward(value) : value;
 }
 
 ModelSpace::Parts ModelSpace::parts_at(const BigUint& index, AddressMode m) const
 {
     if (index >= size_) throw std::out_of_range("model address beyond the line");
-    BigUint value = m == AddressMode::Scrambled ? shuffle_.inverse(index) : index;
+    const BigUint value = m == AddressMode::Scrambled ? shuffle_.inverse(index) : index;
+    BigUint verts, faces;
+    BigUint::divmod(value, BigUint::pow(v_, uint64_t(f_) * 3), verts, faces);
     Parts p;
-    auto take = [&](Digits& d, uint32_t base, size_t length) { // least significant first
-        const uint32_t k = chunk_digits(base);
-        d.assign(length, 0);
-        for (size_t i = d.size(); i > 0;)
-        {
-            const uint32_t n = uint32_t(std::min<size_t>(k, i));
-            uint32_t r = value.divmod_small(small_pow(base, n));
-            for (uint32_t j = 0; j < n; ++j)
-            {
-                d[--i] = r % base;
-                r /= base;
-            }
-        }
-    };
-    take(p.faces, v_, size_t(f_) * 3);
-    take(p.verts, c_, size_t(v_) * 3);
+    p.verts = verts.to_digits(c_, size_t(v_) * 3);
+    p.faces = faces.to_digits(v_, size_t(f_) * 3);
     return p;
 }
 

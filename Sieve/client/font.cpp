@@ -1,3 +1,11 @@
+// Sieve hallway — reading Unifont .hex files and drawing glyphs from them. See font.hpp for the
+// format and the layout rules.
+//
+// Drawing a glyph a pixel at a time would be thousands of draw calls a frame, so glyphs are packed
+// into textures instead: one atlas per block of 256 code points, built the first time anything in
+// that block is drawn, so a font of tens of thousands of glyphs costs only the blocks a language
+// actually uses. The atlases belong to the renderer that made them and are thrown away if the
+// renderer changes, which is what happens when the window is rebuilt for a new resolution.
 #include "font.hpp"
 
 #include "cli/dictionaries.hpp"
@@ -283,6 +291,41 @@ void draw_text(SDL_Renderer* r, float x, float y, const std::string& s, float sc
         }
         cx += cell;
     }
+}
+
+bool paint_glyph(uint32_t* px, int w, int h, float x, float y, float cw, float ch, char32_t cp, uint32_t argb)
+{
+    const Font* f = nullptr;
+    const Glyph* g = nullptr;
+    for (const Font* candidate : {g_font.get(), g_fallback.get()})
+    {
+        if (!candidate) continue;
+        const auto it = candidate->glyphs.find(cp);
+        if (it != candidate->glyphs.end())
+        {
+            f = candidate;
+            g = &it->second;
+            break;
+        }
+    }
+    if (!g || g->rows.empty()) return false;
+    const int gw = g->width, gh = f->height;
+    // An 8-wide glyph in a 16-tall font is half a cell wide, as draw_text lays it out.
+    const float draw_w = gw < gh ? cw * float(gw) / float(gh) * 2.0f : cw;
+    const int x0 = std::max(0, int(std::floor(x))), x1 = std::min(w, int(std::ceil(x + std::min(draw_w, cw))));
+    const int y0 = std::max(0, int(std::floor(y))), y1 = std::min(h, int(std::ceil(y + ch)));
+    for (int py = y0; py < y1; ++py)
+    {
+        const int gy = int((float(py) + 0.5f - y) / ch * float(gh));
+        if (gy < 0 || gy >= int(g->rows.size())) continue;
+        const uint16_t row = g->rows[size_t(gy)];
+        for (int qx = x0; qx < x1; ++qx)
+        {
+            const int gx = int((float(qx) + 0.5f - x) / draw_w * float(gw));
+            if (gx >= 0 && gx < gw && (row >> (gw - 1 - gx) & 1)) px[size_t(py) * size_t(w) + size_t(qx)] = argb;
+        }
+    }
+    return true;
 }
 
 void release_fonts()

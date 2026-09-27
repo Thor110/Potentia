@@ -1,6 +1,21 @@
+// Sieve hallway — the setup menu's behaviour: the rows, the map, the filters overlay, and the
+// arithmetic behind what it shows. See menu.hpp for what the menu is and how it is driven.
+//
+// Three things in here are easy to mistake for cosmetics and are not. The bar lengths are worked
+// out in bits (log2 of a line's size) because the lines differ by factors no screen could draw
+// literally. The padding figures come from modular arithmetic on the line's size rather than from
+// building the line, since the line may be far too large to build. And find_limits() searches for
+// the largest settings this machine could actually walk, growing the lines that share a
+// constraint alternately rather than one at a time, because satisfying one line to its own limit
+// first can leave another with nothing.
+//
+// Rows are numbered, and the numbers appear in the row table, the filter mapping and the tests
+// alike, so a row inserted in the middle moves everything after it.
 #include "menu.hpp"
+#include "display.hpp"
 
 #include "font.hpp"
+#include "mesh.hpp"
 #include "strings.hpp"
 #include "theme.hpp"
 
@@ -11,10 +26,12 @@
 #include "sieve/audio.hpp"
 #include "sieve/filter.hpp"
 #include "sieve/corridor.hpp"
+#include "sieve/biguint.hpp"
 #include "sieve/image.hpp"
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <climits>
 #include <cstdint>
 #include <cctype>
@@ -60,26 +77,41 @@ uint32_t clamp32(uint64_t v) { return uint32_t(std::min<uint64_t>(v, UINT32_MAX)
 uint32_t parse_u32(const sieve::cli::Args& a, const char* key, uint32_t def) { return a.has(key) ? a.get_positive(key, def) : def; }
 
 // What this machine can open. The design has no limit; these only describe the hardware of the
-// day, and a future machine only needs them raised. An address of this many bits is one number
-// held in memory; the arithmetic on it grows with the square of its length.
-constexpr double kSlowBits = 4.0e6;    // above this, opening a line takes noticeable time
+// day, and a future machine only needs them raised.
 constexpr double kTooLargeBits = 8.0e9; // above this, one address would need a gigabyte
 
-// What *this* machine can open, rather than what any machine could. Two things bound it, and a
-// shape has to satisfy both:
+// The budget. Three things bound what this machine can open, and a shape has to fit all three:
 //
-//   bits      one address is a single number held in memory, and the arithmetic on it grows with
-//             the square of its length. A two hundred and fifty-sixth of installed memory is the
-//             share one address is given.
-//   positions the hallway keeps a few thousand whole units in its cache -- a unit's characters,
-//             pixels, notes or coordinates -- so the length of a unit, not of its address, is
-//             usually what actually runs the machine out of memory first. A quarter of installed
-//             memory is the share that cache is given.
+//   memory    the hallway keeps the units around you in a cache -- up to kCachedUnits of them,
+//             each its characters, pixels, notes or coordinates at four bytes a position, and its
+//             address twice, as a number and as hex -- and that cache is given a quarter of
+//             installed memory. Only one line is walked at a time, so the largest line is what
+//             has to fit.
+//   graphics  the models line's crate faces (the model image cache) and an allowance for the
+//             world itself -- the corridor, the portals, the text -- have to fit the graphics
+//             memory set in Settings > Graphics, since SDL cannot ask the card.
+//   time      opening one unit means turning its address into its content, and that grows faster
+//             than the address. It is measured on this machine, once, and the longest address
+//             that opens within kUnitMs is the limit, so a slow build or a slow machine gets
+//             smaller limits rather than a hallway that freezes.
 //
-// Neither is a limit of the design. Both only describe the machine of the day, and a bigger one
-// finds bigger numbers with the same arithmetic.
+// None is a limit of the design. They describe the machine of the day, and a bigger one finds
+// bigger numbers with the same arithmetic.
+constexpr double kCachedUnits = 4096;     // the hallway's cache clears itself past this many
+constexpr double kWorldAllowanceMB = 512; // graphics memory for everything but the crate faces
+constexpr double kUnitMs = 50;            // the longest one unit may take to open
+constexpr double kGrowth = 1.6;           // how the time to open grows with the address (Karatsuba)
 
 void text(SDL_Renderer* r, float x, float y, const std::string& s, float scale, SDL_Color c) { draw_text(r, x, y, s, scale, c); }
+
+// The tallest picture, height over width, of any line's items (faces.ini): what the picture
+// cache has to be sized for, since a picture is the chosen size wide and this much taller.
+double tallest_face()
+{
+    double a = 1.0;
+    for (const char* m : {"pages", "image", "audio", "video", "books", "models"}) a = std::max(a, double(load_face_rect(m).aspect()));
+    return a;
+}
 
 std::string fixed(double v, int d)
 {
@@ -92,15 +124,30 @@ std::string fixed(double v, int d)
 
 Budget machine_budget()
 {
-    const int mb = SDL_GetSystemRAM(); // 0 if SDL cannot tell
-    if (mb <= 0) return {};            // no idea: be careful rather than generous
-    const double bytes = double(mb) * 1024.0 * 1024.0;
+    // The measurement is taken once: a unit of a line of 27 symbols, 40,000 long (about 190,000
+    // bits, a long page), turned from its address into its digits. The first turn builds the
+    // powers the conversion keeps for that base, so the second is the one that is timed.
+    static const std::pair<double, double> measured = [] {
+        const uint32_t base = 27, length = 40000;
+        sieve::BigUint v = sieve::BigUint::pow(base, length);
+        v -= sieve::BigUint(1);
+        (void)v.to_digits(base, length);
+        const auto t0 = std::chrono::steady_clock::now();
+        (void)v.to_digits(base, length);
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        return std::make_pair(double(v.bit_length()), std::max(ms, 0.01));
+    }();
     Budget b;
-    b.bits = std::min(kTooLargeBits, bytes * 8.0 / 256.0);
-    // A quarter of memory, four thousand units cached, four bytes a position.
-    b.positions = uint64_t(std::min(bytes * 0.25 / (4096.0 * 4.0), 4.0e9));
+    b.ref_bits = measured.first;
+    b.ref_ms = measured.second;
+    b.ms_per_unit_at_limit = kUnitMs;
+    b.bits = std::min(kTooLargeBits, b.ref_bits * std::pow(kUnitMs / b.ref_ms, 1.0 / kGrowth));
+    const int mb = SDL_GetSystemRAM(); // 0 if SDL cannot tell: then the default, which is careful
+    if (mb > 0) b.cache_bytes = double(mb) * 1048576.0 * 0.25;
     return b;
 }
+
+double unit_ms(const Budget& b, double bits) { return b.ref_ms * std::pow(std::max(bits, 1.0) / b.ref_bits, kGrowth); }
 
 // ---------------------------------------------------------------- settings
 
@@ -129,6 +176,9 @@ Settings Settings::from_args(const sieve::cli::Args& a)
     s.model_coords = parse_u32(a, "coords", s.model_coords);
     s.model_tile = parse_u32(a, "model-tile", s.model_tile);
     s.items_per_wall = parse_u32(a, "items-per-wall", s.items_per_wall);
+    if (a.has("title-length")) s.title_length = a.get_u32("title-length", s.title_length); // 0 is allowed: no titles
+    s.letters_px = parse_u32(a, "item-letters", s.letters_px);
+    if (a.has("close-up")) s.closeup_px = a.get_u32("close-up", s.closeup_px); // 0 is allowed: off
     return s;
 }
 
@@ -156,6 +206,9 @@ void Settings::apply(sieve::cli::Args& a) const
     a.opts["coords"] = std::to_string(model_coords);
     a.opts["model-tile"] = std::to_string(model_tile);
     a.opts["items-per-wall"] = std::to_string(items_per_wall);
+    a.opts["title-length"] = std::to_string(title_length);
+    a.opts["item-letters"] = std::to_string(letters_px);
+    a.opts["close-up"] = std::to_string(closeup_px);
 }
 
 LineSize line_size(uint32_t base, uint64_t length)
@@ -215,9 +268,24 @@ std::array<LineSize, 6> Menu::line_sizes() const
                        std::to_string(s_.model_vertices) + "^" + std::to_string(3ull * s_.model_faces) +
                        (log10 < 15 ? " = " + fixed(std::pow(10.0, log10), 0) : " = ~10^" + fixed(log10, 1));
     }
-    std::array<LineSize, 6> out{page, image, line_size(kNoteSymbols, s_.notes),
-                                line_size(palette_size(s_.video_palette), positions(s_.video_w, s_.video_h, s_.frames)), books,
-                                models};
+    // Every line but books is titled, and audio and video carry a cover from the image line
+    // (SPECIFICATIONS §11): a titled line is |cover| * |title| * |content| units, so the bits add
+    // and the empty slots follow from the product of the three mod the tile.
+    const LineSize title = line_size(alphabet_size(s_.alphabet), s_.title_length);
+    auto titled = [&](LineSize z, bool with_cover) {
+        const uint64_t per = sieve::books_per_tile();
+        const auto rem = [per](const LineSize& x) { return (per - x.padding) % per; }; // the count mod the tile
+        uint64_t m = rem(z) * rem(title) % per;
+        if (with_cover) m = m * rem(image) % per;
+        z.bits += title.bits + (with_cover ? image.bits : 0.0);
+        z.padding = uint32_t((per - m) % per);
+        const double log10 = z.bits * std::log10(2.0);
+        z.units = std::string(with_cover ? "cov*" : "") + "title*" + z.units.substr(0, z.units.find(" = ")) + " = ~10^" + fixed(log10, 1);
+        return z;
+    };
+    std::array<LineSize, 6> out{titled(page, false), titled(image, false), titled(line_size(kNoteSymbols, s_.notes), true),
+                                titled(line_size(palette_size(s_.video_palette), positions(s_.video_w, s_.video_h, s_.frames)), true),
+                                books, titled(models, false)};
     // A unit has at most 2^32 - 1 positions: a larger picture cannot be opened at all.
     const uint64_t kMaxPositions = 0xFFFFFFFFull;
     if (uint64_t(s_.image_w) * s_.image_h > kMaxPositions) out[1].bits = out[4].bits = HUGE_VAL;
@@ -244,16 +312,62 @@ bool Menu::too_large() const
 int Menu::over_budget() const
 {
     const Budget b = machine_budget();
-    const auto sizes = line_sizes();
-    const uint64_t pos[6] = {s_.length,
-                             uint64_t(s_.image_w) * s_.image_h,
-                             s_.notes,
-                             positions(s_.video_w, s_.video_h, s_.frames),
-                             uint64_t(s_.book_pages + 1) * s_.length + uint64_t(s_.image_w) * s_.image_h,
-                             3ull * s_.model_vertices + 3ull * s_.model_faces};
     for (int i = 0; i < 6; ++i)
-        if (!(sizes[size_t(i)].bits <= b.bits) || pos[i] > b.positions) return i; // catches infinities too
+        if (!over_budget_line(i, b)) return i;
     return -1;
+}
+
+// What line i's cache of units would take: each unit its positions at four bytes and its address
+// held twice, as a number (an eighth of a byte a bit) and as hex (a quarter), for as many units
+// as the hallway keeps around you (fourteen tiles, or kCachedUnits if that is fewer).
+double Menu::line_cache_bytes(int i) const
+{
+    const auto sizes = line_sizes();
+    // Each unit's positions: its content, its title and, on audio and video, its cover.
+    const uint64_t cover = uint64_t(s_.image_w) * s_.image_h, t = s_.title_length;
+    const uint64_t pos[6] = {s_.length + t,
+                             cover + t,
+                             s_.notes + t + cover,
+                             positions(s_.video_w, s_.video_h, s_.frames) + t + cover,
+                             uint64_t(s_.book_pages + 1) * s_.length + cover,
+                             3ull * s_.model_vertices + 3ull * s_.model_faces + t};
+    const double units = std::min(kCachedUnits, 14.0 * double(s_.items_per_wall));
+    return units * (4.0 * double(pos[i]) + 0.375 * sizes[size_t(i)].bits + 256.0);
+}
+
+double Menu::graphics_mb_needed() const { return double(model_cache_mb()) + closeup_mb() + kWorldAllowanceMB; }
+
+// The width line i's displays are drawn at, as the hallway works it out (display.hpp), taking
+// the tallest item's shape so that the figures are never under what it will use. Lines in
+// setup order: 0 pages, 1 image, 2 audio, 3 video, 4 books, 5 models.
+int Menu::display_px_line(int i) const
+{
+    const double title = double(s_.title_length);
+    const DisplayText t = i == 0 ? display_text_pages(double(s_.length), title)
+                          : i == 4 ? display_text_books(double(s_.length))
+                                   : display_text_titled(title);
+    return display_px(int(s_.model_tile), int(s_.letters_px), tallest_face(), t);
+}
+
+double Menu::display_mb() const
+{
+    int px = 0;
+    for (int i = 0; i < 6; ++i) px = std::max(px, display_px_line(i));
+    return double(px) * (double(px) * tallest_face()) * 4 / 1048576.0;
+}
+
+// The close-ups, all kSharpMax of them at the close-up size (hallway.hpp).
+double Menu::closeup_mb() const
+{
+    const double w = double(s_.closeup_px);
+    return 24.0 * w * (w * tallest_face()) * 4 / 1048576.0;
+}
+
+bool Menu::graphics_over() const { return app_ && graphics_mb_needed() > double(app_->graphics_memory_gb) * 1024.0; }
+
+void Menu::save_app() const
+{
+    if (app_ && !app_path_.empty()) app_->save(app_path_); // a read-only folder keeps it for this session
 }
 
 // Find my limits: set every line to the largest shape this machine can open.
@@ -327,19 +441,24 @@ void Menu::find_limits()
             else moved = true;
         }
     }
+    // And the model image cache: three rooms of crate faces at the chosen size, or as many as
+    // the graphics memory has room for beside the world.
+    if (app_)
+    {
+        const double three_rooms = 3.0 * s_.items_per_wall * display_mb();
+        const double room = double(app_->graphics_memory_gb) * 1024.0 - kWorldAllowanceMB - closeup_mb();
+        const int mb = int(std::ceil(std::min({three_rooms, room, 4096.0}) / 8.0)) * 8;
+        app_->model_cache_mb = std::max(8, mb);
+        save_app();
+    }
 }
 
-// Does line i fit inside `b` as the settings stand?
+// Does line i fit inside `b` as the settings stand? Its address has to open in time and its
+// cache of units has to fit in memory (the infinities of a shape too large to hold fail both).
 bool Menu::over_budget_line(int i, const Budget& b) const
 {
-    const auto sizes = line_sizes();
-    const uint64_t pos[6] = {s_.length,
-                             uint64_t(s_.image_w) * s_.image_h,
-                             s_.notes,
-                             positions(s_.video_w, s_.video_h, s_.frames),
-                             uint64_t(s_.book_pages + 1) * s_.length + uint64_t(s_.image_w) * s_.image_h,
-                             3ull * s_.model_vertices + 3ull * s_.model_faces};
-    return sizes[size_t(i)].bits <= b.bits && pos[i] <= b.positions;
+    const double bits = line_sizes()[size_t(i)].bits;
+    return bits <= b.bits && line_cache_bytes(i) <= b.cache_bytes;
 }
 
 void Menu::reset_settings()
@@ -347,10 +466,19 @@ void Menu::reset_settings()
     const std::string key = s_.key; // the key names the shuffle, not the shape: it is kept
     s_ = Settings{};
     s_.key = key;
+    // The picture cache is kept in the app settings, but finding the limits sets it, so resetting
+    // puts it back too: otherwise reset would undo everything find-my-limits did but that.
+    if (app_)
+    {
+        app_->model_cache_mb = AppSettings{}.model_cache_mb;
+        save_app();
+    }
 }
 
-Menu::Menu(SDL_Window* window, SDL_Renderer* renderer, Settings settings, sieve::cli::FilterConfig filters, std::string filters_path)
-    : window_(window), r_(renderer), s_(std::move(settings)), cfg_(std::move(filters)), cfg_path_(std::move(filters_path))
+Menu::Menu(SDL_Window* window, SDL_Renderer* renderer, Settings settings, sieve::cli::FilterConfig filters, std::string filters_path,
+           AppSettings* app, std::filesystem::path app_path)
+    : window_(window), r_(renderer), s_(std::move(settings)), cfg_(std::move(filters)), cfg_path_(std::move(filters_path)),
+      app_(app), app_path_(std::move(app_path))
 {
 }
 
@@ -375,25 +503,59 @@ void Menu::adjust(int dir, int step)
     case 2: break; // key: typed
     // Items per wall: the two values that use a whole byte well (see setup.items_per_wall).
     case 3: s_.items_per_wall = s_.items_per_wall == 128 ? 256u : 128u; break;
-    case 4: num(s_.length); break;
-    case 5: s_.alphabet = cycle(kAlphabets, s_.alphabet, dir); break;
-    case 6: s_.canon = cycle(kCanons, s_.canon, dir); break;
-    case 7: s_.model = !s_.model; break;
-    case 8: num(s_.image_w); break;
-    case 9: num(s_.image_h); break;
-    case 10: s_.image_palette = cycle(kPalettes, s_.image_palette, dir); break;
-    case 11: num(s_.notes); break;
-    case 12: num(s_.video_w); break;
-    case 13: num(s_.video_h); break;
-    case 14: num(s_.frames); break;
-    case 15: s_.video_palette = cycle(kPalettes, s_.video_palette, dir); break;
-    case 16: num(s_.book_pages); break;
-    case 17: num(s_.model_vertices); break;
-    case 18: num(s_.model_faces); break;
+    // Angle precision: decimal places on the compass, 0 to 8. Kept with the application's
+    // settings so that it is saved.
+    case kAngleRow:
+        if (app_)
+        {
+            app_->angle_decimals = std::clamp(app_->angle_decimals + dir, 0, 8);
+            save_app();
+        }
+        break;
+    // Title length: how long every line's titles are, in characters.
+    case kLettersRow: s_.letters_px = uint32_t(std::clamp(int(s_.letters_px) + dir, 1, 64)); break;
+    // Off, then 256, 512, 1024.
+    case kCloseUpRow:
+        s_.closeup_px = dir > 0 ? (s_.closeup_px == 0 ? 256u : std::min(1024u, s_.closeup_px * 2))
+                                : (s_.closeup_px <= 256 ? 0u : s_.closeup_px / 2);
+        break;
+    case kTitleRow:
+    {
+        // 0 is allowed here, unlike a line's length: no titles at all.
+        const int64_t t = step == 0 ? (dir > 0 ? std::max<int64_t>(1, int64_t(s_.title_length) * 2) : s_.title_length / 2)
+                                    : int64_t(s_.title_length) + int64_t(dir) * step;
+        s_.title_length = uint32_t(std::clamp<int64_t>(t, 0, int64_t(UINT32_MAX)));
+        break;
+    }
+    case kPagesRows: num(s_.length); break;
+    case kPagesRows + 1: s_.alphabet = cycle(kAlphabets, s_.alphabet, dir); break;
+    case kPagesRows + 2: s_.canon = cycle(kCanons, s_.canon, dir); break;
+    case kPagesRows + 3: s_.model = !s_.model; break;
+    case kImageRows: num(s_.image_w); break;
+    case kImageRows + 1: num(s_.image_h); break;
+    case kImageRows + 2: s_.image_palette = cycle(kPalettes, s_.image_palette, dir); break;
+    case kAudioRow: num(s_.notes); break;
+    case kVideoRows: num(s_.video_w); break;
+    case kVideoRows + 1: num(s_.video_h); break;
+    case kVideoRows + 2: num(s_.frames); break;
+    case kVideoRows + 3: s_.video_palette = cycle(kPalettes, s_.video_palette, dir); break;
+    case kBooksRow: num(s_.book_pages); break;
+    case kModelsRows: num(s_.model_vertices); break;
+    case kModelsRows + 1: num(s_.model_faces); break;
     // The coordinate grid must be a power of two, so it doubles and halves.
-    case 19: s_.model_coords = std::clamp(dir > 0 ? s_.model_coords * 2 : s_.model_coords / 2, 2u, 4096u); break;
-    // A picture is square and a power of two, so it doubles and halves like the grid.
-    case 20: s_.model_tile = std::clamp(dir > 0 ? s_.model_tile * 2 : s_.model_tile / 2, 16u, 512u); break;
+    case kModelsRows + 2: s_.model_coords = std::clamp(dir > 0 ? s_.model_coords * 2 : s_.model_coords / 2, 2u, 4096u); break;
+    // The display size is a power of two, so it doubles and halves like the grid.
+    case kDisplaySizeRow: s_.model_tile = std::clamp(dir > 0 ? s_.model_tile * 2 : s_.model_tile / 2, 16u, 1024u); break;
+    // The display cache, in steps of 8 MB, as far as the graphics memory allows.
+    case kDisplayCacheRow:
+        if (app_)
+        {
+            const int room = int(double(app_->graphics_memory_gb) * 1024.0 - kWorldAllowanceMB - closeup_mb());
+            const int top = std::max(8, std::min(4096, room));
+            app_->model_cache_mb = std::clamp(app_->model_cache_mb + dir * 8, 8, top);
+            save_app();
+        }
+        break;
     default: break;
     }
 }
@@ -501,9 +663,10 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         break;
     case SDLK_F:
         // The filters of the line whose settings are selected.
-        // Rows 4-7 pages, 8-10 image, 11 audio, 12-15 video, 16 books. The GLOBAL rows above
+        // Rows 6-9 pages, 10-12 image, 13 audio, 14-17 video, 18 books. The GLOBAL rows above
         // and the models rows below belong to no filterable line, so F on them does nothing.
-        if (row_ >= 4 && row_ <= 16) open_filters(row_ >= 8 && row_ <= 10 ? 1 : row_ == 11 ? 2 : row_ == 16 ? 4 : row_ >= 12 ? 3 : 0);
+        if (row_ >= kPagesRows && row_ <= kBooksRow)
+            open_filters(row_ >= kImageRows && row_ < kAudioRow ? 1 : row_ == kAudioRow ? 2 : row_ == kBooksRow ? 4 : row_ >= kVideoRows ? 3 : 0);
         break;
     case SDLK_RETURN:
     case SDLK_KP_ENTER:
@@ -514,7 +677,9 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         if (row_ == kResetRow) { reset_settings(); break; }
         if (row_ != kEnterRow) break;
         if (s_.key.empty()) s_.key = "sieve";
-        if (too_large()) break; // the map says which line; nothing to open on this machine
+        // Over the budget, the foot of the list says which limit and which line; the way in stays
+        // shut rather than opening a hallway this machine would freeze in.
+        if (too_large() || over_budget() >= 0 || graphics_over()) break;
         save_filters();
         done = true;
         result = Result::Enter;
@@ -550,11 +715,61 @@ Menu::Result Menu::run()
     return result;
 }
 
+// The budget, drawn as three bars under the settings the way a game's graphics menu shows its
+// memory: what the largest line's cache of units takes against the memory it is given, what the
+// crate faces and the world take against the graphics memory, and how long the slowest line's
+// unit takes to open against the time allowed. A bar that is over is red, and so is its figure.
+// Returns the y below it.
+float Menu::draw_budget(float y)
+{
+    const Budget b = machine_budget();
+    const SDL_Color white{255, 255, 255, 255}, grey{150, 150, 150, 255}, red{255, 80, 80, 255};
+    double cache = 0, bits = 0;
+    for (int i = 0; i < 6; ++i)
+    {
+        const double c = line_cache_bytes(i), n = line_sizes()[size_t(i)].bits;
+        if (std::isfinite(c)) cache = std::max(cache, c);
+        if (std::isfinite(n)) bits = std::max(bits, n);
+    }
+    const double gb = 1073741824.0;
+    const double gfx_have = app_ ? double(app_->graphics_memory_gb) * 1024.0 : 0.0;
+    struct Bar { std::string label, figure; double used, have; };
+    const Bar bars[3] = {
+        {tr("setup.budget.memory"), trf("setup.budget.gb", {fixed(cache / gb, 2), fixed(b.cache_bytes / gb, 1)}), cache, b.cache_bytes},
+        {tr("setup.budget.graphics"), trf("setup.budget.gb", {fixed(graphics_mb_needed() / 1024.0, 2), fixed(gfx_have / 1024.0, 0)}),
+         graphics_mb_needed(), gfx_have},
+        {tr("setup.budget.time"), trf("setup.budget.ms", {fixed(unit_ms(b, bits), 1), fixed(b.ms_per_unit_at_limit, 0)}),
+         unit_ms(b, bits), b.ms_per_unit_at_limit},
+    };
+    for (const Bar& bar : bars)
+    {
+        const bool known = bar.have > 0;
+        const bool over = known && bar.used > bar.have;
+        text(r_, 40, y, bar.label, 1, grey);
+        const float bx = 320, bw = 150, bh = 8;
+        SDL_SetRenderDrawColor(r_, 90, 90, 90, 255);
+        const SDL_FRect frame{bx, y, bw, bh};
+        SDL_RenderRect(r_, &frame);
+        const float fill = known ? float(std::min(1.0, bar.used / bar.have)) : 0.0f;
+        const SDL_Color c = over ? red : white;
+        SDL_SetRenderDrawColor(r_, c.r, c.g, c.b, 255);
+        const SDL_FRect filled{bx + 1, y + 1, (bw - 2) * fill, bh - 2};
+        SDL_RenderFillRect(r_, &filled);
+        text(r_, bx + bw + 10, y, known ? bar.figure : tr("value.none"), 1, over ? red : grey);
+        y += 14;
+    }
+    return y;
+}
+
 void Menu::render()
 {
-    // The menu needs about 1240x700 (settings on the left, five bars on the right). In a smaller
-    // window it is drawn at that size and scaled down to fit, instead of running off the edge.
-    constexpr int kMinW = 1240, kMinH = 700;
+    // The menu needs about 1240 wide (settings on the left, the map on the right), and as tall as
+    // its rows: 16 px each, 22 more for each of the seven section headings, the budget's bars
+    // and the footer. In a smaller window it is drawn at that size and scaled down to fit,
+    // instead of running off the edge or the actions at the foot running into the footer; worked
+    // out from the rows, so a row added later cannot bring that back.
+    constexpr int kMinW = 1240;
+    const int kMinH = 80 + row_count() * 16 + 7 * 22 + 12 + 3 * 14 + 6 + 60;
     int w = 0, h = 0;
     SDL_GetRenderOutputSize(r_, &w, &h);
     if (w < kMinW || h < kMinH)
@@ -581,11 +796,22 @@ void Menu::render()
     };
     auto n = [](uint32_t v) { return std::to_string(v); };
     const std::string start_key = s_.start_line == "text" ? "line.pages" : "line." + s_.start_line;
+    // Three rooms of crate faces, which is what the models line renders (hallway.hpp: kCrateRooms).
+    const size_t three_rooms_mb = size_t(std::ceil(3.0 * s_.items_per_wall * display_mb()));
     const std::vector<Row> rows = {
         {5, tr("setup.line"), tr(start_key)},
         {-1, tr("setup.ordering"), tr("ordering." + s_.mode)},
         {-1, tr("setup.key"), s_.key + (row_ == 2 ? "_" : "")},
         {-1, tr("setup.items_per_wall"), trf("setup.items_per_wall.value", {n(s_.items_per_wall), n(s_.items_per_wall / 2)})},
+        {-1, tr("setup.angle_decimals"), trf("setup.angle_decimals.value", {std::to_string(app_ ? app_->angle_decimals : 1)})},
+        {-1, tr("setup.title_length"), trf("setup.title_length.value", {n(s_.title_length)})},
+        {-1, tr("setup.letters"), trf("setup.letters.value", {n(s_.letters_px), n(Settings{}.letters_px)})},
+        {-1, tr("setup.model_tile"), trf("setup.model_tile.value", {n(s_.model_tile), std::to_string(display_px_line(0)), std::to_string(display_px_line(4))})},
+        {-1, tr("setup.model_cache"), trf("setup.model_cache.value", {std::to_string(model_cache_mb()),
+                                                                      std::to_string(size_t(double(model_cache_mb()) / display_mb())),
+                                                                      n(s_.model_tile), std::to_string(three_rooms_mb)})},
+        {-1, tr("setup.closeup"), s_.closeup_px == 0 ? tr("setup.closeup.off")
+                                                     : trf("setup.closeup.value", {n(s_.closeup_px), std::to_string(size_t(std::ceil(closeup_mb())))})},
         {0, tr("setup.length"), trf("setup.length.value", {n(s_.length)})},
         {-1, tr("setup.alphabet"), trf("setup.alphabet.value", {s_.alphabet, n(alphabet_size(s_.alphabet))})},
         {-1, tr("setup.canon"), "canon-text-" + s_.canon},
@@ -602,8 +828,7 @@ void Menu::render()
         {6, tr("setup.model_vertices"), n(s_.model_vertices)},
         {-1, tr("setup.model_faces"), n(s_.model_faces)},
         {-1, tr("setup.model_coords"), trf("setup.model_coords.value", {n(s_.model_coords)})},
-        {-1, tr("setup.model_tile"), trf("setup.model_tile.value", {n(s_.model_tile), n(s_.model_tile)})},
-        {-2, tr("setup.limits"), trf("setup.limits.value", {std::to_string(machine_budget().positions)})},
+        {-2, tr("setup.limits"), tr("setup.limits.value")},
         {-1, tr("setup.reset"), ""},
         {-1, tr("setup.enter"), ""},
     };
@@ -611,9 +836,13 @@ void Menu::render()
     for (int i = 0; i < int(rows.size()); ++i)
     {
         const Row& r = rows[size_t(i)];
-        // The three actions sit at the foot of the list, clear of the settings above and the
-        // footer below, so the list can grow without them ever running into either.
-        if (r.section == -2) y = std::max(y + 14, H - 118);
+        // The budget, then the three actions at the foot of the list, clear of the settings above
+        // and the footer below, so the list can grow without them ever running into either.
+        if (r.section == -2)
+        {
+            y = draw_budget(y + 12);
+            y = std::max(y + 6, H - 118);
+        }
         if (r.section >= 0)
         {
             y += 4;
@@ -637,13 +866,17 @@ void Menu::render()
     }
     text(r_, 20, H - 40, tr("setup.footer1"), 1, grey);
     text(r_, 20, H - 26, tr("setup.footer2"), 1, grey);
+    const SDL_Color red{255, 80, 80, 255};
     if (too_large()) text(r_, 20, H - 54, tr("setup.too_large"), 1, white);
     else if (const int over = over_budget(); over >= 0)
     {
-        // Not a limit of the design: a limit of this machine, named so it can be reduced.
+        // Not a limit of the design: a limit of this machine, named so it can be reduced, and
+        // which of the limits it is.
         const Theme& th = over == 4 ? kBooksTheme : over == 5 ? kModelsTheme : kThemes[over];
-        text(r_, 20, H - 54, trf("setup.over_budget", {tr(th.key)}), 1, SDL_Color{255, 80, 80, 255});
+        const bool slow = line_sizes()[size_t(over)].bits > machine_budget().bits;
+        text(r_, 20, H - 54, trf(slow ? "setup.over_time" : "setup.over_budget", {tr(th.key)}), 1, red);
     }
+    else if (graphics_over()) text(r_, 20, H - 54, tr("setup.over_graphics"), 1, red);
 
     // The map: one bar per line, length proportional to its size in bits.
     const auto sizes = line_sizes();
@@ -710,7 +943,8 @@ void Menu::render()
             text(r_, x, label + 58, clip(trf("map.tiles", {fixed(std::max(0.0, z.bits * std::log10(2.0) - std::log10(128.0)), 1)})), 1, th.edge);
             text(r_, x, label + 70, clip(z.padding ? trf("map.empty_slots", {std::to_string(z.padding)}) : tr("map.whole_tiles")), 1, th.edge);
             if (z.bits > kTooLargeBits) text(r_, x, label - 14, clip(tr("map.too_large")), 1, white);
-            else if (z.bits > kSlowBits) text(r_, x, label - 14, clip(tr("map.slow")), 1, grey);
+            // Slow: a unit of it takes more than a quarter of the time allowed to open, measured here.
+            else if (unit_ms(machine_budget(), z.bits) > kUnitMs / 4) text(r_, x, label - 14, clip(tr("map.slow")), 1, grey);
         }
         // The bar: the line's own two colours; never shorter than min_bar, never past the bottom.
         const float len = std::isfinite(z.bits) ? std::clamp(float(z.bits / scale_bits) * span, min_bar, span) : span;
@@ -969,8 +1203,12 @@ void Menu::overlay_change(int dir, bool big)
     {
         const FilterMode order[4] = {FilterMode::Off, FilterMode::Mark, FilterMode::Hide, FilterMode::Compact};
         FilterMode& mode = mode_of(overlay_);
+        // A mode read back from a settings file someone has edited by hand may not be one of the
+        // four, so the search is bounded and anything unrecognised is treated as Off rather than
+        // running off the end of the list.
         int m = 0;
-        while (order[m] != mode) ++m;
+        while (m < 4 && order[m] != mode) ++m;
+        if (m == 4) m = 0;
         mode = order[((m + dir) % 4 + 4) % 4];
         break;
     }

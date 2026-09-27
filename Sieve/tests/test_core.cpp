@@ -17,6 +17,7 @@
 #include "sieve/sha256.hpp"
 #include "sieve/sieve.hpp"
 #include "sieve/space.hpp"
+#include "sieve/titledspace.hpp"
 #include "sieve/utf8.hpp"
 
 #include <cmath>
@@ -526,6 +527,115 @@ void test_biguint_vectors(const std::string& path)
     CHECK(n > 3000); // a truncated or emptied vector file must fail, not pass quietly
 }
 
+// The same pinning at the lengths where the fast algorithms run (Karatsuba, division by a
+// reciprocal, conversion by halves), up to 400,000 bits. The operands are named rather than
+// written out, and each result is compared by its SHA-256, both as reference/sieve_ref.py's
+// large_operand() and cmd_biguint_large_vectors() describe; the builder below follows that
+// description, not the C++ it is testing.
+BigUint large_operand(const std::string& spec)
+{
+    std::vector<std::string> f;
+    for (size_t i = 0, j; i <= spec.size(); i = j + 1)
+    {
+        j = spec.find(':', i);
+        if (j == std::string::npos) j = spec.size();
+        f.push_back(spec.substr(i, j - i));
+    }
+    const auto two_to = [](size_t bits) { BigUint v(1); v <<= bits; return v; };
+    if (f[0] == "r")
+    {
+        const size_t bits = std::stoul(f[1]), bytes = (bits + 7) / 8;
+        std::vector<uint8_t> raw;
+        for (uint32_t k = 0; raw.size() < bytes; ++k)
+            for (uint8_t b : Sha256::hash("biguint-large/v1/" + f[2] + "/" + std::to_string(k))) raw.push_back(b);
+        raw.resize(bytes);
+        std::vector<uint32_t> words((bytes + 3) / 4, 0);
+        for (size_t i = 0; i < bytes; ++i) words[i / 4] |= uint32_t(raw[i]) << (8 * (i % 4));
+        BigUint v = BigUint::mod(BigUint::from_limbs(words), two_to(bits));
+        if (!v.bit(bits - 1)) v += two_to(bits - 1);
+        return v;
+    }
+    if (f[0] == "m") { BigUint v = two_to(std::stoul(f[1])); v -= BigUint(1); return v; }
+    if (f[0] == "s") { BigUint v = two_to(std::stoul(f[1]) - 1); v += BigUint(1); return v; }
+    if (f[0] == "p")
+    {
+        BigUint v = BigUint::pow(uint32_t(std::stoul(f[1])), std::stoull(f[2]));
+        if (f[3] == "-1") v -= BigUint(1);
+        else if (f[3] == "1") v += BigUint(1);
+        return v;
+    }
+    throw std::invalid_argument("unknown large operand " + spec);
+}
+
+void test_biguint_large_vectors(const std::string& path)
+{
+    int n = 0;
+    std::map<std::string, BigUint> made;
+    auto operand = [&](const std::string& spec) -> const BigUint& {
+        auto it = made.find(spec);
+        if (it == made.end()) it = made.emplace(spec, large_operand(spec)).first;
+        return it->second;
+    };
+    for (const auto& f : read_tsv(path, 4))
+    {
+        const std::string& op = f[0];
+        const BigUint& a = operand(f[1]);
+        std::string got;
+        if (op == "mul") got = BigUint::mul(a, operand(f[2])).to_hex();
+        else if (op == "hex") got = a.to_hex();
+        else if (op == "dec")
+        {
+            got = a.to_decimal();
+            CHECK(BigUint::from_decimal(got) == a);
+        }
+        else if (op == "divmod")
+        {
+            const BigUint& b = operand(f[2]);
+            BigUint q, r;
+            BigUint::divmod(a, b, q, r);
+            got = q.to_hex() + "," + r.to_hex();
+            BigUint back = BigUint::mul(q, b);
+            back += r;
+            CHECK(back == a && r < b);
+        }
+        else if (op.rfind("digits", 0) == 0)
+        {
+            const uint32_t base = static_cast<uint32_t>(std::stoul(op.substr(6)));
+            // The smallest len with base^len > a, found by doubling and then bisecting, since a
+            // stepwise search at these lengths would be the slowest thing in the file.
+            size_t lo = 0, hi = 1;
+            while (BigUint::pow(base, hi) <= a) { lo = hi; hi *= 2; }
+            while (hi - lo > 1)
+            {
+                const size_t mid = lo + (hi - lo) / 2;
+                (BigUint::pow(base, mid) <= a ? lo : hi) = mid;
+            }
+            const size_t len = hi;
+            const auto d = a.to_digits(base, len);
+            got.reserve(len * 3);
+            for (size_t i = 0; i < d.size(); ++i)
+            {
+                if (i) got += ',';
+                got += std::to_string(d[i]);
+            }
+            CHECK(BigUint::from_digits(d, base) == a);
+            CHECK(throws([&] { (void)a.to_digits(base, len - 1); }));
+        }
+        else
+        {
+            std::cerr << "  unknown large biguint op '" << op << "'\n";
+            CHECK(false);
+            continue;
+        }
+        const bool ok = Sha256::hex(Sha256::hash(got)) == f[3];
+        CHECK(ok);
+        if (!ok) std::cerr << "  large biguint " << op << "(" << f[1] << ", " << f[2] << ") does not match\n";
+        ++n;
+    }
+    std::cout << "large biguint vectors checked: " << n << "\n";
+    CHECK(n >= 60);
+}
+
 void test_digit_vectors(const std::string& path)
 {
     int n = 0;
@@ -542,6 +652,107 @@ void test_digit_vectors(const std::string& path)
     std::cout << "digit vectors checked: " << n << "\n";
     CHECK(n == 120); // a truncated or emptied vector file must fail, not pass quietly
     CHECK(n > 100);
+}
+
+// The binary line against the oracle: a file cut into bytes256 units by canon-bytes-v1, and each
+// unit's addresses. Until these existed the binary line was checked only by the engine agreeing
+// with itself, in a round trip; these are answers the oracle worked out from the specification.
+void test_bytes_vectors(const std::string& path)
+{
+    int n = 0;
+    const auto hex_of = [](const std::u32string& u) {
+        std::string h;
+        for (char32_t c : u)
+        {
+            char b[3];
+            std::snprintf(b, sizeof b, "%02x", unsigned(c));
+            h += b;
+        }
+        return h;
+    };
+    const auto split = [](const std::string& s) {
+        std::vector<std::string> out;
+        for (size_t i = 0, j; i <= s.size(); i = j + 1)
+        {
+            j = s.find(',', i);
+            if (j == std::string::npos) j = s.size();
+            out.push_back(s.substr(i, j - i));
+        }
+        return out;
+    };
+    for (const auto& f : read_tsv(path, 7))
+    {
+        const Alphabet& alpha = alphabet_of(f[0]);
+        const uint32_t L = static_cast<uint32_t>(std::stoul(f[1]));
+        const std::string raw = f[3] == "-" ? std::string() : from_hex(f[3]);
+        CanonResult r;
+        try
+        {
+            r = canonicalise_bytes(raw, alpha, L);
+        }
+        catch (const std::exception& e)
+        {
+            // A row the engine refuses is a disagreement with the oracle like any other, and
+            // must fail this check rather than end the whole run.
+            CHECK(false);
+            std::cerr << "  bytes vector refused: " << f[0] << " L=" << f[1] << ": " << e.what() << "\n";
+            ++n;
+            continue;
+        }
+        const auto want_units = split(f[4]), want_pos = split(f[5]), want_scr = split(f[6]);
+        bool ok = r.units.size() == want_units.size() && want_pos.size() == want_units.size() &&
+                  want_scr.size() == want_units.size();
+        const Space sp(alpha, L, f[2]);
+        for (size_t i = 0; ok && i < r.units.size(); ++i)
+        {
+            const auto d = sp.digits_of(r.units[i]);
+            ok = hex_of(r.units[i]) == want_units[i] && sp.address_of(d, AddressMode::Positional) == want_pos[i] &&
+                 sp.address_of(d, AddressMode::Scrambled) == want_scr[i] &&
+                 sp.unit_at(want_scr[i], AddressMode::Scrambled) == d;
+        }
+        CHECK(ok);
+        if (!ok) std::cerr << "  bytes vector mismatch: " << f[0] << " L=" << f[1] << " file " << f[3].substr(0, 16) << "\n";
+        ++n;
+    }
+    std::cout << "binary-line vectors checked: " << n << "\n";
+    CHECK(n >= 33); // a truncated or emptied vector file must fail, not pass quietly
+}
+
+// Titled lines against the oracle (SPECIFICATIONS §11): each row names a shape and an address in
+// one ordering, and gives the cover, title and content that address holds; the engine has to find
+// the same parts, and the same address from them.
+void test_titled_vectors(const std::string& path)
+{
+    int n = 0;
+    const auto digits = [](const std::string& s) {
+        Space::Digits d;
+        if (s == "-") return d;
+        for (size_t i = 0, j; i <= s.size(); i = j + 1)
+        {
+            j = s.find(',', i);
+            if (j == std::string::npos) j = s.size();
+            d.push_back(static_cast<uint32_t>(std::stoul(s.substr(i, j - i))));
+        }
+        return d;
+    };
+    for (const auto& f : read_tsv(path, 13))
+    {
+        const std::string& key = f[7];
+        std::optional<Space> title;
+        if (std::stoul(f[3]) > 0) title.emplace(alphabet_of(f[2]), static_cast<uint32_t>(std::stoul(f[3])), key);
+        std::optional<Space> cover;
+        if (f[4] != "-") cover.emplace(f[4], static_cast<uint32_t>(std::stoul(f[5])), static_cast<uint32_t>(std::stoul(f[6])), key);
+        const TitledSpace ts(title, cover, BigUint::from_hex(f[1]), f[0], key);
+        const AddressMode m = f[8] == "scrambled" ? AddressMode::Scrambled : AddressMode::Positional;
+        const TitledSpace::Parts want{digits(f[10]), digits(f[11]), BigUint::from_hex(f[12])};
+        const BigUint address = ts.parse(f[9]);
+        const bool ok = ts.parts_at(address, m) == want && ts.index_of(want, m) == address && ts.hex_of(address) == f[9];
+        CHECK(ok);
+        if (!ok) std::cerr << "  titled vector mismatch: " << f[0] << " " << f[8] << " " << f[9] << "\n";
+        ++n;
+    }
+    std::cout << "titled-line vectors checked: " << n << "\n";
+    CHECK(n >= 60); // a truncated or emptied vector file must fail, not pass quietly
 }
 
 void test_canon_vectors(const std::string& path)
@@ -1988,8 +2199,10 @@ void run_all(int argc, char** argv)
         const std::string dir = std::string(argv[1]) + "/";
         test_vectors(dir + "vectors_v1.tsv");
         test_biguint_vectors(dir + "vectors_biguint_v1.tsv");
+        test_biguint_large_vectors(dir + "vectors_biguint_large_v1.tsv");
         test_digit_vectors(dir + "vectors_digits_v1.tsv");
         test_canon_vectors(dir + "vectors_canon.tsv");
+        test_bytes_vectors(dir + "vectors_bytes_v1.tsv");
         test_alphabet_vectors(dir + "vectors_alphabets_v1.tsv");
         test_model_vectors(dir + "vectors_models_v1.tsv");
         test_image_vectors(dir + "vectors_image_v1.tsv");
@@ -2002,6 +2215,7 @@ void run_all(int argc, char** argv)
         test_booksieve();
         test_review_additions();
         test_book_vectors(dir);
+        test_titled_vectors(dir + "vectors_titled_v1.tsv");
         test_book_filter_vectors(dir);
     }
 }

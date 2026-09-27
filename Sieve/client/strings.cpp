@@ -1,3 +1,10 @@
+// Sieve hallway — loading the language files and looking strings up in them. See strings.hpp for
+// the file format.
+//
+// A missing string is never an error that stops anything: the key itself is shown instead, so a
+// half-translated language is still usable and the gap is obvious on screen rather than silent.
+// English is loaded first and every other language falls back to it for keys it does not have, so
+// a new string added to the menus does not have to be translated before it can be shown.
 #include "strings.hpp"
 
 #include "font.hpp"

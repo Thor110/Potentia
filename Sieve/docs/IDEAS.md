@@ -189,7 +189,7 @@ portals, or something else. Worth trying on one line before committing.
 stand in one is a bearing: the compass in the corner draws the corridor as concentric circles —
 binary outermost, the six it bounds, binary again innermost — with a needle at your angle on the
 line you are on, a mark on every other ring at its own angle, and the bearing written out to
-whatever precision **Angle Precision** in Settings > Graphics asks for. Zero is at the top, where
+whatever precision **Angle Precision** in the setup menu's GLOBAL section asks for. Zero is at the top, where
 every loop starts and finishes.
 
 What is *not* done is the world itself: the corridor is still a straight run. Turning it into an
@@ -239,6 +239,23 @@ knows, rendered wherever someone wants it. Large, and the right shape for it is 
 has to approve them, and there needs to be a hard cap per person. Decide this before the feature,
 not after.
 
+**5.12 The address navigator.** *Built (X in the hallway, `client/navigator.cpp`).* Walking and
+the jump keys only ever reach the right-hand end of an address. The navigator shows the whole of
+it, a hex digit at a time, full screen and scrolling; any digit can be chosen with the keys or the
+pointer and turned with Up/Down, the wheel or its arrows, carrying as counting does and wrapping
+round the line. Possible next steps: a preview of the item at the address being turned, and a
+decimal view beside the hex.
+
+**5.13 Filters on titled lines scan bottom-up.** Edward, 27 September 2026. A titled unit reads
+top-down as cover, title, content, and that is the order its address is packed in (the content
+varies fastest, so neighbours share a cover and a title). Filtering goes the other way: bottom-up,
+content first, then the title, then the cover. The content is where most of the information is
+and where most units fail, so judging it first rejects them soonest; and it is the part that
+changes between neighbours, so a compact line over titled units will be built from the content
+outwards, the title and cover stacks applied to what the content stack lets through. The books
+line already has three stacks (cover, title, pages); when titled lines get filters, they follow
+this order, and the books line should be brought into it too.
+
 ---
 
 ## 6. Limits and settings
@@ -256,11 +273,10 @@ of both and has to fit too.
 Neither number is a limit of the design. They describe the machine of the day, and a bigger one
 finds bigger numbers with the same arithmetic.
 
-**6.5 Global parameters, and entries per shelf.** A shelf holds 128 units because 128 is a power of
-two and the code asserts it. Making it a setting (128, 256, …) is possible, and 256 makes an item
-number exactly one byte. The cost is that it changes what "tile N" means, so every address written
-down under one setting is misread under another — which makes it a *versioned* parameter, not a
-free one. Worth doing only with that clearly stated, and probably worth doing.
+**6.5 Global parameters, and entries per shelf.** *Built.* Items per wall is a setting (a power of
+two from 2 to 4096, default 128), under GLOBAL in the setup menu. It turned out not to need
+versioning: it changes no address, only the (tile, slot) coordinate an address is shown at, so
+"tile N" is a display coordinate tied to the setting, and the address is what gets written down.
 
 **6.6 Adaptive word width.** Let the machinery move between 8/16/32/64-bit words per line as the
 shape demands. This is an implementation matter inside `BigUint` rather than a user setting, and it

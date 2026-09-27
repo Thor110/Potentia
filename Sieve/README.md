@@ -29,6 +29,8 @@ Implementation of [SPECIFICATIONS.md](docs/SPECIFICATIONS.md) (v2.0). This cover
 | `.github/workflows/build.yml` | Builds and tests on Windows, Linux and macOS on every push |
 | `docs/SPECIFICATIONS.md` | The specification |
 | `core/src/biguint.cpp` | The exact big integer every address rests on: limbs of 2^64, pinned against Python's own integers |
+| `docs/HANDOFF.md` | The briefing for picking the project up cold: the standing rules, the build, and where the work stopped |
+| `docs/REVIEW.md` | The last code review: what it fixed, and what it found and left |
 | `docs/IDEAS.md` | What is not built yet: defects, filters, open questions, and what to be careful of |
 | `docs/images/` | Hallway screenshots |
 
@@ -134,6 +136,13 @@ All five lines (the four unit lines and books) share **one endless corridor** li
 - **The start line:** where each copy begins, a **checkered start line** crosses the floor.
 - **The double flag:** where all five lines start together, the start line is doubled: two strips on the floor, a metre apart. That is always so at corridor tile 0, where **Home** takes you.
 
+**Titles and covers.** Every item on the pages, image, audio, video and models lines has a title, and audio and video items have a cover picture as well, as books do. The title length is a GLOBAL setting in the setup menu (`--title-length`, default 32):
+- A titled unit's address covers its cover, its title and its content, so a titled line is larger than the bare one. Neighbours in positional order share a title and differ in their content.
+- **Title length 0** means no titles: the line is the bare line again. The `sieve` tool's lines are bare, so use `--title-length 0` when comparing the hallway with the tool.
+- Guided and compact orderings address the content alone for now.
+- **Letters on items** (GLOBAL, `--item-letters`, default 8 px): the size letters on item displays are drawn at. A line whose items carry text (pages, books, titles) has its displays drawn as wide as that takes, up to 1024 px, so a long page reads as a page; letters that would still come out smaller are drawn as dashes. A blank title reads **[Null Title]**.
+- **Close-up display size** (GLOBAL, `--close-up`, off/256/512/1024, default 1024): the items nearest you, whose displays cover more of the screen than they have pixels, are drawn again at up to this width, and swap in when ready.
+
 **Books, the fifth line.** Beyond video, a door leads to **BOOKS**, in grey with black edges. Each book is a cover (a picture of the image line), a title (a page of the pages line) and a number of pages, set in the menu under BOOKS as "pages per book". So the books line holds every possible book of that shape:
 - **Positional order:** neighbouring books differ only in their last page.
 - **Scrambled order:** a keyed shuffle of the whole line, so neighbours are unrelated books.
@@ -163,9 +172,9 @@ Every choice is applied at once and saved to `sieve-hallway.ini` next to the exe
 
 **The models line.** A sixth line in the hallway, and `sieve mesh` on the command line: every possible mesh of one shape. A model is V vertices and F triangles, each coordinate one of C steps across [-1, 1], so the line holds C^(3V) × V^(3F) models — 2^204 with the defaults (8 vertices, 12 triangles, a grid of 16), and a cube is one of them. The grid is cell-centred, so a coordinate is exactly `(2d + 1 - C) / C`: symmetric about the origin, and a terminating decimal with `log2(C)` places. That makes each model's canonical `.obj` text exact and of a fixed width — and it has no two spaces in a row anywhere, because `canon-text-v2` collapses runs of spaces and the form is built to survive the text line. So the same model is also one unit of an `ascii96` page of that length: warp the `.obj` onto the pages line, read it back byte for byte, warp that back onto the models line, and the address is the same. One object, an address on two lines. With the default shape the `.obj` is 304 characters, so the cube fits on a single page. `sieve mesh --warp cube.obj` gives a mesh's address, `--read ADDR --out model.obj` gives the model at one, and `--browse N` pulls some off the shelf.
 
-In the hallway the models line is green wireframe on clay. **Pre-rendered image tile cache size** in the setup menu's MODELS section sets how big each crate's picture is drawn, square, from 16 to 512 pixels (64 by default): sharper crates, and four times the memory each time it doubles, so it trades directly against how many the **Model Image Cache** budget holds. Changing it throws the cache away rather than stretching what is in it.
+In the hallway the models line is green wireframe on clay. **Pre-rendered display size** in the setup menu's GLOBAL section sets how wide the picture on every item is drawn, from 16 to 1024 pixels (64 by default): sharper pictures and more readable pages, and four times the memory each time it doubles, so it trades directly against how many the **display cache** holds. Changing it throws the cache away rather than stretching what is in it.
 
- Every slot holds the same **crate**, because a mesh cannot be read at a hundred and twenty-eight to a tile — so the crate you are looking at has its model rendered to a small flat image and printed on its front, and then its neighbours do the same, a few a frame, spreading outward along the shelf. The pictures are kept in a cache whose size is **Model Image Cache** in Settings > Graphics (8–512 MB, shown as both megabytes and crates; 64 MB is about four thousand). Walking keeps the ones still nearby and drops the rest, and the crate seen longest ago goes first when the budget is full. Take a crate off the shelf (**E**) and the model itself is in your hands: turn it with the mouse, or **A** and **D**, **R** to set it upright, with its `.obj` text beside it — the same text that is a page on the `ascii96` line.
+ Every slot holds the same **crate**, because a mesh cannot be read at a hundred and twenty-eight to a tile — so each crate in your room and the rooms either side has its model rendered to a small flat image and printed on its front, nearest you first, for a few milliseconds a frame; rooms further off wear the face of the same slot in your room until you reach them. The pictures are kept in a cache whose size is **display cache** in the setup menu's GLOBAL section (8 MB steps, up to 4 GB, as far as **Graphics Memory** in Settings > Graphics allows; the row says how much three rooms need). FIND MY LIMITS sizes it for three rooms. If it is set smaller, the hallway says so and gives the faces to the crates nearest you. Walking keeps the ones still nearby and drops the rest. Take a crate off the shelf (**E**) and the model itself is in your hands: turn it with the mouse, or **A** and **D**, **R** to set it upright, with its `.obj` text beside it — the same text that is a page on the `ascii96` line.
 
 **The binary line.** A seventh line, and the one the other six are bounded by:
 
@@ -198,7 +207,7 @@ The first three are the same length because an address in a bijection *is* the c
 
 Below that: the shape spec that has to travel with an address to mean anything, with its own length in characters — often as long as the address itself — and the address's length written in hex, base32, base64 and base85, which is the measurement behind the question of how a key should travel.
 
-**The compass.** Every line is a loop, so where you stand in one is a bearing as well as a percentage. In the corner of the hallway the corridor is drawn as concentric circles — binary outermost, the six lines it bounds, binary again innermost — with a needle at your angle on the line you are on, and a mark on every other ring at its own angle. The bearing is written out underneath to as many decimal places as **Angle Precision** in Settings > Graphics asks for (0–8).
+**The compass.** Every line is a loop, so where you stand in one is a bearing as well as a percentage. In the corner of the hallway the corridor is drawn as concentric circles — binary outermost, the six lines it bounds, binary again innermost — with a needle at your angle on the line you are on, and a mark on every other ring at its own angle. The bearing is written out underneath to as many decimal places as **Angle Precision** in the setup menu's GLOBAL section asks for (0–8).
 
 Zero is at the top, and zero is the same place for every line: corridor tile 0, where all of them begin a copy together and the start line on the floor is doubled. Walk away from it and the marks fan apart, because the lines loop at different rates — the same corridor tile is a different distance into each line's own loop, and the shorter a line's loop the faster its mark comes back round. So the spread between the marks is how differently sized the state spaces are, read at a glance. The measure is in units, not tiles, so it is exactly the number the percentage shows: three tiles into a six-tile loop of 729 units is 384/729 of the way along, which is 189.6°, not 180°.
 
@@ -338,6 +347,7 @@ A door **keeps your corridor position** and only changes which line reads it:
 | E / left click | Take the book you are looking at off the shelf, or put it back |
 | T | **Warp:** type text, notes, or a picture file path (for image and video), then Enter. You land facing it, in the first copy of the line (where your position equals its address), and it opens in hand. Ctrl+V pastes. |
 | G | **Go to** a hex address or a percentage such as `50%` or `36.25%` (these open the book too), or `@T` for corridor tile T |
+| X | **Address navigator**: the whole address of the item you are looking at, full screen, one hex digit at a time. Left/Right (Shift: a row) choose a digit, Up/Down, the wheel or the arrows turn it, carrying and wrapping round the line; type 0-9 a-f to set it; ENTER goes there, Esc leaves |
 | N / B | Next or previous unit of a warp that made a trail of several units |
 | M | Switch ordering: positional → scrambled → guided (text) → positional |
 | - / = | Guided ordering: zoom out / in by one bit (**Shift**: 8 bits) |

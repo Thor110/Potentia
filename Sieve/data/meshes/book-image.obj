@@ -1,0 +1,27 @@
+# Sieve Real Graphics: the item on the image line, a canvas on a thin frame.
+# Built to the templates/ measurements; the front faces +X, towards the corridor, in the
+# x = 0 plane, and that face is where the pre-rendered picture goes (faces.ini).
+mtllib book-image.mtl
+o book-image
+v 0.000000 -0.000000 -0.140000
+v 0.000000 0.400000 -0.140000
+v 0.000000 0.400000 0.140000
+v 0.000000 0.000000 0.140000
+v -0.050836 0.400000 0.140000
+v -0.050836 0.400000 -0.140000
+v -0.050836 0.000000 0.140000
+v -0.050836 -0.000000 -0.140000
+vt 0.000000 0.000000
+vt 0.400000 0.000000
+vt 0.400000 0.280000
+vt 0.000000 0.280000
+vn 0.0000 0.0000 -1.0000
+vn 0.0000 0.0000 1.0000
+vn 0.0000 1.0000 0.0000
+vn 1.0000 0.0000 0.0000
+s off
+usemtl book_pages
+f 1/1/4 2/2/4 3/3/4 4/4/4
+f 1/1/1 8/1/1 6/2/1 2/2/1
+f 3/3/2 5/3/2 7/4/2 4/4/2
+f 2/2/3 6/2/3 5/3/3 3/3/3

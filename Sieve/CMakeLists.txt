@@ -22,6 +22,7 @@ add_library(sieve_core STATIC
     core/src/biguint.cpp
     core/src/booksieve.cpp
     core/src/bookspace.cpp
+    core/src/titledspace.cpp
     core/src/canon.cpp
     core/src/compact.cpp
     core/src/corridor.cpp
@@ -128,9 +129,15 @@ if(SIEVE_BUILD_CLIENT)
     endif()
 
     add_executable(hallway
+        client/app_main.cpp
         client/app_settings.cpp
+        client/binary_edge.cpp
+        client/item_faces.cpp
+        client/door_portal.cpp
+        client/navigator.cpp
         client/font.cpp
         client/hallway.cpp
+        client/hud.cpp
         client/main_menu.cpp
         client/menu.cpp
         client/mesh.cpp

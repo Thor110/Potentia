@@ -96,6 +96,14 @@ float book_height(int row, int col, bool varied = true);
 // whose start is at z = tile_z.
 void book_face(float tile_z, Side side, int row, int col, Vec3 out[4], bool varied = true);
 
+// The four corners of the picture on a book's front -- top left, top right, bottom right, bottom
+// left, as someone facing the wall sees it, which is the order draw_face_image maps a picture in -- for a picture that covers `bottom` to `top`
+// metres up the item model and `half_width` either side of its centre (mesh.hpp: FaceRect). The
+// rectangle is stretched with the book, as the model is: in height by the slot's height over
+// kUniformBookHeight, and across by the shelf's scale.
+void picture_face(float tile_z, Side side, int row, int col, float bottom, float top, float half_width, Vec3 out[4],
+                  bool varied = true);
+
 // The book the ray hits within `reach` metres, if any. `cam_z` is local to the player's tile and
 // `player_tile` is that tile's index.
 std::optional<BookSlot> pick_book(Vec3 origin, Vec3 dir, int64_t player_tile, float reach, bool varied = true);

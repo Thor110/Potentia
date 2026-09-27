@@ -23,7 +23,11 @@ Every line gets its own set. Copy each template to `<model>-<medium>.obj`, toget
 | video | `hallway-video.obj`, `bookshelf-video.obj`, `book-video.obj`, `marker-video.obj` |
 | books | `hallway-books.obj`, `bookshelf-books.obj`, `book-books.obj`, `marker-books.obj` |
 
-Put the copies in `data/meshes/` (one folder up). The game loads `<model>-<medium>.obj` for the line you are on. It falls back to the template of the same model, and then to wireframe for just that part, and prints to the console which file it used for each part. Only `v`, `vn`, `f`, `mtllib`, `usemtl` and each material's `Kd` colour are read. Faces can have any number of corners, faces pointing away from the camera are not drawn, and textures are not supported yet. When you rename a copy, also change its `mtllib` line to point at the renamed `.mtl`. The "book" of a line is whatever stands in its slots: a page, a canvas (image), a record (audio), a tape (video) or a book.
+The item models for pages, image, audio, video and models are already there (`book-<medium>.obj`); books still uses the template.
+
+**The picture on the front.** Every line's items carry a pre-rendered picture of what they are (a page's text, an image, a video's first frame, a book's title and cover, a model's mesh). `data/meshes/faces.ini` says where on the item it goes, per medium, in the model's own metres: `bottom` and `top` up from the shelf board, and `half_width` either side of the slot's centre, on the front face at x = 0. When you change an item model, measure its front again and change its section to match; the picture is stretched with the model on lines whose items vary in height.
+
+Put the copies in `data/meshes/` (one folder up); `book-pages`, `book-image`, `book-audio`, `book-video` and `book-models` are already there. The game loads `<model>-<medium>.obj` for the line you are on. It falls back to the template of the same model, and then to wireframe for just that part, and prints to the console which file it used for each part. Only `v`, `vn`, `f`, `mtllib`, `usemtl` and each material's `Kd` colour are read. Faces can have any number of corners, faces pointing away from the camera are not drawn, and textures are not supported yet. When you rename a copy, also change its `mtllib` line to point at the renamed `.mtl`. The "book" of a line is whatever stands in its slots: a page, a canvas (image), a record (audio), a tape (video) or a book.
 
 ## Coordinates
 
@@ -42,3 +46,8 @@ Put the copies in `data/meshes/` (one folder up). The game loads `<model>-<mediu
 - **Audio (records) and video (tapes)** never vary. Every slot is exactly the model's own size.
 
 `media_sizes_vary()` in `client/world.hpp` is that switch, and the wireframe already follows it. Model the audio and video books at the size they should be. A record sleeve or a tape box can be any shape, as long as it fits its slot: 0.375 m along the shelf, 0.50 m up to the next board, 0.35 m deep.
+
+## The picture on the front
+
+Every line's items show a picture on their front: a page its text, an image its picture, a video its first frame, a book its title over its cover, a model its mesh. Where on the item it goes is `faces.ini`, beside the meshes: one section per medium, giving how far up the model the picture's `bottom` and `top` are and its `half_width` either side of the centre, in the model's own metres, measured on its front (the x = 0 plane, facing +X). When you change a model's front, measure it again and change its section to match; a missing section or value is the whole 0.28 x 0.40 m slot.
+

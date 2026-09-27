@@ -371,8 +371,13 @@ int cmd_read(const Args& a)
     if (a.has("address-file"))
     {
         if (!a.positional.empty()) throw std::invalid_argument("give an ADDRESS or --address-file PATH, not both");
-        given = slurp(a.get("address-file"));
-        while (!given.empty() && (given.back() == '\n' || given.back() == '\r' || given.back() == ' ')) given.pop_back();
+        // All whitespace goes, not just the trailing newline: an address of forty thousand digits
+        // is the sort of thing an editor or a pipe through `fold` will have wrapped, and a line
+        // break in the middle of it is not a different address.
+        const std::string raw = slurp(a.get("address-file"));
+        given.reserve(raw.size());
+        for (char c : raw)
+            if (c != '\n' && c != '\r' && c != ' ' && c != '\t') given.push_back(c);
     }
     else
     {

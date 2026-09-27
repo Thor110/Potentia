@@ -7,35 +7,15 @@ namespace sieve {
 
 namespace {
 
-// Digits in chunks: as many as fit a 32-bit multiplier (base^k <= 2^32 - 1), one big-number
-// operation per chunk instead of one per digit.
-uint32_t chunk_digits(uint32_t base)
-{
-    uint32_t k = 1;
-    for (uint64_t p = base; p * base < (uint64_t(1) << 32); p *= base) ++k;
-    return k;
-}
-
-uint32_t small_pow(uint32_t base, uint32_t k)
-{
-    uint64_t p = 1;
-    for (uint32_t i = 0; i < k; ++i) p *= base;
-    return uint32_t(p);
-}
-
-void mul_pow(BigUint& n, uint32_t base, uint64_t e)
-{
-    const uint32_t k = chunk_digits(base), full = small_pow(base, k);
-    for (; e >= k; e -= k) n.mul_small(full);
-    for (; e > 0; --e) n.mul_small(base);
-}
+// Every page after the cover, the title included, is a unit of the same page space, so the title
+// and the pages together are one run of digits in one base, and a book's index is the cover's
+// digits followed by that run: cover * |page|^run + run. Packing and unpacking a book is one
+// conversion of each part, with one multiplication or division between them.
+uint64_t run_length(const Space& page, uint32_t pages) { return (uint64_t(pages) + 1) * page.unit_length(); }
 
 BigUint book_count(const Space& cover, const Space& page, uint32_t pages)
 {
-    BigUint n(1);
-    mul_pow(n, cover.base(), cover.unit_length());
-    mul_pow(n, page.base(), (uint64_t(pages) + 1) * page.unit_length());
-    return n;
+    return BigUint::mul(BigUint::pow(cover.base(), cover.unit_length()), BigUint::pow(page.base(), run_length(page, pages)));
 }
 
 std::string shape_id(const Space& cover, const Space& page, uint32_t pages)
@@ -61,52 +41,33 @@ BigUint BookSpace::index_of(const Parts& p, AddressMode m) const
 {
     if (p.cover.size() != cover_.unit_length() || p.title.size() != page_.unit_length() || p.pages.size() != pages_)
         throw std::invalid_argument("the book does not have this line's shape");
-    BigUint v;
-    auto put = [&](const Digits& d, const Space& sp) {
-        if (d.size() != sp.unit_length()) throw std::invalid_argument("a part has the wrong length");
-        const uint32_t b = sp.base(), k = chunk_digits(b);
-        for (size_t i = 0; i < d.size();)
-        {
-            const size_t take = std::min<size_t>(k, d.size() - i);
-            uint64_t chunk = 0;
-            for (size_t j = 0; j < take; ++j, ++i)
-            {
-                if (d[i] >= b) throw std::invalid_argument("digit out of range");
-                chunk = chunk * b + d[i];
-            }
-            v.mul_small(small_pow(b, uint32_t(take)));
-            v.add_small(uint32_t(chunk));
-        }
-    };
-    put(p.cover, cover_);
-    put(p.title, page_);
-    for (const auto& pg : p.pages) put(pg, page_);
+    Digits run;
+    run.reserve(size_t(run_length(page_, pages_)));
+    run.insert(run.end(), p.title.begin(), p.title.end());
+    for (const auto& pg : p.pages)
+    {
+        if (pg.size() != page_.unit_length()) throw std::invalid_argument("a part has the wrong length");
+        run.insert(run.end(), pg.begin(), pg.end());
+    }
+    BigUint v = BigUint::mul(BigUint::from_digits(p.cover, cover_.base()), BigUint::pow(page_.base(), run.size()));
+    v += BigUint::from_digits(run, page_.base());
     return m == AddressMode::Scrambled ? shuffle_.forward(v) : v;
 }
 
 BookSpace::Parts BookSpace::parts_at(const BigUint& index, AddressMode m) const
 {
     if (index >= size_) throw std::out_of_range("book address beyond the line");
-    BigUint v = m == AddressMode::Scrambled ? shuffle_.inverse(index) : index;
+    const BigUint v = m == AddressMode::Scrambled ? shuffle_.inverse(index) : index;
+    BigUint cover, rest;
+    BigUint::divmod(v, BigUint::pow(page_.base(), run_length(page_, pages_)), cover, rest);
     Parts p;
-    auto take = [&](Digits& d, const Space& sp) { // least significant digits first, a chunk per division
-        const uint32_t b = sp.base(), k = chunk_digits(b);
-        d.assign(sp.unit_length(), 0);
-        for (size_t i = d.size(); i > 0;)
-        {
-            const uint32_t n = uint32_t(std::min<size_t>(k, i));
-            uint32_t r = v.divmod_small(small_pow(b, n));
-            for (uint32_t j = 0; j < n; ++j)
-            {
-                d[--i] = r % b;
-                r /= b;
-            }
-        }
-    };
+    p.cover = cover.to_digits(cover_.base(), cover_.unit_length());
+    const Digits run = rest.to_digits(page_.base(), size_t(run_length(page_, pages_)));
+    const auto L = std::ptrdiff_t(page_.unit_length());
+    p.title.assign(run.begin(), run.begin() + L);
     p.pages.resize(pages_);
-    for (size_t k = pages_; k-- > 0;) take(p.pages[k], page_);
-    take(p.title, page_);
-    take(p.cover, cover_);
+    for (size_t k = 0; k < pages_; ++k)
+        p.pages[k].assign(run.begin() + L * std::ptrdiff_t(k + 1), run.begin() + L * std::ptrdiff_t(k + 2));
     return p;
 }
 

@@ -1,3 +1,11 @@
+// Sieve hallway — reading and writing sieve-hallway.ini, and choosing sensible defaults for a
+// display nobody has configured yet. See app_settings.hpp for what the file holds.
+//
+// Two rules shape the loading. An unrecognised or malformed setting is not an error: the default
+// stands, and the file is rewritten in good order the next time anything is saved, so a file from
+// an older build still starts. And the first start has no file at all, so detect_display() picks a
+// resolution from what the display actually reports rather than assuming one, which is why the
+// defaults live in code here and not in a shipped ini.
 #include "app_settings.hpp"
 
 #include "cli/dictionaries.hpp"
@@ -130,15 +138,23 @@ AppSettings AppSettings::load(const fs::path& path)
             else if (key == "edge_glow") s.edge_glow = on_off(value, false);
             else if (key == "real_graphics") s.real_graphics = on_off(value, false);
             else if (key == "door_portals") s.door_portals = on_off(value, false);
-            else if (key == "angle_decimals")
+            else if (key == "graphics_memory_gb")
+            {
+                try { s.graphics_memory_gb = std::clamp(std::stoi(value), 1, 128); } catch (...) {}
+            }
+            else if (key == "fps_counter") s.fps_counter = on_off(value, false);
+        }
+        // [world], and [graphics] too, where files written before the two moved kept them.
+        if (section == "world" || section == "graphics")
+        {
+            if (key == "angle_decimals")
             {
                 try { s.angle_decimals = std::clamp(std::stoi(value), 0, 8); } catch (...) {}
             }
             else if (key == "model_cache_mb")
             {
-                try { s.model_cache_mb = std::clamp(std::stoi(value), 8, 512); } catch (...) {}
+                try { s.model_cache_mb = std::clamp(std::stoi(value), 8, 4096); } catch (...) {}
             }
-            else if (key == "fps_counter") s.fps_counter = on_off(value, false);
         }
         else if (section == "controls")
         {
@@ -157,7 +173,8 @@ AppSettings AppSettings::load(const fs::path& path)
 bool AppSettings::save(const fs::path& path) const
 {
     std::ostringstream o;
-    o << "; Sieve hallway settings, edited by the main menu's Settings (hand edits are welcome).\n"
+    o << "; Sieve hallway settings, edited by the main menu's Settings and, for [world], by the setup\n"
+      << "; menu (hand edits are welcome).\n"
       << "\n[graphics]\n"
       << "resolution = " << (resolution.w > 0 ? resolution.str() : std::string()) << "\n"
       << "fullscreen = " << on_off(fullscreen) << "\n"
@@ -165,9 +182,11 @@ bool AppSettings::save(const fs::path& path) const
       << "edge_glow = " << on_off(edge_glow) << "       ; Geometry Edge Glow\n"
       << "real_graphics = " << on_off(real_graphics) << "   ; Real Graphics (only one of the two is on)\n"
       << "door_portals = " << on_off(door_portals) << "    ; Door Portals: procedural data noise in the doorways\n"
+      << "graphics_memory_gb = " << graphics_memory_gb << "   ; the graphics card's memory, for the setup menu's budget\n"
+      << "fps_counter = " << on_off(fps_counter) << "\n"
+      << "\n[world]\n"
       << "model_cache_mb = " << model_cache_mb << "   ; the models line: memory for rendered crate faces\n"
       << "angle_decimals = " << angle_decimals << "   ; decimal places on the compass's degree readout\n"
-      << "fps_counter = " << on_off(fps_counter) << "\n"
       << "\n[controls]\n"
       << "mouse_sensitivity = " << mouse_sensitivity << "   ; percent\n"
       << "invert_mouse_y = " << on_off(invert_mouse_y) << "\n"

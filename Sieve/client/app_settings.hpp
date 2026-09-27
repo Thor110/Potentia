@@ -54,7 +54,10 @@ struct AppSettings
     bool edge_glow = false;      // Geometry Edge Glow
     bool real_graphics = false;  // Real Graphics
     bool door_portals = false;   // Door Portals: procedural data noise in the doorways
-    int model_cache_mb = 64;     // the models line: memory for rendered crate faces, 8..512
+    int graphics_memory_gb = 4;  // the graphics card's memory, which the setup menu's budget keeps within
+    // The two below describe the generated world rather than how it is drawn, so they are set in
+    // the setup menu, not in Graphics. They are kept here, in [world], so that they are saved.
+    int model_cache_mb = 64;     // the display cache: memory for the pictures on items, 8..4096
     int angle_decimals = 1;      // decimal places on the compass's degree readout, 0..8
     bool fps_counter = false;    // show frames per second in the hallway
     int mouse_sensitivity = 100; // percent, 10..400

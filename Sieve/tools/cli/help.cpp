@@ -113,7 +113,7 @@ const std::vector<Page>& pages()
           {"sieve warp --line video --file walk.gif", "an animation as 8 frames of 5x5"}}},
 
         {"read", "Give an address and get back what is stored there.",
-         "sieve read [--line LINE] [line options] [--key K] --mode MODE [--compact] [--out PATH] [--scale S] (ADDRESS | --at TILE:SLOT | --survivor K)",
+         "sieve read [--line LINE] [line options] [--key K] --mode MODE [--compact] [--out PATH] [--scale S] (ADDRESS | --address-file PATH | --at TILE:SLOT | --survivor K)",
          "The reverse of warp. ADDRESS is the hex string warp or browse printed. Every option that\n"
          "shaped the address (--line, the line options, --key, --mode) must match, or you will read\n"
          "a different unit: every address in range holds something. Text is printed; images and\n"
@@ -124,6 +124,10 @@ const std::vector<Page>& pages()
                           "stretch of the line contains that point."},
           {"--out PATH", "Also save the unit: .png for image and video (frames side by side), .mid for\n"
                          "audio (a playable MIDI file), a .txt file for text."},
+          {"--address-file PATH", "Instead of an ADDRESS on the command line: read it from this file, which must\n"
+                                  "hold the hex address as one unbroken run (any surrounding whitespace is\n"
+                                  "ignored). A long unit's address is long -- a 20,000 byte file on the bytes256\n"
+                                  "line has one of 40,000 digits -- and a command line will not hold it."},
           {"--scale S", "Enlarge each pixel to SxS in the saved PNG. Default 16."},
           {"--around N", "Also show the N units on either side, in the chosen ordering: what the hallway\n"
                          "shows around this shelf. In positional order the neighbours differ only at\n"
@@ -131,7 +135,9 @@ const std::vector<Page>& pages()
                          "address is followed by the first. In guided order the books are points 2^-D\n"
                          "apart (see --zoom), so zooming out shows the likeliest ways to continue."},
           {"--at TILE:SLOT", "Instead of an ADDRESS: the book at that place on the hallway's shared corridor\n"
-                             "(the tile number the hallway shows, and slot 0-127 within it). Each line repeats\n"
+                             "(the tile number the hallway shows, and the slot within it, counting from 0; how\n"
+                             "many slots a tile holds is a setting, and `sieve info` says which is in force,\n"
+                             "so a tile number only means anything alongside it). Each line repeats\n"
                              "along the corridor, so every tile holds something on every line. Guided order\n"
                              "needs --zoom as well."},
           {"--zoom D", "Guided --around and --at: books are 2^-D of the line apart. Default: the length in\n"

@@ -267,6 +267,10 @@ private:
         bool word = false;
     };
 
+    // A node's children are sorted, but the search is a plain scan rather than a binary one: the
+    // alphabet is twenty-seven symbols, so the whole list is a cache line or two and walking it
+    // beats the branching of a binary search. The sort is there to make the trie's shape
+    // deterministic, not to make this faster.
     uint32_t find(uint32_t n, uint32_t c) const
     {
         for (const auto& [cc, child] : nodes_[n].children)

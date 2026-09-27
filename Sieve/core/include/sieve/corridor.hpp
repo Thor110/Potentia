@@ -35,10 +35,15 @@ namespace sieve {
 // means something else under another, which is why the readout and `sieve info` both say which
 // is in force.
 //
-// Set once at start-up, before any LineLoop is built, and never afterwards.
+// Set once at start-up, before any LineLoop is built, and never afterwards -- and that is
+// enforced, not merely asked for: a LineLoop divides its length by the tile size when it is built
+// and keeps the answer, so a later change would leave its tile count and its slots measured in
+// different sizes. The first LineLoop built therefore latches the setting.
 uint32_t books_per_tile();
 unsigned books_per_tile_bits();
-void set_books_per_tile(uint32_t n); // throws std::invalid_argument unless n is a power of two in 2..4096
+// Throws std::invalid_argument unless n is a power of two in 2..4096, and std::logic_error if it
+// would change the size after a line has already been built against it.
+void set_books_per_tile(uint32_t n);
 
 // A tile number on the corridor: any integer, as sign and magnitude.
 struct TileIndex

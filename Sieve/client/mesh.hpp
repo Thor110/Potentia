@@ -45,6 +45,17 @@ std::shared_ptr<const Mesh> load_obj(const std::filesystem::path& path);
 // The model for a line: <model>-<medium>.obj, else the template, else null (stays wireframe).
 std::shared_ptr<const Mesh> load_model(const std::string& model, const std::string& medium);
 
+// Where the pre-rendered picture goes on a line's item, in the item model's own metres: the front
+// faces the corridor at x = 0, y is up from the shelf board, and the picture is centred across the
+// slot, half_width either side. Read from faces.ini beside the meshes, one section per medium;
+// anything missing is the whole 0.28 x 0.40 m slot.
+struct FaceRect
+{
+    float bottom = 0.0f, top = 0.40f, half_width = 0.14f;
+    float aspect() const { return (top - bottom) / (2.0f * half_width); } // height over width
+};
+FaceRect load_face_rect(const std::string& medium);
+
 // A cheap stand-in for a distant copy: only the faces turned towards +X (a book's spine, the
 // side you see from the corridor, for the left wall) and up (its top).
 std::shared_ptr<const Mesh> facing_x(const Mesh& mesh);

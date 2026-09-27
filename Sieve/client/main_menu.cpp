@@ -1,3 +1,11 @@
+// Sieve hallway — the main menu's behaviour: the rows, the drop-down lists, and applying a change
+// the moment it is made. See main_menu.hpp for the keys and the mouse.
+//
+// The rows are built fresh by items() each time they are needed rather than kept in a table,
+// because which rows exist depends on which screen you are on and what the display can do; a
+// stale table was the alternative, and this menu is drawn rarely enough that rebuilding it costs
+// nothing. Every change is applied and saved at once, with no confirm step, so that a setting that
+// makes the window unusable can be undone by changing it back rather than by editing a file.
 #include "main_menu.hpp"
 
 #include "font.hpp"
@@ -47,7 +55,7 @@ std::vector<MainMenu::Item> MainMenu::items() const
     case Screen::Settings:
         return {{Kind::Action, "graphics"}, {Kind::Action, "controls"}, {Kind::Action, "language"}, {Kind::Action, "back"}};
     case Screen::Graphics:
-        return {{Kind::Choice, "resolution"}, {Kind::Toggle, "fullscreen"}, {Kind::Toggle, "vsync"}, {Kind::Toggle, "edge_glow"}, {Kind::Toggle, "real_graphics"}, {Kind::Toggle, "door_portals"}, {Kind::Number, "model_cache"}, {Kind::Number, "angle_decimals"}, {Kind::Toggle, "fps_counter"},
+        return {{Kind::Choice, "resolution"}, {Kind::Toggle, "fullscreen"}, {Kind::Toggle, "vsync"}, {Kind::Toggle, "edge_glow"}, {Kind::Toggle, "real_graphics"}, {Kind::Toggle, "door_portals"}, {Kind::Number, "graphics_memory"}, {Kind::Toggle, "fps_counter"},
                 {Kind::Action, "back"}};
     case Screen::Controls: return {{Kind::Number, "mouse_sensitivity"}, {Kind::Toggle, "invert_mouse_y"}, {Kind::Action, "back"}};
     case Screen::Language: return {{Kind::Choice, "language_choice"}, {Kind::Action, "back"}};
@@ -64,10 +72,7 @@ std::string MainMenu::value_of(const Item& it) const
     if (it.id == "edge_glow") return onoff(s_.edge_glow);
     if (it.id == "real_graphics") return onoff(s_.real_graphics);
     if (it.id == "door_portals") return onoff(s_.door_portals);
-    if (it.id == "angle_decimals") return trf("value.angle_decimals", {std::to_string(s_.angle_decimals)});
-    if (it.id == "model_cache")
-        return trf("value.model_cache", {std::to_string(s_.model_cache_mb),
-                                         std::to_string(size_t(s_.model_cache_mb) * 1024 * 1024 / (64 * 64 * 4))});
+    if (it.id == "graphics_memory") return trf("value.graphics_memory", {std::to_string(s_.graphics_memory_gb)});
     if (it.id == "fps_counter") return onoff(s_.fps_counter);
     if (it.id == "mouse_sensitivity") return std::to_string(s_.mouse_sensitivity) + "%";
     if (it.id == "invert_mouse_y") return onoff(s_.invert_mouse_y);
@@ -179,8 +184,7 @@ void MainMenu::change(int dir)
         save();
         return;
     case Kind::Number:
-        if (it.id == "model_cache") s_.model_cache_mb = std::clamp(s_.model_cache_mb + dir * 8, 8, 512);
-        else if (it.id == "angle_decimals") s_.angle_decimals = std::clamp(s_.angle_decimals + dir, 0, 8);
+        if (it.id == "graphics_memory") s_.graphics_memory_gb = std::clamp(s_.graphics_memory_gb + dir, 1, 128);
         else s_.mouse_sensitivity = std::clamp(s_.mouse_sensitivity + dir * 10, 10, 400);
         save();
         return;
