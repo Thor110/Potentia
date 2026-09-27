@@ -218,6 +218,24 @@ def map_with(a, build):
     print(f"Keep {src.name} as it is: the map names those exact bytes.")
 
 
+def newer_sources(build):
+    """Source files changed since the build's programs were made (at most three named), so a
+    release made from an old build says so rather than shipping the old programs quietly."""
+    programs = [build / f"{p}{EXE}" for p in PROGRAMS if (build / f"{p}{EXE}").exists()]
+    if not programs:
+        return []
+    built = min(p.stat().st_mtime for p in programs)
+    newer = []
+    for folder in ("core", "tools", "client", "third_party"):
+        for f in (ROOT / folder).rglob("*"):
+            if f.suffix in (".cpp", ".hpp", ".h", ".c") and f.stat().st_mtime > built + 2:
+                newer.append(f)
+    if (ROOT / "CMakeLists.txt").stat().st_mtime > built + 2:
+        newer.append(ROOT / "CMakeLists.txt")
+    newer.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+    return [f.relative_to(ROOT).as_posix() for f in newer[:3]]
+
+
 def main():
     ap = argparse.ArgumentParser(description="Make Sieve's release files, in order, and check them.")
     ap.add_argument("--version", default=None, help="the release's version (default: CMakeLists.txt's, e.g. 0.13.0)")
@@ -249,6 +267,11 @@ def main():
             a.skip_build = True
         else:
             fail(f"CMake is not on the PATH, and there is no build in {build}: build Release in Visual Studio first")
+    if a.skip_build:
+        stale = newer_sources(build)
+        if stale:
+            print(f"WARNING: the build in {build} is older than the source ({', '.join(stale)} changed since).")
+            print("         Build Release in Visual Studio first, or the release carries the old programs.")
     name = a.name
     folder = f"Sieve-{a.version}"  # the release folder: what the 7z unpacks to, or what installs
     out = a.out.resolve()
@@ -325,13 +348,16 @@ def main():
                 if not got.exists() or sha256(got) != sha256(archive):
                     fail(f"{f.name} did not install {archive.name} byte for byte")
             print(f"   {f.name}: installs back to what it carries, checked")
-    # The layout: sieve in tools/ finds the installation's data folders in the folder above.
+    # The layout: sieve in tools/ finds the installation's data folders in the folder above. Run
+    # from tools/ itself, which has no data/ folder (one where it is run is looked at first), so a
+    # registry found at all is the one above; the path itself is not compared, since Windows may
+    # spell the same folder differently (case, short names, a drive mapped through a link).
     for what, folder_name in (("dicts", "dictionaries"), ("models", "models")):
-        # (run from the tools folder, since a data/ folder where it is run from is looked at first)
         shown = subprocess.run([str(stage / "tools" / f"sieve{EXE}"), what], capture_output=True, text=True,
-                               cwd=stage / "tools").stdout
-        if str(stage / folder_name) not in shown:
-            fail(f"tools/sieve{EXE} does not find {folder_name} in the folder above it")
+                               errors="replace", cwd=stage / "tools")
+        if shown.returncode != 0 or "registry  " not in shown.stdout or "hash ok" not in shown.stdout:
+            fail(f"tools/sieve{EXE} does not find {folder_name} in the folder above it (is the build older than the "
+                 f"source? build Release in Visual Studio, then run this again):\n{shown.stdout}{shown.stderr}")
     print(f"   {folder}: hallway{EXE} at the top; sieve and sieve-install in tools/, finding the data above")
     text = subprocess.run([str(sieve), "map", str(mapfile)], capture_output=True, text=True, check=True).stdout
     for f in (program, instructions, source):
@@ -347,6 +373,12 @@ def main():
     sums = "".join(f"{sha256(f)}  {f.name}\n" for f in published)
     (out / "SHA256SUMS.txt").write_text(sums, encoding="utf-8")
     sizes = "\n".join(f"| `{f.name}` | {f.stat().st_size:,} bytes | `{sha256(f)}` |" for f in published)
+    if a.uncompressed:
+        where_note = f"The installers put the `{folder}` folder in place."
+    else:
+        where_note = (f"The installer (`{program.name}`, or `sieve-install` with `{instructions.name}`) unpacks the release "
+                      f"into a folder of its own: choose `C:\\Games` and you get `C:\\Games\\{name}\\`. (`sieve install` "
+                      f"and the File Locator give back `{archive.name}` itself, byte for byte; unpack it with 7-Zip.)")
     notes = f"""# Sieve {a.version}
 
 The Gallery of Babel's engine and its hallway: every page, picture, sound, film, book, model and
@@ -368,12 +400,17 @@ file there can be, each with an address, walked through as a library.
   `sieve map`. Its own SHA-256 is above. The whole Potentia repository, Sieve included, is the
   release's "Source code" download.
 
-{f"The installers put the `{folder}` folder in place." if a.uncompressed else f"The installers put `{archive.name}` in place (compressed first: a fraction of the size); unpack it with 7-Zip to get the `{folder}` folder."}
+{where_note}
 
-Windows SmartScreen will warn that the programs are not signed; choose More info, then Run anyway.
+## Getting started
 
-Sieve is licensed under Potentia's licence (`potentia-license.txt`); the third-party licences are
-in `third_party_licenses/`.
+Start `hallway{EXE}` in the installed folder. `tools\\` holds the command-line tool (`sieve{EXE}`: open a command prompt there and run `sieve help`) and the installer the hallway uses to make installer programs. Esc opens the pause menu (the File Locator, the node graph, the navigator); the full guide is the README in the repository.
+
+To check a download, compare its SHA-256 with the table above: in PowerShell, `Get-FileHash {program.name}`; elsewhere, `sha256sum`.
+
+Windows SmartScreen will warn that the programs are not signed; choose More info, then Run anyway. This release is built for 64-bit Windows 10 and 11; on Linux and macOS, build from the source.
+
+Sieve is part of Potentia and licensed under the GNU Affero General Public License v3 (`potentia-license.txt`); the third-party licences are in `third_party_licenses/`.
 """
     (out / "RELEASE-NOTES.md").write_text(notes, encoding="utf-8")
     print(sums, end="")
