@@ -990,6 +990,20 @@ private:
     void graph_poll(); // what the worker and the dialogs have handed over
     void graph_save(GraphMap& g);
     void graph_add_anchor(const Book& bk); // V: the file in hand, to the chosen map (or out of it)
+    // F: the item in hand saved as a file (item_save.cpp). The dialog's answer arrives on the
+    // system's thread (item_save_chosen) and is written at the next frame (item_save_poll).
+public:
+    void item_save_chosen(const std::string& path);
+    void save_in_hand_to(const std::string& path);
+private:
+    void save_in_hand();
+    std::string prepare_save();
+    void item_save_poll();
+    std::string binary_file_name(const Book& bk, const std::string& sha);
+    std::mutex save_mx_;
+    std::optional<std::string> save_pending_;
+    std::optional<Book> save_item_;
+    std::string save_ext_;
     int hand_tabs();                       // 3, or 4 with META
     void draw_meta(const Book& bk, float x, float cy, float pw, float bottom);
     void graph_remove(int node);

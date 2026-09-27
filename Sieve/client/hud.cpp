@@ -483,7 +483,11 @@ void Hallway::draw_in_hand(float W, float H)
     const SDL_Color ink = th.edge;
     const Book& bk = *in_hand_;
     const Space::Digits& u = bk.unit;
-    const float pw = std::min(W - 40, 1000.0f), ph = std::min(H - 120, 640.0f);
+    // A titled item's cover and title take room above the thing itself: the page grows by as
+    // much, where the window has it, so the thing keeps its size and the address stays clear.
+    const bool titled = has_titles() || !bk.cover.empty();
+    const float head = !titled ? 0.0f : bk.cover.empty() ? 44.0f : 100.0f;
+    const float pw = std::min(W - 40, 1000.0f), ph = std::min(H - 120, 640.0f + head);
     const float x = (W - pw) / 2, y = 50;
     panel(x, y, pw, ph, 255);
     float cy = y + 12;
@@ -523,7 +527,7 @@ void Hallway::draw_in_hand(float W, float H)
     if (hand_tab_ == 2) { draw_sort(bk, x, cy, pw, y + ph - 16); return; }
     if (hand_tab_ == 3) { draw_meta(bk, x, cy, pw, y + ph - 16); return; }
     // A titled unit's cover and title, above the thing itself.
-    if (const std::string title = title_text(bk); has_titles() || !bk.cover.empty())
+    if (const std::string title = title_text(bk); titled)
     {
         float tx = x + 14;
         if (!bk.cover.empty())
@@ -569,7 +573,8 @@ void Hallway::draw_in_hand(float W, float H)
     {
         const int frames = int(line().image.frames);
         const int frame = frames > 1 ? int((SDL_GetTicks() / 250) % Uint64(frames)) : 0;
-        const float size = std::min(ph - 170, pw - 28);
+        // What is left above the address and the keys (the cover and title may have taken some).
+        const float size = std::max(40.0f, std::min(y + ph - 120 - cy, pw - 28));
         draw_pixels(u, x + 14, cy, size, frame);
         if (frames > 1)
             text(x + 24 + size, cy, trf("hand.frame", {std::to_string(frame + 1), std::to_string(frames)}), 1, ink);

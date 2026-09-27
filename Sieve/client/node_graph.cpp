@@ -338,20 +338,8 @@ void Hallway::graph_add_anchor(const Book& bk)
         return;
     }
     // Its name: the file's own, if it was walked to from one; else its title, else the start of
-    // its SHA-256, with the kind its first bytes say it is.
-    std::string name;
-    if (auto it = walked_names_.find(sha); it != walked_names_.end()) name = it->second;
-    else
-    {
-        std::string t = title_text(bk);
-        while (!t.empty() && t.back() == ' ') t.pop_back();
-        while (!t.empty() && t.front() == ' ') t.erase(t.begin());
-        std::string kind = file_type(bk.head, bk.file_size);
-        for (char& c : kind) c = char(std::tolower(uint8_t(c)));
-        name = (t.empty() ? "anchor-" + sha.substr(0, 12) : t) + (kind == "?" || kind == "empty" ? "" : "." + kind);
-    }
-    for (char& c : name)
-        if (std::string("/\\:\t\r\n").find(c) != std::string::npos) c = '_';
+    // its SHA-256, with the kind its first bytes say it is (as F saves it).
+    const std::string name = binary_file_name(bk, sha);
     try
     {
         const uint32_t id = g->map.add_held(name, bytes);

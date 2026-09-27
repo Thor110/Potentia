@@ -1103,6 +1103,9 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
     case SDLK_V:
         if (in_hand_) graph_add_anchor(*in_hand_);
         break;
+    case SDLK_F:
+        if (in_hand_) save_in_hand();
+        break;
     case SDLK_HOME:
         tile_ = TileIndex{};
         rebase();
@@ -1200,13 +1203,17 @@ void Hallway::render()
     SDL_GetCurrentRenderOutputSize(r_, &w, &h);
     cam_.update(w, h);
     ++portal_frame_;
+    item_save_poll(); // an item F asked to save, once the dialog has said where
     const Theme& th = theme();
     SDL_SetRenderDrawColor(r_, th.bg.r, th.bg.g, th.bg.b, 255);
     SDL_RenderClear(r_);
     SDL_SetRenderDrawBlendMode(r_, SDL_BLENDMODE_BLEND);
 
     // Nothing stands on the binary line's shelves, so there is nothing to look at or take.
-    hover_ = pick_book(cam_.pos, cam_.forward(), 0, 5.0f, sizes_vary());
+    {
+        const FaceRect& rect = face_rect(); // the item's front as its model has it
+        hover_ = pick_book(cam_.pos, cam_.forward(), 0, 5.0f, sizes_vary(), rect.bottom, rect.top);
+    }
     if (on_binary() && hover_ && hover_->side == Side::Right) hover_.reset(); // the edge: no shelves there
     if (hover_ && effective_mode() == FilterMode::Hide && !book(hover_->tile, hover_->slot()).passes) hover_.reset();
 
@@ -1259,15 +1266,6 @@ void Hallway::render()
             if (all_start(t)) draw_start_line(z0 + 1.0f); // every line starts here: a double flag
         }
     }
-    // The book you are looking at.
-    if (hover_ && !book(hover_->tile, hover_->slot()).empty)
-    {
-        Vec3 f[4];
-        book_face(float(hover_->tile) * kTile, hover_->side, hover_->row, hover_->col, f, sizes_vary());
-        SDL_Color c = th.edge;
-        c.a = 110;
-        fill({f[0], f[1], f[2], f[3]}, c);
-    }
     // Every edge, faded towards the background with distance. Padding slots have no book.
     // (The buckets are kept between frames, so their memory is reused.)
     std::vector<std::vector<SDL_FPoint>>& buckets = edge_buckets_;
@@ -1317,6 +1315,23 @@ void Hallway::render()
     if (on_binary()) draw_binary_edge(visible, kBack, kAhead, real_hall);
     // The pictures on the items' fronts, on every line that has them (item_faces.cpp).
     draw_item_faces(visible, kBack, kAhead);
+    // The item you are looking at, tinted in the line's edge colour. After the pictures, or a
+    // picture covering the whole front hides it (every line but models, whose picture leaves
+    // the front uncovered), and over the picture's own rectangle (faces.ini), which is the
+    // item's front as its model has it: an audio item is shorter than the slot.
+    if (hover_ && !book(hover_->tile, hover_->slot()).empty)
+    {
+        const FaceRect& rect = face_rect();
+        Vec3 f[4];
+        picture_face(float(hover_->tile) * kTile, hover_->side, hover_->row, hover_->col, rect.bottom, rect.top,
+                     rect.half_width, f, sizes_vary());
+        // A line with black edges (books) would only darken it, which hardly shows on a dark
+        // cover: there the tint is white.
+        SDL_Color c = th.edge;
+        if (int(c.r) * 3 + int(c.g) * 6 + int(c.b) < 600) c = SDL_Color{255, 255, 255, 255};
+        c.a = 110;
+        fill({f[0], f[1], f[2], f[3]}, c);
+    }
     if (edge_glow_ && !md) draw_glow(buckets);
     for (int i = 0; i < kBuckets; ++i)
     {

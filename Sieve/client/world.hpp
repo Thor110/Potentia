@@ -109,6 +109,9 @@ void picture_face(float tile_z, Side side, int row, int col, float bottom, float
 
 // The book the ray hits within `reach` metres, if any. `cam_z` is local to the player's tile and
 // `player_tile` is that tile's index.
-std::optional<BookSlot> pick_book(Vec3 origin, Vec3 dir, int64_t player_tile, float reach, bool varied = true);
+// `bottom` and `top` (faces.ini's, in the item model's metres) narrow it to the item's front as its
+// model has it, so the space above a short item (audio) picks nothing; top <= bottom: the whole slot.
+std::optional<BookSlot> pick_book(Vec3 origin, Vec3 dir, int64_t player_tile, float reach, bool varied = true,
+                                  float bottom = 0, float top = 0);
 
 } // namespace hallway

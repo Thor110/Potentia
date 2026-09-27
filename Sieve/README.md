@@ -213,7 +213,9 @@ The rain only ever falls as characters the font can actually draw, so it never b
 
 **SORT, and maps.** A map (`sieve map FOLDER`, or the node graph's "Make a map from a folder...") links real files and folders, each file named by its SHA-256. It holds no file's bytes, so it is small and can be handed round or bundled with a release. On the SORT tab, a file on the binary line whose bytes a node of the chosen map names is that node, a verified anchor, drawn in its place among the rest; anything else is a lone point. Mouse or A/D turns the graph; [ and ] choose another map (on any tab).
 
-**Verified anchors: V.** Make a map with the node graph's **New map...** (O). Then, holding a file (an item on the binary line), press **V** on any tab to add it to the chosen map as a verified anchor, and V again to take it out; the item page shows which map is chosen and what V will do, and [ and ] change the map. Its bytes are kept inside the map (`sieve-map-v2`), so the map can always walk back to it, and can be sent as one file. The node graph's **Remove from map** (or Delete) takes an anchor out too. When an anchor has metadata in the map, its item page has a fourth tab, **META**. Sealed maps (such as a release's `sieve.map`) and "This installation" (the map chosen at the start) is made fresh, so neither can be changed.
+**Verified anchors: V.** Make a map with the node graph's **New map...** (O). Then, holding a file (an item on the binary line), press **V** on any tab to add it to the chosen map as a verified anchor, and V again to take it out; the item page shows which map is chosen and what V will do, and [ and ] change the map. Its bytes are kept inside the map (`sieve-map-v2`), so the map can always walk back to it, and can be sent as one file. The node graph's **Remove from map** (or Delete) takes an anchor out too. When an anchor has metadata in the map, its item page has a fourth tab, **META**. Sealed maps (such as a release's `sieve.map`) and "This installation" (the map chosen at the start, made fresh each time) cannot be changed.
+
+**Saving an item: F.** Holding an item, press **F** on any tab to save it as a file, wherever you choose: a page as text, a picture as a PNG, a video's frames side by side in one PNG, notes as a MIDI file, a model as its `.obj`, a book as text (its title, then its pages), and a file on the binary line as exactly its bytes, named as V would name it.
 
 Every row on the COST tab is the same number written a different way, which is the point:
 
@@ -380,6 +382,7 @@ A door **keeps your corridor position** and only changes which line reads it:
 | Home | Corridor tile 0: the start line of every line (the double flag) |
 | F1 | Back to the setup menu (filters are set there) |
 | P | Play an audio book you are holding |
+| F | Save the item you are holding as a file (asks where) |
 | Esc | Close a panel or input, or free the mouse |
 | Ctrl+Q | Quit |
 

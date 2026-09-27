@@ -648,3 +648,16 @@ it is run is looked at first); CI builds the layout and makes and runs an instal
 it. The hallway keeps its name for now (renaming it `Sieve.exe` would clash with the CLI's name in
 the docs).
 
+**F: save the item in hand; the highlight fixed** (Edward, 28 September 2026). F on any tab of the
+item page (V was taken by anchors) saves the item as a file through the system's save dialog
+(`client/item_save.cpp`): text as .txt, image as PNG, video as its frames in one PNG, audio as MIDI
+(`cli::save_unit`, as `sieve read --out`), a model as its .obj, a book as text (title, then pages;
+no cover), a binary-line file as its bytes, named by `binary_file_name` (shared with V's anchors).
+`--save-item PATH` does it without the dialog, for the checks. The item highlight (the book you
+look at) was drawn before the item pictures, which covered it on every line but models (whose
+picture leaves the front bare), so only the models crate lit up; it is now drawn after them, over
+the picture's own rectangle from faces.ini (so the audio item's highlight is its own height, not
+the slot's), white where a line's edges are black (books). Picking is narrowed to that rectangle
+too (`pick_book`'s bottom/top), so the space above an audio item picks nothing. faces.ini's values
+were right (every model's front measured at x = 0, z within ±0.14, audio 0.006-0.286).
+

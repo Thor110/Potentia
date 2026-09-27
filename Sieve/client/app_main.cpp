@@ -73,6 +73,7 @@ const char* kUsage =
     "  --pose X,Z,YAW,PITCH  camera position and angles in degrees\n"
     "  --tile N            then move N tiles along the corridor\n"
     "  --take              take the book you are looking at off the shelf\n"
+    "  --save-item PATH    then save it as a file (F on the item page), to PATH\n"
     "  --walk DX,DZ;...    walk these distances in metres first (doors work as when walking)\n"
     "  --press K,K,...     then press these keys (e.g. M,M,-,Shift+=), printing where you are\n"
     "  --edge-glow         draw with Geometry Edge Glow (or --settings a file that has it on)\n"
@@ -98,7 +99,7 @@ const char* kUsage =
     "Controls: WASD move, mouse look, Shift run, E or click take a book, T warp, G go to,\n"
     "M switch ordering (positional, scrambled, guided), - and = zoom out/in (guided; Shift: 8x),\n"
     "wheel/PgUp/PgDn/[ ] jump 1/1000/1000000 tiles, Home to corridor tile 0 (every line's start line),\n"
-    "N/B next/previous unit of a warped trail (or page of a book in hand), P play an audio book, F1 the setup menu, Tab free the mouse,\n"
+    "N/B next/previous unit of a warped trail (or page of a book in hand), P play an audio book, F save the item in hand as a file, F1 the setup menu, Tab free the mouse,\n"
     "Esc close or free the mouse, Ctrl+Q quit.\n\n"
     "All five lines share one corridor, 128 books per tile. Each line repeats along it; a\n"
     "checkered start line marks where each repeat begins. Black doors lead to the next line\n"
@@ -397,6 +398,7 @@ int run(const Args& a)
         }
         hall->render(); // computes what you are looking at
         if (a.has("take")) hall->take_hovered();
+        if (a.has("save-item")) hall->save_in_hand_to(a.get("save-item")); // F, without the dialog
         hall->render();
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         std::cout << "saved " << a.get("screenshot") << "\n";

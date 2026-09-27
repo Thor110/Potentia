@@ -225,6 +225,7 @@ if(SIEVE_BUILD_CLIENT)
         client/door_portal.cpp
         client/file_locator.cpp
         client/node_graph.cpp
+        client/item_save.cpp
         client/navigator.cpp
         client/pause_menu.cpp
         client/font.cpp

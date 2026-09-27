@@ -43,7 +43,7 @@ void picture_face(float tile_z, Side side, int row, int col, float bottom, float
     out[3] = {x, y0, zl};
 }
 
-std::optional<BookSlot> pick_book(Vec3 origin, Vec3 dir, int64_t player_tile, float reach, bool varied)
+std::optional<BookSlot> pick_book(Vec3 origin, Vec3 dir, int64_t player_tile, float reach, bool varied, float bottom, float top)
 {
     if (std::fabs(dir.x) < 1e-6f) return std::nullopt;
     const Side side = dir.x < 0 ? Side::Left : Side::Right;
@@ -65,6 +65,11 @@ std::optional<BookSlot> pick_book(Vec3 origin, Vec3 dir, int64_t player_tile, fl
     if (row < 0 || row >= kRows || col < 0 || col >= cols()) return std::nullopt;
     const float y0 = kRowTop - (row + 1) * kRowHeight + 0.02f;
     if (hit.y < y0 || hit.y > y0 + book_height(row, col, varied)) return std::nullopt;
+    if (top > bottom)
+    {
+        const float ys = book_height(row, col, varied) / kUniformBookHeight; // as picture_face stretches it
+        if (hit.y < y0 + bottom * ys || hit.y > y0 + top * ys) return std::nullopt;
+    }
     return BookSlot{player_tile + int64_t(tile_f), side, row, col};
 }
 
