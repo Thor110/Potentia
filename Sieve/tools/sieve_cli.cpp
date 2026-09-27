@@ -1562,14 +1562,16 @@ int cmd_map(const Args& a)
     namespace fs = std::filesystem;
     if (a.has("new"))
     {
-        // An empty map: only its root.
+        // An empty map: only its root (sealed with --seal, as the checks use for a read-only map).
         const std::string name = a.get("new");
-        const auto bytes = Map::empty(name).file();
+        Map empty = Map::empty(name);
+        empty.sealed = a.has("seal");
+        const auto bytes = empty.file();
         const std::string to = a.has("out") ? a.get("out") : name + ".map";
         std::ofstream out(fs::path(std::u8string(to.begin(), to.end())), std::ios::binary);
         out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
         if (!out) throw std::runtime_error("cannot write " + to);
-        std::cerr << "map       " << name << ": empty, written to " << to << "\n";
+        std::cerr << "map       " << name << (empty.sealed ? " (sealed)" : "") << ": empty, written to " << to << "\n";
         return 0;
     }
     if (a.positional.empty()) throw std::invalid_argument("map needs a FOLDER, FILEs, or a MAP file (see: sieve help map)");

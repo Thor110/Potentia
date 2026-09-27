@@ -12,10 +12,17 @@
 // written. It carries the core's addressing and the manifest code and nothing else: no
 // dictionaries, models, fonts or pictures, which is what makes it the trimmed build of the tool.
 //
+// When what it carries is one 7z archive (a release is compressed first, so it carries sieve.7z),
+// it unpacks the archive instead of writing it: into a folder named after the file (sieve.7z ->
+// sieve), with the archive's one top folder, if it has one, left out (client/unpack_7z.hpp). The
+// archive is checked against its SHA-256 first, and 7z checks each file's CRC as it unpacks. Only
+// this program does that; the locator gives back exactly the file it located.
+//
 // For testing without a person: --to FOLDER sets where, --yes installs at once and exits (0 on
 // success), and --screenshot FILE.bmp writes the window as it stands just before exiting.
 
 #include "cli/locate.hpp"
+#include "unpack_7z.hpp"
 #include "window_icon.hpp"
 
 #include <SDL3/SDL.h>
@@ -99,6 +106,8 @@ struct Installer
 {
     fs::path source;            // the .sieve file
     std::optional<Manifest> manifest;
+    // One 7z archive: unpacked into a folder named after it, rather than written as it is.
+    std::optional<install::SevenZip> archive;
     std::string error;          // why the installer could not be read, or the install failed
     std::string dest;           // where, as UTF-8, editable
     bool replace = false;       // replace files that are already there
@@ -120,23 +129,45 @@ struct Installer
     {
         source = file;
         manifest.reset();
+        archive.reset();
         error.clear();
         try
         {
             manifest = installable_manifest(file, false); // an installer, a program, or a v3 manifest
             screen = Screen::Ready;
-            // Where it goes unless you say otherwise: a folder of its own name in your documents;
-            // a single file (Sieve instructions for one file), into your documents themselves.
+            // A 7z archive on its own is unpacked; checked against its SHA-256 first, so a damaged
+            // one is refused here, before its listing is trusted.
+            if (one_file() && install::is_7z(manifest->contents))
+            {
+                if (sha256_hex(manifest->contents) != manifest->entries[0].sha256)
+                    throw std::runtime_error(manifest->root + " does not match its SHA-256: the installer is damaged");
+                archive = install::list_7z(manifest->contents);
+            }
+            // Where it goes unless you say otherwise: into your documents (see where_in).
             const char* docs = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
-            const fs::path base = docs ? from_u8(docs) : fs::current_path();
-            const bool one_file = manifest->entries.size() == 1 && !manifest->entries[0].dir && manifest->entries[0].path == manifest->root;
-            dest = one_file ? u8(base) : u8(base / from_u8(manifest->root));
+            dest = where_in(docs ? from_u8(docs) : fs::current_path());
         }
         catch (const std::exception& e)
         {
             error = e.what();
             screen = Screen::NoInstaller;
         }
+    }
+
+    // A single file (Sieve instructions for one file).
+    bool one_file() const
+    {
+        return manifest && manifest->with_contents && manifest->entries.size() == 1 && !manifest->entries[0].dir &&
+               manifest->entries[0].path == manifest->root;
+    }
+
+    // Where it goes in a folder chosen: a folder of its own name; a single file straight into the
+    // folder; a 7z archive into a folder named after the file (sieve.7z -> sieve).
+    std::string where_in(const fs::path& base) const
+    {
+        if (archive) return u8(base / from_u8(manifest->root).stem());
+        if (one_file()) return u8(base);
+        return u8(base / from_u8(manifest->root));
     }
 
     void start()
@@ -146,10 +177,24 @@ struct Installer
         cancel = false;
         finished = false;
         done = 0;
-        total = manifest->files;
+        total = archive ? size_t(archive->files) : size_t(manifest->files);
         worker = std::thread([this] {
             try
             {
+                if (archive)
+                {
+                    phase = 1; // checked already: the archive's SHA-256 when it was opened
+                    ok = install::unpack_7z(manifest->contents, from_u8(dest), replace,
+                                            [this](size_t d, size_t t, const std::string& path) {
+                                                done = d;
+                                                total = t;
+                                                std::lock_guard<std::mutex> lock(mx);
+                                                current = path;
+                                            },
+                                            &cancel);
+                    finished = true;
+                    return;
+                }
                 const bool whole = install_tree(*manifest, from_u8(dest), replace,
                                                 [this](int ph, size_t d, size_t t, const std::string& path) {
                                                     phase = ph;
@@ -283,7 +328,7 @@ int main(int argc, char** argv)
             std::lock_guard<std::mutex> lock(in.dialog_mx);
             if (in.chosen && in.manifest)
             {
-                in.dest = u8(from_u8(*in.chosen) / from_u8(in.manifest->root));
+                in.dest = in.where_in(from_u8(*in.chosen));
                 in.chosen.reset();
             }
         }
@@ -359,8 +404,17 @@ int main(int argc, char** argv)
         else
         {
             const Manifest& m = *in.manifest;
-            row(80, "Installs", m.root);
-            row(104, "Contents", files_n(m.files) + ", " + human_bytes(m.bytes));
+            if (in.archive)
+            {
+                row(80, "Unpacks", m.root + " (7z, " + human_bytes(m.bytes) + ")");
+                row(104, "Contents", files_n(in.archive->files) + ", " + human_bytes(in.archive->bytes) +
+                                         (in.archive->top.empty() ? "" : ", from " + in.archive->top));
+            }
+            else
+            {
+                row(80, "Installs", m.root);
+                row(104, "Contents", files_n(m.files) + ", " + human_bytes(m.bytes));
+            }
             row(128, "From", tail(u8(in.source.filename()), 60));
             if (in.screen == Screen::Ready)
             {
@@ -383,8 +437,16 @@ int main(int argc, char** argv)
                     SDL_RenderFillRect(r, &in_tick);
                 }
                 text(r, 52, 247, "Replace files that are already there", 1.5f, kInk);
-                text(r, 24, 290, "Every file is read back from its address and checked against its SHA-256", 1, kDim);
-                text(r, 24, 304, "before anything is written. Cancel removes whatever was written.", 1, kDim);
+                if (in.archive)
+                {
+                    text(r, 24, 290, "The archive was read back from its address and checked against its SHA-256;", 1, kDim);
+                    text(r, 24, 304, "each file's CRC is checked as it unpacks. Cancel removes whatever was written.", 1, kDim);
+                }
+                else
+                {
+                    text(r, 24, 290, "Every file is read back from its address and checked against its SHA-256", 1, kDim);
+                    text(r, 24, 304, "before anything is written. Cancel removes whatever was written.", 1, kDim);
+                }
                 buttons.push_back({{W - 328, H - 60, 140, 40}, "Install", !in.dest.empty()});
                 buttons.push_back({{W - 164, H - 60, 140, 40}, "Cancel"});
             }
@@ -395,9 +457,9 @@ int main(int argc, char** argv)
                 if (in.screen == Screen::Installing)
                 {
                     const bool writing = in.phase == 1;
-                    text(r, 24, 196, writing ? "Writing" : "Checking", 2, kInk);
-                    // Checking is the first half of the bar, writing the second.
-                    const float f = (float(d) / float(t) + (writing ? 1.0f : 0.0f)) / 2.0f;
+                    text(r, 24, 196, in.archive ? "Unpacking" : writing ? "Writing" : "Checking", 2, kInk);
+                    // Checking is the first half of the bar, writing the second (unpacking, the whole).
+                    const float f = in.archive ? float(d) / float(t) : (float(d) / float(t) + (writing ? 1.0f : 0.0f)) / 2.0f;
                     const SDL_FRect bar{24, 228, W - 48, 22}, fill{26, 230, (W - 52) * f, 18};
                     SDL_SetRenderDrawColor(r, 110, 110, 110, 255);
                     SDL_RenderRect(r, &bar);
@@ -414,7 +476,10 @@ int main(int argc, char** argv)
                 else if (in.screen == Screen::Done)
                 {
                     text(r, 24, 196, "Installed.", 2, kAccent);
-                    text(r, 24, 228, files_n(in.manifest->files) + (in.manifest->files == 1 ? ", checked against its SHA-256." : ", every one checked against its SHA-256."), 1.5f, kInk);
+                    if (in.archive)
+                        text(r, 24, 228, files_n(in.archive->files) + " unpacked from " + in.manifest->root + ", every one checked.", 1.5f, kInk);
+                    else
+                        text(r, 24, 228, files_n(in.manifest->files) + (in.manifest->files == 1 ? ", checked against its SHA-256." : ", every one checked against its SHA-256."), 1.5f, kInk);
                     buttons.push_back({{W - 164, H - 60, 140, 40}, "Finish"});
                 }
                 else if (in.screen == Screen::Cancelled)

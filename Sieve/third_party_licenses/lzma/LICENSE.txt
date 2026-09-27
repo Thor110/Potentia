@@ -1,0 +1,12 @@
+LZMA SDK (the 7z decoder in third_party/lzma)
+
+LZMA SDK is written and placed in the public domain by Igor Pavlov.
+
+Every file taken from it (third_party/lzma) says so in its first lines ("Igor Pavlov : Public
+domain"). Some other parts of 7-Zip are under the GNU LGPL; none of those is used.
+
+From 7-Zip's DOC/readme.txt:
+
+  LZMA SDK is written and placed in the public domain by Igor Pavlov.
+  You can download LZMA SDK from:
+    http://www.7-zip.org/sdk.html

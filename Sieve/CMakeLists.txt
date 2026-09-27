@@ -169,11 +169,10 @@ else()
 endif()
 add_custom_target(sieve_data ALL
     ${SIEVE_LICENSE_COPY}
-    # The maps shipped: everything in data/maps (sieve.map, the sealed map of the release, and any
-    # other map put there). Maps made in the hallway under other names are left as they are.
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_CURRENT_SOURCE_DIR}/data/maps
-            $<TARGET_FILE_DIR:sieve>/maps
+    # The maps folder, where the node graph (O) lists maps and keeps the ones made in the hallway.
+    # No map is shipped in it: the release's map names the release's files, so it cannot be inside
+    # them, and "This installation" is made fresh. Maps already in it are left as they are.
+    COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:sieve>/maps
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/data/dictionaries
             $<TARGET_FILE_DIR:sieve>/dictionaries
@@ -267,7 +266,22 @@ if(SIEVE_BUILD_CLIENT)
     # the installer attached. SDL is linked statically where a static SDL is to be had, so that
     # program is one file; with only a shared SDL it also needs SDL3.dll beside it (sieve locate
     # --program says so). On Windows it is a windowed program, without a console.
-    add_executable(sieve-install WIN32 client/installer_main.cpp ${SIEVE_ICON_RC})
+    # The LZMA SDK's 7z decoder (third_party/lzma, public domain), for sieve-install alone: it
+    # unpacks an installer that carries one 7z archive (client/unpack_7z.hpp). C, so its own
+    # language; its warnings are the SDK's, at each compiler's usual level.
+    enable_language(C)
+    add_library(sieve_lzma STATIC
+        third_party/lzma/7zAlloc.c third_party/lzma/7zArcIn.c third_party/lzma/7zBuf.c third_party/lzma/7zBuf2.c
+        third_party/lzma/7zCrc.c third_party/lzma/7zCrcOpt.c third_party/lzma/7zDec.c third_party/lzma/7zStream.c
+        third_party/lzma/Bcj2.c third_party/lzma/Bra.c third_party/lzma/Bra86.c third_party/lzma/BraIA64.c
+        third_party/lzma/CpuArch.c third_party/lzma/Delta.c third_party/lzma/Lzma2Dec.c third_party/lzma/LzmaDec.c
+        third_party/lzma/Ppmd7.c third_party/lzma/Ppmd7Dec.c)
+    target_include_directories(sieve_lzma PUBLIC third_party/lzma)
+    if(MSVC)
+        target_compile_options(sieve_lzma PRIVATE /W3)
+    endif()
+    add_executable(sieve-install WIN32 client/installer_main.cpp client/unpack_7z.cpp ${SIEVE_ICON_RC})
+    target_link_libraries(sieve-install PRIVATE sieve_lzma)
     if(SIEVE_SMALL_INSTALLER)
         # Its own SDL, built once from the same source (or fetched, when SDL came from vcpkg or
         # the system), static, optimised for size, and without what the installer never uses:

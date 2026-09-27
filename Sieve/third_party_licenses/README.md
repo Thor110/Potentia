@@ -9,6 +9,7 @@ Everything in Sieve that was not written for it, with its licence. The folders h
 | SCOWL word lists | 2020.12.07 | SCOWL's permissive licence (notice required) | The dictionaries in `data/dictionaries` | `SCOWL/Copyright.txt` |
 | font8x8 | - | Public domain | The menu font, `data/fonts/sieve8x8.hex` | `font8x8/LICENSE.txt` |
 | zlib | 1.3.2 when CMake fetches it (else the system's) | zlib | The `sieve` tool's comparison page: zip's deflate (`tools/cli/compare.cpp`). Fetched and built by CMake if the system has none; not stored in this repository | `zlib/LICENSE` |
+| LZMA SDK (7z decoder) | 26.03 (from 7-Zip 26.03) | Public domain | `sieve-install` only: unpacking an installer that carries one 7z archive (`client/unpack_7z.cpp`); the files are in `third_party/lzma` | `lzma/LICENSE.txt` |
 | liblzma (XZ Utils) | 5.8.1 when CMake fetches it (else the system's) | 0BSD for liblzma, the only part built; the rest of XZ Utils (command line tools, scripts, build system) is not built or shipped | The `sieve` tool's comparison page: 7z's LZMA2 (`tools/cli/compare.cpp`). Fetched and built by CMake if the system has none; not stored in this repository | `xz/COPYING`, `xz/COPYING.0BSD` |
 
 **Parts of SDL with their own notices.** A static build of the hallway compiles in code from SDL's source tree that carries its own licence. The notices it asks to be kept are here:
@@ -26,6 +27,6 @@ SDL's controller database comes from Valve under the zlib licence, the same term
 
 **Data that is not shipped.** The model's training corpus (`corpus/`, fetched by `tools/fetch_corpus.py`) is public-domain Project Gutenberg texts as packaged by NLTK, and is not distributed. The pinned model `data/models/gutenberg-lower27-o5.model` holds only character counts derived from those texts. `tests/example_book_source.txt` is an excerpt of *A Tale of Two Cities* (public domain).
 
-**Sieve itself** has no licence file yet. Until one is added, the default copyright rules apply to it (all rights reserved by its author).
+**Sieve itself** is part of Potentia, under the GNU Affero General Public License v3 (Potentia's `LICENSE`, copied beside the programs as `potentia-license.txt`).
 
 When you add a library or data set, add its licence here. Keep each licence file as the upstream wrote it.

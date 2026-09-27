@@ -551,7 +551,7 @@ checks are unchanged. The hallway: **V** on any item tab adds the file in hand t
 (`graph_add_anchor`; files only for now; name = the real file name if walked to from one
 (`walked_names_`), else the title plus the kind from its first bytes); [ ] choose the map on any
 tab, and the item page shows it; the viewer's **Remove from map** / Delete (`graph_remove`).
-`read_only()`: This installation and sealed maps. `data/maps/sieve.map` (sealed, only its root
+`read_only()`: This installation and sealed maps. *(Superseded 27 September 2026, see "No shipped map" below.)* `data/maps/sieve.map` (sealed, only its root
 until the first release) is the one map shipped; a `default.map` was tried and dropped (below). **At the first release:** make the source archive, then
 `sieve map Sieve-src.7z --name release --seal --out data/maps/sieve.map` and build; the map
 naming the published files (`sieve map sieve.exe sieve.sieve --name sieve --seal`) goes
@@ -604,9 +604,34 @@ menu.cpp). The build itself failed copying `data/maps/release.map`, renamed on E
 `sieve.map` (now here too). Worth running `-Wshadow=local` in future before sending code, since
 MSVC's /W4 checks it and this build does not.
 
-**Release files, final** (Edward, 27 September 2026): `sieve.exe`, `sieve.sieve`, `sieve.zip` (the
-Sieve folder's source at the last commit, `git archive HEAD:<Sieve's path>` run from the
-repository's top folder, since Sieve is a folder in the Potentia repository) and `sieve.map`,
-sealed, naming the other three. `tools/make_release.bat` runs it all with defaults (version from
-CMakeLists.txt; `py -3` first, as a bare `python` on Windows 10/11 can be the Store's stand-in).
+**Release files, final** (Edward, 27 September 2026): three, `sieve.exe`, `sieve.sieve` and
+`sieve.map`. The map is sealed, names the other two, and **holds** `sieve-source.7z`: the Sieve
+folder's source at the last commit (`git archive --format=tar HEAD:<Sieve's path>`, run from the
+repository's top folder since Sieve is a folder in the Potentia repository, then 7-zipped). GitHub's
+own source download is the whole Potentia repository. `tools/make_release.bat` runs it all with
+defaults (version from CMakeLists.txt; `py -3` first, as a bare `python` on Windows 10/11 can be the
+Store's stand-in).
+
+**No shipped map** (Edward, 27 September 2026). `data/maps/sieve.map`, sealed and only its root,
+is gone, and `data/maps` with it: it was meant to name a source archive (`--with-source`), and the
+published `sieve.map` now holds the source instead. The real release map cannot be shipped inside
+the release, since it names `sieve.sieve`, which carries the release (a hash cannot contain
+itself). "This installation" is made fresh anyway. So the build (`sieve_data`) and the release
+script only make an empty `maps/` folder beside the programs, for the node graph; `--with-source`
+is dropped. `sieve map --new NAME --seal` now makes a sealed empty map (it ignored `--seal`
+before), which the CI's read-only checks make for themselves instead of using the shipped one.
+
+**The installer unpacks a 7z** (Edward, 27 September 2026). A release installer carried
+`sieve.7z` and wrote it as it was (and a folder chosen with Browse gained the file's name as a
+folder, `C:\TEST\sieve.7z\sieve.7z`: fixed, a single file goes straight into the folder chosen).
+Now `sieve-install`, and only it, recognises a lone 7z by its signature and unpacks it into a
+folder named after the file (`sieve.7z` -> `sieve\`), leaving out the archive's one top folder if
+it has one (`client/unpack_7z.*`). The archive's SHA-256 is checked on opening; 7z checks each
+file's CRC; existing files are refused unless Replace; cancel or failure removes what was written;
+Unix modes are kept where the archive has them. The decoder is the LZMA SDK's C code, public domain,
+from 7-Zip 26.03, in `third_party/lzma` (18 .c files, `sieve_lzma`, linked into sieve-install
+alone); it adds about 80 KB to the trimmed installer (Linux 1.51 -> 1.59 MB). The locator and
+`sieve install` are unchanged, byte for byte. CI: `tests/manifest_fixture.7z` through
+sieve-install (unpacked, equal to the fixture) and through `sieve install` (the archive itself).
+Zip could be done the same way later with zlib's inflate, if wanted.
 

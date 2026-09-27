@@ -198,7 +198,7 @@ The rain only ever falls as characters the font can actually draw, so it never b
 
 **SORT, and maps.** A map (`sieve map FOLDER`, or the node graph's "Make a map from a folder...") links real files and folders, each file named by its SHA-256. It holds no file's bytes, so it is small and can be handed round or bundled with a release. On the SORT tab, a file on the binary line whose bytes a node of the chosen map names is that node, a verified anchor, drawn in its place among the rest; anything else is a lone point. Mouse or A/D turns the graph; [ and ] choose another map (on any tab).
 
-**Verified anchors: V.** Make a map with the node graph's **New map...** (O). Then, holding a file (an item on the binary line), press **V** on any tab to add it to the chosen map as a verified anchor, and V again to take it out; the item page shows which map is chosen and what V will do, and [ and ] change the map. Its bytes are kept inside the map (`sieve-map-v2`), so the map can always walk back to it, and can be sent as one file. The node graph's **Remove from map** (or Delete) takes an anchor out too. When an anchor has metadata in the map, its item page has a fourth tab, **META**. `maps/sieve.map` is sealed and "This installation" (the map chosen at the start) is made fresh, so neither can be changed.
+**Verified anchors: V.** Make a map with the node graph's **New map...** (O). Then, holding a file (an item on the binary line), press **V** on any tab to add it to the chosen map as a verified anchor, and V again to take it out; the item page shows which map is chosen and what V will do, and [ and ] change the map. Its bytes are kept inside the map (`sieve-map-v2`), so the map can always walk back to it, and can be sent as one file. The node graph's **Remove from map** (or Delete) takes an anchor out too. When an anchor has metadata in the map, its item page has a fourth tab, **META**. Sealed maps (such as a release's `sieve.map`) and "This installation" (the map chosen at the start) is made fresh, so neither can be changed.
 
 Every row on the COST tab is the same number written a different way, which is the point:
 
@@ -667,8 +667,8 @@ A file's place on the binary line is its hex dump plus `0101...01`, one `01` per
 ### `map`: a node graph of verified anchors
 
 ```sh
-sieve map release --out maps/sieve.map            # a map of a folder, for the node graph
-sieve map maps/sieve.map --graphml release.graphml # the same map for Gephi, yEd or Cytoscape
+sieve map release --out maps/release.map          # a map of a folder, for the node graph
+sieve map maps/release.map --graphml release.graphml # the same map for Gephi, yEd or Cytoscape
 sieve map release --dot release.dot                  # or for Graphviz
 ```
 
@@ -695,7 +695,7 @@ An installer's manifest (`sieve-manifest-v3`) is the folder structure followed b
 
 The full guide, including the proper procedure (compress the folder first, then make the installer), is [docs/SIEVE-INSTALL-USAGE.md](docs/SIEVE-INSTALL-USAGE.md). A Sieve release itself is made with `tools/make_release.py` (the same guide, "Making a Sieve release").
 
-`sieve locate FOLDER --installer NAME.sieve` makes the installer: one number, stored as raw bytes. `sieve-install` is the program that installs it, a window with the usual steps: what it installs, where (Browse, or type a path), Install, a progress bar, Finish. Put `NAME.sieve` beside `sieve-install` and run it, or drop the file on its window. Every file is checked against its SHA-256 before anything is written, and Cancel removes whatever was written. It needs nothing else: no data files, only the program and the `.sieve` file.
+`sieve locate FOLDER --installer NAME.sieve` makes the installer: one number, stored as raw bytes. `sieve-install` is the program that installs it, a window with the usual steps: what it installs, where (Browse, or type a path), Install, a progress bar, Finish. Put `NAME.sieve` beside `sieve-install` and run it, or drop the file on its window. Every file is checked against its SHA-256 before anything is written, and Cancel removes whatever was written. It needs nothing else: no data files, only the program and the `.sieve` file. When what it carries is one 7z archive (a release's `sieve.7z`), it unpacks it into a folder named after the file (`C:\TEST\sieve\...`), leaving out the archive's one top folder; see `docs/SIEVE-INSTALL-USAGE.md`. Only the installer does this: `sieve install` and the File Locator give back the archive itself.
 
 To hand someone **one file**, make an installer program: `sieve locate FOLDER --program "NAME installer.exe"`, or the File Locator's "Make an installer..." (it makes a program unless you name the file `.sieve`). That is a copy of `sieve-install` with the installer attached to its end; run it and it installs, and `sieve install` reads it too. It is the program plus the installer plus 24 bytes. `sieve-install` is built on a trimmed SDL of its own (static, optimised for size, with no sound, controllers or GPU), which the first build compiles once, so every installer program carries as little as it can: about 1.5 MB on Linux. (`-DSIEVE_SMALL_INSTALLER=OFF` links the hallway's SDL instead; if that is a shared SDL, the program then needs `SDL3.dll` beside it.)
 

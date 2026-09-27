@@ -501,7 +501,7 @@ const std::vector<Page>& pages()
           {"sieve map sieve.exe sieve.sieve --name sieve --seal --out sieve.map", "a release's map"},
           {"sieve map --new finds --out maps/finds.map", "a new, empty map"},
           {"sieve map maps/finds.map --add found.bin --out maps/finds.map", "add an anchor"},
-          {"sieve map maps/sieve.map --graphml sieve.graphml", "a map for Gephi or yEd"}}},
+          {"sieve map maps/photos.map --graphml photos.graphml", "a map for Gephi or yEd"}}},
 
         {"install", "Put a folder back from its installer: one address.",
          "sieve install INSTALLER.sieve|PROGRAM.exe|MANIFEST --to FOLDER [--force] [--hex]",

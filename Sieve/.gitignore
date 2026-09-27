@@ -19,6 +19,8 @@ data/fonts/unifont.hex
 /*.sieve
 /*.bmp
 /fx_installed/
+/fx7/
+/fx7raw/
 /*.hex
 /*.png
 /*.ini
