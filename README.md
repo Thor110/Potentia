@@ -128,7 +128,7 @@ Potentia is part archive, part alignment sandbox, and part digital civilisationa
 
 Status: the search-space engine, **Sieve**, is built and released (v0.13.0): exact addressing, versioned filters, maps of verified anchors and a walkable hallway. The preservation environment and the Museum itself remain at the design stage.
 
----
+--- [📚 Index](#-index)
 
 ## 🧭 What Potentia Is
 
