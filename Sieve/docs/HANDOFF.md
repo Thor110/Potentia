@@ -54,8 +54,13 @@ at both ends of the map.
 The binary line is **one line met from either end** — one ordinary tile of corridor, the same
 width and height and bookcase as any other, with one side missing. Where the other wall would
 stand the floor ends at a waist-high wall (`kEdgeRail`, `kEdgeRailTop` in `client/world.hpp`) and
-green rain falls past it for ever. `binary_shelf_` decides which wall carries the shelves, since
-which side the drop is on depends on which end you walked out of. Nothing out there is addressed,
+green rain falls past it for ever. The room is always the same way round: shelves and door on the
+line's left, the drop on its right. It used to be mirrored depending on which end you came in
+from, which made it two rooms; since 27 September you are **turned round** instead when you come
+in from models (`cross()`), so the two halves of the ring run in opposite directions, as the two
+ends of one line do. Its one door leads back to where you came from (`binary_from_`, pages when
+you start there), and its sign says so. A scripted `--walk` is in the walker's frame, so a door
+that turns you round turns the rest of the walk with you. Nothing out there is addressed,
 ordered or filtered, and the shelves stand empty: cataloguing what is in the drop is a job for
 people.
 
@@ -241,6 +246,18 @@ have to be moved by hand.
 
 Pictures on items no longer warp up close: see `docs/REVIEW.md`, `draw_face_image`.
 
+### The binary line's room is a template
+
+`data/meshes/templates/edge.obj` (from `tools/build_mesh_templates.py`, which now builds each wall
+with one function shared by `hallway.obj` and `edge.obj`; the other four templates came out
+byte-for-byte the same). The game loads `edge-binary.obj`, then the template, and mirrors it in X
+when the shelves are on the right; only when neither exists does it cut `hallway.obj` in half and
+add a box for the short wall, as it did before.
+
+The portal titles are clipped by hand where a bookcase stands between you and them (nothing
+there is depth-tested): the bookcases are boxes at known places, so the part of a sign behind
+one is a single cut along the wall, where the line of sight grazes the bookcase's end.
+
 ### The address navigator
 
 **X** in the hallway opens the whole address of the item you are looking at, full screen, a hex
@@ -285,7 +302,8 @@ did. `draw_face_image` is shared by the binary edge and the crate faces and stay
    address, which is only shorter when the item is near an anchor. The graph is agreed to be a
    separate system from the corridor, not a mode of it.
 3. The colour-blindness pass over the line palettes.
-4. Portal signage: the doors say nothing about what is through them.
+4. ~~Portal signage~~ — built: every doorway has a sign over it naming the line it leads to,
+   in that line's colours (`draw_door_sign`, `client/door_portal.cpp`).
 5. The manifest and directory walker (§4 of `docs/IDEAS.md`).
 6. The grammar reducer (§1).
 7. The word/dword scaling ladder, so that values are not quietly pinned to a byte.

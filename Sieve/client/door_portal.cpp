@@ -1,6 +1,7 @@
 // Sieve hallway -- Door Portals: the procedural noise that fills a doorway, in the colours of the
 // line it leads to. Drawn straight into a texture a pixel at a time, so it is kept cheap: a
-// smoothed value noise from a table, a few octaves, and the depth test against the scene.
+// smoothed value noise from a table, a few octaves, and the depth test against the scene. And the
+// portal titles: the sign over every doorway that names the line through it.
 
 #include "hallway.hpp"
 
@@ -228,6 +229,87 @@ void Hallway::draw_portal(const std::vector<Vec3>& quad, const Theme& dest, cons
     const SDL_FRect src{0, 0, float(nw), float(nh)};
     const SDL_FRect dst{float(x0), float(y0), float(nw * kGrain), float(nh * kGrain)};
     SDL_RenderTexture(r_, portal_.tex, &src, &dst);
+}
+
+// ---- portal titles
+//
+// Every doorway has a sign over it naming the line it leads to, in that line's colours: the
+// doors used to say nothing about what was through them, and the only way to know was the top
+// bar or walking through. The sign is a texture per line, lettered once in the chosen language
+// and kept, and drawn on the wall between the top of the door and the ceiling, facing the
+// corridor, by the same perspective-correct drawing as the items' displays.
+
+SDL_Texture* Hallway::sign_texture(int line)
+{
+    SignCache& c = signs_[size_t(line)];
+    if (c.tex) return c.tex;
+    const Theme& th = theme_of(line);
+    const std::u32string name = utf8_decode(tr(th.key));
+    constexpr int w = kSignPxW, h = kSignPxH;
+    std::vector<uint32_t> px(size_t(w) * h);
+    const uint32_t ground = 0xFF000000u | uint32_t(th.bg.r / 2) << 16 | uint32_t(th.bg.g / 2) << 8 | uint32_t(th.bg.b / 2);
+    const uint32_t ink = 0xFF000000u | uint32_t(th.edge.r) << 16 | uint32_t(th.edge.g) << 8 | uint32_t(th.edge.b);
+    std::fill(px.begin(), px.end(), ground);
+    // A frame in the line's edge colour, then the name as large as fits inside it, centred.
+    const int b = 6;
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x)
+            if (x < b || y < b || x >= w - b || y >= h - b) px[size_t(y) * w + size_t(x)] = ink;
+    const float room_w = float(w - 8 * b), room_h = float(h - 6 * b);
+    const float cell = std::floor(std::min(room_h, room_w / float(std::max<size_t>(1, name.size()))));
+    const float x0 = (float(w) - cell * float(name.size())) * 0.5f, y0 = (float(h) - cell) * 0.5f;
+    for (size_t i = 0; i < name.size(); ++i)
+        if (name[i] != U' ') paint_glyph(px.data(), w, h, x0 + float(i) * cell, y0, cell, cell, name[i], ink);
+    c.tex = SDL_CreateTexture(r_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, w, h);
+    if (!c.tex) return nullptr;
+    SDL_UpdateTexture(c.tex, nullptr, px.data(), w * 4);
+    SDL_SetTextureBlendMode(c.tex, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureScaleMode(c.tex, SDL_SCALEMODE_LINEAR);
+    return c.tex;
+}
+
+// The sign over the doorway in the wall at sx (-1 left, +1 right) of the tile starting at z0.
+// The left wall's door leads to the next line and the right wall's to the previous, and the
+// binary line's one door back to where you came from (door_to(), cross()).
+void Hallway::draw_door_sign(float sx, float z0, std::vector<SDL_Vertex>& verts)
+{
+    SDL_Texture* tex = sign_texture(door_to(sx));
+    if (!tex) return;
+    // Just off the wall, so it is never lost in it.
+    const float x = sx * (kHalfWidth - 0.01f);
+    const float za = z0 + kDoorStart, zb = z0 + kDoorEnd;
+    // The bookcases hide it. Nothing is depth-tested here, so the part of the sign behind a
+    // bookcase is cut off by hand: a bookcase stands out from the wall to kCaseFront, higher than
+    // the sign, along z 0..kShelfEnd of each tile, so the one before the door (seen from behind
+    // it) or the one after it (seen from beyond it) covers every point of the sign whose line of
+    // sight crosses the bookcase's front inside the bookcase's span. Along the wall that is a
+    // single cut, where the line of sight grazes the bookcase's end.
+    const Vec3 eye = cam_.pos;
+    float lo = za, hi = zb;
+    const float k = (sx * kCaseFront - eye.x) / (x - eye.x); // how far along the sight line the bookcase front is
+    if (k > 0 && k < 1)
+    {
+        if (eye.z < za) lo = std::max(lo, eye.z + (z0 + kShelfEnd - eye.z) / k);   // behind this tile's bookcase
+        if (eye.z > zb) hi = std::min(hi, eye.z + (z0 + kTile - eye.z) / k);       // behind the next tile's
+    }
+    if (hi - lo < 0.01f) return; // hidden
+    // Corners in picture_face's order, the texture cut with the sign: across it, u runs from za
+    // to zb on the left wall and from zb to za on the right, as a reader facing that wall sees it.
+    const float span = zb - za;
+    const float zl = sx < 0 ? lo : hi, zr = sx < 0 ? hi : lo;
+    const float ul = sx < 0 ? (lo - za) / span : (zb - hi) / span, ur = sx < 0 ? (hi - za) / span : (zb - lo) / span;
+    const Vec3 q[4] = {{x, kSignTop, zl}, {x, kSignTop, zr}, {x, kSignBottom, zr}, {x, kSignBottom, zl}};
+    draw_face_image(tex, q, verts, ul, ur);
+}
+
+void Hallway::release_signs()
+{
+    for (SignCache& c : signs_)
+        if (c.tex)
+        {
+            SDL_DestroyTexture(c.tex);
+            c.tex = nullptr;
+        }
 }
 
 } // namespace hallway::hall

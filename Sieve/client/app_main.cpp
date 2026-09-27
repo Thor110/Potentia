@@ -228,7 +228,11 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
     if (a.has("walk"))
     {
         // "DX,DZ;DX,DZ;..." in metres, applied in 5 cm steps so walls and doors behave as when walking.
+        // They are in the walker's own frame: a door that turns you round (into or out of the
+        // binary line from models) turns the rest of the walk round with you, as it turns a
+        // person walking forward.
         std::string spec = a.get("walk");
+        float frame = 1.0f;
         for (size_t start = 0; start < spec.size();)
         {
             const size_t end = std::min(spec.find(';', start), spec.size());
@@ -236,7 +240,12 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
             if (std::sscanf(spec.substr(start, end - start).c_str(), "%f,%f", &dx, &dz) != 2)
                 throw std::invalid_argument("--walk expects DX,DZ;DX,DZ;...");
             const int steps = std::max(1, int(std::ceil(std::sqrt(dx * dx + dz * dz) / 0.05f)));
-            for (int i = 0; i < steps; ++i) hall->move_by({dx / steps, 0, dz / steps});
+            for (int i = 0; i < steps; ++i)
+            {
+                const float yaw = hall->camera().yaw;
+                hall->move_by({frame * dx / steps, 0, frame * dz / steps});
+                if (std::abs(std::remainder(hall->camera().yaw - yaw, 2 * kPi)) > 3.0f) frame = -frame;
+            }
             std::cout << hall->status() << "\n";
             start = end + 1;
         }

@@ -747,14 +747,30 @@ void Hallway::jump_tiles(int64_t n)
 
 // A door keeps your corridor position and changes the line reading it: left wall to the next
 // line, right wall to the previous one. You come in through the opposite wall's door.
+//
+// The binary line is the exception. It has one wall, the left, and one door in it, and that door
+// leads back to the line you came from. From pages you walk out of pages' right wall and into
+// binary's left, as between any two lines. From models you walk out of models' left wall, and the
+// only door in binary is also in its left wall: so you are turned round, and come out of that
+// door facing into the room, with the line running the other way from you. Going back to models
+// turns you round again. The room itself never turns: it is one line, met from either end.
 void Hallway::cross(Side side)
 {
-    const int to = side == Side::Left ? (li_ + 1) % kLines : (li_ + kLines - 1) % kLines;
-    cam_.pos.x = (kHalfWidth - 0.1f) * (side == Side::Left ? 1.0f : -1.0f);
-    // You come out of binary's one wall of shelves, so that is the wall you came in through,
-    // and the drop is on the other side. Which is why the edge is on your left at one end of
-    // the corridor and on your right at the other: it is the same line, met from either end.
-    if (to == kBinaryLine) binary_shelf_ = side == Side::Left ? 1 : 0;
+    int to = side == Side::Left ? (li_ + 1) % kLines : (li_ + kLines - 1) % kLines;
+    bool turn = false;
+    if (on_binary())
+    {
+        to = binary_from_;
+        turn = to != (li_ + 1) % kLines; // back to models, through its left wall
+    }
+    else if (to == kBinaryLine)
+    {
+        binary_from_ = li_;
+        turn = side == Side::Left; // from models' left wall into binary's left wall
+    }
+    const float out = (kHalfWidth - 0.1f) * (side == Side::Left ? 1.0f : -1.0f);
+    cam_.pos.x = turn ? -out : out;
+    if (turn) cam_.yaw += 3.14159265f;
     drop_in_hand();
     trail_.clear(); // a warped trail belongs to the line it was warped on
     set_line(to);
@@ -1033,6 +1049,7 @@ void Hallway::render()
     const float* depth = models_drawn ? models_batch_.depth() : nullptr;
     // Doors: solid black. Start lines: checkered, where a loop of this line begins.
     // Far tile first, so a nearer door's black face covers the one behind it.
+    std::vector<SDL_Vertex> sign_verts;
     for (int t = kAhead; t >= -kBack; --t)
     {
         if (!visible[t + kBack]) continue;
@@ -1048,8 +1065,9 @@ void Hallway::render()
             // A door leads to the next line on the left wall and the previous one on the
             // right (cross()), so each portal takes the colour of the line behind it.
             if (door_portals_)
-                draw_portal(door, theme_of(sx < 0 ? (li_ + 1) % kLines : (li_ + kLines - 1) % kLines),
+                draw_portal(door, theme_of(door_to(sx)),
                             depth, models_batch_.width(), models_batch_.height());
+            draw_door_sign(sx, z0, sign_verts);
         }
         if (!real_marker && offset_loop_tile(t).is_zero())
         {
@@ -1152,7 +1170,8 @@ const Hallway::Models& Hallway::models()
         m.book = load_model("book", medium);
         if (m.book) m.book_far = facing_x(*m.book);
         m.marker = load_model("marker", medium);
-        if (li_ == kBinaryLine && m.hallway)
+        if (li_ == kBinaryLine) m.edge = load_model("edge", "binary");
+        if (li_ == kBinaryLine && m.hallway && !m.edge)
             for (int k = 0; k < 2; ++k)
             {
                 const float sign = k == 0 ? 1.0f : -1.0f;
@@ -1163,7 +1182,8 @@ const Hallway::Models& Hallway::models()
             }
         m.loaded = true;
         std::cerr << "real graphics for the " << medium << " line:";
-        for (const auto& [name, mesh] : {std::pair{"hallway", m.hallway}, {"bookshelf", m.bookshelf}, {"book", m.book}, {"marker", m.marker}})
+        for (const auto& [name, mesh] : {std::pair{"hallway", li_ == kBinaryLine && m.edge ? m.edge : m.hallway}, {"bookshelf", m.bookshelf},
+                                         {"book", m.book}, {"marker", m.marker}})
             std::cerr << " " << name << "=" << (mesh ? std::filesystem::path(mesh->source).filename().string() : std::string("wireframe"));
         std::cerr << "\n";
     }
@@ -1184,7 +1204,8 @@ void Hallway::draw_models(const Models& md, const bool* visible, int back, int a
         // The binary line is the same tile of corridor with one side taken out, and a short
         // wall standing where it went. Everything else about it is an ordinary tile.
         const int bs = binary_shelf_;
-        if (on_binary() && md.half[bs]) models_batch_.add(*md.half[bs], {{0, 0, z0}});
+        if (on_binary() && md.edge) models_batch_.add(*md.edge, {{0, 0, z0}, 1.0f, 1.0f, bs == 1});
+        else if (on_binary() && md.half[bs]) models_batch_.add(*md.half[bs], {{0, 0, z0}});
         else if (md.hallway) models_batch_.add(*md.hallway, {{0, 0, z0}});
         if (on_binary() && md.rail[bs]) models_batch_.add(*md.rail[bs], {{0, 0, z0}});
         if (md.marker && offset_loop_tile(t).is_zero())
@@ -1387,6 +1408,7 @@ void Hallway::release_textures()
 {
     models_batch_.release();
     clear_faces();
+    release_signs();
     if (portal_.tex)
     {
         SDL_DestroyTexture(portal_.tex);

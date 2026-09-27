@@ -3,7 +3,7 @@
 
     python3 tools/build_mesh_templates.py
 
-Four templates, each a Wavefront .obj with its .mtl, built to the hallway's own measurements
+Five templates, each a Wavefront .obj with its .mtl, built to the hallway's own measurements
 (client/world.hpp), in metres, Y up, the corridor running along +Z:
 
     hallway.obj    one 8 m tile of corridor: floor, ceiling, both walls, and a doorway with its
@@ -12,6 +12,8 @@ Four templates, each a Wavefront .obj with its .mtl, built to the hallway's own 
     book.obj       one book at the uniform size (0.40 m tall), spine facing +X (the corridor,
                    for the left wall)
     marker.obj     the checkered start/finish strip on the floor
+    edge.obj       the binary line's tile: the hallway with its right side open to the drop, a
+                   short wall standing on the edge (the other side is its mirror image in X)
 
 Copy each to <model>-<media>.obj (hallway-pages.obj, book-audio.obj, ...) and model from there.
 """
@@ -25,6 +27,7 @@ ROWS, ROW_TOP, ROW_HEIGHT = 4, 2.65, 0.55
 COLS = 16
 BOOK_PITCH, BOOK_WIDTH, UNIFORM_BOOK_HEIGHT = SHELF_END / COLS, 0.28, 0.40
 CASE_TOP = ROW_TOP + 0.2
+EDGE_RAIL, EDGE_RAIL_TOP, EDGE_RAIL_DEPTH = HALF_WIDTH, 0.95, 0.12  # kEdgeRail, kEdgeRailTop
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "meshes", "templates")
 
@@ -94,46 +97,56 @@ class Mesh:
                 f.write(f"\n# {note}\nnewmtl {name}\nKd {rgb[0]:.3f} {rgb[1]:.3f} {rgb[2]:.3f}\nKa 0 0 0\nKs 0 0 0\nd 1\nillum 1\n")
 
 
-def hallway():
-    m = Mesh("hallway")
+def wall_with_door(m, side, sx):
+    """One wall of a tile, with its doorway, the door's reveal and sill, and the frame."""
+    w, h, t = HALF_WIDTH, HEIGHT, TILE
+    frame, trim, recess = 0.08, 0.04, 0.06  # door frame width, how far it stands out, door depth
+    x = sx * w
+    n = (-sx, 0, 0)  # the wall faces into the corridor
+
+    def wall_quad(z0, z1, y0, y1, xx=x, nn=n):
+        if sx < 0:
+            m.quad((xx, y0, z0), (xx, y0, z1), (xx, y1, z1), (xx, y1, z0), nn)
+        else:
+            m.quad((xx, y0, z1), (xx, y0, z0), (xx, y1, z0), (xx, y1, z1), nn)
+
+    m.group(f"wall_{side}", "wall")
+    wall_quad(0, DOOR_START, 0, h)
+    wall_quad(DOOR_END, t, 0, h)
+    wall_quad(DOOR_START, DOOR_END, DOOR_TOP, h)
+    # The doorway's reveal (the sides and top of the opening, back to the door).
+    m.group(f"door_{side}", "door")
+    xd = x + sx * recess
+    wall_quad(DOOR_START, DOOR_END, 0, DOOR_TOP, xd)
+    m.group(f"door_reveal_{side}", "wall")
+    lo, hi = sorted((x, xd))
+    m.box(lo, hi, 0, DOOR_TOP, DOOR_START - 0.001, DOOR_START, skip=("-x", "+x", "-y", "+y", "-z"))
+    m.box(lo, hi, 0, DOOR_TOP, DOOR_END, DOOR_END + 0.001, skip=("-x", "+x", "-y", "+y", "+z"))
+    m.box(lo, hi, DOOR_TOP, DOOR_TOP + 0.001, DOOR_START, DOOR_END, skip=("-x", "+x", "-z", "+z", "+y"))
+    m.group(f"door_sill_{side}", "floor")
+    m.quad((lo, 0, DOOR_START), (hi, 0, DOOR_START), (hi, 0, DOOR_END), (lo, 0, DOOR_END), (0, 1, 0))
+    # The frame: two posts and a lintel standing out of the wall.
+    m.group(f"door_frame_{side}", "door_frame")
+    fx0, fx1 = sorted((x, x - sx * trim))
+    face_skip = ("+x",) if sx > 0 else ("-x",)  # the side against the wall is never seen
+    m.box(fx0, fx1, 0, DOOR_TOP + frame, DOOR_START - frame, DOOR_START, skip=face_skip + ("-y",))
+    m.box(fx0, fx1, 0, DOOR_TOP + frame, DOOR_END, DOOR_END + frame, skip=face_skip + ("-y",))
+    m.box(fx0, fx1, DOOR_TOP, DOOR_TOP + frame, DOOR_START, DOOR_END, skip=face_skip)
+
+
+def floor_and_ceiling(m):
     w, h, t = HALF_WIDTH, HEIGHT, TILE
     m.group("floor", "floor")
     m.quad((-w, 0, 0), (w, 0, 0), (w, 0, t), (-w, 0, t), (0, 1, 0))
     m.group("ceiling", "ceiling")
     m.quad((-w, h, t), (w, h, t), (w, h, 0), (-w, h, 0), (0, -1, 0))
-    frame, trim, recess = 0.08, 0.04, 0.06  # door frame width, how far it stands out, door depth
+
+
+def hallway():
+    m = Mesh("hallway")
+    floor_and_ceiling(m)
     for side, sx in (("left", -1), ("right", 1)):
-        x = sx * w
-        n = (-sx, 0, 0)  # the wall faces into the corridor
-
-        def wall_quad(z0, z1, y0, y1, xx=x, nn=n):
-            if sx < 0:
-                m.quad((xx, y0, z0), (xx, y0, z1), (xx, y1, z1), (xx, y1, z0), nn)
-            else:
-                m.quad((xx, y0, z1), (xx, y0, z0), (xx, y1, z0), (xx, y1, z1), nn)
-
-        m.group(f"wall_{side}", "wall")
-        wall_quad(0, DOOR_START, 0, h)
-        wall_quad(DOOR_END, t, 0, h)
-        wall_quad(DOOR_START, DOOR_END, DOOR_TOP, h)
-        # The doorway's reveal (the sides and top of the opening, back to the door).
-        m.group(f"door_{side}", "door")
-        xd = x + sx * recess
-        wall_quad(DOOR_START, DOOR_END, 0, DOOR_TOP, xd)
-        m.group(f"door_reveal_{side}", "wall")
-        lo, hi = sorted((x, xd))
-        m.box(lo, hi, 0, DOOR_TOP, DOOR_START - 0.001, DOOR_START, skip=("-x", "+x", "-y", "+y", "-z"))
-        m.box(lo, hi, 0, DOOR_TOP, DOOR_END, DOOR_END + 0.001, skip=("-x", "+x", "-y", "+y", "+z"))
-        m.box(lo, hi, DOOR_TOP, DOOR_TOP + 0.001, DOOR_START, DOOR_END, skip=("-x", "+x", "-z", "+z", "+y"))
-        m.group(f"door_sill_{side}", "floor")
-        m.quad((lo, 0, DOOR_START), (hi, 0, DOOR_START), (hi, 0, DOOR_END), (lo, 0, DOOR_END), (0, 1, 0))
-        # The frame: two posts and a lintel standing out of the wall.
-        m.group(f"door_frame_{side}", "door_frame")
-        fx0, fx1 = sorted((x, x - sx * trim))
-        face_skip = ("+x",) if sx > 0 else ("-x",)  # the side against the wall is never seen
-        m.box(fx0, fx1, 0, DOOR_TOP + frame, DOOR_START - frame, DOOR_START, skip=face_skip + ("-y",))
-        m.box(fx0, fx1, 0, DOOR_TOP + frame, DOOR_END, DOOR_END + frame, skip=face_skip + ("-y",))
-        m.box(fx0, fx1, DOOR_TOP, DOOR_TOP + frame, DOOR_START, DOOR_END, skip=face_skip)
+        wall_with_door(m, side, sx)
     header = [
         "Sieve Real Graphics template: hallway (one tile of corridor). Built by tools/build_mesh_templates.py.",
         "Units metres, Y up, the corridor runs along +Z. The tile spans z 0..8, x -2..2, y 0..3; it is",
@@ -197,6 +210,30 @@ def book():
                      ("book_cover", (0.50, 0.08, 0.08), "front and back covers"), ("book_pages", (0.90, 0.88, 0.80), "the page block")])
 
 
+def edge():
+    """The binary line's tile. One line with one wall: the shelves and the door on the left, and
+    on the right, where the other wall would stand, the floor ends at a short wall and beyond it
+    is the drop, where the rain falls. The engine mirrors it in X when the shelves are on the right."""
+    m = Mesh("edge")
+    floor_and_ceiling(m)
+    wall_with_door(m, "left", -1)
+    m.group("rail", "rail")
+    m.box(EDGE_RAIL - EDGE_RAIL_DEPTH, EDGE_RAIL, 0, EDGE_RAIL_TOP, 0, TILE, skip=("-y",))
+    header = [
+        "Sieve Real Graphics template: edge (the binary line's tile). Built by tools/build_mesh_templates.py.",
+        "Units metres, Y up, the corridor runs along +Z. The tile spans z 0..8, x -2..2, y 0..3, like the",
+        "hallway, with the left wall and its doorway only. On the right the floor ends at x = 2, where a",
+        f"short wall {EDGE_RAIL_TOP} m high and {EDGE_RAIL_DEPTH} m thick stands; past it is the drop (nothing is",
+        "drawn there: the engine draws the rain). The engine mirrors it in X when the shelves are on the right.",
+        "Groups: floor, ceiling, wall_left, door_left, door_reveal_left, door_sill_left, door_frame_left, rail.",
+        "Keep the door groups where they are: walking through z 6.4..7.6 at the wall is how you change line.",
+    ]
+    m.write(header, [("floor", (0.10, 0.10, 0.10), "floor"), ("ceiling", (0.12, 0.12, 0.12), "ceiling"),
+                     ("wall", (0.20, 0.20, 0.20), "the wall and the doorway's reveal"),
+                     ("door_frame", (0.45, 0.45, 0.45), "the door frame"), ("door", (0.0, 0.0, 0.0), "the door (black in the wireframe)"),
+                     ("rail", (0.42, 0.44, 0.42), "the short wall on the edge (kRailColour)")])
+
+
 def marker():
     m = Mesh("marker")
     squares, sq = 16, 2 * HALF_WIDTH / 16
@@ -224,4 +261,5 @@ if __name__ == "__main__":
     bookshelf()
     book()
     marker()
+    edge()
     print("wrote", os.path.normpath(OUT))

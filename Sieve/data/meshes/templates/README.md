@@ -1,6 +1,6 @@
 # Real Graphics templates
 
-These are the four starting models for the **Real Graphics** option (Settings > Graphics). Each one is built to the hallway's exact measurements, so a model made from it lines up with the wireframe, the book picking and the doors. `tools/build_mesh_templates.py` regenerates them.
+These are the five starting models for the **Real Graphics** option (Settings > Graphics). Each one is built to the hallway's exact measurements, so a model made from it lines up with the wireframe, the book picking and the doors. `tools/build_mesh_templates.py` regenerates them.
 
 | Template | What it is |
 | :--- | :--- |
@@ -8,6 +8,7 @@ These are the four starting models for the **Real Graphics** option (Settings > 
 | `bookshelf.obj` | The bookcase on the **left** wall. The right wall uses the same model mirrored in X |
 | `book.obj` | One book at the uniform size, its spine facing the corridor |
 | `marker.obj` | The checkered start/finish strip on the floor |
+| `edge.obj` | The binary line's tile: floor, ceiling, the left wall with its doorway, and on the right, where the other wall would be, a short wall 0.95 m high standing on the edge of the drop. The engine mirrors it in X when the shelves are on the right. Copy it to `edge-binary.obj` to model the binary line's room |
 
 Each has a `.mtl` beside it with one placeholder material per part (`floor`, `wall`, `door`, `shelf_wood`, `book_spine`, `marker_light`, ...).
 

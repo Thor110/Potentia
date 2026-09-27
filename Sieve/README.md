@@ -347,6 +347,7 @@ A door **keeps your corridor position** and only changes which line reads it:
 | E / left click | Take the book you are looking at off the shelf, or put it back |
 | T | **Warp:** type text, notes, or a picture file path (for image and video), then Enter. You land facing it, in the first copy of the line (where your position equals its address), and it opens in hand. Ctrl+V pastes. |
 | G | **Go to** a hex address or a percentage such as `50%` or `36.25%` (these open the book too), or `@T` for corridor tile T |
+| (doors) | Every doorway has a sign over it naming the line it leads to, in that line's colours |
 | X | **Address navigator**: the whole address of the item you are looking at, full screen, one hex digit at a time. Left/Right (Shift: a row) choose a digit, Up/Down, the wheel or the arrows turn it, carrying and wrapping round the line; type 0-9 a-f to set it; ENTER goes there, Esc leaves |
 | N / B | Next or previous unit of a warp that made a trail of several units |
 | M | Switch ordering: positional → scrambled → guided (text) → positional |

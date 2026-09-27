@@ -176,6 +176,15 @@ actually stop a modified file passing (see §0).
 nothing about that is graphical. Turning it into a service is multi-threading and transport, not
 architecture. The wireframe mode means it stays usable on a terminal in a server room.
 
+**4.8 What the first release manifest holds, and the node graph's first anchor.** Edward, 27
+September 2026. The release manifest lists the executables and the Real Graphics model templates
+(`data/meshes/templates/*.obj`, the item models), since they ship in the first installer. The CLI
+executable is the anchor the node graph is first viewed from: its bytes are one unit of the binary
+line, placed on the binary shelf. An executable differs between platforms and usually between two
+builds of the same source, so the anchor is the exact released file, named by its SHA-256 in the
+manifest, one per platform release (or the builds are made reproducible). It is where the graph
+starts, not a claim that the bytes are universal.
+
 ---
 
 ## 5. The hallway's shape

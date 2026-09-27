@@ -226,13 +226,17 @@ jobs:
           # It has no loop, nothing on its shelves, and no filters.
           $H --no-menu --line binary --walk "0,0" --screenshot bin.png | sed -n 1p | q "^BINARY line"
           # The six lines no longer loop into one another: they start and finish at binary.
-          # Left out of models is binary; right out of binary is models again.
+          # Left out of models is binary, where you are turned round to come out of its one door
+          # (in its left wall); back out through that door is models again. Right out of pages is
+          # binary too, and there the door leads back to pages.
           $H --no-menu --line models --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door7.png | sed -n 1p | q "^BINARY line"
+          # (A walk is in the walker's frame, so after being turned round, 4.2 is back the way you came.)
           $H --no-menu --line models --pose "-1.7,7.0,0,0" --walk "-1,0;4.2,0" --screenshot door8.png | sed -n 2p | q "^MODELS line"
           $H --no-menu --line pages --pose "1.7,7.0,0,0" --walk "1,0" --screenshot door9.png | sed -n 1p | q "^BINARY line"
-          # Binary's other side is the drop: the short wall stops you at the edge of the floor.
-          # No door, no crossing, whatever the doorway is doing at that z.
-          $H --no-menu --line models --pose "-1.7,7.0,0,0" --walk "-1,0;-9,0" --screenshot walk.png | sed -n 2p | q "^BINARY line.*x -1.650000"
+          $H --no-menu --line pages --pose "1.7,7.0,0,0" --walk "1,0;-1,0" --screenshot door10.png | sed -n 2p | q "^PAGES line"
+          # Binary's other side is the drop, always on its right: the short wall stops you at the
+          # edge of the floor. No door, no crossing, whatever the doorway is doing at that z.
+          $H --no-menu --line models --pose "-1.7,7.0,0,0" --walk "-1,0;-9,0" --screenshot walk.png | sed -n 2p | q "^BINARY line.*x 1.650000"
           # There is no setting for it: not in Settings > Graphics, not in a settings file that
           # Graphics has just written, and not on the command line.
           rm -f be.ini

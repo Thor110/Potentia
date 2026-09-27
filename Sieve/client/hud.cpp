@@ -270,7 +270,7 @@ void Hallway::draw_hud(int w, int h)
                                                                                  : " " + trf("hud.loop.padding", {std::to_string(loop_.padding())}));
     text(10, 28, fit((on_books() ? books_->id() : on_binary() ? tr("hud.binary_id") : titled_here() ? titled_here()->id() : line().space.id()) + (guided_on() ? "   " + trf("hud.model", {line().model_id}) : std::string()) + "   " +
                      loop + per_tile + "   " + filter_status() + "   " +
-                     (on_binary() ? trf("hud.door_one", {tr(theme_of(binary_shelf_ == 0 ? (li_ + 1) % kLines : (li_ + kLines - 1) % kLines).key)})
+                     (on_binary() ? trf("hud.door_one", {tr(theme_of(binary_from_).key)})
                                   : trf("hud.doors", {tr(theme_of((li_ + 1) % kLines).key), tr(theme_of((li_ + kLines - 1) % kLines).key)})),
                      W - 20, 1),
          1, ink);

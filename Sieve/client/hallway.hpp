@@ -96,8 +96,9 @@ constexpr LineKind kLineOrder[4] = {LineKind::Text, LineKind::Image, LineKind::A
 //     binary | pages  image  audio  video  books  models | binary
 //
 // with binary at both ends: the six no longer loop into one another, they start and finish at
-// it. Binary is one line, not two -- it wraps around the outside of the other six, and which
-// side of it you see the edge on depends on which end you walked out of (see binary_shelf_).
+// it. Binary is one line, not two -- it wraps around the outside of the other six. Its room is
+// always the same way round, shelves on one side of the line and the drop on the other; coming in
+// from models you are turned to face the other way along it (see binary_from_).
 constexpr int kLines = 7;
 constexpr int kBooksLine = 4, kModelsLine = 5, kBinaryLine = 6;
 // The short wall on the binary line's open edge, under Real Graphics: dark, so the drop past it
@@ -302,6 +303,9 @@ public:
         // The binary line: the same tile with one side taken out ([0] the right side gone, [1]
         // the left), and the short wall that stands on the edge where it went.
         std::shared_ptr<const Mesh> half[2], rail[2];
+        // Or the edge template (edge.obj), made for the shelves on the left and mirrored for the
+        // right; when there is one it is drawn instead of the two above.
+        std::shared_ptr<const Mesh> edge;
     };
 
     // The models line's shape, which is not a Line: V vertices, F triangles, a grid of C steps.
@@ -333,9 +337,10 @@ public:
     // and models lines it borrows the pages line's Line for the few things that ask about one.
     bool on_binary() const { return li_ == kBinaryLine; }
     // Which wall of the binary line carries the shelves. The other side is the edge and the drop.
-    // It is the wall you came in through, so which side you see the drop on depends on which end
-    // of the corridor you walked out of: binary wraps around the outside of the other six lines,
-    // and you meet it from either end.
+    // It is always the left (binary_shelf_ stays 0): the line is one room, the same way round
+    // whichever end you meet it from. Coming in from the models end you are turned round instead
+    // (cross()), so the drop is still on the line's right, and on your left. The geometry for
+    // the other way round ([1] below) is kept, unused, so the wireframe tables stay symmetrical.
     int shelf_side() const { return binary_shelf_; } // 0: shelves left, drop right. 1: the mirror.
     float drop_sign() const { return binary_shelf_ == 0 ? 1.0f : -1.0f; }
     Media media() const;
@@ -784,6 +789,15 @@ private:
     // the left and the drop on the right, [1] the mirror of that.
     std::vector<Segment> bin_tile_[2], bin_hall_[2], bin_case_[2], edge_geometry_[2];
     int binary_shelf_ = 0;
+    // The line you came into binary from, which its one door leads back to and its sign names:
+    // pages, or models. Pages when you start there.
+    int binary_from_ = 0;
+    // Where a door in the wall at sx (-1 left, +1 right) leads.
+    int door_to(float sx) const
+    {
+        if (on_binary()) return binary_from_;
+        return sx < 0 ? (li_ + 1) % kLines : (li_ + kLines - 1) % kLines;
+    }
     Models models_[kLines]; // Real Graphics, per line
     MeshBatch models_batch_;
     // The last picture drawn in each of the two places one can appear (on the shelf you are
@@ -854,6 +868,14 @@ private:
     // buffer the noise is rasterised into. The frame number drives the noise.
     struct PortalCache { SDL_Texture* tex = nullptr; int w = 0, h = 0; std::vector<uint32_t> px; };
     PortalCache portal_;
+    // Portal titles (door_portal.cpp): one lettered sign per line, over every doorway leading to it.
+    struct SignCache { SDL_Texture* tex = nullptr; };
+    std::array<SignCache, kLines> signs_{};
+    static constexpr int kSignPxW = 480, kSignPxH = 160;          // 1.2 m by 0.4 m, 400 px a metre
+    static constexpr float kSignBottom = 2.35f, kSignTop = 2.75f; // between the door and the ceiling
+    SDL_Texture* sign_texture(int line);
+    void draw_door_sign(float sx, float z0, std::vector<SDL_Vertex>& verts);
+    void release_signs();
     bool door_portals_ = false;
     // A model in hand turns about the upright axis; the mouse or A and D drive it.
     float model_spin_ = 0.6f, model_tilt_ = 0.35f;
