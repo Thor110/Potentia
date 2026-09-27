@@ -26,10 +26,12 @@
 #include "sieve/audio.hpp"
 #include "sieve/filter.hpp"
 #include "sieve/corridor.hpp"
+#include "sieve/binaryspace.hpp"
 #include "sieve/biguint.hpp"
 #include "sieve/image.hpp"
 
 #include <algorithm>
+#include <functional>
 #include <array>
 #include <chrono>
 #include <climits>
@@ -44,6 +46,8 @@ namespace hallway {
 namespace {
 
 const std::vector<std::string> kLines = {"text", "image", "audio", "video", "books", "models", "binary"};
+// What FIND MY LIMITS can be told to spend the budget on: every line, or one of them.
+const std::vector<std::string> kFocuses = {"all", "binary", "text", "image", "audio", "video", "books", "models"};
 const std::vector<std::string> kModes = {"positional", "scrambled", "guided"};
 const std::vector<std::string> kAlphabets = {"lower27", "babel29", "ascii95"};
 const std::vector<std::string> kCanons = {"v2", "v1"};
@@ -137,9 +141,23 @@ Budget machine_budget()
         const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
         return std::make_pair(double(v.bit_length()), std::max(ms, 0.01));
     }();
+    // And the binary line's: a file of 64 KB turned from its place on the line into its bytes,
+    // in scrambled order, which is the slower of the two (the keyed shuffle over a number of
+    // half a million bits costs several times the conversion; both grow in proportion).
+    static const std::pair<double, double> measured_binary = [] {
+        const sieve::BinarySpace bs(65536, "sieve");
+        sieve::BigUint top = bs.size();
+        top -= sieve::BigUint(1);
+        const auto t0 = std::chrono::steady_clock::now();
+        (void)bs.bytes_at(top, sieve::AddressMode::Scrambled);
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        return std::make_pair(double(top.bit_length()), std::max(ms, 0.01));
+    }();
     Budget b;
     b.ref_bits = measured.first;
     b.ref_ms = measured.second;
+    b.binary_ref_bits = measured_binary.first;
+    b.binary_ref_ms = measured_binary.second;
     b.ms_per_unit_at_limit = kUnitMs;
     b.bits = std::min(kTooLargeBits, b.ref_bits * std::pow(kUnitMs / b.ref_ms, 1.0 / kGrowth));
     const int mb = SDL_GetSystemRAM(); // 0 if SDL cannot tell: then the default, which is careful
@@ -179,6 +197,9 @@ Settings Settings::from_args(const sieve::cli::Args& a)
     if (a.has("title-length")) s.title_length = a.get_u32("title-length", s.title_length); // 0 is allowed: no titles
     s.letters_px = parse_u32(a, "item-letters", s.letters_px);
     if (a.has("close-up")) s.closeup_px = a.get_u32("close-up", s.closeup_px); // 0 is allowed: off
+    s.limits_focus = a.get("limits-focus", s.limits_focus);
+    if (s.limits_focus == "pages") s.limits_focus = "text";
+    s.binary_bytes = parse_u32(a, "binary-length", s.binary_bytes);
     return s;
 }
 
@@ -209,6 +230,8 @@ void Settings::apply(sieve::cli::Args& a) const
     a.opts["title-length"] = std::to_string(title_length);
     a.opts["item-letters"] = std::to_string(letters_px);
     a.opts["close-up"] = std::to_string(closeup_px);
+    a.opts["binary-length"] = std::to_string(binary_bytes);
+    a.opts["limits-focus"] = limits_focus;
 }
 
 LineSize line_size(uint32_t base, uint64_t length)
@@ -231,7 +254,7 @@ LineSize line_size(uint32_t base, uint64_t length)
 
 // ---------------------------------------------------------------- menu
 
-std::array<LineSize, 6> Menu::line_sizes() const
+std::array<LineSize, 7> Menu::line_sizes() const
 {
     const LineSize page = line_size(alphabet_size(s_.alphabet), s_.length);
     const LineSize image = line_size(palette_size(s_.image_palette), uint64_t(s_.image_w) * s_.image_h);
@@ -283,9 +306,22 @@ std::array<LineSize, 6> Menu::line_sizes() const
         z.units = std::string(with_cover ? "cov*" : "") + "title*" + z.units.substr(0, z.units.find(" = ")) + " = ~10^" + fixed(log10, 1);
         return z;
     };
-    std::array<LineSize, 6> out{titled(page, false), titled(image, false), titled(line_size(kNoteSymbols, s_.notes), true),
+    // Binary: every file of 0..N bytes, (256^(N+1) - 1) / 255 of them (SPECIFICATIONS §12.1), a
+    // hair over 8N bits; titled, with a cover. Its files stand on one wall, half a tile's slots,
+    // and since 256 is a multiple of every wall's slot count the count is 1 mod the wall, so the
+    // empty slots at the end of a loop follow from the title and the cover alone.
+    LineSize binary;
+    {
+        const uint64_t per = sieve::books_per_tile(), wall = per / 2;
+        const auto rem = [per](const LineSize& x) { return (per - x.padding) % per; };
+        binary.bits = 8.0 * double(s_.binary_bytes) + std::log2(256.0 / 255.0) + title.bits + image.bits;
+        const uint64_t m = rem(title) * rem(image) % wall;
+        binary.padding = uint32_t((wall - m) % wall);
+        binary.units = "cov*title*files<=" + std::to_string(s_.binary_bytes) + "B = ~10^" + fixed(binary.bits * std::log10(2.0), 1);
+    }
+    std::array<LineSize, 7> out{titled(page, false), titled(image, false), titled(line_size(kNoteSymbols, s_.notes), true),
                                 titled(line_size(palette_size(s_.video_palette), positions(s_.video_w, s_.video_h, s_.frames)), true),
-                                books, titled(models, false)};
+                                books, titled(models, false), binary};
     // A unit has at most 2^32 - 1 positions: a larger picture cannot be opened at all.
     const uint64_t kMaxPositions = 0xFFFFFFFFull;
     if (uint64_t(s_.image_w) * s_.image_h > kMaxPositions) out[1].bits = out[4].bits = HUGE_VAL;
@@ -312,7 +348,7 @@ bool Menu::too_large() const
 int Menu::over_budget() const
 {
     const Budget b = machine_budget();
-    for (int i = 0; i < 6; ++i)
+    for (int i = 0; i < 7; ++i)
         if (!over_budget_line(i, b)) return i;
     return -1;
 }
@@ -325,12 +361,14 @@ double Menu::line_cache_bytes(int i) const
     const auto sizes = line_sizes();
     // Each unit's positions: its content, its title and, on audio and video, its cover.
     const uint64_t cover = uint64_t(s_.image_w) * s_.image_h, t = s_.title_length;
-    const uint64_t pos[6] = {s_.length + t,
+    // (The binary line's file is bytes, a quarter of a position each.)
+    const uint64_t pos[7] = {s_.length + t,
                              cover + t,
                              s_.notes + t + cover,
                              positions(s_.video_w, s_.video_h, s_.frames) + t + cover,
                              uint64_t(s_.book_pages + 1) * s_.length + cover,
-                             3ull * s_.model_vertices + 3ull * s_.model_faces + t};
+                             3ull * s_.model_vertices + 3ull * s_.model_faces + t,
+                             (uint64_t(s_.binary_bytes) + 3) / 4 + t + cover};
     const double units = std::min(kCachedUnits, 14.0 * double(s_.items_per_wall));
     return units * (4.0 * double(pos[i]) + 0.375 * sizes[size_t(i)].bits + 256.0);
 }
@@ -343,6 +381,7 @@ double Menu::graphics_mb_needed() const { return double(model_cache_mb()) + clos
 int Menu::display_px_line(int i) const
 {
     const double title = double(s_.title_length);
+    // (Binary, 6, carries a title and a cover, as audio and video do.)
     const DisplayText t = i == 0 ? display_text_pages(double(s_.length), title)
                           : i == 4 ? display_text_books(double(s_.length))
                                    : display_text_titled(title);
@@ -352,7 +391,7 @@ int Menu::display_px_line(int i) const
 double Menu::display_mb() const
 {
     int px = 0;
-    for (int i = 0; i < 6; ++i) px = std::max(px, display_px_line(i));
+    for (int i = 0; i < 7; ++i) px = std::max(px, display_px_line(i));
     return double(px) * (double(px) * tallest_face()) * 4 / 1048576.0;
 }
 
@@ -401,46 +440,74 @@ void Menu::find_limits()
             if (!fits(line)) { v = was; break; }
         }
     };
-    // The pages and image lines are grown together, because the books line is made of both and
-    // has to fit as well: a book is a cover from the image line, a title and its pages from the
-    // pages line. Growing one to its own limit first would leave the other with nothing, so they
-    // take turns, and each step is only kept if its own line and the books line both still fit.
-    s_.book_pages = 1;
-    s_.length = s_.image_w = s_.image_h = 1;
-    for (bool moved = true; moved;)
-    {
-        moved = false;
-        const uint32_t was_len = s_.length;
-        s_.length = was_len + std::max(1u, was_len / 8);
-        if (!fits(0) || !fits(4)) s_.length = was_len;
-        else moved = true;
-        const uint32_t was_px = s_.image_w;
-        s_.image_w = s_.image_h = was_px + std::max(1u, was_px / 8);
-        if (!fits(1) || !fits(4)) s_.image_w = s_.image_h = was_px;
-        else moved = true;
-    }
-    // Then as many pages to a book as what is left allows.
-    while (s_.book_pages < 0xFFFF)
-    {
-        const uint32_t was = s_.book_pages;
-        ++s_.book_pages;
-        if (!fits(4)) { s_.book_pages = was; break; }
-    }
-    grow(s_.notes, 2);
-    grow(s_.frames, 3);
-    // Vertices and faces grow together, so a mesh gets both rather than all of one.
-    s_.model_vertices = s_.model_faces = 1;
-    for (bool moved = true; moved;)
-    {
-        moved = false;
-        for (uint32_t* v : {&s_.model_vertices, &s_.model_faces})
+    // The focus (GLOBAL): every line, or one of them, the rest left as they are. Each line is
+    // judged on its own against the budget -- the memory bar is the largest line's cache, not
+    // all of them added, and the time bar the slowest line -- so a line grown on its own reaches
+    // the same largest shape it would with every other line at its smallest. The one exception
+    // is pages and image, which the books line is made of (below).
+    const std::string& focus = s_.limits_focus;
+    auto on = [&](const char* line) { return focus == "all" || focus == line; };
+    // Growing a pair together, a step each in turn, each kept only while `ok` holds.
+    auto grow_pair = [](uint32_t& a, uint32_t& b2, const std::function<bool()>& ok_a, const std::function<bool()>& ok_b,
+                        bool same) {
+        a = b2 = 1;
+        for (bool moved = true; moved;)
         {
-            const uint32_t was = *v;
-            *v = was + std::max(1u, was / 8);
-            if (!fits(5)) *v = was;
+            moved = false;
+            const uint32_t was_a = a;
+            a = was_a + std::max(1u, was_a / 8);
+            if (same) b2 = a;
+            if (!ok_a()) { a = was_a; if (same) b2 = was_a; }
+            else moved = true;
+            if (same) continue;
+            const uint32_t was_b = b2;
+            b2 = was_b + std::max(1u, was_b / 8);
+            if (!ok_b()) b2 = was_b;
             else moved = true;
         }
+    };
+    if (focus == "all" || focus == "books")
+    {
+        // The pages and image lines are grown together, because the books line is made of both
+        // and has to fit as well: a book is a cover from the image line, a title and its pages
+        // from the pages line. Growing one to its own limit first would leave the other with
+        // nothing, so they take turns, and each step is only kept if its own line and the books
+        // line both still fit.
+        s_.book_pages = 1;
+        s_.length = s_.image_w = s_.image_h = 1;
+        for (bool moved = true; moved;)
+        {
+            moved = false;
+            const uint32_t was_len = s_.length;
+            s_.length = was_len + std::max(1u, was_len / 8);
+            if (!fits(0) || !fits(4)) s_.length = was_len;
+            else moved = true;
+            const uint32_t was_px = s_.image_w;
+            s_.image_w = s_.image_h = was_px + std::max(1u, was_px / 8);
+            if (!fits(1) || !fits(4)) s_.image_w = s_.image_h = was_px;
+            else moved = true;
+        }
+        // Then as many pages to a book as what is left allows.
+        while (s_.book_pages < 0xFFFF)
+        {
+            const uint32_t was = s_.book_pages;
+            ++s_.book_pages;
+            if (!fits(4)) { s_.book_pages = was; break; }
+        }
     }
+    // Focused on pages or on image alone. The books line is made of both -- a cover from the
+    // image line, a title page and pages from the pages line -- so neither can grow to its own
+    // limit without making every book too large to open: grown alone, pages took the books line
+    // to ten times the time allowed. So books drops to its smallest, one page, and the line
+    // grows for as long as it and a one-page book both still open in time.
+    if (focus == "text" || focus == "image") s_.book_pages = 1;
+    if (focus == "text") grow_pair(s_.length, s_.length, [&] { return fits(0) && fits(4); }, [&] { return true; }, true);
+    if (focus == "image") grow_pair(s_.image_w, s_.image_h, [&] { return fits(1) && fits(4); }, [&] { return true; }, true);
+    if (on("audio")) grow(s_.notes, 2);
+    if (on("video")) grow(s_.frames, 3);
+    // Vertices and faces grow together, so a mesh gets both rather than all of one.
+    if (on("models")) grow_pair(s_.model_vertices, s_.model_faces, [&] { return fits(5); }, [&] { return fits(5); }, false);
+    if (on("binary")) grow(s_.binary_bytes, 6);
     // And the model image cache: three rooms of crate faces at the chosen size, or as many as
     // the graphics memory has room for beside the world.
     if (app_)
@@ -458,7 +525,17 @@ void Menu::find_limits()
 bool Menu::over_budget_line(int i, const Budget& b) const
 {
     const double bits = line_sizes()[size_t(i)].bits;
-    return bits <= b.bits && line_cache_bytes(i) <= b.cache_bytes;
+    const bool in_time = i == 6 ? line_ms(i, b) <= kUnitMs : bits <= b.bits;
+    return in_time && line_cache_bytes(i) <= b.cache_bytes;
+}
+
+// How long a unit of line i takes to open: the base conversion's growth for the six, and in
+// proportion to the length for binary, whose conversions are hex (binaryspace.hpp).
+double Menu::line_ms(int i, const Budget& b) const
+{
+    const double bits = line_sizes()[size_t(i)].bits;
+    if (i == 6) return b.binary_ref_ms * std::max(bits, 1.0) / b.binary_ref_bits;
+    return unit_ms(b, bits);
 }
 
 void Menu::reset_settings()
@@ -514,6 +591,7 @@ void Menu::adjust(int dir, int step)
         break;
     // Title length: how long every line's titles are, in characters.
     case kLettersRow: s_.letters_px = uint32_t(std::clamp(int(s_.letters_px) + dir, 1, 64)); break;
+    case kFocusRow: s_.limits_focus = cycle(kFocuses, s_.limits_focus, dir); break;
     // Off, then 256, 512, 1024.
     case kCloseUpRow:
         s_.closeup_px = dir > 0 ? (s_.closeup_px == 0 ? 256u : std::min(1024u, s_.closeup_px * 2))
@@ -543,6 +621,7 @@ void Menu::adjust(int dir, int step)
     case kModelsRows: num(s_.model_vertices); break;
     case kModelsRows + 1: num(s_.model_faces); break;
     // The coordinate grid must be a power of two, so it doubles and halves.
+    case kBinaryRow: num(s_.binary_bytes); break;
     case kModelsRows + 2: s_.model_coords = std::clamp(dir > 0 ? s_.model_coords * 2 : s_.model_coords / 2, 2u, 4096u); break;
     // The display size is a power of two, so it doubles and halves like the grid.
     case kDisplaySizeRow: s_.model_tile = std::clamp(dir > 0 ? s_.model_tile * 2 : s_.model_tile / 2, 16u, 1024u); break;
@@ -724,12 +803,12 @@ float Menu::draw_budget(float y)
 {
     const Budget b = machine_budget();
     const SDL_Color white{255, 255, 255, 255}, grey{150, 150, 150, 255}, red{255, 80, 80, 255};
-    double cache = 0, bits = 0;
-    for (int i = 0; i < 6; ++i)
+    double cache = 0, slowest = 0;
+    for (int i = 0; i < 7; ++i)
     {
-        const double c = line_cache_bytes(i), n = line_sizes()[size_t(i)].bits;
+        const double c = line_cache_bytes(i), ms = line_ms(i, b);
         if (std::isfinite(c)) cache = std::max(cache, c);
-        if (std::isfinite(n)) bits = std::max(bits, n);
+        if (std::isfinite(ms)) slowest = std::max(slowest, ms);
     }
     const double gb = 1073741824.0;
     const double gfx_have = app_ ? double(app_->graphics_memory_gb) * 1024.0 : 0.0;
@@ -738,8 +817,8 @@ float Menu::draw_budget(float y)
         {tr("setup.budget.memory"), trf("setup.budget.gb", {fixed(cache / gb, 2), fixed(b.cache_bytes / gb, 1)}), cache, b.cache_bytes},
         {tr("setup.budget.graphics"), trf("setup.budget.gb", {fixed(graphics_mb_needed() / 1024.0, 2), fixed(gfx_have / 1024.0, 0)}),
          graphics_mb_needed(), gfx_have},
-        {tr("setup.budget.time"), trf("setup.budget.ms", {fixed(unit_ms(b, bits), 1), fixed(b.ms_per_unit_at_limit, 0)}),
-         unit_ms(b, bits), b.ms_per_unit_at_limit},
+        {tr("setup.budget.time"), trf("setup.budget.ms", {fixed(slowest, 1), fixed(b.ms_per_unit_at_limit, 0)}),
+         slowest, b.ms_per_unit_at_limit},
     };
     for (const Bar& bar : bars)
     {
@@ -764,12 +843,12 @@ float Menu::draw_budget(float y)
 void Menu::render()
 {
     // The menu needs about 1240 wide (settings on the left, the map on the right), and as tall as
-    // its rows: 16 px each, 22 more for each of the seven section headings, the budget's bars
+    // its rows: 16 px each, 22 more for each of the eight section headings, the budget's bars
     // and the footer. In a smaller window it is drawn at that size and scaled down to fit,
     // instead of running off the edge or the actions at the foot running into the footer; worked
     // out from the rows, so a row added later cannot bring that back.
     constexpr int kMinW = 1240;
-    const int kMinH = 80 + row_count() * 16 + 7 * 22 + 12 + 3 * 14 + 6 + 60;
+    const int kMinH = 80 + row_count() * 16 + 8 * 22 + 12 + 3 * 14 + 6 + 60;
     int w = 0, h = 0;
     SDL_GetRenderOutputSize(r_, &w, &h);
     if (w < kMinW || h < kMinH)
@@ -812,6 +891,7 @@ void Menu::render()
                                                                       n(s_.model_tile), std::to_string(three_rooms_mb)})},
         {-1, tr("setup.closeup"), s_.closeup_px == 0 ? tr("setup.closeup.off")
                                                      : trf("setup.closeup.value", {n(s_.closeup_px), std::to_string(size_t(std::ceil(closeup_mb())))})},
+        {-1, tr("setup.focus"), s_.limits_focus == "all" ? tr("setup.focus.all") : trf("setup.focus.line", {tr(s_.limits_focus == "text" ? "line.pages" : "line." + s_.limits_focus)})},
         {0, tr("setup.length"), trf("setup.length.value", {n(s_.length)})},
         {-1, tr("setup.alphabet"), trf("setup.alphabet.value", {s_.alphabet, n(alphabet_size(s_.alphabet))})},
         {-1, tr("setup.canon"), "canon-text-" + s_.canon},
@@ -828,6 +908,7 @@ void Menu::render()
         {6, tr("setup.model_vertices"), n(s_.model_vertices)},
         {-1, tr("setup.model_faces"), n(s_.model_faces)},
         {-1, tr("setup.model_coords"), trf("setup.model_coords.value", {n(s_.model_coords)})},
+        {7, tr("setup.binary_length"), trf("setup.binary_length.value", {n(s_.binary_bytes)})},
         {-2, tr("setup.limits"), tr("setup.limits.value")},
         {-1, tr("setup.reset"), ""},
         {-1, tr("setup.enter"), ""},
@@ -847,7 +928,7 @@ void Menu::render()
         {
             y += 4;
             const int li = r.section;
-            const Theme* th = li == 4 ? &kBooksTheme : li == 6 ? &kModelsTheme : li < 4 ? &kThemes[li] : nullptr;
+            const Theme* th = li == 4 ? &kBooksTheme : li == 6 ? &kModelsTheme : li == 7 ? &kBinaryTheme : li < 4 ? &kThemes[li] : nullptr;
             const std::string head = th ? tr(th->key) : tr("setup.start");
             text(r_, 20, y, head, 2, th ? (li == 4 ? menu_ink(kBooksTheme) : th->edge) : white);
             y += 18;
@@ -865,15 +946,15 @@ void Menu::render()
         y += 16;
     }
     text(r_, 20, H - 40, tr("setup.footer1"), 1, grey);
-    text(r_, 20, H - 26, tr("setup.footer2"), 1, grey);
+    text(r_, 20, H - 26, tr(in_game_ ? "setup.footer2.in_game" : "setup.footer2"), 1, grey);
     const SDL_Color red{255, 80, 80, 255};
     if (too_large()) text(r_, 20, H - 54, tr("setup.too_large"), 1, white);
     else if (const int over = over_budget(); over >= 0)
     {
         // Not a limit of the design: a limit of this machine, named so it can be reduced, and
         // which of the limits it is.
-        const Theme& th = over == 4 ? kBooksTheme : over == 5 ? kModelsTheme : kThemes[over];
-        const bool slow = line_sizes()[size_t(over)].bits > machine_budget().bits;
+        const Theme& th = over == 4 ? kBooksTheme : over == 5 ? kModelsTheme : over == 6 ? kBinaryTheme : kThemes[over];
+        const bool slow = line_ms(over, machine_budget()) > kUnitMs;
         text(r_, 20, H - 54, trf(slow ? "setup.over_time" : "setup.over_budget", {tr(th.key)}), 1, red);
     }
     else if (graphics_over()) text(r_, 20, H - 54, tr("setup.over_graphics"), 1, red);
@@ -890,8 +971,8 @@ void Menu::render()
     //
     // It is one line drawn twice, not two: it wraps around the outside of the other six, and
     // which end of the corridor you meet it at decides which side of it the edge is on. It is
-    // drawn like any other line, with its own two colours and a bar of the same width. Its size
-    // is not counted yet (SPECIFICATIONS §12.1), so its bar fills the height and says so.
+    // drawn like any other line, with its own two colours and a bar of the same width, and its
+    // size is every file up to the BINARY length (SPECIFICATIONS §12.1).
     const float x0 = 620, pitch = std::max(80.0f, (W - x0 - 20) / 8);
     const float label = 118, top = 216, bottom = H - 60, span = bottom - top, min_bar = 12;
     // Line names are drawn at double size where a column is wide enough to hold one.
@@ -905,8 +986,7 @@ void Menu::render()
         Theme th = binary ? kBinaryTheme : i == 4 ? kBooksTheme : i == 5 ? kModelsTheme : kThemes[i];
         const SDL_Color ink = menu_ink(th);
         const float x = x0 + float(c) * pitch;
-        static const LineSize kUncounted{HUGE_VAL, 0, ""};
-        const LineSize& z = binary ? kUncounted : sizes[size_t(i)];
+        const LineSize& z = sizes[size_t(binary ? 6 : i)];
         // Labels above the bar, so a full-length bar never runs into them.
         const size_t cols = size_t(std::max(8.0f, pitch - 8) / 8);
         auto clip = [&](const std::string& t) { return text_cells(t) <= cols ? t : fit_cells(t, cols - 2) + ".."; };
@@ -928,13 +1008,6 @@ void Menu::render()
             SDL_RenderLine(r_, x + 11, label + 10, x + 16, label + 15);
         }
         text(r_, x + 22, label, tr(th.key), name_scale, th.edge);
-        if (binary)
-        {
-            // Not counted: it stands for everything the other six do not address.
-            text(r_, x, label + 22, clip(tr("map.infinite")), 1, th.edge);
-            text(r_, x, label + 34, clip(tr("map.uncounted")), 1, th.edge);
-        }
-        else
         {
             const size_t caret = z.units.find(" = ");
             text(r_, x, label + 22, clip(trf("map.units", {z.units.substr(0, caret)})), 1, th.edge);
@@ -944,7 +1017,7 @@ void Menu::render()
             text(r_, x, label + 70, clip(z.padding ? trf("map.empty_slots", {std::to_string(z.padding)}) : tr("map.whole_tiles")), 1, th.edge);
             if (z.bits > kTooLargeBits) text(r_, x, label - 14, clip(tr("map.too_large")), 1, white);
             // Slow: a unit of it takes more than a quarter of the time allowed to open, measured here.
-            else if (unit_ms(machine_budget(), z.bits) > kUnitMs / 4) text(r_, x, label - 14, clip(tr("map.slow")), 1, grey);
+            else if (line_ms(binary ? 6 : i, machine_budget()) > kUnitMs / 4) text(r_, x, label - 14, clip(tr("map.slow")), 1, grey);
         }
         // The bar: the line's own two colours; never shorter than min_bar, never past the bottom.
         const float len = std::isfinite(z.bits) ? std::clamp(float(z.bits / scale_bits) * span, min_bar, span) : span;
@@ -955,7 +1028,7 @@ void Menu::render()
         SDL_RenderRect(r_, &bar);
         const SDL_FRect inner{x + 9, top + 1, 38, len - 2};
         SDL_RenderRect(r_, &inner);
-        if (binary) continue; // no filters and nothing counted, so no survivor bar
+        if (binary) continue; // no filters yet, so no survivor bar
         // What survives the ticked filters, where it can be counted exactly: a filled bar inside.
         const StackInfo& info = stack_info(i);
         if (info.survivor_bits >= 0)

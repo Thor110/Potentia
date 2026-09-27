@@ -42,6 +42,7 @@ const char* kUsage =
     "  --notes N           audio: notes per book (default 16)\n"
     "  --video-width W  --video-height H  --video-frames F  --video-palette ID   video (5, 5, 8, mono)\n"
     "  --title-length T    every line's titles: characters (default 32; 0: no titles; books keep a page)\n"
+    "  --binary-length N   binary: every file of up to N bytes (default 32)\n"
     "  --book-pages N      books: pages per book (default 4); a book is a cover (an image of the\n"
     "                      image line), a title and N pages (pages of the pages line)\n"
     "  --key K             scramble key (default sieve)\n"
@@ -173,7 +174,8 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
                                     : lines[size_t(start_line)].kind;
 
     const Hallway::ModelShape shape{a.get_positive("vertices", 8), a.get_positive("faces", 12), a.get_positive("coords", 16),
-                                    a.has("title-length") ? a.get_u32("title-length", 32) : 32u};
+                                    a.has("title-length") ? a.get_u32("title-length", 32) : 32u,
+                                    a.has("binary-length") ? a.get_positive("binary-length", 32) : 32u};
     auto hall = std::make_unique<Hallway>(window, renderer, std::move(lines), filters,
                                           a.has("book-pages") ? a.get_u32("book-pages", 4) : 4, shape);
     hall->set_line(start_line);
@@ -393,6 +395,7 @@ int run(const Args& a)
     // Interactive: the main menu, then the setup menu, then the hallway (--no-menu goes straight
     // in). F1 in the hallway returns to the setup menu, and Esc there to the main menu.
     bool show_menu = !a.has("no-menu");
+    bool settings_chosen = false; // settings came from a setup menu (F1 in game), even with --no-menu
     bool show_main = show_menu;
     bool first = true;
     while (true)
@@ -417,7 +420,7 @@ int run(const Args& a)
             }
         }
         Args ha = a;
-        if (show_menu) settings.apply(ha);
+        if (show_menu || settings_chosen) settings.apply(ha);
         if (!first)
             for (const char* k : {"warp", "goto", "zoom", "tile", "pose", "walk", "press"}) ha.opts.erase(k);
         // The hallway is built on a worker thread -- a large shape takes a while, and none of
@@ -457,21 +460,66 @@ int run(const Args& a)
         hall->set_fps_counter(app.fps_counter);
         first = false;
         SDL_SetWindowRelativeMouseMode(window, true);
-        bool quit = false;
-        Uint64 last = SDL_GetTicksNS();
-        while (!quit)
+        Menu::Result in_game_menu = Menu::Result::Back;
+        for (;;)
         {
-            SDL_Event e;
-            while (SDL_PollEvent(&e)) hall->handle(e, quit);
-            const Uint64 now = SDL_GetTicksNS();
-            const float dt = std::min(0.1f, float(now - last) / 1e9f);
-            last = now;
-            hall->update(dt, SDL_GetKeyboardState(nullptr));
-            hall->render();
-            SDL_RenderPresent(renderer);
+            bool quit = false;
+            Uint64 last = SDL_GetTicksNS();
+            while (!quit)
+            {
+                SDL_Event e;
+                while (SDL_PollEvent(&e)) hall->handle(e, quit);
+                const Uint64 now = SDL_GetTicksNS();
+                const float dt = std::min(0.1f, float(now - last) / 1e9f);
+                last = now;
+                hall->update(dt, SDL_GetKeyboardState(nullptr));
+                hall->render();
+                SDL_RenderPresent(renderer);
+            }
+            // F1: the setup menu over the hallway, which is kept. Esc there comes back to it just
+            // as it was; ENTER THE HALLWAY builds a new one from the new settings.
+            if (hall->menu_requested())
+            {
+                Menu menu(window, renderer, settings, filters, filters_path, &app, app_path);
+                menu.set_in_game(true);
+                in_game_menu = menu.run();
+                if (in_game_menu == Menu::Result::Back)
+                {
+                    hall->clear_menu_request();
+                    hall->set_model_cache(app.model_cache_mb);
+                    SDL_SetWindowRelativeMouseMode(window, true);
+                    continue;
+                }
+                if (in_game_menu == Menu::Result::Enter)
+                {
+                    settings = menu.settings();
+                    filters = menu.filters();
+                }
+                break;
+            }
+            // Settings from the pause menu: the main menu's screens over the hallway, and then
+            // the same hallway again, still paused, with what was changed applied to it.
+            if (hall->request() != Hallway::Request::Settings) break;
+            hall->clear_request();
+            MainMenu mm(window, renderer, app, app_path, display);
+            if (mm.run_settings() == MainMenu::Result::Quit) break;
+            hall->set_controls(app.mouse_sensitivity, app.invert_mouse_y);
+            hall->set_graphics(app.edge_glow, app.real_graphics, app.door_portals);
+            hall->set_fps_counter(app.fps_counter);
+            hall->settings_changed();
+            SDL_SetWindowRelativeMouseMode(window, false);
+        }
+        if (hall->request() == Hallway::Request::MainMenu)
+        {
+            // Exit Sieve, then Y: back to the main menu, and from there the setup menu as ever.
+            show_main = show_menu = true;
+            continue;
         }
         if (!hall->menu_requested()) break;
-        show_menu = true;
+        if (in_game_menu == Menu::Result::Quit) break;
+        // ENTER THE HALLWAY from the F1 menu: a new hallway from its settings, without the menu again.
+        show_menu = false;
+        settings_chosen = true;
     }
     return finish();
 }

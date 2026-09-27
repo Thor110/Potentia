@@ -24,7 +24,7 @@ Every line gets its own set. Copy each template to `<model>-<medium>.obj`, toget
 | video | `hallway-video.obj`, `bookshelf-video.obj`, `book-video.obj`, `marker-video.obj` |
 | books | `hallway-books.obj`, `bookshelf-books.obj`, `book-books.obj`, `marker-books.obj` |
 
-The item models for pages, image, audio, video and models are already there (`book-<medium>.obj`); books still uses the template.
+The item models for pages, image, audio, video, models and binary are already there (`book-<medium>.obj`; `book-binary.obj` began as a copy of the models line's crate); books still uses the template.
 
 **The picture on the front.** Every line's items carry a pre-rendered picture of what they are (a page's text, an image, a video's first frame, a book's title and cover, a model's mesh). `data/meshes/faces.ini` says where on the item it goes, per medium, in the model's own metres: `bottom` and `top` up from the shelf board, and `half_width` either side of the slot's centre, on the front face at x = 0. When you change an item model, measure its front again and change its section to match; the picture is stretched with the model on lines whose items vary in height.
 

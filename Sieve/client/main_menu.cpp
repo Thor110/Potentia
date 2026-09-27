@@ -141,7 +141,11 @@ void MainMenu::back()
     switch (screen_)
     {
     case Screen::Main: row_ = 2; return; // Esc on the main screen points at Exit rather than quitting
-    case Screen::Settings: screen_ = Screen::Main; row_ = 1; return;
+    case Screen::Settings:
+        if (settings_only_) { result_ = Result::Start; done_ = true; return; } // back to the hallway
+        screen_ = Screen::Main;
+        row_ = 1;
+        return;
     case Screen::Graphics: screen_ = Screen::Settings; row_ = 0; return;
     case Screen::Controls: screen_ = Screen::Settings; row_ = 1; return;
     case Screen::Language: screen_ = Screen::Settings; row_ = 2; return;

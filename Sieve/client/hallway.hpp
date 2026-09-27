@@ -50,6 +50,7 @@
 #include "sieve/guided.hpp"
 #include "sieve/image.hpp"
 #include "sieve/modelspace.hpp"
+#include "sieve/binaryspace.hpp"
 #include "sieve/titledspace.hpp"
 #include "sieve/utf8.hpp"
 
@@ -314,6 +315,7 @@ public:
     {
         uint32_t vertices = 8, faces = 12, coords = 16;
         uint32_t title_length = 32;
+        uint64_t binary_bytes = 32; // the binary line holds every file up to this many bytes
     };
 
     Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> lines, const FilterConfig& filters, uint32_t book_pages,
@@ -394,6 +396,7 @@ public:
         std::string survivor_label;
         std::optional<BookSpace::Parts> parts;       // the books line: cover, title and pages
         std::optional<ModelSpace::Parts> model;      // the models line: vertices and faces
+        std::optional<BinarySpace::Bytes> binary;    // the binary line: the file
         Space::Digits title, cover;                  // a titled line: its title, and its cover if it has one
     };
 
@@ -419,6 +422,7 @@ public:
     void go_to_unit(const Space::Digits& unit, bool open);
 
     void go_to_book(const BookSpace::Parts& p, bool open);
+    void go_to_file(const BinarySpace::Bytes& f, bool open, const Space::Digits* title = nullptr, const Space::Digits* cover = nullptr);
 
     BookSpace::Parts parts_of_record(const std::string& path);
 
@@ -597,6 +601,8 @@ public:
     void draw_pixels(const Space::Digits& unit, const ImageFormat& f, float x, float y, float size, int frame);
 
     std::string one_line_preview(const Space::Digits& u);
+    static std::string binary_preview(const BinarySpace::Bytes& f, size_t most);
+    float draw_file(const BinarySpace::Bytes& f, float x, float cy, float pw, float bottom);
 
     void draw_hud(int w, int h);
 
@@ -737,6 +743,7 @@ public:
     float draw_book(const BookSpace::Parts& p, float x, float cy, float pw, float bottom);
 
     bool menu_requested() const { return menu_requested_; }
+    void clear_menu_request() { menu_requested_ = false; } // back from the setup menu without a new hallway
     ~Hallway();
     void release_textures();
     void set_controls(int sensitivity_percent, bool invert_y);
@@ -833,6 +840,27 @@ private:
     size_t trail_index_ = 0;
     Input input_ = Input::None;
     std::vector<Point2> grid_; // draw_face_image's cell corners, kept between calls
+
+    // ---- the pause menu (pause_menu.cpp): Esc, with nothing in your hands
+public:
+    // What the pause menu has asked the application to open: the settings (after which the same
+    // hallway goes on, paused) or the main menu (after which a new one is built).
+    enum class Request { None, Settings, MainMenu };
+    Request request() const { return request_; }
+    void clear_request() { request_ = Request::None; }
+    // After Settings, the new graphics and language: signs are lettered again, the rest is set.
+    void settings_changed() { release_signs(); }
+
+private:
+    void open_pause();
+    void close_pause();
+    void pause_choose(int row, bool& quit);
+    void pause_event(const SDL_Event& e, bool& quit);
+    void draw_pause(float W, float H);
+    bool pause_open_ = false, pause_confirm_ = false;
+    int pause_row_ = 0;
+    Request request_ = Request::None;
+    std::vector<SDL_FRect> pause_rects_; // the rows as last drawn, for the pointer
 
     // ---- the address navigator (navigator.cpp): X opens the whole address, digit by digit
     void open_navigator();
@@ -934,6 +962,15 @@ private:
                                  FilterMode::Off, FilterMode::Off, FilterMode::Off};
     std::unique_ptr<BookSpace> books_; // the books line
     std::unique_ptr<ModelSpace> model_space_; // the models line (Models above is Real Graphics)
+    // The binary line: every file of 0..N bytes (SPECIFICATIONS §12.1, binary-v1). It has one
+    // wall, so its files stand only in the left wall's half of each tile's slots; the loop counts
+    // the right wall's slots as empty, and these two convert between a file's place on the line
+    // and its place in the loop (the same number on every other line).
+    std::unique_ptr<BinarySpace> binary_space_;
+    BigUint loop_pos(const BigUint& unit) const;   // unit index -> loop position
+    BigUint unit_of_pos(const BigUint& pos) const; // loop position (left-wall slot) -> unit index
+    // How many units the current line holds: its loop's count, except on binary (see above).
+    BigUint line_units() const;
     // Every titled line's space (null for books and binary), built with the lines.
     std::array<std::unique_ptr<TitledSpace>, kLines> titled_;
     int book_page_ = 0;                // the page open in a book in hand

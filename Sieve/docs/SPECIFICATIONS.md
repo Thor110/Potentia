@@ -239,7 +239,7 @@ Input longer than one unit becomes a **sequence of addresses**. The warp lands o
 
 ## 7. Doors
 
-Doors connect the lines in order, and the binary line (§12.1) is the end of the run at both sides: **binary → Text → Image → Audio → Video → Books → Models → binary**. Left goes to the next line and right to the previous one; binary has one wall, so it has one door.
+Doors connect the lines in order, and the binary line (§12.1) is the end of the run at both sides: **binary → Text → Image → Audio → Video → Books → Models → binary**. Left goes to the next line and right to the previous one; binary has one wall, so it has one door, and it leads back to the line you came from.
 
 ### 7.1 Mapping
 
@@ -473,13 +473,23 @@ The seventh line, and the one the other six are bounded by:
 
     binary | pages  image  audio  video  books  models | binary
 
-It is listed twice because it is met from either end, but it is **one line**, not two. It wraps around the outside of the other six — a single closed loop, in binary, around everything they address — so which end of the corridor you walk out of decides which side of it the edge is on.
+It is listed twice because it is met from either end, but it is **one line**, not two. It wraps around the outside of the other six — a single closed loop, in binary, around everything they address. Its room is always the same way round, shelves on the line's left and the edge on its right; met from the models end, you are turned round to face the other way along it, so the two ends run in opposite directions, as the two ends of one line do.
 
 **Shape.** It is the **same space** as any other tile of corridor — the same width, the same height, the same bookcase — and an ordinary line in every respect the engine cares about: its own two colours (black, with green edges and green text), its own place in the door order, its own column on the map. The one difference is that it has **one side**. One wall carries the bookcases; in place of the other the floor ends, at a short wall no higher than your waist, and past that there is nothing. Green rain falls off that edge for ever, filling the opening from the ceiling down and passing behind the wall — characters from every Unicode block, and now and then a code point written out as the surrogate pair it is stored as.
 
-**Doors.** Its one wall carries its one door, so the six lines **no longer loop into one another**: they start and finish at binary. Walking left out of `pages` runs `image`, `audio`, `video`, `books`, `models`, and then binary, where the corridor ends. Walking right out of `pages` reaches binary directly, from the other side. Either way the door you came in by is the door you leave by, because there is only one wall to put a door in.
+**Doors.** Its one wall carries its one door, so the six lines **no longer loop into one another**: they start and finish at binary. Walking left out of `pages` runs `image`, `audio`, `video`, `books`, `models`, and then binary. Walking right out of `pages` reaches binary directly, from the other end. Either way the door you came in by is the door you leave by, because there is only one wall to put a door in: it leads back to the line you came from, and its sign names that line (pages, when you start on binary).
 
-**Size.** Not counted, deliberately, and the map says so. Its shelves stand **empty**: nothing out there is addressed, ordered or filtered yet. What is on them, and how it is addressed, is open — the obvious candidate is every file of a fixed length in base 256, which would make it an ordinary line with an ordinary state space, but it could equally be where real data is put by the people who catalogue it. Until that is decided the line exists, is walkable, and holds nothing.
+**Units (`binary-v1`).** The line holds **every file of 0 to N bytes**, the empty file included, where N is the line's length setting. There are
+
+    M = 1 + 256 + 256^2 + ... + 256^N = (256^(N+1) - 1) / 255
+
+of them. In positional order they are numbered **shortest first**, and within one length by their bytes read as one big-endian number (the first byte most significant):
+
+    index(file of L bytes) = (256^L - 1) / 255 + bytes as a number
+
+The first term is how many files are shorter. In hex it is `01` written L times, so a file's address is its own hex dump plus `0101...01`, and reading one back is a subtraction and a hex conversion: linear in the file's length. Nothing is padded, unlike a fixed-length `bytes256` line (§12.1a): a file and the same file with a NUL after it are two files. A file longer than N is refused. **Scrambled** is the positional index through `shuffle-sha256-v1` over [0, M), keyed with the line's key and domain-separated by the space id `binary/bytes256/L0-<N>/key=<key>/binary-v1`. Like the other lines, a binary unit carries a **title and a cover** (§11): its content shape is `binary/L0-<N>`. The oracle's `binary-vectors` are the conformance vectors.
+
+**Size.** With N the size of a file, the line is as large as the whole of that file's space and every smaller one: N = 2 MB is an address of about 4.2 million hex digits. The size is a setting like every other line's, and FIND MY LIMITS can be told to spend the budget on it.
 
 ## 13. Architecture and Implementation
 

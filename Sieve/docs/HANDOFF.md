@@ -60,9 +60,31 @@ from, which made it two rooms; since 27 September you are **turned round** inste
 in from models (`cross()`), so the two halves of the ring run in opposite directions, as the two
 ends of one line do. Its one door leads back to where you came from (`binary_from_`, pages when
 you start there), and its sign says so. A scripted `--walk` is in the walker's frame, so a door
-that turns you round turns the rest of the walk with you. Nothing out there is addressed,
-ordered or filtered, and the shelves stand empty: cataloguing what is in the drop is a job for
-people.
+that turns you round turns the rest of the walk with you.
+
+**Its units (`binary-v1`, since 27 September).** Every file of 0 to N bytes, N the BINARY
+length setting (`--binary-length`, default 32), numbered shortest first and then by the bytes read
+big-endian, so a file's positional address is its hex dump plus `0101...01`, one `01` for each of
+its bytes (`core/include/sieve/binaryspace.hpp`; SPECIFICATIONS §12.1; oracle `binary-vectors`,
+128 rows in `tests/vectors_binary_v1.tsv`). Scrambled is shuffle-sha256-v1 over the count, and each
+file is titled with a cover, as audio and video are. The files stand on the one wall, so the loop
+counts the right wall's slots as empty (`loop_pos()`, `unit_of_pos()` in `hallway.cpp`; the
+navigator and go-to take the file's place on the line). T on the binary line takes a path, and
+warps to that file's bytes, or else the typed text's own bytes: that is how the release's CLI
+executable goes on the shelf as the node graph's first anchor, once N is at least its size. The
+item in hand is a hex dump. The item model is `data/meshes/book-binary.obj`, the models line's
+crate copied to start from, with a `[binary]` section in `faces.ini`.
+
+Cost: a file's conversions are hex and grow in proportion to N, about 5 ms a file at 272 KB in
+positional order; scrambled order is several times that, since the keyed shuffle runs over a
+number of 8N bits. The setup menu measures the binary line's time on its own (scrambled, the
+slower) rather than with the other lines' base-conversion growth.
+
+**FIND MY LIMITS focus** (GLOBAL, `--limits-focus`: all, binary, pages, image, audio, video,
+books, models): grows the one line and leaves the rest as they are. Each line is judged on its
+own against the budget, so a line grown alone reaches the same largest shape it would with every
+other line at its smallest; pages and image grown together is what "books" and "all" do, since a
+book is made of both.
 
 Its alphabet is `bytes256` — U+0000 to U+00FF in byte order — and its canonicalisation is
 `canon-bytes-v1`, the identity. A file of N bytes is one unit of a length-N line, and its
@@ -257,6 +279,32 @@ add a box for the short wall, as it did before.
 The portal titles are clipped by hand where a bookcase stands between you and them (nothing
 there is depth-tested): the bookcases are boxes at known places, so the part of a sign behind
 one is a single cut along the wall, where the line of sight grazes the bookcase's end.
+
+### The pause menu
+
+Esc in the hallway, with nothing in your hands, pauses (`client/pause_menu.cpp`): Resume Sieve;
+Node Graph Viewer and File Locator, listed but greyed, since neither is built yet; Navigation
+System, the address navigator (also X); Settings, the main menu's own Settings screens
+(`MainMenu::run_settings()`), after which the same hallway goes on, paused, with the new
+graphics, controls and language applied; and Exit Sieve, which asks "Return to the main menu?",
+Y for the main menu and N to leave Sieve. The hallway does not draw the other menus: it sets
+`request()` and ends its loop, and `app_main.cpp` opens them.
+
+The hover panel lays out anything with a cover as a book is: cover on the left, title beside it,
+and what the thing is (its notes, its bytes) under the title, all inside the panel. A video's
+first frame is no longer drawn beside its cover.
+
+### F1 in game, and FIND MY LIMITS on pages or image
+
+F1 opens the setup menu over a hallway that is kept: Esc there goes straight back to it as it
+was, and ENTER THE HALLWAY builds a new one from the new settings (`Menu::set_in_game`, and the
+F1 branch in `app_main.cpp`). Opened from the main menu, Esc still goes to the main menu.
+
+FIND MY LIMITS focused on pages or on image cannot take that line to its own limit: the books
+line is made of both, and grown alone pages took books to ten times the time allowed. So those
+two focuses set books to one page and grow the line while it and a one-page book both still open
+in time. A line already over budget from an earlier run is left as it is by a focused run (the
+others are untouched); "all" or RESET puts it right.
 
 ### The address navigator
 

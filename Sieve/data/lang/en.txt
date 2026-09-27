@@ -126,6 +126,8 @@ setup.model_vertices = vertices
 setup.model_faces = triangles
 setup.model_coords = grid
 setup.model_coords.value = {0} steps per axis (a power of two)
+setup.binary_length = length
+setup.binary_length.value = {0} bytes: every file up to {0} bytes long
 setup.model_tile = pre-rendered display size
 setup.model_tile.value = {0} px at least (pages {1}, books {2})
 setup.items_per_wall = number of items per wall
@@ -138,6 +140,9 @@ setup.letters.value = {0} px; smaller: dashes (default {1})
 setup.angle_decimals.value = {0} decimal places on the compass
 setup.model_cache = display cache
 setup.model_cache.value = {0} MB, {1} displays (3 rooms: {3} MB)
+setup.focus = find my limits focus
+setup.focus.all = all lines
+setup.focus.line = {0} only (others untouched)
 setup.closeup = close-up display size
 setup.closeup.value = {0} px, nearest items ({1} MB)
 setup.closeup.off = off
@@ -155,6 +160,7 @@ setup.enter = >> ENTER THE HALLWAY <<
 setup.over_budget = The {0} line is larger than this machine can open. Reduce it, or press FIND MY LIMITS.
 setup.footer1 = Up/Down choose   Left/Right change (Shift x10, Ctrl x100)   PgUp/PgDn double/halve
 setup.footer2 = type to edit the key   F or the magnifying glass: a line's filters   Enter walk in   Esc main menu
+setup.footer2.in_game = type to edit the key   F or the magnifying glass: a line's filters   Enter walk in anew   Esc back to the hallway
 setup.too_large = A line is too large for this machine to open (one address would need over a gigabyte).
 
 ; ---- the map
@@ -169,8 +175,6 @@ map.too_large = TOO LARGE TO OPEN
 map.slow = large: slow to open
 map.survivors = survivors ~{0} bits
 map.ticked = {0} filters ticked
-map.infinite = unbounded
-map.uncounted = uncounted
 
 ; ---- the filter lists (magnifying glass)
 filters.title = {0} FILTERS
@@ -211,10 +215,7 @@ hud.loop.padding = (+{0} empty slots)
 hud.model = model {0}
 hud.doors = doors: left -> {0}, right -> {1}
 hud.door_one = door: {0} (one wall; the other side is the edge)
-hud.infinite = unbounded
-hud.no_loop = no loop
 hud.per_tile = {0} a tile
-hud.binary_id = binary/uncounted
 hud.zero = 0
 hand.tab.item = ITEM
 hand.tab.cost = COST
@@ -232,7 +233,6 @@ cost.percent = {0}%
 cost.spec = the shape that gives the address its meaning, which has to travel with it
 cost.spec.len = {0} characters of shape
 cost.written = the address written in each base
-hud.no_angle = -- no loop --
 hud.filters.none = filters: none
 hud.filters = filters: {0} {1}
 hud.filters.units = " ({0} survivors)"
@@ -255,23 +255,49 @@ hud.keys.zoom = "-/= zoom  "
 hud.keys2 = "wheel/PgUp/[ ] jump  Home start  "
 hud.keys.page = N/B page
 hud.keys.trail = N/B trail
-hud.keys3 = "  F1 menu  Tab mouse  Ctrl+Q quit"
+hud.keys3 = "  Esc pause  F1 menu  Tab mouse  Ctrl+Q quit"
 
 # What a blank title is shown as, between white brackets, in red.
 title.null = Null Title
+
+# The binary line's files.
+hud.binary.bytes = {0} bytes:
+hand.binary.bytes = a file of {0} bytes
+hand.binary.empty = the empty file: no bytes at all, the first file on the line
+hand.binary.more = ... and {0} bytes more
+msg.warped.file = warped: a file of {0} bytes
+prompt.warp.file = "Warp to a file (a path, or text to take as its bytes): "
+
+# The pause menu (Esc in the hallway).
+pause.title = PAUSED
+pause.resume = Resume Sieve
+pause.graph = Node Graph Viewer
+pause.navigator = Navigation System
+pause.locator = File Locator
+pause.settings = Settings
+pause.exit = Exit Sieve
+pause.help.resume = back to the hallway (Esc)
+pause.help.graph = not built yet: the lines as a graph, from verified anchors
+pause.help.navigator = every digit of the address you are at (X in the hallway)
+pause.help.locator = not built yet: find files, and make a manifest installer from them
+pause.help.settings = graphics, controls and language, as in the main menu
+pause.help.exit = to the main menu, or out of Sieve
+pause.not_built = not built yet
+pause.confirm = Return to the main menu?
+pause.confirm.keys = "Y: the main menu    N: exit Sieve    Esc: back"
 
 # The address navigator (X): the whole address, a hex digit at a time.
 nav.title = ADDRESS NAVIGATOR
 nav.where = {0} line, {1}: the position of the item you were looking at, all {2} hex digits of it. Turn any digit; ENTER goes there.
 nav.digit = digit {0} of {1} chosen: each step moves 16^{2} units along the line, carrying into the digits to its left
 nav.along = {0} along the line
+nav.page = page {0} of {1}
 nav.past_end = that digit would name a place past the end of the line
 nav.more_above = more above (PgUp)
 nav.more_below = more below (PgDn)
-nav.binary = the binary line has no loop and no address to turn
 nav.went = went to {0}
 nav.keys1 = "Left/Right choose a digit   Shift+Left/Right a row   Home/End first/last   Up/Down or wheel turn it (Shift: 8)"
-nav.keys2 = "click a digit to choose it, its arrows to turn it   0-9 a-f type it   PgUp/PgDn scroll   Enter go there   Esc/X cancel"
+nav.keys2 = "click a digit to choose it, its arrows to turn it   0-9 a-f type it   PgUp/PgDn a page   Enter go there   Esc/X cancel"
 prompt.warp.book = "WARP to book file > "
 prompt.warp.picture = "WARP to picture file > "
 prompt.warp.notes = "WARP to notes > "

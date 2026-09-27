@@ -227,6 +227,18 @@ Hallway::Painter Hallway::face_painter(const Book& b) const
             paint_cover_front(px, w, h, title, cover, cf, argb({150, 26, 26, 255}), argb({235, 225, 205, 255}), nw, lp);
         };
     }
+    if (b.binary)
+    {
+        // A file: its title and cover, as a record or a film shows them.
+        const Space::Digits cover = b.cover;
+        const ImageFormat cf = lines_[1].image;
+        const std::u32string title = utf8_decode(title_text(b));
+        const SDL_Color c = theme_of(li_).edge;
+        const uint32_t ground = argb({Uint8(c.r / 3), Uint8(c.g / 3), Uint8(c.b / 3), 255});
+        return [cover, cf, title, ground, nw, lp](std::vector<uint32_t>& px, int w, int h) {
+            paint_cover_front(px, w, h, title, cover, cf, ground, argb({235, 225, 205, 255}), nw, lp);
+        };
+    }
     if (b.unit.empty()) return {};
     const std::u32string title = utf8_decode(title_text(b));
     const bool titled = has_titles();
@@ -527,7 +539,6 @@ SDL_Texture* Hallway::item_face(int64_t dt, uint32_t slot, bool ask, bool& asked
 // spreading out from where you stand. Items past the rendered rooms wear their stand-in.
 void Hallway::draw_item_faces(const bool* visible, int back, int ahead)
 {
-    if (on_binary()) return;
     const FaceRect rect = face_rect();
     if (rect.aspect() != face_aspect_)
     {

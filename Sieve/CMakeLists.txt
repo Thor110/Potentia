@@ -23,6 +23,7 @@ add_library(sieve_core STATIC
     core/src/booksieve.cpp
     core/src/bookspace.cpp
     core/src/titledspace.cpp
+    core/src/binaryspace.cpp
     core/src/canon.cpp
     core/src/compact.cpp
     core/src/corridor.cpp
@@ -135,6 +136,7 @@ if(SIEVE_BUILD_CLIENT)
         client/item_faces.cpp
         client/door_portal.cpp
         client/navigator.cpp
+        client/pause_menu.cpp
         client/font.cpp
         client/hallway.cpp
         client/hud.cpp

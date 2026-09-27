@@ -25,6 +25,15 @@ public:
 
     enum class Result { Start, Quit };
     Result run();
+    // Settings alone, as the hallway's pause menu opens them: the menu starts on the Settings
+    // screen, and backing out of it ends the menu instead of going to the main screen.
+    Result run_settings()
+    {
+        screen_ = Screen::Settings;
+        row_ = 0;
+        settings_only_ = true;
+        return run();
+    }
     void press(SDL_Keycode key, SDL_Keymod mod); // one key, as if typed (scripting and tests)
     void render();
 
@@ -52,6 +61,7 @@ private:
     std::filesystem::path path_;
     DisplayInfo display_;
     Screen screen_ = Screen::Main;
+    bool settings_only_ = false;
     int row_ = 0;
     bool done_ = false;
     Result result_ = Result::Quit;

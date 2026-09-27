@@ -36,6 +36,9 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
         titled_[kModelsLine] = std::make_unique<TitledSpace>(
             title, std::nullopt, model_space_->size(),
             "models/V" + std::to_string(shape.vertices) + "/F" + std::to_string(shape.faces) + "/C" + std::to_string(shape.coords), key);
+        // The binary line: every file up to binary_bytes, titled, with a cover as audio and video have.
+        binary_space_ = std::make_unique<BinarySpace>(std::max<uint64_t>(1, shape.binary_bytes), key);
+        titled_[kBinaryLine] = std::make_unique<TitledSpace>(title, lines_[1].space, binary_space_->size(), binary_space_->shape(), key);
     }
     // Each line's filter stack and mode (sieve-filters.ini, edited in the setup menu).
     for (int i = 0; i < 4; ++i)
@@ -98,7 +101,7 @@ Media Hallway::media() const
 {
     if (on_books()) return Media::Books;
     if (on_models()) return Media::Models;
-    if (on_binary()) return Media::Pages;
+    if (on_binary()) return Media::Binary;
     switch (line().kind)
     {
     case LineKind::Image: return Media::Image;
@@ -188,7 +191,7 @@ FilterMode Hallway::effective_mode(int i) const
 // The models line has no filters yet (SPECIFICATIONS §12 sets out the three tiers to come).
 bool Hallway::has_filters() const
 {
-    if (on_models() || on_binary()) return false;
+    if (on_models() || on_binary()) return false; // no filters on either yet
     return on_books() ? book_sieve_ && !book_sieve_->empty() : !stack().empty();
 }
 
@@ -219,10 +222,14 @@ std::string Hallway::compute_filter_status() const
 // How many units line i has in its loop, in the current ordering and filter mode.
 BigUint Hallway::units_of(int i) const
 {
-    // Binary is not counted yet: it stands for everything the other six do not address, and
-    // its size is not a number we have. One loop tile keeps the shared machinery happy; every
-    // place that would read a unit out of it is guarded by on_binary() instead.
-    if (i == kBinaryLine) return BigUint(uint64_t(sieve::books_per_tile()));
+    // Binary's files stand on one wall, so its loop counts twice as many slots, the right wall's
+    // empty (loop_pos()).
+    if (i == kBinaryLine)
+    {
+        BigUint m = titled_[kBinaryLine]->size();
+        m -= BigUint(1);
+        return loop_pos(m) += BigUint(1);
+    }
     if (i == kModelsLine) return titled_[kModelsLine]->size();
     if (i == kBooksLine) return effective_mode(i) == FilterMode::Compact ? book_sieve_->count() : books_->size();
     if (guided_ && lines_[size_t(i)].guided) return BigUint::pow(2, zoom_);
@@ -297,6 +304,24 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
                     b.failed_by = book_sieve_->first_failure(*b.parts);
                     b.passes = b.failed_by.empty();
                 }
+            }
+        }
+        else if (on_binary())
+        {
+            // A file: its title, its cover, and the file itself by its own positional index. Only
+            // the left wall's slots hold files; the right wall is the edge.
+            const uint32_t half = uint32_t(sieve::books_per_tile() / 2);
+            if (slot >= half) b.empty = true;
+            else
+            {
+                b.index = unit_of_pos(b.index);
+                const TitledSpace& ts = *titled_[kBinaryLine];
+                const TitledSpace::Parts tp = ts.parts_at(b.index, mode_);
+                b.title = tp.title;
+                b.cover = tp.cover;
+                b.binary = binary_space_->bytes_at(tp.content, AddressMode::Positional);
+                b.hex = ts.hex_of(b.index);
+                b.fraction = b.index.is_zero() ? 0.0 : std::pow(10.0, b.index.log10_approx() - ts.size().log10_approx());
             }
         }
         else if (on_models())
@@ -379,7 +404,7 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
 const TitledSpace* Hallway::titled_of(int i) const
 {
     if (i < 0 || i >= kLines || !titled_[size_t(i)]) return nullptr;
-    if (i == kModelsLine) return titled_[size_t(i)].get();
+    if (i == kModelsLine || i == kBinaryLine) return titled_[size_t(i)].get();
     if (guided_ && lines_[size_t(i)].guided) return nullptr; // guided order: the content alone, for now
     if (effective_mode(i) == FilterMode::Compact) return nullptr; // compact: the content's survivors, for now
     return titled_[size_t(i)].get();
@@ -441,6 +466,14 @@ void Hallway::go_to_unit(const Space::Digits& unit, bool open)
 }
 
 // The books line: go to a book, face it, and optionally open it.
+// A file on the binary line, with a blank title and cover, as a unit warped in on its own has.
+void Hallway::go_to_file(const BinarySpace::Bytes& f, bool open, const Space::Digits* title, const Space::Digits* cover)
+{
+    const TitledSpace& ts = *titled_[kBinaryLine];
+    const BigUint content = binary_space_->index_of(f, AddressMode::Positional);
+    place(ts.index_of({cover ? *cover : ts.blank_cover(), title ? *title : ts.blank_title(), content}, mode_), open);
+}
+
 void Hallway::go_to_book(const BookSpace::Parts& p, bool open)
 {
     if (effective_mode() == FilterMode::Compact)
@@ -492,8 +525,9 @@ BookSpace::Parts Hallway::parts_of_record(const std::string& path)
 
 // Teleport to a unit's slot in the first copy of the loop (where position = address), face
 // it, and optionally open it.
-void Hallway::place(const BigUint& index, bool open)
+void Hallway::place(const BigUint& unit, bool open)
 {
+    const BigUint index = on_binary() ? loop_pos(unit) : unit; // binary's files stand on one wall
     tile_ = LineLoop::tile_of(index);
     rebase();
     const uint32_t slot = LineLoop::slot_of(index);
@@ -545,6 +579,17 @@ const Hallway::Book* Hallway::reference_book()
 // you are looking at in front of you.
 void Hallway::cycle_ordering()
 {
+    if (on_binary())
+    {
+        // Positional and scrambled only, keeping the file you are looking at, title, cover and all.
+        const Book* ref = reference_book();
+        const Book keep = ref ? *ref : Book{};
+        mode_ = mode_ == AddressMode::Positional ? AddressMode::Scrambled : AddressMode::Positional;
+        rebase();
+        if (keep.binary) go_to_file(*keep.binary, false, &keep.title, &keep.cover);
+        message(trf(mode_ == AddressMode::Positional ? "msg.ordering.positional" : "msg.ordering.scrambled", {ordering_name()}));
+        return;
+    }
     if (on_books())
     {
         const Book* ref = reference_book();
@@ -601,6 +646,24 @@ bool Hallway::warp(const std::string& input)
             message(trf("msg.opened_book", {input}));
             return true;
         }
+        if (on_binary())
+        {
+            // A file, if the input names one; otherwise the text itself, as its UTF-8 bytes.
+            BinarySpace::Bytes bytes;
+            std::error_code ec;
+            // The typed text is UTF-8; the path is built from it as UTF-8, so Windows finds the file too.
+            const std::filesystem::path path(std::u8string(input.begin(), input.end()));
+            if (std::filesystem::is_regular_file(path, ec))
+            {
+                std::ifstream in(path, std::ios::binary);
+                bytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+            }
+            else bytes.assign(input.begin(), input.end());
+            go_to_file(bytes, true);
+            trail_.clear();
+            message(trf("msg.warped.file", {std::to_string(bytes.size())}));
+            return true;
+        }
         Args a;
         a.opts["line"] = to_string(line().kind);
         if (line().kind == LineKind::Image || line().kind == LineKind::Video) a.opts["file"] = input;
@@ -653,10 +716,10 @@ bool Hallway::go_to(std::string input)
             if (digits.empty() || digits.size() > 9 || digits.find_first_not_of("0123456789") != std::string::npos)
                 throw std::invalid_argument(tr("msg.goto.percent"));
             // floor(p / 10^decimals * loop units)
-            index = loop_.units();
+            index = line_units();
             index.mul_small(uint32_t(std::stoul(digits)));
             for (uint32_t i = 0; i < decimals; ++i) index.divmod_small(10);
-            if (index >= loop_.units()) throw std::invalid_argument(tr("msg.goto.below100"));
+            if (index >= line_units()) throw std::invalid_argument(tr("msg.goto.below100"));
         }
         else if (guided_on())
         {
@@ -695,7 +758,7 @@ void Hallway::step_trail(int dir)
 void Hallway::update(float dt, const bool* keys)
 {
     // Holding a book, you stand still: walking or turning under an open book is disorienting.
-    if (input_ != Input::None || in_hand_ || nav_open_) return;
+    if (input_ != Input::None || in_hand_ || nav_open_ || pause_open_) return;
     const float speed = (keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT]) ? 9.0f : 3.0f;
     const Vec3 fwd = {std::sin(cam_.yaw), 0, std::cos(cam_.yaw)};
     const Vec3 right = {std::cos(cam_.yaw), 0, -std::sin(cam_.yaw)};
@@ -795,6 +858,11 @@ void Hallway::handle(const SDL_Event& e, bool& quit)
 void Hallway::handle_event(const SDL_Event& e, bool& quit)
 {
     if (e.type == SDL_EVENT_QUIT) quit = true;
+    if (pause_open_)
+    {
+        pause_event(e, quit);
+        return;
+    }
     if (nav_open_)
     {
         navigator_event(e);
@@ -869,8 +937,9 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
     switch (e.key.key)
     {
     case SDLK_ESCAPE:
+        // Put down what is in your hands first; with nothing in them, pause.
         if (in_hand_) drop_in_hand();
-        else if (SDL_GetWindowRelativeMouseMode(window_)) SDL_SetWindowRelativeMouseMode(window_, false);
+        else open_pause();
         break;
     case SDLK_TAB: SDL_SetWindowRelativeMouseMode(window_, !SDL_GetWindowRelativeMouseMode(window_)); break;
     case SDLK_Q:
@@ -1004,6 +1073,7 @@ std::string Hallway::status()
             where += " " + std::to_string(used) + "/" + std::to_string(model_space_->vertices()) + " vertices used, " +
                      std::to_string(degenerate) + " degenerate faces";
         }
+        else if (first.binary) where += " " + binary_preview(*first.binary, 16);
         else if (line().kind == LineKind::Text) where += " \"" + ascii(utf8_encode(line().space.text_of(first.unit))) + "\"";
         if (first.guided) where += " (" + std::to_string(first.bits) + " bits)";
     }
@@ -1023,7 +1093,8 @@ void Hallway::render()
     SDL_SetRenderDrawBlendMode(r_, SDL_BLENDMODE_BLEND);
 
     // Nothing stands on the binary line's shelves, so there is nothing to look at or take.
-    hover_ = on_binary() ? std::nullopt : pick_book(cam_.pos, cam_.forward(), 0, 5.0f, sizes_vary());
+    hover_ = pick_book(cam_.pos, cam_.forward(), 0, 5.0f, sizes_vary());
+    if (on_binary() && hover_ && hover_->side == Side::Right) hover_.reset(); // the edge: no shelves there
     if (hover_ && effective_mode() == FilterMode::Hide && !book(hover_->tile, hover_->slot()).passes) hover_.reset();
 
     constexpr int kBack = kCacheBack, kAhead = kCacheAhead;
@@ -1154,6 +1225,7 @@ const char* Hallway::media_name(Media m)
     case Media::Video: return "video";
     case Media::Books: return "books";
     case Media::Models: return "models";
+    case Media::Binary: return "binary";
     default: return "pages";
     }
 }
@@ -1462,14 +1534,13 @@ void Hallway::set_graphics(bool edge_glow, bool real_graphics, bool door_portals
     for (Models& m : models_) m = Models{}; // reloaded on first use (picks up edited files)
 }
 
-// True if tile dt away is the start of a loop on all six addressed lines at once, which is
-// what the double start flag marks. Since it needs every line's loop to come round together
-// it is true at the origin and then only at multiples of all six loop lengths, so in practice
-// you see it where you started and nowhere you can walk to.
+// True if tile dt away is the start of a loop on all seven lines at once, which is what the
+// double start flag marks. Since it needs every line's loop to come round together it is true
+// at the origin and then only at multiples of all seven loop lengths, so in practice you see it
+// where you started and nowhere you can walk to.
 bool Hallway::all_start(int64_t dt) const
 {
-    // Binary is left out: it has no loop to start, so it would mark every tile.
-    for (int i = 0; i < kBinaryLine; ++i)
+    for (int i = 0; i < kLines; ++i)
         if (!offset_loop_tile(all_loops_[i], all_loop_tiles_[i], dt).is_zero()) return false;
     return true;
 }
@@ -1510,12 +1581,48 @@ BigUint Hallway::offset_loop_tile(const LineLoop& loop, const BigUint& loop_tile
 // How many books tile dt holds: all of them, except the last tile of a padded loop.
 uint32_t Hallway::books_in_tile(int64_t dt) const
 {
-    if (on_binary()) return 0; // the shelves stand empty: nothing out there is catalogued yet
-    if (loop_.fills_whole_tiles()) return sieve::books_per_tile();
+    // The binary line's files are in the left wall's slots, which come first.
+    const uint32_t most = on_binary() ? uint32_t(sieve::books_per_tile() / 2) : uint32_t(sieve::books_per_tile());
+    if (loop_.fills_whole_tiles()) return most;
     BigUint lt = offset_loop_tile(dt);
     lt.add_small(1);
-    return lt == loop_.tiles() ? sieve::books_per_tile() - loop_.padding() : sieve::books_per_tile();
+    return std::min(most, lt == loop_.tiles() ? uint32_t(sieve::books_per_tile() - loop_.padding()) : uint32_t(sieve::books_per_tile()));
 }
+
+// A file's place on the binary line to its place in the loop and back: with h slots a wall,
+// unit u stands in tile u / h, left-wall slot u mod h, so its loop position is
+// (u / h) * 2h + u mod h. Both are shifts, since h is a power of two. The identity elsewhere.
+BigUint Hallway::loop_pos(const BigUint& unit) const
+{
+    const size_t h = size_t(std::countr_zero(uint32_t(sieve::books_per_tile() / 2)));
+    BigUint tiles = unit;
+    tiles >>= h;
+    BigUint pos = tiles;
+    pos <<= h + 1;
+    BigUint below = tiles;
+    below <<= h;
+    BigUint slot = unit;
+    slot -= below;
+    pos += slot;
+    return pos;
+}
+
+BigUint Hallway::unit_of_pos(const BigUint& pos) const
+{
+    const size_t h = size_t(std::countr_zero(uint32_t(sieve::books_per_tile() / 2)));
+    BigUint tiles = pos;
+    tiles >>= h + 1;
+    BigUint at = tiles;
+    at <<= h + 1;
+    BigUint slot = pos;
+    slot -= at;
+    BigUint unit = tiles;
+    unit <<= h;
+    unit += slot;
+    return unit;
+}
+
+BigUint Hallway::line_units() const { return on_binary() ? titled_[kBinaryLine]->size() : loop_.units(); }
 
 // The books of one tile, slot by slot (4 edges each), drawn separately so padding can be bare.
 // `varied`: heights vary from slot to slot; else every book is the same size (audio, video).

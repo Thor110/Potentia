@@ -1,0 +1,31 @@
+# Sieve Real Graphics: the item on the binary line, a box (the models line's crate, copied to start from).
+# Built to the templates/ measurements; the front faces +X, towards the corridor, in the
+# x = 0 plane, and that face is where the pre-rendered picture goes (faces.ini).
+mtllib book-binary.mtl
+o book-binary
+v 0.000000 -0.000000 -0.140000
+v 0.000000 0.400000 -0.140000
+v 0.000000 0.400000 0.140000
+v 0.000000 0.000000 0.140000
+v -0.300000 -0.000000 -0.140000
+v -0.300000 0.400000 -0.140000
+v -0.300000 0.000000 0.140000
+v -0.300000 0.400000 0.140000
+vt 0.000000 0.000000
+vt 0.400000 0.000000
+vt 0.400000 0.280000
+vt 0.000000 0.280000
+vt 0.300000 0.000000
+vt 0.300000 0.400000
+vt 0.000000 0.400000
+vn 0.0000 0.0000 -1.0000
+vn 0.0000 0.0000 1.0000
+vn 0.0000 1.0000 0.0000
+vn 1.0000 0.0000 0.0000
+s off
+usemtl book_spine
+f 1/1/4 2/2/4 3/3/4 4/4/4
+f 3/6/3 2/7/3 6/6/3 8/7/3
+usemtl book_cover
+f 1/1/1 5/5/1 6/6/1 2/7/1
+f 7/1/2 4/5/2 3/6/2 8/7/2

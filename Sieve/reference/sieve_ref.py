@@ -13,6 +13,7 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
     python3 sieve_ref.py canon-vectors  > ../tests/vectors_canon.tsv
     python3 sieve_ref.py bytes-vectors  > ../tests/vectors_bytes_v1.tsv
     python3 sieve_ref.py titled-vectors > ../tests/vectors_titled_v1.tsv
+    python3 sieve_ref.py binary-vectors > ../tests/vectors_binary_v1.tsv
     python3 sieve_ref.py image-vectors  > ../tests/vectors_image_v1.tsv
     python3 sieve_ref.py guided-vectors > ../tests/vectors_guided_v1.tsv
     python3 sieve_ref.py filter-vectors > ../tests/vectors_filters_v1.tsv
@@ -1729,6 +1730,51 @@ def cmd_titled_vectors(_args):
                       f"{','.join(map(str, cd)) or '-'}\t{','.join(map(str, td)) or '-'}\t{content:x}")
 
 
+def binary_space_id(n, key):
+    return f"binary/bytes256/L0-{n}/key={key}/binary-v1"
+
+
+def binary_index(data):
+    """binary-v1 positional: every shorter file comes first, then files of this length by their bytes
+    read big-endian. Written from the definition (a sum over lengths), not from any shortcut."""
+    shorter = sum(256 ** l for l in range(len(data)))
+    return shorter + int.from_bytes(data, "big")
+
+
+def binary_file(v):
+    """The inverse: step over whole lengths until the rest is inside one."""
+    length = 0
+    while v >= 256 ** length:
+        v -= 256 ** length
+        length += 1
+    return v.to_bytes(length, "big")
+
+
+def cmd_binary_vectors(_args):
+    """The binary line (binary-v1): every file of 0..N bytes, shortest first, then by value; scrambled
+    through shuffle-sha256-v1 over the count."""
+    print("# sieve binary-line vectors v1 (binary-v1 over shuffle-sha256-v1)")
+    print("# max_bytes key mode address file_length file_hex (hex; '-' for the empty file)")
+    g = stream("binary")
+    named = [b"", b"\x00", b"\xff", b"\x00\x00", b"Sieve", bytes(range(8))]
+    for n, key in ((1, "sieve"), (2, "sieve"), (3, "other"), (5, "sieve"), (40, "sieve"), (700, "sieve")):
+        m = sum(256 ** l for l in range(n + 1))
+        dom = binary_space_id(n, key)
+        width = max(1, ((m - 1).bit_length() + 3) // 4)
+        for mode in ("positional", "scrambled"):
+            files = [f for f in named if len(f) <= n]
+            files += [binary_file(k) for k in (0, m - 1, m // 3)]
+            for _ in range(3):
+                length = next(g) % (n + 1)
+                files.append(bytes(next(g) for _ in range(length)))
+            for f in files:
+                pos = binary_index(f)
+                assert binary_file(pos) == f and pos < m
+                k = shuffle(key, dom, m, pos) if mode == "scrambled" else pos
+                assert (shuffle(key, dom, m, k, inverse=True) if mode == "scrambled" else k) == pos
+                print(f"{n}\t{key}\t{mode}\t{format(k, 'x').zfill(width)}\t{len(f)}\t{f.hex() or '-'}")
+
+
 def cmd_book_filter_vectors(_args):
     """Book filters (books-compact-v1): surviving books counted, unranked and shuffled, each part by
     its own independent ranker, the pages judged as one text."""
@@ -1829,6 +1875,7 @@ def main():
     sub.add_parser("compact-vectors")
     sub.add_parser("book-vectors")
     sub.add_parser("titled-vectors")
+    sub.add_parser("binary-vectors")
     sub.add_parser("book-filter-vectors")
     s = sub.add_parser("book-read")
     s.add_argument("book")
@@ -1866,6 +1913,8 @@ def main():
         cmd_compact_vectors(args)
     elif args.cmd == "titled-vectors":
         cmd_titled_vectors(args)
+    elif args.cmd == "binary-vectors":
+        cmd_binary_vectors(args)
     elif args.cmd == "book-vectors":
         cmd_book_vectors(args)
     elif args.cmd == "book-filter-vectors":

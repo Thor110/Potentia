@@ -11,7 +11,8 @@
 // The number being turned is the item's position in the corridor's loop -- its address in
 // positional and scrambled order, its compact address in compact order, its point at the current
 // zoom in guided order -- which is the number place() takes, so the navigator needs no parsing
-// of its own and works in every ordering. The binary line has no loop and no address to turn.
+// of its own and works in every ordering. On the binary line it is the file's place on the line,
+// which place() turns into its place on the one wall.
 
 #include "hallway.hpp"
 
@@ -30,15 +31,10 @@ constexpr float kLabelW = 80;  // the digit-number labels at the left of each ro
 
 void Hallway::open_navigator()
 {
-    if (on_binary())
-    {
-        message(tr("nav.binary"));
-        return;
-    }
     const Book* ref = reference_book();
     nav_value_ = ref ? ref->index : BigUint();
-    if (nav_value_ >= loop_.units()) nav_value_ = BigUint();
-    BigUint top = loop_.units();
+    if (nav_value_ >= line_units()) nav_value_ = BigUint();
+    BigUint top = line_units();
     top -= BigUint(1);
     nav_width_ = std::max<size_t>(1, (top.bit_length() + 3) / 4);
     nav_hex_ = nav_value_.to_hex(nav_width_);
@@ -64,7 +60,7 @@ void Hallway::close_navigator(bool go)
 // Digit `d` (counted from the left) up or down by one, with carry, round the loop.
 void Hallway::nav_step(size_t d, int dir)
 {
-    const BigUint& n = loop_.units();
+    const BigUint& n = line_units();
     BigUint step = BigUint::pow(16, uint64_t(nav_width_ - 1 - d));
     if (step >= n) step = n; // cannot happen with a width from n - 1, but a loop of one unit has no step
     if (dir > 0)
@@ -90,7 +86,7 @@ void Hallway::nav_set(size_t d, uint32_t v)
     std::string hex = nav_hex_;
     hex[d] = "0123456789abcdef"[v & 15];
     const BigUint to = BigUint::from_hex(hex);
-    if (to >= loop_.units())
+    if (to >= line_units())
     {
         nav_note_ = tr("nav.past_end");
         return;
@@ -175,8 +171,20 @@ void Hallway::navigator_event(const SDL_Event& e)
     case SDLK_END: nav_sel_ = nav_width_ - 1; break;
     case SDLK_UP: nav_step(nav_sel_, shift ? 8 : 1); break;
     case SDLK_DOWN: nav_step(nav_sel_, shift ? -8 : -1); break;
-    case SDLK_PAGEUP: nav_scroll_ = std::max(0, nav_scroll_ - std::max(1, nav_rows_shown_ - 1)); break;
-    case SDLK_PAGEDOWN: nav_scroll_ += std::max(1, nav_rows_shown_ - 1); break;
+    // A page of rows at a time. They move the chosen digit, not just the view: the view follows
+    // the chosen digit, so scrolling it alone would snap straight back.
+    case SDLK_PAGEUP:
+    {
+        const size_t by = size_t(std::max(1, nav_rows_shown_ - 1)) * std::max<size_t>(1, nav_cols_);
+        nav_sel_ = nav_sel_ >= by ? nav_sel_ - by : nav_sel_ % std::max<size_t>(1, nav_cols_);
+        break;
+    }
+    case SDLK_PAGEDOWN:
+    {
+        const size_t by = size_t(std::max(1, nav_rows_shown_ - 1)) * std::max<size_t>(1, nav_cols_);
+        nav_sel_ = std::min(nav_width_ - 1, nav_sel_ + by);
+        break;
+    }
     default: break;
     }
     // Up and down with Shift step eight at a time, which is half a turn of a hex digit.
@@ -249,11 +257,19 @@ void Hallway::draw_navigator(float W, float H)
 
     // What the chosen digit does, and where the address stands.
     const size_t p = nav_width_ - 1 - nav_sel_;
-    const double frac = nav_value_.is_zero() ? 0.0 : std::pow(10.0, nav_value_.log10_approx() - loop_.units().log10_approx());
+    const double frac = nav_value_.is_zero() ? 0.0 : std::pow(10.0, nav_value_.log10_approx() - line_units().log10_approx());
     float y = H - 92;
     text(20, y, fit(trf("nav.digit", {std::to_string(nav_sel_ + 1), std::to_string(nav_width_), std::to_string(p)}), W - 40, 1), 1, ink);
     text(20, y + 14, fit(trf("nav.along", {percent(frac)}), W - 40, 1), 1, ink);
     if (!nav_note_.empty()) text(20, y + 28, nav_note_, 1, SDL_Color{255, 80, 80, 255});
+    // Which page of rows is in view, of how many: bottom right, where a reader looks for it.
+    {
+        const int per = std::max(1, nav_rows_shown_);
+        const int pages = std::max(1, (int(rows) + per - 1) / per);
+        const int page = std::min(pages, (nav_scroll_ + per - 1) / per + 1);
+        const std::string pg = trf("nav.page", {std::to_string(page), std::to_string(pages)});
+        text(W - 20 - text_width(pg, 2), y, pg, 2, ink);
+    }
     text(20, H - 40, fit(tr("nav.keys1"), W - 40, 1), 1, grey);
     text(20, H - 26, fit(tr("nav.keys2"), W - 40, 1), 1, grey);
 }

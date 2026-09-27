@@ -186,9 +186,11 @@ It is the **same space** as any other tile of corridor — the same width, the s
 
 Its one wall carries its one door, so the six lines no longer loop into one another — they **start and finish** at binary. Walking left out of PAGES runs IMAGE, AUDIO, VIDEO, BOOKS, MODELS and then binary, where the corridor ends; walking right out of PAGES reaches binary directly, from the other side.
 
-Its size is not counted, deliberately, and the map says so. Its shelves stand empty: nothing out there is addressed, ordered or filtered yet. What goes on them, and how it is addressed, is open — every file of a fixed length in base 256 would make it an ordinary line with an ordinary state space, and equally it could be where real data is put by the people who catalogue it. For now the line exists, is walkable, and holds nothing.
+Its shelves hold **every file up to N bytes long**, the empty file first (BINARY in the setup menu, `--binary-length`, default 32). Files are numbered shortest first and then by their bytes, so a file's address is its own hex dump plus `0101...01`, one `01` per byte. Each file has a title and a cover, as audio and video do; in hand it is a hex dump. **T** takes a path and warps to that file (or, if it names no file, to the bytes of what you typed). Its files stand on the one wall. The room is always the same way round: coming in from models you are turned to face the other way along it, and its door leads back to where you came from.
 
-![The binary line: one wall of empty shelves, and on the other side the edge, the short wall and the rain](docs/images/hallway-edge.png)
+**FIND MY LIMITS focus** (GLOBAL): FIND MY LIMITS grows every line, or only the one chosen here, leaving the others as they are.
+
+![The binary line: one wall of shelves, and on the other side the edge, the short wall and the rain](docs/images/hallway-edge.png)
 
 The rain only ever falls as characters the font can actually draw, so it never becomes rows of question marks: with Sieve's own `sieve8x8` it is Latin and Greek, and with **Unifont** it is most of Unicode. Unifont is not stored in this repository — it is GPLv2+ while Sieve's own font is public domain, and a project should pick its own licences — so `python tools/fetch_unifont.py` fetches it into `data/fonts/unifont.hex`, each part checked against a pinned SHA-256, exactly as `fetch_corpus.py` fetches the training corpus. Name it on a language file's first line (`font = unifont`) to use it. The rain is redrawn every third frame into one texture and mapped onto the opening with the same perspective grid the crates use, so it lies in the world rather than facing you; each tile takes two of the texture's four panels, side by side, so the glyphs stay about square and the corridor does not repeat as you walk. It costs about 5 ms a frame with the software renderer, nearly all of it the alpha blend, and far less with a real one.
 
@@ -348,6 +350,8 @@ A door **keeps your corridor position** and only changes which line reads it:
 | T | **Warp:** type text, notes, or a picture file path (for image and video), then Enter. You land facing it, in the first copy of the line (where your position equals its address), and it opens in hand. Ctrl+V pastes. |
 | G | **Go to** a hex address or a percentage such as `50%` or `36.25%` (these open the book too), or `@T` for corridor tile T |
 | (doors) | Every doorway has a sign over it naming the line it leads to, in that line's colours |
+| F1 | The **setup menu**, over the hallway: Esc goes back to the hallway as it was, ENTER THE HALLWAY walks into a new one with the new settings |
+| Esc | **Pause**: Resume, Navigation System, Settings (the main menu's, over the hallway), Exit Sieve (to the main menu, or out). The Node Graph Viewer and File Locator are listed but not built yet. With something in your hands, Esc puts it down first |
 | X | **Address navigator**: the whole address of the item you are looking at, full screen, one hex digit at a time. Left/Right (Shift: a row) choose a digit, Up/Down, the wheel or the arrows turn it, carrying and wrapping round the line; type 0-9 a-f to set it; ENTER goes there, Esc leaves |
 | N / B | Next or previous unit of a warp that made a trail of several units |
 | M | Switch ordering: positional → scrambled → guided (text) → positional |

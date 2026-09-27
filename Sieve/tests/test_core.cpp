@@ -17,6 +17,7 @@
 #include "sieve/sha256.hpp"
 #include "sieve/sieve.hpp"
 #include "sieve/space.hpp"
+#include "sieve/binaryspace.hpp"
 #include "sieve/titledspace.hpp"
 #include "sieve/utf8.hpp"
 
@@ -753,6 +754,38 @@ void test_titled_vectors(const std::string& path)
     }
     std::cout << "titled-line vectors checked: " << n << "\n";
     CHECK(n >= 60); // a truncated or emptied vector file must fail, not pass quietly
+}
+
+void test_binary_vectors(const std::string& path)
+{
+    int n = 0;
+    for (const auto& f : read_tsv(path, 6))
+    {
+        const BinarySpace bs(std::stoull(f[0]), f[1]);
+        const AddressMode m = f[2] == "scrambled" ? AddressMode::Scrambled : AddressMode::Positional;
+        BinarySpace::Bytes want;
+        if (f[5] != "-")
+            for (size_t i = 0; i + 1 < f[5].size(); i += 2) want.push_back(uint8_t(std::stoul(f[5].substr(i, 2), nullptr, 16)));
+        const BigUint address = bs.parse(f[3]);
+        const bool ok = want.size() == std::stoull(f[4]) && bs.bytes_at(address, m) == want && bs.index_of(want, m) == address &&
+                        bs.hex_of(address) == f[3];
+        CHECK(ok);
+        if (!ok) std::cerr << "  binary vector mismatch: " << f[0] << " " << f[2] << " " << f[3] << "\n";
+        ++n;
+    }
+    // Longer than the line is refused, not wrapped or cut.
+    bool refused = false;
+    try
+    {
+        (void)BinarySpace(2, "sieve").index_of({1, 2, 3}, AddressMode::Positional);
+    }
+    catch (const std::invalid_argument&)
+    {
+        refused = true;
+    }
+    CHECK(refused);
+    std::cout << "binary-line vectors checked: " << n << "\n";
+    CHECK(n >= 120); // a truncated or emptied vector file must fail, not pass quietly
 }
 
 void test_canon_vectors(const std::string& path)
@@ -2216,6 +2249,7 @@ void run_all(int argc, char** argv)
         test_review_additions();
         test_book_vectors(dir);
         test_titled_vectors(dir + "vectors_titled_v1.tsv");
+        test_binary_vectors(dir + "vectors_binary_v1.tsv");
         test_book_filter_vectors(dir);
     }
 }

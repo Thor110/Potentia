@@ -57,6 +57,9 @@ struct Settings
     uint32_t title_length = 32;
     uint32_t letters_px = 8;   // the letter size item displays are drawn for; smaller letters are dashes
     uint32_t closeup_px = 1024; // the widest close-up display (0: none)
+    uint32_t binary_bytes = 32; // the binary line: every file up to this many bytes
+    // Which line FIND MY LIMITS grows: "all", or one line's name, the others left as they are.
+    std::string limits_focus = "all";
 
     static Settings from_args(const sieve::cli::Args& a);
     // Writes these settings into `a` (as the hallway's own options), keeping everything else.
@@ -79,6 +82,9 @@ struct Budget
     double cache_bytes = 256.0 * 1048576.0;  // what the hallway's cache of units may take
     double ms_per_unit_at_limit = 50;        // the time `bits` was worked out for
     double ref_bits = 0, ref_ms = 0;         // the measurement it was worked out from
+    // The binary line's conversions are hex, linear in the length, not the base conversion the
+    // other lines need, so it has a measurement of its own and grows in proportion from it.
+    double binary_ref_bits = 0, binary_ref_ms = 0;
 };
 Budget machine_budget();
 // Roughly how long one unit with an address of this many bits takes to open here. For the
@@ -94,7 +100,9 @@ public:
     Menu(SDL_Window* window, SDL_Renderer* renderer, Settings settings, sieve::cli::FilterConfig filters, std::string filters_path,
          AppSettings* app = nullptr, std::filesystem::path app_path = {});
 
-    enum class Result { Enter, Quit, Back }; // Back: Esc, to the main menu
+    enum class Result { Enter, Quit, Back }; // Back: Esc, to the main menu (or, in game, the hallway)
+    // Opened with F1 from a hallway that is still there: Esc goes back to it, and the footer says so.
+    void set_in_game(bool on) { in_game_ = on; }
     Result run();                                  // interactive: until Enter or quit
     void press(SDL_Keycode key, SDL_Keymod mod);   // one key, as if typed (scripting)
     void render();
@@ -104,10 +112,11 @@ public:
 
 private:
     void handle(const SDL_Event& e, bool& done, Result& result);
-    std::array<LineSize, 6> line_sizes() const; // pages, image, audio, video, books, models
+    std::array<LineSize, 7> line_sizes() const; // pages, image, audio, video, books, models, binary
     bool too_large() const;
     int over_budget() const;   // which line is beyond this machine, or -1
     bool over_budget_line(int i, const Budget& b) const;
+    double line_ms(int i, const Budget& b) const; // how long a unit of line i takes to open, estimated
     double line_cache_bytes(int i) const;  // what line i's cached units would take in memory
     double graphics_mb_needed() const;     // the display cache, the close-ups and the world, in megabytes
     int display_px_line(int i) const;      // what line i's displays are drawn at (display.hpp)
@@ -120,16 +129,17 @@ private:
     void find_limits();        // set every line to the largest shape this machine can open
     void reset_settings();     // every shape back to its default // a line this machine cannot open
     void adjust(int dir, int step);
-    // 0-24 are the settings rows, in the order render() lists them and adjust() switches on;
+    // 0-26 are the settings rows, in the order render() lists them and adjust() switches on;
     // then FIND MY LIMITS, RESET, and ENTER THE HALLWAY, which is the only row that opens it.
     // The GLOBAL rows come first; each line's rows are counted from kFirstLineRow, so a row added
     // to GLOBAL moves them all with one change here.
     static constexpr int kAngleRow = 4, kTitleRow = 5, kLettersRow = 6, kDisplaySizeRow = 7, kDisplayCacheRow = 8,
-                         kCloseUpRow = 9;
-    static constexpr int kFirstLineRow = 10;
+                         kCloseUpRow = 9, kFocusRow = 10;
+    static constexpr int kFirstLineRow = 11;
     static constexpr int kPagesRows = kFirstLineRow, kImageRows = kFirstLineRow + 4, kAudioRow = kFirstLineRow + 7,
                          kVideoRows = kFirstLineRow + 8, kBooksRow = kFirstLineRow + 12, kModelsRows = kFirstLineRow + 13;
-    static constexpr int kLimitsRow = kModelsRows + 3, kResetRow = kLimitsRow + 1, kEnterRow = kLimitsRow + 2;
+    static constexpr int kBinaryRow = kModelsRows + 3;
+    static constexpr int kLimitsRow = kBinaryRow + 1, kResetRow = kLimitsRow + 1, kEnterRow = kLimitsRow + 2;
     int row_count() const;
 
     // The filter overlay.
@@ -186,6 +196,7 @@ private:
     SDL_FRect magnifier_[5] = {}; // one per line with filters; the models line has none yet
     SDL_FRect box_ = {};
     std::vector<std::pair<SDL_FRect, int>> row_rects_; // overlay rows on screen
+    bool in_game_ = false;
 };
 
 } // namespace hallway

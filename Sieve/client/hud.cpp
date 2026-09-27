@@ -92,7 +92,7 @@ void Hallway::draw_compass(float W, float H)
     // bright as far as the ring you are standing on, faint beyond it.
     const int mine = on_binary() ? 0 : li_ + 1;
     const float rad = r_out - float(mine) * step;
-    const float a = on_binary() ? 0.0f : float(line_fraction(li_)) * 6.2831853f;
+    const float a = float(line_fraction(li_)) * 6.2831853f;
     const float sn = std::sin(a), cs = std::cos(a);
     SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 80);
     SDL_RenderLine(r_, cx + rad * sn, cy - rad * cs, cx + (r_out + 2) * sn, cy - (r_out + 2) * cs);
@@ -101,7 +101,7 @@ void Hallway::draw_compass(float W, float H)
     const SDL_FRect at{cx + rad * sn - 3, cy - rad * cs - 3, 7, 7};
     SDL_RenderFillRect(r_, &at);
     // And the same bearing written out, to whatever precision Settings > Graphics asks for.
-    const std::string deg = on_binary() ? tr("hud.no_angle") : degrees(line_fraction(li_), angle_decimals_);
+    const std::string deg = degrees(line_fraction(li_), angle_decimals_);
     text(cx - text_width(deg, 1) / 2, by + bh - row + 4, deg, 1, ink);
 }
 
@@ -176,9 +176,24 @@ void Hallway::draw_pixels(const Space::Digits& unit, const ImageFormat& f, float
     SDL_RenderRect(r_, &border);
 }
 
+// A file, as a line of text: how long it is and its first bytes in hex. A hex dump rather than
+// the bytes as characters, because most files are not text and a byte is not a character.
+std::string Hallway::binary_preview(const BinarySpace::Bytes& f, size_t most)
+{
+    std::string s = trf("hud.binary.bytes", {std::to_string(f.size())});
+    char b[4];
+    for (size_t i = 0; i < f.size() && i < most; ++i)
+    {
+        std::snprintf(b, sizeof b, " %02x", f[i]);
+        s += b;
+    }
+    if (f.size() > most) s += " ...";
+    return s;
+}
+
 std::string Hallway::one_line_preview(const Space::Digits& u)
 {
-    if (on_binary()) return ""; // its shelves stand empty
+    if (on_binary()) return ""; // a file is written out by binary_preview
     if (on_models()) return ""; // a model is drawn, not written out: see draw_model
     if (line().kind == LineKind::Text) return "\"" + ascii(utf8_encode(line().space.text_of(u))) + "\"";
     if (line().kind == LineKind::Audio) return notes_to_notation(u);
@@ -257,18 +272,16 @@ void Hallway::draw_hud(int w, int h)
     panel(-1, -1, W + 2, 44);
     const Book& first = book(0, 0);
     const std::string where =
-        on_binary() ? trf("hud.line", {tr(th.key)}) + "   " + tr("hud.infinite") + "   " + tr("hud.tile") + " " + tile_label_
-                    : trf("hud.line", {tr(th.key)}) + "   " + ordering_name() +
+        trf("hud.line", {tr(th.key)}) + "   " + ordering_name() +
                           (guided_on() ? "  " + trf("hud.zoom", {std::to_string(zoom_)}) : std::string()) + "   " + tr("hud.tile") + " " +
                           tile_label_ +
                           (first.empty ? "   " + tr("hud.padding") : "   " + trf("hud.along", {percent(first.fraction)}));
     text(10, 7, fit(where, W - 20, 2), 2, ink);
     const std::string per_tile = "   " + trf("hud.per_tile", {std::to_string(sieve::books_per_tile())});
-    const std::string loop = on_binary() ? tr("hud.no_loop")
-                                         : trf("hud.loop", {loop_label_}) + (loop_.fills_whole_tiles()
+    const std::string loop = trf("hud.loop", {loop_label_}) + (loop_.fills_whole_tiles()
                                                                                  ? std::string()
                                                                                  : " " + trf("hud.loop.padding", {std::to_string(loop_.padding())}));
-    text(10, 28, fit((on_books() ? books_->id() : on_binary() ? tr("hud.binary_id") : titled_here() ? titled_here()->id() : line().space.id()) + (guided_on() ? "   " + trf("hud.model", {line().model_id}) : std::string()) + "   " +
+    text(10, 28, fit((on_books() ? books_->id() : titled_here() ? titled_here()->id() : line().space.id()) + (guided_on() ? "   " + trf("hud.model", {line().model_id}) : std::string()) + "   " +
                      loop + per_tile + "   " + filter_status() + "   " +
                      (on_binary() ? trf("hud.door_one", {tr(theme_of(binary_from_).key)})
                                   : trf("hud.doors", {tr(theme_of((li_ + 1) % kLines).key), tr(theme_of((li_ + kLines - 1) % kLines).key)})),
@@ -279,7 +292,9 @@ void Hallway::draw_hud(int w, int h)
     if (hover_ && !in_hand_)
     {
         const Book& bk = book(hover_->tile, hover_->slot());
-        const float ph = on_books() || line().kind == LineKind::Image || line().kind == LineKind::Video ? 150 : 96;
+        // One size for every line: tall enough for a picture of 60 px beside the words, or a
+        // title and the first line of a page under it.
+        const float ph = 150;
         panel(10, H - ph - 44, std::min(W - 20, 900.0f), ph);
         const std::string label = trf(hover_->side == Side::Left ? "hud.slot.left" : "hud.slot.right",
                                       {std::to_string(hover_->row + 1), std::to_string(hover_->col + 1), std::to_string(hover_->slot())});
@@ -316,19 +331,22 @@ void Hallway::draw_hud(int w, int h)
             }
             else if (const std::string title = title_text(bk); has_titles() || !bk.cover.empty())
             {
-                // A titled unit: its cover, if the line has them, and its title; then what it is.
-                float tx = 20;
-                if (!bk.cover.empty())
-                {
-                    draw_pixels(bk.cover, lines_[1].image, 20, y, 60, 0);
-                    tx = 96;
-                }
-                if (!title.empty()) text(tx, y, fit("\"" + title + "\"", W - tx - 20, 2), 2, ink);
+                // A titled unit. With a cover it is laid out as a book is: the cover on the left,
+                // the title beside it, and what the thing is (its notes, its bytes) under the title,
+                // everything inside the panel. Without one, the title and then the thing itself.
+                const float panel_w = std::min(W - 20, 900.0f);
+                const bool covered = !bk.cover.empty();
+                const float tx = covered ? 96 : 20;
+                if (covered) draw_pixels(bk.cover, lines_[1].image, 20, y, 60, 0);
+                if (!title.empty()) text(tx, y, fit("\"" + title + "\"", panel_w - tx, 2), 2, ink);
                 else if (has_titles()) draw_null_title(tx, y, 2);
-                const float below = y + (bk.cover.empty() ? 22 : 64);
-                if (bk.model) text(20, below, model_line_summary(*bk.model), 2, ink);
+                const float below = y + 26;
+                const float room = panel_w - tx;
+                if (bk.binary) text(tx, below, fit(binary_preview(*bk.binary, 24), room, 1), 1, ink);
+                else if (bk.model) text(tx, below, fit(model_line_summary(*bk.model), room, 2), 2, ink);
+                else if (covered) text(tx, below, fit(one_line_preview(u), room, 1), 1, ink); // a video's cover stands for it
                 else if (line().kind == LineKind::Image || line().kind == LineKind::Video) draw_pixels(u, 20, below, 60, 0);
-                else text(20, below, wrap(one_line_preview(u), size_t(std::max(20.0f, (std::min(W - 20, 900.0f) - 40) / 16)))[0], 2, ink);
+                else text(20, below, wrap(one_line_preview(u), size_t(std::max(20.0f, (panel_w - 40) / 16)))[0], 2, ink);
             }
             else if (bk.model) text(20, y, model_line_summary(*bk.model), 2, ink);
             else if (line().kind == LineKind::Image || line().kind == LineKind::Video) draw_pixels(u, 20, y, 60, 0);
@@ -343,7 +361,7 @@ void Hallway::draw_hud(int w, int h)
     if (input_ != Input::None)
     {
         const std::string prompt = input_ == Input::Warp
-                                       ? tr(on_books() ? "prompt.warp.book"
+                                       ? tr(on_books() ? "prompt.warp.book" : on_binary() ? "prompt.warp.file"
                                             : line().kind == LineKind::Image || line().kind == LineKind::Video ? "prompt.warp.picture"
                                             : line().kind == LineKind::Audio                                   ? "prompt.warp.notes"
                                                                                                                : "prompt.warp.text")
@@ -358,6 +376,7 @@ void Hallway::draw_hud(int w, int h)
     // Last, so nothing else in the readout is drawn over it.
     draw_compass(float(W), float(H));
     if (nav_open_) draw_navigator(W, H); // over everything: it is a screen of its own
+    if (pause_open_) draw_pause(W, H);
 }
 
 // A model in hand: its wireframe, turned by the mouse or by A and D, and its .obj text beside
@@ -502,6 +521,7 @@ void Hallway::draw_in_hand(float W, float H)
     const size_t cols2 = size_t((pw - 28) / 16), cols1 = size_t((pw - 28) / 8);
     if (bk.model) cy = draw_model(*bk.model, x, cy, pw, y + ph - 110);
     else if (bk.parts) cy = draw_book(*bk.parts, x, cy, pw, y + ph - 110);
+    else if (bk.binary) cy = draw_file(*bk.binary, x, cy, pw, y + ph - 110);
     else switch (line().kind)
     {
     case LineKind::Text:
@@ -661,6 +681,48 @@ float Hallway::draw_book(const BookSpace::Parts& p, float x, float cy, float pw,
         break;
     }
     return cy;
+}
+
+// A file in hand: its length, then a hex dump of as much of it as fits, sixteen bytes to a row
+// with the offset first and the printable bytes beside, as any hex viewer shows a file. Returns
+// the height used.
+float Hallway::draw_file(const BinarySpace::Bytes& f, float x, float cy, float pw, float bottom)
+{
+    const SDL_Color ink = theme().edge;
+    text(x + 14, cy, trf("hand.binary.bytes", {std::to_string(f.size())}), 2, ink);
+    cy += 24;
+    if (f.empty())
+    {
+        text(x + 14, cy, tr("hand.binary.empty"), 1, ink);
+        return cy + 14;
+    }
+    const size_t per = pw >= 620 ? 16 : 8;
+    char b[24];
+    for (size_t at = 0; at < f.size(); at += per)
+    {
+        if (cy + 12 > bottom)
+        {
+            text(x + 14, cy, trf("hand.binary.more", {std::to_string(f.size() - at)}), 1, ink);
+            cy += 12;
+            break;
+        }
+        std::snprintf(b, sizeof b, "%06zx", at);
+        std::string row = std::string(b) + "  ";
+        std::string chars;
+        for (size_t i = at; i < at + per; ++i)
+        {
+            if (i < f.size())
+            {
+                std::snprintf(b, sizeof b, "%02x ", f[i]);
+                row += b;
+                chars += f[i] >= 0x20 && f[i] < 0x7F ? char(f[i]) : '.';
+            }
+            else row += "   ";
+        }
+        text(x + 14, cy, row + " " + chars, 1, ink);
+        cy += 12;
+    }
+    return cy + 6;
 }
 
 } // namespace hallway::hall

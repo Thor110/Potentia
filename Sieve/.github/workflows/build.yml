@@ -179,7 +179,7 @@ jobs:
           # mapping has to be pinned or a row inserted anywhere above silently opens the wrong
           # line's list. Each row here ticks a mode and the saved file says which line it was.
           # Closing the overlay is what writes it, which also covers that path.
-          for pair in "10 text" "14 image" "17 audio" "18 video" "22 books"; do
+          for pair in "11 text" "15 image" "18 audio" "19 video" "23 books"; do
             set -- $pair
             rm -f row$1.ini
             downs=$(python -c "print(','.join(['Down']*$1))")
@@ -223,7 +223,7 @@ jobs:
           # with Sieve's own small one.
           python -c "import ast,sys; ast.parse(open('tools/fetch_unifont.py').read())"
           $H --no-menu --line binary --pose "0,1.7,4,0" --bench 8 --screenshot edge.png 2>&1 | q "^bench: 8 frames"
-          # It has no loop, nothing on its shelves, and no filters.
+          # It is a line like the others now: every file up to its length, one loop, no filters yet.
           $H --no-menu --line binary --walk "0,0" --screenshot bin.png | sed -n 1p | q "^BINARY line"
           # The six lines no longer loop into one another: they start and finish at binary.
           # Left out of models is binary, where you are turned round to come out of its one door
@@ -355,6 +355,8 @@ jobs:
           $H --warp "$W" --press "M,M,-" --screenshot keys.png | tail -2 | sed -n 1p | q "PAGES line, guided zoom 57"
           # The address navigator: X opens the whole address, Home chooses its first digit, Up turns
           # it (carrying and wrapping), and ENTER goes there, far from where the walk started.
+          # The pause menu (Esc): its third row is the Navigation System, which opens the navigator.
+          $H --warp "$W" --press "Escape,Down,Down,Return,Escape" --screenshot pause.png | q "saved pause.png"
           out=$($H --warp "$W" --press "X,Home,Up,Return" --screenshot nav.png)
           echo "$out" | tail -2 | sed -n 1p | q "went to 1"
           if [ "$(echo "$out" | tail -2 | book)" = "$here" ]; then exit 1; fi
@@ -468,6 +470,7 @@ jobs:
           python sieve_ref.py compact-vectors | diff - ../tests/vectors_compact_v1.tsv
           python sieve_ref.py book-vectors | diff - ../tests/vectors_books_v1.tsv
           python sieve_ref.py titled-vectors | diff - ../tests/vectors_titled_v1.tsv
+          python sieve_ref.py binary-vectors | diff - ../tests/vectors_binary_v1.tsv
           python sieve_ref.py book-filter-vectors | diff - ../tests/vectors_book_filters_v1.tsv
           python sieve_ref.py book-read ../tests/example_book_v1.book > book.out
           test "$(head -1 book.out)" = "$(awk '$1 == "id" {print $2}' ../tests/example_book_v1.book)"
