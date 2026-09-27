@@ -489,12 +489,24 @@ void Hallway::draw_in_hand(float W, float H)
     float cy = y + 12;
     text(x + 14, cy, fit(tr("hand.title") + "   " + in_hand_where_ + "   " + trf("hud.along", {percent(bk.fraction)}), pw - 28, 2), 2, ink);
     cy += 28;
-    // Two tabs: the thing itself, and what it costs to name it. C moves between them.
+    // Three tabs: the thing itself, what it costs to name it, and where it stands in a map. C moves
+    // between them. On every tab, at the right, the chosen map and V to add the item to it.
     {
-        float tx = x + 14;
-        for (int t = 0; t < 3; ++t)
+        if (const GraphMap* g = graph_current())
         {
-            const std::string label = tr(t == 0 ? "hand.tab.item" : t == 1 ? "hand.tab.cost" : "hand.tab.sort");
+            const bool has = !g->read_only() && sort_node(bk) > 0;
+            const std::string m = g->read_only() ? trf("hand.anchor.read_only", {g->title})
+                                  : has          ? trf("hand.anchor.remove", {g->title})
+                                                 : trf("hand.anchor", {g->title});
+            const float mw = text_width(m, 1);
+            text(x + pw - 14 - mw, cy, m, 1, g->read_only() ? SDL_Color{150, 150, 150, 255} : ink);
+        }
+        const int tabs = hand_tabs();
+        if (hand_tab_ >= tabs) hand_tab_ = 0; // META, gone with a change of map
+        float tx = x + 14;
+        for (int t = 0; t < tabs; ++t)
+        {
+            const std::string label = tr(t == 0 ? "hand.tab.item" : t == 1 ? "hand.tab.cost" : t == 2 ? "hand.tab.sort" : "hand.tab.meta");
             const float tw = text_width(label, 1) + 16;
             if (t == hand_tab_)
             {
@@ -509,6 +521,7 @@ void Hallway::draw_in_hand(float W, float H)
     }
     if (hand_tab_ == 1) { draw_cost(bk, x, cy, pw, y + ph); return; }
     if (hand_tab_ == 2) { draw_sort(bk, x, cy, pw, y + ph - 16); return; }
+    if (hand_tab_ == 3) { draw_meta(bk, x, cy, pw, y + ph - 16); return; }
     // A titled unit's cover and title, above the thing itself.
     if (const std::string title = title_text(bk); has_titles() || !bk.cover.empty())
     {

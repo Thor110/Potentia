@@ -543,3 +543,28 @@ minimap's dots show. `all_start` is now the current line's loop start (every lin
 through its doors). CI: 36.25% on pages is 36.25% on images, and back; six doors and back return
 to the same book.
 
+**Verified anchors and map v2** (Edward, 27 September 2026). `sieve-map-v2` (tools/cli/map.*):
+held nodes (the anchor's bytes after `end`, like Sieve instructions: Edward's idea that a map is
+"another .sieve, for mapping"), `sealed yes|no`, and `m` metadata lines (none written yet: room
+for item metadata later). A map is v1 unless it needs v2, so folder maps and the oracle's v1
+checks are unchanged. The hallway: **V** on any item tab adds the file in hand to the chosen map
+(`graph_add_anchor`; files only for now; name = the real file name if walked to from one
+(`walked_names_`), else the title plus the kind from its first bytes); [ ] choose the map on any
+tab, and the item page shows it; the viewer's **Remove from map** / Delete (`graph_remove`).
+`read_only()`: This installation and sealed maps. `data/maps/release.map` (sealed, only its root
+until the first release) is the one map shipped; a `default.map` was tried and dropped (below). **At the first release:** make the source archive, then
+`sieve map Sieve-src.7z --name release --seal --out data/maps/release.map` and build; the map
+naming both archives (`sieve map Sieve-src.7z Sieve-<platform>.7z --name release --seal`) goes
+beside the downloads, with its SHA-256 published, since an archive cannot name itself.
+
+**New map, the V toggle, META** (Edward, 27 September 2026). No `default.map`: the node graph's
+**New map...** (save dialog in `maps/`, `--new-map PATH` scripted; `sieve map --new NAME`) makes an
+empty map, and "This installation" is chosen at the start. **V** toggles: it adds the file in
+hand, or removes it if the chosen map names its bytes; the item page's top right says which. A
+fourth item tab, **META**, appears only when the item is an anchor of the chosen map with
+metadata (`hand_tabs()`, `draw_meta`); `sieve map --meta NODE:key=value` sets it (the oracle
+writes the same). Anchors are for the binary line only, by design: Edward, "the other lines are
+just for show really; having the binary dimension working is the real win". The superseded
+formats and rules (manifest v2 installers, map v1 beside v2, doors keeping the corridor tile)
+stay documented as the record.
+

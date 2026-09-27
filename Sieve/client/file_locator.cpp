@@ -298,6 +298,7 @@ void Hallway::walk_to_file(const std::vector<uint8_t>& bytes, const std::string&
         set_line(kBinaryLine);
     }
     const Space::Digits title = title_for_name(name); // its name is its title
+    walked_names_[cli::sha256_hex(bytes)] = name;
     go_to_file(bytes, true, &title);
     message(trf(past ? "loc.went_past" : "msg.warped.file", {std::to_string(bytes.size())}));
 }

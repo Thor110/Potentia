@@ -709,6 +709,7 @@ bool Hallway::warp(const std::string& input)
                 bytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
                 const std::u8string name = path.filename().u8string();
                 title = title_for_name(std::string(name.begin(), name.end())); // its name is its title
+                walked_names_[cli::sha256_hex(bytes)] = std::string(name.begin(), name.end());
             }
             else bytes.assign(input.begin(), input.end());
             go_to_file(bytes, true, &title);
@@ -1070,7 +1071,7 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
         // in a map (SORT).
         if (in_hand_)
         {
-            hand_tab_ = (hand_tab_ + 1) % 3;
+            hand_tab_ = (hand_tab_ + 1) % hand_tabs();
             if (hand_tab_ == 2)
             {
                 const int node = sort_node(*in_hand_);
@@ -1092,12 +1093,15 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
     case SDLK_PAGEUP: jump_tiles(1000); break;
     case SDLK_PAGEDOWN: jump_tiles(-1000); break;
     case SDLK_RIGHTBRACKET:
-        if (in_hand_ && hand_tab_ == 2) graph_select(graph_sel_ + 1); // the SORT tab's map
+        if (in_hand_) graph_select(graph_sel_ + 1); // holding something: the map it is shown against, and V adds to
         else jump_tiles(1000000);
         break;
     case SDLK_LEFTBRACKET:
-        if (in_hand_ && hand_tab_ == 2) graph_select(graph_sel_ - 1);
+        if (in_hand_) graph_select(graph_sel_ - 1);
         else jump_tiles(-1000000);
+        break;
+    case SDLK_V:
+        if (in_hand_) graph_add_anchor(*in_hand_);
         break;
     case SDLK_HOME:
         tile_ = TileIndex{};

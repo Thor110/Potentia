@@ -404,6 +404,23 @@ jobs:
           # (--warp starts with the item in your hands: the first Escape puts it down, the second pauses.)
           $H --warp "$W" --press "Escape,Escape,Down,Down,Return" --screenshot pausegraph.png | q "saved pausegraph.png"
           $H --no-menu --graph --screenshot installation.png | q "saved installation.png"
+          # Verified anchors: New map... makes an empty map; V adds the file in hand to it, held
+          # (its bytes kept in the map), and V again takes it out; with metadata, the item page
+          # gains a META tab; a held anchor can be walked to from the viewer, whose Delete removes
+          # it; the sealed release map will not take one.
+          rm -f build/maps/finds.map
+          $H --no-menu --binary-length 64 --new-map build/maps/finds.map --locate tests/manifest_fixture/a.txt --press "Return,V" --screenshot anchor.png | q "added a.txt to finds as a verified anchor (node 1)"
+          build/sieve map build/maps/finds.map 2>&1 | q "1 held"
+          $H --no-menu --binary-length 64 --map build/maps/finds.map --locate tests/manifest_fixture/a.txt --press "Return,V" --screenshot anchor2.png | q "removed a.txt from finds"
+          build/sieve map build/maps/finds.map 2>&1 | q "0 held"
+          build/sieve map build/maps/finds.map --add tests/manifest_fixture/a.txt --out build/maps/finds.map 2> /dev/null
+          build/sieve map build/maps/finds.map --meta "1:source=the fixture folder" --out build/maps/finds.map 2> /dev/null
+          $H --no-menu --binary-length 64 --map build/maps/finds.map --locate tests/manifest_fixture/a.txt --press "Return,C,C,C" --screenshot meta.png | q "saved meta.png"
+          $H --no-menu --binary-length 64 --map build/maps/finds.map --graph --press "Tab,Tab,Return" --screenshot anchorgo.png | tail -2 | sed -n 1p | q "^BINARY line.* TXT 34 bytes"
+          $H --no-menu --map build/maps/finds.map --graph --press "Tab,Tab,Delete" --screenshot anchordel.png | q "saved anchordel.png"
+          build/sieve map build/maps/finds.map 2>&1 | q "0 held"
+          rm -f build/maps/finds.map
+          $H --no-menu --binary-length 64 --map build/maps/release.map --locate tests/manifest_fixture/a.txt --press "Return,V" --screenshot sealed.png | q "release is read-only"
           # The pause menu (Esc): its fourth row is the Navigation System, which opens the navigator.
           $H --warp "$W" --press "Escape,Escape,Down,Down,Down,Return,Escape" --screenshot pause.png | q "saved pause.png"
           out=$($H --warp "$W" --press "X,Home,Up,Return" --screenshot nav.png)
@@ -540,6 +557,25 @@ jobs:
           $S map fixture.map | cmp - fixture.map
           grep -q '^digraph "manifest_fixture"' fixture.dot
           python -c "import xml.dom.minidom as m; m.parse('fixture.graphml')"
+          # Maps v2: a release map (files found beside it, sealed) and a map holding anchors (their
+          # bytes inside it) are the oracle's to the byte; removing an anchor leaves the oracle's
+          # map of the rest; a sealed map refuses to change; the maps the build ships are sound.
+          F=../tests/manifest_fixture
+          $S map $F/a.txt $F/Zebra.txt --name release --seal --out rel.map 2> /dev/null
+          python sieve_ref.py map $F/a.txt $F/Zebra.txt --name release --seal | cmp - rel.map
+          if $S map rel.map --add $F/a.txt --out rel2.map 2> /dev/null; then exit 1; fi
+          $S map --new default --out empty.map 2> /dev/null
+          $S map empty.map --add "$F/sub dir/b.bin" --out held.map 2> /dev/null
+          $S map held.map --add $F/a.txt --out held.map 2> /dev/null
+          python sieve_ref.py map "$F/sub dir/b.bin" $F/a.txt --held --name default | cmp - held.map
+          if $S map held.map --add $F/a.txt --out held2.map 2> /dev/null; then exit 1; fi
+          $S map held.map --remove 1 --out held1.map 2> /dev/null
+          python sieve_ref.py map $F/a.txt --held --name default | cmp - held1.map
+          # Metadata on a node, set and read back as the oracle writes it.
+          $S map held1.map --meta "1:source=the fixture folder" --out meta.map 2> /dev/null
+          $S map meta.map --meta "1:found=2026-09-27" --out meta.map 2> /dev/null
+          python sieve_ref.py map $F/a.txt --held --name default --meta "1:source=the fixture folder" --meta "1:found=2026-09-27" | cmp - meta.map
+          $S map ../data/maps/release.map 2>&1 | grep -c "release (sealed)" > /dev/null
           # A v2 manifest (every file's address listed) is the oracle's to the byte.
           $S locate ../tests/manifest_fixture --manifest fixture2.manifest --with-addresses > /dev/null
           python sieve_ref.py manifest ../tests/manifest_fixture --with-addresses | cmp - fixture2.manifest

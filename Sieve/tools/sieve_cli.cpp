@@ -1554,48 +1554,103 @@ int cmd_locate(const Args& a)
     return 0;
 }
 
-// map: a folder's map (node graph of verified anchors), or a map read back, written as the map
+// map: a folder's map (node graph of verified anchors), a map of some files (a release's), or a
+// map read back; changed an anchor at a time (--add, --remove) or sealed; written as the map
 // itself, as DOT or as GraphML.
 int cmd_map(const Args& a)
 {
     namespace fs = std::filesystem;
-    if (a.positional.size() != 1) throw std::invalid_argument("map needs a FOLDER or a MAP file (see: sieve help map)");
-    const std::string arg = a.positional[0];
-    const fs::path target(std::u8string(arg.begin(), arg.end()));
-    Map m;
-    if (fs::is_directory(target))
+    if (a.has("new"))
     {
-        fs::path r = fs::absolute(target).lexically_normal();
-        if (!r.has_filename()) r = r.parent_path();
-        const std::u8string folder_name = r.filename().u8string();
-        m = map_of_folder(target, a.has("name") ? a.get("name") : std::string(folder_name.begin(), folder_name.end()));
+        // An empty map: only its root.
+        const std::string name = a.get("new");
+        const auto bytes = Map::empty(name).file();
+        const std::string to = a.has("out") ? a.get("out") : name + ".map";
+        std::ofstream out(fs::path(std::u8string(to.begin(), to.end())), std::ios::binary);
+        out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+        if (!out) throw std::runtime_error("cannot write " + to);
+        std::cerr << "map       " << name << ": empty, written to " << to << "\n";
+        return 0;
     }
-    else
+    if (a.positional.empty()) throw std::invalid_argument("map needs a FOLDER, FILEs, or a MAP file (see: sieve help map)");
+    auto path_of = [](const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); };
+    auto name_of = [](const fs::path& p) {
+        fs::path r = fs::absolute(p).lexically_normal();
+        if (!r.has_filename()) r = r.parent_path();
+        const std::u8string u = r.filename().u8string();
+        return std::string(u.begin(), u.end());
+    };
+    auto is_map = [&](const fs::path& p) {
+        std::ifstream in(p, std::ios::binary);
+        char head[11] = {};
+        in.read(head, sizeof head);
+        return in.gcount() == 11 && std::string(head, 11) == "sieve-map-v";
+    };
+    const fs::path first = path_of(a.positional[0]);
+    Map m;
+    if (a.positional.size() == 1 && fs::is_directory(first)) m = map_of_folder(first, a.has("name") ? a.get("name") : name_of(first));
+    else if (a.positional.size() == 1 && is_map(first))
     {
-        const auto bytes = read_file_bytes(target);
+        const auto bytes = read_file_bytes(first);
         m = Map::parse(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
         if (a.has("name")) m.name = a.get("name");
     }
-    auto write = [](const std::string& to, const std::string& text) {
-        std::ofstream out(fs::path(std::u8string(to.begin(), to.end())), std::ios::binary);
-        out << text;
+    else
+    {
+        std::vector<fs::path> files;
+        for (const auto& f : a.positional) files.push_back(path_of(f));
+        m = map_of_files(files, a.has("name") ? a.get("name") : "files");
+    }
+    if (a.has("remove"))
+    {
+        const uint32_t id = uint32_t(std::stoul(a.get("remove")));
+        const std::string gone = id < m.nodes.size() ? m.label(id) : "";
+        m.remove(id);
+        std::cerr << "removed   node " << id << " (" << gone << ")\n";
+    }
+    if (a.has("add"))
+    {
+        const fs::path f = path_of(a.get("add"));
+        const std::string label = a.has("as") ? a.get("as") : name_of(f);
+        const uint32_t id = m.add_held(label, read_file_bytes(f));
+        std::cerr << "added     " << label << " as node " << id << ", held in the map\n";
+    }
+    if (a.has("meta"))
+    {
+        // NODE:key=value (an empty value removes the key)
+        const std::string spec = a.get("meta");
+        const size_t colon = spec.find(':'), eq = spec.find('=');
+        if (colon == std::string::npos || eq == std::string::npos || eq < colon) throw std::invalid_argument("--meta takes NODE:key=value");
+        m.set_meta(uint32_t(std::stoul(spec.substr(0, colon))), spec.substr(colon + 1, eq - colon - 1), spec.substr(eq + 1));
+        std::cerr << "metadata  node " << spec.substr(0, colon) << ": " << spec.substr(colon + 1) << "\n";
+    }
+    if (a.has("seal")) m.sealed = true;
+    auto write = [&](const std::string& to, const std::vector<uint8_t>& bytes) {
+        std::ofstream out(path_of(to), std::ios::binary);
+        out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
         if (!out) throw std::runtime_error("cannot write " + to);
     };
-    const std::string text = m.text();
-    size_t files = 0;
-    for (const auto& n : m.nodes) files += n.folder ? 0 : 1;
+    const std::vector<uint8_t> bytes = m.file();
+    size_t files = 0, held = 0;
+    for (const auto& n : m.nodes)
+    {
+        files += n.folder() ? 0 : 1;
+        held += n.kind == MapNode::Held ? 1 : 0;
+    }
     std::ostream* info = &std::cout;
-    if (a.has("out")) write(a.get("out"), text);
+    if (a.has("out")) write(a.get("out"), bytes);
     else if (!a.has("dot") && !a.has("graphml"))
     {
+        const std::string text = m.text(); // the text part: held bytes are no use on a terminal
         std::cout << text;
         info = &std::cerr;
     }
-    if (a.has("dot")) write(a.get("dot"), m.dot());
-    if (a.has("graphml")) write(a.get("graphml"), m.graphml());
-    *info << "map       " << m.name << ": " << m.nodes.size() << " nodes (" << files << " files, " << m.nodes.size() - files
-          << " folders), " << m.edges.size() << " edges\n"
-          << "sha256    " << sha256_hex(std::vector<uint8_t>(text.begin(), text.end())) << "  (the map's identity)\n";
+    auto as_bytes = [](const std::string& t) { return std::vector<uint8_t>(t.begin(), t.end()); };
+    if (a.has("dot")) write(a.get("dot"), as_bytes(m.dot()));
+    if (a.has("graphml")) write(a.get("graphml"), as_bytes(m.graphml()));
+    *info << "map       " << m.name << (m.sealed ? " (sealed)" : "") << ": " << m.nodes.size() << " nodes (" << files << " files, " << held
+          << " held; " << m.nodes.size() - files << " folders), " << m.edges.size() << " edges, " << bytes.size() << " bytes\n"
+          << "sha256    " << sha256_hex(bytes) << "  (the map's identity)\n";
     if (a.has("out")) *info << "wrote     " << a.get("out") << "\n";
     if (a.has("dot")) *info << "wrote     " << a.get("dot") << " (Graphviz DOT)\n";
     if (a.has("graphml")) *info << "wrote     " << a.get("graphml") << " (GraphML)\n";

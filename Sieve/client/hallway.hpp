@@ -971,6 +971,7 @@ private:
         std::vector<Vec3> pos, vel;              // the layout
         int steps = 0;                           // layout steps taken
         void prepare();                          // the above, from the map
+        bool read_only() const;                  // This installation, and sealed maps (the release map)
     };
     void graph_list();                  // what the dropdown offers, found once
     void graph_select(int i);
@@ -987,6 +988,14 @@ private:
     void graph_export(const std::string& to);
     void graph_make(const std::string& folder, bool sync = false);
     void graph_poll(); // what the worker and the dialogs have handed over
+    void graph_save(GraphMap& g);
+    void graph_add_anchor(const Book& bk); // V: the file in hand, to the chosen map (or out of it)
+    int hand_tabs();                       // 3, or 4 with META
+    void draw_meta(const Book& bk, float x, float cy, float pw, float bottom);
+    void graph_remove(int node);
+    // The real names of files walked to (the locator, T with a path, a map's node), by SHA-256,
+    // so an anchor made of one keeps its name rather than its canonicalised title.
+    std::unordered_map<std::string, std::string> walked_names_;
     void close_graph();
     void stop_graph();
     bool graph_open_ = false;

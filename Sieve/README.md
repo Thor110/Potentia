@@ -196,7 +196,9 @@ The rain only ever falls as characters the font can actually draw, so it never b
 
 **The item page, and what a thing costs to name.** Take something off a shelf and the page has three tabs: **ITEM**, the thing itself; **COST**, what it costs to name it; and **SORT**, where it stands in a map (below). **C** moves between them.
 
-**SORT, and maps.** A map (`sieve map FOLDER`, or the node graph's "Make a map from a folder...") links real files and folders, each file named by its SHA-256. It holds no file's bytes, so it is small and can be handed round or bundled with a release. On the SORT tab, a file on the binary line whose bytes a node of the chosen map names is that node, a verified anchor, drawn in its place among the rest; anything else is a lone point. Mouse or A/D turns the graph; [ and ] choose another map.
+**SORT, and maps.** A map (`sieve map FOLDER`, or the node graph's "Make a map from a folder...") links real files and folders, each file named by its SHA-256. It holds no file's bytes, so it is small and can be handed round or bundled with a release. On the SORT tab, a file on the binary line whose bytes a node of the chosen map names is that node, a verified anchor, drawn in its place among the rest; anything else is a lone point. Mouse or A/D turns the graph; [ and ] choose another map (on any tab).
+
+**Verified anchors: V.** Make a map with the node graph's **New map...** (O). Then, holding a file (an item on the binary line), press **V** on any tab to add it to the chosen map as a verified anchor, and V again to take it out; the item page shows which map is chosen and what V will do, and [ and ] change the map. Its bytes are kept inside the map (`sieve-map-v2`), so the map can always walk back to it, and can be sent as one file. The node graph's **Remove from map** (or Delete) takes an anchor out too. When an anchor has metadata in the map, its item page has a fourth tab, **META**. `maps/release.map` is sealed and "This installation" (the map chosen at the start) is made fresh, so neither can be changed.
 
 Every row on the COST tab is the same number written a different way, which is the point:
 
@@ -671,6 +673,14 @@ sieve map release --dot release.dot                  # or for Graphviz
 ```
 
 Every file and folder is a node, each file named by its size and SHA-256; every folder is linked to what is directly in it. Put a map in `maps/` beside the hallway and the node graph (O) lists it.
+
+```sh
+sieve map Sieve-src.7z Sieve-win64.7z --name release --seal --out release.map   # the release map, beside the downloads
+sieve map --new finds --out maps/finds.map                                      # a new, empty map
+sieve map maps/finds.map --add found.bin --out maps/finds.map                   # add an anchor (held in the map)
+sieve map maps/finds.map --meta "1:source=a folder of old CDs" --out maps/finds.map   # give it metadata (META tab)
+sieve map maps/finds.map --remove 1 --out maps/finds.map                        # and take one out
+```
 
 ### `install`: a folder from one address
 

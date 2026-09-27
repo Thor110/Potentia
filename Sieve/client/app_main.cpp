@@ -92,6 +92,7 @@ const char* kUsage =
     "  --install FILE --install-to DIR   the File Locator's install, at once\n"
     "  --map PATH          choose a map for the node graph: a .map file, or a folder to map\n"
     "  --graph             open the node graph (on --map, or on this installation)\n"
+    "  --new-map PATH      the node graph's New map..., at once\n"
     "  --thin              keep only the room you stand in (what going in past the budget does)\n\n"
     "Controls: WASD move, mouse look, Shift run, E or click take a book, T warp, G go to,\n"
     "M switch ordering (positional, scrambled, guided), - and = zoom out/in (guided; Shift: 8x),\n"
@@ -218,6 +219,7 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
     if (a.has("zoom")) hall->zoom_to(a.get_positive("zoom", 20));
     if (a.has("locate")) hall->locate_now(a.get("locate"));
     if (a.has("install") && a.has("install-to")) hall->install_now(a.get("install"), a.get("install-to"));
+    if (a.has("new-map")) hall->graph_picked(4, a.get("new-map")); // the viewer's New map..., at once
     if (a.has("map") || a.has("graph")) hall->graph_map_now(a.has("map") ? a.get("map") : "", a.has("graph"));
     if (a.has("tile"))
     {

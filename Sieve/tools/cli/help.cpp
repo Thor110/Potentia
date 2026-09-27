@@ -474,22 +474,34 @@ const std::vector<Page>& pages()
           {"sieve locate release --installer release.sieve --compare", "an installer for it, and its sizes"},
           {"sieve locate release --program release-setup.exe", "an installer program for it"}}},
 
-        {"map", "A map: a node graph of verified anchors, from a folder.",
-         "sieve map FOLDER|MAP.map [--out OUT.map] [--dot OUT.dot] [--graphml OUT.graphml] [--name NAME]",
-         "A map links real files to one another (sieve-map-v1): every file and folder in the\n"
-         "folder is a node, each file named by its size and SHA-256, and every folder is linked to\n"
-         "what is directly in it (the relation \"contains\"). A map holds no file's bytes, only which\n"
-         "bytes are meant, so it is small; where the file is on this computer and matches, its node\n"
-         "is a verified anchor, and the hallway's node graph (O) can walk to it on the binary line.\n"
-         "The text is canonical, so the same folder always gives the same map. A map can also be\n"
-         "written for other programs: Graphviz DOT, and GraphML (Gephi, yEd, Cytoscape). Given a\n"
-         "MAP file instead of a folder, it reads it and writes it in the forms asked for.",
-         {{"--out FILE", "Write the map here (else to standard output)."},
+        {"map", "A map: a node graph of verified anchors.",
+         "sieve map FOLDER|FILE...|MAP.map [--out OUT.map] [--add FILE [--as NAME]] [--remove ID]\n"
+         "  [--meta NODE:key=value] [--seal]\n"
+         "  sieve map --new NAME [--out NAME.map]\n"
+         "  [--dot OUT.dot] [--graphml OUT.graphml] [--name NAME]",
+         "A map links real files to one another. A FOLDER gives every file and folder in it as a\n"
+         "node, each file named by its size and SHA-256, every folder linked to what is directly in\n"
+         "it (\"contains\"); several FILEs give a map of just those, found beside the map (a\n"
+         "release's archives); a MAP file is read back. A node points at a file (found beside the\n"
+         "map) or holds it (its bytes kept in the map, sieve-map-v2), so a map can carry its anchors\n"
+         "with it. Where the file is here and matches, or held bytes match, the node is a verified\n"
+         "anchor, and the hallway's node graph (O) can walk to it on the binary line. A sealed map\n"
+         "is not changed by the tools (the release map is sealed). The text is canonical. A map can\n"
+         "also be written for other programs: Graphviz DOT, and GraphML (Gephi, yEd, Cytoscape).",
+         {{"--out FILE", "Write the map here (else its text to standard output)."},
+          {"--add FILE", "Add a file as a held anchor (--as NAME: its name in the map)."},
+          {"--remove ID", "Remove a node, its links and its metadata (not the root)."},
+          {"--meta NODE:key=value", "Set a node's metadata (an empty value removes the key)."},
+          {"--seal", "Seal the map: the tools will not change it again."},
+          {"--new NAME", "An empty map (only its root), to add anchors to."},
           {"--dot FILE", "Write it as Graphviz DOT."},
           {"--graphml FILE", "Write it as GraphML."},
-          {"--name NAME", "The map's name (default: the folder's)."}},
-         {{"sieve map release --out maps/release.map", "a map of a release, for the node graph"},
-          {"sieve map maps/release.map --graphml release.graphml", "the same map, for Gephi or yEd"}}},
+          {"--name NAME", "The map's name (default: the folder's, or \"files\")."}},
+         {{"sieve map release --out maps/release.map", "a map of a folder, for the node graph"},
+          {"sieve map Sieve-src.7z Sieve-win64.7z --name release --seal --out release.map", "the release map"},
+          {"sieve map --new finds --out maps/finds.map", "a new, empty map"},
+          {"sieve map maps/finds.map --add found.bin --out maps/finds.map", "add an anchor"},
+          {"sieve map maps/release.map --graphml release.graphml", "a map for Gephi or yEd"}}},
 
         {"install", "Put a folder back from its installer: one address.",
          "sieve install INSTALLER.sieve|PROGRAM.exe|MANIFEST --to FOLDER [--force] [--hex]",

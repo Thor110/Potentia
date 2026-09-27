@@ -1835,12 +1835,46 @@ def cmd_manifest(args):
                 sys.stdout.buffer.write(data)
 
 
+def map_text(name, root, nodes, edges, sealed, held, meta=()):
+    """A map's canonical text: v1 unless it holds a file, has metadata or is sealed. `meta` is
+    (node, key, value) triples, sorted by node then key."""
+    v2 = sealed or held or bool(meta)
+    out = [f"sieve-map-v{2 if v2 else 1}", f"name {name}", f"root {root}"]
+    if v2:
+        out.append(f"sealed {'yes' if sealed else 'no'}")
+    out += [f"nodes {len(nodes)}", f"edges {len(edges)}"] + ([f"meta {len(meta)}"] if v2 else []) + nodes
+    out += [f"e\t{a}\t{b}\t{r}" for a, b, r in sorted(edges, key=lambda e: (e[0], e[1], e[2].encode()))]
+    out += [f"m\t{n}\t{k}\t{v}" for n, k, v in sorted(meta, key=lambda m: (m[0], m[1].encode()))] + ["end"]
+    return ("\n".join(out) + "\n").encode("utf-8")
+
+
 def cmd_map(args):
-    """sieve-map-v1 (SPECIFICATIONS §12.3), from its definition: the folder's root node './', then
-    every folder ('/' at the end) and file (size, SHA-256) by its path's bytes, links skipped; each
-    node but the root is contained by the folder its path is in; edges sorted by from, then to."""
+    """sieve-map-v1/v2 (SPECIFICATIONS §12.3), from its definition. One folder: its root node './',
+    then every folder ('/' at the end) and file (size, SHA-256) by its path's bytes, links skipped;
+    each node but the root is contained by the folder its path is in. Several files: the root and
+    each file by its name's bytes, contained by the root. --held: the root and each file held
+    (its bytes after the text, in order), linked from the root as an anchor. --seal: sealed."""
     import os
-    root = os.path.abspath(args.folder)
+    if args.held or len(args.folder) > 1 or os.path.isfile(args.folder[0]):
+        name = args.name or "files"
+        datas = [(os.path.basename(f), open(f, "rb").read()) for f in args.folder]
+        if not args.held:
+            datas.sort(key=lambda d: d[0].encode("utf-8"))
+        kind = "held" if args.held else "file"
+        nodes = ["n\t0\tfolder\t./"] + [f"n\t{i}\t{kind}\t{len(d)}\t{hashlib.sha256(d).hexdigest()}\t{n}"
+                                          for i, (n, d) in enumerate(datas, start=1)]
+        edges = [(0, i, "anchor" if args.held else "contains") for i in range(1, len(datas) + 1)]
+        meta = []
+        for spec in args.meta:  # NODE:key=value
+            node, rest = spec.split(":", 1)
+            key, value = rest.split("=", 1)
+            meta.append((int(node), key, value))
+        sys.stdout.buffer.write(map_text(name, name, nodes, edges, args.seal, args.held, meta))
+        if args.held:
+            for _, d in datas:
+                sys.stdout.buffer.write(d)
+        return
+    root = os.path.abspath(args.folder[0])
     items = []
     for here, dirs, names in os.walk(root, followlinks=False):
         for d in list(dirs):
@@ -1866,11 +1900,8 @@ def cmd_map(args):
             nodes.append(f"n\t{i}\tfile\t{len(data)}\t{hashlib.sha256(data).hexdigest()}\t{path}")
         bare = path[:-1] if path.endswith("/") else path
         edges.append((ids[bare.rsplit("/", 1)[0] if "/" in bare else ""], i))
-    edges.sort()
     name = os.path.basename(root)
-    out = ["sieve-map-v1", f"name {name}", f"root {name}", f"nodes {len(nodes)}", f"edges {len(edges)}"] + nodes
-    out += [f"e\t{a}\t{b}\tcontains" for a, b in edges] + ["end"]
-    sys.stdout.buffer.write(("\n".join(out) + "\n").encode("utf-8"))
+    sys.stdout.buffer.write(map_text(args.name or name, name, nodes, [(a, b, "contains") for a, b in edges], args.seal, False))
 
 
 def cmd_book_filter_vectors(_args):
@@ -1980,7 +2011,11 @@ def main():
     s.add_argument("--with-addresses", action="store_true")
     s.add_argument("--with-contents", action="store_true")
     s = sub.add_parser("map")
-    s.add_argument("folder")
+    s.add_argument("folder", nargs="+")
+    s.add_argument("--name")
+    s.add_argument("--seal", action="store_true")
+    s.add_argument("--held", action="store_true")
+    s.add_argument("--meta", action="append", default=[])
     sub.add_parser("book-filter-vectors")
     s = sub.add_parser("book-read")
     s.add_argument("book")

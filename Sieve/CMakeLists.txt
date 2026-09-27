@@ -232,7 +232,13 @@ if(SIEVE_BUILD_CLIENT)
                 $<TARGET_FILE_DIR:hallway>/meshes
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${CMAKE_CURRENT_SOURCE_DIR}/third_party_licenses
-                $<TARGET_FILE_DIR:hallway>/third_party_licenses)
+                $<TARGET_FILE_DIR:hallway>/third_party_licenses
+        # The maps shipped (data/maps: the sealed release map), file by file, so that maps made
+        # in the hallway beside them are never touched by a rebuild.
+        COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:hallway>/maps
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/maps/release.map
+                $<TARGET_FILE_DIR:hallway>/maps/release.map)
     target_compile_definitions(hallway PRIVATE SIEVE_VERSION="${PROJECT_VERSION}")
 
     # sieve-install: the installer, a window of its own over the locator's install code. It needs

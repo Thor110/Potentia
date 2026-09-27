@@ -538,6 +538,24 @@ end
 
 Ids count up from 0 in order. The root is node 0, with path `./`. Paths are as in a manifest: UTF-8, `/` between parts, relative to the root, and never absolute, with a drive, a backslash, or a `.` or `..` part. A **map of a folder** lists the root and then the folder's v1 manifest entries in the manifest's order, and links every node but the root to the folder its path is in, with the relation `contains`. Edges are sorted by from, then to, then relation. A relation is any word of lower-case letters and hyphens, so later relations (a newer version, a patch, anything recorded by a tool or a person) are written the same way within v1. `sieve map FOLDER` writes one; the oracle writes the same map from this definition (`sieve_ref.py map`). `--dot` and `--graphml` write it for other programs (Graphviz; Gephi, yEd, Cytoscape).
 
+**Version 2 (`sieve-map-v2`): held anchors, a seal, metadata.** v2 adds three things to v1's text:
+- a line `sealed yes|no` after `root`;
+- a line `meta <M>` after `edges`;
+- **held** nodes, `n<TAB><id><TAB>held<TAB><size><TAB><sha256><TAB><name>`, whose bytes follow the text straight after `end` and its line feed, every held node's in node order, filling the rest of the file exactly. Each is checked against its SHA-256 when the map is read. A held name is one file name, with no `/`, `\`, `:`, tab or line break.
+
+**Metadata** lines, `m<TAB><node><TAB><key><TAB><value>`, come after the edges, sorted by node then key. A key is a lower-case word. None are written yet: this is room for an item's extra facts later.
+
+A map is written as v1 whenever it uses none of these (no held node, no metadata, not sealed), so a map of a folder is always v1. Adding a held anchor links it from the root with the relation `anchor`, and refuses bytes the map already names. Removing a node (never the root) drops its edges and metadata, and every later node moves down one. A **sealed** map is not changed by the tools. The release map is sealed, and its published SHA-256 is what shows a copy has been altered, since a map is a file anyone can edit.
+
+`sieve map` makes and changes maps:
+- `FOLDER`, as v1;
+- `FILE...`, the root and those files, found beside the map;
+- `MAP --add FILE [--as NAME]`, `--remove ID`, `--seal`.
+
+The oracle writes the folder map, the files map (sealed or not) and the held map (`--held`) from this definition.
+
+**The maps shipped.** Only `maps/release.map`, from `data/maps` (the build copies it file by file, so maps made beside it are never touched). It is sealed. Until the first release it is only its root; at a release it names the source archive, which is made first, so its hash is known before the build archive is. An archive cannot name itself: adding the map changes the archive, and so its hash. So the map naming both archives is published beside the downloads, not inside them. "This installation" is made fresh, is read-only, and is the map chosen when the hallway starts. Maps to add anchors to are made with the node graph's **New map...** (an empty map under the name chosen, in `maps`) or `sieve map --new NAME`. *(A `default.map` shipped empty was tried and dropped the same day, 27 September 2026: New map... makes one when it is wanted.)*
+
 **In the hallway.** The node graph (O, or the pause menu's third row) shows one map at a time, chosen from a list:
 - "This installation" is made when first chosen, from the programs beside the hallway and the folders the build puts there. The executable being run is the first anchor.
 - Every `.map` in the `maps` folder beside the program is listed.
@@ -545,7 +563,7 @@ Ids count up from 0 in order. The root is node 0, with path `./`. Paths are as i
 
 The map is laid out in 3D by force direction (Fruchterman–Reingold: every node repels every other, every edge pulls its ends together, the steps shrink to nothing over 300 steps). It starts from each node's distance from the root, in a direction taken from its id, so the same map always settles the same way. Above 900 nodes, each node is repelled by a sample of 128 others, scaled up. A file node whose file is here can be walked to on the binary line, after its SHA-256 is checked.
 
-The item page's **SORT** tab shows the item in hand against the chosen map. A file on the binary line whose SHA-256 a node names *is* that node, a verified anchor by construction, and is drawn in its place in the map. Anything else is a lone point. The state space as a whole is never drawn as a graph: nearly all of it is noise, and a graph the size of the space would show only a tangle.
+**V** on any tab of the item page adds the file in hand to the chosen map as a held anchor, or, if the map already names its bytes, removes it; the page says which V will do. Only files: the binary line is where anchors belong, and an item of another line belongs to that line's setup, which a node does not record. Its name is the file's own name if you walked to it from a file, else its title, with the kind its first bytes say it is. [ and ] choose the map on any tab, and the page shows which map is chosen. The viewer's **Remove from map** (Delete) removes the chosen node. Sealed maps and "This installation" refuse both. When the item is an anchor of the chosen map and its node has metadata, the item page has a fourth tab, **META**, listing it (key and value; `sieve map MAP --meta NODE:key=value` sets it, an empty value removes it). The item page's **SORT** tab shows the item in hand against the chosen map. A file on the binary line whose SHA-256 a node names *is* that node, a verified anchor by construction, and is drawn in its place in the map. Anything else is a lone point. The state space as a whole is never drawn as a graph: nearly all of it is noise, and a graph the size of the space would show only a tangle.
 
 ## 13. Architecture and Implementation
 
