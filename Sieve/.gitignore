@@ -16,6 +16,9 @@ data/fonts/unifont.hex
 # example book. All of it is regenerated, and every pattern is anchored so that the committed
 # fonts, meshes and images are kept.
 /*.bin
+/*.sieve
+/*.bmp
+/fx_installed/
 /*.hex
 /*.png
 /*.ini
@@ -29,3 +32,9 @@ data/fonts/unifont.hex
 /unbound.txt
 /lt/
 /reference/book.out
+/reference/locate.out
+/reference/fixture.manifest
+/reference/addr/
+/reference/fixture2.manifest
+/reference/fixture.sieve
+/reference/installed/

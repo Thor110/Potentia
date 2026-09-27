@@ -176,6 +176,22 @@ actually stop a modified file passing (see §0).
 nothing about that is graphical. Turning it into a service is multi-threading and transport, not
 architecture. The wireframe mode means it stays usable on a terminal in a server room.
 
+**4.9 The locator, the manifest, and a comparison suite.** *The first two are built* (`sieve
+locate`, SPECIFICATIONS §12.2). Edward's plan, 27 September 2026: the manifest installer maker gets
+a COST-like page, run after locating a file or making a manifest, that sets the original size
+beside zip's and 7z's and the address's, as shares of the original (`--compare` does this now).
+The address will almost always be 100%: that is the point of showing it. The suite is meant to
+grow into many views of the same information: a **Kolmogorov complexity analyser** among them,
+which strips repeated byte runs and then slides a window over every length, largest first, to find
+repeats. That is LZ77-style matching plus grammar-based compression (Re-Pair, Sequitur), which is
+§1's reducer. It gives an upper bound on the complexity, as every compressor does. The exact
+limit is not computable by any program, so the analyser's honest output is a set of upper bounds
+from different methods side by side, and the smallest of them.
+
+A later release could ship the locator and manifest creator as a stand-alone tool as well, as
+sieve-install already is: a small window over `tools/cli/locate.*` and `compare.*`, without the
+hallway (Edward, 27 September 2026).
+
 **4.8 What the first release manifest holds, and the node graph's first anchor.** Edward, 27
 September 2026. The release manifest lists the executables and the Real Graphics model templates
 (`data/meshes/templates/*.obj`, the item models), since they ship in the first installer. The CLI

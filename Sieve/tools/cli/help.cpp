@@ -439,6 +439,47 @@ const std::vector<Page>& pages()
          {{"sieve bind --title \"A Tale of Two Cities\" --pages tale.txt --mode guided --out tale.book", "a guided book"},
           {"sieve bind --pages notes.txt --length 1000 --out notes.book", "pages of 1000 characters, scrambled"}}},
 
+        {"locate", "A file's place on the binary line, or a folder's manifest.",
+         "sieve locate FILE [--out ADDRESS.hex] [--compare]\n"
+         "  sieve locate FOLDER [--manifest OUT] [--addresses DIR] [--with-addresses] [--installer OUT.sieve [--hex]] [--compare]",
+         "A file is one unit of the binary line (every file up to N bytes, binary-v1): its\n"
+         "positional address is its own hex dump plus 0101...01, one 01 for each of its bytes.\n"
+         "The address depends only on the file, not on the line's length, so it is the file's\n"
+         "name in the space; the SHA-256 is its short identity. A folder is walked to the\n"
+         "bottom and listed as a manifest (sieve-manifest-v1): every folder and file, each file's\n"
+         "size and SHA-256, sorted, in one canonical text, so the same tree always gives the same\n"
+         "manifest, and the manifest's own SHA-256 names the whole tree. Links are skipped.\n"
+         "--compare sets the sizes side by side: the original, zip's deflate and 7z's LZMA2 (the\n"
+         "compressors at their strongest, without their archives' headers), and the addresses as\n"
+         "numbers and as hex, each as a share of the original. An address is never smaller than\n"
+         "the file: addressing is not compression. An installer's manifest (sieve-manifest-v2)\n"
+         "carries every file's address as well, so the whole tree is in it; its own address, one\n"
+         "number, is the installer, which sieve install puts back into a folder.",
+         {{"--out FILE", "A file: write its whole address, in hex, here."},
+          {"--manifest FILE", "A folder: write the manifest here (else to standard output)."},
+          {"--addresses DIR", "A folder: write every file's address as DIR/<its path>.hex."},
+          {"--with-addresses", "A folder: an installer's manifest (v2), every file's address in it."},
+          {"--installer OUT.sieve", "A folder: write the installer, the address of its v2 manifest as raw\n"
+                                    "bytes (--hex: as hex); implies --with-addresses. --compare then also\n"
+                                    "compresses that manifest. sieve-install opens it."},
+          {"--hex", "Write the installer in hex rather than raw bytes."},
+          {"--compare", "Compare the sizes: original, zip, 7z, and the address."}},
+         {{"sieve locate sieve.exe --compare", "where the executable is, and what zip and 7z make of it"},
+          {"sieve locate release --manifest release.manifest --compare", "the manifest of a release folder"},
+          {"sieve locate release --installer release.sieve --compare", "an installer for it, and its sizes"}}},
+
+        {"install", "Put a folder back from its installer: one address.",
+         "sieve install INSTALLER.sieve --to FOLDER [--force] [--hex]",
+         "The command-line form of sieve-install. Reads the installer (the address of a\n"
+         "sieve-manifest-v2 as raw bytes, made with sieve locate --installer; --hex for one written in hex)\n"
+         "--installer) back into the manifest, and every file's address in it back into the file.\n"
+         "Every file is checked against its size and SHA-256 before anything is written, so a bad\n"
+         "address leaves the folder untouched. Files already there are refused unless --force.",
+         {{"--to FOLDER", "Where to put the tree (required). Created if it is not there."},
+          {"--force", "Replace files that are already there."},
+          {"--hex", "The installer is written in hex rather than raw bytes."}},
+         {{"sieve install release.sieve --to C:/Programs/Sieve", "install a release"}}},
+
         {"unbind", "Read a book record back: check its id, print or save its sections.",
          "sieve unbind BOOK [--pages OUT.txt] [--cover OUT.png] [--scale S]",
          "Recomputes every unit from its address (guided addresses must be the units' own), checks\n"

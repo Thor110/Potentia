@@ -4,10 +4,12 @@ Everything in Sieve that was not written for it, with its licence. The folders h
 
 | Component | Version | Licence | Where it is used | Licence file |
 | :--- | :--- | :--- | :--- | :--- |
-| SDL | 3.2.30 when CMake fetches it (a vcpkg build uses vcpkg's SDL3) | zlib | The hallway (window, input, drawing). Fetched and built by CMake, or taken from vcpkg; not stored in this repository | `SDL3/LICENSE.txt` |
+| SDL | 3.2.30 when CMake fetches it (a vcpkg build uses vcpkg's SDL3) | zlib | The hallway and `sieve-install` (window, input, drawing). Fetched and built by CMake, or taken from vcpkg; not stored in this repository | `SDL3/LICENSE.txt` |
 | stb_image, stb_image_write | 2.30, 1.16 | MIT or public domain (your choice) | Reading pictures and writing PNGs (`third_party/stb`) | `stb/LICENSE.txt` |
 | SCOWL word lists | 2020.12.07 | SCOWL's permissive licence (notice required) | The dictionaries in `data/dictionaries` | `SCOWL/Copyright.txt` |
 | font8x8 | - | Public domain | The menu font, `data/fonts/sieve8x8.hex` | `font8x8/LICENSE.txt` |
+| zlib | 1.3.2 when CMake fetches it (else the system's) | zlib | The `sieve` tool's comparison page: zip's deflate (`tools/cli/compare.cpp`). Fetched and built by CMake if the system has none; not stored in this repository | `zlib/LICENSE` |
+| liblzma (XZ Utils) | 5.8.1 when CMake fetches it (else the system's) | 0BSD for liblzma, the only part built; the rest of XZ Utils (command line tools, scripts, build system) is not built or shipped | The `sieve` tool's comparison page: 7z's LZMA2 (`tools/cli/compare.cpp`). Fetched and built by CMake if the system has none; not stored in this repository | `xz/COPYING`, `xz/COPYING.0BSD` |
 
 **Parts of SDL with their own notices.** A static build of the hallway compiles in code from SDL's source tree that carries its own licence. The notices it asks to be kept are here:
 

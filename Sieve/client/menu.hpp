@@ -103,6 +103,8 @@ public:
     enum class Result { Enter, Quit, Back }; // Back: Esc, to the main menu (or, in game, the hallway)
     // Opened with F1 from a hallway that is still there: Esc goes back to it, and the footer says so.
     void set_in_game(bool on) { in_game_ = on; }
+    // Whether the hallway was entered past the budget (Enter twice): it is then run thin.
+    bool went_in_thin() const { return went_in_thin_; }
     Result run();                                  // interactive: until Enter or quit
     void press(SDL_Keycode key, SDL_Keymod mod);   // one key, as if typed (scripting)
     void render();
@@ -197,6 +199,7 @@ private:
     SDL_FRect box_ = {};
     std::vector<std::pair<SDL_FRect, int>> row_rects_; // overlay rows on screen
     bool in_game_ = false;
+    bool go_anyway_armed_ = false, went_in_thin_ = false;
 };
 
 } // namespace hallway

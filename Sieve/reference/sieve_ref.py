@@ -14,6 +14,7 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
     python3 sieve_ref.py bytes-vectors  > ../tests/vectors_bytes_v1.tsv
     python3 sieve_ref.py titled-vectors > ../tests/vectors_titled_v1.tsv
     python3 sieve_ref.py binary-vectors > ../tests/vectors_binary_v1.tsv
+    python3 sieve_ref.py manifest ../tests/manifest_fixture [--addresses DIR] [--with-addresses]   # sieve-manifest-v1/v2
     python3 sieve_ref.py image-vectors  > ../tests/vectors_image_v1.tsv
     python3 sieve_ref.py guided-vectors > ../tests/vectors_guided_v1.tsv
     python3 sieve_ref.py filter-vectors > ../tests/vectors_filters_v1.tsv
@@ -1775,6 +1776,53 @@ def cmd_binary_vectors(_args):
                 print(f"{n}\t{key}\t{mode}\t{format(k, 'x').zfill(width)}\t{len(f)}\t{f.hex() or '-'}")
 
 
+def cmd_manifest(args):
+    """sieve-manifest-v1 (SPECIFICATIONS §12.2), from its definition: the folder walked to the bottom,
+    links skipped, every folder ('/' at the end) and file (size, SHA-256) listed by its path relative to
+    the root, UTF-8 with '/', sorted by the paths' bytes. With --addresses DIR, checks every file's
+    address written there (DIR/<path>.hex) against binary-v1 and prints nothing else."""
+    import os
+    root = os.path.abspath(args.folder)
+    entries, files, total = [], 0, 0
+    for here, dirs, names in os.walk(root, followlinks=False):
+        for d in list(dirs):
+            full = os.path.join(here, d)
+            if os.path.islink(full):
+                dirs.remove(d)
+                continue
+            entries.append((os.path.relpath(full, root).replace(os.sep, "/") + "/", None))
+        for n in names:
+            full = os.path.join(here, n)
+            if os.path.islink(full) or not os.path.isfile(full):
+                continue
+            data = open(full, "rb").read()
+            entries.append((os.path.relpath(full, root).replace(os.sep, "/"), data))
+            files += 1
+            total += len(data)
+    entries.sort(key=lambda e: e[0].encode("utf-8"))
+    if args.addresses:
+        bad = 0
+        for path, data in entries:
+            if data is None:
+                continue
+            want = format(binary_index(data), "x")
+            got = open(os.path.join(args.addresses, path + ".hex")).read().strip()
+            if got != want:
+                bad += 1
+                print(f"address mismatch: {path}", file=sys.stderr)
+        sys.exit(1 if bad else 0)
+    v2 = args.with_addresses  # an installer's manifest: every file's binary-v1 address beside its hash
+    out = [f"sieve-manifest-v{2 if v2 else 1}", f"root {os.path.basename(root)}", f"files {files}", f"bytes {total}"]
+    for path, data in entries:
+        if data is None:
+            out.append(f"d\t{path}")
+        else:
+            addr = f"{format(binary_index(data), 'x')}\t" if v2 else ""
+            out.append(f"f\t{len(data)}\t{hashlib.sha256(data).hexdigest()}\t{addr}{path}")
+    out.append("end")
+    sys.stdout.buffer.write(("\n".join(out) + "\n").encode("utf-8"))
+
+
 def cmd_book_filter_vectors(_args):
     """Book filters (books-compact-v1): surviving books counted, unranked and shuffled, each part by
     its own independent ranker, the pages judged as one text."""
@@ -1876,6 +1924,10 @@ def main():
     sub.add_parser("book-vectors")
     sub.add_parser("titled-vectors")
     sub.add_parser("binary-vectors")
+    s = sub.add_parser("manifest")
+    s.add_argument("folder")
+    s.add_argument("--addresses")
+    s.add_argument("--with-addresses", action="store_true")
     sub.add_parser("book-filter-vectors")
     s = sub.add_parser("book-read")
     s.add_argument("book")
@@ -1915,6 +1967,8 @@ def main():
         cmd_titled_vectors(args)
     elif args.cmd == "binary-vectors":
         cmd_binary_vectors(args)
+    elif args.cmd == "manifest":
+        cmd_manifest(args)
     elif args.cmd == "book-vectors":
         cmd_book_vectors(args)
     elif args.cmd == "book-filter-vectors":

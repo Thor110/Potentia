@@ -1,7 +1,7 @@
 // The pause menu: Esc in the hallway (with nothing in your hands) stops the world and offers the
-// ways out of it and the tools beside it. Resume; the Node Graph Viewer and the File Locator,
-// which are listed so their place is known but are not built yet; the Navigation System (the
-// address navigator, also X); Settings, the same screens as the main menu's, opened over the
+// ways out of it and the tools beside it. Resume; Restart, the setup menu over the hallway (F1); the Node Graph Viewer, which is listed so its
+// place is known but is not built yet; the Navigation System (the address navigator, also X); the
+// File Locator (file_locator.cpp); Settings, the same screens as the main menu's, opened over the
 // hallway and returning to it; and Exit Sieve, which asks whether you mean the main menu or
 // leaving altogether.
 //
@@ -22,7 +22,7 @@ struct PauseItem
 };
 
 constexpr PauseItem kPauseItems[] = {
-    {"resume", true}, {"graph", false}, {"navigator", true}, {"locator", false}, {"settings", true}, {"exit", true},
+    {"resume", true}, {"restart", true}, {"graph", false}, {"navigator", true}, {"locator", true}, {"settings", true}, {"exit", true},
 };
 constexpr int kPauseCount = int(sizeof kPauseItems / sizeof kPauseItems[0]);
 
@@ -54,11 +54,19 @@ void Hallway::pause_choose(int row, bool& quit)
     }
     const std::string id = it.id;
     if (id == "resume") close_pause();
+    else if (id == "restart")
+    {
+        // The setup menu, as F1 opens it: Esc there comes back to this hallway as it was.
+        close_pause();
+        menu_requested_ = true;
+        quit = true;
+    }
     else if (id == "navigator")
     {
         close_pause();
         open_navigator();
     }
+    else if (id == "locator") open_locator(); // over the pause menu, which is there again after it
     else if (id == "settings")
     {
         request_ = Request::Settings;
@@ -119,7 +127,7 @@ void Hallway::draw_pause(float W, float H)
     SDL_SetRenderDrawColor(r_, 0, 0, 0, 200);
     const SDL_FRect all{0, 0, W, H};
     SDL_RenderFillRect(r_, &all);
-    const float bw = 460, bh = 330, bx = (W - bw) / 2, by = (H - bh) / 2;
+    const float bw = 460, bh = 370, bx = (W - bw) / 2, by = (H - bh) / 2;
     panel(bx, by, bw, bh, 240);
     SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 255);
     const SDL_FRect border{bx, by, bw, bh};

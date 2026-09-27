@@ -351,7 +351,7 @@ A door **keeps your corridor position** and only changes which line reads it:
 | G | **Go to** a hex address or a percentage such as `50%` or `36.25%` (these open the book too), or `@T` for corridor tile T |
 | (doors) | Every doorway has a sign over it naming the line it leads to, in that line's colours |
 | F1 | The **setup menu**, over the hallway: Esc goes back to the hallway as it was, ENTER THE HALLWAY walks into a new one with the new settings |
-| Esc | **Pause**: Resume, Navigation System, Settings (the main menu's, over the hallway), Exit Sieve (to the main menu, or out). The Node Graph Viewer and File Locator are listed but not built yet. With something in your hands, Esc puts it down first |
+| Esc | **Pause**: Resume, Navigation System, **File Locator** (a file's place or a folder's manifest, compared with zip and 7z; go to a file on the binary line; save a manifest or make an installer), Settings (the main menu's, over the hallway), Exit Sieve (to the main menu, or out). The Node Graph Viewer is listed but not built yet. With something in your hands, Esc puts it down first |
 | X | **Address navigator**: the whole address of the item you are looking at, full screen, one hex digit at a time. Left/Right (Shift: a row) choose a digit, Up/Down, the wheel or the arrows turn it, carrying and wrapping round the line; type 0-9 a-f to set it; ENTER goes there, Esc leaves |
 | N / B | Next or previous unit of a warp that made a trail of several units |
 | M | Switch ordering: positional → scrambled → guided (text) → positional |
@@ -647,6 +647,30 @@ chesterton-thursday.txt          307403    1.944    1.950     2.44x
 shakespeare-macbeth.txt           93070    2.478    2.482     1.92x
 all                              534844    2.033    2.039     2.33x
 ```
+
+### `locate`: where a file is, and a folder's manifest
+
+```sh
+sieve locate sieve.exe --compare                     # its place on the binary line, and zip / 7z beside it
+sieve locate sieve.exe --out sieve.hex               # the whole address, in hex
+sieve locate release --manifest release.manifest     # a folder walked and listed (sieve-manifest-v1)
+sieve locate release --manifest release.manifest --addresses release.addresses --compare
+```
+
+A file's place on the binary line is its hex dump plus `0101...01`, one `01` per byte, whatever the line's length setting: the file's name in the space, with its SHA-256 as a short identity. A folder is walked to the bottom and written as a manifest: every folder and file, each file's size and SHA-256, sorted by path, in one canonical text, so the same tree always gives the same manifest and the manifest's SHA-256 names the whole tree. `--compare` sets the original size beside zip's deflate and 7z's LZMA2 (at their strongest, without the archives' headers) and the address, as shares of the original. The address is always 100% of the file, since addressing is not compression; the compressors' figures are upper bounds on how far the data can be reduced.
+
+### `install`: a folder from one address
+
+```sh
+sieve locate release --installer release.install.hex --compare   # the installer: one address
+sieve install release.install.hex --to C:/Programs/Sieve        # the folder put back from it
+```
+
+An installer's manifest (`sieve-manifest-v2`) carries every file's address as well as the folder structure, so the whole tree is in it; its own address is the installer. `install` reads it back, checks every file against its size and SHA-256 before writing any, and will not replace files without `--force`. With `--compare`, `locate` also shows the installer's manifest compressed.
+
+### `sieve-install`: the installer
+
+`sieve locate FOLDER --installer NAME.sieve` makes the installer: one number, stored as raw bytes. `sieve-install` is the program that installs it, a window with the usual steps: what it installs, where (Browse, or type a path), Install, a progress bar, Finish. Put `NAME.sieve` beside `sieve-install` and run it, or drop the file on its window. Every file is checked against its SHA-256 before anything is written, and Cancel removes whatever was written. It needs nothing else: no data files, only the program and the `.sieve` file.
 
 ### `bind`, `unbind`: books
 

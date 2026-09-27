@@ -227,7 +227,7 @@ Hallway::Painter Hallway::face_painter(const Book& b) const
             paint_cover_front(px, w, h, title, cover, cf, argb({150, 26, 26, 255}), argb({235, 225, 205, 255}), nw, lp);
         };
     }
-    if (b.binary)
+    if (b.is_file)
     {
         // A file: its title and cover, as a record or a film shows them.
         const Space::Digits cover = b.cover;
@@ -431,7 +431,7 @@ void Hallway::clear_faces()
 // Graphics (megabytes, which is what costs) will not hold that many.
 size_t Hallway::face_capacity() const
 {
-    const size_t rooms = size_t(2 * kFaceRooms + 1) * sieve::books_per_tile();
+    const size_t rooms = size_t(2 * face_rooms() + 1) * sieve::books_per_tile();
     return std::min(rooms, std::max<size_t>(8, size_t(face_budget_mb_) * 1024 * 1024 / face_bytes()));
 }
 
@@ -440,9 +440,10 @@ size_t Hallway::face_capacity() const
 void Hallway::make_face_room()
 {
     const int64_t per = int64_t(sieve::books_per_tile());
-    const auto outside = [per](int64_t k) {
+    const int rooms = face_rooms();
+    const auto outside = [per, rooms](int64_t k) {
         const int64_t t = k >= 0 ? k / per : -((-k + per - 1) / per);
-        return t < -kFaceRooms || t > kFaceRooms;
+        return t < -rooms || t > rooms;
     };
     while (!faces_.empty() && faces_.size() >= face_capacity())
     {
@@ -487,7 +488,7 @@ void Hallway::collect_faces(Uint64 until)
         face_pending_.erase(d.place);
         if (d.generation != face_generation_ || d.w != face_w() || d.h != face_h()) continue;
         const int64_t key = d.place - face_shift_ * per;
-        if (key < -int64_t(kFaceRooms) * per || key >= int64_t(kFaceRooms + 1) * per || faces_.count(key)) continue;
+        if (key < -int64_t(face_rooms()) * per || key >= int64_t(face_rooms() + 1) * per || faces_.count(key)) continue;
         SDL_Texture* tex = SDL_CreateTexture(r_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, d.w, d.h);
         if (!tex) continue;
         SDL_UpdateTexture(tex, nullptr, d.pixels.data(), d.w * 4);
@@ -556,7 +557,7 @@ void Hallway::draw_item_faces(const bool* visible, int back, int ahead)
     // come and go with every glance.
     struct Want { int64_t order; int64_t dt; uint32_t slot; };
     std::vector<Want> want;
-    for (int t = -kFaceRooms; t <= kFaceRooms; ++t)
+    for (int t = -face_rooms(); t <= face_rooms(); ++t)
     {
         const uint32_t books = books_in_tile(t);
         for (uint32_t k = 0; k < books; ++k)
@@ -656,7 +657,7 @@ void Hallway::draw_item_faces(const bool* visible, int back, int ahead)
     // slot in your room, once it has one.
     for (int t = -back; t <= ahead; ++t)
     {
-        if ((t >= -kFaceRooms && t <= kFaceRooms) || !visible[t + back]) continue;
+        if ((t >= -face_rooms() && t <= face_rooms()) || !visible[t + back]) continue;
         const uint32_t books = books_in_tile(t);
         for (uint32_t k = 0; k < books; ++k)
             if (auto it = faces_.find(int64_t(k)); it != faces_.end() && it->second.tex) draw(it->second.tex, t, k);

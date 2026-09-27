@@ -311,9 +311,9 @@ void Hallway::draw_hud(int w, int h)
                 char b1[16], b2[16];
                 std::snprintf(b1, sizeof b1, "%.2f", double(bk.bits) / double(u.size()));
                 std::snprintf(b2, sizeof b2, "%.2f", std::log2(double(line().space.base())));
-                text(20, y, trf("hud.point", {short_address(bk.hex), std::to_string(bk.bits), b1, b2}), 1, ink);
+                text(20, y, trf("hud.point", {short_address(hex_of(bk)), std::to_string(bk.bits), b1, b2}), 1, ink);
             }
-            else text(20, y, trf(bk.survivor ? "hud.compact_address" : "hud.address", {short_address(bk.hex)}), 1, ink);
+            else text(20, y, trf(bk.survivor ? "hud.compact_address" : "hud.address", {short_address(hex_of(bk))}), 1, ink);
             y += 12;
             std::string verdict;
             if (bk.survivor) verdict = trf("hud.survivor", {bk.survivor_label}) + "   ";
@@ -342,7 +342,7 @@ void Hallway::draw_hud(int w, int h)
                 else if (has_titles()) draw_null_title(tx, y, 2);
                 const float below = y + 26;
                 const float room = panel_w - tx;
-                if (bk.binary) text(tx, below, fit(binary_preview(*bk.binary, 24), room, 1), 1, ink);
+                if (bk.is_file) text(tx, below, fit(binary_preview(file_of(bk), 24), room, 1), 1, ink);
                 else if (bk.model) text(tx, below, fit(model_line_summary(*bk.model), room, 2), 2, ink);
                 else if (covered) text(tx, below, fit(one_line_preview(u), room, 1), 1, ink); // a video's cover stands for it
                 else if (line().kind == LineKind::Image || line().kind == LineKind::Video) draw_pixels(u, 20, below, 60, 0);
@@ -377,6 +377,7 @@ void Hallway::draw_hud(int w, int h)
     draw_compass(float(W), float(H));
     if (nav_open_) draw_navigator(W, H); // over everything: it is a screen of its own
     if (pause_open_) draw_pause(W, H);
+    if (loc_open_) draw_locator(W, H);
 }
 
 // A model in hand: its wireframe, turned by the mouse or by A and D, and its .obj text beside
@@ -521,7 +522,7 @@ void Hallway::draw_in_hand(float W, float H)
     const size_t cols2 = size_t((pw - 28) / 16), cols1 = size_t((pw - 28) / 8);
     if (bk.model) cy = draw_model(*bk.model, x, cy, pw, y + ph - 110);
     else if (bk.parts) cy = draw_book(*bk.parts, x, cy, pw, y + ph - 110);
-    else if (bk.binary) cy = draw_file(*bk.binary, x, cy, pw, y + ph - 110);
+    else if (bk.is_file) cy = draw_file(file_of(bk), x, cy, pw, y + ph - 110);
     else switch (line().kind)
     {
     case LineKind::Text:
@@ -561,7 +562,9 @@ void Hallway::draw_in_hand(float W, float H)
          bk.guided ? trf(kind + ".guided", {std::to_string(bk.bits)}) : trf(kind, {tr(std::string("ordering.") + to_string(mode_))}), 1, ink);
     cy += 12;
     int shown = 0;
-    for (const auto& l : wrap(bk.guided ? bk.own_hex : bk.hex, cols1))
+    // (At most six lines of it are shown, so a file's address, as long as the file, is cut short.)
+    const std::string whole = bk.guided ? bk.own_hex : hex_of(bk);
+    for (const auto& l : wrap(whole.size() > 6 * cols1 + 1 ? whole.substr(0, 6 * cols1 + 1) : whole, cols1))
     {
         if (++shown > 6) { text(x + 14, cy, "...", 1, ink); break; }
         text(x + 14, cy, l, 1, ink);
@@ -600,6 +603,9 @@ void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float botto
     cy += 6;
     row(tr("ordering.positional"), bits, trf("cost.chars", {digits_in(bits, 4)}), tr("cost.same"));
     row(tr("ordering.scrambled"), bits, trf("cost.chars", {digits_in(bits, 4)}), tr("cost.shuffled"));
+    // The same number stored as raw bytes, eight bits to a byte: half the hex, and what an
+    // installer file holds (SPECIFICATIONS §12.2).
+    row(tr("cost.raw"), bits, trf("cost.bytes", {digits_in(bits, 8)}), tr("cost.raw.note"));
     // The guided length for this unit, whatever ordering you are walking in. It exists only
     // on a text line with a model behind it.
     if (!on_books() && !on_models() && !on_binary() && line().guided)

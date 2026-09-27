@@ -87,7 +87,9 @@ const char* kUsage =
     "                      only the tile and slot that name a unit's place in the corridor)\n"
     "  --fps-counter       show the FPS counter\n"
     "  --bench N           before the screenshot, time N frames and print the frame rate\n"
-    "  --settle N          before the screenshot, draw N frames standing still, so the item pictures arrive\n\n"
+    "  --settle N          before the screenshot, draw N frames standing still, so the item pictures arrive\n"
+    "  --locate PATH       open the File Locator on a file or folder\n"
+    "  --thin              keep only the room you stand in (what going in past the budget does)\n\n"
     "Controls: WASD move, mouse look, Shift run, E or click take a book, T warp, G go to,\n"
     "M switch ordering (positional, scrambled, guided), - and = zoom out/in (guided; Shift: 8x),\n"
     "wheel/PgUp/PgDn/[ ] jump 1/1000/1000000 tiles, Home to corridor tile 0 (every line's start line),\n"
@@ -211,6 +213,7 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
     if (!scripted) return hall;
 
     if (a.has("zoom")) hall->zoom_to(a.get_positive("zoom", 20));
+    if (a.has("locate")) hall->locate_now(a.get("locate"));
     if (a.has("tile"))
     {
         const std::string t = a.get("tile");
@@ -349,6 +352,7 @@ int run(const Args& a)
             hall->set_letters_px(a.has("item-letters") ? a.get_u32("item-letters", 8) : 8);
             hall->set_closeup_px(a.has("close-up") ? a.get_u32("close-up", 1024) : 1024);
             hall->set_fps_counter(app.fps_counter || a.has("fps-counter"));
+            hall->set_thin(a.has("thin"));
             // On stderr: stdout is where the readout goes, which scripts read line by line.
             std::cerr << "graphics: edge glow " << (glow && !real ? "on" : "off") << ", real graphics " << (real ? "on" : "off")
                       << ", door portals " << (portals ? "on" : "off")
@@ -396,6 +400,7 @@ int run(const Args& a)
     // in). F1 in the hallway returns to the setup menu, and Esc there to the main menu.
     bool show_menu = !a.has("no-menu");
     bool settings_chosen = false; // settings came from a setup menu (F1 in game), even with --no-menu
+    bool went_in_thin = false;    // the setup menu was told to go in past the budget
     bool show_main = show_menu;
     bool first = true;
     while (true)
@@ -411,6 +416,7 @@ int run(const Args& a)
             Menu menu(window, renderer, settings, filters, filters_path, &app, app_path);
             const Menu::Result r = menu.run();
             if (r == Menu::Result::Quit) break;
+            went_in_thin = menu.went_in_thin();
             settings = menu.settings();
             filters = menu.filters();
             if (r == Menu::Result::Back)
@@ -458,6 +464,7 @@ int run(const Args& a)
         hall->set_letters_px(ha.has("item-letters") ? ha.get_u32("item-letters", 8) : 8);
         hall->set_closeup_px(ha.has("close-up") ? ha.get_u32("close-up", 1024) : 1024);
         hall->set_fps_counter(app.fps_counter);
+        hall->set_thin(went_in_thin || ha.has("thin"));
         first = false;
         SDL_SetWindowRelativeMouseMode(window, true);
         Menu::Result in_game_menu = Menu::Result::Back;
@@ -492,6 +499,7 @@ int run(const Args& a)
                 }
                 if (in_game_menu == Menu::Result::Enter)
                 {
+                    went_in_thin = menu.went_in_thin();
                     settings = menu.settings();
                     filters = menu.filters();
                 }

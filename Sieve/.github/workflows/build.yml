@@ -355,8 +355,26 @@ jobs:
           $H --warp "$W" --press "M,M,-" --screenshot keys.png | tail -2 | sed -n 1p | q "PAGES line, guided zoom 57"
           # The address navigator: X opens the whole address, Home chooses its first digit, Up turns
           # it (carrying and wrapping), and ENTER goes there, far from where the walk started.
-          # The pause menu (Esc): its third row is the Navigation System, which opens the navigator.
-          $H --warp "$W" --press "Escape,Down,Down,Return,Escape" --screenshot pause.png | q "saved pause.png"
+          # sieve-install, unattended: the fixture put back from its installer, identical; a second
+          # time over it is refused (exit 1), as is a damaged installer.
+          build/sieve locate tests/manifest_fixture --installer fx.sieve > /dev/null
+          rm -rf fx_installed
+          build/sieve-install fx.sieve --to fx_installed --yes --screenshot installer.bmp
+          diff -r tests/manifest_fixture fx_installed
+          test -s installer.bmp
+          if build/sieve-install fx.sieve --to fx_installed --yes; then exit 1; fi
+          head -c 100 fx.sieve > broken.sieve
+          if build/sieve-install broken.sieve --to fx_broken --yes; then exit 1; fi
+          test ! -e fx_broken
+          # The File Locator (pause menu): a folder measured, and a file walked to on the binary line.
+          $H --no-menu --locate tests/manifest_fixture --screenshot locate.png | q "saved locate.png"
+          $H --no-menu --binary-length 64 --locate tests/manifest_fixture/a.txt --press "Return" --screenshot locate2.png | tail -2 | sed -n 1p | q "^BINARY line"
+          # Past the budget: a 100 KB file, twice the BINARY length, is still reached by pressing
+          # Go to it twice; the line is made long enough, positional, and only the room is kept.
+          head -c 100000 /dev/urandom > big.bin
+          $H --no-menu --binary-length 1000 --locate big.bin --press "Return,Return" --screenshot big.png | tail -2 | sed -n 1p | q "^BINARY line, positional"
+          # The pause menu (Esc): its fourth row is the Navigation System, which opens the navigator.
+          $H --warp "$W" --press "Escape,Down,Down,Down,Return,Escape" --screenshot pause.png | q "saved pause.png"
           out=$($H --warp "$W" --press "X,Home,Up,Return" --screenshot nav.png)
           echo "$out" | tail -2 | sed -n 1p | q "went to 1"
           if [ "$(echo "$out" | tail -2 | book)" = "$here" ]; then exit 1; fi
@@ -475,6 +493,25 @@ jobs:
           python sieve_ref.py book-read ../tests/example_book_v1.book > book.out
           test "$(head -1 book.out)" = "$(awk '$1 == "id" {print $2}' ../tests/example_book_v1.book)"
           tail -n +3 book.out | cmp - ../tests/example_book_v1.pages.txt
+          # The file locator and the manifest creator: the tool's manifest of the fixture folder is
+          # the oracle's to the byte, and every file's address it writes is binary-v1's.
+          S=../build/sieve
+          [ -f ../build/Release/sieve.exe ] && S=../build/Release/sieve.exe
+          rm -rf addr
+          $S locate ../tests/manifest_fixture --manifest fixture.manifest --addresses addr --compare > locate.out
+          python sieve_ref.py manifest ../tests/manifest_fixture | cmp - fixture.manifest
+          python sieve_ref.py manifest ../tests/manifest_fixture --addresses addr
+          grep -q "7z (LZMA2" locate.out
+          # The installer: a v2 manifest (the oracle's, to the byte), its address, and the folder
+          # put back from that one address, identical to the original.
+          $S locate ../tests/manifest_fixture --manifest fixture2.manifest --installer fixture.sieve > /dev/null
+          python sieve_ref.py manifest ../tests/manifest_fixture --with-addresses | cmp - fixture2.manifest
+          # The installer is the manifest's address as raw bytes: exactly the manifest's size here.
+          test "$(wc -c < fixture.sieve)" = "$(wc -c < fixture2.manifest)"
+          rm -rf installed
+          $S install fixture.sieve --to installed > /dev/null
+          diff -r ../tests/manifest_fixture installed
+          test "$($S locate ../tests/manifest_fixture/a.txt | awk '$1 == "sha256" {print $2}')" = "$(python -c "import hashlib;print(hashlib.sha256(open('../tests/manifest_fixture/a.txt','rb').read()).hexdigest())")"
 
       - name: The pinned model rebuilds byte for byte from its corpus (Linux)
         if: runner.os == 'Linux'

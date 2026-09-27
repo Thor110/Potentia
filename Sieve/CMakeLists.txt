@@ -71,10 +71,71 @@ add_library(sieve_lines STATIC
 target_include_directories(sieve_lines PUBLIC tools)
 target_link_libraries(sieve_lines PUBLIC sieve_core sieve_image_io)
 
+# The file locator and the manifest creator (tools/cli/locate.*), and the comparison of a file's
+# size against what zip and 7z make of it (tools/cli/compare.*). The comparison needs the two
+# compressors themselves: zlib (zip's deflate) and liblzma (7z's LZMA2). An installed copy is used
+# if there is one; otherwise each is fetched from its own repository at a pinned release and built
+# here as a static library, as SDL3 is below. Only the tools link them, never the core.
+find_package(ZLIB QUIET)
+find_package(LibLZMA QUIET)
+if(NOT ZLIB_FOUND OR SIEVE_FETCH_COMPRESSION)
+    include(FetchContent)
+    set(ZLIB_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    set(ZLIB_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+    set(ZLIB_BUILD_STATIC ON CACHE BOOL "" FORCE)
+    set(ZLIB_INSTALL OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(zlib
+        GIT_REPOSITORY https://github.com/madler/zlib.git
+        GIT_TAG v1.3.2
+        GIT_SHALLOW TRUE)
+    FetchContent_MakeAvailable(zlib)
+    set(SIEVE_ZLIB ZLIB::ZLIBSTATIC)
+else()
+    set(SIEVE_ZLIB ZLIB::ZLIB)
+endif()
+if(NOT LIBLZMA_FOUND OR SIEVE_FETCH_COMPRESSION)
+    include(FetchContent)
+    set(XZ_TOOL_XZ OFF CACHE BOOL "" FORCE)
+    set(XZ_TOOL_XZDEC OFF CACHE BOOL "" FORCE)
+    set(XZ_TOOL_LZMADEC OFF CACHE BOOL "" FORCE)
+    set(XZ_TOOL_LZMAINFO OFF CACHE BOOL "" FORCE)
+    set(XZ_TOOL_SCRIPTS OFF CACHE BOOL "" FORCE)
+    set(XZ_TOOL_SYMLINKS OFF CACHE BOOL "" FORCE)
+    set(XZ_TOOL_SYMLINKS_LZMA OFF CACHE BOOL "" FORCE)
+    set(XZ_DOC OFF CACHE BOOL "" FORCE)
+    set(XZ_NLS OFF CACHE BOOL "" FORCE)
+    set(XZ_DOXYGEN OFF CACHE BOOL "" FORCE)
+    set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(xz
+        GIT_REPOSITORY https://github.com/tukaani-project/xz.git
+        GIT_TAG v5.8.1
+        GIT_SHALLOW TRUE)
+    FetchContent_MakeAvailable(xz)
+    set(SIEVE_LZMA liblzma)
+    # Built inside this project, xz's liblzma target keeps its header folder to itself (it is
+    # only exported when installed), so its users are given it here. A system with its own
+    # lzma.h in /usr/include hides the omission, which is how it first got through.
+    set(SIEVE_LZMA_INCLUDE ${xz_SOURCE_DIR}/src/liblzma/api)
+else()
+    set(SIEVE_LZMA LibLZMA::LibLZMA)
+endif()
+
+# The locator and the installer's code (no compressors: sieve-install links this alone), and the
+# comparison, which is the only part that needs them.
+add_library(sieve_locate STATIC tools/cli/locate.cpp)
+target_include_directories(sieve_locate PUBLIC tools)
+target_link_libraries(sieve_locate PUBLIC sieve_core)
+add_library(sieve_compare STATIC tools/cli/compare.cpp)
+target_include_directories(sieve_compare PUBLIC tools)
+target_link_libraries(sieve_compare PUBLIC sieve_core PRIVATE ${SIEVE_ZLIB} ${SIEVE_LZMA})
+if(SIEVE_LZMA_INCLUDE)
+    target_include_directories(sieve_compare SYSTEM PRIVATE ${SIEVE_LZMA_INCLUDE})
+endif()
+
 add_executable(sieve
     tools/sieve_cli.cpp
     tools/cli/help.cpp)
-target_link_libraries(sieve PRIVATE sieve_lines)
+target_link_libraries(sieve PRIVATE sieve_lines sieve_locate sieve_compare)
 if(WIN32)
     # UTF-8 command lines on Windows (the manifest sets the process code page).
     target_sources(sieve PRIVATE tools/utf8.manifest)
@@ -135,6 +196,7 @@ if(SIEVE_BUILD_CLIENT)
         client/binary_edge.cpp
         client/item_faces.cpp
         client/door_portal.cpp
+        client/file_locator.cpp
         client/navigator.cpp
         client/pause_menu.cpp
         client/font.cpp
@@ -146,7 +208,7 @@ if(SIEVE_BUILD_CLIENT)
         client/strings.cpp
         client/synth.cpp
         client/world.cpp)
-    target_link_libraries(hallway PRIVATE sieve_lines SDL3::SDL3)
+    target_link_libraries(hallway PRIVATE sieve_lines sieve_locate sieve_compare SDL3::SDL3)
     if(WIN32)
         target_sources(hallway PRIVATE tools/utf8.manifest)
     endif()
@@ -170,4 +232,13 @@ if(SIEVE_BUILD_CLIENT)
                 ${CMAKE_CURRENT_SOURCE_DIR}/third_party_licenses
                 $<TARGET_FILE_DIR:hallway>/third_party_licenses)
     target_compile_definitions(hallway PRIVATE SIEVE_VERSION="${PROJECT_VERSION}")
+
+    # sieve-install: the installer, a window of its own over the locator's install code. It needs
+    # no data files (SDL's own font), so it is one executable and the .sieve file it installs.
+    # On Windows it is a windowed program, without a console.
+    add_executable(sieve-install WIN32 client/installer_main.cpp)
+    target_link_libraries(sieve-install PRIVATE sieve_locate SDL3::SDL3)
+    if(WIN32)
+        target_sources(sieve-install PRIVATE tools/utf8.manifest)
+    endif()
 endif()

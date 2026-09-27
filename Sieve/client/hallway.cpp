@@ -275,6 +275,10 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
     auto it = cache_.find(key);
     if (it != cache_.end()) return it->second;
     if (cache_.size() > 4096) cache_.clear(); // more than a screenful (14 tiles of 128 books)
+    // Thin: only your own room's books are kept, so a line of huge units keeps a room of them.
+    if (thin_ && dt != 0)
+        for (auto it = cache_.begin(); it != cache_.end();)
+            it = it->first / int64_t(sieve::books_per_tile()) != 0 || it->first < 0 ? cache_.erase(it) : std::next(it);
     Book b;
     const auto idx = loop_.unit_index(offset_loop_tile(dt), slot);
     if (!idx) b.empty = true;
@@ -319,8 +323,7 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
                 const TitledSpace::Parts tp = ts.parts_at(b.index, mode_);
                 b.title = tp.title;
                 b.cover = tp.cover;
-                b.binary = binary_space_->bytes_at(tp.content, AddressMode::Positional);
-                b.hex = ts.hex_of(b.index);
+                b.is_file = true; // its bytes and hex on demand: file_of(), hex_of()
                 b.fraction = b.index.is_zero() ? 0.0 : std::pow(10.0, b.index.log10_approx() - ts.size().log10_approx());
             }
         }
@@ -584,9 +587,10 @@ void Hallway::cycle_ordering()
         // Positional and scrambled only, keeping the file you are looking at, title, cover and all.
         const Book* ref = reference_book();
         const Book keep = ref ? *ref : Book{};
+        if (keep.is_file) (void)file_of(keep); // worked out in the old ordering, before it changes
         mode_ = mode_ == AddressMode::Positional ? AddressMode::Scrambled : AddressMode::Positional;
         rebase();
-        if (keep.binary) go_to_file(*keep.binary, false, &keep.title, &keep.cover);
+        if (keep.is_file) go_to_file(file_of(keep), false, &keep.title, &keep.cover);
         message(trf(mode_ == AddressMode::Positional ? "msg.ordering.positional" : "msg.ordering.scrambled", {ordering_name()}));
         return;
     }
@@ -758,7 +762,7 @@ void Hallway::step_trail(int dir)
 void Hallway::update(float dt, const bool* keys)
 {
     // Holding a book, you stand still: walking or turning under an open book is disorienting.
-    if (input_ != Input::None || in_hand_ || nav_open_ || pause_open_) return;
+    if (input_ != Input::None || in_hand_ || nav_open_ || pause_open_ || loc_open_) return;
     const float speed = (keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT]) ? 9.0f : 3.0f;
     const Vec3 fwd = {std::sin(cam_.yaw), 0, std::cos(cam_.yaw)};
     const Vec3 right = {std::cos(cam_.yaw), 0, -std::sin(cam_.yaw)};
@@ -858,6 +862,11 @@ void Hallway::handle(const SDL_Event& e, bool& quit)
 void Hallway::handle_event(const SDL_Event& e, bool& quit)
 {
     if (e.type == SDL_EVENT_QUIT) quit = true;
+    if (loc_open_)
+    {
+        locator_event(e);
+        return;
+    }
     if (pause_open_)
     {
         pause_event(e, quit);
@@ -1056,7 +1065,7 @@ std::string Hallway::status()
     if (first.empty) where += "first slot empty (padding)";
     else
     {
-        where += percent(first.fraction) + " along, first book " + short_address(first.hex);
+        where += percent(first.fraction) + " along, first book " + short_address(hex_of(first));
         if (first.parts) where += " \"" + ascii(utf8_encode(line().space.text_of(first.parts->title))) + "\"";
         else if (first.model)
         {
@@ -1073,7 +1082,7 @@ std::string Hallway::status()
             where += " " + std::to_string(used) + "/" + std::to_string(model_space_->vertices()) + " vertices used, " +
                      std::to_string(degenerate) + " degenerate faces";
         }
-        else if (first.binary) where += " " + binary_preview(*first.binary, 16);
+        else if (first.is_file) where += " " + binary_preview(file_of(first), 16);
         else if (line().kind == LineKind::Text) where += " \"" + ascii(utf8_encode(line().space.text_of(first.unit))) + "\"";
         if (first.guided) where += " (" + std::to_string(first.bits) + " bits)";
     }
@@ -1471,6 +1480,7 @@ void Hallway::draw_face_image(SDL_Texture* tex, const Vec3 quad[4], std::vector<
 
 Hallway::~Hallway()
 {
+    stop_locator();
     stop_face_workers(); // before the model space they read from goes
     release_textures();
 }
@@ -1620,6 +1630,53 @@ BigUint Hallway::unit_of_pos(const BigUint& pos) const
     unit <<= h;
     unit += slot;
     return unit;
+}
+
+std::string Hallway::hex_of(const Book& b)
+{
+    if (!b.is_file) return b.hex;
+    if (!(memo_hex_ok_ && memo_index_ == b.index))
+    {
+        if (!(memo_index_ == b.index)) memo_file_ok_ = false;
+        memo_index_ = b.index;
+        memo_hex_ = titled_[kBinaryLine]->hex_of(b.index);
+        memo_hex_ok_ = true;
+    }
+    return memo_hex_;
+}
+
+const BinarySpace::Bytes& Hallway::file_of(const Book& b)
+{
+    static const BinarySpace::Bytes kNone;
+    if (!b.is_file) return kNone;
+    if (!(memo_file_ok_ && memo_index_ == b.index))
+    {
+        if (!(memo_index_ == b.index)) memo_hex_ok_ = false;
+        memo_index_ = b.index;
+        const TitledSpace::Parts tp = titled_[kBinaryLine]->parts_at(b.index, mode_);
+        memo_file_ = binary_space_->bytes_at(tp.content, AddressMode::Positional);
+        memo_file_ok_ = true;
+    }
+    return memo_file_;
+}
+
+void Hallway::set_thin(bool on)
+{
+    if (thin_ == on) return;
+    thin_ = on;
+    cache_.clear();
+    clear_faces();
+}
+
+void Hallway::set_binary_length(uint64_t bytes)
+{
+    if (bytes == binary_space_->max_bytes()) return;
+    const std::string key = lines_[0].space.key();
+    const TitledSpace& old = *titled_[kBinaryLine];
+    binary_space_ = std::make_unique<BinarySpace>(std::max<uint64_t>(1, bytes), key);
+    titled_[kBinaryLine] = std::make_unique<TitledSpace>(old.title_space(), old.cover_space(), binary_space_->size(), binary_space_->shape(), key);
+    memo_hex_ok_ = memo_file_ok_ = false;
+    rebase();
 }
 
 BigUint Hallway::line_units() const { return on_binary() ? titled_[kBinaryLine]->size() : loop_.units(); }

@@ -50,6 +50,7 @@
 #include "sieve/guided.hpp"
 #include "sieve/image.hpp"
 #include "sieve/modelspace.hpp"
+#include "cli/locate.hpp"
 #include "sieve/binaryspace.hpp"
 #include "sieve/titledspace.hpp"
 #include "sieve/utf8.hpp"
@@ -396,11 +397,37 @@ public:
         std::string survivor_label;
         std::optional<BookSpace::Parts> parts;       // the books line: cover, title and pages
         std::optional<ModelSpace::Parts> model;      // the models line: vertices and faces
-        std::optional<BinarySpace::Bytes> binary;    // the binary line: the file
+        // The binary line: a file. Only its place, title and cover are kept on the shelf; its bytes
+        // and its address in hex (each as large as the file) are worked out when something asks,
+        // for the one item looked at or held (file_of, hex_of below).
+        bool is_file = false;
         Space::Digits title, cover;                  // a titled line: its title, and its cover if it has one
     };
 
     const Book& book(int64_t dt, uint32_t slot);
+    // A book's address in hex, and a binary file's bytes: kept on the book where they are small,
+    // worked out on demand where they are not (the binary line), remembering the last one asked.
+    std::string hex_of(const Book& b);
+    const BinarySpace::Bytes& file_of(const Book& b);
+    BigUint memo_index_;
+    std::string memo_hex_;
+    BinarySpace::Bytes memo_file_;
+    bool memo_hex_ok_ = false, memo_file_ok_ = false;
+
+public:
+    // Thin: over the budget, only the room you stand in keeps its items and their pictures (the
+    // rooms either side borrow your room's pictures, as the far rooms always do). Set when the
+    // setup menu is told to go in anyway, or the File Locator goes to a file past the budget.
+    void set_thin(bool on);
+    bool thin() const { return thin_; }
+    // The binary line made long enough for a file (the File Locator's Go to it, past the budget).
+    void set_binary_length(uint64_t bytes);
+
+private:
+    bool thin_ = false;
+    int face_rooms() const { return thin_ ? 0 : kFaceRooms; }
+
+public:
 
     // The current line's titled space, when its units are titled in the ordering you are walking:
     // every line but books and binary, in positional and scrambled order. Guided order and compact
@@ -840,6 +867,41 @@ private:
     size_t trail_index_ = 0;
     Input input_ = Input::None;
     std::vector<Point2> grid_; // draw_face_image's cell corners, kept between calls
+
+    // ---- the File Locator (file_locator.cpp): the pause menu's, `sieve locate` in a window
+public:
+    void open_locator();
+    void locate_now(const std::string& path); // scripted: open on it, measured at once
+    // From the system dialogs' callbacks (any thread): what was chosen, handed to the next frame.
+    void locator_picked(const std::string& path);
+    void locator_save_to(const std::string& path);
+
+private:
+    struct LocatorResult
+    {
+        enum Kind { None, File, Folder } kind = None;
+        std::string path, sha256, hex, table, error;
+        std::vector<uint8_t> bytes; // a file
+        cli::Manifest manifest;     // a folder
+    };
+    void close_locator();
+    void locator_analyse(const std::string& path, bool sync = false);
+    void locator_save(const std::string& to);
+    void locator_go();
+    void locator_event(const SDL_Event& e);
+    void draw_locator(float W, float H);
+    void stop_locator();
+    bool loc_open_ = false;
+    std::atomic<bool> loc_busy_{false};
+    std::thread loc_worker_;
+    std::mutex loc_mx_;
+    LocatorResult loc_result_;
+    std::string loc_status_;
+    std::optional<std::string> loc_pending_pick_, loc_pending_save_;
+    int loc_save_what_ = 0;
+    bool loc_go_armed_ = false; // Go to it pressed once for a file past the BINARY length
+    float loc_mx_pos_ = -1, loc_my_pos_ = -1;
+    std::vector<std::pair<SDL_FRect, std::string>> loc_buttons_;
 
     // ---- the pause menu (pause_menu.cpp): Esc, with nothing in your hands
 public:

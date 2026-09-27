@@ -280,6 +280,64 @@ The portal titles are clipped by hand where a bookcase stands between you and th
 there is depth-tested): the bookcases are boxes at known places, so the part of a sign behind
 one is a single cut along the wall, where the line of sight grazes the bookcase's end.
 
+### The file locator and the manifest creator
+
+`sieve locate FILE` names a file's place on the binary line (positional binary-v1, which does not
+depend on the line's length) with its size and SHA-256; `--out` writes the whole address.
+`sieve locate FOLDER` walks it and writes a `sieve-manifest-v1` (SPECIFICATIONS §12.2), with the
+manifest's own SHA-256 as the tree's identity; `--addresses DIR` writes every file's address as
+`DIR/<path>.hex`. `--compare` is the comparison page: original, zip's deflate, 7z's LZMA2 and
+the address, each as a share of the original (`tools/cli/compare.*`). The compressors are zlib
+and liblzma: the system's if there are any, else fetched and built static (`SIEVE_FETCH_COMPRESSION`
+forces that), linked into the tools only. The fixture `tests/manifest_fixture/` (a space in a
+folder name, an empty file, a non-ASCII name) is checked in CI against the oracle's `manifest`.
+
+Measured here (and note: xz's liblzma, built inside the project, does not pass on its header
+folder, so CMake adds it to `sieve_compare` by hand; a system `lzma.h` hid that on Linux): the `sieve` executable (1.86 MB) is 44% under deflate, 34% under LZMA2, and 100%
+as an address; `data/meshes` 31%, 15% and 100%, and its manifest 2.2 KB.
+
+**The installer** (Edward's design): a v2 manifest carries the folder structure and every file's
+address; the installer is that manifest's own address, one number (`sieve locate FOLDER
+--installer OUT.hex`), and `sieve install OUT.hex --to FOLDER` puts the tree back, checking every
+file before writing any. With `--compare` the installer's manifest is compressed too, to see
+whether it ever gets smaller: for `data/meshes` it is 205% of the folder, 25% zipped and 19% under
+7z, against 15% for 7z of the files themselves. The fixture round-trips in CI.
+
+**Installer files are raw bytes** (`NAME.sieve`, `--hex` for hex): the manifest's address as a
+number in base 256, exactly the manifest's size, readable as the manifest shifted up by one per
+byte. The item page's COST tab and `--compare` both show "as raw bytes" beside hex.
+
+**`sieve-install`** (`client/installer_main.cpp`) is the installer program and the trimmed build:
+the core, the locator's install code and SDL3, nothing else (SDL's own debug font, so no data
+files); a windowed program on Windows. It opens the `.sieve` given on its command line, dropped on
+it, or lying beside it alone; shows what it installs, where (your Documents/<name> by default, a
+text field and the system's folder dialog), and an option to replace existing files; then checks
+every file, writes them with a progress bar, and on Cancel removes what it wrote, folders
+included (`install_tree` in `tools/cli/locate.cpp`, shared with `sieve install`). `--to`,
+`--yes` and `--screenshot FILE.bmp` run it unattended; CI does, on the Linux runner.
+
+**The File Locator in the hallway** (pause menu, `client/file_locator.cpp`): the tool's own locator
+and comparison in a window. Choose a file or folder with the system's pickers (F, D) or drop one
+on the window. A file shows its size, SHA-256, address and comparison, and "Go to it" puts you on
+the binary line with the file in hand (the BINARY length must hold it; it says so if not), or its
+address can be saved. A folder shows its manifest's identity and the comparison (its installer's
+manifest compressed too), and saves as a manifest or an installer (`.sieve`). The work runs on a
+worker thread; `--locate PATH` opens it for scripted runs and CI.
+
+**Past the budget.** A binary file on the shelf keeps only its place, title and cover; its bytes
+and its hex are worked out for the one item looked at or held (`file_of`, `hex_of`, remembering
+the last). The setup menu's first Enter over the budget says what going in anyway means, and a
+second goes in **thin**: only the room you stand in keeps items and pictures (`set_thin`,
+`face_rooms()`); past `kTooLargeBits` the way stays shut. The File Locator's Go to it does the same
+for a file longer than the BINARY length: a second press makes the line exactly that long
+(`set_binary_length`), positional, and thin. Edward's 5 MB `Sieve.zip`: 2.8 s from the locator to
+the file in hand, 340 MB at the most, about 16 frames a second walking (software renderer).
+
+Still open: compressing files before they are addressed (the order of operations, for later);
+releasing the locator and manifest creator as a stand-alone tool (IDEAS 4.9). Packaging the release must
+carry `third_party_licenses/` (zlib, XZ Utils' 0BSD, SDL, stb, SCOWL, font8x8): there are no
+install rules yet.
+
 ### The pause menu
 
 Esc in the hallway, with nothing in your hands, pauses (`client/pause_menu.cpp`): Resume Sieve;

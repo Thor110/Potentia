@@ -491,6 +491,28 @@ The first term is how many files are shorter. In hex it is `01` written L times,
 
 **Size.** With N the size of a file, the line is as large as the whole of that file's space and every smaller one: N = 2 MB is an address of about 4.2 million hex digits. The size is a setting like every other line's, and FIND MY LIMITS can be told to spend the budget on it.
 
+### 12.2 Locating files, and manifests (`sieve-manifest-v1`)
+
+**Locating** a file is naming its place on the binary line: its `binary-v1` positional address (§12.1), which is the file's hex dump plus `0101...01`, one `01` for each of its bytes. It depends only on the file, not on the line's length setting, so it is the file's name in the space; its SHA-256 is its short identity.
+
+A **manifest** is a folder located: walked to the bottom and listed in one canonical text, so that the same tree always gives the same bytes, and the manifest — itself a file, with an identity and a place on the binary line — names the whole tree:
+
+    sieve-manifest-v1
+    root <the folder's own name>
+    files <how many files>
+    bytes <their sizes added up>
+    d<TAB><path>/                        a folder
+    f<TAB><size><TAB><sha256><TAB><path> a file
+    end
+
+Paths are relative to the root, UTF-8, with `/` between their parts; a folder's ends in `/`. Entries are sorted by their paths' bytes, compared as unsigned. Fields are separated by one tab, lines end in a line feed, the path comes last. A path containing a tab or a line break cannot be listed and is refused. Symbolic links are neither followed nor listed. The files' addresses are not in the manifest: each address is its file, and would make the manifest as large as the tree. `sieve locate` writes them beside it on request. The oracle's `manifest` command writes the same manifest from this definition, and checks the addresses.
+
+**Installers (`sieve-manifest-v2`).** An installer's manifest is v1 with every file's address in it, in hex, between its SHA-256 and its path: `f<TAB><size><TAB><sha256><TAB><address><TAB><path>`, the empty file's address written `0`. It carries the whole tree, so it is larger than the tree. Its own address — one number — is the installer: `sieve install` reads that number back into the manifest, and every address in it back into its file, checks each against its size and SHA-256 before writing anything, and refuses paths that are absolute, name a drive, use a backslash, or have a part that is `.` or `..`. The oracle writes the same v2 manifest from this definition.
+
+**Installer files.** An installer is its manifest's address stored as **raw bytes**: the number in base 256, most significant byte first, with no header, conventionally named `<name>.sieve`. It is exactly as long as the manifest, or one byte longer when adding `0101...01` carries past the first byte, and it reads as the manifest with every byte one higher (`sieve-manifest-v2` begins `tjfwf.nbojgftu.w3`). `--hex` writes and reads the same number in hex instead, at twice the size. `sieve-install` is the installer program: it opens a `.sieve` file, asks where, checks every file, writes them, and on Cancel removes what it wrote.
+
+**Comparison.** `sieve locate --compare` sets beside the original size what zip's compressor (deflate, zlib level 9, each file on its own) and 7z's (LZMA2, preset 9 extreme, a folder as one solid stream) make of it, without their archives' headers, and the address as a number and in hex, each as a share of the original. The address is never smaller than the file: addressing is not compression. A compressor's figure is an upper bound on how far the data can be reduced, never the limit itself, which (its Kolmogorov complexity) no program can compute.
+
 ## 13. Architecture and Implementation
 
 - **Core** (headless): addressing, canonicalisation, classification, door mapping and Registry access, exposed through a narrow interface and a command-line tool.

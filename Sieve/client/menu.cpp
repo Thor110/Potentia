@@ -370,6 +370,10 @@ double Menu::line_cache_bytes(int i) const
                              3ull * s_.model_vertices + 3ull * s_.model_faces + t,
                              (uint64_t(s_.binary_bytes) + 3) / 4 + t + cover};
     const double units = std::min(kCachedUnits, 14.0 * double(s_.items_per_wall));
+    // A binary file is kept lazily (hallway.hpp, Book::is_file): only its place on the line, a
+    // number as long as the file, and its title and cover; its bytes and hex only for the one
+    // looked at. And only half a tile's slots hold files.
+    if (i == 6) return units / 2 * (double(s_.binary_bytes) + 4.0 * double(s_.title_length + cover) + 256.0) + 3.0 * double(s_.binary_bytes);
     return units * (4.0 * double(pos[i]) + 0.375 * sizes[size_t(i)].bits + 256.0);
 }
 
@@ -725,6 +729,8 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
     if (e.type != SDL_EVENT_KEY_DOWN) return;
     const bool shift = (e.key.mod & SDL_KMOD_SHIFT) != 0, ctrl = (e.key.mod & SDL_KMOD_CTRL) != 0;
     const int step = ctrl ? 100 : shift ? 10 : 1;
+    // "Enter again to go in anyway" holds only for the Enter straight after it.
+    if (e.key.key != SDLK_RETURN && e.key.key != SDLK_KP_ENTER) go_anyway_armed_ = false;
     switch (e.key.key)
     {
     case SDLK_UP: row_ = (row_ + row_count() - 1) % row_count(); break;
@@ -756,9 +762,20 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         if (row_ == kResetRow) { reset_settings(); break; }
         if (row_ != kEnterRow) break;
         if (s_.key.empty()) s_.key = "sieve";
-        // Over the budget, the foot of the list says which limit and which line; the way in stays
-        // shut rather than opening a hallway this machine would freeze in.
-        if (too_large() || over_budget() >= 0 || graphics_over()) break;
+        // Over the budget, the foot of the list says which limit and which line, and the first
+        // Enter only says what going in anyway means: slower than this machine's budget, with only
+        // the room you stand in kept (thin). A second Enter goes in. Past kTooLargeBits, where one
+        // address would need a gigabyte, the way stays shut.
+        if (too_large()) break;
+        if (over_budget() >= 0 || graphics_over())
+        {
+            if (!go_anyway_armed_)
+            {
+                go_anyway_armed_ = true;
+                break;
+            }
+            went_in_thin_ = true;
+        }
         save_filters();
         done = true;
         result = Result::Enter;
@@ -949,6 +966,7 @@ void Menu::render()
     text(r_, 20, H - 26, tr(in_game_ ? "setup.footer2.in_game" : "setup.footer2"), 1, grey);
     const SDL_Color red{255, 80, 80, 255};
     if (too_large()) text(r_, 20, H - 54, tr("setup.too_large"), 1, white);
+    else if (go_anyway_armed_) text(r_, 20, H - 54, tr("setup.go_anyway"), 1, SDL_Color{255, 200, 80, 255}); // in place of why
     else if (const int over = over_budget(); over >= 0)
     {
         // Not a limit of the design: a limit of this machine, named so it can be reduced, and

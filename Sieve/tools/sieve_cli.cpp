@@ -20,10 +20,12 @@
 
 #include "cli/args.hpp"
 #include "cli/book.hpp"
+#include "cli/compare.hpp"
 #include "cli/dictionaries.hpp"
 #include "cli/help.hpp"
 #include "cli/filter_config.hpp"
 #include "cli/lines.hpp"
+#include "cli/locate.hpp"
 #include "cli/models.hpp"
 
 #include "sieve/booksieve.hpp"
@@ -1357,6 +1359,155 @@ int cmd_check_book(const Args& a)
     return 0;
 }
 
+// locate: a file's place on the binary line, or a folder's manifest (SPECIFICATIONS §12.2).
+int cmd_locate(const Args& a)
+{
+    namespace fs = std::filesystem;
+    if (a.positional.empty()) throw std::invalid_argument("locate needs a file or a folder (see: sieve help locate)");
+    const std::string arg = a.positional[0];
+    const fs::path target(std::u8string(arg.begin(), arg.end()));
+    auto u8 = [](const fs::path& p) {
+        const std::u8string u = p.generic_u8string();
+        return std::string(u.begin(), u.end());
+    };
+    auto address_bytes = [](const BigUint& v) { return uint64_t((v.bit_length() + 7) / 8); };
+    auto head_tail = [](const std::string& h) { return h.size() <= 64 ? h : h.substr(0, 32) + "..." + h.substr(h.size() - 32); };
+    Comparison cmp;
+    if (fs::is_regular_file(target))
+    {
+        const auto bytes = read_file_bytes(target);
+        const BigUint addr = binary_address(bytes);
+        const std::string hex = addr.is_zero() ? "0" : addr.to_hex();
+        std::cout << "file      " << u8(target) << "\n"
+                  << "bytes     " << bytes.size() << "\n"
+                  << "sha256    " << sha256_hex(bytes) << "\n"
+                  << "line      binary (binary-v1), positional; on every binary line of length " << bytes.size() << " or more\n"
+                  << "address   " << hex.size() << " hex digits: " << head_tail(hex) << "\n";
+        if (a.has("out"))
+        {
+            const std::string o = a.get("out");
+            std::ofstream out(fs::path(std::u8string(o.begin(), o.end())), std::ios::binary);
+            out << hex << "\n";
+            if (!out) throw std::runtime_error("cannot write " + o);
+            std::cout << "wrote     " << o << "\n";
+        }
+        if (a.has("compare"))
+        {
+            cmp.original = bytes.size();
+            cmp.deflate = deflate_size(bytes);
+            cmp.lzma2 = lzma2_size(bytes);
+            cmp.address_bytes = address_bytes(addr);
+            cmp.address_hex = addr.is_zero() ? 0 : hex.size();
+            std::cout << "\n" << comparison_table(cmp);
+        }
+        return 0;
+    }
+    if (!fs::is_directory(target)) throw std::invalid_argument(arg + " is neither a file nor a folder");
+    Manifest m = walk_folder(target);
+    // An installer's manifest carries every file's address (v2), and the installer is its address.
+    const bool installer = a.has("installer") || a.has("with-addresses");
+    if (installer) add_addresses(m, target);
+    const std::string text = m.text();
+    const std::vector<uint8_t> mbytes(text.begin(), text.end());
+    const BigUint maddr = binary_address(mbytes);
+    // The manifest to --manifest, or to standard output; what it says about itself to standard
+    // error when the manifest is on standard output, so the two never mix.
+    std::ostream* info = &std::cout;
+    if (a.has("manifest"))
+    {
+        const std::string o = a.get("manifest");
+        std::ofstream out(fs::path(std::u8string(o.begin(), o.end())), std::ios::binary);
+        out << text;
+        if (!out) throw std::runtime_error("cannot write " + o);
+    }
+    else
+    {
+        std::cout << text;
+        info = &std::cerr;
+    }
+    size_t dirs = 0;
+    for (const auto& e : m.entries) dirs += e.dir ? 1 : 0;
+    *info << "folder    " << u8(target) << ": " << m.files << " files, " << dirs << " folders, " << m.bytes << " bytes";
+    if (m.skipped) *info << " (" << m.skipped << " links and other entries skipped)";
+    *info << "\nmanifest  " << (m.with_addresses ? kInstallManifestVersion : kManifestVersion) << ", " << text.size() << " bytes" << (a.has("manifest") ? ", written to " + a.get("manifest") : std::string())
+          << "\nsha256    " << sha256_hex(mbytes) << "  (the tree's identity)\n"
+          << "address   " << (maddr.is_zero() ? 1 : maddr.to_hex().size()) << " hex digits: the manifest's own place on the binary line\n";
+    // Every file's address, as <DIR>/<path>.hex, and the comparison over all of them.
+    const fs::path root = fs::absolute(target).lexically_normal();
+    std::vector<uint8_t> all; // every file, in manifest order, for the solid LZMA2 stream
+    const bool compare = a.has("compare");
+    if (a.has("addresses") || compare)
+    {
+        const std::string d = a.get("addresses");
+        const fs::path dir(std::u8string(d.begin(), d.end()));
+        for (const auto& e : m.entries)
+        {
+            if (e.dir) continue;
+            const fs::path file = root / fs::path(std::u8string(e.path.begin(), e.path.end()));
+            const auto bytes = read_file_bytes(file);
+            const BigUint addr = binary_address(bytes);
+            const std::string hex = addr.is_zero() ? "0" : addr.to_hex();
+            if (a.has("addresses"))
+            {
+                const fs::path out_path = dir / fs::path(std::u8string(e.path.begin(), e.path.end()) + u8".hex");
+                fs::create_directories(out_path.parent_path());
+                std::ofstream out(out_path, std::ios::binary);
+                out << hex << "\n";
+                if (!out) throw std::runtime_error("cannot write " + u8(out_path));
+            }
+            if (compare)
+            {
+                cmp.original += bytes.size();
+                cmp.deflate += deflate_size(bytes);
+                cmp.address_bytes += address_bytes(addr);
+                cmp.address_hex += addr.is_zero() ? 0 : hex.size();
+                all.insert(all.end(), bytes.begin(), bytes.end());
+            }
+        }
+        if (a.has("addresses")) *info << "addresses " << m.files << " files' addresses written under " << d << "\n";
+    }
+    if (installer && a.has("installer"))
+    {
+        const std::string o = a.get("installer");
+        write_address_file(fs::path(std::u8string(o.begin(), o.end())), maddr, a.has("hex"));
+        *info << "installer " << o << ": the address of the manifest, which holds every file's address, as "
+              << (a.has("hex") ? "hex" : "raw bytes") << "; install it with\n"
+              << "          sieve-install " << o << "   (or: sieve install " << o << (a.has("hex") ? " --hex" : "") << " --to FOLDER)\n";
+    }
+    if (compare)
+    {
+        cmp.lzma2 = lzma2_size(all);
+        cmp.manifest = text.size();
+        if (installer)
+        {
+            // The manifest itself, compressed: does an installer's manifest ever get smaller?
+            cmp.manifest_deflate = deflate_size(mbytes);
+            cmp.manifest_lzma2 = lzma2_size(mbytes);
+            cmp.installer_hex = maddr.is_zero() ? 1 : maddr.to_hex().size();
+            cmp.installer_raw = address_bytes(maddr);
+        }
+        *info << "\n" << comparison_table(cmp);
+    }
+    return 0;
+}
+
+// install: a folder put back from one address, the address of its installer's manifest.
+int cmd_install(const Args& a)
+{
+    namespace fs = std::filesystem;
+    if (a.positional.empty() || !a.has("to")) throw std::invalid_argument("install needs an address file and --to FOLDER (see: sieve help install)");
+    const std::string in = a.positional[0], to = a.get("to");
+    const BigUint address = read_address_file(fs::path(std::u8string(in.begin(), in.end())), a.has("hex"));
+    const Manifest m = manifest_of_installer(address);
+    std::cout << "manifest  " << m.root << ": " << m.files << " files, " << m.bytes << " bytes\n";
+    const fs::path dest(std::u8string(to.begin(), to.end()));
+    install_tree(m, dest, a.has("force"), [&](int phase, size_t done, size_t total, const std::string& path) {
+        if (phase == 1) std::cout << "  " << done << "/" << total << "  " << path << "\n";
+    });
+    std::cout << "installed " << m.files << " files into " << to << ", every one checked against its SHA-256\n";
+    return 0;
+}
+
 int cmd_unbind(const Args& a)
 {
     if (a.positional.size() != 1) throw std::invalid_argument("give one BOOK file");
@@ -1455,6 +1606,8 @@ int main(int argc, char** argv)
         if (a.command == "check") return cmd_check(a);
         if (a.command == "bind") return cmd_bind(a);
         if (a.command == "unbind") return cmd_unbind(a);
+        if (a.command == "locate") return cmd_locate(a);
+        if (a.command == "install") return cmd_install(a);
         std::cerr << "unknown command '" << a.command << "'\n\n";
         print_usage();
         return 1;
