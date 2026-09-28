@@ -74,9 +74,24 @@ Rules:
 | Image | 10×10, 24-bit | ~10^722 | Guided only |
 | Audio | Symbolic: 104 note events (26 pitches/rest × 4 durations) × 6 events | ~1.3 × 10^12 | Exhaustive with patience |
 | Audio | Symbolic: 104 note events × 16 events | ~10^32 | Guided only |
+| Audio | `notes2`, C3–C6 × 8 durations (304 events) × 32 events, one voice | ~10^79 | Compact with ranking filters |
+| Audio | `notes2`, C2–C7 × 8 durations (496 events) × 4 voices × 32 events | ~10^345 | Compact with ranking filters |
 | Video | 5×5, 1-bit × 8 frames | ~10^60 | Guided only (deferred) |
 
 Audio begins as a **symbolic** line (note sequences), not raw samples. Raw audio at even one second of 8 kHz 8-bit is 256^8,000 possibilities and carries almost no structure per sample; symbolic audio reuses all of the text machinery unchanged.
+
+### 3.2 The `notes2` Family (as built)
+
+`notes104` is fixed and stays exactly as it was: its addresses, notation and MIDI files do not change. `notes2` is a family of larger note sets beside it, one chosen per line, each named by its symbols' id, `notes2/<LOW>-<HIGH>/<DURATIONS>/V<VOICES>` (e.g. `notes2/C3-C6/seEqQhHw/V2`):
+
+- **Pitches:** every semitone from `LOW` to `HIGH`, within C2–C7 (MIDI 36–96) and at least an octave apart; default C3–C6 (37 pitches). Names are written with sharps; a set has one spelling.
+- **Durations:** any of `s` (sixteenth), `e` (eighth), `E` (dotted eighth), `q` (quarter), `Q` (dotted quarter), `h` (half), `H` (dotted half) and `w` (whole), listed in that order; default all eight.
+- **Voices:** 1 to 4, each its own line of events with its own time.
+- **Digits:** `pitch_index × DURATIONS + duration_index`, pitch 0 the rest and pitch 1 `LOW`; digit 0, a rest of the shortest duration, is the padding symbol. A set has `(PITCHES + 1) × DURATIONS` symbols (304 by default).
+- **Units:** `VOICES × L` events, voice by voice: `L` is the line's length in events per voice. Addresses read the whole unit as one number, as every line does.
+- **Filters** on a line of several voices judge each voice on its own (a unit passes when every voice does). The survivors are one voice's to the power of the voices, and a ranker for one voice ranks the whole: a unit's rank is its voices' ranks read as one number in base (one voice's count), voice 1 first.
+- **Playback:** the voices sound together. Saved, a unit is a format-1 MIDI file, a tempo track and a track per voice on its own channel (120 bpm, 480 ticks a quarter).
+- **Books:** `sieve-book-v1` gives an audio section only its length, so books hold `notes104` melodies alone; making a book section of a `notes2` line is refused rather than misread.
 
 ---
 
@@ -218,6 +233,7 @@ Pasted input is fitted to the line's parameter set by **fixed, versioned rules**
 - **Text (`canon-text-v2`, default):** whitespace becomes SPACE; typographic punctuation becomes ASCII (curly quotes, dashes, ellipsis); Latin accented letters U+00C0–U+017F fold to ASCII (`é`→`e`, `ß`→`ss`); ASCII case folds where the alphabet has no capitals. Any character still outside the alphabet is then handled one of two ways: apostrophes are removed (`didn't`→`didnt`), and everything else becomes SPACE (`well-known`→`well known`). Finally, SPACE runs collapse, the text is trimmed, split into units and padded to `UNIT_LENGTH`. `canon-text-v1` removed every out-of-alphabet character, which glued words together; it remains selectable so that earlier results stay reproducible.
 - **Image (`canon-image-v1`):** composite onto black; stretch to the line's dimensions by exact integer area-averaging, rounded half up; quantise each pixel to the nearest palette colour by squared RGB distance, with ties to the lowest index. Video applies this per frame, drops frames beyond `FRAMES`, and pads short input with black frames.
 - **Audio (`canon-notes-v1`):** note notation (`C4q F#5e Bb4h Rq`) converts to the 104-symbol event alphabet (a rest or C4–C6, each with four durations). Flats are written as sharps, out-of-range notes move by whole octaves into C4–C6, and the last unit is padded with eighth rests.
+- **Audio, `notes2` (`canon-notes-v2`):** as v1, with the durations `s e e. q q. h h. w` (a missing one is `q`), voices separated by `//` (fewer voices than the line's are filled with rests; more are an error), pitches moved by whole octaves into the set's range, and a duration the set lacks replaced by the nearest it has by length, a tie going to the longer. Each voice is cut into runs of `L`, every voice is padded to the same number of runs with digit 0, and unit `k` holds run `k` of every voice. Output uses sharps and ` // ` between voices. The oracle has its own implementation, and `tests/vectors_notes2_v1.tsv` pins the units, the report, the notation and each MIDI file's SHA-256.
 
 Palettes are pinned by the implementation: `mono` (2), `ega16` (16), `rgb332` (256) and `rgb24` (16,777,216). Index 0 is black in every palette.
 

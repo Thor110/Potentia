@@ -477,9 +477,16 @@ upgrades a filter to v2 when it uses something only v2 has.
   `notes104`), `DURATIONS` (4) and `LOW` (60, the MIDI number of pitch 1): a note's symbol is
   `pitch * DURATIONS + duration`, pitch 0 the rest. A parameter or `for` variable may not take
   these names, nor `min`, `max` or `abs`.
-- **Families of symbols:** `symbols notes*` applies to every line whose symbols' id begins `notes`,
-  so a filter written in terms of the constants carries over to the larger note lines to come
-  (`notes2`, IDEAS section 12). Today that is `notes104` alone.
+- **Families of symbols:** `symbols notes*` applies to every line whose symbols' id begins `notes`:
+  `notes104` and every `notes2` set (SPECIFICATIONS §3.2), with the constants taken from the set
+  (a `notes2` set's own `PITCHES`, `DURATIONS` and `LOW`). On a line of several voices the stack
+  hands a plugin one voice at a time, so a plugin is always written for one line of events;
+  `sieve filters --plugin` reports it the same way (one voice's automaton; the count to the power
+  of the voices), and so does the oracle. `key-data-v2`, `melody-leap-v1`, `melody-rests-v1` and
+  `melody-range-v1` are checked against the oracle on `notes2` sets of other ranges and durations
+  with one to three voices (CI). `melody-lengths-v1` and `melody-ending-v1` name `notes104`'s four
+  durations in their choices, so they are for `notes104` only; `notes2` versions would name its
+  eight.
 
 The engine and the oracle each have their own reading of it. The oracle's comparison with the
 engine caught a real error in the oracle's first `if` (a variable reused for the block's end cut

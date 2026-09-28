@@ -55,7 +55,21 @@ const std::vector<std::string> kModes = {"positional", "scrambled", "guided"};
 const std::vector<std::string> kAlphabets = {"lower27", "babel29", "ascii95"};
 const std::vector<std::string> kCanons = {"v2", "v1"};
 const std::vector<std::string> kPalettes = {"mono", "ega16", "rgb332", "rgb24"};
-constexpr uint32_t kNoteSymbols = 104;
+// The audio line's note set, from the settings (a notes2 set the settings cannot make falls back
+// to notes104, and the row says so).
+sieve::NoteSet note_set_of_settings(const Settings& s)
+{
+    if (s.note_set != "notes2") return sieve::NoteSet{};
+    try
+    {
+        return sieve::make_note_set(sieve::note_midi_of(s.note_low), sieve::note_midi_of(s.note_high), s.note_durations, s.voices);
+    }
+    catch (const std::exception&)
+    {
+        return sieve::NoteSet{};
+    }
+}
+const std::vector<std::string> kNoteDurationPresets = {"seEqQhHw", "seqhw", "eEqQhHw", "eqhw", "qhw", "sq"};
 
 std::string cycle(const std::vector<std::string>& v, const std::string& cur, int dir)
 {
@@ -189,6 +203,11 @@ Settings Settings::from_args(const sieve::cli::Args& a)
     s.image_h = parse_u32(a, "image-height", s.image_h);
     s.image_palette = a.get("image-palette", s.image_palette);
     s.notes = parse_u32(a, "notes", s.notes);
+    s.note_set = a.get("note-set", s.note_set);
+    s.note_low = a.get("note-low", s.note_low);
+    s.note_high = a.get("note-high", s.note_high);
+    s.note_durations = a.get("note-durations", s.note_durations);
+    s.voices = parse_u32(a, "voices", s.voices);
     s.video_w = parse_u32(a, "video-width", s.video_w);
     s.video_h = parse_u32(a, "video-height", s.video_h);
     s.frames = parse_u32(a, "video-frames", s.frames);
@@ -222,6 +241,11 @@ void Settings::apply(sieve::cli::Args& a) const
     a.opts["image-height"] = std::to_string(image_h);
     a.opts["image-palette"] = image_palette;
     a.opts["notes"] = std::to_string(notes);
+    a.opts["note-set"] = note_set;
+    a.opts["note-low"] = note_low;
+    a.opts["note-high"] = note_high;
+    a.opts["note-durations"] = note_durations;
+    a.opts["voices"] = std::to_string(voices);
     a.opts["video-width"] = std::to_string(video_w);
     a.opts["video-height"] = std::to_string(video_h);
     a.opts["video-frames"] = std::to_string(frames);
@@ -324,7 +348,8 @@ std::array<LineSize, 7> Menu::line_sizes() const
         binary.padding = uint32_t((wall - m) % wall);
         binary.units = "title*files<=" + std::to_string(s_.binary_bytes) + "B = ~10^" + fixed(binary.bits * std::log10(2.0), 1);
     }
-    std::array<LineSize, 7> out{titled(page, false), titled(image, false), titled(line_size(kNoteSymbols, s_.notes), true),
+    const sieve::NoteSet notes = note_set_of_settings(s_);
+    std::array<LineSize, 7> out{titled(page, false), titled(image, false), titled(line_size(notes.base(), s_.notes * notes.voices), true),
                                 titled(line_size(palette_size(s_.video_palette), positions(s_.video_w, s_.video_h, s_.frames)), true),
                                 books, titled(models, false), binary};
     // A unit has at most 2^32 - 1 positions: a larger picture cannot be opened at all.
@@ -369,7 +394,7 @@ double Menu::line_cache_bytes(int i) const
     // (The binary line's file is bytes, a quarter of a position each.)
     const uint64_t pos[7] = {s_.length + t,
                              cover + t,
-                             s_.notes + t + cover,
+                             uint64_t(s_.notes) * note_set_of_settings(s_).voices + t + cover,
                              positions(s_.video_w, s_.video_h, s_.frames) + t + cover,
                              uint64_t(s_.book_pages + 1) * s_.length + cover,
                              3ull * s_.model_vertices + 3ull * s_.model_faces + t,
@@ -622,6 +647,26 @@ void Menu::adjust(int dir, int step)
     case kImageRows + 1: num(s_.image_h); break;
     case kImageRows + 2: s_.image_palette = cycle(kPalettes, s_.image_palette, dir); break;
     case kAudioRow: num(s_.notes); break;
+    case kAudioRow + 1: s_.note_set = s_.note_set == "notes2" ? "notes104" : "notes2"; break;
+    case kAudioRow + 2:
+    case kAudioRow + 3:
+    {
+        // A semitone at a time (Shift: an octave), within C2..C7 and at least an octave apart.
+        if (s_.note_set != "notes2") break;
+        const int by = dir * (step >= 10 ? 12 : 1);
+        int lo = int(sieve::note_midi_of(s_.note_low)), hi = int(sieve::note_midi_of(s_.note_high));
+        if (row_ == kAudioRow + 2) lo = std::clamp(lo + by, int(sieve::kNoteLowest), hi - 11);
+        else hi = std::clamp(hi + by, lo + 11, int(sieve::kNoteHighest));
+        s_.note_low = sieve::note_name(uint32_t(lo));
+        s_.note_high = sieve::note_name(uint32_t(hi));
+        break;
+    }
+    case kAudioRow + 4:
+        if (s_.note_set == "notes2") s_.note_durations = cycle(kNoteDurationPresets, s_.note_durations, dir);
+        break;
+    case kAudioRow + 5:
+        if (s_.note_set == "notes2") s_.voices = uint32_t(std::clamp(int(s_.voices) + dir, 1, int(sieve::kMaxVoices)));
+        break;
     case kVideoRows: num(s_.video_w); break;
     case kVideoRows + 1: num(s_.video_h); break;
     case kVideoRows + 2: num(s_.frames); break;
@@ -757,7 +802,7 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         // the binary row. Anywhere else (the GLOBAL rows, and the three at the foot), F opens the
         // filters of the line you will start on (the "line" row); F again closes them.
         if (row_ >= kPagesRows && row_ <= kBooksRow)
-            open_filters(row_ >= kImageRows && row_ < kAudioRow ? 1 : row_ == kAudioRow ? 2 : row_ == kBooksRow ? 4 : row_ >= kVideoRows ? 3 : 0);
+            open_filters(row_ >= kImageRows && row_ < kAudioRow ? 1 : row_ >= kAudioRow && row_ < kVideoRows ? 2 : row_ == kBooksRow ? 4 : row_ >= kVideoRows ? 3 : 0);
         else if (row_ >= kModelsRows && row_ < kBinaryRow) open_filters(5);
         else if (row_ == kBinaryRow) open_filters(6);
         else
@@ -934,7 +979,14 @@ void Menu::render()
         {1, tr("setup.width"), trf("setup.px", {n(s_.image_w)})},
         {-1, tr("setup.height"), trf("setup.px", {n(s_.image_h)})},
         {-1, tr("setup.palette"), trf("setup.palette.value", {s_.image_palette, n(palette_size(s_.image_palette))})},
-        {2, tr("setup.notes"), n(s_.notes)},
+        {2, tr(note_set_of_settings(s_).voices > 1 ? "setup.notes.per_voice" : "setup.notes"), n(s_.notes)},
+        {-1, tr("setup.note_set"), note_set_of_settings(s_).legacy && s_.note_set == "notes2" ? tr("setup.note_set.bad")
+                                   : s_.note_set == "notes2" ? trf("setup.note_set.value", {n(note_set_of_settings(s_).base())})
+                                                             : tr("setup.note_set.fixed")},
+        {-1, tr("setup.note_low"), s_.note_set == "notes2" ? s_.note_low : tr("setup.notes2_only")},
+        {-1, tr("setup.note_high"), s_.note_set == "notes2" ? s_.note_high : tr("setup.notes2_only")},
+        {-1, tr("setup.note_durations"), s_.note_set == "notes2" ? s_.note_durations : tr("setup.notes2_only")},
+        {-1, tr("setup.voices"), s_.note_set == "notes2" ? n(s_.voices) : tr("setup.notes2_only")},
         {3, tr("setup.width"), trf("setup.px", {n(s_.video_w)})},
         {-1, tr("setup.height"), trf("setup.px", {n(s_.video_h)})},
         {-1, tr("setup.frames"), n(s_.frames)},
@@ -1106,7 +1158,12 @@ sieve::FilterLine Menu::filter_line_of(int i) const
         f = {"image", "image/" + s_.image_palette + "/" + std::to_string(s_.image_w) + "x" + std::to_string(s_.image_h),
              palette_size(s_.image_palette), clamp32(positions(s_.image_w, s_.image_h)), nullptr, s_.image_w, s_.image_h, 1};
         break;
-    case 2: f = {"audio", sieve::kNotesSymbolsId, kNoteSymbols, s_.notes, nullptr, 0, 0, 0}; break;
+    case 2:
+    {
+        const sieve::NoteSet set = note_set_of_settings(s_);
+        f = {"audio", set.id(), set.base(), s_.notes * set.voices, nullptr, 0, 0, 0};
+        break;
+    }
     default:
         f = {"video", "video/" + s_.video_palette + "/" + std::to_string(s_.video_w) + "x" + std::to_string(s_.video_h) + "x" + std::to_string(s_.frames),
              palette_size(s_.video_palette), clamp32(positions(s_.video_w, s_.video_h, s_.frames)), nullptr, s_.video_w, s_.video_h, s_.frames};

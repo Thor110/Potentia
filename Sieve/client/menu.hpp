@@ -41,7 +41,11 @@ struct Settings
     bool model = true; // use the alphabet's default model (guided ordering)
     uint32_t image_w = 10, image_h = 10;
     std::string image_palette = "mono";
-    uint32_t notes = 16;
+    uint32_t notes = 16; // events per book (per voice, on notes2)
+    // The audio line's note set: notes104 (fixed: C4-C6, e q h w, one voice), or notes2 with its
+    // range, durations (codes of s e E q Q h H w) and voices (sieve/audio.hpp).
+    std::string note_set = "notes104", note_low = "C3", note_high = "C6", note_durations = "seEqQhHw";
+    uint32_t voices = 1;
     uint32_t video_w = 5, video_h = 5, frames = 8;
     std::string video_palette = "mono";
     uint32_t book_pages = 4; // books: a cover (image line), a title and this many pages (pages line)
@@ -131,15 +135,16 @@ private:
     void find_limits();        // set every line to the largest shape this machine can open
     void reset_settings();     // every shape back to its default // a line this machine cannot open
     void adjust(int dir, int step);
-    // 0-26 are the settings rows, in the order render() lists them and adjust() switches on;
+    // 0-31 are the settings rows, in the order render() lists them and adjust() switches on;
     // then FIND MY LIMITS, RESET, and ENTER THE HALLWAY, which is the only row that opens it.
     // The GLOBAL rows come first; each line's rows are counted from kFirstLineRow, so a row added
     // to GLOBAL moves them all with one change here.
     static constexpr int kAngleRow = 4, kTitleRow = 5, kLettersRow = 6, kDisplaySizeRow = 7, kDisplayCacheRow = 8,
                          kCloseUpRow = 9, kFocusRow = 10;
     static constexpr int kFirstLineRow = 11;
+    // The audio rows: its notes, then its note set and the notes2 set's range, durations and voices.
     static constexpr int kPagesRows = kFirstLineRow, kImageRows = kFirstLineRow + 4, kAudioRow = kFirstLineRow + 7,
-                         kVideoRows = kFirstLineRow + 8, kBooksRow = kFirstLineRow + 12, kModelsRows = kFirstLineRow + 13;
+                         kVideoRows = kFirstLineRow + 13, kBooksRow = kFirstLineRow + 17, kModelsRows = kFirstLineRow + 18;
     static constexpr int kBinaryRow = kModelsRows + 3;
     static constexpr int kLimitsRow = kBinaryRow + 1, kResetRow = kLimitsRow + 1, kEnterRow = kLimitsRow + 2;
     int row_count() const;

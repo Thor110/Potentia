@@ -1,5 +1,7 @@
 #include "book.hpp"
 
+#include "sieve/audio.hpp"
+
 #include "sieve/sha256.hpp"
 
 #include <algorithm>
@@ -93,6 +95,11 @@ BookSection make_section(const std::string& role, const Args& shape, const std::
     Args full = shape;
     if (mode != "guided") full.opts["model"] = "none";
     const Line line = make_line(full);
+    // sieve-book-v1 gives an audio section only its length, which names a notes104 line: a notes2
+    // melody has nowhere to write its set, so it is refused rather than misread (IDEAS §12: a
+    // book format v2 would carry it).
+    if (line.kind == LineKind::Audio && line.space.symbols_id() != kNotesSymbolsId)
+        throw std::invalid_argument("a book (sieve-book-v1) holds notes104 melodies only, not " + line.space.symbols_id());
     for (const auto& f : shape_fields(line.kind))
     {
         if (f == "alphabet") a.opts[f] = line.alphabet->id();

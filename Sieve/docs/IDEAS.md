@@ -569,5 +569,7 @@ are cheap and because they are the sort of thing that is lost otherwise.
   or loud, which triples the note symbols; for the `notes2` family, after its first version.
 - **Books of `notes2` melodies.** `sieve-book-v1` gives an audio section only a length, so a book
   can hold `notes104` melodies alone. A book format v2 would carry the note family's shape.
+- **`notes2` versions of `melody-lengths` and `melody-ending`,** whose duration choices name
+  `notes104`'s e q h w: on `notes2` they step aside, so a `notes2` track need not end on the tonic.
 - **Rules between voices** of a `notes2` unit (whether notes sounding together agree): harder than
   per-voice filters, because each voice keeps its own time.

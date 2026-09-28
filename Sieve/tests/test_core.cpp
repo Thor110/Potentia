@@ -794,6 +794,37 @@ void test_binary_vectors(const std::string& path)
 
 // cdc-v1 (chunks.hpp) against the oracle's own cutting: the gear table's ends, then each input's
 // chunks, by offset, length, SHA-256 and whether uniform.
+// canon-notes-v2 against the oracle: every unit's digits, the report, the first unit's notation
+// and its MIDI file's SHA-256.
+void test_notes2_vectors(const std::string& path)
+{
+    int n = 0;
+    for (const auto& f : read_tsv(path, 7))
+    {
+        const NoteSet set = note_set_of(f[0]);
+        CHECK(set.id() == f[0] && !set.legacy);
+        const NotesCanonResult r = canonicalise_notes2(f[2], set, uint32_t(std::stoul(f[1])));
+        std::string units;
+        for (const auto& u : r.units)
+        {
+            if (!units.empty()) units += ";";
+            for (size_t i = 0; i < u.size(); ++i) units += (i ? "," : "") + std::to_string(u[i]);
+        }
+        const std::string report = std::to_string(r.events) + "," + std::to_string(r.flats_rewritten) + "," + std::to_string(r.octave_shifted) + "," +
+                                   std::to_string(r.default_durations) + "," + std::to_string(r.durations_changed) + "," + std::to_string(r.padding);
+        const std::string midi = notes_to_midi(set, r.units.front());
+        const bool ok = units == f[3] && report == f[4] && notes_to_notation(set, r.units.front()) == f[5] && Sha256::hex(Sha256::hash(midi)) == f[6];
+        CHECK(ok);
+        if (!ok) std::cerr << "  notes2 vector mismatch: " << f[0] << " " << f[2] << " -> " << units << " | " << report << "\n";
+        // The notation written out reads back to the same unit.
+        const auto again = canonicalise_notes2(notes_to_notation(set, r.units.front()), set, uint32_t(std::stoul(f[1])));
+        CHECK(again.units.front() == r.units.front());
+        ++n;
+    }
+    std::cout << "notes2 vectors checked: " << n << "\n";
+    CHECK(n >= 12);
+}
+
 void test_chunk_vectors(const std::string& path)
 {
     int n = 0;
@@ -1695,6 +1726,80 @@ void test_plugins(const std::string& dir)
     std::cout << "filter plugins checked\n";
 }
 
+
+void test_notes2(const std::string& dir)
+{
+    // notes104 described as a NoteSet: the same tokens and pitches as its own functions.
+    const NoteSet old = note_set_of(kNotesSymbolsId);
+    CHECK(old.legacy && old.base() == kNoteSymbols && old.id() == kNotesSymbolsId && old.voices == 1);
+    bool same = true;
+    for (uint32_t d = 0; d < kNoteSymbols; ++d)
+        same = same && note_token(old, d) == note_token(d) && old.midi(d) == (d / 4 ? 59 + d / 4 : 0) && old.sixteenths(d) == (2u << (d % 4));
+    CHECK(same);
+    const std::vector<uint32_t> tune{53, 69, 85, 0, 103};
+    CHECK(notes_to_midi(old, tune) == notes_to_midi(tune) && notes_to_notation(old, tune) == notes_to_notation(tune));
+    // Sets are checked, and have one spelling.
+    auto refused = [](auto f) {
+        try { f(); } catch (const std::invalid_argument&) { return true; }
+        return false;
+    };
+    CHECK(refused([] { (void)make_note_set(35, 60, "q", 1); }));        // below C2
+    CHECK(refused([] { (void)make_note_set(60, 70, "q", 1); }));        // less than an octave
+    CHECK(refused([] { (void)make_note_set(48, 84, "qe", 1); }));       // out of order
+    CHECK(refused([] { (void)make_note_set(48, 84, "qx", 1); }));       // not a duration
+    CHECK(refused([] { (void)make_note_set(48, 84, "q", 5); }));        // five voices
+    CHECK(refused([] { (void)note_set_of("notes2/Db3-C6/q/V1"); }));    // flats are written as sharps
+    CHECK(refused([] { (void)note_set_of("notes2/C3-C6/q"); }));
+    CHECK(!is_note_symbols("lower27") && is_note_symbols("notes2/C3-C6/q/V1") && is_note_symbols("notes104"));
+    const NoteSet two = make_note_set(48, 84, kNoteDurationCodes, 2);
+    CHECK(refused([&] { (void)canonicalise_notes2("C4 // D4 // E4", two, 2); })); // three voices on a line of two
+    CHECK(refused([&] { (void)canonicalise_notes2("C4w.", two, 2); }));           // no dotted whole
+    // The MIDI file: format 1, a tempo track and one per voice.
+    const std::string midi = notes_to_midi(two, canonicalise_notes2("C4q // E4h", two, 1).units.front());
+    CHECK(midi.substr(0, 4) == "MThd" && midi[9] == 1 && midi[11] == 3);
+
+    // Filters on several voices judge each voice, and count and rank as one voice's to the power
+    // of the voices: every unit of a small set, against the stack.
+    const NoteSet small = make_note_set(60, 71, "sq", 2); // 12 pitches and a rest, x 2 durations: 26 symbols
+    const FilterLine line{"audio", small.id(), small.base(), 4, nullptr, 0, 0, 0};
+    const TestResources none(nullptr, nullptr);
+    const auto key = plugin_spec(load_plugin_file(dir + "../data/filters/key-data-v2.sfilter"));
+    const auto leap = plugin_spec(load_plugin_file(dir + "../data/filters/melody-leap-v1.sfilter"));
+    const FilterStack st(line, {{&key, {{"tonic", "D"}}}, {&leap, {{"leap", "2"}}}}, none);
+    CHECK(st.voices() == 2 && st.ranker() != nullptr);
+    if (st.ranker())
+    {
+        uint64_t brute = 0;
+        std::vector<uint32_t> u(4);
+        auto voice_ok = [&](uint32_t a, uint32_t b) {
+            // D major, and neighbouring notes at most 2 apart (rests passed over).
+            auto in = [&](uint32_t d) {
+                const uint32_t m = small.midi(d);
+                if (m == 0) return true;
+                const uint32_t r = (m + 12 - 2) % 12;
+                return r == 0 || r == 2 || r == 4 || r == 5 || r == 7 || r == 9 || r == 11;
+            };
+            const uint32_t ma = small.midi(a), mb = small.midi(b);
+            return in(a) && in(b) && (ma == 0 || mb == 0 || (ma > mb ? ma - mb : mb - ma) <= 2);
+        };
+        bool agree = true;
+        for (u[0] = 0; u[0] < 26; ++u[0])
+            for (u[1] = 0; u[1] < 26; ++u[1])
+                for (u[2] = 0; u[2] < 26; ++u[2])
+                    for (u[3] = 0; u[3] < 26; ++u[3])
+                    {
+                        const bool want = voice_ok(u[0], u[1]) && voice_ok(u[2], u[3]);
+                        brute += want;
+                        agree = agree && st.passes(u) == want;
+                    }
+        CHECK(agree);
+        CHECK(st.ranker()->count() == BigUint(brute) && brute > 0);
+        bool ok = true;
+        check_ranker_exhaustive(st, 26, 4, ok);
+        CHECK(ok);
+    }
+    std::cout << "notes2 checked\n";
+}
 
 void test_filters(const std::string& dir)
 {
@@ -2618,6 +2723,8 @@ void run_all(int argc, char** argv)
         test_titled_vectors(dir + "vectors_titled_v1.tsv");
         test_binary_vectors(dir + "vectors_binary_v1.tsv");
         test_chunk_vectors(dir + "vectors_chunks_v1.tsv");
+        test_notes2_vectors(dir + "vectors_notes2_v1.tsv");
+        test_notes2(dir);
         test_plugins(dir);
         test_book_filter_vectors(dir);
     }

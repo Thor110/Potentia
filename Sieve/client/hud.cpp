@@ -197,7 +197,7 @@ std::string Hallway::one_line_preview(const Space::Digits& u)
     if (on_binary()) return ""; // a file is written out by binary_preview
     if (on_models()) return ""; // a model is drawn, not written out: see draw_model
     if (line().kind == LineKind::Text) return "\"" + ascii(utf8_encode(line().space.text_of(u))) + "\"";
-    if (line().kind == LineKind::Audio) return notes_to_notation(u);
+    if (line().kind == LineKind::Audio) return notes_to_notation(note_set_of(line().space.symbols_id()), u);
     return "";
 }
 
@@ -562,7 +562,7 @@ void Hallway::draw_in_hand(float W, float H)
         }
         break;
     case LineKind::Audio:
-        for (const auto& l : wrap(notes_to_notation(u), cols2))
+        for (const auto& l : wrap(notes_to_notation(note_set_of(line().space.symbols_id()), u), cols2))
         {
             if (cy > y + ph - 150) { text(x + 14, cy, "...", 2, ink); cy += 20; break; }
             text(x + 14, cy, l, 2, ink);

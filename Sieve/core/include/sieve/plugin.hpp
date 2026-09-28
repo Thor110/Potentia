@@ -74,11 +74,12 @@
 //                                       digits, # and -); in expressions a choice is its place
 //                                       in the list, from 0
 //   symbols   notes*                    every line whose symbols' id starts with what comes
-//                                       before the * (here the note lines: notes104)
+//                                       before the * (here the note lines: notes104 and
+//                                       every notes2 set; on several voices a plugin judges each)
 //
 // and constants of the line, in expressions: BASE (its number of symbols), and on a note line
 // PITCHES (pitches, not counting the rest), DURATIONS and LOW (the MIDI number of the lowest
-// pitch): a note's symbol is pitch * DURATIONS + duration, pitch 0 the rest and pitch 1 LOW. A
+// pitch; notes104: 25, 4, 60; a notes2 set: its own): a note's symbol is pitch * DURATIONS + duration, pitch 0 the rest and pitch 1 LOW. A
 // parameter or a for variable may not take any of these names, nor min, max or abs. A (state, symbol) given two different targets is an error; one
 // given none is the dead end. The oracle (reference/sieve_ref.py plugin) reads the same files with
 // its own parser and engine, and CI compares the two.

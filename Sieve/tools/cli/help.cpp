@@ -46,7 +46,8 @@ const Option kLineOptions = {
     "text   --length L (required)  --alphabet SPEC (lower27)  --canon v2|v1\n"
     "       --model ID|PATH|none  (guided ordering; default: the alphabet's default model)\n"
     "image  --width W (10)  --height H (10)  --palette mono|ega16|rgb332|rgb24 (mono)\n"
-    "audio  --length N note events (16)\n"
+    "audio  --length N note events (16)  --note-set notes104|notes2 (notes104)\n"
+    "       notes2: --low C3  --high C6  --durations seEqQhHw  --voices 1..4; --length is per voice\n"
     "video  --width W (5)  --height H (5)  --frames F (8)  --palette ... (mono)\n"
     "These must match between warp and read, or you will read a different unit."};
 
@@ -627,6 +628,13 @@ const std::vector<Page>& pages()
          "  Notation: C4q D#4e Bb4h Rq  (letter, optional # or b, octave, duration; R = rest).\n"
          "  Missing durations mean q; notes outside C4-C6 move by octaves into range; | and\n"
          "  commas are ignored. Short melodies are padded with eighth rests.\n"
+         "  That is the notes104 set. --note-set notes2 is a larger family, chosen by its range\n"
+         "  (--low C3 --high C6: anywhere in C2-C7, at least an octave), its durations (--durations,\n"
+         "  any of s e E q Q h H w: sixteenth, eighth, dotted eighth, quarter, dotted quarter,\n"
+         "  half, dotted half, whole; all eight by default) and its voices (--voices 1 to 4, each\n"
+         "  with its own time). --length is then events per voice. Notation adds s and the dotted\n"
+         "  e. q. h., and // between voices: C4q E4q. // C3w. Durations the set lacks become the\n"
+         "  nearest it has. Filters judge each voice on its own (canon-notes-v2).\n"
          "\n"
          "VIDEO\n"
          "  A unit is --frames pictures of WxH. Defaults are small because the space grows fast.\n"
@@ -637,6 +645,7 @@ const std::vector<Page>& pages()
          {},
          {{"sieve info --line image --width 16 --height 16 --palette ega16", "size of the 16x16 EGA image space"},
           {"sieve warp --line audio --length 8 \"C4q E4q G4q C5h\"", "an 8-event melody"},
+          {"sieve warp --line audio --note-set notes2 --voices 2 --length 8 \"C4q E4q. G4h // C3w\"", "two voices on the larger note set"},
           {"sieve browse --line video --count 1", "one random animation, frames side by side"}}},
     };
     return list;

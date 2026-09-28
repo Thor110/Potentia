@@ -1,0 +1,13 @@
+# set	length	notation	units	report	notation_out	midi_sha256
+notes2/C3-C6/seEqQhHw/V1	4	C4q E4q. G4h Bb5s	107,140,165,280	4,1,0,0,0,0	C4q E4q. G4h A#5s	bc9101abb7b82f5e397a3d5b724c1df6f54488b9941c192cd93bdc72f5f83679
+notes2/C3-C6/seEqQhHw/V2	6	C4q E4q. G4h Bb5s // C3w G2h	107,140,165,280,0,0,15,69,0,0,0,0	6,1,1,0,0,6	C4q E4q. G4h A#5s Rs Rs // C3w G3h Rs Rs Rs Rs	8b3abdb91cded818cfa44fd31e2cbb7c85c8ce7eee17458c9baa1e5ba4d057ea
+notes2/C3-C6/eqhw/V1	3	C4s D4e. E4q. F4h. G4w	52,61,70;75,83,0	5,0,0,0,4,1	C4e D4q E4h	06612e47614d9c9ff2403db572f14eb8e5dcaeca392ddafbaec44ae3dbba58b5
+notes2/C2-C7/seEqQhHw/V4	2	C1q // C8w // Rh. // A4	11,0,495,0,6,0,275,0	4,0,2,1,0,4	C2q Rs // C7w Rs // Rh. Rs // A4q Rs	c148608f02970bc427a618c9e16445e7977d543d3dd5925add77760f139812f1
+notes2/C4-B4/sq/V1	3	C5q D3s E4	3,6,11	3,0,2,1,0,0	C4q D4s E4q	b08eb338739af7bb8e1d7c36369b5ce0e15daf5c16d38a256a1d8f1643a22166
+notes2/C3-C6/seEqQhHw/V3	2	C4 D4 E4 // F4	107,123,147,0,0,0;139,0,0,0,0,0	4,0,0,4,0,8	C4q D4q // F4q Rs // Rs Rs	2823faeeb5dbe399023c7fad80e8cce2a11af85673f79d0f939f5fb6497ff88c
+notes2/C3-C6/seEqQhHw/V2	2	// C4q	0,0,107,0	1,0,0,0,0,3	Rs Rs // C4q Rs	eacdc87d07b7481d58f84bb0fb6daa3b02484fdd53c1f3594ff165602370a11e
+notes2/C3-C6/seEqQhHw/V1	2	C6w C3s	303,8	2,0,0,0,0,0	C6w C3s	4aeedbf8292a9c28cc9b4eb3c2e369f7e8e3d8a49de1a4811708c3fbb4070998
+notes2/C3-C6/seEqQhHw/V1	3	c4q r e4h.	107,3,142	3,0,0,1,0,0	C4q Rq E4h.	e94326614198a66df01463b11c4988f4e6c89ed4b988b0f45fae7684a4c623d0
+notes2/F#3-G5/EQH/V2	3	F#3e. G5q. Bb4h. | A4h, Gb4 // D4w Rs C4	3,79,53,29,0,21;49,39,0,0,0,0	8,2,0,2,5,4	F#3e. G5q. A#4h. // D4h. Re. C4e.	b60b18abae4f29bd2c201365cd295e9701fffbbac58fa6f0c6816607ec817bda
+notes2/C3-C6/w/V1	2	C4s D4	13,15	2,0,0,1,2,0	C4w D4w	6838884a8cf34ec6c2695995e35393928630a6029024eb051bcf505082d9d54a
+notes2/C3-C6/seEqQhHw/V4	1	C4 // D4 // E4 // F4	107,123,139,147	4,0,0,4,0,0	C4q // D4q // E4q // F4q	1a8ee525ec25f3ebfdf0015094156d30838dcf9df5a77cec03a1afabbd586dfc

@@ -67,7 +67,8 @@ std::vector<Hallway::MediaRow> Hallway::media_rows() const
 {
     using K = MediaRow::Kind;
     std::vector<MediaRow> rows;
-    for (K k : {K::Mode, K::On, K::Volume, K::Length, K::Tempo, K::Voice, K::Echo, K::Gap}) rows.push_back({k, {}, {}, -1});
+    for (K k : {K::Mode, K::On, K::Volume, K::Length, K::NoteSet, K::Low, K::High, K::Durations, K::Voices, K::Tempo, K::Voice, K::Echo, K::Gap})
+        rows.push_back({k, {}, {}, -1});
     // WORLD's character: a mode for each line, and the key round the circle of fifths.
     if (media_mode_ == MusicMode::World)
     {
@@ -79,7 +80,8 @@ std::vector<Hallway::MediaRow> Hallway::media_rows() const
     if (MusicPlayer* p = music())
     {
         const MusicSettings s = p->settings(media_mode_);
-        sieve::FilterLine fl{"audio", sieve::kNotesSymbolsId, sieve::kNoteSymbols, s.length, nullptr, 0, 0, 0};
+        const sieve::NoteSet set = s.notes();
+        sieve::FilterLine fl{"audio", set.id(), set.base(), s.length * set.voices, nullptr, 0, 0, 0};
         for (const sieve::FilterSpec* f : sieve::filters_for(fl))
         {
             rows.push_back({K::Filter, f->name(), {}, -1});
@@ -103,17 +105,17 @@ std::optional<MusicTrack> Hallway::media_selected() const
 void Hallway::media_saved(const std::string& path)
 {
     std::vector<uint32_t> notes;
+    sieve::NoteSet set;
     {
         std::lock_guard<std::mutex> lock(media_mx_);
         notes = media_saving_;
+        set = media_saving_set_;
     }
     std::string done;
     try
     {
-        cli::Args la;
-        la.opts["line"] = "audio";
-        la.opts["length"] = std::to_string(std::max<size_t>(1, notes.size()));
-        cli::save_unit(cli::make_line(la), notes, path, 16); // refuses what the vault holds
+        const uint32_t per = uint32_t(std::max<size_t>(1, notes.size() / std::max<uint32_t>(1, set.voices)));
+        cli::save_unit(audio_line(set, per), notes, path, 16); // refuses what the vault holds
         done = trf("hand.saved", {path});
     }
     catch (const std::exception& e)
@@ -125,13 +127,15 @@ void Hallway::media_saved(const std::string& path)
 }
 
 // Walk to a track: the audio line at the track's slot, the track in hand. Only a hallway whose
-// audio line is the track's length has it; otherwise the application builds one that does.
-void Hallway::go_to_track(const std::vector<uint32_t>& notes)
+// audio line is the track's note set and length has it; otherwise the application builds one that
+// does.
+void Hallway::go_to_track(const sieve::NoteSet& set, const std::vector<uint32_t>& notes)
 {
     if (notes.empty()) return;
-    if (lines_[2].space.unit_length() != notes.size())
+    if (lines_[2].space.unit_length() != notes.size() || lines_[2].space.symbols_id() != set.id())
     {
         track_to_go_ = notes;
+        track_set_to_go_ = set;
         request_ = Request::GoToTrack;
         return;
     }
@@ -173,7 +177,7 @@ void Hallway::media_act(MediaRow::Kind k, bool& quit)
         say(trf("media.playing", {mode_name(t->mode)}));
         break;
     case K::GoTo:
-        go_to_track(t->notes);
+        go_to_track(t->set, t->notes);
         if (request_ == Request::GoToTrack) quit = true; // the application builds the hallway again
         break;
     case K::Save:
@@ -181,6 +185,7 @@ void Hallway::media_act(MediaRow::Kind k, bool& quit)
         {
             std::lock_guard<std::mutex> lock(media_mx_);
             media_saving_ = t->notes;
+            media_saving_set_ = t->set;
         }
         const char* docs = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
         const std::string name = "sieve-audio-" + t->address().substr(0, 12) + ".mid";
@@ -232,6 +237,33 @@ void Hallway::media_change(int dir, bool big, bool& quit)
     case K::On: s.on = !s.on; break;
     case K::Volume: s.volume = std::clamp(s.volume + by * 5, 0, 100); break;
     case K::Length: s.length = uint32_t(std::clamp(int(s.length) + by, 1, 4096)); break;
+    case K::NoteSet: s.note_set = s.note_set == "notes2" ? "notes104" : "notes2"; break;
+    case K::Low:
+    case K::High:
+    {
+        // A semitone at a time (Shift: an octave), within C2..C7, at least an octave apart.
+        if (s.note_set != "notes2") return;
+        const int step = dir * (big ? 12 : 1);
+        int lo = int(sieve::note_midi_of(s.low)), hi = int(sieve::note_midi_of(s.high));
+        if (row.kind == K::Low) lo = std::clamp(lo + step, int(sieve::kNoteLowest), hi - 11);
+        else hi = std::clamp(hi + step, lo + 11, int(sieve::kNoteHighest));
+        s.low = sieve::note_name(uint32_t(lo));
+        s.high = sieve::note_name(uint32_t(hi));
+        break;
+    }
+    case K::Durations:
+    {
+        if (s.note_set != "notes2") return;
+        static const std::vector<std::string> presets = {"seEqQhHw", "seqhw", "eEqQhHw", "eqhw", "qhw", "sq"};
+        const auto it = std::find(presets.begin(), presets.end(), s.durations);
+        const int n = int(presets.size()), i = it == presets.end() ? 0 : int(it - presets.begin());
+        s.durations = presets[size_t(((i + dir) % n + n) % n)];
+        break;
+    }
+    case K::Voices:
+        if (s.note_set != "notes2") return;
+        s.voices = uint32_t(std::clamp(int(s.voices) + dir, 1, int(sieve::kMaxVoices)));
+        break;
     case K::Tempo: s.tempo = std::clamp(s.tempo + by * 2, 20, 300); break;
     case K::Voice: s.voice = Voice((int(s.voice) + dir + 4) % 4); break;
     case K::Echo: s.echo = std::clamp(s.echo + by * 5, 0, 80); break;
@@ -398,7 +430,18 @@ void Hallway::draw_media_player(float W, float H)
         case K::Mode: label = tr("media.mode"); value = "< " + mode_name(media_mode_) + " >"; break;
         case K::On: label = tr("media.on"); value = tr(s.on ? "media.value.on" : "media.value.off"); break;
         case K::Volume: label = tr("media.volume"); value = std::to_string(s.volume) + "%"; break;
-        case K::Length: label = tr("media.length"); value = trf("media.value.notes", {std::to_string(s.length)}); break;
+        case K::Length:
+            label = tr(s.notes().voices > 1 ? "media.length.per_voice" : "media.length");
+            value = trf("media.value.notes", {std::to_string(s.length)});
+            break;
+        case K::NoteSet:
+            label = tr("media.note_set");
+            value = s.note_set == "notes2" ? trf("media.note_set.notes2", {std::to_string(s.notes().base())}) : tr("media.note_set.notes104");
+            break;
+        case K::Low: label = "   " + tr("media.low"); value = s.note_set == "notes2" ? s.low : tr("setup.notes2_only"); break;
+        case K::High: label = "   " + tr("media.high"); value = s.note_set == "notes2" ? s.high : tr("setup.notes2_only"); break;
+        case K::Durations: label = "   " + tr("media.durations"); value = s.note_set == "notes2" ? s.durations : tr("setup.notes2_only"); break;
+        case K::Voices: label = "   " + tr("media.voices"); value = s.note_set == "notes2" ? std::to_string(s.voices) : tr("setup.notes2_only"); break;
         case K::Tempo: label = tr("media.tempo"); value = trf("media.value.bpm", {std::to_string(s.tempo)}); break;
         case K::Voice: label = tr("media.voice"); value = tr(std::string("media.voice.") + voice_id(s.voice)); break;
         case K::Echo: label = tr("media.echo"); value = std::to_string(s.echo) + "%"; break;

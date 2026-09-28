@@ -1833,6 +1833,170 @@ def cmd_chunk_vectors(_args):
         print(f"{name}\t{data.hex() or '-'}\t{cs}")
 
 
+# ---------------------------------------------------------------- notes2 (canon-notes-v2)
+# Written from the description in core/include/sieve/audio.hpp, not from audio.cpp.
+
+NOTE2_CODES = "seEqQhHw"                          # s e e. q q. h h. w
+NOTE2_LEN = dict(zip(NOTE2_CODES, [1, 2, 3, 4, 6, 8, 12, 16]))  # in sixteenths
+NOTE2_WRITTEN = dict(zip(NOTE2_CODES, ["s", "e", "e.", "q", "q.", "h", "h.", "w"]))
+SHARP_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+LETTER_SEMI = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
+
+
+def note2_midi(name):
+    m = re.fullmatch(r"([A-Ga-g])([#b]?)([0-9])", name)
+    if not m:
+        raise ValueError(f"cannot read the note {name!r}")
+    semi = LETTER_SEMI[m.group(1).upper()] + {"#": 1, "b": -1, "": 0}[m.group(2)]
+    return (int(m.group(3)) + 1) * 12 + semi
+
+
+def note2_name(midi):
+    return SHARP_NAMES[midi % 12] + str(midi // 12 - 1)
+
+
+class NoteSet2:
+    def __init__(self, low, high, durations, voices):
+        if not (36 <= low and high <= 96 and high - low >= 11):
+            raise ValueError("a notes2 range lies in C2..C7 and spans an octave")
+        if not durations or any(c not in NOTE2_CODES for c in durations) or \
+                [NOTE2_CODES.index(c) for c in durations] != sorted({NOTE2_CODES.index(c) for c in durations}):
+            raise ValueError("durations are distinct codes of seEqQhHw, in that order")
+        if not 1 <= voices <= 4:
+            raise ValueError("1 to 4 voices")
+        self.low, self.high, self.durations, self.voices = low, high, durations, voices
+        self.D = len(durations)
+        self.P = high - low + 1
+        self.base = (self.P + 1) * self.D
+
+    def id(self):
+        return f"notes2/{note2_name(self.low)}-{note2_name(self.high)}/{self.durations}/V{self.voices}"
+
+    def token(self, d):
+        pitch, dur = divmod(d, self.D)
+        name = "R" if pitch == 0 else note2_name(self.low + pitch - 1)
+        return name + NOTE2_WRITTEN[self.durations[dur]]
+
+
+def canon_notes2(text, ns, L):
+    """canon-notes-v2: units of voices x L digits, and what was changed on the way."""
+    rep = dict(events=0, flats=0, octave=0, default=0, changed=0, padding=0)
+    voices_text = text.split("//")
+    if len(voices_text) > ns.voices:
+        raise ValueError("more voices than the line has")
+    voices = [[] for _ in range(ns.voices)]
+    for v, part in enumerate(voices_text):
+        for tok in re.split(r"[\s|,]+", part):
+            if not tok:
+                continue
+            m = re.fullmatch(r"(?:([Rr])|([A-Ga-g])([#b]?)([0-9]))(?:([seqhwSEQHW])(\.?))?", tok)
+            if not m:
+                raise ValueError(f"cannot read note {tok!r}")
+            if m.group(1):
+                pitch = 0
+            else:
+                if m.group(3) == "b":
+                    rep["flats"] += 1
+                midi = (int(m.group(4)) + 1) * 12 + LETTER_SEMI[m.group(2).upper()] + {"#": 1, "b": -1, "": 0}[m.group(3)]
+                moved = midi
+                while moved < ns.low:
+                    moved += 12
+                while moved > ns.high:
+                    moved -= 12
+                rep["octave"] += moved != midi
+                pitch = moved - ns.low + 1
+            if m.group(5) is None:
+                want = 4
+                rep["default"] += 1
+            else:
+                written = m.group(5).lower() + m.group(6)
+                if written not in NOTE2_WRITTEN.values():
+                    raise ValueError(f"cannot read note {tok!r}")
+                want = {w: NOTE2_LEN[c] for c, w in NOTE2_WRITTEN.items()}[written]
+            # the nearest length the set has; a tie to the longer
+            lengths = [NOTE2_LEN[c] for c in ns.durations]
+            best = min(range(ns.D), key=lambda i: (abs(lengths[i] - want), -lengths[i]))
+            rep["changed"] += lengths[best] != want
+            voices[v].append(pitch * ns.D + best)
+            rep["events"] += 1
+    runs = max(1, max((len(x) + L - 1) // L for x in voices))
+    units = []
+    for k in range(runs):
+        unit = []
+        for x in voices:
+            chunk = x[k * L:(k + 1) * L]
+            rep["padding"] += L - len(chunk)
+            unit += chunk + [0] * (L - len(chunk))
+        units.append(unit)
+    return units, rep
+
+
+def notes2_notation(ns, digits):
+    per = len(digits) // ns.voices
+    return " // ".join(" ".join(ns.token(d) for d in digits[v * per:(v + 1) * per]) for v in range(ns.voices))
+
+
+def notes2_midi(ns, digits):
+    """Format 1: a tempo track, then a track per voice on channel v (480 ticks a quarter)."""
+    def vlq(n):
+        out = [n & 0x7F]
+        n >>= 7
+        while n:
+            out.append(0x80 | (n & 0x7F))
+            n >>= 7
+        return bytes(reversed(out))
+
+    def chunk(body):
+        return b"MTrk" + struct.pack(">I", len(body)) + body
+
+    tracks = [chunk(vlq(0) + bytes([0xFF, 0x51, 0x03, 0x07, 0xA1, 0x20]) + vlq(0) + bytes([0xFF, 0x2F, 0x00]))]
+    per = len(digits) // ns.voices
+    for v in range(ns.voices):
+        body = vlq(0) + bytes([0xC0 | v, 0])
+        wait = 0
+        for d in digits[v * per:(v + 1) * per]:
+            pitch, dur = divmod(d, ns.D)
+            ticks = NOTE2_LEN[ns.durations[dur]] * 120
+            if pitch == 0:
+                wait += ticks
+                continue
+            midi = ns.low + pitch - 1
+            body += vlq(wait) + bytes([0x90 | v, midi, 96]) + vlq(ticks) + bytes([0x80 | v, midi, 0])
+            wait = 0
+        body += vlq(wait) + bytes([0xFF, 0x2F, 0x00])
+        tracks.append(chunk(body))
+    return b"MThd" + struct.pack(">IHHH", 6, 1, 1 + ns.voices, 480) + b"".join(tracks)
+
+
+NOTES2_CASES = [
+    # (low, high, durations, voices, L, notation)
+    ("C3", "C6", "seEqQhHw", 1, 4, "C4q E4q. G4h Bb5s"),
+    ("C3", "C6", "seEqQhHw", 2, 6, "C4q E4q. G4h Bb5s // C3w G2h"),
+    ("C3", "C6", "eqhw", 1, 3, "C4s D4e. E4q. F4h. G4w"),
+    ("C2", "C7", "seEqQhHw", 4, 2, "C1q // C8w // Rh. // A4"),
+    ("C4", "B4", "sq", 1, 3, "C5q D3s E4"),
+    ("C3", "C6", "seEqQhHw", 3, 2, "C4 D4 E4 // F4"),
+    ("C3", "C6", "seEqQhHw", 2, 2, "// C4q"),
+    ("C3", "C6", "seEqQhHw", 1, 2, "C6w C3s"),
+    ("C3", "C6", "seEqQhHw", 1, 3, "c4q r e4h."),
+    ("F#3", "G5", "EQH", 2, 3, "F#3e. G5q. Bb4h. | A4h, Gb4 // D4w Rs C4"),
+    ("C3", "C6", "w", 1, 2, "C4s D4"),
+    ("C3", "C6", "seEqQhHw", 4, 1, "C4 // D4 // E4 // F4"),
+]
+
+
+def cmd_notes2_vectors(args):
+    """canon-notes-v2: set, events per voice, notation in; every unit's digits, the report, the
+    first unit's notation and its MIDI file's SHA-256 out."""
+    print("# set\tlength\tnotation\tunits\treport\tnotation_out\tmidi_sha256")
+    for low, high, durs, voices, L, text in NOTES2_CASES:
+        ns = NoteSet2(note2_midi(low), note2_midi(high), durs, voices)
+        units, rep = canon_notes2(text, ns, L)
+        report = ",".join(str(rep[k]) for k in ("events", "flats", "octave", "default", "changed", "padding"))
+        print(f"{ns.id()}\t{L}\t{text}\t{';'.join(','.join(map(str, u)) for u in units)}\t{report}\t"
+              f"{notes2_notation(ns, units[0])}\t{hashlib.sha256(notes2_midi(ns, units[0])).hexdigest()}")
+
+
 # ---------------------------------------------------------------- filter plugins (sieve-filter-v1)
 # Written from the format in core/include/sieve/plugin.hpp and docs/FILTER-PLUGINS.md, not from
 # plugin.cpp: its own tokenizer, expression reader and interpreter, and Hopcroft's minimisation
@@ -2143,12 +2307,14 @@ def plugin_base(symbols, base=None):
     return base
 
 
-def compile_plugin(head, body, values, base):
+def compile_plugin(head, body, values, base, notes=None):
     env = {}
     v2 = head.get("v2", False)
     if v2:
         env["BASE"] = base
-        if head["symbols"].startswith("notes"):
+        if notes is not None:  # a notes2 set: its own
+            env.update(PITCHES=notes.P, DURATIONS=notes.D, LOW=notes.low)
+        elif head["symbols"].startswith("notes"):
             env.update(PITCHES=25, DURATIONS=4, LOW=60)  # notes104: C4 (MIDI 60) .. C6, e q h w
     for name, d, lo, hi in head["params"]:
         if lo == "dict":
@@ -2699,6 +2865,11 @@ def cmd_plugin(args):
     head, body = parse_plugin(data.decode("utf-8"))
     values = dict(kv.split("=", 1) for kv in args.params.split(",")) if args.params else {}
     base = plugin_base(head["symbols"], args.base)
+    notes, voices = None, 1
+    if args.note_set == "notes2":
+        # one voice's line; a unit is voices x --length, each voice judged on its own
+        notes = NoteSet2(note2_midi(args.low), note2_midi(args.high), args.durations, args.voices)
+        base, voices = notes.base, notes.voices
     word_data = ""
     lazy = None
     if head["form"] == "tokens" and args.lazy:
@@ -2710,7 +2881,7 @@ def cmd_plugin(args):
     else:
         if args.lazy:
             raise SystemExit("--lazy is for the token form")
-        N, start, nxt, acc = compile_plugin(head, body, values, base)
+        N, start, nxt, acc = compile_plugin(head, body, values, base, notes)
     if lazy is None:
         s0, m_next, m_acc = minimise_dfa(start, nxt, acc, base)
     params = " ".join(f"{name}={values.get(name, d)}" for name, d, lo, hi in head["params"]) or "(none)"
@@ -2725,15 +2896,17 @@ def cmd_plugin(args):
     print(f"form       {head['form']}" + (f"  {word_data}" if word_data else ""))
     kind_word = 'words' if head['form'] == 'tokens' else 'declared'
     print(f"states     {N} {kind_word}, " + ("(not determinised: --lazy)" if lazy else f"{len(m_next)} minimal"))
-    print(f"length     {args.length}")
+    print(f"length     {args.length * voices}")
     L = args.length
     if lazy:
         count = lazy.count(lazy.id_of(frozenset([0])), L)
     else:
         table = dfa_count_table(m_next, m_acc, L) if m_next else [[0]]
         count = table[L][0] if m_next else 0
+    one = count
+    count = one ** voices  # every voice a survivor of its own
     print(f"survivors  {count}")
-    print(f"excluded   {base ** L - count}")
+    print(f"excluded   {base ** (L * voices) - count}")
     if count:
         ks = [0]
         if count // 3 not in (0, count - 1):
@@ -2741,7 +2914,13 @@ def cmd_plugin(args):
         if count - 1 != 0:
             ks.append(count - 1)
         for k in ks:
-            u = lazy.unrank(L, k) if lazy else dfa_unrank(m_next, table, L, k)
+            u, rest = [], k
+            parts = []
+            for _ in range(voices):  # the voices' ranks, as digits in base one voice's count
+                rest, r = divmod(rest, one)
+                parts.append(r)
+            for part in reversed(parts):
+                u += lazy.unrank(L, part) if lazy else dfa_unrank(m_next, table, L, part)
             print(f"rank       {k}  {','.join(map(str, u)) or '-'}")
     if args.judge:
         # each line of a text file judged as one unit of its own length, as `sieve filters --plugin
@@ -2999,6 +3178,7 @@ def main():
     sub.add_parser("titled-vectors")
     sub.add_parser("binary-vectors")
     sub.add_parser("chunk-vectors")
+    sub.add_parser("notes2-vectors")
     s = sub.add_parser("plugin")
     s.add_argument("file")
     s.add_argument("--length", type=int, default=32)
@@ -3006,6 +3186,12 @@ def main():
     s.add_argument("--base", type=int)
     s.add_argument("--lazy", action="store_true")  # the token form, without determinising in full
     s.add_argument("--judge")  # a text file: each line judged
+    s.add_argument("--line")  # the engine's option, taken for the same command line (audio)
+    s.add_argument("--note-set", default="notes104")
+    s.add_argument("--low", default="C3")
+    s.add_argument("--high", default="C6")
+    s.add_argument("--durations", default="seEqQhHw")
+    s.add_argument("--voices", type=int, default=1)
     s = sub.add_parser("chunks")
     s.add_argument("file")
     s = sub.add_parser("manifest")
@@ -3060,6 +3246,8 @@ def main():
         cmd_binary_vectors(args)
     elif args.cmd == "chunk-vectors":
         cmd_chunk_vectors(args)
+    elif args.cmd == "notes2-vectors":
+        cmd_notes2_vectors(args)
     elif args.cmd == "chunks":
         cmd_chunks(args)
     elif args.cmd == "plugin":

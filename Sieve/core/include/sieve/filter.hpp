@@ -154,7 +154,16 @@ std::vector<const FilterSpec*> filters_for(const FilterLine& line);
 std::string param_value(const FilterSpec& spec, const FilterValues& values, const std::string& key);
 int64_t param_int(const FilterSpec& spec, const FilterValues& values, const std::string& key);
 
+// V voices' ranker from one voice's (the one kept alive by the caller); see FilterStack.
+std::unique_ptr<Ranker> voices_ranker(const Ranker& one, uint32_t voices);
+
 // The ticked filters of one line.
+//
+// On a note line of several voices (notes2, sieve/audio.hpp) the filters are made for one voice's
+// line (its length the line's divided by the voices) and judge each voice on its own: a unit
+// passes when every voice does. Its survivors are then those of one voice to the power of the
+// voices, and a ranker for one voice ranks the whole (VoicesRanker): the unit's rank is its
+// voices' ranks read as one number in base (one voice's count), voice 1 first.
 class FilterStack
 {
 public:
@@ -182,12 +191,15 @@ public:
     const std::string& provenance() const { return provenance_; }
     const std::string& id() const { return id_; }
 
+    uint32_t voices() const { return voices_; }
+
 private:
     std::vector<std::unique_ptr<Filter>> filters_;
     std::vector<std::string> names_;
-    uint32_t length_ = 0;
+    uint32_t length_ = 0, voices_ = 1;
     const Ranker* compact_ = nullptr;
     std::unique_ptr<Ranker> own_ranker_; // a stack of plugins: their combined automaton's ranker
+    std::unique_ptr<Ranker> voices_ranker_; // several voices: one voice's ranker, for them all
     std::string blocker_;
     std::string provenance_, id_;
 };

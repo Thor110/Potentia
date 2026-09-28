@@ -110,6 +110,13 @@ jobs:
           $exe filters --line image --filters agree.ini | tr -d '\r' | q "^survivors    6053792982126620565936264884 "
           $exe browse --line image --filters agree.ini --compact --count 2 --seed 4 > /dev/null
           $exe browse --line audio --filters lines.ini --compact --count 2 --seed 4 > /dev/null
+          # The notes2 family: two voices of a larger set, warped, and a stack of melody plugins
+          # that judges each voice, counting one voice's survivors squared (218112^2).
+          $exe warp --line audio --note-set notes2 --voices 2 --length 6 "C4q E4q. G4h Bb5s // C3w G2h" | tr -d '\r' | q "C4q E4q. G4h A#5s Rs Rs // C3w G3h Rs Rs Rs Rs"
+          printf '[audio]\nmode = compact\nfilters = key-data-v2, melody-leap-v1\n[audio.key-data-v2]\ntonic = D\n[audio.melody-leap-v1]\nleap = 2\n' > n2.ini
+          $exe filters --line audio --note-set notes2 --voices 1 --length 3 --filters n2.ini | tr -d '\r' | q "^survivors    218112 "
+          $exe filters --line audio --note-set notes2 --voices 2 --length 3 --filters n2.ini | tr -d '\r' | q "^survivors    47572844544 "
+          $exe browse --line audio --note-set notes2 --voices 2 --length 3 --filters n2.ini --compact --count 2 --seed 4 | tr -d '\r' | q " // "
 
       - name: A model is one object with an address on two lines
         run: |
@@ -179,7 +186,8 @@ jobs:
           # mapping has to be pinned or a row inserted anywhere above silently opens the wrong
           # line's list. Each row here ticks a mode and the saved file says which line it was.
           # Closing the overlay is what writes it, which also covers that path.
-          for pair in "11 text" "15 image" "18 audio" "19 video" "23 books" "24 models" "27 binary"; do
+          # (The audio rows are six: its notes, its note set, and notes2's range, durations and voices.)
+          for pair in "11 text" "15 image" "18 audio" "21 audio" "24 video" "28 books" "29 models" "32 binary"; do
             set -- $pair
             rm -f row$1.ini
             downs=$(python -c "print(','.join(['Down']*$1))")
@@ -664,6 +672,9 @@ jobs:
           $H --filters words2.ini --mode guided --warp "$W" --walk "0,0" --screenshot cg.png | sed -n 1p | q "PAGES line, guided zoom 59, filters: 1 compact"
           $H --filters lines.ini --line image --mode scrambled --walk "0,0" --screenshot ci.png | sed -n 1p | q "IMAGE line, scrambled, filters: 1 compact (322091425582872 survivors)"
           $H --filters lines.ini --line audio --walk "0,0" --screenshot ca.png | sed -n 1p | q "AUDIO line, positional, filters: 1 compact"
+          # A notes2 audio line of two voices, its plugins judging each voice, in compact order.
+          printf '[audio]\nmode = compact\nfilters = key-data-v2, melody-leap-v1\n[audio.key-data-v2]\ntonic = D\n[audio.melody-leap-v1]\nleap = 2\n' > n2h.ini
+          $H --filters n2h.ini --line audio --note-set notes2 --voices 2 --notes 3 --walk "0,0" --screenshot n2a.png | sed -n 1p | q "AUDIO line, positional, filters: 2 compact (47572844544 survivors)"
           test -s compact.png && test -s mixed.png && test -s mark.png && test -s overlay.png
 
       - name: Reference oracle reproduces the committed vectors
@@ -685,6 +696,7 @@ jobs:
           python sieve_ref.py titled-vectors | diff - ../tests/vectors_titled_v1.tsv
           python sieve_ref.py binary-vectors | diff - ../tests/vectors_binary_v1.tsv
           python sieve_ref.py chunk-vectors | diff - ../tests/vectors_chunks_v1.tsv
+          python sieve_ref.py notes2-vectors | diff - ../tests/vectors_notes2_v1.tsv
           python sieve_ref.py book-filter-vectors | diff - ../tests/vectors_book_filters_v1.tsv
           python sieve_ref.py book-read ../tests/example_book_v1.book > book.out
           test "$(head -1 book.out)" = "$(awk '$1 == "id" {print $2}' ../tests/example_book_v1.book)"
@@ -736,6 +748,20 @@ jobs:
               python sieve_ref.py plugin ../tests/plugins/toy-v2-v1.sfilter --length $L ${p:+--params $p} > plugin.oracle
               $S filters --plugin ../tests/plugins/toy-v2-v1.sfilter --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
               diff plugin.oracle plugin.engine
+            done
+          done
+          # The notes2 family: the note plugins on sets of other ranges and durations, one to three
+          # voices, each voice judged on its own (counts to the power of the voices, ranks by voice).
+          for set in "--low C3 --high C6 --durations seEqQhHw" "--low F#3 --high G5 --durations EQH"; do
+            for V in 1 2 3; do
+              for spec in "key-data-v2:tonic=D,scale=blues" "melody-leap-v1:leap=3" "melody-rests-v1:run=1,total=2,leading=yes" "melody-range-v1:low=62,high=70"; do
+                f=${spec%%:*}; p=${spec#*:}
+                for L in 1 2 5; do
+                  python sieve_ref.py plugin ../data/filters/$f.sfilter --line audio --note-set notes2 $set --voices $V --length $L --params $p > plugin.oracle
+                  $S filters --plugin ../data/filters/$f.sfilter --line audio --note-set notes2 $set --voices $V --length $L --params $p | tr -d '\r' > plugin.engine
+                  diff plugin.oracle plugin.engine
+                done
+              done
             done
           done
           # The Moby grammars: too large for the oracle to determinise in full (its NFA keeps each

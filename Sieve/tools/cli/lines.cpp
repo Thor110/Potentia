@@ -130,7 +130,23 @@ Line make_line(const Args& a)
         return Line{kind, nullptr, kDefaultCanon, f, Space(f.symbols_id(), f.palette->size(), f.unit_length(), key), nullptr, {}};
     }
     case LineKind::Audio:
-        return Line{kind, nullptr, kDefaultCanon, {}, Space(kNotesSymbolsId, kNoteSymbols, a.get_positive("length", 16), key), nullptr, {}};
+    {
+        // notes104 (the default), or a notes2 set: --note-set notes2 with --low, --high,
+        // --durations and --voices; --length is then events per voice, and a unit is voices x that.
+        const std::string family = a.get("note-set", "notes104");
+        const uint32_t length = a.get_positive("length", 16);
+        if (family == "notes104")
+        {
+            for (const char* k : {"low", "high", "durations", "voices"})
+                if (a.has(k)) throw std::invalid_argument(std::string("--") + k + " is for --note-set notes2 (notes104 is fixed: C4-C6, e q h w, one voice)");
+            return Line{kind, nullptr, kDefaultCanon, {}, Space(kNotesSymbolsId, kNoteSymbols, length, key), nullptr, {}};
+        }
+        if (family != "notes2") throw std::invalid_argument("unknown note set '" + family + "' (notes104 or notes2)");
+        const NoteSet set = make_note_set(note_midi_of(a.get("low", "C3")), note_midi_of(a.get("high", "C6")), a.get("durations", kNoteDurationCodes),
+                                          a.get_positive("voices", 1));
+        if (uint64_t(length) * set.voices > 0xFFFFFFFFull) throw std::invalid_argument("too many events in one unit");
+        return Line{kind, nullptr, kDefaultCanon, {}, Space(set.id(), set.base(), length * set.voices, key), nullptr, {}};
+    }
     }
     throw std::logic_error("unhandled line");
 }
@@ -150,7 +166,15 @@ std::string Line::describe_symbols() const
                std::to_string(image.height) + " pixels, palette " + image.palette->id() + " (" +
                image.palette->description() + ")";
     case LineKind::Audio:
-        return std::to_string(space.unit_length()) + " note events, each one of 104 (rest or C4-C6, x 4 durations)";
+    {
+        const NoteSet set = note_set_of(space.symbols_id());
+        if (set.legacy) return std::to_string(space.unit_length()) + " note events, each one of 104 (rest or C4-C6, x 4 durations)";
+        std::string names;
+        for (char c : set.durations) names += std::string(names.empty() ? "" : " ") + (c == 'E' ? "e." : c == 'Q' ? "q." : c == 'H' ? "h." : std::string(1, c));
+        return std::to_string(set.voices) + " voice(s) x " + std::to_string(space.unit_length() / set.voices) + " note events, each one of " +
+               std::to_string(set.base()) + " (rest or " + note_name(set.low) + "-" + note_name(set.high) + ", " + std::to_string(set.pitches()) +
+               " pitches, x " + std::to_string(set.duration_count()) + " durations: " + names + ")";
+    }
     }
     return "";
 }
@@ -193,13 +217,17 @@ WarpInput read_warp_input(const Line& line, const Args& a)
     {
         const std::string input = a.has("file") ? read_file(a.get("file")) : joined_positional(a);
         if (input.empty()) throw std::invalid_argument("nothing to warp: give notes like \"C4q E4q G4h\" or --file PATH");
-        const NotesCanonResult c = canonicalise_notes(input, line.space.unit_length());
-        w.report.push_back(std::string(kNotesCanonVersion) + ": " + std::to_string(c.events) + " event(s), " +
+        const NoteSet set = note_set_of(line.space.symbols_id());
+        const NotesCanonResult c = set.legacy ? canonicalise_notes(input, line.space.unit_length())
+                                              : canonicalise_notes2(input, set, line.space.unit_length() / set.voices);
+        w.report.push_back(std::string(set.legacy ? kNotesCanonVersion : kNotes2CanonVersion) + ": " + std::to_string(c.events) + " event(s), " +
                            std::to_string(c.units.size()) + " unit(s)");
         if (c.flats_rewritten) w.report.push_back(count_line("flats as sharps", c.flats_rewritten));
-        if (c.octave_shifted) w.report.push_back(count_line("octave shifted", c.octave_shifted, "moved into C4-C6"));
+        if (c.octave_shifted)
+            w.report.push_back(count_line("octave shifted", c.octave_shifted, set.legacy ? "moved into C4-C6" : "moved into the line's range"));
         if (c.default_durations) w.report.push_back(count_line("no duration, used q", c.default_durations));
-        if (c.padding) w.report.push_back(count_line("padding", c.padding, "eighth rests on the last unit"));
+        if (c.durations_changed) w.report.push_back(count_line("durations the set lacks", c.durations_changed, "the nearest used"));
+        if (c.padding) w.report.push_back(count_line("padding", c.padding, set.legacy ? "eighth rests on the last unit" : "rests filling the voices"));
         w.units = c.units;
         break;
     }
@@ -237,7 +265,7 @@ std::string preview(const Line& line, const std::vector<uint32_t>& digits)
     switch (line.kind)
     {
     case LineKind::Text: return "\"" + utf8_encode(line.space.text_of(digits)) + "\"";
-    case LineKind::Audio: return notes_to_notation(digits);
+    case LineKind::Audio: return notes_to_notation(note_set_of(line.space.symbols_id()), digits);
     case LineKind::Image:
     case LineKind::Video:
     {
@@ -289,7 +317,7 @@ bool unit_withheld(const Line& line, const std::vector<uint32_t>& digits)
     }
     case LineKind::Audio:
     {
-        const std::string midi = notes_to_midi(digits);
+        const std::string midi = notes_to_midi(note_set_of(line.space.symbols_id()), digits);
         return vault::withheld_bytes(std::vector<uint8_t>(midi.begin(), midi.end()));
     }
     case LineKind::Image:
@@ -344,7 +372,7 @@ void save_unit(const Line& line, const std::vector<uint32_t>& digits, const std:
     }
     case LineKind::Audio:
     {
-        const std::string midi = notes_to_midi(digits);
+        const std::string midi = notes_to_midi(note_set_of(line.space.symbols_id()), digits);
         std::ofstream out(std::filesystem::path(path), std::ios::binary);
         if (!out) throw std::runtime_error("cannot write '" + path + "'");
         out.write(midi.data(), static_cast<std::streamsize>(midi.size()));

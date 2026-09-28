@@ -4,9 +4,10 @@
 // There are two modes, each with its own settings and its own stack of audio filters: MENUS (every
 // menu and screen that is not the world: the main menu, the setup menu, the designer, the pause
 // menu and the tools opened from it) and WORLD (walking the hallway). A track is one unit of the
-// audio line (notes104) at the mode's own length, picked at random from the survivors of the
-// mode's stack: the stack counts them, a rank is drawn uniformly below the count, and the unit at
-// that rank is played. So every track is on a shelf, with an address, and nothing is searched for.
+// audio line at the mode's own length and note set (notes104, or a notes2 set of 1-4 voices),
+// picked at random from the survivors of the mode's stack: the stack counts them, a rank is
+// drawn uniformly below the count, and the unit at that rank is played. So every track is on a
+// shelf, with an address, and nothing is searched for.
 // With no filter ticked a track is any unit at all; with a stack that cannot count (a judge-only
 // filter) units are drawn at random until one passes, a few thousand tries at most.
 //
@@ -18,8 +19,9 @@
 // darkest Lydian, Ionian, Mixolydian, Dorian, Aeolian, Phrygian, Locrian (by default image,
 // pages, audio, video, books, models, binary, in that order of brightness). A note is moved from
 // its step of the track's scale to the same step of the line's mode, on the same tonic; the scale
-// and tonic are those of the key filter in WORLD's stack (key-data-v2, or key-v1), so without one the modes do nothing. Scales
-// of fewer than seven notes are read as the seven-note scale they come from (the major
+// and tonic are those of the key filter in WORLD's stack (key-data-v2, or key-v1), so without
+// one the modes do nothing. Scales of fewer than seven notes are read as the seven-note scale
+// they come from (the major
 // pentatonic as the major scale's steps 1 2 3 5 6), and then lack the steps some modes change:
 // on the major pentatonic, Lydian, Ionian and Mixolydian sound the same. Optionally the key
 // follows the line round the circle of fifths too (pages C, image G, audio D, video A, books E,
@@ -41,6 +43,8 @@
 #pragma once
 
 #include "cli/filter_config.hpp"
+#include "cli/lines.hpp"
+#include "sieve/audio.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -63,7 +67,11 @@ struct MusicSettings
 {
     bool on = true;
     int volume = 30;       // percent
-    uint32_t length = 32;  // notes in a track
+    uint32_t length = 32;  // notes in a track (in each voice, on notes2)
+    // The note set tracks are drawn from: notes104, or notes2 with its range, durations and voices.
+    std::string note_set = "notes104", low = "C3", high = "C6", durations = "seEqQhHw";
+    uint32_t voices = 1;
+    sieve::NoteSet notes() const; // the set (notes104 if the notes2 fields cannot make one)
     int tempo = 80;        // quarter notes a minute
     Voice voice = Voice::Soft;
     int echo = 25;         // percent fed back
@@ -85,8 +93,9 @@ struct MusicTrack
 {
     MusicMode mode = MusicMode::World;
     int line = -1;                // WORLD: the line it began on (the hallway's numbering), else -1
+    sieve::NoteSet set;           // what its notes are (notes104 unless said)
     std::string when;             // "14:05", when it began
-    std::vector<uint32_t> notes;  // the unit (notes104), its length the track's
+    std::vector<uint32_t> notes;  // the unit, its length the track's (voices x events on notes2)
     std::string notation() const;
     std::string address() const;  // positional, in hex, on the audio line of its length
     std::string where() const;    // "WORLD [BINARY]", "MENUS"
@@ -109,7 +118,7 @@ public:
     void set_line(int li);
 
     // The melody in hand: square tones at 120 bpm, over the music, which fades out under it.
-    std::string play_item(const std::vector<uint32_t>& notes);
+    std::string play_item(const sieve::NoteSet& set, const std::vector<uint32_t>& notes);
     void stop_item();
 
     MusicSettings settings(MusicMode m) const;
@@ -133,14 +142,20 @@ public:
     void draw_overlay(SDL_Renderer* r, float W, float H, SDL_Color bg, SDL_Color ink) const;
 
 private:
+    // One voice of a track as it plays: its stretch of the unit, the note it is on, and how far in.
+    struct Part
+    {
+        size_t from = 0, to = 0, note = 0, sample = 0, note_samples = 0;
+        float freq = 0, phase = 0;
+    };
     struct Channel
     {
         std::vector<uint32_t> notes;
+        sieve::NoteSet set;        // how the notes read (notes104, or a notes2 set of 1-4 voices)
+        std::vector<Part> parts;   // one a voice, all sounding together
         float bpm = 120, echo = 0, gain = 0, target = 0, level = 1;
         Voice voice = Voice::Square;
-        size_t note = 0, sample = 0, note_samples = 0;
-        float freq = 0, phase = 0;
-        int shift[26] = {}; // semitones each pitch is moved by (the line's character)
+        int shift[62] = {}; // semitones each pitch is moved by (the line's character), by pitch index
         std::vector<float> ring; // the echo's delay line
         size_t ring_pos = 0, tail = 0;
         bool active = false, done = true;
@@ -149,8 +164,9 @@ private:
     static void SDLCALL callback(void* user, SDL_AudioStream* stream, int additional, int total);
     void mix(float* out, int n);
     float sample_of(Channel& c);
-    void start_note(Channel& c);
-    void load(Channel& c, const std::vector<uint32_t>& notes, float bpm, Voice v, float echo, float level);
+    float part_sample(Channel& c, Part& p);
+    void start_note(Channel& c, Part& p);
+    void load(Channel& c, const sieve::NoteSet& set, const std::vector<uint32_t>& notes, float bpm, Voice v, float echo, float level);
     void retarget();                              // under mx_
     void recharacter();                           // under mx_: WORLD's shifts, for the line and settings
     void worker();
@@ -176,6 +192,9 @@ private:
     std::string status_, toast_;
     Uint64 toast_until_ = 0, retry_at_[2] = {0, 0};
 };
+
+// The audio line of a note set and length (in events per voice), as the hallway makes it.
+sieve::cli::Line audio_line(const sieve::NoteSet& set, uint32_t length);
 
 // The one player, for every screen (null when there is none: tests and scripted pictures of
 // screens other than the player's own).

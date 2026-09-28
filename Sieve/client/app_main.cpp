@@ -45,7 +45,9 @@ const char* kUsage =
     "  --alphabet ID       text: lower27 (default), babel29, ascii95\n"
     "  --canon v2|v1       text: warp rules (default v2)\n"
     "  --image-width W  --image-height H  --image-palette ID    image line (10, 10, mono)\n"
-    "  --notes N           audio: notes per book (default 16)\n"
+    "  --notes N           audio: notes per book (default 16; per voice on notes2)\n"
+    "  --note-set notes104|notes2  --note-low C3  --note-high C6  --note-durations seEqQhHw  --voices 1..4\n"
+    "                      audio: the note set (default notes104; the rest are notes2's)\n"
     "  --video-width W  --video-height H  --video-frames F  --video-palette ID   video (5, 5, 8, mono)\n"
     "  --title-length T    every line's titles: characters (default 32; 0: no titles; books keep a page)\n"
     "  --binary-length N   binary: every file of up to N bytes (default 32)\n"
@@ -140,7 +142,17 @@ std::vector<Line> make_lines(const Args& a)
             la.opts["height"] = a.get("image-height", "10");
             la.opts["palette"] = a.get("image-palette", "mono");
             break;
-        case LineKind::Audio: la.opts["length"] = a.get("notes", "16"); break;
+        case LineKind::Audio:
+            la.opts["length"] = a.get("notes", "16");
+            if (a.get("note-set", "notes104") == "notes2")
+            {
+                la.opts["note-set"] = "notes2";
+                la.opts["low"] = a.get("note-low", "C3");
+                la.opts["high"] = a.get("note-high", "C6");
+                la.opts["durations"] = a.get("note-durations", "seEqQhHw");
+                la.opts["voices"] = a.get("voices", "1");
+            }
+            break;
         case LineKind::Video:
             la.opts["width"] = a.get("video-width", "5");
             la.opts["height"] = a.get("video-height", "5");
@@ -491,6 +503,7 @@ int run(const Args& a)
     bool show_main = show_menu;
     bool first = true;
     std::vector<uint32_t> pending_track; // a music track to go to in the next hallway built
+    sieve::NoteSet pending_set;          // and its note set
     while (true)
     {
         if (show_main)
@@ -569,7 +582,7 @@ int run(const Args& a)
         first = false;
         if (!pending_track.empty())
         {
-            hall->go_to_track(pending_track);
+            hall->go_to_track(pending_set, pending_track);
             pending_track.clear();
         }
         SDL_SetWindowRelativeMouseMode(window, true);
@@ -638,9 +651,19 @@ int run(const Args& a)
             // A music track on an audio line of another length: the hallway again at that length,
             // on the audio line, and there the track.
             const std::vector<uint32_t> track = hall->track_to_go();
-            settings.notes = uint32_t(track.size());
+            const sieve::NoteSet set = hall->track_set_to_go();
+            settings.notes = uint32_t(track.size() / std::max<uint32_t>(1, set.voices));
+            settings.note_set = set.legacy ? "notes104" : "notes2";
+            if (!set.legacy)
+            {
+                settings.note_low = sieve::note_name(set.low);
+                settings.note_high = sieve::note_name(set.high);
+                settings.note_durations = set.durations;
+                settings.voices = set.voices;
+            }
             settings.start_line = "audio";
             pending_track = track;
+            pending_set = set;
             show_menu = false;
             settings_chosen = true;
             continue;

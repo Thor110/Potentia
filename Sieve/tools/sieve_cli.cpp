@@ -657,12 +657,12 @@ int cmd_version()
               << "  address scramble        " << kScrambleVersion << " (" << kScrambleRounds << " rounds)\n"
               << "  text canonicalisation   " << to_string(kDefaultCanon) << " (default), canon-text-v1\n"
               << "  image canonicalisation  " << kImageCanonVersion << "\n"
-              << "  note canonicalisation   " << kNotesCanonVersion << "\n"
+              << "  note canonicalisation   " << kNotesCanonVersion << " (notes104), " << kNotes2CanonVersion << " (notes2)\n"
               << "  alphabets               ";
     for (const auto& id : alphabet_ids()) std::cout << id << " ";
     std::cout << "\n  palettes                ";
     for (const auto& id : palette_ids()) std::cout << id << " ";
-    std::cout << "\n  note symbols            " << kNotesSymbolsId << "\n"
+    std::cout << "\n  note symbols            " << kNotesSymbolsId << ", notes2/LOW-HIGH/DURATIONS/VN (e.g. " << make_note_set(48, 84, kNoteDurationCodes, 1).id() << ")\n"
               << "  guided addresses        " << kGuidedVersion << " over " << kCharModelFormat << " (" << kSmoothing << ", total 2^"
               << kModelTotalBits << ")\n"
               << "  compact orderings       " << kShuffleVersion << " (scrambled), " << kSieveRestrictVersion << " (guided)\n"
@@ -1172,7 +1172,16 @@ int cmd_filters_plugin(const Args& a)
     size_t declared = 0;
     static const AppResources resources;
     std::string data;
-    const Dfa d = compile_plugin(*def, fl, values, resources, &declared, &data);
+    // A note line of several voices: the plugin judges each voice, as in a stack (FilterStack), so
+    // it is compiled for one voice's line and counted through the voices.
+    uint32_t voices = 1;
+    FilterLine one = fl;
+    if (fl.kind == "audio" && is_note_symbols(fl.symbols_id))
+    {
+        voices = note_set_of(fl.symbols_id).voices;
+        one.length = fl.length / voices;
+    }
+    const Dfa d = compile_plugin(*def, one, values, resources, &declared, &data);
     std::string params;
     for (const auto& p : h.params)
     {
@@ -1221,13 +1230,15 @@ int cmd_filters_plugin(const Args& a)
             std::cout << "judge      " << (!spelled ? "unspellable" : d.accepts(u) ? "pass" : "FAIL") << "  " << l << "\n";
         }
     };
-    if (DfaRanker::table_bytes(d.states(), d.base, fl.length) > kPluginTableBudget)
+    if (DfaRanker::table_bytes(d.states(), d.base, one.length) > kPluginTableBudget)
     {
         std::cout << "survivors  (judge only: the table is over the budget at this length)\n";
         judge_lines();
         return 0;
     }
-    const DfaRanker r(d, fl.length);
+    const DfaRanker one_voice(d, one.length);
+    const std::unique_ptr<Ranker> all_voices = voices > 1 ? voices_ranker(one_voice, voices) : nullptr;
+    const Ranker& r = all_voices ? *all_voices : static_cast<const Ranker&>(one_voice);
     BigUint excluded = BigUint::pow(fl.base, fl.length);
     excluded -= r.count();
     std::cout << "survivors  " << r.count().to_decimal() << "\n"

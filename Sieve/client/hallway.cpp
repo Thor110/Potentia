@@ -1117,7 +1117,8 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
         if (in_hand_ && !on_books() && line().kind == LineKind::Audio)
         {
             // Through the music player when there is one, which fades the music out under it.
-            const std::string err = music() ? music()->play_item(in_hand_->unit) : synth_.play(in_hand_->unit);
+            const sieve::NoteSet set = note_set_of(line().space.symbols_id());
+            const std::string err = music() ? music()->play_item(set, in_hand_->unit) : synth_.play(set, in_hand_->unit);
             message(err.empty() ? tr("msg.playing") : err);
         }
         break;

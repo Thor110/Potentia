@@ -1,5 +1,6 @@
 #include "sieve/filter.hpp"
 
+#include "sieve/audio.hpp"
 #include "sieve/dfa.hpp"
 #include "sieve/plugin.hpp"
 #include "sieve/sha256.hpp"
@@ -168,6 +169,99 @@ bool Ranker::accepts(std::span<const uint32_t> unit) const
 
 namespace {
 
+// Several voices, one ranker: V copies of one voice's walk, one after another. A state is the
+// voice, the place in it and the one voice's own state, packed into 64 bits (3, 16 and 45 bits),
+// which every ranker a note line has (their states are automata's states) fits.
+class VoicesRanker : public Ranker
+{
+public:
+    VoicesRanker(const Ranker& one, uint32_t voices) : one_(one), v_(voices), L_(one.length())
+    {
+        if (L_ >= (1u << 16)) throw std::invalid_argument("a voice of 65536 or more events is too long to rank");
+        per_ = one_.count();
+        set_count();
+    }
+    uint32_t length() const override { return v_ * L_; }
+    uint32_t base() const override { return one_.base(); }
+    State start() const override { return pack(0, 0, one_.start()); }
+    State next(State s, uint32_t symbol) const override
+    {
+        if (s == kDead) return kDead;
+        const uint32_t v = voice(s), p = place(s);
+        if (v >= v_) return kDead;
+        const State n = one_.next(inner(s), symbol);
+        if (n == kDead) return kDead;
+        if (p + 1 < L_) return pack(v, p + 1, n);
+        // The voice is complete: it must be a survivor on its own, and the next voice starts.
+        if (one_.completions(n, 0).is_zero()) return kDead;
+        return pack(v + 1, 0, v + 1 < v_ ? one_.start() : 0);
+    }
+    BigUint completions(State s, uint32_t remaining) const override
+    {
+        if (s == kDead) return BigUint();
+        const uint32_t v = voice(s), p = place(s);
+        if (v >= v_) return remaining == 0 ? BigUint(1) : BigUint();
+        const uint32_t left = L_ - p, after = v_ - 1 - v;
+        if (uint64_t(remaining) != uint64_t(left) + uint64_t(after) * L_) return BigUint();
+        BigUint c = one_.completions(inner(s), left);
+        for (uint32_t i = 0; i < after; ++i) c = BigUint::mul(c, per_);
+        return c;
+    }
+    std::vector<uint32_t> unrank(const BigUint& k0) const override
+    {
+        if (k0 >= count()) throw std::out_of_range("rank beyond the survivors");
+        std::vector<BigUint> parts(v_);
+        BigUint k = k0;
+        for (uint32_t i = v_; i-- > 0;)
+        {
+            BigUint q, r;
+            BigUint::divmod(k, per_, q, r);
+            parts[i] = r;
+            k = q;
+        }
+        std::vector<uint32_t> out;
+        out.reserve(size_t(v_) * L_);
+        for (const BigUint& part : parts)
+        {
+            const auto u = one_.unrank(part);
+            out.insert(out.end(), u.begin(), u.end());
+        }
+        return out;
+    }
+    BigUint rank(std::span<const uint32_t> unit) const override
+    {
+        if (unit.size() != size_t(v_) * L_) throw std::invalid_argument("unit has the wrong length");
+        BigUint k;
+        for (uint32_t i = 0; i < v_; ++i)
+        {
+            k = BigUint::mul(k, per_);
+            k += one_.rank(unit.subspan(size_t(i) * L_, L_));
+        }
+        return k;
+    }
+
+private:
+    static constexpr uint64_t kInnerBits = 45;
+    static State pack(uint32_t v, uint32_t p, State inner)
+    {
+        if (inner >= (State(1) << kInnerBits)) throw std::invalid_argument("a voice's ranker state is too large to rank several voices");
+        return (State(v) << 61) | (State(p) << kInnerBits) | inner;
+    }
+    static uint32_t voice(State s) { return uint32_t(s >> 61); }
+    static uint32_t place(State s) { return uint32_t((s >> kInnerBits) & 0xFFFF); }
+    static State inner(State s) { return s & ((State(1) << kInnerBits) - 1); }
+
+    const Ranker& one_;
+    uint32_t v_, L_;
+    BigUint per_;
+};
+
+} // namespace
+
+std::unique_ptr<Ranker> voices_ranker(const Ranker& one, uint32_t voices) { return std::make_unique<VoicesRanker>(one, voices); }
+
+namespace {
+
 // Entry j is implied by entry i when i's spec lists j's name among its implications and they agree
 // on every parameter they share (words with one dictionary does not imply window with another).
 bool implied_by(const FilterStack::Entry& i, const FilterStack::Entry& j)
@@ -182,10 +276,19 @@ bool implied_by(const FilterStack::Entry& i, const FilterStack::Entry& j)
 
 } // namespace
 
-FilterStack::FilterStack(const FilterLine& line, const std::vector<Entry>& entries, const FilterResources& resources)
-    : length_(line.length)
+FilterStack::FilterStack(const FilterLine& whole, const std::vector<Entry>& entries, const FilterResources& resources)
+    : length_(whole.length)
 {
-    provenance_ = line.kind + "/" + line.symbols_id + "/L" + std::to_string(line.length);
+    provenance_ = whole.kind + "/" + whole.symbols_id + "/L" + std::to_string(whole.length);
+    // Several voices: the filters are made for one voice and judge each (see the header).
+    FilterLine line = whole;
+    if (whole.kind == "audio" && is_note_symbols(whole.symbols_id))
+    {
+        voices_ = note_set_of(whole.symbols_id).voices;
+        if (whole.length % voices_ != 0) throw std::invalid_argument("a unit of " + std::to_string(voices_) + " voices has a length they divide");
+        line.length = whole.length / voices_;
+        if (voices_ > 1) provenance_ += " (each of " + std::to_string(voices_) + " voices)";
+    }
     for (const auto& e : entries)
     {
         if (!e.spec->applies(line)) throw std::invalid_argument(e.spec->name() + " does not apply to the " + line.kind + " line");
@@ -223,6 +326,11 @@ FilterStack::FilterStack(const FilterLine& line, const std::vector<Entry>& entri
             else blocker_ = "the plugins' combined table is over the budget at this length: they judge only";
         }
     }
+    if (compact_ && voices_ > 1)
+    {
+        voices_ranker_ = std::make_unique<VoicesRanker>(*compact_, voices_);
+        compact_ = voices_ranker_.get();
+    }
     if (filters_.empty()) blocker_ = "no filters ticked";
     else if (!compact_ && blocker_.empty()) // (a stack of plugins over the budget has said why already)
     {
@@ -245,8 +353,10 @@ int FilterStack::first_failure(std::span<const uint32_t> unit) const
 {
     if (filters_.empty()) return -1;
     if (unit.size() != length_) throw std::invalid_argument("unit has the wrong length for this filter stack");
+    const size_t per = length_ / voices_;
     for (size_t i = 0; i < filters_.size(); ++i)
-        if (!filters_[i]->passes(unit)) return int(i);
+        for (uint32_t v = 0; v < voices_; ++v)
+            if (!filters_[i]->passes(unit.subspan(v * per, per))) return int(i);
     return -1;
 }
 

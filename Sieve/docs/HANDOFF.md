@@ -849,3 +849,21 @@ plugins loaded; oracle diffs for all six at four lengths. IDEAS §12: cross-line
 (Edward), loudness per note (later), book format v2 for notes2, rules between voices.
 Next: Part 2, the notes2 family (range C3-C6 default up to C2-C7, eight durations, up to 4
 voices filtered one by one).
+Part 2, the notes2 family (SPECIFICATIONS §3.2; full harness run). core/audio: NoteSet (notes104
+described too, legacy: its functions and MIDI unchanged), make_note_set / note_set_of / note_name,
+canon-notes-v2 (s e e. q q. h h. w, // voices, nearest duration with ties to the longer, octave
+moves, voices padded to equal runs), notation with " // ", format-1 MIDI with a track per voice.
+filter.cpp: FilterStack on a note line of V voices builds its filters for one voice's line and
+judges each voice; VoicesRanker (count^V, mixed-radix rank/unrank, packed 3+16+45-bit states);
+voices_ranker() exported. plugin.cpp: PITCHES/DURATIONS/LOW from the set. lines: --note-set
+notes2 --low --high --durations --voices (length per voice); warp, preview, vault and MIDI by set;
+books refuse notes2 sections. Oracle: its own notes2 (NoteSet2, canon_notes2, notation, MIDI),
+notes2-vectors -> tests/vectors_notes2_v1.tsv (12 cases), plugin --note-set/--voices; 108
+engine-vs-oracle plugin comparisons identical. Tests: vectors, round trip, notes104 equivalence,
+refusals, a two-voice stack exhaustively against brute force (26^4 units). Hallway: Settings
+note_set/note_low/note_high/note_durations/voices (setup menu audio rows 18-23; rows below moved
+by 5, CI pins updated), in-hand notation by set, mixer and fallback synth play every voice,
+Media Player note-set rows, tracks/recent/favourites carry their set (ini: notes = ..., recent
+lines name a notes2 set before the notation; favourites.tsv a fifth column), go to a track
+rebuilds the hallway at its set. Known limits: melody-lengths-v1 and melody-ending-v1 are
+notes104 only (their duration choices); books hold notes104 only.

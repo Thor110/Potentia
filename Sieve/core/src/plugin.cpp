@@ -782,11 +782,14 @@ public:
         {
             // The line's constants (v2).
             env_["BASE"] = int64_t(line.base);
-            if (line.symbols_id == kNotesSymbolsId)
+            if (is_note_symbols(line.symbols_id))
             {
-                env_["PITCHES"] = 25;
-                env_["DURATIONS"] = 4;
-                env_["LOW"] = 60;
+                // notes104 (25, 4, 60) or a notes2 set: one voice's events (the stack gives a
+                // plugin one voice at a time).
+                const NoteSet set = note_set_of(line.symbols_id);
+                env_["PITCHES"] = int64_t(set.pitches());
+                env_["DURATIONS"] = int64_t(set.duration_count());
+                env_["LOW"] = int64_t(set.low);
             }
         }
         for (const auto& par : p.header.params)
