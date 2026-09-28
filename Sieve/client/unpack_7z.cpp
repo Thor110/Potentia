@@ -9,6 +9,8 @@
 
 #include "unpack_7z.hpp"
 
+#include "cli/vault.hpp"
+
 #include "7z.h"
 #include "7zCrc.h"
 
@@ -291,6 +293,8 @@ bool unpack_7z(const std::vector<uint8_t>& archive, const fs::path& dest, bool f
             size_t offset = 0, got = 0;
             const SRes r = SzArEx_Extract(&a.db, &a.look.vt, index[k], &block, &out, &out_size, &offset, &got, &kAlloc, &kAlloc);
             if (r != SZ_OK) throw std::runtime_error("cannot unpack " + u.path + ": " + sz_error(r));
+            // The vault: nothing it withholds is written, whatever archive it arrives in.
+            sieve::cli::vault::check_bytes(std::vector<uint8_t>(out + offset, out + offset + got), u.path);
             std::ofstream f(to, std::ios::binary | std::ios::trunc);
             if (!f) throw std::runtime_error("cannot write " + u.path);
             written.push_back(to);

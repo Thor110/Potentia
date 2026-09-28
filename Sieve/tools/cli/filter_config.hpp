@@ -59,6 +59,10 @@ struct FilterConfig
 {
     LineFilters lines[4]; // text, image, audio, video
     BookFilters books;
+    // The models and binary lines: a mode and a stack each, kept for when they have filters
+    // (none are registered for them yet; filter plugins will add them). The binary line is one
+    // line, met at both ends of the corridor, so it has one section.
+    LineFilters models, binary;
     LineFilters& of(LineKind k) { return lines[int(k)]; }
     const LineFilters& of(LineKind k) const { return lines[int(k)]; }
 

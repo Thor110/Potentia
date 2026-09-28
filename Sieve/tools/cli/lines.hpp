@@ -51,8 +51,16 @@ WarpInput read_warp_input(const Line& line, const Args& a);
 // Multi-line console preview of one unit (quoted text, ASCII-art image/frames, note list).
 std::string preview(const Line& line, const std::vector<uint32_t>& digits);
 
+// The vault (vault.hpp): whether a unit is withheld. A unit of a byte line by its bytes (it is a
+// file), a melody by its MIDI file, other text as a file written out (its own bytes, and each
+// well-known encoding decoded: vault_decode.hpp), never by what it says; a picture or a video by
+// each frame, by PDQ (picture_withheld).
+bool unit_withheld(const Line& line, const std::vector<uint32_t>& digits);
+// A picture in this format (a unit of the image or video line, or a cover), each frame by PDQ.
+bool picture_withheld(const ImageFormat& format, const std::vector<uint32_t>& digits);
+
 // Writes a unit to a file: .png for image/video (video frames side by side), .mid for audio,
-// UTF-8 text for text. `scale` enlarges image pixels.
+// UTF-8 text for text. `scale` enlarges image pixels. Refuses (VaultWithheld) what the vault holds.
 void save_unit(const Line& line, const std::vector<uint32_t>& digits, const std::string& path, uint32_t scale);
 
 } // namespace sieve::cli

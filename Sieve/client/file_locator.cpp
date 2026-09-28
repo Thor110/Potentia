@@ -12,6 +12,7 @@
 
 #include "cli/compare.hpp"
 #include "cli/locate.hpp"
+#include "cli/vault.hpp"
 
 namespace hallway::hall {
 
@@ -285,6 +286,11 @@ void Hallway::locator_go()
 
 void Hallway::walk_to_file(const std::vector<uint8_t>& bytes, const std::string& name, bool past)
 {
+    if (cli::vault::withheld_bytes(bytes)) // the vault: nowhere to walk to
+    {
+        message(tr("vault.withheld"));
+        return;
+    }
     if (past)
     {
         set_thin(true);

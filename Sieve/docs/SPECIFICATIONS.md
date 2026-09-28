@@ -358,7 +358,7 @@ filters = words-v2
 dictionary = scowl-en-35
 ```
 
-The hallway's setup menu edits and saves it (§5.1); hand edits are welcome. A missing file means nothing is ticked. `sieve filters` lists a line's filters and its stack; `sieve check` runs content through every filter.
+The hallway's setup menu edits and saves it (§5.1); hand edits are welcome. A missing file means nothing is ticked. Every line has a section, `[models]` and `[binary]` included (one `[binary]`: it is one line, met at both ends of the corridor), and every column of the setup menu's map has a magnifying glass, both binary columns opening the same one; the models and binary lines have no filters registered yet, so theirs keep only a mode until filter plugins bring some. `sieve filters` lists a line's filters and its stack; `sieve check` runs content through every filter.
 
 ---
 

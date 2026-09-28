@@ -521,6 +521,34 @@ const std::vector<Page>& pages()
           {"--hex", "The installer is written in hex rather than raw bytes."}},
          {{"sieve install release.sieve --to C:/Programs/Sieve", "install a release"}}},
 
+        {"vault", "What the vault withholds, and whether files are withheld.",
+         "sieve vault [FILE...] [--parse | --written | --pdq] | --test-picture FILE.png [--scale N]",
+         "The vault is a list of hashes of content Sieve refuses to show, emit or pass on\n"
+         "(docs/VAULT.md). It is not a filter and cannot be turned off: withheld content keeps its\n"
+         "address and place, so every count stays exact, but nothing of it is shown, saved,\n"
+         "located, installed, mapped or exported. Entries are built in, and every *.vault file\n"
+         "(sieve-vault-v1: hashes only) in the vault folder beside the programs adds to them; a\n"
+         "vault file that cannot be read fails the vault closed, withholding everything.\n"
+         "With no FILE, says how many entries are loaded and from where. With FILEs, says whether\n"
+         "each is withheld (exit 3 if any is).\n"
+         "The vault is for known files, pictures, melodies and models, in any form Sieve\n"
+         "recognises: text is checked as a file written out (its own bytes, and hex, base64,\n"
+         "base32, ascii85, decimal, a-p nibbles, spelled-out digits and two-symbol binary, each\n"
+         "decoded: vault-decoders-v1), never by what it says. Pictures are matched by PDQ, a\n"
+         "perceptual hash, so near copies (resized, recompressed, rotated, flipped, lightly\n"
+         "edited) match too: every picture Sieve draws, and every file that is a picture.\n"
+         "The built-in entries are harmless tests: the 16 bytes \"sieve vault test\", and a test\n"
+         "picture (--test-picture writes it).",
+         {{"--parse", "Check that each FILE is a well-formed vault file, rather than whether it is withheld."},
+          {"--written", "Read each FILE as text that may be a known file written out, and check every decoding."},
+          {"--pdq", "Print each FILE's PDQ hash and quality (each frame of an animation), as PDQ's own tools write them."},
+          {"--test-picture FILE.png", "Write the test picture (64 x 64), which the vault withholds, and its near copies."},
+          {"--scale N", "With --test-picture: each pixel as an N x N block (still withheld: PDQ sees the same picture)."}},
+         {{"sieve vault", "how many entries, and from which files"},
+          {"sieve vault found.bin", "is this file withheld?"},
+          {"sieve vault --written page.txt", "is this text a withheld file written out?"},
+          {"sieve vault --test-picture t.png --scale 4", "the test picture, 256 x 256"}}},
+
         {"unbind", "Read a book record back: check its id, print or save its sections.",
          "sieve unbind BOOK [--pages OUT.txt] [--cover OUT.png] [--scale S]",
          "Recomputes every unit from its address (guided addresses must be the units' own), checks\n"

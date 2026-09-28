@@ -188,8 +188,9 @@ FilterConfig FilterConfig::load(const fs::path& path)
             continue;
         }
         const auto li = std::find(std::begin(kSections), std::end(kSections), line_name) - std::begin(kSections);
-        if (li >= 4) throw std::runtime_error(path.string() + ": unknown section [" + section + "]");
-        LineFilters& lf = c.lines[li];
+        if (li >= 4 && line_name != "models" && line_name != "binary")
+            throw std::runtime_error(path.string() + ": unknown section [" + section + "]");
+        LineFilters& lf = line_name == "models" ? c.models : line_name == "binary" ? c.binary : c.lines[li];
         if (dot == std::string::npos)
         {
             if (key == "mode") lf.mode = mode_at(value, path, line_no);
@@ -200,6 +201,8 @@ FilterConfig FilterConfig::load(const fs::path& path)
     }
     for (auto& lf : c.lines) canonicalise(lf);
     for (auto& lf : c.books.parts) canonicalise(lf);
+    canonicalise(c.models);
+    canonicalise(c.binary);
     return c;
 }
 
@@ -209,6 +212,7 @@ void FilterConfig::save(const fs::path& path) const
     o << "; Sieve filter stack, one section per line. Edited by the hallway's setup menu (magnifying\n"
       << "; glass beside each line); hand edits are welcome.\n"
       << ";   mode     off | mark (dim failing books) | hide (leave them out) | compact (only survivors)\n"
+      << ";            | excluded (only the books that fail, in their places)\n"
       << ";   filters  the ticked filters, comma-separated (list them with: sieve filters --line LINE)\n"
       << "; A [line.filter] section holds that filter's parameters.\n";
     for (int i = 0; i < 4; ++i)
@@ -226,6 +230,14 @@ void FilterConfig::save(const fs::path& path) const
         o << "\n[books." << kBookParts[i] << "]\n";
         write_filters(o, books.parts[i]);
         write_values(o, std::string("books.") + kBookParts[i], books.parts[i]);
+    }
+    o << "\n; The models and binary lines: no filters are registered for them yet (filter plugins will\n"
+      << "; add them); their mode is kept for then. The binary line is one line, met at both ends.\n";
+    for (const auto& [name, lf] : {std::pair<const char*, const LineFilters*>{"models", &models}, {"binary", &binary}})
+    {
+        o << "\n[" << name << "]\nmode = " << to_string(lf->mode) << "\n";
+        write_filters(o, *lf);
+        write_values(o, name, *lf);
     }
     std::ofstream out(path, std::ios::binary);
     out << o.str();

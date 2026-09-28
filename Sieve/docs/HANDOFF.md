@@ -671,3 +671,46 @@ core change and no new address scheme. A compact excluded mode (excluded units p
 k = 0 .. total - survivors - 1) is possible with the same rankers, unranking digit by digit with
 `base^r - completions(state, r)` in place of `completions`, but it would be a new versioned
 compact scheme (and a shuffle domain for scrambled), so it waits. Named "excluded" by Edward (first built as "rejects", renamed the same night, before any release).
+
+**Filters on every column** (Edward, 28 September 2026). The setup menu's map has a magnifying
+glass on all eight columns; both binary columns open one overlay (6), since binary is one line met
+at both ends (`Menu::overlay_of_column`). F on the models rows opens the models overlay (5), on
+the binary row the binary one. `FilterConfig` gains `models` and `binary` (`[models]`, `[binary]`
+in `sieve-filters.ini`); no filters are registered for either yet, so their overlays show the mode
+and "no filters for this line yet; filter plugins will add them". CI's F-row check covers both.
+
+**F in the setup menu** (Edward, 28 September 2026). On rows that belong to no line (GLOBAL and
+the three at the foot), F opens the filters of the line you will start on (the "line" row; pages
+by default); F again closes them. CI checks both (pages by default, models once the line row is
+turned five times). The filter-plugin proposal is `docs/FILTER-PLUGINS.md` (draft, for review).
+
+**The vault** (Edward, 28 September 2026; docs/VAULT.md). Hashes of content Sieve refuses to show,
+emit or pass on; not a filter, no setting turns it off. `tools/cli/vault.*` (in `sieve_locate`);
+`sieve-vault-v1` files hold only hashes; built-in entries compiled in (the test entry, SHA-256 of
+"sieve vault test"); `vault/` beside the programs (build and release copy `data/vault/test.vault`)
+adds to them; a broken vault file fails closed. Checked at: walk/locate/install (including the
+installer's 7z), map held anchors, warp input, CLI output (`preview`, `read`, `browse`, `unbind`,
+`mesh`), hallway items (`Book::withheld`, `vault_withholds`, `file_withheld`, `refuse_if_withheld`),
+F. `sieve vault [FILE...] [--parse]`. PDQ (pictures) is next. Edward is weighing a custom licence
+clause forbidding its removal (AGPL lets recipients drop added restrictions); undecided.
+Text is out of the vault's reach (Edward, same night): pages, books and titles are never withheld;
+files (the binary line, and a byte-alphabet line), pictures (PDQ, next), melodies and models are.
+The docs say plainly that an address cannot be made secret (it is neighbour plus or minus one, and
+it is the content): the vault only makes sure Sieve is not what hands it over.
+Then (same night) Edward's point that a file can be written out as text, even on lower27 ("c7 a9
+9a 7c", a-p nibbles, spelled digits), so the vault is addressed at every level Sieve can see: text
+is checked as a file written out, through `vault-decoders-v1` (tools/cli/vault_decode.*: its own
+bytes, hex, base64, base32, ascii85, decimal, nibbles, spelled, binary), on every unit, page, title
+and book (pages as one); never by what it says. `sieve vault --written FILE`. So "sieve vault test"
+as text is now withheld again, as the file it is. Next: PDQ (pictures, and decoded bytes that are
+images), then `chunk` entries for files split across units.
+PDQ built (same night): Meta's reference C++ vendored unedited in third_party/pdq (ThreatExchange
+ec3671b, BSD), wrapped by tools/cli/pdq_hash.*; vault format sieve-vault-v2 adds `v pdq <hex>`
+entries (v1 still read); match rule pdq-match-v1 (quality >= 50, any of 8 orientations within 31
+bits). Checked on every picture drawn (image units, video frames, covers) and every file that is a
+picture (stb formats, each frame), so also bytes decoded from text. Agrees bit for bit with
+Meta's pdqhash on PNGs (JPEGs within 2 bits: stb and libjpeg decode slightly differently). A second
+built-in test entry: the test picture (`sieve vault --test-picture`). The G message no longer
+overwrites "withheld". Misses, documented: heavy crops, few-colour palettes, quality < 50. Next:
+`chunk` entries; then the filter plugins (step 1 needs the full test harness: ask first).
+

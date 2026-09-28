@@ -10,6 +10,7 @@ Everything in Sieve that was not written for it, with its licence. The folders h
 | font8x8 | - | Public domain | The menu font, `data/fonts/sieve8x8.hex` | `font8x8/LICENSE.txt` |
 | zlib | 1.3.2 when CMake fetches it (else the system's) | zlib | The `sieve` tool's comparison page: zip's deflate (`tools/cli/compare.cpp`). Fetched and built by CMake if the system has none; not stored in this repository | `zlib/LICENSE` |
 | LZMA SDK (7z decoder) | 26.03 (from 7-Zip 26.03) | Public domain | `sieve-install` only: unpacking an installer that carries one 7z archive (`client/unpack_7z.cpp`); the files are in `third_party/lzma` | `lzma/LICENSE.txt` |
+| PDQ (Meta's reference C++) | ThreatExchange commit ec3671b (2026-09-25) | BSD | The vault's perceptual check for pictures (`tools/cli/pdq_hash.cpp`), in every program that checks the vault, the installer included; the files are in `third_party/pdq` | `pdq/LICENSE` |
 | liblzma (XZ Utils) | 5.8.1 when CMake fetches it (else the system's) | 0BSD for liblzma, the only part built; the rest of XZ Utils (command line tools, scripts, build system) is not built or shipped | The `sieve` tool's comparison page: 7z's LZMA2 (`tools/cli/compare.cpp`). Fetched and built by CMake if the system has none; not stored in this repository | `xz/COPYING`, `xz/COPYING.0BSD` |
 
 **Parts of SDL with their own notices.** A static build of the hallway compiles in code from SDL's source tree that carries its own licence. The notices it asks to be kept are here:

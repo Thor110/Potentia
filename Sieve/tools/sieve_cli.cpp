@@ -23,9 +23,12 @@
 #include "cli/compare.hpp"
 #include "cli/dictionaries.hpp"
 #include "cli/help.hpp"
+#include "cli/image_io.hpp"
 #include "cli/filter_config.hpp"
 #include "cli/lines.hpp"
 #include "cli/locate.hpp"
+#include "cli/vault.hpp"
+#include "cli/vault_decode.hpp"
 #include "cli/map.hpp"
 #include "cli/models.hpp"
 
@@ -335,7 +338,7 @@ int read_at(const Line& line, const Args& a, const std::string& mode)
         digits = line.space.unit_of_address(address, address_mode_from_string(mode));
         std::cerr << "address " << line.space.hex_of(address) << "\n";
     }
-    if (line.kind == LineKind::Text) std::cout << utf8_encode(line.space.text_of(digits)) << "\n";
+    if (line.kind == LineKind::Text) std::cout << (unit_withheld(line, digits) ? std::string("(withheld)") : utf8_encode(line.space.text_of(digits))) << "\n";
     else std::cout << preview(line, digits) << "\n";
     if (a.has("out"))
     {
@@ -364,7 +367,7 @@ int cmd_read(const Args& a)
         const auto digits = st.ranker()->unrank(k);
         std::cerr << "survivor " << k.to_decimal() << " of " << st.ranker()->count().to_decimal() << ", address "
                   << line.space.hex_of(line.space.address_digits(digits, address_mode_from_string(mode))) << "\n";
-        if (line.kind == LineKind::Text) std::cout << utf8_encode(line.space.text_of(digits)) << "\n";
+        if (line.kind == LineKind::Text) std::cout << (unit_withheld(line, digits) ? std::string("(withheld)") : utf8_encode(line.space.text_of(digits))) << "\n";
         else std::cout << preview(line, digits) << "\n";
         return 0;
     }
@@ -466,7 +469,7 @@ int cmd_read(const Args& a)
     }
     if (!a.has("around"))
     {
-        if (line.kind == LineKind::Text) std::cout << utf8_encode(line.space.text_of(digits)) << "\n";
+        if (line.kind == LineKind::Text) std::cout << (unit_withheld(line, digits) ? std::string("(withheld)") : utf8_encode(line.space.text_of(digits))) << "\n";
         else std::cout << preview(line, digits) << "\n";
     }
     if (a.has("out"))
@@ -812,6 +815,7 @@ int cmd_mesh(const Args& a)
         const AddressMode m = address_mode_from_string(a.get("mode", "positional"));
         const ModelSpace::Parts p = sp.parts_at(sp.parse(a.get("read")), m);
         const std::string obj = sp.to_obj(p);
+        vault::check_bytes(std::vector<uint8_t>(obj.begin(), obj.end()), "the model"); // the vault
         if (a.has("out"))
         {
             std::ofstream out(a.get("out"), std::ios::binary);
@@ -828,6 +832,10 @@ int cmd_mesh(const Args& a)
     {
         const ObjMesh mesh = read_obj(a.get("warp"));
         const ModelSpace::Fitted fit = sp.fit(mesh.verts, mesh.faces);
+        {
+            const std::string obj = sp.to_obj(fit.parts);
+            vault::check_bytes(std::vector<uint8_t>(obj.begin(), obj.end()), "the model given"); // the vault
+        }
         shape();
         std::cout << "fitted       " << mesh.verts.size() << " vertices in, " << mesh.faces.size() << " triangles in; scaled by "
                   << fixed(double(fit.scale), 4) << "\n";
@@ -852,7 +860,10 @@ int cmd_mesh(const Args& a)
         for (uint32_t i = 0; i < n; ++i)
         {
             const BigUint k = random_below(sp.size(), rng);
-            std::cout << show_address(sp.hex_of(k), a.has("short")) << "\n" << mesh_preview(sp, sp.parts_at(k, m));
+            const ModelSpace::Parts p = sp.parts_at(k, m);
+            const std::string obj = sp.to_obj(p);
+            if (vault::withheld_bytes(std::vector<uint8_t>(obj.begin(), obj.end()))) { std::cout << "(withheld)\n"; continue; }
+            std::cout << show_address(sp.hex_of(k), a.has("short")) << "\n" << mesh_preview(sp, p);
         }
         return 0;
     }
@@ -1387,6 +1398,7 @@ int cmd_locate(const Args& a)
     if (fs::is_regular_file(target))
     {
         const auto bytes = read_file_bytes(target);
+        vault::check_bytes(bytes, u8(target)); // the vault: a withheld file is never located
         const BigUint addr = binary_address(bytes);
         const std::string hex = addr.is_zero() ? "0" : addr.to_hex();
         std::cout << "file      " << u8(target) << "\n"
@@ -1723,6 +1735,64 @@ int cmd_unbind(const Args& a)
     return 0;
 }
 
+// vault: what the vault holds (how many entries, from which files, which decoders) and whether files
+// are withheld, as they are or (--written) as text that is a known file written out.
+int cmd_vault(const Args& a)
+{
+    namespace fs = std::filesystem;
+    const vault::Status st = vault::status();
+    std::cout << "vault     " << st.builtin << " built in, " << st.loaded << " from files (" << st.sha256 << " sha256, " << st.pdq << " pdq)\n";
+    for (const auto& f : st.files) std::cout << "file      " << f << "\n";
+    {
+        std::cout << "decoders  " << vault::kDecoders << ":";
+        for (const auto& n : vault::decoder_names()) std::cout << " " << n;
+        std::cout << "\n";
+        std::cout << "pictures  " << vault::kPdqMatch << ": quality " << vault::kPdqMinQuality << " or more, within "
+                  << vault::kPdqMaxDistance << " bits, any of 8 orientations\n";
+    }
+    if (st.failed_closed) std::cout << "FAILED CLOSED: everything is withheld until this is fixed or removed:\n  " << st.error << "\n";
+    if (a.has("test-picture"))
+    {
+        // The test picture, 64 x 64, for seeing the perceptual check work (docs/VAULT.md).
+        const std::vector<uint8_t> px = vault::test_picture_rgba();
+        std::vector<Rgb> rgb(size_t(64) * 64);
+        for (size_t i = 0; i < rgb.size(); ++i) rgb[i] = Rgb{px[i * 4], px[i * 4 + 1], px[i * 4 + 2]};
+        write_png(a.get("test-picture"), 64, 64, rgb, a.has("scale") ? a.get_positive("scale", 1) : 1);
+        std::cout << "wrote     " << a.get("test-picture") << "\n";
+        return 0;
+    }
+    int withheld = 0;
+    for (const std::string& arg : a.positional)
+    {
+        const fs::path p(std::u8string(arg.begin(), arg.end()));
+        if (a.has("parse"))
+        {
+            std::ifstream in(p, std::ios::binary);
+            std::ostringstream text;
+            text << in.rdbuf();
+            const auto entries = vault::parse(text.str());
+            std::cout << "parsed    " << arg << ": " << entries.size() << " entries (" << entries.sha256.size() << " sha256, "
+                      << entries.pdq.size() << " pdq), well formed\n";
+            continue;
+        }
+        if (a.has("pdq"))
+        {
+            const auto hs = vault::picture_hashes(read_file_bytes(p));
+            if (hs.empty()) std::cout << "not a picture (or under 5 pixels either way)  " << arg << "\n";
+            for (size_t i = 0; i < hs.size(); ++i)
+                std::cout << hs[i].hex << "  quality " << hs[i].quality << "  " << arg << (hs.size() > 1 ? "  frame " + std::to_string(i + 1) : std::string()) << "\n";
+            continue;
+        }
+        // --written: the file read as text that may be a known file written out (vault_decode.hpp).
+        const std::vector<uint8_t> bytes = read_file_bytes(p);
+        const bool w = a.has("written") ? vault::withheld_written(std::string(bytes.begin(), bytes.end()))
+                                        : vault::withheld_bytes(bytes);
+        std::cout << (w ? "withheld  " : "clear     ") << arg << "\n";
+        if (w) ++withheld;
+    }
+    return withheld ? 3 : 0;
+}
+
 bool is_command(const std::string& name)
 {
     return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" ||
@@ -1786,6 +1856,7 @@ int main(int argc, char** argv)
         if (a.command == "locate") return cmd_locate(a);
         if (a.command == "install") return cmd_install(a);
         if (a.command == "map") return cmd_map(a);
+        if (a.command == "vault") return cmd_vault(a);
         std::cerr << "unknown command '" << a.command << "'\n\n";
         print_usage();
         return 1;

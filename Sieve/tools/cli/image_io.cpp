@@ -34,11 +34,27 @@ void append(void* ctx, void* data, int size)
 std::vector<RgbaImage> load_image_frames(const std::string& path)
 {
     const std::string bytes = read_bytes(path);
-    const auto* data = reinterpret_cast<const stbi_uc*>(bytes.data());
-    const int len = static_cast<int>(bytes.size());
+    return decode_image_frames(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), path);
+}
+
+bool image_info(const uint8_t* data, size_t size, uint32_t& width, uint32_t& height)
+{
+    if (size == 0 || size > 0x7FFFFFFFu) return false;
+    int w = 0, h = 0, comp = 0;
+    if (!stbi_info_from_memory(data, static_cast<int>(size), &w, &h, &comp) || w <= 0 || h <= 0) return false;
+    width = uint32_t(w);
+    height = uint32_t(h);
+    return true;
+}
+
+std::vector<RgbaImage> decode_image_frames(const uint8_t* bytes_in, size_t size, const std::string& path)
+{
+    if (size > 0x7FFFFFFFu) throw std::runtime_error("cannot decode '" + path + "': too large");
+    const auto* data = reinterpret_cast<const stbi_uc*>(bytes_in);
+    const int len = static_cast<int>(size);
     std::vector<RgbaImage> frames;
 
-    const bool is_gif = bytes.size() >= 6 && bytes.compare(0, 3, "GIF") == 0;
+    const bool is_gif = size >= 6 && bytes_in[0] == 'G' && bytes_in[1] == 'I' && bytes_in[2] == 'F';
     if (is_gif)
     {
         int* delays = nullptr;

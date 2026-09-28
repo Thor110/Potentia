@@ -60,7 +60,7 @@ fs::path program_dir()
 // a release, sieve and sieve-install are in tools\; in a build folder, beside the hallway.
 const char* const kInstalled[] = {"hallway",        "hallway.exe", "sieve",  "sieve.exe", "sieve-install", "sieve-install.exe",
                                   "tools",          "dictionaries", "models", "lang",     "fonts",         "meshes",
-                                  "maps",           "third_party_licenses", "potentia-license.txt"};
+                                  "maps",           "vault",        "third_party_licenses", "potentia-license.txt"};
 
 cli::Map installation_map()
 {

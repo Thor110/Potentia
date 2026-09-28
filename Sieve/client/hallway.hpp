@@ -408,6 +408,9 @@ public:
         uint64_t file_size = 0;
         std::vector<uint8_t> head;
         Space::Digits title, cover;                  // a titled line: its title, and its cover if it has one
+        // The vault (tools/cli/vault.hpp): withheld content keeps its place but is never shown,
+        // taken, saved or passed on. A file's is worked out with its bytes (file_withheld).
+        bool withheld = false;
     };
 
     const Book& book(int64_t dt, uint32_t slot);
@@ -425,6 +428,7 @@ public:
     std::string memo_hex_;
     BinarySpace::Bytes memo_file_;
     bool memo_hex_ok_ = false, memo_file_ok_ = false;
+    bool memo_withheld_ = false; // the vault's verdict on memo_file_
 
 public:
     // Thin: over the budget, only the room you stand in keeps its items and their pictures (the
@@ -448,6 +452,13 @@ public:
     const TitledSpace* titled_of(int i) const;
     // A book's title as text, without the padding it ends in; empty for none or a blank title.
     std::string title_text(const Book& b) const;
+    // The vault: whether an item is withheld (its content, its title, a book's pages, a model's
+    // .obj; a file by its bytes, worked out when they are), and putting one down if it is in hand.
+    bool vault_withholds(const Book& b) const;
+    bool file_withheld(const Book& b);
+    bool withheld(const Book& b) { return b.withheld || (b.is_file && file_withheld(b)); }
+    bool refuse_if_withheld();
+    bool refused_ = false; // set when refuse_if_withheld puts something down, so its message stands
     float draw_null_title(float x, float y, float scale); // "[Null Title]"; returns its width
     // Whether this line's items have titles at all (title length above 0, and not guided or compact).
     bool has_titles() const

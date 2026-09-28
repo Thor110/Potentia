@@ -304,6 +304,8 @@ void Hallway::draw_hud(int w, int h)
         y += 22;
         if (bk.empty)
             text(20, y, tr("hud.empty_slot"), 1, ink);
+        else if (withheld(bk))
+            text(20, y, tr("vault.withheld"), 1, ink); // the vault: nothing of it, not even its address
         else
         {
             const Space::Digits& u = bk.unit;

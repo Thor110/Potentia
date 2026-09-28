@@ -1,4 +1,6 @@
 #include "lines.hpp"
+#include "vault.hpp"
+#include "vault_decode.hpp"
 
 #include "models.hpp"
 
@@ -222,11 +224,16 @@ WarpInput read_warp_input(const Line& line, const Args& a)
         break;
     }
     }
+    // The vault: an address is its content in another form, so withheld content is refused here,
+    // before any address of it is made.
+    for (const auto& u : w.units)
+        if (unit_withheld(line, u)) throw VaultWithheld("withheld by the vault: the content given");
     return w;
 }
 
 std::string preview(const Line& line, const std::vector<uint32_t>& digits)
 {
+    if (unit_withheld(line, digits)) return "(withheld)"; // the vault: never shown
     switch (line.kind)
     {
     case LineKind::Text: return "\"" + utf8_encode(line.space.text_of(digits)) + "\"";
@@ -262,8 +269,59 @@ std::string preview(const Line& line, const std::vector<uint32_t>& digits)
     return "";
 }
 
+bool unit_withheld(const Line& line, const std::vector<uint32_t>& digits)
+{
+    switch (line.kind)
+    {
+    case LineKind::Text:
+    {
+        // A line that holds every byte is a line of files: a unit is a file, by its bytes. Any other
+        // text is checked as a file written out (vault_decode.hpp): its own bytes, and each
+        // well-known encoding decoded. Never by what it says (docs/VAULT.md).
+        if (line.alphabet && holds_all_bytes(*line.alphabet))
+        {
+            std::vector<uint8_t> b;
+            b.reserve(digits.size());
+            for (uint32_t d : digits) b.push_back(uint8_t(d));
+            return vault::withheld_bytes(b);
+        }
+        return vault::withheld_written(utf8_encode(line.space.text_of(digits)));
+    }
+    case LineKind::Audio:
+    {
+        const std::string midi = notes_to_midi(digits);
+        return vault::withheld_bytes(std::vector<uint8_t>(midi.begin(), midi.end()));
+    }
+    case LineKind::Image:
+    case LineKind::Video: return picture_withheld(line.image, digits);
+    }
+    return vault::status().failed_closed;
+}
+
+bool picture_withheld(const ImageFormat& format, const std::vector<uint32_t>& digits)
+{
+    // Each frame as it is drawn, by PDQ (vault.hpp): a video is withheld if any frame is.
+    const auto px = render_image(digits, format);
+    const uint32_t W = format.width, H = format.height;
+    std::vector<uint8_t> rgba(size_t(W) * H * 4);
+    for (uint32_t f = 0; f < format.frames; ++f)
+    {
+        for (size_t i = 0; i < size_t(W) * H; ++i)
+        {
+            const Rgb& c = px[size_t(f) * W * H + i];
+            rgba[i * 4] = c.r;
+            rgba[i * 4 + 1] = c.g;
+            rgba[i * 4 + 2] = c.b;
+            rgba[i * 4 + 3] = 255;
+        }
+        if (vault::withheld_picture(rgba.data(), W, H)) return true;
+    }
+    return false;
+}
+
 void save_unit(const Line& line, const std::vector<uint32_t>& digits, const std::string& path, uint32_t scale)
 {
+    if (unit_withheld(line, digits)) throw VaultWithheld("withheld by the vault: the unit");
     switch (line.kind)
     {
     case LineKind::Text:

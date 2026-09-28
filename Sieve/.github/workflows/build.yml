@@ -179,17 +179,20 @@ jobs:
           # mapping has to be pinned or a row inserted anywhere above silently opens the wrong
           # line's list. Each row here ticks a mode and the saved file says which line it was.
           # Closing the overlay is what writes it, which also covers that path.
-          for pair in "11 text" "15 image" "18 audio" "19 video" "23 books"; do
+          for pair in "11 text" "15 image" "18 audio" "19 video" "23 books" "24 models" "27 binary"; do
             set -- $pair
             rm -f row$1.ini
             downs=$(python -c "print(','.join(['Down']*$1))")
             $H --menu --filters row$1.ini --press "$downs,F,Space,Escape" --screenshot row$1.png > /dev/null
             grep -A1 "^\[$2\]" row$1.ini | q "mode = mark"
           done
-          # And the rows above and below those belong to no line, so F on them opens nothing.
-          rm -f none.ini
-          $H --menu --filters none.ini --press "F,Space,Escape" --screenshot none.png > /dev/null
-          if grep -q "mode = mark" none.ini; then exit 1; fi
+          # On the rows that belong to no line, F opens the filters of the line you start on: pages
+          # by default, and models once the "line" row (the first) is turned to models.
+          rm -f start.ini start2.ini
+          $H --menu --filters start.ini --press "F,Space,Escape" --screenshot start.png > /dev/null
+          grep -A1 "^\[text\]" start.ini | q "mode = mark"
+          $H --menu --filters start2.ini --press "Right,Right,Right,Right,Right,F,Space,Escape" --screenshot start2.png > /dev/null
+          grep -A1 "^\[models\]" start2.ini | q "mode = mark"
           # Items per wall: the corridor's tile size is a setting. It changes no address -- the
           # same unit, at the same percentage along the same line -- only the tile and slot that
           # name where it stands, and at 256 a tile the tile number is half what it was. Untitled
@@ -413,6 +416,51 @@ jobs:
           build/sieve filters --line text --length 32 --filters excluded.ini | q "^mode *excluded"
           build/sieve filters --line text --length 32 --filters excluded.ini | q "^excluded *247982505688110457657730525203966127924868733 "
           $H --no-menu --filters excluded.ini --goto 0% --press Escape --screenshot excluded.png | q "saved excluded.png"
+          # The vault (docs/VAULT.md): its built-in test entry, the 16 bytes "sieve vault test", is
+          # withheld as a file everywhere (located, mapped, installed by either installer) and
+          # written out as text (as it is, or in any vault-decoders-v1 form, such as hex, base64 or
+          # the a-p nibbles a lower27 line can hold), while text that is not a known file, however
+          # close its words, is not. A vault file that cannot be read fails it closed.
+          printf 'sieve vault test' > vt.txt
+          build/sieve vault | q "2 built in"
+          build/sieve vault | q "vault-decoders-v1"
+          # Pictures, by PDQ: this cover's hash as Meta's own pdqhash (Pillow decoding) gives it, so
+          # Sieve's reading of the reference code agrees bit for bit; then the test picture withheld
+          # as it is, scaled, as an image unit, and base64'd, while an ordinary picture is not.
+          build/sieve vault --pdq tests/example_book_cover.png | q "^cc661c39738cc4c68c713399cc63cc66739c1939cc66e3ce39391c71e3c6e38e  quality 56 "
+          build/sieve vault --test-picture vtp.png > /dev/null
+          build/sieve vault --test-picture vtp4.png --scale 4 > /dev/null
+          if build/sieve vault vtp.png > /dev/null; then exit 1; fi
+          if build/sieve vault vtp4.png > /dev/null; then exit 1; fi
+          if build/sieve locate vtp4.png > /dev/null 2>&1; then exit 1; fi
+          if build/sieve warp --line image --palette rgb24 --width 32 --height 32 --file vtp.png > /dev/null 2>&1; then exit 1; fi
+          base64 vtp.png > vtp.b64
+          if build/sieve vault --written vtp.b64 > /dev/null; then exit 1; fi
+          build/sieve vault tests/example_book_cover.png | q "^clear"
+          build/sieve warp --line image --palette rgb24 --width 32 --height 32 --file tests/example_book_cover.png | q "positional"
+          if build/sieve vault vt.txt > /dev/null; then exit 1; fi
+          if build/sieve locate vt.txt > /dev/null 2>&1; then exit 1; fi
+          if build/sieve warp --line text --length 32 "sieve vault test" > /dev/null 2>&1; then exit 1; fi
+          if build/sieve warp --line text --length 32 hdgjgfhggfcahggbhfgmhecahegfhdhe > /dev/null 2>&1; then exit 1; fi
+          printf '73 69 65 76 65 20 76 61 75 6c 74 20 74 65 73 74\n' > vhex.txt
+          printf 'c2lldmUgdmF1bHQgdGVzdA==' > vb64.txt
+          if build/sieve vault --written vhex.txt > /dev/null; then exit 1; fi
+          if build/sieve vault --written vb64.txt > /dev/null; then exit 1; fi
+          build/sieve warp --line text --length 32 "sieve vault tests" | q "positional"
+          build/sieve map --new vt --out vt.map 2> /dev/null
+          if build/sieve map vt.map --add vt.txt --out vt.map > /dev/null 2>&1; then exit 1; fi
+          python reference/sieve_ref.py manifest vt.txt --with-contents > vt.manifest
+          python -c "b=open('vt.manifest','rb').read(); n=int.from_bytes(b,'big')+(256**len(b)-1)//255; open('vt.sieve','wb').write(n.to_bytes((n.bit_length()+7)//8,'big'))"
+          rm -rf vti vti2
+          if build/sieve install vt.sieve --to vti > /dev/null 2>&1; then exit 1; fi
+          if build/sieve-install vt.sieve --to vti2 --yes; then exit 1; fi
+          test ! -e vti && test ! -e vti2
+          printf 'nonsense\n' > data/vault/broken.vault
+          printf 'harmless' > vok.txt
+          build/sieve vault | q "FAILED CLOSED"
+          if build/sieve locate vok.txt > /dev/null 2>&1; then exit 1; fi
+          rm data/vault/broken.vault
+          build/sieve locate vok.txt | q "^sha256"
           # F on the item page saves the item in hand (here without its dialog): a page of the text
           # line as text, and a file of the binary line as exactly its bytes.
           rm -f saved_page.txt saved_file.bin

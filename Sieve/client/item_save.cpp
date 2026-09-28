@@ -14,6 +14,7 @@
 
 #include "cli/lines.hpp"
 #include "cli/locate.hpp"
+#include "cli/vault.hpp"
 
 #include <fstream>
 
@@ -90,6 +91,7 @@ std::string Hallway::prepare_save()
 {
     if (!in_hand_) return {};
     const Book& bk = *in_hand_;
+    if (withheld(bk)) return {}; // the vault (it cannot be in hand, but never saved either way)
     std::string name, ext;
     if (on_binary() && bk.is_file) name = binary_file_name(bk, cli::sha256_hex(file_of(bk)));
     else
@@ -135,6 +137,7 @@ void Hallway::item_save_poll()
     }();
     try
     {
+        if (withheld(bk)) throw cli::VaultWithheld("withheld by the vault");
         if (bk.is_file)
         {
             const auto& bytes = file_of(bk);

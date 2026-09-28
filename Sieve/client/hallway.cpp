@@ -4,6 +4,9 @@
 
 #include "hallway.hpp"
 
+#include "cli/vault.hpp"
+#include "cli/vault_decode.hpp"
+
 #include <cstring>
 
 namespace hallway::hall {
@@ -441,6 +444,7 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
             if (!b.passes) b.failed_by = stack().filter_name(size_t(fail));
         }
         if (b.survivor) b.survivor_label = short_big(b.survivor_number);
+        b.withheld = vault_withholds(b); // the vault: kept in its place, never shown
     }
     catch (const std::exception& e)
     {
@@ -509,9 +513,11 @@ void Hallway::go_to_unit(const Space::Digits& unit, bool open)
             b.fraction = line().space.fraction_of(address);
             b.passes = false;
             b.failed_by = stack().filter_name(size_t(fail));
+            b.withheld = vault_withholds(b);
             in_hand_ = b;
             hand_tab_ = 0;
             in_hand_where_ = trf("hand.not_shelved", {b.failed_by});
+            refuse_if_withheld();
             return;
         }
     }
@@ -592,6 +598,7 @@ void Hallway::place(const BigUint& unit, bool open)
         in_hand_ = book(0, slot);
         hand_tab_ = 0;
         in_hand_where_ = trf("hand.where", {tile_label_, std::to_string(slot)});
+        refuse_if_withheld();
     }
 }
 
@@ -717,6 +724,7 @@ bool Hallway::warp(const std::string& input)
                 walked_names_[cli::sha256_hex(bytes)] = std::string(name.begin(), name.end());
             }
             else bytes.assign(input.begin(), input.end());
+            cli::vault::check_bytes(bytes, "the file"); // the vault: refused before it has a place
             go_to_file(bytes, true, &title);
             trail_.clear();
             message(trf("msg.warped.file", {std::to_string(bytes.size())}));
@@ -793,8 +801,9 @@ bool Hallway::go_to(std::string input)
         else if (const TitledSpace* ts = titled_here()) index = ts->parse(input);
         else index = BigUint::from_digits(line().space.parse_address(input), line().space.base());
         trail_.clear();
+        refused_ = false;
         place(index, true);
-        message(trf("msg.goto.done", {input}));
+        if (!refused_) message(trf("msg.goto.done", {input})); // else "withheld" stands
         return true;
     }
     catch (const std::exception& e)
@@ -1146,6 +1155,11 @@ void Hallway::take_hovered()
     if (!hover_) return;
     const Book& b = book(hover_->tile, hover_->slot());
     if (b.empty) return;
+    if (withheld(b))
+    {
+        message(tr("vault.withheld"));
+        return;
+    }
     in_hand_ = b;
     hand_tab_ = 0;
     book_page_ = 0;
@@ -1314,6 +1328,11 @@ void Hallway::render()
                     dim = 0.8f;
                 }
             if (fm == FilterMode::Excluded && book(t, k).passes) continue; // only what the stack excludes
+            if (book(t, k).withheld) // the vault: blank, and never in the excluded view
+            {
+                if (fm == FilterMode::Excluded) continue;
+                dim = 0.8f;
+            }
             for (const Segment& s : book_geometry_[sizes_vary()][k]) add(s, z0, dim);
         }
     }
@@ -1445,6 +1464,11 @@ void Hallway::draw_models(const Models& md, const bool* visible, int back, int a
                     dim = 0.8f;
                 }
             if (fm == FilterMode::Excluded && book(t, k).passes) continue; // only what the stack excludes
+            if (book(t, k).withheld) // the vault: blank, and never in the excluded view
+            {
+                if (fm == FilterMode::Excluded) continue;
+                dim = 0.8f;
+            }
             const BookSlot b = BookSlot::of(0, k);
             const float y0 = kRowTop - float(b.row + 1) * kRowHeight + 0.02f;
             const float zc = z0 + float(b.col) * book_pitch() + book_pitch() * 0.5f;
@@ -1834,9 +1858,62 @@ const BinarySpace::Bytes& Hallway::file_of(const Book& b)
         memo_index_ = b.index;
         const TitledSpace::Parts tp = titled_[kBinaryLine]->parts_at(b.index, mode_);
         memo_file_ = binary_space_->bytes_at(tp.content, AddressMode::Positional);
+        memo_withheld_ = cli::vault::withheld_bytes(memo_file_);
         memo_file_ok_ = true;
     }
     return memo_file_;
+}
+
+bool Hallway::file_withheld(const Book& b)
+{
+    if (!b.is_file) return false;
+    file_of(b);
+    return memo_withheld_;
+}
+
+// The vault: a model's .obj, a melody's MIDI file, a file's bytes (file_withheld), every picture
+// drawn by PDQ (an image, each frame of a video, every cover), and text as a file written out
+// (vault_decode.hpp): a title, a book's each page, and its pages read as one, since a file too long
+// for a page runs on over the next. Never by what the text says (docs/VAULT.md). Failed closed,
+// everything is withheld.
+bool Hallway::vault_withholds(const Book& b) const
+{
+    if (b.empty) return false;
+    // A cover (a book's, or an audio or video unit's on a titled line) is a picture of its own.
+    if (b.parts && cli::picture_withheld(lines_[1].image, b.parts->cover)) return true;
+    if (!b.cover.empty() && cli::picture_withheld(lines_[1].image, b.cover)) return true;
+    if (!b.parts && !b.title.empty() && cli::vault::withheld_written(title_text(b))) return true;
+    if (b.parts)
+    {
+        const Line& l = line();
+        if (cli::vault::withheld_written(utf8_encode(l.space.text_of(b.parts->title)))) return true;
+        std::string all;
+        for (const auto& page : b.parts->pages)
+        {
+            if (cli::unit_withheld(l, page)) return true;
+            std::string t = utf8_encode(l.space.text_of(page));
+            while (!t.empty() && t.back() == ' ') t.pop_back();
+            all += t + "\n";
+        }
+        return b.parts->pages.size() > 1 && cli::vault::withheld_written(all);
+    }
+    if (b.model && model_space_)
+    {
+        const std::string obj = model_space_->to_obj(*b.model);
+        return cli::vault::withheld_bytes(std::vector<uint8_t>(obj.begin(), obj.end()));
+    }
+    if (b.is_file) return false; // worked out with its bytes: file_withheld
+    return !b.unit.empty() && cli::unit_withheld(line(), b.unit);
+}
+
+// Puts down what is in hand if the vault withholds it; true if it did.
+bool Hallway::refuse_if_withheld()
+{
+    if (!in_hand_ || !withheld(*in_hand_)) return false;
+    in_hand_.reset();
+    message(tr("vault.withheld"));
+    refused_ = true;
+    return true;
 }
 
 void Hallway::set_thin(bool on)

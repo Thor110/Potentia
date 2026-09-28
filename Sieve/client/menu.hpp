@@ -190,12 +190,15 @@ private:
     std::string cfg_path_;
     AppSettings* app_ = nullptr;
     std::filesystem::path app_path_;
-    int overlay_ = -1; // line whose filters are open, or -1
+    int overlay_ = -1; // line whose filters are open (0-3 text/image/audio/video, 4 books, 5 models, 6 binary), or -1
     int orow_ = 0;
     int oscroll_ = 0;
     float wheel_ = 0; // wheel movement not yet whole notches
-    StackInfo info_[6]; // one per line of the map; the last is the models line, which has no filters
-    SDL_FRect magnifier_[5] = {}; // one per line with filters; the models line has none yet
+    StackInfo info_[7]; // one per line of the map: text, image, audio, video, books, models, binary
+    // One glass per column of the map: binary, the six lines, binary again. Both binary columns
+    // open the same filters (overlay 6), because it is one line met at both ends.
+    SDL_FRect magnifier_[8] = {};
+    static int overlay_of_column(int c) { return c == 0 || c == 7 ? 6 : c - 1; }
     SDL_FRect box_ = {};
     std::vector<std::pair<SDL_FRect, int>> row_rects_; // overlay rows on screen
     bool in_game_ = false;

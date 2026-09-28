@@ -1,6 +1,7 @@
 // The file locator and the manifest creator (locate.hpp).
 
 #include "cli/locate.hpp"
+#include "cli/vault.hpp"
 
 #include "sieve/sha256.hpp"
 
@@ -136,6 +137,7 @@ Manifest manifest_of_file(const fs::path& file)
     if (e.path.find_first_of("\t\r\n") != std::string::npos) throw std::runtime_error("a name with a tab or a line break in it cannot be listed: " + e.path);
     e.size = uint64_t(fs::file_size(file));
     e.sha256 = sha256_file_hex(file);
+    vault::check_file(file, e.sha256, e.path); // the vault: withheld files are never located
     m.entries.push_back(e);
     m.files = 1;
     m.bytes = e.size;
@@ -174,6 +176,7 @@ Manifest walk_folder(const fs::path& root_in)
             e.path = manifest_path(d.path(), root);
             e.size = uint64_t(d.file_size());
             e.sha256 = sha256_file_hex(d.path());
+            vault::check_file(d.path(), e.sha256, e.path); // the vault: withheld files are never located
             ++m.files;
             m.bytes += e.size;
         }
@@ -489,6 +492,7 @@ bool install_tree(const Manifest& m, const fs::path& dest, bool force, const Ins
         else bytes = file_at(e.address == "0" ? BigUint() : BigUint::from_hex(e.address));
         if (bytes.size() != e.size || sha256_hex(bytes) != e.sha256)
             throw std::runtime_error("the installer does not give " + e.path + " (its size or SHA-256 is wrong)");
+        vault::check_known(bytes, e.sha256, e.path); // the vault: nothing it withholds is ever written
         if (fs::exists(path_of(e.path)) && !force) throw std::runtime_error(e.path + " is already there");
         files[i].second = std::move(bytes);
         if (progress) progress(0, i + 1, files.size(), e.path);

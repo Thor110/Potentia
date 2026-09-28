@@ -3,6 +3,7 @@
 // and written for other programs as DOT and GraphML.
 
 #include "cli/map.hpp"
+#include "cli/vault.hpp"
 
 #include <algorithm>
 #include <map>
@@ -251,6 +252,7 @@ Map Map::parse(std::string_view whole)
         node.bytes.assign(whole.begin() + std::ptrdiff_t(at), whole.begin() + std::ptrdiff_t(at + node.size));
         at += size_t(node.size);
         if (sha256_hex(node.bytes) != node.sha256) throw std::runtime_error("map: " + node.path + "'s bytes do not match its SHA-256");
+        vault::check_known(node.bytes, node.sha256, "the map's anchor " + node.path); // a map never carries what the vault withholds
     }
     if (at != whole.size()) throw std::runtime_error(v2 ? "map: bytes after the held anchors" : "map: something after 'end'");
     return m;
@@ -280,6 +282,7 @@ uint32_t Map::add_held(const std::string& label, const std::vector<uint8_t>& byt
     if (sealed) throw std::runtime_error("the map " + name + " is sealed: it is not changed");
     if (!is_held_name(label)) throw std::runtime_error("an anchor's name cannot hold / \\ : or line breaks: " + label);
     const std::string sha = sha256_hex(bytes);
+    vault::check_known(bytes, sha, label);
     if (const int at = find(sha); at >= 0) throw std::runtime_error("the map already has these bytes, as node " + std::to_string(at));
     MapNode node;
     node.kind = MapNode::Held;

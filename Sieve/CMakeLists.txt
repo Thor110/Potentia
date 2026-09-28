@@ -71,6 +71,7 @@ add_library(sieve_lines STATIC
     tools/cli/models.cpp)
 target_include_directories(sieve_lines PUBLIC tools)
 target_link_libraries(sieve_lines PUBLIC sieve_core sieve_image_io)
+# (sieve_locate, defined below, is linked into sieve_lines after it: the lines check the vault.)
 
 # The file locator and the manifest creator (tools/cli/locate.*), and the comparison of a file's
 # size against what zip and 7z make of it (tools/cli/compare.*). The comparison needs the two
@@ -132,9 +133,29 @@ else()
     set(SIEVE_ICON_RC "")
 endif()
 
-add_library(sieve_locate STATIC tools/cli/locate.cpp tools/cli/map.cpp)
+# PDQ, the perceptual hash the vault matches pictures with: Meta's reference code (third_party/pdq,
+# BSD licence) and Sieve's wrapper over it (tools/cli/pdq_hash.*), compiled together without the
+# core's strict warning flags, as stb and the LZMA SDK are; the wrapper's header shows none of it.
+add_library(sieve_pdq STATIC
+    tools/cli/pdq_hash.cpp
+    third_party/pdq/pdq/cpp/common/pdqhashtypes.cpp
+    third_party/pdq/pdq/cpp/downscaling/downscaling.cpp
+    third_party/pdq/pdq/cpp/hashing/pdqhashing.cpp
+    third_party/pdq/pdq/cpp/hashing/torben.cpp)
+target_include_directories(sieve_pdq SYSTEM PRIVATE third_party/pdq)
+target_compile_features(sieve_pdq PRIVATE cxx_std_20)
+if(MSVC)
+    # PDQ's own code, as Meta wrote it, narrows doubles to floats and uses sscanf: MSVC's notes on
+    # those (C4244, C4267, C4305, C4996) are about upstream code, which is kept unedited.
+    target_compile_options(sieve_pdq PRIVATE /W3 /utf-8 /wd4244 /wd4267 /wd4305 /wd4996)
+    target_compile_definitions(sieve_pdq PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+
+add_library(sieve_locate STATIC tools/cli/locate.cpp tools/cli/map.cpp tools/cli/vault.cpp tools/cli/vault_decode.cpp)
 target_include_directories(sieve_locate PUBLIC tools)
-target_link_libraries(sieve_locate PUBLIC sieve_core)
+# The vault checks pictures (PDQ), including files that are pictures, so it reads them (stb).
+target_link_libraries(sieve_locate PUBLIC sieve_core PRIVATE sieve_pdq sieve_image_io)
+target_link_libraries(sieve_lines PUBLIC sieve_locate) # the lines check units against the vault
 add_library(sieve_compare STATIC tools/cli/compare.cpp)
 target_include_directories(sieve_compare PUBLIC tools)
 target_link_libraries(sieve_compare PUBLIC sieve_core PRIVATE ${SIEVE_ZLIB} ${SIEVE_LZMA})
@@ -173,6 +194,10 @@ add_custom_target(sieve_data ALL
     # No map is shipped in it: the release's map names the release's files, so it cannot be inside
     # them, and "This installation" is made fresh. Maps already in it are left as they are.
     COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:sieve>/maps
+    # The vault's files (docs/VAULT.md): hashes only; the built-in entries are compiled in as well.
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/data/vault
+            $<TARGET_FILE_DIR:sieve>/vault
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/data/dictionaries
             $<TARGET_FILE_DIR:sieve>/dictionaries

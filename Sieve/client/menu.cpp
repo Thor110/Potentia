@@ -706,8 +706,8 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
                 }
             return;
         }
-        for (int i = 0; i < 5; ++i)
-            if (inside(magnifier_[i], mx, my)) open_filters(i);
+        for (int c = 0; c < 8; ++c)
+            if (inside(magnifier_[c], mx, my)) open_filters(overlay_of_column(c));
         return;
     }
     if (alpha_open_)
@@ -748,10 +748,18 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         break;
     case SDLK_F:
         // The filters of the line whose settings are selected.
-        // Rows 6-9 pages, 10-12 image, 13 audio, 14-17 video, 18 books. The GLOBAL rows above
-        // and the models rows below belong to no filterable line, so F on them does nothing.
+        // Rows 6-9 pages, 10-12 image, 13 audio, 14-17 video, 18 books, then the models rows and
+        // the binary row. Anywhere else (the GLOBAL rows, and the three at the foot), F opens the
+        // filters of the line you will start on (the "line" row); F again closes them.
         if (row_ >= kPagesRows && row_ <= kBooksRow)
             open_filters(row_ >= kImageRows && row_ < kAudioRow ? 1 : row_ == kAudioRow ? 2 : row_ == kBooksRow ? 4 : row_ >= kVideoRows ? 3 : 0);
+        else if (row_ >= kModelsRows && row_ < kBinaryRow) open_filters(5);
+        else if (row_ == kBinaryRow) open_filters(6);
+        else
+        {
+            const auto at = std::find(kLines.begin(), kLines.end(), s_.start_line); // text image audio video books models binary
+            open_filters(at == kLines.end() ? 0 : int(at - kLines.begin()));
+        }
         break;
     case SDLK_RETURN:
     case SDLK_KP_ENTER:
@@ -1010,11 +1018,11 @@ void Menu::render()
         auto clip = [&](const std::string& t) { return text_cells(t) <= cols ? t : fit_cells(t, cols - 2) + ".."; };
         const SDL_Color edge = th.edge;
         th.edge = ink; // labels in a readable colour; the bar keeps the line's own edges
-        // Magnifying glass: opens this line's filters. The models and binary lines have none
-        // yet, so they have no glass, and their names start where the others' names do.
-        if (!binary && i < 5)
+        // Magnifying glass: opens this line's filters, on every line. The models and binary
+        // lines have no filters registered yet (plugins will add them), but their mode is kept,
+        // and both binary columns open the one binary line's filters.
         {
-            magnifier_[i] = {x - 2, label - 2, 20, 20};
+            magnifier_[c] = {x - 2, label - 2, 20, 20};
             SDL_SetRenderDrawColor(r_, th.edge.r, th.edge.g, th.edge.b, 255);
             for (int k = 0; k < 16; ++k)
             {
@@ -1107,25 +1115,35 @@ sieve::FilterLine Menu::book_part_line(int part) const
 
 sieve::cli::LineFilters& Menu::filters_of(const ORow& row)
 {
+    if (overlay_ == 5) return cfg_.models;
+    if (overlay_ == 6) return cfg_.binary;
     return overlay_ == 4 ? cfg_.books.parts[std::max(0, row.part)] : cfg_.lines[overlay_];
 }
 
 const sieve::cli::LineFilters& Menu::filters_of(const ORow& row) const
 {
+    if (overlay_ == 5) return cfg_.models;
+    if (overlay_ == 6) return cfg_.binary;
     return overlay_ == 4 ? cfg_.books.parts[std::max(0, row.part)] : cfg_.lines[overlay_];
 }
 
-sieve::cli::FilterMode& Menu::mode_of(int line) { return line == 4 ? cfg_.books.mode : cfg_.lines[line].mode; }
+sieve::cli::FilterMode& Menu::mode_of(int line)
+{
+    if (line == 5) return cfg_.models.mode;
+    if (line == 6) return cfg_.binary.mode;
+    return line == 4 ? cfg_.books.mode : cfg_.lines[line].mode;
+}
 
 const Menu::StackInfo& Menu::stack_info(int i)
 {
     if (i == 4) return book_stack_info();
-    // The models line has no filters yet (SPECIFICATIONS §12 sets out the tiers to come), so
-    // there is nothing to count and nothing to say.
-    if (i == 5)
+    // The models and binary lines have no filters registered yet (SPECIFICATIONS §12 sets out
+    // the models line's tiers to come; filter plugins will bring them), so there is nothing to
+    // count, only that to say.
+    if (i == 5 || i == 6)
     {
-        info_[5] = StackInfo{"models", "", -1};
-        return info_[5];
+        info_[i] = StackInfo{i == 5 ? "models" : "binary", tr("status.no_filters_yet"), -1};
+        return info_[i];
     }
     if (line_sizes()[size_t(i)].bits > kTooLargeBits)
     {
@@ -1557,7 +1575,7 @@ void Menu::render_alphabets(float W, float H)
 void Menu::render_overlay(float W, float H)
 {
     const SDL_Color white{255, 255, 255, 255}, grey{150, 150, 150, 255};
-    const Theme& th = overlay_ == 4 ? kBooksTheme : kThemes[overlay_];
+    const Theme& th = overlay_ == 4 ? kBooksTheme : overlay_ == 5 ? kModelsTheme : overlay_ == 6 ? kBinaryTheme : kThemes[overlay_];
     const SDL_Color title_ink = overlay_ == 4 ? menu_ink(kBooksTheme) : th.edge;
     box_ = {600, 70, W - 614, H - 124};
     SDL_SetRenderDrawColor(r_, 0, 0, 0, 250);
@@ -1569,9 +1587,9 @@ void Menu::render_overlay(float W, float H)
     const float x = box_.x + 14;
     const size_t cols = size_t((box_.w - 60) / 8);
     text(r_, x, box_.y + 10, trf("filters.title", {tr(th.key)}), 2, title_ink);
-    text(r_, x, box_.y + 32, tr(overlay_ == 4 ? "filters.intro.books" : "filters.intro"), 1, grey);
+    text(r_, x, box_.y + 32, tr(overlay_ == 4 ? "filters.intro.books" : overlay_ >= 5 ? "filters.intro.none" : "filters.intro"), 1, grey);
 
-    const sieve::cli::FilterMode mode = overlay_ == 4 ? cfg_.books.mode : cfg_.lines[overlay_].mode;
+    const sieve::cli::FilterMode mode = mode_of(overlay_);
     const auto rows = overlay_rows();
     // Layout: each row's height, then scroll so the selected row stays in view.
     struct Item
