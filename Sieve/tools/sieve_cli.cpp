@@ -29,7 +29,10 @@
 #include "cli/locate.hpp"
 #include "cli/vault.hpp"
 #include "cli/vault_decode.hpp"
+#include "cli/plugins.hpp"
 #include "cli/timings.hpp"
+#include "sieve/dfa.hpp"
+#include "sieve/plugin.hpp"
 #include "sieve/chunks.hpp"
 #include "cli/map.hpp"
 #include "cli/models.hpp"
@@ -1085,8 +1088,113 @@ int cmd_measure(const Args& a)
 int cmd_check_book(const Args& a);
 int cmd_filters_books(const Args& a);
 
+// --params "a=1,b=2" into values.
+FilterValues parse_params(const std::string& s)
+{
+    FilterValues v;
+    size_t at = 0;
+    while (at < s.size())
+    {
+        const size_t comma = s.find(',', at);
+        const std::string item = s.substr(at, comma == std::string::npos ? std::string::npos : comma - at);
+        const size_t eq = item.find('=');
+        if (eq == std::string::npos || eq == 0) throw std::invalid_argument("--params expects NAME=VALUE, commas between: '" + item + "'");
+        v[item.substr(0, eq)] = item.substr(eq + 1);
+        if (comma == std::string::npos) break;
+        at = comma + 1;
+    }
+    return v;
+}
+
+// One plugin file: its header, its automaton and, at the line's length, what it keeps. The same
+// report as the oracle's `sieve_ref.py plugin`, line for line, so CI can compare them.
+int cmd_filters_plugin(const Args& a)
+{
+    const std::string file = a.get("plugin");
+    const std::vector<uint8_t> bytes = read_file_bytes(std::filesystem::path(std::u8string(file.begin(), file.end())));
+    const std::string text(bytes.begin(), bytes.end());
+    const std::string sha = Sha256::hex(Sha256::hash(text));
+    const auto def = parse_plugin(text, sha);
+    const PluginHeader& h = plugin_header(*def);
+    // The line: as given, or the one the plugin's symbols name.
+    Args b = a;
+    if (!a.has("line"))
+    {
+        if (h.symbols == "notes104") b.opts["line"] = "audio";
+        else if (h.symbols.rfind("palette:", 0) == 0)
+        {
+            b.opts["line"] = "image";
+            b.opts["palette"] = h.symbols.substr(8);
+        }
+        else if (h.symbols != "any" && !a.has("alphabet")) b.opts["alphabet"] = h.symbols;
+    }
+    const LineKind kind = line_from_string(b.get("line", "text"));
+    if (kind == LineKind::Audio && a.has("length")) b.opts["notes"] = a.get("length"); // a melody's length is its notes
+    if (!b.has("length") && kind == LineKind::Text) b.opts["length"] = "32";
+    const Line line = make_line(b);
+    const FilterLine fl = filter_line(line);
+    const FilterValues values = a.has("params") ? parse_params(a.get("params")) : FilterValues{};
+    for (const auto& [k, v] : values)
+        if (std::none_of(h.params.begin(), h.params.end(), [&](const FilterParam& p) { return p.key == k; }))
+            throw std::invalid_argument(h.name() + " has no parameter '" + k + "'");
+    size_t declared = 0;
+    const Dfa d = compile_plugin(*def, fl, values, &declared);
+    std::string params;
+    for (const auto& p : h.params)
+    {
+        const auto it = values.find(p.key);
+        params += (params.empty() ? "" : " ") + p.key + "=" + (it == values.end() ? p.default_value : it->second);
+    }
+    std::cout << "plugin     " << h.name() << "\n"
+              << "sha256     " << sha << "\n"
+              << "origin     " << h.origin << "\n"
+              << "author     " << h.author << "\n"
+              << "symbols    " << h.symbols << "\n"
+              << "params     " << (params.empty() ? "(none)" : params) << "\n"
+              << "states     " << declared << " declared, " << d.states() << " minimal\n"
+              << "length     " << fl.length << "\n";
+    if (DfaRanker::table_bytes(d.states(), d.base, fl.length) > kPluginTableBudget)
+    {
+        std::cout << "survivors  (judge only: the table is over the budget at this length)\n";
+        return 0;
+    }
+    const DfaRanker r(d, fl.length);
+    BigUint excluded = BigUint::pow(fl.base, fl.length);
+    excluded -= r.count();
+    std::cout << "survivors  " << r.count().to_decimal() << "\n"
+              << "excluded   " << excluded.to_decimal() << "\n";
+    if (!r.count().is_zero())
+    {
+        BigUint third = r.count();
+        third.divmod_small(3);
+        BigUint last = r.count();
+        last -= BigUint(1);
+        std::vector<BigUint> ks{BigUint(0)};
+        if (!(third == BigUint(0)) && !(third == last)) ks.push_back(third);
+        if (!(last == BigUint(0))) ks.push_back(last);
+        for (const BigUint& k : ks)
+        {
+            std::string digits;
+            for (uint32_t c : r.unrank(k)) digits += (digits.empty() ? "" : ",") + std::to_string(c);
+            std::cout << "rank       " << k.to_decimal() << "  " << (digits.empty() ? "-" : digits) << "\n";
+        }
+    }
+    return 0;
+}
+
 int cmd_filters(const Args& a)
 {
+    if (a.has("plugin")) return cmd_filters_plugin(a);
+    if (a.has("plugins"))
+    {
+        const auto& list = load_plugins();
+        if (list.empty()) std::cout << "No plugin files found (a filters folder beside the programs, or data/filters).\n";
+        for (const PluginFile& p : list)
+            std::cout << (p.error.empty() ? "loaded   " : "REFUSED  ") << (p.name.empty() ? std::string("?") : p.name) << "  "
+                      << (p.sha256.empty() ? std::string("-") : p.sha256.substr(0, 16)) << "  " << p.path
+                      << (p.error.empty() ? std::string() : "\n         " + p.error) << "\n";
+        return 0;
+    }
     if (a.get("line", "text") == "books") return cmd_filters_books(a);
     const Line line = make_line(a.has("length") || line_from_string(a.get("line", "text")) != LineKind::Text ? a : [&] {
         Args b = a;
@@ -1875,6 +1983,7 @@ int main(int argc, char** argv)
         if (a.help && print_help(a.command == "sieve" ? "sift" : a.command)) return 0;
         // --timings, on any command: how long each phase took, to standard error at exit.
         if (a.has("timings")) timings::enable();
+        load_plugins(); // the filter plugins, registered beside the built-in filters
         const std::string command_phase = "sieve " + a.command;
         timings::Scope timed(command_phase.c_str());
         // A mistyped option would otherwise be ignored without a word.

@@ -1,0 +1,39 @@
+sieve-filter-v1
+; The built-in max-run-v1, written as data, with its setting as a parameter: no letter repeated
+; more than max times in a row (SPACE may repeat freely). Unlike the built-in, it counts and ranks,
+; so compact mode works with it.
+id        max-run-data
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     text
+symbols   lower27
+describe  No letter repeated more than max times in a row (max-run-v1, as a plugin that also counts).
+param     max  int  3  1  64  longest run of one letter allowed
+
+class     space   " "
+
+; State 0: the start, or just after a SPACE. State 1 + (d-1)*max + (k-1): the last symbol is letter
+; d (1 = a .. 26 = z, as lower27 numbers them) and it has run k times.
+states    {1 + 26 * max}
+start     0
+accept    0..{26 * max}
+t   0   space   0
+for d 1 26
+  t   0   @{d}   {1 + (d - 1) * max}
+  for k 1 max
+    t   {1 + (d - 1) * max + k - 1}   space   0
+    ; the same letter again: one longer, up to max
+    for j 1 {max - k}
+      t   {1 + (d - 1) * max + k - 1}   @{d}   {1 + (d - 1) * max + k}
+    done
+    ; another letter: its first
+    for e 1 {d - 1}
+      t   {1 + (d - 1) * max + k - 1}   @{e}   {1 + (e - 1) * max}
+    done
+    for e {d + 1} 26
+      t   {1 + (d - 1) * max + k - 1}   @{e}   {1 + (e - 1) * max}
+    done
+  done
+done
+end

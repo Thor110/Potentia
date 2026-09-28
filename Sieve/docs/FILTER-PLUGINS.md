@@ -1,6 +1,11 @@
-# Filter plugins (draft for review)
+# Filter plugins
 
-A proposal, not yet built: filters written as data files and dropped into a folder, so that anyone
+*Built (28 September 2026): the format with parameters, the table form, the engine (judge, count,
+rank, compact, stacks of plugins), the loader and `filters/` folder, `sieve filters --plugin` and
+`--plugins`, the oracle's own parser and engine, and three reference plugins, all checked against
+the built-in filters they port (section 11). Next: the token form (section 4.3).*
+
+Filters written as data files and dropped into a folder, so that anyone
 (a person, or an AI) can add a filter to the stack without touching the C++ or rebuilding Sieve.
 A plugin describes a walk through states, one symbol at a time, and one engine runs every such
 file: it judges units, and, because every counting filter in Sieve is already a walk of that
@@ -49,7 +54,8 @@ format validators and whole-mesh checks, which judge but cannot count) is left f
 
 ## 4. The file format, `sieve-filter-v1`
 
-Canonical, line by line: a keyword and its value, `;` or `#` starting a comment. Two ways of
+Canonical, line by line: a keyword and its value; `;` starts a comment anywhere outside quotes, and
+a line whose first character is `#` is a comment. Two ways of
 writing the walk: a **table** (states and transitions, for small rules) and **tokens** (word lists
 and which may follow which, for words, word pairs and grammar). Both compile to the same thing.
 
@@ -88,8 +94,30 @@ t   3   letter  2
 end
 ```
 
-`class` names a set of symbols (ranges and single symbols in the alphabet's terms); every symbol
-belongs to at most one class used in the table, and a symbol in no class is dead everywhere. This
+`class` names a set of symbols: `"quoted"` characters, a range `a-z`, a symbol by its digit `@7`, a
+range of digits `@0..@9`, or `*` (every symbol in no other class). A symbol belongs to at most one
+class; a symbol in no class is dead everywhere, unless a transition names it directly (the symbol
+field of `t` takes a class, or symbols written as in a class). Symbols by digit are how plugins for
+pictures, melodies and `any` line are written.
+
+**Parameters and loops** (Edward: any value a filter uses should be adjustable, so filters are
+quick to make and test). A plugin declares its parameters, and its numbers can be expressions over
+them; `for` repeats lines, so a table's size and shape can follow a parameter:
+
+```
+param     max  int  3  1  64  longest run of one letter allowed    ; name, kind, default, min, max, text
+states    {1 + 26 * max}                                          ; integers, names, or {expressions}
+accept    0..{26 * max}
+for d 1 26                                                        ; d = 1 .. 26 (none when from > to)
+  t   0   @{d}   {1 + (d - 1) * max}
+done
+```
+
+Expressions are integers with `+ - * / %` and brackets over parameters and `for` variables (`/` and
+`%` for non-negative numbers only). Parameters appear in the setup menu and the filter settings like
+a built-in filter's, and every value in use is part of the stack's provenance, beside the file's
+SHA-256: `max-run-data-v1{plugin sha256=... max=2}`. The file is still the version: a setting is not
+an edit. This
 example is the built-in `clean-v1`, written as data (checked while drafting: this table gives
 exactly `clean-v1`'s survivor counts at lengths 1, 2, 5 and 32, 6106292877396388000207847302280459363471654912 at 32).
 
@@ -176,8 +204,7 @@ a conformance check, not a replacement.
 
 ## 9. Not in v1
 
-- **Parameters.** A variant is a new file; a plugin has no settings of its own. (Simple and exact;
-  parameters can come in a later version of the format.)
+- **Parameter kinds beyond integers** (a word list, a set of symbols, a choice): v1 has `int` only.
 - **Judge-only scripts.** Filters that must see a whole unit at once (file-format validators,
   watertight meshes) need code; a sandboxed, deterministic tier (WebAssembly, say) could carry
   them later, judging only.
@@ -186,11 +213,47 @@ a conformance check, not a replacement.
 
 ## 10. Order of work
 
-1. The format, the loader and the table form; the engine's judge, count, rank and compact; the
-   `filters/` folder; `sieve filters --plugin`. The oracle's loader and engine, and CI comparing
-   them. **This needs the full test harness** (a new ranker in the core, and new oracle vectors).
-2. `clean-data-v1` and `key-data-v1`, checked against the built-ins.
+1. **Built.** The format, the loader and the table form, with parameters; the engine's judge, count,
+   rank and compact; the `filters/` folder; `sieve filters --plugin`. The oracle's loader and
+   engine, and CI comparing them. (Ran the full test harness.)
+2. **Built.** `clean-data-v1` and `key-data-v1` checked against the built-ins, and `max-run-data-v1`.
 3. The token form; `words-data-v1` and `window-data-v1`, checked against the built-ins.
 4. The setup menu: plugins listed with their origin and author, reasons for any that fail to load.
 5. The first new filters: word pairs (by sets), then grammar (a tagged list first).
 6. The binary line (judging), then counting where the budget allows.
+
+## 11. As built
+
+- **Core.** `sieve/dfa.hpp`: the automaton, minimised to a canonical form (trimmed to live states,
+  merged by Moore's refinement, numbered breadth first from the start, symbols in order), the
+  product of two, and `DfaRanker`, a completion table built backwards with each state's transitions
+  grouped by target. `sieve/plugin.hpp`: the parser (errors name their line), the compiler (the
+  body run with the parameters' values), the plugin filter, and the registry that `find_filter`
+  and `filters_for` read after the built-in filters. A stack of plugins ranks through the product
+  of their automata. Counting needs a table of states x (length + 1) numbers; past 512 MB a plugin
+  judges only, and says so.
+- **Loading.** `tools/cli/plugins.*`: every `*.sfilter` in the installation's `filters/` folder
+  (the build copies `data/filters/` there; the release ships it) and in `data/filters/` when run
+  from the repository, read once at start-up by the command line and the hallway. `sieve filters
+  --plugins` lists each file with its name and SHA-256, or why it was refused: malformed, a
+  built-in's id, or another file with the same name and version but different bytes (then neither
+  is used). The same file found twice is used once.
+- **Checking.** `sieve filters --plugin FILE [--length L] [--params k=v,...]` reports the header,
+  the states as declared and minimal, the survivors, what is excluded and three survivors by rank.
+  The oracle (`sieve_ref.py plugin`) has its own tokenizer, expressions and interpreter, and
+  minimises by Hopcroft's algorithm rather than Moore's; the canonical numbering makes the two
+  reports identical, and CI diffs them for every reference plugin at five lengths and several
+  settings. (Writing it caught a real difference first: Hopcroft on an incomplete automaton merges
+  states that differ only in a missing transition, so the oracle completes the automaton with a
+  sink before refining.) The unit tests check the ports against the built-ins: `clean-data-v1`'s
+  counts are `clean-v1`'s at lengths 1 to 200 and it judges the same; `max-run-data-v1` judges as
+  `max-run-v1` at `max` 1 to 4, exhaustively at length 3 and on run-heavy units at 24, and counts
+  where the built-in cannot; `key-data-v1` counts as `key-v1` in the major key on all twelve
+  tonics; a stack of two plugins ranks exactly; renumbered states compile to the same automaton;
+  and ten kinds of mistake are refused with their line.
+- **Reference plugins** (`data/filters/`): `clean-data-v1` (table), `max-run-data-v1` (parameter
+  `max`, loops; unlike `max-run-v1` it counts, so compact mode works with it), `key-data-v1`
+  (parameter `tonic`, symbols by digit on the notes line).
+- **Later** (noted): the Moby part-of-speech list for the first grammar plugin, with or after the
+  token form; the menu showing plugins' origin and author on their own line, and load errors
+  (for now: `sieve filters --plugins`); chunk sizes as a parameter (VAULT.md section 8).

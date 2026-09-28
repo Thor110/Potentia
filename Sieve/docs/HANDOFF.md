@@ -738,4 +738,13 @@ blocks; no threads needed), replacing sha256_file_hex + check_file in locate.cpp
 multithreading work: the hallway's item work (content, filters, vault) on the face workers' pool;
 the menu's survivor counts and budget test off the main thread. Chunk sizes as a parameter:
 a named family (cdc-v1/min-avg-max), VAULT.md section 8, with the plugins.
+Filter plugins, step 1 (and 2) built (same night; full test harness run locally, all Linux CI steps
+pass except the model rebuild, which needs the network): core/include/sieve/dfa.hpp (canonical
+minimise, intersect, DfaRanker), core/include/sieve/plugin.hpp (sieve-filter-v1 table form with
+`param NAME int DEF MIN MAX`, {expressions}, for/done loops, @digit symbols; registry merged into
+find_filter/filters_for; a stack of plugins ranks via the product), tools/cli/plugins.* (filters/
+folder, refusals listed), `sieve filters --plugin/--plugins`, oracle `plugin` (own parser, Hopcroft
+with a sink), data/filters: clean-data-v1, max-run-data-v1, key-data-v1. Edward: parameters must be
+adjustable in plugins (done, int only in v1); `.sfilter` kept; Moby later. Next: the token form
+(step 3), then the menu's plugin details (step 4).
 

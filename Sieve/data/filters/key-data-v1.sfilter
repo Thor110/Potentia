@@ -1,0 +1,42 @@
+sieve-filter-v1
+; The built-in key-v1 in a major key, written as data, with its tonic as a parameter: every note's
+; pitch is in the major scale on the tonic; rests always pass. notes104 numbers a note 4 x pitch +
+; duration, pitch 0 a rest and 1 .. 25 C4 .. C6, so pitch class (pitch - 1) % 12.
+id        key-data
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     audio
+symbols   notes104
+describe  Every note in the major key on the tonic (0 C, 1 C#, ... 11 B); rests always pass (key-v1, as a plugin).
+param     tonic  int  0  0  11  the key's first note, in semitones above C
+
+states    1
+start     0
+accept    0
+t   0   @0..@3   0
+; for a pitch class pc, pitches 1 + pc + 12 o up to 25, each with its 4 durations
+for v 0 3
+  for o 0 {(24 - (tonic + 0) % 12) / 12}
+    t 0 @{4 * (1 + (tonic + 0) % 12 + 12 * o) + v} 0
+  done
+  for o 0 {(24 - (tonic + 2) % 12) / 12}
+    t 0 @{4 * (1 + (tonic + 2) % 12 + 12 * o) + v} 0
+  done
+  for o 0 {(24 - (tonic + 4) % 12) / 12}
+    t 0 @{4 * (1 + (tonic + 4) % 12 + 12 * o) + v} 0
+  done
+  for o 0 {(24 - (tonic + 5) % 12) / 12}
+    t 0 @{4 * (1 + (tonic + 5) % 12 + 12 * o) + v} 0
+  done
+  for o 0 {(24 - (tonic + 7) % 12) / 12}
+    t 0 @{4 * (1 + (tonic + 7) % 12 + 12 * o) + v} 0
+  done
+  for o 0 {(24 - (tonic + 9) % 12) / 12}
+    t 0 @{4 * (1 + (tonic + 9) % 12 + 12 * o) + v} 0
+  done
+  for o 0 {(24 - (tonic + 11) % 12) / 12}
+    t 0 @{4 * (1 + (tonic + 11) % 12 + 12 * o) + v} 0
+  done
+done
+end

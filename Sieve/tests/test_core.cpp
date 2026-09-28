@@ -8,6 +8,8 @@
 #include "sieve/modelspace.hpp"
 #include "sieve/canon.hpp"
 #include "sieve/chunks.hpp"
+#include "sieve/dfa.hpp"
+#include "sieve/plugin.hpp"
 #include "sieve/compact.hpp"
 #include "sieve/corridor.hpp"
 #include "sieve/filter.hpp"
@@ -1376,6 +1378,135 @@ std::vector<uint32_t> digits27(const std::string& t)
 
 void check_ranker_exhaustive(const FilterStack& st, uint32_t base, uint32_t L, bool& ok);
 
+// ---------------------------------------------------------------- filter plugins
+
+std::shared_ptr<const PluginDef> load_plugin_file(const std::string& path)
+{
+    std::ifstream in(path, std::ios::binary);
+    std::ostringstream s;
+    s << in.rdbuf();
+    const std::string text = s.str();
+    CHECK(!text.empty());
+    return parse_plugin(text, Sha256::hex(Sha256::hash(text)));
+}
+
+bool plugin_parse_fails(const std::string& text, const std::string& expect)
+{
+    try
+    {
+        const auto p = parse_plugin(text, "0");
+        (void)compile_plugin(*p, text_line(4), {});
+    }
+    catch (const std::invalid_argument& e)
+    {
+        if (std::string(e.what()).find(expect) != std::string::npos) return true;
+        std::cerr << "  plugin error was: " << e.what() << "\n";
+        return false;
+    }
+    return false;
+}
+
+// The engine against the built-in filters its reference plugins port, and its own rules.
+void test_plugins(const std::string& dir)
+{
+    const std::string filters = dir + "../data/filters/";
+    const TestResources none(nullptr, nullptr);
+    std::mt19937_64 rng(20260928);
+
+    // clean-data-v1 counts exactly as clean-v1, and judges every unit the same.
+    const auto clean = load_plugin_file(filters + "clean-data-v1.sfilter");
+    const FilterSpec clean_spec = plugin_spec(clean);
+    for (uint32_t L : {1u, 2u, 3u, 6u, 32u, 200u})
+    {
+        const FilterStack plug(text_line(L), {{&clean_spec, {}}}, none), built(text_line(L), {{find_filter("clean-v1"), {}}}, none);
+        CHECK(plug.ranker() && built.ranker() && plug.ranker()->count() == built.ranker()->count());
+        for (int i = 0; i < 300; ++i)
+        {
+            std::vector<uint32_t> u(L);
+            for (auto& c : u) c = uint32_t(rng() % 4 == 0 ? 0 : rng() % 27);
+            CHECK(plug.passes(u) == built.passes(u));
+            if (plug.passes(u)) CHECK(plug.ranker()->unrank(plug.ranker()->rank(u)) == u);
+        }
+    }
+
+    // max-run-data-v1 judges as max-run-v1 at every setting, exhaustively at length 3 and on
+    // run-heavy random units at 24, and (unlike the built-in) counts.
+    const auto run = load_plugin_file(filters + "max-run-data-v1.sfilter");
+    const FilterSpec run_spec = plugin_spec(run);
+    for (int max = 1; max <= 4; ++max)
+    {
+        const FilterValues pv{{"max", std::to_string(max)}}, bv{{"max_run", std::to_string(max)}};
+        const FilterStack p3(text_line(3), {{&run_spec, pv}}, none), b3(text_line(3), {{find_filter("max-run-v1"), bv}}, none);
+        uint64_t n = 0;
+        bool same = true;
+        for (uint32_t x = 0; x < 27 * 27 * 27; ++x)
+        {
+            const std::vector<uint32_t> u{x / 729, x / 27 % 27, x % 27};
+            same = same && p3.passes(u) == b3.passes(u);
+            n += b3.passes(u) ? 1 : 0;
+        }
+        CHECK(same);
+        CHECK(p3.ranker() && p3.ranker()->count() == BigUint(n));
+        const FilterStack p24(text_line(24), {{&run_spec, pv}}, none), b24(text_line(24), {{find_filter("max-run-v1"), bv}}, none);
+        for (int i = 0; i < 400; ++i)
+        {
+            std::vector<uint32_t> u(24);
+            for (size_t k = 0; k < u.size(); ++k) u[k] = k > 0 && rng() % 2 ? u[k - 1] : uint32_t(rng() % 27);
+            CHECK(p24.passes(u) == b24.passes(u));
+        }
+    }
+
+    // key-data-v1 counts as key-v1 in the major key on every tonic.
+    static const char* const tonics[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+    const auto key = load_plugin_file(filters + "key-data-v1.sfilter");
+    const FilterSpec key_spec = plugin_spec(key);
+    for (int t = 0; t < 12; ++t)
+        for (uint32_t L : {1u, 7u})
+        {
+            const FilterLine audio{"audio", "notes104", 104, L, nullptr, 0, 0, 0};
+            const FilterStack p(audio, {{&key_spec, {{"tonic", std::to_string(t)}}}}, none);
+            const FilterStack b(audio, {{find_filter("key-v1"), {{"tonic", tonics[t]}, {"scale", "major"}}}}, none);
+            CHECK(p.ranker() && b.ranker() && p.ranker()->count() == b.ranker()->count());
+        }
+
+    // A stack of two plugins ranks through their combined automaton, exactly.
+    {
+        const FilterStack both(text_line(3), {{&clean_spec, {}}, {&run_spec, {{"max", "1"}}}}, none);
+        CHECK(both.ranker() != nullptr);
+        uint64_t n = 0;
+        for (uint32_t x = 0; x < 27 * 27 * 27; ++x)
+            n += both.passes(std::vector<uint32_t>{x / 729, x / 27 % 27, x % 27}) ? 1 : 0;
+        CHECK(both.ranker() && both.ranker()->count() == BigUint(n));
+    }
+
+    // Minimising is canonical: the same rule with its states numbered differently compiles to
+    // the same automaton.
+    {
+        const std::string head = "sieve-filter-v1\nid x\nversion 1\nauthor t\norigin human\nlines text\nsymbols lower27\n"
+                                 "class space \" \"\nclass letter a-z\nstates 5\n";
+        const auto a = parse_plugin(head + "start 0\naccept 2 3\nt 0 space 1\nt 0 letter 2\nt 1 letter 2\nt 2 letter 2\nt 2 space 3\nt 3 letter 2\nend\n", "a");
+        const auto b = parse_plugin(head + "start 4\naccept 1 0\nt 4 space 2\nt 4 letter 1\nt 2 letter 1\nt 1 letter 1\nt 1 space 0\nt 0 letter 1\nend\n", "b");
+        const Dfa da = compile_plugin(*a, text_line(4), {}), db = compile_plugin(*b, text_line(4), {});
+        CHECK(da.next == db.next && da.accept == db.accept && da.states() == 4);
+    }
+
+    // Mistakes are refused with their line.
+    const std::string h = "sieve-filter-v1\nid x\nversion 1\nauthor t\norigin human\nlines text\nsymbols lower27\nstates 2\nstart 0\naccept 1\n";
+    CHECK(plugin_parse_fails(h + "t 0 @1 1\nt 0 @1 0\nend\n", "line 12: state 0 on symbol @1 goes to both 1 and 0"));
+    CHECK(plugin_parse_fails(h + "t 0 vowel 1\nend\n", "'vowel' is not a class"));
+    CHECK(plugin_parse_fails(h + "t 0 @1 2\nend\n", "state 2 does not exist"));
+    CHECK(plugin_parse_fails(h + "t 0 @27 1\nend\n", "@27 is not a symbol"));
+    CHECK(plugin_parse_fails(h + "t 0 \"A\" 1\nend\n", "is not a symbol of lower27"));
+    CHECK(plugin_parse_fails(h + "t 0 @1 1\n", "ends with end"));
+    CHECK(plugin_parse_fails(h + "for i 0 3\nt 0 @1 1\nend\n", "not closed by done"));
+    CHECK(plugin_parse_fails(h + "t 0 @{n} 1\nend\n", "'n' is not a parameter"));
+    CHECK(plugin_parse_fails(h + "t 0 @{5 / 0} 1\nend\n", "/ is for"));
+    CHECK(plugin_parse_fails("sieve-filter-v1\nid x\nversion 1\nauthor t\norigin human\nlines text\nsymbols lower27\nparam n int 9 1 5\nend\n",
+                             "default must lie between"));
+    std::cout << "filter plugins checked\n";
+}
+
+
 void test_filters(const std::string& dir)
 {
     // Exact logarithms.
@@ -2298,6 +2429,7 @@ void run_all(int argc, char** argv)
         test_titled_vectors(dir + "vectors_titled_v1.tsv");
         test_binary_vectors(dir + "vectors_binary_v1.tsv");
         test_chunk_vectors(dir + "vectors_chunks_v1.tsv");
+        test_plugins(dir);
         test_book_filter_vectors(dir);
     }
 }

@@ -28,6 +28,8 @@ add_library(sieve_core STATIC
     core/src/canon.cpp
     core/src/chunks.cpp
     core/src/compact.cpp
+    core/src/dfa.cpp
+    core/src/plugin.cpp
     core/src/corridor.cpp
     core/src/modelspace.cpp
     core/src/filter.cpp
@@ -69,7 +71,8 @@ add_library(sieve_lines STATIC
     tools/cli/dictionaries.cpp
     tools/cli/filter_config.cpp
     tools/cli/lines.cpp
-    tools/cli/models.cpp)
+    tools/cli/models.cpp
+    tools/cli/plugins.cpp)
 target_include_directories(sieve_lines PUBLIC tools)
 target_link_libraries(sieve_lines PUBLIC sieve_core sieve_image_io)
 # (sieve_locate, defined below, is linked into sieve_lines after it: the lines check the vault.)
@@ -199,6 +202,10 @@ add_custom_target(sieve_data ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/data/vault
             $<TARGET_FILE_DIR:sieve>/vault
+    # Filter plugins (docs/FILTER-PLUGINS.md): the reference plugins; add your own beside them.
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/data/filters
+            $<TARGET_FILE_DIR:sieve>/filters
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/data/dictionaries
             $<TARGET_FILE_DIR:sieve>/dictionaries

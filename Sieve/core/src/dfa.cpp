@@ -1,0 +1,253 @@
+// Sieve — deterministic automata (dfa.hpp): minimising to the canonical form, the product of two,
+// and the ranker's completion table.
+//
+// Minimising is Moore's refinement: states start split by whether they accept, and are split
+// again by the classes their symbols lead to until nothing changes. It is quadratic at worst, which
+// the sizes plugins compile to (thousands of states) never notice, and simple enough that the
+// oracle's independent copy is easy to check against.
+
+#include "sieve/dfa.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <deque>
+#include <map>
+#include <stdexcept>
+#include <unordered_map>
+
+namespace sieve {
+
+bool Dfa::accepts(std::span<const uint32_t> unit) const
+{
+    int32_t s = start;
+    for (uint32_t c : unit)
+    {
+        s = step(s, c);
+        if (s < 0) return false;
+    }
+    return s >= 0 && accept[size_t(s)] != 0;
+}
+
+namespace {
+
+Dfa empty_dfa(uint32_t base)
+{
+    Dfa e;
+    e.base = base;
+    return e;
+}
+
+} // namespace
+
+Dfa minimise(const Dfa& d)
+{
+    const size_t n = d.states(), B = d.base;
+    if (B == 0) throw std::invalid_argument("an automaton needs at least one symbol");
+    if (d.next.size() != n * B) throw std::invalid_argument("an automaton's table must have states x symbols entries");
+    for (int32_t t : d.next)
+        if (t < Dfa::kDead || (t >= 0 && size_t(t) >= n)) throw std::invalid_argument("a transition leads to a state that does not exist");
+    if (d.start == Dfa::kDead || n == 0) return empty_dfa(d.base);
+    if (d.start < 0 || size_t(d.start) >= n) throw std::invalid_argument("the start state does not exist");
+
+    // Reachable from the start, and able to reach an accepting state: the live states.
+    std::vector<uint8_t> reach(n, 0), coreach(n, 0);
+    std::vector<int32_t> stack{d.start};
+    reach[size_t(d.start)] = 1;
+    while (!stack.empty())
+    {
+        const int32_t s = stack.back();
+        stack.pop_back();
+        for (size_t c = 0; c < B; ++c)
+            if (const int32_t t = d.next[size_t(s) * B + c]; t >= 0 && !reach[size_t(t)])
+            {
+                reach[size_t(t)] = 1;
+                stack.push_back(t);
+            }
+    }
+    std::vector<std::vector<int32_t>> back(n);
+    for (size_t s = 0; s < n; ++s)
+        if (reach[s])
+            for (size_t c = 0; c < B; ++c)
+                if (const int32_t t = d.next[s * B + c]; t >= 0) back[size_t(t)].push_back(int32_t(s));
+    for (size_t s = 0; s < n; ++s)
+        if (reach[s] && d.accept[s])
+        {
+            coreach[s] = 1;
+            stack.push_back(int32_t(s));
+        }
+    while (!stack.empty())
+    {
+        const int32_t s = stack.back();
+        stack.pop_back();
+        for (int32_t p : back[size_t(s)])
+            if (!coreach[size_t(p)])
+            {
+                coreach[size_t(p)] = 1;
+                stack.push_back(p);
+            }
+    }
+    if (!coreach[size_t(d.start)]) return empty_dfa(d.base);
+    auto live = [&](int32_t s) { return s >= 0 && reach[size_t(s)] && coreach[size_t(s)]; };
+
+    // Moore's refinement over the live states; a dead transition is class -1.
+    std::vector<int32_t> cls(n, -1);
+    for (size_t s = 0; s < n; ++s)
+        if (live(int32_t(s))) cls[s] = d.accept[s] ? 1 : 0;
+    size_t classes = 0;
+    for (;;)
+    {
+        std::map<std::vector<int32_t>, int32_t> ids;
+        std::vector<int32_t> next_cls(n, -1);
+        std::vector<int32_t> sig(B + 1);
+        for (size_t s = 0; s < n; ++s)
+        {
+            if (!live(int32_t(s))) continue;
+            sig[0] = cls[s];
+            for (size_t c = 0; c < B; ++c)
+            {
+                const int32_t t = d.next[s * B + c];
+                sig[c + 1] = live(t) ? cls[size_t(t)] : -1;
+            }
+            next_cls[s] = ids.emplace(sig, int32_t(ids.size())).first->second;
+        }
+        cls.swap(next_cls);
+        if (ids.size() == classes) break;
+        classes = ids.size();
+    }
+
+    // Canonical numbering: breadth first from the start's class, symbols in order.
+    std::vector<int32_t> rep(classes, -1);
+    for (size_t s = 0; s < n; ++s)
+        if (cls[s] >= 0 && rep[size_t(cls[s])] < 0) rep[size_t(cls[s])] = int32_t(s);
+    std::vector<int32_t> order(classes, -1);
+    std::deque<int32_t> queue{cls[size_t(d.start)]};
+    order[size_t(cls[size_t(d.start)])] = 0;
+    int32_t numbered = 1;
+    std::vector<int32_t> seq;
+    while (!queue.empty())
+    {
+        const int32_t k = queue.front();
+        queue.pop_front();
+        seq.push_back(k);
+        const size_t s = size_t(rep[size_t(k)]);
+        for (size_t c = 0; c < B; ++c)
+        {
+            const int32_t t = d.next[s * B + c];
+            if (!live(t)) continue;
+            const int32_t kt = cls[size_t(t)];
+            if (order[size_t(kt)] < 0)
+            {
+                order[size_t(kt)] = numbered++;
+                queue.push_back(kt);
+            }
+        }
+    }
+    Dfa m;
+    m.base = d.base;
+    m.start = 0;
+    m.accept.assign(seq.size(), 0);
+    m.next.assign(seq.size() * B, Dfa::kDead);
+    for (int32_t k : seq)
+    {
+        const size_t s = size_t(rep[size_t(k)]), ns = size_t(order[size_t(k)]);
+        m.accept[ns] = d.accept[s];
+        for (size_t c = 0; c < B; ++c)
+            if (const int32_t t = d.next[s * B + c]; live(t)) m.next[ns * B + c] = order[size_t(cls[size_t(t)])];
+    }
+    return m;
+}
+
+Dfa intersect(const Dfa& a, const Dfa& b)
+{
+    if (a.base != b.base) throw std::invalid_argument("automata over different symbols cannot be combined");
+    const size_t B = a.base;
+    if (a.start < 0 || b.start < 0) return empty_dfa(a.base);
+    std::unordered_map<uint64_t, int32_t> id;
+    std::vector<std::pair<int32_t, int32_t>> pairs;
+    auto get = [&](int32_t x, int32_t y) {
+        const uint64_t key = uint64_t(uint32_t(x)) << 32 | uint32_t(y);
+        const auto [it, added] = id.emplace(key, int32_t(pairs.size()));
+        if (added) pairs.emplace_back(x, y);
+        return it->second;
+    };
+    Dfa p;
+    p.base = a.base;
+    p.start = get(a.start, b.start);
+    for (size_t i = 0; i < pairs.size(); ++i)
+    {
+        const auto [x, y] = pairs[i];
+        p.accept.push_back(a.accept[size_t(x)] && b.accept[size_t(y)] ? 1 : 0);
+        for (size_t c = 0; c < B; ++c)
+        {
+            const int32_t tx = a.next[size_t(x) * B + c], ty = b.next[size_t(y) * B + c];
+            p.next.push_back(tx < 0 || ty < 0 ? Dfa::kDead : get(tx, ty));
+        }
+    }
+    return minimise(p);
+}
+
+// ---------------------------------------------------------------- the ranker
+
+double DfaRanker::table_bytes(size_t states, uint32_t base, uint32_t length)
+{
+    // On average a number in the table is half the longest (the counts grow with r).
+    const double bits = double(length) * std::log2(double(std::max<uint32_t>(base, 2)));
+    return double(states) * (double(length) + 1) * (bits / 16.0 + 32.0);
+}
+
+DfaRanker::DfaRanker(const Dfa& minimal, uint32_t length) : dfa_(minimal), length_(length)
+{
+    const size_t n = dfa_.states(), B = dfa_.base;
+    // Each state's transitions grouped by where they lead, with how many symbols lead there.
+    std::vector<std::vector<std::pair<int32_t, uint32_t>>> groups(n);
+    for (size_t s = 0; s < n; ++s)
+    {
+        std::map<int32_t, uint32_t> m;
+        for (size_t c = 0; c < B; ++c)
+            if (const int32_t t = dfa_.next[s * B + c]; t >= 0) ++m[t];
+        groups[s].assign(m.begin(), m.end());
+    }
+    table_.assign(size_t(length) + 1, std::vector<BigUint>(n));
+    for (size_t s = 0; s < n; ++s)
+        if (dfa_.accept[s]) table_[0][s] = BigUint(1);
+    for (uint32_t r = 1; r <= length; ++r)
+        for (size_t s = 0; s < n; ++s)
+        {
+            BigUint acc;
+            for (const auto& [t, mult] : groups[s])
+            {
+                const BigUint& prev = table_[r - 1][size_t(t)];
+                if (prev.is_zero()) continue;
+                if (mult == 1) acc += prev;
+                else
+                {
+                    BigUint x = prev;
+                    x.mul_small(mult);
+                    acc += x;
+                }
+            }
+            table_[r][s] = std::move(acc);
+        }
+    set_count();
+}
+
+Ranker::State DfaRanker::next(State s, uint32_t symbol) const
+{
+    if (s == kDead || s >= dfa_.states() || symbol >= dfa_.base) return kDead;
+    const int32_t t = dfa_.next[size_t(s) * dfa_.base + symbol];
+    return t < 0 ? kDead : State(t);
+}
+
+BigUint DfaRanker::completions(State s, uint32_t remaining) const
+{
+    if (s == kDead || s >= dfa_.states() || remaining > length_) return BigUint();
+    return table_[remaining][size_t(s)];
+}
+
+bool DfaRanker::alive(State s, uint32_t remaining) const
+{
+    if (s == kDead || s >= dfa_.states() || remaining > length_) return false;
+    return !table_[remaining][size_t(s)].is_zero();
+}
+
+} // namespace sieve

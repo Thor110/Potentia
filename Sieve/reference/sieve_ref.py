@@ -26,6 +26,7 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
 """
 import argparse
 import hashlib
+import re
 import math
 import struct
 import sys
@@ -1827,6 +1828,477 @@ def cmd_chunk_vectors(_args):
         print(f"{name}\t{data.hex() or '-'}\t{cs}")
 
 
+# ---------------------------------------------------------------- filter plugins (sieve-filter-v1)
+# Written from the format in core/include/sieve/plugin.hpp and docs/FILTER-PLUGINS.md, not from
+# plugin.cpp: its own tokenizer, expression reader and interpreter, and Hopcroft's minimisation
+# where the engine uses Moore's (both end in the one canonical numbering: breadth first from the
+# start, symbols in order), so the two agreeing on every reference plugin is a real check.
+
+PLUGIN_FORMAT = "sieve-filter-v1"
+NOTES_BASE = 104
+
+
+class PluginError(Exception):
+    pass
+
+
+def _plugin_tokens(line, n):
+    toks, i = [], 0
+    while i < len(line):
+        c = line[i]
+        if c in " \t":
+            i += 1
+            continue
+        if c == ";":
+            break
+        if c == '"':
+            i += 1
+            text, closed = "", False
+            while i < len(line):
+                ch = line[i]
+                i += 1
+                if ch == '"':
+                    closed = True
+                    break
+                if ch == "\\":
+                    if i >= len(line):
+                        raise PluginError(f"line {n}: a quoted string ends in a backslash")
+                    e = line[i]
+                    i += 1
+                    if e not in 'nt"\\':
+                        raise PluginError(f"line {n}: unknown escape \\{e}")
+                    text += {"n": "\n", "t": "\t"}.get(e, e)
+                else:
+                    text += ch
+            if not closed:
+                raise PluginError(f"line {n}: a quoted string is not closed")
+            toks.append((text, True))
+            continue
+        depth, text = 0, ""
+        while i < len(line) and (depth > 0 or line[i] not in ' \t;"'):
+            if line[i] == "{":
+                depth += 1
+            if line[i] == "}":
+                depth -= 1
+                if depth < 0:
+                    raise PluginError(f"line {n}: a }} without its {{")
+            text += line[i]
+            i += 1
+        if depth:
+            raise PluginError(f"line {n}: a {{ without its }}")
+        toks.append((text, False))
+    return toks
+
+
+def _plugin_expr(s, env, n):
+    """+ - * / % and brackets over integers and names; / and % for non-negative numbers only."""
+    toks = re.findall(r"\s*(\d+|[A-Za-z_]\w*|[-+*/%()]|\S)", s)
+    pos = [0]
+    LIMIT = 1 << 62
+
+    def chk(v):
+        if abs(v) > LIMIT:
+            raise PluginError(f"line {n}: a number is too large")
+        return v
+
+    def peek():
+        return toks[pos[0]] if pos[0] < len(toks) else None
+
+    def take():
+        pos[0] += 1
+        return toks[pos[0] - 1]
+
+    def atom():
+        t = peek()
+        if t is None:
+            raise PluginError(f"line {n}: an expression ends too soon: '{s}'")
+        if t == "-":
+            take()
+            return chk(-atom())
+        if t == "(":
+            take()
+            v = add()
+            if peek() != ")":
+                raise PluginError(f"line {n}: a ( without its ) in '{s}'")
+            take()
+            return v
+        take()
+        if t.isdigit():
+            return chk(int(t))
+        if re.fullmatch(r"[A-Za-z_]\w*", t):
+            if t not in env:
+                raise PluginError(f"line {n}: '{t}' is not a parameter or a for variable")
+            return env[t]
+        raise PluginError(f"line {n}: cannot read the expression '{s}'")
+
+    def mul():
+        v = atom()
+        while peek() in ("*", "/", "%"):
+            op = take()
+            r = atom()
+            if op == "*":
+                v = chk(v * r)
+            else:
+                if v < 0 or r <= 0:
+                    raise PluginError(f"line {n}: {op} is for a number of 0 or more by one of 1 or more")
+                v = v // r if op == "/" else v % r
+        return v
+
+    def add():
+        v = mul()
+        while peek() in ("+", "-"):
+            op = take()
+            r = mul()
+            v = chk(v + r if op == "+" else v - r)
+        return v
+
+    v = add()
+    if pos[0] != len(toks):
+        raise PluginError(f"line {n}: cannot read the expression '{s}'")
+    return v
+
+
+def _plugin_num(tok, env, n):
+    text, quoted = tok
+    if quoted:
+        raise PluginError(f"line {n}: expected a number, got a quoted string")
+    if len(text) >= 2 and text[0] == "{" and text[-1] == "}":
+        text = text[1:-1]
+    elif "{" in text or "}" in text:
+        raise PluginError(f"line {n}: an expression must be all inside {{braces}}: '{text}'")
+    return _plugin_expr(text, env, n)
+
+
+def _split_range(s):
+    depth = 0
+    for i in range(len(s) - 1):
+        depth += (s[i] == "{") - (s[i] == "}")
+        if depth == 0 and s[i:i + 2] == "..":
+            return s[:i], s[i + 2:]
+    return None
+
+
+def parse_plugin(text):
+    head = {"params": [], "lines": []}
+    body, n, first, ended, stack = [], 0, True, False, []
+    for raw in text.split("\n"):
+        n += 1
+        if raw.endswith("\r"):
+            raise PluginError(f"line {n}: line breaks must be line feeds only")
+        st = raw.lstrip(" \t")
+        if not st or st[0] in "#;":
+            continue
+        toks = _plugin_tokens(raw, n)
+        if not toks:
+            continue
+        if ended:
+            raise PluginError(f"line {n}: nothing may follow end")
+        if first:
+            if toks != [(PLUGIN_FORMAT, False)]:
+                raise PluginError(f"line {n}: a plugin starts with {PLUGIN_FORMAT}")
+            first = False
+            continue
+        k = toks[0][0]
+        rest = raw.split(";")[0].strip(" \t")[len(k):].strip(" \t")
+        if k in ("id", "version", "origin", "symbols"):
+            if len(toks) != 2:
+                raise PluginError(f"line {n}: {k} takes 1 value")
+            head[k] = toks[1][0]
+        elif k in ("author", "describe"):
+            head[k] = rest
+        elif k == "lines":
+            head["lines"] = [t for t, _ in toks[1:]]
+        elif k == "param":
+            name, kind = toks[1][0], toks[2][0]
+            if kind != "int":
+                raise PluginError(f"line {n}: a parameter's kind is int")
+            d, lo, hi = (_plugin_num(t, {}, n) for t in toks[3:6])
+            if not lo <= d <= hi:
+                raise PluginError(f"line {n}: a parameter's default must lie between its minimum and maximum")
+            head["params"].append((name, d, lo, hi))
+        elif k in ("class", "states", "start", "accept", "t", "for", "done"):
+            body.append((n, toks))
+            if k == "for":
+                stack.append(len(body) - 1)
+            if k == "done":
+                if not stack:
+                    raise PluginError(f"line {n}: done without its for")
+                stack.pop()
+        elif k == "end":
+            if stack:
+                raise PluginError(f"line {n}: a for is not closed by done")
+            ended = True
+        else:
+            raise PluginError(f"line {n}: unknown keyword '{k}'")
+    if not ended:
+        raise PluginError("a plugin ends with end")
+    for key in ("id", "version", "author", "origin", "symbols"):
+        if key not in head:
+            raise PluginError(f"the header has no {key}")
+    head["name"] = f"{head['id']}-v{int(head['version'])}"
+    return head, body
+
+
+def plugin_base(symbols, base=None):
+    if symbols in ALPHABETS:
+        return len(ALPHABETS[symbols])
+    if symbols == "notes104":
+        return NOTES_BASE
+    if symbols.startswith("palette:"):
+        return PALETTE_SIZES[symbols[8:]]
+    if base is None:
+        raise PluginError(f"give --base for symbols {symbols}")
+    return base
+
+
+def compile_plugin(head, body, values, base):
+    env = {}
+    for name, d, lo, hi in head["params"]:
+        v = int(values.get(name, d))
+        if not lo <= v <= hi:
+            raise PluginError(f"{head['name']}: {name} must be {lo}..{hi}")
+        env[name] = v
+    alpha = ALPHABETS.get(head["symbols"])
+
+    def sym_of(ch, n):
+        if alpha is None:
+            raise PluginError(f"line {n}: a quoted or lettered symbol needs a text line")
+        if ch not in alpha:
+            raise PluginError(f"line {n}: U+{ord(ch):04X} is not a symbol of {head['symbols']}")
+        return alpha.index(ch)
+
+    def digit(expr, n):
+        v = _plugin_num((expr, False), env, n)
+        if not 0 <= v < base:
+            raise PluginError(f"line {n}: @{v} is not a symbol of this line")
+        return v
+
+    def item(tok, n):
+        text, quoted = tok
+        if quoted:
+            return {sym_of(c, n) for c in text}
+        if text.startswith("@"):
+            r = _split_range(text)
+            if r:
+                lo, hi = digit(r[0][1:], n), digit(r[1][1:], n)
+                return set(range(lo, hi + 1))
+            return {digit(text[1:], n)}
+        if len(text) == 3 and text[1] == "-":
+            return {sym_of(chr(c), n) for c in range(ord(text[0]), ord(text[2]) + 1)}
+        raise PluginError(f"line {n}: cannot read the symbols '{text}'")
+
+    classes, owner, star = {}, {}, None
+    for n, toks in body:
+        if toks[0][0] != "class":
+            continue
+        name = toks[1][0]
+        if toks[2:] == [("*", False)]:
+            star = name
+            continue
+        syms = set()
+        for t in toks[2:]:
+            syms |= item(t, n)
+        for d in syms:
+            if d in owner:
+                raise PluginError(f"line {n}: symbol @{d} is in both {owner[d]} and {name}")
+            owner[d] = name
+        classes[name] = sorted(syms)
+    if star:
+        classes[star] = [d for d in range(base) if d not in owner]
+
+    state = {"N": None, "start": None, "next": None, "accept": None}
+
+    def st(tok, n):
+        v = _plugin_num(tok, env, n)
+        if not 0 <= v < state["N"]:
+            raise PluginError(f"line {n}: state {v} does not exist")
+        return v
+
+    def run(i, j):
+        while i < j:
+            n, toks = body[i]
+            k = toks[0][0]
+            if k == "states":
+                state["N"] = _plugin_num(toks[1], env, n)
+                state["next"] = [[-1] * base for _ in range(state["N"])]
+                state["accept"] = [False] * state["N"]
+            elif k == "start":
+                state["start"] = st(toks[1], n)
+            elif k == "accept":
+                for t in toks[1:]:
+                    r = _split_range(t[0])
+                    if r:
+                        for s in range(st((r[0], False), n), st((r[1], False), n) + 1):
+                            state["accept"][s] = True
+                    else:
+                        state["accept"][st(t, n)] = True
+            elif k == "t":
+                a, b = st(toks[1], n), st(toks[3], n)
+                syms = classes[toks[2][0]] if not toks[2][1] and toks[2][0] in classes else sorted(item(toks[2], n))
+                for c in syms:
+                    cur = state["next"][a][c]
+                    if cur != -1 and cur != b:
+                        raise PluginError(f"line {n}: state {a} on symbol @{c} goes to both {cur} and {b}")
+                    state["next"][a][c] = b
+            elif k == "for":
+                var = toks[1][0]
+                lo, hi = _plugin_num(toks[2], env, n), _plugin_num(toks[3], env, n)
+                depth, end = 0, i + 1
+                while True:
+                    kk = body[end][1][0][0]
+                    if kk == "for":
+                        depth += 1
+                    if kk == "done":
+                        if depth == 0:
+                            break
+                        depth -= 1
+                    end += 1
+                for v in range(lo, hi + 1):
+                    env[var] = v
+                    run(i + 1, end)
+                env.pop(var, None)
+                i = end
+            i += 1
+
+    run(0, len(body))
+    return state["N"], state["start"], state["next"], state["accept"]
+
+
+def minimise_dfa(start, nxt, acc, base):
+    """Trim to the live states, merge by Hopcroft's algorithm, number breadth first."""
+    n = len(nxt)
+    reach, todo = {start}, [start]
+    while todo:
+        s = todo.pop()
+        for t in nxt[s]:
+            if t >= 0 and t not in reach:
+                reach.add(t)
+                todo.append(t)
+    back = {s: set() for s in reach}
+    for s in reach:
+        for t in nxt[s]:
+            if t >= 0:
+                back[t].add(s)
+    co = {s for s in reach if acc[s]}
+    todo = list(co)
+    while todo:
+        s = todo.pop()
+        for p in back[s]:
+            if p not in co:
+                co.add(p)
+                todo.append(p)
+    live = reach & co
+    if start not in live:
+        return None, [], []
+    # Hopcroft needs a complete automaton: every missing transition goes to a sink, DEAD, which
+    # stays in a block of its own (a live state can reach acceptance; the sink cannot).
+    DEAD = -1
+    rev = [dict() for _ in range(base)]  # symbol -> target -> sources
+    for s in live:
+        for c in range(base):
+            t = nxt[s][c]
+            rev[c].setdefault(t if t in live else DEAD, set()).add(s)
+    for c in range(base):
+        rev[c].setdefault(DEAD, set()).add(DEAD)
+    F = frozenset(s for s in live if acc[s])
+    parts = [p for p in (F, frozenset((live - F) | {DEAD})) if p]
+    work = [min(parts, key=len)] if len(parts) == 2 else list(parts)
+    while work:
+        A = work.pop()
+        for c in range(base):
+            X = set()
+            for t in A:
+                X |= rev[c].get(t, set())
+            if not X:
+                continue
+            new = []
+            for Y in parts:
+                i1, i2 = Y & X, Y - X
+                if i1 and i2:
+                    new += [frozenset(i1), frozenset(i2)]
+                    if Y in work:
+                        work.remove(Y)
+                        work += [frozenset(i1), frozenset(i2)]
+                    else:
+                        work.append(frozenset(i1) if len(i1) <= len(i2) else frozenset(i2))
+                else:
+                    new.append(Y)
+            parts = new
+    block = {s: i for i, P in enumerate(parts) for s in P if s != DEAD}
+    order, seq, q = {block[start]: 0}, [], [block[start]]
+    while q:
+        b = q.pop(0)
+        seq.append(b)
+        s = next(iter(parts[b]))
+        for c in range(base):
+            t = nxt[s][c]
+            if t in live and block[t] not in order:
+                order[block[t]] = len(order)
+                q.append(block[t])
+    m_next, m_acc = [], []
+    for b in seq:
+        s = next(iter(parts[b]))
+        m_acc.append(acc[s])
+        m_next.append([order[block[nxt[s][c]]] if nxt[s][c] in live else -1 for c in range(base)])
+    return 0, m_next, m_acc
+
+
+def dfa_count_table(nxt, acc, L):
+    n = len(nxt)
+    table = [[1 if acc[s] else 0 for s in range(n)]]
+    for _ in range(L):
+        prev = table[-1]
+        table.append([sum(prev[t] for t in nxt[s] if t >= 0) for s in range(n)])
+    return table
+
+
+def dfa_unrank(nxt, table, L, k):
+    s, out = 0, []
+    for i in range(L):
+        for c, t in enumerate(nxt[s]):
+            if t < 0:
+                continue
+            m = table[L - i - 1][t]
+            if k < m:
+                out.append(c)
+                s = t
+                break
+            k -= m
+    return out
+
+
+def cmd_plugin(args):
+    """One plugin file, reported line for line as `sieve filters --plugin` reports it."""
+    data = open(args.file, "rb").read()
+    head, body = parse_plugin(data.decode("utf-8"))
+    values = dict(kv.split("=", 1) for kv in args.params.split(",")) if args.params else {}
+    base = plugin_base(head["symbols"], args.base)
+    N, start, nxt, acc = compile_plugin(head, body, values, base)
+    s0, m_next, m_acc = minimise_dfa(start, nxt, acc, base)
+    params = " ".join(f"{name}={values.get(name, d)}" for name, d, lo, hi in head["params"]) or "(none)"
+    print(f"plugin     {head['name']}")
+    print(f"sha256     {hashlib.sha256(data).hexdigest()}")
+    print(f"origin     {head['origin']}")
+    print(f"author     {head['author']}")
+    print(f"symbols    {head['symbols']}")
+    print(f"params     {params}")
+    print(f"states     {N} declared, {len(m_next)} minimal")
+    print(f"length     {args.length}")
+    L = args.length
+    table = dfa_count_table(m_next, m_acc, L) if m_next else [[0]]
+    count = table[L][0] if m_next else 0
+    print(f"survivors  {count}")
+    print(f"excluded   {base ** L - count}")
+    if count:
+        ks = [0]
+        if count // 3 not in (0, count - 1):
+            ks.append(count // 3)
+        if count - 1 != 0:
+            ks.append(count - 1)
+        for k in ks:
+            print(f"rank       {k}  {','.join(map(str, dfa_unrank(m_next, table, L, k))) or '-'}")
+
+
 def cmd_manifest(args):
     """sieve-manifest-v1 (SPECIFICATIONS §12.2), from its definition: the folder walked to the bottom,
     links skipped, every folder ('/' at the end) and file (size, SHA-256) listed by its path relative to
@@ -2056,6 +2528,11 @@ def main():
     sub.add_parser("titled-vectors")
     sub.add_parser("binary-vectors")
     sub.add_parser("chunk-vectors")
+    s = sub.add_parser("plugin")
+    s.add_argument("file")
+    s.add_argument("--length", type=int, default=32)
+    s.add_argument("--params", default="")
+    s.add_argument("--base", type=int)
     s = sub.add_parser("chunks")
     s.add_argument("file")
     s = sub.add_parser("manifest")
@@ -2112,6 +2589,8 @@ def main():
         cmd_chunk_vectors(args)
     elif args.cmd == "chunks":
         cmd_chunks(args)
+    elif args.cmd == "plugin":
+        cmd_plugin(args)
     elif args.cmd == "manifest":
         cmd_manifest(args)
     elif args.cmd == "map":

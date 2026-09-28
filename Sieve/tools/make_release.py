@@ -81,7 +81,7 @@ These are Sieve's helper programs. To run Sieve, start hallway{exe} in the folde
 
 Both find the installation's data folders (dictionaries, models) in the folder above.
 """
-FOLDERS = ["dictionaries", "models", "lang", "fonts", "meshes", "vault", "third_party_licenses"]
+FOLDERS = ["dictionaries", "models", "lang", "fonts", "meshes", "vault", "filters", "third_party_licenses"]
 FILES = ["potentia-license.txt"]
 
 

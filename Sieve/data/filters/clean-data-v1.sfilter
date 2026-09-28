@@ -1,0 +1,25 @@
+sieve-filter-v1
+; The built-in clean-v1, written as data: a template for table plugins, and a check on the engine
+; (its survivors must be clean-v1's, exactly, at every length).
+id        clean-data
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     text
+symbols   lower27
+describe  No two SPACEs in a row, and at least one letter (clean-v1, as a plugin).
+
+class     space   " "
+class     letter  a-z
+
+; 0 start, 1 space before any letter, 2 after a letter, 3 space after a letter
+states    4
+start     0
+accept    2 3
+t   0   space   1
+t   0   letter  2
+t   1   letter  2
+t   2   letter  2
+t   2   space   3
+t   3   letter  2
+end

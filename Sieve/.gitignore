@@ -44,6 +44,9 @@ data/fonts/unifont.hex
 /vtf*
 /listed*
 /ordinary/
+/plugins.out
+/plugin.oracle
+/plugin.engine
 /timed.ini
 /vtp.png
 /vtp4.png

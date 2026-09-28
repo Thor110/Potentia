@@ -2,6 +2,7 @@
 // the checks, and the event loop. The hallway itself is in hallway.hpp and the files beside it.
 
 #include "window_icon.hpp"
+#include "cli/plugins.hpp"
 #include "cli/timings.hpp"
 #include "hallway.hpp"
 
@@ -298,6 +299,7 @@ int run(const Args& a)
     // --timings: how long each phase takes, written at exit to standard error and to
     // sieve-timings.txt beside the settings (tools/cli/timings.hpp).
     if (a.has("timings")) sieve::cli::timings::enable(app_path.parent_path() / "sieve-timings.txt");
+    sieve::cli::load_plugins(); // the filter plugins in the filters folder, beside the built-in filters
     AppSettings app = shot ? AppSettings{} : AppSettings::load(app_path);
     if (shot && a.has("settings")) app = AppSettings::load(app_path);
     const DisplayInfo display = detect_display();

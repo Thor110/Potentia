@@ -480,6 +480,16 @@ jobs:
           rm data/vault/listed.vault
           rm -rf ordinary && mkdir ordinary && cp listed-piece.bin ordinary/
           test "$(build/sieve vault --chunks listed.bin --common ordinary | tail -2 | head -1 | tr ',' '\n' | wc -l)" -lt "$(build/sieve vault --chunks listed.bin | tail -2 | head -1 | tr ',' '\n' | wc -l)"
+          # Filter plugins that do not load are listed with the reason, never skipped: a malformed
+          # file, and two different files under one name (neither is used: versions are never edited).
+          printf 'sieve-filter-v1\nid broken\n' > build/filters/broken.sfilter
+          sed 's/^describe.*/describe edited/' data/filters/clean-data-v1.sfilter > build/filters/clean-edited.sfilter
+          build/sieve filters --plugins > plugins.out
+          grep -A1 "broken.sfilter" plugins.out | q "ends with end"
+          grep -A1 "clean-edited.sfilter" plugins.out | q "with different contents"
+          if build/sieve filters --length 8 | grep -q "clean-data-v1"; then exit 1; fi
+          rm build/filters/broken.sfilter build/filters/clean-edited.sfilter
+          build/sieve filters --length 8 | q "clean-data-v1"
           # --timings: the table at exit, on the command line and from the hallway (to its file too).
           build/sieve warp --line text --length 32 --timings "timed" 2>&1 | q "^sieve warp "
           $H --no-menu --timings --settings timed.ini --screenshot timed.png 2>&1 | q "^hallway.item "
@@ -650,6 +660,18 @@ jobs:
           # the oracle's to the byte, and every file's address it writes is binary-v1's.
           S=../build/sieve
           [ -f ../build/Release/sieve.exe ] && S=../build/Release/sieve.exe
+          # Filter plugins (docs/FILTER-PLUGINS.md): every reference plugin, at several lengths and
+          # settings, reported identically by the engine and by the oracle's own parser and engine
+          # (states declared and minimal, survivors, excluded, and survivors by rank).
+          for L in 1 2 5 17 40; do
+            for spec in "clean-data-v1:" "max-run-data-v1:max=1" "max-run-data-v1:max=3" "max-run-data-v1:max=5" "key-data-v1:tonic=0" "key-data-v1:tonic=5" "key-data-v1:tonic=11"; do
+              f=${spec%%:*}; p=${spec#*:}
+              python sieve_ref.py plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} > plugin.oracle
+              $S filters --plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
+              diff plugin.oracle plugin.engine
+            done
+          done
+          $S filters --plugins | grep -c "^loaded" | grep -qx 3
           rm -rf addr
           $S locate ../tests/manifest_fixture --manifest fixture.manifest --addresses addr --compare > locate.out
           python sieve_ref.py manifest ../tests/manifest_fixture | cmp - fixture.manifest

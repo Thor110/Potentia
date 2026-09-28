@@ -1,5 +1,7 @@
 #include "sieve/filter.hpp"
 
+#include "sieve/dfa.hpp"
+#include "sieve/plugin.hpp"
 #include "sieve/sha256.hpp"
 
 #include <algorithm>
@@ -21,22 +23,25 @@ const std::vector<FilterSpec>& filter_registry()
     return list;
 }
 
+// The built-in filters, then the plugins (sieve/plugin.hpp).
 const FilterSpec* find_filter(const std::string& name)
 {
     const FilterSpec* newest = nullptr;
-    for (const auto& f : filter_registry())
-    {
-        if (f.name() == name) return &f;
-        if (f.id == name && (!newest || f.version > newest->version)) newest = &f;
-    }
+    for (const auto* list : {&filter_registry(), &plugin_registry()})
+        for (const auto& f : *list)
+        {
+            if (f.name() == name) return &f;
+            if (f.id == name && (!newest || f.version > newest->version)) newest = &f;
+        }
     return newest;
 }
 
 std::vector<const FilterSpec*> filters_for(const FilterLine& line)
 {
     std::vector<const FilterSpec*> out;
-    for (const auto& f : filter_registry())
-        if (f.applies(line)) out.push_back(&f);
+    for (const auto* list : {&filter_registry(), &plugin_registry()})
+        for (const auto& f : *list)
+            if (f.applies(line)) out.push_back(&f);
     return out;
 }
 
@@ -194,8 +199,27 @@ FilterStack::FilterStack(const FilterLine& line, const std::vector<Entry>& entri
             if (j != i && !implied_by(entries[i], entries[j])) covers = false;
         if (covers) compact_ = filters_[i]->ranker();
     }
+    // A stack of plugins only: their automata combined into one (the units every one accepts),
+    // which ranks the stack exactly when its table fits.
+    if (!compact_ && filters_.size() > 1)
+    {
+        bool all_plugins = true;
+        for (const auto& f : filters_)
+            if (!plugin_dfa(*f)) all_plugins = false;
+        if (all_plugins)
+        {
+            Dfa d = *plugin_dfa(*filters_[0]);
+            for (size_t i = 1; i < filters_.size(); ++i) d = intersect(d, *plugin_dfa(*filters_[i]));
+            if (DfaRanker::table_bytes(d.states(), d.base, line.length) <= kPluginTableBudget)
+            {
+                own_ranker_ = std::make_unique<DfaRanker>(d, line.length);
+                compact_ = own_ranker_.get();
+            }
+            else blocker_ = "the plugins' combined table is over the budget at this length: they judge only";
+        }
+    }
     if (filters_.empty()) blocker_ = "no filters ticked";
-    else if (!compact_)
+    else if (!compact_ && blocker_.empty()) // (a stack of plugins over the budget has said why already)
     {
         // Name the first ranking filter and the ticked filters it does not imply.
         size_t r = filters_.size();

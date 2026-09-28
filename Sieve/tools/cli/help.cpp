@@ -352,11 +352,16 @@ const std::vector<Page>& pages()
           {"sieve measure --length 32 mybook.txt", "your own text, one line of 32 characters at a time"}}},
 
         {"filters", "List the filters a line offers, which are ticked, and their settings.",
-         "sieve filters [--line LINE] [line options] [--filters PATH]",
+         "sieve filters [--line LINE] [line options] [--filters PATH] | --plugins |\n"
+         "              --plugin FILE [line options] [--length L] [--params NAME=V,...]",
          "Filters judge whether a unit looks like content rather than noise. Each is a versioned,\n"
          "compiled-in module (words-v1, words-v2, ...): a changed filter is added as a new version\n"
          "and the old one is kept, so earlier results can always be reproduced. Every decision is\n"
          "made in exact integer arithmetic, so every machine agrees.\n"
+         "Filters can also be plugins: sieve-filter-v1 files (.sfilter) in the filters folder,\n"
+         "written as data (a table of states, with parameters), which the engine judges, counts,\n"
+         "ranks and compacts exactly with no code of their own (docs/FILTER-PLUGINS.md). They\n"
+         "list, tick and take settings like the built-in filters.\n"
          "\n"
          "The filters ticked for a line form its stack: a unit must pass all of them. The stack\n"
          "and its display mode are chosen in the hallway's setup menu (the magnifying glass beside\n"
@@ -394,8 +399,14 @@ const std::vector<Page>& pages()
          "parameter and data file) and, where it can be counted, the exact number of survivors.",
          {kLine, kLineOptions,
           {"--filters PATH", "The settings file. Default: sieve-filters.ini next to the executable. A missing\n"
-                             "file means nothing is ticked."}},
+                             "file means nothing is ticked."},
+          {"--plugins", "List the plugin files found, with each one's name and SHA-256, or why it did not load."},
+          {"--plugin FILE", "Load one plugin file and show its header, its automaton (states as declared and\n"
+                            "minimal) and, at the line's length, its survivors, what it excludes, and a few\n"
+                            "survivors by rank. The line follows the plugin's symbols unless given."},
+          {"--params NAME=V,...", "With --plugin: parameter values (the rest take their defaults)."}},
          {{"sieve filters", "the text line's filters (at length 32) and what is ticked"},
+          {"sieve filters --plugin data/filters/max-run-data-v1.sfilter --length 12 --params max=2", "a plugin at a setting"},
           {"sieve filters --length 1000", "the same stack judged at paragraph scale"},
           {"sieve filters --line image", "the filters the image line offers"},
           {"sieve filters --line books --length 400 --book-pages 3", "the books line's three stacks and surviving books"}}},

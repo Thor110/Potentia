@@ -128,6 +128,7 @@ struct FilterSpec
     std::string description;
     std::vector<FilterParam> params;
     std::vector<std::string> implies; // full names of filters every survivor of this one also passes
+    std::string author, origin, plugin_sha256; // plugins only (sieve/plugin.hpp): who made it, and its file
     std::function<bool(const FilterLine&)> applies;
     std::function<std::unique_ptr<Filter>(const FilterLine&, const FilterValues&, const FilterResources&)> make;
 
@@ -176,6 +177,7 @@ private:
     std::vector<std::string> names_;
     uint32_t length_ = 0;
     const Ranker* compact_ = nullptr;
+    std::unique_ptr<Ranker> own_ranker_; // a stack of plugins: their combined automaton's ranker
     std::string blocker_;
     std::string provenance_, id_;
 };
