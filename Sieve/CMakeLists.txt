@@ -268,7 +268,9 @@ if(SIEVE_BUILD_CLIENT)
         client/hud.cpp
         client/main_menu.cpp
         client/menu.cpp
+        client/media_player.cpp
         client/mesh.cpp
+        client/music.cpp
         client/strings.cpp
         client/synth.cpp
         client/world.cpp)

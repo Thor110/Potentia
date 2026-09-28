@@ -128,6 +128,13 @@ void Hallway::set_line(int li)
 {
     li_ = li;
     rebase();
+    music_line();
+}
+
+void Hallway::music_line()
+{
+    music_colours(theme().bg, theme().edge);
+    if (music()) music()->set_line(li_);
 }
 
 void Hallway::set_mode(AddressMode m)
@@ -961,6 +968,11 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
         locator_event(e);
         return;
     }
+    if (media_open_) // over the pause menu, like the other tools
+    {
+        media_event(e, quit);
+        return;
+    }
     if (nav_open_) // before the pause menu: it may be open over it
     {
         navigator_event(e);
@@ -1104,7 +1116,8 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
     case SDLK_P:
         if (in_hand_ && !on_books() && line().kind == LineKind::Audio)
         {
-            const std::string err = synth_.play(in_hand_->unit);
+            // Through the music player when there is one, which fades the music out under it.
+            const std::string err = music() ? music()->play_item(in_hand_->unit) : synth_.play(in_hand_->unit);
             message(err.empty() ? tr("msg.playing") : err);
         }
         break;
@@ -1146,6 +1159,7 @@ void Hallway::drop_in_hand()
 {
     in_hand_.reset();
     synth_.stop();
+    if (music()) music()->stop_item(); // and the music comes back
 }
 
 void Hallway::take_or_return()

@@ -32,6 +32,7 @@
 #include "menu.hpp"
 #include "mesh.hpp"
 #include "strings.hpp"
+#include "music.hpp"
 #include "synth.hpp"
 #include "theme.hpp"
 #include "world.hpp"
@@ -1046,7 +1047,9 @@ private:
 public:
     // What the pause menu has asked the application to open: the settings (after which the same
     // hallway goes on, paused) or the main menu (after which a new one is built).
-    enum class Request { None, Settings, MainMenu };
+    // GoToTrack: a music track to walk to, on an audio line of another length than this one's,
+    // so the application builds a hallway of that length and hands it the track (track_to_go()).
+    enum class Request { None, Settings, MainMenu, GoToTrack };
     Request request() const { return request_; }
     void clear_request() { request_ = Request::None; }
     // After Settings, the new graphics and language: signs are lettered again, the rest is set.
@@ -1062,6 +1065,47 @@ private:
     int pause_row_ = 0;
     Request request_ = Request::None;
     std::vector<SDL_FRect> pause_rects_; // the rows as last drawn, for the pointer
+
+    // ---- the media player (media_player.cpp): the music's settings, its recent tracks and
+    // favourites, from the pause menu
+public:
+    // Whether a menu is over the world (the pause menu or a tool opened from it): the music
+    // player's MENUS mode, else WORLD.
+    bool in_menu() const { return pause_open_ || nav_open_ || loc_open_ || graph_open_ || media_open_; }
+    // Tells the music where you are: the line's colours for the NOW PLAYING box, and the line for
+    // WORLD's character. At every change of line, and when the hallway is back from a menu.
+    void music_line();
+    void open_media_player();
+    // Walk to a track: on the audio line, facing it, the item in hand. A track of another length
+    // than this hallway's audio line cannot be reached here: request() is then GoToTrack.
+    void go_to_track(const std::vector<uint32_t>& notes);
+    const std::vector<uint32_t>& track_to_go() const { return track_to_go_; }
+    void media_saved(const std::string& path); // the save dialog's choice (any thread)
+
+private:
+    struct MediaRow
+    {
+        enum class Kind { Mode, On, Volume, Length, Tempo, Voice, Echo, Gap, Character, Fifths, LineMode, Next, Filters, Filter, Param, Play, GoTo, Save, Favourite };
+        Kind kind;
+        std::string filter, key; // Filter and Param rows
+        int line = -1;           // LineMode rows
+    };
+    std::vector<MediaRow> media_rows() const;
+    std::optional<MusicTrack> media_selected() const; // the highlighted entry of the list last used
+    void media_change(int dir, bool big, bool& quit);
+    void media_act(MediaRow::Kind k, bool& quit);
+    void close_media_player();
+    void media_event(const SDL_Event& e, bool& quit);
+    void draw_media_player(float W, float H);
+    bool media_open_ = false, media_had_mouse_ = false;
+    int media_area_ = 1;          // 0 recent, 1 the controls, 2 favourites
+    int media_list_ = 0;          // the list the actions act on: 0 recent, 2 favourites
+    int media_row_ = 0, media_sel_[3] = {0, 0, 0}, media_top_ = 0;
+    MusicMode media_mode_ = MusicMode::World;
+    std::vector<std::pair<SDL_FRect, std::pair<int, int>>> media_rects_; // area, row
+    std::mutex media_mx_;
+    std::string media_status_;
+    std::vector<uint32_t> media_saving_, track_to_go_;
 
     // ---- the address navigator (navigator.cpp): X opens the whole address, digit by digit
     void open_navigator();

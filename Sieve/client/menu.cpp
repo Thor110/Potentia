@@ -14,6 +14,7 @@
 #include "menu.hpp"
 #include "cli/timings.hpp"
 #include "display.hpp"
+#include "music.hpp"
 
 #include "font.hpp"
 #include "mesh.hpp"
@@ -804,6 +805,8 @@ Menu::Result Menu::run()
 {
     SDL_SetWindowRelativeMouseMode(window_, false);
     SDL_StartTextInput(window_);
+    music_mode(MusicMode::Menus);
+    music_colours_default();
     bool done = false;
     Result result = Result::Quit;
     while (!done)
@@ -819,7 +822,7 @@ Menu::Result Menu::run()
             sieve::cli::timings::Scope timed("menu.setup.frame"); // its slowest: the first, which counts the lines
             render();
         }
-        SDL_RenderPresent(r_);
+        present(r_);
     }
     SDL_StopTextInput(window_);
     SDL_SetRenderLogicalPresentation(r_, 0, 0, SDL_LOGICAL_PRESENTATION_DISABLED); // the hallway draws at full size

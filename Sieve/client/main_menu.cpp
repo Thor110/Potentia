@@ -10,6 +10,7 @@
 #include "cli/timings.hpp"
 
 #include "font.hpp"
+#include "music.hpp"
 #include "strings.hpp"
 
 #include <algorithm>
@@ -295,6 +296,8 @@ void MainMenu::handle(const SDL_Event& event)
 MainMenu::Result MainMenu::run()
 {
     SDL_SetWindowRelativeMouseMode(window_, false);
+    music_mode(MusicMode::Menus);
+    music_colours_default();
     done_ = false;
     while (!done_)
     {
@@ -309,7 +312,7 @@ MainMenu::Result MainMenu::run()
             sieve::cli::timings::Scope timed("menu.main.frame");
             render();
         }
-        SDL_RenderPresent(r_);
+        present(r_);
     }
     SDL_SetRenderLogicalPresentation(r_, 0, 0, SDL_LOGICAL_PRESENTATION_DISABLED);
     return result_;

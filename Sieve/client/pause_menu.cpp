@@ -1,7 +1,7 @@
 // The pause menu: Esc in the hallway (with nothing in your hands) stops the world and offers the
 // ways out of it and the tools beside it. Resume; Restart, the setup menu over the hallway (F1); the Node Graph Viewer
 // (node_graph.cpp, also O); the Navigation System (the address navigator, also X); the
-// File Locator (file_locator.cpp); Settings, the same screens as the main menu's, opened over the
+// File Locator (file_locator.cpp); the Media Player (media_player.cpp, the background music); Settings, the same screens as the main menu's, opened over the
 // hallway and returning to it; and Exit Sieve, which asks whether you mean the main menu or
 // leaving altogether.
 //
@@ -26,7 +26,7 @@ struct PauseItem
 };
 
 constexpr PauseItem kPauseItems[] = {
-    {"resume", true}, {"restart", true}, {"graph", true}, {"navigator", true}, {"locator", true}, {"settings", true}, {"exit", true},
+    {"resume", true}, {"restart", true}, {"graph", true}, {"navigator", true}, {"locator", true}, {"media", true}, {"settings", true}, {"exit", true},
 };
 constexpr int kPauseCount = int(sizeof kPauseItems / sizeof kPauseItems[0]);
 
@@ -70,6 +70,7 @@ void Hallway::pause_choose(int row, bool& quit)
     else if (id == "graph") open_graph(); // over the pause menu, which is there again after it
     else if (id == "navigator") open_navigator(); // over the pause menu: Esc comes back to it, ENTER goes
     else if (id == "locator") open_locator(); // over the pause menu, which is there again after it
+    else if (id == "media") open_media_player(); // likewise
     else if (id == "settings")
     {
         request_ = Request::Settings;
@@ -130,7 +131,7 @@ void Hallway::draw_pause(float W, float H)
     SDL_SetRenderDrawColor(r_, 0, 0, 0, 200);
     const SDL_FRect all{0, 0, W, H};
     SDL_RenderFillRect(r_, &all);
-    const float bw = 460, bh = 370, bx = (W - bw) / 2, by = (H - bh) / 2;
+    const float bw = 460, bh = 406, bx = (W - bw) / 2, by = (H - bh) / 2;
     panel(bx, by, bw, bh, 240);
     SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 255);
     const SDL_FRect border{bx, by, bw, bh};

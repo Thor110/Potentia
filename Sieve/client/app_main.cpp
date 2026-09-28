@@ -75,6 +75,9 @@ const char* kUsage =
     "  --designer          with --screenshot: a picture of the filter designer; --design FILE opens a\n"
     "                      plugin, --script \"Down,Right,=text,Return\" runs keys and typed text, and\n"
     "                      --design-out FILE writes the filter as the designer would save it\n"
+    "  --no-music          no background music this run (the Media Player is still there, silent)\n"
+    "  --media-player      with --screenshot: a silent music player, so --press can open the Media\n"
+    "                      Player from the pause menu (Escape, then Down to it, Return)\n"
     "  --filters PATH      filter settings (default: sieve-filters.ini next to the executable)\n"
     "  --timings           time each phase (building, items, filters, vault, faces, frames, menus);\n"
     "                      written at exit to sieve-timings.txt beside the settings, and to stderr\n\n"
@@ -325,7 +328,18 @@ int run(const Args& a)
     if (!renderer) throw std::runtime_error(std::string("cannot create a renderer: ") + SDL_GetError());
     SDL_SetRenderVSync(renderer, app.vsync ? 1 : 0);
     if (!shot && !a.has("size") && app.fullscreen) apply_video(window, app);
+    // The music player (music.hpp): melodies from the audio line behind every screen. Scripted
+    // pictures have none, unless --media-player asks for one (silent) to draw the Media Player;
+    // --no-music leaves it silent in the app too.
+    std::unique_ptr<MusicPlayer> player;
+    if (!shot || a.has("media-player"))
+    {
+        const std::filesystem::path folder = app_path.parent_path().empty() ? std::filesystem::path(".") : app_path.parent_path();
+        player = std::make_unique<MusicPlayer>(folder, !shot && !a.has("no-music"));
+        set_music(player.get());
+    }
     auto finish = [&] {
+        player.reset(); // its audio stream goes before SDL does
         release_fonts(); // glyph textures belong to the renderer
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
@@ -476,6 +490,7 @@ int run(const Args& a)
     bool went_in_thin = false;    // the setup menu was told to go in past the budget
     bool show_main = show_menu;
     bool first = true;
+    std::vector<uint32_t> pending_track; // a music track to go to in the next hallway built
     while (true)
     {
         if (show_main)
@@ -515,6 +530,8 @@ int run(const Args& a)
         // it is still working: a red CALCULATING, its dots counting up and starting again. It
         // only appears if the building takes long enough to be noticed.
         bool quit_while_building = false;
+        music_mode(MusicMode::Menus); // building is still the menus
+        music_colours_default();
         auto building = std::async(std::launch::async, [&] {
             sieve::cli::timings::Scope timed("hallway.build");
             return make_hallway(window, renderer, ha, first, filters);
@@ -536,7 +553,7 @@ int run(const Args& a)
             // Centred on the word alone, so the dots grow to the right and it does not jump.
             const float x = (float(ww) - float(word.size()) * 8.0f * scale) * 0.5f, y = (float(wh) - 8.0f * scale) * 0.5f;
             draw_text(renderer, x, y, word + std::string(size_t((waited / 400) % 4), '.'), scale, SDL_Color{255, 60, 60, 255});
-            SDL_RenderPresent(renderer);
+            present(renderer);
         }
         auto hall = building.get(); // rethrows here anything the building threw
         if (quit_while_building) break;
@@ -550,10 +567,16 @@ int run(const Args& a)
         hall->set_fps_counter(app.fps_counter);
         hall->set_thin(went_in_thin || ha.has("thin"));
         first = false;
+        if (!pending_track.empty())
+        {
+            hall->go_to_track(pending_track);
+            pending_track.clear();
+        }
         SDL_SetWindowRelativeMouseMode(window, true);
         Menu::Result in_game_menu = Menu::Result::Back;
         for (;;)
         {
+            hall->music_line(); // back from a menu (or in for the first time): the line's colours and character
             bool quit = false;
             Uint64 last = SDL_GetTicksNS();
             while (!quit)
@@ -571,9 +594,10 @@ int run(const Args& a)
                     sieve::cli::timings::Scope timed("hallway.frame.render");
                     hall->render();
                 }
+                music_mode(hall->in_menu() ? MusicMode::Menus : MusicMode::World);
                 {
                     sieve::cli::timings::Scope timed("hallway.frame.present"); // waits for vsync when it is on
-                    SDL_RenderPresent(renderer);
+                    present(renderer);
                 }
             }
             // F1: the setup menu over the hallway, which is kept. Esc there comes back to it just
@@ -608,6 +632,18 @@ int run(const Args& a)
             hall->set_fps_counter(app.fps_counter);
             hall->settings_changed();
             SDL_SetWindowRelativeMouseMode(window, false);
+        }
+        if (hall->request() == Hallway::Request::GoToTrack)
+        {
+            // A music track on an audio line of another length: the hallway again at that length,
+            // on the audio line, and there the track.
+            const std::vector<uint32_t> track = hall->track_to_go();
+            settings.notes = uint32_t(track.size());
+            settings.start_line = "audio";
+            pending_track = track;
+            show_menu = false;
+            settings_chosen = true;
+            continue;
         }
         if (hall->request() == Hallway::Request::MainMenu)
         {

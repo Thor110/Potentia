@@ -806,3 +806,32 @@ run), CI expects 8 loaded plugins. Designer: opens and tests filters with tagged
 the file is, copied to the scratch folder once; Save copies them beside the saved filter).
 Limits: imperatives fail (no sentence may start with a verb); a word in no list fails its sentence;
 no punctuation.
+Background music and the Media Player (Edward's design; no plugins or listening samples first:
+tuned by ear later). client/music.* : MusicPlayer, one SDL audio stream with a callback, mixing
+three channels (MENUS, WORLD, the melody in hand) synthesised sample by sample (voices soft, sine,
+triangle, square; tempo; a feedback echo), gains fading over 1.5 s; the inactive mode's channel
+waits where it was. Tracks: a worker picks one per mode (count the mode's stack, uniform random
+rank below the count, unrank; no filters: any unit; judge-only stack: up to 5000 draws; vault-
+withheld units skipped), the first at once, later ones after the mode's gap. Defaults: menus
+key-v1 A minor, sine, 66 bpm; world key-v1 C major-pentatonic, soft, 72 bpm, more echo. Recent
+(10, chosen tracks only), favourites as sieve-favourites.sieve (v3 manifest: NNN-mode.mid +
+favourites.tsv; installs with sieve install), settings and recent in sieve-music.ini beside the
+hallway's settings. present(r) draws the NOW PLAYING box on every screen; music_mode() is set by
+each screen (menus) and per hallway frame (Hallway::in_menu()). P plays through the mixer (music
+ducks). client/media_player.cpp: pause menu item after File Locator; three columns (recent,
+controls with the mode's filters and params, favourites), actions play / go to (same length:
+audio line + go_to_unit; else Request::GoToTrack, app_main rebuilds with notes = track length) /
+save MIDI / favourite. --no-music; --media-player gives scripted runs a silent player. Checked
+headless with SDL's disk audio driver (levels, ducking, crossfade), favourites round trip and
+install. CI: Media Player screenshot. The test harness does not cover sound.
+The NOW PLAYING box takes the colours of where you are (Edward): the line's background and edges in the hallway, paused or not (music_colours() each frame), white on black in the menus (music_colours_default()).
+Each line's character (Edward): WORLD plays every line in its own mode (MusicSettings::modes, one per
+line, default image Lydian, pages Ionian, audio Mixolydian, video Dorian, books Aeolian, models
+Phrygian, binary Locrian) by moving each note from its step of key-v1's scale (read as its
+seven-note parent: pentatonics and blues as major/minor) to the same step of the mode on the same
+tonic, plus optionally the key round the circle of fifths (fifths, off by default); a per-pitch
+shift table on the WORLD channel, recomputed on set_line and settings changes, taken up at the next
+note. World default scale is now major (the pentatonic lacks steps 4 and 7). Hallway::set_line calls
+music_line() (colours + line), as does the hallway loop on (re)entry, instead of every frame.
+Tracks record their line: WORLD [BINARY] in the lists, world/binary in sieve-music.ini and
+favourites.tsv (older lines read as before), NNN-world-binary.mid.

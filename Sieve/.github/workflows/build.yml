@@ -566,6 +566,10 @@ jobs:
           rm -f build/maps/sealed.map
           # The pause menu (Esc): its fourth row is the Navigation System, which opens the navigator.
           $H --warp "$W" --press "Escape,Escape,Down,Down,Down,Return,Escape" --screenshot pause.png | q "saved pause.png"
+          # The Media Player (pause menu, sixth row): with --media-player a silent music player is
+          # made for the picture; its settings file goes where --settings says, not beside the program.
+          mkdir -p mp
+          $H --no-menu --media-player --settings mp/hallway.ini --press "Escape,Down,Down,Down,Down,Down,Return" --screenshot media.png | q "saved media.png"
           out=$($H --warp "$W" --press "X,Home,Up,Return" --screenshot nav.png)
           echo "$out" | tail -2 | sed -n 1p | q "went to 1"
           if [ "$(echo "$out" | tail -2 | book)" = "$here" ]; then exit 1; fi

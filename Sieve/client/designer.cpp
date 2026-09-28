@@ -9,6 +9,7 @@
 #include "designer.hpp"
 
 #include "font.hpp"
+#include "music.hpp"
 #include "strings.hpp"
 
 #include "cli/dictionaries.hpp"
@@ -610,6 +611,8 @@ Designer::Result Designer::run()
 {
     SDL_SetWindowRelativeMouseMode(window_, false);
     SDL_StartTextInput(window_);
+    music_mode(MusicMode::Menus);
+    music_colours_default();
     while (!done_)
     {
         SDL_Event e;
@@ -620,7 +623,7 @@ Designer::Result Designer::run()
         }
         poll();
         render();
-        SDL_RenderPresent(r_);
+        present(r_);
     }
     SDL_StopTextInput(window_);
     SDL_SetRenderLogicalPresentation(r_, 0, 0, SDL_LOGICAL_PRESENTATION_DISABLED);
