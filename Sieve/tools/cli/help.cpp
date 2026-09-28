@@ -358,7 +358,7 @@ const std::vector<Page>& pages()
          "compiled-in module (words-v1, words-v2, ...): a changed filter is added as a new version\n"
          "and the old one is kept, so earlier results can always be reproduced. Every decision is\n"
          "made in exact integer arithmetic, so every machine agrees.\n"
-         "Filters can also be plugins: sieve-filter-v1 files (.sfilter) in the filters folder,\n"
+         "Filters can also be plugins: sieve-filter-v1 and -v2 files (.sfilter) in the filters folder,\n"
          "written as data (a table of states, with parameters), which the engine judges, counts,\n"
          "ranks and compacts exactly with no code of their own (docs/FILTER-PLUGINS.md). They\n"
          "list, tick and take settings like the built-in filters.\n"

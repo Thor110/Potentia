@@ -35,6 +35,10 @@ struct Doc
     // Header.
     std::string id = "my-filter", author = "", origin = "human", symbols = "lower27", describe = "";
     uint32_t version = 1;
+    // The file format: 1 (sieve-filter-v1) or 2 (-v2: comparisons, if/else/fi, choice parameters,
+    // the line's constants, notes*). A choice parameter or notes* makes it 2 when written.
+    uint32_t format = 1;
+    uint32_t written_format() const;
     std::vector<std::string> lines{"text"};
     // The entry node: filters switched on with this one, each with the settings it pins.
     struct Prerequisite
@@ -43,10 +47,10 @@ struct Doc
         std::vector<std::pair<std::string, std::string>> pins;
     };
     std::vector<Prerequisite> prerequisites;
-    // Parameters: int (default, min, max) or dict (default only).
+    // Parameters: int (default, min, max), dict (default only) or choice (default, choices: A,B,C).
     struct Param
     {
-        std::string name, kind = "int", def = "1", min = "1", max = "10", text;
+        std::string name, kind = "int", def = "1", min = "1", max = "10", text, choices = "a,b";
     };
     std::vector<Param> params;
     // The rule: "tokens" (word sets) or "table" (states and transitions, as text).

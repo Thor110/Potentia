@@ -274,9 +274,16 @@ void Designer::build()
             mark();
         });
     }
+    add("header", FKind::Choice, "format", doc_.written_format() >= 2 ? "sieve-filter-v2" : "sieve-filter-v1", [this, mark](int) {
+        // v2 adds comparisons, if/else/fi, choice parameters and the line's constants; a choice
+        // parameter or notes* needs it, so it cannot go back to v1 while they are there.
+        doc_.format = doc_.format >= 2 ? 1 : 2;
+        mark();
+    });
     add("header", FKind::Choice, "symbols", doc_.symbols, [this, mark](int dir) {
         std::vector<std::string> o = sieve::alphabet_ids();
         o.push_back(sieve::kNotesSymbolsId);
+        o.push_back("notes*"); // every note line (v2)
         for (const auto& p : sieve::palette_ids()) o.push_back("palette:" + p);
         o.push_back("any");
         cycle(o, doc_.symbols, dir, doc_.symbols);
@@ -301,8 +308,8 @@ void Designer::build()
         add("params", FKind::Text, "name", p.name, {}, [this, i, mark](const std::string& v) { doc_.params[i].name = v; mark(); }, remove);
         add("params", FKind::Choice, "  kind", p.kind, [this, i, mark](int) {
             auto& q = doc_.params[i];
-            q.kind = q.kind == "int" ? "dict" : "int";
-            q.def = q.kind == "int" ? "1" : "";
+            q.kind = q.kind == "int" ? "dict" : q.kind == "dict" ? "choice" : "int";
+            q.def = q.kind == "int" ? "1" : q.kind == "choice" ? q.choices.substr(0, q.choices.find(',')) : "";
             mark();
         });
         add("params", FKind::Text, "  default", p.kind == "dict" && p.def.empty() ? "default" : p.def, {},
@@ -312,6 +319,8 @@ void Designer::build()
             add("params", FKind::Text, "  min", p.min, {}, [this, i, mark](const std::string& v) { doc_.params[i].min = v; mark(); });
             add("params", FKind::Text, "  max", p.max, {}, [this, i, mark](const std::string& v) { doc_.params[i].max = v; mark(); });
         }
+        if (p.kind == "choice")
+            add("params", FKind::Text, "  choices", p.choices, {}, [this, i, mark](const std::string& v) { doc_.params[i].choices = v; mark(); });
         add("params", FKind::Text, "  about", p.text, {}, [this, i, mark](const std::string& v) { doc_.params[i].text = v; mark(); });
     }
     add("params", FKind::Button, tr("designer.params.add"), "[+]", [this, mark](int) {

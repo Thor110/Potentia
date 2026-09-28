@@ -1,0 +1,25 @@
+sieve-filter-v2
+; Every note between `low` and `high`, as MIDI numbers (60 is middle C, C4), so a melody keeps to
+; a comfortable register. Rests always pass.
+id        melody-range
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     audio
+symbols   notes*
+describe  Every note between the lowest and highest allowed (MIDI numbers; 60 is middle C).
+param     low   int  60  0  127  the lowest note (MIDI)
+param     high  int  84  0  127  the highest note (MIDI)
+
+states    1
+start     0
+accept    0
+for d 0 {DURATIONS - 1}
+  t 0 @{d} 0
+  for p 1 {PITCHES}
+    if {LOW + p - 1 >= low && LOW + p - 1 <= high}
+      t 0 @{p * DURATIONS + d} 0
+    fi
+  done
+done
+end

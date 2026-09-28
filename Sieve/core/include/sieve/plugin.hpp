@@ -58,7 +58,28 @@
 // a list's words must be the line's symbols. Each list's SHA-256 is part of the provenance.
 //
 // Expressions: + - * / % and brackets over integers, parameters and `for` variables; / and % are
-// for non-negative numbers only. A (state, symbol) given two different targets is an error; one
+// for non-negative numbers only.
+//
+// sieve-filter-v2 (a file's first line says which it is; a v1 file reads exactly as it always has)
+// is v1 and, in the table form:
+//
+//   {abs(p - q) <= leap && !(p == 0)}   comparisons (== != < <= > >=) give 1 or 0; && || and !
+//                                       take 0 as false and anything else as true; min(a, b),
+//                                       max(a, b) and abs(a). Lowest to highest: || && comparisons
+//                                       + - * / % and unary - !. Both sides are always worked out.
+//   if        {EXPR}                    the lines up to `else` or `fi` when EXPR is not 0, and
+//   else                                those after `else` (if there is one) when it is; if
+//   fi                                  blocks nest with for blocks
+//   param     scale choice major major,minor,blues   the default, then the choices (letters,
+//                                       digits, # and -); in expressions a choice is its place
+//                                       in the list, from 0
+//   symbols   notes*                    every line whose symbols' id starts with what comes
+//                                       before the * (here the note lines: notes104)
+//
+// and constants of the line, in expressions: BASE (its number of symbols), and on a note line
+// PITCHES (pitches, not counting the rest), DURATIONS and LOW (the MIDI number of the lowest
+// pitch): a note's symbol is pitch * DURATIONS + duration, pitch 0 the rest and pitch 1 LOW. A
+// parameter or a for variable may not take any of these names, nor min, max or abs. A (state, symbol) given two different targets is an error; one
 // given none is the dead end. The oracle (reference/sieve_ref.py plugin) reads the same files with
 // its own parser and engine, and CI compares the two.
 #pragma once
@@ -75,6 +96,7 @@
 namespace sieve {
 
 inline constexpr const char* kPluginFormat = "sieve-filter-v1";
+inline constexpr const char* kPluginFormat2 = "sieve-filter-v2";
 
 struct PluginDef; // the parsed file (plugin.cpp)
 
@@ -83,6 +105,7 @@ struct PluginHeader
     std::string id, author, origin, symbols, describe, sha256;
     std::string form; // "table" or "tokens"
     uint32_t version = 0;
+    uint32_t format = 1; // sieve-filter-v1 or -v2
     std::vector<std::string> lines;
     std::vector<FilterParam> params;
     std::vector<FilterSpec::Prerequisite> prerequisites;

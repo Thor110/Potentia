@@ -18,7 +18,7 @@
 // darkest Lydian, Ionian, Mixolydian, Dorian, Aeolian, Phrygian, Locrian (by default image,
 // pages, audio, video, books, models, binary, in that order of brightness). A note is moved from
 // its step of the track's scale to the same step of the line's mode, on the same tonic; the scale
-// and tonic are those of key-v1 in WORLD's stack, so without key-v1 the modes do nothing. Scales
+// and tonic are those of the key filter in WORLD's stack (key-data-v2, or key-v1), so without one the modes do nothing. Scales
 // of fewer than seven notes are read as the seven-note scale they come from (the major
 // pentatonic as the major scale's steps 1 2 3 5 6), and then lack the steps some modes change:
 // on the major pentatonic, Lydian, Ionian and Mixolydian sound the same. Optionally the key

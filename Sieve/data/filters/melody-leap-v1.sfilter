@@ -1,0 +1,33 @@
+sieve-filter-v2
+; No leap between neighbouring notes wider than `leap` semitones: melodies that move mostly by
+; small steps sound calm and singable, big jumps restless. Rests are passed over (the next note is
+; measured from the last note before them), or, with rest_resets, a rest lets the next note be
+; anything. The state is the last note's pitch (0: none yet).
+id        melody-leap
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     audio
+symbols   notes*
+describe  No two neighbouring notes further apart than the leap, in semitones.
+param     leap         int     4  1  24  the widest step between neighbouring notes, in semitones
+param     rest_resets  choice  no no,yes whether a rest lets the next note be anything
+
+states    {PITCHES + 1}
+start     0
+accept    0..{PITCHES}
+for d 0 {DURATIONS - 1}
+  t 0 @{d} 0
+  for p 1 {PITCHES}
+    t 0 @{p * DURATIONS + d} {p}
+    if {rest_resets == 1}
+      t {p} @{d} 0
+    else
+      t {p} @{d} {p}
+    fi
+    for q {max(1, p - leap)} {min(PITCHES, p + leap)}
+      t {p} @{q * DURATIONS + d} {q}
+    done
+  done
+done
+end

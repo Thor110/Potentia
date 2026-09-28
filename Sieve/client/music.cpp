@@ -111,19 +111,41 @@ std::string trim(const std::string& s)
 
 MusicSettings defaults(MusicMode m)
 {
-    // MENUS is the serious one: a minor key, lower and slower, a plain sine. WORLD is the relaxing
-    // one: the major pentatonic, soft struck tones and more echo. Both are starting points to be
-    // tuned by ear in the Media Player.
+    // MENUS is the serious one: a minor key, lower and slower, a plain sine, a little more
+    // movement. WORLD is the relaxing one: the major scale (not the pentatonic, so every line's
+    // mode is heard: the pentatonic lacks the steps Lydian and Mixolydian change), small steps,
+    // long notes, few rests, a register kept low, ending home on the tonic, soft struck tones and
+    // more echo. Both are starting points to be tuned by ear in the Media Player. The melody
+    // plugins (data/filters) all count, so the stack counts and a track is drawn by rank; without
+    // them (a filters folder not found) only key-v1, which counts on its own.
     MusicSettings s;
-    s.filters.enabled = {"key-v1"};
-    if (m == MusicMode::Menus)
+    const bool plugins = sieve::find_filter("key-data-v2") && sieve::find_filter("melody-leap-v1") && sieve::find_filter("melody-lengths-v1") &&
+                         sieve::find_filter("melody-rests-v1") && sieve::find_filter("melody-ending-v1") && sieve::find_filter("melody-range-v1");
+    const bool menus = m == MusicMode::Menus;
+    const std::string tonic = menus ? "A" : "C", scale = menus ? "minor" : "major";
+    if (plugins)
+    {
+        s.filters.enabled = {"key-data-v2", "melody-leap-v1", "melody-lengths-v1", "melody-rests-v1", "melody-ending-v1", "melody-range-v1"};
+        s.filters.values["key-data-v2"] = {{"tonic", tonic}, {"scale", scale}};
+        s.filters.values["melody-leap-v1"] = {{"leap", menus ? "5" : "4"}, {"rest_resets", "no"}};
+        s.filters.values["melody-lengths-v1"] = menus ? sieve::FilterValues{{"shortest", "e"}, {"longest", "h"}, {"eighths", "2"}}
+                                                      : sieve::FilterValues{{"shortest", "q"}, {"longest", "w"}, {"eighths", "0"}};
+        s.filters.values["melody-rests-v1"] = {{"run", menus ? "2" : "1"}, {"total", menus ? "6" : "4"}, {"leading", "no"}};
+        s.filters.values["melody-ending-v1"] = {{"tonic", tonic}, {"hold", menus ? "q" : "h"}};
+        s.filters.values["melody-range-v1"] = {{"low", "60"}, {"high", menus ? "76" : "79"}};
+    }
+    else
+    {
+        s.filters.enabled = {"key-v1"};
+        s.filters.values["key-v1"] = {{"tonic", tonic}, {"scale", scale}};
+    }
+    if (menus)
     {
         s.volume = 25;
         s.tempo = 66;
         s.voice = Voice::Sine;
         s.echo = 20;
         s.gap = 6;
-        s.filters.values["key-v1"] = {{"tonic", "A"}, {"scale", "minor"}};
     }
     else
     {
@@ -132,9 +154,6 @@ MusicSettings defaults(MusicMode m)
         s.voice = Voice::Soft;
         s.echo = 35;
         s.gap = 8;
-        // The major scale, not the pentatonic, so every line's mode is heard (the pentatonic lacks
-        // the steps Lydian and Mixolydian change).
-        s.filters.values["key-v1"] = {{"tonic", "C"}, {"scale", "major"}};
     }
     return s;
 }
@@ -307,9 +326,11 @@ void MusicPlayer::recharacter()
     const int* parent = nullptr;
     int tonic = 0;
     static const int ionian[7] = {0, 2, 4, 5, 7, 9, 11}, aeolian[7] = {0, 2, 3, 5, 7, 8, 10}, harmonic[7] = {0, 2, 3, 5, 7, 8, 11};
-    if (s.filters.is_enabled("key-v1"))
+    // key-data-v2 (the plugin) or key-v1 (built in): the same tonics and scales, by the same names.
+    const char* key = s.filters.is_enabled("key-data-v2") ? "key-data-v2" : s.filters.is_enabled("key-v1") ? "key-v1" : nullptr;
+    if (key)
     {
-        const auto it = s.filters.values.find("key-v1");
+        const auto it = s.filters.values.find(key);
         const auto value = [&](const char* k, const char* def) {
             if (it == s.filters.values.end()) return std::string(def);
             const auto v = it->second.find(k);

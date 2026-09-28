@@ -1,0 +1,30 @@
+sieve-filter-v2
+; A melody that comes home: the last event is a note on the tonic (any octave), at least `hold`
+; long, so a track resolves rather than stopping mid-phrase. For notes104 (durations e q h w).
+; The state is whether the last event so far would end it well.
+id        melody-ending
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     audio
+symbols   notes104
+describe  The last note is the tonic, held at least so long.
+param     tonic  choice  C C,C#,D,D#,E,F,F#,G,G#,A,A#,B the note to end on
+param     hold   choice  e e,q,h,w the shortest the last note may be
+
+states    2
+start     0
+accept    1
+for s 0 1
+  for d 0 {DURATIONS - 1}
+    t {s} @{d} 0
+    for p 1 {PITCHES}
+      if {(LOW + p - 1) % 12 == tonic && d >= hold}
+        t {s} @{p * DURATIONS + d} 1
+      else
+        t {s} @{p * DURATIONS + d} 0
+      fi
+    done
+  done
+done
+end

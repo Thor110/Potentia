@@ -1,0 +1,37 @@
+sieve-filter-v2
+; How much silence: at most `run` rests in a row and `total` in a track, and, unless `leading`
+; allows it, no rest before the first note. The state is the rests so far and the rests in a row
+; (state 0: nothing yet; then 1 + total_so_far * (run + 1) + in_a_row).
+id        melody-rests
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     audio
+symbols   notes*
+describe  At most so many rests in a row and in all, and none first unless allowed.
+param     run      int     2  0  16  the most rests in a row
+param     total    int     8  0  64  the most rests in a track
+param     leading  choice  no no,yes whether a track may begin with a rest
+
+states    {1 + (total + 1) * (run + 1)}
+start     0
+accept    0..{(total + 1) * (run + 1)}
+for d 0 {DURATIONS - 1}
+  for p 1 {PITCHES}
+    t 0 @{p * DURATIONS + d} 1
+    for so_far 0 {total}
+      for row 0 {run}
+        t {1 + so_far * (run + 1) + row} @{p * DURATIONS + d} {1 + so_far * (run + 1)}
+      done
+    done
+  done
+  if {leading == 1 && run >= 1 && total >= 1}
+    t 0 @{d} {1 + (run + 1) + 1}
+  fi
+  for so_far 0 {total - 1}
+    for row 0 {run - 1}
+      t {1 + so_far * (run + 1) + row} @{d} {1 + (so_far + 1) * (run + 1) + row + 1}
+    done
+  done
+done
+end

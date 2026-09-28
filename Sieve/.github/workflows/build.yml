@@ -720,6 +720,24 @@ jobs:
               diff plugin.oracle plugin.engine
             done
           done
+          # sieve-filter-v2 (comparisons, && || !, min max abs, if/else/fi, choice parameters, the
+          # line's constants, symbols families): the melody plugins on the audio line at several
+          # settings, and a toy of the grammar on the text line.
+          for spec in "key-data-v2:" "key-data-v2:tonic=A,scale=minor" "key-data-v2:tonic=F#,scale=blues" "melody-leap-v1:" "melody-leap-v1:leap=2,rest_resets=yes" "melody-lengths-v1:" "melody-lengths-v1:shortest=q,longest=h,eighths=0" "melody-rests-v1:" "melody-rests-v1:run=1,total=3,leading=yes" "melody-ending-v1:tonic=A,hold=h" "melody-range-v1:low=64,high=72"; do
+            f=${spec%%:*}; p=${spec#*:}
+            for L in 1 2 5 17; do
+              python sieve_ref.py plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} > plugin.oracle
+              $S filters --plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
+              diff plugin.oracle plugin.engine
+            done
+          done
+          for p in "" "gap=0" "mode=far" "mode=any,gap=5"; do
+            for L in 1 2 5 12; do
+              python sieve_ref.py plugin ../tests/plugins/toy-v2-v1.sfilter --length $L ${p:+--params $p} > plugin.oracle
+              $S filters --plugin ../tests/plugins/toy-v2-v1.sfilter --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
+              diff plugin.oracle plugin.engine
+            done
+          done
           # The Moby grammars: too large for the oracle to determinise in full (its NFA keeps each
           # token's reading apart, and the subsets run past ten million), so its lazy mode makes the
           # subsets only as they are reached: counts, ranks and verdicts on real and shuffled
@@ -729,7 +747,7 @@ jobs:
             $S filters --plugin ../data/filters/$f.sfilter --length 6 --judge ../tests/plugins/moby-sentences.txt | tr -d '\r' | grep -v "^states" > plugin.engine
             diff plugin.oracle plugin.engine
           done
-          $S filters --plugins | grep -c "^loaded" | grep -qx 8
+          $S filters --plugins | grep -c "^loaded" | grep -qx 14
           $S filters --plugin ../data/filters/words-data-v1.sfilter --length 6 --relations | grep -q "stricter than (implies) window-data-v1"
           rm -rf addr
           $S locate ../tests/manifest_fixture --manifest fixture.manifest --addresses addr --compare > locate.out

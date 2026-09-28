@@ -1152,7 +1152,7 @@ int cmd_filters_plugin(const Args& a)
     Args b = a;
     if (!a.has("line"))
     {
-        if (h.symbols == "notes104") b.opts["line"] = "audio";
+        if (h.symbols == "notes104" || h.symbols == "notes*") b.opts["line"] = "audio"; // notes*: every note line (v2)
         else if (h.symbols.rfind("palette:", 0) == 0)
         {
             b.opts["line"] = "image";

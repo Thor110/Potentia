@@ -554,3 +554,20 @@ are cheap and because they are the sort of thing that is lost otherwise.
 - **How much would the reducer actually save** on a real corpus? Never measured, and it is the
   number that decides whether the key idea is worth anything (see §0).
 - **The licence.** Still nothing in the repository.
+
+---
+
+## 12. Noted along the way (September 2026)
+
+- **Each line as a filter against the others** (Edward). Why should a MIDI file written out appear
+  as text on the pages line, or a picture's bytes as a book? A line could set aside units that are
+  really another line's content in disguise: a page that decodes (as the vault's decoders do: hex,
+  base64, a–p nibbles) to a valid MIDI, PNG or OBJ file, a picture whose bytes are text. The vault
+  already does this for known files; this would do it for whole kinds of file. Close to the open
+  question of which media types cross paths (§11).
+- **Loudness per note** (Edward: worth having, in a later version). Each note event quiet, medium
+  or loud, which triples the note symbols; for the `notes2` family, after its first version.
+- **Books of `notes2` melodies.** `sieve-book-v1` gives an audio section only a length, so a book
+  can hold `notes104` melodies alone. A book format v2 would carry the note family's shape.
+- **Rules between voices** of a `notes2` unit (whether notes sounding together agree): harder than
+  per-voice filters, because each voice keeps its own time.

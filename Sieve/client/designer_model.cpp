@@ -96,10 +96,17 @@ fs::path scratch()
 
 // ---------------------------------------------------------------- the file
 
+uint32_t Doc::written_format() const
+{
+    const bool needs_v2 = symbols.find('*') != std::string::npos && symbols != "any";
+    const bool choice = std::any_of(params.begin(), params.end(), [](const Param& p) { return p.kind == "choice"; });
+    return format >= 2 || needs_v2 || choice ? 2 : 1;
+}
+
 std::string Doc::to_text() const
 {
     std::ostringstream o;
-    o << "sieve-filter-v1\n; Made with the Sieve filter designer.\n";
+    o << (written_format() >= 2 ? "sieve-filter-v2" : "sieve-filter-v1") << "\n; Made with the Sieve filter designer.\n";
     for (const auto& [node, p] : layout) o << "; designer: node " << node << " " << int(p.x) << " " << int(p.y) << "\n";
     o << "id        " << id << "\n"
       << "version   " << version << "\n"
@@ -120,6 +127,7 @@ std::string Doc::to_text() const
     for (const auto& p : params)
     {
         if (p.kind == "dict") o << "param     " << p.name << "  dict  " << (trim(p.def).empty() ? std::string("default") : p.def);
+        else if (p.kind == "choice") o << "param     " << p.name << "  choice  " << p.def << "  " << p.choices;
         else o << "param     " << p.name << "  int  " << p.def << "  " << p.min << "  " << p.max;
         if (!trim(p.text).empty()) o << "  " << clean(p.text);
         o << "\n";
@@ -174,6 +182,7 @@ Doc Doc::from_text(const std::string& text, const fs::path& folder)
         if (first_line)
         {
             if (t.empty() || t[0] == ';' || t[0] == '#') continue;
+            d.format = t == "sieve-filter-v2" ? 2 : 1;
             first_line = false;
             continue;
         }
@@ -226,6 +235,12 @@ Doc Doc::from_text(const std::string& text, const fs::path& folder)
             {
                 p.def = w[3] == "default" ? "" : w[3];
                 for (size_t i = 4; i < w.size(); ++i) p.text += (p.text.empty() ? "" : " ") + w[i];
+            }
+            else if (p.kind == "choice")
+            {
+                p.def = w[3];
+                p.choices = w[4];
+                for (size_t i = 5; i < w.size(); ++i) p.text += (p.text.empty() ? "" : " ") + w[i];
             }
             else
             {
@@ -301,10 +316,10 @@ sieve::FilterLine test_line(const std::string& symbols, uint32_t length)
 {
     sieve::FilterLine l;
     l.length = length;
-    if (symbols == sieve::kNotesSymbolsId)
+    if (symbols == sieve::kNotesSymbolsId || symbols == "notes*") // notes*: every note line, tested on notes104
     {
         l.kind = "audio";
-        l.symbols_id = symbols;
+        l.symbols_id = sieve::kNotesSymbolsId;
         l.base = sieve::kNoteSymbols;
         return l;
     }

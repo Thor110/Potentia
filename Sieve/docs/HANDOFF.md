@@ -835,3 +835,17 @@ note. World default scale is now major (the pentatonic lacks steps 4 and 7). Hal
 music_line() (colours + line), as does the hallway loop on (re)entry, instead of every frame.
 Tracks record their line: WORLD [BINARY] in the lists, world/binary in sieve-music.ini and
 favourites.tsv (older lines read as before), NNN-world-binary.mid.
+Melody filters, Part 1 of Edward's plan (FILTER-PLUGINS.md section 14; full harness run). The
+format sieve-filter-v2 (v1 untouched): comparisons, && || !, min max abs, if/else/fi blocks,
+`param NAME choice DEFAULT A,B,C`, constants BASE and (note lines) PITCHES DURATIONS LOW, and
+`symbols notes*`. Engine (Expr v2 grammar, parser, Compiler if/else, choice as index) and oracle
+(its own) agree; the oracle comparison caught an oracle bug (if reused the loop bound j), the unit
+tests an engine one (choice params without a description refused). Plugins: key-data-v2,
+melody-leap-v1, melody-lengths-v1, melody-rests-v1, melody-ending-v1, melody-range-v1, and
+tests/plugins/toy-v2-v1. Player defaults are stacks of them (they count, so tracks by rank);
+falls back to key-v1 without the plugins; line character reads key-data-v2 or key-v1. Designer:
+format field, choice params (kind int -> dict -> choice), notes* tested on notes104. CI: 14
+plugins loaded; oracle diffs for all six at four lengths. IDEAS §12: cross-line filtering
+(Edward), loudness per note (later), book format v2 for notes2, rules between voices.
+Next: Part 2, the notes2 family (range C3-C6 default up to C2-C7, eight durations, up to 4
+voices filtered one by one).

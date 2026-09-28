@@ -140,10 +140,11 @@ int64_t checked(int64_t v, int line)
 class Expr
 {
 public:
-    Expr(const std::string& s, const Env& env, int line) : s_(s), env_(env), line_(line) {}
+    // v2: comparisons, && || !, min max abs (sieve-filter-v2); v1 reads exactly as it always has.
+    Expr(const std::string& s, const Env& env, int line, bool v2 = false) : s_(s), env_(env), line_(line), v2_(v2) {}
     int64_t value()
     {
-        const int64_t v = sum();
+        const int64_t v = v2_ ? disjunction() : sum();
         skip();
         if (i_ != s_.size()) fail(line_, "cannot read the expression '" + s_ + "'");
         return v;
@@ -153,6 +154,55 @@ private:
     void skip()
     {
         while (i_ < s_.size() && is_space(s_[i_])) ++i_;
+    }
+    bool at(const char* op)
+    {
+        skip();
+        const size_t n = std::char_traits<char>::length(op);
+        return s_.compare(i_, n, op) == 0;
+    }
+    int64_t disjunction()
+    {
+        int64_t v = conjunction();
+        while (at("||"))
+        {
+            i_ += 2;
+            const int64_t r = conjunction();
+            v = (v != 0 || r != 0) ? 1 : 0;
+        }
+        return v;
+    }
+    int64_t conjunction()
+    {
+        int64_t v = comparison();
+        while (at("&&"))
+        {
+            i_ += 2;
+            const int64_t r = comparison();
+            v = (v != 0 && r != 0) ? 1 : 0;
+        }
+        return v;
+    }
+    int64_t comparison()
+    {
+        int64_t v = sum();
+        for (;;)
+        {
+            // Two-character operators before one.
+            const char* ops[] = {"==", "!=", "<=", ">=", "<", ">"};
+            const char* op = nullptr;
+            for (const char* o : ops)
+                if (at(o))
+                {
+                    op = o;
+                    break;
+                }
+            if (!op) return v;
+            i_ += std::char_traits<char>::length(op);
+            const int64_t r = sum();
+            const std::string o = op;
+            v = o == "==" ? v == r : o == "!=" ? v != r : o == "<=" ? v <= r : o == ">=" ? v >= r : o == "<" ? v < r : v > r;
+        }
     }
     int64_t sum()
     {
@@ -201,7 +251,32 @@ private:
             ++i_;
             return checked(-unary(), line_);
         }
+        if (v2_ && i_ < s_.size() && s_[i_] == '!' && !at("!="))
+        {
+            ++i_;
+            return unary() == 0 ? 1 : 0;
+        }
         return atom();
+    }
+    // min(a, b), max(a, b), abs(a): after the name, its arguments in brackets.
+    int64_t call(const std::string& name)
+    {
+        skip();
+        if (i_ >= s_.size() || s_[i_] != '(') fail(line_, name + " takes its arguments in brackets: " + name + "(...)");
+        ++i_;
+        std::vector<int64_t> args{disjunction()};
+        while (at(","))
+        {
+            ++i_;
+            args.push_back(disjunction());
+        }
+        skip();
+        if (i_ >= s_.size() || s_[i_] != ')') fail(line_, "a ( without its ) in '" + s_ + "'");
+        ++i_;
+        const size_t want = name == "abs" ? 1 : 2;
+        if (args.size() != want) fail(line_, name + " takes " + std::to_string(want) + (want == 1 ? " argument" : " arguments"));
+        if (name == "abs") return checked(args[0] < 0 ? -args[0] : args[0], line_);
+        return name == "min" ? std::min(args[0], args[1]) : std::max(args[0], args[1]);
     }
     int64_t atom()
     {
@@ -211,7 +286,7 @@ private:
         if (c == '(')
         {
             ++i_;
-            const int64_t v = sum();
+            const int64_t v = v2_ ? disjunction() : sum();
             skip();
             if (i_ >= s_.size() || s_[i_] != ')') fail(line_, "a ( without its ) in '" + s_ + "'");
             ++i_;
@@ -231,6 +306,7 @@ private:
         {
             std::string name;
             while (i_ < s_.size() && (std::isalnum(static_cast<unsigned char>(s_[i_])) || s_[i_] == '_')) name += s_[i_++];
+            if (v2_ && (name == "min" || name == "max" || name == "abs")) return call(name);
             const auto it = env_.find(name);
             if (it == env_.end()) fail(line_, "'" + name + "' is not a parameter or a for variable");
             return it->second;
@@ -241,17 +317,24 @@ private:
     const std::string& s_;
     const Env& env_;
     int line_;
+    bool v2_ = false;
     size_t i_ = 0;
 };
 
+// Names a v2 file keeps for itself: the functions and the line's constants.
+bool reserved_v2(const std::string& n)
+{
+    return n == "min" || n == "max" || n == "abs" || n == "BASE" || n == "PITCHES" || n == "DURATIONS" || n == "LOW";
+}
+
 // A number field: an integer, a name, or {an expression}.
-int64_t eval(const Tok& t, const Env& env, int line)
+int64_t eval(const Tok& t, const Env& env, int line, bool v2 = false)
 {
     if (t.quoted) fail(line, "expected a number, got a quoted string");
     std::string s = t.text;
     if (s.size() >= 2 && s.front() == '{' && s.back() == '}') s = s.substr(1, s.size() - 2);
     else if (s.find_first_of("{}") != std::string::npos) fail(line, "an expression must be all inside {braces}: '" + t.text + "'");
-    return Expr(s, env, line).value();
+    return Expr(s, env, line, v2).value();
 }
 
 // "a..b" into its two halves (outside braces), or nothing.
@@ -280,7 +363,9 @@ struct PluginDef
 {
     PluginHeader header;
     std::vector<Stmt> body;          // class, states, start, accept, t, for, done (in order)
-    std::vector<size_t> done_of;     // for a `for` at body[i], the index of its `done`
+    std::vector<size_t> done_of;     // for a `for` at body[i], the index of its `done`; for an `if`, its `fi`
+    std::vector<size_t> else_of;     // for an `if` at body[i], the index of its `else`, or of its `fi`
+    bool v2 = false;                 // sieve-filter-v2
     // The token form.
     struct WordSet
     {
@@ -312,7 +397,8 @@ std::shared_ptr<const PluginDef> parse_plugin(const std::string& text, const std
     int line = 0;
     bool first = true, ended = false, has_states = false, has_start = false, has_version = false;
     std::vector<size_t> open_for;
-    std::vector<std::pair<size_t, size_t>> pairs; // each for, and its done
+    std::vector<std::pair<size_t, size_t>> pairs; // each for, and its done; each if, and its fi
+    std::map<size_t, size_t> else_at;             // each if with an else, and its else
     std::set<std::string> seen_header, class_names;
     while (std::getline(in, raw))
     {
@@ -325,7 +411,10 @@ std::shared_ptr<const PluginDef> parse_plugin(const std::string& text, const std
         if (ended) fail(line, "nothing may follow end");
         if (first)
         {
-            if (toks.size() != 1 || toks[0].quoted || toks[0].text != kPluginFormat) fail(line, std::string("a plugin starts with ") + kPluginFormat);
+            if (toks.size() != 1 || toks[0].quoted || (toks[0].text != kPluginFormat && toks[0].text != kPluginFormat2))
+                fail(line, std::string("a plugin starts with ") + kPluginFormat + " or " + kPluginFormat2);
+            def->v2 = toks[0].text == kPluginFormat2;
+            h.format = def->v2 ? 2 : 1;
             first = false;
             continue;
         }
@@ -383,6 +472,9 @@ std::shared_ptr<const PluginDef> parse_plugin(const std::string& text, const std
             once();
             want(2);
             h.symbols = toks[1].text;
+            if (h.symbols.find('*') != std::string::npos && h.symbols != "any" &&
+                (!def->v2 || h.symbols.back() != '*' || h.symbols.find('*') + 1 != h.symbols.size() || h.symbols.size() < 2))
+                fail(line, def->v2 ? "a family of symbols ends in one * (notes*)" : "symbols ending in * need sieve-filter-v2");
         }
         else if (k == "describe")
         {
@@ -414,12 +506,42 @@ std::shared_ptr<const PluginDef> parse_plugin(const std::string& text, const std
         }
         else if (k == "param")
         {
-            if (toks.size() < 4 || (toks.size() < 6 && toks[2].text != "dict")) fail(line, "param NAME int DEFAULT MIN MAX [text], or param NAME dict DEFAULT [text]");
+            if (toks.size() < 4 || (toks.size() < 6 && toks[2].text != "dict" && toks[2].text != "choice"))
+                fail(line, def->v2 ? "param NAME int DEFAULT MIN MAX [text], param NAME choice DEFAULT A,B,C [text], or param NAME dict DEFAULT [text]"
+                                   : "param NAME int DEFAULT MIN MAX [text], or param NAME dict DEFAULT [text]");
             FilterParam p;
             p.key = toks[1].text;
             if (!is_name(p.key)) fail(line, "a parameter's name is letters, digits and _, starting with a letter");
+            if (def->v2 && reserved_v2(p.key)) fail(line, p.key + " is kept for the format (a function or a constant of the line)");
             for (const auto& q : h.params)
                 if (q.key == p.key) fail(line, "parameter " + p.key + " is declared twice");
+            if (toks[2].text == "choice")
+            {
+                // param NAME choice DEFAULT A,B,C [text]: one of a list, by name (v2).
+                if (!def->v2) fail(line, "a choice parameter needs sieve-filter-v2");
+                if (toks.size() < 5) fail(line, "param NAME choice DEFAULT A,B,C [text]");
+                p.kind = FilterParam::Kind::Text;
+                std::string list = toks[4].text;
+                size_t at = 0;
+                while (at <= list.size())
+                {
+                    const size_t comma = std::min(list.find(',', at), list.size());
+                    const std::string c = list.substr(at, comma - at);
+                    if (c.empty() || !std::all_of(c.begin(), c.end(), [](char ch) { return std::isalnum(static_cast<unsigned char>(ch)) || ch == '#' || ch == '-'; }))
+                        fail(line, "a choice is letters, digits, # and -: '" + c + "'");
+                    if (std::find(p.choices.begin(), p.choices.end(), c) != p.choices.end()) fail(line, "choice " + c + " is listed twice");
+                    p.choices.push_back(c);
+                    at = comma + 1;
+                }
+                if (std::find(p.choices.begin(), p.choices.end(), toks[3].text) == p.choices.end())
+                    fail(line, "the default " + toks[3].text + " is not one of the choices");
+                p.default_value = toks[3].text;
+                std::string desc;
+                for (size_t i = 5; i < toks.size(); ++i) desc += (desc.empty() ? "" : " ") + toks[i].text;
+                p.description = desc;
+                h.params.push_back(p);
+                continue;
+            }
             if (toks[2].text == "dict")
             {
                 // A dictionary setting: a registered id, or `default` (the registry's default).
@@ -433,10 +555,10 @@ std::shared_ptr<const PluginDef> parse_plugin(const std::string& text, const std
                 h.params.push_back(p);
                 continue;
             }
-            if (toks[2].text != "int") fail(line, "a parameter's kind is int or dict");
+            if (toks[2].text != "int") fail(line, def->v2 ? "a parameter's kind is int, choice or dict" : "a parameter's kind is int or dict");
             p.kind = FilterParam::Kind::Integer;
             const Env none;
-            const int64_t dflt = eval(toks[3], none, line), lo = eval(toks[4], none, line), hi = eval(toks[5], none, line);
+            const int64_t dflt = eval(toks[3], none, line, def->v2), lo = eval(toks[4], none, line, def->v2), hi = eval(toks[5], none, line, def->v2);
             if (lo > hi || dflt < lo || dflt > hi) fail(line, "a parameter's default must lie between its minimum and maximum");
             p.default_value = std::to_string(dflt);
             p.min = lo;
@@ -535,13 +657,39 @@ std::shared_ptr<const PluginDef> parse_plugin(const std::string& text, const std
         {
             want(4);
             if (!is_name(toks[1].text)) fail(line, "a for variable's name is letters, digits and _, starting with a letter");
+            if (def->v2 && reserved_v2(toks[1].text)) fail(line, toks[1].text + " is kept for the format (a function or a constant of the line)");
             open_for.push_back(def->body.size());
             def->body.push_back({line, toks, {}});
         }
         else if (k == "done")
         {
             want(1);
-            if (open_for.empty()) fail(line, "done without its for");
+            if (open_for.empty() || def->body[open_for.back()].toks[0].text != "for") fail(line, "done without its for");
+            const size_t f = open_for.back();
+            open_for.pop_back();
+            pairs.emplace_back(f, def->body.size());
+            def->body.push_back({line, toks, {}});
+        }
+        else if (def->v2 && k == "if")
+        {
+            // if {EXPR} ... [else ...] fi (v2): blocks share the stack with for, so they nest.
+            want(2);
+            if (!has_states) fail(line, "states comes before any if");
+            open_for.push_back(def->body.size());
+            def->body.push_back({line, toks, {}});
+        }
+        else if (def->v2 && k == "else")
+        {
+            want(1);
+            if (open_for.empty() || def->body[open_for.back()].toks[0].text != "if") fail(line, "else without its if");
+            if (else_at.count(open_for.back())) fail(line, "an if has one else");
+            else_at[open_for.back()] = def->body.size();
+            def->body.push_back({line, toks, {}});
+        }
+        else if (def->v2 && k == "fi")
+        {
+            want(1);
+            if (open_for.empty() || def->body[open_for.back()].toks[0].text != "if") fail(line, "fi without its if");
             const size_t f = open_for.back();
             open_for.pop_back();
             pairs.emplace_back(f, def->body.size());
@@ -550,7 +698,8 @@ std::shared_ptr<const PluginDef> parse_plugin(const std::string& text, const std
         else if (k == "end")
         {
             want(1);
-            if (!open_for.empty()) fail(line, "a for is not closed by done");
+            if (!open_for.empty())
+                fail(line, def->body[open_for.back()].toks[0].text == "if" ? "an if is not closed by fi" : "a for is not closed by done");
             ended = true;
         }
         else fail(line, "unknown keyword '" + k + "'");
@@ -591,7 +740,12 @@ std::shared_ptr<const PluginDef> parse_plugin(const std::string& text, const std
     h.form = "table";
     if (!has_states || !has_start) throw std::invalid_argument("a table plugin needs states and start");
     def->done_of.assign(def->body.size(), 0);
-    for (const auto& [f, d] : pairs) def->done_of[f] = d;
+    def->else_of.assign(def->body.size(), 0);
+    for (const auto& [f, d] : pairs)
+    {
+        def->done_of[f] = d;
+        def->else_of[f] = else_at.count(f) ? else_at[f] : d;
+    }
     for (const auto& p : h.params)
         if (class_names.count(p.key)) throw std::invalid_argument("parameter " + p.key + " has the same name as a class");
     return def;
@@ -603,6 +757,8 @@ bool plugin_applies(const PluginDef& p, const FilterLine& line)
     if (std::find(h.lines.begin(), h.lines.end(), line.kind) == h.lines.end()) return false;
     if (line.base == 0 || line.base > 65536) return false; // a table of states x symbols must stay small
     if (h.symbols == "any") return true;
+    if (h.format >= 2 && h.symbols.size() >= 2 && h.symbols.back() == '*') // a family: notes*
+        return line.symbols_id.compare(0, h.symbols.size() - 1, h.symbols, 0, h.symbols.size() - 1) == 0;
     if (h.symbols.rfind("palette:", 0) == 0)
     {
         if (line.kind != "image" && line.kind != "video") return false;
@@ -622,8 +778,29 @@ class Compiler
 public:
     Compiler(const PluginDef& p, const FilterLine& line, const FilterValues& values) : p_(p), line_(line)
     {
+        if (p.v2)
+        {
+            // The line's constants (v2).
+            env_["BASE"] = int64_t(line.base);
+            if (line.symbols_id == kNotesSymbolsId)
+            {
+                env_["PITCHES"] = 25;
+                env_["DURATIONS"] = 4;
+                env_["LOW"] = 60;
+            }
+        }
         for (const auto& par : p.header.params)
         {
+            if (par.kind == FilterParam::Kind::Text && !par.choices.empty() && p.v2)
+            {
+                // A choice: its place in the list.
+                const auto it = values.find(par.key);
+                const std::string v = it == values.end() ? par.default_value : it->second;
+                const auto c = std::find(par.choices.begin(), par.choices.end(), v);
+                if (c == par.choices.end()) throw std::invalid_argument(p.header.name() + ": " + par.key + " must be one of its choices, got '" + v + "'");
+                env_[par.key] = int64_t(c - par.choices.begin());
+                continue;
+            }
             if (par.kind != FilterParam::Kind::Integer) continue;
             const auto it = values.find(par.key);
             int64_t v = 0;
@@ -673,7 +850,7 @@ private:
     }
     uint32_t digit(const std::string& expr, int line) const
     {
-        const int64_t v = eval(Tok{expr, false}, env_, line);
+        const int64_t v = eval(Tok{expr, false}, env_, line, p_.v2);
         if (v < 0 || v >= int64_t(B_)) fail(line, "@" + std::to_string(v) + " is not a symbol of this line (it has " + std::to_string(B_) + ")");
         return uint32_t(v);
     }
@@ -748,7 +925,7 @@ private:
 
     int64_t state(const Tok& t, int line) const
     {
-        const int64_t v = eval(t, env_, line);
+        const int64_t v = eval(t, env_, line, p_.v2);
         if (v < 0 || v >= N_) fail(line, "state " + std::to_string(v) + " does not exist (there are " + std::to_string(N_) + ")");
         return v;
     }
@@ -765,10 +942,20 @@ private:
             const Stmt& st = p_.body[i];
             const std::string& k = st.toks[0].text;
             tick(st.line);
-            if (k == "class" || k == "done") continue;
+            if (k == "class" || k == "done" || k == "fi") continue;
+            if (k == "if")
+            {
+                // The lines to its else (or fi) when true, from its else to its fi when not.
+                const bool yes = eval(st.toks[1], env_, st.line, p_.v2) != 0;
+                const size_t els = p_.else_of[i], fi = p_.done_of[i];
+                if (yes) run_block(i + 1, els);
+                else if (els != fi) run_block(els + 1, fi);
+                i = fi;
+                continue;
+            }
             if (k == "states")
             {
-                N_ = eval(st.toks[1], env_, st.line);
+                N_ = eval(st.toks[1], env_, st.line, p_.v2);
                 if (N_ < 1 || N_ > 2'000'000) fail(st.line, "states must be 1 to 2,000,000");
                 if (double(N_) * double(B_) > 2e8) fail(st.line, "states x symbols is over 200 million: too large a table");
                 next_.assign(size_t(N_) * B_, Dfa::kDead);
@@ -818,7 +1005,7 @@ private:
             {
                 const std::string& var = st.toks[1].text;
                 if (env_.count(var)) fail(st.line, "'" + var + "' is already a parameter or a for variable");
-                const int64_t lo = eval(st.toks[2], env_, st.line), hi = eval(st.toks[3], env_, st.line);
+                const int64_t lo = eval(st.toks[2], env_, st.line, p_.v2), hi = eval(st.toks[3], env_, st.line, p_.v2);
                 const size_t done = p_.done_of[i];
                 for (int64_t v = lo; v <= hi; ++v)
                 {

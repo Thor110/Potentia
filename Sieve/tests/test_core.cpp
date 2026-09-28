@@ -1613,6 +1613,85 @@ void test_plugins(const std::string& dir)
     CHECK(plugin_parse_fails("sieve-filter-v1\nid x\nversion 1\nrequires clean-v1 max\nend\n", "a pinned setting is NAME=VALUE"));
     CHECK(plugin_parse_fails("sieve-filter-v1\nid x\nversion 1\nauthor t\norigin human\nlines text\nsymbols lower27\nparam n int 9 1 5\nend\n",
                              "default must lie between"));
+
+    // sieve-filter-v2: what v1 does not have is refused there, and v2's own mistakes are named.
+    const std::string h2 = "sieve-filter-v2\nid x\nversion 1\nauthor t\norigin human\nlines text\nsymbols lower27\n";
+    CHECK(plugin_parse_fails(h + "if {1}\nt 0 @1 1\nfi\nend\n", "unknown keyword 'if'"));
+    CHECK(plugin_parse_fails("sieve-filter-v1\nid x\nversion 1\nauthor t\norigin human\nlines text\nsymbols lower27\nparam m choice a a,b\nend\n", "a choice parameter needs sieve-filter-v2"));
+    CHECK(plugin_parse_fails("sieve-filter-v1\nid x\nversion 1\nsymbols notes*\nend\n", "need sieve-filter-v2"));
+    CHECK(plugin_parse_fails(h + "t 0 @{1 < 2} 1\nend\n", "cannot read the expression"));
+    CHECK(plugin_parse_fails(h2 + "states 2\nstart 0\nfi\nend\n", "fi without its if"));
+    CHECK(plugin_parse_fails(h2 + "states 2\nstart 0\nif {1}\nelse\nelse\nfi\nend\n", "an if has one else"));
+    CHECK(plugin_parse_fails(h2 + "states 2\nstart 0\nif {1}\nend\n", "an if is not closed by fi"));
+    CHECK(plugin_parse_fails(h2 + "param BASE int 1 0 2\nstates 2\nstart 0\nend\n", "kept for the format"));
+    CHECK(plugin_parse_fails(h2 + "param m choice c a,b\nstates 2\nstart 0\nend\n", "is not one of the choices"));
+    CHECK(plugin_parse_fails(h2 + "states 2\nstart 0\nt 0 @{abs(1, 2)} 1\nend\n", "abs takes 1 argument"));
+    CHECK(plugin_parse_fails(h2 + "states 2\nstart 0\nfor min 0 1\ndone\nend\n", "kept for the format"));
+    {
+        // The v2 expressions, worked out: comparisons give 1 or 0, && || ! on truth, min max abs.
+        const auto p = parse_plugin(h2 + "states 40\nstart 0\naccept 0\n"
+                                         "t 0 @{(3 < 5) + (5 <= 5) * 2 + (2 == 3) * 4 + (1 != 0) * 8} {abs(0 - 7) + min(4, 9) + max(-3, 1)}\n"
+                                         "t 12 @{!0 + !5 * 2 + (0 || 3) * 4 + (2 && 0) * 8} 0\nend\n", "v2");
+        const Dfa d = compile_plugin(*p, text_line(2), {}, none);
+        // @11 from 0 to state 12 (7 + 4 + 1), then @5 back to 0: of every two-letter unit, only that.
+        CHECK(d.accepts(std::vector<uint32_t>{11, 5}));
+        const Dfa m = minimise(d);
+        CHECK(DfaRanker(m, 2).count() == BigUint(1));
+    }
+
+    // The melody plugins (data/filters, sieve-filter-v2 on notes104): what they let through, in
+    // notation, and a stack of three counted exactly, against every unit at length 3.
+    {
+        auto notes = [](const std::string& notation) {
+            const auto c = canonicalise_notes(notation, uint32_t(std::count(notation.begin(), notation.end(), ' ') + 1));
+            return c.units.front();
+        };
+        auto audio = [](uint32_t L) { return FilterLine{"audio", kNotesSymbolsId, kNoteSymbols, L, nullptr, 0, 0, 0}; };
+        std::map<std::string, std::shared_ptr<const PluginDef>> m;
+        for (const char* f : {"key-data-v2", "melody-leap-v1", "melody-lengths-v1", "melody-rests-v1", "melody-ending-v1", "melody-range-v1"})
+            m[f] = load_plugin_file(filters + f + ".sfilter");
+        auto judge = [&](const std::string& f, const std::string& notation, const FilterValues& v = {}) {
+            const auto u = notes(notation);
+            return compile_plugin(*m[f], audio(uint32_t(u.size())), v, none).accepts(u);
+        };
+        CHECK(judge("key-data-v2", "C4q E4q G4h Rq B5w"));
+        CHECK(!judge("key-data-v2", "C4q Eb4q G4h"));
+        CHECK(judge("key-data-v2", "A4q C5q E5h G5q", {{"tonic", "A"}, {"scale", "minor"}}));
+        CHECK(!judge("key-data-v2", "A4q C#5q", {{"tonic", "A"}, {"scale", "minor"}}));
+        CHECK(judge("melody-leap-v1", "C4q E4q D4q F4h"));        // steps of 4, 2 and 3
+        CHECK(!judge("melody-leap-v1", "C4q E4q D4q G4h"));       // D4 to G4 is 5
+        CHECK(!judge("melody-leap-v1", "C4q C5q"));               // 12 semitones
+        CHECK(judge("melody-leap-v1", "C4q Rq C5q", {{"rest_resets", "yes"}}));
+        CHECK(!judge("melody-leap-v1", "C4q Rq C5q"));            // a rest is passed over
+        CHECK(judge("melody-lengths-v1", "C4e D4e E4q"));
+        CHECK(!judge("melody-lengths-v1", "C4e D4e E4e"));        // three eighths in a row
+        CHECK(!judge("melody-lengths-v1", "C4q D4w", {{"longest", "h"}}));
+        CHECK(judge("melody-rests-v1", "C4q Rq Rq D4q"));
+        CHECK(!judge("melody-rests-v1", "Rq C4q"));               // no rest first
+        CHECK(judge("melody-rests-v1", "Rq C4q", {{"leading", "yes"}}));
+        CHECK(!judge("melody-rests-v1", "C4q Rq Rq Rq"));         // three in a row
+        CHECK(judge("melody-ending-v1", "E4q D4q C5h"));
+        CHECK(!judge("melody-ending-v1", "E4q D4q C5h Rq"));      // it must end on the note
+        CHECK(!judge("melody-ending-v1", "E4q C4e", {{"hold", "q"}}));
+        CHECK(judge("melody-range-v1", "C4q G5q", {{"low", "60"}, {"high", "79"}}));
+        CHECK(!judge("melody-range-v1", "C4q A5q", {{"low", "60"}, {"high", "79"}}));
+        // A stack of three plugins counts through their product, exactly: every unit at length 3.
+        const FilterSpec a = plugin_spec(m["key-data-v2"]), b = plugin_spec(m["melody-leap-v1"]), c = plugin_spec(m["melody-ending-v1"]);
+        const FilterStack st(audio(3), {{&a, {}}, {&b, {{"leap", "2"}}}, {&c, {}}}, none);
+        CHECK(st.ranker() != nullptr);
+        if (st.ranker())
+        {
+            uint64_t brute = 0;
+            std::vector<uint32_t> u(3);
+            for (u[0] = 0; u[0] < 104; ++u[0])
+                for (u[1] = 0; u[1] < 104; ++u[1])
+                    for (u[2] = 0; u[2] < 104; ++u[2]) brute += st.passes(u);
+            CHECK(st.ranker()->count() == BigUint(brute) && brute > 0);
+            bool ok = true;
+            check_ranker_exhaustive(st, 104, 3, ok);
+            CHECK(ok);
+        }
+    }
     std::cout << "filter plugins checked\n";
 }
 

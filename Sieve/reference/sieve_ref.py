@@ -1840,7 +1840,10 @@ def cmd_chunk_vectors(_args):
 # start, symbols in order), so the two agreeing on every reference plugin is a real check.
 
 PLUGIN_FORMAT = "sieve-filter-v1"
+PLUGIN_FORMAT2 = "sieve-filter-v2"  # v1, and comparisons, && || !, min max abs, if/else/fi, choice
+                                    # parameters, the line's constants, and symbols families (notes*)
 NOTES_BASE = 104
+V2_RESERVED = {"min", "max", "abs", "BASE", "PITCHES", "DURATIONS", "LOW"}
 
 
 class PluginError(Exception):
@@ -1895,9 +1898,14 @@ def _plugin_tokens(line, n):
     return toks
 
 
-def _plugin_expr(s, env, n):
-    """+ - * / % and brackets over integers and names; / and % for non-negative numbers only."""
-    toks = re.findall(r"\s*(\d+|[A-Za-z_]\w*|[-+*/%()]|\S)", s)
+def _plugin_expr(s, env, n, v2=False):
+    """+ - * / % and brackets over integers and names; / and % for non-negative numbers only.
+    v2 adds, loosest first: ||, &&, the comparisons (1 or 0), then + - and * / %, with unary - and
+    !, and min(a, b), max(a, b), abs(a). Every operand is worked out, whatever the other side."""
+    if v2:
+        toks = re.findall(r"\s*(\d+|[A-Za-z_]\w*|==|!=|<=|>=|&&|\|\||[-+*/%()<>!,]|\S)", s)
+    else:
+        toks = re.findall(r"\s*(\d+|[A-Za-z_]\w*|[-+*/%()]|\S)", s)
     pos = [0]
     LIMIT = 1 << 62
 
@@ -1920,9 +1928,12 @@ def _plugin_expr(s, env, n):
         if t == "-":
             take()
             return chk(-atom())
+        if v2 and t == "!":
+            take()
+            return 0 if atom() else 1
         if t == "(":
             take()
-            v = add()
+            v = top()
             if peek() != ")":
                 raise PluginError(f"line {n}: a ( without its ) in '{s}'")
             take()
@@ -1930,6 +1941,20 @@ def _plugin_expr(s, env, n):
         take()
         if t.isdigit():
             return chk(int(t))
+        if v2 and t in ("min", "max", "abs"):
+            if peek() != "(":
+                raise PluginError(f"line {n}: {t} takes its arguments in brackets")
+            take()
+            args = [top()]
+            while peek() == ",":
+                take()
+                args.append(top())
+            if peek() != ")":
+                raise PluginError(f"line {n}: a ( without its ) in '{s}'")
+            take()
+            if len(args) != (1 if t == "abs" else 2):
+                raise PluginError(f"line {n}: {t} takes the wrong number of arguments")
+            return chk(abs(args[0])) if t == "abs" else (min(args) if t == "min" else max(args))
         if re.fullmatch(r"[A-Za-z_]\w*", t):
             if t not in env:
                 raise PluginError(f"line {n}: '{t}' is not a parameter or a for variable")
@@ -1957,13 +1982,38 @@ def _plugin_expr(s, env, n):
             v = chk(v + r if op == "+" else v - r)
         return v
 
-    v = add()
+    def cmp():
+        v = add()
+        while peek() in ("==", "!=", "<", "<=", ">", ">="):
+            op = take()
+            r = add()
+            v = int({"==": v == r, "!=": v != r, "<": v < r, "<=": v <= r, ">": v > r, ">=": v >= r}[op])
+        return v
+
+    def conj():
+        v = cmp()
+        while peek() == "&&":
+            take()
+            r = cmp()
+            v = int(bool(v) and bool(r))
+        return v
+
+    def disj():
+        v = conj()
+        while peek() == "||":
+            take()
+            r = conj()
+            v = int(bool(v) or bool(r))
+        return v
+
+    top = disj if v2 else add
+    v = top()
     if pos[0] != len(toks):
         raise PluginError(f"line {n}: cannot read the expression '{s}'")
     return v
 
 
-def _plugin_num(tok, env, n):
+def _plugin_num(tok, env, n, v2=False):
     text, quoted = tok
     if quoted:
         raise PluginError(f"line {n}: expected a number, got a quoted string")
@@ -1971,7 +2021,7 @@ def _plugin_num(tok, env, n):
         text = text[1:-1]
     elif "{" in text or "}" in text:
         raise PluginError(f"line {n}: an expression must be all inside {{braces}}: '{text}'")
-    return _plugin_expr(text, env, n)
+    return _plugin_expr(text, env, n, v2)
 
 
 def _split_range(s):
@@ -1999,8 +2049,9 @@ def parse_plugin(text):
         if ended:
             raise PluginError(f"line {n}: nothing may follow end")
         if first:
-            if toks != [(PLUGIN_FORMAT, False)]:
-                raise PluginError(f"line {n}: a plugin starts with {PLUGIN_FORMAT}")
+            if toks not in ([(PLUGIN_FORMAT, False)], [(PLUGIN_FORMAT2, False)]):
+                raise PluginError(f"line {n}: a plugin starts with {PLUGIN_FORMAT} or {PLUGIN_FORMAT2}")
+            head["v2"] = toks[0][0] == PLUGIN_FORMAT2
             first = False
             continue
         k = toks[0][0]
@@ -2034,21 +2085,35 @@ def parse_plugin(text):
             head.setdefault("follow", []).append((toks[1][0], toks[2][0]))
         elif k in ("first", "last"):
             head[k] = [t for t, _ in toks[1:]]
+        elif k == "param" and head["v2"] and toks[2][0] == "choice":
+            # param NAME choice DEFAULT A,B,C: in expressions, its place in the list
+            name, choices = toks[1][0], toks[4][0].split(",")
+            if name in V2_RESERVED or toks[3][0] not in choices:
+                raise PluginError(f"line {n}: a bad choice parameter")
+            head["params"].append((name, toks[3][0], "choice", choices))
         elif k == "param":
             name, kind = toks[1][0], toks[2][0]
             if kind != "int":
                 raise PluginError(f"line {n}: a parameter's kind is int or dict")
-            d, lo, hi = (_plugin_num(t, {}, n) for t in toks[3:6])
+            if head["v2"] and name in V2_RESERVED:
+                raise PluginError(f"line {n}: {name} is kept for the format")
+            d, lo, hi = (_plugin_num(t, {}, n, head["v2"]) for t in toks[3:6])
             if not lo <= d <= hi:
                 raise PluginError(f"line {n}: a parameter's default must lie between its minimum and maximum")
             head["params"].append((name, d, lo, hi))
-        elif k in ("class", "states", "start", "accept", "t", "for", "done"):
+        elif k in ("class", "states", "start", "accept", "t", "for", "done") or (head["v2"] and k in ("if", "else", "fi")):
             body.append((n, toks))
-            if k == "for":
-                stack.append(len(body) - 1)
+            if k in ("for", "if"):
+                stack.append(k)
             if k == "done":
-                if not stack:
+                if not stack or stack[-1] != "for":
                     raise PluginError(f"line {n}: done without its for")
+                stack.pop()
+            if k == "else" and (not stack or stack[-1] != "if"):
+                raise PluginError(f"line {n}: else without its if")
+            if k == "fi":
+                if not stack or stack[-1] != "if":
+                    raise PluginError(f"line {n}: fi without its if")
                 stack.pop()
         elif k == "end":
             if stack:
@@ -2069,7 +2134,7 @@ def parse_plugin(text):
 def plugin_base(symbols, base=None):
     if symbols in ALPHABETS:
         return len(ALPHABETS[symbols])
-    if symbols == "notes104":
+    if symbols in ("notes104", "notes*"):  # notes*: the note lines (only notes104 so far)
         return NOTES_BASE
     if symbols.startswith("palette:"):
         return PALETTE_SIZES[symbols[8:]]
@@ -2080,8 +2145,19 @@ def plugin_base(symbols, base=None):
 
 def compile_plugin(head, body, values, base):
     env = {}
+    v2 = head.get("v2", False)
+    if v2:
+        env["BASE"] = base
+        if head["symbols"].startswith("notes"):
+            env.update(PITCHES=25, DURATIONS=4, LOW=60)  # notes104: C4 (MIDI 60) .. C6, e q h w
     for name, d, lo, hi in head["params"]:
         if lo == "dict":
+            continue
+        if lo == "choice":
+            v = values.get(name, d)
+            if v not in hi:
+                raise PluginError(f"{head['name']}: {name} must be one of its choices")
+            env[name] = hi.index(v)
             continue
         v = int(values.get(name, d))
         if not lo <= v <= hi:
@@ -2097,7 +2173,7 @@ def compile_plugin(head, body, values, base):
         return alpha.index(ch)
 
     def digit(expr, n):
-        v = _plugin_num((expr, False), env, n)
+        v = _plugin_num((expr, False), env, n, v2)
         if not 0 <= v < base:
             raise PluginError(f"line {n}: @{v} is not a symbol of this line")
         return v
@@ -2138,7 +2214,7 @@ def compile_plugin(head, body, values, base):
     state = {"N": None, "start": None, "next": None, "accept": None}
 
     def st(tok, n):
-        v = _plugin_num(tok, env, n)
+        v = _plugin_num(tok, env, n, v2)
         if not 0 <= v < state["N"]:
             raise PluginError(f"line {n}: state {v} does not exist")
         return v
@@ -2148,7 +2224,7 @@ def compile_plugin(head, body, values, base):
             n, toks = body[i]
             k = toks[0][0]
             if k == "states":
-                state["N"] = _plugin_num(toks[1], env, n)
+                state["N"] = _plugin_num(toks[1], env, n, v2)
                 state["next"] = [[-1] * base for _ in range(state["N"])]
                 state["accept"] = [False] * state["N"]
             elif k == "start":
@@ -2171,7 +2247,7 @@ def compile_plugin(head, body, values, base):
                     state["next"][a][c] = b
             elif k == "for":
                 var = toks[1][0]
-                lo, hi = _plugin_num(toks[2], env, n), _plugin_num(toks[3], env, n)
+                lo, hi = _plugin_num(toks[2], env, n, v2), _plugin_num(toks[3], env, n, v2)
                 depth, end = 0, i + 1
                 while True:
                     kk = body[end][1][0][0]
@@ -2182,11 +2258,32 @@ def compile_plugin(head, body, values, base):
                             break
                         depth -= 1
                     end += 1
+                if var in env:
+                    raise PluginError(f"line {n}: '{var}' is already a parameter or a for variable")
                 for v in range(lo, hi + 1):
                     env[var] = v
                     run(i + 1, end)
                 env.pop(var, None)
                 i = end
+            elif k == "if":
+                # its else and fi, at its own depth of ifs
+                depth, fi, els = 0, i + 1, None
+                while True:
+                    kk = body[fi][1][0][0]
+                    if kk == "if":
+                        depth += 1
+                    elif kk == "fi":
+                        if depth == 0:
+                            break
+                        depth -= 1
+                    elif kk == "else" and depth == 0:
+                        els = fi
+                    fi += 1
+                if _plugin_num(toks[1], env, n, v2):
+                    run(i + 1, els if els is not None else fi)
+                elif els is not None:
+                    run(els + 1, fi)
+                i = fi
             i += 1
 
     run(0, len(body))

@@ -4,8 +4,8 @@
 engine (judge, count, rank, compact, stacks of plugins), `requires`, the loader and `filters/`
 folder, `sieve filters --plugin`, `--plugins` and `--relations`, the oracle's own parser and
 engine, and six reference plugins, all checked against the built-in filters they port (section
-11), the filter designer (section 12), and tagged lists with the first grammar filters, over the
-Moby part-of-speech list (section 13).*
+11), the filter designer (section 12), tagged lists with the first grammar filters, over the
+Moby part-of-speech list (section 13), and `sieve-filter-v2` with the melody filters (section 14).*
 
 Filters written as data files and dropped into a folder, so that anyone
 (a person, or an AI) can add a filter to the stack without touching the C++ or rebuilding Sieve.
@@ -228,6 +228,8 @@ every length checked, and the same verdict on every unit.
 | `window-data-v1` | `window-v1` | tokens, one set, cut edges |
 | `key-data-v1` | `key-v1` (C major) | table over the note alphabet |
 | `moby-grammar-v1`, `moby-grammar-strict-v1` | (new: English word order by part of speech) | tokens, nine sets from tagged lists, whole edges |
+| `key-data-v2` | `key-v1`, every scale | table, v2 (a choice parameter) |
+| `melody-leap-v1`, `melody-lengths-v1`, `melody-rests-v1`, `melody-ending-v1`, `melody-range-v1` | (new: melody shape) | table, v2 |
 
 They are new filters with new ids (the built-ins keep theirs); a built-in and its port agreeing is
 a conformance check, not a replacement.
@@ -244,8 +246,8 @@ a conformance check, not a replacement.
 
 ## 9. Not in v1
 
-- **Parameter kinds beyond integers and dictionaries** (a word list, a set of symbols, a choice):
-  v1 has `int` and `dict`.
+- **Parameter kinds beyond integers, dictionaries and choices** (a word list, a set of symbols):
+  v1 has `int` and `dict`; v2 adds `choice` (section 14).
 - **Judge-only scripts.** Filters that must see a whole unit at once (file-format validators,
   watertight meshes) need code; a sandboxed, deterministic tier (WebAssembly, say) could carry
   them later, judging only.
@@ -454,4 +456,59 @@ in short:
   real sentence followed by the same words shuffled: lenient 82 real and 37 shuffled pass, strict
   67 and 17). At length 9 the reachable subsets outgrow 8 GB. CI runs the same comparison at
   length 6 (about 20 s each).
+
+## 14. `sieve-filter-v2` and the melody filters (built)
+
+A melody filter needs to ask "is this note within four semitones of the last one?", which v1's
+arithmetic cannot say. v1 is a version and is never edited, so the table form gained what it
+needed as `sieve-filter-v2`: a file says which it is on its first line, and a v1 file reads exactly
+as before (what v2 adds is refused in it, by name). The designer reads and writes both, and
+upgrades a filter to v2 when it uses something only v2 has.
+
+- **Expressions.** Comparisons (`== != < <= > >=`, giving 1 or 0), `&&`, `||` and `!` (0 is false,
+  anything else true), and `min(a, b)`, `max(a, b)`, `abs(a)`. Loosest first: `||`, `&&`, the
+  comparisons, `+ -`, `* / %`, then unary `-` and `!`. Every operand is worked out, whatever the
+  other side says, so a mistake is never hidden by a short cut.
+- **`if {EXPR}` … `else` … `fi`**, around any lines of the table, nesting with `for` and with each
+  other.
+- **`param NAME choice DEFAULT A,B,C [text]`**: one of a list, by name in the settings and the
+  provenance, by its place in the list (from 0) in expressions. The menus cycle through it.
+- **The line's constants:** `BASE` (its number of symbols), and on a note line `PITCHES` (25 on
+  `notes104`), `DURATIONS` (4) and `LOW` (60, the MIDI number of pitch 1): a note's symbol is
+  `pitch * DURATIONS + duration`, pitch 0 the rest. A parameter or `for` variable may not take
+  these names, nor `min`, `max` or `abs`.
+- **Families of symbols:** `symbols notes*` applies to every line whose symbols' id begins `notes`,
+  so a filter written in terms of the constants carries over to the larger note lines to come
+  (`notes2`, IDEAS section 12). Today that is `notes104` alone.
+
+The engine and the oracle each have their own reading of it. The oracle's comparison with the
+engine caught a real error in the oracle's first `if` (a variable reused for the block's end cut
+the loop short) before anything shipped, and the unit tests caught the engine refusing a choice
+parameter written without a description. A toy of the grammar (`tests/plugins/toy-v2-v1`) is
+checked against brute force at lengths 1 to 3 and against the oracle in CI.
+
+**The melody filters** (`data/filters`, all counting, so any stack of them ranks through the
+product of their automata):
+
+| Plugin | Rule | Parameters |
+| :--- | :--- | :--- |
+| `key-data-v2` | every note in the scale on the tonic (as `key-v1`); rests pass | tonic, scale (choices) |
+| `melody-leap-v1` | no two neighbouring notes further apart than `leap` semitones; rests passed over, or a fresh start | leap (1–24), rest_resets |
+| `melody-lengths-v1` | notes and rests from `shortest` to `longest`, at most `eighths` eighths in a row (`notes104`) | shortest, longest, eighths |
+| `melody-rests-v1` | at most `run` rests in a row and `total` in all, none first unless `leading` | run, total, leading |
+| `melody-ending-v1` | the last event is the tonic, held at least `hold` (`notes104`) | tonic, hold |
+| `melody-range-v1` | every note between `low` and `high` (MIDI numbers) | low, high |
+
+Checked: each against the oracle at lengths 1, 2, 5 and 17 and several settings (CI); counts by
+hand where they have a closed form (C major leaves 15 of the 25 pitches, 64 symbols, so 64^17 at
+length 17; no rests at all, 100^17); melodies in notation judged in the unit tests; and a stack of
+three (key, leap 2, ending) counted exactly against all 104^3 units at length 3, and ranked and
+unranked through every survivor.
+
+**The music player's defaults** (new installs; a saved `sieve-music.ini` keeps its own) are stacks
+of these, so a track is drawn by rank: WORLD in C major, leaps of 4 at most, quarter to whole notes
+with no eighths, a rest at a time and four in all, ending on C held at least a half note, between
+C4 and G5 (about 1.5 × 10^38 tracks at 32 notes); MENUS in A minor, leaps of 5, eighths to halves
+with two eighths in a row at most, ending on A, C4 to E5 (about 4 × 10^40). Without the plugins (a
+filters folder not found) the player falls back to `key-v1`.
 

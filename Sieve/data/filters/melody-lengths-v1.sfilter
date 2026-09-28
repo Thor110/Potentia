@@ -1,0 +1,33 @@
+sieve-filter-v2
+; How long notes and rests may be: none shorter than `shortest` or longer than `longest`, and at
+; most `eighths` eighth-length events (notes or rests) in a row, so a track can be mostly long
+; notes with a few quick ones. For notes104, whose durations are e q h w; the state is how many
+; eighths have come in a row.
+id        melody-lengths
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     audio
+symbols   notes104
+describe  Note lengths from shortest to longest, and at most so many eighths in a row.
+param     shortest  choice  e e,q,h,w the shortest note or rest allowed
+param     longest   choice  w e,q,h,w the longest note or rest allowed
+param     eighths   int     2  0  32  the most eighth-length notes or rests in a row
+
+states    {eighths + 1}
+start     0
+accept    0..{eighths}
+for s 0 {eighths}
+  for p 0 {PITCHES}
+    for d {shortest} {longest}
+      if {d == 0}
+        if {s < eighths}
+          t {s} @{p * DURATIONS} {s + 1}
+        fi
+      else
+        t {s} @{p * DURATIONS + d} 0
+      fi
+    done
+  done
+done
+end

@@ -404,7 +404,7 @@ void Hallway::draw_media_player(float W, float H)
         case K::Echo: label = tr("media.echo"); value = std::to_string(s.echo) + "%"; break;
         case K::Gap: label = tr("media.gap"); value = trf("media.value.seconds", {std::to_string(s.gap)}); break;
         case K::Character:
-            label = tr(s.filters.is_enabled("key-v1") ? "media.character" : "media.character.no_key");
+            label = tr(s.filters.is_enabled("key-data-v2") || s.filters.is_enabled("key-v1") ? "media.character" : "media.character.no_key");
             header = true;
             break;
         case K::LineMode: label = "   " + tr(line_key(row.line)); value = tr(std::string("media.mode.") + music_mode_name(s.modes[row.line])); break;
