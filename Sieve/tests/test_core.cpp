@@ -7,6 +7,7 @@
 #include "sieve/bookspace.hpp"
 #include "sieve/modelspace.hpp"
 #include "sieve/canon.hpp"
+#include "sieve/chunks.hpp"
 #include "sieve/compact.hpp"
 #include "sieve/corridor.hpp"
 #include "sieve/filter.hpp"
@@ -21,6 +22,7 @@
 #include "sieve/titledspace.hpp"
 #include "sieve/utf8.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -786,6 +788,51 @@ void test_binary_vectors(const std::string& path)
     CHECK(refused);
     std::cout << "binary-line vectors checked: " << n << "\n";
     CHECK(n >= 120); // a truncated or emptied vector file must fail, not pass quietly
+}
+
+// cdc-v1 (chunks.hpp) against the oracle's own cutting: the gear table's ends, then each input's
+// chunks, by offset, length, SHA-256 and whether uniform.
+void test_chunk_vectors(const std::string& path)
+{
+    int n = 0;
+    for (const auto& f : read_tsv(path, 3))
+    {
+        if (f[0] == "gear")
+        {
+            char want[17];
+            std::snprintf(want, sizeof want, "%016llx", static_cast<unsigned long long>(sieve::cdc::gear()[std::stoul(f[1])]));
+            CHECK(f[2] == want);
+            ++n;
+            continue;
+        }
+        const std::string in = f[1] == "-" ? std::string() : from_hex(f[1]);
+        std::string got;
+        for (const auto& c : sieve::cdc::chunks(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(in.data()), in.size())))
+        {
+            if (!got.empty()) got += ",";
+            got += std::to_string(c.offset) + ":" + std::to_string(c.length) + ":" + Sha256::hex(c.sha256) + ":" + (c.uniform ? "1" : "0");
+        }
+        if (got.empty()) got = "-";
+        // Fed in pieces (37 bytes at a time), the Chunker must cut exactly as in one go.
+        sieve::cdc::Chunker ck;
+        for (size_t i = 0; i < in.size(); i += 37)
+            ck.update(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(in.data()) + i, std::min<size_t>(37, in.size() - i)));
+        ck.finish();
+        std::string pieces;
+        for (const auto& c : ck.ready())
+        {
+            if (!pieces.empty()) pieces += ",";
+            pieces += std::to_string(c.offset) + ":" + std::to_string(c.length) + ":" + Sha256::hex(c.sha256) + ":" + (c.uniform ? "1" : "0");
+        }
+        if (pieces.empty()) pieces = "-";
+        CHECK(pieces == got);
+        const bool ok = got == f[2];
+        CHECK(ok);
+        if (!ok) std::cerr << "  chunk vector mismatch: " << f[0] << "\n";
+        ++n;
+    }
+    std::cout << "chunk vectors checked: " << n << "\n";
+    CHECK(n >= 13); // a truncated or emptied vector file must fail, not pass quietly
 }
 
 void test_canon_vectors(const std::string& path)
@@ -2250,6 +2297,7 @@ void run_all(int argc, char** argv)
         test_book_vectors(dir);
         test_titled_vectors(dir + "vectors_titled_v1.tsv");
         test_binary_vectors(dir + "vectors_binary_v1.tsv");
+        test_chunk_vectors(dir + "vectors_chunks_v1.tsv");
         test_book_filter_vectors(dir);
     }
 }

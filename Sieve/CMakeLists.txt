@@ -26,6 +26,7 @@ add_library(sieve_core STATIC
     core/src/titledspace.cpp
     core/src/binaryspace.cpp
     core/src/canon.cpp
+    core/src/chunks.cpp
     core/src/compact.cpp
     core/src/corridor.cpp
     core/src/modelspace.cpp

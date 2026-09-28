@@ -722,4 +722,20 @@ menu.budget.measure(_binary), menu.survivors(.books), vault.load/bytes/decoders/
 atomic read. First reading: on the image line nearly all of an item's cost is PDQ (0.11 ms of 0.13).
 Worth doing later, measured with this: the item work on the face workers' pool (it is pure, per
 address; an item is shown only once its vault check is done).
+Chunks built (same night): core/include/sieve/chunks.hpp, `cdc-v1` (gear hash, top 8 bits zero,
+64..1024 bytes, gear[i] = SHA-256("cdc-v1 gear"+byte i)[:8] big-endian), with a streaming Chunker;
+the oracle's independent `chunks`/`chunk-vectors` and tests/vectors_chunks_v1.tsv (C++ checks them,
+also fed in pieces; CI regenerates and diffs). Vault format sieve-vault-v3 adds `v chunks
+h,h,...` (one file per entry); `chunk-match-v1` = two distinct chunks of one entry (one for a
+one-chunk file), uniform chunks never count. Checked in withheld_bytes, check_known, and
+check_file (streamed, 1 MB blocks). `sieve vault --chunks FILE... [--common FOLDER]` writes a
+vault file; `--test-file` writes the third built-in test (listed by chunks only). Measured catch
+rate on random data: 2 KB 98%, 1.5 KB 86%, 1 KB ~65%, 600 B 22% (the ~600 B I first told Edward
+was optimistic). Edward's point: chunking is general (filters, maps), so it is in the core;
+VAULT.md section 8. Next: the filter plugins (step 1 needs the full test harness: ask first).
+A located file is now read once (vault::hash_checked_file: SHA-256 and chunks from the same 1 MB
+blocks; no threads needed), replacing sha256_file_hex + check_file in locate.cpp. Noted for the
+multithreading work: the hallway's item work (content, filters, vault) on the face workers' pool;
+the menu's survivor counts and budget test off the main thread. Chunk sizes as a parameter:
+a named family (cdc-v1/min-avg-max), VAULT.md section 8, with the plugins.
 

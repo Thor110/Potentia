@@ -1777,6 +1777,56 @@ def cmd_binary_vectors(_args):
                 print(f"{n}\t{key}\t{mode}\t{format(k, 'x').zfill(width)}\t{len(f)}\t{f.hex() or '-'}")
 
 
+# ---------------------------------------------------------------- content-defined chunks (cdc-v1)
+# Written from the rule in core/include/sieve/chunks.hpp, not from its code: h = 2h + gear[byte]
+# mod 2^64; a chunk ends after a byte where h's top eight bits are zero (at 64 bytes or more), or
+# at 1,024; h starts again at each chunk. gear[i]: SHA-256("cdc-v1 gear" + byte i), first 8 bytes
+# big-endian. Each chunk is named by its SHA-256; a chunk of one repeated byte is "uniform".
+
+CDC_MIN, CDC_MAX = 64, 1024
+CDC_GEAR = [int.from_bytes(hashlib.sha256(b"cdc-v1 gear" + bytes([i])).digest()[:8], "big") for i in range(256)]
+
+
+def cdc_chunks(data):
+    out, start, h = [], 0, 0
+    mask = (1 << 64) - 1
+    for i, b in enumerate(data):
+        h = ((h << 1) + CDC_GEAR[b]) & mask
+        n = i + 1 - start
+        if (n >= CDC_MIN and h >> 56 == 0) or n >= CDC_MAX:
+            out.append((start, n))
+            start, h = i + 1, 0
+    if start < len(data):
+        out.append((start, len(data) - start))
+    return [(o, n, hashlib.sha256(data[o:o + n]).hexdigest(), len(set(data[o:o + n])) == 1) for o, n in out]
+
+
+def cmd_chunks(args):
+    """A file's cdc-v1 chunks: offset, length, SHA-256, and whether every byte is the same."""
+    data = open(args.file, "rb").read()
+    for o, n, h, u in cdc_chunks(data):
+        print(f"{o}\t{n}\t{h}\t{'uniform' if u else '-'}")
+
+
+def cmd_chunk_vectors(_args):
+    """cdc-v1: the gear table's ends, then inputs and their chunks (offset:length:sha256:uniform)."""
+    print("# sieve content-defined chunk vectors (cdc-v1)")
+    print("# gear i value_hex | name input_hex chunks")
+    for i in (0, 1, 127, 255):
+        print(f"gear\t{i}\t{CDC_GEAR[i]:016x}")
+    g = stream("chunks")
+    noise = bytes(next(g) for _ in range(6000))
+    text = (b"It was the best of times, it was the worst of times, it was the age of wisdom, "
+            b"it was the age of foolishness, it was the epoch of belief. ") * 40
+    changed = bytearray(noise[:3000]); changed[1500] ^= 0xFF
+    cases = [("empty", b""), ("short", b"Sieve cdc"), ("zeros63", bytes(63)), ("zeros3000", bytes(3000)),
+             ("noise", noise), ("fragment", noise[1234:1234 + 2500]), ("text", text[:4000]),
+             ("changed", bytes(changed)), ("ramp", bytes(i % 256 for i in range(2600)))]
+    for name, data in cases:
+        cs = ",".join(f"{o}:{n}:{h}:{int(u)}" for o, n, h, u in cdc_chunks(data)) or "-"
+        print(f"{name}\t{data.hex() or '-'}\t{cs}")
+
+
 def cmd_manifest(args):
     """sieve-manifest-v1 (SPECIFICATIONS §12.2), from its definition: the folder walked to the bottom,
     links skipped, every folder ('/' at the end) and file (size, SHA-256) listed by its path relative to
@@ -2005,6 +2055,9 @@ def main():
     sub.add_parser("book-vectors")
     sub.add_parser("titled-vectors")
     sub.add_parser("binary-vectors")
+    sub.add_parser("chunk-vectors")
+    s = sub.add_parser("chunks")
+    s.add_argument("file")
     s = sub.add_parser("manifest")
     s.add_argument("folder")
     s.add_argument("--addresses")
@@ -2055,6 +2108,10 @@ def main():
         cmd_titled_vectors(args)
     elif args.cmd == "binary-vectors":
         cmd_binary_vectors(args)
+    elif args.cmd == "chunk-vectors":
+        cmd_chunk_vectors(args)
+    elif args.cmd == "chunks":
+        cmd_chunks(args)
     elif args.cmd == "manifest":
         cmd_manifest(args)
     elif args.cmd == "map":

@@ -422,7 +422,7 @@ jobs:
           # the a-p nibbles a lower27 line can hold), while text that is not a known file, however
           # close its words, is not. A vault file that cannot be read fails it closed.
           printf 'sieve vault test' > vt.txt
-          build/sieve vault | q "2 built in"
+          build/sieve vault | q "3 built in"
           build/sieve vault | q "vault-decoders-v1"
           # Pictures, by PDQ: this cover's hash as Meta's own pdqhash (Pillow decoding) gives it, so
           # Sieve's reading of the reference code agrees bit for bit; then the test picture withheld
@@ -461,6 +461,25 @@ jobs:
           if build/sieve locate vok.txt > /dev/null 2>&1; then exit 1; fi
           rm data/vault/broken.vault
           build/sieve locate vok.txt | q "^sha256"
+          # Pieces, by chunks (cdc-v1, chunk-match-v1): the built-in test file is listed by its chunks
+          # only, so a 2.5 KB piece of it between other bytes is withheld, as a file, located, and
+          # base64'd; a vault file written by --chunks lists another file the same way; and
+          # --common leaves out chunks that ordinary files also hold.
+          build/sieve vault | q "1 chunks: 13 chunks in all"
+          build/sieve vault --test-file vtf.bin > /dev/null
+          python -c "import base64; b=open('vtf.bin','rb').read(); open('vtf-piece.bin','wb').write(b'junk'+b[1000:3500]+b'junk'); open('vtf-piece.b64','w').write(base64.b64encode(b[500:3000]).decode())"
+          if build/sieve vault vtf-piece.bin > /dev/null; then exit 1; fi
+          if build/sieve locate vtf-piece.bin > /dev/null 2>&1; then exit 1; fi
+          if build/sieve vault --written vtf-piece.b64 > /dev/null; then exit 1; fi
+          python -c "import hashlib; open('listed.bin','wb').write(b''.join(hashlib.sha256(b'listed %d' % i).digest() for i in range(300)))"
+          python -c "b=open('listed.bin','rb').read(); open('listed-piece.bin','wb').write(b[3000:6000])"
+          build/sieve vault listed-piece.bin | q "^clear"
+          build/sieve vault --chunks listed.bin > data/vault/listed.vault
+          build/sieve vault --parse data/vault/listed.vault | q "1 chunks), well formed"
+          if build/sieve vault listed-piece.bin > /dev/null; then exit 1; fi
+          rm data/vault/listed.vault
+          rm -rf ordinary && mkdir ordinary && cp listed-piece.bin ordinary/
+          test "$(build/sieve vault --chunks listed.bin --common ordinary | tail -2 | head -1 | tr ',' '\n' | wc -l)" -lt "$(build/sieve vault --chunks listed.bin | tail -2 | head -1 | tr ',' '\n' | wc -l)"
           # --timings: the table at exit, on the command line and from the hallway (to its file too).
           build/sieve warp --line text --length 32 --timings "timed" 2>&1 | q "^sieve warp "
           $H --no-menu --timings --settings timed.ini --screenshot timed.png 2>&1 | q "^hallway.item "
@@ -622,6 +641,7 @@ jobs:
           python sieve_ref.py book-vectors | diff - ../tests/vectors_books_v1.tsv
           python sieve_ref.py titled-vectors | diff - ../tests/vectors_titled_v1.tsv
           python sieve_ref.py binary-vectors | diff - ../tests/vectors_binary_v1.tsv
+          python sieve_ref.py chunk-vectors | diff - ../tests/vectors_chunks_v1.tsv
           python sieve_ref.py book-filter-vectors | diff - ../tests/vectors_book_filters_v1.tsv
           python sieve_ref.py book-read ../tests/example_book_v1.book > book.out
           test "$(head -1 book.out)" = "$(awk '$1 == "id" {print $2}' ../tests/example_book_v1.book)"

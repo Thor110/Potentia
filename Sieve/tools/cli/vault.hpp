@@ -6,14 +6,22 @@
 // prints "withheld" in its place. It is not a filter: it is not in the stack, it has no mode, and
 // nothing in the settings turns it off.
 //
-// Entries are hashes only, in `sieve-vault-v2` files (conceptually a map's cousin, holding nothing
-// but the hashes; v1 files, which hold only sha256 entries, are still read):
+// Entries are hashes only, in `sieve-vault-v3` files (conceptually a map's cousin, holding nothing
+// but the hashes; v1 files, sha256 entries only, and v2, no chunks, are still read):
 //
-//     sieve-vault-v2
+//     sieve-vault-v3
 //     entries <N>
 //     v	sha256	<64 hex digits>      the exact bytes of a file
 //     v	pdq	<64 hex digits>         a picture, by PDQ (pdq_hash.hpp): its near copies match too
+//     v	chunks	<hex>,<hex>,...     one file, by its cdc-v1 chunks (sieve/chunks.hpp): pieces of it
 //     end
+//
+// A `chunks` entry matches under `chunk-match-v1`: bytes are withheld when they hold two different
+// chunks of one entry (or its only chunk, for a file of one chunk), wherever they sit; chunks of a
+// single repeated byte are never counted. So a piece of a listed file, cut out anywhere and
+// written anywhere (a unit of a line, a page of a book, bytes decoded from text, another file), is
+// recognised once it holds two whole chunks of it after falling into step with its cuts: measured
+// on random data, a piece of 1 KB is caught about two times in three, 1.5 KB 86%, 2 KB 98%.
 //
 // A picture matches a pdq entry under `pdq-match-v1`: PDQ's quality at least 50 (plainer pictures
 // hash too alike to tell apart), and any of its eight orientations within 31 bits, the threshold
@@ -28,12 +36,13 @@
 // (image and video units, covers) by PDQ; text as a file written out (vault_decode.hpp), never by
 // what it says. It is for known files and pictures.
 // The built-in entries are harmless tests (as antivirus software ships the EICAR test file), so the
-// mechanism can be seen working and checked: the 16 bytes "sieve vault test", and a test picture
-// (test_picture below) by PDQ.
+// mechanism can be seen working and checked: the 16 bytes "sieve vault test", a test picture
+// (test_picture below) by PDQ, and a test file (test_file_bytes) by its chunks.
 #pragma once
 
 #include <cstdint>
 #include <filesystem>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -49,8 +58,10 @@ struct VaultWithheld : std::runtime_error
 
 namespace vault {
 
-inline constexpr const char* kVersion = "sieve-vault-v2";
+inline constexpr const char* kVersion = "sieve-vault-v3";
+inline constexpr const char* kVersion2 = "sieve-vault-v2"; // still read: no chunks
 inline constexpr const char* kVersion1 = "sieve-vault-v1"; // still read: sha256 entries only
+inline constexpr const char* kChunkMatch = "chunk-match-v1";
 inline constexpr const char* kPdqMatch = "pdq-match-v1";
 inline constexpr int kPdqMaxDistance = 31, kPdqMinQuality = 50;
 
@@ -78,14 +89,25 @@ std::vector<PictureHash> picture_hashes(const std::vector<uint8_t>& bytes);
 // blocks). Noise no photograph resembles, so it withholds nothing real; its PDQ hash is built in.
 std::vector<uint8_t> test_picture_rgba(); // 64 * 64 * 4 bytes
 
+// The test file: 4,096 bytes, SHA-256 chained from "sieve vault test file" (the digest, then the
+// digest of that, 128 times). Its chunks are a built-in `chunks` entry (its whole-file hash is not
+// listed), so any piece of it of a few hundred bytes is withheld: the chunk check, seen working.
+std::vector<uint8_t> test_file_bytes();
+
+// A file's `chunks` entry line (without its end of line): its cdc-v1 chunks, less those of one
+// repeated byte and less any in `common` (chunks found in ordinary files, which would match
+// unrelated things). Empty when no chunk is left.
+std::string chunks_entry(const std::vector<uint8_t>& bytes, const std::set<std::string>& common = {});
+
 // Throws VaultWithheld when withheld; `what` names what is refused (a path, or "the unit").
 void check_sha256(const std::string& sha256_hex, const std::string& what);
 void check_bytes(const std::vector<uint8_t>& bytes, const std::string& what);
 // Where the SHA-256 is already known: checks it, then the bytes as a picture (when they are one).
 void check_known(const std::vector<uint8_t>& bytes, const std::string& sha256_hex, const std::string& what);
-// A file on disk whose SHA-256 is already known: checks it, then, if the file is a picture (by its
-// first bytes, or a .tga name), reads it and checks its frames by PDQ.
-void check_file(const std::filesystem::path& file, const std::string& sha256_hex, const std::string& what);
+// A file on disk, read once: its SHA-256 (returned) and its chunks worked out from the same blocks
+// and checked; then, if the file is a picture (by its first bytes, or a .tga name), its frames by
+// PDQ. Throws VaultWithheld when withheld.
+std::string hash_checked_file(const std::filesystem::path& file, const std::string& what);
 
 // The state, for `sieve vault` and the hallway: how many entries, from which files, and whether it
 // has failed closed (and why).
@@ -93,6 +115,7 @@ struct Status
 {
     size_t builtin = 0, loaded = 0;          // entries compiled in, and from files
     size_t sha256 = 0, pdq = 0;              // all entries, of each kind
+    size_t chunk_files = 0, chunks = 0;      // `chunks` entries, and the chunks in them
     std::vector<std::string> files;          // the vault files read
     bool failed_closed = false;
     std::string error;                       // why, when it has
@@ -102,8 +125,9 @@ Status status();
 // A vault file's text, parsed (throws on anything malformed). For `sieve vault --parse`.
 struct Entries
 {
-    std::vector<std::string> sha256, pdq; // lower-case hex
-    size_t size() const { return sha256.size() + pdq.size(); }
+    std::vector<std::string> sha256, pdq;       // lower-case hex
+    std::vector<std::vector<std::string>> chunks; // one per `chunks` entry: its chunks' SHA-256s
+    size_t size() const { return sha256.size() + pdq.size() + chunks.size(); }
 };
 Entries parse(const std::string& text);
 

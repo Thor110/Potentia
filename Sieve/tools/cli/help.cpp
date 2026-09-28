@@ -522,12 +522,13 @@ const std::vector<Page>& pages()
          {{"sieve install release.sieve --to C:/Programs/Sieve", "install a release"}}},
 
         {"vault", "What the vault withholds, and whether files are withheld.",
-         "sieve vault [FILE...] [--parse | --written | --pdq] | --test-picture FILE.png [--scale N]",
+         "sieve vault [FILE...] [--parse | --written | --pdq] | --chunks FILE... [--common FOLDER] |\n"
+         "            --test-picture FILE.png [--scale N] | --test-file FILE",
          "The vault is a list of hashes of content Sieve refuses to show, emit or pass on\n"
          "(docs/VAULT.md). It is not a filter and cannot be turned off: withheld content keeps its\n"
          "address and place, so every count stays exact, but nothing of it is shown, saved,\n"
          "located, installed, mapped or exported. Entries are built in, and every *.vault file\n"
-         "(sieve-vault-v1: hashes only) in the vault folder beside the programs adds to them; a\n"
+         "(sieve-vault-v3: hashes only) in the vault folder beside the programs adds to them; a\n"
          "vault file that cannot be read fails the vault closed, withholding everything.\n"
          "With no FILE, says how many entries are loaded and from where. With FILEs, says whether\n"
          "each is withheld (exit 3 if any is).\n"
@@ -537,17 +538,25 @@ const std::vector<Page>& pages()
          "decoded: vault-decoders-v1), never by what it says. Pictures are matched by PDQ, a\n"
          "perceptual hash, so near copies (resized, recompressed, rotated, flipped, lightly\n"
          "edited) match too: every picture Sieve draws, and every file that is a picture.\n"
-         "The built-in entries are harmless tests: the 16 bytes \"sieve vault test\", and a test\n"
-         "picture (--test-picture writes it).",
+         "Files can also be listed by their content-defined chunks (cdc-v1), so a piece of one,\n"
+         "cut out anywhere and put anywhere, is recognised once it holds two of its chunks\n"
+         "(chunk-match-v1: a piece of 2 KB almost always, 1 KB about two times in three).\n"
+         "The built-in entries are harmless tests: the 16 bytes \"sieve vault test\", a test\n"
+         "picture (--test-picture writes it), and a test file listed by its chunks only\n"
+         "(--test-file writes it; any few hundred bytes of it are withheld).",
          {{"--parse", "Check that each FILE is a well-formed vault file, rather than whether it is withheld."},
           {"--written", "Read each FILE as text that may be a known file written out, and check every decoding."},
           {"--pdq", "Print each FILE's PDQ hash and quality (each frame of an animation), as PDQ's own tools write them."},
           {"--test-picture FILE.png", "Write the test picture (64 x 64), which the vault withholds, and its near copies."},
-          {"--scale N", "With --test-picture: each pixel as an N x N block (still withheld: PDQ sees the same picture)."}},
+          {"--scale N", "With --test-picture: each pixel as an N x N block (still withheld: PDQ sees the same picture)."},
+          {"--chunks", "Write a vault file (sieve-vault-v3) listing each FILE by its chunks, to standard output."},
+          {"--common FOLDER", "With --chunks: leave out chunks also found in the files under FOLDER (ordinary files), which would match unrelated things."},
+          {"--test-file FILE", "Write the test file (4,096 bytes), listed by its chunks: any piece of it of a few hundred bytes is withheld."}},
          {{"sieve vault", "how many entries, and from which files"},
           {"sieve vault found.bin", "is this file withheld?"},
           {"sieve vault --written page.txt", "is this text a withheld file written out?"},
-          {"sieve vault --test-picture t.png --scale 4", "the test picture, 256 x 256"}}},
+          {"sieve vault --test-picture t.png --scale 4", "the test picture, 256 x 256"},
+          {"sieve vault --chunks listed.bin --common ordinary/ > listed.vault", "a vault file listing a file by its chunks"}}},
 
         {"unbind", "Read a book record back: check its id, print or save its sections.",
          "sieve unbind BOOK [--pages OUT.txt] [--cover OUT.png] [--scale S]",

@@ -136,8 +136,7 @@ Manifest manifest_of_file(const fs::path& file)
     e.path = m.root;
     if (e.path.find_first_of("\t\r\n") != std::string::npos) throw std::runtime_error("a name with a tab or a line break in it cannot be listed: " + e.path);
     e.size = uint64_t(fs::file_size(file));
-    e.sha256 = sha256_file_hex(file);
-    vault::check_file(file, e.sha256, e.path); // the vault: withheld files are never located
+    e.sha256 = vault::hash_checked_file(file, e.path); // read once: its hash, and the vault's check
     m.entries.push_back(e);
     m.files = 1;
     m.bytes = e.size;
@@ -175,8 +174,7 @@ Manifest walk_folder(const fs::path& root_in)
         {
             e.path = manifest_path(d.path(), root);
             e.size = uint64_t(d.file_size());
-            e.sha256 = sha256_file_hex(d.path());
-            vault::check_file(d.path(), e.sha256, e.path); // the vault: withheld files are never located
+            e.sha256 = vault::hash_checked_file(d.path(), e.path); // read once: its hash, and the vault's check
             ++m.files;
             m.bytes += e.size;
         }

@@ -1,6 +1,6 @@
 # The vault
 
-*Built (28 September 2026): the exact check, the decoders for text, and the perceptual check for pictures (PDQ), everywhere below. Next: `chunk` entries for files split across units.*
+*Built (28 September 2026): the exact check, the decoders for text, the perceptual check for pictures (PDQ), and `chunks` entries for pieces of files, everywhere below.*
 
 A list of content that Sieve refuses to show, emit or pass on, checked
 wherever content enters Sieve, leaves it, or is shown in the hallway. The space itself is
@@ -47,7 +47,7 @@ ignored throughout, and each must account for the whole text. They cost about 0.
 order, a withheld item's address is its neighbour's plus or minus one), and an address is its
 content in another form. Nor can every encoding be caught: they are endless (a bespoke cipher, any
 compression, the address itself), and a file split across many units matches no whole-file hash
-(the `chunk` entries below are for that). What the vault does is make sure Sieve is not the one
+(the `chunks` entries below catch pieces of a couple of kilobytes and more; smaller pieces pass). What the vault does is make sure Sieve is not the one
 that hands a known file over, in the forms it shows, recognises or produces: it does not draw it,
 show its address, let it be taken, save it, or pass it on. Compressed or enciphered data looks like
 noise, which the default filters already exclude; the vault is what stays when filters are off.
@@ -83,8 +83,24 @@ walked to rather than brought in.
   ignore those hashes) or under 5 pixels either way; heavy crops (PDQ sees the whole frame, so a
   quarter cut away is a different picture); pictures reduced to a few colours (the mono and ega16
   palettes lose too much for the hash to survive); and a picture file over 8192 x 8192, which is
-  not decoded (its exact hash is still checked). A picture split across units, or hidden inside
-  another file, is the `chunk` entries' job.
+  not decoded (its exact hash is still checked). A picture file split across units, or hidden
+  inside another file, is the `chunks` entries' job.
+- **Pieces:** a file can also be listed by its content-defined chunks (`cdc-v1`,
+  `core/include/sieve/chunks.hpp`). A rolling hash over the bytes cuts wherever the last 64 bytes
+  meet a fixed condition (chunks of 64 to 1,024 bytes, about 300 on average), so where the cuts
+  fall depends on the content alone, and a piece of a file, cut out anywhere, falls into step with
+  the file's own cuts within a chunk: from there its chunks are the file's. Each chunk is named by
+  its SHA-256. The rule, `chunk-match-v1`: bytes are withheld when they hold two different chunks
+  of one entry (its only chunk, for a file of one); chunks of one repeated byte never count, and
+  two are asked for so that one chunk that ordinary files happen to share cannot match on its own.
+  Checked wherever bytes are: files (read a block at a time, so any size), units, pages and books,
+  and bytes decoded from text. **Measured** on random data, a piece of a listed file is caught
+  98% of the time at 2 KB, 86% at 1.5 KB, about two times in three at 1 KB, 22% at 600 bytes, and
+  hardly ever under 500: a text unit of a long line, a page, a book or a file of the binary line
+  is well past that; a short unit is not. Smaller chunks would catch smaller pieces at the price
+  of longer entries: that would be a new version (`cdc-v2`), never an edit of this one. The
+  Python oracle cuts independently and `tests/vectors_chunks_v1.tsv` pins both, so a list-holder's
+  tools can make entries that match Sieve's cutting exactly.
 - **Cost:** about a tenth of a millisecond for a 64 x 64 picture with all eight orientations, only
   for what is drawn or passed on; files are decoded only when their first bytes say they are a
   picture.
@@ -93,19 +109,25 @@ walked to rather than brought in.
 
 ## 4. The vault files
 
-- A format of its own (`sieve-vault-v2`), conceptually a map's cousin but holding only hashes: no
+- A format of its own (`sieve-vault-v3`), conceptually a map's cousin but holding only hashes: no
   names, paths or descriptions. Canonical, line feeds only:
 
   ```
-  sieve-vault-v2
-  entries 2
+  sieve-vault-v3
+  entries 3
   v	sha256	3b19e41d21594052df12c58b539a105951c93be229ce6e1683b6db5a2e6de1f3
   v	pdq	69b3ded065e3895c02a91ddd969247727a186104d9166bd50e7957eb7184e4bd
+  v	chunks	<64 hex digits>,<64 hex digits>,...
   end
   ```
 
   A `pdq` hash is written as PDQ's own tools write it, so a list's hashes are copied in as they
-  are. `sieve-vault-v1` files (sha256 entries only) are still read. `sieve vault` says how many
+  are. A `chunks` entry is one file: its chunks' SHA-256s, commas between.
+  `sieve vault --chunks FILE... [--common FOLDER] > list.vault` writes a whole vault file listing
+  each FILE by its chunks, less chunks of one repeated byte and less any chunk also found in the
+  files under FOLDER (a collection of ordinary files: headers and other structure that unrelated
+  files share would otherwise be listed too). `sieve-vault-v1` (sha256 only) and `-v2` (no chunks)
+  files are still read. `sieve vault` says how many
   entries are loaded, of each kind, and from which files; `sieve vault FILE...` says whether files
   are withheld; `--written` checks a text file as a file written out; `--pdq` prints a picture's
   PDQ hash and quality, so a deployment can check its hashes agree; `--parse` checks a vault file.
@@ -119,14 +141,17 @@ walked to rather than brought in.
   under agreement; obtaining the material to hash it is itself a crime. Sieve ships the mechanism,
   with its format documented, so that a deployment with legitimate access to such a list can load
   it.
-- **Test entries.** Sieve ships two harmless entries (as antivirus software ships the EICAR test
+- **Test entries.** Sieve ships three harmless entries (as antivirus software ships the EICAR test
   file), so the mechanism can be seen working and checked by CI: the SHA-256 of the 16 bytes
   "sieve vault test", withheld everywhere, as a file and written out; and the PDQ hash of the
   **test picture**, 64 x 64 grey noise in 4 x 4 blocks whose shades are SHA-256 chained from "sieve
   vault test picture" (noise no photograph resembles, so it withholds nothing real).
   `sieve vault --test-picture t.png [--scale N]` writes it: it is withheld as it is, scaled,
   rotated, recompressed as a JPEG, blurred or brightened, warped onto an image line (rgb24 or
-  rgb332), and base64'd.
+  rgb332), and base64'd. And the **test file**, 4,096 bytes SHA-256 chained from "sieve vault test
+  file", listed by its 13 chunks only (not by its whole hash): `sieve vault --test-file t.bin`
+  writes it, and any couple of kilobytes of it, between other bytes, located, or base64'd, is
+  withheld.
 
 ## 5. Keeping it in
 
@@ -146,7 +171,8 @@ rebuild. What can be done:
   entries, fail-closed, and the checks. What is hashed: a file's bytes (and a unit of a line that
   holds every byte, which is a file); a melody's MIDI file; a model's canonical `.obj`; text as a
   file written out, through the decoders (`tools/cli/vault_decode.*`); pictures by PDQ
-  (`tools/cli/pdq_hash.*` over `third_party/pdq`), both drawn and in files.
+  (`tools/cli/pdq_hash.*` over `third_party/pdq`), both drawn and in files; and all bytes by their
+  chunks (`core/src/chunks.cpp`, in the core since filters and maps can use it too).
 - Files: every file walked or located (`walk_folder`, `manifest_of_file`, `sieve locate`), every
   file installed (`install_tree`, and each file the installer unpacks from a 7z), held anchors
   added to or read from maps.
@@ -159,13 +185,33 @@ rebuild. What can be done:
 - CI: the test entry refused as a file, in a map, by both installers, and written out (as it is,
   in hex, base64 and a-p nibbles); text that is not it ("sieve vault tests") not refused; PDQ
   agreeing bit for bit with Meta's `pdqhash` on a PNG; the test picture refused as it is, scaled,
-  located, warped onto an image line and base64'd, while an ordinary picture is not; and a broken
-  vault file failing it closed.
+  located, warped onto an image line and base64'd, while an ordinary picture is not; a piece of
+  the test file refused as a file, located and base64'd; a vault file written by `--chunks`
+  catching a piece of another file, and `--common` leaving shared chunks out; the chunk vectors
+  (C++ against the oracle, and the oracle regenerated and compared); and a broken vault file
+  failing it closed.
+- Cost, measured with `--timings`: on a text line of 3,200 characters, the chunk check adds about
+  0.007 ms per bytes checked (about 10 ms over a screen of 512 items); a unit under 64 bytes has
+  no chunk to check. A located file is read once: its SHA-256 and its chunks come from the same
+  blocks (`vault::hash_checked_file`); only a file whose first bytes say it is a picture is read
+  again, whole, for PDQ.
 
 ## 7. Order of work, from here
 
-1. `chunk` entries: content-defined chunk hashes (as backup tools use to find repeated data), so a
-   piece of a listed file, split across units wherever the split falls, still matches. Only a body
-   holding the list can make them; Sieve provides the format.
-2. Documentation for deployments loading a real list (and, for lists of millions, an index for
+1. Documentation for deployments loading a real list (and, for lists of millions, an index for
    the PDQ entries: PDQ's own multi-index hashing, in place of the scan through every entry).
+
+## 8. Chunks beyond the vault
+
+Content-defined chunking is not the vault's alone: it recognises known material inside anything,
+at any offset, so it lives in the core. Uses to come: filters that mark units holding known
+material (a corpus, the dictionaries' sources, a map's files), as a novelty or provenance mark;
+maps and the locator recognising a new version of a mapped file, or a file that holds one, by
+the chunks they share. A chunk filter cannot be counted exactly (compact mode needs a ranker), so
+it would work in mark, hide and excluded modes. These come with the filter plugins.
+
+**Chunk size as a parameter** (Edward's wish): the sizes (64 / about 256 / 1,024) are fixed in
+`cdc-v1`. The plan is a family, each set of sizes its own pinned name (for example
+`cdc-v1/32-128-512`), which a `chunks` entry and a chunk filter both name, so small pieces can be
+caught where longer entries are worth it and big files cut coarsely where they are not. It comes
+with the plugins, whose parameters raise the same question.

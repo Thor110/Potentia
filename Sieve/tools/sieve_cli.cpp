@@ -30,6 +30,7 @@
 #include "cli/vault.hpp"
 #include "cli/vault_decode.hpp"
 #include "cli/timings.hpp"
+#include "sieve/chunks.hpp"
 #include "cli/map.hpp"
 #include "cli/models.hpp"
 
@@ -55,6 +56,7 @@
 #include <iostream>
 #include <iterator>
 #include <random>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -1741,8 +1743,48 @@ int cmd_unbind(const Args& a)
 int cmd_vault(const Args& a)
 {
     namespace fs = std::filesystem;
+    if (a.has("chunks"))
+    {
+        // A whole vault file on standard output, one `chunks` entry per FILE (docs/VAULT.md).
+        if (a.positional.empty()) throw std::invalid_argument("give the files to list: sieve vault --chunks FILE...");
+        std::set<std::string> common;
+        if (a.has("common"))
+        {
+            const std::string c = a.get("common");
+            const fs::path folder(std::u8string(c.begin(), c.end()));
+            if (!fs::is_directory(folder)) throw std::invalid_argument("--common expects a folder");
+            for (const auto& e : fs::recursive_directory_iterator(folder))
+                if (e.is_regular_file())
+                {
+                    const std::vector<uint8_t> b = read_file_bytes(e.path());
+                    for (const cdc::Chunk& ch : cdc::chunks(b)) common.insert(Sha256::hex(ch.sha256));
+                }
+        }
+        std::vector<std::string> lines;
+        for (const std::string& arg : a.positional)
+        {
+            const std::string line = vault::chunks_entry(read_file_bytes(fs::path(std::u8string(arg.begin(), arg.end()))), common);
+            if (line.empty()) std::cerr << "note: " << arg << " has no chunks left to list (too small, one repeated byte, or all common)\n";
+            else lines.push_back(line);
+        }
+        std::cout << vault::kVersion << "\nentries " << lines.size() << "\n";
+        for (const std::string& l : lines) std::cout << l << "\n";
+        std::cout << "end\n";
+        return 0;
+    }
+    if (a.has("test-file"))
+    {
+        const std::vector<uint8_t> b = vault::test_file_bytes();
+        const std::string out = a.get("test-file");
+        std::ofstream f(fs::path(std::u8string(out.begin(), out.end())), std::ios::binary);
+        if (!f) throw std::runtime_error("cannot write '" + out + "'");
+        f.write(reinterpret_cast<const char*>(b.data()), std::streamsize(b.size()));
+        std::cout << "wrote     " << out << "\n";
+        return 0;
+    }
     const vault::Status st = vault::status();
-    std::cout << "vault     " << st.builtin << " built in, " << st.loaded << " from files (" << st.sha256 << " sha256, " << st.pdq << " pdq)\n";
+    std::cout << "vault     " << st.builtin << " built in, " << st.loaded << " from files (" << st.sha256 << " sha256, " << st.pdq << " pdq, "
+              << st.chunk_files << " chunks: " << st.chunks << " chunks in all)\n";
     for (const auto& f : st.files) std::cout << "file      " << f << "\n";
     {
         std::cout << "decoders  " << vault::kDecoders << ":";
@@ -1750,6 +1792,8 @@ int cmd_vault(const Args& a)
         std::cout << "\n";
         std::cout << "pictures  " << vault::kPdqMatch << ": quality " << vault::kPdqMinQuality << " or more, within "
                   << vault::kPdqMaxDistance << " bits, any of 8 orientations\n";
+        std::cout << "pieces    " << vault::kChunkMatch << ": " << cdc::kVersion << " chunks (" << cdc::kMin << " to " << cdc::kMax
+                  << " bytes), two of one entry\n";
     }
     if (st.failed_closed) std::cout << "FAILED CLOSED: everything is withheld until this is fixed or removed:\n  " << st.error << "\n";
     if (a.has("test-picture"))
@@ -1773,7 +1817,7 @@ int cmd_vault(const Args& a)
             text << in.rdbuf();
             const auto entries = vault::parse(text.str());
             std::cout << "parsed    " << arg << ": " << entries.size() << " entries (" << entries.sha256.size() << " sha256, "
-                      << entries.pdq.size() << " pdq), well formed\n";
+                      << entries.pdq.size() << " pdq, " << entries.chunks.size() << " chunks), well formed\n";
             continue;
         }
         if (a.has("pdq"))
