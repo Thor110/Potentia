@@ -867,3 +867,29 @@ Media Player note-set rows, tracks/recent/favourites carry their set (ini: notes
 lines name a notes2 set before the notation; favourites.tsv a fifth column), go to a track
 rebuilds the hallway at its set. Known limits: melody-lengths-v1 and melody-ending-v1 are
 notes104 only (their duration choices); books hold notes104 only.
+One line filtered by another (FILTER-PLUGINS.md section 15; full harness run). Edward's idea,
+with the arithmetic agreed first: exclusion (not another line's content) removes only the share
+another line takes up, which is tiny; requirement multiplies shares. Built as four parts.
+(1) core/filekind: file-kinds-v1, the hallway's kind table moved to core with MID added
+(Hallway::file_type delegates); KindCounter counts and ranks files of chosen kinds on binary-v1 at
+any length (heads of <= 16 bytes through a small automaton; longer files are heads times
+256^(L-16)); BinarySieve is the binary line's stack, with compact positional/scrambled.
+binary-kind-v1 (kinds, keep) is registered for FilterLine kind "binary"; symbol-entropy-v1 no
+longer applies there. (2) core/written: not-written-v1 for text lines. Each vault reading but
+ascii85 is a machine walked into an automaton, and their union O is minimised. The binary
+reading is walked by symbol class (first, other, whitespace) as Bn (872 states), and a stack's
+count is |P| - |P&O| - |P&Bn| + |P&O&Bn|. The joint terms are walked with the two symbols named,
+cut to small per-pair automata once both are known; a joint budget falls back to judge-only.
+FilterStack combines it with plugins; make_dfa_filter is exported; dfa gained unite and
+complement. (3) Oracle: kind-vectors (583 rows) and written-vectors (585 rows, about 3 minutes):
+its own machines, its own closed form for |Bn|, and the overlap walked pair by pair. The engine
+matched all of it, and brute force at small lengths in development (43 million units on
+3-symbol alphabets at length 16). (4) CLI: sieve filters prints shares as powers of ten;
+--line binary lists the filter, stack and every kind's share (--exact); sieve check --line
+binary --file F; locate prints the kind. Hallway: binary filters in the setup menu (overlay 6,
+survivor bar), the modes on the binary line (compact closes up the survivors, titles blank), J
+between an item and its file (item_file / open_as_kind in item_save.cpp; cli::unit_file and
+image_io encode_png factored out of save_unit), and midi_to_notation in core/audio so a MIDI file
+opens as a melody (300 round trips in the tests). Measured: pages (lower27, 32) set aside
+10^-4.23, mostly base32 (any letters are base32); binary TXT about 1 in 7 at 16+ bytes, which is
+why TXT clusters are easy to find.

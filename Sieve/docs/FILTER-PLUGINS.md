@@ -519,3 +519,117 @@ C4 and G5 (about 1.5 × 10^38 tracks at 32 notes); MENUS in A minor, leaps of 5,
 with two eighths in a row at most, ending on A, C4 to E5 (about 4 × 10^40). Without the plugins (a
 filters folder not found) the player falls back to `key-v1`.
 
+
+## 15. One line filtered by another (built)
+
+Edward's idea: every line could set aside what really belongs on another. A page that is a PNG
+written out in hex is a file, not a page, and the binary line already holds that file. Two
+built-in filters do this, and both count exactly.
+
+**Exclusion and requirement.** A line can use another in two ways, and they are very different
+in size:
+
+- **Exclusion** ("not something that belongs elsewhere"): what another line counts as its own is
+  a tiny share of this line, so taking all of it away removes only that share. If the stack keeps
+  `P` units and the units that are some other line's content are `W`, the stack with exclusion
+  keeps `|P| − |P ∩ W|`. `W` is far smaller than `P`, so the count hardly moves. Taking away
+  "100% of six other lines" takes away six slivers, not six hundred percent. Exclusion is for
+  **cleanliness**: each line keeps only what is its own.
+- **Requirement** ("must be valid there as well"): every requirement multiplies the share kept,
+  `|P ∩ Q| ≈ |P| · |Q| / N` for rules that have nothing to do with each other, which is how a
+  stack of a line's own filters removes so much. Between two lines' rules the product is usually
+  empty rather than distilled.
+
+The powers of ten come off through each line's own filters; exclusion keeps the lines clean.
+`sieve filters` now prints both the kept and the set-aside shares as powers of ten of the line,
+so any stack can be measured this way.
+
+**`not-written-v1`** (text lines, and the books' title and pages; `core/src/written.cpp`) fails a
+unit that some reading of it is a file whose first bytes carry a signature (`file-kinds-v1`,
+below). The readings are the vault's decoders less ascii85 (SPECIFICATIONS §8.5), each over the
+unit's whole text: its own bytes (as it is, trimmed, and trimmed with a line feed), hex, base64,
+base32, decimal, the letters a–p, spelled-out digits, and any two symbols as bits, both ways
+round. A parameter, `readings`, checks all of them or just one. On a line of every byte
+(`bytes256`) a unit is read only as its own bytes.
+
+What it sets aside on the pages line at 32 symbols (exact; the share is display only):
+
+| Reading | `lower27` | `ascii95` | What it is on `lower27` |
+| :--- | :--- | :--- | :--- |
+| all | 10^-4.23 | 10^-3.65 | |
+| text | 10^-5.73 | 10^-3.65 | "ftyp" at the fifth letter makes an MP4 (on `ascii95`: "MZ" or "BM" first) |
+| hex | none | 10^-21.58 | no digits, and a–f alone never spell a signature |
+| base64 | none | 10^-9.41 | |
+| base32 | 10^-4.24 | 10^-10.91 | any run of letters is base32: one page in about 17,000 is an EXE, BMP or GZ |
+| decimal | none | 10^-28.01 | |
+| nibbles | 10^-11.06 | 10^-19.28 | "enfk" is 4d 5a, "MZ" |
+| spelled | 10^-35.93 | 10^-39.15 | |
+| binary | 10^-32.99 | 10^-49.35 | two letters as bits |
+
+So on the default pages line, about one page in 17,000 is a file written out. That is the whole
+effect of taking another line's content away. The largest part is base32, which reads any letters
+at all as data, so 2-byte signatures turn up by chance.
+
+**How it counts.** Each reading but binary is a small machine over the text: the decoder's own
+state, and the signature matcher's (after `p` decoded bytes, which signatures still fit). The
+matcher is decided after at most 14 bytes, and a reading whose matcher has failed is dead, so the
+machines stay small. Walked over the alphabet's symbols, each is an automaton; their union `O` is
+minimised (2,590 states on `lower27`, 9,350 on `ascii95`). The binary reading cannot be one
+automaton of that kind, because it has to remember which two symbols it has seen as well as the
+bits so far (on `lower27` that would be millions of states). But which two symbols they are
+changes nothing except which symbols it accepts next. So it is walked over what a symbol is to it
+(the first symbol, the other, or whitespace), with each class's number of symbols, as an automaton
+`Bn` of 872 states. The units a stack keeps, with `P` its plugins' automaton (every unit when
+there are none), are
+```
+kept = |P| − |P ∩ O| − |P ∩ Bn| + |P ∩ O ∩ Bn|
+```
+The last two terms are walked with the two symbols named, and only while both automata are alive.
+Once both symbols are known, only they and whitespace can follow, so the automaton from there is
+cut down to those few symbols and minimised; pairs that give the same small automaton share their
+counts. `|Bn|` from a state comes from its own table. Ranking and unranking follow from the
+counts, as for every ranker. The whole thing is exact, and it combines with plugins (a stack of
+plugins and `not-written-v1` counts and compacts). With other built-in filters it judges only,
+like any two rankers that do not imply each other. On an alphabet whose symbols take more than one
+byte of UTF-8, with the binary reading chosen, it judges only; the verdicts are the same.
+
+**Checked:**
+- Every unit of `lower27` at length 4, `ascii95` at 3 and `bytes256` at 2 (unit tests), and in
+  development every unit of 3-symbol alphabets at length 16 (43 million units each, including
+  {space, M, Z}, where readings overlap). Three things agree: the automata's verdict, the readings
+  decoded outright, and the count.
+- Survivors round-trip through rank and unrank at length 32 on three alphabets.
+- The oracle counts independently. `O` is its own Python machines, determinised and minimised.
+  `|Bn|` is in closed form: `Σ C(L, 8m) · w^(L−8m) · K(K−1) · S(m)`, where `S(m)` is the number of
+  byte strings of `m` bytes, the first below 80, that are signed or have a signed complement. The
+  overlap is walked pair by pair. 50 counts, including stacks with `max-run-data-v1` and
+  `clean-data-v1`, and 535 verdicts are in `tests/vectors_written_v1.tsv`, and CI regenerates them.
+
+**`binary-kind-v1`** (the binary line; `core/src/filekind.cpp`) keeps the files of chosen kinds
+(`kinds`: signed, text, signed-or-text, unknown, empty, any, or one kind; `keep`: keep or exclude).
+A file's kind is decided by its first 16 bytes and its size (`file-kinds-v1`: the hallway's label
+table, with MID added), so the survivors are counted and ranked exactly on a binary line of any
+length. A head of up to 16 bytes is walked byte by byte through an automaton of which signatures
+still fit and whether every byte so far is readable; a file of `L > 16` bytes is a head of 16 and
+any `L − 16` bytes after it. Every kind's share of the line (`sieve filters --line binary`),
+at 32 bytes:
+
+| Kind | Share | Kind | Share |
+| :--- | :--- | :--- | :--- |
+| ? | 10^-0.06 | ZIP | 10^-9.33 |
+| TXT | 10^-0.87 (about 1 in 7) | MP4, ELF, PDF, RAR, OGG, FLAC, MID | 10^-9.63 each |
+| EXE, BMP, GZ | 10^-4.82 each | GIF | 10^-14.15 |
+| JPG, MP3, BZ2 | 10^-7.22 each | PNG | 10^-19.27 |
+
+This is why a cluster of TXT files turns up easily on the binary line. A file reads as TXT when
+all of its first 16 bytes are readable, 226 of the 256 byte values, which is 0.883^16 ≈ 1 in 7.
+Neighbouring files share their first bytes, which are the top digits of the address, so they share
+their label too. Checked against every file of up to 2 bytes (unit tests), and against the
+oracle's own head automaton: counts at ten lengths up to 300 bytes, files by rank, and the compact
+scrambled order (`tests/vectors_kinds_v1.tsv`, 583 rows).
+
+**Between the two lines, J.** In the hallway, J on an item in hand jumps between it and its file:
+from any line, to the item's file (as F saves it, a picture at one pixel a pixel) on the binary
+line; from the binary line, a file of a kind a line holds (TXT, PNG, JPG, GIF, BMP, MID, BOOK) to
+that line, fitted to it as T fits what is warped in. A melody's MIDI file comes back as the same
+music (`midi_to_notation`, checked on 300 melodies across five note sets).

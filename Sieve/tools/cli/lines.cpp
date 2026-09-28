@@ -347,36 +347,33 @@ bool picture_withheld(const ImageFormat& format, const std::vector<uint32_t>& di
     return false;
 }
 
-void save_unit(const Line& line, const std::vector<uint32_t>& digits, const std::string& path, uint32_t scale)
+std::vector<uint8_t> unit_file(const Line& line, const std::vector<uint32_t>& digits, uint32_t scale)
 {
     if (unit_withheld(line, digits)) throw VaultWithheld("withheld by the vault: the unit");
     switch (line.kind)
     {
     case LineKind::Text:
     {
-        std::ofstream out(std::filesystem::path(path), std::ios::binary);
-        if (!out) throw std::runtime_error("cannot write '" + path + "'");
         // On a line that holds every byte, a digit is a byte: the file is the unit exactly, and
         // nothing may be encoded or appended.
+        std::vector<uint8_t> out;
         if (line.alphabet && holds_all_bytes(*line.alphabet))
         {
-            for (uint32_t d : digits) out.put(char(static_cast<unsigned char>(d)));
-            return;
+            for (uint32_t d : digits) out.push_back(uint8_t(d));
+            return out;
         }
         // Exactly the unit. A trailing newline is added only where the alphabet cannot hold one
         // itself, as a courtesy so the file does not end mid-line; on an alphabet that can (see
         // ascii96), the file IS the unit, byte for byte, and adding anything would spoil that.
-        out << utf8_encode(line.space.text_of(digits));
-        if (!line.alphabet || !line.alphabet->contains(U'\n')) out << "\n";
-        return;
+        const std::string t = utf8_encode(line.space.text_of(digits));
+        out.assign(t.begin(), t.end());
+        if (!line.alphabet || !line.alphabet->contains(U'\n')) out.push_back('\n');
+        return out;
     }
     case LineKind::Audio:
     {
         const std::string midi = notes_to_midi(note_set_of(line.space.symbols_id()), digits);
-        std::ofstream out(std::filesystem::path(path), std::ios::binary);
-        if (!out) throw std::runtime_error("cannot write '" + path + "'");
-        out.write(midi.data(), static_cast<std::streamsize>(midi.size()));
-        return;
+        return std::vector<uint8_t>(midi.begin(), midi.end());
     }
     case LineKind::Image:
     case LineKind::Video:
@@ -391,10 +388,20 @@ void save_unit(const Line& line, const std::vector<uint32_t>& digits, const std:
             for (uint32_t y = 0; y < H; ++y)
                 for (uint32_t x = 0; x < W; ++x)
                     sheet[size_t(y) * sheet_w + f * (W + gap) + x] = px[size_t(f) * W * H + size_t(y) * W + x];
-        write_png(path, sheet_w, H, sheet, scale);
-        return;
+        const std::string png = encode_png(sheet_w, H, sheet, scale);
+        return std::vector<uint8_t>(png.begin(), png.end());
     }
     }
+    return {};
+}
+
+void save_unit(const Line& line, const std::vector<uint32_t>& digits, const std::string& path, uint32_t scale)
+{
+    const std::vector<uint8_t> bytes = unit_file(line, digits, scale);
+    std::ofstream out(std::filesystem::path(path), std::ios::binary);
+    if (!out) throw std::runtime_error("cannot write '" + path + "'");
+    out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    if (!out) throw std::runtime_error("cannot write '" + path + "'");
 }
 
 } // namespace sieve::cli

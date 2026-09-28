@@ -599,7 +599,7 @@ void Hallway::draw_in_hand(float W, float H)
         text(x + 14, cy, l, 1, ink);
         cy += 10;
     }
-    text(x + 14, y + ph - 16, tr(bk.parts ? "hand.keys.book" : bk.model ? "hand.keys.model" : "hand.keys"), 1, ink);
+    text(x + 14, y + ph - 16, tr(bk.parts ? "hand.keys.book" : bk.model ? "hand.keys.model" : bk.is_file ? "hand.keys.file" : "hand.keys"), 1, ink);
 }
 
 // COST: what it costs to name the thing in your hand.

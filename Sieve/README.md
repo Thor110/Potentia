@@ -223,6 +223,8 @@ The rain only ever falls as characters the font can actually draw, so it never b
 
 **Saving an item: F.** Holding an item, press **F** on any tab to save it as a file, wherever you choose: a page as text, a picture as a PNG, a video's frames side by side in one PNG, notes as a MIDI file, a model as its `.obj`, a book as text (its title, then its pages), and a file on the binary line as exactly its bytes, named as V would name it.
 
+**Between an item and its file: J.** Holding an item on any line, press **J** to go to its file on the binary line: the same file F would save (a picture at one pixel a pixel), with the item's title. Holding a file on the binary line, press **J** to open it on the line that holds its kind: text on the pages line, a PNG, JPG, GIF or BMP on the image line (an animated GIF on the video line), a MIDI file on the audio line, and a book record on the books line, fitted to the line as T fits what you warp in. So J twice takes an item to its file and back.
+
 Every row on the COST tab is the same number written a different way, which is the point:
 
 ```
@@ -287,7 +289,7 @@ What limits a line in practice is the machine. An address is one number held in 
     - **Positional:** slot *k* holds survivor number *k*.
     - **Scrambled:** the survivor numbers are shuffled with the key, so neighbours are unrelated survivors.
     - **Guided:** the guided line is restricted to survivors. Every symbol that could not lead to a survivor is removed from the model's tables as the coder goes, so every point on the line is a survivor, and likely survivors own the long stretches.
-- **Filters**, each with a tickbox and a description.
+- **Filters**, each with a tickbox and a description. Two of them measure one line by another. **not-written** (pages) leaves out a page that some reading of it (hex, base64, base32, the letters a to p, two letters as bits, and so on) turns into a file with a signature, a PNG or a ZIP written out, since that file has its own place on the binary line; on 32-letter pages it takes away about one page in 17,000. **binary-kind** (binary) keeps the files of chosen kinds, as their own first bytes say (PNG, ZIP, MID, TXT, ...), so the binary line can be walked through nothing but PNGs.
 - **Parameters**, shown under a filter when it is ticked. Numbers step with Left/Right; a dictionary or model cycles through the registered ones.
 
 Space/Right ticks or changes a row and Left steps back; with the mouse, click to tick or change and right-click to step back. Esc, F or a click outside closes the list and saves it to `sieve-filters.ini` next to the executable (or wherever `--filters PATH` points). The file is plain text and may be edited by hand:

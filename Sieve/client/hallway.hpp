@@ -408,6 +408,9 @@ public:
         // what file_type() reads its kind from.
         uint64_t file_size = 0;
         std::vector<uint8_t> head;
+        // Its place on binary-v1 itself (positional, no title), whatever the ordering or filters:
+        // what its bytes are worked out from (file_of).
+        std::optional<BigUint> content;
         Space::Digits title, cover;                  // a titled line: its title, and its cover if it has one
         // The vault (tools/cli/vault.hpp): withheld content keeps its place but is never shown,
         // taken, saved or passed on. A file's is worked out with its bytes (file_withheld).
@@ -425,7 +428,7 @@ public:
     // length. Blank without titles.
     Space::Digits title_for_name(const std::string& name) const;
     const BinarySpace::Bytes& file_of(const Book& b);
-    BigUint memo_index_;
+    BigUint memo_index_, memo_content_;
     std::string memo_hex_;
     BinarySpace::Bytes memo_file_;
     bool memo_hex_ok_ = false, memo_file_ok_ = false;
@@ -1009,6 +1012,13 @@ public:
     void save_in_hand_to(const std::string& path);
 private:
     void save_in_hand();
+    // J: between an item and its file. On any other line, the item in hand as the file F saves
+    // (a picture at one pixel a pixel) is found on the binary line; on the binary line, a file
+    // whose kind is one a line holds (TXT, PNG, JPG, GIF, BMP, MID, BOOK) is opened on that line,
+    // fitted to it as T would fit it.
+    void jump_kind();
+    std::vector<uint8_t> item_file(const Book& bk, std::string& name);
+    void open_as_kind(const std::vector<uint8_t>& bytes);
     std::string prepare_save();
     void item_save_poll();
     std::string binary_file_name(const Book& bk, const std::string& sha);
@@ -1215,6 +1225,11 @@ private:
     // the right wall's slots as empty, and these two convert between a file's place on the line
     // and its place in the loop (the same number on every other line).
     std::unique_ptr<BinarySpace> binary_space_;
+    // Its filters (binary-kind-v1, sieve/filekind.hpp), rebuilt when its length changes; null if
+    // they failed to build.
+    LineFilters binary_filters_;
+    std::unique_ptr<BinarySieve> binary_sieve_;
+    void rebuild_binary_sieve();
     BigUint loop_pos(const BigUint& unit) const;   // unit index -> loop position
     BigUint unit_of_pos(const BigUint& pos) const; // loop position (left-wall slot) -> unit index
     // How many units the current line holds: its loop's count, except on binary (see above).

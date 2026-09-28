@@ -4,8 +4,10 @@
 #include "sieve/dfa.hpp"
 #include "sieve/plugin.hpp"
 #include "sieve/sha256.hpp"
+#include "sieve/written.hpp"
 
 #include <algorithm>
+#include <optional>
 #include <stdexcept>
 
 namespace sieve {
@@ -308,13 +310,31 @@ FilterStack::FilterStack(const FilterLine& whole, const std::vector<Entry>& entr
         if (covers) compact_ = filters_[i]->ranker();
     }
     // A stack of plugins only: their automata combined into one (the units every one accepts),
-    // which ranks the stack exactly when its table fits.
+    // which ranks the stack exactly when its table fits. With not-written-v1 among them, its rule
+    // counts the units the plugins keep that it keeps too (sieve/written.hpp).
     if (!compact_ && filters_.size() > 1)
     {
         bool all_plugins = true;
+        std::shared_ptr<const WrittenRule> written;
+        size_t written_count = 0;
         for (const auto& f : filters_)
-            if (!plugin_dfa(*f)) all_plugins = false;
-        if (all_plugins)
+            if (auto w = written_rule_of(*f))
+            {
+                written = w;
+                ++written_count;
+            }
+            else if (!plugin_dfa(*f)) all_plugins = false;
+        if (all_plugins && written_count == 1)
+        {
+            std::optional<Dfa> keep;
+            for (const auto& f : filters_)
+                if (const Dfa* d = plugin_dfa(*f)) keep = keep ? intersect(*keep, *d) : *d;
+            std::string why;
+            own_ranker_ = written_ranker(written, keep ? &*keep : nullptr, line.length, why);
+            if (own_ranker_) compact_ = own_ranker_.get();
+            else blocker_ = why;
+        }
+        else if (all_plugins && written_count == 0)
         {
             Dfa d = *plugin_dfa(*filters_[0]);
             for (size_t i = 1; i < filters_.size(); ++i) d = intersect(d, *plugin_dfa(*filters_[i]));

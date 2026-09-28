@@ -397,7 +397,23 @@ const std::vector<Page>& pages()
          "           the hallway falls back to hide.\n"
          "This command lists every filter for the line with its description, parameters and\n"
          "which other filters it implies, then the stack's id (a hash of every filter, version,\n"
-         "parameter and data file) and, where it can be counted, the exact number of survivors.",
+         "parameter and data file) and, where it can be counted, the exact number of survivors,\n"
+         "what the stack sets aside, and both as powers of ten of the line.\n"
+         "\n"
+         "One line can be filtered by what belongs on another. not-written-v1 (the text line and\n"
+         "the books' title and pages) fails a unit that some reading of it (its own bytes, hex,\n"
+         "base64, base32, decimal, the letters a-p, spelled-out digits, or any two symbols as\n"
+         "bits) turns into a file whose first bytes carry a signature (PNG, ZIP, MID, ...): that\n"
+         "unit is a file written out, and has its own place on the binary line. It counts exactly,\n"
+         "alone or with plugins. On the binary line, binary-kind-v1 keeps the files of chosen\n"
+         "kinds, read from their own first bytes (file-kinds-v1), and lists every kind's share of\n"
+         "the line:\n"
+         "  [binary]\n"
+         "  mode = compact\n"
+         "  filters = binary-kind-v1\n"
+         "  [binary.binary-kind-v1]\n"
+         "  kinds = png                 ; signed, text, signed-or-text, unknown, empty, any, or one kind\n"
+         "  keep = keep                 ; or exclude",
          {kLine, kLineOptions,
           {"--filters PATH", "The settings file. Default: sieve-filters.ini next to the executable. A missing\n"
                              "file means nothing is ticked."},
@@ -408,6 +424,7 @@ const std::vector<Page>& pages()
           {"--params NAME=V,...", "With --plugin: parameter values (the rest take their defaults)."},
           {"--relations", "With --plugin: how its rule compares with every other custom filter for the line (same,\n"
                           "stricter or looser, exactly, over every length): duplicates show up here."},
+          {"--exact", "With --line binary: every kind's count in full, beside its share of the line."},
           {"--judge FILE", "With --plugin: judge each line of a UTF-8 text file as one unit of its own length, and\n"
                            "print pass, FAIL, or unspellable (a character the line does not have) beside it. Lines\n"
                            "starting with # are comments."}},
@@ -416,6 +433,7 @@ const std::vector<Page>& pages()
           {"sieve filters --plugin data/filters/moby-grammar-v1.sfilter --judge sentences.txt", "a grammar's verdict on each sentence"},
           {"sieve filters --length 1000", "the same stack judged at paragraph scale"},
           {"sieve filters --line image", "the filters the image line offers"},
+          {"sieve filters --line binary --length 32", "the binary line's filters, and every kind's share of it"},
           {"sieve filters --line books --length 400 --book-pages 3", "the books line's three stacks and surviving books"}}},
 
         {"check", "Run content through every filter and show which pass.",
@@ -428,7 +446,11 @@ const std::vector<Page>& pages()
          "With --book, a book record (sieve bind) is judged by the books line's filters instead:\n"
          "its cover, its title and all its pages as one text. The books line takes the record's\n"
          "own shape (as many pages as it has, or --book-pages N); a passing book gets its\n"
-         "survivor number and its compact addresses on the books line.",
+         "survivor number and its compact addresses on the books line.\n"
+         "\n"
+         "With --line binary, a file (--file PATH) is judged by the [binary] filters: its kind,\n"
+         "each filter's verdict and, if the stack keeps it, its survivor number and compact\n"
+         "addresses. The line is --length bytes long (at least the file's size; 32 by default).",
          {kLine, kLineOptions,
           {"--filters PATH", "The settings file. Default: sieve-filters.ini next to the executable."},
           {"--file PATH", "Read the input from a file instead of the command line."},
@@ -436,7 +458,8 @@ const std::vector<Page>& pages()
          {{"sieve check --length 32 \"It was the best of times\"", "every text filter's verdict"},
           {"sieve check --length 1000 --file chapter1.txt", "a whole text, 1000 characters per unit"},
           {"sieve check --line image --file sprite.png", "the image filters on a picture"},
-          {"sieve check --book tests/example_book_v1.book", "a whole book: cover, title and pages"}}},
+          {"sieve check --book tests/example_book_v1.book", "a whole book: cover, title and pages"},
+          {"sieve check --line binary --file picture.png", "a file's kind, and where it stands among the kept files"}}},
 
         {"bind", "Bind a title, a cover and pages into a book record.",
          "sieve bind --out FILE.book [--title TEXT] [--cover PICTURE] [--pages FILE] [--length N] [--mode MODE] [--key K]",
@@ -466,7 +489,8 @@ const std::vector<Page>& pages()
          "A file is one unit of the binary line (every file up to N bytes, binary-v1): its\n"
          "positional address is its own hex dump plus 0101...01, one 01 for each of its bytes.\n"
          "The address depends only on the file, not on the line's length, so it is the file's\n"
-         "name in the space; the SHA-256 is its short identity. A folder is walked to the\n"
+         "name in the space; the SHA-256 is its short identity. Its kind (PNG, ZIP, TXT, ...) is\n"
+         "read from its first bytes (file-kinds-v1). A folder is walked to the\n"
          "bottom and listed as a manifest (sieve-manifest-v1): every folder and file, each file's\n"
          "size and SHA-256, sorted, in one canonical text, so the same tree always gives the same\n"
          "manifest, and the manifest's own SHA-256 names the whole tree. Links are skipped.\n"

@@ -9,6 +9,8 @@
 #include "sieve/canon.hpp"
 #include "sieve/chunks.hpp"
 #include "sieve/dfa.hpp"
+#include "sieve/filekind.hpp"
+#include "sieve/written.hpp"
 #include "sieve/plugin.hpp"
 #include "sieve/compact.hpp"
 #include "sieve/corridor.hpp"
@@ -1814,7 +1816,7 @@ void test_filters(const std::string& dir)
     CHECK(find_filter("words") == find_filter("words-v2")); // the newest version
     CHECK(find_filter("words-v1") != find_filter("words-v2"));
     CHECK(find_filter("nonsense") == nullptr);
-    CHECK(filters_for(text_line(8)).size() == 10);
+    CHECK(filters_for(text_line(8)).size() == 11); // not-written-v1 joined the ten
     const FilterLine image{"image", "image/mono/10x10", 2, 100, nullptr, 10, 10, 1};
     CHECK(filters_for(image).size() == 2); // symbol-entropy, neighbour-agreement
 
@@ -2682,6 +2684,326 @@ void test_filter_vectors(const std::string& dir)
     CHECK(n == 997); // a truncated or emptied vector file must fail, not pass quietly
 }
 
+
+// ---------------------------------------------------------------- file kinds and not-written
+
+std::vector<std::vector<std::string>> read_rows(const std::string& path)
+{
+    std::vector<std::vector<std::string>> rows;
+    std::ifstream in(path);
+    CHECK(static_cast<bool>(in));
+    std::string line;
+    while (std::getline(in, line))
+    {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line.empty() || line[0] == '#') continue;
+        std::vector<std::string> f;
+        size_t start = 0;
+        for (size_t i = 0; i <= line.size(); ++i)
+            if (i == line.size() || line[i] == '\t') { f.push_back(line.substr(start, i - start)); start = i + 1; }
+        rows.push_back(std::move(f));
+    }
+    return rows;
+}
+
+std::vector<uint8_t> from_hex_bytes(const std::string& h)
+{
+    std::vector<uint8_t> b;
+    if (h == "-") return b;
+    for (size_t i = 0; i + 1 < h.size(); i += 2) b.push_back(uint8_t(std::stoul(h.substr(i, 2), nullptr, 16)));
+    return b;
+}
+
+FilterStack::Entry kind_entry(const std::string& kinds, const std::string& keep)
+{
+    return {find_filter("binary-kind-v1"), {{"kinds", kinds}, {"keep", keep}}};
+}
+
+// file-kinds-v1 and binary-kind-v1 against the oracle: kinds of chosen and random files, the
+// survivors of each kind set on lines of several lengths, survivors by rank, and the compact
+// scrambled order.
+void test_kind_vectors(const std::string& path)
+{
+    int n = 0;
+    std::map<std::string, std::unique_ptr<KindCounter>> counters;
+    auto counter = [&](const std::string& N, const std::string& kinds, const std::string& keep) -> const KindCounter& {
+        auto& c = counters[N + "/" + kinds + "/" + keep];
+        if (!c)
+        {
+            KindSet s = kind_set_of(kinds);
+            if (keep == "exclude")
+                for (auto& f : s) f = f ? 0 : 1;
+            c = std::make_unique<KindCounter>(std::stoull(N), s);
+        }
+        return *c;
+    };
+    for (const auto& f : read_rows(path))
+    {
+        bool ok = false;
+        if (f[0] == "kind" && f.size() == 4)
+        {
+            const auto b = from_hex_bytes(f[1]);
+            ok = file_kind(b, std::stoull(f[2])) == f[3];
+        }
+        else if (f[0] == "count" && f.size() == 5) ok = counter(f[1], f[2], f[3]).count().to_decimal() == f[4];
+        else if (f[0] == "file" && f.size() == 6)
+        {
+            const KindCounter& c = counter(f[1], f[2], f[3]);
+            const BigUint k = BigUint::from_decimal(f[4]);
+            const auto want = from_hex_bytes(f[5]);
+            ok = c.unrank(k) == want && c.rank(want) == k;
+        }
+        else if (f[0] == "compact" && f.size() == 8)
+        {
+            const BinarySpace space(std::stoull(f[1]), f[2]);
+            const BinarySieve bs(space, {kind_entry(f[3], f[4])});
+            const BigUint index = BigUint::from_decimal(f[6]), number = BigUint::from_decimal(f[7]);
+            const auto file = bs.counter().unrank(number);
+            ok = bs.id() == f[5] && bs.index_of(file, AddressMode::Scrambled) == index && bs.file_at(index, AddressMode::Scrambled) == file &&
+                 bs.rank_of_index(index, AddressMode::Scrambled) == number && bs.index_of(file, AddressMode::Positional) == number;
+        }
+        CHECK(ok);
+        if (!ok)
+        {
+            std::cerr << "  kind vector mismatch:";
+            for (const auto& x : f) std::cerr << " " << x;
+            std::cerr << "\n";
+        }
+        ++n;
+    }
+    std::cout << "file-kind vectors checked: " << n << "\n";
+    CHECK(n >= 500);
+}
+
+// The kinds' counts, every file of up to 2 bytes walked (the oracle's vectors reach further); a BinarySieve's verdicts, and its
+// compact orderings round the survivors both ways.
+void test_kinds()
+{
+    for (const std::string set : {"signed", "text", "unknown", "empty", "exe", "gz", "any", "signed-or-text"})
+    {
+        const KindCounter k(2, kind_set_of(set));
+        uint64_t n = 0;
+        bool ok = true;
+        auto visit = [&](const std::vector<uint8_t>& f) {
+            if (!k.passes(f, f.size())) return;
+            if (n % 257 == 0) ok = ok && k.rank(f) == BigUint(n) && k.unrank(BigUint(n)) == f;
+            ++n;
+        };
+        visit({});
+        for (int L = 1; L <= 2; ++L)
+        {
+            std::vector<uint8_t> f(size_t(L), 0);
+            for (;;)
+            {
+                visit(f);
+                int i = L;
+                while (i > 0 && ++f[size_t(i - 1)] == 0) --i;
+                if (i == 0) break;
+            }
+        }
+        CHECK(ok);
+        CHECK(k.count() == BigUint(n));
+    }
+    // A sieve on a 40-byte line: every survivor it hands out passes, and comes back to its place.
+    const BinarySpace space(40, "sieve");
+    const BinarySieve bs(space, {kind_entry("signed", "keep")});
+    std::mt19937_64 rng(40);
+    for (int i = 0; i < 200; ++i)
+    {
+        std::string h;
+        for (int d = 0; d < 110; ++d) h += "0123456789abcdef"[rng() % 16];
+        const BigUint index = BigUint::mod(BigUint::from_hex(h), bs.count());
+        for (AddressMode m : {AddressMode::Positional, AddressMode::Scrambled})
+        {
+            const auto f = bs.file_at(index, m);
+            CHECK(bs.passes(f, f.size()) && is_signed_kind(file_kind(f, f.size())));
+            CHECK(bs.index_of(f, m) == index);
+        }
+    }
+    CHECK(bs.first_failure(std::vector<uint8_t>{'a', 'b'}, 2) == "binary-kind-v1");
+    CHECK(throws([&] { (void)bs.index_of({'a', 'b'}, AddressMode::Positional); }));
+}
+
+FilterLine alphabet_line(const Alphabet& a, uint32_t L) { return {"text", a.id(), a.size(), L, &a, 0, 0, 0}; }
+
+// not-written-v1 against the oracle (verdicts, and survivors counted by its own walk and closed
+// form), then against itself: the automata's verdict and the readings decoded outright agree on
+// every unit of short lines, the count is the brute force's, and survivors round-trip by rank.
+void test_written_vectors(const std::string& dir)
+{
+    const TestResources none(nullptr, nullptr);
+    int n = 0;
+    const FilterSpec* spec = find_filter("not-written-v1");
+    CHECK(spec != nullptr);
+    if (!spec) return;
+    std::map<std::string, std::shared_ptr<const PluginDef>> plugins;
+    for (const auto& f : read_rows(dir + "vectors_written_v1.tsv"))
+    {
+        bool ok = false;
+        if (f[0] == "judge" && f.size() == 5)
+        {
+            const Alphabet& a = alphabet_of(f[1]);
+            const auto bytes = from_hex_bytes(f[3]);
+            const std::u32string text = utf8_decode(std::string(bytes.begin(), bytes.end()));
+            std::optional<WrittenReading> r;
+            std::vector<uint32_t> unit;
+            for (char32_t c : text) unit.push_back(*a.digit_of(c));
+            if (holds_all_bytes(a)) r = written_as_bytes(unit);
+            else r = written_as(text, written_mask_of(f[2]));
+            const std::string got = r ? r->decoder + ":" + r->kind : "-";
+            ok = got == f[4];
+            // The automata give the same verdict.
+            const bool by_rule = written_by_rule(*written_rule(a, written_mask_of(f[2])), unit);
+            ok = ok && by_rule == r.has_value();
+        }
+        else if (f[0] == "count" && (f.size() == 5 || f.size() == 7))
+        {
+            const Alphabet& a = alphabet_of(f[1]);
+            const uint32_t L = uint32_t(std::stoul(f[3]));
+            std::vector<FilterStack::Entry> entries{{spec, {{"readings", f[2]}}}};
+            std::unique_ptr<FilterSpec> plug;
+            if (f.size() == 7)
+            {
+                auto& p = plugins[f[5]];
+                if (!p) p = load_plugin_file(dir + "../data/filters/" + f[5] + ".sfilter");
+                plug = std::make_unique<FilterSpec>(plugin_spec(p));
+                FilterValues v;
+                if (f[6] != "-") v[f[6].substr(0, f[6].find('='))] = f[6].substr(f[6].find('=') + 1);
+                entries.push_back({plug.get(), v});
+            }
+            const FilterStack st(alphabet_line(a, L), entries, none);
+            ok = st.ranker() && st.ranker()->count().to_decimal() == f[4];
+            if (!ok) std::cerr << "  (" << (st.ranker() ? st.ranker()->count().to_decimal() : "no ranker: " + st.compact_blocker()) << ")\n";
+        }
+        CHECK(ok);
+        if (!ok)
+        {
+            std::cerr << "  written vector mismatch:";
+            for (const auto& x : f) std::cerr << " " << x;
+            std::cerr << "\n";
+        }
+        ++n;
+    }
+    std::cout << "not-written vectors checked: " << n << "\n";
+    CHECK(n >= 550);
+
+    // Every unit of short lines: the verdicts agree, and the count is the brute force's.
+    for (const auto& [id, L] : std::vector<std::pair<std::string, uint32_t>>{{"lower27", 4}, {"ascii95", 3}, {"bytes256", 2}})
+    {
+        const Alphabet& a = alphabet_of(id);
+        const FilterStack st(alphabet_line(a, L), {{spec, {}}}, none);
+        CHECK(st.ranker() != nullptr);
+        if (!st.ranker()) continue;
+        const auto rule = written_rule(a, written_mask_of("all"));
+        std::vector<uint32_t> u(L, 0);
+        uint64_t kept = 0;
+        bool agree = true, round = true;
+        for (;;)
+        {
+            const bool pass = st.passes(u);
+            agree = agree && pass == !written_by_rule(*rule, u);
+            if (pass)
+            {
+                if (kept % 1013 == 0) round = round && st.ranker()->rank(u) == BigUint(kept) && st.ranker()->unrank(BigUint(kept)) == u;
+                ++kept;
+            }
+            size_t i = L;
+            while (i > 0 && ++u[i - 1] == a.size()) u[--i] = 0;
+            if (i == 0) break;
+        }
+        CHECK(agree);
+        CHECK(round);
+        CHECK(st.ranker()->count() == BigUint(kept));
+    }
+
+    // At the hallway's length, on each alphabet: survivors by rank pass and come back to their
+    // rank; units written out under each reading fail, and are found again by the rule.
+    std::mt19937_64 rng(2026);
+    for (const std::string id : {"lower27", "babel29", "ascii95"})
+    {
+        const Alphabet& a = alphabet_of(id);
+        const FilterStack st(alphabet_line(a, 32), {{spec, {}}}, none);
+        CHECK(st.ranker() != nullptr);
+        if (!st.ranker()) continue;
+        for (int i = 0; i < 40; ++i)
+        {
+            std::string h;
+            for (int d = 0; d < 60; ++d) h += "0123456789abcdef"[rng() % 16];
+            const BigUint k = BigUint::mod(BigUint::from_hex(h), st.ranker()->count());
+            const auto u = st.ranker()->unrank(k);
+            CHECK(st.passes(u));
+            CHECK(st.ranker()->rank(u) == k);
+        }
+    }
+    // Written out, on purpose: a page of 32 letters with "ftyp" at 4 is an MP4 file as text; the
+    // same page reads as "MZ" in nibbles when it is "enfk" and padding; bits in two letters.
+    const Alphabet& lower = alphabet_of("lower27");
+    auto unit_of = [&](const std::string& t) {
+        std::vector<uint32_t> u;
+        for (char c : t) u.push_back(*lower.digit_of(char32_t(uint8_t(c))));
+        u.resize(32, 0);
+        return u;
+    };
+    const FilterStack st32(alphabet_line(lower, 32), {{spec, {}}}, none);
+    CHECK(!st32.passes(unit_of("abcdftyp")));
+    CHECK(!st32.passes(unit_of("enfk")));
+    CHECK(!st32.passes(unit_of("abaabbab" "ababbaba"))); // 4d 5a as bits, a = 0: "MZ", an EXE
+    CHECK(!st32.passes(unit_of("aaaaaaaa" "aabaabbb" "aaaaaaaa"))); // ff d8 ff with a = 1: a JPG, the other way round
+    CHECK(st32.passes(unit_of("hello world")));
+    std::cout << "not-written checked\n";
+}
+
+
+// MIDI read back (midi_to_notation): a melody saved as MIDI and read again, then fitted to its
+// set, sounds the same: every voice, sixteenth by sixteenth (which pitch, and where each note
+// starts), up to the rests at the end. Rests may be written with fewer events.
+std::vector<std::vector<int>> sounding(const NoteSet& set, const std::vector<uint32_t>& unit)
+{
+    std::vector<std::vector<int>> v(set.voices);
+    const size_t per = unit.size() / set.voices;
+    for (uint32_t k = 0; k < set.voices; ++k)
+    {
+        for (size_t e = 0; e < per; ++e)
+        {
+            const uint32_t d = unit[k * per + e], m = set.midi(d), n = set.sixteenths(d);
+            for (uint32_t i = 0; i < n; ++i) v[k].push_back(m == 0 ? -1 : int(m) * 2 + (i == 0 ? 1 : 0));
+        }
+        while (!v[k].empty() && v[k].back() == -1) v[k].pop_back();
+    }
+    return v;
+}
+
+void test_midi_read()
+{
+    std::mt19937_64 rng(1028);
+    const std::vector<NoteSet> sets = {note_set_of("notes104"), make_note_set(48, 84, "seEqQhHw", 1), make_note_set(48, 84, "seEqQhHw", 3),
+                                       make_note_set(36, 96, "eqhw", 2), make_note_set(60, 72, "qh", 2)};
+    int n = 0;
+    for (const NoteSet& set : sets)
+        for (int t = 0; t < 60; ++t)
+        {
+            const uint32_t L = 16;
+            std::vector<uint32_t> u(size_t(L) * set.voices);
+            for (auto& d : u) d = rng() % 3 == 0 ? uint32_t(rng() % set.duration_count()) : uint32_t(rng() % set.base()); // rests often
+            if (t == 0) std::fill(u.begin(), u.end(), 0u);                                                                   // all rests
+            const std::string midi = notes_to_midi(set, u);
+            std::vector<std::string> report;
+            const std::string notation = midi_to_notation(std::vector<uint8_t>(midi.begin(), midi.end()), set, &report);
+            const NotesCanonResult c = set.legacy ? canonicalise_notes(notation, L) : canonicalise_notes2(notation, set, L);
+            const bool ok = c.units.size() == 1 && sounding(set, c.units[0]) == sounding(set, u) && report.empty() && c.octave_shifted == 0 &&
+                            c.durations_changed == 0;
+            CHECK(ok);
+            if (!ok) std::cerr << "  midi read back differs: " << set.id() << " " << notes_to_notation(set, u) << "\n    read: " << notation << "\n";
+            ++n;
+        }
+    // Not MIDI, or cut short: refused with a reason.
+    const NoteSet set = note_set_of("notes104");
+    CHECK(throws([&] { (void)midi_to_notation({'M', 'Z', 0, 0}, set); }));
+    const std::string midi = notes_to_midi(set, std::vector<uint32_t>(8, 13 * 4 + 1));
+    CHECK(throws([&] { (void)midi_to_notation(std::vector<uint8_t>(midi.begin(), midi.begin() + 20), set); }));
+    std::cout << "MIDI read back: " << n << " melodies\n";
+}
+
 void run_all(int argc, char** argv)
 {
     test_sha256();
@@ -2696,6 +3018,7 @@ void run_all(int argc, char** argv)
     test_sieve();
     test_image();
     test_audio();
+    test_midi_read();
     test_model();
     test_guided();
     test_modelspace();
@@ -2727,6 +3050,9 @@ void run_all(int argc, char** argv)
         test_notes2(dir);
         test_plugins(dir);
         test_book_filter_vectors(dir);
+        test_kinds();
+        test_kind_vectors(dir + "vectors_kinds_v1.tsv");
+        test_written_vectors(dir);
     }
 }
 

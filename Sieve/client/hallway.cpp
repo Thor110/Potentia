@@ -47,6 +47,10 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
         // (No cover: a file's kind is read from its own first bytes instead, and shown on its front.)
         titled_[kBinaryLine] = std::make_unique<TitledSpace>(title, std::nullopt, binary_space_->size(), binary_space_->shape(), key);
     }
+    // The binary line's filters: by the files' own kinds (binary-kind-v1).
+    binary_filters_ = filters.binary;
+    modes_[kBinaryLine] = filters.binary.mode;
+    rebuild_binary_sieve();
     // Each line's filter stack and mode (sieve-filters.ini, edited in the setup menu).
     for (int i = 0; i < 4; ++i)
     {
@@ -193,6 +197,12 @@ void Hallway::move_tiles(int64_t d)
 // survivors; otherwise the line hides instead.
 FilterMode Hallway::effective_mode(int i) const
 {
+    if (i == kBinaryLine)
+    {
+        if (!binary_sieve_ || binary_sieve_->empty()) return FilterMode::Off;
+        if (modes_[i] != FilterMode::Compact) return modes_[i];
+        return binary_sieve_->count().is_zero() ? FilterMode::Hide : FilterMode::Compact;
+    }
     if (i == kBooksLine)
     {
         if (!book_sieve_ || book_sieve_->empty()) return FilterMode::Off;
@@ -209,7 +219,8 @@ FilterMode Hallway::effective_mode(int i) const
 // The models line has no filters yet (SPECIFICATIONS §12 sets out the three tiers to come).
 bool Hallway::has_filters() const
 {
-    if (on_models() || on_binary()) return false; // no filters on either yet
+    if (on_models()) return false; // no filters there yet
+    if (on_binary()) return binary_sieve_ && !binary_sieve_->empty();
     return on_books() ? book_sieve_ && !book_sieve_->empty() : !stack().empty();
 }
 
@@ -228,6 +239,17 @@ std::string Hallway::compute_filter_status() const
         else if (modes_[li_] == FilterMode::Compact)
             s += book_sieve_->can_rank() ? tr("hud.filters.no_book") : trf("hud.filters.blocked", {book_sieve_->blocker()});
         return s;
+    }
+    if (on_binary())
+    {
+        if (!has_filters()) return tr("hud.filters.none");
+        const FilterMode m = effective_mode();
+        std::string st = trf("hud.filters", {std::to_string(binary_sieve_->size()), tr(std::string("mode.") + to_string(m))});
+        if (m == FilterMode::Compact) st += trf("hud.filters.units", {short_big(binary_sieve_->count())});
+        else if (m == FilterMode::Excluded)
+            st += trf("hud.filters.excluded", {short_big(BigUint(binary_space_->size()) -= binary_sieve_->count())});
+        else if (modes_[li_] == FilterMode::Compact) st += tr("hud.filters.no_unit");
+        return st;
     }
     const FilterStack& st = stack();
     if (st.empty()) return tr("hud.filters.none");
@@ -248,7 +270,8 @@ BigUint Hallway::units_of(int i) const
     // empty (loop_pos()).
     if (i == kBinaryLine)
     {
-        BigUint m = titled_[kBinaryLine]->size();
+        // Compact: only the surviving files, closed up (their titles blank, as a compact line's are).
+        BigUint m = effective_mode(i) == FilterMode::Compact ? binary_sieve_->count() : titled_[kBinaryLine]->size();
         m -= BigUint(1);
         return loop_pos(m) += BigUint(1);
     }
@@ -378,6 +401,21 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
             // the left wall's slots hold files; the right wall is the edge.
             const uint32_t half = uint32_t(sieve::books_per_tile() / 2);
             if (slot >= half) b.empty = true;
+            else if (compact_here)
+            {
+                // Only the surviving files stand here, closed up: slot i holds the survivor whose
+                // compact address is i. Its bytes come from its survivor number (filekind.hpp).
+                b.index = unit_of_pos(b.index);
+                const BinarySpace::Bytes f = binary_sieve_->file_at(b.index, mode_);
+                b.title = titled_[kBinaryLine]->blank_title();
+                b.is_file = true;
+                b.file_size = f.size();
+                b.head.assign(f.begin(), f.begin() + std::ptrdiff_t(std::min<size_t>(16, f.size())));
+                b.content = binary_space_->index_of(f, AddressMode::Positional);
+                b.survivor = true;
+                b.survivor_number = binary_sieve_->rank_of_index(b.index, mode_);
+                b.fraction = b.index.is_zero() ? 0.0 : std::pow(10.0, b.index.log10_approx() - binary_sieve_->count().log10_approx());
+            }
             else
             {
                 b.index = unit_of_pos(b.index);
@@ -386,7 +424,13 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
                 b.title = tp.title;
                 b.is_file = true; // its bytes and hex on demand: file_of(), hex_of()
                 b.head = file_head(tp.content, 16, b.file_size);
+                b.content = tp.content;
                 b.fraction = b.index.is_zero() ? 0.0 : std::pow(10.0, b.index.log10_approx() - ts.size().log10_approx());
+                if (binary_sieve_ && !binary_sieve_->empty())
+                {
+                    b.failed_by = binary_sieve_->first_failure(b.head, b.file_size);
+                    b.passes = b.failed_by.empty();
+                }
             }
         }
         else if (on_models())
@@ -541,6 +585,32 @@ void Hallway::go_to_file(const BinarySpace::Bytes& f, bool open, const Space::Di
 {
     const TitledSpace& ts = *titled_[kBinaryLine];
     const BigUint content = binary_space_->index_of(f, AddressMode::Positional);
+    if (effective_mode() == FilterMode::Compact)
+    {
+        // Compact: a surviving file by its compact address (its title is not kept there); one the
+        // filters set aside has no shelf, and is shown in hand, as on the other lines.
+        const std::string fail = binary_sieve_->first_failure(f, f.size());
+        if (fail.empty())
+        {
+            place(binary_sieve_->index_of(f, mode_), open);
+            return;
+        }
+        Book b;
+        b.is_file = true;
+        b.index = ts.index_of({ts.blank_cover(), title ? *title : ts.blank_title(), content}, AddressMode::Positional);
+        b.title = title ? *title : ts.blank_title();
+        b.content = content;
+        b.file_size = f.size();
+        b.head.assign(f.begin(), f.begin() + std::ptrdiff_t(std::min<size_t>(16, f.size())));
+        b.passes = false;
+        b.failed_by = fail;
+        drop_in_hand();
+        in_hand_ = b;
+        hand_tab_ = 0;
+        in_hand_where_ = trf("hand.not_shelved", {fail});
+        refuse_if_withheld();
+        return;
+    }
     place(ts.index_of({cover ? *cover : ts.blank_cover(), title ? *title : ts.blank_title(), content}, mode_), open);
 }
 
@@ -807,6 +877,7 @@ bool Hallway::go_to(std::string input)
             index >>= g.scale_bits() - zoom_;
         }
         else if (on_models()) index = titled_[kModelsLine]->parse(input);
+        else if (on_binary()) index = effective_mode() == FilterMode::Compact ? binary_sieve_->parse(input) : titled_[kBinaryLine]->parse(input);
         else if (on_books()) index = effective_mode() == FilterMode::Compact ? book_sieve_->parse(input) : books_->parse(input);
         else if (effective_mode() == FilterMode::Compact) index = compact().parse(input); // a compact address, as the books show
         else if (const TitledSpace* ts = titled_here()) index = ts->parse(input);
@@ -1137,6 +1208,9 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
         break;
     case SDLK_F:
         if (in_hand_) save_in_hand();
+        break;
+    case SDLK_J:
+        if (in_hand_) jump_kind();
         break;
     case SDLK_HOME:
         tile_ = TileIndex{};
@@ -1800,50 +1874,9 @@ BigUint Hallway::unit_of_pos(const BigUint& pos) const
     return unit;
 }
 
-// Signatures ("magic numbers"): what a file's first bytes say it is. Longest and most specific
-// first; two-byte ones (MZ, BM) last, since two bytes happen by chance once in 65,536 files.
-std::string Hallway::file_type(const std::vector<uint8_t>& h, uint64_t size)
-{
-    if (size == 0) return "EMPTY";
-    auto starts = [&](std::initializer_list<int> sig, size_t at = 0) {
-        if (h.size() < at + sig.size()) return false;
-        size_t i = at;
-        for (int b : sig)
-            if (h[i++] != uint8_t(b)) return false;
-        return true;
-    };
-    auto text_at = [&](const char* s, size_t at = 0) {
-        const size_t n = std::strlen(s);
-        return h.size() >= at + n && std::memcmp(h.data() + at, s, n) == 0;
-    };
-    if (starts({0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A})) return "PNG";
-    if (starts({'7', 'z', 0xBC, 0xAF, 0x27, 0x1C})) return "7Z";
-    if (starts({0xFD, '7', 'z', 'X', 'Z', 0x00})) return "XZ";
-    if (text_at("sieve-manifest")) return "MANIFEST";
-    if (text_at("sieve-book")) return "BOOK";
-    if (text_at("GIF87a") || text_at("GIF89a")) return "GIF";
-    if (text_at("RIFF") && text_at("WAVE", 8)) return "WAV";
-    if (text_at("RIFF") && text_at("AVI ", 8)) return "AVI";
-    if (text_at("RIFF") && text_at("WEBP", 8)) return "WEBP";
-    if (text_at("ftyp", 4)) return "MP4";
-    if (starts({'P', 'K', 0x03, 0x04}) || starts({'P', 'K', 0x05, 0x06})) return "ZIP";
-    if (starts({0x7F, 'E', 'L', 'F'})) return "ELF";
-    if (text_at("%PDF")) return "PDF";
-    if (text_at("Rar!")) return "RAR";
-    if (text_at("OggS")) return "OGG";
-    if (text_at("fLaC")) return "FLAC";
-    if (starts({0xFF, 0xD8, 0xFF})) return "JPG";
-    if (text_at("ID3")) return "MP3";
-    if (text_at("BZh")) return "BZ2";
-    if (starts({0x1F, 0x8B})) return "GZ";
-    if (text_at("MZ")) return "EXE";
-    if (text_at("BM")) return "BMP";
-    // Readable text: printable ASCII, whitespace, or UTF-8's bytes above 127, all through what
-    // is known of it (a file may of course stop being text past its first bytes).
-    bool text = true;
-    for (uint8_t b : h) text = text && (b >= 0x20 || b == '\t' || b == '\n' || b == '\r') && b != 0x7F;
-    return text ? "TXT" : "?";
-}
+// What a file's first bytes say it is: file-kinds-v1 (sieve/filekind.hpp), which the binary
+// line's filters read too, so the label and the filters always agree.
+std::string Hallway::file_type(const std::vector<uint8_t>& h, uint64_t size) { return sieve::file_kind(h, size); }
 
 Space::Digits Hallway::title_for_name(const std::string& name) const
 {
@@ -1857,6 +1890,7 @@ Space::Digits Hallway::title_for_name(const std::string& name) const
 std::string Hallway::hex_of(const Book& b)
 {
     if (!b.is_file) return b.hex;
+    if (b.survivor && binary_sieve_) return binary_sieve_->hex_of(b.index); // its compact address
     if (!(memo_hex_ok_ && memo_index_ == b.index))
     {
         if (!(memo_index_ == b.index)) memo_file_ok_ = false;
@@ -1871,12 +1905,12 @@ const BinarySpace::Bytes& Hallway::file_of(const Book& b)
 {
     static const BinarySpace::Bytes kNone;
     if (!b.is_file) return kNone;
-    if (!(memo_file_ok_ && memo_index_ == b.index))
+    // By its place on binary-v1 itself, which neither the ordering nor the filters change.
+    const BigUint content = b.content ? *b.content : titled_[kBinaryLine]->parts_at(b.index, mode_).content;
+    if (!(memo_file_ok_ && memo_content_ == content))
     {
-        if (!(memo_index_ == b.index)) memo_hex_ok_ = false;
-        memo_index_ = b.index;
-        const TitledSpace::Parts tp = titled_[kBinaryLine]->parts_at(b.index, mode_);
-        memo_file_ = binary_space_->bytes_at(tp.content, AddressMode::Positional);
+        memo_content_ = content;
+        memo_file_ = binary_space_->bytes_at(content, AddressMode::Positional);
         memo_withheld_ = cli::vault::withheld_bytes(memo_file_);
         memo_file_ok_ = true;
     }
@@ -1951,10 +1985,28 @@ void Hallway::set_binary_length(uint64_t bytes)
     binary_space_ = std::make_unique<BinarySpace>(std::max<uint64_t>(1, bytes), key);
     titled_[kBinaryLine] = std::make_unique<TitledSpace>(old.title_space(), std::nullopt, binary_space_->size(), binary_space_->shape(), key);
     memo_hex_ok_ = memo_file_ok_ = false;
+    rebuild_binary_sieve();
     rebase();
 }
 
-BigUint Hallway::line_units() const { return on_binary() ? titled_[kBinaryLine]->size() : loop_.units(); }
+void Hallway::rebuild_binary_sieve()
+{
+    try
+    {
+        binary_sieve_ = std::make_unique<BinarySieve>(build_binary_sieve(*binary_space_, binary_filters_));
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "filters for the binary line: " << e.what() << "\n";
+        binary_sieve_.reset();
+    }
+}
+
+BigUint Hallway::line_units() const
+{
+    if (!on_binary()) return loop_.units();
+    return effective_mode() == FilterMode::Compact ? binary_sieve_->count() : titled_[kBinaryLine]->size();
+}
 
 // The books of one tile, slot by slot (4 edges each), drawn separately so padding can be bare.
 // `varied`: heights vary from slot to slot; else every book is the same size (audio, video).

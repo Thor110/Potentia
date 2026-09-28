@@ -559,12 +559,20 @@ are cheap and because they are the sort of thing that is lost otherwise.
 
 ## 12. Noted along the way (September 2026)
 
-- **Each line as a filter against the others** (Edward). Why should a MIDI file written out appear
-  as text on the pages line, or a picture's bytes as a book? A line could set aside units that are
-  really another line's content in disguise: a page that decodes (as the vault's decoders do: hex,
-  base64, a–p nibbles) to a valid MIDI, PNG or OBJ file, a picture whose bytes are text. The vault
-  already does this for known files; this would do it for whole kinds of file. Close to the open
-  question of which media types cross paths (§11).
+- **Each line as a filter against the others** (Edward). Built for text against the binary line:
+  `not-written-v1`, `binary-kind-v1` and J (FILTER-PLUGINS.md §15), with the arithmetic that
+  exclusion removes only the share another line takes up (10^-4.23 of 32-letter pages) while
+  requirement multiplies shares. Still open, in the same spirit:
+  - pictures whose pixels are text or a file (an image line reading of its bits);
+  - melodies whose MIDI is also valid as something else;
+  - models (`.obj` is text, so a models filter could ask that a page is not a valid model, and
+    the reverse);
+  - ascii85 in `not-written` (its groups of five are base 85: countable by comparing each group
+    with the bounds digit by digit, a second version);
+  - a check that a signed file is well formed past its signature (a PNG's chunks and CRCs): judging
+    only, since it cannot be counted.
+  The binary line as the ground the other lines stand on is already true in one direction: every
+  item's file is on it, and J goes there and back.
 - **Loudness per note** (Edward: worth having, in a later version). Each note event quiet, medium
   or loud, which triples the note symbols; for the `notes2` family, after its first version.
 - **Books of `notes2` melodies.** `sieve-book-v1` gives an audio section only a length, so a book

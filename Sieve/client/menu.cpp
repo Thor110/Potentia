@@ -1080,9 +1080,9 @@ void Menu::render()
         auto clip = [&](const std::string& t) { return text_cells(t) <= cols ? t : fit_cells(t, cols - 2) + ".."; };
         const SDL_Color edge = th.edge;
         th.edge = ink; // labels in a readable colour; the bar keeps the line's own edges
-        // Magnifying glass: opens this line's filters, on every line. The models and binary
-        // lines have no filters registered yet (plugins will add them), but their mode is kept,
-        // and both binary columns open the one binary line's filters.
+        // Magnifying glass: opens this line's filters, on every line. The models line has no
+        // filters registered yet, but its mode is kept; both binary columns open the one binary
+        // line's filters (by its files' kinds).
         {
             magnifier_[c] = {x - 2, label - 2, 20, 20};
             SDL_SetRenderDrawColor(r_, th.edge.r, th.edge.g, th.edge.b, 255);
@@ -1116,9 +1116,8 @@ void Menu::render()
         SDL_RenderRect(r_, &bar);
         const SDL_FRect inner{x + 9, top + 1, 38, len - 2};
         SDL_RenderRect(r_, &inner);
-        if (binary) continue; // no filters yet, so no survivor bar
         // What survives the ticked filters, where it can be counted exactly: a filled bar inside.
-        const StackInfo& info = stack_info(i);
+        const StackInfo& info = stack_info(binary ? 6 : i);
         if (info.survivor_bits >= 0)
         {
             const float slen = std::clamp(float(info.survivor_bits / scale_bits) * span, 3.0f, len - 4);
@@ -1132,6 +1131,7 @@ void Menu::render()
             size_t ticked = 0;
             if (i == 4)
                 for (const auto& part : cfg_.books.parts) ticked += part.enabled.size();
+            else if (binary) ticked = cfg_.binary.enabled.size();
             else if (i < 4) ticked = cfg_.lines[i].enabled.size(); // the models line has no filters yet
             if (ticked) text(r_, x, label + 82, clip(trf("map.ticked", {std::to_string(ticked)})), 1, th.edge);
         }
@@ -1164,6 +1164,7 @@ sieve::FilterLine Menu::filter_line_of(int i) const
         f = {"audio", set.id(), set.base(), s_.notes * set.voices, nullptr, 0, 0, 0};
         break;
     }
+    case 6: f = sieve::cli::binary_filter_line(s_.binary_bytes); break;
     default:
         f = {"video", "video/" + s_.video_palette + "/" + std::to_string(s_.video_w) + "x" + std::to_string(s_.video_h) + "x" + std::to_string(s_.frames),
              palette_size(s_.video_palette), clamp32(positions(s_.video_w, s_.video_h, s_.frames)), nullptr, s_.video_w, s_.video_h, s_.frames};
@@ -1204,13 +1205,42 @@ sieve::cli::FilterMode& Menu::mode_of(int line)
 const Menu::StackInfo& Menu::stack_info(int i)
 {
     if (i == 4) return book_stack_info();
-    // The models and binary lines have no filters registered yet (SPECIFICATIONS §12 sets out
-    // the models line's tiers to come; filter plugins will bring them), so there is nothing to
-    // count, only that to say.
-    if (i == 5 || i == 6)
+    // The models line has no filters registered yet (SPECIFICATIONS §12 sets out its tiers to
+    // come), so there is nothing to count, only that to say.
+    if (i == 5)
     {
-        info_[i] = StackInfo{i == 5 ? "models" : "binary", tr("status.no_filters_yet"), -1};
+        info_[i] = StackInfo{"models", tr("status.no_filters_yet"), -1};
         return info_[i];
+    }
+    // The binary line: its files' kinds, counted exactly at any length (sieve/filekind.hpp).
+    if (i == 6)
+    {
+        const sieve::cli::LineFilters& lf = cfg_.binary;
+        std::string key = "binary/" + std::to_string(s_.binary_bytes) + "/" + to_string(lf.mode) + ":";
+        for (const auto& n : lf.enabled) key += n + ",";
+        for (const auto& [n, vals] : lf.values)
+            for (const auto& [k, v] : vals) key += n + "." + k + "=" + v + ";";
+        StackInfo& info = info_[i];
+        if (info.key == key) return info;
+        info = StackInfo{key, "", -1};
+        try
+        {
+            const sieve::BinarySpace space(std::max<uint32_t>(1, s_.binary_bytes), "sieve");
+            const sieve::BinarySieve bs = sieve::cli::build_binary_sieve(space, lf);
+            if (bs.empty()) info.status = tr("status.none_units");
+            else
+            {
+                const sieve::BigUint& n = bs.count();
+                info.survivor_bits = n.is_zero() ? 0 : n.log10_approx() / std::log10(2.0);
+                info.status = trf(n.is_zero() ? "status.survivors_none" : "status.survivors",
+                                  {n.log10_approx() < 15 ? n.to_decimal() : "~10^" + fixed(n.log10_approx(), 1)});
+            }
+        }
+        catch (const std::exception& e)
+        {
+            info.status = trf("status.error", {e.what()});
+        }
+        return info;
     }
     if (line_sizes()[size_t(i)].bits > kTooLargeBits)
     {
@@ -1366,6 +1396,7 @@ std::vector<Menu::ORow> Menu::overlay_rows() const
         }
     }
     else if (overlay_ >= 0 && overlay_ < 4) add_filter_rows(rows, filter_line_of(overlay_), cfg_.lines[overlay_], -1);
+    else if (overlay_ == 6) add_filter_rows(rows, filter_line_of(6), cfg_.binary, -1);
     else return {{ORow::Kind::Mode, "", ""}}; // closed, or a line with no filters yet
     // Custom filter files that did not load, with why: never skipped without a word.
     if (otab_ == 1)
@@ -1394,6 +1425,7 @@ void Menu::toggle_all_filters(bool both_tabs)
     if (overlay_ == 4)
         for (int part = 0; part < 3; ++part) stacks.emplace_back(&cfg_.books.parts[part], book_part_line(part));
     else if (overlay_ >= 0 && overlay_ < 4) stacks.emplace_back(&cfg_.lines[overlay_], filter_line_of(overlay_));
+    else if (overlay_ == 6) stacks.emplace_back(&cfg_.binary, filter_line_of(6));
     std::vector<std::pair<sieve::cli::LineFilters*, std::string>> in_reach;
     for (auto& [lf, line] : stacks)
         for (const sieve::FilterSpec* f : sieve::filters_for(line))
@@ -1698,7 +1730,7 @@ void Menu::render_overlay(float W, float H)
     const float x = box_.x + 14;
     const size_t cols = size_t((box_.w - 60) / 8);
     text(r_, x, box_.y + 10, trf("filters.title", {tr(th.key)}), 2, title_ink);
-    text(r_, x, box_.y + 32, tr(overlay_ == 4 ? "filters.intro.books" : overlay_ >= 5 ? "filters.intro.none" : "filters.intro"), 1, grey);
+    text(r_, x, box_.y + 32, tr(overlay_ == 4 ? "filters.intro.books" : overlay_ == 6 ? "filters.intro.binary" : overlay_ == 5 ? "filters.intro.none" : "filters.intro"), 1, grey);
 
     const sieve::cli::FilterMode mode = mode_of(overlay_);
     const auto rows = overlay_rows();

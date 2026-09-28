@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <map>
 #include <initializer_list>
 #include <stdexcept>
 #include <utility>
@@ -445,6 +446,189 @@ std::string notes_to_midi(const NoteSet& set, const std::vector<uint32_t>& digit
         chunk(t);
     }
     return file;
+}
+
+// ---------------------------------------------------------------- MIDI read back
+
+std::string midi_to_notation(const std::vector<uint8_t>& m, const NoteSet& set, std::vector<std::string>* report)
+{
+    size_t at = 0;
+    auto need = [&](size_t n) {
+        if (at + n > m.size()) throw std::invalid_argument("the MIDI file ends too soon");
+    };
+    auto u32 = [&] {
+        need(4);
+        const uint32_t v = uint32_t(m[at]) << 24 | uint32_t(m[at + 1]) << 16 | uint32_t(m[at + 2]) << 8 | m[at + 3];
+        at += 4;
+        return v;
+    };
+    auto u16 = [&] {
+        need(2);
+        const uint32_t v = uint32_t(m[at]) << 8 | m[at + 1];
+        at += 2;
+        return v;
+    };
+    need(4);
+    if (!(m[0] == 'M' && m[1] == 'T' && m[2] == 'h' && m[3] == 'd')) throw std::invalid_argument("not a MIDI file (no MThd)");
+    at = 4;
+    const uint32_t header = u32();
+    if (header < 6) throw std::invalid_argument("the MIDI header is too short");
+    (void)u16(); // format: 0, 1 or 2, each read the same way (a track at a time)
+    const uint32_t tracks = u16(), division = u16();
+    if (division & 0x8000) throw std::invalid_argument("MIDI timed in SMPTE frames is not read");
+    if (division == 0) throw std::invalid_argument("the MIDI file has no ticks per quarter note");
+    at = 8 + header;
+    struct Note
+    {
+        uint64_t start, end;
+        uint32_t pitch;
+    };
+    std::vector<std::vector<Note>> voices;
+    std::vector<uint64_t> ends;
+    for (uint32_t t = 0; t < tracks && at < m.size(); ++t)
+    {
+        need(8);
+        const bool track = m[at] == 'M' && m[at + 1] == 'T' && m[at + 2] == 'r' && m[at + 3] == 'k';
+        at += 4;
+        const uint32_t len = u32();
+        need(len);
+        const size_t stop = at + len;
+        if (!track)
+        {
+            at = stop;
+            continue;
+        }
+        std::vector<Note> notes;
+        std::map<uint32_t, uint64_t> open; // channel << 8 | pitch -> start
+        uint64_t now = 0;
+        uint8_t status = 0;
+        auto vlq = [&] {
+            uint64_t v = 0;
+            for (int i = 0; i < 4; ++i)
+            {
+                if (at >= stop) throw std::invalid_argument("a MIDI track ends inside an event");
+                const uint8_t b = m[at++];
+                v = v << 7 | (b & 0x7F);
+                if (!(b & 0x80)) return v;
+            }
+            throw std::invalid_argument("a MIDI delta time is too long");
+        };
+        while (at < stop)
+        {
+            now += vlq();
+            if (at >= stop) break;
+            const uint8_t b = m[at];
+            if (b == 0xFF)
+            {
+                at += 2;
+                if (at > stop) throw std::invalid_argument("a MIDI track ends inside an event");
+                const uint8_t type = m[at - 1];
+                const uint64_t n = vlq();
+                at += size_t(n);
+                if (type == 0x2F) break; // end of track, at `now`
+                continue;
+            }
+            if (b == 0xF0 || b == 0xF7)
+            {
+                ++at;
+                at += size_t(vlq());
+                continue;
+            }
+            if (b & 0x80)
+            {
+                status = b;
+                ++at;
+            }
+            else if (!status) throw std::invalid_argument("a MIDI event with no status");
+            const uint32_t kind = status & 0xF0u, ch = status & 0x0Fu;
+            const size_t data = kind == 0xC0 || kind == 0xD0 ? 1 : 2;
+            if (at + data > stop) throw std::invalid_argument("a MIDI track ends inside an event");
+            const uint32_t d1 = m[at], d2 = data == 2 ? uint32_t(m[at + 1]) : 0u;
+            at += data;
+            const uint32_t key = ch << 8 | d1;
+            if (kind == 0x90 && d2 > 0)
+            {
+                if (auto it = open.find(key); it != open.end()) notes.push_back({it->second, now, d1});
+                open[key] = now;
+            }
+            else if (kind == 0x80 || kind == 0x90)
+            {
+                if (auto it = open.find(key); it != open.end())
+                {
+                    notes.push_back({it->second, now, d1});
+                    open.erase(it);
+                }
+            }
+        }
+        for (const auto& [key, start] : open) notes.push_back({start, now, key & 0xFF});
+        at = stop;
+        if (notes.empty() && now == 0) continue; // no notes and no length: a tempo track, say
+        std::stable_sort(notes.begin(), notes.end(), [](const Note& a, const Note& b) { return a.start < b.start; });
+        voices.push_back(std::move(notes));
+        ends.push_back(now);
+    }
+    if (voices.empty()) throw std::invalid_argument("the MIDI file has no notes, and no length");
+    // Lengths in the set's durations; the shortest is the grid times are rounded to.
+    std::vector<std::pair<uint32_t, std::string>> codes; // sixteenths, notation code; longest first
+    for (char c : set.durations)
+    {
+        const int i = code_index(c);
+        codes.push_back({kCodeSixteenths[i], set.legacy ? std::string(1, c) : std::string(kCodeNotation[i])});
+    }
+    std::sort(codes.begin(), codes.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+    const uint32_t grid = codes.back().first;
+    const uint64_t per_grid = uint64_t(division) * grid; // ticks x 4 in one grid step
+    auto steps = [&](uint64_t ticks) { return (ticks * 4 + per_grid / 2) / per_grid; }; // grid steps, rounded
+    size_t overlapped = 0, dropped = 0;
+    std::string out;
+    auto put = [&](std::string& v, const std::string& token) {
+        if (!v.empty()) v += ' ';
+        v += token;
+    };
+    auto write = [&](std::string& v, uint64_t n, const std::string& pitch) {
+        // n grid steps as the set's durations, longest first: the note once, then rests.
+        bool first = true;
+        for (const auto& [len, code] : codes)
+        {
+            const uint64_t k = len / grid;
+            while (n >= k)
+            {
+                put(v, (first && !pitch.empty() ? pitch : std::string("R")) + code);
+                first = false;
+                n -= k;
+            }
+        }
+    };
+    const size_t used = std::min<size_t>(voices.size(), set.voices);
+    dropped = voices.size() - used;
+    for (size_t vi = 0; vi < used; ++vi)
+    {
+        std::string v;
+        uint64_t cur = 0; // grid steps written so far
+        for (const Note& n : voices[vi])
+        {
+            uint64_t s = steps(n.start), e = steps(n.end);
+            if (s < cur)
+            {
+                ++overlapped;
+                continue;
+            }
+            if (e <= s) e = s + 1;
+            write(v, s - cur, "");
+            write(v, e - s, note_name(n.pitch));
+            cur = e;
+        }
+        const uint64_t end = steps(ends[vi]);
+        if (end > cur) write(v, end - cur, "");
+        if (!out.empty()) out += " // ";
+        out += v;
+    }
+    if (report)
+    {
+        if (overlapped) report->push_back(std::to_string(overlapped) + " note(s) starting inside another left out (one note at a time)");
+        if (dropped) report->push_back(std::to_string(dropped) + " track(s) beyond the set's voices left out");
+    }
+    return out;
 }
 
 } // namespace sieve

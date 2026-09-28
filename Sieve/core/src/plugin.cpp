@@ -1629,6 +1629,11 @@ const Dfa* plugin_dfa(const Filter& f)
     return p ? &p->dfa() : nullptr;
 }
 
+std::unique_ptr<Filter> make_dfa_filter(Dfa dfa, uint32_t length, std::string provenance)
+{
+    return std::make_unique<PluginFilter>(std::move(dfa), length, std::move(provenance));
+}
+
 FilterSpec plugin_spec(std::shared_ptr<const PluginDef> p)
 {
     const PluginHeader& h = p->header;

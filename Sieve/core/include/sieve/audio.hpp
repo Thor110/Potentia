@@ -104,4 +104,13 @@ std::string notes_to_notation(const NoteSet& set, const std::vector<uint32_t>& d
 // ticks per quarter, piano). notes104 keeps notes_to_midi above; this is for notes2.
 std::string notes_to_midi(const NoteSet& set, const std::vector<uint32_t>& digits);
 
+// A Standard MIDI File read back as notation for a set, for canonicalise_notes (notes104) or
+// canonicalise_notes2 to fit to the line: each track with notes, or with a length and no notes
+// (a voice of rests), is a voice (as many as the set has; the rest are left out), each voice one note at a time (a note that starts before the one
+// before it ends is left out), the times rounded to the set's shortest duration, and each note and
+// gap written with the set's durations, longest first (a note too long for one is the note, then
+// rests). Files the hallway saves come back as the same music. Throws std::invalid_argument on a
+// file that is not MIDI; `report` receives what was changed, in words.
+std::string midi_to_notation(const std::vector<uint8_t>& midi, const NoteSet& set, std::vector<std::string>* report = nullptr);
+
 } // namespace sieve

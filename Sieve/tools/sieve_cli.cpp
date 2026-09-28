@@ -40,6 +40,7 @@
 #include "sieve/booksieve.hpp"
 #include "sieve/audio.hpp"
 #include "sieve/compact.hpp"
+#include "sieve/filekind.hpp"
 #include "sieve/corridor.hpp"
 #include "sieve/guided.hpp"
 #include "sieve/image.hpp"
@@ -1263,6 +1264,102 @@ int cmd_filters_plugin(const Args& a)
     return 0;
 }
 
+
+// The binary line's filters (binary-kind-v1), its sieve, and what each kind is of the line: the
+// calculator for where the binary line's files stand, exact at any length.
+int cmd_filters_binary(const Args& a)
+{
+    const uint64_t n = a.has("length") ? std::stoull(a.get("length")) : 32;
+    const BinarySpace space(std::max<uint64_t>(1, n), a.get("key", "sieve"));
+    const FilterConfig cfg = load_filter_config(a);
+    const LineFilters& lf = cfg.binary;
+    const FilterLine fl = binary_filter_line(space.max_bytes());
+    std::cout << "line         binary  (" << space.id() << ")\n"
+              << "settings     " << filters_path(a) << "\n"
+              << "mode         " << to_string(lf.mode) << "\n\n";
+    for (const FilterSpec* f : filters_for(fl))
+    {
+        std::cout << (lf.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << "\n";
+        print_indented(f->description, "      ");
+        const auto vit = lf.values.find(f->name());
+        for (const auto& p : f->params)
+            std::cout << "      " << p.key << " = " << param_value(*f, vit == lf.values.end() ? FilterValues{} : vit->second, p.key) << "   "
+                      << p.description << "\n";
+    }
+    const BigUint& all = space.size();
+    auto share = [&](const BigUint& part) {
+        if (part.is_zero()) return std::string("none");
+        std::ostringstream o;
+        const double x = part.log10_approx() - all.log10_approx();
+        if (x > -0.005) return std::string("about all");
+        o << "10^" << std::fixed << std::setprecision(2) << x;
+        return o.str();
+    };
+    const BinarySieve bs = build_binary_sieve(space, lf);
+    if (!bs.empty())
+    {
+        BigUint excluded = all;
+        excluded -= bs.count();
+        std::cout << "\nstack        " << bs.id().substr(0, 16) << "...  " << bs.provenance() << "\n"
+                  << "survivors    " << bs.count().to_decimal() << " (exact; compact mode available)\n"
+                  << "excluded     " << excluded.to_decimal() << " (exact)\n"
+                  << "share        the stack keeps " << share(bs.count()) << " of the line and sets aside " << share(excluded) << "\n";
+    }
+    // Every kind's share of the line (display: its power of ten; --exact for the counts).
+    std::cout << "\nkinds        every file of 0.." << space.max_bytes() << " bytes by " << kFileKindsVersion << ", of "
+              << all.to_decimal().size() << "-digit total\n";
+    const auto& kinds = file_kinds();
+    for (size_t i = 0; i < kinds.size(); ++i)
+    {
+        KindSet one(kinds.size(), 0);
+        one[i] = 1;
+        const KindCounter k(space.max_bytes(), one);
+        std::cout << "  " << std::left << std::setw(10) << kinds[i] << std::right << std::setw(12) << share(k.count());
+        if (a.has("exact")) std::cout << "  " << k.count().to_decimal();
+        std::cout << "\n";
+    }
+    return 0;
+}
+
+// A file on the binary line: its kind, each binary filter's verdict, and its survivor number and
+// compact addresses where the stack keeps it.
+int cmd_check_binary(const Args& a)
+{
+    if (!a.has("file")) throw std::invalid_argument("check --line binary needs --file PATH");
+    const std::string file = a.get("file");
+    const auto bytes = read_file_bytes(std::filesystem::path(std::u8string(file.begin(), file.end())));
+    vault::check_bytes(bytes, file); // the vault: a withheld file is never placed
+    const uint64_t n = a.has("length") ? std::stoull(a.get("length")) : std::max<uint64_t>(32, bytes.size());
+    if (bytes.size() > n) throw std::invalid_argument("the file is " + std::to_string(bytes.size()) + " bytes, longer than the line's " + std::to_string(n));
+    const BinarySpace space(std::max<uint64_t>(1, n), a.get("key", "sieve"));
+    const FilterConfig cfg = load_filter_config(a);
+    const FilterLine fl = binary_filter_line(space.max_bytes());
+    const BinarySieve bs = build_binary_sieve(space, cfg.binary);
+    std::cout << "line         binary  (" << space.id() << ")\n"
+              << "file         " << file << ", " << bytes.size() << " bytes\n"
+              << "kind         " << file_kind(bytes, bytes.size()) << " (" << kFileKindsVersion << ")\n"
+              << "stack        " << (bs.empty() ? std::string("(none ticked)") : bs.id().substr(0, 16) + "...  " + bs.provenance()) << "\n";
+    for (const FilterSpec* f : filters_for(fl))
+    {
+        LineFilters one = cfg.binary;
+        one.enabled = {f->name()};
+        const BinarySieve single = build_binary_sieve(space, one);
+        std::cout << "  " << (cfg.binary.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name()
+                  << std::string(std::max<size_t>(1, 24 - f->name().size()), ' ') << (single.passes(bytes, bytes.size()) ? "pass" : "FAIL") << "\n";
+    }
+    if (!bs.empty())
+    {
+        const std::string fail = bs.first_failure(bytes, bytes.size());
+        std::cout << "  stack: " << (fail.empty() ? "passes" : "fails at " + fail);
+        if (fail.empty())
+            std::cout << ", survivor number " << bs.index_of(bytes, AddressMode::Positional).to_decimal() << " of " << bs.count().to_decimal()
+                      << "\n  compact      positional " << bs.hex_of(bs.index_of(bytes, AddressMode::Positional)) << "\n"
+                      << "               scrambled  " << bs.hex_of(bs.index_of(bytes, AddressMode::Scrambled));
+        std::cout << "\n";
+    }
+    return 0;
+}
+
 int cmd_filters(const Args& a)
 {
     if (a.has("plugin")) return cmd_filters_plugin(a);
@@ -1277,6 +1374,7 @@ int cmd_filters(const Args& a)
         return 0;
     }
     if (a.get("line", "text") == "books") return cmd_filters_books(a);
+    if (a.get("line", "text") == "binary") return cmd_filters_binary(a);
     const Line line = make_line(a.has("length") || line_from_string(a.get("line", "text")) != LineKind::Text ? a : [&] {
         Args b = a;
         b.opts["length"] = "32";
@@ -1329,6 +1427,16 @@ int cmd_filters(const Args& a)
             BigUint excluded = line.space.size();
             excluded -= st.ranker()->count();
             std::cout << "excluded     " << excluded.to_decimal() << " (exact)\n";
+            // As powers of ten of the line (display only): what the numbers above come to.
+            auto share = [&](const BigUint& part) {
+                if (part.is_zero()) return std::string("none");
+                std::ostringstream o;
+                const double x = part.log10_approx() - line.space.size().log10_approx();
+                if (x > -0.005) return std::string("about all");
+                o << "10^" << std::fixed << std::setprecision(2) << x;
+                return o.str();
+            };
+            std::cout << "share        the stack keeps " << share(st.ranker()->count()) << " of the line and sets aside " << share(excluded) << "\n";
         }
         else std::cout << "compact      unavailable: " << st.compact_blocker() << "\n";
     }
@@ -1338,6 +1446,7 @@ int cmd_filters(const Args& a)
 int cmd_check(const Args& a)
 {
     if (a.has("book")) return cmd_check_book(a);
+    if (a.get("line", "text") == "binary") return cmd_check_binary(a);
     const Line line = make_line(a);
     const FilterConfig cfg = load_filter_config(a);
     const LineFilters& lf = cfg.of(line.kind);
@@ -1607,6 +1716,7 @@ int cmd_locate(const Args& a)
         std::cout << "file      " << u8(target) << "\n"
                   << "bytes     " << bytes.size() << "\n"
                   << "sha256    " << sha256_hex(bytes) << "\n"
+                  << "kind      " << file_kind(bytes, bytes.size()) << " (" << kFileKindsVersion << ", from its first bytes)\n"
                   << "line      binary (binary-v1), positional; on every binary line of length " << bytes.size() << " or more\n"
                   << "address   " << hex.size() << " hex digits: " << head_tail(hex) << "\n";
         if (a.has("out"))

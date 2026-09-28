@@ -14,6 +14,8 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
     python3 sieve_ref.py bytes-vectors  > ../tests/vectors_bytes_v1.tsv
     python3 sieve_ref.py titled-vectors > ../tests/vectors_titled_v1.tsv
     python3 sieve_ref.py binary-vectors > ../tests/vectors_binary_v1.tsv
+    python3 sieve_ref.py kind-vectors   > ../tests/vectors_kinds_v1.tsv
+    python3 sieve_ref.py written-vectors > ../tests/vectors_written_v1.tsv
     python3 sieve_ref.py manifest ../tests/manifest_fixture [--addresses DIR] [--with-addresses | --with-contents]   # sieve-manifest-v1/v2/v3
     python3 sieve_ref.py map ../tests/manifest_fixture                # sieve-map-v1
     python3 sieve_ref.py image-vectors  > ../tests/vectors_image_v1.tsv
@@ -3141,6 +3143,883 @@ def cmd_book_filter_vectors(_args):
                       f"{'|'.join(txt(p) for p in pages)}")
 
 
+# ---------------------------------------------------------------- file kinds (file-kinds-v1)
+# Written from the table and rules in core/include/sieve/filekind.hpp, not from its code: a file's
+# kind is read from its first 16 bytes (fewer if it is shorter) and its size. EMPTY for no bytes;
+# else the first signature in the table whose fixed bytes all lie within the file and match; else
+# TXT when every one of those bytes is readable (20-7E, 80-FF, tab, line feed, carriage return);
+# else "?".
+
+FILE_SIGNATURES = [
+    ("PNG", {0: b"\x89PNG\r\n\x1a\n"}),
+    ("7Z", {0: b"7z\xbc\xaf\x27\x1c"}),
+    ("XZ", {0: b"\xfd7zXZ\x00"}),
+    ("MANIFEST", {0: b"sieve-manifest"}),
+    ("BOOK", {0: b"sieve-book"}),
+    ("GIF", {0: b"GIF87a"}),
+    ("GIF", {0: b"GIF89a"}),
+    ("WAV", {0: b"RIFF", 8: b"WAVE"}),
+    ("AVI", {0: b"RIFF", 8: b"AVI "}),
+    ("WEBP", {0: b"RIFF", 8: b"WEBP"}),
+    ("MP4", {4: b"ftyp"}),
+    ("ZIP", {0: b"PK\x03\x04"}),
+    ("ZIP", {0: b"PK\x05\x06"}),
+    ("ELF", {0: b"\x7fELF"}),
+    ("PDF", {0: b"%PDF"}),
+    ("RAR", {0: b"Rar!"}),
+    ("OGG", {0: b"OggS"}),
+    ("FLAC", {0: b"fLaC"}),
+    ("MID", {0: b"MThd"}),
+    ("JPG", {0: b"\xff\xd8\xff"}),
+    ("MP3", {0: b"ID3"}),
+    ("BZ2", {0: b"BZh"}),
+    ("GZ", {0: b"\x1f\x8b"}),
+    ("EXE", {0: b"MZ"}),
+    ("BMP", {0: b"BM"}),
+]
+SIGS = [(k, {o + i: b for o, bs in parts.items() for i, b in enumerate(bs)}) for k, parts in FILE_SIGNATURES]
+SIG_END = [max(f) + 1 for _, f in SIGS]
+FILE_KINDS = ["EMPTY"] + list(dict.fromkeys(k for k, _ in SIGS)) + ["TXT", "?"]
+KIND_HEAD = 16
+
+
+def readable(b):
+    return (b >= 0x20 or b in (9, 10, 13)) and b != 0x7F
+
+
+def file_kind(head, size):
+    if size == 0:
+        return "EMPTY"
+    h = bytes(head[: min(size, KIND_HEAD)])
+    for (kind, fixed), end in zip(SIGS, SIG_END):
+        if end <= len(h) and all(h[p] == b for p, b in fixed.items()):
+            return kind
+    return "TXT" if all(readable(b) for b in h) else "?"
+
+
+def signed(kind):
+    return kind not in ("EMPTY", "TXT", "?")
+
+
+KIND_SET_NAMES = ["signed", "text", "signed-or-text", "unknown", "empty", "any"] + [k.lower() for k in FILE_KINDS if signed(k)]
+
+
+def kind_set(name, keep="keep"):
+    s = {
+        "signed": {k for k in FILE_KINDS if signed(k)},
+        "text": {"TXT"},
+        "signed-or-text": {k for k in FILE_KINDS if signed(k)} | {"TXT"},
+        "unknown": {"?"},
+        "empty": {"EMPTY"},
+        "any": set(FILE_KINDS),
+    }.get(name)
+    if s is None:
+        s = {k for k in FILE_KINDS if signed(k) and k.lower() == name}
+        assert s, name
+    return set(FILE_KINDS) - s if keep == "exclude" else s
+
+
+_KIND_WALK = None
+
+
+def kind_walk():
+    """The heads of 0..16 bytes, walked a byte at a time, once: a head's state is the set of
+    signatures it still fits and whether it is readable so far. levels[p]: {state: heads of p bytes
+    in it}; moves[p][state]: the state after each of the 256 bytes; groups[p][state]: those states
+    with how many bytes lead to each."""
+    global _KIND_WALK
+    if _KIND_WALK is None:
+        start = (frozenset(range(len(SIGS))), True)
+        levels, moves, groups = [{start: 1}], [], []
+        for p in range(KIND_HEAD):
+            nxt, mv, gr = {}, {}, {}
+            for st, n in levels[p].items():
+                alive, txt = st
+                row = [(frozenset(i for i in alive if SIGS[i][1].get(p, b) == b), txt and readable(b)) for b in range(256)]
+                mv[st] = row
+                g = {}
+                for t in row:
+                    g[t] = g.get(t, 0) + 1
+                gr[st] = g
+                for t, m in g.items():
+                    nxt[t] = nxt.get(t, 0) + n * m
+            levels.append(nxt)
+            moves.append(mv)
+            groups.append(gr)
+        _KIND_WALK = (start, levels, moves, groups)
+    return _KIND_WALK
+
+
+class KindHeads:
+    """A kind set's heads: heads[h] is how many heads of exactly h bytes have a kind in the set."""
+
+    def __init__(self, kinds):
+        self.kinds = kinds
+        self.start, self.levels, self.moves, self.groups = kind_walk()
+        self.heads = [sum(n for st, n in self.levels[h].items() if self.kind(h, st) in kinds) for h in range(KIND_HEAD + 1)]
+        self.done = {}
+
+    @staticmethod
+    def kind(h, st):
+        if h == 0:
+            return "EMPTY"
+        alive, txt = st
+        for i in sorted(alive):
+            if SIG_END[i] <= h:
+                return SIGS[i][0]
+        return "TXT" if txt else "?"
+
+    def completions(self, h):
+        """done[p][state]: heads of exactly h bytes through state after p bytes, of a kind chosen."""
+        if h not in self.done:
+            d = [None] * (h + 1)
+            d[h] = {st: 1 if self.kind(h, st) in self.kinds else 0 for st in self.levels[h]}
+            for p in range(h - 1, -1, -1):
+                d[p] = {st: sum(m * d[p + 1][t] for t, m in self.groups[p][st].items()) for st in self.levels[p]}
+            self.done[h] = d
+        return self.done[h]
+
+    def of_length(self, L):
+        return self.heads[L] if L <= KIND_HEAD else self.heads[KIND_HEAD] * 256 ** (L - KIND_HEAD)
+
+    def count(self, N):
+        small = sum(self.of_length(L) for L in range(min(N, KIND_HEAD) + 1))
+        # 256 + 256^2 + ... + 256^(N-16), times the heads of 16 bytes
+        return small + (self.heads[KIND_HEAD] * sum(256 ** j for j in range(1, N - KIND_HEAD + 1)) if N > KIND_HEAD else 0)
+
+    def unrank(self, N, k):
+        L = 0
+        while k >= self.of_length(L):
+            k -= self.of_length(L)
+            L += 1
+            assert L <= N
+        h = min(L, KIND_HEAD)
+        tail = L - h
+        head_k, rest = divmod(k, 256 ** tail)
+        done = self.completions(h)
+        st, out = self.start, []
+        for p in range(h):
+            for b in range(256):
+                t = self.moves[p][st][b]
+                m = done[p + 1][t]
+                if head_k < m:
+                    out.append(b)
+                    st = t
+                    break
+                head_k -= m
+        return bytes(out) + (rest.to_bytes(tail, "big") if tail else b"")
+
+
+def binary_sieve_id(n, kinds, keep):
+    prov = f"binary/L0-{n}; binary-kind-v1{{file-kinds-v1 kinds={kinds} keep={keep}}}"
+    return prov, hashlib.sha256(prov.encode()).hexdigest()
+
+
+def cmd_kind_vectors(_args):
+    """file-kinds-v1 (a file's kind from its first bytes) and binary-kind-v1 (the binary line's files
+    of chosen kinds, counted, numbered shortest first then by value, and their compact scrambled
+    order through shuffle-sha256-v1 keyed with the line's key, the sieve's id as its domain)."""
+    print("# sieve file-kind vectors v1 (file-kinds-v1, binary-kind-v1)")
+    print("# kind     file_hex('-' empty) size kind   (size may exceed the bytes given: the first 16 are enough)")
+    print("# count    max_bytes kinds keep survivors")
+    print("# file     max_bytes kinds keep rank file_hex")
+    print("# compact  max_bytes key kinds keep sieve_id compact_index survivor_number")
+    files = [b"", b"a", b"\x00", b"\x7f", b"\t\n\r", b"MZ", b"M", b"MZ\x00", b"BM", b"\x1f\x8b", b"\x1f", b"ID3", b"BZh91",
+             b"\xff\xd8\xff\xe0", b"\xff\xd8", b"MThd\x00\x00\x00\x06", b"MThd", b"MTh", b"fLaC", b"OggS", b"Rar!\x1a\x07",
+             b"%PDF-1.7", b"\x7fELF\x02", b"PK\x03\x04", b"PK\x05\x06", b"PK\x01\x02", b"RIFF\x24\x00\x00\x00WAVEfmt ",
+             b"RIFF\x00\x00\x00\x00AVI LIST", b"RIFF1234WEBPVP8 ", b"RIFF1234WAV", b"\x00\x00\x00\x18ftypmp42",
+             b"abcdftyp", b"abcdfty", b"GIF89a", b"GIF87a", b"GIF88a", b"sieve-book-v1\n", b"sieve-manifest-v3\n",
+             b"sieve-boo", b"\xfd7zXZ\x00\x00", b"\xfd7zXZ", b"7z\xbc\xaf\x27\x1c\x00", b"\x89PNG\r\n\x1a\n\x00",
+             b"\x89PNG\r\n\x1a", "héllo".encode(), b"hello world", b"hello\x00", bytes(range(0x80, 0x90))]
+    for f in files:
+        print(f"kind\t{f.hex() or '-'}\t{len(f)}\t{file_kind(f, len(f))}")
+    # A long file known by its first 16 bytes.
+    for f, size in ((b"MZ" + bytes(14), 100000), (b"ab" * 8, 17), (bytes(16), 1 << 40), (b"abcdefghijklmnop", 3)):
+        print(f"kind\t{f.hex()}\t{size}\t{file_kind(f, size)}")
+    g = stream("kinds")
+    for _ in range(40):
+        n = next(g) % 20
+        f = bytes(next(g) for _ in range(n))
+        print(f"kind\t{f.hex() or '-'}\t{len(f)}\t{file_kind(f, len(f))}")
+    heads = {}
+
+    def heads_of(kinds, keep):
+        key = (kinds, keep)
+        if key not in heads:
+            heads[key] = KindHeads(kind_set(kinds, keep))
+        return heads[key]
+
+    for n in (1, 2, 3, 5, 12, 16, 17, 20, 33, 300):
+        for kinds in KIND_SET_NAMES:
+            for keep in ("keep", "exclude"):
+                if keep == "exclude" and kinds not in ("signed", "unknown", "text", "png", "empty"):
+                    continue
+                print(f"count\t{n}\t{kinds}\t{keep}\t{heads_of(kinds, keep).count(n)}")
+    for n in (3, 16, 40):
+        for kinds, keep in (("signed", "keep"), ("text", "keep"), ("png", "keep"), ("mid", "keep"), ("unknown", "keep"), ("signed", "exclude"), ("empty", "keep")):
+            kh = heads_of(kinds, keep)
+            c = kh.count(n)
+            ranks = sorted({0, 1, c // 3, c // 2, c - 1} | {next(g) * next(g) % c for _ in range(3)}) if c > 1 else list(range(c))
+            for k in ranks:
+                f = kh.unrank(n, k)
+                assert file_kind(f, len(f)) in kind_set(kinds, keep) and len(f) <= n
+                print(f"file\t{n}\t{kinds}\t{keep}\t{k}\t{f.hex() or '-'}")
+    for n, key, kinds, keep in ((16, "sieve", "signed", "keep"), (32, "sieve", "text", "keep"), (40, "other", "png", "keep"), (5, "sieve", "unknown", "exclude")):
+        c = heads_of(kinds, keep).count(n)
+        _, sid = binary_sieve_id(n, kinds, keep)
+        for k in sorted({0, 1, c // 2, c - 1, next(g) % c}):
+            j = shuffle(key, sid, c, k) if c > 1 else k
+            assert shuffle(key, sid, c, j, inverse=True) == k
+            print(f"compact\t{n}\t{key}\t{kinds}\t{keep}\t{sid}\t{j}\t{k}")
+
+
+# ---------------------------------------------------------------- not-written-v1
+# Written from the rules in core/include/sieve/written.hpp, not from its code. A unit is written
+# out when some reading of its text is a file whose first bytes carry a signature (file-kinds-v1).
+# Here each reading is decoded outright (for judging), and, separately, walked as a small machine
+# whose states make an automaton (for counting). The binary reading is counted in closed form: a
+# unit it reads is whitespace and n = 8m other symbols, all one of two (the first, a, and the
+# other, b), and the bits (a = 0) spell m bytes X, which is signed or whose complement is.
+
+W_SPACE = {9, 10, 11, 12, 13, 32}
+W_READINGS = ["text", "hex", "base64", "base32", "decimal", "nibbles", "spelled", "binary"]
+W_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+           "eleven", "twelve", "thirteen", "fourteen", "fifteen"]
+
+
+def w_signed(b):
+    return len(b) > 0 and signed(file_kind(b, len(b)))
+
+
+def w_decode(text, reading):
+    """The byte strings a reading gives for the text (a str), or [] if it does not read it."""
+    s = text.encode("utf-8")
+    if reading == "text":
+        raw = bytes(ord(c) for c in text) if all(ord(c) < 256 for c in text) else s
+        trimmed = raw.rstrip(bytes(W_SPACE))
+        return [raw, trimmed, trimmed + b"\n"]
+    if reading == "hex":
+        digits, i = [], 0
+        while i < len(s):
+            c = s[i]
+            if c in b"0\\" and i + 1 < len(s) and s[i + 1] in b"xX":
+                i += 2
+                continue
+            i += 1
+            if c in W_SPACE or c in b",:;-_":
+                continue
+            ch = chr(c)
+            if ch not in "0123456789abcdefABCDEF":
+                return []
+            digits.append(int(ch, 16))
+        return [bytes(digits[i] * 16 + digits[i + 1] for i in range(0, len(digits), 2))] if digits and len(digits) % 2 == 0 else []
+    t = bytes(c for c in s if c not in W_SPACE)
+    if reading == "base64":
+        if t.startswith(b"data:") and b"base64," in t:
+            t = t[t.index(b"base64,") + 7:]
+        t = t.rstrip(b"=")
+        if not t or len(t) % 4 == 1:
+            return []
+        std = set(b"+/") & set(t)
+        url = set(b"-_") & set(t)
+        if std and url:
+            return []
+        alpha = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" + (b"-_" if url else b"+/")
+        if any(c not in alpha for c in t):
+            return []
+        bits = "".join(format(alpha.index(c), "06b") for c in t)
+        return [bytes(int(bits[i:i + 8], 2) for i in range(0, len(bits) - 7, 8))]
+    if reading == "base32":
+        t = t.rstrip(b"=")
+        alpha = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+        t = t.upper()
+        if not t or any(c not in alpha for c in t):
+            return []
+        bits = "".join(format(alpha.index(c), "05b") for c in t)
+        return [bytes(int(bits[i:i + 8], 2) for i in range(0, len(bits) - 7, 8))]
+    if reading == "decimal":
+        parts = re.split(rb"[\t\n\x0b\x0c\r ,;\[\]{}()]", s)
+        if any(p and not p.isdigit() for p in parts):
+            return []
+        vals = [int(p) for p in parts if p]
+        if not vals or any(len(p) > 3 for p in parts if p) or any(v > 255 for v in vals):
+            return []
+        return [bytes(vals)]
+    if reading == "nibbles":
+        t = t.lower()
+        if not t or any(not (97 <= c <= 112) for c in t) or len(t) % 2:
+            return []
+        return [bytes((t[i] - 97) * 16 + t[i + 1] - 97 for i in range(0, len(t), 2))]
+    if reading == "spelled":
+        words = re.split(rb"[\t\n\x0b\x0c\r ,.\-]", s.lower())
+        n = []
+        for w in words:
+            if not w:
+                continue
+            w = w.decode("latin-1")
+            if len(w) == 1 and w in "abcdef":
+                n.append(10 + "abcdef".index(w))
+            elif w in W_WORDS:
+                n.append(W_WORDS.index(w))
+            else:
+                return []
+        return [bytes(n[i] * 16 + n[i + 1] for i in range(0, len(n), 2))] if n and len(n) % 2 == 0 else []
+    if reading == "binary":
+        if not t or len(t) % 8 or len(set(t)) != 2:
+            return []
+        a = t[0]
+        x = bytes(int("".join("0" if c == a else "1" for c in t[i:i + 8]), 2) for i in range(0, len(t), 8))
+        return [x, bytes(255 - v for v in x)]
+    raise ValueError(reading)
+
+
+def w_judge(text, readings, bytes_line=False):
+    """The first reading (and the kind) under which the text is a signed file, or None."""
+    if bytes_line:
+        b = bytes(ord(c) for c in text)
+        return ("bytes", file_kind(b, len(b))) if w_signed(b) else None
+    for r in readings:
+        for b in w_decode(text, r):
+            if w_signed(b):
+                return (r, file_kind(b, len(b)))
+    return None
+
+
+# The machines. A matcher state is None (no signature possible), "S" (signed) or (bytes seen,
+# the signatures still fitting).
+W_ALL_SIGS = frozenset(range(len(SIGS)))
+
+
+def m_feed(h, b):
+    if h is None or h == "S":
+        return h
+    pos, alive = h
+    alive = frozenset(i for i in alive if SIGS[i][1].get(pos, b) == b)
+    pos += 1
+    if not alive:
+        return None
+    if any(SIG_END[i] <= pos for i in alive):
+        return "S"
+    return (pos, alive) if pos < KIND_HEAD else None
+
+
+def m_decided(h):
+    return h is None or h == "S"
+
+
+def m_nib(par, hi, h, v):
+    """A nibble into (parity, high half, matcher); None when the matcher has failed."""
+    if par == 0:
+        return (1, 0 if m_decided(h) else v, h)
+    h = m_feed(h, hi * 16 + v)
+    return None if h is None else (0, 0, h)
+
+
+class WMachine:
+    codepoints = False
+
+
+class WText(WMachine):
+    codepoints = True
+    start = (0, (0, W_ALL_SIGS), (0, W_ALL_SIGS), (0, W_ALL_SIGS), (0, W_ALL_SIGS))
+
+    def step(self, st, cp):
+        high, al, tl, au, tu = st
+        if cp < 256:
+            al = m_feed(al, cp)
+            if cp not in W_SPACE:
+                tl = al
+        else:
+            high, al, tl = 1, None, None
+        for b in chr(cp).encode("utf-8"):
+            au = m_feed(au, b)
+            if b not in W_SPACE:
+                tu = au
+        live = (au, tu) if high else (al, tl, au, tu)
+        return (high, al, tl, au, tu) if any(x is not None for x in live) else None
+
+    def accept(self, st):
+        high, al, tl, au, tu = st
+        a, t = (au, tu) if high else (al, tl)
+        return a == "S" or t == "S" or m_feed(t, 10) == "S"
+
+
+class WHex(WMachine):
+    start = (0, 0, 0, (0, W_ALL_SIGS))  # held back ("" / "0" / "\\"), parity, high, matcher
+
+    def plain(self, st, c):
+        held, par, hi, h = st
+        if c in b"0\\":
+            return (c, par, hi, h)
+        if c in W_SPACE or c in b",:;-_":
+            return st
+        if chr(c) not in "0123456789abcdefABCDEF":
+            return None
+        r = m_nib(par, hi, h, int(chr(c), 16))
+        return None if r is None else (0,) + r
+
+    def step(self, st, c):
+        held = st[0]
+        if held:
+            if c in b"xX":
+                return (0,) + st[1:]
+            if held == ord("\\"):
+                return None
+            r = m_nib(st[1], st[2], st[3], 0)
+            if r is None:
+                return None
+            st = (0,) + r
+        return self.plain(st, c)
+
+    def accept(self, st):
+        held, par, hi, h = st
+        if held == ord("\\"):
+            return False
+        if held:
+            r = m_nib(par, hi, h, 0)
+            if r is None:
+                return False
+            par, hi, h = r
+        return par == 0 and h == "S"
+
+
+B64 = {c: i for i, c in enumerate(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")}
+
+
+def b64_read(p, c):
+    """One symbol into a base64 decoding (symbols mod 4, in the padding, alphabets used, bits
+    waiting, their value, matcher, any symbol); None when it cannot go on."""
+    cnt, pad, used, nb, acc, h, anyc = p
+    if pad:
+        return p if c == ord("=") else None
+    if c == ord("="):
+        return (cnt, 1, used, nb, acc, h, anyc)
+    if c in B64:
+        v = B64[c]
+    elif c in b"+/":
+        v, used = (62 if c == ord("+") else 63), used | 1
+    elif c in b"-_":
+        v, used = (62 if c == ord("-") else 63), used | 2
+    else:
+        return None
+    if used == 3:
+        return None
+    cnt, anyc, nb = (cnt + 1) % 4, 1, nb + 6
+    if m_decided(h):
+        return (cnt, 0, used, nb % 8, 0, h, anyc)
+    acc = acc * 64 + v
+    if nb >= 8:
+        nb -= 8
+        h = m_feed(h, acc >> nb)
+        acc &= (1 << nb) - 1
+        if h is None:
+            return None
+        if h == "S":
+            acc = 0
+    return (cnt, 0, used, nb, acc, h, anyc)
+
+
+def b64_done(p):
+    return p is not None and p[6] and p[0] != 1 and p[5] == "S"
+
+
+class WBase64(WMachine):
+    start = ((0, 0, 0, 0, 0, (0, W_ALL_SIGS), 0), ("pre", 0))
+
+    def step(self, st, c):
+        if c in W_SPACE:
+            return st
+        plain, d = st
+        plain = b64_read(plain, c) if plain is not None else None
+        if d is not None:
+            kind, v = d
+            if kind == "pre":
+                d = (("pre", v + 1) if v + 1 < 5 else ("look", 0)) if c == b"data:"[v] else None
+            elif kind == "look":
+                k = v + 1 if c == b"base64,"[v] else (1 if c == ord("b") else 0)
+                d = ("in", (0, 0, 0, 0, 0, (0, W_ALL_SIGS), 0)) if k == 7 else ("look", k)
+            else:
+                v = b64_read(v, c)
+                d = ("in", v) if v is not None else None
+        return (plain, d) if plain is not None or d is not None else None
+
+    def accept(self, st):
+        plain, d = st
+        return b64_done(plain) or (d is not None and d[0] == "in" and b64_done(d[1]))
+
+
+B32 = {c: i for i, c in enumerate(b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")}
+
+
+class WBase32(WMachine):
+    start = (0, 0, 0, 0, (0, W_ALL_SIGS))  # padding, any, bits waiting, value, matcher
+
+    def step(self, st, c):
+        if c in W_SPACE:
+            return st
+        pad, anyc, nb, acc, h = st
+        if pad:
+            return st if c == ord("=") else None
+        if c == ord("="):
+            return (1, anyc, nb, acc, h)
+        c = c - 32 if 97 <= c <= 122 else c
+        if c not in B32:
+            return None
+        nb += 5
+        if m_decided(h):
+            return (0, 1, nb % 8, 0, h)
+        acc = acc * 32 + B32[c]
+        if nb >= 8:
+            nb -= 8
+            h = m_feed(h, acc >> nb)
+            acc &= (1 << nb) - 1
+            if h is None:
+                return None
+            if h == "S":
+                acc = 0
+        return (0, 1, nb, acc, h)
+
+    def accept(self, st):
+        return st[1] == 1 and st[4] == "S"
+
+
+class WDecimal(WMachine):
+    start = (0, 0, (0, W_ALL_SIGS))  # digits, value (256: too large), matcher
+
+    @staticmethod
+    def end(st):
+        d, v, h = st
+        if d == 0:
+            return st
+        if v > 255:
+            return None
+        h = m_feed(h, v)
+        return None if h is None else (0, 0, h)
+
+    def step(self, st, c):
+        if 48 <= c <= 57:
+            d, v, h = st
+            if d == 3:
+                return None
+            return (d + 1, min(256, v * 10 + c - 48), h)
+        if c in W_SPACE or c in b",;[]{}()":
+            return self.end(st)
+        return None
+
+    def accept(self, st):
+        e = self.end(st)
+        return e is not None and e[2] == "S"
+
+
+class WNibbles(WMachine):
+    start = (0, 0, (0, W_ALL_SIGS))
+
+    def step(self, st, c):
+        if c in W_SPACE:
+            return st
+        c = c + 32 if 65 <= c <= 90 else c
+        if not 97 <= c <= 112:
+            return None
+        return m_nib(st[0], st[1], st[2], c - 97)
+
+    def accept(self, st):
+        return st[0] == 0 and st[2] == "S"
+
+
+class WSpelled(WMachine):
+    start = ("", 0, 0, (0, W_ALL_SIGS))  # the word so far, parity, high, matcher
+
+    @staticmethod
+    def end(st):
+        w, par, hi, h = st
+        if not w:
+            return st
+        if len(w) == 1 and w in "abcdef":
+            v = 10 + "abcdef".index(w)
+        elif w in W_WORDS:
+            v = W_WORDS.index(w)
+        else:
+            return None
+        r = m_nib(par, hi, h, v)
+        return None if r is None else ("",) + r
+
+    def step(self, st, c):
+        c = c + 32 if 65 <= c <= 90 else c
+        if 97 <= c <= 122:
+            w = st[0] + chr(c)
+            if not any(x.startswith(w) for x in W_WORDS + list("abcdef")):
+                return None
+            return (w,) + st[1:]
+        if c in W_SPACE or c in b",.-":
+            return self.end(st)
+        return None
+
+    def accept(self, st):
+        e = self.end(st)
+        return e is not None and e[1] == 0 and e[3] == "S"
+
+
+class WBytes(WMachine):
+    start = (0, W_ALL_SIGS)
+
+    def step(self, st, d):
+        return m_feed(st, d)
+
+    def accept(self, st):
+        return st == "S"
+
+
+W_MACHINES = {"text": WText, "hex": WHex, "base64": WBase64, "base32": WBase32, "decimal": WDecimal,
+              "nibbles": WNibbles, "spelled": WSpelled}
+
+
+def w_walk(m, inputs):
+    """A machine's states over the symbols (inputs[c]: what symbol c feeds it), minimised."""
+    ids, states, nxt, acc = {m.start: 0}, [m.start], [], []
+    i = 0
+    while i < len(states):
+        st = states[i]
+        i += 1
+        acc.append(m.accept(st))
+        row = []
+        for feed in inputs:
+            t = st
+            for x in feed:
+                t = m.step(t, x)
+                if t is None:
+                    break
+            if t is None:
+                row.append(-1)
+            else:
+                if t not in ids:
+                    ids[t] = len(states)
+                    states.append(t)
+                row.append(ids[t])
+        nxt.append(row)
+    s0, mn, ma = minimise_dfa(0, nxt, acc, len(inputs))
+    return (mn, ma) if s0 is not None else ([], [])
+
+
+def w_union(a, b, base):
+    (an, aa), (bn, ba) = a, b
+    if not an:
+        return b
+    if not bn:
+        return a
+    ids, pairs, nxt, acc = {(0, 0): 0}, [(0, 0)], [], []
+    i = 0
+    while i < len(pairs):
+        x, y = pairs[i]
+        i += 1
+        acc.append((x >= 0 and aa[x]) or (y >= 0 and ba[y]))
+        row = []
+        for c in range(base):
+            t = (an[x][c] if x >= 0 else -1, bn[y][c] if y >= 0 else -1)
+            if t == (-1, -1):
+                row.append(-1)
+                continue
+            if t not in ids:
+                ids[t] = len(pairs)
+                pairs.append(t)
+            row.append(ids[t])
+        nxt.append(row)
+    s0, mn, ma = minimise_dfa(0, nxt, acc, base)
+    return (mn, ma) if s0 is not None else ([], [])
+
+
+_W_OTHERS = {}
+
+
+def w_others(alpha, readings):
+    """O: the union of the readings but binary, over the alphabet (a line of every byte: its own bytes)."""
+    key = (alpha, tuple(readings))
+    if key not in _W_OTHERS:
+        base = len(alpha)
+        if alpha == ALPHABETS["bytes256"]:
+            _W_OTHERS[key] = w_walk(WBytes(), [[c] for c in range(base)])
+        else:
+            o = ([], [])
+            for r in readings:
+                if r == "binary":
+                    continue
+                m = W_MACHINES[r]()
+                o = w_union(o, w_walk(m, [[ord(ch)] if m.codepoints else list(ch.encode("utf-8")) for ch in alpha]), base)
+            _W_OTHERS[key] = o
+    return _W_OTHERS[key]
+
+
+def w_patterns(m):
+    """How many byte strings X of m bytes, the first below 80, are signed or have a signed complement."""
+    states = {((0, W_ALL_SIGS), (0, W_ALL_SIGS)): 1}
+    for i in range(m):
+        nxt = {}
+        for (x, y), n in states.items():
+            for b in range(128 if i == 0 else 256):
+                t = (m_feed(x, b), m_feed(y, 255 - b))
+                if t == (None, None):
+                    continue
+                if m_decided(t[0]) and m_decided(t[1]):
+                    t = ("S" if "S" in t else None, None)  # decided: only whether either is signed
+                nxt[t] = nxt.get(t, 0) + n
+        states = nxt
+    return sum(n for (x, y), n in states.items() if x == "S" or y == "S")
+
+
+def w_binary_count(alpha, L):
+    """|Bn| at length L, in closed form (see above)."""
+    w = sum(1 for ch in alpha if ord(ch) in W_SPACE)
+    k = len(alpha) - w
+    return sum(math.comb(L, 8 * m) * w ** (L - 8 * m) * k * (k - 1) * w_patterns(m) for m in range(2, L // 8 + 1))
+
+
+def w_both(alpha, others, keep, L):
+    """|D and Bn| at length L, D = others (O, with keep's plugins if any): every ordered pair of
+    symbols (a first), walked over a, b and whitespace alone."""
+    on, oa = others
+    if not on:
+        return 0
+    ws = [c for c, ch in enumerate(alpha) if ord(ch) in W_SPACE]
+    syms = [c for c, ch in enumerate(alpha) if ord(ch) not in W_SPACE]
+    total = 0
+    for a in syms:
+        for b in syms:
+            if a == b:
+                continue
+            # (automaton state, keep state, started, b seen, bits mod 8, byte so far, matcher X, matcher ~X)
+            states = {(0, 0 if keep else -2, 0, 0, 0, 0, (0, W_ALL_SIGS), (0, W_ALL_SIGS)): 1}
+            for _ in range(L):
+                nxt = {}
+                for st, n in states.items():
+                    o, p, started, seen, cnt, acc, hx, hy = st
+                    for c in ws + [a, b]:
+                        o2 = on[o][c]
+                        if o2 < 0:
+                            continue
+                        p2 = p
+                        if keep:
+                            p2 = keep[0][p][c]
+                            if p2 < 0:
+                                continue
+                        if c in ws:
+                            t = (o2, p2) + st[2:]
+                        else:
+                            if c == b and not started:
+                                continue
+                            bit = 1 if c == b else 0
+                            started2, seen2, cnt2 = 1, seen or bit, (cnt + 1) % 8
+                            acc2 = acc * 2 + bit
+                            hx2, hy2 = hx, hy
+                            if cnt2 == 0:
+                                hx2, hy2, acc2 = m_feed(hx, acc2), m_feed(hy, 255 - acc2), 0
+                                if hx2 is None and hy2 is None:
+                                    continue
+                            t = (o2, p2, started2, seen2, cnt2, acc2, hx2, hy2)
+                        nxt[t] = nxt.get(t, 0) + n
+                states = nxt
+                if not states:
+                    break
+            total += sum(n for (o, p, started, seen, cnt, acc, hx, hy), n in states.items()
+                         if oa[o] and (not keep or keep[1][p]) and seen and cnt == 0 and ("S" in (hx, hy)))
+    return total
+
+
+def w_survivors(alpha, readings, L, keep=None):
+    """Units of length L that no reading finds written out (and that keep, a minimal automaton
+    (nxt, acc), accepts): |P| - |P and O| - |P and Bn| + |P and O and Bn|, with P every unit when
+    there is no keep."""
+    base = len(alpha)
+    o = w_others(alpha, readings)
+    everything = ([[0] * base], [True])
+    p = keep if keep else everything
+    po = w_intersect(p, o, base) if keep else o
+    count = lambda d: dfa_count_table(d[0], d[1], L)[L][0] if d[0] else 0
+    kept = count(p) - count(po)
+    if "binary" in readings and alpha != ALPHABETS["bytes256"]:
+        kept -= w_binary_count(alpha, L) if not keep else w_both(alpha, p, None, L)
+        kept += w_both(alpha, po, None, L)
+    return kept
+
+
+def w_intersect(a, b, base):
+    (an, aa), (bn, ba) = a, b
+    if not an or not bn:
+        return ([], [])
+    ids, pairs, nxt, acc = {(0, 0): 0}, [(0, 0)], [], []
+    i = 0
+    while i < len(pairs):
+        x, y = pairs[i]
+        i += 1
+        acc.append(aa[x] and ba[y])
+        row = []
+        for c in range(base):
+            t = (an[x][c], bn[y][c])
+            if t[0] < 0 or t[1] < 0:
+                row.append(-1)
+                continue
+            if t not in ids:
+                ids[t] = len(pairs)
+                pairs.append(t)
+            row.append(ids[t])
+        nxt.append(row)
+    s0, mn, ma = minimise_dfa(0, nxt, acc, base)
+    return (mn, ma) if s0 is not None else ([], [])
+
+
+def cmd_written_vectors(_args):
+    """not-written-v1: verdicts on chosen texts, and the survivors counted at several lengths."""
+    print("# sieve not-written vectors v1 (not-written-v1 over file-kinds-v1)")
+    print("# judge  alphabet readings text_utf8_hex verdict (reading:KIND, or -)")
+    print("# count  alphabet readings length survivors [plugin params]")
+    texts = [
+        ("lower27", "abcdftyp"), ("lower27", "abcdftypxyz  "), ("lower27", "enfk"), ("lower27", "en fk"), ("lower27", "enf"),
+        ("lower27", "jvnq"), ("lower27", "abababab" * 2), ("lower27", "abbaabab" + "abaababb"), ("ascii95", "MZ"),
+        ("ascii95", "MZ   "), ("ascii95", "4d5a"), ("ascii95", "0x4d0x5a"), ("ascii95", "4d:5a"), ("ascii95", "\\x4d\\x5a"),
+        ("ascii95", "4d5"), ("ascii95", "TVo="), ("ascii95", "TVo"), ("ascii95", "data:x;base64,TVo="), ("ascii95", "data:TVo="),
+        ("ascii95", "JVBERi0="), ("ascii95", "JVBE+i0_"), ("ascii95", "JVGQ===="), ("ascii95", "jvgq"), ("ascii95", "77 90"),
+        ("ascii95", "[77,90]"), ("ascii95", "077,090"), ("ascii95", "0077 90"), ("ascii95", "77 256"), ("ascii95", "four thirteen five ten"),
+        ("ascii95", "four,d,five.a"), ("ascii95", "four thirteen five"), ("ascii95", "fourd five a"), ("ascii95", "ENFK"),
+        ("ascii95", "xxyyxxyx" + "xyxyxyyx"), ("ascii95", "0100110101011010"), ("ascii95", "1011001010100101"),
+        ("ascii95", "01001101 01011010"), ("ascii95", "0100110101011012"), ("ascii95", "%PDF-1.7"), ("ascii95", "  MZ"),
+        ("ascii95", "BM"), ("ascii95", "ID3"), ("ascii95", "BZh"), ("ascii95", "Rar!"), ("ascii95", "hello"),
+        ("ascii96", "MZ\n\n"), ("ascii96", "\nMZ"), ("ascii96", "4d5a\n"), ("bytes256", "MZ\x00\x00"), ("bytes256", "\x89PNG\r\n\x1a\n"),
+        ("bytes256", "4d5a"), ("babel29", "four,thirteen.five,ten"), ("babel29", "enfk.."),
+        ("u+0020-u+0020+u+004d-u+004d+u+005a-u+005a", "MZMZMZMZMZMZMZMZ"), ("u+0020-u+0020+u+004d-u+004d+u+005a-u+005a", "MMZMMMZZMZZMMZZM"),
+    ]
+    for alpha_id, text in texts:
+        alpha = alphabet(alpha_id)
+        assert all(ch in alpha for ch in text), (alpha_id, text)
+        for readings in (["all"], ["text"], ["hex"], ["base64"], ["base32"], ["decimal"], ["nibbles"], ["spelled"], ["binary"]):
+            rs = W_READINGS if readings == ["all"] else readings
+            v = w_judge(text, rs, alpha == ALPHABETS["bytes256"])
+            print(f"judge\t{alpha_id}\t{readings[0]}\t{text.encode('utf-8').hex()}\t{v[0] + ':' + v[1] if v else '-'}")
+    g = stream("written")
+    for alpha_id, L in (("lower27", 6), ("ascii95", 5)):
+        alpha = alphabet(alpha_id)
+        for _ in range(20):
+            text = "".join(alpha[next(g) % len(alpha)] for _ in range(L))
+            v = w_judge(text, W_READINGS)
+            print(f"judge\t{alpha_id}\tall\t{text.encode('utf-8').hex()}\t{v[0] + ':' + v[1] if v else '-'}")
+    rows = [("lower27", r, L) for r in ["all"] + W_READINGS for L in (4, 16)]
+    rows += [("lower27", "all", L) for L in (1, 8, 24, 32, 40)]
+    rows += [("babel29", r, 32) for r in ("all", "spelled", "binary")]
+    rows += [("ascii95", r, L) for r in ("all", "text", "hex", "base64", "decimal", "binary") for L in (3, 16)]
+    rows += [("bytes256", "all", 3), ("bytes256", "all", 32)]
+    rows += [("u+0020-u+0020+u+004d-u+004d+u+005a-u+005a", r, L) for r in ("all", "text", "binary") for L in (16, 24)]
+    rows += [("u+0030-u+0031+u+0078-u+0078", "all", 16), ("u+0061-u+0063", "all", 24)]
+    for alpha_id, r, L in rows:
+        alpha = alphabet(alpha_id)
+        rs = W_READINGS if r == "all" else [r]
+        print(f"count\t{alpha_id}\t{r}\t{L}\t{w_survivors(alpha, rs, L)}")
+    # With a plugin's automaton kept too (the stack's count).
+    for f, params, L in (("max-run-data-v1", "max=2", 16), ("clean-data-v1", "", 16)):
+        head, body = parse_plugin(open(f"../data/filters/{f}.sfilter", encoding="utf-8").read())
+        values = dict(kv.split("=", 1) for kv in params.split(",")) if params else {}
+        base = plugin_base(head["symbols"])
+        _, start, nxt, acc = compile_plugin(head, body, values, base)
+        s0, mn, ma = minimise_dfa(start, nxt, acc, base)
+        print(f"count\tlower27\tall\t{L}\t{w_survivors(ALPHABETS['lower27'], W_READINGS, L, (mn, ma))}\t{f}\t{params or '-'}")
+
+
 def main():
     # Vectors are compared byte for byte: always write "\n" line endings and UTF-8, on every platform.
     sys.stdout.reconfigure(newline="\n", encoding="utf-8")
@@ -3179,6 +4058,8 @@ def main():
     sub.add_parser("binary-vectors")
     sub.add_parser("chunk-vectors")
     sub.add_parser("notes2-vectors")
+    sub.add_parser("kind-vectors")
+    sub.add_parser("written-vectors")
     s = sub.add_parser("plugin")
     s.add_argument("file")
     s.add_argument("--length", type=int, default=32)
@@ -3248,6 +4129,10 @@ def main():
         cmd_chunk_vectors(args)
     elif args.cmd == "notes2-vectors":
         cmd_notes2_vectors(args)
+    elif args.cmd == "kind-vectors":
+        cmd_kind_vectors(args)
+    elif args.cmd == "written-vectors":
+        cmd_written_vectors(args)
     elif args.cmd == "chunks":
         cmd_chunks(args)
     elif args.cmd == "plugin":

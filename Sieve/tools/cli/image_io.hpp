@@ -19,6 +19,8 @@ std::vector<RgbaImage> decode_image_frames(const uint8_t* data, size_t size, con
 bool image_info(const uint8_t* data, size_t size, uint32_t& width, uint32_t& height);
 
 // Writes RGB pixels as a PNG, each pixel scaled up to a scale x scale block.
+// The same picture as a PNG file's bytes, in memory.
+std::string encode_png(uint32_t width, uint32_t height, const std::vector<Rgb>& pixels, uint32_t scale);
 void write_png(const std::string& path, uint32_t width, uint32_t height, const std::vector<Rgb>& pixels, uint32_t scale);
 
 } // namespace sieve::cli

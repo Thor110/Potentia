@@ -234,7 +234,8 @@ jobs:
           # with Sieve's own small one.
           python -c "import ast,sys; ast.parse(open('tools/fetch_unifont.py').read())"
           $H --no-menu --line binary --pose "0,1.7,4,0" --bench 8 --screenshot edge.png 2>&1 | q "^bench: 8 frames"
-          # It is a line like the others now: every file up to its length, one loop, no filters yet.
+          # It is a line like the others now: every file up to its length, one loop (its filters,
+          # by the files' kinds, are checked with the other filters below).
           $H --no-menu --line binary --walk "0,0" --screenshot bin.png | sed -n 1p | q "^BINARY line"
           # The six lines no longer loop into one another: they start and finish at binary.
           # Left out of models is binary, where you are turned round to come out of its one door
@@ -675,6 +676,32 @@ jobs:
           # A notes2 audio line of two voices, its plugins judging each voice, in compact order.
           printf '[audio]\nmode = compact\nfilters = key-data-v2, melody-leap-v1\n[audio.key-data-v2]\ntonic = D\n[audio.melody-leap-v1]\nleap = 2\n' > n2h.ini
           $H --filters n2h.ini --line audio --note-set notes2 --voices 2 --notes 3 --walk "0,0" --screenshot n2a.png | sed -n 1p | q "AUDIO line, positional, filters: 2 compact (47572844544 survivors)"
+          # One line filtered by another. The CLI's counts are the oracle's (the vector files'
+          # rows): not-written-v1 on 32-letter pages, alone and with max-run-data-v1; binary-kind-v1
+          # on a 33-byte binary line. The kinds a file says it is, from locate and check.
+          printf "[text]\nmode = compact\nfilters = not-written-v1\n" > nw.ini
+          want=$(awk -F'\t' '$1 == "count" && $2 == "lower27" && $3 == "all" && $4 == "32" && NF == 5 {print $5}' tests/vectors_written_v1.tsv)
+          build/sieve filters --length 32 --filters nw.ini | q "^survivors    $want (exact; compact mode available)"
+          build/sieve filters --length 32 --filters nw.ini | q "^share        the stack keeps about all of the line and sets aside 10\^-4.23"
+          printf "[text]\nmode = compact\nfilters = not-written-v1, max-run-data-v1\n[text.max-run-data-v1]\nmax = 2\n" > nw2.ini
+          want=$(awk -F'\t' '$1 == "count" && $6 == "max-run-data-v1" && $7 == "max=2" {print $5}' tests/vectors_written_v1.tsv)
+          build/sieve filters --length 16 --filters nw2.ini | q "^survivors    $want (exact; compact mode available)"
+          build/sieve check --length 32 --filters nw.ini "enfk" | q "stack: fails at not-written-v1"
+          build/sieve check --length 32 --filters nw.ini "hello world" | q "stack: passes, survivor number"
+          printf "[binary]\nmode = compact\nfilters = binary-kind-v1\n[binary.binary-kind-v1]\nkinds = png\n" > bk.ini
+          want=$(awk -F'\t' '$1 == "count" && $2 == "33" && $3 == "png" && $4 == "keep" {print $5}' tests/vectors_kinds_v1.tsv)
+          build/sieve filters --line binary --length 33 --filters bk.ini | q "^survivors    $want (exact; compact mode available)"
+          build/sieve filters --line binary --length 32 | q "^  TXT  *10\^-0.87"
+          printf 'MThd\0\0\0\6' > k.mid
+          build/sieve locate k.mid | q "^kind      MID (file-kinds-v1, from its first bytes)"
+          build/sieve check --line binary --file k.mid --filters bk.ini | q "stack: fails at binary-kind-v1"
+          # In the hallway: the binary line compacted to PNGs, every file on the shelves a PNG; J
+          # from a page to its file on the binary line and back; and from a picture, a PNG.
+          $H --no-menu --line binary --filters bk.ini --walk "0,0" --screenshot binpng.png | sed -n 1p | q "^BINARY line, positional, filters: 1 compact .* PNG 32 bytes: 89 50 4e 47"
+          $H --no-menu --warp "hello world" --press "J" --screenshot j1.png | q "^BINARY line.*its file: TXT, 33 bytes, on the binary line"
+          $H --no-menu --warp "hello world" --press "J,J" --screenshot j2.png | q "^PAGES line.*a TXT file, opened on the PAGES line"
+          $H --no-menu --line image --walk "0,0" --press "E,J,J" --screenshot j3.png | q "^IMAGE line.*a PNG file, opened on the IMAGE line"
+          $H --no-menu --line audio --warp "C4q E4q G4h Re B4e C5w" --press "J,J" --screenshot j4.png | q "^AUDIO line.*a MID file, opened on the AUDIO line"
           test -s compact.png && test -s mixed.png && test -s mark.png && test -s overlay.png
 
       - name: Reference oracle reproduces the committed vectors
@@ -697,6 +724,11 @@ jobs:
           python sieve_ref.py binary-vectors | diff - ../tests/vectors_binary_v1.tsv
           python sieve_ref.py chunk-vectors | diff - ../tests/vectors_chunks_v1.tsv
           python sieve_ref.py notes2-vectors | diff - ../tests/vectors_notes2_v1.tsv
+          # One line filtered by another (FILTER-PLUGINS.md section 15): file kinds and the binary
+          # line's filter by them, and not-written-v1, counted by the oracle's own machines, its
+          # closed form for the binary reading and the overlap walked pair by pair (about 3 minutes).
+          python sieve_ref.py kind-vectors | diff - ../tests/vectors_kinds_v1.tsv
+          python sieve_ref.py written-vectors | diff - ../tests/vectors_written_v1.tsv
           python sieve_ref.py book-filter-vectors | diff - ../tests/vectors_book_filters_v1.tsv
           python sieve_ref.py book-read ../tests/example_book_v1.book > book.out
           test "$(head -1 book.out)" = "$(awk '$1 == "id" {print $2}' ../tests/example_book_v1.book)"

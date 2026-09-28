@@ -15,6 +15,7 @@
 #include "cli/lines.hpp"
 #include "cli/locate.hpp"
 #include "cli/vault.hpp"
+#include "sieve/filekind.hpp"
 
 #include <fstream>
 
@@ -169,6 +170,161 @@ void Hallway::item_save_poll()
     {
         message(trf("hand.save_failed", {shown, ex.what()}));
     }
+}
+
+
+// ---- J: between an item and its file
+
+// The item in hand as the file F saves it (a picture at one pixel a pixel, so the file is the
+// picture at its own size), and the name to give it.
+std::vector<uint8_t> Hallway::item_file(const Book& bk, std::string& name)
+{
+    std::string title = bk.parts ? utf8_encode(line().space.text_of(bk.parts->title)) : title_text(bk);
+    while (!title.empty() && title.back() == ' ') title.pop_back();
+    title = safe_name(title);
+    auto named = [&](const std::string& ext) {
+        name = (title.empty() ? std::string("sieve-") + media_name(media()) : title) + ext;
+    };
+    if (bk.model && model_space_)
+    {
+        named(".obj");
+        const std::string obj = model_space_->to_obj(*bk.model);
+        return std::vector<uint8_t>(obj.begin(), obj.end());
+    }
+    if (bk.parts)
+    {
+        named(".txt");
+        std::string text = utf8_encode(line().space.text_of(bk.parts->title));
+        while (!text.empty() && text.back() == ' ') text.pop_back();
+        text += "\n\n";
+        for (size_t i = 0; i < bk.parts->pages.size(); ++i) text += utf8_encode(line().space.text_of(bk.parts->pages[i])) + "\n\n";
+        return std::vector<uint8_t>(text.begin(), text.end());
+    }
+    switch (line().kind)
+    {
+    case LineKind::Text: named(".txt"); break;
+    case LineKind::Audio: named(".mid"); break;
+    default: named(".png"); break;
+    }
+    return cli::unit_file(line(), bk.unit, 1);
+}
+
+void Hallway::jump_kind()
+{
+    if (!in_hand_) return;
+    const Book bk = *in_hand_;
+    if (withheld(bk))
+    {
+        message(tr("vault.withheld"));
+        return;
+    }
+    try
+    {
+        if (on_binary())
+        {
+            if (bk.is_file) open_as_kind(file_of(bk));
+            return;
+        }
+        std::string name;
+        const std::vector<uint8_t> bytes = item_file(bk, name);
+        cli::vault::check_bytes(bytes, "the file"); // the vault: refused before it has a place
+        const std::string kind = file_kind(bytes, bytes.size());
+        const int from = li_;
+        // A file longer than the binary line makes the line long enough for it (only the room you
+        // stand in keeps its pictures past 64 KB, as the File Locator does past the budget).
+        if (bytes.size() > binary_space_->max_bytes())
+        {
+            if (bytes.size() > 65536) set_thin(true);
+            set_binary_length(bytes.size());
+        }
+        drop_in_hand();
+        set_line(kBinaryLine);
+        binary_from_ = from; // its door leads back to the line the item came from
+        walked_names_[cli::sha256_hex(bytes)] = name;
+        // The item's own title, where it has one: every line's titles are the same space.
+        go_to_file(bytes, true, bk.title.empty() ? nullptr : &bk.title);
+        if (!refused_) message(trf("msg.jump.file", {kind, std::to_string(bytes.size())}));
+    }
+    catch (const std::exception& e)
+    {
+        message(trf("msg.jump.failed", {e.what()}));
+    }
+}
+
+// A file from the binary line opened on the line that holds its kind, fitted to it as T fits
+// what is warped in (the report says what changed); a text file's units become a trail (N / B).
+void Hallway::open_as_kind(const std::vector<uint8_t>& bytes)
+{
+    const std::string kind = file_kind(bytes, bytes.size());
+    int to = -1;
+    if (kind == "TXT") to = 0;
+    else if (kind == "PNG" || kind == "JPG" || kind == "GIF" || kind == "BMP") to = 1;
+    else if (kind == "MID") to = 2;
+    else if (kind == "BOOK") to = kBooksLine;
+    if (to < 0)
+    {
+        message(trf("msg.jump.no_line", {kind}));
+        return;
+    }
+    if (to == kBooksLine)
+    {
+        const std::string text(bytes.begin(), bytes.end());
+        const sieve::cli::Book record = parse_book(text);
+        const auto decoded = decode_book(record);
+        if (book_id(decoded) != record.id) throw std::runtime_error("the book's content does not match its id");
+        const BookSpace::Parts parts = record_parts(decoded, *books_);
+        drop_in_hand();
+        set_line(kBooksLine);
+        go_to_book(parts, true);
+        trail_.clear();
+        message(trf("msg.jump.opened", {kind, tr(theme().key), "book record"}));
+        return;
+    }
+    std::vector<std::vector<uint32_t>> units;
+    std::string report;
+    if (to == 1)
+    {
+        std::vector<RgbaImage> frames = decode_image_frames(bytes.data(), bytes.size(), kind);
+        if (kind == "GIF" && frames.size() > 1) to = 3; // an animation: the video line
+        const Line& l = lines_[size_t(to)];
+        if (to == 1) frames.resize(1);
+        ImageCanonReport r;
+        units.push_back(canonicalise_image(frames, l.image, &r));
+        report = std::string(kImageCanonVersion) + ": " + std::to_string(r.source_width) + "x" + std::to_string(r.source_height) + " -> " +
+                 l.image.symbols_id();
+        if (cli::unit_withheld(l, units[0])) throw cli::VaultWithheld("withheld by the vault");
+    }
+    else if (to == 2)
+    {
+        const Line& l = lines_[2];
+        const sieve::NoteSet set = note_set_of(l.space.symbols_id());
+        std::vector<std::string> notes;
+        const std::string notation = midi_to_notation(bytes, set, &notes);
+        const NotesCanonResult c = set.legacy ? canonicalise_notes(notation, l.space.unit_length())
+                                              : canonicalise_notes2(notation, set, l.space.unit_length() / set.voices);
+        units = c.units;
+        report = std::string(set.legacy ? kNotesCanonVersion : kNotes2CanonVersion) + ": " + std::to_string(c.events) + " event(s), " +
+                 std::to_string(c.units.size()) + " unit(s)";
+        for (const std::string& n : notes) report += "; " + n;
+        for (const auto& u : units)
+            if (cli::unit_withheld(l, u)) throw cli::VaultWithheld("withheld by the vault");
+    }
+    else
+    {
+        Args a;
+        a.opts["line"] = "text";
+        a.positional = {std::string(bytes.begin(), bytes.end())};
+        const WarpInput w = read_warp_input(lines_[0], a);
+        units = w.units;
+        report = w.report.front();
+    }
+    if (units.empty()) throw std::invalid_argument(tr("msg.warp.empty"));
+    drop_in_hand();
+    set_line(to);
+    trail_ = units;
+    trail_index_ = 0;
+    go_to_unit(trail_[0], true);
+    message(trf("msg.jump.opened", {kind, tr(theme().key), report}));
 }
 
 } // namespace hallway::hall

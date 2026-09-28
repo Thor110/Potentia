@@ -34,6 +34,10 @@ add_library(sieve_core STATIC
     core/src/modelspace.cpp
     core/src/filter.cpp
     core/src/filters/audio.cpp
+    core/src/filters/binary.cpp
+    core/src/filters/written.cpp
+    core/src/filekind.cpp
+    core/src/written.cpp
     core/src/filters/builtin.cpp
     core/src/filters/media.cpp
     core/src/filters/statistics.cpp

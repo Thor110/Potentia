@@ -232,8 +232,8 @@ void FilterConfig::save(const fs::path& path) const
         write_filters(o, books.parts[i]);
         write_values(o, std::string("books.") + kBookParts[i], books.parts[i]);
     }
-    o << "\n; The models and binary lines: no filters are registered for them yet (filter plugins will\n"
-      << "; add them); their mode is kept for then. The binary line is one line, met at both ends.\n";
+    o << "\n; The models line: no filters are registered for it yet; its mode is kept for then. The binary\n"
+      << "; line (one line, met at both ends) has its files' kinds: binary-kind-v1.\n";
     for (const auto& [name, lf] : {std::pair<const char*, const LineFilters*>{"models", &models}, {"binary", &binary}})
     {
         o << "\n[" << name << "]\nmode = " << to_string(lf->mode) << "\n";
@@ -359,6 +359,33 @@ FilterStack build_stack(const FilterLine& fl, const LineFilters& given)
     }
     static const AppResources resources;
     return FilterStack(fl, entries, resources);
+}
+
+FilterLine binary_filter_line(uint64_t max_bytes)
+{
+    FilterLine f;
+    f.kind = "binary";
+    f.symbols_id = "bytes256";
+    f.base = 256;
+    f.length = uint32_t(std::min<uint64_t>(max_bytes, 0xffffffffull));
+    return f;
+}
+
+BinarySieve build_binary_sieve(const BinarySpace& space, const LineFilters& given)
+{
+    LineFilters settings = given;
+    for (const auto& name : given.enabled) (void)tick_filter(settings, name, true);
+    const FilterLine fl = binary_filter_line(space.max_bytes());
+    std::vector<FilterStack::Entry> entries;
+    for (const auto& name : settings.enabled)
+    {
+        const FilterSpec* spec = find_filter(name);
+        if (!spec) throw std::invalid_argument("unknown filter '" + name + "' (see: sieve filters --line binary)");
+        if (!spec->applies(fl)) continue;
+        const auto it = settings.values.find(spec->name());
+        entries.push_back({spec, it == settings.values.end() ? FilterValues{} : it->second});
+    }
+    return BinarySieve(space, entries);
 }
 
 BookStacks build_book_stacks(const Line& cover, const Line& page, uint32_t pages, const BookFilters& settings)

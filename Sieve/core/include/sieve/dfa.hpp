@@ -38,6 +38,13 @@ Dfa minimise(const Dfa& d);
 // The units both accept (the product, minimised). Both must read the same symbols.
 Dfa intersect(const Dfa& a, const Dfa& b);
 
+// The units either accepts (the product, minimised). Both must read the same symbols.
+Dfa unite(const Dfa& a, const Dfa& b);
+
+// The units it does not accept, at every length (every state completed with a sink, acceptance
+// flipped, minimised).
+Dfa complement(const Dfa& d);
+
 // Whether every unit a accepts, b accepts too, at every length (a's rule implies b's). Exact: a
 // walk of the pairs of states the two can be in together, looking for one where a accepts and b
 // does not. Two minimal automata accept the same units exactly when they are equal, state for

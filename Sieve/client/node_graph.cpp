@@ -647,7 +647,7 @@ int Hallway::sort_node(const Book& bk)
     if (!on_binary() || !bk.is_file) return -1;
     GraphMap* g = graph_current();
     if (!g || !g->ready) return -1;
-    const std::string key = bk.index.to_hex();
+    const std::string key = (bk.content ? *bk.content : bk.index).to_hex(); // the file itself, whatever the ordering
     auto it = sort_sha_.find(key);
     if (it == sort_sha_.end())
     {

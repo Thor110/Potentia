@@ -59,8 +59,10 @@ bool unit_withheld(const Line& line, const std::vector<uint32_t>& digits);
 // A picture in this format (a unit of the image or video line, or a cover), each frame by PDQ.
 bool picture_withheld(const ImageFormat& format, const std::vector<uint32_t>& digits);
 
-// Writes a unit to a file: .png for image/video (video frames side by side), .mid for audio,
-// UTF-8 text for text. `scale` enlarges image pixels. Refuses (VaultWithheld) what the vault holds.
+// The file a unit saves as, in bytes: a PNG for image/video (video frames side by side, `scale`
+// pixels a pixel), MIDI for audio, UTF-8 text for text. Refuses (VaultWithheld) what the vault
+// holds. save_unit writes it to a file.
+std::vector<uint8_t> unit_file(const Line& line, const std::vector<uint32_t>& digits, uint32_t scale);
 void save_unit(const Line& line, const std::vector<uint32_t>& digits, const std::string& path, uint32_t scale);
 
 } // namespace sieve::cli

@@ -42,6 +42,7 @@ public:
     BinarySpace(uint64_t max_bytes, std::string key);
 
     uint64_t max_bytes() const { return max_bytes_; }
+    const std::string& key() const { return key_; }
     const BigUint& size() const { return size_; } // M, the files on the line
     size_t hex_width() const { return hex_width_; }
     // "binary/bytes256/L0-<N>/key=<key>/binary-v1"

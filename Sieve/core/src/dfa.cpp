@@ -286,6 +286,63 @@ Dfa intersect(const Dfa& a, const Dfa& b)
     return minimise(p);
 }
 
+Dfa unite(const Dfa& a, const Dfa& b)
+{
+    if (a.base != b.base) throw std::invalid_argument("automata over different symbols cannot be combined");
+    if (a.start < 0) return minimise(b);
+    if (b.start < 0) return minimise(a);
+    const size_t B = a.base;
+    // Pairs of states, either of which may be the dead end (-1) but not both.
+    std::unordered_map<uint64_t, int32_t> id;
+    std::vector<std::pair<int32_t, int32_t>> pairs;
+    auto get = [&](int32_t x, int32_t y) {
+        const uint64_t key = uint64_t(uint32_t(x)) << 32 | uint32_t(y);
+        const auto [it, added] = id.emplace(key, int32_t(pairs.size()));
+        if (added) pairs.emplace_back(x, y);
+        return it->second;
+    };
+    Dfa p;
+    p.base = a.base;
+    p.start = get(a.start, b.start);
+    for (size_t i = 0; i < pairs.size(); ++i)
+    {
+        const auto [x, y] = pairs[i];
+        p.accept.push_back((x >= 0 && a.accept[size_t(x)]) || (y >= 0 && b.accept[size_t(y)]) ? 1 : 0);
+        for (size_t c = 0; c < B; ++c)
+        {
+            const int32_t tx = x < 0 ? Dfa::kDead : a.next[size_t(x) * B + c], ty = y < 0 ? Dfa::kDead : b.next[size_t(y) * B + c];
+            p.next.push_back(tx < 0 && ty < 0 ? Dfa::kDead : get(tx, ty));
+        }
+    }
+    return minimise(p);
+}
+
+Dfa complement(const Dfa& d)
+{
+    const size_t B = d.base;
+    if (B == 0) throw std::invalid_argument("an automaton needs at least one symbol");
+    // Every state, and a sink for the dead end, with acceptance flipped.
+    const size_t n = d.states();
+    Dfa c;
+    c.base = d.base;
+    const int32_t sink = int32_t(n);
+    c.start = d.start < 0 ? sink : d.start;
+    c.next.resize((n + 1) * B);
+    c.accept.resize(n + 1);
+    for (size_t s = 0; s < n; ++s)
+    {
+        c.accept[s] = d.accept[s] ? 0 : 1;
+        for (size_t k = 0; k < B; ++k)
+        {
+            const int32_t t = d.next[s * B + k];
+            c.next[s * B + k] = t < 0 ? sink : t;
+        }
+    }
+    c.accept[n] = 1;
+    for (size_t k = 0; k < B; ++k) c.next[n * B + k] = sink;
+    return minimise(c);
+}
+
 bool subset(const Dfa& a, const Dfa& b)
 {
     if (a.base != b.base) throw std::invalid_argument("automata over different symbols cannot be compared");

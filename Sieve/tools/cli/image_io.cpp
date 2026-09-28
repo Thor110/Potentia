@@ -78,7 +78,7 @@ std::vector<RgbaImage> decode_image_frames(const uint8_t* bytes_in, size_t size,
     return frames;
 }
 
-void write_png(const std::string& path, uint32_t width, uint32_t height, const std::vector<Rgb>& pixels, uint32_t scale)
+std::string encode_png(uint32_t width, uint32_t height, const std::vector<Rgb>& pixels, uint32_t scale)
 {
     if (scale == 0) scale = 1;
     // The PNG writer takes int sizes, and the whole image is held in memory: keep it under 2^30 bytes.
@@ -97,6 +97,12 @@ void write_png(const std::string& path, uint32_t width, uint32_t height, const s
     std::string png;
     if (!stbi_write_png_to_func(append, &png, int(W), int(H), 3, rgb.data(), int(W) * 3))
         throw std::runtime_error("cannot encode PNG");
+    return png;
+}
+
+void write_png(const std::string& path, uint32_t width, uint32_t height, const std::vector<Rgb>& pixels, uint32_t scale)
+{
+    const std::string png = encode_png(width, height, pixels, scale);
     std::ofstream out(std::filesystem::path(path), std::ios::binary);
     if (!out) throw std::runtime_error("cannot write '" + path + "'");
     out.write(png.data(), static_cast<std::streamsize>(png.size()));

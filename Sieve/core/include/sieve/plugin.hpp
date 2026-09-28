@@ -143,6 +143,9 @@ FilterSpec plugin_spec(std::shared_ptr<const PluginDef> p);
 
 // A plugin filter's automaton (for combining a stack of plugins into one ranker), or nullptr.
 const Dfa* plugin_dfa(const Filter& f);
+// A filter whose rule is an automaton made in code rather than read from a file (not-written-v1,
+// sieve/written.hpp): judged, counted and combined with plugins exactly as a plugin's is.
+std::unique_ptr<Filter> make_dfa_filter(Dfa dfa, uint32_t length, std::string provenance);
 
 // The plugins in use, registered once at start-up (the application finds and loads the files;
 // tools/cli/plugins.hpp). find_filter and filters_for look here after the built-in filters.

@@ -21,6 +21,7 @@
 
 #include "lines.hpp"
 
+#include "sieve/filekind.hpp"
 #include "sieve/filter.hpp"
 
 #include <filesystem>
@@ -59,9 +60,9 @@ struct FilterConfig
 {
     LineFilters lines[4]; // text, image, audio, video
     BookFilters books;
-    // The models and binary lines: a mode and a stack each, kept for when they have filters
-    // (none are registered for them yet; filter plugins will add them). The binary line is one
-    // line, met at both ends of the corridor, so it has one section.
+    // The models and binary lines: a mode and a stack each. The models line has no filters yet;
+    // the binary line has binary-kind-v1 (sieve/filekind.hpp). The binary line is one line, met at
+    // both ends of the corridor, so it has one section.
     LineFilters models, binary;
     LineFilters& of(LineKind k) { return lines[int(k)]; }
     const LineFilters& of(LineKind k) const { return lines[int(k)]; }
@@ -92,6 +93,11 @@ FilterLine filter_line(const Line& line);
 // ticked filter's prerequisites join the stack even when a hand-edited file leaves them out.
 FilterStack build_stack(const Line& line, const LineFilters& settings);
 FilterStack build_stack(const FilterLine& line, const LineFilters& settings);
+
+// The binary line's shape as filters see it (kind "binary", its length the line's most bytes),
+// and its ticked filters as one sieve (sieve/filekind.hpp).
+FilterLine binary_filter_line(uint64_t max_bytes);
+BinarySieve build_binary_sieve(const BinarySpace& space, const LineFilters& settings);
 
 // The books line's stacks: the cover on the cover (image) line, the title on one page, and the
 // pages on all pages read as one text (P * L symbols; no stack when P = 0).
