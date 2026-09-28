@@ -640,6 +640,8 @@ void print_usage()
         std::cout << "  " << name << p.summary << "\n";
     }
     std::cout << "\nLines (choose with --line): text (default), image, audio, video.\n"
+                 "\nOn any command, --timings writes how long each phase took (runs, total, mean,\n"
+                 "slowest, in ms) to standard error at exit, for finding what is slow and benchmarking.\n"
                  "\nDetailed help and examples:\n"
                  "  sieve help warp        (or: sieve warp --help)\n"
                  "  sieve help lines       the four lines and their options\n\n"

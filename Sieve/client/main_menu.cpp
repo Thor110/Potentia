@@ -7,6 +7,7 @@
 // nothing. Every change is applied and saved at once, with no confirm step, so that a setting that
 // makes the window unusable can be undone by changing it back rather than by editing a file.
 #include "main_menu.hpp"
+#include "cli/timings.hpp"
 
 #include "font.hpp"
 #include "strings.hpp"
@@ -303,7 +304,10 @@ MainMenu::Result MainMenu::run()
             handle(e);
             while (SDL_PollEvent(&e)) handle(e);
         }
-        render();
+        {
+            sieve::cli::timings::Scope timed("menu.main.frame");
+            render();
+        }
         SDL_RenderPresent(r_);
     }
     SDL_SetRenderLogicalPresentation(r_, 0, 0, SDL_LOGICAL_PRESENTATION_DISABLED);

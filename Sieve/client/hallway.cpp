@@ -6,6 +6,7 @@
 
 #include "cli/vault.hpp"
 #include "cli/vault_decode.hpp"
+#include "cli/timings.hpp"
 
 #include <cstring>
 
@@ -327,6 +328,7 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
     const int64_t key = dt * int64_t(sieve::books_per_tile()) + slot;
     auto it = cache_.find(key);
     if (it != cache_.end()) return it->second;
+    sieve::cli::timings::Scope timed("hallway.item"); // one item worked out: content, filters, vault
     if (cache_.size() > 4096) cache_.clear(); // more than a screenful (14 tiles of 128 books)
     // Thin: only your own room's books are kept, so a line of huge units keeps a room of them.
     if (thin_ && dt != 0)
@@ -439,11 +441,13 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
         }
         if (!on_books() && !on_models() && !b.survivor && !stack().empty())
         {
+            sieve::cli::timings::Scope timed_filters("hallway.item.filters");
             const int fail = stack().first_failure(b.unit);
             b.passes = fail < 0;
             if (!b.passes) b.failed_by = stack().filter_name(size_t(fail));
         }
         if (b.survivor) b.survivor_label = short_big(b.survivor_number);
+        sieve::cli::timings::Scope timed_vault("hallway.item.vault");
         b.withheld = vault_withholds(b); // the vault: kept in its place, never shown
     }
     catch (const std::exception& e)

@@ -2,6 +2,7 @@
 // the checks, and the event loop. The hallway itself is in hallway.hpp and the files beside it.
 
 #include "window_icon.hpp"
+#include "cli/timings.hpp"
 #include "hallway.hpp"
 
 #include <SDL3/SDL_main.h>
@@ -67,7 +68,9 @@ const char* kUsage =
     "  --language CODE     menu language for this run (a file in the lang folder, e.g. en)\n"
     "  --menu              with --screenshot: a picture of the setup menu (--press keys go to it)\n"
     "  --main-menu         with --screenshot: a picture of the main menu (--press keys go to it)\n"
-    "  --filters PATH      filter settings (default: sieve-filters.ini next to the executable)\n\n"
+    "  --filters PATH      filter settings (default: sieve-filters.ini next to the executable)\n"
+    "  --timings           time each phase (building, items, filters, vault, faces, frames, menus);\n"
+    "                      written at exit to sieve-timings.txt beside the settings, and to stderr\n\n"
     "Screenshots (for documentation and testing):\n"
     "  --screenshot PATH   render one frame to a PNG and exit\n"
     "  --size WxH          window size (default 1280x720)\n"
@@ -292,6 +295,9 @@ int run(const Args& a)
     // resolution is chosen from the display. Screenshots keep --size (default 1280x720) and the
     // default settings, so they come out the same on every machine.
     const std::filesystem::path app_path = a.has("settings") ? std::filesystem::path(a.get("settings")) : AppSettings::default_path();
+    // --timings: how long each phase takes, written at exit to standard error and to
+    // sieve-timings.txt beside the settings (tools/cli/timings.hpp).
+    if (a.has("timings")) sieve::cli::timings::enable(app_path.parent_path() / "sieve-timings.txt");
     AppSettings app = shot ? AppSettings{} : AppSettings::load(app_path);
     if (shot && a.has("settings")) app = AppSettings::load(app_path);
     const DisplayInfo display = detect_display();
@@ -349,7 +355,10 @@ int run(const Args& a)
     }
     if (shot)
     {
-        auto hall = make_hallway(window, renderer, a, true, filters);
+        auto hall = [&] {
+            sieve::cli::timings::Scope timed("hallway.build");
+            return make_hallway(window, renderer, a, true, filters);
+        }();
         {
             const bool glow = app.edge_glow || a.has("edge-glow"), real = app.real_graphics || a.has("real-graphics");
             // --real-graphics brings Door Portals with it, as turning it on in the menu does. The
@@ -446,7 +455,10 @@ int run(const Args& a)
         // it is still working: a red CALCULATING, its dots counting up and starting again. It
         // only appears if the building takes long enough to be noticed.
         bool quit_while_building = false;
-        auto building = std::async(std::launch::async, [&] { return make_hallway(window, renderer, ha, first, filters); });
+        auto building = std::async(std::launch::async, [&] {
+            sieve::cli::timings::Scope timed("hallway.build");
+            return make_hallway(window, renderer, ha, first, filters);
+        });
         const Uint64 building_since = SDL_GetTicks();
         while (building.wait_for(std::chrono::milliseconds(16)) != std::future_status::ready)
         {
@@ -491,9 +503,18 @@ int run(const Args& a)
                 const Uint64 now = SDL_GetTicksNS();
                 const float dt = std::min(0.1f, float(now - last) / 1e9f);
                 last = now;
-                hall->update(dt, SDL_GetKeyboardState(nullptr));
-                hall->render();
-                SDL_RenderPresent(renderer);
+                {
+                    sieve::cli::timings::Scope timed("hallway.frame.update");
+                    hall->update(dt, SDL_GetKeyboardState(nullptr));
+                }
+                {
+                    sieve::cli::timings::Scope timed("hallway.frame.render");
+                    hall->render();
+                }
+                {
+                    sieve::cli::timings::Scope timed("hallway.frame.present"); // waits for vsync when it is on
+                    SDL_RenderPresent(renderer);
+                }
             }
             // F1: the setup menu over the hallway, which is kept. Esc there comes back to it just
             // as it was; ENTER THE HALLWAY builds a new one from the new settings.

@@ -461,6 +461,10 @@ jobs:
           if build/sieve locate vok.txt > /dev/null 2>&1; then exit 1; fi
           rm data/vault/broken.vault
           build/sieve locate vok.txt | q "^sha256"
+          # --timings: the table at exit, on the command line and from the hallway (to its file too).
+          build/sieve warp --line text --length 32 --timings "timed" 2>&1 | q "^sieve warp "
+          $H --no-menu --timings --settings timed.ini --screenshot timed.png 2>&1 | q "^hallway.item "
+          grep -q "^hallway.build " sieve-timings.txt
           # F on the item page saves the item in hand (here without its dialog): a page of the text
           # line as text, and a file of the binary line as exactly its bytes.
           rm -f saved_page.txt saved_file.bin

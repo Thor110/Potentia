@@ -7,6 +7,7 @@
 // under it, as books do.
 
 #include "hallway.hpp"
+#include "cli/timings.hpp"
 
 namespace hallway::hall {
 
@@ -401,8 +402,9 @@ void Hallway::start_face_workers()
                     job = std::move(face_jobs_.front());
                     face_jobs_.pop_front();
                 }
-                    try
+                try
                 {
+                    sieve::cli::timings::Scope timed("hallway.face"); // one item's picture, on a worker
                     job.paint(px, job.w, job.h);
                 }
                 catch (const std::exception&)

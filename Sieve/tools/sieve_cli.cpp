@@ -29,6 +29,7 @@
 #include "cli/locate.hpp"
 #include "cli/vault.hpp"
 #include "cli/vault_decode.hpp"
+#include "cli/timings.hpp"
 #include "cli/map.hpp"
 #include "cli/models.hpp"
 
@@ -1828,12 +1829,16 @@ int main(int argc, char** argv)
         }
         const Args a = parse_args(argc, argv);
         if (a.help && print_help(a.command == "sieve" ? "sift" : a.command)) return 0;
+        // --timings, on any command: how long each phase took, to standard error at exit.
+        if (a.has("timings")) timings::enable();
+        const std::string command_phase = "sieve " + a.command;
+        timings::Scope timed(command_phase.c_str());
         // A mistyped option would otherwise be ignored without a word.
         {
             const auto known = documented_options(a.command == "sieve" ? "sift" : a.command);
             if (!known.empty())
                 for (const auto& [key, value] : a.opts)
-                    if (std::find(known.begin(), known.end(), key) == known.end())
+                    if (key != "timings" && std::find(known.begin(), known.end(), key) == known.end())
                         std::cerr << "warning: --" << key << " is not an option of 'sieve " << a.command << "' (see: sieve help " << a.command
                                   << "); ignored\n";
         }

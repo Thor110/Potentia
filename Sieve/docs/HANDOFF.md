@@ -713,4 +713,13 @@ Meta's pdqhash on PNGs (JPEGs within 2 bits: stb and libjpeg decode slightly dif
 built-in test entry: the test picture (`sieve vault --test-picture`). The G message no longer
 overwrites "withheld". Misses, documented: heavy crops, few-colour palettes, quality < 50. Next:
 `chunk` entries; then the filter plugins (step 1 needs the full test harness: ask first).
+`--timings` (same night; Edward's 5 s stall on the setup menu turned out to be VS2022 and other
+programs in the background, not Sieve): tools/cli/timings.* in sieve_locate, a table per phase
+(runs, total, mean, slowest) written at exit to stderr, and by the hallway to sieve-timings.txt
+beside its settings. Phases: sieve <command>, hallway.build, hallway.item(.filters/.vault),
+hallway.face, hallway.frame.update/render/present, menu.main.frame, menu.setup.frame,
+menu.budget.measure(_binary), menu.survivors(.books), vault.load/bytes/decoders/pdq. Off costs one
+atomic read. First reading: on the image line nearly all of an item's cost is PDQ (0.11 ms of 0.13).
+Worth doing later, measured with this: the item work on the face workers' pool (it is pure, per
+address; an item is shown only once its vault check is done).
 

@@ -40,6 +40,8 @@ data/fonts/unifont.hex
 /vok.txt
 /vhex.txt
 /vb64.txt
+/sieve-timings.txt
+/timed.ini
 /vtp.png
 /vtp4.png
 /vtp.b64

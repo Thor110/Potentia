@@ -822,6 +822,8 @@ Measured on a 2-core x86-64 container with SHA-NI (Release build):
 
 Where it came from: hardware SHA-256; hashing the round function's fixed prefix once per round instead of once per output block; computing each address once and deriving its hex and position from it; stepping neighbours on the address digits so each shelf costs one unscramble instead of three; converting big numbers several digits at a time; and deduplicating dictionary suffixes without a hash set. The hallway caches each book's address, hex and position, and skips tiles that are out of view. None of this changes a single address: every conformance vector is identical.
 
+**Measuring it yourself.** `--timings`, on any command and on the hallway, times each phase and writes a table at exit: how many runs, the total, the mean and the slowest, in milliseconds. It covers building the hallway (`hallway.build`), each item worked out (`hallway.item`, and within it `.filters` and `.vault`), each face painted (`hallway.face`, on the worker threads), each frame's update, render and present, the menus' frames, the budget test and the survivor counts, and the vault's own checks (`vault.bytes`, `vault.decoders`, `vault.pdq`). The hallway writes it to `sieve-timings.txt` beside its settings as well as to standard error, since it is usually started without a console. Phases nest, so their totals overlap. A heavy program in the background shows up here as slow phases everywhere at once; one slow phase is the thing to look at.
+
 After an intentional, versioned change, regenerate them:
 
 ```sh

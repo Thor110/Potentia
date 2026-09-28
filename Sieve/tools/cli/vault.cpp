@@ -10,6 +10,7 @@
 
 #include "cli/image_io.hpp"
 #include "cli/locate.hpp"
+#include "cli/timings.hpp"
 #include "cli/pdq_hash.hpp"
 #include "sieve/sha256.hpp"
 
@@ -142,7 +143,10 @@ const Vault& the_vault()
 {
     static std::once_flag once;
     static Vault v;
-    std::call_once(once, [] { v = load(); });
+    std::call_once(once, [] {
+        timings::Scope t("vault.load");
+        v = load();
+    });
     return v;
 }
 
@@ -188,6 +192,7 @@ bool withheld_sha256(const std::string& h)
 
 bool withheld_picture(const uint8_t* rgba, uint32_t width, uint32_t height)
 {
+    timings::Scope t("vault.pdq");
     const Vault& v = the_vault();
     if (v.st.failed_closed) return true;
     if (v.pdq.empty()) return false;
@@ -241,6 +246,7 @@ bool picture_magic(const uint8_t* b, size_t n)
 
 bool withheld_bytes(const std::vector<uint8_t>& bytes)
 {
+    timings::Scope t("vault.bytes");
     const Vault& v = the_vault();
     if (v.st.failed_closed) return true;
     if (v.sha256.count(sha256_hex(bytes)) != 0) return true;

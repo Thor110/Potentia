@@ -20,6 +20,7 @@
 
 #include "cli/locate.hpp"
 #include "cli/vault.hpp"
+#include "cli/timings.hpp"
 
 #include <algorithm>
 #include <array>
@@ -333,6 +334,7 @@ std::vector<Bytes> decodings(const std::string& utf8)
 
 bool withheld_written(const std::string& utf8)
 {
+    timings::Scope t("vault.decoders");
     if (status().failed_closed) return true;
     for (const Bytes& b : decodings(utf8))
         if (withheld_bytes(b)) return true;

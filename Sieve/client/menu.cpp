@@ -12,6 +12,7 @@
 // Rows are numbered, and the numbers appear in the row table, the filter mapping and the tests
 // alike, so a row inserted in the middle moves everything after it.
 #include "menu.hpp"
+#include "cli/timings.hpp"
 #include "display.hpp"
 
 #include "font.hpp"
@@ -132,6 +133,7 @@ Budget machine_budget()
     // bits, a long page), turned from its address into its digits. The first turn builds the
     // powers the conversion keeps for that base, so the second is the one that is timed.
     static const std::pair<double, double> measured = [] {
+        sieve::cli::timings::Scope timed("menu.budget.measure");
         const uint32_t base = 27, length = 40000;
         sieve::BigUint v = sieve::BigUint::pow(base, length);
         v -= sieve::BigUint(1);
@@ -145,6 +147,7 @@ Budget machine_budget()
     // in scrambled order, which is the slower of the two (the keyed shuffle over a number of
     // half a million bits costs several times the conversion; both grow in proportion).
     static const std::pair<double, double> measured_binary = [] {
+        sieve::cli::timings::Scope timed("menu.budget.measure_binary");
         const sieve::BinarySpace bs(65536, "sieve");
         sieve::BigUint top = bs.size();
         top -= sieve::BigUint(1);
@@ -811,7 +814,10 @@ Menu::Result Menu::run()
             handle(e, done, result);
             while (SDL_PollEvent(&e)) handle(e, done, result);
         }
-        render();
+        {
+            sieve::cli::timings::Scope timed("menu.setup.frame"); // its slowest: the first, which counts the lines
+            render();
+        }
         SDL_RenderPresent(r_);
     }
     SDL_StopTextInput(window_);
@@ -1166,6 +1172,7 @@ const Menu::StackInfo& Menu::stack_info(int i)
     }
     try
     {
+        sieve::cli::timings::Scope timed("menu.survivors"); // a line's stack built and counted
         const sieve::FilterStack st = sieve::cli::build_stack(fl, lf);
         if (st.empty()) info.status = tr("status.none_units");
         else if (st.ranker())
@@ -1210,6 +1217,7 @@ const Menu::StackInfo& Menu::book_stack_info()
     static const char* const names[3] = {"cover", "title", "pages"};
     try
     {
+        sieve::cli::timings::Scope timed("menu.survivors.books");
         double bits = 0, log10 = 0;
         bool exact = true, any = false, none_survive = false;
         std::string blocker;
