@@ -1,0 +1,28 @@
+sieve-filter-v1
+; A test of the token form's grammar: four word lists, which may follow which, how a sentence may
+; start and end, and a word in two sets ("run" is a noun and a verb). Not shipped: CI checks the
+; engine against the oracle with it.
+id        toy-grammar
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     text
+symbols   lower27
+describe  A toy grammar: determiner, adjectives, noun, verb, and on (whole edges).
+
+tokens    separator " "
+edges     whole
+set       det   list:det.txt
+set       adj   list:adj.txt
+set       noun  list:noun.txt
+set       verb  list:verb.txt
+follow    det   adj
+follow    det   noun
+follow    adj   adj
+follow    adj   noun
+follow    noun  verb
+follow    verb  det
+follow    verb  noun
+first     det noun
+last      noun verb
+end

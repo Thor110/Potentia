@@ -3,10 +3,13 @@
 
 #include "window_icon.hpp"
 #include "cli/plugins.hpp"
+#include "designer.hpp"
 #include "cli/timings.hpp"
 #include "hallway.hpp"
 
 #include <SDL3/SDL_main.h>
+
+#include <fstream>
 
 using namespace hallway;
 using namespace hallway::hall;
@@ -57,7 +60,7 @@ const char* kUsage =
     "  --goto ADDR|P%|@T   go to an address, a percentage, or corridor tile T on start\n\n"
     "Menu:\n"
     "  The main menu opens first: Start Sieve, Settings (graphics, controls, language; saved to\n"
-    "  sieve-hallway.ini) and Exit Sieve. Start Sieve opens the setup menu (Esc: back to the\n"
+    "  sieve-hallway.ini), the Filter Designer (make filter plugins as nodes) and Exit Sieve. Start Sieve opens the setup menu (Esc: back to the\n"
     "  main menu): adjust every line's state space and see the five lines as a map.\n"
     "  The magnifying glass beside a line's title (or F) opens its filters: tick filters, set\n"
     "  their parameters, and choose the mode: off, mark (failures faint), hide (failures left\n"
@@ -69,6 +72,9 @@ const char* kUsage =
     "  --language CODE     menu language for this run (a file in the lang folder, e.g. en)\n"
     "  --menu              with --screenshot: a picture of the setup menu (--press keys go to it)\n"
     "  --main-menu         with --screenshot: a picture of the main menu (--press keys go to it)\n"
+    "  --designer          with --screenshot: a picture of the filter designer; --design FILE opens a\n"
+    "                      plugin, --script \"Down,Right,=text,Return\" runs keys and typed text, and\n"
+    "                      --design-out FILE writes the filter as the designer would save it\n"
     "  --filters PATH      filter settings (default: sieve-filters.ini next to the executable)\n"
     "  --timings           time each phase (building, items, filters, vault, faces, frames, menus);\n"
     "                      written at exit to sieve-timings.txt beside the settings, and to stderr\n\n"
@@ -154,6 +160,7 @@ std::vector<std::pair<SDL_Keycode, SDL_Keymod>> parse_presses(const std::string&
         std::string name = spec.substr(start, end - start);
         SDL_Keymod mod = SDL_KMOD_NONE;
         if (name.rfind("Shift+", 0) == 0) { mod = SDL_KMOD_LSHIFT; name = name.substr(6); }
+        if (name.rfind("Ctrl+", 0) == 0) { mod = SDL_KMOD_LCTRL; name = name.substr(5); }
         const SDL_Keycode key = name == "-" ? SDLK_MINUS : name == "=" ? SDLK_EQUALS : SDL_GetKeyFromName(name.c_str());
         if (key == SDLK_UNKNOWN) throw std::invalid_argument("--press: unknown key '" + name + "'");
         out.emplace_back(key, mod);
@@ -332,6 +339,41 @@ int run(const Args& a)
     if (a.has("filters") && !std::filesystem::exists(filters_path))
         std::cerr << "note: " << filters_path << " does not exist yet: no filters ticked (the menu saves your choices there)\n";
     FilterConfig filters = FilterConfig::load(filters_path);
+    if (shot && a.has("designer"))
+    {
+        // A picture of the filter designer (for documentation and testing): --design FILE opens a
+        // plugin in it; --script runs keys and typed text ("Down,Right,=some words,Return").
+        Designer d(window, renderer, a.get("design"));
+        d.settle();
+        if (a.has("script"))
+        {
+            std::string script = a.get("script");
+            size_t at = 0;
+            while (at <= script.size())
+            {
+                const size_t comma = script.find(',', at);
+                const std::string item = script.substr(at, comma == std::string::npos ? std::string::npos : comma - at);
+                if (!item.empty() && item[0] == '=') d.type(item.substr(1));
+                else if (!item.empty())
+                    for (const auto& [key, mod] : parse_presses(item)) d.press(key, mod);
+                d.settle();
+                if (comma == std::string::npos) break;
+                at = comma + 1;
+            }
+        }
+        d.settle();
+        d.render();
+        if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
+        std::cout << "designer: " << d.doc().name() << "\n";
+        if (!d.status().empty()) std::cout << "status: " << d.status() << "\n";
+        if (a.has("design-out"))
+        {
+            std::ofstream out(std::filesystem::path(a.get("design-out")), std::ios::binary);
+            out << d.doc().to_text();
+        }
+        std::cout << "saved " << a.get("screenshot") << "\n";
+        return finish();
+    }
     if (shot && a.has("main-menu"))
     {
         // A picture of the main menu; --press keys go to it (e.g. Down,Enter for Settings).
@@ -431,7 +473,15 @@ int run(const Args& a)
         if (show_main)
         {
             MainMenu mm(window, renderer, app, app_path, display);
-            if (mm.run() == MainMenu::Result::Quit) break;
+            const MainMenu::Result r = mm.run();
+            if (r == MainMenu::Result::Quit) break;
+            if (r == MainMenu::Result::Designer)
+            {
+                // The filter designer, and back to the main menu from it.
+                Designer designer(window, renderer);
+                if (designer.run() == Designer::Result::Quit) break;
+                continue;
+            }
             show_main = false;
         }
         if (show_menu)

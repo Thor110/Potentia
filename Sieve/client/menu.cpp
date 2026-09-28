@@ -21,6 +21,7 @@
 #include "theme.hpp"
 
 #include "cli/dictionaries.hpp"
+#include "cli/plugins.hpp"
 #include "cli/models.hpp"
 
 #include "sieve/alphabet.hpp"
@@ -1265,32 +1266,51 @@ const Menu::StackInfo& Menu::book_stack_info()
     return info;
 }
 
+// One stack's rows under the current tab: its filters, the settings of those ticked, and for a
+// custom filter who made it and what it requires; notes on prerequisites come first.
+void Menu::add_filter_rows(std::vector<ORow>& rows, const sieve::FilterLine& line, const sieve::cli::LineFilters& lf, int part) const
+{
+    for (const std::string& n : sieve::cli::prerequisite_notes(lf)) rows.push_back({ORow::Kind::Info, "", "", part, trf("filters.note", {n})});
+    bool any = false;
+    for (const sieve::FilterSpec* f : sieve::filters_for(line))
+    {
+        const bool custom = !f->plugin_sha256.empty();
+        if (custom != (otab_ == 1)) continue;
+        any = true;
+        rows.push_back({ORow::Kind::Filter, f->name(), "", part});
+        if (custom)
+        {
+            rows.push_back({ORow::Kind::Info, f->name(), "", part, trf("filters.custom.by", {f->author, f->origin, f->plugin_sha256.substr(0, 12)})});
+            for (const auto& r : f->prerequisites)
+            {
+                std::string what = r.name;
+                for (const auto& [k, v] : r.values) what += " " + k + "=" + v;
+                rows.push_back({ORow::Kind::Info, f->name(), "", part, trf("filters.custom.requires", {what})});
+            }
+        }
+        if (lf.is_enabled(f->name()))
+            for (const auto& p : f->params) rows.push_back({ORow::Kind::Param, f->name(), p.key, part});
+    }
+    if (otab_ == 1 && !any) rows.push_back({ORow::Kind::Info, "", "", part, tr("filters.custom.none")});
+}
+
 std::vector<Menu::ORow> Menu::overlay_rows() const
 {
-    std::vector<ORow> rows{{ORow::Kind::Mode, "", ""}};
+    std::vector<ORow> rows{{ORow::Kind::Mode, "", ""}, {ORow::Kind::Tabs, "", ""}};
     if (overlay_ == 4)
     {
         for (int part = 0; part < 3; ++part)
         {
             rows.push_back({ORow::Kind::Header, "", "", part});
-            const sieve::cli::LineFilters& lf = cfg_.books.parts[part];
-            for (const sieve::FilterSpec* f : sieve::filters_for(book_part_line(part)))
-            {
-                rows.push_back({ORow::Kind::Filter, f->name(), "", part});
-                if (lf.is_enabled(f->name()))
-                    for (const auto& p : f->params) rows.push_back({ORow::Kind::Param, f->name(), p.key, part});
-            }
+            add_filter_rows(rows, book_part_line(part), cfg_.books.parts[part], part);
         }
-        return rows;
     }
-    if (overlay_ < 0 || overlay_ >= 4) return rows; // closed: no line to list
-    const sieve::cli::LineFilters& lf = cfg_.lines[overlay_];
-    for (const sieve::FilterSpec* f : sieve::filters_for(filter_line_of(overlay_)))
-    {
-        rows.push_back({ORow::Kind::Filter, f->name(), ""});
-        if (lf.is_enabled(f->name()))
-            for (const auto& p : f->params) rows.push_back({ORow::Kind::Param, f->name(), p.key});
-    }
+    else if (overlay_ >= 0 && overlay_ < 4) add_filter_rows(rows, filter_line_of(overlay_), cfg_.lines[overlay_], -1);
+    else return {{ORow::Kind::Mode, "", ""}}; // closed, or a line with no filters yet
+    // Custom filter files that did not load, with why: never skipped without a word.
+    if (otab_ == 1)
+        for (const auto& pf : sieve::cli::load_plugins())
+            if (!pf.error.empty()) rows.push_back({ORow::Kind::Info, "", "", -1, trf("filters.custom.refused", {pf.path, pf.error})});
     return rows;
 }
 
@@ -1306,6 +1326,23 @@ void Menu::save_filters()
     }
 }
 
+// Z (this tab) and C (both tabs): if every filter in reach is ticked, untick them all; otherwise
+// tick them all (with their prerequisites). On the books line, every part's list.
+void Menu::toggle_all_filters(bool both_tabs)
+{
+    std::vector<std::pair<sieve::cli::LineFilters*, sieve::FilterLine>> stacks;
+    if (overlay_ == 4)
+        for (int part = 0; part < 3; ++part) stacks.emplace_back(&cfg_.books.parts[part], book_part_line(part));
+    else if (overlay_ >= 0 && overlay_ < 4) stacks.emplace_back(&cfg_.lines[overlay_], filter_line_of(overlay_));
+    std::vector<std::pair<sieve::cli::LineFilters*, std::string>> in_reach;
+    for (auto& [lf, line] : stacks)
+        for (const sieve::FilterSpec* f : sieve::filters_for(line))
+            if (both_tabs || f->plugin_sha256.empty() == (otab_ == 0)) in_reach.emplace_back(lf, f->name());
+    const bool all_on = std::all_of(in_reach.begin(), in_reach.end(), [](const auto& e) { return e.first->is_enabled(e.second); });
+    for (auto& [lf, name] : in_reach) (void)sieve::cli::tick_filter(*lf, name, !all_on);
+    save_filters();
+}
+
 void Menu::overlay_change(int dir, bool big)
 {
     const auto rows = overlay_rows();
@@ -1315,7 +1352,9 @@ void Menu::overlay_change(int dir, bool big)
     using sieve::cli::FilterMode;
     switch (row.kind)
     {
-    case ORow::Kind::Header: return;
+    case ORow::Kind::Header:
+    case ORow::Kind::Info: return;
+    case ORow::Kind::Tabs: otab_ = 1 - otab_; break;
     case ORow::Kind::Mode:
     {
         const FilterMode order[5] = {FilterMode::Off, FilterMode::Mark, FilterMode::Hide, FilterMode::Compact, FilterMode::Excluded};
@@ -1329,7 +1368,7 @@ void Menu::overlay_change(int dir, bool big)
         mode = order[((m + dir) % 5 + 5) % 5];
         break;
     }
-    case ORow::Kind::Filter: lf.set_enabled(row.filter, !lf.is_enabled(row.filter)); break;
+    case ORow::Kind::Filter: (void)sieve::cli::tick_filter(lf, row.filter, !lf.is_enabled(row.filter)); break; // with its prerequisites
     case ORow::Kind::Param:
     {
         const sieve::FilterSpec* spec = sieve::find_filter(row.filter);
@@ -1346,11 +1385,13 @@ void Menu::overlay_change(int dir, bool big)
         }
         else
         {
-            // Registered data: cycle through the registry's ids ("" = the default).
+            // A fixed list (key-v1's tonic and scale), or registered data: the registry's ids
+            // ("" = the default).
             std::vector<std::string> choices{""};
-            try
+            if (!p->choices.empty()) choices = p->choices;
+            else try
             {
-                if (p->key == "dictionary")
+                if (p->key == "dictionary" || p->registry == "dictionary")
                     for (const auto& e : sieve::cli::load_registry().entries) choices.push_back(e.id);
                 if (p->key == "model")
                     for (const auto& e : sieve::cli::load_model_registry().entries)
@@ -1382,6 +1423,8 @@ void Menu::overlay_key(SDL_Keycode key, bool shift)
     case SDLK_SPACE:
     case SDLK_RETURN:
     case SDLK_KP_ENTER: overlay_change(1, shift); break;
+    case SDLK_Z: toggle_all_filters(false); break;
+    case SDLK_C: toggle_all_filters(true); break;
     case SDLK_ESCAPE:
     case SDLK_F:
         save_filters();
@@ -1627,6 +1670,32 @@ void Menu::render_overlay(float W, float H)
                 sub = sub.substr(std::min(sub.size(), cut + 1));
             }
         }
+        else if (row.kind == ORow::Kind::Tabs)
+        {
+            // How many of each the line offers, whichever tab is showing.
+            size_t built = 0, custom = 0;
+            auto count = [&](const sieve::FilterLine& l) {
+                for (const sieve::FilterSpec* f : sieve::filters_for(l)) ++(f->plugin_sha256.empty() ? built : custom);
+            };
+            if (overlay_ == 4)
+                for (int part = 0; part < 3; ++part) count(book_part_line(part));
+            else count(filter_line_of(overlay_));
+            const std::string a = trf("filters.tab.builtin", {std::to_string(built)}), b = trf("filters.tab.custom", {std::to_string(custom)});
+            it.lines = {otab_ == 0 ? "[ " + a + " ]     " + b + " " : "  " + a + "     [ " + b + " ]", "    " + tr("filters.tab.help")};
+        }
+        else if (row.kind == ORow::Kind::Info)
+        {
+            std::string d = row.text;
+            const std::string indent = row.filter.empty() ? "  " : "      ";
+            while (!d.empty())
+            {
+                size_t cut = d.size() <= cols - 8 ? d.size() : d.rfind(' ', cols - 8);
+                if (cut == std::string::npos || cut == 0) cut = std::min(d.size(), cols - 8);
+                it.lines.push_back(indent + d.substr(0, cut));
+                d = d.substr(std::min(d.size(), cut + 1));
+            }
+            if (it.lines.empty()) it.lines.push_back("");
+        }
         else if (row.kind == ORow::Kind::Filter)
         {
             const sieve::FilterSpec* f = sieve::find_filter(row.filter);
@@ -1679,7 +1748,8 @@ void Menu::render_overlay(float W, float H)
             SDL_RenderFillRect(r_, &r);
         }
         for (size_t k = 0; k < it.lines.size(); ++k)
-            text(r_, x, y + float(k) * 12, (k == 0 && i == orow_ ? "> " : "  ") + it.lines[k], 1, k == 0 ? white : grey);
+            text(r_, x, y + float(k) * 12, (k == 0 && i == orow_ ? "> " : "  ") + it.lines[k], 1,
+                 k == 0 && rows[size_t(i)].kind != ORow::Kind::Info ? white : grey);
         y += it.h;
     }
     if (oscroll_ > 0) text(r_, box_.x + box_.w - 90, top - 12, tr("filters.more_above"), 1, grey);

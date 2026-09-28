@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <fstream>
 #include <mutex>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 
@@ -287,8 +288,66 @@ FilterLine filter_line(const Line& line)
 
 FilterStack build_stack(const Line& line, const LineFilters& settings) { return build_stack(filter_line(line), settings); }
 
-FilterStack build_stack(const FilterLine& fl, const LineFilters& settings)
+std::vector<std::string> tick_filter(LineFilters& settings, const std::string& name, bool on)
 {
+    std::vector<std::string> added;
+    if (!on)
+    {
+        settings.set_enabled(name, false);
+        return added;
+    }
+    std::vector<std::pair<std::string, const FilterValues*>> todo{{name, nullptr}};
+    std::set<std::string> seen;
+    while (!todo.empty())
+    {
+        const auto [n, pinned] = todo.back();
+        todo.pop_back();
+        if (!seen.insert(n).second) continue;
+        if (!settings.is_enabled(n))
+        {
+            settings.set_enabled(n, true);
+            if (n != name) added.push_back(n);
+            if (pinned) // newly ticked: it takes the settings its dependant pins
+                for (const auto& [k, v] : *pinned) settings.values[n][k] = v;
+        }
+        if (const FilterSpec* spec = find_filter(n))
+            for (const auto& r : spec->prerequisites) todo.emplace_back(r.name, &r.values);
+    }
+    return added;
+}
+
+std::vector<std::string> prerequisite_notes(const LineFilters& settings)
+{
+    std::vector<std::string> notes;
+    for (const auto& name : settings.enabled)
+    {
+        const FilterSpec* spec = find_filter(name);
+        if (!spec) continue;
+        for (const auto& r : spec->prerequisites)
+        {
+            if (!settings.is_enabled(r.name))
+            {
+                notes.push_back(name + " requires " + r.name + ", which is not ticked (it joins the stack anyway)");
+                continue;
+            }
+            const FilterSpec* req = find_filter(r.name);
+            const auto it = settings.values.find(r.name);
+            const FilterValues have = it == settings.values.end() ? FilterValues{} : it->second;
+            for (const auto& [k, v] : r.values)
+            {
+                const std::string now = req ? param_value(*req, have, k) : (have.count(k) ? have.at(k) : "");
+                if (now != v) notes.push_back(name + " requires " + r.name + " at " + k + "=" + v + "; it is set to " + k + "=" + now);
+            }
+        }
+    }
+    return notes;
+}
+
+FilterStack build_stack(const FilterLine& fl, const LineFilters& given)
+{
+    // The ticked filters, and any prerequisite a hand-edited file left out (with its pinned settings).
+    LineFilters settings = given;
+    for (const auto& name : given.enabled) (void)tick_filter(settings, name, true);
     std::vector<FilterStack::Entry> entries;
     for (const auto& name : settings.enabled)
     {

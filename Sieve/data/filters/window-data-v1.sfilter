@@ -1,0 +1,16 @@
+sieve-filter-v1
+; The built-in window-v1, written in the token form: a template for word filters, and a check on the
+; engine (it must judge exactly as window-v1 does, with the same dictionary).
+id        window-data
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     text
+symbols   lower27
+describe  Could be cut from running English: whole words inside, a word's end at the left edge, a word's start at the right edge (window-v1, as a plugin).
+param     dictionary  dict  default  the word list (a registered dictionary)
+
+tokens    separator " "
+edges     cut
+set       word  dict:{dictionary}
+end

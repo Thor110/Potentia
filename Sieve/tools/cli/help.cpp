@@ -404,7 +404,9 @@ const std::vector<Page>& pages()
           {"--plugin FILE", "Load one plugin file and show its header, its automaton (states as declared and\n"
                             "minimal) and, at the line's length, its survivors, what it excludes, and a few\n"
                             "survivors by rank. The line follows the plugin's symbols unless given."},
-          {"--params NAME=V,...", "With --plugin: parameter values (the rest take their defaults)."}},
+          {"--params NAME=V,...", "With --plugin: parameter values (the rest take their defaults)."},
+          {"--relations", "With --plugin: how its rule compares with every other custom filter for the line (same,\n"
+                          "stricter or looser, exactly, over every length): duplicates show up here."}},
          {{"sieve filters", "the text line's filters (at length 32) and what is ticked"},
           {"sieve filters --plugin data/filters/max-run-data-v1.sfilter --length 12 --params max=2", "a plugin at a setting"},
           {"sieve filters --length 1000", "the same stack judged at paragraph scale"},

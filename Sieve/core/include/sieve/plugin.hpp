@@ -19,6 +19,8 @@
 //   lines     text                      the lines it applies to: text image video audio
 //   symbols   lower27                   an alphabet id, palette:<id>, notes104, or any
 //   describe  No two SPACEs in a row.
+//   requires  clean-v1                  filters switched on with this one (by full name), one a line,
+//   requires  max-run-data-v1  max=3    each with any settings it pins
 //   param     max  int  3  1  64  Longest run allowed   (name, kind, default, min, max, text)
 //   class     space  " "                symbols: "literal", a-z, @7, @0..@9 (by digit), or *
 //   class     letter a-z                (* is every symbol in no other class)
@@ -31,6 +33,26 @@
 //   done
 //   end
 //
+// The token form (instead of classes, states and transitions): tokens are runs of symbols between
+// separators, each a word of some set; one separator between tokens, at most one at each end, and
+// at least one token.
+//
+//   tokens    separator " "             the symbols that separate tokens (as in a class)
+//   edges     whole                     whole | cut: cut lets a token touching the unit's start be
+//                                       a suffix of a word, one touching its end a prefix, and one
+//                                       touching both a substring (a page cut from running text)
+//   param     dictionary dict default  a dictionary setting: a registered id, or default
+//   set       word  dict:{dictionary}   a registered dictionary (dict:ID, or dict:{a dict param})
+//   set       det   list:determiners.txt  a word list beside the plugin, one word a line
+//   follow    det   noun                which set may follow which (none at all: any order)
+//   first     det noun                  the sets the first token may be (default: all)
+//   last      noun                      the sets the last token may be (default: all)
+//
+// A word in several sets may be any of them: a unit passes if some reading of its tokens chains
+// by `follow`. A token cut by an edge (cut) may be any set. A dictionary's words take the line's
+// symbols as they are (letters it does not have are skipped, with the dictionary's own rule);
+// a list's words must be the line's symbols. Each list's SHA-256 is part of the provenance.
+//
 // Expressions: + - * / % and brackets over integers, parameters and `for` variables; / and % are
 // for non-negative numbers only. A (state, symbol) given two different targets is an error; one
 // given none is the dead end. The oracle (reference/sieve_ref.py plugin) reads the same files with
@@ -40,6 +62,7 @@
 #include "sieve/dfa.hpp"
 #include "sieve/filter.hpp"
 
+#include <deque>
 #include <memory>
 #include <string>
 #include <vector>
@@ -53,15 +76,18 @@ struct PluginDef; // the parsed file (plugin.cpp)
 struct PluginHeader
 {
     std::string id, author, origin, symbols, describe, sha256;
+    std::string form; // "table" or "tokens"
     uint32_t version = 0;
     std::vector<std::string> lines;
     std::vector<FilterParam> params;
+    std::vector<FilterSpec::Prerequisite> prerequisites;
     std::string name() const { return id + "-v" + std::to_string(version); }
 };
 
 // Parses a plugin file's text; `sha256` is the file's, recorded as its identity. Throws
 // std::invalid_argument naming the line on anything malformed.
-std::shared_ptr<const PluginDef> parse_plugin(const std::string& text, const std::string& sha256);
+// `folder` is where the file is, for word lists beside it (`set NAME list:FILE`).
+std::shared_ptr<const PluginDef> parse_plugin(const std::string& text, const std::string& sha256, const std::string& folder = {});
 const PluginHeader& plugin_header(const PluginDef& p);
 
 // Whether the plugin is written for this line (its kind, and its symbols).
@@ -69,7 +95,10 @@ bool plugin_applies(const PluginDef& p, const FilterLine& line);
 
 // The automaton for this line and these parameter values (missing ones take their defaults), as
 // declared (`declared_states` receives how many the file declared) and minimised.
-Dfa compile_plugin(const PluginDef& p, const FilterLine& line, const FilterValues& values, size_t* declared_states = nullptr);
+// `resources` supplies registered dictionaries (the token form's `dict:` sets).
+// `data` receives the hashes of the word lists and dictionaries used, for the provenance.
+Dfa compile_plugin(const PluginDef& p, const FilterLine& line, const FilterValues& values, const FilterResources& resources,
+                   size_t* declared_states = nullptr, std::string* data = nullptr);
 
 // Counting needs a table of states x (length + 1) numbers; past this many bytes a plugin judges
 // only (mark, hide, excluded), and the menu says why.
@@ -85,6 +114,9 @@ const Dfa* plugin_dfa(const Filter& f);
 // The plugins in use, registered once at start-up (the application finds and loads the files;
 // tools/cli/plugins.hpp). find_filter and filters_for look here after the built-in filters.
 void register_plugins(std::vector<FilterSpec> specs);
-const std::vector<FilterSpec>& plugin_registry();
+// One more, while running (the designer's save): false if a filter of that name is registered
+// already. Registered filters never move, so pointers to them stay good.
+bool add_plugin(FilterSpec spec);
+const std::deque<FilterSpec>& plugin_registry();
 
 } // namespace sieve

@@ -27,21 +27,26 @@ const std::vector<FilterSpec>& filter_registry()
 const FilterSpec* find_filter(const std::string& name)
 {
     const FilterSpec* newest = nullptr;
-    for (const auto* list : {&filter_registry(), &plugin_registry()})
-        for (const auto& f : *list)
+    auto look = [&](const auto& list) -> const FilterSpec* {
+        for (const auto& f : list)
         {
             if (f.name() == name) return &f;
             if (f.id == name && (!newest || f.version > newest->version)) newest = &f;
         }
+        return nullptr;
+    };
+    if (const FilterSpec* f = look(filter_registry())) return f;
+    if (const FilterSpec* f = look(plugin_registry())) return f;
     return newest;
 }
 
 std::vector<const FilterSpec*> filters_for(const FilterLine& line)
 {
     std::vector<const FilterSpec*> out;
-    for (const auto* list : {&filter_registry(), &plugin_registry()})
-        for (const auto& f : *list)
-            if (f.applies(line)) out.push_back(&f);
+    for (const auto& f : filter_registry())
+        if (f.applies(line)) out.push_back(&f);
+    for (const auto& f : plugin_registry())
+        if (f.applies(line)) out.push_back(&f);
     return out;
 }
 

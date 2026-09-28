@@ -1,0 +1,16 @@
+sieve-filter-v1
+; The built-in words-v1, written in the token form: a template for word filters, and a check on the
+; engine (it must judge exactly as words-v1 does, with the same dictionary).
+id        words-data
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     text
+symbols   lower27
+describe  Every token is a complete dictionary word (words-v1, as a plugin).
+param     dictionary  dict  default  the word list (a registered dictionary)
+
+tokens    separator " "
+edges     whole
+set       word  dict:{dictionary}
+end

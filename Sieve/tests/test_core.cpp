@@ -1387,7 +1387,8 @@ std::shared_ptr<const PluginDef> load_plugin_file(const std::string& path)
     s << in.rdbuf();
     const std::string text = s.str();
     CHECK(!text.empty());
-    return parse_plugin(text, Sha256::hex(Sha256::hash(text)));
+    const size_t slash = path.find_last_of('/');
+    return parse_plugin(text, Sha256::hex(Sha256::hash(text)), slash == std::string::npos ? std::string(".") : path.substr(0, slash));
 }
 
 bool plugin_parse_fails(const std::string& text, const std::string& expect)
@@ -1395,7 +1396,8 @@ bool plugin_parse_fails(const std::string& text, const std::string& expect)
     try
     {
         const auto p = parse_plugin(text, "0");
-        (void)compile_plugin(*p, text_line(4), {});
+        static const TestResources none(nullptr, nullptr);
+        (void)compile_plugin(*p, text_line(4), {}, none);
     }
     catch (const std::invalid_argument& e)
     {
@@ -1479,6 +1481,72 @@ void test_plugins(const std::string& dir)
         CHECK(both.ranker() && both.ranker()->count() == BigUint(n));
     }
 
+    // The token form: words-data-v1 and window-data-v1 judge and count exactly as words-v1 and
+    // window-v1 with the same dictionary, exhaustively at lengths 1 to 4 and on random units.
+    {
+        auto dict = std::make_shared<const Dictionary>(Dictionary::from_words({"a", "an", "ant", "i", "in", "tan", "tin", "at", "nit"}));
+        const TestResources dres(dict, nullptr);
+        for (const char* port : {"words", "window"})
+        {
+            const auto plug = load_plugin_file(filters + port + "-data-v1.sfilter");
+            const FilterSpec spec = plugin_spec(plug);
+            for (uint32_t L = 1; L <= 9; ++L)
+            {
+                const FilterStack p(text_line(L), {{&spec, {}}}, dres), b(text_line(L), {{find_filter(std::string(port) + "-v1"), {}}}, dres);
+                CHECK(p.ranker() && b.ranker() && p.ranker()->count() == b.ranker()->count());
+                bool same = true;
+                if (L <= 4)
+                {
+                    uint64_t total = 1;
+                    for (uint32_t k = 0; k < L; ++k) total *= 27;
+                    std::vector<uint32_t> u(L);
+                    for (uint64_t x = 0; x < total; ++x)
+                    {
+                        uint64_t y = x;
+                        for (uint32_t k = 0; k < L; ++k, y /= 27) u[k] = uint32_t(y % 27);
+                        same = same && p.passes(u) == b.passes(u);
+                    }
+                }
+                for (int i = 0; i < 300; ++i)
+                {
+                    std::vector<uint32_t> u(L);
+                    const std::string letters = "aint ";
+                    for (auto& c : u) c = digits27(std::string(1, letters[rng() % letters.size()]))[0];
+                    same = same && p.passes(u) == b.passes(u);
+                }
+                CHECK(same);
+            }
+        }
+    }
+
+    // A grammar: sets from word lists, follow, first and last, and a word in two sets.
+    {
+        const auto g = load_plugin_file(dir + "plugins/toy-grammar-v1.sfilter");
+        const FilterSpec gs = plugin_spec(g);
+        auto judge = [&](const std::string& t) {
+            const FilterStack st(text_line(uint32_t(t.size())), {{&gs, {}}}, none);
+            return st.passes(digits27(t));
+        };
+        CHECK(judge("the big red cat sat"));
+        CHECK(judge("the dog run"));         // run as a verb
+        CHECK(judge("a cat sees the run"));  // run as a noun
+        CHECK(judge("cat run "));            // one trailing SPACE
+        CHECK(!judge("big cat sat"));        // first must be det or noun
+        CHECK(!judge("the cat the"));        // last must be noun or verb
+        CHECK(!judge("the  cat"));           // two SPACEs
+        CHECK(!judge("the cats"));           // not a word of any set
+        CHECK(!judge("the sat"));            // det is not followed by a verb
+    }
+
+    // subset is exact: max-run at 1 keeps only what max-run at 3 keeps, not the other way round,
+    // and a rule is a subset of itself.
+    {
+        const Dfa r1 = compile_plugin(*run, text_line(8), {{"max", "1"}}, none), r3 = compile_plugin(*run, text_line(8), {{"max", "3"}}, none);
+        CHECK(subset(r1, r3) && !subset(r3, r1) && subset(r3, r3));
+        const Dfa c = compile_plugin(*clean, text_line(8), {}, none);
+        CHECK(!subset(c, r1) && !subset(r1, c));
+    }
+
     // Minimising is canonical: the same rule with its states numbered differently compiles to
     // the same automaton.
     {
@@ -1486,7 +1554,7 @@ void test_plugins(const std::string& dir)
                                  "class space \" \"\nclass letter a-z\nstates 5\n";
         const auto a = parse_plugin(head + "start 0\naccept 2 3\nt 0 space 1\nt 0 letter 2\nt 1 letter 2\nt 2 letter 2\nt 2 space 3\nt 3 letter 2\nend\n", "a");
         const auto b = parse_plugin(head + "start 4\naccept 1 0\nt 4 space 2\nt 4 letter 1\nt 2 letter 1\nt 1 letter 1\nt 1 space 0\nt 0 letter 1\nend\n", "b");
-        const Dfa da = compile_plugin(*a, text_line(4), {}), db = compile_plugin(*b, text_line(4), {});
+        const Dfa da = compile_plugin(*a, text_line(4), {}, none), db = compile_plugin(*b, text_line(4), {}, none);
         CHECK(da.next == db.next && da.accept == db.accept && da.states() == 4);
     }
 
@@ -1501,6 +1569,8 @@ void test_plugins(const std::string& dir)
     CHECK(plugin_parse_fails(h + "for i 0 3\nt 0 @1 1\nend\n", "not closed by done"));
     CHECK(plugin_parse_fails(h + "t 0 @{n} 1\nend\n", "'n' is not a parameter"));
     CHECK(plugin_parse_fails(h + "t 0 @{5 / 0} 1\nend\n", "/ is for"));
+    CHECK(plugin_parse_fails("sieve-filter-v1\nid x\nversion 1\nrequires clean\nend\n", "requires names a filter with its version"));
+    CHECK(plugin_parse_fails("sieve-filter-v1\nid x\nversion 1\nrequires clean-v1 max\nend\n", "a pinned setting is NAME=VALUE"));
     CHECK(plugin_parse_fails("sieve-filter-v1\nid x\nversion 1\nauthor t\norigin human\nlines text\nsymbols lower27\nparam n int 9 1 5\nend\n",
                              "default must lie between"));
     std::cout << "filter plugins checked\n";

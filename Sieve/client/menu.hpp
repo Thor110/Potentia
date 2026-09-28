@@ -110,7 +110,7 @@ public:
     void render();
     const Settings& settings() const { return s_; }
     const sieve::cli::FilterConfig& filters() const { return cfg_; }
-    void open_filters(int line) { overlay_ = line; orow_ = 0; oscroll_ = 0; }
+    void open_filters(int line) { overlay_ = line; orow_ = 0; oscroll_ = 0; otab_ = 0; }
 
 private:
     void handle(const SDL_Event& e, bool& done, Result& result);
@@ -147,9 +147,10 @@ private:
     // The filter overlay.
     struct ORow
     {
-        enum class Kind { Mode, Header, Filter, Param } kind;
+        enum class Kind { Mode, Header, Filter, Param, Tabs, Info } kind;
         std::string filter, key;
         int part = -1; // books: 0 cover, 1 title, 2 pages
+        std::string text = {}; // Info: the line to show
     };
     std::vector<ORow> overlay_rows() const;
 
@@ -166,6 +167,8 @@ private:
     std::vector<std::pair<SDL_FRect, int>> arow_rects_;
     void overlay_key(SDL_Keycode key, bool shift);
     void overlay_change(int dir, bool big);
+    // Z / C: every filter on this tab / on both tabs switched on, or off if all were on already.
+    void toggle_all_filters(bool both_tabs);
     void render_overlay(float W, float H);
     sieve::FilterLine filter_line_of(int line) const;
     sieve::FilterLine book_part_line(int part) const; // books: the line a part's filters see
@@ -190,6 +193,8 @@ private:
     std::string cfg_path_;
     AppSettings* app_ = nullptr;
     std::filesystem::path app_path_;
+    int otab_ = 0;     // the filters window's tab: 0 built-in filters, 1 custom filters (plugins)
+    void add_filter_rows(std::vector<ORow>& rows, const sieve::FilterLine& line, const sieve::cli::LineFilters& lf, int part) const;
     int overlay_ = -1; // line whose filters are open (0-3 text/image/audio/video, 4 books, 5 models, 6 binary), or -1
     int orow_ = 0;
     int oscroll_ = 0;

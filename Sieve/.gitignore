@@ -45,6 +45,12 @@ data/fonts/unifont.hex
 /listed*
 /ordinary/
 /plugins.out
+/tidy*.ini
+/rt.a
+/rt.b
+/designer*.png
+/tests/plugins/roundtrip-v1.sfilter
+/clean-copy.sfilter
 /plugin.oracle
 /plugin.engine
 /timed.ini

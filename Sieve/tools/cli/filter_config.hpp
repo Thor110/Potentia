@@ -79,8 +79,17 @@ public:
     std::shared_ptr<const CharModel> model(const std::string& id, const std::string& symbols) const override;
 };
 
+// Ticks or unticks a filter. Ticking also ticks what it requires (a plugin's `requires`), and what
+// those require, each with the settings it pins; a prerequisite already ticked keeps its own
+// settings (prerequisite_notes then reports the difference). Returns the filters ticked with it.
+std::vector<std::string> tick_filter(LineFilters& settings, const std::string& name, bool on);
+// What the ticked filters' prerequisites say about the stack: one line for each prerequisite that
+// is not ticked, or is ticked at a setting other than the one pinned. Empty when all is well.
+std::vector<std::string> prerequisite_notes(const LineFilters& settings);
+
 FilterLine filter_line(const Line& line);
-// The line's stack from its settings (filters that do not apply to this line are skipped).
+// The line's stack from its settings (filters that do not apply to this line are skipped). A
+// ticked filter's prerequisites join the stack even when a hand-edited file leaves them out.
 FilterStack build_stack(const Line& line, const LineFilters& settings);
 FilterStack build_stack(const FilterLine& line, const LineFilters& settings);
 

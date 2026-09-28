@@ -64,6 +64,7 @@ struct FilterParam
     std::string default_value;
     int64_t min = 0, max = 0, step = 1; // Integer only
     std::vector<std::string> choices;   // Text only: the allowed values, if a fixed list
+    std::string registry = {};          // Text only: "dictionary" to choose from the registered dictionaries
 };
 using FilterValues = std::map<std::string, std::string>; // key -> value; missing keys take defaults
 
@@ -129,6 +130,15 @@ struct FilterSpec
     std::vector<FilterParam> params;
     std::vector<std::string> implies; // full names of filters every survivor of this one also passes
     std::string author, origin, plugin_sha256; // plugins only (sieve/plugin.hpp): who made it, and its file
+    // Filters this one needs switched on with it (a plugin's `requires` lines), each by its full
+    // name and, where the plugin pins them, settings. Not `implies`: this says what must be ticked
+    // alongside, not what its survivors are known to pass.
+    struct Prerequisite
+    {
+        std::string name;
+        FilterValues values;
+    };
+    std::vector<Prerequisite> prerequisites;
     std::function<bool(const FilterLine&)> applies;
     std::function<std::unique_ptr<Filter>(const FilterLine&, const FilterValues&, const FilterResources&)> make;
 

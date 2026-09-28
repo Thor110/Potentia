@@ -38,6 +38,12 @@ Dfa minimise(const Dfa& d);
 // The units both accept (the product, minimised). Both must read the same symbols.
 Dfa intersect(const Dfa& a, const Dfa& b);
 
+// Whether every unit a accepts, b accepts too, at every length (a's rule implies b's). Exact: a
+// walk of the pairs of states the two can be in together, looking for one where a accepts and b
+// does not. Two minimal automata accept the same units exactly when they are equal, state for
+// state (minimise is canonical), which is how duplicate filters are found.
+bool subset(const Dfa& a, const Dfa& b);
+
 // Counts, ranks and unranks what a Dfa accepts at one length. completions(s, r) is a table built
 // backwards from the accepting states, r = 0 .. length, in exact integers, with each state's
 // transitions grouped by where they lead (every letter after a letter goes to one state).

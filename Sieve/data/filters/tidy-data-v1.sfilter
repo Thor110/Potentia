@@ -1,0 +1,29 @@
+sieve-filter-v1
+; An example of `requires`: its own rule is small (no word longer than longest letters), and it
+; switches on clean-data-v1 and max-run-data-v1 (at max=3) with it, so ticking it ticks a tidy
+; stack in one go. Its own settings and the ones it pins are all adjustable.
+id        tidy-data
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     text
+symbols   lower27
+describe  No word longer than longest letters, and it switches on clean-data-v1 and max-run-data-v1 (max 3) with it.
+requires  clean-data-v1
+requires  max-run-data-v1  max=3
+param     longest  int  20  1  200  longest word allowed, in letters
+
+class     space   " "
+class     letter  a-z
+
+; state k: the current word has k letters so far
+states    {longest + 1}
+start     0
+accept    0..{longest}
+for k 0 longest
+  t   {k}   space   0
+done
+for k 0 {longest - 1}
+  t   {k}   letter  {k + 1}
+done
+end

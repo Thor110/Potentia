@@ -747,4 +747,31 @@ folder, refusals listed), `sieve filters --plugin/--plugins`, oracle `plugin` (o
 with a sink), data/filters: clean-data-v1, max-run-data-v1, key-data-v1. Edward: parameters must be
 adjustable in plugins (done, int only in v1); `.sfilter` kept; Moby later. Next: the token form
 (step 3), then the menu's plugin details (step 4).
+Prerequisites, tabs, relations (same night, full harness run again, all pass): `requires NAME-vN
+[k=v ...]` header lines (FilterSpec::prerequisites; loader refuses a missing/refused/self/badly
+pinned prerequisite); cli::tick_filter (ticks the closure with pinned settings, keeps existing
+settings), cli::prerequisite_notes, build_stack includes prerequisites; setup menu filters window:
+BUILT-IN / CUSTOM tabs (otab_), info rows (author, origin, file, requires, refused files, notes);
+dfa::subset and `sieve filters --plugin F --relations`; data/filters/tidy-data-v1 (requires example).
+Oracle reports `requires` too. Planned: the filter designer from the main menu (FILTER-PLUGINS.md
+section 12): entry node = prerequisites with + per entry (settings node) and + to add; the filter
+list as reference; blocks not states; live test panel; relation check on save; then Moby.
+Step 1 of Edward's order (word sets + toggle all) built, full harness run, all pass: Z/C in the
+filters window (this tab / both tabs; ticks with prerequisites, or unticks if all on); token form
+(`tokens separator`, `edges whole|cut`, `set NAME dict:ID|dict:{param}|list:FILE`, `follow`,
+`first`, `last`; `param NAME dict DEFAULT`, FilterParam::registry); TokenCompiler (trie + reading
+masks, generalized suffix automaton for cut); compile cache; oracle token_nfa_dfa (NFA + subset
+construction) and a proper Hopcroft (203 s -> 9 s); words-data-v1, window-data-v1;
+tests/plugins/toy-grammar(-cut)-v1 with lists. Fixed on the way: the menu's text parameters with a
+fixed list (key-v1's tonic, scale) cycled through the registry instead of their own choices.
+Next: 2 the designer (FILTER-PLUGINS.md section 12), 3 Moby (built by hand, not in the designer).
+Step 2, the filter designer, built (full harness run, all pass): main menu item after Settings
+(Result::Designer; Esc returns to the main menu). client/designer_model.* (Doc <-> .sfilter with
+layout comments; test() compiles from a scratch folder, counts, 5 samples; judge() explains
+failures, table errors in editor line numbers; relations(); save(): version never overwritten,
+lists never changed underneath, add_plugin registers at once) and client/designer.* (nodes rebuilt
+each frame, fields walked by keys, mouse pick and title drag, auto column layout until a node is
+placed, follow arrows routed round the side, multi-line editor, worker for tests and relations).
+Core: plugin registry is a deque with add_plugin. Scripts: `hallway --designer --design F --script
+"keys,=text" --design-out F`, Ctrl+ in --press. Next: step 3, Moby (by hand).
 

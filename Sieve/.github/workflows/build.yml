@@ -490,6 +490,32 @@ jobs:
           if build/sieve filters --length 8 | grep -q "clean-data-v1"; then exit 1; fi
           rm build/filters/broken.sfilter build/filters/clean-edited.sfilter
           build/sieve filters --length 8 | q "clean-data-v1"
+          # `requires`: ticking tidy-data-v1 alone brings clean-data-v1 and max-run-data-v1 (at the
+          # max it pins) into the stack, which still counts; a different setting is flagged; and a
+          # copy of a plugin under another name is found to be the same rule.
+          printf "[text]\nmode = compact\nfilters = tidy-data-v1\n" > tidy.ini
+          build/sieve filters --length 12 --filters tidy.ini | q "max-run-data-v1{plugin sha256=[0-9a-f]* max=3}; clean-data-v1"
+          build/sieve filters --length 12 --filters tidy.ini | q "compact mode available"
+          printf "[text]\nfilters = tidy-data-v1, max-run-data-v1\n[text.max-run-data-v1]\nmax = 5\n" > tidy5.ini
+          build/sieve filters --length 12 --filters tidy5.ini | q "requires max-run-data-v1 at max=3; it is set to max=5"
+          sed 's/^id        clean-data/id        clean-copy/' data/filters/clean-data-v1.sfilter > clean-copy.sfilter
+          build/sieve filters --plugin clean-copy.sfilter --relations | q "the same rule as clean-data-v1  -- a duplicate"
+          # The filter designer (main menu): it opens a plugin and writes it back as it would save
+          # it, the same rule (a round trip); a word filter made and saved by script is registered
+          # at once and named a duplicate of words-data-v1; saving other contents under that
+          # version offers the next one instead (versions are never edited).
+          $H --designer --screenshot designer.png | q "designer: my-words-v1"
+          $H --designer --design tests/plugins/toy-grammar-v1.sfilter --design-out tests/plugins/roundtrip-v1.sfilter --screenshot designer2.png | q "designer: toy-grammar-v1"
+          build/sieve filters --plugin tests/plugins/toy-grammar-v1.sfilter --length 11 | grep -v "^sha256" > rt.a
+          build/sieve filters --plugin tests/plugins/roundtrip-v1.sfilter --length 11 | grep -v "^sha256" > rt.b
+          diff rt.a rt.b
+          rm tests/plugins/roundtrip-v1.sfilter
+          rm -f build/filters/designed-words-v*.sfilter
+          $H --designer --script "Ctrl+N,Down,Return,Ctrl+Backspace,=designed-words,Return,Ctrl+S" --screenshot designer3.png | q "status: saved to .*designed-words-v1.sfilter"
+          build/sieve filters --plugins | q "^loaded   designed-words-v1"
+          build/sieve filters --plugin build/filters/designed-words-v1.sfilter --length 6 --relations | q "the same rule as words-data-v1  -- a duplicate"
+          $H --designer --design build/filters/designed-words-v1.sfilter --script "Down,Down,Down,Down,Down,Down,Down,Return,=!,Return,Ctrl+S" --screenshot designer4.png | q "save as version 2"
+          rm build/filters/designed-words-v1.sfilter
           # --timings: the table at exit, on the command line and from the hallway (to its file too).
           build/sieve warp --line text --length 32 --timings "timed" 2>&1 | q "^sieve warp "
           $H --no-menu --timings --settings timed.ini --screenshot timed.png 2>&1 | q "^hallway.item "
@@ -664,14 +690,30 @@ jobs:
           # settings, reported identically by the engine and by the oracle's own parser and engine
           # (states declared and minimal, survivors, excluded, and survivors by rank).
           for L in 1 2 5 17 40; do
-            for spec in "clean-data-v1:" "max-run-data-v1:max=1" "max-run-data-v1:max=3" "max-run-data-v1:max=5" "key-data-v1:tonic=0" "key-data-v1:tonic=5" "key-data-v1:tonic=11"; do
+            for spec in "clean-data-v1:" "max-run-data-v1:max=1" "max-run-data-v1:max=3" "max-run-data-v1:max=5" "key-data-v1:tonic=0" "key-data-v1:tonic=5" "key-data-v1:tonic=11" "tidy-data-v1:" "tidy-data-v1:longest=3"; do
               f=${spec%%:*}; p=${spec#*:}
               python sieve_ref.py plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} > plugin.oracle
               $S filters --plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
               diff plugin.oracle plugin.engine
             done
           done
-          $S filters --plugins | grep -c "^loaded" | grep -qx 3
+          # The token form: the ports of words-v1 and window-v1 (a dictionary each, built another way
+          # by the oracle: an NFA and the subset construction, then Hopcroft), and a toy grammar
+          # (word lists, follow, first and last, a word in two sets; whole and cut edges).
+          for f in words-data-v1 window-data-v1; do
+            python sieve_ref.py plugin ../data/filters/$f.sfilter --length 6 --params dictionary=scowl-en-35 > plugin.oracle
+            $S filters --plugin ../data/filters/$f.sfilter --length 6 --params dictionary=scowl-en-35 | tr -d '\r' > plugin.engine
+            diff plugin.oracle plugin.engine
+          done
+          for f in toy-grammar-v1 toy-grammar-cut-v1; do
+            for L in 1 3 11 25; do
+              python sieve_ref.py plugin ../tests/plugins/$f.sfilter --length $L > plugin.oracle
+              $S filters --plugin ../tests/plugins/$f.sfilter --length $L | tr -d '\r' > plugin.engine
+              diff plugin.oracle plugin.engine
+            done
+          done
+          $S filters --plugins | grep -c "^loaded" | grep -qx 6
+          $S filters --plugin ../data/filters/words-data-v1.sfilter --length 6 --relations | grep -q "stricter than (implies) window-data-v1"
           rm -rf addr
           $S locate ../tests/manifest_fixture --manifest fixture.manifest --addresses addr --compare > locate.out
           python sieve_ref.py manifest ../tests/manifest_fixture | cmp - fixture.manifest

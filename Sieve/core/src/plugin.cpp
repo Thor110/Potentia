@@ -11,6 +11,7 @@
 
 #include "sieve/audio.hpp"
 #include "sieve/image.hpp"
+#include "sieve/sha256.hpp"
 #include "sieve/utf8.hpp"
 
 #include <algorithm>
@@ -19,6 +20,11 @@
 #include <cstdio>
 #include <limits>
 #include <map>
+#include <mutex>
+#include <unordered_map>
+#include <optional>
+#include <fstream>
+#include <filesystem>
 #include <set>
 #include <sstream>
 #include <stdexcept>
@@ -275,15 +281,32 @@ struct PluginDef
     PluginHeader header;
     std::vector<Stmt> body;          // class, states, start, accept, t, for, done (in order)
     std::vector<size_t> done_of;     // for a `for` at body[i], the index of its `done`
+    // The token form.
+    struct WordSet
+    {
+        std::string name, kind, source; // kind "dict" or "list"
+        int line = 0;
+    };
+    std::vector<Tok> separator;
+    int separator_line = 0;
+    bool cut = false;
+    std::vector<WordSet> sets;
+    std::vector<std::pair<std::string, std::string>> follows;
+    std::vector<std::string> first, last;
+    bool has_first = false, has_last = false;
+    std::string folder;
 };
 
 const PluginHeader& plugin_header(const PluginDef& p) { return p.header; }
 
-std::shared_ptr<const PluginDef> parse_plugin(const std::string& text, const std::string& sha256)
+std::shared_ptr<const PluginDef> parse_plugin(const std::string& text, const std::string& sha256, const std::string& folder)
 {
     auto def = std::make_shared<PluginDef>();
     PluginHeader& h = def->header;
     h.sha256 = sha256;
+    def->folder = folder;
+    bool token_form = false, table_form = false, has_edges = false;
+    std::set<std::string> set_names;
     std::istringstream in(text);
     std::string raw;
     int line = 0;
@@ -366,15 +389,51 @@ std::shared_ptr<const PluginDef> parse_plugin(const std::string& text, const std
             once();
             h.describe = rest_after_keyword(raw);
         }
+        else if (k == "requires")
+        {
+            // A filter by its full name (<id>-v<version>), then any settings it pins, NAME=VALUE.
+            if (toks.size() < 2) fail(line, "requires NAME-vN [SETTING=VALUE ...]");
+            FilterSpec::Prerequisite r;
+            r.name = toks[1].text;
+            const size_t v = r.name.rfind("-v");
+            if (toks[1].quoted || v == std::string::npos || v == 0 || v + 2 >= r.name.size() ||
+                !std::all_of(r.name.begin() + long(v) + 2, r.name.end(), [](char c) { return c >= '0' && c <= '9'; }))
+                fail(line, "requires names a filter with its version, as <id>-v<n>");
+            for (const auto& q : h.prerequisites)
+                if (q.name == r.name) fail(line, r.name + " is required twice");
+            for (size_t i = 2; i < toks.size(); ++i)
+            {
+                const size_t eq = toks[i].text.find('=');
+                if (toks[i].quoted || eq == std::string::npos || eq == 0 || eq + 1 >= toks[i].text.size())
+                    fail(line, "a pinned setting is NAME=VALUE: '" + toks[i].text + "'");
+                const std::string key = toks[i].text.substr(0, eq);
+                if (r.values.count(key)) fail(line, key + " is pinned twice");
+                r.values[key] = toks[i].text.substr(eq + 1);
+            }
+            h.prerequisites.push_back(std::move(r));
+        }
         else if (k == "param")
         {
-            if (toks.size() < 6) fail(line, "param NAME int DEFAULT MIN MAX [text]");
+            if (toks.size() < 4 || (toks.size() < 6 && toks[2].text != "dict")) fail(line, "param NAME int DEFAULT MIN MAX [text], or param NAME dict DEFAULT [text]");
             FilterParam p;
             p.key = toks[1].text;
             if (!is_name(p.key)) fail(line, "a parameter's name is letters, digits and _, starting with a letter");
             for (const auto& q : h.params)
                 if (q.key == p.key) fail(line, "parameter " + p.key + " is declared twice");
-            if (toks[2].text != "int") fail(line, "a parameter's kind is int (the only kind in sieve-filter-v1)");
+            if (toks[2].text == "dict")
+            {
+                // A dictionary setting: a registered id, or `default` (the registry's default).
+                if (toks.size() < 4) fail(line, "param NAME dict DEFAULT [text]");
+                p.kind = FilterParam::Kind::Text;
+                p.registry = "dictionary";
+                p.default_value = toks[3].text == "default" ? "" : toks[3].text;
+                std::string desc;
+                for (size_t i = 4; i < toks.size(); ++i) desc += (desc.empty() ? "" : " ") + toks[i].text;
+                p.description = desc;
+                h.params.push_back(p);
+                continue;
+            }
+            if (toks[2].text != "int") fail(line, "a parameter's kind is int or dict");
             p.kind = FilterParam::Kind::Integer;
             const Env none;
             const int64_t dflt = eval(toks[3], none, line), lo = eval(toks[4], none, line), hi = eval(toks[5], none, line);
@@ -386,6 +445,51 @@ std::shared_ptr<const PluginDef> parse_plugin(const std::string& text, const std
             for (size_t i = 6; i < toks.size(); ++i) desc += (desc.empty() ? "" : " ") + toks[i].text;
             p.description = desc;
             h.params.push_back(p);
+        }
+        else if (k == "tokens")
+        {
+            once();
+            token_form = true;
+            if (toks.size() < 3 || toks[1].text != "separator") fail(line, "tokens separator SYMBOLS...");
+            def->separator.assign(toks.begin() + 2, toks.end());
+            def->separator_line = line;
+        }
+        else if (k == "edges")
+        {
+            once();
+            want(2);
+            if (toks[1].text != "whole" && toks[1].text != "cut") fail(line, "edges is whole or cut");
+            def->cut = toks[1].text == "cut";
+            has_edges = true;
+        }
+        else if (k == "set")
+        {
+            want(3);
+            token_form = true;
+            if (!is_name(toks[1].text)) fail(line, "a set's name is letters, digits and _, starting with a letter");
+            if (!set_names.insert(toks[1].text).second) fail(line, "set " + toks[1].text + " is declared twice");
+            if (set_names.size() > 62) fail(line, "at most 62 sets");
+            const std::string& src = toks[2].text;
+            const size_t colon = src.find(':');
+            const std::string kind = colon == std::string::npos ? "" : src.substr(0, colon);
+            if (toks[2].quoted || (kind != "dict" && kind != "list") || colon + 1 >= src.size())
+                fail(line, "a set's words come from dict:ID, dict:{PARAM} or list:FILE");
+            def->sets.push_back({toks[1].text, kind, src.substr(colon + 1), line});
+        }
+        else if (k == "follow")
+        {
+            want(3);
+            token_form = true;
+            def->follows.emplace_back(toks[1].text, toks[2].text);
+        }
+        else if (k == "first" || k == "last")
+        {
+            once();
+            token_form = true;
+            if (toks.size() < 2) fail(line, k + " names at least one set");
+            auto& v = k == "first" ? def->first : def->last;
+            for (size_t i = 1; i < toks.size(); ++i) v.push_back(toks[i].text);
+            (k == "first" ? def->has_first : def->has_last) = true;
         }
         else if (k == "class")
         {
@@ -452,6 +556,34 @@ std::shared_ptr<const PluginDef> parse_plugin(const std::string& text, const std
     for (const char* r : required)
         if (!seen_header.count(r)) throw std::invalid_argument(std::string("the header has no ") + r);
     if (!has_version) throw std::invalid_argument("the header has no version");
+    table_form = !def->body.empty();
+    if (token_form && table_form) throw std::invalid_argument("a plugin is a table (states, transitions) or tokens (sets), not both");
+    if (token_form)
+    {
+        h.form = "tokens";
+        if (def->separator.empty()) throw std::invalid_argument("the token form needs tokens separator SYMBOLS");
+        if (!has_edges) throw std::invalid_argument("the token form needs edges whole or edges cut");
+        if (def->sets.empty()) throw std::invalid_argument("the token form needs at least one set");
+        auto known = [&](const std::string& s) {
+            if (!set_names.count(s)) throw std::invalid_argument("'" + s + "' is not a set");
+        };
+        for (const auto& [a, b] : def->follows)
+        {
+            known(a);
+            known(b);
+        }
+        for (const auto& s : def->first) known(s);
+        for (const auto& s : def->last) known(s);
+        for (const auto& s : def->sets)
+            if (s.kind == "dict" && s.source.size() > 2 && s.source.front() == '{')
+            {
+                const std::string pn = s.source.substr(1, s.source.size() - 2);
+                const bool ok = std::any_of(h.params.begin(), h.params.end(), [&](const FilterParam& q) { return q.key == pn && q.registry == "dictionary"; });
+                if (s.source.back() != '}' || !ok) fail(s.line, "dict:{" + pn + "} needs a dict parameter called " + pn);
+            }
+        return def;
+    }
+    h.form = "table";
     if (!has_states || !has_start) throw std::invalid_argument("a table plugin needs states and start");
     def->done_of.assign(def->body.size(), 0);
     for (const auto& [f, d] : pairs) def->done_of[f] = d;
@@ -487,6 +619,7 @@ public:
     {
         for (const auto& par : p.header.params)
         {
+            if (par.kind != FilterParam::Kind::Integer) continue;
             const auto it = values.find(par.key);
             int64_t v = 0;
             if (it == values.end()) v = std::stoll(par.default_value);
@@ -705,15 +838,407 @@ private:
     std::vector<uint8_t> accept_;
 };
 
+// ---------------------------------------------------------------- the token form
+
+// Words as the line's symbols, in one trie; each node knows which sets it ends a word of. The DFA
+// is made directly (a subset construction folded in): between tokens the state is the set of
+// readings the last token can have; inside a token it is the trie node and the readings the
+// token before it could have. With `edges cut`, a token touching the unit's start runs through a
+// suffix automaton of the words instead, so it may be any suffix (or, touching both ends, any
+// substring) of a word.
+class TokenCompiler
+{
+public:
+    TokenCompiler(const PluginDef& p, const FilterLine& line, const FilterValues& values, const FilterResources& res)
+        : p_(p), line_(line), values_(values), res_(res), B_(line.base)
+    {
+    }
+
+    Dfa run(size_t* declared, std::string* data)
+    {
+        separators();
+        words(data);
+        relations();
+        if (p_.cut) build_dawg();
+        return build(declared);
+    }
+
+private:
+    static constexpr uint64_t kStart = uint64_t(1) << 63; // "no token yet", as a reading
+
+    uint32_t symbol(char32_t cp, bool& ok) const
+    {
+        const auto d = line_.alphabet ? line_.alphabet->digit_of(cp) : std::nullopt;
+        ok = d.has_value();
+        return d ? *d : 0;
+    }
+
+    void separators()
+    {
+        if (!line_.alphabet) fail(p_.separator_line, "the token form needs a text line");
+        sep_.assign(B_, 0);
+        for (const Tok& t : p_.separator)
+        {
+            std::u32string u = t.quoted ? utf8_decode(t.text) : std::u32string();
+            if (!t.quoted)
+            {
+                const std::u32string r = utf8_decode(t.text);
+                if (r.size() == 3 && r[1] == U'-')
+                    for (char32_t c = r[0]; c <= r[2]; ++c) u.push_back(c);
+                else fail(p_.separator_line, "separator symbols are \"quoted\" or a range a-z");
+            }
+            for (char32_t cp : u)
+            {
+                bool ok = false;
+                const uint32_t d = symbol(cp, ok);
+                if (!ok) fail(p_.separator_line, "a separator is not a symbol of " + line_.symbols_id);
+                sep_[d] = 1;
+            }
+        }
+    }
+
+    int32_t child(int32_t n, uint32_t c) const
+    {
+        for (const auto& [s, t] : kids_[size_t(n)])
+            if (s == c) return t;
+        return -1;
+    }
+
+    void add_word(const std::vector<uint32_t>& w, size_t set)
+    {
+        int32_t n = 0;
+        for (uint32_t c : w)
+        {
+            int32_t t = child(n, c);
+            if (t < 0)
+            {
+                t = int32_t(kids_.size());
+                kids_[size_t(n)].emplace_back(c, t);
+                kids_.emplace_back();
+                ends_.push_back(0);
+            }
+            n = t;
+        }
+        ends_[size_t(n)] |= uint64_t(1) << set;
+        all_words_.push_back(w);
+    }
+
+    void words(std::string* data)
+    {
+        kids_.assign(1, {});
+        ends_.assign(1, 0);
+        for (size_t i = 0; i < p_.sets.size(); ++i)
+        {
+            const auto& s = p_.sets[i];
+            std::vector<std::string> list;
+            std::string hash;
+            if (s.kind == "dict")
+            {
+                std::string id = s.source;
+                if (id.size() > 2 && id.front() == '{')
+                {
+                    const std::string pn = id.substr(1, id.size() - 2);
+                    const auto it = values_.find(pn);
+                    id = it != values_.end() ? it->second : "";
+                    for (const auto& q : p_.header.params)
+                        if (q.key == pn && it == values_.end()) id = q.default_value;
+                }
+                const auto d = res_.dictionary(id);
+                if (!d) fail(s.line, "no dictionary " + (id.empty() ? std::string("(the default)") : id));
+                list = d->words();
+                hash = "dict:" + (id.empty() ? std::string("default") : id) + "=" + d->sha256();
+                // A dictionary's words that the line cannot spell are left out, as dictionaries
+                // leave out words with other letters.
+                for (const std::string& w : list)
+                {
+                    std::vector<uint32_t> digits;
+                    bool fits = true;
+                    for (char32_t cp : utf8_decode(w))
+                    {
+                        bool ok = false;
+                        const uint32_t dd = symbol(cp, ok);
+                        if (!ok || sep_[dd]) fits = false;
+                        digits.push_back(dd);
+                    }
+                    if (fits && !digits.empty()) add_word(digits, i);
+                }
+            }
+            else
+            {
+                const std::string path = (p_.folder.empty() ? std::string() : p_.folder + "/") + s.source;
+                std::ifstream in(std::filesystem::path(std::u8string(path.begin(), path.end())), std::ios::binary);
+                if (!in) fail(s.line, "cannot read the word list " + s.source);
+                std::ostringstream o;
+                o << in.rdbuf();
+                const std::string text = o.str();
+                hash = "list:" + s.source + "=" + Sha256::hex(Sha256::hash(text));
+                std::istringstream lines(text);
+                std::string w;
+                int n = 0;
+                while (std::getline(lines, w))
+                {
+                    ++n;
+                    if (w.empty()) continue;
+                    std::vector<uint32_t> digits;
+                    for (char32_t cp : utf8_decode(w))
+                    {
+                        bool ok = false;
+                        const uint32_t dd = symbol(cp, ok);
+                        if (!ok || sep_[dd]) fail(s.line, s.source + " line " + std::to_string(n) + ": '" + w + "' is not a word of " + line_.symbols_id + "'s symbols");
+                        digits.push_back(dd);
+                    }
+                    add_word(digits, i);
+                }
+            }
+            if (data) *data += (data->empty() ? "" : " ") + s.name + "=" + hash;
+        }
+    }
+
+    void relations()
+    {
+        const size_t n = p_.sets.size();
+        auto index = [&](const std::string& name) {
+            for (size_t i = 0; i < n; ++i)
+                if (p_.sets[i].name == name) return i;
+            return size_t(0);
+        };
+        const uint64_t all = n >= 64 ? ~uint64_t(0) : (uint64_t(1) << n) - 1;
+        follow_.assign(n, p_.follows.empty() ? all : 0);
+        for (const auto& [a, b] : p_.follows) follow_[index(a)] |= uint64_t(1) << index(b);
+        first_ = p_.has_first ? 0 : all;
+        for (const auto& s : p_.first) first_ |= uint64_t(1) << index(s);
+        last_ = p_.has_last ? 0 : all;
+        for (const auto& s : p_.last) last_ |= uint64_t(1) << index(s);
+        all_ = all;
+    }
+
+    // The readings a finished token at trie node n can have, after a token with readings prev.
+    uint64_t readings(int32_t n, uint64_t prev) const
+    {
+        uint64_t allowed = (prev & kStart) ? first_ : 0;
+        for (size_t i = 0; i < follow_.size(); ++i)
+            if (prev & (uint64_t(1) << i)) allowed |= follow_[i];
+        return ends_[size_t(n)] & allowed;
+    }
+
+    // The suffix automaton of every word (a generalized one: each word added from the root).
+    struct Sam
+    {
+        int32_t len = 0, link = -1;
+        std::map<uint32_t, int32_t> next;
+        bool suffix = false;
+    };
+    int32_t sam_add(int32_t last, uint32_t c)
+    {
+        auto clone_of = [&](int32_t p, int32_t q) {
+            const int32_t cl = int32_t(sam_.size());
+            Sam copy = sam_[size_t(q)];
+            copy.len = sam_[size_t(p)].len + 1;
+            copy.suffix = false;
+            sam_.push_back(copy);
+            while (p >= 0)
+            {
+                auto it = sam_[size_t(p)].next.find(c);
+                if (it == sam_[size_t(p)].next.end() || it->second != q) break;
+                it->second = cl;
+                p = sam_[size_t(p)].link;
+            }
+            sam_[size_t(q)].link = cl;
+            return cl;
+        };
+        if (const auto it = sam_[size_t(last)].next.find(c); it != sam_[size_t(last)].next.end())
+        {
+            const int32_t q = it->second;
+            if (sam_[size_t(last)].len + 1 == sam_[size_t(q)].len) return q;
+            return clone_of(last, q);
+        }
+        const int32_t cur = int32_t(sam_.size());
+        sam_.push_back({sam_[size_t(last)].len + 1, -1, {}, false});
+        int32_t p = last;
+        while (p >= 0 && !sam_[size_t(p)].next.count(c))
+        {
+            sam_[size_t(p)].next[c] = cur;
+            p = sam_[size_t(p)].link;
+        }
+        if (p < 0) sam_[size_t(cur)].link = 0;
+        else
+        {
+            const int32_t q = sam_[size_t(p)].next[c];
+            if (sam_[size_t(p)].len + 1 == sam_[size_t(q)].len) sam_[size_t(cur)].link = q;
+            else
+            {
+                const int32_t cl = clone_of(p, q);
+                sam_[size_t(cur)].link = cl;
+            }
+        }
+        return cur;
+    }
+    void build_dawg()
+    {
+        sam_.assign(1, {});
+        for (const auto& w : all_words_)
+        {
+            int32_t last = 0;
+            for (uint32_t c : w) last = sam_add(last, c);
+        }
+        // Suffix states: walk each word again, then up its suffix links.
+        for (const auto& w : all_words_)
+        {
+            int32_t s = 0;
+            for (uint32_t c : w) s = sam_[size_t(s)].next.at(c);
+            for (; s > 0 && !sam_[size_t(s)].suffix; s = sam_[size_t(s)].link) sam_[size_t(s)].suffix = true;
+        }
+    }
+
+    // DFA states: 0 start, 1 after a leading separator, then B (between), In (in a token) and
+    // Suf (in a cut first token), numbered as found.
+    enum Kind : uint8_t { kS0, kS1, kB, kIn, kSuf };
+    struct Key
+    {
+        Kind kind;
+        int32_t node;
+        uint64_t mask;
+        bool operator==(const Key& o) const { return kind == o.kind && node == o.node && mask == o.mask; }
+    };
+    struct KeyHash
+    {
+        size_t operator()(const Key& k) const { return std::hash<uint64_t>()(k.mask * 1000003u ^ (uint64_t(uint32_t(k.node)) << 3) ^ k.kind); }
+    };
+
+    Dfa build(size_t* declared)
+    {
+        std::unordered_map<Key, int32_t, KeyHash> id;
+        std::vector<Key> keys;
+        auto get = [&](const Key& k) {
+            const auto [it, added] = id.emplace(k, int32_t(keys.size()));
+            if (added)
+            {
+                keys.push_back(k);
+                if (keys.size() > 5'000'000) throw std::invalid_argument("the token form makes over 5 million states: too many sets or words");
+            }
+            return it->second;
+        };
+        get({kS0, 0, 0});
+        Dfa d;
+        d.base = B_;
+        d.start = 0;
+        for (size_t i = 0; i < keys.size(); ++i)
+        {
+            const Key k = keys[i];
+            bool acc = false;
+            switch (k.kind)
+            {
+            case kS0:
+            case kS1: break;
+            case kB: acc = (k.mask & last_) != 0; break;
+            case kIn: acc = p_.cut || (readings(k.node, k.mask) & last_) != 0; break;
+            case kSuf: acc = true; break; // touching both ends: any substring
+            }
+            d.accept.push_back(acc ? 1 : 0);
+            for (uint32_t c = 0; c < B_; ++c)
+            {
+                int32_t t = Dfa::kDead;
+                if (sep_[c])
+                {
+                    if (k.kind == kS0) t = get({kS1, 0, 0});
+                    else if (k.kind == kIn)
+                    {
+                        const uint64_t r = readings(k.node, k.mask);
+                        if (r) t = get({kB, 0, r});
+                    }
+                    else if (k.kind == kSuf && sam_[size_t(k.node)].suffix) t = get({kB, 0, all_}); // a cut token: any set
+                }
+                else
+                {
+                    if (k.kind == kS0 && p_.cut)
+                    {
+                        const auto it = sam_[0].next.find(c);
+                        if (it != sam_[0].next.end()) t = get({kSuf, it->second, 0});
+                    }
+                    else if (k.kind == kS0 || k.kind == kS1 || k.kind == kB)
+                    {
+                        const int32_t n = child(0, c);
+                        if (n >= 0) t = get({kIn, n, k.kind == kB ? k.mask : kStart});
+                    }
+                    else if (k.kind == kIn)
+                    {
+                        const int32_t n = child(k.node, c);
+                        if (n >= 0) t = get({kIn, n, k.mask});
+                    }
+                    else if (k.kind == kSuf)
+                    {
+                        const auto it = sam_[size_t(k.node)].next.find(c);
+                        if (it != sam_[size_t(k.node)].next.end()) t = get({kSuf, it->second, 0});
+                    }
+                }
+                d.next.push_back(t);
+            }
+        }
+        if (declared) *declared = keys.size();
+        return d;
+    }
+
+    const PluginDef& p_;
+    const FilterLine& line_;
+    const FilterValues& values_;
+    const FilterResources& res_;
+    uint32_t B_;
+    std::vector<uint8_t> sep_;
+    std::vector<std::vector<std::pair<uint32_t, int32_t>>> kids_;
+    std::vector<uint64_t> ends_;
+    std::vector<std::vector<uint32_t>> all_words_;
+    std::vector<uint64_t> follow_;
+    uint64_t first_ = 0, last_ = 0, all_ = 0;
+    std::vector<Sam> sam_;
+};
+
 } // namespace
 
-Dfa compile_plugin(const PluginDef& p, const FilterLine& line, const FilterValues& values, size_t* declared_states)
+Dfa compile_plugin(const PluginDef& p, const FilterLine& line, const FilterValues& values, const FilterResources& resources,
+                   size_t* declared_states, std::string* data)
 {
     if (!plugin_applies(p, line)) throw std::invalid_argument(p.header.name() + " is not written for this line (" + line.kind + ", " + line.symbols_id + ")");
-    Compiler c(p, line, values);
+    // Compiled automata are kept for the process: the same file, symbols and settings always
+    // compile to the same automaton (a dictionary is pinned by its hash, so its id is enough), and
+    // a large one takes seconds, where the menu and the hallway rebuild stacks often.
+    struct Compiled
+    {
+        Dfa dfa;
+        size_t declared = 0;
+        std::string data;
+    };
+    static std::mutex mx;
+    static std::map<std::string, std::shared_ptr<const Compiled>> cache;
+    std::string key = p.header.sha256 + "|" + line.symbols_id + "|" + std::to_string(line.base);
+    for (const auto& par : p.header.params)
+    {
+        const auto it = values.find(par.key);
+        key += "|" + par.key + "=" + (it == values.end() ? par.default_value : it->second);
+    }
+    {
+        std::lock_guard<std::mutex> lock(mx);
+        if (const auto it = cache.find(key); it != cache.end() && !p.header.sha256.empty())
+        {
+            if (declared_states) *declared_states = it->second->declared;
+            if (data) *data = it->second->data;
+            return it->second->dfa;
+        }
+    }
     try
     {
-        return minimise(c.run(declared_states));
+        auto c = std::make_shared<Compiled>();
+        if (p.header.form == "tokens") c->dfa = minimise(TokenCompiler(p, line, values, resources).run(&c->declared, &c->data));
+        else
+        {
+            Compiler tc(p, line, values);
+            c->dfa = minimise(tc.run(&c->declared));
+        }
+        if (declared_states) *declared_states = c->declared;
+        if (data) *data = c->data;
+        std::lock_guard<std::mutex> lock(mx);
+        if (cache.size() > 64) cache.clear();
+        cache[key] = c;
+        return c->dfa;
     }
     catch (const std::invalid_argument& e)
     {
@@ -757,21 +1282,24 @@ FilterSpec plugin_spec(std::shared_ptr<const PluginDef> p)
     s.id = h.id;
     s.version = h.version;
     s.title = h.id;
-    s.description = (h.describe.empty() ? std::string("A filter plugin.") : h.describe) + " (plugin by " + h.author + ", " + h.origin + "; " +
-                    h.sha256.substr(0, 12) + ")";
+    s.description = h.describe.empty() ? std::string("A filter plugin.") : h.describe; // who made it: author, origin
     s.params = h.params;
     s.author = h.author;
     s.origin = h.origin;
     s.plugin_sha256 = h.sha256;
+    s.prerequisites = h.prerequisites;
     s.applies = [p](const FilterLine& l) { return plugin_applies(*p, l); };
-    s.make = [p](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+    s.make = [p](const FilterLine& l, const FilterValues& v, const FilterResources& r) -> std::unique_ptr<Filter> {
         std::string prov = "plugin sha256=" + p->header.sha256;
         for (const auto& par : p->header.params)
         {
             const auto it = v.find(par.key);
             prov += " " + par.key + "=" + (it == v.end() ? par.default_value : it->second);
         }
-        return std::make_unique<PluginFilter>(compile_plugin(*p, l, v), l.length, prov);
+        std::string data;
+        Dfa d = compile_plugin(*p, l, v, r, nullptr, &data);
+        if (!data.empty()) prov += " " + data;
+        return std::make_unique<PluginFilter>(std::move(d), l.length, prov);
     };
     return s;
 }
@@ -780,11 +1308,12 @@ FilterSpec plugin_spec(std::shared_ptr<const PluginDef> p)
 
 namespace {
 
-std::vector<FilterSpec>& plugins()
+std::deque<FilterSpec>& plugins()
 {
-    static std::vector<FilterSpec> list;
+    static std::deque<FilterSpec> list;
     return list;
 }
+std::mutex g_plugins_mx;
 
 bool g_registered = false;
 
@@ -792,11 +1321,24 @@ bool g_registered = false;
 
 void register_plugins(std::vector<FilterSpec> specs)
 {
-    if (g_registered) return; // once: specs are handed out by pointer, so the list never changes after
+    std::lock_guard<std::mutex> lock(g_plugins_mx);
+    if (g_registered) return; // once, at start-up; add_plugin adds more later
     g_registered = true;
-    plugins() = std::move(specs);
+    for (auto& s : specs) plugins().push_back(std::move(s));
 }
 
-const std::vector<FilterSpec>& plugin_registry() { return plugins(); }
+bool add_plugin(FilterSpec spec)
+{
+    std::lock_guard<std::mutex> lock(g_plugins_mx);
+    g_registered = true;
+    for (const auto& f : plugins())
+        if (f.name() == spec.name()) return false;
+    for (const auto& f : filter_registry())
+        if (f.id == spec.id) return false;
+    plugins().push_back(std::move(spec)); // a deque: the others stay where they are
+    return true;
+}
+
+const std::deque<FilterSpec>& plugin_registry() { return plugins(); }
 
 } // namespace sieve

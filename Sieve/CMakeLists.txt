@@ -254,6 +254,8 @@ if(SIEVE_BUILD_CLIENT)
         client/app_main.cpp
         client/app_settings.cpp
         client/binary_edge.cpp
+        client/designer.cpp
+        client/designer_model.cpp
         client/item_faces.cpp
         client/door_portal.cpp
         client/file_locator.cpp

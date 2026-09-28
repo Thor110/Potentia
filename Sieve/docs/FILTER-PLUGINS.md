@@ -1,9 +1,10 @@
 # Filter plugins
 
-*Built (28 September 2026): the format with parameters, the table form, the engine (judge, count,
-rank, compact, stacks of plugins), the loader and `filters/` folder, `sieve filters --plugin` and
-`--plugins`, the oracle's own parser and engine, and three reference plugins, all checked against
-the built-in filters they port (section 11). Next: the token form (section 4.3).*
+*Built (28 September 2026): the format with parameters, the table form and the token form, the
+engine (judge, count, rank, compact, stacks of plugins), `requires`, the loader and `filters/`
+folder, `sieve filters --plugin`, `--plugins` and `--relations`, the oracle's own parser and
+engine, and six reference plugins, all checked against the built-in filters they port (section
+11), and the filter designer (section 12). Next: the Moby grammar filter.*
 
 Filters written as data files and dropped into a folder, so that anyone
 (a person, or an AI) can add a filter to the stack without touching the C++ or rebuilding Sieve.
@@ -72,6 +73,21 @@ symbols   lower27                ; the alphabet it is written for, by id
 describe  No two SPACEs in a row, and at least one letter.
 ```
 
+`requires` (any number of lines, in the header) names filters that are switched on with this one,
+each by its full name, built-in or custom, with any settings it pins:
+
+```
+requires  clean-v1
+requires  max-run-data-v1  max=3
+```
+
+Ticking the plugin ticks what it requires (and what those require), each at its pinned settings;
+a prerequisite already ticked keeps its own, and the filters window and `sieve filters` say where
+they differ ("tidy-data-v1 requires max-run-data-v1 at max=3; it is set to max=5"). A stack built
+from a hand-edited file gets its prerequisites too. `requires` is not `implies`: it says what must be
+switched on alongside, not what the plugin's survivors are known to pass. A plugin whose
+prerequisite is missing, refused, itself, or pinned at a setting it does not have, is refused.
+
 `symbols` binds the plugin to one alphabet (or palette, or note set): symbols are named in the
 alphabet's own terms, and a plugin written for `lower27` is not offered on an `ascii96` line.
 
@@ -125,16 +141,22 @@ exactly `clean-v1`'s survivor counts at lengths 1, 2, 5 and 32, 6106292877396388
 
 ```
 tokens    separator " "          ; tokens are runs between separators
-edges     whole                  ; whole | cut: cut lets the first and last token be a suffix
-                                 ; and a prefix of a word (a page cut from running text)
-set       word    dict:scowl-en-60-names      ; a registered dictionary, pinned by its SHA-256
-set       det     list:determiners.txt        ; a word list beside the plugin, pinned the same way
-set       noun    tags:moby-pos.tsv:N         ; words carrying a tag in a pinned tagged list
-follow    det     noun                        ; which set may follow which (any set may start
-follow    noun    verb                        ; and end, unless start/end lines say otherwise)
-start     det noun
+edges     whole                  ; whole | cut: cut lets a token touching the unit's start be a
+                                 ; suffix of a word, one touching its end a prefix, and one
+                                 ; touching both a substring (a page cut from running text)
+param     dictionary  dict  default   ; a dictionary setting (a registered id, or default)
+set       word    dict:{dictionary}   ; a registered dictionary (dict:ID, or dict:{a dict param})
+set       det     list:determiners.txt        ; a word list beside the plugin, pinned by its SHA-256
+follow    det     noun                        ; which set may follow which (none: any order)
+follow    noun    verb
+first     det noun                            ; the sets the first token may be (default: all)
+last      noun verb                           ; the sets the last token may be (default: all)
 end
 ```
+
+As built: one separator between tokens, at most one at each end, at least one token (so `clean`
+is part of every token filter, as it is of `words` and `window`). A token cut by an edge may be any
+set. The Moby tagged list (`tags:`) comes with the grammar filter.
 
 A token must be a word of some set; a unit passes when its tokens chain by `follow` (with no
 `follow` lines at all, any order passes, which makes this `words`). A word in several sets can be
@@ -204,7 +226,8 @@ a conformance check, not a replacement.
 
 ## 9. Not in v1
 
-- **Parameter kinds beyond integers** (a word list, a set of symbols, a choice): v1 has `int` only.
+- **Parameter kinds beyond integers and dictionaries** (a word list, a set of symbols, a choice):
+  v1 has `int` and `dict`.
 - **Judge-only scripts.** Filters that must see a whole unit at once (file-format validators,
   watertight meshes) need code; a sandboxed, deterministic tier (WebAssembly, say) could carry
   them later, judging only.
@@ -217,7 +240,7 @@ a conformance check, not a replacement.
    rank and compact; the `filters/` folder; `sieve filters --plugin`. The oracle's loader and
    engine, and CI comparing them. (Ran the full test harness.)
 2. **Built.** `clean-data-v1` and `key-data-v1` checked against the built-ins, and `max-run-data-v1`.
-3. The token form; `words-data-v1` and `window-data-v1`, checked against the built-ins.
+3. **Built.** The token form; `words-data-v1` and `window-data-v1`, checked against the built-ins.
 4. The setup menu: plugins listed with their origin and author, reasons for any that fail to load.
 5. The first new filters: word pairs (by sets), then grammar (a tagged list first).
 6. The binary line (judging), then counting where the budget allows.
@@ -253,7 +276,92 @@ a conformance check, not a replacement.
   and ten kinds of mistake are refused with their line.
 - **Reference plugins** (`data/filters/`): `clean-data-v1` (table), `max-run-data-v1` (parameter
   `max`, loops; unlike `max-run-v1` it counts, so compact mode works with it), `key-data-v1`
-  (parameter `tonic`, symbols by digit on the notes line).
+  (parameter `tonic`, symbols by digit on the notes line), `tidy-data-v1` (`requires`),
+  `words-data-v1` and `window-data-v1` (the token form, with a `dict` parameter).
+- **The token form.** The engine builds the automaton directly: words from every set in one trie
+  (each node knowing which sets it ends a word of); between tokens the state is the set of
+  readings the last token can have, inside a token the trie node and the readings of the token
+  before; with `edges cut`, a first token touching the start runs through a suffix automaton of
+  all the words. The oracle builds it another way (an NFA with a state per trie node and reading,
+  and for a cut token one per trie node it could be at, then the subset construction and
+  Hopcroft), and the two agree state for state: `words-data-v1` (179,305 states made, 14,334
+  minimal with scowl-en-35) and `window-data-v1`, and a toy grammar (`tests/plugins/`: four word
+  lists, follow, first and last, "run" both noun and verb, whole and cut edges) at four lengths.
+  The unit tests find the ports judging exactly as `words-v1` and `window-v1`, exhaustively at
+  lengths 1 to 4 and counting the same to 9, and the grammar accepting and refusing the sentences
+  it should. Compiled automata are kept for the run (the default dictionary takes about 3 s).
+  Counting needs the table to fit (512 MB): a dictionary's automaton counts at page lengths of a
+  few hundred characters; past that the plugin judges only, where the built-in `words` still
+  counts with its own method. `--relations` finds `words-data-v1` stricter than `window-data-v1`,
+  as it should be.
+- **Prerequisites and the custom tab** (the same night). `requires` as above (`tidy-data-v1` is the
+  example: its own rule is a word-length limit, and it brings `clean-data-v1` and
+  `max-run-data-v1` at `max=3` with it). The setup menu's filters window has two tabs, BUILT-IN
+  FILTERS and CUSTOM FILTERS, so what is compiled into Sieve and what is a plugin never mix; the
+  custom tab shows each plugin's author, origin, file and prerequisites, notes where prerequisites
+  are missing or set differently, and lists every refused file with the reason.
+- **Duplicates and relations.** `subset(a, b)` (`sieve/dfa.hpp`) decides exactly, over every
+  length, whether everything one rule keeps the other keeps too; two minimal automata keep the
+  same units exactly when they are equal. `sieve filters --plugin FILE --relations` reports how a
+  plugin compares with every other custom filter for its line: the same rule (a duplicate),
+  stricter, or looser. The designer runs this on save.
 - **Later** (noted): the Moby part-of-speech list for the first grammar plugin, with or after the
   token form; the menu showing plugins' origin and author on their own line, and load errors
   (for now: `sieve filters --plugins`); chunk sizes as a parameter (VAULT.md section 8).
+
+## 12. The filter designer (built; Edward's design)
+
+A node editor for making filters inside Sieve, opened from the **main menu** (not the setup menu,
+which is for choosing and tuning filters). It edits `.sfilter` files: the file stays the source of
+truth, so a filter made in the designer and one written by hand are the same kind of thing, hashed,
+versioned and checked by the oracle alike.
+
+- **The entry node: prerequisites.** The `requires` list, with a **+** to add an entry and, beside
+  each listed filter, a **+** that opens a node for the settings it pins.
+- **The reference list.** The same filter list as the setup menu's (built-in and custom tabs), with
+  the designer's own controls: to see what exists and what each does, and to drag one in as a
+  prerequisite.
+- **Blocks, not states.** The nodes are the file's building blocks (symbols and classes, parameters,
+  rule blocks: a table, or word sets joined by `follow` edges); a drawn state diagram is a viewer
+  for automata small enough to read (max-run at 64 has 1,665 states).
+- **Live testing.** Survivors at a chosen length, survivors pulled out by rank, and a box to type
+  text into and see pass or fail, with the node that rejected it.
+- **On save:** the relation check against every filter for the line, so duplicates are caught
+  before they are made ("the same rule as clean-data-v1"), and stricter or looser rules are named.
+- **Relations between filters** beyond `requires` (Edward): a filter could require another's
+  opposite, for example; each such relation is an exact operation on the automata.
+- **First use:** the Moby part-of-speech list and the first grammar filter, built in the designer
+  on the token form.
+
+### As built
+
+- **Main menu > Filter Designer** (`client/designer.*`, the screen; `client/designer_model.*`, the
+  filter as parts, its file, testing and saving). Three panels: the filter list (built-in and
+  custom tabs, the chosen one described; R requires it, Enter opens a custom one here); the canvas
+  of nodes; the test panel.
+- **Nodes.** ENTRY: REQUIRES, each prerequisite with a **+** that opens a SETTINGS node for what it
+  pins (Left/Right steps a number or cycles a choice; Delete unpins, back to "its own") and **+ add a
+  filter it requires** (then choose in the list). HEADER (id, version, author, origin, lines,
+  symbols, describe, form). PARAMETERS (name, kind int or dict, default, min, max, about; **+ add**).
+  RULE: WORD SETS (separator, edges, **+ add a word set**) and a SET node per set (name, its words:
+  a dictionary, a dict parameter or a word list, may start, may end, **edit its words** for a list,
+  **link** to draw a `follow` arrow to another set; arrows are drawn between the nodes, and Delete
+  on an arrow's row removes it). RULE: TABLE, whose lines open in a multi-line editor. Nodes are
+  placed in columns and move when dragged by their titles; the canvas pans with a right-drag or
+  Ctrl+arrows. Where each node sits is kept in the file as comments the parser skips.
+- **The test panel**, on a worker (a dictionary takes seconds; the window never waits): states made
+  and minimal, survivors and what is excluded at a length (Left/Right, Shift x10), five survivors by
+  rank, text typed in and judged, with why it fails ("the token 'on' (characters 13 to 14) is not
+  the start of a word that can come there"; a table's errors by the editor's own line numbers), the
+  relation check, and Save.
+- **Saving** (Ctrl+S) writes `<id>-v<version>.sfilter` and its word lists to the filters folder and
+  registers it at once (it is in the CUSTOM FILTERS tab straight away), then runs the relation
+  check, so a duplicate is named as soon as it is made. A version that exists with other contents
+  is never overwritten: Save offers the next free version. A word list that exists with other words
+  is never changed underneath the filters using it: the new one needs a new name.
+- **A round trip** (CI): a plugin opened in the designer and written back is the same rule. The
+  designer writes its own layout, so a hand-written file's comments are not kept (its rule is).
+- **Scripted** (for CI and documentation): `hallway --designer [--design FILE] [--script
+  "keys,=typed text,..."] [--design-out FILE] --screenshot PNG` prints the filter's name and the
+  status line. CI makes and saves a word filter by script, finds it registered and named the same
+  rule as `words-data-v1`, and finds a second save of other contents offered version 2.

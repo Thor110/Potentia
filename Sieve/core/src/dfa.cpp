@@ -186,6 +186,33 @@ Dfa intersect(const Dfa& a, const Dfa& b)
     return minimise(p);
 }
 
+bool subset(const Dfa& a, const Dfa& b)
+{
+    if (a.base != b.base) throw std::invalid_argument("automata over different symbols cannot be compared");
+    if (a.start < 0) return true; // a accepts nothing
+    const size_t B = a.base;
+    // Pairs (state of a, state of b or dead); a pair where a accepts and b does not (or is dead)
+    // is a unit a keeps and b does not.
+    std::unordered_map<uint64_t, char> seen;
+    std::vector<std::pair<int32_t, int32_t>> todo{{a.start, b.start}};
+    auto key = [](int32_t x, int32_t y) { return uint64_t(uint32_t(x)) << 32 | uint32_t(y); };
+    seen.emplace(key(a.start, b.start), 1);
+    while (!todo.empty())
+    {
+        const auto [x, y] = todo.back();
+        todo.pop_back();
+        if (a.accept[size_t(x)] && (y < 0 || !b.accept[size_t(y)])) return false;
+        for (size_t c = 0; c < B; ++c)
+        {
+            const int32_t tx = a.next[size_t(x) * B + c];
+            if (tx < 0) continue;
+            const int32_t ty = y < 0 ? Dfa::kDead : b.next[size_t(y) * B + c];
+            if (seen.emplace(key(tx, ty), 1).second) todo.emplace_back(tx, ty);
+        }
+    }
+    return true;
+}
+
 // ---------------------------------------------------------------- the ranker
 
 double DfaRanker::table_bytes(size_t states, uint32_t base, uint32_t length)

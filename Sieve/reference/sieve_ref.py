@@ -28,6 +28,7 @@ import argparse
 import hashlib
 import re
 import math
+import os
 import struct
 import sys
 import unicodedata
@@ -1979,7 +1980,7 @@ def _split_range(s):
 
 
 def parse_plugin(text):
-    head = {"params": [], "lines": []}
+    head = {"params": [], "lines": [], "requires": []}
     body, n, first, ended, stack = [], 0, True, False, []
     for raw in text.split("\n"):
         n += 1
@@ -2008,10 +2009,31 @@ def parse_plugin(text):
             head[k] = rest
         elif k == "lines":
             head["lines"] = [t for t, _ in toks[1:]]
+        elif k == "requires":
+            # a filter by its full name, then settings it pins, NAME=VALUE (kept in sorted order,
+            # as the engine keeps them)
+            name = toks[1][0]
+            if not re.fullmatch(r".+-v[0-9]+", name):
+                raise PluginError(f"line {n}: requires names a filter with its version, as <id>-v<n>")
+            pins = dict(t.split("=", 1) for t, _ in toks[2:])
+            head["requires"].append((name, pins))
+        elif k == "param" and toks[2][0] == "dict":
+            head["params"].append((toks[1][0], "" if toks[3][0] == "default" else toks[3][0], "dict", None))
+        elif k == "tokens":
+            head["separator"] = toks[2:]
+        elif k == "edges":
+            head["edges"] = toks[1][0]
+        elif k == "set":
+            kind, _, src = toks[2][0].partition(":")
+            head.setdefault("sets", []).append((toks[1][0], kind, src))
+        elif k == "follow":
+            head.setdefault("follow", []).append((toks[1][0], toks[2][0]))
+        elif k in ("first", "last"):
+            head[k] = [t for t, _ in toks[1:]]
         elif k == "param":
             name, kind = toks[1][0], toks[2][0]
             if kind != "int":
-                raise PluginError(f"line {n}: a parameter's kind is int")
+                raise PluginError(f"line {n}: a parameter's kind is int or dict")
             d, lo, hi = (_plugin_num(t, {}, n) for t in toks[3:6])
             if not lo <= d <= hi:
                 raise PluginError(f"line {n}: a parameter's default must lie between its minimum and maximum")
@@ -2036,6 +2058,7 @@ def parse_plugin(text):
         if key not in head:
             raise PluginError(f"the header has no {key}")
     head["name"] = f"{head['id']}-v{int(head['version'])}"
+    head["form"] = "tokens" if "sets" in head else "table"
     return head, body
 
 
@@ -2054,6 +2077,8 @@ def plugin_base(symbols, base=None):
 def compile_plugin(head, body, values, base):
     env = {}
     for name, d, lo, hi in head["params"]:
+        if lo == "dict":
+            continue
         v = int(values.get(name, d))
         if not lo <= v <= hi:
             raise PluginError(f"{head['name']}: {name} must be {lo}..{hi}")
@@ -2164,6 +2189,132 @@ def compile_plugin(head, body, values, base):
     return state["N"], state["start"], state["next"], state["accept"]
 
 
+def dictionary_registry(folder="../data/dictionaries"):
+    """dictionaries.tsv: id -> (path, sha256), and the default id."""
+    reg, default = {}, None
+    for line in open(os.path.join(folder, "dictionaries.tsv"), encoding="utf-8"):
+        if line.startswith("#") or not line.strip():
+            continue
+        f = line.rstrip("\n").split("\t")
+        reg[f[0]] = (os.path.join(folder, f[1]), f[4])
+        if f[3] == "yes":
+            default = f[0]
+    return reg, default
+
+
+def token_nfa_dfa(head, values, base, folder):
+    """The token form, built another way than the engine's: an NFA with one state per (trie node,
+    reading of the token before), and for a cut first token one per trie node it could be at,
+    then the ordinary subset construction. Returns (states declared, start, next, accept, data)."""
+    alpha = ALPHABETS[head["symbols"]]
+    sep = set()
+    for text, quoted in head["separator"]:
+        chars = text if quoted else "".join(chr(c) for c in range(ord(text[0]), ord(text[2]) + 1))
+        sep |= {alpha.index(c) for c in chars}
+    names = [s[0] for s in head["sets"]]
+    # the trie: children per node, and which sets each node ends a word of
+    kids, ends, data = [{}], [set()], []
+    for i, (name, kind, src) in enumerate(head["sets"]):
+        if kind == "dict":
+            if src.startswith("{"):
+                pn = src[1:-1]
+                src = values.get(pn, next(d for n_, d, lo, hi in head["params"] if n_ == pn))
+            reg, default = dictionary_registry()
+            ident = src or default
+            path, sha = reg[ident]
+            words = sorted(load_dict(path)[0])
+            data.append(f"{name}=dict:{src or 'default'}={sha}")
+        else:
+            raw = open(os.path.join(folder, src), "rb").read()
+            words = [w for w in raw.decode("utf-8").split("\n") if w]
+            data.append(f"{name}=list:{src}={hashlib.sha256(raw).hexdigest()}")
+        for w in words:
+            if any(c not in alpha or alpha.index(c) in sep for c in w):
+                if kind == "list":
+                    raise PluginError(f"'{w}' is not a word of {head['symbols']}'s symbols")
+                continue
+            node = 0
+            for c in w:
+                d = alpha.index(c)
+                if d not in kids[node]:
+                    kids[node][d] = len(kids)
+                    kids.append({})
+                    ends.append(set())
+                node = kids[node][d]
+            ends[node].add(i)
+    n = len(names)
+    follow = {r: set(range(n)) for r in range(n)} if not head.get("follow") else {r: set() for r in range(n)}
+    for a, b in head.get("follow", []):
+        follow[names.index(a)].add(names.index(b))
+    START = "start"
+    follow[START] = {names.index(s) for s in head["first"]} if "first" in head else set(range(n))
+    last = {names.index(s) for s in head["last"]} if "last" in head else set(range(n))
+    cut = head["edges"] == "cut"
+    incoming = {}
+    for node, ch in enumerate(kids):
+        for d, t in ch.items():
+            incoming.setdefault(d, set()).add(t)
+
+    def step(q, c):
+        out = set()
+        if q == "S0":
+            if c in sep:
+                out.add("S1")
+            elif cut:
+                out |= {("Suf", t) for t in incoming.get(c, ())}
+            elif c in kids[0]:
+                out.add(("In", kids[0][c], START))
+        elif q == "S1":
+            if c not in sep and c in kids[0]:
+                out.add(("In", kids[0][c], START))
+        elif q[0] == "B":
+            if c not in sep and c in kids[0]:
+                out.add(("In", kids[0][c], q[1]))
+        elif q[0] == "In":
+            _, node, p = q
+            if c in sep:
+                out |= {("B", r) for r in ends[node] if r in follow[p]}
+            elif c in kids[node]:
+                out.add(("In", kids[node][c], p))
+        elif q[0] == "Suf":
+            node = q[1]
+            if c in sep:
+                if ends[node]:
+                    out |= {("B", r) for r in range(n)}
+            elif c in kids[node]:
+                out.add(("Suf", kids[node][c]))
+        return out
+
+    def accepting(q):
+        if q in ("S0", "S1"):
+            return False
+        if q[0] == "B":
+            return q[1] in last
+        if q[0] == "In":
+            return cut or any(r in follow[q[2]] and r in last for r in ends[q[1]])
+        return True  # Suf: the whole unit, a substring of a word
+
+    start = frozenset(["S0"])
+    index, order, nxt, acc = {start: 0}, [start], [], []
+    i = 0
+    while i < len(order):
+        S = order[i]
+        acc.append(any(accepting(q) for q in S))
+        row = []
+        for c in range(base):
+            T = frozenset(t for q in S for t in step(q, c))
+            if not T:
+                row.append(-1)
+                continue
+            if T not in index:
+                index[T] = len(order)
+                order.append(T)
+            row.append(index[T])
+        nxt.append(row)
+        i += 1
+    return len(order), 0, nxt, acc, " ".join(data)
+
+
 def minimise_dfa(start, nxt, acc, base):
     """Trim to the live states, merge by Hopcroft's algorithm, number breadth first."""
     n = len(nxt)
@@ -2200,30 +2351,35 @@ def minimise_dfa(start, nxt, acc, base):
             rev[c].setdefault(t if t in live else DEAD, set()).add(s)
     for c in range(base):
         rev[c].setdefault(DEAD, set()).add(DEAD)
-    F = frozenset(s for s in live if acc[s])
-    parts = [p for p in (F, frozenset((live - F) | {DEAD})) if p]
-    work = [min(parts, key=len)] if len(parts) == 2 else list(parts)
-    while work:
-        A = work.pop()
+    # Hopcroft: blocks as sets, each state's block by index; a splitter's predecessors on each
+    # symbol split every block they cut, and the smaller half (or both, if the block was waiting)
+    # waits to split others.
+    F = {s for s in live if acc[s]}
+    blocks = [b for b in (F, (live - F) | {DEAD}) if b]
+    block_of = {s: i for i, b in enumerate(blocks) for s in b}
+    waiting = {min(range(len(blocks)), key=lambda i: len(blocks[i]))} if len(blocks) == 2 else set(range(len(blocks)))
+    while waiting:
+        A = set(blocks[waiting.pop()])
         for c in range(base):
             X = set()
             for t in A:
                 X |= rev[c].get(t, set())
-            if not X:
-                continue
-            new = []
-            for Y in parts:
-                i1, i2 = Y & X, Y - X
-                if i1 and i2:
-                    new += [frozenset(i1), frozenset(i2)]
-                    if Y in work:
-                        work.remove(Y)
-                        work += [frozenset(i1), frozenset(i2)]
-                    else:
-                        work.append(frozenset(i1) if len(i1) <= len(i2) else frozenset(i2))
+            touched = {}
+            for s_ in X:
+                touched.setdefault(block_of[s_], set()).add(s_)
+            for b, inter in touched.items():
+                if len(inter) == len(blocks[b]):
+                    continue
+                nb = len(blocks)
+                blocks[b] -= inter
+                blocks.append(inter)
+                for s_ in inter:
+                    block_of[s_] = nb
+                if b in waiting:
+                    waiting.add(nb)
                 else:
-                    new.append(Y)
-            parts = new
+                    waiting.add(nb if len(inter) <= len(blocks[b]) else b)
+    parts = [frozenset(b) for b in blocks]
     block = {s: i for i, P in enumerate(parts) for s in P if s != DEAD}
     order, seq, q = {block[start]: 0}, [], [block[start]]
     while q:
@@ -2273,7 +2429,11 @@ def cmd_plugin(args):
     head, body = parse_plugin(data.decode("utf-8"))
     values = dict(kv.split("=", 1) for kv in args.params.split(",")) if args.params else {}
     base = plugin_base(head["symbols"], args.base)
-    N, start, nxt, acc = compile_plugin(head, body, values, base)
+    word_data = ""
+    if head["form"] == "tokens":
+        N, start, nxt, acc, word_data = token_nfa_dfa(head, values, base, os.path.dirname(os.path.abspath(args.file)))
+    else:
+        N, start, nxt, acc = compile_plugin(head, body, values, base)
     s0, m_next, m_acc = minimise_dfa(start, nxt, acc, base)
     params = " ".join(f"{name}={values.get(name, d)}" for name, d, lo, hi in head["params"]) or "(none)"
     print(f"plugin     {head['name']}")
@@ -2282,6 +2442,9 @@ def cmd_plugin(args):
     print(f"author     {head['author']}")
     print(f"symbols    {head['symbols']}")
     print(f"params     {params}")
+    reqs = "; ".join(name + "".join(f" {k}={v}" for k, v in sorted(pins.items())) for name, pins in head["requires"])
+    print(f"requires   {reqs or '(none)'}")
+    print(f"form       {head['form']}" + (f"  {word_data}" if word_data else ""))
     print(f"states     {N} declared, {len(m_next)} minimal")
     print(f"length     {args.length}")
     L = args.length

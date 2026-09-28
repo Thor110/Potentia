@@ -1106,6 +1106,36 @@ FilterValues parse_params(const std::string& s)
     return v;
 }
 
+// What a plugin's rule is to every other custom filter for the same line, at their default
+// settings: the same (a duplicate), stricter (it implies the other), looser (implied by it), or
+// neither. Exact, over every length (sieve/dfa.hpp: subset).
+void print_relations(const std::string& self_name, const Dfa& d, const FilterLine& fl)
+{
+    bool any = false;
+    for (const FilterSpec& other : plugin_registry())
+    {
+        if (other.name() == self_name || !other.applies(fl)) continue;
+        std::unique_ptr<Filter> f;
+        try
+        {
+            static const AppResources resources;
+            f = other.make(fl, {}, resources);
+        }
+        catch (const std::exception&)
+        {
+            continue;
+        }
+        const Dfa* o = plugin_dfa(*f);
+        if (!o) continue;
+        const bool in = subset(d, *o), out = subset(*o, d);
+        const char* what = in && out ? "the same rule as" : in ? "stricter than (implies)" : out ? "looser than (implied by)" : nullptr;
+        if (!what) continue;
+        std::cout << "relation   " << what << " " << other.name() << (in && out ? "  -- a duplicate" : "") << "\n";
+        any = true;
+    }
+    if (!any) std::cout << "relation   none: no other custom filter for this line is the same, stricter or looser\n";
+}
+
 // One plugin file: its header, its automaton and, at the line's length, what it keeps. The same
 // report as the oracle's `sieve_ref.py plugin`, line for line, so CI can compare them.
 int cmd_filters_plugin(const Args& a)
@@ -1114,7 +1144,9 @@ int cmd_filters_plugin(const Args& a)
     const std::vector<uint8_t> bytes = read_file_bytes(std::filesystem::path(std::u8string(file.begin(), file.end())));
     const std::string text(bytes.begin(), bytes.end());
     const std::string sha = Sha256::hex(Sha256::hash(text));
-    const auto def = parse_plugin(text, sha);
+    const std::filesystem::path file_path(std::u8string(file.begin(), file.end()));
+    const std::u8string folder = file_path.parent_path().u8string();
+    const auto def = parse_plugin(text, sha, std::string(folder.begin(), folder.end()));
     const PluginHeader& h = plugin_header(*def);
     // The line: as given, or the one the plugin's symbols name.
     Args b = a;
@@ -1138,7 +1170,9 @@ int cmd_filters_plugin(const Args& a)
         if (std::none_of(h.params.begin(), h.params.end(), [&](const FilterParam& p) { return p.key == k; }))
             throw std::invalid_argument(h.name() + " has no parameter '" + k + "'");
     size_t declared = 0;
-    const Dfa d = compile_plugin(*def, fl, values, &declared);
+    static const AppResources resources;
+    std::string data;
+    const Dfa d = compile_plugin(*def, fl, values, resources, &declared, &data);
     std::string params;
     for (const auto& p : h.params)
     {
@@ -1150,9 +1184,18 @@ int cmd_filters_plugin(const Args& a)
               << "origin     " << h.origin << "\n"
               << "author     " << h.author << "\n"
               << "symbols    " << h.symbols << "\n"
-              << "params     " << (params.empty() ? "(none)" : params) << "\n"
+              << "params     " << (params.empty() ? "(none)" : params) << "\n";
+    std::string reqs;
+    for (const auto& r : h.prerequisites)
+    {
+        reqs += (reqs.empty() ? "" : "; ") + r.name;
+        for (const auto& [k, v] : r.values) reqs += " " + k + "=" + v;
+    }
+    std::cout << "requires   " << (reqs.empty() ? "(none)" : reqs) << "\n"
+              << "form       " << h.form << (data.empty() ? std::string() : "  " + data) << "\n"
               << "states     " << declared << " declared, " << d.states() << " minimal\n"
               << "length     " << fl.length << "\n";
+    if (a.has("relations")) print_relations(h.name(), d, fl);
     if (DfaRanker::table_bytes(d.states(), d.base, fl.length) > kPluginTableBudget)
     {
         std::cout << "survivors  (judge only: the table is over the budget at this length)\n";
@@ -1211,8 +1254,18 @@ int cmd_filters(const Args& a)
     if (list.empty()) std::cout << "No filters for this line yet.\n";
     for (const FilterSpec* f : list)
     {
-        std::cout << (lf.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << "\n";
+        std::cout << (lf.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << (f->plugin_sha256.empty() ? "" : "   (custom)") << "\n";
         print_indented(f->description, "      ");
+        if (!f->plugin_sha256.empty())
+        {
+            std::cout << "      by " << f->author << " (" << f->origin << "), file " << f->plugin_sha256.substr(0, 12) << "\n";
+            for (const auto& r : f->prerequisites)
+            {
+                std::cout << "      requires " << r.name;
+                for (const auto& [k, v] : r.values) std::cout << " " << k << "=" << v;
+                std::cout << " (ticked with it)\n";
+            }
+        }
         const auto vit = lf.values.find(f->name());
         for (const auto& p : f->params)
         {
@@ -1226,6 +1279,7 @@ int cmd_filters(const Args& a)
             std::cout << "\n";
         }
     }
+    for (const std::string& n : prerequisite_notes(lf)) std::cout << "\nnote         " << n;
     const FilterStack st = build_stack(line, lf);
     if (!st.empty())
     {
