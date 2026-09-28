@@ -347,7 +347,9 @@ by a space; for `ascii95`, a capital after a full stop. Countable with the word 
 exists. This matters: `lower27` throws away case and punctuation, so the books line currently holds
 word streams, not sentences.
 
-**7.6 Model-line filters.** Three tiers are specified in §12 and none are built: local per-face
+**7.6 Model-line filters.** The models line has a stack (`ModelSieve`) with `not-a-file-v1` and the
+first two tiers built (distinct vertices, distinct indices, every vertex used; FILTER-PLUGINS §16).
+The third tier is still to come. The three tiers of §12: local per-face
 constraints (rank exactly), small-V constraints such as "every vertex is used" (rank as a state
 machine, 256 states at V=8), and whole-mesh properties — watertight, manifold, convex — which judge
 but cannot rank, so they run in `mark`/`hide`.
@@ -573,6 +575,10 @@ are cheap and because they are the sort of thing that is lost otherwise.
     only, since it cannot be counted.
   The binary line as the ground the other lines stand on is already true in one direction: every
   item's file is on it, and J goes there and back.
+- **Transformed copies** (Edward): compression and encryption of other lines' content as filters.
+  Written up in TRANSFORM-FILTERS.md: keyless and small-keyed transforms can count exactly,
+  compression can only judge, and every key at once excludes everything.
+- **The game**, *State Space: Near Zero*: GAME.md.
 - **Loudness per note** (Edward: worth having, in a later version). Each note event quiet, medium
   or loud, which triples the note symbols; for the `notes2` family, after its first version.
 - **Books of `notes2` melodies.** `sieve-book-v1` gives an audio section only a length, so a book

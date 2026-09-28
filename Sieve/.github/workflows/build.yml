@@ -698,10 +698,40 @@ jobs:
           # In the hallway: the binary line compacted to PNGs, every file on the shelves a PNG; J
           # from a page to its file on the binary line and back; and from a picture, a PNG.
           $H --no-menu --line binary --filters bk.ini --walk "0,0" --screenshot binpng.png | sed -n 1p | q "^BINARY line, positional, filters: 1 compact .* PNG 32 bytes: 89 50 4e 47"
-          $H --no-menu --warp "hello world" --press "J" --screenshot j1.png | q "^BINARY line.*its file: TXT, 33 bytes, on the binary line"
+          $H --no-menu --warp "hello world" --press "J" --screenshot j1.png | q "^BINARY line.*its file: TXT, 32 bytes, on the binary line"
           $H --no-menu --warp "hello world" --press "J,J" --screenshot j2.png | q "^PAGES line.*a TXT file, opened on the PAGES line"
           $H --no-menu --line image --walk "0,0" --press "E,J,J" --screenshot j3.png | q "^IMAGE line.*a PNG file, opened on the IMAGE line"
           $H --no-menu --line audio --warp "C4q E4q G4h Re B4e C5w" --press "J,J" --screenshot j4.png | q "^AUDIO line.*a MID file, opened on the AUDIO line"
+          # Every line filtered by every other (FILTER-PLUGINS.md section 16): the CLI's counts are
+          # the oracle's cross-vectors; a page's file fails not-an-item-v1 on the binary line, and
+          # the hallway says why the binary line cannot compact with every item form asked for.
+          printf "[text]\nmode = compact\nfilters = not-a-file-v1\n" > naf.ini
+          want=$(awk -F'\t' '$1 == "not-a-file" && $2 == "27" && $3 == "32" {print $4}' tests/vectors_cross_v1.tsv)
+          build/sieve filters --length 32 --filters naf.ini | q "^survivors    $want (exact; compact mode available)"
+          printf "[image]\nmode = compact\nfilters = not-packed-v1\n" > np.ini
+          want=$(awk -F'\t' '$1 == "packed" && $2 == "2" && $3 == "100" {print $4}' tests/vectors_cross_v1.tsv)
+          build/sieve filters --line image --filters np.ini | q "^survivors    $want (exact; compact mode available)"
+          printf "[binary]\nmode = compact\nfilters = binary-kind-v1, not-an-item-v1\n[binary.binary-kind-v1]\nkinds = signed\nkeep = exclude\n" > ni.ini
+          want=$(awk -F'\t' '$1 == "item-pages" && $2 == "40" {print $7}' tests/vectors_cross_v1.tsv)
+          build/sieve filters --line binary --length 40 --alphabet ascii95 --page-length 20 --filters ni.ini | q "^survivors    $want (exact; compact mode available)"
+          printf 'hello world, 20 char' > page.txt
+          build/sieve check --line binary --length 40 --alphabet ascii95 --page-length 20 --file page.txt --filters ni.ini | q "stack: fails at not-an-item-v1"
+          # The models line's own stack: not-a-file-v1 on a model's number, counted as the oracle
+          # counts it, a cube's verdict and compact address, and the line compacted in the hallway.
+          printf "[models]\nmode = compact\nfilters = not-a-file-v1\n" > mf.ini
+          want=$(awk -F'\t' '$1 == "models" && $2 == "8" && $3 == "12" && $4 == "16" {print $5}' tests/vectors_cross_v1.tsv)
+          build/sieve filters --line models --filters mf.ini | q "^survivors    $want (exact; compact mode available)"
+          build/sieve mesh --warp cube.obj --filters mf.ini | q "^stack: passes, survivor number"
+          $H --no-menu --line models --filters mf.ini --walk "0,0" --screenshot mcompact.png | q "^MODELS line, positional, filters: 1 compact"
+          # And the line's own filters: counted as the oracle's face walk counts them, a cube passes
+          # all three, and the hallway's compact line holds only well-formed models.
+          printf "[models]\nmode = compact\nfilters = distinct-vertices-v1, distinct-indices-v1, every-vertex-used-v1\n" > mr.ini
+          want=$(awk -F'\t' '$1 == "mesh" && $2 == "8" && $3 == "12" && $4 == "16" && $5 == "viu" {print $6}' tests/vectors_cross_v1.tsv)
+          build/sieve filters --line models --filters mr.ini | q "^survivors    $want (exact; compact mode available)"
+          build/sieve mesh --warp cube.obj --filters mr.ini | q "^stack: passes, survivor number"
+          $H --no-menu --line models --filters mr.ini --walk "0,0" --take --screenshot mrules.png | q "8/8 vertices used, 0 degenerate faces"
+          printf "[binary]\nmode = compact\nfilters = not-an-item-v1\n[binary.not-an-item-v1]\nitems = all\n" > nia.ini
+          $H --no-menu --line binary --filters nia.ini --walk "0,0" --screenshot nia.png | q "^BINARY line, positional, filters: 1 hide (compact: not-an-item-v1 judges models file by file"
           test -s compact.png && test -s mixed.png && test -s mark.png && test -s overlay.png
 
       - name: Reference oracle reproduces the committed vectors
@@ -729,6 +759,9 @@ jobs:
           # closed form for the binary reading and the overlap walked pair by pair (about 3 minutes).
           python sieve_ref.py kind-vectors | diff - ../tests/vectors_kinds_v1.tsv
           python sieve_ref.py written-vectors | diff - ../tests/vectors_written_v1.tsv
+          # Every line filtered by every other (section 16): not-a-file, the notation and .obj
+          # machines, the packed closed form and the pages among the binary kinds (about 10 s).
+          python sieve_ref.py cross-vectors | diff - ../tests/vectors_cross_v1.tsv
           python sieve_ref.py book-filter-vectors | diff - ../tests/vectors_book_filters_v1.tsv
           python sieve_ref.py book-read ../tests/example_book_v1.book > book.out
           test "$(head -1 book.out)" = "$(awk '$1 == "id" {print $2}' ../tests/example_book_v1.book)"

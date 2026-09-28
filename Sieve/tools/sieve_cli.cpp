@@ -855,6 +855,21 @@ int cmd_mesh(const Args& a)
             const BigUint k = sp.index_of(fit.parts, address_mode_from_string(m));
             std::cout << "  " << std::setw(11) << std::left << m << show_address(sp.hex_of(k), a.has("short")) << "\n";
         }
+        // The models line's filters ([models] in the settings), when any are ticked.
+        const ModelSieve ms = build_model_sieve(sp, load_filter_config(a).models);
+        if (!ms.empty())
+        {
+            const BigUint k = sp.index_of(fit.parts, AddressMode::Positional);
+            const std::string fail = ms.first_failure(k);
+            if (!fail.empty()) std::cout << "stack: fails at " << fail << "\n";
+            else if (!ms.can_rank()) std::cout << "stack: passes (compact unavailable: " << ms.blocker() << ")\n";
+            else
+            {
+                std::cout << "stack: passes, survivor number " << ms.index_of(k, AddressMode::Positional).to_decimal() << "\n";
+                for (const auto m : {AddressMode::Positional, AddressMode::Scrambled})
+                    std::cout << "  compact " << std::setw(11) << std::left << to_string(m) << show_address(ms.hex_of(ms.index_of(k, m)), a.has("short")) << "\n";
+            }
+        }
         std::cout << mesh_preview(sp, fit.parts);
         return 0;
     }
@@ -1267,12 +1282,81 @@ int cmd_filters_plugin(const Args& a)
 
 // The binary line's filters (binary-kind-v1), its sieve, and what each kind is of the line: the
 // calculator for where the binary line's files stand, exact at any length.
+// The other lines, as not-an-item-v1 sees them from the command line: the pages line of --alphabet
+// and --page-length (default lower27, 32), and the other lines at their default shapes.
+struct OtherLines
+{
+    static Line line(const Args& a, const char* kind)
+    {
+        Args b;
+        b.opts["line"] = kind;
+        b.opts["model"] = "none";
+        if (std::string(kind) == "text")
+        {
+            b.opts["alphabet"] = a.get("alphabet", "lower27");
+            b.opts["length"] = a.get("page-length", "32");
+        }
+        return make_line(b);
+    }
+    Line pages, image, video, audio;
+    ModelSpace models{8, 12, 16};
+    BinaryItems items;
+    explicit OtherLines(const Args& a)
+        : pages(line(a, "text")), image(line(a, "image")), video(line(a, "video")), audio(line(a, "audio"))
+    {
+        items = binary_items(&pages, &image, &video, &audio, &models);
+    }
+};
+
+// The models line's filters: what it offers, what is ticked ([models] in the settings), and the
+// stack's survivors, exact (sieve/modelsieve.hpp).
+int cmd_filters_models(const Args& a)
+{
+    const ModelSpace space = make_model_space(a);
+    const FilterConfig cfg = load_filter_config(a);
+    const LineFilters& lf = cfg.models;
+    const FilterLine fl = models_filter_line(space.vertices(), space.face_count(), space.coords());
+    std::cout << "line         models  (" << space.id() << ")\n"
+              << "settings     " << filters_path(a) << "\n"
+              << "mode         " << to_string(lf.mode) << "\n\n";
+    for (const FilterSpec* f : filters_for(fl))
+    {
+        std::cout << (lf.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << "\n";
+        print_indented(f->description, "      ");
+    }
+    const ModelSieve ms = build_model_sieve(space, lf);
+    if (ms.empty()) return 0;
+    if (!ms.can_rank())
+    {
+        std::cout << "\nstack        " << ms.id().substr(0, 16) << "...  " << ms.provenance() << "\n"
+                  << "compact      unavailable: " << ms.blocker() << "\n";
+        return 0;
+    }
+    const BigUint& all = space.size();
+    auto share = [&](const BigUint& part) {
+        if (part.is_zero()) return std::string("none");
+        std::ostringstream o;
+        const double x = part.log10_approx() - all.log10_approx();
+        if (x > -0.005) return std::string("about all");
+        o << "10^" << std::fixed << std::setprecision(2) << x;
+        return o.str();
+    };
+    BigUint excluded = all;
+    excluded -= ms.count();
+    std::cout << "\nstack        " << ms.id().substr(0, 16) << "...  " << ms.provenance() << "\n"
+              << "survivors    " << ms.count().to_decimal() << " (exact; compact mode available)\n"
+              << "excluded     " << excluded.to_decimal() << " (exact)\n"
+              << "share        the stack keeps " << share(ms.count()) << " of the line and sets aside " << share(excluded) << "\n";
+    return 0;
+}
+
 int cmd_filters_binary(const Args& a)
 {
     const uint64_t n = a.has("length") ? std::stoull(a.get("length")) : 32;
     const BinarySpace space(std::max<uint64_t>(1, n), a.get("key", "sieve"));
     const FilterConfig cfg = load_filter_config(a);
     const LineFilters& lf = cfg.binary;
+    const OtherLines others(a);
     const FilterLine fl = binary_filter_line(space.max_bytes());
     std::cout << "line         binary  (" << space.id() << ")\n"
               << "settings     " << filters_path(a) << "\n"
@@ -1295,8 +1379,11 @@ int cmd_filters_binary(const Args& a)
         o << "10^" << std::fixed << std::setprecision(2) << x;
         return o.str();
     };
-    const BinarySieve bs = build_binary_sieve(space, lf);
-    if (!bs.empty())
+    const BinarySieve bs = build_binary_sieve(space, lf, &others.items);
+    if (!bs.empty() && !bs.can_rank())
+        std::cout << "\nstack        " << bs.id().substr(0, 16) << "...  " << bs.provenance() << "\n"
+                  << "compact      unavailable: " << bs.blocker() << "\n";
+    else if (!bs.empty())
     {
         BigUint excluded = all;
         excluded -= bs.count();
@@ -1334,7 +1421,8 @@ int cmd_check_binary(const Args& a)
     const BinarySpace space(std::max<uint64_t>(1, n), a.get("key", "sieve"));
     const FilterConfig cfg = load_filter_config(a);
     const FilterLine fl = binary_filter_line(space.max_bytes());
-    const BinarySieve bs = build_binary_sieve(space, cfg.binary);
+    const OtherLines others(a);
+    const BinarySieve bs = build_binary_sieve(space, cfg.binary, &others.items);
     std::cout << "line         binary  (" << space.id() << ")\n"
               << "file         " << file << ", " << bytes.size() << " bytes\n"
               << "kind         " << file_kind(bytes, bytes.size()) << " (" << kFileKindsVersion << ")\n"
@@ -1343,15 +1431,15 @@ int cmd_check_binary(const Args& a)
     {
         LineFilters one = cfg.binary;
         one.enabled = {f->name()};
-        const BinarySieve single = build_binary_sieve(space, one);
+        const BinarySieve single = build_binary_sieve(space, one, &others.items);
         std::cout << "  " << (cfg.binary.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name()
-                  << std::string(std::max<size_t>(1, 24 - f->name().size()), ' ') << (single.passes(bytes, bytes.size()) ? "pass" : "FAIL") << "\n";
+                  << std::string(std::max<size_t>(1, 24 - f->name().size()), ' ') << (single.first_failure_of(bytes).empty() ? "pass" : "FAIL") << "\n";
     }
     if (!bs.empty())
     {
-        const std::string fail = bs.first_failure(bytes, bytes.size());
+        const std::string fail = bs.first_failure_of(bytes);
         std::cout << "  stack: " << (fail.empty() ? "passes" : "fails at " + fail);
-        if (fail.empty())
+        if (fail.empty() && bs.can_rank())
             std::cout << ", survivor number " << bs.index_of(bytes, AddressMode::Positional).to_decimal() << " of " << bs.count().to_decimal()
                       << "\n  compact      positional " << bs.hex_of(bs.index_of(bytes, AddressMode::Positional)) << "\n"
                       << "               scrambled  " << bs.hex_of(bs.index_of(bytes, AddressMode::Scrambled));
@@ -1375,6 +1463,7 @@ int cmd_filters(const Args& a)
     }
     if (a.get("line", "text") == "books") return cmd_filters_books(a);
     if (a.get("line", "text") == "binary") return cmd_filters_binary(a);
+    if (a.get("line", "text") == "models") return cmd_filters_models(a);
     const Line line = make_line(a.has("length") || line_from_string(a.get("line", "text")) != LineKind::Text ? a : [&] {
         Args b = a;
         b.opts["length"] = "32";
@@ -1564,9 +1653,6 @@ int cmd_bind(const Args& a)
     std::ofstream out(std::filesystem::path(a.get("out")), std::ios::binary);
     out << record;
     if (!out) throw std::runtime_error("cannot write " + a.get("out"));
-    size_t chars = 0;
-    for (const auto& d : decoded)
-        if (d.line.kind == LineKind::Text) chars += d.units.size() * d.line.space.unit_length();
     std::cout << "book         " << b.id << "\n";
     for (const auto& d : decoded)
         std::cout << "  " << d.section->role << std::string(std::max<size_t>(1, 11 - d.section->role.size()), ' ') << d.units.size()

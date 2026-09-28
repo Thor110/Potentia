@@ -1080,9 +1080,8 @@ void Menu::render()
         auto clip = [&](const std::string& t) { return text_cells(t) <= cols ? t : fit_cells(t, cols - 2) + ".."; };
         const SDL_Color edge = th.edge;
         th.edge = ink; // labels in a readable colour; the bar keeps the line's own edges
-        // Magnifying glass: opens this line's filters, on every line. The models line has no
-        // filters registered yet, but its mode is kept; both binary columns open the one binary
-        // line's filters (by its files' kinds).
+        // Magnifying glass: opens this line's filters, on every line; both binary columns open the
+        // one binary line's filters (by its files' kinds).
         {
             magnifier_[c] = {x - 2, label - 2, 20, 20};
             SDL_SetRenderDrawColor(r_, th.edge.r, th.edge.g, th.edge.b, 255);
@@ -1132,7 +1131,8 @@ void Menu::render()
             if (i == 4)
                 for (const auto& part : cfg_.books.parts) ticked += part.enabled.size();
             else if (binary) ticked = cfg_.binary.enabled.size();
-            else if (i < 4) ticked = cfg_.lines[i].enabled.size(); // the models line has no filters yet
+            else if (i == 5) ticked = cfg_.models.enabled.size();
+            else if (i < 4) ticked = cfg_.lines[i].enabled.size();
             if (ticked) text(r_, x, label + 82, clip(trf("map.ticked", {std::to_string(ticked)})), 1, th.edge);
         }
     }
@@ -1164,6 +1164,7 @@ sieve::FilterLine Menu::filter_line_of(int i) const
         f = {"audio", set.id(), set.base(), s_.notes * set.voices, nullptr, 0, 0, 0};
         break;
     }
+    case 5: f = sieve::cli::models_filter_line(s_.model_vertices, s_.model_faces, s_.model_coords); break;
     case 6: f = sieve::cli::binary_filter_line(s_.binary_bytes); break;
     default:
         f = {"video", "video/" + s_.video_palette + "/" + std::to_string(s_.video_w) + "x" + std::to_string(s_.video_h) + "x" + std::to_string(s_.frames),
@@ -1202,15 +1203,89 @@ sieve::cli::FilterMode& Menu::mode_of(int line)
     return line == 4 ? cfg_.books.mode : cfg_.lines[line].mode;
 }
 
+// How much of a line its filters remove, exactly, as a percentage: truncated (so 100% means every
+// unit, and 0% none), with as many decimals as it takes to get past the leading 9s or 0s (up to
+// twelve, then "..."), and, where one side is too small to read as a percentage, that side
+// as a power of ten.
+static std::string filtered_text(const sieve::BigUint& kept, const sieve::BigUint& total)
+{
+    if (total.is_zero()) return "0%";
+    sieve::BigUint removed = total;
+    removed -= kept;
+    if (removed.is_zero()) return "0%";
+    if (kept.is_zero()) return "100%";
+    std::string pct;
+    bool cut = false, extra = false;
+    for (uint32_t d = 1;; ++d)
+    {
+        sieve::BigUint q, r;
+        sieve::BigUint::divmod(sieve::BigUint::mul(removed, sieve::BigUint::pow(10, d + 2)), total, q, r);
+        std::string digits = q.to_decimal();
+        if (digits.size() < d + 1) digits.insert(0, d + 1 - digits.size(), '0');
+        const std::string whole = digits.substr(0, digits.size() - d), frac = digits.substr(digits.size() - d);
+        pct = whole + "." + frac;
+        const bool all_zero = whole == "0" && frac.find_first_not_of('0') == std::string::npos;
+        const bool all_nine = whole == "99" && frac.find_first_not_of('9') == std::string::npos;
+        if (!all_zero && !all_nine)
+        {
+            // Past the 9s or 0s: one digit more, so it reads to two figures (0.0059%, 99.9941%).
+            if (d > 1 && !extra)
+            {
+                extra = true;
+                continue;
+            }
+            break;
+        }
+        if (d == 12)
+        {
+            cut = true;
+            break;
+        }
+    }
+    std::string out = pct + (cut ? "...%" : "%");
+    const double lt = total.log10_approx(), lk = kept.log10_approx() - lt, lr = removed.log10_approx() - lt;
+    if (lk < -2) out += "  (" + trf("filters.filtered.kept", {"10^" + fixed(lk, 2)}) + ")";
+    else if (lr < -2) out += "  (" + trf("filters.filtered.removed", {"10^" + fixed(lr, 2)}) + ")";
+    return out;
+}
+
 const Menu::StackInfo& Menu::stack_info(int i)
 {
     if (i == 4) return book_stack_info();
-    // The models line has no filters registered yet (SPECIFICATIONS §12 sets out its tiers to
-    // come), so there is nothing to count, only that to say.
+    // The models line: not-a-file-v1 on a model's own number, counted exactly (sieve/modelsieve.hpp).
     if (i == 5)
     {
-        info_[i] = StackInfo{"models", tr("status.no_filters_yet"), -1};
-        return info_[i];
+        const sieve::cli::LineFilters& lf = cfg_.models;
+        std::string key = "models/" + std::to_string(s_.model_vertices) + "/" + std::to_string(s_.model_faces) + "/" +
+                          std::to_string(s_.model_coords) + "/" + to_string(lf.mode) + ":";
+        for (const auto& n : lf.enabled) key += n + ",";
+        StackInfo& info = info_[i];
+        if (info.key == key) return info;
+        info = StackInfo{key, "", -1, ""};
+        try
+        {
+            const sieve::ModelSpace space(s_.model_vertices, s_.model_faces, s_.model_coords, "sieve");
+            const sieve::ModelSieve ms = sieve::cli::build_model_sieve(space, lf);
+            if (!ms.empty() && !ms.can_rank()) info.status = trf("status.not_countable", {ms.blocker()});
+            else if (ms.empty())
+            {
+                info.status = tr("status.none_units");
+                info.filtered = "0%";
+            }
+            else
+            {
+                const sieve::BigUint& n = ms.count();
+                info.filtered = filtered_text(n, space.size());
+                info.survivor_bits = n.is_zero() ? 0 : n.log10_approx() / std::log10(2.0);
+                info.status = trf(n.is_zero() ? "status.survivors_none" : "status.survivors",
+                                  {n.log10_approx() < 15 ? n.to_decimal() : "~10^" + fixed(n.log10_approx(), 1)});
+            }
+        }
+        catch (const std::exception& e)
+        {
+            info.status = trf("status.error", {e.what()});
+        }
+        return info;
     }
     // The binary line: its files' kinds, counted exactly at any length (sieve/filekind.hpp).
     if (i == 6)
@@ -1222,15 +1297,24 @@ const Menu::StackInfo& Menu::stack_info(int i)
             for (const auto& [k, v] : vals) key += n + "." + k + "=" + v + ";";
         StackInfo& info = info_[i];
         if (info.key == key) return info;
-        info = StackInfo{key, "", -1};
+        info = StackInfo{key, "", -1, ""};
         try
         {
             const sieve::BinarySpace space(std::max<uint32_t>(1, s_.binary_bytes), "sieve");
-            const sieve::BinarySieve bs = sieve::cli::build_binary_sieve(space, lf);
-            if (bs.empty()) info.status = tr("status.none_units");
+            // Pages as items of the binary line, counted exactly (the other forms need the lines built).
+            sieve::BinaryItems items;
+            items.pages = sieve::cli::page_pattern(sieve::alphabet_of(s_.alphabet), s_.length);
+            const sieve::BinarySieve bs = sieve::cli::build_binary_sieve(space, lf, &items);
+            if (!bs.empty() && !bs.can_rank()) info.status = trf("status.not_countable", {bs.blocker()});
+            else if (bs.empty())
+            {
+                info.status = tr("status.none_units");
+                info.filtered = "0%";
+            }
             else
             {
                 const sieve::BigUint& n = bs.count();
+                info.filtered = filtered_text(n, space.size());
                 info.survivor_bits = n.is_zero() ? 0 : n.log10_approx() / std::log10(2.0);
                 info.status = trf(n.is_zero() ? "status.survivors_none" : "status.survivors",
                                   {n.log10_approx() < 15 ? n.to_decimal() : "~10^" + fixed(n.log10_approx(), 1)});
@@ -1244,7 +1328,7 @@ const Menu::StackInfo& Menu::stack_info(int i)
     }
     if (line_sizes()[size_t(i)].bits > kTooLargeBits)
     {
-        info_[i] = StackInfo{"too large", tr("status.too_large"), -1};
+        info_[i] = StackInfo{"too large", tr("status.too_large"), -1, ""};
         return info_[i];
     }
     const sieve::FilterLine fl = filter_line_of(i);
@@ -1255,7 +1339,7 @@ const Menu::StackInfo& Menu::stack_info(int i)
         for (const auto& [k, v] : vals) key += n + "." + k + "=" + v + ";";
     StackInfo& info = info_[i];
     if (info.key == key) return info;
-    info = StackInfo{key, "", -1};
+    info = StackInfo{key, "", -1, ""};
     if (line_sizes()[size_t(i)].bits > kTooLargeBits)
     {
         info.status = tr("status.too_large");
@@ -1265,10 +1349,15 @@ const Menu::StackInfo& Menu::stack_info(int i)
     {
         sieve::cli::timings::Scope timed("menu.survivors"); // a line's stack built and counted
         const sieve::FilterStack st = sieve::cli::build_stack(fl, lf);
-        if (st.empty()) info.status = tr("status.none_units");
+        if (st.empty())
+        {
+            info.status = tr("status.none_units");
+            info.filtered = "0%";
+        }
         else if (st.ranker())
         {
             const sieve::BigUint& n = st.ranker()->count();
+            info.filtered = filtered_text(n, sieve::BigUint::pow(fl.base, fl.length));
             info.survivor_bits = n.is_zero() ? 0 : n.log10_approx() / std::log10(2.0);
             info.status = trf(n.is_zero() ? "status.survivors_none" : "status.survivors",
                               {n.log10_approx() < 15 ? n.to_decimal() : "~10^" + fixed(n.log10_approx(), 1)});
@@ -1289,7 +1378,7 @@ const Menu::StackInfo& Menu::book_stack_info()
     StackInfo& info = info_[4];
     if (line_sizes()[4].bits > kTooLargeBits)
     {
-        info = StackInfo{"too large", tr("status.too_large"), -1};
+        info = StackInfo{"too large", tr("status.too_large"), -1, ""};
         return info;
     }
     std::string key = std::string("books/") + to_string(cfg_.books.mode) + "/";
@@ -1304,26 +1393,35 @@ const Menu::StackInfo& Menu::book_stack_info()
         key += "|";
     }
     if (info.key == key) return info;
-    info = StackInfo{key, "", -1};
+    info = StackInfo{key, "", -1, ""};
     static const char* const names[3] = {"cover", "title", "pages"};
     try
     {
         sieve::cli::timings::Scope timed("menu.survivors.books");
         double bits = 0, log10 = 0;
         bool exact = true, any = false, none_survive = false;
+        sieve::BigUint kept(1), total(1); // exact, part by part
         std::string blocker;
         for (int part = 0; part < 3; ++part)
         {
             const sieve::FilterLine fl = book_part_line(part);
             const sieve::cli::LineFilters& lf = cfg_.books.parts[part];
             const double all = double(fl.length) * std::log2(double(fl.base));
+            const sieve::BigUint whole = part == 2 && s_.book_pages == 0 ? sieve::BigUint(1) : sieve::BigUint::pow(fl.base, fl.length);
+            total = sieve::BigUint::mul(total, whole);
             if (lf.enabled.empty() || (part == 2 && s_.book_pages == 0))
             {
                 bits += all;
+                kept = sieve::BigUint::mul(kept, whole);
                 continue;
             }
             const sieve::FilterStack st = sieve::cli::build_stack(fl, lf);
-            if (st.empty()) { bits += all; continue; }
+            if (st.empty())
+            {
+                bits += all;
+                kept = sieve::BigUint::mul(kept, whole);
+                continue;
+            }
             any = true;
             if (!st.ranker())
             {
@@ -1332,10 +1430,12 @@ const Menu::StackInfo& Menu::book_stack_info()
                 continue;
             }
             const sieve::BigUint& n = st.ranker()->count();
+            kept = sieve::BigUint::mul(kept, n);
             if (n.is_zero()) none_survive = true;
             else bits += n.log10_approx() / std::log10(2.0);
         }
         log10 = bits * std::log10(2.0);
+        if (exact) info.filtered = filtered_text(kept, total);
         if (!any) info.status = tr("status.none_books");
         else if (!exact) info.status = trf("status.not_countable", {blocker});
         else if (none_survive)
@@ -1396,6 +1496,7 @@ std::vector<Menu::ORow> Menu::overlay_rows() const
         }
     }
     else if (overlay_ >= 0 && overlay_ < 4) add_filter_rows(rows, filter_line_of(overlay_), cfg_.lines[overlay_], -1);
+    else if (overlay_ == 5) add_filter_rows(rows, filter_line_of(5), cfg_.models, -1);
     else if (overlay_ == 6) add_filter_rows(rows, filter_line_of(6), cfg_.binary, -1);
     else return {{ORow::Kind::Mode, "", ""}}; // closed, or a line with no filters yet
     // Custom filter files that did not load, with why: never skipped without a word.
@@ -1425,6 +1526,7 @@ void Menu::toggle_all_filters(bool both_tabs)
     if (overlay_ == 4)
         for (int part = 0; part < 3; ++part) stacks.emplace_back(&cfg_.books.parts[part], book_part_line(part));
     else if (overlay_ >= 0 && overlay_ < 4) stacks.emplace_back(&cfg_.lines[overlay_], filter_line_of(overlay_));
+    else if (overlay_ == 5) stacks.emplace_back(&cfg_.models, filter_line_of(5));
     else if (overlay_ == 6) stacks.emplace_back(&cfg_.binary, filter_line_of(6));
     std::vector<std::pair<sieve::cli::LineFilters*, std::string>> in_reach;
     for (auto& [lf, line] : stacks)
@@ -1729,8 +1831,16 @@ void Menu::render_overlay(float W, float H)
     SDL_RenderRect(r_, &inner);
     const float x = box_.x + 14;
     const size_t cols = size_t((box_.w - 60) / 8);
-    text(r_, x, box_.y + 10, trf("filters.title", {tr(th.key)}), 2, title_ink);
-    text(r_, x, box_.y + 32, tr(overlay_ == 4 ? "filters.intro.books" : overlay_ == 6 ? "filters.intro.binary" : overlay_ == 5 ? "filters.intro.none" : "filters.intro"), 1, grey);
+    const std::string title = trf("filters.title", {tr(th.key)});
+    text(r_, x, box_.y + 10, title, 2, title_ink);
+    // The tally: how much of this line the ticked filters remove, live as they change.
+    if (overlay_ != 5)
+    {
+        const StackInfo& tally = stack_info(overlay_);
+        text(r_, x + text_width(title, 2) + 24, box_.y + 16,
+             trf("filters.filtered", {tally.filtered.empty() ? tr("filters.filtered.unknown") : tally.filtered}), 1, white);
+    }
+    text(r_, x, box_.y + 32, tr(overlay_ == 4 ? "filters.intro.books" : overlay_ == 6 ? "filters.intro.binary" : overlay_ == 5 ? "filters.intro.models" : "filters.intro"), 1, grey);
 
     const sieve::cli::FilterMode mode = mode_of(overlay_);
     const auto rows = overlay_rows();

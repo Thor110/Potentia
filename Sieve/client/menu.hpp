@@ -185,6 +185,9 @@ private:
         std::string key;      // settings it was computed for
         std::string status;   // one line for the overlay footer
         double survivor_bits = -1; // exact survivors (log2), or -1
+        // The tally beside the overlay's title: how much of the line the ticked filters remove,
+        // as a percentage ("99.999999999999...% (kept 10^-19.27)"), or empty when it cannot be counted.
+        std::string filtered;
     };
     const StackInfo& stack_info(int line);
     const StackInfo& book_stack_info();

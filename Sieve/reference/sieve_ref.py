@@ -16,6 +16,7 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
     python3 sieve_ref.py binary-vectors > ../tests/vectors_binary_v1.tsv
     python3 sieve_ref.py kind-vectors   > ../tests/vectors_kinds_v1.tsv
     python3 sieve_ref.py written-vectors > ../tests/vectors_written_v1.tsv
+    python3 sieve_ref.py cross-vectors  > ../tests/vectors_cross_v1.tsv
     python3 sieve_ref.py manifest ../tests/manifest_fixture [--addresses DIR] [--with-addresses | --with-contents]   # sieve-manifest-v1/v2/v3
     python3 sieve_ref.py map ../tests/manifest_fixture                # sieve-map-v1
     python3 sieve_ref.py image-vectors  > ../tests/vectors_image_v1.tsv
@@ -4020,6 +4021,427 @@ def cmd_written_vectors(_args):
         print(f"count\tlower27\tall\t{L}\t{w_survivors(ALPHABETS['lower27'], W_READINGS, L, (mn, ma))}\t{f}\t{params or '-'}")
 
 
+# ---------------------------------------------------------------- one line filtered by every other
+# Written from the rules in core/src/filters/crossline.cpp, core/include/sieve/written.hpp and
+# core/include/sieve/filekind.hpp, not from their code.
+
+SIGNED = {k for k in FILE_KINDS if signed(k)}
+
+
+def kind_at_index(v):
+    """The kind of the file at binary-v1 positional index v (the whole file, written out)."""
+    f = binary_file(v)
+    return file_kind(f, len(f))
+
+
+def signed_before(x):
+    """How many binary-v1 indexes below x hold a signed file: whole lengths, then this length's
+    heads below its head (each with any tail), then its own head's tails below its own."""
+    kh = KindHeads(SIGNED)
+    if x == 0:
+        return 0
+    length, rest = 0, x
+    while rest >= 256 ** length:
+        rest -= 256 ** length
+        length += 1
+    total = sum(kh.of_length(l) for l in range(length))
+    h = min(length, KIND_HEAD)
+    head, tail = divmod(rest, 256 ** (length - h))
+    hb = head.to_bytes(h, "big")
+    done = kh.completions(h)
+    st, below = kh.start, 0
+    for p in range(h):
+        for b in range(hb[p]):
+            below += done[p + 1][kh.moves[p][st][b]]
+        st = kh.moves[p][st][hb[p]]
+    total += below * 256 ** (length - h)
+    if kh.kind(h, st) in SIGNED:
+        total += tail
+    return total
+
+
+def not_a_file_count(base, L, brute=False):
+    n = base ** L
+    if brute:
+        return sum(1 for v in range(n) if kind_at_index(v) not in SIGNED)
+    return n - signed_before(n)
+
+
+def not_a_file_unrank(base, L, k):
+    lo, hi = k, base ** L - 1
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if (mid + 1) - signed_before(mid + 1) > k:
+            hi = mid
+        else:
+            lo = mid + 1
+    digits = []
+    v = lo
+    for _ in range(L):
+        v, d = divmod(v, base)
+        digits.append(d)
+    return digits[::-1]
+
+
+# not-other-line-v1: melody notation and .obj text, judged outright by patterns ...
+NOTE_TOKEN = re.compile(r"(//|R|[A-G][#b]?[0-9])(s|e\.?|q\.?|h\.?|w)?$")
+OBJ_V = re.compile(r"v( [+-]?[0-9]+(\.[0-9]+)?){3}$")
+OBJ_F = re.compile(r"f( [1-9][0-9]*){3}$")
+
+
+def other_line_judge(text, forms):
+    if any(ord(c) >= 128 for c in text):
+        return None
+    if "notes" in forms:
+        toks = [t for t in re.split(r"[ \n\r\t|,]", text) if t]
+        if toks and all(NOTE_TOKEN.match(t) and not (t.startswith("//") and len(t) > 2) for t in toks) and any(t != "//" for t in toks):
+            return "notes"
+    if "obj" in forms:
+        body = text.rstrip(" ")
+        lines = body.split("\n")
+        if body and all(l == "" or OBJ_V.match(l) or OBJ_F.match(l) for l in lines):
+            if any(l.startswith("v") for l in lines) and any(l.startswith("f") for l in lines):
+                return "obj"
+    return None
+
+
+# ... and, for counting, as machines of their own over the characters.
+class ONotes:
+    codepoints = True
+    start = ("gap", False)
+
+    def step(self, st, c):
+        at, seen = st
+        ch = chr(c)
+        if ch in " \n\r\t|,":
+            return None if at in ("letter", "accidental", "slash") else ("gap", seen)
+        nxt = {
+            "gap": {**{x: "letter" for x in "ABCDEFG"}, "R": "rest", "/": "slash"},
+            "letter": {**{x: "accidental" for x in "#b"}, **{x: "octave" for x in "0123456789"}},
+            "accidental": {x: "octave" for x in "0123456789"},
+            "octave": {"e": "dotable", "q": "dotable", "h": "dotable", "s": "done", "w": "done"},
+            "rest": {"e": "dotable", "q": "dotable", "h": "dotable", "s": "done", "w": "done"},
+            "dotable": {".": "done"},
+            "slash": {"/": "voices"},
+        }.get(at, {})
+        if ch not in nxt:
+            return None
+        to = nxt[ch]
+        return (to, seen or to in ("octave", "rest"))
+
+    def accept(self, st):
+        return st[1] and st[0] not in ("letter", "accidental", "slash")
+
+
+class OObj:
+    """A .obj text as the judge reads it, with each line reduced to where it is in its grammar:
+    (line kind "", "v" or "f"; phase; which number; kinds of line seen; in the trailing padding)."""
+    codepoints = True
+    start = ("", "", 0, frozenset(), False)
+    DIGITS = "0123456789"
+
+    @staticmethod
+    def complete(kind, phase, idx):
+        return idx == 3 and ((kind == "v" and phase in ("int", "frac")) or (kind == "f" and phase == "num"))
+
+    def step(self, st, c):
+        kind, phase, idx, seen, pad = st
+        ch = chr(c)
+        if pad:
+            return st if ch == " " else None
+        if ch == "\n":
+            if not kind:
+                return st
+            return ("", "", 0, seen | {kind}, False) if self.complete(kind, phase, idx) else None
+        if ch == " " and (not kind or self.complete(kind, phase, idx)):
+            return ("", "", 0, seen | ({kind} if kind else set()), True)
+        if not kind:
+            return (ch, "k", 0, seen, False) if ch in "vf" else None
+        if ch == " ":
+            ok = phase == "k" or (idx < 3 and phase in (("int", "frac") if kind == "v" else ("num",)))
+            return (kind, "sp", idx + 1, seen, False) if ok else None
+        if kind == "v":
+            to = {("sp", "+"): "sign", ("sp", "-"): "sign", ("int", "."): "dot"}.get((phase, ch))
+            if ch in self.DIGITS:
+                to = {"sp": "int", "sign": "int", "int": "int", "dot": "frac", "frac": "frac"}.get(phase)
+        else:
+            to = "num" if (phase == "num" and ch in self.DIGITS) or (phase == "sp" and ch in "123456789") else None
+        return (kind, to, idx, seen, False) if to else None
+
+    def accept(self, st):
+        kind, phase, idx, seen, pad = st
+        if kind:
+            if not self.complete(kind, phase, idx):
+                return False
+            seen = seen | {kind}
+        return {"v", "f"} <= seen
+
+
+def other_line_count(alpha, forms, L):
+    o = ([], [])
+    if "notes" in forms:
+        o = w_walk(ONotes(), [[ord(ch)] for ch in alpha])
+    if "obj" in forms:
+        o = w_union(o, w_walk(OObj(), [[ord(ch)] for ch in alpha]), len(alpha))
+    written = dfa_count_table(o[0], o[1], L)[L][0] if o[0] else 0
+    return len(alpha) ** L - written
+
+
+def packed_count(base, L):
+    """Units of L symbols of b bits whose bits, packed into floor(L b / 8) bytes, are not a signed
+    file: a closed form, since the packing is a bijection onto bit strings."""
+    b = base.bit_length() - 1
+    m = L * b // 8
+    signed_files = KindHeads(SIGNED).of_length(m)
+    return base ** L - signed_files * 2 ** (L * b - 8 * m)
+
+
+def pages_pattern(alpha, L):
+    """A page's files on the binary line: exactly its text, one byte a symbol."""
+    return [set(ord(c) for c in alpha)] * L
+
+
+def pattern_in_kinds(kinds, allowed):
+    """Files matching the pattern whose kind is in the set: walked byte by byte over the heads."""
+    kh = KindHeads(kinds)
+    h = min(len(allowed), KIND_HEAD)
+    states = {kh.start: 1}
+    for p in range(h):
+        nxt = {}
+        for st, n in states.items():
+            for b in allowed[p]:
+                t = kh.moves[p][st][b]
+                nxt[t] = nxt.get(t, 0) + n
+        states = nxt
+    rest = 1
+    for q in range(h, len(allowed)):
+        rest *= len(allowed[q])
+    return sum(n for st, n in states.items() if kh.kind(h, st) in kinds) * rest
+
+
+def number_files_unrank(size, k):
+    """The k-th number in [0, size) whose file on the binary line has no signature."""
+    lo, hi = k, size - 1
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if (mid + 1) - signed_before(mid + 1) > k:
+            hi = mid
+        else:
+            lo = mid + 1
+    return lo
+
+
+
+# ---------------------------------------------------------------- the models line's own rules
+# distinct-vertices-v1, distinct-indices-v1 and every-vertex-used-v1, written from their rules
+# (core/src/filters/models.cpp), not from the engine's closed forms: the faces are walked as a
+# machine whose state is the set of vertices used so far and what the current face has named.
+
+def mesh_ok(V, F, C, rules, coords, faces):
+    if "v" in rules:
+        pts = [tuple(coords[3 * i:3 * i + 3]) for i in range(V)]
+        if len(set(pts)) < V:
+            return False
+    if "i" in rules:
+        for k in range(F):
+            a, b, c = faces[3 * k:3 * k + 3]
+            if a == b or b == c or a == c:
+                return False
+    if "u" in rules and len(set(faces)) < V:
+        return False
+    return True
+
+
+class FaceWalk:
+    """Completions of the face digits from every state, position by position (backwards)."""
+
+    def __init__(self, V, F, rules):
+        self.V, self.F, self.rules = V, F, rules
+        self.full = (1 << V) - 1
+        self.done = [dict() for _ in range(3 * F + 1)]
+        self.done[3 * F] = None  # filled lazily by comp()
+
+    def step(self, st, s):
+        mask, named = st
+        if "i" in self.rules and s in named:
+            return None
+        named = named + (s,)
+        if len(named) == 3:
+            named = ()
+        return (mask | (1 << s) if "u" in self.rules else 0, named if "i" in self.rules else ())
+
+    def comp(self, p, st):
+        if p == 3 * self.F:
+            return 1 if "u" not in self.rules or st[0] == self.full else 0
+        memo = self.done[p]
+        if st in memo:
+            return memo[st]
+        total = 0
+        for s in range(self.V):
+            t = self.step(st, s)
+            if t is not None:
+                total += self.comp(p + 1, t)
+        memo[st] = total
+        return total
+
+    def count(self):
+        return self.comp(0, (0, ()))
+
+    def unrank(self, k):
+        st, out = (0, ()), []
+        for p in range(3 * self.F):
+            for s in range(self.V):
+                t = self.step(st, s)
+                if t is None:
+                    continue
+                c = self.comp(p + 1, t)
+                if k < c:
+                    out.append(s)
+                    st = t
+                    break
+                k -= c
+        return out
+
+
+def vertex_strings(V, C, rules):
+    P = C ** 3
+    if "v" not in rules:
+        return P ** V
+    n = 1
+    for i in range(V):
+        n *= max(P - i, 0)
+    return n
+
+
+def vertex_unrank(V, C, rules, k):
+    if "v" not in rules:
+        return to_digits_n(k, C, 3 * V)
+    P, taken, out = C ** 3, set(), []
+    for i in range(V):
+        block = 1  # the ways to place the vertices after this one
+        for t in range(i + 1, V):
+            block *= P - t
+        q, k = divmod(k, block)
+        for pt in range(P):  # the q-th point not yet taken
+            if pt in taken:
+                continue
+            if q == 0:
+                break
+            q -= 1
+        taken.add(pt)
+        out += [pt // (C * C), pt // C % C, pt % C]
+    return out
+
+
+def to_digits_n(v, base, n):
+    out = []
+    for _ in range(n):
+        v, d = divmod(v, base)
+        out.append(d)
+    return out[::-1]
+
+
+def mesh_index(V, F, C, coords, faces):
+    x = 0
+    for d in coords:
+        x = x * C + d
+    for d in faces:
+        x = x * V + d
+    return x
+
+
+def cmd_cross_vectors(_args):
+    """not-a-file-v1, not-other-line-v1, not-packed-v1 and not-an-item-v1 (pages), counted."""
+    sys.set_int_max_str_digits(0)
+    print("# sieve cross-line vectors v1")
+    print("# not-a-file   base length survivors")
+    print("# a-file-unit  base length rank digits(comma)")
+    print("# other-judge  alphabet forms text_utf8_hex verdict")
+    print("# other        alphabet forms length survivors")
+    print("# packed       base length survivors")
+    print("# item-pages   max_bytes kinds keep page_alphabet page_length survivors")
+    print("# models       vertices faces coords survivors  (not-a-file-v1 on a model's positional index)")
+    print("# model-unit   vertices faces coords rank positional_index")
+    print("# mesh         vertices faces coords rules survivors  (rules: v distinct-vertices, i distinct-indices, u every-vertex-used)")
+    print("# mesh-unit    vertices faces coords rules rank positional_index")
+    for base, L, brute in ((3, 8, True), (27, 3, True), (27, 4, True), (2, 12, True), (27, 32, False), (2, 100, False),
+                           (104, 16, False), (304, 32, False), (16, 25, False), (256, 12, False), (29, 3200, False)):
+        c = not_a_file_count(base, L, brute)
+        if brute:
+            assert c == base ** L - signed_before(base ** L)
+        print(f"not-a-file\t{base}\t{L}\t{c}")
+    g = stream("cross")
+    for base, L in ((27, 32), (2, 100), (104, 16)):
+        c = not_a_file_count(base, L)
+        for k in sorted({0, c // 7, c // 2, c - 1, next(g) * next(g) % c}):
+            print(f"a-file-unit\t{base}\t{L}\t{k}\t{','.join(map(str, not_a_file_unrank(base, L, k)))}")
+    texts = ["C4q E4q G4h", "C4q E4q G4h   ", "Rq Re. C#5w", "C4 D4 // E4 F4", "C4q|D4q,E4h", "//", "C4x", "H4q", "C#", "Cb4h.",
+             "C4q.. D4", "v 1 2 3\nf 1 2 3", "v -0.9375 +0.9375 0.5\nv 1 2 3\nf 1 2 3\n", "v 1 2 3\nf 1 2 3   ", "v 1 2\nf 1 2 3",
+             "f 1 2 3", "v 1 2 3\nf 0 2 3", "v 1 2 3 \nf 1 2 3", "v 1. 2 3\nf 1 2 3", "\nv 1 2 3\n\nf 10 20 30", "hello world"]
+    for alpha_id in ("ascii96",):
+        alpha = alphabet(alpha_id)
+        for t in texts:
+            for forms in ("all", "notes", "obj"):
+                fs = ["notes", "obj"] if forms == "all" else [forms]
+                v = other_line_judge(t, fs)
+                print(f"other-judge\t{alpha_id}\t{forms}\t{t.encode().hex()}\t{v or '-'}")
+    for alpha_id, forms, L in (("ascii95", "all", 3), ("ascii95", "notes", 8), ("ascii95", "all", 12), ("ascii96", "obj", 16),
+                               ("ascii96", "all", 20), ("lower27", "all", 32), ("babel29", "all", 16)):
+        fs = ["notes", "obj"] if forms == "all" else [forms]
+        print(f"other\t{alpha_id}\t{forms}\t{L}\t{other_line_count(alphabet(alpha_id), fs, L)}")
+    for base, L in ((2, 100), (2, 25), (4, 40), (16, 25), (256, 12), (2, 12)):
+        print(f"packed\t{base}\t{L}\t{packed_count(base, L)}")
+    for n, kinds, keep, pa, pl in ((2, "any", "keep", "u+0061-u+0062", 1), (3, "text", "keep", "u+0061-u+0062", 2),
+                                   (33, "any", "keep", "lower27", 32), (33, "text", "keep", "lower27", 32),
+                                   (40, "signed", "exclude", "ascii95", 20), (8, "any", "keep", "bytes256", 3)):
+        ks = kind_set(kinds, keep)
+        alpha = alphabet(pa)
+        allowed = [set(range(256))] * pl if alpha == ALPHABETS["bytes256"] else pages_pattern(alpha, pl)
+        total = KindHeads(ks).count(n)
+        pages = pattern_in_kinds(ks, allowed) if len(allowed) <= n else 0
+        if pa == "lower27" and kinds == "text":
+            assert pages == 27 ** 32 - 27 ** 28  # every page is TXT but those with "ftyp" at the fifth letter
+        print(f"item-pages\t{n}\t{kinds}\t{keep}\t{pa}\t{pl}\t{total - pages}")
+    # The models line: N = C^(3V) * V^(3F) models, numbered by their positional index.
+    for V, F, C, brute in ((3, 1, 2, True), (3, 2, 2, True), (4, 1, 4, False), (8, 12, 16, False), (12, 20, 64, False)):
+        size = C ** (3 * V) * V ** (3 * F)
+        c = size - signed_before(size)
+        if brute:
+            assert c == sum(1 for v in range(size) if kind_at_index(v) not in SIGNED)
+        print(f"models\t{V}\t{F}\t{C}\t{c}")
+        if not brute:
+            for k in sorted({0, c // 3, c - 1, next(g) * next(g) % c}):
+                print(f"model-unit\t{V}\t{F}\t{C}\t{k}\t{number_files_unrank(size, k)}")
+    # The models line's own rules: every model of a tiny shape by brute force, then the face walk.
+    combos = ("v", "i", "u", "vi", "iu", "vu", "viu")
+    V, F, C = 3, 2, 2
+    for rules in combos:
+        kept = []
+        for x in range(C ** (3 * V) * V ** (3 * F)):
+            digits = to_digits_n(x, V, 3 * F)
+            coords = to_digits_n(x // V ** (3 * F), C, 3 * V)
+            if mesh_ok(V, F, C, rules, coords, digits):
+                kept.append(x)
+        fc = FaceWalk(V, F, rules).count()
+        assert len(kept) == vertex_strings(V, C, rules) * fc
+        print(f"mesh\t{V}\t{F}\t{C}\t{rules}\t{len(kept)}")
+        for k in sorted({0, len(kept) // 3, len(kept) - 1}):
+            print(f"mesh-unit\t{V}\t{F}\t{C}\t{rules}\t{k}\t{kept[k]}")
+    for V, F, C in ((4, 3, 4), (5, 4, 8), (8, 12, 16)):
+        for rules in combos:
+            fw = FaceWalk(V, F, rules)
+            fc = fw.count()
+            n = vertex_strings(V, C, rules) * fc
+            print(f"mesh\t{V}\t{F}\t{C}\t{rules}\t{n}")
+            if (V, F, C) == (4, 3, 4) or rules in ("iu", "viu"):
+                for k in sorted({0, n // 7, n - 1, next(g) * next(g) % n}):
+                    q, r = divmod(k, fc)
+                    coords = vertex_unrank(V, C, rules, q)
+                    faces = fw.unrank(r)
+                    assert mesh_ok(V, F, C, rules, coords, faces)
+                    print(f"mesh-unit\t{V}\t{F}\t{C}\t{rules}\t{k}\t{mesh_index(V, F, C, coords, faces)}")
+
+
 def main():
     # Vectors are compared byte for byte: always write "\n" line endings and UTF-8, on every platform.
     sys.stdout.reconfigure(newline="\n", encoding="utf-8")
@@ -4060,6 +4482,7 @@ def main():
     sub.add_parser("notes2-vectors")
     sub.add_parser("kind-vectors")
     sub.add_parser("written-vectors")
+    sub.add_parser("cross-vectors")
     s = sub.add_parser("plugin")
     s.add_argument("file")
     s.add_argument("--length", type=int, default=32)
@@ -4133,6 +4556,8 @@ def main():
         cmd_kind_vectors(args)
     elif args.cmd == "written-vectors":
         cmd_written_vectors(args)
+    elif args.cmd == "cross-vectors":
+        cmd_cross_vectors(args)
     elif args.cmd == "chunks":
         cmd_chunks(args)
     elif args.cmd == "plugin":

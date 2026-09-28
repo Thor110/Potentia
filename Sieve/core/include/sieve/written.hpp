@@ -98,4 +98,24 @@ std::shared_ptr<const WrittenRule> written_rule_of(const Filter& f);
 // alphabet's symbols; nullopt when it would pass `max_states` states before minimising.
 std::optional<Dfa> written_dfa(const Alphabet& a, uint32_t mask, size_t max_states = kWrittenMaxStates);
 
+// ---- not-other-line-v1 (text): a page that is another line's content written as text
+
+// Forms: "notes" (melody notation, as canon-notes-v1 and -v2 read it: notes A-G with # or b and an
+// octave digit, rests R, durations s e e. q q. h h. w or none, // between voices, separated by
+// whitespace, | or ,; at least one note or rest) and "obj" (a model's .obj text: v lines of three
+// numbers and f lines of three indices, apart by line feeds, at least one of each, padding spaces
+// only at the end). Mask bit 0 notes, bit 1 obj.
+const std::vector<std::string>& other_line_forms();
+uint32_t other_line_mask_of(const std::string& name); // "all", "notes" or "obj"
+// The form the text is, decided outright (not by the automaton), or nullopt.
+std::optional<std::string> other_line_as(const std::u32string& text, uint32_t mask);
+// The automaton of the texts in those forms, over the alphabet's symbols.
+std::optional<Dfa> other_line_dfa(const Alphabet& a, uint32_t mask, size_t max_states = kWrittenMaxStates);
+
+// ---- not-packed-v1 (image, video): a unit whose symbols, `bits` each, packed into bytes are a
+// file with a signature
+
+std::optional<std::string> packed_as(std::span<const uint32_t> digits, uint32_t bits);
+Dfa packed_dfa(uint32_t base, uint32_t bits);
+
 } // namespace sieve

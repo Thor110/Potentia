@@ -281,7 +281,7 @@ void add_statistics_filters(std::vector<FilterSpec>& out)
     ent.params = {{"min_millibits", "lowest entropy allowed, in 1/1000 bits per symbol", FilterParam::Kind::Integer, "0", 0, 32000, 50, {}},
                   {"max_millibits", "highest entropy allowed, in 1/1000 bits per symbol", FilterParam::Kind::Integer, "4400", 0, 32000, 50, {}}};
     // Every line of fixed-length units (the binary line's files have lengths of their own).
-    ent.applies = [](const FilterLine& l) { return l.kind != "binary"; };
+    ent.applies = [](const FilterLine& l) { return l.kind != "binary" && l.kind != "models"; }; // not a mixed-radix model
     ent.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) {
         const FilterSpec& s = *find_filter("symbol-entropy-v1");
         return std::make_unique<SymbolEntropy>(param_int(s, v, "min_millibits"), param_int(s, v, "max_millibits"), l.base, l.length);

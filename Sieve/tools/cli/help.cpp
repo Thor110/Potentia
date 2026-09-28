@@ -281,6 +281,8 @@ const std::vector<Page>& pages()
           {"--warp FILE", "Where an .obj file lives on this line."},
           {"--read ADDR", "The model at an address, as canonical .obj (--out FILE to save it)."},
           {"--browse N", "N models off the shelf (--seed S to repeat a run)."},
+          {"--filters PATH", "With --warp: the settings file whose [models] stack judges the model (its survivor\n"
+                             "number and compact addresses when it passes). Default: sieve-filters.ini."},
           {"--mode MODE", "positional or scrambled, for --read and --browse (positional)."},
           {"--out FILE", "With --read, write the .obj there instead of to the screen."}},
          {{"sieve mesh", "how big the default models line is"},
@@ -413,7 +415,21 @@ const std::vector<Page>& pages()
          "  filters = binary-kind-v1\n"
          "  [binary.binary-kind-v1]\n"
          "  kinds = png                 ; signed, text, signed-or-text, unknown, empty, any, or one kind\n"
-         "  keep = keep                 ; or exclude",
+         "  keep = keep                 ; or exclude\n"
+         "Every line also sets aside what the others hold (docs/FILTER-PLUGINS.md section 16):\n"
+         "  not-a-file-v1      every line but binary: the unit's own number, read as a place on the\n"
+         "                     binary line, holds a file with a signature\n"
+         "  not-other-line-v1  pages: melody notation or a model's .obj text (forms = all|notes|obj)\n"
+         "  not-packed-v1      image, video (2, 4, 16 or 256 colours): the pixels packed as bits\n"
+         "                     into bytes are a file with a signature\n"
+         "  not-an-item-v1     binary: a file that is exactly another line's item as F saves it\n"
+         "                     (items = pages|melodies|pictures|models|all). Pages count exactly;\n"
+         "                     the others are judged file by file, so compact falls back to hide.\n"
+         "Each counts exactly on its own; not-a-file-v1 ticked with other ranking filters judges only.\n"
+         "The models line (--line models, with --vertices, --faces and --coords as sieve mesh takes\n"
+         "them) has its own stack, [models]: not-a-file-v1 on a model's own number, and the line's\n"
+         "own rules distinct-vertices-v1, distinct-indices-v1 (no degenerate faces) and\n"
+         "every-vertex-used-v1, each exact, with compact orderings (not-a-file with the rules judges only).",
          {kLine, kLineOptions,
           {"--filters PATH", "The settings file. Default: sieve-filters.ini next to the executable. A missing\n"
                              "file means nothing is ticked."},
@@ -425,6 +441,8 @@ const std::vector<Page>& pages()
           {"--relations", "With --plugin: how its rule compares with every other custom filter for the line (same,\n"
                           "stricter or looser, exactly, over every length): duplicates show up here."},
           {"--exact", "With --line binary: every kind's count in full, beside its share of the line."},
+          {"--page-length N", "With --line binary: the pages line not-an-item-v1 compares with (its --alphabet and\n"
+                              "this length; default lower27, 32). A page's file is exactly its text."},
           {"--judge FILE", "With --plugin: judge each line of a UTF-8 text file as one unit of its own length, and\n"
                            "print pass, FAIL, or unspellable (a character the line does not have) beside it. Lines\n"
                            "starting with # are comments."}},
@@ -454,7 +472,9 @@ const std::vector<Page>& pages()
          {kLine, kLineOptions,
           {"--filters PATH", "The settings file. Default: sieve-filters.ini next to the executable."},
           {"--file PATH", "Read the input from a file instead of the command line."},
-          {"--book FILE", "Judge a book record by the [books] filters."}},
+          {"--book FILE", "Judge a book record by the [books] filters."},
+          {"--page-length N", "With --line binary: the pages line not-an-item-v1 compares with (its --alphabet and\n"
+                              "this length; default lower27, 32). A page's file is exactly its text."}},
          {{"sieve check --length 32 \"It was the best of times\"", "every text filter's verdict"},
           {"sieve check --length 1000 --file chapter1.txt", "a whole text, 1000 characters per unit"},
           {"sieve check --line image --file sprite.png", "the image filters on a picture"},

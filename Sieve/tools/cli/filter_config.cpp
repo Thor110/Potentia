@@ -2,8 +2,14 @@
 
 #include "dictionaries.hpp"
 #include "models.hpp"
+#include "image_io.hpp"
+
+#include "sieve/audio.hpp"
+#include "sieve/image.hpp"
+#include "sieve/utf8.hpp"
 
 #include <algorithm>
+#include <array>
 #include <fstream>
 #include <mutex>
 #include <set>
@@ -371,7 +377,98 @@ FilterLine binary_filter_line(uint64_t max_bytes)
     return f;
 }
 
-BinarySieve build_binary_sieve(const BinarySpace& space, const LineFilters& given)
+std::optional<KindCounter::Pattern> page_pattern(const Alphabet& a, uint32_t length)
+{
+    KindCounter::Pattern p;
+    if (holds_all_bytes(a))
+    {
+        std::array<bool, 256> any;
+        any.fill(true);
+        p.allowed.assign(length, any); // every file of the length is a page
+        return p;
+    }
+    std::array<bool, 256> symbols{};
+    for (uint32_t d = 0; d < a.size(); ++d)
+    {
+        if (a.symbol(d) >= 0x80) return std::nullopt; // more than a byte: judged instead
+        symbols[size_t(a.symbol(d))] = true;
+    }
+    p.allowed.assign(length, symbols); // a page's file is exactly its text (unit_file)
+    return p;
+}
+
+BinaryItems binary_items(const Line* pages, const Line* image, const Line* video, const Line* audio, const ModelSpace* models)
+{
+    BinaryItems items;
+    auto guard = [](auto f) {
+        return [f](const std::vector<uint8_t>& b) {
+            try { return f(b); } catch (const std::exception&) { return false; }
+        };
+    };
+    if (pages && pages->alphabet)
+    {
+        const Line* l = pages;
+        items.pages = page_pattern(*l->alphabet, l->space.unit_length());
+        if (!items.pages)
+            items.judges.emplace_back("pages", guard([l](const std::vector<uint8_t>& b) {
+                const std::string t(b.begin(), b.end());
+                const std::u32string u = utf8_decode(t);
+                if (u.size() != l->space.unit_length() || utf8_encode(u) != t) return false;
+                for (char32_t c : u)
+                    if (!l->alphabet->digit_of(c)) return false;
+                return true;
+            }));
+    }
+    // A picture: its PNG at one pixel a pixel, frames side by side a pixel apart.
+    auto picture = [](const Line* l) {
+        return [l](const std::vector<uint8_t>& b) {
+            if (file_kind(b, b.size()) != "PNG") return false;
+            const auto frames = decode_image_frames(b.data(), b.size(), "the file");
+            if (frames.size() != 1) return false;
+            const RgbaImage& sheet = frames[0];
+            const uint32_t W = l->image.width, H = l->image.height, F = l->image.frames;
+            if (sheet.height != H || sheet.width != F * W + (F - 1)) return false;
+            std::vector<RgbaImage> each;
+            for (uint32_t f = 0; f < F; ++f)
+            {
+                RgbaImage one;
+                one.width = W;
+                one.height = H;
+                for (uint32_t y = 0; y < H; ++y)
+                    for (uint32_t x = 0; x < W; ++x)
+                    {
+                        const size_t at = (size_t(y) * sheet.width + f * (W + 1) + x) * 4;
+                        one.rgba.insert(one.rgba.end(), sheet.rgba.begin() + std::ptrdiff_t(at), sheet.rgba.begin() + std::ptrdiff_t(at + 4));
+                    }
+                each.push_back(std::move(one));
+            }
+            return unit_file(*l, canonicalise_image(each, l->image), 1) == b;
+        };
+    };
+    if (image || video)
+        items.judges.emplace_back("pictures", guard([image, video, picture](const std::vector<uint8_t>& b) {
+            return (image && picture(image)(b)) || (video && picture(video)(b));
+        }));
+    if (audio)
+        items.judges.emplace_back("melodies", guard([audio](const std::vector<uint8_t>& b) {
+            if (file_kind(b, b.size()) != "MID") return false;
+            const NoteSet set = note_set_of(audio->space.symbols_id());
+            const uint32_t L = audio->space.unit_length();
+            const std::string n = midi_to_notation(b, set);
+            const NotesCanonResult c = set.legacy ? canonicalise_notes(n, L) : canonicalise_notes2(n, set, L / set.voices);
+            if (c.units.size() != 1) return false;
+            const std::string m = notes_to_midi(set, c.units[0]);
+            return std::vector<uint8_t>(m.begin(), m.end()) == b;
+        }));
+    if (models)
+        items.judges.emplace_back("models", guard([models](const std::vector<uint8_t>& b) {
+            const std::string t(b.begin(), b.end());
+            return models->to_obj(models->from_obj(t)) == t;
+        }));
+    return items;
+}
+
+BinarySieve build_binary_sieve(const BinarySpace& space, const LineFilters& given, const BinaryItems* items)
 {
     LineFilters settings = given;
     for (const auto& name : given.enabled) (void)tick_filter(settings, name, true);
@@ -385,7 +482,35 @@ BinarySieve build_binary_sieve(const BinarySpace& space, const LineFilters& give
         const auto it = settings.values.find(spec->name());
         entries.push_back({spec, it == settings.values.end() ? FilterValues{} : it->second});
     }
-    return BinarySieve(space, entries);
+    return BinarySieve(space, entries, items);
+}
+
+FilterLine models_filter_line(uint32_t vertices, uint32_t faces, uint32_t coords)
+{
+    FilterLine f;
+    f.kind = "models";
+    f.symbols_id = "models/V" + std::to_string(vertices) + "/F" + std::to_string(faces) + "/C" + std::to_string(coords);
+    f.width = vertices; // (the shape, for reference; a model is not one base, so base and length stay 0)
+    f.height = faces;
+    f.frames = coords;
+    return f;
+}
+
+ModelSieve build_model_sieve(const ModelSpace& space, const LineFilters& given)
+{
+    LineFilters settings = given;
+    for (const auto& name : given.enabled) (void)tick_filter(settings, name, true);
+    const FilterLine fl = models_filter_line(space.vertices(), space.face_count(), space.coords());
+    std::vector<FilterStack::Entry> entries;
+    for (const auto& name : settings.enabled)
+    {
+        const FilterSpec* spec = find_filter(name);
+        if (!spec) throw std::invalid_argument("unknown filter '" + name + "' (see: sieve filters --line models)");
+        if (!spec->applies(fl)) continue;
+        const auto it = settings.values.find(spec->name());
+        entries.push_back({spec, it == settings.values.end() ? FilterValues{} : it->second});
+    }
+    return ModelSieve(space, entries);
 }
 
 BookStacks build_book_stacks(const Line& cover, const Line& page, uint32_t pages, const BookFilters& settings)

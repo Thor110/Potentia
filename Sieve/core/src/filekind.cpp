@@ -366,14 +366,189 @@ std::vector<uint8_t> KindCounter::unrank(const BigUint& k) const
     return out;
 }
 
+namespace {
+
+// The file at binary-v1 positional index v: its length, and it less the files shorter than it
+// (its bytes read as one number).
+uint64_t length_at(const BigUint& v)
+{
+    BigUint t = v;
+    t.mul_small(255);
+    t.add_small(1);
+    return uint64_t((t.bit_length() - 1) / 8);
+}
+
+BigUint ones_of(uint64_t n)
+{
+    if (n == 0) return {};
+    std::string h;
+    h.reserve(size_t(2 * n));
+    for (uint64_t i = 0; i < n; ++i) h += "01";
+    return BigUint::from_hex(h);
+}
+
+// Its first min(length, 16) bytes, and the rest as a number.
+std::vector<uint8_t> head_at(const BigUint& v, uint64_t length, BigUint* tail)
+{
+    BigUint w = v;
+    w -= ones_of(length);
+    const uint64_t h = std::min<uint64_t>(length, kKindHead);
+    const size_t shift = size_t(8 * (length - h));
+    BigUint head = w;
+    head >>= shift;
+    if (tail)
+    {
+        BigUint top = head;
+        top <<= shift;
+        *tail = w;
+        *tail -= top;
+    }
+    std::vector<uint8_t> out(static_cast<size_t>(h), 0);
+    if (h == 0) return out;
+    const std::string hx = head.to_hex(size_t(2 * h));
+    auto nib = [](char c) { return uint8_t(c <= '9' ? c - '0' : c - 'a' + 10); };
+    for (size_t i = 0; i < out.size(); ++i) out[i] = uint8_t(nib(hx[2 * i]) << 4 | nib(hx[2 * i + 1]));
+    return out;
+}
+
+} // namespace
+
+std::string file_kind_at(const BigUint& index)
+{
+    const uint64_t length = length_at(index);
+    return file_kind(head_at(index, length, nullptr), length);
+}
+
+BigUint KindCounter::count_before(const BigUint& index) const
+{
+    if (index.is_zero()) return {};
+    const uint64_t length = length_at(index);
+    if (length > max_bytes_) return count_;
+    BigUint tail;
+    const std::vector<uint8_t> head = head_at(index, length, &tail);
+    const uint32_t h = uint32_t(head.size());
+    // The heads of h bytes below this one, each followed by any bytes after the head.
+    BigUint below;
+    uint32_t s = 0;
+    for (uint32_t p = 0; p < h; ++p)
+    {
+        std::map<uint32_t, uint32_t> times;
+        for (uint32_t b = 0; b < head[p]; ++b) ++times[next_[p][s * 256 + b]];
+        for (const auto& [t, n] : times)
+        {
+            BigUint c = comp_[h][p + 1][t];
+            c.mul_small(n);
+            below += c;
+        }
+        s = next_[p][s * 256 + head[p]];
+    }
+    below <<= size_t(8 * (length - h));
+    BigUint r = shorter_than(length);
+    r += below;
+    if (kinds_[size_t(kind_of(h, s))]) r += tail; // its own head, with the tails below its own
+    return r;
+}
+
+std::vector<std::vector<BigUint>> KindCounter::pattern_table(const Pattern& pat) const
+{
+    const size_t length = pat.allowed.size();
+    const uint32_t h = uint32_t(std::min<size_t>(length, kKindHead));
+    // Beyond the head, any allowed bytes: the product of how many each position allows.
+    BigUint rest(1);
+    for (size_t q = h; q < length; ++q)
+    {
+        uint32_t n = 0;
+        for (bool x : pat.allowed[q]) n += x ? 1u : 0u;
+        rest.mul_small(n);
+    }
+    std::vector<std::vector<BigUint>> t(h + 1);
+    t[h].resize(states_[h].size());
+    for (uint32_t s = 0; s < states_[h].size(); ++s) t[h][s] = kinds_[size_t(kind_of(h, s))] ? rest : BigUint();
+    for (uint32_t p = h; p-- > 0;)
+    {
+        t[p].resize(states_[p].size());
+        for (uint32_t s = 0; s < states_[p].size(); ++s)
+        {
+            BigUint sum;
+            for (uint32_t b = 0; b < 256; ++b)
+                if (pat.allowed[p][b]) sum += t[p + 1][next_[p][s * 256 + b]];
+            t[p][s] = sum;
+        }
+    }
+    return t;
+}
+
+BigUint KindCounter::pattern_count(const Pattern& pat) const
+{
+    if (pat.allowed.size() > max_bytes_) return {};
+    return pattern_table(pat)[0][0];
+}
+
+bool KindCounter::pattern_has(const Pattern& pat, const std::vector<uint8_t>& file)
+{
+    if (file.size() != pat.allowed.size()) return false;
+    for (size_t p = 0; p < file.size(); ++p)
+        if (!pat.allowed[p][file[p]]) return false;
+    return true;
+}
+
+BigUint KindCounter::pattern_below(const Pattern& pat, const std::vector<uint8_t>& file) const
+{
+    const size_t length = pat.allowed.size();
+    if (length > max_bytes_ || file.size() < length) return {};
+    if (file.size() > length) return pattern_count(pat);
+    const auto t = pattern_table(pat);
+    const uint32_t h = uint32_t(std::min<size_t>(length, kKindHead));
+    BigUint below;
+    uint32_t s = 0;
+    for (size_t p = 0; p < length; ++p)
+    {
+        if (p < h)
+        {
+            for (uint32_t b = 0; b < file[p]; ++b)
+                if (pat.allowed[p][b]) below += t[p + 1][next_[p][s * 256 + b]];
+            if (!pat.allowed[p][file[p]]) return below;
+            s = next_[p][s * 256 + file[p]];
+            continue;
+        }
+        // Past the head the kind is decided: each allowed byte below, times the ways to finish.
+        if (!kinds_[size_t(kind_of(h, s))]) return below;
+        BigUint after(1);
+        for (size_t q = p + 1; q < length; ++q)
+        {
+            uint32_t n = 0;
+            for (bool x : pat.allowed[q]) n += x ? 1u : 0u;
+            after.mul_small(n);
+        }
+        uint32_t smaller = 0;
+        for (uint32_t b = 0; b < file[p]; ++b) smaller += pat.allowed[p][b] ? 1u : 0u;
+        after.mul_small(smaller);
+        below += after;
+        if (!pat.allowed[p][file[p]]) return below;
+    }
+    return below; // the file itself, if a page, is not below itself
+}
+
 // ---------------------------------------------------------------- BinarySieve
 
-BinarySieve::BinarySieve(const BinarySpace& space, const std::vector<FilterStack::Entry>& entries)
+BinarySieve::BinarySieve(const BinarySpace& space, const std::vector<FilterStack::Entry>& entries, const BinaryItems* items)
 {
     provenance_ = space.shape();
+    if (items) items_ = *items;
     KindSet all(file_kinds().size(), 1);
     for (const auto& e : entries)
     {
+        names_.push_back(e.spec->name());
+        if (e.spec->id == "not-an-item")
+        {
+            const std::string forms = param_value(*e.spec, e.values, "items");
+            item_forms_ = forms == "all" ? std::vector<std::string>{"pages", "melodies", "pictures", "models"} : std::vector<std::string>{forms};
+            item_name_ = e.spec->name();
+            sets_.push_back(KindSet(file_kinds().size(), 1));
+            item_filter_.push_back(0);
+            provenance_ += "; " + e.spec->name() + "{items=" + forms + "}";
+            continue;
+        }
         if (e.spec->id != "binary-kind") throw std::invalid_argument(e.spec->name() + " does not apply to the binary line");
         const std::string kinds = param_value(*e.spec, e.values, "kinds"), keep = param_value(*e.spec, e.values, "keep");
         KindSet s = kind_set_of(kinds);
@@ -381,13 +556,30 @@ BinarySieve::BinarySieve(const BinarySpace& space, const std::vector<FilterStack
             for (auto& f : s) f = f ? 0 : 1;
         for (size_t i = 0; i < all.size(); ++i) all[i] = all[i] && s[i];
         sets_.push_back(std::move(s));
-        names_.push_back(e.spec->name());
+        item_filter_.push_back(-1);
         provenance_ += "; " + e.spec->name() + "{" + std::string(kFileKindsVersion) + " kinds=" + kinds + " keep=" + keep + "}";
     }
     id_ = Sha256::hex(Sha256::hash(provenance_));
     counter_ = std::make_unique<KindCounter>(space.max_bytes(), all);
-    shuffle_ = std::make_unique<Shuffle>(counter_->count().is_zero() ? BigUint(1) : counter_->count(), space.key(), id_);
-    BigUint top = counter_->count();
+    count_ = counter_->count();
+    // not-an-item-v1: pages as a pattern count exactly; any other form asked for is judged.
+    for (const std::string& f : item_forms_)
+    {
+        if (f == "pages" && items_.pages)
+        {
+            exclude_pages_ = true;
+            pages_in_ = counter_->pattern_count(*items_.pages);
+            count_ -= pages_in_;
+            continue;
+        }
+        bool judged = false;
+        for (const auto& j : items_.judges) judged = judged || j.first == f;
+        can_rank_ = false;
+        blocker_ = judged ? "not-an-item-v1 judges " + f + " file by file, so the survivors cannot be counted"
+                          : "not-an-item-v1 needs the other lines' shapes to recognise " + f;
+    }
+    shuffle_ = std::make_unique<Shuffle>(count_.is_zero() ? BigUint(1) : count_, space.key(), id_);
+    BigUint top = count_;
     if (!top.is_zero()) top -= BigUint(1);
     hex_width_ = std::max<size_t>(1, (top.bit_length() + 3) / 4);
 }
@@ -395,17 +587,74 @@ BinarySieve::BinarySieve(const BinarySpace& space, const std::vector<FilterStack
 std::string BinarySieve::first_failure(std::span<const uint8_t> head, uint64_t size) const
 {
     if (names_.empty()) return {};
-    const std::string k = file_kind(head, size);
-    const size_t i = kind_index(k);
+    const size_t i = kind_index(file_kind(head, size));
     for (size_t f = 0; f < sets_.size(); ++f)
         if (!sets_[f][i]) return names_[f];
     return {};
 }
 
+std::string BinarySieve::first_failure_of(const std::vector<uint8_t>& file) const
+{
+    if (names_.empty()) return {};
+    const size_t i = kind_index(file_kind(file, file.size()));
+    for (size_t f = 0; f < sets_.size(); ++f)
+    {
+        if (!sets_[f][i]) return names_[f];
+        if (item_filter_[f] < 0) continue;
+        for (const std::string& form : item_forms_)
+        {
+            if (form == "pages" && items_.pages && KindCounter::pattern_has(*items_.pages, file)) return names_[f];
+            for (const auto& [name, judge] : items_.judges)
+                if (name == form && judge(file)) return names_[f];
+        }
+    }
+    return {};
+}
+
+BigUint BinarySieve::rank(const std::vector<uint8_t>& file) const
+{
+    BigUint r = counter_->rank(file);
+    if (exclude_pages_) r -= counter_->pattern_below(*items_.pages, file);
+    return r;
+}
+
+std::vector<uint8_t> BinarySieve::unrank(const BigUint& k) const
+{
+    if (!exclude_pages_) return counter_->unrank(k);
+    // The smallest j (a place among the kind survivors) with more than k survivors in 0..j, the
+    // pages among them taken away: between k and k + (the pages there are).
+    auto kept_through = [&](const BigUint& j, std::vector<uint8_t>& f) {
+        f = counter_->unrank(j);
+        BigUint n = j;
+        n.add_small(1);
+        n -= counter_->pattern_below(*items_.pages, f);
+        if (KindCounter::pattern_has(*items_.pages, f)) n -= BigUint(1);
+        return n;
+    };
+    BigUint lo = k, hi = k;
+    hi += pages_in_;
+    std::vector<uint8_t> f;
+    while (lo < hi)
+    {
+        BigUint mid = lo;
+        mid += hi;
+        mid >>= 1;
+        if (kept_through(mid, f) > k) hi = mid;
+        else
+        {
+            lo = mid;
+            lo.add_small(1);
+        }
+    }
+    (void)kept_through(lo, f);
+    return f;
+}
+
 BigUint BinarySieve::index_of(const std::vector<uint8_t>& file, AddressMode m) const
 {
-    if (!first_failure(file, file.size()).empty() || file.size() > counter_->max_bytes()) throw std::invalid_argument("the file is not a survivor");
-    const BigUint r = counter_->rank(file);
+    if (!can_rank_) throw std::logic_error("this binary sieve cannot rank: " + blocker_);
+    if (!first_failure_of(file).empty() || file.size() > counter_->max_bytes()) throw std::invalid_argument("the file is not a survivor");
+    const BigUint r = rank(file);
     return m == AddressMode::Scrambled ? shuffle_->forward(r) : r;
 }
 
@@ -416,8 +665,9 @@ BigUint BinarySieve::rank_of_index(const BigUint& index, AddressMode m) const
 
 std::vector<uint8_t> BinarySieve::file_at(const BigUint& index, AddressMode m) const
 {
-    if (index >= counter_->count()) throw std::out_of_range("compact address beyond the survivors");
-    return counter_->unrank(rank_of_index(index, m));
+    if (!can_rank_) throw std::logic_error("this binary sieve cannot rank: " + blocker_);
+    if (index >= count_) throw std::out_of_range("compact address beyond the survivors");
+    return unrank(rank_of_index(index, m));
 }
 
 std::string BinarySieve::hex_of(const BigUint& index) const { return index.to_hex(hex_width_); }
@@ -425,7 +675,7 @@ std::string BinarySieve::hex_of(const BigUint& index) const { return index.to_he
 BigUint BinarySieve::parse(std::string_view hex) const
 {
     const BigUint v = BigUint::from_hex(hex);
-    if (v >= counter_->count()) throw std::out_of_range("compact address beyond the survivors");
+    if (v >= count_) throw std::out_of_range("compact address beyond the survivors");
     return v;
 }
 

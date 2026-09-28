@@ -1230,6 +1230,10 @@ private:
     LineFilters binary_filters_;
     std::unique_ptr<BinarySieve> binary_sieve_;
     void rebuild_binary_sieve();
+    // The models line's filters (not-a-file-v1), judged on a model's positional index.
+    LineFilters model_filters_;
+    std::unique_ptr<ModelSieve> model_sieve_;
+    void rebuild_model_sieve();
     BigUint loop_pos(const BigUint& unit) const;   // unit index -> loop position
     BigUint unit_of_pos(const BigUint& pos) const; // loop position (left-wall slot) -> unit index
     // How many units the current line holds: its loop's count, except on binary (see above).

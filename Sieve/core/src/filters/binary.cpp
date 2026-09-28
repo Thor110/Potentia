@@ -31,6 +31,21 @@ void add_binary_filters(std::vector<FilterSpec>& out)
         throw std::invalid_argument("binary-kind-v1 judges files on the binary line (a BinarySieve), not units of digits");
     };
     out.push_back(k);
+
+    FilterSpec n;
+    n.id = "not-an-item";
+    n.title = "not-an-item";
+    n.description = "Not another line's item: fails a file that is exactly an item of another line, as F saves it (a page of "
+                    "the pages line as its text, a picture as its PNG, a melody as its MIDI file, a model as its .obj). "
+                    "Pages whose symbols are one byte each count exactly; melodies, pictures and models are judged file "
+                    "by file, so with them the survivors cannot be counted (hide, not compact).";
+    n.params = {{"items", "which items: all, pages, melodies, pictures or models", FilterParam::Kind::Text, "pages", 0, 0, 1,
+                 {"pages", "all", "melodies", "pictures", "models"}}};
+    n.applies = [](const FilterLine& l) { return l.kind == "binary"; };
+    n.make = [](const FilterLine&, const FilterValues&, const FilterResources&) -> std::unique_ptr<Filter> {
+        throw std::invalid_argument("not-an-item-v1 judges files on the binary line (a BinarySieve), not units of digits");
+    };
+    out.push_back(n);
 }
 
 } // namespace sieve

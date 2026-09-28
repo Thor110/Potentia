@@ -724,6 +724,177 @@ public:
     bool accept(const St& s) const override { return s[0] == kSigned; }
 };
 
+// ---- other lines' content in text (not-other-line-v1)
+
+bool note_sep(uint32_t c) { return c == ' ' || c == '\n' || c == '\r' || c == '\t' || c == '|' || c == ','; }
+
+// Melody notation: tokens separated by whitespace, | or ,; a token a note (A-G, # or b, an octave
+// digit, a duration), a rest (R, a duration) or // between voices; durations s e e. q q. h h. w or
+// none; at least one note or rest. Slots: 0 where in a token (0 between tokens, 1 after a letter,
+// 2 after its accidental, 3 after its octave, 4 after e q or h, 5 after . s or w, 6 after R, 7 after
+// one /, 8 after //), 1 a note or rest seen.
+class NotesMachine : public Machine
+{
+public:
+    St start() const override { return St{}; }
+    bool step(St& s, uint32_t c) const override
+    {
+        const int32_t at = s[0];
+        if (note_sep(c))
+        {
+            if (at == 1 || at == 2 || at == 7) return false;
+            s[0] = 0;
+            return true;
+        }
+        auto duration = [&]() {
+            if (c == 'e' || c == 'q' || c == 'h') { s[0] = 4; return true; }
+            if (c == 's' || c == 'w') { s[0] = 5; return true; }
+            return false;
+        };
+        switch (at)
+        {
+        case 0:
+            if (c >= 'A' && c <= 'G') { s[0] = 1; return true; }
+            if (c == 'R') { s[0] = 6; s[1] = 1; return true; }
+            if (c == '/') { s[0] = 7; return true; }
+            return false;
+        case 1:
+            if (c == '#' || c == 'b') { s[0] = 2; return true; }
+            [[fallthrough]];
+        case 2:
+            if (c >= '0' && c <= '9') { s[0] = 3; s[1] = 1; return true; }
+            return false;
+        case 3:
+        case 6: return duration();
+        case 4:
+            if (c == '.') { s[0] = 5; return true; }
+            return false;
+        case 7:
+            if (c == '/') { s[0] = 8; return true; }
+            return false;
+        default: return false;
+        }
+    }
+    bool accept(const St& s) const override { return s[1] && s[0] != 1 && s[0] != 2 && s[0] != 7; }
+};
+
+// A model's .obj text: lines apart by line feeds (empty lines allowed), each "v" and three numbers
+// ([+-]digits[.digits]) or "f" and three indices (no leading zero), one space before each; at
+// least one v line and one f line; spaces allowed only at the very end (a page's padding). Slots:
+// 0 the line's kind (0 none yet, 1 v, 2 f), 1 fields done, 2 where in a field (0 wanting a space,
+// 1 wanting a number, 2 after a sign, 3 in its digits, 4 after a point, 5 in its decimals), 3 a v
+// line seen, 4 an f line seen, 5 in the padding.
+class ObjMachine : public Machine
+{
+public:
+    St start() const override { return St{}; }
+    static bool ended(const St& s) { return s[2] == 3 || (s[0] == 1 && s[2] == 5); } // a number just read
+    static bool complete(const St& s) { return s[0] != 0 && s[1] == 2 && ended(s); }
+    static void commit(St& s)
+    {
+        (s[0] == 1 ? s[3] : s[4]) = 1;
+        s[0] = s[1] = s[2] = 0;
+    }
+    bool step(St& s, uint32_t c) const override
+    {
+        if (s[5]) return c == ' ';
+        if (c == '\n')
+        {
+            if (s[0] == 0) return true;
+            if (!complete(s)) return false;
+            commit(s);
+            return true;
+        }
+        if (c == ' ')
+        {
+            if (s[0] == 0) // padding after the last line
+            {
+                s[5] = 1;
+                return true;
+            }
+            if (complete(s))
+            {
+                commit(s);
+                s[5] = 1;
+                return true;
+            }
+            if (s[2] == 0) { s[2] = 1; return true; }
+            if (ended(s)) { ++s[1]; s[2] = 1; return true; }
+            return false;
+        }
+        if (s[0] == 0)
+        {
+            if (c == 'v' || c == 'f') { s[0] = c == 'v' ? 1 : 2; s[1] = 0; s[2] = 0; return true; }
+            return false;
+        }
+        const bool digit = c >= '0' && c <= '9';
+        switch (s[2])
+        {
+        case 1:
+            if (s[0] == 2) { if (c >= '1' && c <= '9') { s[2] = 3; return true; } return false; }
+            if (c == '+' || c == '-') { s[2] = 2; return true; }
+            if (digit) { s[2] = 3; return true; }
+            return false;
+        case 2: if (digit) { s[2] = 3; return true; } return false;
+        case 3:
+            if (digit) return true;
+            if (c == '.' && s[0] == 1) { s[2] = 4; return true; }
+            return false;
+        case 4: if (digit) { s[2] = 5; return true; } return false;
+        case 5: return digit;
+        default: return false;
+        }
+    }
+    bool accept(const St& s) const override
+    {
+        St t = s;
+        if (!t[5] && t[0] != 0)
+        {
+            if (!complete(t)) return false;
+            commit(t);
+        }
+        return t[3] && t[4];
+    }
+};
+
+// A unit's symbols packed as bits (b each, most significant first) into bytes: a file with a
+// signature? Slots: 0 bits waiting, 1 their value, 2 the matcher.
+class BitsMachine : public Machine
+{
+public:
+    explicit BitsMachine(uint32_t bits) : bits_(bits) {}
+    St start() const override
+    {
+        St s{};
+        s[2] = head().start();
+        return s;
+    }
+    bool step(St& s, uint32_t d) const override
+    {
+        s[0] += int32_t(bits_);
+        if (Head::decided(s[2]))
+        {
+            s[0] %= 8;
+            s[1] = 0;
+            return s[2] != kDeadHead;
+        }
+        s[1] = int32_t(uint32_t(s[1]) << bits_ | d);
+        while (s[0] >= 8)
+        {
+            s[0] -= 8;
+            s[2] = head().feed(s[2], uint32_t(s[1]) >> s[0]);
+            s[1] &= (1 << s[0]) - 1;
+            if (s[2] == kDeadHead) return false;
+        }
+        if (Head::decided(s[2])) s[1] = 0;
+        return true;
+    }
+    bool accept(const St& s) const override { return s[2] == kSigned; }
+
+private:
+    uint32_t bits_;
+};
+
 std::unique_ptr<Machine> machine(uint32_t r)
 {
     switch (r)
@@ -1320,6 +1491,160 @@ std::unique_ptr<Ranker> written_ranker(std::shared_ptr<const WrittenRule> rule, 
         why = "not-written-v1 with these filters walks too many two-symbol units to count: it judges only";
         return nullptr;
     }
+}
+
+// ---------------------------------------------------------------- other lines in text, and packed bits
+
+const std::vector<std::string>& other_line_forms() { static const std::vector<std::string> f = {"notes", "obj"}; return f; }
+
+uint32_t other_line_mask_of(const std::string& name)
+{
+    if (name == "all") return 3;
+    if (name == "notes") return 1;
+    if (name == "obj") return 2;
+    throw std::invalid_argument("not-other-line-v1: unknown form '" + name + "'");
+}
+
+std::optional<std::string> other_line_as(const std::u32string& text, uint32_t mask)
+{
+    // Decided outright, from the rules in written.hpp, not by walking the machines.
+    std::string t;
+    for (char32_t c : text)
+    {
+        if (c >= 0x80) return std::nullopt; // every form is ASCII
+        t += char(c);
+    }
+    if (mask & 1)
+    {
+        bool ok = true, any = false;
+        size_t i = 0;
+        while (ok && i < t.size())
+        {
+            if (note_sep(uint8_t(t[i]))) { ++i; continue; }
+            size_t j = i;
+            while (j < t.size() && !note_sep(uint8_t(t[j]))) ++j;
+            const std::string tok = t.substr(i, j - i);
+            i = j;
+            if (tok == "//") continue;
+            size_t k = 0;
+            if (tok[0] == 'R') k = 1;
+            else if (tok[0] >= 'A' && tok[0] <= 'G')
+            {
+                k = 1;
+                if (k < tok.size() && (tok[k] == '#' || tok[k] == 'b')) ++k;
+                if (k < tok.size() && tok[k] >= '0' && tok[k] <= '9') ++k;
+                else { ok = false; break; }
+            }
+            else { ok = false; break; }
+            const std::string dur = tok.substr(k);
+            static const char* const durs[] = {"", "s", "e", "e.", "q", "q.", "h", "h.", "w"};
+            bool known = false;
+            for (const char* d : durs) known = known || dur == d;
+            ok = known;
+            any = true;
+        }
+        if (ok && any) return std::string("notes");
+    }
+    if (mask & 2)
+    {
+        std::string u = t;
+        const size_t end = u.find_last_not_of(' ');
+        const bool padded = end != std::string::npos && end + 1 < u.size();
+        if (end == std::string::npos) u.clear();
+        else u.resize(end + 1);
+        // Spaces are padding only after the last line: none may stand before a line feed there.
+        bool ok = !u.empty(), v = false, f = false;
+        (void)padded;
+        size_t i = 0;
+        while (ok && i <= u.size())
+        {
+            size_t j = u.find('\n', i);
+            if (j == std::string::npos) j = u.size();
+            const std::string line = u.substr(i, j - i);
+            i = j + 1;
+            if (line.empty()) { if (j == u.size()) break; continue; }
+            if (line.size() < 2 || (line[0] != 'v' && line[0] != 'f') || line[1] != ' ') { ok = false; break; }
+            const bool vert = line[0] == 'v';
+            size_t k = 1, fields = 0;
+            while (ok && k < line.size())
+            {
+                if (line[k] != ' ') { ok = false; break; }
+                ++k;
+                size_t start = k;
+                if (vert && k < line.size() && (line[k] == '+' || line[k] == '-')) ++k;
+                size_t digits = k;
+                while (k < line.size() && line[k] >= '0' && line[k] <= '9') ++k;
+                if (k == digits) { ok = false; break; }
+                if (!vert && line[start] == '0') { ok = false; break; }
+                if (vert && k < line.size() && line[k] == '.')
+                {
+                    ++k;
+                    const size_t dec = k;
+                    while (k < line.size() && line[k] >= '0' && line[k] <= '9') ++k;
+                    if (k == dec) { ok = false; break; }
+                }
+                ++fields;
+            }
+            if (fields != 3) ok = false;
+            (vert ? v : f) = true;
+            if (j == u.size()) break;
+        }
+        if (ok && v && f) return std::string("obj");
+    }
+    return std::nullopt;
+}
+
+std::optional<Dfa> other_line_dfa(const Alphabet& a, uint32_t mask, size_t max_states)
+{
+    const uint32_t B = a.size();
+    std::vector<std::vector<uint32_t>> bytes(B);
+    for (uint32_t c = 0; c < B; ++c)
+        for (char ch : utf8_encode(a.symbol(c))) bytes[c].push_back(uint8_t(ch));
+    std::optional<Dfa> all;
+    if (mask & 1)
+    {
+        auto d = walk(NotesMachine(), bytes, max_states);
+        if (!d) return std::nullopt;
+        all = std::move(*d);
+    }
+    if (mask & 2)
+    {
+        auto d = walk(ObjMachine(), bytes, max_states);
+        if (!d) return std::nullopt;
+        all = all ? unite(*all, *d) : std::move(*d);
+    }
+    if (!all)
+    {
+        Dfa none;
+        none.base = B;
+        return none;
+    }
+    return all;
+}
+
+std::optional<std::string> packed_as(std::span<const uint32_t> digits, uint32_t bits)
+{
+    Bytes b;
+    uint32_t acc = 0, n = 0;
+    for (uint32_t d : digits)
+    {
+        acc = acc << bits | d;
+        n += bits;
+        while (n >= 8)
+        {
+            n -= 8;
+            b.push_back(uint8_t(acc >> n));
+            acc &= (1u << n) - 1;
+        }
+    }
+    return signed_kind(b);
+}
+
+Dfa packed_dfa(uint32_t base, uint32_t bits)
+{
+    std::vector<std::vector<uint32_t>> inputs(base);
+    for (uint32_t c = 0; c < base; ++c) inputs[c] = {c};
+    return *walk(BitsMachine(bits), inputs, SIZE_MAX);
 }
 
 } // namespace sieve

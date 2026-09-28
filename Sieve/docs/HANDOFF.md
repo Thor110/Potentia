@@ -893,3 +893,59 @@ image_io encode_png factored out of save_unit), and midi_to_notation in core/aud
 opens as a melody (300 round trips in the tests). Measured: pages (lower27, 32) set aside
 10^-4.23, mostly base32 (any letters are base32); binary TXT about 1 in 7 at 16+ bytes, which is
 why TXT clusters are easy to find.
+The setup menu's filter overlay shows a live tally beside its title (Edward): "amount of content
+filtered", the exact share of the line's units the ticked filters remove (filtered_text in
+menu.cpp: truncated, decimals until past the leading 9s or 0s plus one, at most twelve; the small
+side as a power of ten), from StackInfo::filtered, computed with the survivor count (books: the
+parts' product). A note that "display mode: off" leaves every unit shelved was offered and
+declined for now.
+Every line filtered by every other (Edward's table; FILTER-PLUGINS §16). Four filters, each
+exact on its own. not-a-file-v1 (core/src/filters/crossline.cpp; every line but binary): the
+unit's number as a binary-v1 index; KindCounter::count_before(x) gives the signed files below x
+from the head alone, so survivors below x are x - E(x), completions S(hi) - S(lo), unrank by
+binary search. It is not an automaton, so with other ranking filters the stack judges only.
+not-other-line-v1 (written.cpp NotesMachine/ObjMachine; text but bytes256; forms all|notes|obj)
+and not-packed-v1 (BitsMachine; image/video with 2/4/16/256 colours) are DFA filters
+(make_dfa_filter) and combine with plugins, each other and not-written-v1. not-an-item-v1
+(binary; items pages|melodies|pictures|models|all): pages are a KindCounter::Pattern counted
+exactly (|K| - |K&P|, rank by pattern_below); the rest are judges supplied by the application
+(cli::binary_items in filter_config: PNG round trip through canonicalise_image and unit_file,
+MIDI through midi_to_notation and notes_to_midi, .obj through from_obj/to_obj), which make
+BinarySieve::can_rank false with a blocker (hallway falls back to hide and shows why; menu shows
+not countable). BinarySieve::first_failure_of(file) judges whole files; needs_file() when items
+are asked for. The models line has no filter stack yet. sieve filters/check --line binary take
+--page-length. Oracle cross-vectors (115 rows, ~10 s): its own count_before, notation and .obj
+machines, packed closed form, pages walked through its head automaton; all match. Tests: 48,300
+checks. Measured: pages not-a-file 10^-4.38; ascii95 not-other-line 10^-32.93 (none on lower27:
+no digits); image not-packed 10^-4.34, not-a-file 10^-5.54; audio not-a-file 10^-5.30; binary
+40 bytes with ascii95/20 pages (see FILTER-PLUGINS §16 for the figures). GAME.md gained the credits replay/graph and the emulator-logo idea.
+F no longer appends a line feed to a page saved from an alphabet without one (Edward: it should
+never have been there). cli::unit_file writes exactly the page's text on every alphabet, so a page
+and its file are one to one and J lands on the 32-byte file of a 32-letter page. No address
+changes (a page's comes from its symbols, a file's from its bytes); older 33-byte saves keep their
+addresses and still open. not-an-item-v1's pages pattern (page_pattern, the tests, the oracle's
+pages_pattern) was corrected in place, before any release, with Edward's agreement.
+not-written-v1's "trimmed with a line feed" reading is unchanged (versioned).
+The models line has a filter stack (Edward's table, last row). core ModelSieve
+(modelsieve.hpp/.cpp): judges a model by its positional index (a mixed-radix number), holds
+not-a-file-v1 via NumberFiles (x - E(x), unrank by halving), compact positional/scrambled
+(shuffle keyed with the key, domain = stack id). not-a-file-v1's applies now includes kind
+"models" (its make throws there: ModelSieve sieves it); symbol-entropy-v1 no longer offered on
+models. cli: models_filter_line, build_model_sieve; sieve filters --line models; sieve mesh --warp
+prints the stack's verdict and compact addresses. Hallway: model_sieve_, effective_mode, status,
+units_of, shelves (compact: model_at, blank titles, compact hex; else failed_by), G parses compact
+hex. Menu: overlay 5 lists the filters, stack_info(5) counts, ticked count on the map. Oracle
+cross-vectors gained models/model-unit rows (125 rows); tests brute-force the 3/1/2 shape through
+both orders. Default models (8/12/16) set aside 10^-5.54. The tiers of the models line's own
+filters (SPECIFICATIONS §12) are still to come; ModelSieve accepts only not-a-file-v1 so far.
+The models line's own filters, tiers 1 and 2 (core/src/filters/models.cpp specs; MeshRules in
+modelsieve.cpp): distinct-vertices-v1, distinct-indices-v1, every-vertex-used-v1. Vertices and
+faces are separate, so kept = (vertex strings kept) x (face strings kept) and rank = vrank *
+fcount + frank, which is the positional order. Vertices: falling factorial of C^3, a vertex's
+place = points left below it. Faces: completions(m unused, k named in the face, faces left) =
+sum_j (-1)^j C(m,j) tail(V-j,k) (face ways(V-j))^left, tables of powers and binomials; ranking
+budget 3F*V*(V+1) <= 4e6 (else counts, judges only). not-a-file with the rules: judged, blocker
+shown (the open problem, item 1 of Edward's list, to be discussed next). Oracle: brute force of
+the 3/2/2 shape (373,248 models, all seven combinations) and its own face walk over (used set,
+face so far) at three larger shapes; 218 cross rows, all matching. Defaults: distinct-indices
+keeps 10^-2.20, all three 10^-2.21.

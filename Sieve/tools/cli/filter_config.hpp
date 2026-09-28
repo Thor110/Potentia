@@ -22,6 +22,8 @@
 #include "lines.hpp"
 
 #include "sieve/filekind.hpp"
+#include "sieve/modelsieve.hpp"
+#include "sieve/modelspace.hpp"
 #include "sieve/filter.hpp"
 
 #include <filesystem>
@@ -97,7 +99,16 @@ FilterStack build_stack(const FilterLine& line, const LineFilters& settings);
 // The binary line's shape as filters see it (kind "binary", its length the line's most bytes),
 // and its ticked filters as one sieve (sieve/filekind.hpp).
 FilterLine binary_filter_line(uint64_t max_bytes);
-BinarySieve build_binary_sieve(const BinarySpace& space, const LineFilters& settings);
+// The other lines, for not-an-item-v1: pages of one-byte symbols as a pattern (counted exactly),
+// and judges for pictures (their PNG, one pixel a pixel), melodies (their MIDI file), models
+// (their .obj) and pages of other alphabets. Any line may be null (its form is then not known).
+BinaryItems binary_items(const Line* pages, const Line* image, const Line* video, const Line* audio, const ModelSpace* models);
+// Pages of `length` symbols of an alphabet as files: a pattern when every symbol is one byte.
+std::optional<KindCounter::Pattern> page_pattern(const Alphabet& a, uint32_t length);
+BinarySieve build_binary_sieve(const BinarySpace& space, const LineFilters& settings, const BinaryItems* items = nullptr);
+// The models line: its FilterLine (kind "models", for listing the filters it offers) and its stack.
+FilterLine models_filter_line(uint32_t vertices, uint32_t faces, uint32_t coords);
+ModelSieve build_model_sieve(const ModelSpace& space, const LineFilters& settings);
 
 // The books line's stacks: the cover on the cover (image) line, the title on one page, and the
 // pages on all pages read as one text (P * L symbols; no stack when P = 0).

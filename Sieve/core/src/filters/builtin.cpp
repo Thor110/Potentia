@@ -1,6 +1,6 @@
 // The compiled-in filters, in the order they are listed. To add a filter: write it in its own
 // file (see text_m1.cpp, statistics.cpp, media.cpp, audio.cpp,
-// written.cpp, binary.cpp), give it an id and version, and add its
+// written.cpp, crossline.cpp, binary.cpp), give it an id and version, and add its
 // registration call here. To change a filter, register it again with a new version and keep
 // the old one, so earlier results stay reproducible.
 
@@ -14,6 +14,9 @@ void add_media_filters(std::vector<FilterSpec>& out);
 void add_audio_filters(std::vector<FilterSpec>& out);
 void add_binary_filters(std::vector<FilterSpec>& out);
 void add_written_filters(std::vector<FilterSpec>& out);
+void add_crossline_filters(std::vector<FilterSpec>& out);
+void add_model_filters(std::vector<FilterSpec>& out);
+void add_other_line_filters(std::vector<FilterSpec>& out);
 
 std::vector<FilterSpec> builtin_filters()
 {
@@ -23,6 +26,9 @@ std::vector<FilterSpec> builtin_filters()
     add_media_filters(out);
     add_audio_filters(out);
     add_written_filters(out);
+    add_crossline_filters(out);
+    add_model_filters(out);
+    add_other_line_filters(out);
     add_binary_filters(out);
     return out;
 }

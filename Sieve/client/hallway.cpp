@@ -51,6 +51,10 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
     binary_filters_ = filters.binary;
     modes_[kBinaryLine] = filters.binary.mode;
     rebuild_binary_sieve();
+    // The models line's filters (not-a-file-v1), on a model's own number.
+    model_filters_ = filters.models;
+    modes_[kModelsLine] = filters.models.mode;
+    rebuild_model_sieve();
     // Each line's filter stack and mode (sieve-filters.ini, edited in the setup menu).
     for (int i = 0; i < 4; ++i)
     {
@@ -201,7 +205,13 @@ FilterMode Hallway::effective_mode(int i) const
     {
         if (!binary_sieve_ || binary_sieve_->empty()) return FilterMode::Off;
         if (modes_[i] != FilterMode::Compact) return modes_[i];
-        return binary_sieve_->count().is_zero() ? FilterMode::Hide : FilterMode::Compact;
+        return binary_sieve_->can_rank() && !binary_sieve_->count().is_zero() ? FilterMode::Compact : FilterMode::Hide;
+    }
+    if (i == kModelsLine)
+    {
+        if (!model_sieve_ || model_sieve_->empty()) return FilterMode::Off;
+        if (modes_[i] != FilterMode::Compact) return modes_[i];
+        return model_sieve_->can_rank() && !model_sieve_->count().is_zero() ? FilterMode::Compact : FilterMode::Hide;
     }
     if (i == kBooksLine)
     {
@@ -216,10 +226,10 @@ FilterMode Hallway::effective_mode(int i) const
     return compact_[i] ? FilterMode::Compact : FilterMode::Hide;
 }
 
-// The models line has no filters yet (SPECIFICATIONS §12 sets out the three tiers to come).
+// The models line's own stack judges a model by its number (sieve/modelsieve.hpp).
 bool Hallway::has_filters() const
 {
-    if (on_models()) return false; // no filters there yet
+    if (on_models()) return model_sieve_ && !model_sieve_->empty();
     if (on_binary()) return binary_sieve_ && !binary_sieve_->empty();
     return on_books() ? book_sieve_ && !book_sieve_->empty() : !stack().empty();
 }
@@ -240,6 +250,18 @@ std::string Hallway::compute_filter_status() const
             s += book_sieve_->can_rank() ? tr("hud.filters.no_book") : trf("hud.filters.blocked", {book_sieve_->blocker()});
         return s;
     }
+    if (on_models())
+    {
+        if (!has_filters()) return tr("hud.filters.none");
+        const FilterMode m = effective_mode();
+        std::string st = trf("hud.filters", {std::to_string(model_sieve_->size()), tr(std::string("mode.") + to_string(m))});
+        if (m == FilterMode::Compact) st += trf("hud.filters.units", {short_big(model_sieve_->count())});
+        else if (m == FilterMode::Excluded && model_sieve_->can_rank())
+            st += trf("hud.filters.excluded", {short_big(BigUint(model_space_->size()) -= model_sieve_->count())});
+        else if (modes_[li_] == FilterMode::Compact)
+            st += model_sieve_->can_rank() ? tr("hud.filters.no_unit") : trf("hud.filters.blocked", {model_sieve_->blocker()});
+        return st;
+    }
     if (on_binary())
     {
         if (!has_filters()) return tr("hud.filters.none");
@@ -248,7 +270,8 @@ std::string Hallway::compute_filter_status() const
         if (m == FilterMode::Compact) st += trf("hud.filters.units", {short_big(binary_sieve_->count())});
         else if (m == FilterMode::Excluded)
             st += trf("hud.filters.excluded", {short_big(BigUint(binary_space_->size()) -= binary_sieve_->count())});
-        else if (modes_[li_] == FilterMode::Compact) st += tr("hud.filters.no_unit");
+        else if (modes_[li_] == FilterMode::Compact)
+            st += binary_sieve_->can_rank() ? tr("hud.filters.no_unit") : trf("hud.filters.blocked", {binary_sieve_->blocker()});
         return st;
     }
     const FilterStack& st = stack();
@@ -275,7 +298,8 @@ BigUint Hallway::units_of(int i) const
         m -= BigUint(1);
         return loop_pos(m) += BigUint(1);
     }
-    if (i == kModelsLine) return titled_[kModelsLine]->size();
+    // Compact: only the surviving models, closed up (their titles blank, as a compact line's are).
+    if (i == kModelsLine) return effective_mode(i) == FilterMode::Compact ? model_sieve_->count() : titled_[kModelsLine]->size();
     if (i == kBooksLine) return effective_mode(i) == FilterMode::Compact ? book_sieve_->count() : books_->size();
     if (guided_ && lines_[size_t(i)].guided) return BigUint::pow(2, zoom_);
     if (effective_mode(i) == FilterMode::Compact) return compact_[i]->count();
@@ -428,20 +452,42 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
                 b.fraction = b.index.is_zero() ? 0.0 : std::pow(10.0, b.index.log10_approx() - ts.size().log10_approx());
                 if (binary_sieve_ && !binary_sieve_->empty())
                 {
-                    b.failed_by = binary_sieve_->first_failure(b.head, b.file_size);
+                    // From its head alone, unless a filter needs the whole file (not-an-item-v1).
+                    b.failed_by = binary_sieve_->needs_file() ? binary_sieve_->first_failure_of(binary_space_->bytes_at(tp.content, AddressMode::Positional))
+                                                              : binary_sieve_->first_failure(b.head, b.file_size);
                     b.passes = b.failed_by.empty();
                 }
             }
         }
         else if (on_models())
         {
-            // A titled model: its title, and the model itself by its own positional index.
             const TitledSpace& ts = *titled_[kModelsLine];
-            const TitledSpace::Parts tp = ts.parts_at(b.index, mode_);
-            b.title = tp.title;
-            b.model = model_space_->parts_at(tp.content, AddressMode::Positional);
-            b.hex = ts.hex_of(b.index);
-            b.fraction = b.index.is_zero() ? 0.0 : std::pow(10.0, b.index.log10_approx() - ts.size().log10_approx());
+            if (compact_here)
+            {
+                // Only the surviving models stand here, closed up: slot i holds the survivor whose
+                // compact address is i, its model worked out from its survivor number.
+                const BigUint content = model_sieve_->model_at(b.index, mode_);
+                b.title = ts.blank_title();
+                b.model = model_space_->parts_at(content, AddressMode::Positional);
+                b.hex = model_sieve_->hex_of(b.index);
+                b.survivor = true;
+                b.survivor_number = model_sieve_->rank_of_index(b.index, mode_);
+                b.fraction = b.index.is_zero() ? 0.0 : std::pow(10.0, b.index.log10_approx() - model_sieve_->count().log10_approx());
+            }
+            else
+            {
+                // A titled model: its title, and the model itself by its own positional index.
+                const TitledSpace::Parts tp = ts.parts_at(b.index, mode_);
+                b.title = tp.title;
+                b.model = model_space_->parts_at(tp.content, AddressMode::Positional);
+                b.hex = ts.hex_of(b.index);
+                b.fraction = b.index.is_zero() ? 0.0 : std::pow(10.0, b.index.log10_approx() - ts.size().log10_approx());
+                if (model_sieve_ && !model_sieve_->empty())
+                {
+                    b.failed_by = model_sieve_->first_failure(tp.content);
+                    b.passes = b.failed_by.empty();
+                }
+            }
         }
         else if (compact_here && !guided_on())
         {
@@ -589,7 +635,7 @@ void Hallway::go_to_file(const BinarySpace::Bytes& f, bool open, const Space::Di
     {
         // Compact: a surviving file by its compact address (its title is not kept there); one the
         // filters set aside has no shelf, and is shown in hand, as on the other lines.
-        const std::string fail = binary_sieve_->first_failure(f, f.size());
+        const std::string fail = binary_sieve_->first_failure_of(f);
         if (fail.empty())
         {
             place(binary_sieve_->index_of(f, mode_), open);
@@ -876,7 +922,7 @@ bool Hallway::go_to(std::string input)
             index = point;
             index >>= g.scale_bits() - zoom_;
         }
-        else if (on_models()) index = titled_[kModelsLine]->parse(input);
+        else if (on_models()) index = effective_mode() == FilterMode::Compact ? model_sieve_->parse(input) : titled_[kModelsLine]->parse(input);
         else if (on_binary()) index = effective_mode() == FilterMode::Compact ? binary_sieve_->parse(input) : titled_[kBinaryLine]->parse(input);
         else if (on_books()) index = effective_mode() == FilterMode::Compact ? book_sieve_->parse(input) : books_->parse(input);
         else if (effective_mode() == FilterMode::Compact) index = compact().parse(input); // a compact address, as the books show
@@ -1989,11 +2035,26 @@ void Hallway::set_binary_length(uint64_t bytes)
     rebase();
 }
 
+void Hallway::rebuild_model_sieve()
+{
+    try
+    {
+        model_sieve_ = std::make_unique<ModelSieve>(build_model_sieve(*model_space_, model_filters_));
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "filters for the models line: " << e.what() << "\n";
+        model_sieve_.reset();
+    }
+}
+
 void Hallway::rebuild_binary_sieve()
 {
     try
     {
-        binary_sieve_ = std::make_unique<BinarySieve>(build_binary_sieve(*binary_space_, binary_filters_));
+        // The other lines as not-an-item-v1 recognises their items (text, image, audio, video, models).
+        const BinaryItems items = binary_items(&lines_[0], &lines_[1], &lines_[3], &lines_[2], model_space_.get());
+        binary_sieve_ = std::make_unique<BinarySieve>(build_binary_sieve(*binary_space_, binary_filters_, &items));
     }
     catch (const std::exception& e)
     {

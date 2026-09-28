@@ -10,6 +10,7 @@
 #include "sieve/chunks.hpp"
 #include "sieve/dfa.hpp"
 #include "sieve/filekind.hpp"
+#include "sieve/modelsieve.hpp"
 #include "sieve/written.hpp"
 #include "sieve/plugin.hpp"
 #include "sieve/compact.hpp"
@@ -1816,9 +1817,9 @@ void test_filters(const std::string& dir)
     CHECK(find_filter("words") == find_filter("words-v2")); // the newest version
     CHECK(find_filter("words-v1") != find_filter("words-v2"));
     CHECK(find_filter("nonsense") == nullptr);
-    CHECK(filters_for(text_line(8)).size() == 11); // not-written-v1 joined the ten
+    CHECK(filters_for(text_line(8)).size() == 13); // not-written-v1, not-a-file-v1 and not-other-line-v1 joined the ten
     const FilterLine image{"image", "image/mono/10x10", 2, 100, nullptr, 10, 10, 1};
-    CHECK(filters_for(image).size() == 2); // symbol-entropy, neighbour-agreement
+    CHECK(filters_for(image).size() == 4); // symbol-entropy, neighbour-agreement, not-a-file, not-packed
 
     // Rankers, exhaustively at small lengths with a small dictionary: rank = position among the
     // survivors in address order, and unrank inverts it.
@@ -2954,6 +2955,229 @@ void test_written_vectors(const std::string& dir)
 }
 
 
+// The cross-line filters (not-a-file-v1, not-other-line-v1, not-packed-v1, and not-an-item-v1's
+// pages), against the oracle's vectors (tests/vectors_cross_v1.tsv), then a few brute-force checks.
+void test_cross_vectors(const std::string& dir)
+{
+    const TestResources none(nullptr, nullptr);
+    const FilterSpec* not_file = find_filter("not-a-file-v1");
+    const FilterSpec* not_other = find_filter("not-other-line-v1");
+    const FilterSpec* not_packed = find_filter("not-packed-v1");
+    const FilterSpec* not_item = find_filter("not-an-item-v1");
+    CHECK(not_file && not_other && not_packed && not_item);
+    if (!not_file || !not_other || !not_packed || !not_item) return;
+    auto number_line = [](uint32_t base, uint32_t L) { return FilterLine{"image", "cross", base, L, nullptr, L, 1, 0}; };
+    std::map<std::string, std::unique_ptr<FilterStack>> stacks;
+    auto file_stack = [&](uint32_t base, uint32_t L) -> const FilterStack& {
+        auto& st = stacks[std::to_string(base) + "/" + std::to_string(L)];
+        if (!st) st = std::make_unique<FilterStack>(number_line(base, L), std::vector<FilterStack::Entry>{{not_file, {}}}, none);
+        return *st;
+    };
+    // A page's files as the binary line holds them: exactly its symbols' bytes (every byte, for
+    // bytes256).
+    auto pattern_of = [](const Alphabet& a, uint32_t L) {
+        KindCounter::Pattern p;
+        std::array<bool, 256> at{};
+        for (uint32_t d = 0; d < a.size(); ++d) at[a.symbol(d) & 0xff] = true;
+        if (a.size() == 256) at.fill(true);
+        p.allowed.assign(L, at);
+        return p;
+    };
+    int n = 0;
+    for (const auto& f : read_rows(dir + "vectors_cross_v1.tsv"))
+    {
+        bool ok = false;
+        if (f[0] == "not-a-file" && f.size() == 4)
+        {
+            const FilterStack& st = file_stack(uint32_t(std::stoul(f[1])), uint32_t(std::stoul(f[2])));
+            ok = st.ranker() && st.ranker()->count().to_decimal() == f[3];
+        }
+        else if (f[0] == "a-file-unit" && f.size() == 5)
+        {
+            const FilterStack& st = file_stack(uint32_t(std::stoul(f[1])), uint32_t(std::stoul(f[2])));
+            const std::vector<uint32_t> want = split_u32(f[4]);
+            const BigUint k = BigUint::from_decimal(f[3]);
+            ok = st.ranker() && st.ranker()->unrank(k) == want && st.ranker()->rank(want) == k && st.passes(want);
+        }
+        else if (f[0] == "other-judge" && f.size() == 5)
+        {
+            const Alphabet& a = alphabet_of(f[1]);
+            const auto bytes = from_hex_bytes(f[3]);
+            const std::u32string text = utf8_decode(std::string(bytes.begin(), bytes.end()));
+            const auto v = other_line_as(text, other_line_mask_of(f[2]));
+            std::vector<uint32_t> unit;
+            for (char32_t c : text) unit.push_back(*a.digit_of(c));
+            const FilterStack st(alphabet_line(a, uint32_t(unit.size())), {{not_other, {{"forms", f[2]}}}}, none);
+            ok = (v ? *v : std::string("-")) == f[4] && st.passes(unit) == !v.has_value();
+        }
+        else if (f[0] == "other" && f.size() == 5)
+        {
+            const FilterStack st(alphabet_line(alphabet_of(f[1]), uint32_t(std::stoul(f[3]))), {{not_other, {{"forms", f[2]}}}}, none);
+            ok = st.ranker() && st.ranker()->count().to_decimal() == f[4];
+        }
+        else if (f[0] == "packed" && f.size() == 4)
+        {
+            const FilterStack st(number_line(uint32_t(std::stoul(f[1])), uint32_t(std::stoul(f[2]))), {{not_packed, {}}}, none);
+            ok = st.ranker() && st.ranker()->count().to_decimal() == f[3];
+        }
+        else if ((f[0] == "models" && f.size() == 5) || (f[0] == "model-unit" && f.size() == 6))
+        {
+            const ModelSpace space(uint32_t(std::stoul(f[1])), uint32_t(std::stoul(f[2])), uint32_t(std::stoul(f[3])));
+            const ModelSieve ms(space, {{not_file, {}}});
+            if (f[0] == "models") ok = ms.count().to_decimal() == f[4];
+            else
+            {
+                const BigUint k = BigUint::from_decimal(f[4]), v = BigUint::from_decimal(f[5]);
+                ok = ms.model_at(k, AddressMode::Positional) == v && ms.index_of(v, AddressMode::Positional) == k && ms.first_failure(v).empty();
+            }
+        }
+        else if ((f[0] == "mesh" && f.size() == 6) || (f[0] == "mesh-unit" && f.size() == 7))
+        {
+            const ModelSpace space(uint32_t(std::stoul(f[1])), uint32_t(std::stoul(f[2])), uint32_t(std::stoul(f[3])));
+            std::vector<FilterStack::Entry> entries;
+            for (char r : f[4])
+                entries.push_back({find_filter(r == 'v' ? "distinct-vertices-v1" : r == 'i' ? "distinct-indices-v1" : "every-vertex-used-v1"), {}});
+            const ModelSieve ms(space, entries);
+            if (f[0] == "mesh") ok = ms.can_rank() && ms.count().to_decimal() == f[5];
+            else
+            {
+                const BigUint k = BigUint::from_decimal(f[5]), v = BigUint::from_decimal(f[6]);
+                ok = ms.model_at(k, AddressMode::Positional) == v && ms.index_of(v, AddressMode::Positional) == k && ms.first_failure(v).empty();
+            }
+        }
+        else if (f[0] == "item-pages" && f.size() == 7)
+        {
+            const BinarySpace space(std::stoull(f[1]), "sieve");
+            BinaryItems items;
+            items.pages = pattern_of(alphabet_of(f[4]), uint32_t(std::stoul(f[5])));
+            const BinarySieve bs(space, {kind_entry(f[2], f[3]), {not_item, {{"items", "pages"}}}}, &items);
+            ok = bs.can_rank() && bs.count().to_decimal() == f[6];
+            if (!ok) std::cerr << "  (" << bs.count().to_decimal() << " " << bs.blocker() << ")\n";
+        }
+        CHECK(ok);
+        if (!ok)
+        {
+            std::cerr << "  cross vector mismatch:";
+            for (const auto& x : f) std::cerr << " " << x;
+            std::cerr << "\n";
+        }
+        ++n;
+    }
+    std::cout << "cross-line vectors checked: " << n << "\n";
+    CHECK(n >= 210);
+
+    // The models line: every model of a small shape, against file_kind_at, in both compact orders.
+    {
+        const ModelSpace space(3, 1, 2);
+        const ModelSieve ms(space, {{not_file, {}}});
+        uint64_t kept = 0;
+        bool agree = true, round = true;
+        for (uint64_t v = 0; BigUint(v) < space.size(); ++v)
+        {
+            const bool pass = ms.first_failure(BigUint(v)).empty();
+            agree = agree && pass == !is_signed_kind(file_kind_at(BigUint(v)));
+            if (!pass) continue;
+            for (const AddressMode m : {AddressMode::Positional, AddressMode::Scrambled})
+            {
+                const BigUint c = ms.index_of(BigUint(v), m);
+                round = round && ms.model_at(c, m) == BigUint(v) && ms.rank_of_index(c, m) == BigUint(kept);
+            }
+            ++kept;
+        }
+        CHECK(agree);
+        CHECK(round);
+        CHECK(ms.count() == BigUint(kept));
+        CHECK(kept < 13824); // one model's number is a signed file
+        const ModelSieve none(space, {});
+        CHECK(none.empty() && none.count() == space.size());
+        // The line's own rules at the same shape: every model judged, the survivors in positional
+        // order, and every one round trip through both compact orders.
+        const ModelSieve rules(space, {{find_filter("distinct-vertices-v1"), {}}, {find_filter("distinct-indices-v1"), {}},
+                                       {find_filter("every-vertex-used-v1"), {}}});
+        uint64_t n_rules = 0;
+        bool order = true;
+        for (uint64_t v = 0; BigUint(v) < space.size(); ++v)
+        {
+            if (!rules.first_failure(BigUint(v)).empty()) continue;
+            order = order && rules.index_of(BigUint(v), AddressMode::Positional) == BigUint(n_rules) &&
+                    rules.model_at(rules.index_of(BigUint(v), AddressMode::Scrambled), AddressMode::Scrambled) == BigUint(v);
+            ++n_rules;
+        }
+        CHECK(order);
+        CHECK(rules.count() == BigUint(n_rules));
+        // With not-a-file-v1 too: judged, not counted.
+        const ModelSieve both(space, {{not_file, {}}, {find_filter("distinct-indices-v1"), {}}});
+        CHECK(!both.can_rank() && !both.blocker().empty());
+    }
+
+    // not-a-file: every unit of a short line, against file_kind_at, ranked in order.
+    for (const auto& [base, L] : std::vector<std::pair<uint32_t, uint32_t>>{{2, 16}, {27, 3}, {256, 2}})
+    {
+        const FilterStack& st = file_stack(base, L);
+        std::vector<uint32_t> u(L, 0);
+        uint64_t kept = 0;
+        bool agree = true, round = true;
+        for (BigUint v; ; v += BigUint(1))
+        {
+            const bool pass = st.passes(u);
+            agree = agree && pass == !is_signed_kind(file_kind_at(v));
+            if (pass)
+            {
+                if (kept % 97 == 0) round = round && st.ranker()->rank(u) == BigUint(kept) && st.ranker()->unrank(BigUint(kept)) == u;
+                ++kept;
+            }
+            size_t i = L;
+            while (i > 0 && ++u[i - 1] == base) u[--i] = 0;
+            if (i == 0) break;
+        }
+        CHECK(agree);
+        CHECK(round);
+        CHECK(st.ranker()->count() == BigUint(kept));
+    }
+    // not-packed: every unit of a short line, against packed_as.
+    for (const auto& [base, L] : std::vector<std::pair<uint32_t, uint32_t>>{{2, 16}, {16, 4}, {4, 9}})
+    {
+        const FilterStack st(number_line(base, L), {{not_packed, {}}}, none);
+        const uint32_t bits = base == 2 ? 1 : base == 4 ? 2 : 4;
+        std::vector<uint32_t> u(L, 0);
+        uint64_t kept = 0;
+        bool agree = true;
+        for (;;)
+        {
+            const bool pass = st.passes(u);
+            agree = agree && pass == !packed_as(u, bits).has_value();
+            kept += pass;
+            size_t i = L;
+            while (i > 0 && ++u[i - 1] == base) u[--i] = 0;
+            if (i == 0) break;
+        }
+        CHECK(agree);
+        CHECK(st.ranker() && st.ranker()->count() == BigUint(kept));
+    }
+    // not-an-item's pages: the survivors, in order, are the kind survivors that are not pages.
+    {
+        const BinarySpace space(2, "sieve");
+        BinaryItems items;
+        items.pages = pattern_of(alphabet_of("u+0061-u+0062"), 1);
+        const BinarySieve bs(space, {kind_entry("any", "keep"), {not_item, {{"items", "pages"}}}}, &items);
+        bool ok = bs.can_rank() && bs.needs_file(); // a page is judged by its whole file
+        BigUint last;
+        for (uint64_t k = 0; ok && BigUint(k) < bs.count(); k += 211)
+        {
+            const auto file = bs.file_at(BigUint(k), AddressMode::Positional);
+            const bool page = file.size() == 1 && (file[0] == 'a' || file[0] == 'b');
+            ok = !page && bs.first_failure_of(file).empty() && bs.index_of(file, AddressMode::Positional) == BigUint(k);
+            if (!ok) std::cerr << "  (pages: k " << k << " size " << file.size() << " page " << page << " fail '" << bs.first_failure_of(file) << "')\n";
+        }
+        CHECK(ok);
+        CHECK(!bs.first_failure_of({'a'}).empty());
+        CHECK(bs.first_failure_of({'a', '\n'}).empty()); // a page's text only, nothing appended
+        CHECK(bs.first_failure_of({'c'}).empty());
+    }
+    std::cout << "cross-line checked\n";
+}
+
+
 // MIDI read back (midi_to_notation): a melody saved as MIDI and read again, then fitted to its
 // set, sounds the same: every voice, sixteenth by sixteenth (which pitch, and where each note
 // starts), up to the rests at the end. Rests may be written with fewer events.
@@ -3053,6 +3277,7 @@ void run_all(int argc, char** argv)
         test_kinds();
         test_kind_vectors(dir + "vectors_kinds_v1.tsv");
         test_written_vectors(dir);
+        test_cross_vectors(dir);
     }
 }
 

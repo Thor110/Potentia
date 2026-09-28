@@ -633,3 +633,138 @@ from any line, to the item's file (as F saves it, a picture at one pixel a pixel
 line; from the binary line, a file of a kind a line holds (TXT, PNG, JPG, GIF, BMP, MID, BOOK) to
 that line, fitted to it as T fits what is warped in. A melody's MIDI file comes back as the same
 music (`midi_to_notation`, checked on 300 melodies across five note sets).
+
+## 16. Every line filtered by every other (built)
+
+§15 took the binary line's content away from the pages. Edward's table takes each line's content
+away from every other line, in the same spirit: exclusion, for cleanliness. Four filters do it.
+
+| Line | Filter | Sets aside |
+| :--- | :--- | :--- |
+| pages, books' text | `not-written-v1` (§15) | files written out as text |
+| pages | `not-other-line-v1` | melody notation, and a model's `.obj` text |
+| image, video | `not-packed-v1` | pixels which, packed as bits into bytes, are a file with a signature |
+| every line but binary | `not-a-file-v1` | a unit whose own number, as a place on the binary line, holds a file with a signature |
+| binary | `not-an-item-v1` | a file that is exactly an item of another line, as F saves it |
+
+A line made of other lines' parts is not asked to exclude its parts: a book holds pages and a
+picture, and a video is frames, by design.
+
+**`not-a-file-v1`** reads the unit as the number it is (its symbols as base-`B` digits, as the
+positional address does) and asks what file stands at that place on the binary line. The file's
+kind comes from its first bytes and its length alone (`file-kinds-v1`), and both come from the top
+of the number, so the file is never written out. With `E(x)` the signed files at binary places
+below `x` (`KindCounter::count_before`: whole lengths, then heads below this head, then this
+head's tails), the survivors below `x` are `x − E(x)`. Every prefix of a unit is a range of
+numbers, so its completions are `S(hi) − S(lo)`, and ranking walks those; unranking searches
+for the number. Exact at any length.
+
+**`not-other-line-v1`** (text lines whose symbols are not `bytes256`) has two forms, `notes` and
+`obj`, in a `forms` parameter. Melody notation is what `canon-notes-v1` and `-v2` read: notes A–G
+with `#` or `b` and an octave digit, rests `R`, the durations `s e e. q q. h h. w` or none, `//`
+between voices, apart by whitespace, `|` or `,`, with at least one note or rest. A model's text is
+`v` lines of three numbers and `f` lines of three indices from 1, apart by line feeds, at least one
+of each, with padding spaces only at the end. Each is a small machine walked into an automaton
+over the alphabet; the filter keeps its complement, so it counts, ranks, and combines with plugins
+and `not-written-v1` like any automaton.
+
+**`not-packed-v1`** (image and video lines of 2, 4, 16 or 256 colours: `b` bits a pixel) packs the
+unit's pixels, first bit highest, into `⌊L·b/8⌋` bytes, and fails the unit if those bytes are a file
+with a signature. Packing is one-to-one, so this is `binary-kind-v1`'s head automaton walked bit by
+bit: an automaton, counted and ranked exactly.
+
+**`not-an-item-v1`** (binary) fails a file that is exactly another line's item as F saves it
+(`items`: pages by default, or melodies, pictures, models, or all):
+- **pages**: exactly the page's text, as F now saves it on every alphabet. When each symbol
+  is one byte, the pages are a pattern of allowed bytes per position, and the survivors are counted
+  exactly: the kind survivors less the pages among them, `|K| − |K ∩ P|`, and ranked by the same
+  subtraction, walking the pattern through the head automaton.
+- **melodies**: a MIDI file that reads back (`midi_to_notation`) as a melody of the audio line
+  whose MIDI is that file, byte for byte;
+- **pictures**: a PNG that decodes to a picture (or a video's sheet of frames) of the line which
+  saves as that PNG, byte for byte;
+- **models**: an `.obj` text that the models line saves as itself.
+Those three are judged file by file, so with them the binary line cannot be counted or compacted
+(it falls back to hide and says why).
+
+**The models line's stack** (`core/src/modelsieve.cpp`, `[models]` in the settings). A model is
+not a run of symbols of one base: it is a mixed-radix number (coordinates in base `C`, then face
+indices in base `V`), and its positional index is that number. So, like the binary line, it has a
+stack of its own (`ModelSieve`) that judges a model by its index. It holds `not-a-file-v1`, the
+same rule as on every other line, worked on the index itself: survivors below `x` are
+`x − E(x)`, a survivor's number is `S(index)`, and the k-th survivor is found by halving. It counts
+exactly, and the models line compacts (positional, or scrambled by `shuffle-sha256-v1` over the
+survivors, keyed with the line's key and the stack's id), its titles blank as a compact line's are.
+The other lines' content a model could be is already handled from their side: `.obj` text on the
+pages (`not-other-line-v1`) and a model's `.obj` file on the binary line (`not-an-item-v1`). The
+models line's own filters join the same stack (below).
+
+**The models line's own filters** (`core/src/filters/models.cpp`; SPECIFICATIONS §12's first two
+tiers). These are requirement filters, not exclusion: they remove most of the line.
+
+| Filter | Keeps | Counted as | Kept, 8 vertices, 12 faces, grid 16 |
+| :--- | :--- | :--- | :--- |
+| `distinct-vertices-v1` | no two vertices at the same point | `P(P−1)…(P−V+1)`, `P = C³` | about all (sets aside 10^-2.17) |
+| `distinct-indices-v1` | no face names a vertex twice | each face `V(V−1)(V−2)` ways, not `V³` | 10^-2.20 |
+| `every-vertex-used-v1` | every vertex named by a face | `Σⱼ (−1)ʲ C(V,j) · (face ways with V−j)^F` | 10^-0.03 (sets aside 10^-1.19) |
+| all three | | the product of the parts | 10^-2.21 |
+
+The rules on the vertices and on the faces are separate, so the survivors are the vertex strings
+kept times the face strings kept, and a survivor's number is its vertices' rank times the face
+strings kept, plus its faces' rank. That is exactly the positional order of the survivors, since a
+model's vertices are the top digits of its number. Each part is ranked digit by digit: below each
+digit, the completions of every smaller one. For the vertices those depend only on how many points
+are taken. For the faces they depend on how many vertices are still unused, which vertices the
+current face has named, and how many faces are left, and inclusion and exclusion gives them in
+closed form, however many faces there are. Ranking walks `3F` digits and tries up to `V` at each,
+so past a budget (`3F · V · (V+1)` at 4 million with every-vertex-used) a stack still counts but
+judges only.
+
+Ticked with `not-a-file-v1`, the stack judges but cannot count: not-a-file is arithmetic on the
+whole number, the rules walk its digits, and counting the two together is the open problem of the
+text lines too (see the note under "Together" above).
+
+**What they set aside** (exact; the shares are display only; hallway defaults):
+
+| Line | Filter | Set aside |
+| :--- | :--- | :--- |
+| pages, `lower27` 32 | `not-a-file-v1` | 10^-4.38 |
+| pages, `lower27` or `babel29` | `not-other-line-v1` | none (no digits, so no notes and no `.obj`) |
+| pages, `ascii95` 32 | `not-other-line-v1` | 10^-32.93 |
+| image, black and white 10×10 | `not-packed-v1` | 10^-4.34 |
+| image, black and white 10×10 | `not-a-file-v1` | 10^-5.54 |
+| audio, 16 notes | `not-a-file-v1` | 10^-5.30 |
+| video, 5×5×8 | `not-packed-v1` | 10^-4.34 |
+| models, 8 vertices, 12 faces, grid 16 | `not-a-file-v1` | 10^-5.54 |
+| binary, 32 bytes, pages `lower27` 32 | `not-an-item-v1` (pages) | 10^-31.26 |
+| binary, 33 bytes, pages `lower27` 32 | `not-an-item-v1` (pages) | 10^-33.67 |
+
+F once added a line feed to a page saved from an alphabet without one; it no longer does (a page
+and its file are one to one, and addresses are unchanged: a page's comes from its symbols, a file's
+from its bytes). `not-an-item-v1` was corrected with it before any release. The 2-byte signatures
+(`MZ`, `BM`, `1F 8B`) are most of every share, as in §15.
+
+**Together.** Each filter counts on its own. `not-other-line-v1` and `not-packed-v1` are automata,
+so they combine with plugins, with each other and with `not-written-v1`. `not-a-file-v1` is counted
+by arithmetic on the unit's number, not by an automaton over its symbols, so ticked with another
+ranking filter the stack judges only (hide, not compact). Counting both together would need the
+other filter's survivors inside each of the binary line's signed ranges, which are ranges of a
+base-256 number against a base-`B` unit: not built.
+
+**Checked:**
+- The oracle (`reference/sieve_ref.py cross-vectors`, `tests/vectors_cross_v1.tsv`, 115 rows, about
+  10 seconds) has its own implementations: `E(x)` from its own head automaton, the notation and
+  `.obj` machines (checked against its own judges on 30,000 random `.obj`-like texts and every text
+  of a small alphabet to length 6), the packed count in closed form (packing is a bijection), and
+  the pages among the kind survivors walked through its head automaton. Every row matches.
+- Every unit of short lines (unit tests): `not-a-file-v1` against `file_kind_at` on base 2 at 16,
+  27 at 3 and 256 at 2, with rank and unrank; `not-packed-v1` against `packed_as` at three sizes;
+  and the binary line's survivors with pages excluded, in order, none of them a page; every model
+  of a 3-vertex, 1-face, 2-step shape (13,824) against `file_kind_at`, through both compact orders.
+- The models line in the oracle: its counts at five shapes (two by brute force) and survivors by
+  rank at three, from its own `signed_before`. The line's own rules: every model of the 3-vertex,
+  2-face, 2-step shape (373,248) by brute force for all seven combinations, then counts at three
+  larger shapes and survivors by rank, from the oracle's own walk over the faces (its state the set
+  of vertices used and the current face's named vertices), a different method from the engine's
+  closed forms. 218 rows in all. The unit tests also walk every model of the 3/1/2 shape through
+  both compact orders with all three rules.

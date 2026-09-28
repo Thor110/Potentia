@@ -192,6 +192,10 @@ map.ticked = {0} filters ticked
 
 ; ---- the filter lists (magnifying glass)
 filters.title = {0} FILTERS
+filters.filtered = - amount of content filtered: {0}
+filters.filtered.kept = kept {0}
+filters.filtered.removed = removed {0}
+filters.filtered.unknown = not countable with these filters
 filters.intro = A unit is shelved only if it passes every ticked filter.
 filters.intro.books = A book is shelved only if its cover, title and pages pass their ticked filters.
 filters.mode = display mode: {0}
@@ -199,6 +203,7 @@ filters.mode.help1 = off: every book   mark: failures drawn faint
 filters.mode.help2 = hide: failures left out   compact: only survivors, closed up
 filters.mode.help3 = excluded: only failures, in their places, to check what the filters set aside
 filters.intro.binary = A file is shelved only if it passes every ticked filter: by what its own first bytes say it is.
+filters.intro.models = A model is shelved only if it passes every ticked filter: judged by its own number, as a place on the binary line.
 filters.intro.none = No filters are registered for this line yet; filter plugins will add them. Its mode is kept for then.
 status.no_filters_yet = no filters for this line yet
 filters.part.cover = COVER

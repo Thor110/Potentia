@@ -362,12 +362,12 @@ std::vector<uint8_t> unit_file(const Line& line, const std::vector<uint32_t>& di
             for (uint32_t d : digits) out.push_back(uint8_t(d));
             return out;
         }
-        // Exactly the unit. A trailing newline is added only where the alphabet cannot hold one
-        // itself, as a courtesy so the file does not end mid-line; on an alphabet that can (see
-        // ascii96), the file IS the unit, byte for byte, and adding anything would spoil that.
+        // Exactly the unit's text, on every alphabet: nothing is appended, so a page and its file
+        // are one to one, and J lands on the file of exactly that text. (A trailing line feed was
+        // once added where the alphabet has none; files saved that way keep their own addresses
+        // and still open, but F no longer writes them.)
         const std::string t = utf8_encode(line.space.text_of(digits));
         out.assign(t.begin(), t.end());
-        if (!line.alphabet || !line.alphabet->contains(U'\n')) out.push_back('\n');
         return out;
     }
     case LineKind::Audio:
