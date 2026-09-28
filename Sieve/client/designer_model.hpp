@@ -19,6 +19,7 @@
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -62,6 +63,10 @@ struct Doc
     std::vector<std::string> table; // the table form's lines, as written
     // Word lists being edited (file name -> words, one a line), written beside the plugin on save.
     std::map<std::string, std::string> lists;
+    // Where tagged lists (`set NAME tags:FILE:TAGS`) are read from: the folder the file was opened
+    // from, or (when empty) the filters folder. They are large and not edited here, so they are
+    // read in place rather than held like the word lists above.
+    std::filesystem::path data_folder;
     // Where each node sits: "header", "requires", "params", "rule", "set:<name>", "test".
     std::map<std::string, Pos> layout;
 
@@ -91,11 +96,32 @@ struct TestResult
     sieve::FilterLine line;
 };
 
+// What a worker is doing, for the screen's progress window: set from the worker, read by the
+// window as it draws.
+class Progress
+{
+public:
+    void set(const std::string& step)
+    {
+        std::lock_guard<std::mutex> lock(mx_);
+        step_ = step;
+    }
+    std::string step() const
+    {
+        std::lock_guard<std::mutex> lock(mx_);
+        return step_;
+    }
+
+private:
+    mutable std::mutex mx_;
+    std::string step_;
+};
+
 // The line a filter written for these symbols is tested on, at this length.
 sieve::FilterLine test_line(const std::string& symbols, uint32_t length);
 
 // Compiles the file (from a scratch folder with the lists) and counts at `length`.
-TestResult test(const Doc& d, uint32_t length);
+TestResult test(const Doc& d, uint32_t length, Progress* progress = nullptr);
 
 // Whether the text passes, and if not, where and why, in words.
 std::string judge(const Doc& d, const TestResult& t, const std::string& text);
@@ -103,7 +129,7 @@ std::string judge(const Doc& d, const TestResult& t, const std::string& text);
 // How the rule compares with every custom filter registered for the line (same, stricter,
 // looser), at their default settings; slow for large dictionaries, so the screen runs it in the
 // background.
-std::vector<std::string> relations(const Doc& d, const TestResult& t);
+std::vector<std::string> relations(const Doc& d, const TestResult& t, Progress* progress = nullptr);
 
 // Where Save writes: the installation's filters folder.
 std::filesystem::path filters_folder();

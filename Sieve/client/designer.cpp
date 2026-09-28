@@ -13,6 +13,7 @@
 
 #include "cli/dictionaries.hpp"
 #include "cli/plugins.hpp"
+#include "cli/timings.hpp"
 #include "sieve/alphabet.hpp"
 #include "sieve/audio.hpp"
 #include "sieve/image.hpp"
@@ -22,6 +23,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <fstream>
 #include <sstream>
 
@@ -66,6 +68,13 @@ template <typename T> void cycle(std::vector<T>& v, const T& cur, int dir, T& ou
     out = v[size_t(((i + dir) % int(v.size()) + int(v.size())) % int(v.size()))];
 }
 
+std::string fmt_seconds(double s)
+{
+    char b[32];
+    std::snprintf(b, sizeof b, s < 10 ? "%.1f s" : "%.0f s", s);
+    return b;
+}
+
 std::vector<std::string> split_lines(const std::string& s)
 {
     std::vector<std::string> out;
@@ -82,8 +91,7 @@ Designer::Designer(SDL_Window* window, SDL_Renderer* renderer, const std::string
 {
     doc_ = design::Doc::new_tokens();
     if (!open_file_path.empty()) open_file(open_file_path);
-    changed();
-    dirty_ = false;
+    dirty_ = false; // nothing is compiled until asked for (F5) or needed (Save)
 }
 
 Designer::~Designer()
@@ -145,6 +153,10 @@ std::vector<std::string> Designer::source_choices() const
     {
     }
     for (const auto& [file, words] : doc_.lists) out.push_back("list:" + file);
+    // Tagged lists the filter already reads (written in the file; not made here), so cycling a
+    // set's words can always come back to them.
+    for (const auto& s : doc_.sets)
+        if (s.source.rfind("tags:", 0) == 0 && std::find(out.begin(), out.end(), s.source) == out.end()) out.push_back(s.source);
     return out;
 }
 
@@ -433,7 +445,19 @@ void Designer::changed()
     dirty_ = true;
     leave_warned_ = false;
     save_as_ = 0;
-    retest_ = true;
+}
+
+std::string Designer::current_key() const
+{
+    // What the file says, less where its nodes sit (moving a node changes nothing), and the length.
+    design::Doc d = doc_;
+    d.layout.clear();
+    return d.to_text() + "|" + std::to_string(length_);
+}
+
+void Designer::request_test()
+{
+    if (stale()) retest_ = true;
 }
 
 void Designer::poll()
@@ -441,26 +465,64 @@ void Designer::poll()
     if (job_running_ && job_.valid() && job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
     {
         result_ = job_.get();
+        result_key_ = job_key_;
         job_running_ = false;
         verdict_ = design::judge(doc_, result_, judge_text_);
+        const double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - job_started_).count();
+        done_ok_ = result_.error.empty();
+        done_msg_ = done_ok_ ? trf("designer.popup.tested", {fmt_seconds(s)}) : trf("designer.popup.failed", {fmt_seconds(s)});
+        done_at_ = std::chrono::steady_clock::now();
     }
     if (rel_running_ && rel_job_.valid() && rel_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
     {
         relations_ = rel_job_.get();
         rel_running_ = false;
+        const double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - rel_started_).count();
+        done_ok_ = std::none_of(relations_.begin(), relations_.end(), [](const std::string& r) { return r.find("duplicate") != std::string::npos; });
+        done_msg_ = trf(done_ok_ ? "designer.popup.related" : "designer.popup.duplicate", {fmt_seconds(s)});
+        done_at_ = std::chrono::steady_clock::now();
+    }
+    // What was waiting for a test: a save (only of a filter that compiles), and the relations.
+    if (!job_running_ && !retest_ && (pending_save_ || pending_relations_))
+    {
+        if (stale()) retest_ = true;
+        else if (!result_.error.empty())
+        {
+            if (pending_save_) status_ = tr("designer.not_saved.compile");
+            pending_save_ = pending_relations_ = false;
+        }
+        else if (!rel_running_)
+        {
+            if (pending_save_)
+            {
+                pending_save_ = false;
+                save_now();
+            }
+            else if (pending_relations_)
+            {
+                pending_relations_ = false;
+                start_relations();
+            }
+        }
     }
     if (retest_ && !job_running_)
     {
-        // Test what the file says, less where its nodes sit (moving a node changes nothing).
         design::Doc d = doc_;
         d.layout.clear();
-        const std::string key = d.to_text() + "|" + std::to_string(length_);
         retest_ = false;
-        if (key == tested_) return;
-        tested_ = key;
+        if (!stale()) return;
+        job_key_ = current_key();
         job_running_ = true;
+        popup_hidden_ = false;
+        job_started_ = std::chrono::steady_clock::now();
+        progress_ = std::make_shared<design::Progress>();
+        progress_->set("starting");
         const uint32_t L = length_;
-        job_ = std::async(std::launch::async, [d, L] { return design::test(d, L); });
+        auto pr = progress_;
+        job_ = std::async(std::launch::async, [d, L, pr] {
+            sieve::cli::timings::Scope timed("designer.test");
+            return design::test(d, L, pr.get());
+        });
     }
 }
 
@@ -469,25 +531,60 @@ void Designer::settle()
     for (int i = 0; i < 2000; ++i)
     {
         poll();
-        if (!job_running_ && !rel_running_ && !retest_) return;
+        if (!job_running_ && !rel_running_ && !retest_ && !pending_save_ && !pending_relations_) return;
         SDL_Delay(5);
     }
 }
 
 void Designer::start_relations()
 {
-    if (rel_running_ || !result_.dfa) return;
+    if (rel_running_) return;
+    if (stale() || !result_.dfa)
+    {
+        // Relations are of the filter as it is now: test it first.
+        pending_relations_ = true;
+        popup_hidden_ = false;
+        request_test();
+        return;
+    }
     rel_running_ = true;
     relations_ = {tr("designer.relations.running")};
     design::Doc d = doc_;
     const design::TestResult t = result_;
-    rel_job_ = std::async(std::launch::async, [d, t] { return design::relations(d, t); });
+    popup_hidden_ = false;
+    rel_started_ = std::chrono::steady_clock::now();
+    rel_progress_ = std::make_shared<design::Progress>();
+    rel_progress_->set("starting");
+    auto pr = rel_progress_;
+    rel_job_ = std::async(std::launch::async, [d, t, pr] {
+        sieve::cli::timings::Scope timed("designer.relations");
+        return design::relations(d, t, pr.get());
+    });
 }
 
 void Designer::do_save()
 {
-    // Nothing may be running over the registry while a filter is added to it.
-    settle();
+    // Nothing may be running over the registry while a filter is added to it: if the worker is
+    // busy, the save waits for it (the progress window says so), and the window never freezes.
+    // Only a filter that compiles is saved: test it first if it has changed since its last test.
+    if (job_running_ || rel_running_ || retest_ || stale())
+    {
+        pending_save_ = true;
+        popup_hidden_ = false;
+        status_ = tr("designer.popup.save_waits");
+        request_test();
+        return;
+    }
+    if (!result_.error.empty())
+    {
+        status_ = tr("designer.not_saved.compile");
+        return;
+    }
+    save_now();
+}
+
+void Designer::save_now()
+{
     design::Doc d = doc_;
     if (save_as_) d.version = save_as_;
     uint32_t next = 0;
@@ -676,10 +773,12 @@ void Designer::key(SDL_Keycode k, SDL_Keymod mod)
         return;
     }
     if (ctrl && k == SDLK_S) { do_save(); return; }
+    if (k == SDLK_F5) { request_test(); popup_hidden_ = false; return; }
     if (ctrl && k == SDLK_N) { doc_ = design::Doc::new_tokens(); path_.clear(); open_pins_.clear(); relations_.clear(); changed(); status_ = tr("designer.new"); return; }
     if (ctrl && k == SDLK_T) { doc_ = design::Doc::new_table(); path_.clear(); open_pins_.clear(); relations_.clear(); changed(); status_ = tr("designer.new"); return; }
     if (k == SDLK_ESCAPE)
     {
+        if (popup_visible()) { popup_hidden_ = true; return; }
         if (picking_) { picking_ = false; area_ = Area::Canvas; status_.clear(); return; }
         if (!link_from_.empty()) { link_from_.clear(); status_.clear(); return; }
         if (dirty_ && !leave_warned_)
@@ -694,20 +793,20 @@ void Designer::key(SDL_Keycode k, SDL_Keymod mod)
     if (area_ == Area::List) { list_key(k); return; }
     if (area_ == Area::Test)
     {
-        constexpr int kItems = 4; // length, text to judge, relations, save
+        constexpr int kItems = 5; // length, test now, text to judge, relations, save
         if (k == SDLK_UP) test_sel_ = (test_sel_ + kItems - 1) % kItems;
         else if (k == SDLK_DOWN) test_sel_ = (test_sel_ + 1) % kItems;
         else if (test_sel_ == 0 && (k == SDLK_LEFT || k == SDLK_RIGHT))
         {
             const int64_t step = shift ? 10 : 1;
             length_ = uint32_t(std::clamp<int64_t>(int64_t(length_) + (k == SDLK_RIGHT ? step : -step), 1, 100000));
-            retest_ = true;
         }
         else if (k == SDLK_RETURN || k == SDLK_KP_ENTER)
         {
-            if (test_sel_ == 1) { editing_ = true; judge_edit_ = true; edit_ = judge_text_; }
-            else if (test_sel_ == 2) start_relations();
-            else if (test_sel_ == 3) do_save();
+            if (test_sel_ == 1) { request_test(); popup_hidden_ = false; }
+            else if (test_sel_ == 2) { editing_ = true; judge_edit_ = true; edit_ = judge_text_; }
+            else if (test_sel_ == 3) start_relations();
+            else if (test_sel_ == 4) do_save();
         }
         return;
     }
@@ -767,7 +866,8 @@ void Designer::finish_edit(bool keep)
     if (judge) // the text to judge
     {
         judge_text_ = edit_;
-        verdict_ = design::judge(doc_, result_, judge_text_);
+        if (stale()) request_test(); // judged against the filter as it is now, when the test is done
+        else verdict_ = design::judge(doc_, result_, judge_text_);
         return;
     }
     if (sel_ < int(fields_.size()) && fields_[size_t(sel_)].set) fields_[size_t(sel_)].set(edit_);
@@ -956,6 +1056,48 @@ void Designer::render()
     txt(r_, 16, H - 30, tr(editor_open_ ? "designer.footer.editor" : "designer.footer"), kGrey);
     if (!editor_open_) txt(r_, 16, H - 16, tr("designer.footer2"), kGrey);
     if (editor_open_) draw_editor(W, H);
+    draw_popup(W, H);
+}
+
+bool Designer::popup_visible() const
+{
+    if (popup_hidden_) return false;
+    const auto now = std::chrono::steady_clock::now();
+    // Not for work done in a blink: only once it has run a fifth of a second, so the window never
+    // flickers; then for two seconds after, to say how it went.
+    const bool busy = (job_running_ && now - job_started_ > std::chrono::milliseconds(200)) ||
+                      (rel_running_ && now - rel_started_ > std::chrono::milliseconds(200)) || pending_save_;
+    return busy || (!done_msg_.empty() && now - done_at_ < std::chrono::milliseconds(2000));
+}
+
+void Designer::draw_popup(float W, float H)
+{
+    if (!popup_visible()) return;
+    const auto now = std::chrono::steady_clock::now();
+    const bool busy = job_running_ || rel_running_ || pending_save_;
+    const SDL_FRect box{W / 2 - 320, H / 2 - 55, 640, 110};
+    frame(r_, box, busy ? kAccent : done_ok_ ? kGood : kBad, 250);
+    const SDL_FRect inner{box.x + 3, box.y + 3, box.w - 6, box.h - 6};
+    SDL_SetRenderDrawColor(r_, 60, 60, 60, 255);
+    SDL_RenderRect(r_, &inner);
+    const size_t cols = size_t((box.w - 32) / 8);
+    if (!busy)
+    {
+        txt(r_, box.x + 16, box.y + 44, fit_cells(done_msg_, cols), done_ok_ ? kGood : kBad);
+        return;
+    }
+    const bool rel = rel_running_ && !job_running_;
+    const auto since = rel ? rel_started_ : job_started_;
+    const double s = std::chrono::duration<double>(now - since).count();
+    static const char spin[4] = {'|', '/', '-', '\\'};
+    const std::string title = pending_save_ && !job_running_ && !rel_running_ ? tr("designer.popup.saving")
+                              : job_running_                                   ? tr("designer.popup.testing")
+                                                                               : tr("designer.popup.relations");
+    txt(r_, box.x + 16, box.y + 14, title + "  " + std::string(1, spin[int(s * 8) % 4]), kWhite, 1.5f);
+    const std::string step = rel ? (rel_progress_ ? rel_progress_->step() : "") : (progress_ ? progress_->step() : "");
+    txt(r_, box.x + 16, box.y + 42, fit_cells(step, cols), kAccent);
+    txt(r_, box.x + 16, box.y + 60, trf("designer.popup.elapsed", {fmt_seconds(s)}) + (pending_save_ ? "   " + tr("designer.popup.then_save") : ""), kGrey);
+    txt(r_, box.x + 16, box.y + 84, fit_cells(tr("designer.popup.hint"), cols), kDim);
 }
 
 void Designer::draw_list(float x, float y, float w, float h)
@@ -1114,7 +1256,10 @@ void Designer::draw_test(float x, float y, float w, float h)
         line((area_ == Area::Test && test_sel_ == i ? "> " : "  ") + s, kWhite);
     };
     item(0, trf("designer.test.length", {std::to_string(length_)}));
+    item(1, tr("designer.test.now"));
     yy += 4;
+    const bool old = !job_running_ && stale();
+    if (old) wrap(tr(result_.dfa || !result_.error.empty() ? "designer.test.stale" : "designer.test.untested"), kAccent, 3);
     if (job_running_) line(tr("designer.test.compiling"), kAccent);
     else if (!result_.error.empty())
     {
@@ -1123,7 +1268,7 @@ void Designer::draw_test(float x, float y, float w, float h)
     }
     else if (result_.dfa)
     {
-        line(trf("designer.test.states", {std::to_string(result_.declared), std::to_string(result_.minimal)}), kGrey);
+        line(trf(doc_.form == "tokens" ? "designer.test.words_states" : "designer.test.states", {std::to_string(result_.declared), std::to_string(result_.minimal)}), kGrey);
         if (result_.counted)
         {
             wrap(trf("designer.test.survivors", {result_.survivors}), kGood, 3);
@@ -1135,14 +1280,14 @@ void Designer::draw_test(float x, float y, float w, float h)
     }
     yy += 6;
     const bool editing_judge = editing_ && judge_edit_;
-    item(1, tr("designer.test.type"));
+    item(2, tr("designer.test.type"));
     line("  " + (editing_judge ? edit_ + "_" : "\"" + judge_text_ + "\""), editing_judge ? kWhite : SDL_Color{200, 200, 200, 255});
     wrap("  " + verdict_, verdict_ == "passes" ? kGood : kBad, 3);
     yy += 6;
-    item(2, tr(rel_running_ ? "designer.test.relations_running" : "designer.test.relations"));
+    item(3, tr(rel_running_ ? "designer.test.relations_running" : "designer.test.relations"));
     for (const auto& r : relations_) wrap("  " + r, r.find("duplicate") != std::string::npos ? kBad : kGrey, 2);
     yy = std::max(yy + 6, y + h - 40);
-    item(3, save_as_ ? trf("designer.test.save_as", {std::to_string(save_as_)}) : tr("designer.test.save"));
+    item(4, save_as_ ? trf("designer.test.save_as", {std::to_string(save_as_)}) : tr("designer.test.save"));
     line("  " + design::filters_folder().string(), kDim);
 }
 

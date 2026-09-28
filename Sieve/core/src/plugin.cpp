@@ -472,8 +472,13 @@ std::shared_ptr<const PluginDef> parse_plugin(const std::string& text, const std
             const std::string& src = toks[2].text;
             const size_t colon = src.find(':');
             const std::string kind = colon == std::string::npos ? "" : src.substr(0, colon);
-            if (toks[2].quoted || (kind != "dict" && kind != "list") || colon + 1 >= src.size())
-                fail(line, "a set's words come from dict:ID, dict:{PARAM} or list:FILE");
+            if (toks[2].quoted || (kind != "dict" && kind != "list" && kind != "tags") || colon + 1 >= src.size())
+                fail(line, "a set's words come from dict:ID, dict:{PARAM}, list:FILE or tags:FILE:TAGS");
+            if (kind == "tags")
+            {
+                const size_t last = src.rfind(':');
+                if (last <= colon + 1 || last + 1 >= src.size()) fail(line, "a tagged set is tags:FILE:TAGS (the tags a word must carry one of)");
+            }
             def->sets.push_back({toks[1].text, kind, src.substr(colon + 1), line});
         }
         else if (k == "follow")
@@ -849,17 +854,27 @@ private:
 class TokenCompiler
 {
 public:
-    TokenCompiler(const PluginDef& p, const FilterLine& line, const FilterValues& values, const FilterResources& res)
-        : p_(p), line_(line), values_(values), res_(res), B_(line.base)
+    TokenCompiler(const PluginDef& p, const FilterLine& line, const FilterValues& values, const FilterResources& res,
+                  const std::function<void(const std::string&)>& step)
+        : p_(p), line_(line), values_(values), res_(res), B_(line.base), step_(step)
     {
     }
 
     Dfa run(size_t* declared, std::string* data)
     {
         separators();
+        say("reading the word sets");
         words(data);
+        distinct_words_ = size_t(std::count_if(ends_.begin(), ends_.end(), [](uint64_t e) { return e != 0; }));
+        say("sharing the words' endings (" + std::to_string(kids_.size()) + " trie nodes)");
+        share_endings();
         relations();
-        if (p_.cut) build_dawg();
+        if (p_.cut)
+        {
+            say("building the suffix automaton for cut edges (" + std::to_string(all_words_.size()) + " words)");
+            build_dawg();
+        }
+        say("building the automaton from " + std::to_string(all_words_.size()) + " words (" + std::to_string(kids_.size()) + " word nodes)");
         return build(declared);
     }
 
@@ -923,6 +938,84 @@ private:
         all_words_.push_back(w);
     }
 
+    std::string read_list(const std::string& file, int line) const
+    {
+        const std::string path = (p_.folder.empty() ? std::string() : p_.folder + "/") + file;
+        std::ifstream in(std::filesystem::path(std::u8string(path.begin(), path.end())), std::ios::binary);
+        if (!in) fail(line, "cannot read " + file);
+        std::ostringstream o;
+        o << in.rdbuf();
+        return o.str();
+    }
+
+    // A word in the line's symbols: as it is, or lower-cased (A-Z and the Latin-1 capitals) on a
+    // line with no capitals. False when it cannot be spelled, or holds a separator.
+    bool spell(const std::string& w, std::vector<uint32_t>& digits) const
+    {
+        const bool fold = !line_.alphabet->has_uppercase();
+        digits.clear();
+        for (char32_t cp : utf8_decode(w))
+        {
+            bool ok = false;
+            uint32_t d = symbol(cp, ok);
+            if (!ok && fold && ((cp >= U'A' && cp <= U'Z') || (cp >= 0xC0 && cp <= 0xDE && cp != 0xD7))) d = symbol(cp + 32, ok);
+            if (!ok || sep_[d]) return false;
+            digits.push_back(d);
+        }
+        return !digits.empty();
+    }
+
+    // The trie shrunk to the smallest graph with the same words and the same sets at each word's
+    // end (words that end alike share their endings): bottom up, a node is the same as another
+    // with the same sets and the same children. The grammar's states are multiplied by this, so
+    // it matters: Moby's 180,000 words are about 450,000 trie nodes, and a few tens of thousands
+    // after this.
+    void share_endings()
+    {
+        const size_t n = kids_.size();
+        std::vector<int32_t> canon(n, -1);
+        std::vector<std::vector<std::pair<uint32_t, int32_t>>> nk;
+        std::vector<uint64_t> ne;
+        std::map<std::vector<uint64_t>, int32_t> seen;
+        // Post-order without recursion (words can be long).
+        std::vector<std::pair<int32_t, size_t>> stack{{0, 0}};
+        while (!stack.empty())
+        {
+            auto& [node, k] = stack.back();
+            if (k < kids_[size_t(node)].size())
+            {
+                const int32_t c = kids_[size_t(node)][k++].second;
+                stack.emplace_back(c, 0);
+                continue;
+            }
+            auto ch = kids_[size_t(node)];
+            for (auto& e : ch) e.second = canon[size_t(e.second)];
+            std::sort(ch.begin(), ch.end());
+            std::vector<uint64_t> sig{ends_[size_t(node)]};
+            for (const auto& [sym, c] : ch) sig.push_back(uint64_t(sym) << 32 | uint32_t(c));
+            const auto [it, added] = seen.emplace(std::move(sig), int32_t(nk.size()));
+            if (added)
+            {
+                nk.push_back(std::move(ch));
+                ne.push_back(ends_[size_t(node)]);
+            }
+            canon[size_t(node)] = it->second;
+            stack.pop_back();
+        }
+        // The root is found last: number it 0.
+        const int32_t root = canon[0], m = int32_t(nk.size());
+        auto renum = [&](int32_t x) { return x == root ? 0 : x < root ? x + 1 : x; };
+        kids_.assign(size_t(m), {});
+        ends_.assign(size_t(m), 0);
+        for (int32_t x = 0; x < m; ++x)
+        {
+            auto ch = nk[size_t(x)];
+            for (auto& e : ch) e.second = renum(e.second);
+            kids_[size_t(renum(x))] = std::move(ch);
+            ends_[size_t(renum(x))] = ne[size_t(x)];
+        }
+    }
+
     void words(std::string* data)
     {
         kids_.assign(1, {});
@@ -961,6 +1054,58 @@ private:
                         digits.push_back(dd);
                     }
                     if (fits && !digits.empty()) add_word(digits, i);
+                }
+            }
+            else if (s.kind == "tags")
+            {
+                // A tagged list: word<TAB>tags a line, each tag one character. The set is the
+                // words carrying any of the tags asked for. Words are taken as the line can spell
+                // them: as they are, or, on a line without capitals, in lower case; others are left
+                // out, as a dictionary's are.
+                // Several files may be read as one, joined with + (Moby, and its inflections).
+                const size_t cut = s.source.rfind(':');
+                // TAGS, or TAGS-EXCLUDED: carrying any of the first and none of the second.
+                const std::string files = s.source.substr(0, cut), spec = s.source.substr(cut + 1);
+                const size_t dash = spec.find('-');
+                const std::string want = spec.substr(0, dash), unwanted = dash == std::string::npos ? std::string() : spec.substr(dash + 1);
+                std::string text, hashes;
+                for (size_t at = 0;;)
+                {
+                    const size_t plus = files.find('+', at);
+                    const std::string one = files.substr(at, plus == std::string::npos ? std::string::npos : plus - at);
+                    const std::string t = read_list(one, s.line);
+                    hashes += (hashes.empty() ? "" : "+") + Sha256::hex(Sha256::hash(t));
+                    text += t;
+                    if (!text.empty() && text.back() != '\n') text += '\n';
+                    if (plus == std::string::npos) break;
+                    at = plus + 1;
+                }
+                hash = "tags:" + s.source + "=" + hashes;
+                // A word carries the tags of all its lines, in every file and every spelling that
+                // comes to the same word on this line ("OF" and "of" on a line without capitals),
+                // and is judged by them together: Moby's "OF" (a noun) does not make "of", a
+                // preposition, a noun where prepositions are excluded.
+                std::unordered_map<std::u32string, std::string> tags_of;
+                std::vector<std::u32string> order;
+                std::istringstream lines(text);
+                std::string l;
+                while (std::getline(lines, l))
+                {
+                    const size_t tab = l.find('\t');
+                    if (tab == std::string::npos || tab == 0) continue;
+                    std::vector<uint32_t> digits;
+                    if (!spell(l.substr(0, tab), digits)) continue;
+                    const std::u32string key(digits.begin(), digits.end());
+                    auto [it, fresh] = tags_of.try_emplace(key);
+                    if (fresh) order.push_back(key);
+                    it->second += l.substr(tab + 1);
+                }
+                for (const std::u32string& key : order)
+                {
+                    const std::string& tags = tags_of[key];
+                    if (tags.find_first_of(want) == std::string::npos) continue;
+                    if (!unwanted.empty() && tags.find_first_of(unwanted) != std::string::npos) continue;
+                    add_word(std::vector<uint32_t>(key.begin(), key.end()), i);
                 }
             }
             else
@@ -1012,14 +1157,17 @@ private:
         all_ = all;
     }
 
-    // The readings a finished token at trie node n can have, after a token with readings prev.
-    uint64_t readings(int32_t n, uint64_t prev) const
+    // The sets a token may be after a token with these readings (kStart: none yet).
+    uint64_t allowed_after(uint64_t prev) const
     {
         uint64_t allowed = (prev & kStart) ? first_ : 0;
         for (size_t i = 0; i < follow_.size(); ++i)
             if (prev & (uint64_t(1) << i)) allowed |= follow_[i];
-        return ends_[size_t(n)] & allowed;
+        return allowed;
     }
+    // The readings a finished token at node n can have, given the sets it may be. Inside a token
+    // the state keeps only those (not the readings before it), so fewer states are made.
+    uint64_t readings(int32_t n, uint64_t allowed) const { return ends_[size_t(n)] & allowed; }
 
     // The suffix automaton of every word (a generalized one: each word added from the root).
     struct Sam
@@ -1158,7 +1306,7 @@ private:
                     else if (k.kind == kS0 || k.kind == kS1 || k.kind == kB)
                     {
                         const int32_t n = child(0, c);
-                        if (n >= 0) t = get({kIn, n, k.kind == kB ? k.mask : kStart});
+                        if (n >= 0) t = get({kIn, n, allowed_after(k.kind == kB ? k.mask : kStart)});
                     }
                     else if (k.kind == kIn)
                     {
@@ -1174,7 +1322,9 @@ private:
                 d.next.push_back(t);
             }
         }
-        if (declared) *declared = keys.size();
+        // For the token form, "declared" is the number of distinct words: how many states are made
+        // on the way depends on how the automaton is built, and the oracle builds it another way.
+        if (declared) *declared = distinct_words_;
         return d;
     }
 
@@ -1190,13 +1340,22 @@ private:
     std::vector<uint64_t> follow_;
     uint64_t first_ = 0, last_ = 0, all_ = 0;
     std::vector<Sam> sam_;
+    const std::function<void(const std::string&)>& step_;
+    size_t distinct_words_ = 0;
+    void say(const std::string& s) const
+    {
+        if (step_) step_(s);
+    }
 };
 
 } // namespace
 
 Dfa compile_plugin(const PluginDef& p, const FilterLine& line, const FilterValues& values, const FilterResources& resources,
-                   size_t* declared_states, std::string* data)
+                   size_t* declared_states, std::string* data, const std::function<void(const std::string&)>& step)
 {
+    auto say = [&](const std::string& s) {
+        if (step) step(s);
+    };
     if (!plugin_applies(p, line)) throw std::invalid_argument(p.header.name() + " is not written for this line (" + line.kind + ", " + line.symbols_id + ")");
     // Compiled automata are kept for the process: the same file, symbols and settings always
     // compile to the same automaton (a dictionary is pinned by its hash, so its id is enough), and
@@ -1221,18 +1380,23 @@ Dfa compile_plugin(const PluginDef& p, const FilterLine& line, const FilterValue
         {
             if (declared_states) *declared_states = it->second->declared;
             if (data) *data = it->second->data;
+            say("compiled already (kept from before)");
             return it->second->dfa;
         }
     }
     try
     {
         auto c = std::make_shared<Compiled>();
-        if (p.header.form == "tokens") c->dfa = minimise(TokenCompiler(p, line, values, resources).run(&c->declared, &c->data));
+        Dfa made;
+        if (p.header.form == "tokens") made = TokenCompiler(p, line, values, resources, step).run(&c->declared, &c->data);
         else
         {
+            say("running the table");
             Compiler tc(p, line, values);
-            c->dfa = minimise(tc.run(&c->declared));
+            made = tc.run(&c->declared);
         }
+        say("minimising " + std::to_string(made.states()) + " states");
+        c->dfa = minimise(made);
         if (declared_states) *declared_states = c->declared;
         if (data) *data = c->data;
         std::lock_guard<std::mutex> lock(mx);

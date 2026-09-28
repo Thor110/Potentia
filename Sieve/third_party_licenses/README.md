@@ -6,7 +6,8 @@ Everything in Sieve that was not written for it, with its licence. The folders h
 | :--- | :--- | :--- | :--- | :--- |
 | SDL | 3.2.30 when CMake fetches it (a vcpkg build uses vcpkg's SDL3) | zlib | The hallway and `sieve-install` (window, input, drawing). Fetched and built by CMake, or taken from vcpkg; not stored in this repository | `SDL3/LICENSE.txt` |
 | stb_image, stb_image_write | 2.30, 1.16 | MIT or public domain (your choice) | Reading pictures and writing PNGs (`third_party/stb`) | `stb/LICENSE.txt` |
-| SCOWL word lists | 2020.12.07 | SCOWL's permissive licence (notice required) | The dictionaries in `data/dictionaries` | `SCOWL/Copyright.txt` |
+| SCOWL word lists | 2020.12.07 | SCOWL's permissive licence (notice required) | The dictionaries in `data/dictionaries`, and the words of `data/filters/moby-inflections-v1.tsv` and `moby-names-v1.tsv` | `SCOWL/Copyright.txt` |
+| Moby Part-of-Speech II (Grady Ward) | The list as mirrored at github.com/Hyneman/moby-project, commit 672f6bd (Project Gutenberg eBook #3203) | Public domain (the author's grant, January 2001) | The grammar filter plugins in `data/filters` (`moby-pos-v1.tsv`, converted by `tools/moby_pos.py`; see `data/filters/moby-pos-v1.md`). The inflections and names lists beside it are drawn from SCOWL as well, whose notice covers them | `Moby/PUBLIC-DOMAIN.txt` |
 | font8x8 | - | Public domain | The menu font, `data/fonts/sieve8x8.hex` | `font8x8/LICENSE.txt` |
 | zlib | 1.3.2 when CMake fetches it (else the system's) | zlib | The `sieve` tool's comparison page: zip's deflate (`tools/cli/compare.cpp`). Fetched and built by CMake if the system has none; not stored in this repository | `zlib/LICENSE` |
 | LZMA SDK (7z decoder) | 26.03 (from 7-Zip 26.03) | Public domain | `sieve-install` only: unpacking an installer that carries one 7z archive (`client/unpack_7z.cpp`); the files are in `third_party/lzma` | `lzma/LICENSE.txt` |

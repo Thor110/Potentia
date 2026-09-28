@@ -406,9 +406,13 @@ const std::vector<Page>& pages()
                             "survivors by rank. The line follows the plugin's symbols unless given."},
           {"--params NAME=V,...", "With --plugin: parameter values (the rest take their defaults)."},
           {"--relations", "With --plugin: how its rule compares with every other custom filter for the line (same,\n"
-                          "stricter or looser, exactly, over every length): duplicates show up here."}},
+                          "stricter or looser, exactly, over every length): duplicates show up here."},
+          {"--judge FILE", "With --plugin: judge each line of a UTF-8 text file as one unit of its own length, and\n"
+                           "print pass, FAIL, or unspellable (a character the line does not have) beside it. Lines\n"
+                           "starting with # are comments."}},
          {{"sieve filters", "the text line's filters (at length 32) and what is ticked"},
           {"sieve filters --plugin data/filters/max-run-data-v1.sfilter --length 12 --params max=2", "a plugin at a setting"},
+          {"sieve filters --plugin data/filters/moby-grammar-v1.sfilter --judge sentences.txt", "a grammar's verdict on each sentence"},
           {"sieve filters --length 1000", "the same stack judged at paragraph scale"},
           {"sieve filters --line image", "the filters the image line offers"},
           {"sieve filters --line books --length 400 --book-pages 3", "the books line's three stacks and surviving books"}}},

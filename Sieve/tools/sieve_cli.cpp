@@ -1193,12 +1193,38 @@ int cmd_filters_plugin(const Args& a)
     }
     std::cout << "requires   " << (reqs.empty() ? "(none)" : reqs) << "\n"
               << "form       " << h.form << (data.empty() ? std::string() : "  " + data) << "\n"
-              << "states     " << declared << " declared, " << d.states() << " minimal\n"
+              << "states     " << (h.form == "tokens" ? std::to_string(declared) + " words, " : std::to_string(declared) + " declared, ") << d.states()
+              << " minimal\n"
               << "length     " << fl.length << "\n";
     if (a.has("relations")) print_relations(h.name(), d, fl);
+    // --judge FILE: each line of a text file judged as one unit of its own length (the oracle's
+    // `plugin --judge` prints the same, so CI compares verdicts on real and shuffled sentences).
+    auto judge_lines = [&]() {
+        if (!a.has("judge")) return;
+        if (!fl.alphabet) throw std::invalid_argument("--judge reads text: the plugin is not for a text line");
+        const std::string jf = a.get("judge");
+        std::ifstream in(std::filesystem::path(std::u8string(jf.begin(), jf.end())), std::ios::binary);
+        if (!in) throw std::invalid_argument("cannot read " + jf);
+        std::string l;
+        while (std::getline(in, l))
+        {
+            if (!l.empty() && l.back() == '\r') l.pop_back();
+            if (l.empty() || l[0] == '#') continue; // a comment
+            std::vector<uint32_t> u;
+            bool spelled = true;
+            for (char32_t cp : utf8_decode(l))
+            {
+                const auto dg = fl.alphabet->digit_of(cp);
+                if (!dg) { spelled = false; break; }
+                u.push_back(*dg);
+            }
+            std::cout << "judge      " << (!spelled ? "unspellable" : d.accepts(u) ? "pass" : "FAIL") << "  " << l << "\n";
+        }
+    };
     if (DfaRanker::table_bytes(d.states(), d.base, fl.length) > kPluginTableBudget)
     {
         std::cout << "survivors  (judge only: the table is over the budget at this length)\n";
+        judge_lines();
         return 0;
     }
     const DfaRanker r(d, fl.length);
@@ -1222,6 +1248,7 @@ int cmd_filters_plugin(const Args& a)
             std::cout << "rank       " << k.to_decimal() << "  " << (digits.empty() ? "-" : digits) << "\n";
         }
     }
+    judge_lines();
     return 0;
 }
 

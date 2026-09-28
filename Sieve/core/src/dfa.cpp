@@ -1,10 +1,10 @@
 // Sieve — deterministic automata (dfa.hpp): minimising to the canonical form, the product of two,
 // and the ranker's completion table.
 //
-// Minimising is Moore's refinement: states start split by whether they accept, and are split
-// again by the classes their symbols lead to until nothing changes. It is quadratic at worst, which
-// the sizes plugins compile to (thousands of states) never notice, and simple enough that the
-// oracle's independent copy is easy to check against.
+// Minimising is Hopcroft's algorithm, O(n x symbols x log n), on flat arrays (a dictionary's
+// automaton has hundreds of thousands of states, and a debug build is slow with anything else).
+// The oracle minimises with its own copy of Hopcroft in Python, written separately; both end in the
+// same canonical numbering, which CI compares state for state.
 
 #include "sieve/dfa.hpp"
 
@@ -89,31 +89,131 @@ Dfa minimise(const Dfa& d)
     if (!coreach[size_t(d.start)]) return empty_dfa(d.base);
     auto live = [&](int32_t s) { return s >= 0 && reach[size_t(s)] && coreach[size_t(s)]; };
 
-    // Moore's refinement over the live states; a dead transition is class -1.
+    // Hopcroft's refinement over the live states, completed with a sink for every dead transition
+    // (without it, states that differ only in where a symbol is missing would merge). Flat arrays
+    // throughout: a refinable partition of the states (each block a range of `elems`, its marked
+    // members at the front), and each state's predecessors on each symbol.
+    std::vector<int32_t> id(n, -1); // live state -> dense index; the sink is index live_n
+    int32_t live_n = 0;
+    for (size_t s = 0; s < n; ++s)
+        if (live(int32_t(s))) id[s] = live_n++;
+    const int32_t sink = live_n, N = live_n + 1;
+    std::vector<int32_t> orig(static_cast<size_t>(live_n), 0);
+    for (size_t s = 0; s < n; ++s)
+        if (id[s] >= 0) orig[size_t(id[s])] = int32_t(s);
+    auto next_dense = [&](int32_t x, size_t c) -> int32_t {
+        if (x == sink) return sink;
+        const int32_t t = d.next[size_t(orig[size_t(x)]) * B + c];
+        return live(t) ? id[size_t(t)] : sink;
+    };
+    // Predecessors, by (target, symbol), in one array.
+    std::vector<uint32_t> pstart(size_t(N) * B + 1, 0);
+    for (int32_t x = 0; x < N; ++x)
+        for (size_t c = 0; c < B; ++c) ++pstart[size_t(next_dense(x, c)) * B + c + 1];
+    for (size_t k = 1; k < pstart.size(); ++k) pstart[k] += pstart[k - 1];
+    std::vector<int32_t> preds(pstart.back());
+    {
+        std::vector<uint32_t> fill(pstart.begin(), pstart.end() - 1);
+        for (int32_t x = 0; x < N; ++x)
+            for (size_t c = 0; c < B; ++c) preds[fill[size_t(next_dense(x, c)) * B + c]++] = x;
+    }
+    // The partition: accepting states, and the rest with the sink.
+    std::vector<int32_t> elems(static_cast<size_t>(N), 0), loc(static_cast<size_t>(N), 0), blk(static_cast<size_t>(N), 0);
+    std::vector<int32_t> first, end, mid;
+    {
+        int32_t k = 0;
+        for (int32_t x = 0; x < live_n; ++x)
+            if (d.accept[size_t(orig[size_t(x)])]) elems[size_t(k++)] = x;
+        const int32_t split = k;
+        for (int32_t x = 0; x < live_n; ++x)
+            if (!d.accept[size_t(orig[size_t(x)])]) elems[size_t(k++)] = x;
+        elems[size_t(k++)] = sink;
+        if (split > 0)
+        {
+            first.push_back(0);
+            end.push_back(split);
+        }
+        first.push_back(split);
+        end.push_back(N);
+        for (size_t b = 0; b < first.size(); ++b)
+            for (int32_t i = first[b]; i < end[b]; ++i)
+            {
+                blk[size_t(elems[size_t(i)])] = int32_t(b);
+                loc[size_t(elems[size_t(i)])] = i;
+            }
+        mid = first;
+    }
+    std::vector<uint8_t> waiting(first.size(), 0);
+    std::vector<int32_t> work;
+    if (first.size() == 2)
+    {
+        const int32_t smaller = end[0] - first[0] <= end[1] - first[1] ? 0 : 1;
+        work.push_back(smaller);
+        waiting[size_t(smaller)] = 1;
+    }
+    else
+    {
+        work.push_back(0);
+        waiting[0] = 1;
+    }
+    std::vector<int32_t> splitter, touched;
+    while (!work.empty())
+    {
+        const int32_t a = work.back();
+        work.pop_back();
+        waiting[size_t(a)] = 0;
+        splitter.assign(elems.begin() + first[size_t(a)], elems.begin() + end[size_t(a)]);
+        for (size_t c = 0; c < B; ++c)
+        {
+            touched.clear();
+            for (int32_t t : splitter)
+                for (uint32_t k = pstart[size_t(t) * B + c]; k < pstart[size_t(t) * B + c + 1]; ++k)
+                {
+                    const int32_t x = preds[k];
+                    const int32_t b = blk[size_t(x)];
+                    const int32_t i = loc[size_t(x)];
+                    if (i < mid[size_t(b)]) continue; // marked already
+                    if (mid[size_t(b)] == first[size_t(b)]) touched.push_back(b);
+                    const int32_t j = mid[size_t(b)]++;
+                    std::swap(elems[size_t(i)], elems[size_t(j)]);
+                    loc[size_t(elems[size_t(i)])] = i;
+                    loc[size_t(elems[size_t(j)])] = j;
+                }
+            for (int32_t b : touched)
+            {
+                if (mid[size_t(b)] == end[size_t(b)])
+                {
+                    mid[size_t(b)] = first[size_t(b)]; // all of it: no split
+                    continue;
+                }
+                // The marked front becomes a new block.
+                const int32_t nb = int32_t(first.size());
+                first.push_back(first[size_t(b)]);
+                end.push_back(mid[size_t(b)]);
+                mid.push_back(first[size_t(b)]);
+                first[size_t(b)] = mid[size_t(b)];
+                mid[size_t(b)] = first[size_t(b)];
+                waiting.push_back(0);
+                for (int32_t i = first[size_t(nb)]; i < end[size_t(nb)]; ++i) blk[size_t(elems[size_t(i)])] = nb;
+                if (waiting[size_t(b)])
+                {
+                    work.push_back(nb);
+                    waiting[size_t(nb)] = 1;
+                }
+                else
+                {
+                    const int32_t pick = end[size_t(nb)] - first[size_t(nb)] <= end[size_t(b)] - first[size_t(b)] ? nb : b;
+                    work.push_back(pick);
+                    waiting[size_t(pick)] = 1;
+                }
+            }
+        }
+    }
+    // Each live state's class: its block.
     std::vector<int32_t> cls(n, -1);
     for (size_t s = 0; s < n; ++s)
-        if (live(int32_t(s))) cls[s] = d.accept[s] ? 1 : 0;
-    size_t classes = 0;
-    for (;;)
-    {
-        std::map<std::vector<int32_t>, int32_t> ids;
-        std::vector<int32_t> next_cls(n, -1);
-        std::vector<int32_t> sig(B + 1);
-        for (size_t s = 0; s < n; ++s)
-        {
-            if (!live(int32_t(s))) continue;
-            sig[0] = cls[s];
-            for (size_t c = 0; c < B; ++c)
-            {
-                const int32_t t = d.next[s * B + c];
-                sig[c + 1] = live(t) ? cls[size_t(t)] : -1;
-            }
-            next_cls[s] = ids.emplace(sig, int32_t(ids.size())).first->second;
-        }
-        cls.swap(next_cls);
-        if (ids.size() == classes) break;
-        classes = ids.size();
-    }
+        if (id[s] >= 0) cls[s] = blk[size_t(id[s])];
+    const size_t classes = first.size();
 
     // Canonical numbering: breadth first from the start's class, symbols in order.
     std::vector<int32_t> rep(classes, -1);

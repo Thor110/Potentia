@@ -1538,6 +1538,46 @@ void test_plugins(const std::string& dir)
         CHECK(!judge("the sat"));            // det is not followed by a verb
     }
 
+    // Tagged lists: two files as one, an excluded tag, capitals folded, and a word judged by the
+    // tags of all its lines ("Sat", a noun in the second file, makes "sat" no verb).
+    {
+        const auto g = load_plugin_file(dir + "plugins/toy-tags-v1.sfilter");
+        const FilterSpec gs = plugin_spec(g);
+        auto judge = [&](const std::string& t) {
+            const FilterStack st(text_line(uint32_t(t.size())), {{&gs, {}}}, none);
+            return st.passes(digits27(t));
+        };
+        CHECK(judge("the cat sees a mat"));    // "a" from "A", "mat" from the second file
+        CHECK(judge("it sees the old hill"));
+        CHECK(!judge("it sees the green hill")); // "green" (AN) is a noun, not an adjective (A-N)
+        CHECK(judge("run"));                   // "Run" folded
+        CHECK(!judge("the cat sat"));          // "sat" is a noun too, so no verb
+        CHECK(judge("the hill"));
+        CHECK(!judge("the it"));               // "it" is a pronoun, never a noun (Np-r), in either file
+    }
+
+    // The Moby grammars (data/filters): real word order passes, the same words shuffled do not,
+    // and a sentence must start and end as the grammar says. Judged on the automaton directly,
+    // compiled once each in the run (the lists are large; the second SHA-256 pass reuses them).
+    for (const std::string name : {"moby-grammar-v1", "moby-grammar-strict-v1"})
+    {
+        static std::map<std::string, Dfa> compiled;
+        if (!compiled.count(name)) compiled[name] = compile_plugin(*load_plugin_file(filters + name + ".sfilter"), text_line(8), {}, none);
+        const Dfa& d = compiled[name];
+        const bool strict = name == "moby-grammar-strict-v1";
+        CHECK(d.accepts(digits27("the old man sat by the fire")));
+        CHECK(d.accepts(digits27("she walked slowly to the door")));
+        CHECK(d.accepts(digits27("he had never seen such a thing")));
+        CHECK(d.accepts(digits27("and so they went home together")));
+        CHECK(!d.accepts(digits27("fire the by sat man old the")));
+        CHECK(!d.accepts(digits27("door the to slowly walked she")));
+        CHECK(!d.accepts(digits27("the the the")));
+        CHECK(!d.accepts(digits27("quickly the of"))); // Moby's "OF" (a noun) does not make "of" one
+        CHECK(!d.accepts(digits27("the old  man")));   // two SPACEs
+        CHECK(!d.accepts(digits27("the old man zqxv"))); // not a word of the lists
+        CHECK(d.accepts(digits27("sat")) == !strict);  // strict: a sentence starts with a determiner, pronoun, conjunction or interjection
+    }
+
     // subset is exact: max-run at 1 keeps only what max-run at 3 keeps, not the other way round,
     // and a rule is a subset of itself.
     {

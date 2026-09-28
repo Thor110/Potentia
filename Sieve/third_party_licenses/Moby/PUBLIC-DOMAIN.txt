@@ -1,0 +1,27 @@
+Moby Part-of-Speech II, by Grady Ward: public domain.
+
+Project Gutenberg eBook #3203, "Moby Part of Speech List" (released 1 May 2002), states:
+
+    Public Domain material by grant from the author, January, 2001.
+
+The Moby Project mirror Sieve's copy was taken from (github.com/Hyneman/moby-project, commit
+672f6bdca054c42d375f065ffee87e8ceba0c242) carries the author's dedication, as he wrote it:
+
+The Moby lexicon project is complete and has
+been place into the public domain. Use, sell,
+rework, excerpt and use in any way on any platform.
+
+Placing this material on internal or public servers is
+also encouraged. The compiler is not aware of any
+export restrictions so freely distribute world-wide.
+
+You can verify the public domain status by contacting
+
+Grady Ward
+3449 Martha Ct.
+Arcata, CA  95521-4884
+
+daedal@myrealbox.com
+
+The same mirror's moby/mpos/readme still holds the 1993 commercial licence the list was first sold
+under; the grant above replaced it.

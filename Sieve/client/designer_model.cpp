@@ -270,6 +270,7 @@ Doc Doc::from_text(const std::string& text, const fs::path& folder)
         }
     }
     if (d.lines.empty()) d.lines = {"text"};
+    d.data_folder = folder;
     return d;
 }
 
@@ -341,10 +342,49 @@ std::string unit_text(const sieve::FilterLine& l, const std::vector<uint32_t>& u
     return s;
 }
 
-// The file and its lists in the scratch folder, parsed.
+// The files a tagged set reads ("tags:a.tsv+b.tsv:Np" -> a.tsv, b.tsv).
+std::vector<std::string> tag_files(const Doc& d)
+{
+    std::vector<std::string> out;
+    for (const auto& s : d.sets)
+    {
+        if (s.source.rfind("tags:", 0) != 0) continue;
+        const std::string rest = s.source.substr(5);
+        const size_t colon = rest.rfind(':');
+        std::string files = colon == std::string::npos ? rest : rest.substr(0, colon);
+        size_t at = 0;
+        while (at <= files.size())
+        {
+            const size_t plus = std::min(files.find('+', at), files.size());
+            const std::string f = files.substr(at, plus - at);
+            if (!f.empty() && std::find(out.begin(), out.end(), f) == out.end()) out.push_back(f);
+            at = plus + 1;
+        }
+    }
+    return out;
+}
+
+fs::path data_folder_of(const Doc& d)
+{
+    return d.data_folder.empty() ? filters_folder() : d.data_folder;
+}
+
+// The file and its lists in the scratch folder, parsed. Tagged lists are copied there from where
+// they are (once: a copy of the same size and time is kept).
 std::shared_ptr<const sieve::PluginDef> staged(const Doc& d)
 {
     const fs::path dir = scratch();
+    for (const std::string& f : tag_files(d))
+    {
+        std::error_code ec;
+        const fs::path from = data_folder_of(d) / from_u8(f), to = dir / from_u8(f);
+        if (!fs::exists(from, ec)) continue; // the compiler names the missing file
+        const bool same = fs::exists(to, ec) && fs::file_size(to, ec) == fs::file_size(from, ec) &&
+                          fs::last_write_time(to, ec) == fs::last_write_time(from, ec);
+        if (same) continue;
+        fs::copy_file(from, to, fs::copy_options::overwrite_existing, ec);
+        if (!ec) fs::last_write_time(to, fs::last_write_time(from, ec), ec);
+    }
     for (const auto& [file, words] : d.lists)
     {
         std::ofstream out(dir / from_u8(file), std::ios::binary);
@@ -385,19 +425,24 @@ std::string in_table_terms(const Doc& d, const std::string& error)
 
 } // namespace
 
-TestResult test(const Doc& d, uint32_t length)
+TestResult test(const Doc& d, uint32_t length, Progress* progress)
 {
     TestResult r;
+    auto say = [&](const std::string& s) {
+        if (progress) progress->set(s);
+    };
     try
     {
         r.line = test_line(d.symbols, std::max<uint32_t>(1, length));
+        say("writing the file and its word lists");
         const auto p = staged(d);
         static const sieve::cli::AppResources resources;
-        sieve::Dfa dfa = sieve::compile_plugin(*p, r.line, {}, resources, &r.declared, &r.data);
+        sieve::Dfa dfa = sieve::compile_plugin(*p, r.line, {}, resources, &r.declared, &r.data, [&](const std::string& s) { say(s); });
         r.minimal = dfa.states();
         r.dfa = std::make_shared<const sieve::Dfa>(std::move(dfa));
         if (sieve::DfaRanker::table_bytes(r.dfa->states(), r.dfa->base, r.line.length) <= sieve::kPluginTableBudget)
         {
+            say("counting the survivors at length " + std::to_string(r.line.length) + " (" + std::to_string(r.minimal) + " states)");
             const sieve::DfaRanker rk(*r.dfa, r.line.length);
             r.counted = true;
             r.survivors = rk.count().to_decimal();
@@ -417,6 +462,7 @@ TestResult test(const Doc& d, uint32_t length)
                     k.divmod_small(4);
                     if (ks.empty() || !(ks.back() == k)) ks.push_back(k);
                 }
+                say("picking survivors by rank");
                 for (const auto& k : ks) r.samples.push_back(unit_text(r.line, rk.unrank(k)));
             }
         }
@@ -478,14 +524,19 @@ std::string judge(const Doc& d, const TestResult& t, const std::string& text)
     return "fails: it ends in a state that does not accept";
 }
 
-std::vector<std::string> relations(const Doc& d, const TestResult& t)
+std::vector<std::string> relations(const Doc& d, const TestResult& t, Progress* progress)
 {
     std::vector<std::string> out;
     if (!t.dfa) return out;
     static const sieve::cli::AppResources resources;
+    std::vector<const sieve::FilterSpec*> others;
     for (const sieve::FilterSpec& other : sieve::plugin_registry())
+        if (other.name() != d.name() && other.applies(t.line)) others.push_back(&other);
+    size_t k = 0;
+    for (const sieve::FilterSpec* op : others)
     {
-        if (other.name() == d.name() || !other.applies(t.line)) continue;
+        const sieve::FilterSpec& other = *op;
+        if (progress) progress->set("comparing with " + other.name() + " (" + std::to_string(++k) + " of " + std::to_string(others.size()) + ")");
         try
         {
             const auto f = other.make(t.line, {}, resources);
@@ -551,10 +602,29 @@ std::string save(const Doc& d, uint32_t& next_version)
         const fs::path lp = folder / from_u8(name);
         if (fs::exists(lp, ec) && read_file(lp) != words) return "not saved: " + name + " exists in the filters folder with other words; give this list a new name";
     }
+    // Tagged lists opened from elsewhere go beside it too; one of that name already there must be
+    // the same file.
+    std::vector<std::pair<fs::path, fs::path>> copies;
+    for (const std::string& f : tag_files(d))
+    {
+        const fs::path from = data_folder_of(d) / from_u8(f), to = folder / from_u8(f);
+        if (fs::equivalent(from, to, ec)) continue;
+        if (fs::exists(to, ec))
+        {
+            if (read_file(to) != read_file(from)) return "not saved: " + f + " exists in the filters folder with other contents; give it a new name";
+            continue;
+        }
+        copies.emplace_back(from, to);
+    }
     for (const auto& [name, words] : d.lists)
     {
         std::ofstream out(folder / from_u8(name), std::ios::binary);
         out << words;
+    }
+    for (const auto& [from, to] : copies)
+    {
+        fs::copy_file(from, to, fs::copy_options::skip_existing, ec);
+        if (ec) return "not saved: cannot copy " + u8(from.filename());
     }
     {
         std::ofstream out(file, std::ios::binary);

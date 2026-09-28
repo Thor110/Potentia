@@ -44,6 +44,10 @@
 //   param     dictionary dict default  a dictionary setting: a registered id, or default
 //   set       word  dict:{dictionary}   a registered dictionary (dict:ID, or dict:{a dict param})
 //   set       det   list:determiners.txt  a word list beside the plugin, one word a line
+//   set       noun  tags:pos.tsv:Np     the words of a tagged list (word<TAB>tags) carrying any of
+//                                       the tags given (Np-DP: any of N p, and none of D P),
+//                                       a word judged by the tags of all its lines together;
+//                                       files+joined+with+plus are read as one
 //   follow    det   noun                which set may follow which (none at all: any order)
 //   first     det noun                  the sets the first token may be (default: all)
 //   last      noun                      the sets the last token may be (default: all)
@@ -63,6 +67,7 @@
 #include "sieve/filter.hpp"
 
 #include <deque>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -94,11 +99,15 @@ const PluginHeader& plugin_header(const PluginDef& p);
 bool plugin_applies(const PluginDef& p, const FilterLine& line);
 
 // The automaton for this line and these parameter values (missing ones take their defaults), as
-// declared (`declared_states` receives how many the file declared) and minimised.
+// declared (`declared_states` receives how many the file declared; for the token form, how many
+// distinct words, since the states made on the way depend on how it is built) and minimised.
 // `resources` supplies registered dictionaries (the token form's `dict:` sets).
 // `data` receives the hashes of the word lists and dictionaries used, for the provenance.
+// `step`, if given, is told what is being done as it happens ("building the automaton"), for a
+// screen that shows progress; it is called from the compiling thread.
 Dfa compile_plugin(const PluginDef& p, const FilterLine& line, const FilterValues& values, const FilterResources& resources,
-                   size_t* declared_states = nullptr, std::string* data = nullptr);
+                   size_t* declared_states = nullptr, std::string* data = nullptr,
+                   const std::function<void(const std::string&)>& step = {});
 
 // Counting needs a table of states x (length + 1) numbers; past this many bytes a plugin judges
 // only (mark, hide, excluded), and the menu says why.

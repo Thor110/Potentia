@@ -1,0 +1,37 @@
+sieve-filter-v1
+; A test of tagged word lists (word<TAB>tags): two files read as one (tags-a.tsv+tags-b.tsv), a
+; tag excluded (a noun that may also be a pronoun is left out of `noun`), a word with capitals
+; folded to the line's lower case ("A", "Run"), a word judged by the tags of all its lines together
+; ("it" in both files; "Sat", a noun, makes "sat" no verb, as verbs exclude nouns), and lines
+; skipped (one with no tab, one whose word holds the separator, one whose word the line cannot
+; spell). Not shipped: CI checks the engine against the oracle with it.
+id        toy-tags-cut
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     text
+symbols   lower27
+describe  A toy tagged grammar over two tagged lists, with an excluded tag (cut edges).
+
+tokens    separator " "
+edges     cut
+set       det   tags:tags-a.tsv+tags-b.tsv:D
+set       noun  tags:tags-a.tsv+tags-b.tsv:Np-r
+set       pron  tags:tags-a.tsv+tags-b.tsv:r
+set       verb  tags:tags-a.tsv+tags-b.tsv:Vt-N
+set       adj   tags:tags-a.tsv+tags-b.tsv:A-N
+set       adv   tags:tags-a.tsv+tags-b.tsv:v-P
+set       prep  tags:tags-a.tsv+tags-b.tsv:P
+follow    det   adj
+follow    det   noun
+follow    adj   noun
+follow    noun  verb
+follow    pron  verb
+follow    verb  adv
+follow    verb  prep
+follow    verb  det
+follow    adv   prep
+follow    prep  det
+first     det pron noun
+last      noun verb adv
+end

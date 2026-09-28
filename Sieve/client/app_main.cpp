@@ -344,7 +344,9 @@ int run(const Args& a)
         // A picture of the filter designer (for documentation and testing): --design FILE opens a
         // plugin in it; --script runs keys and typed text ("Down,Right,=some words,Return").
         Designer d(window, renderer, a.get("design"));
-        d.settle();
+        // --busy: the picture while the first test is still running (the progress window).
+        const bool busy = a.has("busy");
+        if (!busy) d.settle();
         if (a.has("script"))
         {
             std::string script = a.get("script");
@@ -361,9 +363,15 @@ int run(const Args& a)
                 at = comma + 1;
             }
         }
-        d.settle();
+        if (busy)
+        {
+            d.press(SDLK_F5, SDL_KMOD_NONE); // starts the test on the worker
+            SDL_Delay(400);
+        }
+        else d.settle();
         d.render();
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
+        if (busy) d.settle(); // never leave the worker running as the program ends
         std::cout << "designer: " << d.doc().name() << "\n";
         if (!d.status().empty()) std::cout << "status: " << d.status() << "\n";
         if (a.has("design-out"))

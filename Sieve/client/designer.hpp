@@ -18,7 +18,9 @@
 
 #include <SDL3/SDL.h>
 
+#include <chrono>
 #include <functional>
+#include <memory>
 #include <set>
 #include <future>
 #include <string>
@@ -115,7 +117,6 @@ private:
     // The test.
     uint32_t length_ = 32;
     design::TestResult result_;
-    std::string tested_; // the text last tested, with its length
     std::future<design::TestResult> job_;
     bool job_running_ = false, retest_ = false;
     std::string judge_text_ = "the cat sat on the mat", verdict_;
@@ -123,6 +124,21 @@ private:
     std::future<std::vector<std::string>> rel_job_;
     bool rel_running_ = false;
     uint32_t save_as_ = 0; // Save found this version taken: the next press saves as this one
+    // The progress window: what the worker is doing, and for how long; then, for a moment, how
+    // it went. Esc hides it (the work carries on).
+    std::shared_ptr<design::Progress> progress_, rel_progress_;
+    std::chrono::steady_clock::time_point job_started_{}, rel_started_{}, done_at_{};
+    std::string done_msg_;
+    bool done_ok_ = true, popup_hidden_ = false, pending_save_ = false, pending_relations_ = false;
+    // Testing happens only when asked (F5, TEST NOW) or needed (Save, relations, judging text):
+    // the result is stale once the filter or the length has changed since it was made.
+    std::string result_key_, job_key_;
+    std::string current_key() const;
+    bool stale() const { return current_key() != result_key_; }
+    void request_test();
+    bool popup_visible() const;
+    void draw_popup(float W, float H);
+    void save_now();
     int test_sel_ = 0;
     std::vector<std::pair<SDL_FRect, int>> test_rects_;
     // The multi-line editor (the table's lines, or a word list's words).

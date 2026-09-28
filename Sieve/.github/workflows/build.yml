@@ -505,6 +505,9 @@ jobs:
           # at once and named a duplicate of words-data-v1; saving other contents under that
           # version offers the next one instead (versions are never edited).
           $H --designer --screenshot designer.png | q "designer: my-words-v1"
+          $H --designer --busy --screenshot designer-busy.png | q "designer: my-words-v1"
+          # Opening the designer compiles nothing: only F5 (TEST NOW), Save or the relation check do.
+          test "$($H --designer --timings --screenshot designer-idle.png 2>&1 | grep -c '^designer.test ')" = 0
           $H --designer --design tests/plugins/toy-grammar-v1.sfilter --design-out tests/plugins/roundtrip-v1.sfilter --screenshot designer2.png | q "designer: toy-grammar-v1"
           build/sieve filters --plugin tests/plugins/toy-grammar-v1.sfilter --length 11 | grep -v "^sha256" > rt.a
           build/sieve filters --plugin tests/plugins/roundtrip-v1.sfilter --length 11 | grep -v "^sha256" > rt.b
@@ -705,14 +708,24 @@ jobs:
             $S filters --plugin ../data/filters/$f.sfilter --length 6 --params dictionary=scowl-en-35 | tr -d '\r' > plugin.engine
             diff plugin.oracle plugin.engine
           done
-          for f in toy-grammar-v1 toy-grammar-cut-v1; do
+          # toy-tags: tagged lists (two files as one, an excluded tag, capitals folded, lines skipped).
+          for f in toy-grammar-v1 toy-grammar-cut-v1 toy-tags-v1 toy-tags-cut-v1; do
             for L in 1 3 11 25; do
               python sieve_ref.py plugin ../tests/plugins/$f.sfilter --length $L > plugin.oracle
               $S filters --plugin ../tests/plugins/$f.sfilter --length $L | tr -d '\r' > plugin.engine
               diff plugin.oracle plugin.engine
             done
           done
-          $S filters --plugins | grep -c "^loaded" | grep -qx 6
+          # The Moby grammars: too large for the oracle to determinise in full (its NFA keeps each
+          # token's reading apart, and the subsets run past ten million), so its lazy mode makes the
+          # subsets only as they are reached: counts, ranks and verdicts on real and shuffled
+          # sentences must match the engine's; the minimal size is the engine's alone.
+          for f in moby-grammar-v1 moby-grammar-strict-v1; do
+            python sieve_ref.py plugin ../data/filters/$f.sfilter --length 6 --lazy --judge ../tests/plugins/moby-sentences.txt | grep -v "^states" > plugin.oracle
+            $S filters --plugin ../data/filters/$f.sfilter --length 6 --judge ../tests/plugins/moby-sentences.txt | tr -d '\r' | grep -v "^states" > plugin.engine
+            diff plugin.oracle plugin.engine
+          done
+          $S filters --plugins | grep -c "^loaded" | grep -qx 8
           $S filters --plugin ../data/filters/words-data-v1.sfilter --length 6 --relations | grep -q "stricter than (implies) window-data-v1"
           rm -rf addr
           $S locate ../tests/manifest_fixture --manifest fixture.manifest --addresses addr --compare > locate.out

@@ -1,0 +1,205 @@
+# Sentences for the Moby grammar plugins' check in CI: the engine (sieve filters --plugin FILE
+# --judge) and the oracle (sieve_ref.py plugin FILE --lazy --judge) must give every line the same
+# verdict. Each real sentence (from books of the NLTK Gutenberg corpus that the grammars were not
+# tuned on: Moby-Dick, Emma, Alice in Wonderland, The Parent's Assistant; public domain) is followed
+# by the same words shuffled. Lines starting with # are comments.
+and that is all that can be said
+and can said is that be that all
+lord john has just given his promise to wheeler
+given his to wheeler has just promise lord john
+woodhouse hoped to influence every visitor of the newly married pair
+woodhouse influence to every married hoped visitor of the pair newly
+her figure particularly graceful
+figure graceful particularly her
+how can ye be so careless child
+be child careless ye how so can
+nay ask mammy said jem a little offended
+nay mammy ask little said a jem offended
+know ye not the goblet end
+end goblet the know not ye
+which of them is it
+which them it of is
+and while we are very sad about that lord
+and while sad we that are lord about very
+he does know answered de grey
+grey he answered know does de
+elton looked as if he did not very well know what answer to make
+if elton to answer very not well looked did as what know he make
+miss fairfax was not well enough to write
+was well write miss to enough not fairfax
+but surely said bab we can contrive to get some honey in the neighbourhood
+bab the to get can honey in surely some neighbourhood we but said contrive
+they grease the bottom
+grease they bottom the
+you have given miss smith all that she required said he
+given she miss that all said required have he smith you
+a good deal of moving and talking
+of a and good talking moving deal
+the father would not accept of the tools
+the tools accept not father the would of
+and so much the worse because undesigned
+because so much and the worse undesigned
+she knows now what gentlemen are
+she are gentlemen now knows what
+why does bob show them through this way
+this does through show why bob way them
+i do think from the description that this was wheeler
+was the do from this description wheeler think that i
+at this moment mr
+at this mr moment
+i think i have seen your face before but i forget
+before think seen your have face i but forget i i
+our grand master is still to be named
+our to is still be grand named master
+i think it looks stingy to servants
+think to servants stingy i looks it
+not a word of a certain young physician from windsor
+physician windsor not young a word certain of from a
+but in general he was looking grave
+he in general was but grave looking
+it is impossible to refuse what you ask in such a way
+way you refuse such is in it impossible ask to a what
+and then he saved her life
+he her saved then life and
+the hunter you know
+know the hunter you
+here brush this old hair aside
+here aside old brush this hair
+pressed his forehead again against mine
+pressed mine his again forehead against
+she should then have heard more
+more should she heard have then
+as much of an audacious mariner as any
+as mariner any audacious an as much of
+though the first boat always hovers at hand to assist its consort
+at boat its first assist consort the hovers always to hand though
+emma was extremely confused
+was extremely confused emma
+what is de grey thinking of
+de is of what thinking grey
+your daughter shows that she has been well taught said sir arthur
+been said well that your has sir she taught shows daughter arthur
+she would improve her
+her would she improve
+off with you then
+you with off then
+but have you really heard of nothing
+of you really heard but nothing have
+strangest problems of life seem clearing
+life clearing seem strangest problems of
+but it is a ponderous task
+task ponderous a it is but
+it has been changed whilst i was taken up with my story
+with been changed whilst my has was up story i taken it
+she wished he could love a ballroom better and could like frank churchill better
+could love a churchill ballroom like he better could and wished frank she better
+but it is beautiful retorted her mother
+but mother it is retorted beautiful her
+rather wish cecilia interrupted mrs
+interrupted rather mrs cecilia wish
+quite wonderful how she does her hair
+hair how her she quite does wonderful
+poor jane is ill
+ill is jane poor
+his omnipresence our divine equality
+omnipresence his our divine equality
+after emma had talked about it for ten minutes mr
+ten about emma minutes talked it had after for mr
+but that one would not wish to slight
+not to would one wish that but slight
+and gently disengaging her hand she went on tiptoe to extinguish the candle
+extinguish gently on she hand to tiptoe and disengaging the her went candle
+you who make everybody else laugh
+who else make everybody you laugh
+well woman said he what do you want with me
+want said me he well what you woman with do
+but every one began to prepare for death
+began every one prepare death to but for
+my father and mrs
+and mrs my father
+i interrupt you mr
+interrupt you mr i
+and here is mrs
+and here is mrs
+and he was always very ready to part with the little he had
+part little was ready to he had always with and he very the
+the dread of such a failure after all became the prominent uneasiness
+the all after a became uneasiness failure prominent such dread of the
+the strength of the song falls on the second
+strength second of the the the song falls on
+and a few parties chiefly among the single men had already taken place
+chiefly already and had parties among a single men place few taken the
+no now i recollect now i have it
+now no i have now recollect i it
+they must kiss their last and come to judgment
+their to they judgment and must come last kiss
+and jem heard her say that she got them amongst the neighbouring rocks
+them that jem got rocks and heard her say amongst she neighbouring the
+no no my lad
+no lad my no
+pray let me into the circle
+the circle pray into me let
+so go thy ways and i will mine
+will so thy ways go and i mine
+i ishmael was one of that crew
+ishmael of was crew i that one
+how else could they come
+come could how else they
+stand by for it flask
+flask it stand for by
+this is the driest thing i know
+driest this i thing is the know
+he stood for an instant searchingly eyeing every man of his crew
+every stood eyeing crew man of an his searchingly he for instant
+take it and give me the flora
+me give it the take and flora
+the kitchen and two other rooms near it were yet covered in tolerably well
+and were covered two other kitchen tolerably it yet near in rooms well the
+the children are all fond of him
+all children him of the are fond
+while they talked they were advancing towards the carriage
+towards carriage they advancing while talked were the they
+she had scarcely a stronger regret than for her past coldness
+a coldness regret she her scarcely than had past stronger for
+what contradict me again after i gave you time to recollect yourself
+to you again yourself contradict gave recollect me after what i time
+but tell me what is this flaw
+this me what tell is flaw but
+well said she to her confidante betty you hear how things have turned out
+confidante to have out well said betty turned how you she things her hear
+weston appeared at a little distance from the window evidently on the watch
+appeared little on a the at weston distance from evidently the window watch
+the french are the lads for painting action
+action painting for french are lads the the
+elton at the same moment came congratulating me upon it
+at upon it same the elton moment me congratulating came
+i am always watching her to admire
+am watching admire to i her always
+as cool as an icicle
+as an as icicle cool
+my mother gave it to me
+to my gave mother it me
+she will probably have soon done and then we shall go home
+she go home then done will soon probably shall we have and
+and she made the most of it while her friend related
+related she the friend of most made her it while and
+the only way of proving it however will be to turn to our maps
+only to way our maps however it of the will proving to turn be
+you will see by this direction where you are to go said his mistress
+to direction his you will this where said by mistress go are see you
+this is all said mr
+is mr said all this
+his distended eyes turned full upon old ahab
+ahab distended old upon full his turned eyes
+why what put that into your head
+put that your why head what into
+but i want to set your heart at ease as to mrs
+to i at ease heart set but want as to mrs your
+nobody is healthy in london nobody can be
+can healthy london nobody be is nobody in
+now in that japanese sea the days in summer are as freshets of effulgences
+sea are in freshets the as summer that japanese effulgences days now of in
+in a beautiful and retired part of england lived mrs
+beautiful of a lived part mrs in retired england and
+if she is she swings with an uncommon long cable though
+cable she long though she is an with swings if uncommon

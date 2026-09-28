@@ -23,6 +23,9 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
     python3 sieve_ref.py warp --length 32 "Some text"
     python3 sieve_ref.py read --length 32 --mode scrambled <hex>
     python3 sieve_ref.py sieve --dict words.txt --max 4
+    python3 sieve_ref.py plugin ../data/filters/max-run-data-v1.sfilter --length 12 --params max=2
+    python3 sieve_ref.py plugin ../data/filters/moby-grammar-v1.sfilter --length 6 --lazy \
+        --judge ../tests/plugins/moby-sentences.txt   # too large to determinise: subsets as reached
 """
 import argparse
 import hashlib
@@ -32,6 +35,7 @@ import os
 import struct
 import sys
 import unicodedata
+from array import array
 from fractions import Fraction
 
 # Pinned symbol alphabets. The order of the symbols IS the digit order, and babel29's is
@@ -2202,10 +2206,11 @@ def dictionary_registry(folder="../data/dictionaries"):
     return reg, default
 
 
-def token_nfa_dfa(head, values, base, folder):
+def token_nfa(head, values, base, folder):
     """The token form, built another way than the engine's: an NFA with one state per (trie node,
-    reading of the token before), and for a cut first token one per trie node it could be at,
-    then the ordinary subset construction. Returns (states declared, start, next, accept, data)."""
+    reading of the token before), and for a cut first token one per trie node it could be at.
+    Returns (distinct words, step(state, symbol) -> states, accepting(state), data); the start is
+    state 0."""
     alpha = ALPHABETS[head["symbols"]]
     sep = set()
     for text, quoted in head["separator"]:
@@ -2224,6 +2229,30 @@ def token_nfa_dfa(head, values, base, folder):
             path, sha = reg[ident]
             words = sorted(load_dict(path)[0])
             data.append(f"{name}=dict:{src or 'default'}={sha}")
+        elif kind == "tags":
+            # word<TAB>tags lines; the words carrying any of the tags asked for, spelled as the
+            # line can: as they are, or lower-cased (A-Z and the Latin-1 capitals) on a line
+            # without capitals; others are left out
+            files, _, spec = src.rpartition(":")
+            want, _, unwanted = spec.partition("-")
+            parts = [open(os.path.join(folder, f), "rb").read() for f in files.split("+")]
+            data.append(f"{name}=tags:{src}=" + "+".join(hashlib.sha256(p).hexdigest() for p in parts))
+            raw = b"".join(p if p.endswith(b"\n") or not p else p + b"\n" for p in parts)
+            fold = not any("A" <= c <= "Z" for c in alpha)  # "a line without capitals": no A-Z in it
+            # A word is judged by the tags of all its lines together (every file, every spelling
+            # that comes to the same word here), so "OF" (noun) and "of" (preposition) are one word
+            # with both tags.
+            tags_of = {}
+            for line in raw.decode("utf-8").split("\n"):
+                w, tab, tags = line.partition("\t")
+                if not tab or not w:
+                    continue
+                if fold:
+                    w = "".join(chr(ord(c) + 32) if ("A" <= c <= "Z" or (0xC0 <= ord(c) <= 0xDE and ord(c) != 0xD7)) and c not in alpha else c for c in w)
+                if all(c in alpha and alpha.index(c) not in sep for c in w):
+                    tags_of[w] = tags_of.get(w, "") + tags
+            words = [w for w, tags in tags_of.items() if set(tags) & set(want) and not set(tags) & set(unwanted)]
+            kind = "dict"  # spelled already: anything left that does not fit is skipped, as a dictionary's
         else:
             raw = open(os.path.join(folder, src), "rb").read()
             words = [w for w in raw.decode("utf-8").split("\n") if w]
@@ -2246,10 +2275,16 @@ def token_nfa_dfa(head, values, base, folder):
     follow = {r: set(range(n)) for r in range(n)} if not head.get("follow") else {r: set() for r in range(n)}
     for a, b in head.get("follow", []):
         follow[names.index(a)].add(names.index(b))
-    START = "start"
+    # The NFA's states are numbered, not tupled, so a large word list fits in memory:
+    # S0 (before anything) 0, S1 (after a leading separator) 1, B r (between tokens, the last
+    # read as set r) 2 + r, In (trie node, reading p of the token before; p = n before the first
+    # token) 2 + n + node * (n + 1) + p, and Suf node (a cut first token) after those.
+    START = n
     follow[START] = {names.index(s) for s in head["first"]} if "first" in head else set(range(n))
     last = {names.index(s) for s in head["last"]} if "last" in head else set(range(n))
     cut = head["edges"] == "cut"
+    NT = len(kids)
+    IN0, SUF0 = 2 + n, 2 + n + NT * (n + 1)
     incoming = {}
     for node, ch in enumerate(kids):
         for d, t in ch.items():
@@ -2257,113 +2292,247 @@ def token_nfa_dfa(head, values, base, folder):
 
     def step(q, c):
         out = set()
-        if q == "S0":
+        if q == 0:
             if c in sep:
-                out.add("S1")
+                out.add(1)
             elif cut:
-                out |= {("Suf", t) for t in incoming.get(c, ())}
+                out |= {SUF0 + t for t in incoming.get(c, ())}
             elif c in kids[0]:
-                out.add(("In", kids[0][c], START))
-        elif q == "S1":
+                out.add(IN0 + kids[0][c] * (n + 1) + START)
+        elif q == 1:
             if c not in sep and c in kids[0]:
-                out.add(("In", kids[0][c], START))
-        elif q[0] == "B":
+                out.add(IN0 + kids[0][c] * (n + 1) + START)
+        elif q < IN0:
             if c not in sep and c in kids[0]:
-                out.add(("In", kids[0][c], q[1]))
-        elif q[0] == "In":
-            _, node, p = q
+                out.add(IN0 + kids[0][c] * (n + 1) + (q - 2))
+        elif q < SUF0:
+            node, p = divmod(q - IN0, n + 1)
             if c in sep:
-                out |= {("B", r) for r in ends[node] if r in follow[p]}
+                out |= {2 + r for r in ends[node] if r in follow[p]}
             elif c in kids[node]:
-                out.add(("In", kids[node][c], p))
-        elif q[0] == "Suf":
-            node = q[1]
+                out.add(IN0 + kids[node][c] * (n + 1) + p)
+        else:
+            node = q - SUF0
             if c in sep:
                 if ends[node]:
-                    out |= {("B", r) for r in range(n)}
+                    out |= {2 + r for r in range(n)}
             elif c in kids[node]:
-                out.add(("Suf", kids[node][c]))
+                out.add(SUF0 + kids[node][c])
         return out
 
     def accepting(q):
-        if q in ("S0", "S1"):
+        if q < 2:
             return False
-        if q[0] == "B":
-            return q[1] in last
-        if q[0] == "In":
-            return cut or any(r in follow[q[2]] and r in last for r in ends[q[1]])
+        if q < IN0:
+            return (q - 2) in last
+        if q < SUF0:
+            node, p = divmod(q - IN0, n + 1)
+            return cut or any(r in follow[p] and r in last for r in ends[node])
         return True  # Suf: the whole unit, a substring of a word
 
-    start = frozenset(["S0"])
+    words_n = sum(1 for e in ends if e)  # distinct words: the token form's "declared" figure
+    return words_n, step, accepting, " ".join(data)
+
+
+def token_nfa_dfa(head, values, base, folder):
+    """The token form's NFA (token_nfa), determinised by the ordinary subset construction.
+    Returns (states declared, start, next, accept, data)."""
+    words_n, step, accepting, data = token_nfa(head, values, base, folder)
+    start = frozenset([0])
     index, order, nxt, acc = {start: 0}, [start], [], []
     i = 0
     while i < len(order):
         S = order[i]
         acc.append(any(accepting(q) for q in S))
-        row = []
+        row = array("i", [-1]) * base
         for c in range(base):
             T = frozenset(t for q in S for t in step(q, c))
             if not T:
-                row.append(-1)
                 continue
             if T not in index:
                 index[T] = len(order)
                 order.append(T)
-            row.append(index[T])
+            row[c] = index[T]
         nxt.append(row)
+        order[i] = None  # done with: only the index needs it now
         i += 1
-    return len(order), 0, nxt, acc, " ".join(data)
+    del index, order
+    return words_n, 0, nxt, acc, data
+
+
+class LazyTokens:
+    """The token form judged, counted and ranked without building the whole automaton: the subsets
+    of NFA states are made only as a walk reaches them, and completions are counted for the
+    subsets reachable within the length. For word lists too large to determinise here in full;
+    `plugin --lazy` reports as `plugin` does, except the minimal size, which it does not know."""
+
+    def __init__(self, step, accepting, base):
+        self.step, self.accepting, self.base = step, accepting, base
+        self.ids, self.sets, self.moves, self.memo = {}, [], {}, {}
+
+    def id_of(self, S):
+        if S not in self.ids:
+            self.ids[S] = len(self.sets)
+            self.sets.append(S)
+        return self.ids[S]
+
+    def move(self, i, c):
+        key = (i, c)
+        if key not in self.moves:
+            T = frozenset(t for q in self.sets[i] for t in self.step(q, c))
+            self.moves[key] = self.id_of(T) if T else -1
+        return self.moves[key]
+
+    def count(self, i, r):
+        """Units of r more symbols that the walk from subset i accepts (iterative, by depth)."""
+        if (i, r) in self.memo:
+            return self.memo[(i, r)]
+        # the subsets reachable at each depth, then counts from the deepest up
+        layers = [{i}]
+        for d in range(r):
+            nxt = set()
+            for s in layers[-1]:
+                if (s, r - d) in self.memo:
+                    continue
+                for c in range(self.base):
+                    t = self.move(s, c)
+                    if t >= 0:
+                        nxt.add(t)
+            layers.append(nxt)
+        for d in range(r, -1, -1):
+            left = r - d
+            for s in layers[d]:
+                if (s, left) in self.memo:
+                    continue
+                if left == 0:
+                    self.memo[(s, 0)] = 1 if any(self.accepting(q) for q in self.sets[s]) else 0
+                else:
+                    total = 0
+                    for c in range(self.base):
+                        t = self.move(s, c)
+                        if t >= 0:
+                            total += self.memo[(t, left - 1)]
+                    self.memo[(s, left)] = total
+        return self.memo[(i, r)]
+
+    def unrank(self, L, k):
+        s, out = self.id_of(frozenset([0])), []
+        for i in range(L):
+            for c in range(self.base):
+                t = self.move(s, c)
+                if t < 0:
+                    continue
+                m = self.count(t, L - i - 1)
+                if k < m:
+                    out.append(c)
+                    s = t
+                    break
+                k -= m
+        return out
+
+    def accepts(self, unit):
+        S = frozenset([0])
+        for c in unit:
+            S = frozenset(t for q in S for t in self.step(q, c))
+            if not S:
+                return False
+        return any(self.accepting(q) for q in S)
 
 
 def minimise_dfa(start, nxt, acc, base):
-    """Trim to the live states, merge by Hopcroft's algorithm, number breadth first."""
+    """Trim to the live states, merge by Hopcroft's algorithm, number breadth first. The reverse
+    transitions are kept as flat arrays (sources grouped by target, per symbol), so an automaton
+    of millions of states fits in memory."""
     n = len(nxt)
-    reach, todo = {start}, [start]
+    reach, todo = bytearray(n), [start]
+    reach[start] = 1
     while todo:
         s = todo.pop()
         for t in nxt[s]:
-            if t >= 0 and t not in reach:
-                reach.add(t)
+            if t >= 0 and not reach[t]:
+                reach[t] = 1
                 todo.append(t)
-    back = {s: set() for s in reach}
-    for s in reach:
-        for t in nxt[s]:
-            if t >= 0:
-                back[t].add(s)
-    co = {s for s in reach if acc[s]}
-    todo = list(co)
+    # predecessors over every symbol, grouped by target: sources back_src[back_at[t]:back_at[t + 1]]
+    back_at = array("i", [0]) * (n + 1)
+    for s in range(n):
+        if reach[s]:
+            for t in nxt[s]:
+                if t >= 0:
+                    back_at[t + 1] += 1
+    for t in range(n):
+        back_at[t + 1] += back_at[t]
+    fill = array("i", back_at)
+    back_src = array("i", [0]) * back_at[n]
+    for s in range(n):
+        if reach[s]:
+            for t in nxt[s]:
+                if t >= 0:
+                    back_src[fill[t]] = s
+                    fill[t] += 1
+    del fill
+    co, todo = bytearray(n), [s for s in range(n) if reach[s] and acc[s]]
+    for s in todo:
+        co[s] = 1
     while todo:
         s = todo.pop()
-        for p in back[s]:
-            if p not in co:
-                co.add(p)
+        for p in back_src[back_at[s]:back_at[s + 1]]:
+            if not co[p]:
+                co[p] = 1
                 todo.append(p)
-    live = reach & co
-    if start not in live:
+    del back_at, back_src
+    live_list = [s for s in range(n) if reach[s] and co[s]]
+    start_live = bool(co[start])
+    del reach, co
+    if not start_live:
         return None, [], []
-    # Hopcroft needs a complete automaton: every missing transition goes to a sink, DEAD, which
-    # stays in a block of its own (a live state can reach acceptance; the sink cannot).
-    DEAD = -1
-    rev = [dict() for _ in range(base)]  # symbol -> target -> sources
-    for s in live:
-        for c in range(base):
-            t = nxt[s][c]
-            rev[c].setdefault(t if t in live else DEAD, set()).add(s)
+    # The live states numbered 0..m-1 (idx), and the sink, DEAD = m: Hopcroft needs a complete
+    # automaton, so every missing transition goes to the sink, which stays in a block of its own
+    # (a live state can reach acceptance; the sink cannot).
+    m = len(live_list)
+    idx = array("i", [-1]) * n
+    for k, s in enumerate(live_list):
+        idx[s] = k
+    DEAD = m
+
+    def target(s, c):
+        t = nxt[s][c]
+        return idx[t] if t >= 0 and idx[t] >= 0 else DEAD
+
+    # per symbol: sources grouped by target, rev_src[c][rev_at[c][t]:rev_at[c][t + 1]]
+    rev_at, rev_src = [], []
     for c in range(base):
-        rev[c].setdefault(DEAD, set()).add(DEAD)
+        at = array("i", [0]) * (m + 2)
+        for s in live_list:
+            at[target(s, c) + 1] += 1
+        at[DEAD + 1] += 1  # the sink's own loop
+        for t in range(m + 1):
+            at[t + 1] += at[t]
+        fill = array("i", at)
+        src = array("i", [0]) * at[m + 1]
+        for k, s in enumerate(live_list):
+            t = target(s, c)
+            src[fill[t]] = k
+            fill[t] += 1
+        src[fill[DEAD]] = DEAD
+        rev_at.append(at)
+        rev_src.append(src)
     # Hopcroft: blocks as sets, each state's block by index; a splitter's predecessors on each
     # symbol split every block they cut, and the smaller half (or both, if the block was waiting)
     # waits to split others.
-    F = {s for s in live if acc[s]}
-    blocks = [b for b in (F, (live - F) | {DEAD}) if b]
-    block_of = {s: i for i, b in enumerate(blocks) for s in b}
+    F = {k for k, s in enumerate(live_list) if acc[s]}
+    blocks = [b for b in (F, set(range(m + 1)) - F) if b]
+    block_of = array("i", [0]) * (m + 1)
+    for i, b in enumerate(blocks):
+        for s_ in b:
+            block_of[s_] = i
     waiting = {min(range(len(blocks)), key=lambda i: len(blocks[i]))} if len(blocks) == 2 else set(range(len(blocks)))
     while waiting:
-        A = set(blocks[waiting.pop()])
+        A = list(blocks[waiting.pop()])
         for c in range(base):
+            at, src = rev_at[c], rev_src[c]
             X = set()
             for t in A:
-                X |= rev[c].get(t, set())
+                X.update(src[at[t]:at[t + 1]])
             touched = {}
             for s_ in X:
                 touched.setdefault(block_of[s_], set()).add(s_)
@@ -2379,23 +2548,27 @@ def minimise_dfa(start, nxt, acc, base):
                     waiting.add(nb)
                 else:
                     waiting.add(nb if len(inter) <= len(blocks[b]) else b)
-    parts = [frozenset(b) for b in blocks]
-    block = {s: i for i, P in enumerate(parts) for s in P if s != DEAD}
-    order, seq, q = {block[start]: 0}, [], [block[start]]
-    while q:
-        b = q.pop(0)
+    del rev_at, rev_src
+    rep = {}
+    for k in range(m):
+        rep.setdefault(block_of[k], live_list[k])
+    b0 = block_of[idx[start]]
+    order, seq, q, qi = {b0: 0}, [], [b0], 0
+    while qi < len(q):
+        b = q[qi]
+        qi += 1
         seq.append(b)
-        s = next(iter(parts[b]))
+        s = rep[b]
         for c in range(base):
-            t = nxt[s][c]
-            if t in live and block[t] not in order:
-                order[block[t]] = len(order)
-                q.append(block[t])
+            t = target(s, c)
+            if t != DEAD and block_of[t] not in order:
+                order[block_of[t]] = len(order)
+                q.append(block_of[t])
     m_next, m_acc = [], []
     for b in seq:
-        s = next(iter(parts[b]))
+        s = rep[b]
         m_acc.append(acc[s])
-        m_next.append([order[block[nxt[s][c]]] if nxt[s][c] in live else -1 for c in range(base)])
+        m_next.append([order[block_of[target(s, c)]] if target(s, c) != DEAD else -1 for c in range(base)])
     return 0, m_next, m_acc
 
 
@@ -2430,11 +2603,19 @@ def cmd_plugin(args):
     values = dict(kv.split("=", 1) for kv in args.params.split(",")) if args.params else {}
     base = plugin_base(head["symbols"], args.base)
     word_data = ""
-    if head["form"] == "tokens":
+    lazy = None
+    if head["form"] == "tokens" and args.lazy:
+        N, step, accepting, word_data = token_nfa(head, values, base, os.path.dirname(os.path.abspath(args.file)))
+        lazy = LazyTokens(step, accepting, base)
+        m_next, m_acc = None, None
+    elif head["form"] == "tokens":
         N, start, nxt, acc, word_data = token_nfa_dfa(head, values, base, os.path.dirname(os.path.abspath(args.file)))
     else:
+        if args.lazy:
+            raise SystemExit("--lazy is for the token form")
         N, start, nxt, acc = compile_plugin(head, body, values, base)
-    s0, m_next, m_acc = minimise_dfa(start, nxt, acc, base)
+    if lazy is None:
+        s0, m_next, m_acc = minimise_dfa(start, nxt, acc, base)
     params = " ".join(f"{name}={values.get(name, d)}" for name, d, lo, hi in head["params"]) or "(none)"
     print(f"plugin     {head['name']}")
     print(f"sha256     {hashlib.sha256(data).hexdigest()}")
@@ -2445,11 +2626,15 @@ def cmd_plugin(args):
     reqs = "; ".join(name + "".join(f" {k}={v}" for k, v in sorted(pins.items())) for name, pins in head["requires"])
     print(f"requires   {reqs or '(none)'}")
     print(f"form       {head['form']}" + (f"  {word_data}" if word_data else ""))
-    print(f"states     {N} declared, {len(m_next)} minimal")
+    kind_word = 'words' if head['form'] == 'tokens' else 'declared'
+    print(f"states     {N} {kind_word}, " + ("(not determinised: --lazy)" if lazy else f"{len(m_next)} minimal"))
     print(f"length     {args.length}")
     L = args.length
-    table = dfa_count_table(m_next, m_acc, L) if m_next else [[0]]
-    count = table[L][0] if m_next else 0
+    if lazy:
+        count = lazy.count(lazy.id_of(frozenset([0])), L)
+    else:
+        table = dfa_count_table(m_next, m_acc, L) if m_next else [[0]]
+        count = table[L][0] if m_next else 0
     print(f"survivors  {count}")
     print(f"excluded   {base ** L - count}")
     if count:
@@ -2459,7 +2644,33 @@ def cmd_plugin(args):
         if count - 1 != 0:
             ks.append(count - 1)
         for k in ks:
-            print(f"rank       {k}  {','.join(map(str, dfa_unrank(m_next, table, L, k))) or '-'}")
+            u = lazy.unrank(L, k) if lazy else dfa_unrank(m_next, table, L, k)
+            print(f"rank       {k}  {','.join(map(str, u)) or '-'}")
+    if args.judge:
+        # each line of a text file judged as one unit of its own length, as `sieve filters --plugin
+        # FILE --judge TEXT` does
+        alpha = ALPHABETS.get(head["symbols"])
+        if alpha is None:
+            raise SystemExit("--judge reads text: the plugin is not for a text line")
+        for line in open(args.judge, "rb").read().decode("utf-8").split("\n"):
+            line = line[:-1] if line.endswith("\r") else line
+            if not line or line.startswith("#"):  # a comment
+                continue
+            if any(ch not in alpha for ch in line):
+                verdict = "unspellable"
+            else:
+                unit = [alpha.index(ch) for ch in line]
+                if lazy:
+                    ok = lazy.accepts(unit)
+                else:
+                    s = 0 if m_next else -1
+                    for c in unit:
+                        if s < 0:
+                            break
+                        s = m_next[s][c]
+                    ok = s >= 0 and m_acc[s]
+                verdict = "pass" if ok else "FAIL"
+            print(f"judge      {verdict}  {line}")
 
 
 def cmd_manifest(args):
@@ -2696,6 +2907,8 @@ def main():
     s.add_argument("--length", type=int, default=32)
     s.add_argument("--params", default="")
     s.add_argument("--base", type=int)
+    s.add_argument("--lazy", action="store_true")  # the token form, without determinising in full
+    s.add_argument("--judge")  # a text file: each line judged
     s = sub.add_parser("chunks")
     s.add_argument("file")
     s = sub.add_parser("manifest")

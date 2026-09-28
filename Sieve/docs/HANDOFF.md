@@ -774,4 +774,35 @@ each frame, fields walked by keys, mouse pick and title drag, auto column layout
 placed, follow arrows routed round the side, multi-line editor, worker for tests and relations).
 Core: plugin registry is a deque with add_plugin. Scripts: `hallway --designer --design F --script
 "keys,=text" --design-out F`, Ctrl+ in --press. Next: step 3, Moby (by hand).
+Designer progress window (Edward: compiling was slow in his debug build and it was not obvious
+what was happening): centred window while a test/relations job runs over 200 ms (step from
+design::Progress, fed by compile_plugin's new `step` callback, elapsed time, spinner), then 2 s of
+the outcome; Esc hides it; Save while busy waits (pending_save_) instead of freezing. Minimise is
+now Hopcroft on flat arrays (0.95 s -> 0.43 s on 418k states, release); oracle comparison of every
+plugin identical, full harness passes. `hallway --designer --busy` screenshots it mid-job.
+Designer tests only on request (Edward): nothing compiles on opening or editing; F5 / TEST NOW
+(test panel item 1) requests it; Save, relations and judging request it when stale (result_key_ vs
+current_key(): the file without layout, plus the length), with pending_save_ / pending_relations_
+done after; Save refuses a filter that does not compile. CI: `hallway --designer --timings` shows no
+designer.test run.
 
+Step 3, the Moby grammar filters (by hand, as planned; FILTER-PLUGINS.md section 13,
+data/filters/moby-pos-v1.md). tools/moby_pos.py converts Moby Part-of-Speech II (public domain,
+Grady Ward's grant of January 2001; third_party_licenses/Moby) to data/filters/moby-pos-v1.tsv and
+makes moby-inflections-v1.tsv and moby-names-v1.tsv from it and SCOWL en-80. Token form: `set NAME
+tags:FILE+FILE:TAGS[-EXCLUDED]`; a word is judged by the tags of all its lines together (every
+file, every spelling folding to it), found when "quickly the of" passed because Moby's "OF" is a
+noun. moby-grammar-v1 (lenient) and moby-grammar-strict-v1: follow/first/last chosen by a greedy
+search (real minus weighted shuffled) on three NLTK Gutenberg books, measured with the compiled
+plugins on 2,790 held-out sentences: 83.5% real / 42.8% shuffled / 41.4% random words (lenient),
+58.8 / 18.4 / 17.1 (strict). 258,024 words; 287,267 and 215,179 minimal states; about 6 s to
+compile cold (release). Oracle: its NFA subset construction passes ten million states and does
+not fit in 8 GB, so `plugin --lazy` (subsets made as reached) and `--judge FILE` (engine: `sieve
+filters --plugin F --judge FILE`, # lines are comments); identical to the engine at length 8 and
+on 200 held-out sentences, and at length 6 in CI. The oracle's minimiser and token NFA now use
+integer states and flat arrays (same results, far less memory). tests/plugins/toy-tags(-cut)-v1
+with tags-a.tsv/tags-b.tsv (CI, engine vs oracle), unit tests for both grammars (compiled once per
+run), CI expects 8 loaded plugins. Designer: opens and tests filters with tagged lists (read where
+the file is, copied to the scratch folder once; Save copies them beside the saved filter).
+Limits: imperatives fail (no sentence may start with a verb); a word in no list fails its sentence;
+no punctuation.

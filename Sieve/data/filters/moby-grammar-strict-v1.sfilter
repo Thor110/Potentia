@@ -1,0 +1,106 @@
+sieve-filter-v1
+; English word order by part of speech (strict): every word must be in the Moby Part-of-Speech
+; list, its regular inflections or the names list, and each word must be able to follow the one
+; before it. A word with several parts of speech may be any of them, except that a word Moby lists
+; as a determiner, preposition, conjunction or pronoun is not also a noun, verb or adjective, and a
+; determiner is not also an adverb (Moby gives "the" an adverb reading and "a" a noun one, which
+; would let almost any order through).
+;
+; Which part of speech may follow which was chosen from real sentences, not by hand: starting with
+; every pairing allowed, pairings were taken away one at a time while real sentences lost less
+; than shuffled ones did, on three books of the NLTK Gutenberg corpus
+; (Persuasion, The Man Who Was Thursday, Buster Bear), then measured on four others it never saw
+; (Moby-Dick, Emma, Alice in Wonderland, The Parent's Assistant), sentences of 4 to 14 words that
+; are all in the lists: 58.8% of real sentences pass, 18.4% of the same sentences shuffled, 17.1%
+; of random strings of their words. That is a sieve for word salad, not a parser; moby-grammar-v1
+; is the more lenient choice.
+;
+; The lists (beside this file; see moby-pos-v1.md): Moby Part-of-Speech II (Grady Ward; public
+; domain), and the inflections and names tools/moby_pos.py makes from it and from SCOWL. Moby's
+; codes: N noun, p plural, h noun phrase, V verb (participle), t transitive verb, i intransitive
+; verb, A adjective, v adverb, C conjunction, P preposition, ! interjection, r pronoun,
+; D definite article, I indefinite article, o nominative.
+id        moby-grammar-strict
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     text
+symbols   lower27
+describe  English word order by part of speech (Moby), strict: on unseen books 58.8% of real sentences pass and 18.4% of shuffled ones.
+
+tokens    separator " "
+edges     whole
+set       det     tags:moby-pos-v1.tsv+moby-inflections-v1.tsv+moby-names-v1.tsv:DI
+set       noun    tags:moby-pos-v1.tsv+moby-inflections-v1.tsv+moby-names-v1.tsv:Np-DIPCro
+set       pron    tags:moby-pos-v1.tsv+moby-inflections-v1.tsv+moby-names-v1.tsv:ro
+set       verb    tags:moby-pos-v1.tsv+moby-inflections-v1.tsv+moby-names-v1.tsv:Vti-DIPCro
+set       adj     tags:moby-pos-v1.tsv+moby-inflections-v1.tsv+moby-names-v1.tsv:A-DIPCro
+set       adv     tags:moby-pos-v1.tsv+moby-inflections-v1.tsv+moby-names-v1.tsv:v-DI
+set       prep    tags:moby-pos-v1.tsv+moby-inflections-v1.tsv+moby-names-v1.tsv:P
+set       conj    tags:moby-pos-v1.tsv+moby-inflections-v1.tsv+moby-names-v1.tsv:C
+set       interj  tags:moby-pos-v1.tsv+moby-inflections-v1.tsv+moby-names-v1.tsv:!
+
+follow    det     det
+follow    det     noun
+follow    det     pron
+follow    det     verb
+follow    det     adj
+follow    noun    noun
+follow    noun    pron
+follow    noun    verb
+follow    noun    adj
+follow    noun    adv
+follow    noun    prep
+follow    noun    conj
+follow    pron    det
+follow    pron    verb
+follow    pron    adv
+follow    pron    prep
+follow    pron    conj
+follow    verb    det
+follow    verb    noun
+follow    verb    pron
+follow    verb    verb
+follow    verb    adj
+follow    verb    adv
+follow    verb    prep
+follow    verb    conj
+follow    adj     det
+follow    adj     noun
+follow    adj     pron
+follow    adj     adj
+follow    adj     adv
+follow    adj     prep
+follow    adj     conj
+follow    adj     interj
+follow    adv     det
+follow    adv     noun
+follow    adv     verb
+follow    adv     adj
+follow    adv     adv
+follow    adv     prep
+follow    adv     conj
+follow    prep    det
+follow    prep    noun
+follow    prep    pron
+follow    prep    adj
+follow    prep    adv
+follow    prep    prep
+follow    prep    interj
+follow    conj    det
+follow    conj    noun
+follow    conj    pron
+follow    conj    verb
+follow    conj    adj
+follow    conj    adv
+follow    conj    prep
+follow    conj    conj
+follow    interj  det
+follow    interj  verb
+follow    interj  adj
+follow    interj  adv
+follow    interj  conj
+follow    interj  interj
+first     det pron conj interj
+last      noun pron verb adj adv interj
+end

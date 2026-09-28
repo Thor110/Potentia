@@ -4,7 +4,8 @@
 engine (judge, count, rank, compact, stacks of plugins), `requires`, the loader and `filters/`
 folder, `sieve filters --plugin`, `--plugins` and `--relations`, the oracle's own parser and
 engine, and six reference plugins, all checked against the built-in filters they port (section
-11), and the filter designer (section 12). Next: the Moby grammar filter.*
+11), the filter designer (section 12), and tagged lists with the first grammar filters, over the
+Moby part-of-speech list (section 13).*
 
 Filters written as data files and dropped into a folder, so that anyone
 (a person, or an AI) can add a filter to the stack without touching the C++ or rebuilding Sieve.
@@ -147,6 +148,8 @@ edges     whole                  ; whole | cut: cut lets a token touching the un
 param     dictionary  dict  default   ; a dictionary setting (a registered id, or default)
 set       word    dict:{dictionary}   ; a registered dictionary (dict:ID, or dict:{a dict param})
 set       det     list:determiners.txt        ; a word list beside the plugin, pinned by its SHA-256
+set       noun    tags:pos.tsv+more.tsv:Np-DP ; a tagged list (word<TAB>tags): the words carrying
+                                              ; any of N p and none of D P
 follow    det     noun                        ; which set may follow which (none: any order)
 follow    noun    verb
 first     det noun                            ; the sets the first token may be (default: all)
@@ -156,7 +159,16 @@ end
 
 As built: one separator between tokens, at most one at each end, at least one token (so `clean`
 is part of every token filter, as it is of `words` and `window`). A token cut by an edge may be any
-set. The Moby tagged list (`tags:`) comes with the grammar filter.
+set.
+
+**Tagged lists** (`tags:FILES:TAGS`) are files of `word<TAB>tags`, each tag one character, beside
+the plugin; several are read as one when joined with `+`, and each file's SHA-256 is in the
+provenance. `TAGS` is the tags a word must carry at least one of, and `TAGS-EXCLUDED` adds the tags
+it must carry none of. A word carries the tags of all its lines together: in every file, and in
+every spelling that comes to the same word on the line (a line without capitals reads A-Z and the
+Latin-1 capitals in lower case, so Moby's "OF", a noun, and "of", a preposition, are one word tagged
+`PN`, and `Np-P` leaves it out). Words the line cannot spell, or that hold a separator (phrases), are
+left out, as a dictionary's are.
 
 A token must be a word of some set; a unit passes when its tokens chain by `follow` (with no
 `follow` lines at all, any order passes, which makes this `words`). A word in several sets can be
@@ -165,8 +177,8 @@ Word pairs are `follow` over sets of words (or single words, for small lists); g
 over part-of-speech sets from a tagged list.
 
 Word lists and tagged lists live beside the plugin or in the registries, each pinned by SHA-256
-in the provenance, exactly as dictionaries are now. A tagged English list in the public domain
-(the Moby part-of-speech list is one) would be the first grammar plugin's data.
+in the provenance, exactly as dictionaries are now. The first grammar plugins read the Moby
+part-of-speech list, which is in the public domain (section 13).
 
 ## 5. The engine
 
@@ -196,7 +208,12 @@ in the provenance, exactly as dictionaries are now. A tagged English list in the
   units at a length.
 - `sieve_ref.py plugin FILE --length L` does the same from its own loader and engine. CI compares
   them for every file in `data/filters/`, at several lengths.
-- `sieve check` judges content against plugins as it does against built-in filters.
+- `sieve check` judges content against plugins as it does against built-in filters, and `sieve
+  filters --plugin FILE --judge TEXT` judges each line of a text file as a unit of its own length
+  (the oracle's `plugin --judge` prints the same).
+- A token-form plugin too large for the oracle to determinise (the Moby grammars) is checked with
+  `sieve_ref.py plugin FILE --lazy`: the subsets are made only as a walk reaches them, so counts,
+  ranks and verdicts come out exactly, at the lengths the reachable subsets fit in memory.
 
 ## 7. Reference plugins
 
@@ -210,6 +227,7 @@ every length checked, and the same verdict on every unit.
 | `words-data-v1` | `words-v1` | tokens, one set, whole edges |
 | `window-data-v1` | `window-v1` | tokens, one set, cut edges |
 | `key-data-v1` | `key-v1` (C major) | table over the note alphabet |
+| `moby-grammar-v1`, `moby-grammar-strict-v1` | (new: English word order by part of speech) | tokens, nine sets from tagged lists, whole edges |
 
 They are new filters with new ids (the built-ins keep theirs); a built-in and its port agreeing is
 a conformance check, not a replacement.
@@ -242,13 +260,15 @@ a conformance check, not a replacement.
 2. **Built.** `clean-data-v1` and `key-data-v1` checked against the built-ins, and `max-run-data-v1`.
 3. **Built.** The token form; `words-data-v1` and `window-data-v1`, checked against the built-ins.
 4. The setup menu: plugins listed with their origin and author, reasons for any that fail to load.
-5. The first new filters: word pairs (by sets), then grammar (a tagged list first).
+5. **Built.** Grammar from a tagged list: `moby-grammar-v1` and `moby-grammar-strict-v1` (section 13).
+   Word pairs by sets are written the same way, with lists instead of tags.
 6. The binary line (judging), then counting where the budget allows.
 
 ## 11. As built
 
 - **Core.** `sieve/dfa.hpp`: the automaton, minimised to a canonical form (trimmed to live states,
-  merged by Moore's refinement, numbered breadth first from the start, symbols in order), the
+  merged by Hopcroft's refinement with a sink, numbered breadth first from the start, symbols in
+  order), the
   product of two, and `DfaRanker`, a completion table built backwards with each state's transitions
   grouped by target. `sieve/plugin.hpp`: the parser (errors name their line), the compiler (the
   body run with the parameters' values), the plugin filter, and the registry that `find_filter`
@@ -264,7 +284,7 @@ a conformance check, not a replacement.
 - **Checking.** `sieve filters --plugin FILE [--length L] [--params k=v,...]` reports the header,
   the states as declared and minimal, the survivors, what is excluded and three survivors by rank.
   The oracle (`sieve_ref.py plugin`) has its own tokenizer, expressions and interpreter, and
-  minimises by Hopcroft's algorithm rather than Moore's; the canonical numbering makes the two
+  minimises by its own Hopcroft, written separately; the canonical numbering makes the two
   reports identical, and CI diffs them for every reference plugin at five lengths and several
   settings. (Writing it caught a real difference first: Hopcroft on an incomplete automaton merges
   states that differ only in a missing transition, so the oracle completes the automaton with a
@@ -305,8 +325,7 @@ a conformance check, not a replacement.
   same units exactly when they are equal. `sieve filters --plugin FILE --relations` reports how a
   plugin compares with every other custom filter for its line: the same rule (a duplicate),
   stricter, or looser. The designer runs this on save.
-- **Later** (noted): the Moby part-of-speech list for the first grammar plugin, with or after the
-  token form; the menu showing plugins' origin and author on their own line, and load errors
+- **Later** (noted): the menu showing plugins' origin and author on their own line, and load errors
   (for now: `sieve filters --plugins`); chunk sizes as a parameter (VAULT.md section 8).
 
 ## 12. The filter designer (built; Edward's design)
@@ -330,8 +349,9 @@ versioned and checked by the oracle alike.
   before they are made ("the same rule as clean-data-v1"), and stricter or looser rules are named.
 - **Relations between filters** beyond `requires` (Edward): a filter could require another's
   opposite, for example; each such relation is an exact operation on the automata.
-- **First use:** the Moby part-of-speech list and the first grammar filter, built in the designer
-  on the token form.
+- **First use:** the Moby grammar filters were written by hand, as planned (Edward: the designer is
+  for others' filters; these were chosen from data by a search). They open in the designer, which
+  tests them from where their tagged lists are.
 
 ### As built
 
@@ -354,6 +374,21 @@ versioned and checked by the oracle alike.
   rank, text typed in and judged, with why it fails ("the token 'on' (characters 13 to 14) is not
   the start of a word that can come there"; a table's errors by the editor's own line numbers), the
   relation check, and Save.
+- **Tested when asked** (Edward): opening the designer or changing the filter compiles nothing.
+  F5 or TEST NOW compiles and counts; Save tests first if the filter changed since its last test,
+  and saves only a filter that compiles; the relation check and judging typed text test first when
+  needed. Results from before a change stay on show, marked as from before it.
+- **The progress window** (Edward): while the worker compiles, tests or checks relations for more
+  than a fifth of a second, a window in the middle of the screen says what it is doing and for how
+  long ("building the automaton from 88986 words (209178 trie nodes)", "minimising 418357
+  states", "counting the survivors at length 32", "comparing with window-data-v1 (3 of 5)"), then
+  for two seconds how it went. It never blocks: Esc hides it and the work carries on, and a Save
+  asked for meanwhile happens when the worker is free. The steps come from the compiler itself
+  (`compile_plugin`'s `step`). Measured (release build, the default dictionary, cold): reading
+  0.27 s, building 0.23 s, minimising 0.43 s (Hopcroft's algorithm on flat arrays, which replaced
+  a first Moore refinement that took 0.95 s and is far slower in a debug build), counting 0.1 s: about
+  1 s in all, then instant from the cache. `--timings` records `designer.test` and
+  `designer.relations`.
 - **Saving** (Ctrl+S) writes `<id>-v<version>.sfilter` and its word lists to the filters folder and
   registers it at once (it is in the CUSTOM FILTERS tab straight away), then runs the relation
   check, so a duplicate is named as soon as it is made. A version that exists with other contents
@@ -365,3 +400,58 @@ versioned and checked by the oracle alike.
   "keys,=typed text,..."] [--design-out FILE] --screenshot PNG` prints the filter's name and the
   status line. CI makes and saves a word filter by script, finds it registered and named the same
   rule as `words-data-v1`, and finds a second save of other contents offered version 2.
+- **Tagged lists in the designer.** A set's words may be `tags:FILES:TAGS`, written in the file (a
+  set's words choice cycles through the tagged sources the filter already reads, as well as
+  dictionaries and lists; typing a new one in the designer is for later). The lists are large and not edited here, so they are read where the opened file is (copied
+  into the scratch folder once, kept while unchanged), and Save copies them beside the saved filter
+  when they are not there yet; one of the same name with other contents stops the save. The Moby
+  grammar tests in the designer in about 8 s (release build; the progress window names each step).
+
+## 13. The Moby grammar filters (built)
+
+Two plugins judge English word order by part of speech: `moby-grammar-v1` (lenient) and
+`moby-grammar-strict-v1`. Their data and how it was made are in `data/filters/moby-pos-v1.md`;
+in short:
+
+- **The lists.** `moby-pos-v1.tsv` is Moby Part-of-Speech II (Grady Ward, public domain by his
+  grant of January 2001), every entry, converted to UTF-8 `word<TAB>codes` by `tools/moby_pos.py`,
+  which prints the source's and the output's SHA-256. Moby lacks regular inflections, so
+  `moby-inflections-v1.tsv` adds the plurals, verb forms, comparatives and -ly adverbs that the rules
+  of English make from its words and that SCOWL's largest list confirms (73,070). Moby lacks most
+  names, so `moby-names-v1.tsv` adds SCOWL's names that Moby lacks, as nouns (16,052).
+- **The sets.** det `DI`, noun `Np-DIPCro`, pron `ro`, verb `Vti-DIPCro`, adj `A-DIPCro`, adv
+  `v-DI`, prep `P`, conj `C`, interj `!`. The exclusions stop function words doubling as content
+  words (Moby gives "the" an adverb reading and "a" a noun one, which would let almost any order
+  through).
+- **The rule** (`follow`, `first`, `last`) was chosen by a search, not by hand. It started from every
+  pairing allowed and removed pairings one at a time while real sentences lost less than shuffled
+  ones did (strict), or less than half as much (lenient). It was tuned on three NLTK Gutenberg books
+  and measured on four others it never saw. On 2,790 held-out sentences of 4 to 14 words, all in the
+  lists:
+
+  | Plugin | Real pass | Shuffled pass | Random words pass | Minimal states |
+  | :--- | ---: | ---: | ---: | ---: |
+  | `moby-grammar-v1` | 83.5% | 42.8% | 41.4% | 287,267 |
+  | `moby-grammar-strict-v1` | 58.8% | 18.4% | 17.1% | 215,179 |
+
+  Both are sieves for word salad, not parsers: a bigram grammar over parts of speech has a ceiling.
+  Neither lets a sentence start with a verb, so imperatives fail. A word in no list fails its
+  sentence.
+- **Cost.** 258,024 distinct words. Compiling takes about 6 s cold in a release build (reading 0.4 s,
+  building 0.3 s, minimising 1.6 million states 2.4 s, counting at length 32 about 3 s), then instant
+  from the cache. Both count at page lengths within the 512 MB table budget.
+- **Checked.** The unit tests judge sentences with both (real order passes, the same words shuffled
+  fail, "quickly the of" fails because "of" is no noun, a strict sentence may not start with a verb).
+  `tests/plugins/toy-tags-v1` and `toy-tags-cut-v1` test tagged lists against the oracle in CI: two
+  files as one, an excluded tag, capitals folded, a word judged by the tags of all its lines, and
+  lines skipped.
+- **Against the oracle, at full size.** The oracle's NFA keeps each token's reading apart, so its
+  subset construction for the Moby lists runs past ten million states and does not fit in 8 GB (the
+  engine's direct construction makes 1.6 million). Rather than build the oracle the engine's way,
+  its lazy mode makes subsets only as they are reached. With every word of the lists, the two agree
+  exactly at length 8 (282 billion units: 399,429,320 survivors lenient, 15,477,561 strict), on the
+  three ranked survivors, and on 200 held-out sentences (`tests/plugins/moby-sentences.txt`, each
+  real sentence followed by the same words shuffled: lenient 82 real and 37 shuffled pass, strict
+  67 and 17). At length 9 the reachable subsets outgrow 8 GB. CI runs the same comparison at
+  length 6 (about 20 s each).
+
