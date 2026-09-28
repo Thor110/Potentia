@@ -4,7 +4,7 @@
 // rebuild never overwrites it), or wherever --filters PATH points. It is plain text:
 //
 //   [text]
-//   mode = hide                  ; off | mark | hide | compact
+//   mode = hide                  ; off | mark | hide | compact | excluded
 //   filters = words-v1, model-information-v1
 //   [text.model-information-v1]
 //   max_millibits = 4000
@@ -30,7 +30,10 @@
 
 namespace sieve::cli {
 
-enum class FilterMode { Off, Mark, Hide, Compact };
+// Excluded is Hide turned round: the units that pass are left out and the ones that fail keep
+// their places, so what a stack sets aside can be walked and checked, each with the filter that
+// rejected it.
+enum class FilterMode { Off, Mark, Hide, Compact, Excluded };
 const char* to_string(FilterMode m);
 FilterMode filter_mode_from_string(const std::string& s);
 

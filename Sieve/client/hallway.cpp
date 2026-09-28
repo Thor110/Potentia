@@ -175,7 +175,8 @@ void Hallway::move_tiles(int64_t d)
 // ---- filters
 //
 // Each line has a stack and a mode: off, mark (failing books dimmed), hide (failing books
-// left out, every address where it was) or compact (only survivors, closed up, in every
+// left out, every address where it was), excluded (the other way round: passing books left out,
+// so what the stack sets aside can be walked and checked) or compact (only survivors, closed up, in every
 // ordering: positional by survivor number, scrambled by a keyed shuffle of those numbers,
 // guided on the guided line restricted to survivors). Compact needs a stack that can rank its
 // survivors; otherwise the line hides instead.
@@ -211,6 +212,8 @@ std::string Hallway::compute_filter_status() const
                            std::to_string(book_stacks_.pages.size());
         std::string s = trf("hud.filters", {parts, tr(std::string("mode.") + to_string(m))});
         if (m == FilterMode::Compact) s += trf("hud.filters.books", {short_big(book_sieve_->count())});
+        else if (m == FilterMode::Excluded && book_sieve_->can_rank())
+            s += trf("hud.filters.excluded", {short_big(BigUint(books_->size()) -= book_sieve_->count())});
         else if (modes_[li_] == FilterMode::Compact)
             s += book_sieve_->can_rank() ? tr("hud.filters.no_book") : trf("hud.filters.blocked", {book_sieve_->blocker()});
         return s;
@@ -220,6 +223,8 @@ std::string Hallway::compute_filter_status() const
     const FilterMode m = effective_mode();
     std::string s = trf("hud.filters", {std::to_string(st.size()), tr(std::string("mode.") + to_string(m))});
     if (m == FilterMode::Compact) s += trf("hud.filters.units", {short_big(st.ranker()->count())});
+    else if (m == FilterMode::Excluded && st.ranker())
+        s += trf("hud.filters.excluded", {short_big(BigUint(line().space.size()) -= st.ranker()->count())});
     else if (modes_[li_] == FilterMode::Compact)
         s += st.ranker() ? tr("hud.filters.no_unit") : trf("hud.filters.blocked", {st.compact_blocker()});
     return s;
@@ -1216,6 +1221,7 @@ void Hallway::render()
     }
     if (on_binary() && hover_ && hover_->side == Side::Right) hover_.reset(); // the edge: no shelves there
     if (hover_ && effective_mode() == FilterMode::Hide && !book(hover_->tile, hover_->slot()).passes) hover_.reset();
+    if (hover_ && effective_mode() == FilterMode::Excluded && book(hover_->tile, hover_->slot()).passes) hover_.reset();
 
     constexpr int kBack = kCacheBack, kAhead = kCacheAhead;
     // Only tiles that can appear on screen are drawn (usually about half of them).
@@ -1307,6 +1313,7 @@ void Hallway::render()
                     if (fm == FilterMode::Hide) continue;
                     dim = 0.8f;
                 }
+            if (fm == FilterMode::Excluded && book(t, k).passes) continue; // only what the stack excludes
             for (const Segment& s : book_geometry_[sizes_vary()][k]) add(s, z0, dim);
         }
     }
@@ -1437,6 +1444,7 @@ void Hallway::draw_models(const Models& md, const bool* visible, int back, int a
                     if (fm == FilterMode::Hide) continue;
                     dim = 0.8f;
                 }
+            if (fm == FilterMode::Excluded && book(t, k).passes) continue; // only what the stack excludes
             const BookSlot b = BookSlot::of(0, k);
             const float y0 = kRowTop - float(b.row + 1) * kRowHeight + 0.02f;
             const float zc = z0 + float(b.col) * book_pitch() + book_pitch() * 0.5f;

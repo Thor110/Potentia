@@ -1292,15 +1292,15 @@ void Menu::overlay_change(int dir, bool big)
     case ORow::Kind::Header: return;
     case ORow::Kind::Mode:
     {
-        const FilterMode order[4] = {FilterMode::Off, FilterMode::Mark, FilterMode::Hide, FilterMode::Compact};
+        const FilterMode order[5] = {FilterMode::Off, FilterMode::Mark, FilterMode::Hide, FilterMode::Compact, FilterMode::Excluded};
         FilterMode& mode = mode_of(overlay_);
         // A mode read back from a settings file someone has edited by hand may not be one of the
-        // four, so the search is bounded and anything unrecognised is treated as Off rather than
+        // five, so the search is bounded and anything unrecognised is treated as Off rather than
         // running off the end of the list.
         int m = 0;
-        while (m < 4 && order[m] != mode) ++m;
-        if (m == 4) m = 0;
-        mode = order[((m + dir) % 4 + 4) % 4];
+        while (m < 5 && order[m] != mode) ++m;
+        if (m == 5) m = 0;
+        mode = order[((m + dir) % 5 + 5) % 5];
         break;
     }
     case ORow::Kind::Filter: lf.set_enabled(row.filter, !lf.is_enabled(row.filter)); break;
@@ -1586,7 +1586,7 @@ void Menu::render_overlay(float W, float H)
         const sieve::cli::LineFilters& lf = filters_of(row);
         if (row.kind == ORow::Kind::Mode)
             it.lines = {trf("filters.mode", {tr(std::string("mode.") + to_string(mode))}), "    " + tr("filters.mode.help1"),
-                        "    " + tr("filters.mode.help2")};
+                        "    " + tr("filters.mode.help2"), "    " + tr("filters.mode.help3")};
         else if (row.kind == ORow::Kind::Header)
         {
             static const char* const heads[3] = {"filters.part.cover", "filters.part.title", "filters.part.pages"};

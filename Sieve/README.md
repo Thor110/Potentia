@@ -325,6 +325,8 @@ A changed filter never replaces the old one. It is registered as the next versio
 | mark | ![Mark](docs/images/hallway-mark.png) |
 | hide | ![Hide](docs/images/hallway-hide.png) |
 
+**Excluded** is hide turned round: units that pass are left out and units that fail keep their places, each with the filter that rejected it, so what a stack sets aside can be walked and checked. The top bar and `sieve filters` give the exact number excluded wherever the stack can count its survivors.
+
 ![Compact: only units that pass words-v2, with warped text on its shelf as survivor number 100485...4005](docs/images/hallway-compact.png)
 
 ![Compact in the guided ordering, zoomed out: the likeliest survivors, every one of them whole words](docs/images/hallway-compact-guided.png)

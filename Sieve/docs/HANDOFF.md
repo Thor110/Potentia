@@ -661,3 +661,13 @@ the slot's), white where a line's edges are black (books). Picking is narrowed t
 too (`pick_book`'s bottom/top), so the space above an audio item picks nothing. faces.ini's values
 were right (every model's front measured at x = 0, z within ±0.14, audio 0.006-0.286).
 
+**Excluded mode** (Edward, 28 September 2026). A fifth display mode, `excluded` (`FilterMode::Excluded`,
+`sieve-filters.ini` `mode = excluded`): hide turned round, so the units a stack sets aside can be
+walked and checked, each with the filter that failed it. Drawing, picking and item pictures skip
+survivors (hallway.cpp, item_faces.cpp); the setup menu cycles five modes; the top bar shows
+"(N excluded)" where the stack ranks (the line's size less the survivors; for books, the books
+line's size less the surviving books), and `sieve filters` prints an `excluded` line (exact). No
+core change and no new address scheme. A compact excluded mode (excluded units packed together, numbered
+k = 0 .. total - survivors - 1) is possible with the same rankers, unranking digit by digit with
+`base^r - completions(state, r)` in place of `completions`, but it would be a new versioned
+compact scheme (and a shuffle domain for scrambled), so it waits. Named "excluded" by Edward (first built as "rejects", renamed the same night, before any release).

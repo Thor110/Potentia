@@ -541,6 +541,7 @@ SDL_Texture* Hallway::item_face(int64_t dt, uint32_t slot, bool ask, bool& asked
     if (!ask || face_pending_.count(place)) return nullptr;
     const Book& b = book(dt, slot);
     if (effective_mode() == FilterMode::Hide && !b.passes) return nullptr; // it is not on the shelf
+    if (effective_mode() == FilterMode::Excluded && b.passes) return nullptr; // nor, here, is a survivor
     Painter paint = face_painter(b);
     if (!paint) return nullptr;
     start_face_workers();

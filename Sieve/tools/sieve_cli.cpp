@@ -1108,7 +1108,14 @@ int cmd_filters(const Args& a)
     if (!st.empty())
     {
         std::cout << "\nstack        " << st.id().substr(0, 16) << "...  " << st.provenance() << "\n";
-        if (st.ranker()) std::cout << "survivors    " << st.ranker()->count().to_decimal() << " (exact; compact mode available)\n";
+        if (st.ranker())
+        {
+            std::cout << "survivors    " << st.ranker()->count().to_decimal() << " (exact; compact mode available)\n";
+            // What the stack sets aside: the rest of the line (the hallway's excluded mode shows them).
+            BigUint excluded = line.space.size();
+            excluded -= st.ranker()->count();
+            std::cout << "excluded     " << excluded.to_decimal() << " (exact)\n";
+        }
         else std::cout << "compact      unavailable: " << st.compact_blocker() << "\n";
     }
     return 0;

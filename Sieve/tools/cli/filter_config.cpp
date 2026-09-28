@@ -104,6 +104,7 @@ const char* to_string(FilterMode m)
     case FilterMode::Mark: return "mark";
     case FilterMode::Hide: return "hide";
     case FilterMode::Compact: return "compact";
+    case FilterMode::Excluded: return "excluded";
     }
     return "off";
 }
@@ -114,7 +115,8 @@ FilterMode filter_mode_from_string(const std::string& s)
     if (s == "mark") return FilterMode::Mark;
     if (s == "hide") return FilterMode::Hide;
     if (s == "compact") return FilterMode::Compact;
-    throw std::invalid_argument("filter mode must be off, mark, hide or compact, not '" + s + "'");
+    if (s == "excluded") return FilterMode::Excluded;
+    throw std::invalid_argument("filter mode must be off, mark, hide, compact or excluded, not '" + s + "'");
 }
 
 bool LineFilters::is_enabled(const std::string& name) const

@@ -407,6 +407,12 @@ jobs:
           $H --no-menu --binary-length 64 --locate tests/manifest_fixture/a.txt --press "Return" --screenshot locate2.png | tail -2 | sed -n 1p | tee l2.txt | q "^BINARY line"
           # Its kind, read from its first bytes.
           grep -q " TXT " l2.txt
+          # The excluded mode: read back from the settings, and the excluded count is exactly the
+          # line less the survivors (27^32 less clean-v2's survivors at length 32).
+          printf "[text]\nmode = excluded\nfilters = clean-v2\n" > excluded.ini
+          build/sieve filters --line text --length 32 --filters excluded.ini | q "^mode *excluded"
+          build/sieve filters --line text --length 32 --filters excluded.ini | q "^excluded *247982505688110457657730525203966127924868733 "
+          $H --no-menu --filters excluded.ini --goto 0% --press Escape --screenshot excluded.png | q "saved excluded.png"
           # F on the item page saves the item in hand (here without its dialog): a page of the text
           # line as text, and a file of the binary line as exactly its bytes.
           rm -f saved_page.txt saved_file.bin

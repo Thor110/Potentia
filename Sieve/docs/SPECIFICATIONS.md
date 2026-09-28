@@ -379,6 +379,7 @@ The address space is complete; the shelves are curated.
 | mark | every unit; units that fail the stack are drawn faint, as a visible record of what the stack rejects |
 | hide | units that fail are left out; the rest keep their places, so the gaps show what was sieved |
 | compact | only survivors, packed together in address order: slot `k` of a loop holds the `k`-th survivor, and a loop is as long as the survivor count |
+| excluded | hide turned round: units that pass are left out and units that fail keep their places, each with the filter that rejected it, so what a stack sets aside can be walked and checked. Where the stack can rank, the count of excluded units (the line's size less the survivors) is exact, in the top bar and in `sieve filters`. *(Added 28 September 2026. Excluded units packed together, as compact packs survivors, would need their own compact addressing and is not built.)* |
 
 Compact mode needs a stack that can rank; otherwise the hallway falls back to hide and says why. It works in every ordering, each with its own compact form over the `N` survivors (numbered `0 … N−1` in positional order):
 

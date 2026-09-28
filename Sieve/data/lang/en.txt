@@ -90,6 +90,7 @@ mode.off = off
 mode.mark = mark
 mode.hide = hide
 mode.compact = compact
+mode.excluded = excluded
 
 ; ---- setup menu (Start Sieve)
 setup.title = SIEVE - set up the lines
@@ -184,6 +185,7 @@ filters.intro.books = A book is shelved only if its cover, title and pages pass 
 filters.mode = display mode: {0}
 filters.mode.help1 = off: every book   mark: failures drawn faint
 filters.mode.help2 = hide: failures left out   compact: only survivors, closed up
+filters.mode.help3 = excluded: only failures, in their places, to check what the filters set aside
 filters.part.cover = COVER
 filters.part.cover.help = a picture of the IMAGE line
 filters.part.title = TITLE
@@ -242,6 +244,7 @@ hud.filters.none = filters: none
 hud.filters = filters: {0} {1}
 hud.filters.units = " ({0} survivors)"
 hud.filters.books = " ({0} surviving books)"
+hud.filters.excluded = " ({0} excluded)"
 hud.filters.no_unit = " (compact: no unit survives)"
 hud.filters.no_book = " (compact: no book survives)"
 hud.filters.blocked = " (compact: {0})"
