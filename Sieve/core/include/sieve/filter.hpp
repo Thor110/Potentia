@@ -144,6 +144,10 @@ struct FilterSpec
     //   "model-rule"  the models line's own rules: combine with each other
     //   ""            judges only, or has no rule about combining (never unticks anything)
     std::string counts_as;
+    // Retired: kept, and loadable, so earlier stacks still reproduce, but it judges only and would
+    // stop a line compacting (its condensed address space). The menus list retired filters on a
+    // tab of their own, tick them only by hand, and leave them out of "tick all".
+    bool retired = false;
     std::string author, origin, plugin_sha256; // plugins only (sieve/plugin.hpp): who made it, and its file
     // Filters this one needs switched on with it (a plugin's `requires` lines), each by its full
     // name and, where the plugin pins them, settings. Not `implies`: this says what must be ticked

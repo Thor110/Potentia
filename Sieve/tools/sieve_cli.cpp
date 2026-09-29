@@ -1479,7 +1479,7 @@ int cmd_filters(const Args& a)
     if (list.empty()) std::cout << "No filters for this line yet.\n";
     for (const FilterSpec* f : list)
     {
-        std::cout << (lf.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << (f->plugin_sha256.empty() ? "" : "   (custom)") << "\n";
+        std::cout << (lf.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << (f->plugin_sha256.empty() ? "" : "   (custom)") << (f->retired ? "   (retired: judges only)" : "") << "\n";
         print_indented(f->description, "      ");
         if (!f->plugin_sha256.empty())
         {

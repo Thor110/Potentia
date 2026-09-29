@@ -1252,6 +1252,9 @@ static std::string filtered_text(const sieve::BigUint& kept, const sieve::BigUin
     return out;
 }
 
+// Which tab of the filters window lists a filter: 0 built-in, 1 custom (plugins), 2 retired.
+int tab_of(const sieve::FilterSpec& f) { return f.retired ? 2 : f.plugin_sha256.empty() ? 0 : 1; }
+
 const Menu::StackInfo& Menu::stack_info(int i)
 {
     if (i == 4) return book_stack_info();
@@ -1414,7 +1417,7 @@ void Menu::add_filter_rows(std::vector<ORow>& rows, const sieve::FilterLine& lin
     for (const sieve::FilterSpec* f : sieve::filters_for(line))
     {
         const bool custom = !f->plugin_sha256.empty();
-        if (custom != (otab_ == 1)) continue;
+        if (tab_of(*f) != otab_) continue;
         any = true;
         rows.push_back({ORow::Kind::Filter, f->name(), "", part});
         if (custom)
@@ -1431,6 +1434,7 @@ void Menu::add_filter_rows(std::vector<ORow>& rows, const sieve::FilterLine& lin
             for (const auto& p : f->params) rows.push_back({ORow::Kind::Param, f->name(), p.key, part});
     }
     if (otab_ == 1 && !any) rows.push_back({ORow::Kind::Info, "", "", part, tr("filters.custom.none")});
+    if (otab_ == 2 && !any) rows.push_back({ORow::Kind::Info, "", "", part, tr("filters.retired.none")});
 }
 
 std::vector<Menu::ORow> Menu::overlay_rows() const
@@ -1579,8 +1583,25 @@ void Menu::toggle_all_filters(ToggleScope scope)
     std::vector<std::pair<sieve::cli::LineFilters*, std::string>> in_reach;
     for (auto& [lf, line] : stacks)
         for (const sieve::FilterSpec* f : sieve::filters_for(line))
-            if (both_tabs || f->plugin_sha256.empty() == (otab_ == 0)) in_reach.emplace_back(lf, f->name());
-    const bool all_on = std::all_of(in_reach.begin(), in_reach.end(), [](const auto& e) { return e.first->is_enabled(e.second); });
+            // This tab, or the two main tabs: retired filters are ticked only by hand, or by Z
+            // on their own tab.
+            // title-v1 is for a book's title page (words, then SPACEs): ticking all ticks it
+            // only there, never on pages, where it would leave little but short lines.
+            if ((both_tabs ? tab_of(*f) != 2 : tab_of(*f) == otab_) && (f->id != "title" || lf == &cfg_.books.parts[1]))
+                in_reach.emplace_back(lf, f->name());
+    // Where two clash, the one kept is the more useful: newer versions first, and the filters
+    // counted by arithmetic (a sliver each, and clashing with everything) last.
+    std::stable_sort(in_reach.begin(), in_reach.end(), [](const auto& x, const auto& y) {
+        const sieve::FilterSpec* a = sieve::find_filter(x.second);
+        const sieve::FilterSpec* b = sieve::find_filter(y.second);
+        if (!a || !b) return false;
+        const bool arith_a = a->counts_as == "arithmetic", arith_b = b->counts_as == "arithmetic";
+        if (arith_a != arith_b) return arith_b;
+        return a->version > b->version;
+    });
+    // Anything in reach ticked: untick them all. Otherwise tick them all (bar those that clash).
+    // ("All ticked" can never be reached when some clash, so it is not the test.)
+    const bool all_on = std::any_of(in_reach.begin(), in_reach.end(), [](const auto& e) { return e.first->is_enabled(e.second); });
     // Ticking all keeps the first of any two that cannot be counted together (the list's order),
     // and skips the other: docs/FILTERS-CONFLICTS.md.
     for (auto& [lf, name] : in_reach)
@@ -1610,7 +1631,7 @@ void Menu::overlay_change(int dir, bool big)
     {
     case ORow::Kind::Header:
     case ORow::Kind::Info: return;
-    case ORow::Kind::Tabs: otab_ = 1 - otab_; break;
+    case ORow::Kind::Tabs: otab_ = ((otab_ + (dir < 0 ? -1 : 1)) % 3 + 3) % 3; break;
     case ORow::Kind::Mode:
     {
         const FilterMode order[5] = {FilterMode::Off, FilterMode::Mark, FilterMode::Hide, FilterMode::Compact, FilterMode::Excluded};
@@ -1939,15 +1960,21 @@ void Menu::render_overlay(float W, float H)
         else if (row.kind == ORow::Kind::Tabs)
         {
             // How many of each the line offers, whichever tab is showing.
-            size_t built = 0, custom = 0;
+            size_t n[3] = {0, 0, 0};
             auto count = [&](const sieve::FilterLine& l) {
-                for (const sieve::FilterSpec* f : sieve::filters_for(l)) ++(f->plugin_sha256.empty() ? built : custom);
+                for (const sieve::FilterSpec* f : sieve::filters_for(l)) ++n[tab_of(*f)];
             };
             if (overlay_ == 4)
                 for (int part = 0; part < 3; ++part) count(book_part_line(part));
             else count(filter_line_of(overlay_));
-            const std::string a = trf("filters.tab.builtin", {std::to_string(built)}), b = trf("filters.tab.custom", {std::to_string(custom)});
-            it.lines = {otab_ == 0 ? "[ " + a + " ]     " + b + " " : "  " + a + "     [ " + b + " ]", "    " + tr("filters.tab.help")};
+            static const char* const keys[3] = {"filters.tab.builtin", "filters.tab.custom", "filters.tab.retired"};
+            std::string tabs;
+            for (int t = 0; t < 3; ++t)
+            {
+                const std::string label = trf(keys[t], {std::to_string(n[t])});
+                tabs += (t ? "  -  " : "") + (t == otab_ ? "[ " + label + " ]" : label);
+            }
+            it.lines = {tabs, "    " + tr("filters.tab.help")};
         }
         else if (row.kind == ORow::Kind::Info)
         {

@@ -2,11 +2,14 @@
 // All decisions are exact integer comparisons (sieve/intlog.hpp).
 
 #include "sieve/filter.hpp"
+#include "sieve/dfa.hpp"
 #include "sieve/intlog.hpp"
+#include "sieve/plugin.hpp"
 
 #include <algorithm>
 #include <map>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 
 namespace sieve {
@@ -34,6 +37,38 @@ public:
 private:
     int64_t max_, space_;
 };
+
+// The same rule as an automaton, so max-run counts, ranks and merges with the other automata
+// (the custom filters, not-other-line, not-written): its state is the last symbol and how many
+// times in a row it has come (SPACE never counts), and a symbol one past max_run is dead. Only
+// when that table would be too large (a huge alphabet or max_run) does it judge instead.
+std::optional<Dfa> max_run_dfa(uint32_t base, int64_t max_run, int64_t space)
+{
+    const uint64_t R = uint64_t(max_run);
+    const uint64_t states = 2 + uint64_t(base) * R;
+    if (states * base > (uint64_t(1) << 24)) return std::nullopt;
+    Dfa d;
+    d.base = base;
+    d.start = 0;
+    d.next.assign(size_t(states) * base, Dfa::kDead);
+    d.accept.assign(size_t(states), 1);
+    auto at = [&](uint32_t x, uint64_t r) { return int32_t(2 + uint64_t(x) * R + (r - 1)); }; // r = 1..R
+    for (uint64_t s = 0; s < states; ++s)
+    {
+        const bool run_state = s >= 2;
+        const uint32_t last = run_state ? uint32_t((s - 2) / R) : 0;
+        const uint64_t r = run_state ? (s - 2) % R + 1 : 0;
+        for (uint32_t x = 0; x < base; ++x)
+        {
+            int32_t t;
+            if (int64_t(x) == space) t = 1; // SPACE: a run of its own that never counts
+            else if (run_state && x == last) t = r + 1 <= R ? at(x, r + 1) : Dfa::kDead;
+            else t = at(x, 1);
+            d.next[size_t(s) * base + x] = t;
+        }
+    }
+    return minimise(d);
+}
 
 // ---------------------------------------------------------------- symbol-entropy
 
@@ -266,14 +301,18 @@ void add_statistics_filters(std::vector<FilterSpec>& out)
     run.description = "No letter repeated more than max_run times in a row (English never exceeded 3 in the held-out books).";
     run.params = {{"max_run", "longest run of one letter allowed", FilterParam::Kind::Integer, "3", 1, 1000000, 1, {}}};
     run.applies = is_text;
-    run.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) {
+    run.counts_as = "automaton";
+    run.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
         const auto space = l.alphabet->digit_of(U' ');
-        return std::make_unique<MaxRun>(param_int(*find_filter("max-run-v1"), v, "max_run"), space ? int64_t(*space) : -1);
+        const int64_t max_run = param_int(*find_filter("max-run-v1"), v, "max_run"), sp = space ? int64_t(*space) : -1;
+        if (auto dfa = max_run_dfa(l.base, max_run, sp)) return make_dfa_filter(std::move(*dfa), l.length, "max_run=" + std::to_string(max_run));
+        return std::make_unique<MaxRun>(max_run, sp);
     };
     out.push_back(run);
 
     FilterSpec ent;
     ent.id = "symbol-entropy";
+    ent.retired = true; // judges only (it counts on black and white alone): stops compact
     ent.title = "symbol-entropy";
     ent.description = "Shannon entropy of the unit's own symbol frequencies, in bits per symbol, within [min, max]. "
                       "Separates text from noise on long units (English ~4.1, random letters ~4.7 at length 1000). "
@@ -290,6 +329,7 @@ void add_statistics_filters(std::vector<FilterSpec>& out)
 
     FilterSpec info;
     info.id = "model-information";
+    info.retired = true; // judges only: stops compact
     info.title = "model-information";
     info.description = "Information content under the pinned frequency model, at most max bits per symbol. "
                        "English ~1.9-4.1, random letters 9 or more.";

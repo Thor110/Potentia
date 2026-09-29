@@ -998,4 +998,20 @@ selected filter shows its conflicts in red (filters.conflict.merge / .hard). Jud
 (max-run, symbol-entropy, model-information) are left out: Edward's group 3, next. Next build step:
 the word filters, neighbour-agreement and key-v1 hand over their automata so "merge" pairs combine
 (with an early state limit so an oversized merge gives up fast).
+max-run-v1 is an automaton now (statistics.cpp max_run_dfa: states start, SPACE, and (symbol, run
+1..R); a symbol one past max_run is dead; minimised; make_dfa_filter with the same provenance, so
+stack ids are unchanged; the old judge remains when the table would pass 2^24 entries). counts_as
+"automaton": it merges with the custom filters and not-written, compacts on its own, and "needs
+merging" with the word filters. Oracle: max-run rows in cross-vectors, counted by its own (last
+symbol, run) walk; tests: every unit of three short lines judged, counted and ranked, and a merged
+stack with not-written compacts. Two older tests that used max-run as their judge-only example now
+use symbol-entropy.
+Retired filters (Edward): FilterSpec::retired, set on symbol-entropy-v1 and model-information-v1
+(judge only). The filters window has three tabs (tab_of: built-in, custom, retired); retired ones
+tick only by hand or Z on their tab. Toggle-all fixed: it unticks when anything in reach is ticked
+(with clashes skipped, "all ticked" was never reached, so it never toggled off), ticks newer
+versions first and arithmetic filters last, and ticks title-v1 only on the books' title part.
+Footer: "both main pages". sieve filters marks retired filters. Edward's measured kept shares with
+everything countable ticked: binary 10^-4.34, pages 10^-18.32, image 10^-2.32, audio 10^-3.37,
+video removes 10^-4.34, books 10^-17.23, models 10^-2.97.
 

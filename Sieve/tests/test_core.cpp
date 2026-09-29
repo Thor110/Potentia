@@ -1823,7 +1823,9 @@ void test_filters(const std::string& dir)
     CHECK(clash("title-v1", "words-v2").empty());                // title implies words-v2
     CHECK(clash("not-written-v1", "not-other-line-v1").empty()); // merged today
     CHECK(clash("distinct-indices-v1", "every-vertex-used-v1").empty());
-    CHECK(clash("max-run-v1", "not-a-file-v1").empty());         // judges only: not in the rule
+    CHECK(clash("symbol-entropy-v1", "not-a-file-v1").empty());  // judges only: not in the rule
+    CHECK(clash("max-run-v1", "not-written-v1").empty());        // max-run is an automaton now
+    CHECK(clash("max-run-v1", "not-a-file-v1") == "conflict");
     CHECK(clash("words-v2", "not-written-v1") == "merge");
     CHECK(clash("clean-v1", "clean-v2") == "merge");
     CHECK(clash("neighbour-agreement-v1", "not-packed-v1") == "merge");
@@ -2525,7 +2527,7 @@ void test_review_additions()
         const Space page(alphabet_by_id("lower27"), 2, "sieve");
         const BookSpace bs(cover, page, 2);
         const FilterStack none_stack;
-        const FilterStack pages(text_line(4), {{find_filter("max-run-v1"), {}}}, res);
+        const FilterStack pages(text_line(4), {{find_filter("max-run-v1"), {}}, {find_filter("symbol-entropy-v1"), {}}}, res); // entropy judges only on 27 symbols
         const BookSieve s(bs, none_stack, none_stack, pages);
         CHECK(!s.can_rank());
         CHECK(s.blocker().rfind("pages: ", 0) == 0);
@@ -3058,6 +3060,11 @@ void test_cross_vectors(const std::string& dir)
                 ok = ms.model_at(k, AddressMode::Positional) == v && ms.index_of(v, AddressMode::Positional) == k && ms.first_failure(v).empty();
             }
         }
+        else if (f[0] == "max-run" && f.size() == 5)
+        {
+            const FilterStack st(alphabet_line(alphabet_of(f[1]), uint32_t(std::stoul(f[2]))), {{find_filter("max-run-v1"), {{"max_run", f[3]}}}}, none);
+            ok = st.ranker() && st.ranker()->count().to_decimal() == f[4];
+        }
         else if ((f[0] == "pattern" && f.size() == 8) || (f[0] == "pattern-unit" && f.size() == 9))
         {
             const FilterValues v{{"width", f[3]}, {"order", f[4]}, {"period", f[5]}, {"ramps", f[6]}};
@@ -3091,6 +3098,48 @@ void test_cross_vectors(const std::string& dir)
     }
     std::cout << "cross-line vectors checked: " << n << "\n";
     CHECK(n >= 270);
+
+    // max-run-v1 as an automaton: every unit of short lines judged as the rule says (no symbol but
+    // SPACE more than max_run times in a row), counted, and ranked in order; and it merges with a
+    // custom filter and not-written (one automaton), so that stack compacts.
+    for (const auto& [id, L, R] : std::vector<std::tuple<std::string, uint32_t, uint32_t>>{{"lower27", 4, 1}, {"lower27", 5, 2}, {"u+0020-u+0022", 9, 2}})
+    {
+        const Alphabet& a = alphabet_of(id);
+        const FilterStack st(alphabet_line(a, L), {{find_filter("max-run-v1"), {{"max_run", std::to_string(R)}}}}, none);
+        CHECK(st.ranker() != nullptr);
+        if (!st.ranker()) continue;
+        const auto sp = a.digit_of(U' ');
+        std::vector<uint32_t> u(L, 0);
+        uint64_t kept = 0;
+        bool agree = true, round = true;
+        for (;;)
+        {
+            uint32_t run = 0;
+            bool rule = true;
+            for (size_t i = 0; i < L; ++i)
+            {
+                run = (i > 0 && u[i] == u[i - 1] && (!sp || u[i] != *sp)) ? run + 1 : 1;
+                rule = rule && run <= R;
+            }
+            agree = agree && st.passes(u) == rule;
+            if (rule)
+            {
+                round = round && st.ranker()->rank(u) == BigUint(kept) && st.ranker()->unrank(BigUint(kept)) == u;
+                ++kept;
+            }
+            size_t i = L;
+            while (i > 0 && ++u[i - 1] == a.size()) u[--i] = 0;
+            if (i == 0) break;
+        }
+        CHECK(agree);
+        CHECK(round);
+        CHECK(st.ranker()->count() == BigUint(kept));
+    }
+    {
+        const FilterStack both(alphabet_line(alphabet_of("lower27"), 16), {{find_filter("max-run-v1"), {}}, {find_filter("not-written-v1"), {}}}, none);
+        CHECK(both.ranker() != nullptr); // merged with not-written: compact
+        CHECK(filter_conflict(*find_filter("max-run-v1"), *find_filter("not-written-v1")).empty());
+    }
 
     // not-a-pattern-v1: every unit of short lines at several settings, ranked in order, and the
     // generic walk (completions from each prefix) agreeing with the filter's own rank.

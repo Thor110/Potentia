@@ -104,6 +104,9 @@ void finish_filter_warmup();
 // Whether a counting worker is still running (at exit: see app_main.cpp).
 bool filter_workers_busy();
 
+// Which tab of the filters window lists a filter: 0 built-in, 1 custom (plugins), 2 retired.
+int tab_of(const sieve::FilterSpec& f);
+
 class Menu
 {
 public:
@@ -228,7 +231,7 @@ private:
     std::string cfg_path_;
     AppSettings* app_ = nullptr;
     std::filesystem::path app_path_;
-    int otab_ = 0;     // the filters window's tab: 0 built-in filters, 1 custom filters (plugins)
+    int otab_ = 0;     // the filters window's tab: 0 built-in filters, 1 custom filters (plugins), 2 retired filters
     void add_filter_rows(std::vector<ORow>& rows, const sieve::FilterLine& line, const sieve::cli::LineFilters& lf, int part) const;
     int overlay_ = -1; // line whose filters are open (0-3 text/image/audio/video, 4 books, 5 models, 6 binary), or -1
     int orow_ = 0;

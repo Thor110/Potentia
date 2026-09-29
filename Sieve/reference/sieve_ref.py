@@ -4423,6 +4423,28 @@ def pat_count(B, L, w, Q, ramps):
     return B ** L - out
 
 
+
+def max_run_count(B, L, R, space):
+    """Units of L symbols with no symbol but SPACE repeated more than R times in a row: walked by
+    (last symbol, run length), counted with multiplicities (not the engine's automaton)."""
+    ways = {None: 1}  # key: (symbol, run) or None at the start
+    for _ in range(L):
+        nxt = {}
+        for key, n in ways.items():
+            for x in range(B):
+                if x == space:
+                    k2 = ("sp", 1)
+                elif key is not None and key[0] == x:
+                    if key[1] + 1 > R:
+                        continue
+                    k2 = (x, key[1] + 1)
+                else:
+                    k2 = (x, 1)
+                nxt[k2] = nxt.get(k2, 0) + n
+        ways = nxt
+    return sum(ways.values())
+
+
 def cmd_cross_vectors(_args):
     """not-a-file-v1, not-other-line-v1, not-packed-v1 and not-an-item-v1 (pages), counted."""
     sys.set_int_max_str_digits(0)
@@ -4437,6 +4459,7 @@ def cmd_cross_vectors(_args):
     print("# model-unit   vertices faces coords rank positional_index")
     print("# mesh         vertices faces coords rules survivors  (rules: v distinct-vertices, i distinct-indices, u every-vertex-used)")
     print("# mesh-unit    vertices faces coords rules rank positional_index")
+    print("# max-run      alphabet length max_run survivors  (max-run-v1, counted since it became an automaton)")
     print("# pattern      base length width order period ramps survivors  (not-a-pattern-v1)")
     print("# pattern-unit base length width order period ramps rank digits(comma)")
     for base, L, brute in ((3, 8, True), (27, 3, True), (27, 4, True), (2, 12, True), (27, 32, False), (2, 100, False),
@@ -4515,6 +4538,10 @@ def cmd_cross_vectors(_args):
                     faces = fw.unrank(r)
                     assert mesh_ok(V, F, C, rules, coords, faces)
                     print(f"mesh-unit\t{V}\t{F}\t{C}\t{rules}\t{k}\t{mesh_index(V, F, C, coords, faces)}")
+    for alpha_id, L, R in (("lower27", 32, 3), ("lower27", 32, 1), ("lower27", 100, 2), ("ascii95", 32, 3), ("babel29", 20, 2)):
+        al = alphabet(alpha_id)
+        sp = al.index(" ") if " " in al else -1
+        print(f"max-run\t{alpha_id}\t{L}\t{R}\t{max_run_count(len(al), L, R, sp)}")
     # not-a-pattern-v1: every unit of small lines by the judge, then the counts at full size.
     from itertools import product
     for B, L, w, order, Q, ramps in ((2, 16, 1, "big", 16, "on"), (3, 9, 1, "big", 16, "on"), (4, 8, 1, "big", 2, "on"),

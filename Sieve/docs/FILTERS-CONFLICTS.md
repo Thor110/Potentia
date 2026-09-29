@@ -17,12 +17,12 @@ counts (`FilterSpec::counts_as`):
 
 | Counts as | Filters | Combines with |
 | :--- | :--- | :--- |
-| automaton | every custom filter (the `.sfilter` plugins: clean-data, max-run-data, tidy-data, window-data, words-data, the Moby grammars, key-data, the melody filters), `not-other-line-v1`, `not-packed-v1` | other automata, and `not-written-v1` |
+| automaton | every custom filter (the `.sfilter` plugins: clean-data, max-run-data, tidy-data, window-data, words-data, the Moby grammars, key-data, the melody filters), `max-run-v1`, `not-other-line-v1`, `not-packed-v1` | other automata, and `not-written-v1` |
 | written | `not-written-v1` | automata |
 | own ranker | `clean-v1`, `window-v1`, `words-v1`, `clean-v2`, `window-v2`, `words-v2`, `title-v1`, `neighbour-agreement-v1`, `key-v1` | only a filter it implies, or that implies it |
 | arithmetic | `not-a-file-v1`, `not-a-pattern-v1` | nothing |
 | model rule | `distinct-vertices-v1`, `distinct-indices-v1`, `every-vertex-used-v1` | each other |
-| judges only | `max-run-v1`, `symbol-entropy-v1`, `model-information-v1`; on the binary line `binary-kind-v1` and `not-an-item-v1` | not part of this rule (see below) |
+| judges only | `symbol-entropy-v1`, `model-information-v1`; on the binary line `binary-kind-v1` and `not-an-item-v1` | not part of this rule (see below) |
 
 A filter never conflicts with one it implies, or that implies it: `words-v1` implies `clean-v1`
 and `window-v1`, `window-v1` implies `clean-v1`, the v2 versions the same, and `title-v1` implies
@@ -34,7 +34,7 @@ and `window-v1`, `window-v1` implies `clean-v1`, the v2 versions the same, and `
 - *Filters need merging:* any word filter (`clean`, `window`, `words`, v1 or v2, `title`) with
   `not-written-v1`, `not-other-line-v1` or any custom filter; and the word filters with each other
   where neither implies the other (`clean-v1` with `clean-v2`, `words-v1` with `window-v2`,
-  `title-v1` with `words-v1`, and so on).
+  `title-v1` with `words-v1`, and so on); and the word filters with `max-run-v1`.
 - *Conflicting filters:* `not-a-file-v1` and `not-a-pattern-v1` with each other and with every
   counting filter above.
 - *No conflict:* the custom filters, `not-other-line-v1` and `not-written-v1` together (merged
@@ -86,14 +86,24 @@ against rules that walk the model's digits.
 
 ## Not in this rule: filters that judge only
 
-`max-run-v1`, `symbol-entropy-v1` (except on black-and-white pictures, where it counts) and
-`model-information-v1` measure the whole unit (a longest run, a spread of symbols, an information
-content) and do not count survivors at all. Ticking one means that line hides, whatever else is
+`symbol-entropy-v1` (except on black-and-white pictures, where it counts) and
+`model-information-v1` measure the whole unit (a spread of symbols, an information content) and do
+not count survivors at all. (`max-run-v1` was one of them, and is now an automaton: its state is the
+last symbol and how often it has come in a row, so it counts, ranks and merges.) Ticking one means that line hides, whatever else is
 ticked. On the binary line, `not-an-item-v1` with melodies, pictures or models judges file by file.
 These are not auto-unticked: they are the next thing to discuss.
 
+## Retired filters
+
+`symbol-entropy-v1` and `model-information-v1` are **retired**: they judge only, so a line with one
+ticked cannot compact. They stay loadable (earlier stacks reproduce), on a third tab of the filters
+window, and are ticked only by hand (or by Z on that tab). If a countable way to express them is
+found, they come back as new versions.
+
 ## Ticking many at once
 
-Z, C and X (this tab, both tabs, every line) tick filters in list order and skip any that conflict
-with one already ticked, so the first of each clashing pair is kept. A settings file edited by hand
+Z (this tab), C (both main tabs) and X (both main tabs of every line) untick everything in reach if
+anything is ticked, and otherwise tick it all, skipping any filter that clashes with one already
+ticked. The kept one of a clashing pair is the more useful: newer versions first, the arithmetic
+filters last. `title-v1` is ticked only on a book's title part, and retired filters never. A settings file edited by hand
 is never changed when it is loaded: a stack with a conflict in it simply hides, and says why.
