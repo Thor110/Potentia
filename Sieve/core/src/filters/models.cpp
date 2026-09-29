@@ -25,6 +25,7 @@ void add_model_filters(std::vector<FilterSpec>& out)
         s.title = id;
         s.description = description;
         s.applies = [](const FilterLine& l) { return l.kind == "models"; };
+        s.counts_as = "model-rule";
         s.make = [](const FilterLine&, const FilterValues&, const FilterResources&) -> std::unique_ptr<Filter> {
             throw std::invalid_argument("the models line's filters judge models (a ModelSieve), not units of digits");
         };

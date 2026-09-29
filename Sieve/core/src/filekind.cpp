@@ -449,7 +449,7 @@ BigUint KindCounter::count_before(const BigUint& index) const
     return r;
 }
 
-std::vector<std::vector<BigUint>> KindCounter::pattern_table(const Pattern& pat) const
+KindCounter::PatternTable KindCounter::pattern_table(const Pattern& pat) const
 {
     const size_t length = pat.allowed.size();
     const uint32_t h = uint32_t(std::min<size_t>(length, kKindHead));
@@ -494,10 +494,15 @@ bool KindCounter::pattern_has(const Pattern& pat, const std::vector<uint8_t>& fi
 
 BigUint KindCounter::pattern_below(const Pattern& pat, const std::vector<uint8_t>& file) const
 {
+    if (pat.allowed.size() > max_bytes_ || file.size() < pat.allowed.size()) return {};
+    return pattern_below(pat, pattern_table(pat), file);
+}
+
+BigUint KindCounter::pattern_below(const Pattern& pat, const PatternTable& t, const std::vector<uint8_t>& file) const
+{
     const size_t length = pat.allowed.size();
     if (length > max_bytes_ || file.size() < length) return {};
-    if (file.size() > length) return pattern_count(pat);
-    const auto t = pattern_table(pat);
+    if (file.size() > length) return t[0][0];
     const uint32_t h = uint32_t(std::min<size_t>(length, kKindHead));
     BigUint below;
     uint32_t s = 0;
@@ -569,6 +574,7 @@ BinarySieve::BinarySieve(const BinarySpace& space, const std::vector<FilterStack
         {
             exclude_pages_ = true;
             pages_in_ = counter_->pattern_count(*items_.pages);
+            if (items_.pages->allowed.size() <= counter_->max_bytes()) pages_table_ = counter_->pattern_table(*items_.pages);
             count_ -= pages_in_;
             continue;
         }
@@ -614,20 +620,20 @@ std::string BinarySieve::first_failure_of(const std::vector<uint8_t>& file) cons
 BigUint BinarySieve::rank(const std::vector<uint8_t>& file) const
 {
     BigUint r = counter_->rank(file);
-    if (exclude_pages_) r -= counter_->pattern_below(*items_.pages, file);
+    if (exclude_pages_ && !pages_table_.empty()) r -= counter_->pattern_below(*items_.pages, pages_table_, file);
     return r;
 }
 
 std::vector<uint8_t> BinarySieve::unrank(const BigUint& k) const
 {
-    if (!exclude_pages_) return counter_->unrank(k);
+    if (!exclude_pages_ || pages_table_.empty()) return counter_->unrank(k);
     // The smallest j (a place among the kind survivors) with more than k survivors in 0..j, the
     // pages among them taken away: between k and k + (the pages there are).
     auto kept_through = [&](const BigUint& j, std::vector<uint8_t>& f) {
         f = counter_->unrank(j);
         BigUint n = j;
         n.add_small(1);
-        n -= counter_->pattern_below(*items_.pages, f);
+        if (!pages_table_.empty()) n -= counter_->pattern_below(*items_.pages, pages_table_, f);
         if (KindCounter::pattern_has(*items_.pages, f)) n -= BigUint(1);
         return n;
     };

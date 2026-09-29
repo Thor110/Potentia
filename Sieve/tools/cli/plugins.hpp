@@ -8,6 +8,7 @@
 // edited), as is a plugin that takes a built-in filter's id.
 #pragma once
 
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -20,5 +21,7 @@ struct PluginFile
 
 // Loads and registers the plugins (the first call does the work; later calls return the list).
 const std::vector<PluginFile>& load_plugins();
+// Where compiled automata are kept on disk (see plugins.cpp): shared by every build.
+std::filesystem::path plugin_cache_dir();
 
 } // namespace sieve::cli

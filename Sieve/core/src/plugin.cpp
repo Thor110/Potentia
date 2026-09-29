@@ -20,6 +20,7 @@
 #include <cstdio>
 #include <limits>
 #include <map>
+#include <iterator>
 #include <mutex>
 #include <unordered_map>
 #include <optional>
@@ -1540,6 +1541,136 @@ private:
 
 } // namespace
 
+namespace {
+
+struct Compiled
+{
+    Dfa dfa;
+    size_t declared = 0;
+    std::string data;
+};
+std::mutex g_compiled_mx;
+std::map<std::string, std::shared_ptr<const Compiled>> g_compiled;
+std::filesystem::path g_cache_dir;
+// One compile at a time for each automaton: a thread that finds another compiling the same one
+// waits for it and then takes it from the cache, instead of compiling it again.
+std::map<std::string, std::shared_ptr<std::mutex>> g_compiling;
+
+std::string compiled_key(const std::string& sha256, const FilterLine& line, const std::vector<FilterParam>& params, const FilterValues& values)
+{
+    std::string key = sha256 + "|" + line.symbols_id + "|" + std::to_string(line.base);
+    for (const auto& par : params)
+    {
+        const auto it = values.find(par.key);
+        key += "|" + par.key + "=" + (it == values.end() ? par.default_value : it->second);
+    }
+    return key;
+}
+
+std::filesystem::path cache_file(const std::string& key)
+{
+    return g_cache_dir / (Sha256::hex(Sha256::hash(key)).substr(0, 32) + ".dfa");
+}
+
+// sieve-dfa-cache-v1: the magic line; the key; base, start, states; each state's accept flag and
+// its live transitions (symbol, target), all little-endian; the declared states and the data
+// string; then the SHA-256 of everything before it.
+void put_u32(std::string& o, uint32_t v)
+{
+    for (int i = 0; i < 4; ++i) o.push_back(char((v >> (8 * i)) & 0xff));
+}
+
+std::string encode(const std::string& key, const Compiled& c)
+{
+    std::string o = "sieve-dfa-cache-v1\n";
+    put_u32(o, uint32_t(key.size()));
+    o += key;
+    put_u32(o, c.dfa.base);
+    put_u32(o, uint32_t(c.dfa.start));
+    put_u32(o, uint32_t(c.dfa.states()));
+    for (size_t s = 0; s < c.dfa.states(); ++s)
+    {
+        o.push_back(char(c.dfa.accept[s]));
+        uint32_t live = 0;
+        for (uint32_t x = 0; x < c.dfa.base; ++x) live += c.dfa.next[s * c.dfa.base + x] >= 0 ? 1 : 0;
+        put_u32(o, live);
+        for (uint32_t x = 0; x < c.dfa.base; ++x)
+            if (const int32_t t = c.dfa.next[s * c.dfa.base + x]; t >= 0)
+            {
+                put_u32(o, x);
+                put_u32(o, uint32_t(t));
+            }
+    }
+    put_u32(o, uint32_t(c.declared));
+    put_u32(o, uint32_t(c.data.size()));
+    o += c.data;
+    const auto d = Sha256::hash(o);
+    o.append(reinterpret_cast<const char*>(d.data()), d.size());
+    return o;
+}
+
+std::shared_ptr<const Compiled> decode(const std::string& key, const std::string& f)
+{
+    const std::string magic = "sieve-dfa-cache-v1\n";
+    if (f.size() < magic.size() + 32 || f.compare(0, magic.size(), magic) != 0) return nullptr;
+    const std::string body = f.substr(0, f.size() - 32);
+    const auto d = Sha256::hash(body);
+    if (f.compare(f.size() - 32, 32, std::string(reinterpret_cast<const char*>(d.data()), d.size())) != 0) return nullptr;
+    size_t at = magic.size();
+    bool ok = true;
+    auto u32 = [&]() -> uint32_t {
+        if (at + 4 > body.size()) { ok = false; return 0; }
+        uint32_t v = 0;
+        for (int i = 0; i < 4; ++i) v |= uint32_t(uint8_t(body[at + size_t(i)])) << (8 * i);
+        at += 4;
+        return v;
+    };
+    const uint32_t klen = u32();
+    if (!ok || at + klen > body.size() || body.compare(at, klen, key) != 0) return nullptr;
+    at += klen;
+    auto c = std::make_shared<Compiled>();
+    c->dfa.base = u32();
+    c->dfa.start = int32_t(u32());
+    const uint32_t states = u32();
+    if (!ok || c->dfa.base == 0 || uint64_t(states) * c->dfa.base > (uint64_t(1) << 32)) return nullptr;
+    c->dfa.next.assign(size_t(states) * c->dfa.base, Dfa::kDead);
+    c->dfa.accept.assign(states, 0);
+    for (uint32_t s = 0; s < states && ok; ++s)
+    {
+        if (at >= body.size()) return nullptr;
+        c->dfa.accept[s] = uint8_t(body[at++]);
+        const uint32_t live = u32();
+        for (uint32_t i = 0; i < live && ok; ++i)
+        {
+            const uint32_t x = u32(), t = u32();
+            if (x >= c->dfa.base || t >= states) return nullptr;
+            c->dfa.next[size_t(s) * c->dfa.base + x] = int32_t(t);
+        }
+    }
+    c->declared = u32();
+    const uint32_t dlen = u32();
+    if (!ok || at + dlen != body.size() || (c->dfa.start != Dfa::kDead && uint32_t(c->dfa.start) >= states)) return nullptr;
+    c->data = body.substr(at, dlen);
+    return c;
+}
+
+} // namespace
+
+void set_plugin_cache_dir(const std::filesystem::path& dir)
+{
+    std::lock_guard<std::mutex> lock(g_compiled_mx);
+    g_cache_dir = dir;
+}
+
+bool plugin_compiled(const std::string& sha256, const FilterLine& line, const std::vector<FilterParam>& params, const FilterValues& values)
+{
+    const std::string key = compiled_key(sha256, line, params, values);
+    std::lock_guard<std::mutex> lock(g_compiled_mx);
+    if (g_compiled.count(key)) return true;
+    std::error_code ec;
+    return !g_cache_dir.empty() && std::filesystem::exists(cache_file(key), ec);
+}
+
 Dfa compile_plugin(const PluginDef& p, const FilterLine& line, const FilterValues& values, const FilterResources& resources,
                    size_t* declared_states, std::string* data, const std::function<void(const std::string&)>& step)
 {
@@ -1547,31 +1678,45 @@ Dfa compile_plugin(const PluginDef& p, const FilterLine& line, const FilterValue
         if (step) step(s);
     };
     if (!plugin_applies(p, line)) throw std::invalid_argument(p.header.name() + " is not written for this line (" + line.kind + ", " + line.symbols_id + ")");
-    // Compiled automata are kept for the process: the same file, symbols and settings always
-    // compile to the same automaton (a dictionary is pinned by its hash, so its id is enough), and
-    // a large one takes seconds, where the menu and the hallway rebuild stacks often.
-    struct Compiled
-    {
-        Dfa dfa;
-        size_t declared = 0;
-        std::string data;
+    // Compiled automata are kept for the process, and on disk when the application names a folder
+    // (set_plugin_cache_dir): the same file, symbols and settings always compile to the same
+    // automaton (a dictionary is pinned by its hash, so its id is enough), and a large one takes
+    // seconds, where the menu and the hallway rebuild stacks often.
+    const std::string key = compiled_key(p.header.sha256, line, p.header.params, values);
+    auto give = [&](const Compiled& c) {
+        if (declared_states) *declared_states = c.declared;
+        if (data) *data = c.data;
+        return c.dfa;
     };
-    static std::mutex mx;
-    static std::map<std::string, std::shared_ptr<const Compiled>> cache;
-    std::string key = p.header.sha256 + "|" + line.symbols_id + "|" + std::to_string(line.base);
-    for (const auto& par : p.header.params)
+    std::shared_ptr<std::mutex> own;
     {
-        const auto it = values.find(par.key);
-        key += "|" + par.key + "=" + (it == values.end() ? par.default_value : it->second);
+        std::lock_guard<std::mutex> lock(g_compiled_mx);
+        auto& m = g_compiling[key];
+        if (!m) m = std::make_shared<std::mutex>();
+        own = m;
     }
+    std::lock_guard<std::mutex> compiling(*own);
+    std::filesystem::path file;
     {
-        std::lock_guard<std::mutex> lock(mx);
-        if (const auto it = cache.find(key); it != cache.end() && !p.header.sha256.empty())
+        std::lock_guard<std::mutex> lock(g_compiled_mx);
+        if (const auto it = g_compiled.find(key); it != g_compiled.end() && !p.header.sha256.empty())
         {
-            if (declared_states) *declared_states = it->second->declared;
-            if (data) *data = it->second->data;
             say("compiled already (kept from before)");
-            return it->second->dfa;
+            return give(*it->second);
+        }
+        if (!g_cache_dir.empty() && !p.header.sha256.empty()) file = cache_file(key);
+    }
+    if (!file.empty())
+    {
+        std::ifstream in(file, std::ios::binary);
+        const std::string bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        if (auto c = in ? decode(key, bytes) : nullptr)
+        {
+            say("compiled already (kept on disk)");
+            std::lock_guard<std::mutex> lock(g_compiled_mx);
+            if (g_compiled.size() > 64) g_compiled.clear();
+            g_compiled[key] = c;
+            return give(*c);
         }
     }
     try
@@ -1587,12 +1732,23 @@ Dfa compile_plugin(const PluginDef& p, const FilterLine& line, const FilterValue
         }
         say("minimising " + std::to_string(made.states()) + " states");
         c->dfa = minimise(made);
-        if (declared_states) *declared_states = c->declared;
-        if (data) *data = c->data;
-        std::lock_guard<std::mutex> lock(mx);
-        if (cache.size() > 64) cache.clear();
-        cache[key] = c;
-        return c->dfa;
+        if (!file.empty())
+        {
+            // Written whole to a temporary name, then renamed, so a reader never sees half a file.
+            std::error_code ec;
+            std::filesystem::create_directories(file.parent_path(), ec);
+            const std::filesystem::path tmp = file.string() + ".tmp";
+            {
+                std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+                out << encode(key, *c);
+            }
+            std::filesystem::rename(tmp, file, ec);
+            if (ec) std::filesystem::remove(tmp, ec);
+        }
+        std::lock_guard<std::mutex> lock(g_compiled_mx);
+        if (g_compiled.size() > 64) g_compiled.clear();
+        g_compiled[key] = c;
+        return give(*c);
     }
     catch (const std::invalid_argument& e)
     {
@@ -1607,18 +1763,29 @@ namespace {
 class PluginFilter : public Filter
 {
 public:
-    PluginFilter(Dfa dfa, uint32_t length, std::string provenance) : dfa_(std::move(dfa))
+    PluginFilter(Dfa dfa, uint32_t length, std::string provenance) : dfa_(std::move(dfa)), length_(length)
     {
         provenance_ = std::move(provenance);
-        if (DfaRanker::table_bytes(dfa_.states(), dfa_.base, length) <= kPluginTableBudget) ranker_ = std::make_unique<DfaRanker>(dfa_, length);
+        fits_ = DfaRanker::table_bytes(dfa_.states(), dfa_.base, length) <= kPluginTableBudget;
     }
     bool passes(std::span<const uint32_t> unit) const override { return dfa_.accepts(unit); }
-    const Ranker* ranker() const override { return ranker_.get(); }
+    // The counting table is built the first time it is asked for: a stack that judges only (or
+    // that combines the plugins' automata into one) never needs it.
+    const Ranker* ranker() const override
+    {
+        if (!fits_) return nullptr;
+        std::call_once(built_, [this] { ranker_ = std::make_unique<DfaRanker>(dfa_, length_); });
+        return ranker_.get();
+    }
+    bool can_rank() const override { return fits_; }
     const Dfa& dfa() const { return dfa_; }
 
 private:
     Dfa dfa_;
-    std::unique_ptr<DfaRanker> ranker_;
+    uint32_t length_;
+    bool fits_ = false;
+    mutable std::once_flag built_;
+    mutable std::unique_ptr<DfaRanker> ranker_;
 };
 
 } // namespace
@@ -1646,6 +1813,7 @@ FilterSpec plugin_spec(std::shared_ptr<const PluginDef> p)
     s.author = h.author;
     s.origin = h.origin;
     s.plugin_sha256 = h.sha256;
+    s.counts_as = "automaton";
     s.prerequisites = h.prerequisites;
     s.applies = [p](const FilterLine& l) { return plugin_applies(*p, l); };
     s.make = [p](const FilterLine& l, const FilterValues& v, const FilterResources& r) -> std::unique_ptr<Filter> {

@@ -222,7 +222,11 @@ filters.custom.requires = requires {0}: ticked with it
 filters.custom.refused = refused: {0}: {1}
 filters.note = ! {0}
 filters.more_above = more above
-filters.footer = Up/Down choose  Space/Right tick or change  Z/C toggle all filters (this page/both pages)  Esc/F close
+filters.footer = Up/Down choose  Space/Right tick or change  Z/X/C toggle all filters (this page/optimise all pages all dimensions/both pages)  Esc/F close
+filters.conflict.merge = filters need merging: not yet counted together with {0}. Ticking one unticks the other (docs/FILTERS-CONFLICTS.md).
+filters.conflict.hard = conflicting filters: cannot be counted together with {0}. Ticking one unticks the other (docs/FILTERS-CONFLICTS.md).
+filters.conflict.ticked = (ticked)
+status.counting = counting... (a custom grammar compiles the first time only, then is kept on disk)
 ; A filter's description and its parameters' can be translated too: filter.<name> and
 ; filter.<name>.<parameter> (e.g. filter.words-v2 = ..., filter.title-v1.max_length = ...).
 ; Left out, they show the English text built into Sieve.

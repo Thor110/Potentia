@@ -59,6 +59,11 @@ scientific, the curious, and people drawn to vastness and dread (the megalophobi
 5. **Open.** The source stays public (AGPLv3). Anything deterministic in the game can be, and
    will be, reverse-engineered, so a secret is kept by scale and effort, never by obscurity.
 
+
+**Start Game** (Edward; only if the game turns out to need it). If the game needs a predefined
+state space, then with the story on, the main menu's **Start Sieve** becomes **Start Game**, and
+the game runs on that fixed state space. §5 already leans that way: with the story on, the lines'
+shapes are fixed at known values so that the suit cannot be found by shrinking them.
 ---
 
 ## 3. Story

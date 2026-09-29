@@ -322,6 +322,32 @@ std::vector<std::string> tick_filter(LineFilters& settings, const std::string& n
     return added;
 }
 
+std::vector<std::string> tick_filter_by_hand(LineFilters& settings, const std::string& name, bool on)
+{
+    std::vector<std::string> unticked;
+    if (!on)
+    {
+        (void)tick_filter(settings, name, false);
+        return unticked;
+    }
+    std::vector<std::string> fresh = tick_filter(settings, name, true);
+    fresh.push_back(name);
+    for (const std::string& other : std::vector<std::string>(settings.enabled))
+    {
+        if (std::find(fresh.begin(), fresh.end(), other) != fresh.end()) continue;
+        const FilterSpec* b = find_filter(other);
+        if (!b) continue;
+        for (const std::string& n : fresh)
+            if (const FilterSpec* a = find_filter(n); a && !filter_conflict(*a, *b).empty())
+            {
+                settings.set_enabled(other, false);
+                unticked.push_back(other);
+                break;
+            }
+    }
+    return unticked;
+}
+
 std::vector<std::string> prerequisite_notes(const LineFilters& settings)
 {
     std::vector<std::string> notes;

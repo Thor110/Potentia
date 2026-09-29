@@ -86,6 +86,10 @@ public:
 // those require, each with the settings it pins; a prerequisite already ticked keeps its own
 // settings (prerequisite_notes then reports the difference). Returns the filters ticked with it.
 std::vector<std::string> tick_filter(LineFilters& settings, const std::string& name, bool on);
+// Ticking by hand (the menus): as tick_filter, and then any ticked filter that cannot be counted
+// together with what was just ticked is unticked (filter_conflict; docs/FILTERS-CONFLICTS.md).
+// Returns the names unticked. Settings files are never changed this way when they are loaded.
+std::vector<std::string> tick_filter_by_hand(LineFilters& settings, const std::string& name, bool on);
 // What the ticked filters' prerequisites say about the stack: one line for each prerequisite that
 // is not ticked, or is ticked at a setting other than the one pinned. Empty when all is well.
 std::vector<std::string> prerequisite_notes(const LineFilters& settings);

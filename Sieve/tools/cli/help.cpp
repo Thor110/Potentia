@@ -422,6 +422,8 @@ const std::vector<Page>& pages()
          "  not-other-line-v1  pages: melody notation or a model's .obj text (forms = all|notes|obj)\n"
          "  not-packed-v1      image, video (2, 4, 16 or 256 colours): the pixels packed as bits\n"
          "                     into bytes are a file with a signature\n"
+         "  not-a-pattern-v1   every line but binary and models: a unit that repeats a block of up to\n"
+         "                     period values, or counts up by a fixed step (width 1, 2, 4 or 8 digits)\n"
          "  not-an-item-v1     binary: a file that is exactly another line's item as F saves it\n"
          "                     (items = pages|melodies|pictures|models|all). Pages count exactly;\n"
          "                     the others are judged file by file, so compact falls back to hide.\n"

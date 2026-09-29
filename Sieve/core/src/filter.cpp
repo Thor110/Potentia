@@ -7,6 +7,7 @@
 #include "sieve/written.hpp"
 
 #include <algorithm>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 
@@ -300,14 +301,34 @@ FilterStack::FilterStack(const FilterLine& whole, const std::vector<Entry>& entr
     }
     id_ = Sha256::hex(Sha256::hash(provenance_));
 
+    entries_ = entries;
+    unit_length_ = line.length;
+    lazy_ = std::make_unique<std::once_flag>();
+}
+
+// Compact is worked out the first time it is asked for (ranker(), compact_blocker()): combining
+// large automata, and building their counting tables, takes seconds and hundreds of megabytes,
+// and a stack that only marks or hides never needs it.
+void FilterStack::settle() const
+{
+    if (lazy_) std::call_once(*lazy_, [this] { settle_now(); }); // (a default stack has nothing to settle)
+}
+
+void FilterStack::settle_now() const
+{
+    const std::vector<Entry>& entries = entries_;
+    struct
+    {
+        uint32_t length;
+    } line{unit_length_};
     // Compact: one filter with a ranker whose survivors are exactly the stack's.
     for (size_t i = 0; i < filters_.size() && !compact_; ++i)
     {
-        if (!filters_[i]->ranker()) continue;
+        if (!filters_[i]->can_rank()) continue;
         bool covers = true;
         for (size_t j = 0; j < entries.size(); ++j)
             if (j != i && !implied_by(entries[i], entries[j])) covers = false;
-        if (covers) compact_ = filters_[i]->ranker();
+        if (covers) compact_ = filters_[i]->ranker(); // built here, only for the filter that is used
     }
     // A stack of plugins only: their automata combined into one (the units every one accepts),
     // which ranks the stack exactly when its table fits. With not-written-v1 among them, its rule
@@ -357,7 +378,7 @@ FilterStack::FilterStack(const FilterLine& whole, const std::vector<Entry>& entr
         // Name the first ranking filter and the ticked filters it does not imply.
         size_t r = filters_.size();
         for (size_t i = 0; i < filters_.size() && r == filters_.size(); ++i)
-            if (filters_[i]->ranker()) r = i;
+            if (filters_[i]->can_rank()) r = i;
         if (r == filters_.size()) blocker_ = "none of the ticked filters can rank its survivors at this size";
         else
         {
@@ -380,6 +401,31 @@ int FilterStack::first_failure(std::span<const uint32_t> unit) const
     return -1;
 }
 
-std::string FilterStack::compact_blocker() const { return blocker_; }
+std::string filter_conflict(const FilterSpec& a, const FilterSpec& b)
+{
+    if (a.name() == b.name() || a.counts_as.empty() || b.counts_as.empty()) return {};
+    auto implies = [](const FilterSpec& x, const FilterSpec& y) {
+        return std::find(x.implies.begin(), x.implies.end(), y.name()) != x.implies.end();
+    };
+    if (implies(a, b) || implies(b, a)) return {};
+    const std::string& x = a.counts_as;
+    const std::string& y = b.counts_as;
+    auto pair = [&](const char* p, const char* q) { return (x == p && y == q) || (x == q && y == p); };
+    if (pair("automaton", "automaton") || pair("automaton", "written") || pair("model-rule", "model-rule")) return {};
+    if (x == "arithmetic" || y == "arithmetic") return "conflict";
+    return "merge";
+}
+
+std::string FilterStack::compact_blocker() const
+{
+    settle();
+    return blocker_;
+}
+
+const Ranker* FilterStack::ranker() const
+{
+    settle();
+    return compact_;
+}
 
 } // namespace sieve

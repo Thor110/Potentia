@@ -72,7 +72,8 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
         try
         {
             // Compact needs the survivors in every ordering; if that fails, the line hides instead.
-            const Ranker* rk = stacks_[i].ranker();
+            // Only a line shown compact asks for them: working them out can take a while.
+            const Ranker* rk = modes_[i] == FilterMode::Compact ? stacks_[i].ranker() : nullptr;
             if (rk && !rk->count().is_zero())
             {
                 const Line& ln = lines_[size_t(i)];

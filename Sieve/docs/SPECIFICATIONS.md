@@ -357,6 +357,7 @@ The structure tests of §8.1 are built as **filters**: small, self-contained mod
 | `not-a-file-v1` | text, image, audio, video, models | the unit's own number, read as a place on the binary line (binary-v1), does not hold a file whose first bytes carry a signature; counted from the file's head alone (FILTER-PLUGINS §16) | yes |
 | `not-other-line-v1` | text (not bytes256) | the page is not melody notation (`notes`) or a model's `.obj` text (`obj`); `forms`: all, notes or obj; an automaton | yes |
 | `not-packed-v1` | image, video (2, 4, 16 or 256 colours) | the pixels, packed as bits into bytes, are not a file with a signature; an automaton | yes |
+| `not-a-pattern-v1` | text, image, audio, video | not a repeat of a block of up to `period` values (default 16) all the way along, nor a ramp of values counting up by a fixed step (`ramps`); values of `width` digits (1, 2, 4, 8), `order` big or little; FILTER-PLUGINS §18 | yes |
 | `distinct-vertices-v1` | models | no two vertices stand at the same point of the grid; `P(P−1)…(P−V+1)` of the coordinate strings, `P = C³` | yes |
 | `distinct-indices-v1` | models | no face names the same vertex twice | yes |
 | `every-vertex-used-v1` | models | every vertex is named by at least one face; inclusion and exclusion over the vertices left out | yes, within a budget |

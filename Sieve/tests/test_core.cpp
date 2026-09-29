@@ -1817,9 +1817,22 @@ void test_filters(const std::string& dir)
     CHECK(find_filter("words") == find_filter("words-v2")); // the newest version
     CHECK(find_filter("words-v1") != find_filter("words-v2"));
     CHECK(find_filter("nonsense") == nullptr);
-    CHECK(filters_for(text_line(8)).size() == 13); // not-written-v1, not-a-file-v1 and not-other-line-v1 joined the ten
+    // Which filters cannot be counted together (docs/FILTERS-CONFLICTS.md).
+    auto clash = [](const char* a, const char* b) { return filter_conflict(*find_filter(a), *find_filter(b)); };
+    CHECK(clash("words-v2", "clean-v2").empty());                // words implies clean
+    CHECK(clash("title-v1", "words-v2").empty());                // title implies words-v2
+    CHECK(clash("not-written-v1", "not-other-line-v1").empty()); // merged today
+    CHECK(clash("distinct-indices-v1", "every-vertex-used-v1").empty());
+    CHECK(clash("max-run-v1", "not-a-file-v1").empty());         // judges only: not in the rule
+    CHECK(clash("words-v2", "not-written-v1") == "merge");
+    CHECK(clash("clean-v1", "clean-v2") == "merge");
+    CHECK(clash("neighbour-agreement-v1", "not-packed-v1") == "merge");
+    CHECK(clash("not-a-file-v1", "words-v2") == "conflict");
+    CHECK(clash("not-a-pattern-v1", "not-other-line-v1") == "conflict");
+    CHECK(clash("not-a-file-v1", "distinct-vertices-v1") == "conflict");
+    CHECK(filters_for(text_line(8)).size() == 14); // not-written-v1, not-a-file-v1, not-other-line-v1 and not-a-pattern-v1 joined the ten
     const FilterLine image{"image", "image/mono/10x10", 2, 100, nullptr, 10, 10, 1};
-    CHECK(filters_for(image).size() == 4); // symbol-entropy, neighbour-agreement, not-a-file, not-packed
+    CHECK(filters_for(image).size() == 5); // symbol-entropy, neighbour-agreement, not-a-file, not-packed, not-a-pattern
 
     // Rankers, exhaustively at small lengths with a small dictionary: rank = position among the
     // survivors in address order, and unrank inverts it.
@@ -3045,6 +3058,19 @@ void test_cross_vectors(const std::string& dir)
                 ok = ms.model_at(k, AddressMode::Positional) == v && ms.index_of(v, AddressMode::Positional) == k && ms.first_failure(v).empty();
             }
         }
+        else if ((f[0] == "pattern" && f.size() == 8) || (f[0] == "pattern-unit" && f.size() == 9))
+        {
+            const FilterValues v{{"width", f[3]}, {"order", f[4]}, {"period", f[5]}, {"ramps", f[6]}};
+            const FilterStack st(number_line(uint32_t(std::stoul(f[1])), uint32_t(std::stoul(f[2]))), {{find_filter("not-a-pattern-v1"), v}}, none);
+            if (!st.ranker()) ok = false;
+            else if (f[0] == "pattern") ok = st.ranker()->count().to_decimal() == f[7];
+            else
+            {
+                const BigUint k = BigUint::from_decimal(f[7]);
+                const std::vector<uint32_t> want = split_u32(f[8]);
+                ok = st.ranker()->unrank(k) == want && st.ranker()->rank(want) == k && st.passes(want);
+            }
+        }
         else if (f[0] == "item-pages" && f.size() == 7)
         {
             const BinarySpace space(std::stoull(f[1]), "sieve");
@@ -3064,7 +3090,57 @@ void test_cross_vectors(const std::string& dir)
         ++n;
     }
     std::cout << "cross-line vectors checked: " << n << "\n";
-    CHECK(n >= 210);
+    CHECK(n >= 270);
+
+    // not-a-pattern-v1: every unit of short lines at several settings, ranked in order, and the
+    // generic walk (completions from each prefix) agreeing with the filter's own rank.
+    for (const auto& [base, L, width, order] : std::vector<std::tuple<uint32_t, uint32_t, std::string, std::string>>{
+             {2, 14, "1", "big"}, {3, 8, "1", "big"}, {2, 16, "2", "little"}, {2, 16, "4", "big"}, {4, 7, "2", "big"}})
+    {
+        const FilterStack st(number_line(base, L), {{find_filter("not-a-pattern-v1"), {{"width", width}, {"order", order}}}}, none);
+        CHECK(st.ranker() != nullptr);
+        if (!st.ranker()) continue;
+        std::vector<uint32_t> u(L, 0);
+        uint64_t kept = 0;
+        bool round = true;
+        for (;;)
+        {
+            if (st.passes(u))
+            {
+                if (kept % 37 == 0) round = round && st.ranker()->rank(u) == BigUint(kept) && st.ranker()->unrank(BigUint(kept)) == u &&
+                                            st.ranker()->Ranker::rank(u) == BigUint(kept);
+                ++kept;
+            }
+            size_t i = L;
+            while (i > 0 && ++u[i - 1] == base) u[--i] = 0;
+            if (i == 0) break;
+        }
+        CHECK(round);
+        CHECK(st.ranker()->count() == BigUint(kept));
+    }
+    {
+        // A ramp through every byte, a 16-bit counter and a repeated block fail; text passes.
+        const FilterStack bytes(number_line(256, 32), {{find_filter("not-a-pattern-v1"), {}}}, none);
+        std::vector<uint32_t> ramp(32), rep(32), word(32);
+        for (uint32_t i = 0; i < 32; ++i)
+        {
+            ramp[i] = (200 + i * 7) % 256;
+            rep[i] = std::vector<uint32_t>{1, 2, 3}[i % 3];
+        }
+        CHECK(!bytes.passes(ramp));
+        CHECK(!bytes.passes(rep));
+        const FilterStack words16(number_line(256, 32), {{find_filter("not-a-pattern-v1"), {{"width", "2"}, {"order", "little"}}}}, none);
+        for (uint32_t k = 0; k < 16; ++k)
+        {
+            const uint32_t v = (0xfff0 + k * 3) % 65536;
+            word[2 * k] = v % 256;
+            word[2 * k + 1] = v / 256;
+        }
+        CHECK(!words16.passes(word));
+        CHECK(bytes.passes(word)); // not a pattern of single bytes
+        std::string t = "it was the best of times it was ";
+        CHECK(bytes.passes(std::vector<uint32_t>(t.begin(), t.end())));
+    }
 
     // The models line: every model of a small shape, against file_kind_at, in both compact orders.
     {

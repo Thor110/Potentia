@@ -26,6 +26,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <span>
 #include <string>
 #include <vector>
@@ -113,6 +114,9 @@ public:
     virtual ~Filter() = default;
     virtual bool passes(std::span<const uint32_t> unit) const = 0;
     virtual const Ranker* ranker() const { return nullptr; }
+    // Whether ranker() would give a ranker, without building it (a large automaton's table takes
+    // seconds and hundreds of megabytes, so it is built only when a stack will use it).
+    virtual bool can_rank() const { return ranker() != nullptr; }
     // Parameters and data hashes, for provenance ("dictionary=scowl-en-60 sha256=...").
     const std::string& provenance() const { return provenance_; }
 
@@ -129,6 +133,17 @@ struct FilterSpec
     std::string description;
     std::vector<FilterParam> params;
     std::vector<std::string> implies; // full names of filters every survivor of this one also passes
+    // How the filter counts, for which filters can be counted together (docs/FILTERS-CONFLICTS.md):
+    //   "automaton"   an automaton over the symbols: combines with other automata (plugins,
+    //                 not-other-line, not-packed) and with not-written
+    //   "written"     not-written: combines with automata
+    //   "own"         its own ranker (the word filters, neighbour-agreement, key): an automaton
+    //                 underneath, not yet merged with others ("filters need merging")
+    //   "arithmetic"  counted by arithmetic on the whole unit (not-a-file, not-a-pattern): combines
+    //                 with nothing ("conflicting filters")
+    //   "model-rule"  the models line's own rules: combine with each other
+    //   ""            judges only, or has no rule about combining (never unticks anything)
+    std::string counts_as;
     std::string author, origin, plugin_sha256; // plugins only (sieve/plugin.hpp): who made it, and its file
     // Filters this one needs switched on with it (a plugin's `requires` lines), each by its full
     // name and, where the plugin pins them, settings. Not `implies`: this says what must be ticked
@@ -149,6 +164,12 @@ struct FilterSpec
 const std::vector<FilterSpec>& filter_registry();
 const FilterSpec* find_filter(const std::string& name); // "words-v1", or "words" for the newest version
 std::vector<const FilterSpec*> filters_for(const FilterLine& line);
+
+// Whether two filters for the same line cannot be counted together, and why: "" (they can, or one
+// judges only), "merge" (both are automata underneath but are not merged yet: "filters need
+// merging") or "conflict" (one is counted by arithmetic: "conflicting filters"). A filter implied
+// by the other never conflicts with it. See docs/FILTERS-CONFLICTS.md.
+std::string filter_conflict(const FilterSpec& a, const FilterSpec& b);
 
 // The value of a parameter, or its default. Throws if an integer is malformed or out of range.
 std::string param_value(const FilterSpec& spec, const FilterValues& values, const std::string& key);
@@ -184,7 +205,8 @@ public:
 
     // A ranker for the whole stack, if one filter has a ranker and implies every other ticked
     // filter (so its survivors are exactly the stack's survivors). Otherwise nullptr.
-    const Ranker* ranker() const { return compact_; }
+    // Worked out on first use (see filter.cpp), so a stack that only judges costs nothing for it.
+    const Ranker* ranker() const;
     std::string compact_blocker() const; // why there is no ranker ("" if there is one)
 
     // "words-v1{dictionary=scowl-en-60 sha256=...}; max-run-v1{max_run=2}" and its SHA-256.
@@ -197,10 +219,16 @@ private:
     std::vector<std::unique_ptr<Filter>> filters_;
     std::vector<std::string> names_;
     uint32_t length_ = 0, voices_ = 1;
-    const Ranker* compact_ = nullptr;
-    std::unique_ptr<Ranker> own_ranker_; // a stack of plugins: their combined automaton's ranker
-    std::unique_ptr<Ranker> voices_ranker_; // several voices: one voice's ranker, for them all
-    std::string blocker_;
+    // Compact, worked out once, when first asked for (settle()).
+    std::vector<Entry> entries_;
+    uint32_t unit_length_ = 0;
+    std::unique_ptr<std::once_flag> lazy_;
+    void settle() const;
+    void settle_now() const;
+    mutable const Ranker* compact_ = nullptr;
+    mutable std::unique_ptr<Ranker> own_ranker_; // a stack of plugins: their combined automaton's ranker
+    mutable std::unique_ptr<Ranker> voices_ranker_; // several voices: one voice's ranker, for them all
+    mutable std::string blocker_;
     std::string provenance_, id_;
 };
 

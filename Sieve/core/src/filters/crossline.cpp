@@ -154,6 +154,7 @@ void add_crossline_filters(std::vector<FilterSpec>& out)
     f.description = "Not a file by its number: every unit is a number, and every number is a place on the binary line. "
                     "Fails a unit whose own number holds, there, a file whose first bytes carry a signature (file-kinds-v1: "
                     "PNG, ZIP, MID, ...): the same number read as a file says it is one. Any line, any shape. Exact.";
+    f.counts_as = "arithmetic";
     f.applies = [](const FilterLine& l) { return l.kind == "models" || (l.kind != "binary" && l.base >= 2 && l.length >= 1); };
     f.make = [](const FilterLine& l, const FilterValues&, const FilterResources&) -> std::unique_ptr<Filter> {
         if (l.kind == "models") throw std::invalid_argument("the models line is sieved by its own stack (sieve/modelsieve.hpp)");

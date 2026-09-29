@@ -270,7 +270,7 @@ void Hallway::media_change(int dir, bool big, bool& quit)
     case K::Gap: s.gap = std::clamp(s.gap + by, 0, 600); break;
     case K::Fifths: s.fifths = !s.fifths; break;
     case K::LineMode: s.modes[row.line] = ((s.modes[row.line] + dir) % kMusicModes + kMusicModes) % kMusicModes; break;
-    case K::Filter: (void)cli::tick_filter(s.filters, row.filter, !s.filters.is_enabled(row.filter)); break; // with its prerequisites
+    case K::Filter: (void)cli::tick_filter_by_hand(s.filters, row.filter, !s.filters.is_enabled(row.filter)); break; // with its prerequisites
     case K::Param:
     {
         const sieve::FilterSpec* spec = sieve::find_filter(row.filter);

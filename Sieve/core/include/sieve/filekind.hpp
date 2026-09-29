@@ -111,6 +111,11 @@ public:
     BigUint pattern_count(const Pattern& pat) const;
     BigUint pattern_below(const Pattern& pat, const std::vector<uint8_t>& file) const;
     static bool pattern_has(const Pattern& pat, const std::vector<uint8_t>& file);
+    // The same with the pattern's table worked out once (pattern_table) and kept by the caller: a
+    // table is every head state at every level, so building it for each call is what is slow.
+    using PatternTable = std::vector<std::vector<BigUint>>;
+    PatternTable pattern_table(const Pattern& pat) const; // completions from each head state after p bytes
+    BigUint pattern_below(const Pattern& pat, const PatternTable& table, const std::vector<uint8_t>& file) const;
 
 private:
     // The head automaton, level by level: states_[p] are the states after p bytes (0..16), each a
@@ -129,8 +134,6 @@ private:
     BigUint count_, short_total_; // all survivors; those of 16 bytes or fewer
     int kind_of(uint32_t h, uint32_t s) const; // index into file_kinds() of a head of h bytes ending in s
     BigUint shorter_than(uint64_t length) const; // survivors shorter than `length` bytes
-    // Completions of a pattern from each head state after p bytes (p <= min(length, 16)).
-    std::vector<std::vector<BigUint>> pattern_table(const Pattern& pat) const;
 };
 
 // The other lines' items as the binary line holds them (not-an-item-v1): each a file that is
@@ -192,6 +195,7 @@ private:
     BinaryItems items_;
     std::unique_ptr<KindCounter> counter_; // the survivors of the kind filters
     BigUint count_, pages_in_;             // survivors; pages among the kind survivors
+    KindCounter::PatternTable pages_table_; // the pages' pattern table, worked out once
     bool can_rank_ = true, exclude_pages_ = false;
     std::string blocker_;
     std::unique_ptr<Shuffle> shuffle_;

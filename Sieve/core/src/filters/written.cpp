@@ -71,6 +71,7 @@ void add_written_filters(std::vector<FilterSpec>& out)
     for (const auto& r : written_decoders()) choices.push_back(r);
     w.params = {{"readings", "which readings to check: all, or one", FilterParam::Kind::Text, "all", 0, 0, 1, choices}};
     w.applies = [](const FilterLine& l) { return l.kind == "text" && l.alphabet != nullptr; };
+    w.counts_as = "written";
     w.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
         const FilterSpec& s = *find_filter("not-written-v1");
         const std::string readings = param_value(s, v, "readings");
@@ -134,6 +135,7 @@ void add_other_line_filters(std::vector<FilterSpec>& out)
                     "the audio or the models line. Only alphabets with digits can hold either. Exact.";
     o.params = {{"forms", "which forms: all, notes or obj", FilterParam::Kind::Text, "all", 0, 0, 1, {"all", "notes", "obj"}}};
     o.applies = [](const FilterLine& l) { return l.kind == "text" && l.alphabet != nullptr && !holds_all_bytes(*l.alphabet); };
+    o.counts_as = "automaton";
     o.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
         const std::string forms = param_value(*find_filter("not-other-line-v1"), v, "forms");
         const uint32_t mask = other_line_mask_of(forms);
@@ -152,6 +154,7 @@ void add_other_line_filters(std::vector<FilterSpec>& out)
                     "bits a pixel, in address order), make a file whose first bytes carry a signature (file-kinds-v1). That "
                     "picture is a file stored as pixels, and belongs on the binary line. Palettes of 2, 4, 16 or 256 colours. Exact.";
     p.applies = [](const FilterLine& l) { return (l.kind == "image" || l.kind == "video") && bits_of(l.base) > 0 && l.base <= 256; };
+    p.counts_as = "automaton";
     p.make = [](const FilterLine& l, const FilterValues&, const FilterResources&) -> std::unique_ptr<Filter> {
         const uint32_t base = l.base;
         const auto dfa = kept_dfa("packed/" + std::to_string(base), [&] { return std::optional<Dfa>(packed_dfa(base, bits_of(base))); });

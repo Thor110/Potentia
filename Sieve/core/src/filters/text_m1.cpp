@@ -13,6 +13,7 @@
 #include "sieve/filter.hpp"
 
 #include <algorithm>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -121,10 +122,32 @@ private:
     std::vector<BigUint> c2_;
 };
 
+// A ranker built the first time it is asked for: the dictionary automata's counting tables take
+// time and memory, and a stack that only judges (mark, hide) never needs them.
+class LazyRanker
+{
+public:
+    using Make = std::function<std::unique_ptr<Ranker>()>;
+    LazyRanker() = default;
+    explicit LazyRanker(Make make) : make_(std::move(make)) {}
+    const Ranker* get() const
+    {
+        if (!make_) return nullptr;
+        std::call_once(once_, [this] { ranker_ = make_(); });
+        return ranker_.get();
+    }
+    bool can() const { return bool(make_); }
+
+private:
+    Make make_;
+    mutable std::once_flag once_;
+    mutable std::unique_ptr<Ranker> ranker_;
+};
+
 class M1Filter : public Filter
 {
 public:
-    M1Filter(SieveFilter kind, bool padding, std::shared_ptr<const Dictionary> dict, std::unique_ptr<Ranker> ranker)
+    M1Filter(SieveFilter kind, bool padding, std::shared_ptr<const Dictionary> dict, LazyRanker::Make ranker)
         : kind_(kind), padding_(padding), dict_(std::move(dict)), ranker_(std::move(ranker))
     {
     }
@@ -141,13 +164,14 @@ public:
         return unit_passes(t, kind_, *dict_);
     }
     const Ranker* ranker() const override { return ranker_.get(); }
+    bool can_rank() const override { return ranker_.can(); }
     void set_provenance(std::string p) { provenance_ = std::move(p); }
 
 private:
     SieveFilter kind_;
     bool padding_;
     std::shared_ptr<const Dictionary> dict_;
-    std::unique_ptr<Ranker> ranker_;
+    LazyRanker ranker_;
 };
 
 // ---------------------------------------------------------------- words
@@ -609,13 +633,14 @@ public:
             if (unit[i] != 0) return false;
         return words_.passes(unit.first(std::min<size_t>(N_, unit.size())));
     }
-    const Ranker* ranker() const override { return ranker_.get(); }
-    void set_ranker(std::unique_ptr<Ranker> r) { ranker_ = std::move(r); }
+    const Ranker* ranker() const override { return ranker_ ? ranker_->get() : nullptr; }
+    bool can_rank() const override { return ranker_ && ranker_->can(); }
+    void set_ranker(LazyRanker::Make r) { ranker_ = std::make_unique<LazyRanker>(std::move(r)); }
 
 private:
     M1Filter words_;
     uint32_t N_;
-    std::unique_ptr<Ranker> ranker_;
+    std::unique_ptr<LazyRanker> ranker_;
 };
 
 std::unique_ptr<Filter> make_m1(SieveFilter kind, bool padding, const FilterLine& line, const FilterValues& values, const FilterResources& res,
@@ -624,12 +649,15 @@ std::unique_ptr<Filter> make_m1(SieveFilter kind, bool padding, const FilterLine
     // clean needs no words.
     auto dict = kind == SieveFilter::Clean ? std::make_shared<const Dictionary>(Dictionary::from_words({}))
                                            : res.dictionary(param_value(spec, values, "dictionary"));
-    std::unique_ptr<Ranker> ranker;
+    LazyRanker::Make ranker;
     if (line.length <= kMaxRankLength)
     {
-        if (kind == SieveFilter::Clean) ranker = std::make_unique<CleanRanker>(line.length, padding);
-        if (kind == SieveFilter::Words) ranker = std::make_unique<WordsRanker>(*dict, line.length, padding);
-        if (kind == SieveFilter::Window) ranker = std::make_unique<WindowRanker>(*dict, line.length, padding);
+        const uint32_t L = line.length;
+        ranker = [kind, dict, L, padding]() -> std::unique_ptr<Ranker> {
+            if (kind == SieveFilter::Clean) return std::make_unique<CleanRanker>(L, padding);
+            if (kind == SieveFilter::Words) return std::make_unique<WordsRanker>(*dict, L, padding);
+            return std::make_unique<WindowRanker>(*dict, L, padding);
+        };
     }
     auto f = std::make_unique<M1Filter>(kind, padding, dict, std::move(ranker));
     if (kind != SieveFilter::Clean)
@@ -658,6 +686,7 @@ void add_text_m1_filters(std::vector<FilterSpec>& out)
     clean.title = "clean";
     clean.description = "No two SPACEs in a row, and at least one letter. Can rank (compact).";
     clean.applies = is_lower27;
+    clean.counts_as = "own";
     clean.make = [](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
         return make_m1(SieveFilter::Clean, l, v, r, *find_filter("clean-v1"));
     };
@@ -671,6 +700,7 @@ void add_text_m1_filters(std::vector<FilterSpec>& out)
     window.params = {dict};
     window.implies = {"clean-v1"};
     window.applies = is_lower27;
+    window.counts_as = "own";
     window.make = [](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
         return make_m1(SieveFilter::Window, l, v, r, *find_filter("window-v1"));
     };
@@ -683,6 +713,7 @@ void add_text_m1_filters(std::vector<FilterSpec>& out)
     words.params = {dict};
     words.implies = {"clean-v1", "window-v1"};
     words.applies = is_lower27;
+    words.counts_as = "own";
     words.make = [](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
         return make_m1(SieveFilter::Words, l, v, r, *find_filter("words-v1"));
     };
@@ -724,6 +755,7 @@ void add_text_m1_filters(std::vector<FilterSpec>& out)
     title.params = {dict, {"max_length", "longest title, in characters", FilterParam::Kind::Integer, "64", 1, 1000000, 8, {}}};
     title.implies = {"clean-v2", "window-v2", "words-v2"};
     title.applies = is_lower27;
+    title.counts_as = "own";
     title.make = [](const FilterLine& l, const FilterValues& v, const FilterResources& r) -> std::unique_ptr<Filter> {
         const FilterSpec& spec = *find_filter("title-v1");
         const std::string id = param_value(spec, v, "dictionary");
@@ -733,7 +765,11 @@ void add_text_m1_filters(std::vector<FilterSpec>& out)
         auto f = std::make_unique<TitleFilter>(dict, l.length, max_length,
                                                "dictionary=" + (id.empty() ? std::string("default") : id) + " sha256=" + dict->sha256() +
                                                    " max_length=" + std::to_string(max_length));
-        if (n <= kMaxRankLength) f->set_ranker(std::make_unique<TitleRanker>(std::make_unique<WordsRanker>(*dict, n, true), l.length));
+        if (n <= kMaxRankLength)
+        {
+            const uint32_t L = l.length;
+            f->set_ranker([dict, n, L]() -> std::unique_ptr<Ranker> { return std::make_unique<TitleRanker>(std::make_unique<WordsRanker>(*dict, n, true), L); });
+        }
         return f;
     };
     out.push_back(title);

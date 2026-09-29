@@ -4350,6 +4350,79 @@ def mesh_index(V, F, C, coords, faces):
     return x
 
 
+
+# ---------------------------------------------------------------- not-a-pattern-v1
+# Written from the rule (core/src/filters/pattern.cpp's header), not the engine's counting: the
+# judge reads the unit directly; counts at large sizes come from inclusion and exclusion over the
+# sets of block lengths (each set's units repeat with the gcd of its lengths), and the ramps that
+# also repeat from Euler's phi (the steps of order s number phi(s) when s divides B^w).
+
+def pat_limit(L, w, Q):
+    return max([j for j in range(1, Q + 1) if 2 * j * w <= L] or [0])
+
+
+def pat_value(ds, B, little):
+    v = 0
+    for d in (ds[::-1] if little else ds):
+        v = v * B + d
+    return v
+
+
+def pat_digits(v, B, w, little):
+    out = to_digits_n(v, B, w)
+    return out[::-1] if little else out
+
+
+def pat_judge(u, B, w, little, Q, ramps):
+    """True when the unit is a pattern (fails the filter)."""
+    L = len(u)
+    for j in range(1, pat_limit(L, w, Q) + 1):
+        if all(u[i] == u[i - j * w] for i in range(j * w, L)):
+            return True
+    if ramps and L // w >= 3:
+        M = B ** w
+        a = pat_value(u[:w], B, little)
+        d = (pat_value(u[w:2 * w], B, little) - a) % M
+        run, v = [], a
+        while len(run) < L:
+            run += pat_digits(v, B, w, little)
+            v = (v + d) % M
+        if run[:L] == list(u):
+            return True
+    return False
+
+
+def phi(n):
+    r, m, p = n, n, 2
+    while p * p <= m:
+        if m % p == 0:
+            while m % p == 0:
+                m //= p
+            r -= r // p
+        p += 1
+    return r - r // m if m > 1 else r
+
+
+def pat_count(B, L, w, Q, ramps):
+    """Units kept, by inclusion and exclusion (no brute force)."""
+    from math import gcd
+    from itertools import combinations
+    q = pat_limit(L, w, Q)
+    rep = 0
+    for size in range(1, q + 1):
+        for S in combinations(range(1, q + 1), size):
+            g = 0
+            for x in S:
+                g = gcd(g, x)
+            rep += (-1) ** (size + 1) * B ** (g * w)
+    out = rep
+    if ramps and L // w >= 3:
+        M = B ** w
+        both = M * sum(phi(s) for s in range(1, q + 1) if M % s == 0)
+        out += M * M - both
+    return B ** L - out
+
+
 def cmd_cross_vectors(_args):
     """not-a-file-v1, not-other-line-v1, not-packed-v1 and not-an-item-v1 (pages), counted."""
     sys.set_int_max_str_digits(0)
@@ -4364,6 +4437,8 @@ def cmd_cross_vectors(_args):
     print("# model-unit   vertices faces coords rank positional_index")
     print("# mesh         vertices faces coords rules survivors  (rules: v distinct-vertices, i distinct-indices, u every-vertex-used)")
     print("# mesh-unit    vertices faces coords rules rank positional_index")
+    print("# pattern      base length width order period ramps survivors  (not-a-pattern-v1)")
+    print("# pattern-unit base length width order period ramps rank digits(comma)")
     for base, L, brute in ((3, 8, True), (27, 3, True), (27, 4, True), (2, 12, True), (27, 32, False), (2, 100, False),
                            (104, 16, False), (304, 32, False), (16, 25, False), (256, 12, False), (29, 3200, False)):
         c = not_a_file_count(base, L, brute)
@@ -4440,6 +4515,22 @@ def cmd_cross_vectors(_args):
                     faces = fw.unrank(r)
                     assert mesh_ok(V, F, C, rules, coords, faces)
                     print(f"mesh-unit\t{V}\t{F}\t{C}\t{rules}\t{k}\t{mesh_index(V, F, C, coords, faces)}")
+    # not-a-pattern-v1: every unit of small lines by the judge, then the counts at full size.
+    from itertools import product
+    for B, L, w, order, Q, ramps in ((2, 16, 1, "big", 16, "on"), (3, 9, 1, "big", 16, "on"), (4, 8, 1, "big", 2, "on"),
+                                     (2, 16, 2, "big", 16, "on"), (2, 16, 2, "little", 16, "on"), (2, 17, 4, "little", 2, "on"),
+                                     (4, 9, 2, "big", 16, "on"), (3, 10, 1, "big", 3, "off"), (2, 12, 1, "big", 0, "on"),
+                                     (27, 4, 1, "big", 16, "on")):
+        kept = [u for u in product(range(B), repeat=L) if not pat_judge(u, B, w, order == "little", Q, ramps == "on")]
+        assert len(kept) == pat_count(B, L, w, Q, ramps == "on")
+        print(f"pattern\t{B}\t{L}\t{w}\t{order}\t{Q}\t{ramps}\t{len(kept)}")
+        for k in sorted({0, len(kept) // 3, len(kept) // 2, len(kept) - 1}):
+            print(f"pattern-unit\t{B}\t{L}\t{w}\t{order}\t{Q}\t{ramps}\t{k}\t{','.join(map(str, kept[k]))}")
+    for B, L, w, order, Q, ramps in ((256, 32, 1, "big", 16, "on"), (256, 32, 2, "big", 16, "on"), (256, 32, 4, "little", 16, "on"),
+                                     (256, 64, 8, "big", 16, "on"), (256, 64, 8, "little", 4, "off"), (27, 32, 1, "big", 16, "on"),
+                                     (2, 100, 1, "big", 16, "on"), (2, 100, 8, "big", 16, "on"), (104, 16, 1, "big", 8, "on"),
+                                     (29, 3200, 1, "big", 12, "on")):
+        print(f"pattern\t{B}\t{L}\t{w}\t{order}\t{Q}\t{ramps}\t{pat_count(B, L, w, Q, ramps == 'on')}")
 
 
 def main():

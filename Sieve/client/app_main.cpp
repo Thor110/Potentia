@@ -9,6 +9,7 @@
 
 #include <SDL3/SDL_main.h>
 
+#include <cstdlib>
 #include <fstream>
 
 using namespace hallway;
@@ -426,6 +427,8 @@ int run(const Args& a)
         Menu menu(window, renderer, settings, filters, filters_path, &app, a.has("settings") ? app_path : std::filesystem::path());
         if (a.has("press"))
             for (const auto& [key, mod] : parse_presses(a.get("press"))) menu.press(key, mod);
+        menu.render();              // starts the counting workers
+        finish_filter_warmup();     // a picture shows the counts, not "counting..."
         menu.render();
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         std::cout << "saved " << a.get("screenshot") << "\n";
@@ -699,11 +702,26 @@ int main(int argc, char** argv)
             std::cout << kUsage;
             return 0;
         }
-        return run(a);
+        const int status = run(a);
+        // A menu count still running at exit (a large stack in a Debug build can take minutes)
+        // would use statics that are being destroyed, and waiting for it would hold the program
+        // open: so leave at once. Everything is saved as it changes, and the disk cache is written
+        // by renaming a finished file, so nothing is left half done.
+        if (filter_workers_busy())
+        {
+            std::cout.flush();
+            std::cerr.flush();
+            std::_Exit(status);
+        }
+        finish_filter_warmup();
+        return status;
     }
     catch (const std::exception& e)
     {
         std::cerr << "error: " << e.what() << "\n\n" << kUsage;
+        std::cerr.flush();
+        if (filter_workers_busy()) std::_Exit(1);
+        finish_filter_warmup();
         return 1;
     }
 }

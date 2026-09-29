@@ -83,8 +83,8 @@ public:
     }
 
 private:
-    AgreementRanker(uint32_t base, uint32_t w, uint32_t h, uint32_t frames, uint32_t P, uint64_t BP, uint64_t pairs, uint64_t max_dis)
-        : B_(base), w_(w), h_(h), f_(frames), P_(P), BP_(BP), n_(uint64_t(w) * h * frames), pairs_(pairs), D_(max_dis)
+    AgreementRanker(uint32_t base, uint32_t w, uint32_t h, uint32_t frames, uint32_t P, uint64_t BP, uint64_t /*pairs*/, uint64_t max_dis)
+        : B_(base), w_(w), h_(h), P_(P), BP_(BP), n_(uint64_t(w) * h * frames), D_(max_dis)
     {
     }
 
@@ -195,8 +195,8 @@ private:
         }
     }
 
-    uint32_t B_, w_, h_, f_, P_;
-    uint64_t BP_, n_, pairs_, D_;
+    uint32_t B_, w_, h_, P_;
+    uint64_t BP_, n_, D_;
     std::vector<uint32_t> width_;
     std::vector<uint64_t> bmax_, offset_, pow_;
     std::vector<uint32_t> pool_;
@@ -253,6 +253,7 @@ void add_media_filters(std::vector<FilterSpec>& out)
                     "Can rank (compact) while colours^width (video: colours^(width*height)) stays small.";
     n.params = {{"min_permille", "agreeing neighbours required, per thousand", FilterParam::Kind::Integer, "600", 0, 1000, 10, {}}};
     n.applies = [](const FilterLine& l) { return (l.kind == "image" || l.kind == "video") && l.width && l.height; };
+    n.counts_as = "own";
     n.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) {
         return std::make_unique<NeighbourAgreement>(l.width, l.height, l.frames ? l.frames : 1,
                                                     param_int(*find_filter("neighbour-agreement-v1"), v, "min_permille"), l.base);

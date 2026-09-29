@@ -8,6 +8,7 @@
 #include "sieve/sha256.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -172,11 +173,50 @@ std::vector<PluginFile> load()
 
 } // namespace
 
+// One folder for every build (Debug, Release, a packaged copy), so a grammar compiled by any of
+// them is there for the rest: SIEVE_CACHE if set; else the user's cache folder (Windows:
+// %LOCALAPPDATA%\Sieve\cache; elsewhere $XDG_CACHE_HOME/sieve or ~/.cache/sieve); else the
+// folder next to the executable. The files are checked by their SHA-256 on every load.
+std::filesystem::path plugin_cache_dir()
+{
+    auto env = [](const char* name) -> std::string {
+#ifdef _MSC_VER
+        char* v = nullptr;
+        size_t n = 0;
+        std::string out;
+        if (_dupenv_s(&v, &n, name) == 0 && v)
+        {
+            out = v;
+            free(v);
+        }
+        return out;
+#else
+        const char* v = std::getenv(name);
+        return v ? v : "";
+#endif
+    };
+    auto utf8 = [](const std::string& s) { return std::filesystem::path(std::u8string(s.begin(), s.end())); };
+    if (const std::string s = env("SIEVE_CACHE"); !s.empty()) return utf8(s);
+#ifdef _WIN32
+    if (const std::string s = env("LOCALAPPDATA"); !s.empty()) return utf8(s) / "Sieve" / "cache";
+#else
+    if (const std::string s = env("XDG_CACHE_HOME"); !s.empty()) return utf8(s) / "sieve";
+    if (const std::string s = env("HOME"); !s.empty()) return utf8(s) / ".cache" / "sieve";
+#endif
+    return executable_dir() / "cache";
+}
+
 const std::vector<PluginFile>& load_plugins()
 {
     static std::once_flag once;
     static std::vector<PluginFile> list;
-    std::call_once(once, [] { list = load(); });
+    std::call_once(once, [] {
+        // Compiled automata are kept on disk next to the executable, so a large grammar compiles
+        // once rather than at every start (sieve/plugin.hpp). A folder that cannot be written
+        // leaves them in memory only.
+        set_plugin_cache_dir(plugin_cache_dir());
+        list = load();
+    });
     return list;
 }
 

@@ -768,3 +768,107 @@ base-256 number against a base-`B` unit: not built.
   of vertices used and the current face's named vertices), a different method from the engine's
   closed forms. 218 rows in all. The unit tests also walk every model of the 3/1/2 shape through
   both compact orders with all three rules.
+
+## 17. Ideas noted (not built)
+
+Edward's notes from 28 September 2026, with where each stands.
+
+**Hard and soft filters.** Filters should be aimed at finding garbage where they can. Edward
+proposes sorting them into two categories, so a stack can be switched a category at a time rather
+than filter by filter:
+- **hard** (rigid): trims only noise, with no collateral. Structural and exclusion rules belong
+  here: `not-written`, `not-a-file`, `not-other-line`, `not-packed`, `not-an-item`,
+  `binary-kind`, `distinct-vertices`, `distinct-indices`, `max-run`.
+- **soft** (loose): may trim things you would want to keep. Dictionary and model rules belong
+  here: `words`, `window`, `title`, `clean` (it drops a legitimate double space),
+  `symbol-entropy`, `model-information`, the Moby grammars, `every-vertex-used` (a model with a
+  spare vertex is still a model).
+Not built. It would be a field on each filter (`category = hard | soft`, shown in the lists), and
+a way to tick or untick a category at once. The category is a label, not part of a filter's
+rule, so adding it changes no version.
+
+**Titles that are not words.** A cover has near-infinite books behind it, most with titles like
+"ahsuahsosj", and the idea is to trim those at the book level. *Equivalents exist.* The books line
+already has a stack per part (cover, title and pages), and the title's stack takes any text filter.
+- `title-v1` (whole dictionary words) does it, but would lose titles like "X-Men",
+  "Stargate-SG1" or "X, Y & Z", as Edward noted. That makes it a soft filter.
+- `symbol-entropy-v1` is **not** the answer for a title, whatever Gemini said. Entropy separates
+  English from noise only on long units (about 4.1 against 4.7 bits a letter at 1,000
+  characters). A short title of mostly different letters scores near the maximum whether it is
+  "stargate" or "ahsuahsosj".
+- `model-information-v1` is the right tool. It measures a unit's information under the pinned
+  character model, the same one that orders the guided line. Keyboard-mashing costs far more bits
+  a letter than a name does, and it needs no dictionary, so "X-Men" and "Stargate-SG1" can pass
+  while "ahsuahsosj" does not. It needs an alphabet that has a model (`lower27` today), and it
+  judges but does not rank.
+A cheaper version for any alphabet: a small plugin that forbids letter pairs English never uses,
+which ranks like any automaton.
+
+**Patterns that look ordered.** A unit that repeats a short pattern (`00 FF 00 FF …`), or counts
+up (`00 01 02 … FF`, and the same with 16-bit, 32-bit or floating-point steps), is structure
+rather than content, and some slips past the noise filters. *Partly covered, the rest is new.*
+- `max-run-v1` catches one symbol repeated. It does not catch a longer pattern or a ramp.
+- `symbol-entropy-v1` catches a short repeated pattern: `00 FF` repeated has 1 bit a symbol. It
+  **passes** a ramp: `00` to `FF` uses every byte once, the flattest distribution there is, so
+  its entropy is the highest possible. That is exactly the gap Edward pointed at.
+- Built as **`not-a-pattern-v1`** (§18). The proposal as first noted: fails a unit that is periodic with a short
+  period (up to a parameter), or an arithmetic progression of fixed-width values: 8, 16, 32 or 64
+  bits, either byte order, start and step anything, wrapping. It belongs with the hard filters.
+  Counting it is exact but has some work in it. The periodic units of period at most `p` are
+  counted by inclusion and exclusion over the periods. The ramps are small families, a start and
+  a step for each width and byte order, so as an exclusion they are a sliver, counted by listing
+  where the families overlap (a byte ramp with step 1 is also a 16-bit pattern). Floating-point
+  ramps are harder, because a float's step is not exact after rounding. They would be defined as
+  "the values' exact differences are equal", and judged rather than counted. Like the cross-line
+  filters it removes almost nothing by count. But these are the units a person notices on a shelf
+  and recognises as not content, so it matters to how the line looks.
+
+## 18. `not-a-pattern-v1` (built)
+
+Edward's idea (§17): a unit can be a pattern, not content, and some patterns slip past the noise
+filters. A ramp through every byte has the highest entropy there is. The filter
+(`core/src/filters/pattern.cpp`; every line but binary and models) reads a unit as a run of
+values of `width` digits each (1, 2, 4 or 8, big- or little-endian, the last value possibly cut
+short), and fails it if:
+- **it repeats**: a block of `j` values, `j` up to `period` (default 16), all the way along, at
+  least twice (`00 FF 00 FF …`, `1 2 3 1 2 3 …`, `1 2 3 4 1 2 3 4 …`); or
+- **it ramps** (`ramps = on`): its values count up by a fixed step, wrapping, value `k` being
+  `(a + k·d) mod B^width`. That covers `00 01 02 … FF 00 …`, every gradient through a byte (any
+  start, any step: B² of them, as Edward reckoned), and 16-, 32- and 64-bit counters with
+  `width`. It needs at least three whole values.
+
+**How it counts, exactly.** Two block lengths that both fit twice give their greatest common
+divisor as a block too (Fine and Wilf), so every repeating unit has one smallest block. The units
+whose smallest block is `j` values number `Σ_{i|j} μ(j/i) B^(i·width)` (Möbius), and all of them
+together `Σ_{i≤Q} M(Q/i) B^(i·width)`, where `M` is the Mertens function. The same holds under a
+fixed prefix: for each block length the prefix either repeats with it (then `B^(the block's free
+digits)`) or does not (0). The ramps number `B^(2·width)`: a prefix fixes `a`, then `d`, then
+everything. A ramp repeats with a block of `j` values exactly when `j·d = 0 mod B^width`, so the
+units that are both are the ramps whose step is in a short list, with any start. Set aside, under
+any prefix: repeats + ramps − both. It ranks on its own. Like every non-automaton ranker, with
+another ranking filter the stack judges only (item 1 of the open problems).
+
+**What it sets aside** (defaults; the longest block dominates):
+
+| Line | Set aside |
+| :--- | :--- |
+| pages, `lower27` 32 | 10^-22.89 |
+| pages, `bytes256` 32 (any width) | 10^-38.53 |
+| image, black and white 10×10 | 10^-24.99 |
+| audio, 16 notes | 10^-16.13 |
+
+**Checked.** The oracle has its own judge, which reads the unit directly. Every unit of ten small
+lines is judged and counted by brute force, at widths 1, 2 and 4, in both byte orders, with
+ramps on and off and periods 0 to 16. At full size it counts by inclusion and exclusion over the
+sets of block lengths (each set repeats with the gcd of its lengths), and the ramps that also
+repeat by Euler's φ: a different method from the engine's. 60 rows, all matching. The unit tests
+walk every unit of five short lines through rank and unrank, both the filter's own walk and the
+generic one from each prefix.
+
+**Not in v1.**
+- Floating-point ramps: a float's step rounds, so "equal steps" wants a definition of its own,
+  and would judge rather than count.
+- The binary line: its files have every length, and its stack is BinarySieve.
+- Patterns that are neither repeats nor straight ramps, such as a repeated ramp or a curve.
+  Edward's "gradient curve of all possible values" is wider than straight ramps, and each shape
+  would be a family of its own.

@@ -16,6 +16,7 @@ void add_binary_filters(std::vector<FilterSpec>& out);
 void add_written_filters(std::vector<FilterSpec>& out);
 void add_crossline_filters(std::vector<FilterSpec>& out);
 void add_model_filters(std::vector<FilterSpec>& out);
+void add_pattern_filters(std::vector<FilterSpec>& out);
 void add_other_line_filters(std::vector<FilterSpec>& out);
 
 std::vector<FilterSpec> builtin_filters()
@@ -28,6 +29,7 @@ std::vector<FilterSpec> builtin_filters()
     add_written_filters(out);
     add_crossline_filters(out);
     add_model_filters(out);
+    add_pattern_filters(out);
     add_other_line_filters(out);
     add_binary_filters(out);
     return out;

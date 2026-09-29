@@ -89,6 +89,7 @@
 #include "sieve/filter.hpp"
 
 #include <deque>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <string>
@@ -140,6 +141,16 @@ inline constexpr double kPluginTableBudget = 512.0 * 1024 * 1024;
 // The registered filter for a plugin: its make() compiles for the line and values, and builds the
 // ranker when the table fits the budget.
 FilterSpec plugin_spec(std::shared_ptr<const PluginDef> p);
+
+// Compiled automata are kept for the process, and, once the application names a folder, on disk
+// as well (sieve-dfa-cache-v1): one file a plugin, symbols and settings, holding the minimal
+// automaton and a SHA-256 of all of it, checked on every load, so a large grammar compiles once
+// rather than at every start. An unreadable or mismatched file is ignored and rewritten. No folder
+// (the default, and the tests): memory only.
+void set_plugin_cache_dir(const std::filesystem::path& dir);
+// Whether a plugin (by its SHA-256 and parameters) is compiled for the line with these values
+// already, in memory or on disk: building a stack with it will then be quick.
+bool plugin_compiled(const std::string& sha256, const FilterLine& line, const std::vector<FilterParam>& params, const FilterValues& values);
 
 // A plugin filter's automaton (for combining a stack of plugins into one ranker), or nullptr.
 const Dfa* plugin_dfa(const Filter& f);

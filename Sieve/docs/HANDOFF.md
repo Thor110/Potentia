@@ -949,3 +949,53 @@ shown (the open problem, item 1 of Edward's list, to be discussed next). Oracle:
 the 3/2/2 shape (373,248 models, all seven combinations) and its own face walk over (used set,
 face so far) at three larger shapes; 218 cross rows, all matching. Defaults: distinct-indices
 keeps 10^-2.20, all three 10^-2.21.
+Notes cleared (Edward's loose files): GAME.md gained "Start Game" (only if the game needs a predefined
+state space); FILTER-PLUGINS §17 records hard/soft filter categories, titles that are not words
+(model-information-v1 is the existing tool; entropy fails on short titles) and a proposed
+not-a-pattern-v1 (periods and ramps, which symbol-entropy passes). Nothing built.
+not-a-pattern-v1 (core/src/filters/pattern.cpp; Edward's ramp idea): repeats of a block of up to
+`period` values (default 16) and ramps (value k = a + k*d mod B^w), values of width 1/2/4/8
+digits, big/little. Exact ranker (PatternRanker, prefix-interned states; rank/unrank walk with
+PatternRules::excluded_after): repeats by Mobius/Mertens over the smallest block (Fine-Wilf),
+ramps B^(2w), both = ramps with j*d = 0 (steps list D). Oracle: direct judge, brute force of ten
+small lines, inclusion-exclusion over period sets and Euler phi at full size; 60 rows. Defaults
+set aside: lower27/32 10^-22.89, bytes256/32 10^-38.53, image 10^-24.99, audio 10^-16.13. Not in
+v1: float ramps, binary line, curves. filters_for counts in the tests rose to 14 (text), 5 (image).
+Start-up and menu stalls (Edward: Z/C and Start Sieve "locked up" in all builds, after C ticked
+every filter). Causes and fixes: (1) the two Moby grammars compile in ~9 s each (Release) and were
+compiled on the menu's drawing thread and at every launch: compiled automata are now also kept on
+disk (set_plugin_cache_dir, executable_dir()/cache, sieve-dfa-cache-v1: sparse transitions plus a
+SHA-256 of the file, verified on load, written via rename; plugin_compiled() asks). (2) The menu
+counted every stack on the drawing thread: Menu::resolve now runs each line's count on a worker
+(shows "counting..."); the workers outlive the menu and finish_filter_warmup() joins them before
+the hallway is built and before main returns (statics). Scripted menu screenshots wait for them.
+(3) Counting tables were built for every filter at every build, even in hide mode (a Moby grammar
+at 32 letters is ~700 MB): Filter::can_rank() says whether one would exist, PluginFilter and the
+word filters (LazyRanker) build theirs on first use, FilterStack settles compact lazily
+(settle()), and the hallway asks only for lines in compact mode. (4) BinarySieve with pages:
+pattern_below rebuilt the pattern table each call (15.5 s start): the table is kept
+(pages_table_), 1.0 s. Measured, everything ticked: 23 s / 1 GB -> 2.6 s / 594 MB (cold compile
+once, then cached). Menu: X toggles every filter on both tabs of every line (Edward's wording in
+the footer).
+Follow-up (Edward: VS Debug/Release stuck at the loading screen, packaged Release fine; no tally
+on MODELS FILTERS). The tally was switched off for overlay 5 by an old condition: removed. The
+compile cache moved from next to each executable to one per-user folder shared by every build
+(cli::plugin_cache_dir: SIEVE_CACHE, else %LOCALAPPDATA%\Sieve\cache, $XDG_CACHE_HOME/sieve or
+~/.cache/sieve, else next to the executable), so Debug reuses what Release compiled rather than
+compiling for minutes and never finishing. compile_plugin holds a per-key lock, so two threads
+never compile the same automaton at once (the second waits and takes it from the cache). The
+hallway build no longer waits for the menu's counting workers; at exit, if one is still running,
+the program flushes and leaves with _Exit (waiting would hold it open, and statics would go
+first). Note for Visual Studio: start with Ctrl+F5 (without debugging) to compare timings; a
+debugger slows heavy allocation.
+Filter conflicts (Edward: "the safe thing", auto-untick; docs/FILTERS-CONFLICTS.md). FilterSpec
+gained counts_as (automaton, written, own, arithmetic, model-rule, or "" for judge-only), and
+filter_conflict(a, b) returns "", "merge" ("filters need merging": both automata underneath, not
+yet merged) or "conflict" ("conflicting filters": not-a-file / not-a-pattern). Implication never
+conflicts. cli::tick_filter_by_hand (menu, media player) unticks conflicts; build_stack and loading
+never do. Z/C/X skip filters that clash with one already ticked (first in list order wins). The
+selected filter shows its conflicts in red (filters.conflict.merge / .hard). Judge-only filters
+(max-run, symbol-entropy, model-information) are left out: Edward's group 3, next. Next build step:
+the word filters, neighbour-agreement and key-v1 hand over their automata so "merge" pairs combine
+(with an early state limit so an oversized merge gives up fast).
+

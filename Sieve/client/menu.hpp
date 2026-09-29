@@ -23,6 +23,9 @@
 #include <SDL3/SDL.h>
 
 #include <array>
+#include <memory>
+#include <functional>
+#include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <string>
@@ -94,6 +97,12 @@ Budget machine_budget();
 // Roughly how long one unit with an address of this many bits takes to open here. For the
 // budget's display only: it is an estimate from one measurement, never used to address anything.
 double unit_ms(const Budget& b, double bits);
+
+// The menu counts each line's stack on worker threads, which outlive the menu: building the
+// hallway, and leaving the program, wait for them first (they share its caches).
+void finish_filter_warmup();
+// Whether a counting worker is still running (at exit: see app_main.cpp).
+bool filter_workers_busy();
 
 class Menu
 {
@@ -173,7 +182,10 @@ private:
     void overlay_key(SDL_Keycode key, bool shift);
     void overlay_change(int dir, bool big);
     // Z / C: every filter on this tab / on both tabs switched on, or off if all were on already.
-    void toggle_all_filters(bool both_tabs);
+    // Z: this tab of this line; C: both tabs of this line; X: both tabs of every line.
+    enum class ToggleScope { ThisTab, BothTabs, EveryLine };
+    void toggle_all_filters(ToggleScope scope);
+
     void render_overlay(float W, float H);
     sieve::FilterLine filter_line_of(int line) const;
     sieve::FilterLine book_part_line(int part) const; // books: the line a part's filters see
@@ -191,6 +203,21 @@ private:
     };
     const StackInfo& stack_info(int line);
     const StackInfo& book_stack_info();
+    // Stack info is worked out on worker threads (menu.cpp): the result when it is ready, else a
+    // "counting" placeholder, asked again each frame.
+    struct Job
+    {
+        std::atomic<bool> ready{false};
+        StackInfo result;
+    };
+    struct Pending
+    {
+        std::string key;
+        std::shared_ptr<Job> job;
+    };
+    std::array<Pending, 7> pending_;
+    std::array<StackInfo, 7> waiting_;
+    const StackInfo& resolve(int i, const std::string& key, std::function<StackInfo()> work);
     void save_filters();
 
     SDL_Window* window_;

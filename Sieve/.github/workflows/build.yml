@@ -730,6 +730,13 @@ jobs:
           build/sieve filters --line models --filters mr.ini | q "^survivors    $want (exact; compact mode available)"
           build/sieve mesh --warp cube.obj --filters mr.ini | q "^stack: passes, survivor number"
           $H --no-menu --line models --filters mr.ini --walk "0,0" --take --screenshot mrules.png | q "8/8 vertices used, 0 degenerate faces"
+          # not-a-pattern-v1: counted as the oracle counts it (by inclusion and exclusion over the
+          # block lengths), and a ramp through the alphabet fails while text passes.
+          printf "[text]\nmode = compact\nfilters = not-a-pattern-v1\n" > pat.ini
+          want=$(awk -F'\t' '$1 == "pattern" && $2 == "27" && $3 == "32" && $4 == "1" {print $8}' tests/vectors_cross_v1.tsv)
+          build/sieve filters --length 32 --filters pat.ini | q "^survivors    $want (exact; compact mode available)"
+          build/sieve check --length 26 --filters pat.ini --model none "abcdefghijklmnopqrstuvwxyz" | q "stack: fails at not-a-pattern-v1"
+          build/sieve check --length 26 --filters pat.ini --model none "it was the best of times it" | q "stack: passes"
           printf "[binary]\nmode = compact\nfilters = not-an-item-v1\n[binary.not-an-item-v1]\nitems = all\n" > nia.ini
           $H --no-menu --line binary --filters nia.ini --walk "0,0" --screenshot nia.png | q "^BINARY line, positional, filters: 1 hide (compact: not-an-item-v1 judges models file by file"
           test -s compact.png && test -s mixed.png && test -s mark.png && test -s overlay.png
