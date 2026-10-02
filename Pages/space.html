@@ -321,7 +321,8 @@
   let simState = 'READY';
 
   // Planck 2018 Constants & Live Calculations
-  const EPOCH = Date.UTC(2026, 0, 1); 
+  const currentYear = new Date().getFullYear();
+  const EPOCH = Date.UTC(currentYear, 0, 1);
   const REACH_GLY = 16.58, SEEN_GLY = 46.18;
   const SECONDS_PER_YEAR = 31557600;
   
@@ -342,7 +343,7 @@
     const starsLostTotal = Math.floor(totalSecondsElapsed * STARS_LOST_PER_SECOND).toLocaleString();
 
     document.getElementById('limitation-counter').innerText = `${unreachablePct.toFixed(1)}% Unreachable`;
-    document.getElementById('star-loss-ticker').innerText = `~${starsLostTotal} stars crossed permanently since epoch start.`;
+    document.getElementById('star-loss-ticker').innerText = `~${starsLostTotal} stars crossed permanently since the start of ${currentYear}.`;
   }
 
   // Single clean interval
