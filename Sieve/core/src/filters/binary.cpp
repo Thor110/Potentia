@@ -4,6 +4,8 @@
 // or, with keep = exclude, every file but those. A file is judged from its head and size alone,
 // and the survivors are counted and ranked exactly, so the hallway can close them up (compact).
 //
+// utf8-valid-v1 keeps the files that are well-formed UTF-8 throughout (Utf8Counter, filekind.hpp).
+//
 // The binary line's files have lengths of their own, so its filters are not a FilterStack over
 // digits: BinarySieve (filekind.hpp) judges and counts them. The spec here gives the filter its
 // name, its settings and its place in every list.
@@ -46,6 +48,22 @@ void add_binary_filters(std::vector<FilterSpec>& out)
         throw std::invalid_argument("not-an-item-v1 judges files on the binary line (a BinarySieve), not units of digits");
     };
     out.push_back(n);
+
+    FilterSpec u;
+    u.id = "utf8-valid";
+    u.title = "utf8-valid";
+    u.description = "Well-formed UTF-8 from the first byte to the last (no overlong forms, no surrogates, nothing past "
+                    "U+10FFFF), and with controls = text no control characters but tab, line feed and carriage return: the "
+                    "whole file is text, where binary-kind's TXT reads only its first 16 bytes. Exact: counted and ranked "
+                    "on its own, at lengths whose table fits; with the kind filters it judges file by file.";
+    u.params = {{"controls", "any: every well-formed character; text: no control characters but tab, line feed and "
+                             "carriage return", FilterParam::Kind::Text, "text", 0, 0, 1, {"text", "any"}}};
+    u.applies = [](const FilterLine& l) { return l.kind == "binary"; };
+    u.counts_as = "own";
+    u.make = [](const FilterLine&, const FilterValues&, const FilterResources&) -> std::unique_ptr<Filter> {
+        throw std::invalid_argument("utf8-valid-v1 judges files on the binary line (a BinarySieve), not units of digits");
+    };
+    out.push_back(u);
 }
 
 } // namespace sieve

@@ -1247,8 +1247,10 @@ static std::string filtered_text(const sieve::BigUint& kept, const sieve::BigUin
     }
     std::string out = pct + (cut ? "...%" : "%");
     const double lt = total.log10_approx(), lk = kept.log10_approx() - lt, lr = removed.log10_approx() - lt;
-    if (lk < -2) out += "  (" + trf("filters.filtered.kept", {"10^" + fixed(lk, 2)}) + ")";
-    else if (lr < -2) out += "  (" + trf("filters.filtered.removed", {"10^" + fixed(lr, 2)}) + ")";
+    // The smaller side as a power of ten, always, so every stack reads the same way (92.4% is kept
+    // 10^-1.12; 0.0046% is removed 10^-4.34).
+    if (lk <= lr) out += "  (" + trf("filters.filtered.kept", {"10^" + fixed(lk, 2)}) + ")";
+    else out += "  (" + trf("filters.filtered.removed", {"10^" + fixed(lr, 2)}) + ")";
     return out;
 }
 

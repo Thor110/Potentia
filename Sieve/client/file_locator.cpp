@@ -12,6 +12,7 @@
 
 #include "cli/compare.hpp"
 #include "cli/locate.hpp"
+#include "cli/timings.hpp"
 #include "cli/vault.hpp"
 
 namespace hallway::hall {
@@ -286,26 +287,33 @@ void Hallway::locator_go()
 
 void Hallway::walk_to_file(const std::vector<uint8_t>& bytes, const std::string& name, bool past)
 {
+    sieve::cli::timings::Scope timed("hallway.walk"); // to a file: the line made long enough, and the place
     if (cli::vault::withheld_bytes(bytes)) // the vault: nowhere to walk to
     {
         message(tr("vault.withheld"));
         return;
     }
+    // What touches the renderer (the pictures let go, the line's colours), here; then the rest,
+    // which for a file of megabytes takes seconds, on a worker while the window says LOCATING.
     if (past)
     {
         set_thin(true);
         mode_ = AddressMode::Positional;
-        set_binary_length(bytes.size());
     }
+    clear_faces();
     if (!on_binary())
     {
         binary_from_ = 0; // its door leads to pages, as when you start on binary
         drop_in_hand();
         set_line(kBinaryLine);
     }
-    const Space::Digits title = title_for_name(name); // its name is its title
-    walked_names_[cli::sha256_hex(bytes)] = name;
-    go_to_file(bytes, true, &title);
+    busy(tr("locating"), [&] {
+        if (past) set_binary_length(bytes.size());
+        const Space::Digits title = title_for_name(name); // its name is its title
+        walked_names_[cli::sha256_hex(bytes)] = name;
+        go_to_file(bytes, true, &title);
+        warm_room();
+    });
     message(trf(past ? "loc.went_past" : "msg.warped.file", {std::to_string(bytes.size())}));
 }
 

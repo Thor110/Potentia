@@ -1,0 +1,112 @@
+sieve-filter-v2
+; Contains a fragment: the unit holds at least one of these fragments somewhere in it, for
+; searching for pages that quote known lines of a lost work:
+;   "best of"
+;   "worst"
+;   "age of"
+; The states are a machine over the fragments (Aho-Corasick); state 19 is a fragment found.
+; Made by tools/build_anchor_plugins.py from fragments.txt (sha256 f39c1d54c0381abb75e0ed6feeb10ca474007ca7dab6e609e7e1e40fe25356b7).
+id        contains-example
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     text
+symbols   lower27
+describe  Holds at least one of 3 fragments.
+
+states    20
+start     0
+accept    19
+t 19 " abcdefghijklmnopqrstuvwxyz" 19
+t 0 " cdefghijklmnopqrstuvxyz" 0
+t 0 "b" 1
+t 0 "w" 8
+t 0 "a" 13
+t 1 " cdfghijklmnopqrstuvxyz" 0
+t 1 "b" 1
+t 1 "e" 2
+t 1 "w" 8
+t 1 "a" 13
+t 2 " cdefghijklmnopqrtuvxyz" 0
+t 2 "b" 1
+t 2 "s" 3
+t 2 "w" 8
+t 2 "a" 13
+t 3 " cdefghijklmnopqrsuvxyz" 0
+t 3 "b" 1
+t 3 "t" 4
+t 3 "w" 8
+t 3 "a" 13
+t 4 "cdefghijklmnopqrstuvxyz" 0
+t 4 "b" 1
+t 4 " " 5
+t 4 "w" 8
+t 4 "a" 13
+t 5 " cdefghijklmnpqrstuvxyz" 0
+t 5 "b" 1
+t 5 "o" 6
+t 5 "w" 8
+t 5 "a" 13
+t 6 " cdeghijklmnopqrstuvxyz" 0
+t 6 "b" 1
+t 6 "w" 8
+t 6 "a" 13
+t 6 "f" 19
+t 7 " cdefghijklmnopqrstuvxyz" 0
+t 7 "b" 1
+t 7 "w" 8
+t 7 "a" 13
+t 8 " cdefghijklmnpqrstuvxyz" 0
+t 8 "b" 1
+t 8 "w" 8
+t 8 "o" 9
+t 8 "a" 13
+t 9 " cdefghijklmnopqstuvxyz" 0
+t 9 "b" 1
+t 9 "w" 8
+t 9 "r" 10
+t 9 "a" 13
+t 10 " cdefghijklmnopqrtuvxyz" 0
+t 10 "b" 1
+t 10 "w" 8
+t 10 "s" 11
+t 10 "a" 13
+t 11 " cdefghijklmnopqrsuvxyz" 0
+t 11 "b" 1
+t 11 "w" 8
+t 11 "a" 13
+t 11 "t" 19
+t 12 " cdefghijklmnopqrstuvxyz" 0
+t 12 "b" 1
+t 12 "w" 8
+t 12 "a" 13
+t 13 " cdefhijklmnopqrstuvxyz" 0
+t 13 "b" 1
+t 13 "w" 8
+t 13 "a" 13
+t 13 "g" 14
+t 14 " cdfghijklmnopqrstuvxyz" 0
+t 14 "b" 1
+t 14 "w" 8
+t 14 "a" 13
+t 14 "e" 15
+t 15 "cdefghijklmnopqrstuvxyz" 0
+t 15 "b" 1
+t 15 "w" 8
+t 15 "a" 13
+t 15 " " 16
+t 16 " cdefghijklmnpqrstuvxyz" 0
+t 16 "b" 1
+t 16 "w" 8
+t 16 "a" 13
+t 16 "o" 17
+t 17 " cdeghijklmnopqrstuvxyz" 0
+t 17 "b" 1
+t 17 "w" 8
+t 17 "a" 13
+t 17 "f" 19
+t 18 " cdefghijklmnopqrstuvxyz" 0
+t 18 "b" 1
+t 18 "w" 8
+t 18 "a" 13
+end

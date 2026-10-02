@@ -1,0 +1,2 @@
+# One anchor for near-example-v1: the first 32 letters of the example book, on lower27.
+it was the best of times it was 

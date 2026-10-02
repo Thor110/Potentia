@@ -19,9 +19,9 @@ counts (`FilterSpec::counts_as`):
 | :--- | :--- | :--- |
 | automaton | every custom filter (the `.sfilter` plugins: clean-data, max-run-data, tidy-data, window-data, words-data, the Moby grammars, key-data, the melody filters), `max-run-v1`, `not-other-line-v1`, `not-packed-v1` | other automata, and `not-written-v1` |
 | written | `not-written-v1` | automata |
-| own ranker | `clean-v1`, `window-v1`, `words-v1`, `clean-v2`, `window-v2`, `words-v2`, `title-v1`, `neighbour-agreement-v1`, `key-v1` | only a filter it implies, or that implies it |
+| own ranker | `clean-v1`, `window-v1`, `words-v1`, `clean-v2`, `window-v2`, `words-v2`, `title-v1`, `neighbour-agreement-v1`, `key-v1`, `palette-size-v1`, `row-runs-v1`, `utf8-valid-v1` | only a filter it implies, or that implies it |
 | arithmetic | `not-a-file-v1`, `not-a-pattern-v1` | nothing |
-| model rule | `distinct-vertices-v1`, `distinct-indices-v1`, `every-vertex-used-v1` | each other |
+| model rule | `distinct-vertices-v1`, `distinct-indices-v1`, `every-vertex-used-v1`, `canonical-mesh-v1` | each other (canonical-mesh implies the first two and counts with every-vertex-used) |
 | judges only | `symbol-entropy-v1`, `model-information-v1`; on the binary line `binary-kind-v1` and `not-an-item-v1` | not part of this rule (see below) |
 
 A filter never conflicts with one it implies, or that implies it: `words-v1` implies `clean-v1`
@@ -44,7 +44,10 @@ On a line of every byte (`bytes256`) only `not-written-v1`, `not-a-file-v1` and
 `not-a-pattern-v1` count, and the last two conflict with the first and with each other.
 
 **Image and video.**
-- *Filters need merging:* `neighbour-agreement-v1` with `not-packed-v1`.
+- *Filters need merging:* `neighbour-agreement-v1` with `not-packed-v1`; `palette-size-v1` and
+  `row-runs-v1` with each other and with both of those. row-runs is an automaton underneath on a
+  small palette (its state is the column, the changes and the last colour); palette-size's state is
+  the set of colours used, an automaton only on the smallest palettes.
 - *Conflicting filters:* `not-a-file-v1` and `not-a-pattern-v1` with each other, with
   `neighbour-agreement-v1` and with `not-packed-v1`.
 
@@ -58,7 +61,8 @@ On a line of every byte (`bytes256`) only `not-written-v1`, `not-a-file-v1` and
   `every-vertex-used-v1`. The three rules count together exactly.
 
 **Binary.** No conflicts: `binary-kind-v1` and `not-an-item-v1` count together exactly when
-not-an-item asks only for pages. With melodies, pictures or models it judges file by file, and
+not-an-item asks only for pages. `utf8-valid-v1` counts on its own; with either of them the line
+judges only and says why (it needs the whole file, where they read the file's head). With melodies, pictures or models it judges file by file, and
 the line hides and says why (see below).
 
 ## Why each kind conflicts

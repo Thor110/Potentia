@@ -3,6 +3,7 @@
 //   distinct-vertices-v1  no two vertices stand at the same point of the grid
 //   distinct-indices-v1   no face names the same vertex twice (no degenerate triangles)
 //   every-vertex-used-v1  every vertex is named by at least one face
+//   canonical-mesh-v1     one encoding of each mesh, so re-orderings of the same mesh are set aside
 // A model is a mixed-radix number, not a run of symbols of one base, so these are judged, counted
 // and ranked by the models line's own stack (ModelSieve, sieve/modelsieve.hpp), in closed form:
 //   vertices  distinct: C^3 (C^3 - 1) ... (C^3 - V + 1) of the C^(3V) coordinate strings
@@ -19,8 +20,9 @@ namespace sieve {
 
 void add_model_filters(std::vector<FilterSpec>& out)
 {
-    auto spec = [&](const char* id, const char* description) {
+    auto spec = [&](const char* id, const char* description, std::vector<std::string> implies = {}) {
         FilterSpec s;
+        s.implies = std::move(implies);
         s.id = id;
         s.title = id;
         s.description = description;
@@ -37,6 +39,11 @@ void add_model_filters(std::vector<FilterSpec>& out)
                              "V(V-1)(V-2) ways instead of V^3.");
     spec("every-vertex-used", "Every vertex is named by at least one face: no stray points. Exact, by inclusion and "
                               "exclusion over the vertices left out; ranks while the shape is small enough.");
+    spec("canonical-mesh", "One encoding of each mesh: vertices in increasing order as grid points, each face rotated to "
+                           "start at its smallest index (winding kept), faces in increasing order. Removes only "
+                           "re-orderings of the same mesh: about 10^-19 of the default line. Exact: C(C^3, V) x "
+                           "C(V(V-1)(V-2)/3, F); with every-vertex-used it ranks up to 12 vertices.",
+         {"distinct-vertices-v1", "distinct-indices-v1"});
 }
 
 } // namespace sieve

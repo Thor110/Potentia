@@ -1,0 +1,34 @@
+sieve-filter-v2
+; The ambitus: from the lowest note of a melody to its highest is at most `span` semitones, wherever
+; it lies (melody-range-v1 bounds the register; this bounds how wide the tune is). Rests pass. The
+; state is nothing yet (0), or the lowest note so far and how far above it the highest is:
+; 1 + (low - 1) * (span + 1) + width.
+id        melody-ambitus
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     audio
+symbols   notes*
+describe  From the lowest note to the highest is at most the span, in semitones.
+param     span  int  12  0  48  the widest the melody may be, lowest note to highest, in semitones
+
+states    {1 + PITCHES * (span + 1)}
+start     0
+accept    0..{PITCHES * (span + 1)}
+for d 0 {DURATIONS - 1}
+  t 0 @{d} 0
+  for q 1 {PITCHES}
+    t 0 @{q * DURATIONS + d} {1 + (q - 1) * (span + 1)}
+  done
+  for lo 1 {PITCHES}
+    for w 0 {span}
+      if {lo + w <= PITCHES}
+        t {1 + (lo - 1) * (span + 1) + w} @{d} {1 + (lo - 1) * (span + 1) + w}
+        for q {max(1, lo + w - span)} {min(PITCHES, lo + span)}
+          t {1 + (lo - 1) * (span + 1) + w} @{q * DURATIONS + d} {1 + (min(lo, q) - 1) * (span + 1) + max(lo + w, q) - min(lo, q)}
+        done
+      fi
+    done
+  done
+done
+end

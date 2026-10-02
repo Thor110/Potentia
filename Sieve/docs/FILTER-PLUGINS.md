@@ -230,6 +230,8 @@ every length checked, and the same verdict on every unit.
 | `moby-grammar-v1`, `moby-grammar-strict-v1` | (new: English word order by part of speech) | tokens, nine sets from tagged lists, whole edges |
 | `key-data-v2` | `key-v1`, every scale | table, v2 (a choice parameter) |
 | `melody-leap-v1`, `melody-lengths-v1`, `melody-rests-v1`, `melody-ending-v1`, `melody-range-v1` | (new: melody shape) | table, v2 |
+| `melody-metre-v1`, `melody-ambitus-v1`, `melody-gapfill-v1` | (new: bars, span, leaps filled; §19) | table, v2 |
+| `letter-pairs-v1`, `letter-triples-v1`, `word-cost-v1`, `function-words-v1`, `sentence-shape-v1`, `babel-punctuation-v1` | (new: generated from the pinned lists by `tools/build_text_plugins.py`; §19) | table, v2 (function-words: tokens) |
 
 They are new filters with new ids (the built-ins keep theirs); a built-in and its port agreeing is
 a conformance check, not a replacement.
@@ -472,7 +474,9 @@ upgrades a filter to v2 when it uses something only v2 has.
 - **`if {EXPR}` … `else` … `fi`**, around any lines of the table, nesting with `for` and with each
   other.
 - **`param NAME choice DEFAULT A,B,C [text]`**: one of a list, by name in the settings and the
-  provenance, by its place in the list (from 0) in expressions. The menus cycle through it.
+  provenance, by its place in the list (from 0) in expressions. The menus cycle through it. A
+  choice is ASCII letters, digits, `#` and `-` (so a time signature is written `3-4`), each listed
+  once, and the default is one of them.
 - **The line's constants:** `BASE` (its number of symbols), and on a note line `PITCHES` (25 on
   `notes104`), `DURATIONS` (4) and `LOW` (60, the MIDI number of pitch 1): a note's symbol is
   `pitch * DURATIONS + duration`, pitch 0 the rest. A parameter or `for` variable may not take
@@ -783,9 +787,11 @@ than filter by filter:
   here: `words`, `window`, `title`, `clean` (it drops a legitimate double space),
   `symbol-entropy`, `model-information`, the Moby grammars, `every-vertex-used` (a model with a
   spare vertex is still a model).
-Not built. It would be a field on each filter (`category = hard | soft`, shown in the lists), and
-a way to tick or untick a category at once. The category is a label, not part of a filter's
-rule, so adding it changes no version.
+*The label is built* (§19): `FilterSpec::category`, set for every built-in filter in one table
+(`core/src/filters/builtin.cpp`) and shown by `sieve filters`. Not yet built: ticking a category at
+once in the setup menu, and a label for plugins (a header line would change the plugin formats, so
+it waits for a decision). The category is a label, not part of a filter's rule, so adding it
+changes no version.
 
 **Titles that are not words.** A cover has near-infinite books behind it, most with titles like
 "ahsuahsosj", and the idea is to trim those at the book level. *Equivalents exist.* The books line
@@ -872,3 +878,120 @@ generic one from each prefix.
 - Patterns that are neither repeats nor straight ramps, such as a repeated ramp or a curve.
   Edward's "gradient curve of all possible values" is wider than straight ramps, and each shape
   would be a family of its own.
+
+## 19. The October 2026 filters (built)
+
+The filters proposed after a review of the whole stack (Edward, 29 September 2026), each built so
+that it counts and ranks exactly, checked by the oracle with methods of its own and by brute force
+on small lines. Shares are exact counts shown as powers of ten, at the hallway's default shapes.
+
+**Melody plugins** (`data/filters`, `sieve-filter-v2`, all automata, so they stack with the other
+melody filters and rank through the product):
+
+| Plugin | Rule | State | Keeps (16 notes) |
+| :--- | :--- | :--- | ---: |
+| `melody-metre-v1` | every note and rest fits inside its bar, none across a bar line; `complete` fills the last bar (`time`: 2-4, 3-4, 4-4, 5-4; `notes104`) | eighths gone in the bar | 10^-2.38 |
+| `melody-ambitus-v1` | lowest note to highest at most `span` semitones (melody-range bounds the register; this bounds the width) | lowest note and width | 10^-3.33 |
+| `melody-gapfill-v1` | after a leap wider than `leap`, the next note turns back by at most `step`; `resolve` refuses ending on an unfilled leap | last note and what it owes | 10^-4.51 |
+
+Checked against a brute force written from the descriptions at lengths 1 to 3 (every one of 104^3
+units), and against the oracle at four lengths, several settings and on `notes2` sets of one and
+two voices. A choice's name may not hold `/`, so a time signature is written `3-4` (§14).
+
+**Generated text plugins.** `tools/build_text_plugins.py` writes them from the pinned SCOWL lists,
+which it checks against the registry's SHA-256; `--check` (CI) fails if a file would change.
+
+| Plugin | Line | Rule | Keeps (32 symbols) |
+| :--- | :--- | :--- | ---: |
+| `letter-pairs-v1` | lower27 | no letter pair inside a word that no word of scowl-en-80-names has (46 of the 676 pairs), nor a word starting or ending as none does | 10^-0.81 |
+| `letter-triples-v1` | lower27 | the same for three letters, a word's start and end counting as letters (about 9,300 triples occur) | 10^-5.23 |
+| `word-cost-v1` | lower27 | no stretch of a word costs more than `rate` per letter plus `slack` under a letter-pair model of the list, in quarter-bits (a leaky bucket: e = max(0, e + cost - rate) never passes slack) | 10^-5.83 |
+| `function-words-v1` | lower27 | every token a word of scowl-en-60-names; no function word twice in a row ("the the"); after an article neither an article, a preposition nor a conjunction ("a the", "the of"); no two conjunctions ("and or") | 10^-18.33 |
+| `sentence-shape-v1` | ascii95 | punctuation follows a word and is followed by a SPACE; . ! ? up to three; a capital starts a word or follows a capital; with `capitals`, a sentence's first word starts with one; # $ % and the like only with `others` | 10^-10.57 |
+| `babel-punctuation-v1` | babel29 | commas and full stops follow a letter and are followed by a SPACE; up to three full stops | 10^-0.49 |
+
+All but function-words need no dictionary of whole words: they are the countable stand-ins for the
+retired `model-information-v1` and `symbol-entropy-v1` on short units such as titles, where a name
+like "stargate" should pass and "ahsuahsosj" should not (§17). They do not add to `words`: the
+default dictionary is a subset of the list they are built from, so every page of dictionary words
+already passes them (words-data-v1 with letter-triples-v1 keeps exactly what words-data-v1 keeps).
+function-words-v1 takes a further share of the pages of words, the word salad of "the the" and "the
+of", that grows with the page: 0.91% at 32 letters (2.7 × 10^25 pages), 1.80% at 64 (6.8 × 10^52),
+3.57% at 128 (2.1 × 10^107). Each pair of neighbouring words is another chance to break a rule, so
+what it keeps falls as a power of the page length: about (1 - 0.009)^(L/32), some 60% removed at a
+3,200-letter page. Small as a share, vast as a number. Measured on 100 held-out real sentences (`tests/plugins/moby-sentences.txt`) and Sieve's
+own documents cut into pages: letter-triples keeps 95% of the sentences and none of 6,000 random
+pages, failing "mrs" and "fairfax" (abbreviations and some names are not in SCOWL); word-cost keeps
+98% and none of the random pages. The page start may be the middle of a word, so the first letters
+of a unit are judged by what they can be the end of, and its end is never judged; spaces after
+spaces always pass, so the last unit of warped text (padded with spaces) does.
+
+sentence-shape-v1's abbreviation limit is deliberate and documented in the file: with `capitals`,
+"e.g. the" fails (a full stop and a SPACE owe a capital). Its cases are in
+`tests/plugins/sentence-shape-cases.txt`, each with the verdict it should get.
+
+Every generated plugin was compared with a rule written separately from its description, on 9,000
+units each (real, random letters, random words): no disagreement. The engine and the oracle agree
+on every count, rank and verdict (CI; function-words with the oracle's lazy mode, as for Moby).
+
+**Anchor plugins** (`tools/build_anchor_plugins.py`; Potentia's layers 4 to 6). Two kinds of
+filter that search the space around known content, written as table-form plugins so they count,
+rank and merge with every other automaton on the line:
+- `near`: units within `distance` substitutions of an anchor (Hamming distance), for damaged copies
+  and variants of a known page. With one anchor the distance is a parameter; with several it is
+  fixed when the file is made (the union of their neighbourhoods, made deterministic). Within d
+  substitutions of one page of L symbols there are sum over i <= d of C(L, i)(B - 1)^i units, and
+  the engine's counts are exactly that (`tests/plugins/near-example-v1.sfilter`).
+- `contains`: units that hold at least one fragment somewhere (an Aho-Corasick machine), for pages
+  that quote known lines of a lost work.
+The anchors and fragments are folded onto the line's alphabet as canon-text-v2 folds lower27, and
+the source file's SHA-256 is written into the plugin. Examples and their checks are in
+`tests/plugins` (near one anchor, near three, three fragments): the union of three balls counted by
+enumeration (52,470 units), 3,000 planted and random units judged against a plain substring test,
+and the oracle at four lengths.
+
+**Built-in filters** (compiled in; `counts_as` in brackets, docs/FILTERS-CONFLICTS.md):
+
+| Filter | Line | Rule | Keeps |
+| :--- | :--- | :--- | ---: |
+| `palette-size-v1` (own) | image, video | at most `colours` distinct colours (16); on video, `scope` film or each frame on its own | rgb332 10×10: 10^-95.42; rgb24: 10^-499.80; ega16 video, 2 a frame: 10^-163.98 |
+| `row-runs-v1` (own) | image, video | at most `changes` colour changes along each row (3) | mono 10×10: 10^-5.95; ega16: 10^-53.72; rgb24: 10^-414.24 |
+| `canonical-mesh-v1` (model rule) | models | one encoding of each mesh: vertices increasing as grid points, faces rotated to their smallest index (winding kept) and increasing | with every-vertex-used: 10^-21.48 (the three old rules: 10^-2.21) |
+| `utf8-valid-v1` (own) | binary | well-formed UTF-8 throughout; `controls = text` also refuses control characters but tab, LF and CR | 32 bytes: text 10^-10.75, any 10^-8.00 |
+
+- **palette-size** counts with `comp(m, r) = m comp(m, r - 1) + (B - m) comp(m + 1, r - 1)` and
+  ranks and unranks arithmetically at each pixel (the used colours below it, and the rest), so
+  2^24 colours cost what two do. **row-runs** remembers one row's changes, not the row above, so it
+  counts at any width and palette, which neighbour-agreement cannot; it is blind to vertical
+  structure. Per-frame palettes have their own frame-aware ranker (`VoicesRanker` packs at most
+  seven voices, and a video has eight frames by default). Oracle: `picture-vectors`
+  (`tests/vectors_picture_v1.tsv`), counted by inclusion and exclusion and by binomials, every unit
+  of ten small lines by brute force.
+- **canonical-mesh** counts C(C^3, V) × C(V(V-1)(V-2)/3, F) and ranks as combinations by the
+  hockey-stick identity; with every-vertex-used, inclusion and exclusion over the subsets of
+  unused vertices against a table of the triples avoiding each, so it ranks up to 12 vertices and
+  counts beyond. It sets aside only re-orderings of the same mesh: a hard filter. `sieve mesh --warp
+  FILE --canonical` puts a real .obj into its canonical encoding (`canonical_mesh`, modelsieve.hpp);
+  without it a warped mesh is almost never canonical. Oracle: rows `c`, `cu`, `cviu` in
+  `cross-vectors`, by brute force of every 3-vertex, 2-face, 2-step model and a walk over (last
+  triple, vertices named) at larger shapes, a different method from the engine's binomials.
+- **utf8-valid** is a 9-state automaton over bytes counted length by length, ranked in the binary
+  line's order (shortest first, then by the bytes), so the binary line compacts to text files.
+  With binary-kind-v1 or not-an-item-v1 it judges only (it needs the whole file, where they read
+  the head). Past 512 MB of table it judges only. Oracle: `utf8-vectors`, with Python's strict
+  decoder as the judge and a recurrence over code points by encoded length as the count.
+- **Hard and soft** (§17): every built-in filter is labelled; the new hard one is canonical-mesh.
+
+**Not built, and why.**
+- *Merging the built-in automata* (words, window, title, key-v1, neighbour-agreement) with the
+  plugins: the largest gain of all and its own piece of work (docs/FILTERS-CONFLICTS.md). Until
+  then, use words-data-v1 (the plugin port) to stack words with the new text plugins.
+- *A general "every frame passes the image stack"*: palette-size's frame scope covers the new
+  filters; a stack-wide version needs per-line settings to name another line's stack.
+- *header-consistent-v1* (BMP and RIFF size fields that must equal the file's length): it fits the
+  head-and-size counting of BinarySieve as a pattern, but removes a sliver; left for later.
+- *not-a-pattern-v2 as an automaton* for short periods: its states are the last few symbols and the
+  periods still possible, which counts only at short lengths; not worth a version yet.
+- *moby-grammar-v2* (imperatives, punctuation): needs the rule search re-run on the corpus, which is
+  not in the repository.
+- *A category for plugins*, and ticking a category at once in the setup menu.

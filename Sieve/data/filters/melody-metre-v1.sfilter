@@ -1,0 +1,32 @@
+sieve-filter-v2
+; Bars: every note and rest fits inside its bar, none crossing a bar line, so a melody falls into
+; a time signature rather than drifting across one. With `complete`, the last bar is filled too.
+; For notes104, whose durations are e q h w: 1, 2, 4 and 8 eighths. The state is how many eighths
+; of the current bar have gone.
+id        melody-metre
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     audio
+symbols   notes104
+describe  Notes and rests fit inside bars of the time signature, none across a bar line.
+param     time      choice  4-4 2-4,3-4,4-4,5-4 the time signature (2/4, 3/4, 4/4 or 5/4: bars of 4, 6, 8 or 10 eighths)
+param     complete  choice  no no,yes whether the last bar must be filled
+
+states    {(time == 0) * 4 + (time == 1) * 6 + (time == 2) * 8 + (time == 3) * 10}
+start     0
+if {complete == 1}
+  accept  0
+else
+  accept  0..{(time == 0) * 4 + (time == 1) * 6 + (time == 2) * 8 + (time == 3) * 10 - 1}
+fi
+for pos 0 {(time == 0) * 4 + (time == 1) * 6 + (time == 2) * 8 + (time == 3) * 10 - 1}
+  for d 0 {DURATIONS - 1}
+    if {pos + (d == 0) + (d == 1) * 2 + (d == 2) * 4 + (d == 3) * 8 <= (time == 0) * 4 + (time == 1) * 6 + (time == 2) * 8 + (time == 3) * 10}
+      for p 0 {PITCHES}
+        t {pos} @{p * DURATIONS + d} {(pos + (d == 0) + (d == 1) * 2 + (d == 2) * 4 + (d == 3) * 8) % ((time == 0) * 4 + (time == 1) * 6 + (time == 2) * 8 + (time == 3) * 10)}
+      done
+    fi
+  done
+done
+end

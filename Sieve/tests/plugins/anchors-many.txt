@@ -1,0 +1,4 @@
+# Three anchors of 8 letters for near-many-example-v1.
+the cats
+the bats
+my hound

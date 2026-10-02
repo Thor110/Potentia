@@ -117,7 +117,8 @@ true rather than wishful, and a slow machine can stop reading early and still ge
 If it cannot, then a low-poly variant is simply different content with a different address and the
 LOD idea is dead. Nobody asked this question in 700 turns and it is the one with teeth.
 
-**3.2 Exact counting under a model.** Counting every page whose information under the order-5 model
+**3.2 Exact counting under a model.** *The small one is built: `word-cost-v1` (FILTER-PLUGINS
+§19), a letter-pair model in quarter-bits, budgeted per stretch of a word, not per page.* Counting every page whose information under the order-5 model
 stays inside a bit budget needs a DP over (context × bits spent × position) and is infeasible at
 page length. Two honest routes: lean on guided ordering and do not count, or build a filter over a
 *deliberately tiny* model — letter pairs, costs rounded to whole eighth-bits — that is exactly
@@ -136,6 +137,26 @@ exactly where the heuristics leak. A test protocol, not a metaphor.
 provably empty and store them as a skip list. The safety rule is the important half: never exclude
 a range without having exhaustively searched it, because a false exclusion erases a real work
 permanently.
+
+**3.6 Angles as a reduction: why not, and what is kept.** Edward, 2 October 2026. The proposal:
+limit the line to a slice of the circle (say 330 to 331 degrees), map the slice to a full 360
+degrees, and repeat, each time cutting the line to 1/360 of its size, so that a file's address
+would come out 1/360 as long; with a byte for the angle (0 to 180, the values 181 to 255 kept for
+other meanings). The arithmetic says no. An angle is the leading part of the address: a slice of
+1/360 of the line takes log2(360), about 8.5 bits, off what is left to say, and the angle costs
+those 8.5 bits to say (a byte of 181 values says 7.5 for 8). A 32-byte file is 256 bits whole,
+8 + 247.5 with one angle, and 80 + 171 after ten; at best even, never shorter. Dividing the rooms
+by 360 shortens an address by 2.56 decimal digits, because an address's length is the number's
+order of magnitude. Repeated, the angles are the address written in base 360: one to one and
+reversible, so it no longer looks like the data, but it is the data in another form (no smaller,
+and no secret). The filters are different in kind, not degree: a stack is one rule everyone holds,
+so what it removes is never sent, while the slice a file is in depends on the file and must go
+with every address. The two meet in compact mode, where the circle is made of survivors only.
+What is kept: the bearing as a way to choose where to look (built: the navigator's bearing field,
+Tab in X, at the Angle Precision); a range view over one arc of a line; angle, room and item as a
+readable notation of an address, with a leading tag for the notation's version (the 181..255
+idea, as a format tag); and progressive orderings (§3.1), the version of this in which narrowing
+the angle would mean refining the content.
 
 ---
 
@@ -342,19 +363,22 @@ pages line be *searched* for meshes rather than only checked against one.
 **7.4 A dedicated `.obj` alphabet.** Digits, `.`, `-`, `/`, whitespace and the keyword letters.
 Cutting the space in the mapping layer before the filter layer runs is far cheaper than filtering.
 
-**7.5 Punctuation filters for `babel29` and `ascii95`.** Punctuation follows a word and is followed
+**7.5 Punctuation filters for `babel29` and `ascii95`.** *Built: `sentence-shape-v1` and
+`babel-punctuation-v1` (FILTER-PLUGINS §19).* Punctuation follows a word and is followed
 by a space; for `ascii95`, a capital after a full stop. Countable with the word trie that already
 exists. This matters: `lower27` throws away case and punctuation, so the books line currently holds
 word streams, not sentences.
 
-**7.6 Model-line filters.** The models line has a stack (`ModelSieve`) with `not-a-file-v1` and the
+**7.6 Model-line filters.** *`canonical-mesh-v1` built (one encoding of each mesh, 10^-19 of the
+default line; FILTER-PLUGINS §19).* The models line has a stack (`ModelSieve`) with `not-a-file-v1` and the
 first two tiers built (distinct vertices, distinct indices, every vertex used; FILTER-PLUGINS §16).
 The third tier is still to come. The three tiers of §12: local per-face
 constraints (rank exactly), small-V constraints such as "every vertex is used" (rank as a state
 machine, 256 states at V=8), and whole-mesh properties — watertight, manifold, convex — which judge
 but cannot rank, so they run in `mark`/`hide`.
 
-**7.7 Ranking beyond two colours.** Image compact mode only ranks two-colour pictures, because
+**7.7 Ranking beyond two colours.** *Built for two rules that count on any palette:
+`palette-size-v1` and `row-runs-v1` (FILTER-PLUGINS §19).* Image compact mode only ranks two-colour pictures, because
 entropy there depends only on the popcount. Everything with a real palette is unrankable, which is
 why compact image mode keeps sparse pictures rather than structured ones.
 

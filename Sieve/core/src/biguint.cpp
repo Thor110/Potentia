@@ -725,6 +725,32 @@ BigUint BigUint::from_limbs(std::span<const uint32_t> limbs)
     return v;
 }
 
+BigUint BigUint::from_bytes(std::span<const uint8_t> bytes)
+{
+    BigUint v;
+    v.limbs_.assign((bytes.size() + 7) / 8, 0);
+    for (size_t i = 0; i < bytes.size(); ++i)
+    {
+        const size_t from_end = bytes.size() - 1 - i; // place of this byte, least significant first
+        v.limbs_[from_end / 8] |= uint64_t(bytes[i]) << (8 * (from_end % 8));
+    }
+    v.trim();
+    return v;
+}
+
+std::vector<uint8_t> BigUint::to_bytes(size_t length) const
+{
+    if (limbs_.size() > (length + 7) / 8 || (bit_length() + 7) / 8 > length) throw std::out_of_range("value does not fit in that many bytes");
+    std::vector<uint8_t> out(length, 0);
+    for (size_t k = 0; k < length; ++k)
+    {
+        const size_t limb = k / 8;
+        if (limb >= limbs_.size()) break;
+        out[length - 1 - k] = uint8_t(limbs_[limb] >> (8 * (k % 8)));
+    }
+    return out;
+}
+
 BigUint BigUint::from_digits(std::span<const uint32_t> digits, uint32_t base)
 {
     if (base < 2) throw std::invalid_argument("base must be at least 2");

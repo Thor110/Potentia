@@ -13,6 +13,13 @@
 // zoom in guided order -- which is the number place() takes, so the navigator needs no parsing
 // of its own and works in every ordering. On the binary line it is the file's place on the line,
 // which place() turns into its place on the one wall.
+//
+// At the foot, the same position as a bearing round the loop, written to the setup menu's Angle
+// Precision, can be typed instead (Tab, or a click on it): 0 degrees is where the loop starts, as
+// on the compass. A bearing A with d decimal places names the first unit at or past it,
+// ceil(A * units / (360 * 10^d)), worked out exactly; ENTER goes there as it does from the digits.
+// It is a way of choosing where to look, not a shorter address: the bearing carries only the
+// leading part of the position (docs/IDEAS.md §3.6).
 
 #include "hallway.hpp"
 
@@ -42,6 +49,8 @@ void Hallway::open_navigator()
     nav_hover_.reset();
     nav_scroll_ = -1; // scroll to the selection on the first draw
     nav_note_.clear();
+    nav_angle_focus_ = false;
+    nav_angle_ = nav_angle_of(nav_value_);
     nav_had_mouse_ = SDL_GetWindowRelativeMouseMode(window_);
     SDL_SetWindowRelativeMouseMode(window_, false); // the digits are picked with the pointer
     nav_open_ = true;
@@ -79,6 +88,7 @@ void Hallway::nav_step(size_t d, int dir)
     }
     nav_hex_ = nav_value_.to_hex(nav_width_);
     nav_note_.clear();
+    nav_angle_ = nav_angle_of(nav_value_);
 }
 
 // Digit `d` set outright, as typed: refused if it would name a place past the end of the line.
@@ -95,7 +105,87 @@ void Hallway::nav_set(size_t d, uint32_t v)
     nav_value_ = to;
     nav_hex_ = std::move(hex);
     nav_note_.clear();
+    nav_angle_ = nav_angle_of(nav_value_);
     if (nav_sel_ + 1 < nav_width_) ++nav_sel_;
+}
+
+// A position's bearing, exactly: floor(v * 360 * 10^d / units), written with d decimal places.
+std::string Hallway::nav_angle_of(const BigUint& v) const
+{
+    const int d = angle_decimals_;
+    const BigUint units = line_units();
+    if (units.is_zero()) return "0";
+    BigUint scale = BigUint::pow(10, uint64_t(d));
+    scale.mul_small(360);
+    BigUint q, r;
+    BigUint::divmod(BigUint::mul(v, scale), units, q, r);
+    std::string digits = q.to_decimal();
+    if (d == 0) return digits;
+    if (digits.size() <= size_t(d)) digits.insert(0, size_t(d) + 1 - digits.size(), '0');
+    return digits.substr(0, digits.size() - size_t(d)) + "." + digits.substr(digits.size() - size_t(d));
+}
+
+// The typed bearing, checked against the Angle Precision, as a position: the first unit at or past
+// it, round the loop to the start when it falls past the last unit.
+void Hallway::nav_angle_apply()
+{
+    const int d = angle_decimals_;
+    const std::string& t = nav_angle_;
+    const size_t dot = t.find('.');
+    const std::string whole = t.substr(0, dot), frac = dot == std::string::npos ? "" : t.substr(dot + 1);
+    if (whole.empty() || whole.size() > 3 || frac.find('.') != std::string::npos)
+    {
+        nav_note_ = tr("nav.angle_bad");
+        return;
+    }
+    if (frac.size() > size_t(d))
+    {
+        nav_note_ = trf("nav.angle_places", {std::to_string(d)});
+        return;
+    }
+    const std::string scaled = whole + frac + std::string(size_t(d) - frac.size(), '0');
+    const BigUint a = BigUint::from_decimal(scaled);
+    BigUint scale = BigUint::pow(10, uint64_t(d));
+    scale.mul_small(360);
+    if (a >= scale)
+    {
+        nav_note_ = tr("nav.angle_range");
+        return;
+    }
+    const BigUint units = line_units();
+    BigUint q, r;
+    BigUint::divmod(BigUint::mul(a, units), scale, q, r);
+    if (!r.is_zero()) q.add_small(1);
+    if (q >= units) q = BigUint();
+    nav_value_ = q;
+    nav_hex_ = nav_value_.to_hex(nav_width_);
+    nav_note_.clear();
+}
+
+// A key while the bearing field has focus: digits and one decimal point, Backspace; the first key
+// after entering the field replaces what it showed.
+void Hallway::nav_angle_key(SDL_Keycode k)
+{
+    char c = 0;
+    if (k >= SDLK_0 && k <= SDLK_9) c = char('0' + (k - SDLK_0));
+    else if (k >= SDLK_KP_1 && k <= SDLK_KP_9) c = char('1' + (k - SDLK_KP_1));
+    else if (k == SDLK_KP_0) c = '0';
+    else if (k == SDLK_PERIOD || k == SDLK_KP_PERIOD) c = '.';
+    if (c)
+    {
+        if (nav_angle_fresh_) nav_angle_.clear();
+        nav_angle_fresh_ = false;
+        if (nav_angle_.size() < 16) nav_angle_ += c;
+    }
+    else if (k == SDLK_BACKSPACE)
+    {
+        if (nav_angle_fresh_) nav_angle_.clear();
+        nav_angle_fresh_ = false;
+        if (!nav_angle_.empty()) nav_angle_.pop_back();
+    }
+    else return;
+    if (nav_angle_.empty() || nav_angle_ == ".") nav_note_.clear();
+    else nav_angle_apply();
 }
 
 // Where digit d is drawn: its row and its x.
@@ -138,8 +228,15 @@ void Hallway::navigator_event(const SDL_Event& e)
     {
         float x = e.button.x, y = e.button.y;
         SDL_RenderCoordinatesFromWindow(r_, e.button.x, e.button.y, &x, &y);
-        if (const auto hit = nav_hit(x, y))
+        const SDL_FPoint pt{x, y};
+        if (SDL_PointInRectFloat(&pt, &nav_angle_box_))
         {
+            nav_angle_focus_ = true;
+            nav_angle_fresh_ = true;
+        }
+        else if (const auto hit = nav_hit(x, y))
+        {
+            nav_angle_focus_ = false;
             nav_sel_ = hit->first;
             if (hit->second != 0) nav_step(hit->first, hit->second);
         }
@@ -156,6 +253,30 @@ void Hallway::navigator_event(const SDL_Event& e)
     if (e.type != SDL_EVENT_KEY_DOWN) return;
     const bool shift = (e.key.mod & SDL_KMOD_SHIFT) != 0;
     const SDL_Keycode k = e.key.key;
+    // Tab moves between the digits and the bearing field. In the field, Esc leaves it (a second
+    // Esc closes the navigator) and ENTER goes to the bearing typed.
+    if (k == SDLK_TAB)
+    {
+        nav_angle_focus_ = !nav_angle_focus_;
+        nav_angle_fresh_ = nav_angle_focus_;
+        if (!nav_angle_focus_) nav_angle_ = nav_angle_of(nav_value_);
+        return;
+    }
+    if (nav_angle_focus_)
+    {
+        if (k == SDLK_ESCAPE)
+        {
+            nav_angle_focus_ = false;
+            nav_angle_ = nav_angle_of(nav_value_);
+            nav_note_.clear();
+        }
+        else if (k == SDLK_RETURN || k == SDLK_KP_ENTER)
+        {
+            if (nav_note_.empty()) close_navigator(true);
+        }
+        else nav_angle_key(k);
+        return;
+    }
     if (k >= SDLK_0 && k <= SDLK_9) { nav_set(nav_sel_, uint32_t(k - SDLK_0)); return; }
     if (k >= SDLK_A && k <= SDLK_F) { nav_set(nav_sel_, uint32_t(10 + k - SDLK_A)); return; }
     if (k >= SDLK_KP_1 && k <= SDLK_KP_9) { nav_set(nav_sel_, uint32_t(1 + k - SDLK_KP_1)); return; }
@@ -210,7 +331,7 @@ void Hallway::draw_navigator(float W, float H)
     nav_x0_ = 20 + kLabelW;
     nav_y0_ = 110;
     const size_t rows = (nav_width_ + nav_cols_ - 1) / nav_cols_;
-    nav_rows_shown_ = std::max(1, int((H - nav_y0_ - 110) / kRowH));
+    nav_rows_shown_ = std::max(1, int((H - nav_y0_ - 150) / kRowH));
     // Keep the chosen digit in view; PgUp/PgDn scroll freely within the rows there are.
     const int sel_row = int(nav_sel_ / nav_cols_);
     if (nav_scroll_ < 0) nav_scroll_ = std::max(0, sel_row - nav_rows_shown_ / 2);
@@ -255,6 +376,23 @@ void Hallway::draw_navigator(float W, float H)
     }
     if (nav_scroll_ > 0) text(W - 180, nav_y0_ - 18, tr("nav.more_above"), 1, grey);
     if (nav_scroll_ + nav_rows_shown_ < int(rows)) text(W - 180, nav_y0_ + float(nav_rows_shown_) * kRowH, tr("nav.more_below"), 1, grey);
+
+    // The bearing: the position as an angle round the loop, which can be typed instead.
+    {
+        const float ay = H - 136;
+        const std::string label = trf("nav.angle", {std::to_string(angle_decimals_)});
+        text(20, ay + 4, label, 1, nav_angle_focus_ ? white : grey);
+        const float bx = 20 + text_width(label, 1) + 12;
+        const std::string shown = nav_angle_ + (nav_angle_focus_ && (SDL_GetTicks() / 500) % 2 ? "_" : "") + "\xc2\xb0";
+        nav_angle_box_ = SDL_FRect{bx - 6, ay - 4, std::max(160.0f, text_width(shown, 2) + 12), 26};
+        SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, nav_angle_focus_ ? 70 : 25);
+        SDL_RenderFillRect(r_, &nav_angle_box_);
+        SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 255);
+        SDL_RenderRect(r_, &nav_angle_box_);
+        text(bx, ay, shown, 2, nav_angle_focus_ ? white : ink);
+        text(nav_angle_box_.x + nav_angle_box_.w + 12, ay + 4, fit(tr(nav_angle_focus_ ? "nav.angle_typing" : "nav.angle_hint"),
+                                                                  W - (nav_angle_box_.x + nav_angle_box_.w + 32), 1), 1, grey);
+    }
 
     // What the chosen digit does, and where the address stands.
     const size_t p = nav_width_ - 1 - nav_sel_;

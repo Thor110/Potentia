@@ -1834,7 +1834,10 @@ void test_filters(const std::string& dir)
     CHECK(clash("not-a-file-v1", "distinct-vertices-v1") == "conflict");
     CHECK(filters_for(text_line(8)).size() == 14); // not-written-v1, not-a-file-v1, not-other-line-v1 and not-a-pattern-v1 joined the ten
     const FilterLine image{"image", "image/mono/10x10", 2, 100, nullptr, 10, 10, 1};
-    CHECK(filters_for(image).size() == 5); // symbol-entropy, neighbour-agreement, not-a-file, not-packed, not-a-pattern
+    CHECK(filters_for(image).size() == 7); // symbol-entropy, neighbour-agreement, not-a-file, not-packed, not-a-pattern,
+                                           // palette-size, row-runs
+    CHECK(clash("palette-size-v1", "row-runs-v1") == "merge");
+    CHECK(clash("palette-size-v1", "not-a-pattern-v1") == "conflict");
 
     // Rankers, exhaustively at small lengths with a small dictionary: rank = position among the
     // survivors in address order, and unrank inverts it.
@@ -3051,7 +3054,7 @@ void test_cross_vectors(const std::string& dir)
             const ModelSpace space(uint32_t(std::stoul(f[1])), uint32_t(std::stoul(f[2])), uint32_t(std::stoul(f[3])));
             std::vector<FilterStack::Entry> entries;
             for (char r : f[4])
-                entries.push_back({find_filter(r == 'v' ? "distinct-vertices-v1" : r == 'i' ? "distinct-indices-v1" : "every-vertex-used-v1"), {}});
+                entries.push_back({find_filter(r == 'v' ? "distinct-vertices-v1" : r == 'i' ? "distinct-indices-v1" : r == 'c' ? "canonical-mesh-v1" : "every-vertex-used-v1"), {}});
             const ModelSieve ms(space, entries);
             if (f[0] == "mesh") ok = ms.can_rank() && ms.count().to_decimal() == f[5];
             else
@@ -3234,6 +3237,91 @@ void test_cross_vectors(const std::string& dir)
         const ModelSieve both(space, {{not_file, {}}, {find_filter("distinct-indices-v1"), {}}});
         CHECK(!both.can_rank() && !both.blocker().empty());
     }
+    // canonical-mesh-v1: every model of a small shape judged against the rule as written, the
+    // survivors in positional order through both compact orders, alone and with every-vertex-used;
+    // and a mesh's canonical form is a survivor holding the same points and the same faces.
+    {
+        const ModelSpace space(3, 2, 2);
+        for (const bool used : {false, true})
+        {
+            std::vector<FilterStack::Entry> entries{{find_filter("canonical-mesh-v1"), {}}};
+            if (used) entries.push_back({find_filter("every-vertex-used-v1"), {}});
+            const ModelSieve cm(space, entries);
+            uint64_t kept = 0;
+            bool agree = true, order = true;
+            for (uint64_t v = 0; BigUint(v) < space.size(); ++v)
+            {
+                const ModelSpace::Parts p = space.parts_at(BigUint(v), AddressMode::Positional);
+                auto point = [&](int i) { return (p.verts[3 * i] * 2 + p.verts[3 * i + 1]) * 2 + p.verts[3 * i + 2]; };
+                auto face = [&](int k) { return std::array<uint32_t, 3>{p.faces[3 * k], p.faces[3 * k + 1], p.faces[3 * k + 2]}; };
+                bool rule = point(0) < point(1) && point(1) < point(2) && face(0) < face(1);
+                for (int k = 0; k < 2; ++k)
+                    rule = rule && face(k)[0] < face(k)[1] && face(k)[0] < face(k)[2] && face(k)[1] != face(k)[2];
+                // With three vertices every face names all of them, so every-vertex-used adds nothing here.
+                const bool pass = cm.first_failure(BigUint(v)).empty();
+                agree = agree && pass == rule;
+                if (!pass) continue;
+                order = order && cm.index_of(BigUint(v), AddressMode::Positional) == BigUint(kept) &&
+                        cm.model_at(cm.index_of(BigUint(v), AddressMode::Scrambled), AddressMode::Scrambled) == BigUint(v);
+                ++kept;
+            }
+            CHECK(agree);
+            CHECK(order);
+            CHECK(cm.can_rank() && cm.count() == BigUint(kept));
+            CHECK(kept == 56); // C(8, 3) * C(2, 2)
+        }
+        // A cube, its corners listed in any order: its canonical form is a survivor, with the same
+        // points and the same faces, each started at its smallest corner.
+        const ModelSpace big(8, 12, 16);
+        std::vector<ModelSpace::Vertex> corners;
+        for (int i = 0; i < 8; ++i) corners.push_back({i & 4 ? 1.0f : -1.0f, i & 1 ? 1.0f : -1.0f, i & 2 ? 1.0f : -1.0f});
+        const uint32_t quads[6][4] = {{0, 1, 3, 2}, {4, 6, 7, 5}, {0, 4, 5, 1}, {2, 3, 7, 6}, {0, 2, 6, 4}, {1, 5, 7, 3}};
+        std::vector<ModelSpace::Face> tris;
+        for (const auto& q : quads)
+        {
+            tris.push_back({q[2], q[0], q[1]}); // not started at the smallest corner
+            tris.push_back({q[0], q[2], q[3]});
+        }
+        const ModelSpace::Parts raw = big.fit(corners, tris).parts;
+        const auto canon = canonical_mesh(big, raw);
+        CHECK(canon.has_value());
+        const ModelSieve cms(big, {{find_filter("canonical-mesh-v1"), {}}, {find_filter("every-vertex-used-v1"), {}}});
+        const BigUint at = big.index_of(*canon, AddressMode::Positional);
+        CHECK(cms.first_failure(at).empty() && !cms.first_failure(big.index_of(raw, AddressMode::Positional)).empty());
+        CHECK(cms.can_rank() && cms.model_at(cms.index_of(at, AddressMode::Positional), AddressMode::Positional) == at);
+        auto sorted_points = [&](const ModelSpace::Parts& p) {
+            std::vector<std::array<uint32_t, 3>> v;
+            for (int i = 0; i < 8; ++i) v.push_back({p.verts[3 * i], p.verts[3 * i + 1], p.verts[3 * i + 2]});
+            std::sort(v.begin(), v.end());
+            return v;
+        };
+        auto face_points = [&](const ModelSpace::Parts& p) {
+            // Each face as the points of its corners, rotated to start at its smallest point.
+            std::vector<std::array<uint64_t, 3>> f;
+            for (int k = 0; k < 12; ++k)
+            {
+                std::array<uint64_t, 3> t;
+                for (int j = 0; j < 3; ++j)
+                {
+                    const uint32_t i = p.faces[3 * k + j];
+                    t[j] = (uint64_t(p.verts[3 * i]) * 16 + p.verts[3 * i + 1]) * 16 + p.verts[3 * i + 2];
+                }
+                std::rotate(t.begin(), std::min_element(t.begin(), t.end()), t.end());
+                f.push_back(t);
+            }
+            std::sort(f.begin(), f.end());
+            return f;
+        };
+        CHECK(sorted_points(*canon) == sorted_points(raw));
+        CHECK(face_points(*canon) == face_points(raw));
+        // A face given twice has no canonical form.
+        ModelSpace::Parts twice = raw;
+        std::copy(twice.faces.begin(), twice.faces.begin() + 3, twice.faces.begin() + 3);
+        CHECK(!canonical_mesh(big, twice).has_value());
+        // Counts in closed form at the default shape: C(4096, 8) x C(112, 12).
+        const ModelSieve alone(big, {{find_filter("canonical-mesh-v1"), {}}});
+        CHECK(alone.count().to_decimal() == "8619984089677964781973927273325038295040");
+    }
 
     // not-a-file: every unit of a short line, against file_kind_at, ranked in order.
     for (const auto& [base, L] : std::vector<std::pair<uint32_t, uint32_t>>{{2, 16}, {27, 3}, {256, 2}})
@@ -3322,6 +3410,148 @@ std::vector<std::vector<int>> sounding(const NoteSet& set, const std::vector<uin
     return v;
 }
 
+// palette-size-v1 and row-runs-v1 against the oracle's vectors (tests/vectors_picture_v1.tsv):
+// counts, ranks both ways and verdicts, on small lines checked there by brute force and on the
+// image line's palettes (rgb24 included) and video.
+void test_picture_vectors(const std::string& dir)
+{
+    const TestResources none(nullptr, nullptr);
+    const FilterSpec* palette = find_filter("palette-size-v1");
+    const FilterSpec* runs = find_filter("row-runs-v1");
+    CHECK(palette && runs);
+    if (!palette || !runs) return;
+    int n = 0;
+    for (const auto& f : read_rows(dir + "vectors_picture_v1.tsv"))
+    {
+        bool ok = false;
+        const bool is_palette = f[0] == "palette" || f[0] == "palette-unit";
+        if ((f[0] == "palette" && f.size() == 8) || (f[0] == "palette-unit" && f.size() == 9) || (f[0] == "runs" && f.size() == 7) ||
+            (f[0] == "runs-unit" && f.size() == 8))
+        {
+            const uint32_t base = uint32_t(std::stoul(f[1])), w = uint32_t(std::stoul(f[2])), h = uint32_t(std::stoul(f[3])),
+                           frames = uint32_t(std::stoul(f[4]));
+            const FilterLine line{frames > 1 ? "video" : "image", "picture", base, w * h * frames, nullptr, w, h, frames > 1 ? frames : 0};
+            const FilterValues v = is_palette ? FilterValues{{"scope", f[5]}, {"colours", f[6]}} : FilterValues{{"changes", f[5]}};
+            const FilterStack st(line, {{is_palette ? palette : runs, v}}, none);
+            const size_t at = is_palette ? 7 : 6;
+            if (!st.ranker()) ok = false;
+            else if (f[0] == "palette" || f[0] == "runs") ok = st.ranker()->count().to_decimal() == f[at];
+            else
+            {
+                const BigUint k = BigUint::from_decimal(f[at]);
+                const std::vector<uint32_t> want = split_u32(f[at + 1]);
+                ok = st.ranker()->unrank(k) == want && st.ranker()->rank(want) == k && st.passes(want) && st.ranker()->accepts(want);
+            }
+        }
+        CHECK(ok);
+        if (!ok)
+        {
+            std::cerr << "  picture vector mismatch:";
+            for (const auto& x : f) std::cerr << " " << x.substr(0, 60);
+            std::cerr << "\n";
+        }
+        ++n;
+    }
+    std::cout << "picture vectors checked: " << n << "\n";
+    CHECK(n >= 90);
+    // Every unit of a short line judged by the filter and walked by its ranker agree, in a
+    // black-and-white video judged frame by frame.
+    {
+        const FilterLine line{"video", "picture", 3, 2 * 1 * 3, nullptr, 2, 1, 3};
+        const FilterStack st(line, {{palette, {{"scope", "frame"}, {"colours", "1"}}}, {runs, {}}}, none);
+        CHECK(!st.ranker() && !st.compact_blocker().empty()); // two own rankers: judged, not counted
+        const FilterStack one(line, {{palette, {{"scope", "frame"}, {"colours", "1"}}}}, none);
+        std::vector<uint32_t> u(6, 0);
+        uint64_t kept = 0;
+        bool agree = true;
+        for (;;)
+        {
+            const bool pass = one.passes(u);
+            agree = agree && pass == one.ranker()->accepts(u) && pass == (u[0] == u[1] && u[2] == u[3] && u[4] == u[5]);
+            if (pass) agree = agree && one.ranker()->rank(u) == BigUint(kept++);
+            size_t i = 6;
+            while (i > 0 && ++u[i - 1] == 3) u[--i] = 0;
+            if (i == 0) break;
+        }
+        CHECK(agree);
+        CHECK(kept == 27 && one.ranker()->count() == BigUint(27));
+    }
+}
+
+// utf8-valid-v1 on the binary line against the oracle's vectors (tests/vectors_utf8_v1.tsv): the
+// survivors' counts, and files by rank both ways through the compact positional order.
+void test_utf8_vectors(const std::string& dir)
+{
+    const FilterSpec* utf8 = find_filter("utf8-valid-v1");
+    CHECK(utf8);
+    if (!utf8) return;
+    int n = 0;
+    for (const auto& f : read_rows(dir + "vectors_utf8_v1.tsv"))
+    {
+        bool ok = false;
+        if ((f[0] == "utf8" && f.size() == 4) || (f[0] == "utf8-unit" && f.size() == 5))
+        {
+            const BinarySpace space(std::stoull(f[1]), "sieve");
+            const BinarySieve bs(space, {{utf8, {{"controls", f[2]}}}});
+            if (!bs.can_rank()) ok = false;
+            else if (f[0] == "utf8") ok = bs.count().to_decimal() == f[3];
+            else
+            {
+                const BigUint k = BigUint::from_decimal(f[3]);
+                const std::vector<uint8_t> file = f[4] == "-" ? std::vector<uint8_t>{} : from_hex_bytes(f[4]);
+                ok = bs.file_at(k, AddressMode::Positional) == file && bs.index_of(file, AddressMode::Positional) == k &&
+                     bs.first_failure_of(file).empty() && bs.needs_file();
+            }
+        }
+        CHECK(ok);
+        if (!ok)
+        {
+            std::cerr << "  utf8 vector mismatch:";
+            for (const auto& x : f) std::cerr << " " << x.substr(0, 60);
+            std::cerr << "\n";
+        }
+        ++n;
+    }
+    std::cout << "utf8 vectors checked: " << n << "\n";
+    CHECK(n >= 80);
+    // Malformed and unwanted files fail; with a kind filter the stack judges only.
+    const BinarySpace space(8, "sieve");
+    const BinarySieve text(space, {{utf8, {{"controls", "text"}}}});
+    for (const std::vector<uint8_t>& bad : std::vector<std::vector<uint8_t>>{
+             {0xC0, 0xAF}, {0xED, 0xA0, 0x80}, {0xF4, 0x90, 0x80, 0x80}, {0xE2, 0x82}, {0x00}, {0x7F}, {0xC2, 0x85}, {0x80}})
+        CHECK(text.first_failure_of(bad) == "utf8-valid-v1");
+    CHECK(text.first_failure_of({'h', 0xC3, 0xA9, '\n'}).empty());
+    const BinarySieve both(space, {{utf8, {}}, {find_filter("binary-kind-v1"), {{"kinds", "text"}}}});
+    CHECK(!both.can_rank() && !both.blocker().empty());
+}
+
+// BigUint's byte conversions (a file read as one number and back), against the hex path they
+// replaced, and BinarySpace::file_at_place against bytes_at.
+void test_byte_conversions()
+{
+    CHECK(BigUint::from_bytes(std::vector<uint8_t>{}).is_zero());
+    CHECK(BigUint::from_bytes(std::vector<uint8_t>{0, 0, 1}) == BigUint(1));
+    CHECK(BigUint(0x0102).to_bytes(4) == (std::vector<uint8_t>{0, 0, 1, 2}));
+    CHECK(BigUint().to_bytes(0).empty());
+    CHECK(throws([] { BigUint(0x10000).to_bytes(2); }));
+    uint64_t seed = 12345;
+    bool same = true;
+    for (size_t n : {1u, 7u, 8u, 9u, 15u, 16u, 17u, 255u, 1000u, 4097u})
+    {
+        std::vector<uint8_t> bytes(n);
+        for (auto& b : bytes) b = uint8_t((seed = seed * 6364136223846793005ULL + 1442695040888963407ULL) >> 56);
+        if (n % 3 == 0) bytes[0] = 0; // a leading zero byte
+        std::string h;
+        for (uint8_t b : bytes) h += "0123456789abcdef"[b >> 4], h += "0123456789abcdef"[b & 15];
+        const BigUint v = BigUint::from_bytes(bytes);
+        same = same && v == BigUint::from_hex(h) && v.to_bytes(n) == bytes;
+        const BinarySpace bs(n, "sieve");
+        const BigUint place = bs.index_of(bytes, AddressMode::Positional);
+        same = same && BinarySpace::file_at_place(place) == bytes && bs.bytes_at(place, AddressMode::Positional) == bytes;
+    }
+    CHECK(same);
+}
+
 void test_midi_read()
 {
     std::mt19937_64 rng(1028);
@@ -3403,6 +3633,9 @@ void run_all(int argc, char** argv)
         test_kind_vectors(dir + "vectors_kinds_v1.tsv");
         test_written_vectors(dir);
         test_cross_vectors(dir);
+        test_picture_vectors(dir);
+        test_utf8_vectors(dir);
+        test_byte_conversions();
     }
 }
 

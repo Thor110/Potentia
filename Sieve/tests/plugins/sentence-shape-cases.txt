@@ -1,0 +1,40 @@
+# Cases for sentence-shape-v1 (CI: the engine's and the oracle's verdicts on every line must agree).
+# Each case is preceded by the verdict it should get at the default settings.
+# pass
+It was the best of times, it was the worst of times.
+# pass
+He said: "Stop." Then he left.
+# FAIL
+Is it? Yes! It is... 3.14 is pi, e.g. here.
+# pass
+the end of a sentence. And the next one
+# FAIL
+(as written) in the U.S. and the UK; fine.
+# pass
+rest of a word, and more   
+# pass
+well-known, re-read -- a dash
+# pass
+the dogs' bowls aren't full.
+# FAIL
+It was the best of times , it was.
+# FAIL
+the end. and then
+# FAIL
+hEllo there
+# FAIL
+what,is this
+# FAIL
+stop!!!! now
+# FAIL
+cost $5 today
+# FAIL
+a (b ( c
+# pass
+Is it? Yes! It is... 3.14 is pi, e.g. Here.
+# pass
+(as written) in the U.S. And so on; fine.
+# pass
+- item, -5 and x -- y
+# FAIL
+word- x

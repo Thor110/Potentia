@@ -1,0 +1,4 @@
+# Fragments for contains-example-v1.
+best of
+worst
+age of

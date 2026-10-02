@@ -21,6 +21,8 @@ Special thanks to Claude Opus 5.5 for helping to build out the Sieve system base
 | `tools/build_dictionary.py` | Rebuilds the English dictionaries from SCOWL |
 | `data/filters/` | The reference filter plugins (`.sfilter`), and the tagged lists the grammar plugins read (the Moby part-of-speech list, its inflections and names; `moby-pos-v1.md`) |
 | `tools/moby_pos.py` | Rebuilds the Moby tagged lists from the Moby Part-of-Speech II source and SCOWL |
+| `tools/build_text_plugins.py` | Rebuilds the generated text plugins (letter pairs and triples, word cost, function words, sentence shape) from the pinned SCOWL lists; `--check` in CI |
+| `tools/build_anchor_plugins.py` | Makes plugins for the units near known pages, or holding known fragments |
 | `data/dictionaries/` | The dictionary registry (`dictionaries.tsv`) and pinned English word lists (SCOWL 2020.12.07) |
 | `data/models/` | The model registry (`models.tsv`), the pinned text model, and the training corpus manifest (`corpus/gutenberg-nltk.tsv`) |
 | `tools/fetch_corpus.py` | Downloads the training corpus into `corpus/` (not stored in the repository) and checks every file's hash |
@@ -280,7 +282,7 @@ What limits a line in practice is the machine. An address is one number held in 
 
 ![The setup menu](docs/images/hallway-menu.png)
 
-**Filters.** The magnifying glass beside each line's title (or **F** on that line's settings) opens the line's **filter list** over the map: a black box with a white outline, scrolled with the wheel or the arrow keys. Beside its title is a live tally, **amount of content filtered**: the exact share of the line's units the ticked filters remove, as a percentage with as many decimals as it takes to get past the leading 9s or 0s (`99.999999999999...%`, `0.0059%`), and, where one side is too small to read as a percentage, that side as a power of ten (`kept 10^-19.27`, `removed 10^-4.23`). It says "not countable" when the stack cannot count. It has three kinds of row:
+**Filters.** The magnifying glass beside each line's title (or **F** on that line's settings) opens the line's **filter list** over the map: a black box with a white outline, scrolled with the wheel or the arrow keys. Beside its title is a live tally, **amount of content filtered**: the exact share of the line's units the ticked filters remove, as a percentage with as many decimals as it takes to get past the leading 9s or 0s (`99.999999999999...%`, `0.0059%`), and the smaller side as a power of ten (`kept 10^-19.27`, `kept 10^-1.12`, `removed 10^-4.23`). It says "not countable" when the stack cannot count. It has three kinds of row:
 - **Display mode**, one of four:
   - **off:** every book on the shelves.
   - **mark:** books that fail are drawn faint. Good for record keeping and tests: you see exactly what the stack rejects.
@@ -321,6 +323,12 @@ Every filter is a separate, versioned module compiled into the core. Every decis
 | `model-information-v1` | text | information under the pinned frequency model is at most `max` bits per symbol (5) | |
 | `neighbour-agreement-v1` | image, video | enough neighbouring pixels (and frames) share a colour | while colours^width is small (video: colours^(width×height)) |
 | `key-v1` | audio | every note is in one key (tonic C…B; major, minor, harmonic minor, major or minor pentatonic, blues); rests always pass | yes |
+| `palette-size-v1` | image, video | at most so many distinct colours (or in each frame) | yes, on every palette, rgb24 included |
+| `row-runs-v1` | image, video | at most so many colour changes along each row of pixels | yes, at any width |
+| `canonical-mesh-v1` | models | one encoding of each mesh (vertices and faces in order): 10^-19 of the line is re-orderings | yes |
+| `utf8-valid-v1` | binary | the whole file is well-formed UTF-8 (and, by default, text: no control characters) | yes, on its own |
+
+Each built-in filter is labelled **hard** (sets aside only noise or other lines' content) or **soft** (may set aside what a person would keep), shown by `sieve filters`. The custom filters in `data/filters` add melody metre, ambitus and gap-filling; letter pairs and triples, a word-cost model, function-word rules and sentence punctuation for text, generated from the pinned word lists by `tools/build_text_plugins.py`; and `tools/build_anchor_plugins.py` makes filters for the units near a known page or holding known fragments (docs/FILTER-PLUGINS.md §19).
 
 **Compact** needs a filter that can count and rank its survivors (the Compact column), so it works on every line: words on text, neighbour agreement or low entropy on black-and-white pictures, a key on melodies. Neighbour agreement is counted row by row, remembering the row above (a transfer matrix). The work grows as colours^width, which is inherent to counting pictures by their neighbours. A 10×10 black-and-white picture takes 0.1 s, and small video works. Past the memory limit the line falls back to hide. Any other ticked filter must be one that filter *implies*: `words` implies `clean`, so the two together still compact, but `words` with `max-run` does not. When compact is not possible the hallway falls back to hide, and the top bar says why. Warp to text that fails the stack and it opens in hand marked **NOT ON THE SHELVES**, with the filter that rejected it.
 
@@ -384,7 +392,7 @@ A door **keeps your corridor position** and only changes which line reads it:
 | F1 | The **setup menu**, over the hallway: Esc goes back to the hallway as it was, ENTER THE HALLWAY walks into a new one with the new settings |
 | Esc | **Pause**: Resume, Navigation System, **File Locator** (a file's place or a folder's manifest, compared with zip and 7z; go to a file on the binary line; save Sieve instructions (`.sieve`, for anyone with Sieve) or make an installer program (for anyone); install from Sieve instructions), **Media Player** (the background music, below), Settings (the main menu's, over the hallway), Exit Sieve (to the main menu, or out). **Node Graph Viewer** (as O). Every tool opened from the pause menu (Restart's setup menu included) comes back to it with Esc. With something in your hands, Esc puts it down first |
 | O | **Node graph**: maps of verified anchors in 3D. Choose a map from the dropdown (**This installation**, the maps in `maps/`, or open or make one from a folder); drag or the arrows turn it, the wheel zooms, click or Tab chooses a node, Enter or a double click walks to a file on the binary line; Export writes GraphML or DOT for other programs |
-| X | **Address navigator**: the whole address of the item you are looking at, full screen, one hex digit at a time. Left/Right (Shift: a row) choose a digit, Up/Down, the wheel or the arrows turn it, carrying and wrapping round the line; type 0-9 a-f to set it; ENTER goes there, Esc leaves |
+| X | **Address navigator**: the whole address of the item you are looking at, full screen, one hex digit at a time. Left/Right (Shift: a row) choose a digit, Up/Down, the wheel or the arrows turn it, carrying and wrapping round the line; type 0-9 a-f to set it; ENTER goes there, Esc leaves. **Tab** (or a click) types a **bearing** instead, at the Angle Precision of the setup menu: 180 is halfway round the loop, and ENTER goes to the first item at or past it |
 | N / B | Next or previous unit of a warp that made a trail of several units |
 | M | Switch ordering: positional → scrambled → guided (text) → positional |
 | - / = | Guided ordering: zoom out / in by one bit (**Shift**: 8 bits) |

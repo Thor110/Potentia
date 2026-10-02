@@ -1,0 +1,138 @@
+sieve-filter-v2
+; Near an anchor: a unit of 8 symbols within so many substitutions of one of these
+; anchors (Hamming distance), for searching the space around known content:
+;   "the cats"
+;   "the bats"
+;   "my hound"
+; The distance is fixed at 2: the states are the place in the unit and the substitutions so
+; far against each anchor, made deterministic.
+; Made by tools/build_anchor_plugins.py from anchors-many.txt (sha256 a7d0fe5a8f98260795db58f80167ed0f7d419e5ca7210a83071796913117a681).
+id        near-many-example
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     text
+symbols   lower27
+describe  Within 2 substitutions of one of 3 anchors.
+
+states    70
+start     0
+accept    59 60 61 62 63 64 65 66 67 68 69
+t 0 " abcdefghijklnopqrsuvwxyz" 1
+t 0 "m" 2
+t 0 "t" 3
+t 1 " abcdefgijklmnopqrstuvwxz" 4
+t 1 "h" 5
+t 1 "y" 6
+t 2 " abcdefgijklmnopqrstuvwxz" 6
+t 2 "h" 7
+t 2 "y" 8
+t 3 " abcdefgijklmnopqrstuvwxz" 5
+t 3 "y" 7
+t 3 "h" 9
+t 4 " " 10
+t 4 "e" 11
+t 5 "abcdfghijklmnopqrstuvwxyz" 11
+t 5 " " 12
+t 5 "e" 13
+t 6 "abcdfghijklmnopqrstuvwxyz" 10
+t 6 "e" 12
+t 6 " " 14
+t 7 "abcdfghijklmnopqrstuvwxyz" 12
+t 7 " " 15
+t 7 "e" 16
+t 8 "abcdfghijklmnopqrstuvwxyz" 14
+t 8 "e" 15
+t 8 " " 17
+t 9 "abcdfghijklmnopqrstuvwxyz" 13
+t 9 " " 16
+t 9 "e" 18
+t 10 "h" 19
+t 11 " " 20
+t 12 "h" 19
+t 12 " " 20
+t 13 "abcdefghijklmnopqrstuvwxyz" 20
+t 13 " " 21
+t 14 " abcdefgijklmnopqrstuvwxyz" 19
+t 14 "h" 22
+t 15 "abcdefgijklmnopqrstuvwxyz" 19
+t 15 "h" 22
+t 15 " " 23
+t 16 "abcdefgijklmnopqrstuvwxyz" 20
+t 16 " " 21
+t 16 "h" 23
+t 17 " abcdefgijklmnopqrstuvwxyz" 22
+t 17 "h" 24
+t 18 "abcdefghijklmnopqrstuvwxyz" 21
+t 18 " " 25
+t 19 "o" 26
+t 20 "b" 27
+t 20 "c" 28
+t 21 " adefghijklmnopqrstuvwxyz" 29
+t 21 "b" 30
+t 21 "c" 31
+t 22 " abcdefghijklmnpqrstuvwxyz" 26
+t 22 "o" 32
+t 23 "o" 26
+t 23 "b" 27
+t 23 "c" 28
+t 24 " abcdefghijklmnpqrstuvwxyz" 32
+t 24 "o" 33
+t 25 " adefghijklmnopqrstuvwxyz" 34
+t 25 "b" 35
+t 25 "c" 36
+t 26 "u" 37
+t 27 "a" 38
+t 28 "a" 39
+t 29 "a" 40
+t 30 " bcdefghijklmnopqrstuvwxyz" 38
+t 30 "a" 41
+t 31 " bcdefghijklmnopqrstuvwxyz" 39
+t 31 "a" 42
+t 32 " abcdefghijklmnopqrstvwxyz" 37
+t 32 "u" 43
+t 33 " abcdefghijklmnopqrstvwxyz" 43
+t 33 "u" 44
+t 34 " bcdefghijklmnopqrstuvwxyz" 40
+t 34 "a" 45
+t 35 " bcdefghijklmnopqrstuvwxyz" 41
+t 35 "a" 46
+t 36 " bcdefghijklmnopqrstuvwxyz" 42
+t 36 "a" 47
+t 37 "n" 48
+t 38 "t" 49
+t 39 "t" 50
+t 40 "t" 51
+t 41 " abcdefghijklmnopqrsuvwxyz" 49
+t 41 "t" 52
+t 42 " abcdefghijklmnopqrsuvwxyz" 50
+t 42 "t" 53
+t 43 " abcdefghijklmopqrstuvwxyz" 48
+t 43 "n" 54
+t 44 " abcdefghijklmopqrstuvwxyz" 54
+t 44 "n" 55
+t 45 " abcdefghijklmnopqrsuvwxyz" 51
+t 45 "t" 56
+t 46 " abcdefghijklmnopqrsuvwxyz" 52
+t 46 "t" 57
+t 47 " abcdefghijklmnopqrsuvwxyz" 53
+t 47 "t" 58
+t 48 "d" 59
+t 49 "s" 60
+t 50 "s" 61
+t 51 "s" 62
+t 52 " abcdefghijklmnopqrtuvwxyz" 60
+t 52 "s" 63
+t 53 " abcdefghijklmnopqrtuvwxyz" 61
+t 53 "s" 64
+t 54 " abcefghijklmnopqrstuvwxyz" 59
+t 54 "d" 65
+t 55 " abcefghijklmnopqrstuvwxyz" 65
+t 55 "d" 66
+t 56 " abcdefghijklmnopqrtuvwxyz" 62
+t 56 "s" 67
+t 57 " abcdefghijklmnopqrtuvwxyz" 63
+t 57 "s" 68
+t 58 " abcdefghijklmnopqrtuvwxyz" 64
+t 58 "s" 69
+end

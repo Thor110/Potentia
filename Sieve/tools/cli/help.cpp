@@ -254,7 +254,7 @@ const std::vector<Page>& pages()
           {"sieve browse --alphabet hiragana --length 16 --count 5", "five units of kana"}}},
 
         {"mesh", "The models line: every possible mesh of one shape, and the .obj text of each.",
-         "sieve mesh [--vertices V] [--faces F] [--coords C] [--key K] [--warp FILE | --read ADDR | --browse N]",
+         "sieve mesh [--vertices V] [--faces F] [--coords C] [--key K] [--warp FILE [--canonical] | --read ADDR | --browse N]",
          "A model of this line is V vertices and F triangles. Each coordinate is one of C steps\n"
          "across [-1, 1], and each face names three vertices, so the line holds\n"
          "\n"
@@ -279,6 +279,9 @@ const std::vector<Page>& pages()
           {"--coords C", "Steps per axis, a power of two from 2 to 4096 (16)."},
           {"--key K", "Seeds the scrambled ordering, as on the other lines."},
           {"--warp FILE", "Where an .obj file lives on this line."},
+          {"--canonical", "With --warp: reorder the fitted mesh into the one encoding canonical-mesh-v1 keeps\n"
+                          "(vertices in increasing order, each face started at its smallest corner, faces in\n"
+                          "increasing order). The same mesh, at the address that filter shelves."},
           {"--read ADDR", "The model at an address, as canonical .obj (--out FILE to save it)."},
           {"--browse N", "N models off the shelf (--seed S to repeat a run)."},
           {"--filters PATH", "With --warp: the settings file whose [models] stack judges the model (its survivor\n"
@@ -288,6 +291,7 @@ const std::vector<Page>& pages()
          {{"sieve mesh", "how big the default models line is"},
           {"sieve mesh --vertices 24 --faces 44 --coords 64", "a bigger shape"},
           {"sieve mesh --warp cube.obj", "the address of a cube"},
+          {"sieve mesh --warp cube.obj --canonical", "the cube's one canonical encoding"},
           {"sieve mesh --read ADDR --out model.obj", "save the model at an address"},
           {"sieve mesh --browse 3 --seed 1", "three models off the shelf"}}},
 

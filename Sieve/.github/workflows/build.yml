@@ -582,6 +582,10 @@ jobs:
           out=$($H --warp "$W" --press "X,Home,Up,Return" --screenshot nav.png)
           echo "$out" | tail -2 | sed -n 1p | q "went to 1"
           if [ "$(echo "$out" | tail -2 | book)" = "$here" ]; then exit 1; fi
+          # The navigator's bearing field: Tab, a bearing, ENTER, and you stand at that angle round
+          # the loop (180 degrees is exactly halfway); a bearing of 360 or more is refused.
+          $H --warp "$W" --press "X,Tab,1,8,0,Return" --screenshot navangle.png | tail -2 | sed -n 1p | q "50.0000000000% along"
+          if $H --warp "$W" --press "X,Tab,3,6,0,Return" --screenshot navangle2.png | tail -2 | sed -n 1p | grep -q "went to"; then exit 1; fi
           start=$($H --mode guided --warp "$W" --zoom 20 --walk "0,0" --screenshot start.png | book)
           # The corridor end to end and back: six doors left from pages reach binary, which is
           # where the run finishes, and six right brings you back to the same book on pages.
@@ -767,8 +771,15 @@ jobs:
           python sieve_ref.py kind-vectors | diff - ../tests/vectors_kinds_v1.tsv
           python sieve_ref.py written-vectors | diff - ../tests/vectors_written_v1.tsv
           # Every line filtered by every other (section 16): not-a-file, the notation and .obj
-          # machines, the packed closed form and the pages among the binary kinds (about 10 s).
+          # machines, the packed closed form and the pages among the binary kinds; and the models
+          # line's rules with canonical-mesh-v1 (about 45 s).
           python sieve_ref.py cross-vectors | diff - ../tests/vectors_cross_v1.tsv
+          # palette-size-v1 and row-runs-v1 (closed forms, brute force on small lines), and
+          # utf8-valid-v1 on the binary line (code points by encoded length, Python's decoder).
+          python sieve_ref.py picture-vectors | diff - ../tests/vectors_picture_v1.tsv
+          python sieve_ref.py utf8-vectors | diff - ../tests/vectors_utf8_v1.tsv
+          # The generated text plugins are what tools/build_text_plugins.py makes from the pinned lists.
+          python ../tools/build_text_plugins.py --check
           python sieve_ref.py book-filter-vectors | diff - ../tests/vectors_book_filters_v1.tsv
           python sieve_ref.py book-read ../tests/example_book_v1.book > book.out
           test "$(head -1 book.out)" = "$(awk '$1 == "id" {print $2}' ../tests/example_book_v1.book)"
@@ -815,6 +826,41 @@ jobs:
               diff plugin.oracle plugin.engine
             done
           done
+          for spec in "melody-metre-v1:" "melody-metre-v1:time=3-4,complete=yes" "melody-metre-v1:time=5-4" "melody-ambitus-v1:" "melody-ambitus-v1:span=4" "melody-gapfill-v1:" "melody-gapfill-v1:leap=2,step=5,resolve=yes"; do
+            f=${spec%%:*}; p=${spec#*:}
+            for L in 1 2 5 17; do
+              python sieve_ref.py plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} > plugin.oracle
+              $S filters --plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
+              diff plugin.oracle plugin.engine
+            done
+          done
+          # The generated text plugins (tools/build_text_plugins.py), at several lengths and settings.
+          for spec in "letter-pairs-v1:" "letter-pairs-v1:min_words=5" "letter-triples-v1:" "letter-triples-v1:min_words=3" "word-cost-v1:" "word-cost-v1:rate=12,slack=8" "sentence-shape-v1:" "sentence-shape-v1:capitals=no,others=yes" "babel-punctuation-v1:"; do
+            f=${spec%%:*}; p=${spec#*:}
+            for L in 1 2 5 17 40; do
+              python sieve_ref.py plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} > plugin.oracle
+              $S filters --plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
+              diff plugin.oracle plugin.engine
+            done
+          done
+          python sieve_ref.py plugin ../data/filters/sentence-shape-v1.sfilter --length 6 --judge ../tests/plugins/sentence-shape-cases.txt > plugin.oracle
+          $S filters --plugin ../data/filters/sentence-shape-v1.sfilter --length 6 --judge ../tests/plugins/sentence-shape-cases.txt | tr -d '\r' > plugin.engine
+          diff plugin.oracle plugin.engine
+          # function-words-v1 reads every word of scowl-en-60-names: the oracle's lazy mode, as for Moby.
+          python sieve_ref.py plugin ../data/filters/function-words-v1.sfilter --length 6 --lazy --judge ../tests/plugins/moby-sentences.txt | grep -v "^states" > plugin.oracle
+          $S filters --plugin ../data/filters/function-words-v1.sfilter --length 6 --judge ../tests/plugins/moby-sentences.txt | tr -d '\r' | grep -v "^states" > plugin.engine
+          diff plugin.oracle plugin.engine
+          # Anchor plugins (tools/build_anchor_plugins.py): near one anchor, near several, and fragments.
+          for spec in "near-example-v1:" "near-example-v1:distance=0" "near-example-v1:distance=7" "near-many-example-v1:" "contains-example-v1:"; do
+            f=${spec%%:*}; p=${spec#*:}
+            for L in 1 8 20 32; do
+              python sieve_ref.py plugin ../tests/plugins/$f.sfilter --length $L ${p:+--params $p} > plugin.oracle
+              $S filters --plugin ../tests/plugins/$f.sfilter --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
+              diff plugin.oracle plugin.engine
+            done
+          done
+          # Within d substitutions of one 32-letter page: sum over i <= d of C(32, i) 26^i.
+          $S filters --plugin ../tests/plugins/near-example-v1.sfilter --length 32 --params distance=3 | grep -qx "survivors  87513089"
           for p in "" "gap=0" "mode=far" "mode=any,gap=5"; do
             for L in 1 2 5 12; do
               python sieve_ref.py plugin ../tests/plugins/toy-v2-v1.sfilter --length $L ${p:+--params $p} > plugin.oracle
@@ -845,7 +891,7 @@ jobs:
             $S filters --plugin ../data/filters/$f.sfilter --length 6 --judge ../tests/plugins/moby-sentences.txt | tr -d '\r' | grep -v "^states" > plugin.engine
             diff plugin.oracle plugin.engine
           done
-          $S filters --plugins | grep -c "^loaded" | grep -qx 14
+          $S filters --plugins | grep -c "^loaded" | grep -qx 23
           $S filters --plugin ../data/filters/words-data-v1.sfilter --length 6 --relations | grep -q "stricter than (implies) window-data-v1"
           rm -rf addr
           $S locate ../tests/manifest_fixture --manifest fixture.manifest --addresses addr --compare > locate.out

@@ -44,6 +44,7 @@ add_library(sieve_core STATIC
     core/src/written.cpp
     core/src/filters/builtin.cpp
     core/src/filters/media.cpp
+    core/src/filters/picture.cpp
     core/src/filters/statistics.cpp
     core/src/filters/text_m1.cpp
     core/src/guided.cpp

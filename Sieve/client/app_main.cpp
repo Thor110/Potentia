@@ -453,7 +453,7 @@ int run(const Args& a)
             hall->set_letters_px(a.has("item-letters") ? a.get_u32("item-letters", 8) : 8);
             hall->set_closeup_px(a.has("close-up") ? a.get_u32("close-up", 1024) : 1024);
             hall->set_fps_counter(app.fps_counter || a.has("fps-counter"));
-            hall->set_thin(a.has("thin"));
+            if (a.has("thin")) hall->set_thin(true); // (a walk to a long file in --press may have made it thin already)
             // On stderr: stdout is where the readout goes, which scripts read line by line.
             std::cerr << "graphics: edge glow " << (glow && !real ? "on" : "off") << ", real graphics " << (real ? "on" : "off")
                       << ", door portals " << (portals ? "on" : "off")

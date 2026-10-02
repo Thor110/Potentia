@@ -10,6 +10,9 @@
 //                         As on every other line: with E(x) the signed files at binary places below
 //                         x (KindCounter::count_before, from the file's head alone), the survivors
 //                         below x are S(x) = x - E(x); the k-th is found by halving.
+//   canonical-mesh-v1     one encoding of each mesh: vertices in increasing order, faces rotated to
+//                         their smallest index and in increasing order; C(P, V) x C(T, F), with
+//                         every-vertex-used by inclusion and exclusion (modelsieve.cpp)
 //   distinct-vertices-v1, distinct-indices-v1, every-vertex-used-v1: the line's own rules
 //                         (core/src/filters/models.cpp), counted in closed form. A model is its
 //                         vertices (base C) then its faces (base V), and the rules on each part
@@ -60,7 +63,14 @@ private:
     std::unique_ptr<KindCounter> signed_;
 };
 
-class MeshRules; // the line's own rules, counted and ranked (modelsieve.cpp)
+class MeshRules;     // the line's own rules, counted and ranked (modelsieve.cpp)
+class CanonicalMesh; // canonical-mesh-v1: one encoding of each mesh (modelsieve.cpp)
+
+// The canonical encoding of a mesh (canonical-mesh-v1): its vertices in increasing order as grid
+// points, each face rotated to start at its smallest index (keeping its winding), its faces in
+// increasing order. None when the mesh has none: two vertices at one point, a face naming a vertex
+// twice, or a face twice.
+std::optional<ModelSpace::Parts> canonical_mesh(const ModelSpace& space, const ModelSpace::Parts& parts);
 
 class ModelSieve
 {
@@ -97,6 +107,7 @@ private:
     std::vector<std::string> names_, ids_;
     std::unique_ptr<NumberFiles> files_; // not-a-file-v1, when ticked
     std::unique_ptr<MeshRules> rules_;   // the line's own rules, when any is ticked
+    std::unique_ptr<CanonicalMesh> canon_; // canonical-mesh-v1, when ticked: it counts the line then
     BigUint size_, count_;
     bool can_rank_ = true;
     std::string blocker_;

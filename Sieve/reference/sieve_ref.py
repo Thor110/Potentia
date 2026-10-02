@@ -17,6 +17,8 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
     python3 sieve_ref.py kind-vectors   > ../tests/vectors_kinds_v1.tsv
     python3 sieve_ref.py written-vectors > ../tests/vectors_written_v1.tsv
     python3 sieve_ref.py cross-vectors  > ../tests/vectors_cross_v1.tsv
+    python3 sieve_ref.py picture-vectors > ../tests/vectors_picture_v1.tsv
+    python3 sieve_ref.py utf8-vectors   > ../tests/vectors_utf8_v1.tsv
     python3 sieve_ref.py manifest ../tests/manifest_fixture [--addresses DIR] [--with-addresses | --with-contents]   # sieve-manifest-v1/v2/v3
     python3 sieve_ref.py map ../tests/manifest_fixture                # sieve-map-v1
     python3 sieve_ref.py image-vectors  > ../tests/vectors_image_v1.tsv
@@ -31,6 +33,7 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
         --judge ../tests/plugins/moby-sentences.txt   # too large to determinise: subsets as reached
 """
 import argparse
+import collections
 import hashlib
 import re
 import math
@@ -2257,6 +2260,9 @@ def parse_plugin(text):
             name, choices = toks[1][0], toks[4][0].split(",")
             if name in V2_RESERVED or toks[3][0] not in choices:
                 raise PluginError(f"line {n}: a bad choice parameter")
+            # A choice is ASCII letters, digits, # and - (FILTER-PLUGINS §14), and listed once.
+            if any(not re.fullmatch(r"[A-Za-z0-9#-]+", c) for c in choices) or len(set(choices)) != len(choices):
+                raise PluginError(f"line {n}: a choice is letters, digits, # and -, each listed once")
             head["params"].append((name, toks[3][0], "choice", choices))
         elif k == "param":
             name, kind = toks[1][0], toks[2][0]
@@ -4303,6 +4309,98 @@ class FaceWalk:
         return out
 
 
+# canonical-mesh-v1, from its rule: vertices in increasing order as grid points, each face starting
+# at its smallest index (a < b, a < c, b != c), faces in increasing order as triples. Counted here
+# by walking the faces as a machine (its state the last triple and, with every-vertex-used, the set
+# of vertices named so far), not by the engine's binomials and inclusion and exclusion.
+
+def canon_ok(V, F, C, rules, coords, faces):
+    pts = [tuple(coords[3 * i:3 * i + 3]) for i in range(V)]
+    if any(pts[i] >= pts[i + 1] for i in range(V - 1)):
+        return False
+    tri = [tuple(faces[3 * k:3 * k + 3]) for k in range(F)]
+    if any(not (a < b and a < c and b != c) for a, b, c in tri):
+        return False
+    if any(tri[k] >= tri[k + 1] for k in range(F - 1)):
+        return False
+    return "u" not in rules or len(set(faces)) == V
+
+
+class CanonWalk:
+    """Increasing sequences of F rotated triples. comp(j, last, mask) is the number of ways to place
+    faces j.. with every triple after `last`, mask the vertices named so far (with every-vertex-used;
+    else 0). Tabled backwards as suffix sums over the next triple x:
+        S[j][x][mask] = comp(j + 1, x, mask | m_x) + S[j][x + 1][mask],  comp(j, last, mask) = S[j][last + 1][mask]."""
+
+    def __init__(self, V, F, rules):
+        self.V, self.F, self.u = V, F, "u" in rules
+        self.tri = [(a, b, c) for a in range(V) for b in range(V) for c in range(V) if a < b and a < c and b != c]
+        self.m = [(1 << a) | (1 << b) | (1 << c) for a, b, c in self.tri]
+        self.T = T = len(self.tri)
+        full = (1 << V) - 1
+        masks = range(1 << V) if self.u else [0]
+        last = {mk: (1 if not self.u or mk == full else 0) for mk in masks}  # comp(F, ., mask)
+        self.S = [None] * F
+        for j in range(F - 1, -1, -1):
+            row = {}
+            for mk in masks:
+                acc = 0
+                row[T, mk] = 0
+                for x in range(T - 1, -1, -1):
+                    nm = (mk | self.m[x]) if self.u else 0
+                    acc += last[nm] if j == F - 1 else self.S[j + 1][x + 1, nm]
+                    row[x, mk] = acc
+            self.S[j] = row
+
+    def comp(self, j, last, mask):
+        if j == self.F:
+            return 1 if not self.u or mask == (1 << self.V) - 1 else 0
+        return self.S[j][last + 1, mask]
+
+    def count(self):
+        return self.comp(0, -1, 0)
+
+    def unrank(self, k):
+        last, mask, out = -1, 0, []
+        for j in range(self.F):
+            for t in range(last + 1, self.T):
+                m = (mask | self.m[t]) if self.u else 0
+                n = self.comp(j + 1, t, m)
+                if k < n:
+                    out += list(self.tri[t])
+                    last, mask = t, m
+                    break
+                k -= n
+        return out
+
+
+def canon_vertex_count(V, C):
+    """Increasing sequences of V of the C^3 points, by a walk over the points (small), or C(P, V)."""
+    P = C ** 3
+    if P <= 4096:
+        ways = [1] * (P + 1)  # ways[p]: sequences of the vertices still to place, from point p on
+        for _ in range(V):
+            nxt = [0] * (P + 1)
+            for p in range(P - 1, -1, -1):
+                nxt[p] = nxt[p + 1] + ways[p + 1]
+            ways = nxt
+        return ways[0]
+    return math.comb(P, V)
+
+
+def canon_vertex_unrank(V, C, k):
+    P, out, start = C ** 3, [], 0
+    for i in range(V):
+        for p in range(start, P):
+            n = math.comb(P - 1 - p, V - 1 - i)  # the increasing ways to place the rest above p
+            if k < n:
+                out += [p // (C * C), p // C % C, p % C]
+                start = p + 1
+                break
+            k -= n
+    return out
+
+
 def vertex_strings(V, C, rules):
     P = C ** 3
     if "v" not in rules:
@@ -4457,7 +4555,7 @@ def cmd_cross_vectors(_args):
     print("# item-pages   max_bytes kinds keep page_alphabet page_length survivors")
     print("# models       vertices faces coords survivors  (not-a-file-v1 on a model's positional index)")
     print("# model-unit   vertices faces coords rank positional_index")
-    print("# mesh         vertices faces coords rules survivors  (rules: v distinct-vertices, i distinct-indices, u every-vertex-used)")
+    print("# mesh         vertices faces coords rules survivors  (rules: v distinct-vertices, i distinct-indices, u every-vertex-used, c canonical-mesh)")
     print("# mesh-unit    vertices faces coords rules rank positional_index")
     print("# max-run      alphabet length max_run survivors  (max-run-v1, counted since it became an automaton)")
     print("# pattern      base length width order period ramps survivors  (not-a-pattern-v1)")
@@ -4558,6 +4656,275 @@ def cmd_cross_vectors(_args):
                                      (2, 100, 1, "big", 16, "on"), (2, 100, 8, "big", 16, "on"), (104, 16, 1, "big", 8, "on"),
                                      (29, 3200, 1, "big", 12, "on")):
         print(f"pattern\t{B}\t{L}\t{w}\t{order}\t{Q}\t{ramps}\t{pat_count(B, L, w, Q, ramps == 'on')}")
+    # canonical-mesh-v1 (c), alone and with every-vertex-used (u); the other two rules it implies.
+    # Every model of the tiny shape by brute force, then the face walk at larger shapes.
+    V, F, C = 3, 2, 2
+    for rules in ("c", "cu", "cviu"):
+        kept = []
+        for x in range(C ** (3 * V) * V ** (3 * F)):
+            digits = to_digits_n(x, V, 3 * F)
+            coords = to_digits_n(x // V ** (3 * F), C, 3 * V)
+            if canon_ok(V, F, C, rules, coords, digits):
+                kept.append(x)
+        assert len(kept) == canon_vertex_count(V, C) * CanonWalk(V, F, rules).count()
+        print(f"mesh\t{V}\t{F}\t{C}\t{rules}\t{len(kept)}")
+        for k in sorted({0, len(kept) // 3, len(kept) - 1}):
+            print(f"mesh-unit\t{V}\t{F}\t{C}\t{rules}\t{k}\t{kept[k]}")
+    for V2, F2, C2, rs in ((4, 3, 4, ("c", "cu", "cviu")), (5, 4, 8, ("c", "cu", "cviu")), (8, 12, 16, ("c", "cu", "cviu")),
+                           (10, 9, 16, ("cu",)), (12, 20, 64, ("c",))):
+        for rules in rs:
+            cw = CanonWalk(V2, F2, rules)
+            fc = cw.count()
+            n = canon_vertex_count(V2, C2) * fc
+            print(f"mesh\t{V2}\t{F2}\t{C2}\t{rules}\t{n}")
+            for k in sorted({0, n // 7, n - 1, next(g) * next(g) % n}):
+                q, r = divmod(k, fc)
+                coords, faces = canon_vertex_unrank(V2, C2, q), cw.unrank(r)
+                assert canon_ok(V2, F2, C2, rules, coords, faces)
+                print(f"mesh-unit\t{V2}\t{F2}\t{C2}\t{rules}\t{k}\t{mesh_index(V2, F2, C2, coords, faces)}")
+
+
+# ---------------------------------------------------------------- palette-size-v1, row-runs-v1
+# Written from the rules (core/src/filters/picture.cpp's header), counted by inclusion and
+# exclusion and by binomials rather than by the engine's recurrences, and checked by brute force
+# on small lines. A unit is pixels in address order; for a video with scope "frame" the colours
+# are counted in each frame of W*H pixels on its own.
+
+def palette_ok(u, k, scope):
+    return all(len(set(u[i:i + scope])) <= k for i in range(0, len(u), scope))
+
+
+def palette_finish(B, k, m, r):
+    """Strings of r more pixels when m colours are already used, using at most k in all: choose the
+    j new colours, then the strings over the m + j colours in which each new one appears."""
+    total = 0
+    for j in range(0, min(k - m, B - m, r) + 1):
+        onto = sum((-1) ** i * math.comb(j, i) * (m + j - i) ** r for i in range(j + 1))
+        total += math.comb(B - m, j) * onto
+    return total if m <= k else 0
+
+
+def palette_count(B, L, scope, k):
+    return palette_finish(B, k, 0, scope) ** (L // scope)
+
+
+def palette_ways(B, L, scope, k, pos, m):
+    """Ways to finish from pixel pos (m colours used in its scope)."""
+    left = (scope - pos % scope) % scope
+    whole = palette_finish(B, k, 0, scope) ** ((L - pos - left) // scope)
+    return whole if left == 0 else palette_finish(B, k, m, left) * whole
+
+
+def palette_unrank(B, L, scope, k, n):
+    out, used = [], set()
+    for pos in range(L):
+        m = len(used)
+        boundary = (pos + 1) % scope == 0
+        old = palette_ways(B, L, scope, k, pos + 1, 0 if boundary else m)
+        new = palette_ways(B, L, scope, k, pos + 1, 0 if boundary else m + 1) if m < k else 0
+        # The symbols in order, each worth `old` (a colour already used) or `new`.
+        x = 0
+        for c in sorted(used) + [B]:
+            gap = c - x  # new colours x .. c-1
+            if new and n < gap * new:
+                x += n // new
+                n %= new
+                break
+            n -= gap * new
+            if c == B:
+                raise AssertionError("palette unrank ran past the symbols")
+            if n < old:
+                x = c
+                break
+            n -= old
+            x = c + 1
+        out.append(x)
+        used.add(x)
+        if boundary:
+            used = set()
+    return out
+
+
+def runs_ok(u, W, c):
+    return all(sum(u[r + x] != u[r + x - 1] for x in range(1, W)) <= c for r in range(0, len(u), W))
+
+
+def runs_row(B, W, c):
+    return sum(B * math.comb(W - 1, t) * (B - 1) ** t for t in range(min(c, W - 1) + 1))
+
+
+def runs_ways(B, W, L, c, pos, t):
+    """Ways to finish from pixel pos, t changes so far in its row (pos inside a row)."""
+    if t > c:
+        return 0
+    left = (W - pos % W) % W
+    rows = runs_row(B, W, c) ** ((L - pos - left) // W)
+    if left == 0:
+        return rows
+    return sum(math.comb(left, s) * (B - 1) ** s for s in range(c - t + 1)) * rows
+
+
+def runs_unrank(B, W, L, c, n):
+    out, t = [], 0
+    for pos in range(L):
+        if pos % W == 0:
+            block = runs_ways(B, W, L, c, pos + 1, 0)
+            out.append(n // block)
+            n %= block
+            t = 0
+            continue
+        last = out[-1]
+        same, other = runs_ways(B, W, L, c, pos + 1, t), runs_ways(B, W, L, c, pos + 1, t + 1)
+        if n < last * other:
+            d = n // other
+            n %= other
+        elif n < last * other + same:
+            n -= last * other
+            d = last
+        else:
+            n -= last * other + same
+            d = last + 1 + n // other
+            n %= other
+        t += d != last
+        out.append(d)
+    return out
+
+
+def rank_by_unrank(unrank, count, u):
+    """The rank of u, by halving over the survivors (the oracle has unrank; this gives rank too)."""
+    lo, hi = 0, count - 1
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if unrank(mid) <= u:
+            lo = mid
+        else:
+            hi = mid - 1
+    assert unrank(lo) == u
+    return lo
+
+
+def cmd_picture_vectors(_args):
+    from itertools import product
+    print("# Picture filters: palette-size-v1 and row-runs-v1 (core/src/filters/picture.cpp).")
+    print("# palette       base width height frames scope colours survivors")
+    print("# palette-unit  base width height frames scope colours rank pixels(comma)")
+    print("# runs          base width height frames changes survivors")
+    print("# runs-unit     base width height frames changes rank pixels(comma)")
+    g = stream("picture")
+    # Every unit of small lines, judged by the rule, against the counts and the unranking.
+    for B, W, H, F, scope, k in ((3, 2, 2, 1, "film", 2), (4, 3, 2, 1, "film", 2), (2, 3, 3, 1, "film", 1), (3, 2, 1, 3, "frame", 1),
+                                 (3, 2, 1, 3, "film", 2), (5, 2, 2, 1, "film", 3)):
+        L, S = W * H * F, (W * H if scope == "frame" else W * H * F)
+        kept = [list(u) for u in product(range(B), repeat=L) if palette_ok(u, k, S)]
+        assert len(kept) == palette_count(B, L, S, k)
+        assert all(palette_unrank(B, L, S, k, i) == u for i, u in enumerate(kept))
+        print(f"palette\t{B}\t{W}\t{H}\t{F}\t{scope}\t{k}\t{len(kept)}")
+        for i in sorted({0, len(kept) // 3, len(kept) - 1}):
+            print(f"palette-unit\t{B}\t{W}\t{H}\t{F}\t{scope}\t{k}\t{i}\t{','.join(map(str, kept[i]))}")
+    for B, W, H, c in ((2, 4, 3, 1), (3, 3, 2, 0), (3, 4, 2, 2), (4, 3, 2, 1)):
+        L = W * H
+        kept = [list(u) for u in product(range(B), repeat=L) if runs_ok(u, W, c)]
+        assert len(kept) == runs_row(B, W, c) ** H
+        assert all(runs_unrank(B, W, L, c, i) == u for i, u in enumerate(kept))
+        print(f"runs\t{B}\t{W}\t{H}\t1\t{c}\t{len(kept)}")
+        for i in sorted({0, len(kept) // 3, len(kept) - 1}):
+            print(f"runs-unit\t{B}\t{W}\t{H}\t1\t{c}\t{i}\t{','.join(map(str, kept[i]))}")
+    # Full size: the palettes of the image line (mono, ega16, rgb332, rgb24) and video.
+    for B, W, H, F, scope, k in ((2, 10, 10, 1, "film", 1), (16, 10, 10, 1, "film", 4), (256, 8, 8, 1, "film", 8),
+                                 (1 << 24, 10, 10, 1, "film", 16), (16, 5, 5, 8, "frame", 3), (16, 5, 5, 8, "film", 5),
+                                 (1 << 24, 4, 4, 8, "frame", 4)):
+        L, S = W * H * F, (W * H if scope == "frame" else W * H * F)
+        n = palette_count(B, L, S, k)
+        print(f"palette\t{B}\t{W}\t{H}\t{F}\t{scope}\t{k}\t{n}")
+        for i in sorted({0, n // 7, n - 1, int.from_bytes(bytes(next(g) for _ in range(40)), "big") % n}):
+            u = palette_unrank(B, L, S, k, i)
+            assert palette_ok(u, k, S)
+            print(f"palette-unit\t{B}\t{W}\t{H}\t{F}\t{scope}\t{k}\t{i}\t{','.join(map(str, u))}")
+    for B, W, H, F, c in ((2, 10, 10, 1, 3), (16, 10, 10, 1, 2), (1 << 24, 10, 10, 1, 3), (16, 5, 5, 8, 1), (256, 64, 64, 1, 4)):
+        L = W * H * F
+        n = runs_row(B, W, c) ** (H * F)
+        print(f"runs\t{B}\t{W}\t{H}\t{F}\t{c}\t{n}")
+        for i in sorted({0, n // 7, n - 1, int.from_bytes(bytes(next(g) for _ in range(40)), "big") % n}):
+            u = runs_unrank(B, W, L, c, i)
+            assert runs_ok(u, W, c)
+            print(f"runs-unit\t{B}\t{W}\t{H}\t{F}\t{c}\t{i}\t{','.join(map(str, u))}")
+
+
+# ---------------------------------------------------------------- utf8-valid-v1
+# Written from the rule, not the engine's byte automaton: a file is valid when Python's strict
+# UTF-8 decoder takes it (RFC 3629) and, with controls = text, it holds no control character but
+# tab, line feed and carriage return. Counted by code points: c_k code points take k bytes, so the
+# valid files of n bytes number a(n) = sum over k of c_k a(n - k). Ranked through the fact that
+# UTF-8 keeps code point order: files of one length compare byte by byte as their code points do.
+
+def utf8_ranges(text_only):
+    """Allowed code points as ascending (lo, hi, bytes) ranges."""
+    one = [(9, 11, 1), (13, 14, 1), (0x20, 0x7F, 1)] if text_only else [(0, 0x80, 1)]
+    two = [(0xA0, 0x800, 2)] if text_only else [(0x80, 0x800, 2)]
+    return one + two + [(0x800, 0xD800, 3), (0xE000, 0x10000, 3), (0x10000, 0x110000, 4)]
+
+
+def utf8_ok(b, text_only):
+    try:
+        t = b.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    if text_only and any((ord(c) < 0x20 and c not in "\t\n\r") or 0x7F <= ord(c) <= 0x9F for c in t):
+        return False
+    return True
+
+
+def utf8_counts(n, text_only):
+    c = collections.Counter()
+    for lo, hi, k in utf8_ranges(text_only):
+        c[k] += hi - lo
+    a = [1] + [0] * n
+    for m in range(1, n + 1):
+        a[m] = sum(c[k] * a[m - k] for k in c if k <= m)
+    return a
+
+
+def utf8_unrank(n, text_only, k):
+    a = utf8_counts(n, text_only)
+    length = 0
+    while k >= a[length]:
+        k -= a[length]
+        length += 1
+    out, r = b"", length
+    while r:
+        for lo, hi, size in utf8_ranges(text_only):
+            if size > r:
+                continue
+            block = a[r - size]
+            if k < (hi - lo) * block:
+                out += chr(lo + k // block).encode("utf-8")
+                k %= block
+                r -= size
+                break
+            k -= (hi - lo) * block
+    return out
+
+
+def cmd_utf8_vectors(_args):
+    print("# utf8-valid-v1 on the binary line (core/src/filekind.cpp, Utf8Counter).")
+    print("# utf8       max_bytes controls survivors")
+    print("# utf8-unit  max_bytes controls rank file_hex")
+    from itertools import product
+    for text_only in (False, True):
+        ctl = "text" if text_only else "any"
+        # Every file of up to 2 bytes, judged by the decoder, against the counts and the order.
+        files = [bytes(f) for n in range(3) for f in product(range(256), repeat=n)]
+        kept = [f for f in files if utf8_ok(f, text_only)]
+        assert len(kept) == sum(utf8_counts(2, text_only))
+        assert all(utf8_unrank(2, text_only, i) == f for i, f in enumerate(kept))
+        g = stream("utf8/" + ctl)
+        for n in (1, 2, 3, 4, 16, 32, 100, 1000):  # a binary line holds files of 0 .. n bytes, n >= 1
+            total = sum(utf8_counts(n, text_only))
+            print(f"utf8\t{n}\t{ctl}\t{total}")
+            for i in sorted({0, total // 3, total - 1, int.from_bytes(bytes(next(g) for _ in range(n + 8)), "big") % total}):
+                f = utf8_unrank(n, text_only, i)
+                assert utf8_ok(f, text_only)
+                print(f"utf8-unit\t{n}\t{ctl}\t{i}\t{f.hex() or '-'}")
 
 
 def main():
@@ -4601,6 +4968,8 @@ def main():
     sub.add_parser("kind-vectors")
     sub.add_parser("written-vectors")
     sub.add_parser("cross-vectors")
+    sub.add_parser("picture-vectors")
+    sub.add_parser("utf8-vectors")
     s = sub.add_parser("plugin")
     s.add_argument("file")
     s.add_argument("--length", type=int, default=32)
@@ -4676,6 +5045,10 @@ def main():
         cmd_written_vectors(args)
     elif args.cmd == "cross-vectors":
         cmd_cross_vectors(args)
+    elif args.cmd == "picture-vectors":
+        cmd_picture_vectors(args)
+    elif args.cmd == "utf8-vectors":
+        cmd_utf8_vectors(args)
     elif args.cmd == "chunks":
         cmd_chunks(args)
     elif args.cmd == "plugin":

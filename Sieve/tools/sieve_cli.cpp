@@ -7,7 +7,7 @@
 //   sieve read   ... ADDRESS --around N      (the N units either side)
 //   sieve dicts  [--hash FILE]
 //   sieve alphabets [--spec SPEC]
-//   sieve mesh   [--vertices V] [--faces F] [--coords C] [--warp FILE | --read ADDR | --browse N]
+//   sieve mesh   [--vertices V] [--faces F] [--coords C] [--warp FILE [--canonical] | --read ADDR | --browse N]
 //   sieve version
 //   sieve models
 //   sieve filters [--line LINE] [line options] [--filters INI]
@@ -838,7 +838,18 @@ int cmd_mesh(const Args& a)
     if (a.has("warp"))
     {
         const ObjMesh mesh = read_obj(a.get("warp"));
-        const ModelSpace::Fitted fit = sp.fit(mesh.verts, mesh.faces);
+        ModelSpace::Fitted fit = sp.fit(mesh.verts, mesh.faces);
+        // --canonical: the one encoding canonical-mesh-v1 keeps (the same mesh, reordered).
+        std::string canonical_note;
+        if (a.has("canonical"))
+        {
+            if (const auto c = canonical_mesh(sp, fit.parts))
+            {
+                canonical_note = c->verts == fit.parts.verts && c->faces == fit.parts.faces ? "already canonical" : "vertices and faces reordered";
+                fit.parts = *c;
+            }
+            else canonical_note = "none (two vertices on one grid point, a face naming a vertex twice, or a face twice): left as fitted";
+        }
         {
             const std::string obj = sp.to_obj(fit.parts);
             vault::check_bytes(std::vector<uint8_t>(obj.begin(), obj.end()), "the model given"); // the vault
@@ -850,6 +861,7 @@ int cmd_mesh(const Args& a)
         if (fit.faces_dropped) std::cout << "             " << fit.faces_dropped << " faces dropped (past --faces)\n";
         if (fit.faces_added) std::cout << "             " << fit.faces_added << " filler faces added\n";
         if (fit.indices_clamped) std::cout << "             " << fit.indices_clamped << " indices clamped into range\n";
+        if (!canonical_note.empty()) std::cout << "canonical    " << canonical_note << "\n";
         for (const char* m : {"positional", "scrambled"})
         {
             const BigUint k = sp.index_of(fit.parts, address_mode_from_string(m));
@@ -1321,7 +1333,7 @@ int cmd_filters_models(const Args& a)
               << "mode         " << to_string(lf.mode) << "\n\n";
     for (const FilterSpec* f : filters_for(fl))
     {
-        std::cout << (lf.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << "\n";
+        std::cout << (lf.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << (f->category.empty() ? "" : "   (" + f->category + ")") << "\n";
         print_indented(f->description, "      ");
     }
     const ModelSieve ms = build_model_sieve(space, lf);
@@ -1363,7 +1375,7 @@ int cmd_filters_binary(const Args& a)
               << "mode         " << to_string(lf.mode) << "\n\n";
     for (const FilterSpec* f : filters_for(fl))
     {
-        std::cout << (lf.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << "\n";
+        std::cout << (lf.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << (f->category.empty() ? "" : "   (" + f->category + ")") << "\n";
         print_indented(f->description, "      ");
         const auto vit = lf.values.find(f->name());
         for (const auto& p : f->params)
@@ -1479,7 +1491,8 @@ int cmd_filters(const Args& a)
     if (list.empty()) std::cout << "No filters for this line yet.\n";
     for (const FilterSpec* f : list)
     {
-        std::cout << (lf.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << (f->plugin_sha256.empty() ? "" : "   (custom)") << (f->retired ? "   (retired: judges only)" : "") << "\n";
+        std::cout << (lf.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << (f->category.empty() ? "" : "   (" + f->category + ")")
+                  << (f->plugin_sha256.empty() ? "" : "   (custom)") << (f->retired ? "   (retired: judges only)" : "") << "\n";
         print_indented(f->description, "      ");
         if (!f->plugin_sha256.empty())
         {

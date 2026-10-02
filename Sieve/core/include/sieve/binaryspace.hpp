@@ -55,6 +55,10 @@ public:
 
     BigUint index_of(const Bytes& file, AddressMode m) const; // throws if longer than max_bytes
     Bytes bytes_at(const BigUint& index, AddressMode m) const; // index < size()
+    // The file at a positional place on binary-v1, whatever the line's length (the length comes from
+    // the number itself): what bytes_at does in positional order, for a worker that must not hold the
+    // line, which can be rebuilt meanwhile.
+    static Bytes file_at_place(const BigUint& place);
     std::string hex_of(const BigUint& index) const { return index.to_hex(hex_width_); }
     BigUint parse(std::string_view hex) const; // range-checked
 

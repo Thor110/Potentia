@@ -148,6 +148,12 @@ struct FilterSpec
     // stop a line compacting (its condensed address space). The menus list retired filters on a
     // tab of their own, tick them only by hand, and leave them out of "tick all".
     bool retired = false;
+    // Hard or soft (docs/FILTER-PLUGINS.md §17): "hard" sets aside only noise, with no collateral
+    // (structural and exclusion rules: content of another line, a re-encoding of the same mesh, a
+    // pattern); "soft" may set aside things a person would keep (a dictionary, a model, a key, a
+    // rule of style). A label for the lists and for ticking a category at once, not part of the
+    // rule: it changes no version. "" for a filter not yet labelled (plugins, for now).
+    std::string category;
     std::string author, origin, plugin_sha256; // plugins only (sieve/plugin.hpp): who made it, and its file
     // Filters this one needs switched on with it (a plugin's `requires` lines), each by its full
     // name and, where the plugin pins them, settings. Not `implies`: this says what must be ticked

@@ -232,17 +232,21 @@ void Hallway::jump_kind()
         const int from = li_;
         // A file longer than the binary line makes the line long enough for it (only the room you
         // stand in keeps its pictures past 64 KB, as the File Locator does past the budget).
-        if (bytes.size() > binary_space_->max_bytes())
-        {
-            if (bytes.size() > 65536) set_thin(true);
-            set_binary_length(bytes.size());
-        }
+        const bool longer = bytes.size() > binary_space_->max_bytes();
+        if (longer && bytes.size() > 65536) set_thin(true);
+        clear_faces();
+        const Space::Digits title = bk.title; // the item is let go below
         drop_in_hand();
         set_line(kBinaryLine);
         binary_from_ = from; // its door leads back to the line the item came from
-        walked_names_[cli::sha256_hex(bytes)] = name;
-        // The item's own title, where it has one: every line's titles are the same space.
-        go_to_file(bytes, true, bk.title.empty() ? nullptr : &bk.title);
+        // The rest takes seconds for a file of megabytes: on a worker, while the window says so.
+        busy(tr("locating"), [&] {
+            if (longer) set_binary_length(bytes.size());
+            walked_names_[cli::sha256_hex(bytes)] = name;
+            // The item's own title, where it has one: every line's titles are the same space.
+            go_to_file(bytes, true, title.empty() ? nullptr : &title);
+            warm_room();
+        });
         if (!refused_) message(trf("msg.jump.file", {kind, std::to_string(bytes.size())}));
     }
     catch (const std::exception& e)

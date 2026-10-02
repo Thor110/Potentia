@@ -74,6 +74,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <atomic>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -415,6 +416,11 @@ public:
         // The vault (tools/cli/vault.hpp): withheld content keeps its place but is never shown,
         // taken, saved or passed on. A file's is worked out with its bytes (file_withheld).
         bool withheld = false;
+        // A file's verdict once worked out (-1 not yet, 0 shown, 1 withheld), kept with the item so
+        // looking back at a file costs nothing, and its slot when it stands in your room (-1
+        // otherwise), where the vault worker (vault_ahead) may have worked it out already.
+        mutable int8_t file_vault = -1;
+        int32_t room_slot = -1;
     };
 
     const Book& book(int64_t dt, uint32_t slot);
@@ -428,6 +434,22 @@ public:
     // length. Blank without titles.
     Space::Digits title_for_name(const std::string& name) const;
     const BinarySpace::Bytes& file_of(const Book& b);
+    // A book's address shortened for the panels (its first and last twelve hex digits and how many
+    // there are), the same text as short_address(hex_of(b)); for a file, from the number itself,
+    // without writing out its whole hex (ten million digits for a file of 5 MB).
+    std::string short_hex_of(const Book& b);
+    // The vault's verdicts on the files of your room, worked out on a worker as soon as the room
+    // is built, so the first look at a file of megabytes does not wait for its bytes and hashes.
+    // Results are kept by slot for the room they were worked out for (room_gen_); a room left,
+    // rebuilt or remade (moving, a new ordering, a new length) is a new generation.
+    void vault_ahead();
+    void stop_vault_ahead();
+    uint64_t room_gen_ = 0;
+    std::mutex vault_mx_;
+    std::unordered_map<uint32_t, int8_t> vault_done_; // slot -> verdict, for vault_done_gen_
+    uint64_t vault_done_gen_ = ~uint64_t(0), vault_started_gen_ = ~uint64_t(0);
+    std::atomic<uint64_t> vault_want_gen_{0};
+    std::thread vault_thread_;
     BigUint memo_index_, memo_content_;
     std::string memo_hex_;
     BinarySpace::Bytes memo_file_;
@@ -958,6 +980,15 @@ private:
     // Onto the binary line, in front of a file you have (the locator's Go to it, a map node's):
     // its name as its title. `past`: longer than the BINARY length, so the line is made to fit.
     void walk_to_file(const std::vector<uint8_t>& bytes, const std::string& name, bool past);
+    // Work too long for one frame (a walk to a file of megabytes), done on a worker while this
+    // thread keeps the window answering and, past a fifth of a second, says so: a red word with
+    // its dots counting, as CALCULATING does while a hallway is built. Input that arrives
+    // meanwhile is dropped (a click storm on a window that is busy would otherwise land later),
+    // and a request to quit is kept for afterwards. The job must not touch the renderer.
+    void busy(const std::string& word, const std::function<void()>& job);
+    // The room you stand in worked out ahead of drawing it, and the file in hand's bytes and hex,
+    // so the first frame after a long walk does not do it.
+    void warm_room();
 
     // ---- the node graph (node_graph.cpp): maps of verified anchors, O or the pause menu, and
     // the item page's SORT tab
@@ -1134,6 +1165,14 @@ private:
     size_t nav_width_ = 1, nav_sel_ = 0;
     std::optional<size_t> nav_hover_;
     std::string nav_note_;        // why the last typed digit was refused
+    // The bearing field at the foot of the navigator: an angle typed at the Angle Precision of the
+    // setup menu, which moves the digits to the first unit at or past that bearing.
+    bool nav_angle_focus_ = false, nav_angle_fresh_ = false;
+    std::string nav_angle_;       // as typed (or, before any typing, the position's own bearing)
+    SDL_FRect nav_angle_box_{};
+    std::string nav_angle_of(const BigUint& v) const; // v's bearing, exactly, to angle_decimals_ places
+    void nav_angle_key(SDL_Keycode k);
+    void nav_angle_apply();
     float nav_wheel_ = 0;
     // The layout of the last frame drawn, which the pointer is tested against.
     size_t nav_cols_ = 0;

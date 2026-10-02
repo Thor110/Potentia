@@ -9,6 +9,7 @@
 #include "cli/timings.hpp"
 
 #include <cstring>
+#include <future>
 
 namespace hallway::hall {
 
@@ -189,6 +190,7 @@ void Hallway::move_tiles(int64_t d)
     }
     else clear_faces(); // too far to be the same shelves: start the field again
     cache_ = std::move(shifted);
+    ++room_gen_; // the room you stand in is another one now
     refresh_labels();
 }
 
@@ -337,6 +339,7 @@ void Hallway::rebase()
         else if (all_loop_tiles_[i] >= all_loops_[i].tiles()) all_loop_tiles_[i] = BigUint::mod(all_loop_tiles_[i], all_loops_[i].tiles());
     }
     cache_.clear();
+    ++room_gen_;
     clear_faces();
     filter_status_ = compute_filter_status();
     refresh_labels();
@@ -348,11 +351,23 @@ void Hallway::rebase()
 // them is smaller than the ones below them (a borrow).
 static std::vector<uint8_t> file_head(const BigUint& v, size_t most, uint64_t& size)
 {
+    // 0101...01 of n bytes, (256^n - 1) / 255: by a shift and one small division rather than by
+    // reading a hex string of 2n digits, and the last one kept, since a room of files has the same
+    // length (on a line of 5 MB files, building the string was most of an item's 40 ms).
     auto ones = [](size_t n) {
-        std::string h;
-        h.reserve(2 * n);
-        for (size_t i = 0; i < n; ++i) h += "01";
-        return n ? BigUint::from_hex(h) : BigUint();
+        thread_local size_t last_n = 0;
+        thread_local BigUint last;
+        if (n == 0) return BigUint();
+        if (n != last_n)
+        {
+            BigUint t(1);
+            t <<= 8 * n;
+            t -= BigUint(1);
+            t.divmod_small(255);
+            last = std::move(t);
+            last_n = n;
+        }
+        return last;
     };
     BigUint t = v;
     t.mul_small(255);
@@ -383,13 +398,27 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
     const int64_t key = dt * int64_t(sieve::books_per_tile()) + slot;
     auto it = cache_.find(key);
     if (it != cache_.end()) return it->second;
-    sieve::cli::timings::Scope timed("hallway.item"); // one item worked out: content, filters, vault
-    if (cache_.size() > 4096) cache_.clear(); // more than a screenful (14 tiles of 128 books)
-    // Thin: only your own room's books are kept, so a line of huge units keeps a room of them.
+    // Thin: only your own room's books are worked out and kept, so a line of huge units keeps a
+    // room of them; the rooms either side stand bare. (Working them out and dropping them again,
+    // as this once did, rebuilt both neighbours on every frame: tens of seconds a room of files of
+    // megabytes, with the window not answering.)
     if (thin_ && dt != 0)
-        for (auto ci = cache_.begin(); ci != cache_.end();)
-            ci = ci->first / int64_t(sieve::books_per_tile()) != 0 || ci->first < 0 ? cache_.erase(ci) : std::next(ci);
+    {
+        static const Book bare = [] {
+            Book e;
+            e.empty = true;
+            return e;
+        }();
+        return bare;
+    }
+    sieve::cli::timings::Scope timed("hallway.item"); // one item worked out: content, filters, vault
+    if (cache_.size() > 4096)
+    {
+        cache_.clear(); // more than a screenful (14 tiles of 128 books)
+        ++room_gen_;
+    }
     Book b;
+    if (dt == 0) b.room_slot = int32_t(slot);
     const auto idx = loop_.unit_index(offset_loop_tile(dt), slot);
     if (!idx) b.empty = true;
     else try
@@ -853,7 +882,11 @@ bool Hallway::warp(const std::string& input)
             }
             else bytes.assign(input.begin(), input.end());
             cli::vault::check_bytes(bytes, "the file"); // the vault: refused before it has a place
-            go_to_file(bytes, true, &title);
+            clear_faces();
+            busy(tr("locating"), [&] { // a file of megabytes takes seconds to place
+                go_to_file(bytes, true, &title);
+                warm_room();
+            });
             trail_.clear();
             message(trf("msg.warped.file", {std::to_string(bytes.size())}));
             return true;
@@ -1331,7 +1364,7 @@ std::string Hallway::status()
     if (first.empty) where += "first slot empty (padding)";
     else
     {
-        where += percent(first.fraction) + " along, first book " + short_address(hex_of(first));
+        where += percent(first.fraction) + " along, first book " + short_hex_of(first);
         if (first.parts) where += " \"" + ascii(utf8_encode(line().space.text_of(first.parts->title))) + "\"";
         else if (first.model)
         {
@@ -1363,6 +1396,7 @@ void Hallway::render()
     cam_.update(w, h);
     ++portal_frame_;
     item_save_poll(); // an item F asked to save, once the dialog has said where
+    vault_ahead();    // your room's files checked by the vault ahead of a look at them
     const Theme& th = theme();
     SDL_SetRenderDrawColor(r_, th.bg.r, th.bg.g, th.bg.b, 255);
     SDL_RenderClear(r_);
@@ -1771,6 +1805,7 @@ void Hallway::draw_face_image(SDL_Texture* tex, const Vec3 quad[4], std::vector<
 
 Hallway::~Hallway()
 {
+    stop_vault_ahead();
     stop_locator();
     stop_graph();
     stop_face_workers(); // before the model space they read from goes
@@ -1942,6 +1977,7 @@ std::string Hallway::hex_of(const Book& b)
     {
         if (!(memo_index_ == b.index)) memo_file_ok_ = false;
         memo_index_ = b.index;
+        sieve::cli::timings::Scope timed("hallway.file.hex");
         memo_hex_ = titled_[kBinaryLine]->hex_of(b.index);
         memo_hex_ok_ = true;
     }
@@ -1957,7 +1993,11 @@ const BinarySpace::Bytes& Hallway::file_of(const Book& b)
     if (!(memo_file_ok_ && memo_content_ == content))
     {
         memo_content_ = content;
-        memo_file_ = binary_space_->bytes_at(content, AddressMode::Positional);
+        {
+            sieve::cli::timings::Scope timed("hallway.file.bytes");
+            memo_file_ = binary_space_->bytes_at(content, AddressMode::Positional);
+        }
+        sieve::cli::timings::Scope timed("hallway.file.vault");
         memo_withheld_ = cli::vault::withheld_bytes(memo_file_);
         memo_file_ok_ = true;
     }
@@ -1967,8 +2007,86 @@ const BinarySpace::Bytes& Hallway::file_of(const Book& b)
 bool Hallway::file_withheld(const Book& b)
 {
     if (!b.is_file) return false;
-    file_of(b);
-    return memo_withheld_;
+    if (b.file_vault < 0 && b.room_slot >= 0)
+    {
+        std::lock_guard<std::mutex> lock(vault_mx_);
+        if (vault_done_gen_ == room_gen_)
+            if (const auto it = vault_done_.find(uint32_t(b.room_slot)); it != vault_done_.end()) b.file_vault = it->second;
+    }
+    if (b.file_vault < 0)
+    {
+        file_of(b);
+        b.file_vault = memo_withheld_ ? 1 : 0;
+    }
+    return b.file_vault == 1;
+}
+
+std::string Hallway::short_hex_of(const Book& b)
+{
+    if (!b.is_file || (b.survivor && binary_sieve_)) return short_address(hex_of(b));
+    if (memo_hex_ok_ && memo_index_ == b.index) return short_address(memo_hex_);
+    // The same text short_address(hex_of(b)) gives: the number zero-padded to the line's width,
+    // its first and last twelve digits, and the width, from a shift and the low limb alone.
+    const size_t width = titled_[kBinaryLine]->hex_width();
+    if (width <= 28) return short_address(hex_of(b));
+    BigUint top = b.index;
+    top >>= 4 * (width - 12);
+    BigUint low = b.index;
+    BigUint high = b.index;
+    high >>= 48;
+    high <<= 48;
+    low -= high;
+    return top.to_hex(12) + "..." + low.to_hex(12) + " (" + std::to_string(width) + " digits)";
+}
+
+void Hallway::stop_vault_ahead()
+{
+    vault_want_gen_ = ~uint64_t(0) - 1; // no room: the worker stops at its next file
+    if (vault_thread_.joinable()) vault_thread_.join();
+}
+
+void Hallway::vault_ahead()
+{
+    // Worth it only where a file's bytes take noticeable time: a binary line of long files.
+    if (!on_binary() || binary_space_->max_bytes() < 65536 || vault_started_gen_ == room_gen_) return;
+    // Once your room's files are all on the shelf (book() has been asked for each).
+    const uint32_t half = uint32_t(sieve::books_per_tile() / 2);
+    std::vector<std::pair<uint32_t, BigUint>> todo;
+    for (uint32_t slot = 0; slot < half; ++slot)
+    {
+        const auto it = cache_.find(int64_t(slot));
+        if (it == cache_.end()) return; // not built yet: try again next frame
+        const Book& b = it->second;
+        if (b.is_file && b.content && b.file_vault < 0) todo.emplace_back(slot, *b.content);
+    }
+    vault_started_gen_ = room_gen_;
+    if (vault_thread_.joinable())
+    {
+        vault_want_gen_ = ~uint64_t(0) - 1;
+        vault_thread_.join();
+    }
+    {
+        std::lock_guard<std::mutex> lock(vault_mx_);
+        vault_done_.clear();
+        vault_done_gen_ = room_gen_;
+    }
+    const uint64_t gen = room_gen_;
+    vault_want_gen_ = gen;
+    // Nearest the middle of the wall first, where you are most likely to look.
+    std::sort(todo.begin(), todo.end(), [&](const auto& a, const auto& c) {
+        auto dist = [&](uint32_t s) { return std::abs(int(s % 16) - 8); };
+        return dist(a.first) < dist(c.first);
+    });
+    vault_thread_ = std::thread([this, gen, todo = std::move(todo)] {
+        for (const auto& [slot, place] : todo)
+        {
+            if (vault_want_gen_ != gen) return; // the room is gone
+            const BinarySpace::Bytes f = BinarySpace::file_at_place(place);
+            const int8_t verdict = cli::vault::withheld_bytes(f) ? 1 : 0;
+            std::lock_guard<std::mutex> lock(vault_mx_);
+            if (vault_done_gen_ == gen) vault_done_[slot] = verdict;
+        }
+    });
 }
 
 // The vault: a model's .obj, a melody's MIDI file, a file's bytes (file_withheld), every picture
@@ -2021,7 +2139,56 @@ void Hallway::set_thin(bool on)
     if (thin_ == on) return;
     thin_ = on;
     cache_.clear();
+    ++room_gen_;
     clear_faces();
+}
+
+void Hallway::busy(const std::string& word, const std::function<void()>& job)
+{
+    // Off the main thread (a hallway built with scripted keys runs them while it is built) there
+    // is no window to keep answering: the job simply runs.
+    if (!SDL_IsMainThread())
+    {
+        job();
+        return;
+    }
+    auto work = std::async(std::launch::async, job);
+    const Uint64 since = SDL_GetTicks();
+    bool quit = false;
+    while (work.wait_for(std::chrono::milliseconds(16)) != std::future_status::ready)
+    {
+        SDL_Event e;
+        while (SDL_PollEvent(&e))
+            if (e.type == SDL_EVENT_QUIT) quit = true;
+        const Uint64 waited = SDL_GetTicks() - since;
+        if (waited < 200) continue;
+        int ww = 0, wh = 0;
+        SDL_GetCurrentRenderOutputSize(r_, &ww, &wh);
+        SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
+        SDL_RenderClear(r_);
+        const float scale = 4.0f;
+        // Centred on the word alone, so the dots grow to the right and it does not jump.
+        const float x = (float(ww) - text_width(word, scale)) * 0.5f, y = (float(wh) - 8.0f * scale) * 0.5f;
+        text(x, y, word + std::string(size_t((waited / 400) % 4), '.'), scale, SDL_Color{255, 60, 60, 255});
+        present(r_);
+    }
+    if (quit)
+    {
+        SDL_Event q{};
+        q.type = SDL_EVENT_QUIT;
+        SDL_PushEvent(&q);
+    }
+    work.get(); // rethrows here anything the job threw
+}
+
+void Hallway::warm_room()
+{
+    for (uint32_t slot = 0; slot < sieve::books_per_tile(); ++slot) (void)book(0, slot);
+    if (in_hand_ && in_hand_->is_file)
+    {
+        (void)file_of(*in_hand_);
+        (void)hex_of(*in_hand_);
+    }
 }
 
 void Hallway::set_binary_length(uint64_t bytes)

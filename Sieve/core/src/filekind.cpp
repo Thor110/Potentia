@@ -536,6 +536,128 @@ BigUint KindCounter::pattern_below(const Pattern& pat, const PatternTable& t, co
 
 // ---------------------------------------------------------------- BinarySieve
 
+// ---------------------------------------------------------------- utf8-valid-v1
+
+// The automaton (RFC 3629, table 3-7 of the Unicode standard): state 0 between characters; 1, 2
+// and 5 waiting for 1, 2 and 3 more continuation bytes (80..BF); 3 after E0 (A0..BF next, no
+// overlong forms), 4 after ED (80..9F next, no surrogates), 6 after F0 (90..BF next), 7 after F4
+// (80..8F next, nothing past U+10FFFF), and 8 after C2 when only text is allowed (A0..BF next: no
+// C1 controls). C0, C1 and F5..FF never begin a character.
+uint8_t Utf8Counter::step(uint8_t s, uint8_t b, bool text_only)
+{
+    auto in = [&](int lo, int hi) { return b >= lo && b <= hi; };
+    switch (s)
+    {
+    case 0:
+        if (b < 0x80)
+        {
+            if (text_only && ((b < 0x20 && b != 0x09 && b != 0x0A && b != 0x0D) || b == 0x7F)) return kDead;
+            return 0;
+        }
+        if (b == 0xC2 && text_only) return 8;
+        if (in(0xC2, 0xDF)) return 1;
+        if (b == 0xE0) return 3;
+        if (b == 0xED) return 4;
+        if (in(0xE1, 0xEF)) return 2;
+        if (b == 0xF0) return 6;
+        if (in(0xF1, 0xF3)) return 5;
+        if (b == 0xF4) return 7;
+        return kDead;
+    case 1: return in(0x80, 0xBF) ? 0 : kDead;
+    case 2: return in(0x80, 0xBF) ? 1 : kDead;
+    case 3: return in(0xA0, 0xBF) ? 1 : kDead;
+    case 4: return in(0x80, 0x9F) ? 1 : kDead;
+    case 5: return in(0x80, 0xBF) ? 2 : kDead;
+    case 6: return in(0x90, 0xBF) ? 2 : kDead;
+    case 7: return in(0x80, 0x8F) ? 2 : kDead;
+    case 8: return in(0xA0, 0xBF) ? 0 : kDead;
+    default: return kDead;
+    }
+}
+
+bool Utf8Counter::valid(std::span<const uint8_t> file, bool text_only)
+{
+    uint8_t s = 0;
+    for (uint8_t b : file)
+        if ((s = step(s, b, text_only)) == kDead) return false;
+    return s == 0;
+}
+
+Utf8Counter::Utf8Counter(uint64_t max_bytes, bool text_only) : max_bytes_(max_bytes), text_only_(text_only)
+{
+    // About kStates x (n + 1) numbers of up to 8n bits.
+    if (double(kStates) * double(max_bytes + 1) * double(8 * max_bytes + 64) > double(kMaxTableBits))
+    {
+        can_rank_ = false;
+        return;
+    }
+    ways_.assign(max_bytes + 1, std::vector<BigUint>(kStates));
+    ways_[0][0] = BigUint(1);
+    for (uint64_t r = 1; r <= max_bytes; ++r)
+        for (uint8_t s = 0; s < kStates; ++s)
+        {
+            BigUint w;
+            for (uint32_t b = 0; b < 256; ++b)
+            {
+                const uint8_t t = step(s, uint8_t(b), text_only);
+                if (t != kDead) w += ways_[r - 1][t];
+            }
+            ways_[r][s] = w;
+        }
+    before_.assign(max_bytes + 2, BigUint());
+    for (uint64_t l = 0; l <= max_bytes; ++l) before_[l + 1] = BigUint(before_[l]) += ways_[l][0];
+    count_ = before_[max_bytes + 1];
+}
+
+BigUint Utf8Counter::rank(const std::vector<uint8_t>& file) const
+{
+    if (!can_rank_) throw std::logic_error("utf8-valid-v1 cannot rank at this length");
+    if (file.size() > max_bytes_ || !valid(file, text_only_)) throw std::invalid_argument("the file is not a survivor");
+    BigUint r = before_[file.size()];
+    uint8_t s = 0;
+    for (size_t i = 0; i < file.size(); ++i)
+    {
+        const uint64_t left = file.size() - i - 1;
+        for (uint32_t b = 0; b < file[i]; ++b)
+        {
+            const uint8_t t = step(s, uint8_t(b), text_only_);
+            if (t != kDead) r += ways_[left][t];
+        }
+        s = step(s, file[i], text_only_);
+    }
+    return r;
+}
+
+std::vector<uint8_t> Utf8Counter::unrank(const BigUint& k) const
+{
+    if (!can_rank_) throw std::logic_error("utf8-valid-v1 cannot rank at this length");
+    if (!(k < count_)) throw std::out_of_range("survivor number beyond the survivors");
+    uint64_t l = 0;
+    while (!(k < before_[l + 1])) ++l;
+    BigUint rest = k;
+    rest -= before_[l];
+    std::vector<uint8_t> out;
+    uint8_t s = 0;
+    for (uint64_t i = 0; i < l; ++i)
+    {
+        const uint64_t left = l - i - 1;
+        for (uint32_t b = 0;; ++b)
+        {
+            if (b > 255) throw std::logic_error("utf8 unrank ran past the bytes");
+            const uint8_t t = step(s, uint8_t(b), text_only_);
+            if (t == kDead) continue;
+            if (rest < ways_[left][t])
+            {
+                out.push_back(uint8_t(b));
+                s = t;
+                break;
+            }
+            rest -= ways_[left][t];
+        }
+    }
+    return out;
+}
+
 BinarySieve::BinarySieve(const BinarySpace& space, const std::vector<FilterStack::Entry>& entries, const BinaryItems* items)
 {
     provenance_ = space.shape();
@@ -552,6 +674,16 @@ BinarySieve::BinarySieve(const BinarySpace& space, const std::vector<FilterStack
             sets_.push_back(KindSet(file_kinds().size(), 1));
             item_filter_.push_back(0);
             provenance_ += "; " + e.spec->name() + "{items=" + forms + "}";
+            continue;
+        }
+        if (e.spec->id == "utf8-valid")
+        {
+            const std::string controls = param_value(*e.spec, e.values, "controls");
+            utf8_text_only_ = controls == "text";
+            utf8_filter_ = int(names_.size()) - 1;
+            sets_.push_back(KindSet(file_kinds().size(), 1));
+            item_filter_.push_back(-1);
+            provenance_ += "; " + e.spec->name() + "{controls=" + controls + "}";
             continue;
         }
         if (e.spec->id != "binary-kind") throw std::invalid_argument(e.spec->name() + " does not apply to the binary line");
@@ -584,6 +716,22 @@ BinarySieve::BinarySieve(const BinarySpace& space, const std::vector<FilterStack
         blocker_ = judged ? "not-an-item-v1 judges " + f + " file by file, so the survivors cannot be counted"
                           : "not-an-item-v1 needs the other lines' shapes to recognise " + f;
     }
+    // utf8-valid-v1 counts on its own; with the kind filters or not-an-item-v1 the stack judges.
+    if (utf8_filter_ >= 0)
+    {
+        utf8_ = std::make_unique<Utf8Counter>(space.max_bytes(), utf8_text_only_);
+        if (names_.size() > 1)
+        {
+            can_rank_ = false;
+            blocker_ = "utf8-valid-v1 counts on its own, not together with binary-kind-v1 or not-an-item-v1";
+        }
+        else if (!utf8_->can_rank())
+        {
+            can_rank_ = false;
+            blocker_ = "utf8-valid-v1's table is too large at this length: it judges only";
+        }
+        else count_ = utf8_->count();
+    }
     shuffle_ = std::make_unique<Shuffle>(count_.is_zero() ? BigUint(1) : count_, space.key(), id_);
     BigUint top = count_;
     if (!top.is_zero()) top -= BigUint(1);
@@ -606,6 +754,7 @@ std::string BinarySieve::first_failure_of(const std::vector<uint8_t>& file) cons
     for (size_t f = 0; f < sets_.size(); ++f)
     {
         if (!sets_[f][i]) return names_[f];
+        if (int(f) == utf8_filter_ && !Utf8Counter::valid(file, utf8_text_only_)) return names_[f];
         if (item_filter_[f] < 0) continue;
         for (const std::string& form : item_forms_)
         {
@@ -619,6 +768,7 @@ std::string BinarySieve::first_failure_of(const std::vector<uint8_t>& file) cons
 
 BigUint BinarySieve::rank(const std::vector<uint8_t>& file) const
 {
+    if (utf8_) return utf8_->rank(file);
     BigUint r = counter_->rank(file);
     if (exclude_pages_ && !pages_table_.empty()) r -= counter_->pattern_below(*items_.pages, pages_table_, file);
     return r;
@@ -626,6 +776,7 @@ BigUint BinarySieve::rank(const std::vector<uint8_t>& file) const
 
 std::vector<uint8_t> BinarySieve::unrank(const BigUint& k) const
 {
+    if (utf8_) return utf8_->unrank(k);
     if (!exclude_pages_ || pages_table_.empty()) return counter_->unrank(k);
     // The smallest j (a place among the kind survivors) with more than k survivors in 0..j, the
     // pages among them taken away: between k and k + (the pages there are).

@@ -316,7 +316,7 @@ void Hallway::draw_hud(int w, int h)
                 std::snprintf(b2, sizeof b2, "%.2f", std::log2(double(line().space.base())));
                 text(20, y, trf("hud.point", {short_address(hex_of(bk)), std::to_string(bk.bits), b1, b2}), 1, ink);
             }
-            else text(20, y, trf(bk.survivor ? "hud.compact_address" : "hud.address", {short_address(hex_of(bk))}), 1, ink);
+            else text(20, y, trf(bk.survivor ? "hud.compact_address" : "hud.address", {short_hex_of(bk)}), 1, ink);
             y += 12;
             std::string verdict;
             if (bk.survivor) verdict = trf("hud.survivor", {bk.survivor_label}) + "   ";

@@ -152,6 +152,37 @@ struct BinaryItems
 // give the hallway: a verdict from a file's head and size, the survivors' count, and their compact
 // orderings (positional: survivor k at compact address k; scrambled: shuffle-sha256-v1 over the
 // survivors, keyed with the line's key, the stack id its domain, as sieve/compact.hpp does).
+// utf8-valid-v1 (core/src/filters/binary.cpp): the files of 0..max_bytes bytes that are well-formed
+// UTF-8 (RFC 3629: no overlong forms, no surrogates, nothing past U+10FFFF), and with
+// `text_only` no control characters but tab, line feed and carriage return (C0, DEL and C1).
+// Judged byte by byte through a small automaton; counted length by length from its table of
+// completions, and ranked in the binary line's order (shortest first, then by the bytes), so the
+// survivors compact. The table holds states x (max_bytes + 1) numbers of up to 8 max_bytes bits,
+// so past a budget (kMaxTableBits) it judges only.
+class Utf8Counter
+{
+public:
+    static constexpr uint64_t kMaxTableBits = uint64_t(1) << 32; // 512 MB
+    Utf8Counter(uint64_t max_bytes, bool text_only);
+
+    static bool valid(std::span<const uint8_t> file, bool text_only);
+    bool can_rank() const { return can_rank_; }
+    const BigUint& count() const { return count_; }
+    BigUint rank(const std::vector<uint8_t>& file) const;  // the file must pass
+    std::vector<uint8_t> unrank(const BigUint& k) const;   // k < count()
+
+    static constexpr uint32_t kStates = 9;
+    static constexpr uint8_t kDead = 0xFF;
+    static uint8_t step(uint8_t state, uint8_t byte, bool text_only); // state 0 is a whole character
+
+private:
+    uint64_t max_bytes_;
+    bool text_only_, can_rank_ = true;
+    std::vector<std::vector<BigUint>> ways_; // ways_[r][s]: completions from state s with r bytes left
+    std::vector<BigUint> before_;            // before_[l]: survivors shorter than l bytes
+    BigUint count_;
+};
+
 class BinarySieve
 {
 public:
@@ -166,7 +197,7 @@ public:
     std::string first_failure(std::span<const uint8_t> head, uint64_t size) const;
     std::string first_failure_of(const std::vector<uint8_t>& file) const;
     bool passes(std::span<const uint8_t> head, uint64_t size) const { return first_failure(head, size).empty(); }
-    bool needs_file() const { return !item_forms_.empty(); }
+    bool needs_file() const { return !item_forms_.empty() || utf8_filter_ >= 0; }
     // Whether the survivors can be counted and ranked (not when a form is judged file by file).
     bool can_rank() const { return can_rank_; }
     std::string blocker() const { return blocker_; }
@@ -194,6 +225,9 @@ private:
     std::string item_name_;
     BinaryItems items_;
     std::unique_ptr<KindCounter> counter_; // the survivors of the kind filters
+    std::unique_ptr<Utf8Counter> utf8_;    // utf8-valid-v1, when ticked
+    int utf8_filter_ = -1;                 // its place in names_
+    bool utf8_text_only_ = false;
     BigUint count_, pages_in_;             // survivors; pages among the kind survivors
     KindCounter::PatternTable pages_table_; // the pages' pattern table, worked out once
     bool can_rank_ = true, exclude_pages_ = false;

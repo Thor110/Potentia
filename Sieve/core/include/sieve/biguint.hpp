@@ -24,6 +24,11 @@ public:
     // same value with repeated shift-and-add would be O(n^2). The words are 32 bits because that
     // is how a SHA-256 digest arrives; a limb holds two of them.
     static BigUint from_limbs(std::span<const uint32_t> limbs);
+    // A value from bytes, most significant first (a file read as one number), and back to exactly
+    // `length` bytes (throws if it does not fit): eight bytes to a limb, linear, with no hex text
+    // between (a file of megabytes went through a string of twice its size each way).
+    static BigUint from_bytes(std::span<const uint8_t> bytes);
+    std::vector<uint8_t> to_bytes(size_t length) const;
     // Returns exactly `length` digits, most-significant first. Throws if the value does not fit.
     std::vector<uint32_t> to_digits(uint32_t base, size_t length) const;
 
