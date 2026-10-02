@@ -83,4 +83,35 @@ private:
     uint32_t padding_ = 0;
 };
 
+// A unit's bearing round its loop, as the compass and the navigator write it: floor(v * 360 *
+// 10^d / units) with d decimal places ("90.10"). The navigator goes from a bearing A to the first
+// unit at or past it, ceil(A * units / (360 * 10^d)), round to the start past the last unit.
+std::string bearing_of(const BigUint& v, const BigUint& units, int decimals);
+BigUint unit_at_bearing(const BigUint& scaled_bearing, const BigUint& units, int decimals); // A * 10^d, < 360 * 10^d
+
+// Variable length addressing: the shortest way found to write down where unit v stands on a loop
+// of `units`, by the ways there are to get there. Either its position itself, in hex without
+// leading zeros (a unit near the start is short to name); or a bearing of 0 to max_decimals places,
+// typed into the navigator, then a walk of some units forward (+) or back (-) from where it lands,
+// in hex. For each number of places the bearing just below the unit and the one just above it
+// are tried (just above 359.9... is 0, and then the walk back goes round the loop to the end).
+// Fewest characters wins, then fewer places. A unit that the bearing lands on exactly needs no
+// walk at all. Across every unit of the loop, no way of writing them can be shorter on the whole
+// than the position itself (there are only so many short strings); this finds the units it can.
+struct ShortestPath
+{
+    bool by_bearing = false;
+    int decimals = 0;         // the bearing's places
+    std::string bearing;      // as typed ("90.1"); empty when by_bearing is false
+    bool back = false;        // the walk is backwards
+    BigUint walk;             // units to walk from where the bearing lands (0: none)
+    std::string written;      // the whole of it: "3f2a", "90.1", "90.1+3f", "0-1a"
+    size_t chars = 0;         // written.size()
+    double bits = 0;          // decimal digits at log2(10), hex digits at 4, a walk's direction at 1
+};
+// On a long loop (past 4096 bits), bearings far from the unit are first estimated from the
+// numbers' leading bits and skipped when their walk could not be short enough; `prune` false
+// works every one out exactly (the tests check the two agree).
+ShortestPath shortest_path(const BigUint& v, const BigUint& units, int max_decimals, bool prune = true);
+
 } // namespace sieve

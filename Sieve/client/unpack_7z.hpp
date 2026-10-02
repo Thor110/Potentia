@@ -7,7 +7,7 @@
 // recognises a 7z by its signature and unpacks it into a folder named after the file
 // (sieve.7z -> sieve\). When everything in the archive is inside one top folder (a release's
 // Sieve-<version>\), that folder's contents go straight into it, so the result is C:\TEST\sieve\...
-// and not C:\TEST\sieve\Sieve-0.13.0\.... The locator (sieve install, the File Locator's installs)
+// and not C:\TEST\sieve\Sieve-0.13.1\.... The locator (sieve install, the File Locator's installs)
 // is left byte for byte: it gives back exactly the file that was located.
 //
 // The archive's own SHA-256 is checked before this is reached (the manifest names it), and 7z

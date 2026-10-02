@@ -234,7 +234,10 @@ the unit itself      152 bits   39 chars   100.0%   what is on the shelf
 positional           152 bits   39 chars   100.0%   the same number, written out
 scrambled            152 bits   39 chars   100.0%   the same number, shuffled by the key
 guided                58 bits   15 chars    38.1%   shorter: this is likely under the model
+variable length ...  152 bits   38 chars    49.9%   no shorter route: the position itself, leading zeros dropped
 ```
+
+**Variable length addressing** is the shortest route found to the unit, by the ways there are to get there: its position without leading zeros (a unit near the start of a line is short to name), or a bearing typed into the navigator (X, Tab) followed by a walk of so many units forward or back from where it lands, with up to 20 decimal places. A unit that sits exactly on a short bearing needs nothing else: the page the navigator lands on at 90.1 degrees is `90.1`, four characters. Shown under it is the route itself (and, if it needs more places than Angle Precision allows, how many). For almost every unit no route is shorter than the address, because a bearing carries only the leading part of the position and the walk carries the rest; across all units no way of writing them can be shorter on the whole. The few that can are found. On a line of long files it is worked out on a worker, which says so until it has the answer.
 
 The first three are the same length because an address in a bijection *is* the content. Only the guided ordering is shorter, and only when the model finds the content likely — so that percentage doubles as an exact measure of how text-like the thing in your hand is. Pick up noise and it reads over 100%, because the guided ordering spends *more* on an unlikely string than positional order spends on any string at all.
 

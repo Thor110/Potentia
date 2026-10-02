@@ -1841,6 +1841,7 @@ void Hallway::draw_face_image(SDL_Texture* tex, const Vec3 quad[4], std::vector<
 
 Hallway::~Hallway()
 {
+    if (vla_thread_.joinable()) vla_thread_.join(); // a unit's shortest route: seconds at most
     stop_vault_ahead();
     stop_locator();
     stop_graph();

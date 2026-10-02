@@ -101,8 +101,8 @@ replace them. Cancel part way removes whatever was written, including the folder
 archive (as a release's does: `sieve.7z`), `sieve-install` unpacks it automatically into a folder
 named after the file, instead of writing the archive itself. Choose `C:\TEST` and `sieve.7z`
 unpacks into `C:\TEST\sieve\`, with its files straight inside it. If everything in the archive
-sits in one top folder (a release's `Sieve-0.13.0\`), that folder is left out, so you get
-`C:\TEST\sieve\hallway.exe` rather than `C:\TEST\sieve\Sieve-0.13.0\hallway.exe`. The window says
+sits in one top folder (a release's `Sieve-0.13.1\`), that folder is left out, so you get
+`C:\TEST\sieve\hallway.exe` rather than `C:\TEST\sieve\Sieve-0.13.1\hallway.exe`. The window says
 "Unpacks" instead of "Installs" and shows what the archive holds. The archive is checked against its
 SHA-256 before it is opened, and 7z checks each file's CRC as it unpacks; files already there are
 refused unless you tick Replace, and a cancel or a failure removes what was written. It is a 7z by
@@ -136,9 +136,9 @@ not show in GitHub Desktop.
 
 ```sh
 python tools/make_release.py                                   # build, stage, 7z, instructions, program, map, checks
-python tools/make_release.py --version 0.13.0                  # the same, with the version given
-python tools/make_release.py --version 0.13.0 --skip-build     # the Release build is already made
-python tools/make_release.py --version 0.13.0 --uncompressed   # installers of the folder itself, not the 7z
+python tools/make_release.py --version 0.13.1                  # the same, with the version given
+python tools/make_release.py --version 0.13.1 --skip-build     # the Release build is already made
+python tools/make_release.py --version 0.13.1 --uncompressed   # installers of the folder itself, not the 7z
 ```
 
 It stages only what the program uses (the programs, their data folders, an empty `maps`

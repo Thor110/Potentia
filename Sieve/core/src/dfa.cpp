@@ -257,7 +257,7 @@ Dfa minimise(const Dfa& d)
     return m;
 }
 
-Dfa intersect(const Dfa& a, const Dfa& b)
+Dfa intersect(const Dfa& a, const Dfa& b, size_t max_pairs)
 {
     if (a.base != b.base) throw std::invalid_argument("automata over different symbols cannot be combined");
     const size_t B = a.base;
@@ -275,6 +275,7 @@ Dfa intersect(const Dfa& a, const Dfa& b)
     p.start = get(a.start, b.start);
     for (size_t i = 0; i < pairs.size(); ++i)
     {
+        if (max_pairs && pairs.size() > max_pairs) throw std::length_error("the product of two automata is over its budget");
         const auto [x, y] = pairs[i];
         p.accept.push_back(a.accept[size_t(x)] && b.accept[size_t(y)] ? 1 : 0);
         for (size_t c = 0; c < B; ++c)

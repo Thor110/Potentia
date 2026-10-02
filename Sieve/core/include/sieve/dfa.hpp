@@ -35,8 +35,11 @@ struct Dfa
 // (a transition to a state that does not exist, or a start out of range).
 Dfa minimise(const Dfa& d);
 
-// The units both accept (the product, minimised). Both must read the same symbols.
-Dfa intersect(const Dfa& a, const Dfa& b);
+// The units both accept (the product, minimised). Both must read the same symbols. With
+// `max_pairs`, throws std::length_error once the product has more states than that before it is
+// minimised (for a caller that would refuse a table that size anyway, and must not run out of
+// memory finding out).
+Dfa intersect(const Dfa& a, const Dfa& b, size_t max_pairs = 0);
 
 // The units either accepts (the product, minimised). Both must read the same symbols.
 Dfa unite(const Dfa& a, const Dfa& b);

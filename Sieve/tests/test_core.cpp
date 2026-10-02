@@ -1759,6 +1759,46 @@ void test_plugins(const std::string& dir)
         }
     }
     std::cout << "filter plugins checked\n";
+    // (Last: it compiles words-data-v1 with a real dictionary, and compiled automata are kept for the
+    // run by their settings, which name the dictionary only as the default.)
+    // not-written-v1 with a dictionary's automaton at page length: its tables are measured, not
+    // bounded (the product with the readings is far smaller than either), so the stack ranks.
+    // Survivors drawn by number are kept by both filters and come back to the same number, and
+    // not-written takes a few away from the dictionary's own count.
+    {
+        auto scowl = std::make_shared<const Dictionary>(Dictionary::load_file(dir + "../data/dictionaries/scowl-2020.12.07-en-60.txt"));
+        const TestResources dres(scowl, nullptr);
+        const auto words = load_plugin_file(filters + "words-data-v1.sfilter");
+        const FilterSpec wspec = plugin_spec(words);
+        const FilterStack alone(text_line(32), {{&wspec, {}}}, dres);
+        const FilterStack both(text_line(32), {{&wspec, {}}, {find_filter("not-written-v1"), {}}}, dres);
+        CHECK(alone.ranker() && both.ranker());
+        if (alone.ranker() && both.ranker())
+        {
+            CHECK(both.ranker()->count() < alone.ranker()->count());
+            bool ok = true;
+            for (int i = 0; i < 200; ++i)
+            {
+                BigUint k = BigUint(rng()) , q, r;
+                k <<= 64;
+                k += BigUint(rng());
+                BigUint::divmod(k, both.ranker()->count(), q, r);
+                const auto u = both.ranker()->unrank(r);
+                ok = ok && both.passes(u) && alone.passes(u) && both.ranker()->rank(u) == r;
+            }
+            CHECK(ok);
+        }
+        // The product's own cap: refused early rather than built.
+        Dfa a, b;
+        a.base = b.base = 2;
+        a.start = b.start = 0;
+        a.accept = {1, 1, 1, 1};
+        a.next = {1, 2, 3, 0, 0, 1, 2, 3}; // a 4-cycle on each symbol, so the product grows
+        b.accept = {1, 1, 1};
+        b.next = {1, 2, 2, 0, 0, 1};
+        CHECK(throws([&] { (void)intersect(a, b, 2); }));
+        CHECK(!throws([&] { (void)intersect(a, b, 1000); }));
+    }
 }
 
 
@@ -3673,6 +3713,92 @@ void test_utf8_joint()
     }
 }
 
+// Variable length addressing (corridor.hpp shortest_path): on small loops, against every bearing
+// of up to the given places and every walk either way round, worked out with plain integers; and
+// the path it gives, followed as the navigator would, leads to the unit.
+void test_shortest_path()
+{
+    auto hexlen = [](uint64_t x) { size_t n = 1; while (x >>= 4) ++n; return n; };
+    auto bearing_len = [](uint64_t a, int d) {
+        size_t n = std::to_string(a).size();
+        return d == 0 ? n : std::max<size_t>(n, size_t(d) + 1) + 1;
+    };
+    int bad = 0, n = 0;
+    for (uint64_t units : {1ull, 2ull, 7ull, 50ull, 128ull, 360ull, 1000ull, 19683ull})
+        for (int maxd : {0, 1, 2})
+        {
+            if (units > 1000 && maxd > 1) continue;
+            uint64_t scale0 = 360;
+            std::vector<size_t> best(units, SIZE_MAX);
+            for (uint64_t v = 0; v < units; ++v) best[v] = hexlen(v);
+            for (int d = 0; d <= maxd; ++d, scale0 *= 10)
+                for (uint64_t a = 0; a < scale0; ++a)
+                {
+                    uint64_t lands = (a * units + scale0 - 1) / scale0;
+                    if (lands >= units) lands = 0;
+                    const size_t len = bearing_len(a, d);
+                    for (uint64_t v = 0; v < units; ++v)
+                    {
+                        const uint64_t f = (v + units - lands) % units, b = (lands + units - v) % units;
+                        const size_t c = len + (f == 0 ? 0 : 1 + std::min(hexlen(f), hexlen(b)));
+                        best[v] = std::min(best[v], c);
+                    }
+                }
+            for (uint64_t v = 0; v < units; ++v)
+            {
+                const ShortestPath p = shortest_path(BigUint(v), BigUint(units), maxd);
+                bool ok = p.chars == best[v] && p.chars == p.written.size();
+                if (p.by_bearing)
+                {
+                    // Followed: the bearing typed, then the walk, round the loop.
+                    const size_t dot = p.bearing.find('.');
+                    const std::string digits = dot == std::string::npos ? p.bearing : p.bearing.substr(0, dot) + p.bearing.substr(dot + 1);
+                    const uint64_t lands = std::stoull(unit_at_bearing(BigUint::from_decimal(digits), BigUint(units), p.decimals).to_decimal());
+                    const uint64_t w = p.walk.is_zero() ? 0 : std::stoull(p.walk.to_decimal()) % units;
+                    ok = ok && (p.back ? (lands + units - w) % units : (lands + w) % units) == v;
+                }
+                else ok = ok && BigUint::from_hex(p.written) == BigUint(v);
+                ++n;
+                if (!ok && ++bad <= 5)
+                    std::cerr << "  shortest path: units " << units << " v " << v << " maxd " << maxd << " got " << p.written << " (" << p.chars << "), best " << best[v] << "\n";
+            }
+        }
+    CHECK(bad == 0);
+    std::cout << "shortest paths checked against every bearing: " << n << "\n";
+    // On a long loop the far bearings are estimated and skipped: never a different answer.
+    {
+        std::mt19937_64 rng(31);
+        int differ = 0;
+        for (int i = 0; i < 40; ++i)
+        {
+            std::vector<uint8_t> ub(700 + i), vb(700 + i);
+            for (auto& x : ub) x = uint8_t(rng());
+            for (auto& x : vb) x = uint8_t(rng());
+            BigUint units = BigUint::from_bytes(ub), v = BigUint::from_bytes(vb);
+            units.add_small(1);
+            // Some near the start, the end, and exact bearings, where the routes are short.
+            if (i % 4 == 1) v >>= 8 * (650 + i);
+            else if (i % 4 == 2) { v = units; v -= BigUint(uint64_t(rng() % 5000) + 1); }
+            else if (i % 4 == 3) v = unit_at_bearing(BigUint(uint64_t(rng() % 3600000)), units, 4);
+            if (!(v < units)) v = BigUint();
+            const ShortestPath a = shortest_path(v, units, 20, true), b = shortest_path(v, units, 20, false);
+            differ += a.written == b.written && a.chars == b.chars ? 0 : 1;
+        }
+        CHECK(differ == 0);
+    }
+    // An exact landing: the unit a bearing names is that bearing alone.
+    const BigUint big = BigUint::pow(27, 32);
+    const BigUint at = unit_at_bearing(BigUint(9010), big, 2); // 90.10 degrees
+    const ShortestPath p = shortest_path(at, big, 20);
+    CHECK(p.by_bearing && p.walk.is_zero() && p.written == "90.1");
+    // A unit beside it: the bearing, and a step.
+    BigUint next = at;
+    next.add_small(1);
+    CHECK(shortest_path(next, big, 20).written == "90.1+1");
+    // bearing_of is the compass's reading.
+    CHECK(bearing_of(at, big, 2) == "90.10");
+}
+
 // BigUint's byte conversions (a file read as one number and back), against the hex path they
 // replaced, and BinarySpace::file_at_place against bytes_at.
 void test_byte_conversions()
@@ -3784,6 +3910,7 @@ void run_all(int argc, char** argv)
         test_picture_vectors(dir);
         test_utf8_vectors(dir);
         test_utf8_joint();
+        test_shortest_path();
         test_byte_conversions();
     }
 }

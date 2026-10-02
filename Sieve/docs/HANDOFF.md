@@ -579,8 +579,8 @@ SIEVE-INSTALL-USAGE.md); tested end to end on the Linux build here, not yet on W
 on every build (which now also copies `maps/sieve.map`), is listed in "This installation", and a
 release refuses to go without it. Before the release, Edward (his order): (1) the licence: decided,
 standard AGPLv3 (Potentia's LICENSE, one folder up); (2) icons for the programs and the file types;
-(3) a full test harness run on Windows; (4) the version: 0.13.0 (set in CMakeLists.txt and
-vcpkg.json); (5) the release build, with tools/make_release.py --version 0.13.0.
+(3) a full test harness run on Windows; (4) the version: 0.13.1 (set in CMakeLists.txt and
+vcpkg.json); (5) the release build, with tools/make_release.py --version 0.13.1.
 
 **The icon** (Edward's choice, 27 September 2026): the minimap itself, design "C" of three: the
 eight rings in door order on a black disc (as the minimap has them on its black panel), pages
@@ -1122,3 +1122,32 @@ and retiring; a note on optimise all and COST).
   exhaustively to 4 symbols, against the oracle's engine at 5 lengths (added to CI's plugin loop),
   and key-data-v2 on all 72 keys. What is left, and what blocks each: FILTERS-CONFLICTS.md, "Merging
   and retiring: what is left". The optimise-all and COST note: IDEAS.md §12.
+Variable length addressing (Edward, 2 October 2026: a COST that works out the shortest route to a
+file from what we know, since a file could land exactly on a bearing). core corridor.hpp:
+bearing_of (the compass's reading, as exact_degrees), unit_at_bearing (the navigator's landing,
+ceil(A * units / (360 * 10^d)), round to 0 past the end), and shortest_path(v, units, max_decimals):
+the position in hex without leading zeros, or the best of, for d = 0..20, the bearing 0, the
+bearings just below and above the unit, and each width's (1, 2, 3 whole degrees) nearest and ends,
+each followed by the shorter walk round the loop. Exact against brute force over every bearing and
+walk on loops of 1 to 19683 units (44,010 units); past 4096 bits the far bearings are first
+estimated from leading bits and skipped when they cannot win (40 long loops agree with the
+exhaustive search). 8.5 MB takes about 2.4 s, so the COST row (hud.cpp draw_cost) asks
+Hallway::shortest_path_of, a worker never waited for (it finishes the unit it has, then takes
+the one now asked for), showing "working out..." meanwhile. Seen: a page near the start of the
+pages line names in 38 chars of 77; the page at 90.1 degrees is "90.1"; hallway.exe saves one
+leading zero.
+not-written-v1 refused to count with the plugins (Edward, 2 October 2026: X left pages and books
+"not countable": not-written-v1's tables over the budget). written_ranker sized P-and-O (the units
+the plugins keep that a reading writes as a file) as P's states times (1 + O's states / 64): for
+every text plugin at 32 characters, 236,034 x 41.5 states, 13 GB. Built, it has 1,559 states (most
+readings die within a few symbols of a page; with words-data-v1 alone, 6,834). Now written_ranker
+minimises P, checks P's table, builds P-and-O with intersect's new max_pairs cap (as many pairs as
+could still fit, times 4 for the minimising), and checks the real sizes; WrittenRanker takes the
+built automata. X's whole pages stack counts exactly at 32 (not-written takes 736 pages from it) and
+compacts. Where P alone is over the budget the message says so ("the plugins' combined table"),
+which is what stops the books' pages part (128 characters, 2.1 GB of table) with or without
+not-written. Measured for what to do about that: the same count without the table (two rows of
+counts, walked length by length) is exact in 1.7 s at 32, 12.8 s at 128 and 114 s at 512, in a few
+tens of MB; it would give the tallies, the Filtered shares and X's weighing, not compact. Tests:
+words-data-v1 (scowl-en-60) and not-written at 32 ranks, below words-data's own count, and survivors
+drawn by number pass both and come back to their number; intersect's cap throws early.

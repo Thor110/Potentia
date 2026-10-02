@@ -825,6 +825,18 @@ public:
     void draw_in_hand(float W, float H);
 
     void draw_cost(const Book& bk, float x, float cy, float pw, float bottom);
+    // Variable length addressing (COST): the shortest route found to a unit (corridor.hpp
+    // shortest_path), worked out on a worker, since on a line of long files it takes seconds. The
+    // worker is never waited for: it finishes the unit it was given, and the next one asked for is
+    // started after it. The answer, or null while it is being worked out.
+    const sieve::ShortestPath* shortest_path_of(const BigUint& v, const BigUint& units);
+    std::thread vla_thread_;
+    std::atomic<bool> vla_busy_{false};
+    std::mutex vla_mx_;
+    BigUint vla_v_, vla_units_;                       // what the answer below is for (vla_mx_)
+    std::optional<sieve::ShortestPath> vla_done_;     // (vla_mx_)
+    uint64_t vla_done_gen_ = 0, vla_shown_gen_ = 0;   // which answer each is (done: vla_mx_)
+    std::optional<sieve::ShortestPath> vla_shown_;    // a copy for the frames, made once per answer
 
     float draw_book(const BookSpace::Parts& p, float x, float cy, float pw, float bottom);
 

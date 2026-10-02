@@ -156,7 +156,13 @@ What is kept: the bearing as a way to choose where to look (built: the navigator
 Tab in X, at the Angle Precision); a range view over one arc of a line; angle, room and item as a
 readable notation of an address, with a leading tag for the notation's version (the 181..255
 idea, as a format tag); and progressive orderings (§3.1), the version of this in which narrowing
-the angle would mean refining the content.
+the angle would mean refining the content. And, measured rather than assumed (Edward, the same
+day: a file could land exactly on 90.10 degrees): COST's **variable length addressing**
+(corridor.hpp `shortest_path`) finds, for the unit in hand, the shortest route there is: the
+position without leading zeros, or a bearing of up to 20 places then a walk forward or back. It
+is a minimum over the routes, not a scheme for every unit: averaged over a line it cannot beat
+the address (pigeonhole), but it names the lucky units (a bearing's own landing, the line's
+start and end) at what they really cost.
 
 ---
 

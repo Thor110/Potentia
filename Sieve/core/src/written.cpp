@@ -1216,15 +1216,16 @@ constexpr size_t kJointBudget = 3000000; // walked (two symbols named) states x 
 class WrittenRanker : public Ranker
 {
 public:
-    WrittenRanker(std::shared_ptr<const WrittenRule> rule, const Dfa* keep, uint32_t length) : rule_(std::move(rule)), length_(length)
+    // `p`: the plugins' automaton, minimal (none: every unit); `q`: the units it keeps that a
+    // reading writes as a file (p and others, or others alone), minimal: written_ranker builds both.
+    WrittenRanker(std::shared_ptr<const WrittenRule> rule, std::optional<Dfa> p, Dfa q, uint32_t length) : rule_(std::move(rule)), length_(length)
     {
         const WrittenRule& r = *rule_;
-        if (keep)
+        if (p)
         {
-            p_ = minimise(*keep);
+            p_ = std::move(p);
             pr_ = std::make_unique<DfaRanker>(*p_, length);
         }
-        Dfa q = keep ? intersect(*p_, *r.others) : minimise(*r.others);
         if (q.start >= 0)
         {
             q_ = std::move(q);
@@ -1474,17 +1475,41 @@ std::unique_ptr<Ranker> written_ranker(std::shared_ptr<const WrittenRule> rule, 
         why = rule->blocker;
         return nullptr;
     }
-    // The tables: P's and P-and-O's (as a plugin's), and Bn's.
-    double bytes = DfaRanker::table_bytes(rule->others->states() + (keep ? keep->states() * (1 + rule->others->states() / 64) : 0), rule->base, length);
-    bytes += DfaRanker::table_bytes(rule->bnext.size(), rule->base, length);
-    if (bytes > kPluginTableBudget)
+    // The tables: P's (the plugins' automaton), P-and-O's (the units it keeps that a reading writes
+    // as a file), and Bn's. P-and-O is built and measured, not guessed: most readings die within a
+    // few symbols of a page, so it is usually far smaller than P (1,559 states against 236,034 for
+    // every text plugin at 32 characters, where a bound of P times O's states had it at 13 GB).
+    const auto bytes_of = [&](size_t states) { return DfaRanker::table_bytes(states, rule->base, length); };
+    const double per_state = bytes_of(1);
+    std::optional<Dfa> p;
+    if (keep) p = minimise(*keep);
+    const double fixed = (p ? bytes_of(p->states()) : 0.0) + bytes_of(rule->bnext.size());
+    if (fixed > kPluginTableBudget)
+    {
+        why = keep ? "the plugins' combined table is over the budget at this length: they judge only"
+                   : "not-written-v1's tables are over the budget at this length: it judges only";
+        return nullptr;
+    }
+    Dfa q;
+    try
+    {
+        // As many pairs as could still fit, with room for the minimising to shrink them.
+        const size_t room = size_t(std::max(1.0, (kPluginTableBudget - fixed) / per_state)) * 4;
+        q = p ? intersect(*p, *rule->others, room) : minimise(*rule->others);
+    }
+    catch (const std::length_error&)
+    {
+        why = "not-written-v1's tables are over the budget at this length: it judges only";
+        return nullptr;
+    }
+    if (fixed + bytes_of(q.states()) > kPluginTableBudget)
     {
         why = "not-written-v1's tables are over the budget at this length: it judges only";
         return nullptr;
     }
     try
     {
-        return std::make_unique<WrittenRanker>(std::move(rule), keep, length);
+        return std::make_unique<WrittenRanker>(std::move(rule), std::move(p), std::move(q), length);
     }
     catch (const std::length_error&)
     {

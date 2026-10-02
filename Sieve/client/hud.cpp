@@ -649,6 +649,36 @@ void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float botto
         {
         }
     }
+    // Variable length addressing: the shortest route found to this unit, by the ways there are to
+    // get there (its position without leading zeros, or a bearing typed into the navigator and a
+    // walk from where it lands). Usually no shorter than the address: a bearing carries only the
+    // leading part of the position, and the walk the rest. A unit that sits on a short bearing,
+    // or near the start or the end of the loop, is the exception, and this finds it.
+    {
+        const BigUint units = line_units();
+        if (bk.index < units)
+        {
+            if (const sieve::ShortestPath* p = shortest_path_of(bk.index, units))
+            {
+                const std::string how = !p->by_bearing ? tr("cost.vla.address")
+                                        : p->walk.is_zero() ? trf("cost.vla.exact", {p->bearing})
+                                                            : trf("cost.vla.walk", {p->bearing, tr(p->back ? "cost.vla.back" : "cost.vla.forward")});
+                row(tr("cost.vla"), p->bits, trf("cost.chars", {std::to_string(p->chars)}), how);
+                const size_t room = size_t(std::max(20.0f, (pw - 300) / 8));
+                std::string w = p->written.size() > room ? p->written.substr(0, room - 3) + "..." : p->written;
+                text(x + 28, cy, trf("cost.vla.route", {w}), 1, dim);
+                if (p->by_bearing && p->decimals > angle_decimals_)
+                    text(x + 28 + 8 * float(w.size() + 8), cy, trf("cost.vla.places", {std::to_string(p->decimals)}), 1, dim);
+                cy += 14;
+            }
+            else
+            {
+                text(x + 14, cy, tr("cost.vla"), 1, ink);
+                text(x + 260, cy, tr("cost.vla.working"), 1, dim);
+                cy += 14;
+            }
+        }
+    }
     cy += 10;
     // The other half of a written-down key: the shape that gives the address its meaning.
     const std::string spec = (on_books() ? books_->id() : titled_here() ? titled_here()->id() : line().space.id());
@@ -758,6 +788,53 @@ float Hallway::draw_file(const BinarySpace::Bytes& f, float x, float cy, float p
         cy += 12;
     }
     return cy + 6;
+}
+
+
+// The worker behind COST's variable length addressing (see hallway.hpp).
+const sieve::ShortestPath* Hallway::shortest_path_of(const BigUint& v, const BigUint& units)
+{
+    {
+        std::lock_guard<std::mutex> lock(vla_mx_);
+        if (vla_done_ && vla_v_ == v && vla_units_ == units)
+        {
+            if (vla_shown_gen_ != vla_done_gen_) // (a route on a line of files is as long as a file)
+            {
+                vla_shown_ = vla_done_;
+                vla_shown_gen_ = vla_done_gen_;
+            }
+            return &*vla_shown_;
+        }
+    }
+    if (vla_busy_) return nullptr; // another unit's: this one is started when it is done
+    if (vla_thread_.joinable()) vla_thread_.join(); // finished
+    {
+        std::lock_guard<std::mutex> lock(vla_mx_);
+        vla_v_ = v;
+        vla_units_ = units;
+        vla_done_.reset();
+    }
+    vla_busy_ = true;
+    vla_thread_ = std::thread([this, v, units] {
+        std::optional<sieve::ShortestPath> p;
+        try
+        {
+            p = sieve::shortest_path(v, units, kMaxAngleDecimals);
+        }
+        catch (const std::exception&)
+        {
+        }
+        {
+            std::lock_guard<std::mutex> lock(vla_mx_);
+            if (vla_v_ == v && vla_units_ == units)
+            {
+                vla_done_ = std::move(p);
+                ++vla_done_gen_;
+            }
+        }
+        vla_busy_ = false;
+    });
+    return nullptr;
 }
 
 } // namespace hallway::hall
