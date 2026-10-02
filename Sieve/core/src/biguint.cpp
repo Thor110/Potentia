@@ -697,6 +697,18 @@ void BigUint::add_small(uint32_t a)
     if (carry) limbs_.push_back(carry);
 }
 
+uint32_t BigUint::mod_small(uint32_t d) const
+{
+    if (d == 0) throw std::domain_error("division by zero");
+    uint64_t rem = 0;
+    for (size_t i = limbs_.size(); i-- > 0;)
+    {
+        rem = ((rem << 32) | (limbs_[i] >> 32)) % d;
+        rem = ((rem << 32) | (limbs_[i] & kHalfMask)) % d;
+    }
+    return static_cast<uint32_t>(rem);
+}
+
 uint32_t BigUint::divmod_small(uint32_t d)
 {
     if (d == 0) throw std::domain_error("division by zero");

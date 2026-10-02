@@ -426,7 +426,7 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
     }
     Book b;
     if (dt == 0) b.room_slot = int32_t(slot);
-    const auto idx = loop_.unit_index(offset_loop_tile(dt), slot);
+    const std::optional<BigUint> idx = dt == 0 ? room_unit(slot) : loop_.unit_index(offset_loop_tile(dt), slot);
     if (!idx) b.empty = true;
     else try
     {
@@ -466,32 +466,61 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
             {
                 // Only the surviving files stand here, closed up: slot i holds the survivor whose
                 // compact address is i. Its bytes come from its survivor number (filekind.hpp).
-                b.index = unit_of_pos(b.index);
-                const BinarySpace::Bytes f = binary_sieve_->file_at(b.index, mode_);
+                b.index = file_place(dt, slot, b.index);
                 b.title = titled_[kBinaryLine]->blank_title();
                 b.is_file = true;
-                b.file_size = f.size();
-                b.head.assign(f.begin(), f.begin() + std::ptrdiff_t(std::min<size_t>(16, f.size())));
-                b.content = binary_space_->index_of(f, AddressMode::Positional);
+                const auto found = dt == 0 && found_gen_ == room_gen_ ? found_.find(slot) : found_.end();
+                if (found != found_.end())
+                {
+                    // Worked out ahead, with the rest of the room (find_room_files).
+                    b.file_size = found->second.size;
+                    b.head = std::move(found->second.head);
+                    b.content = std::move(found->second.content);
+                    found_.erase(found);
+                }
+                else
+                {
+                    const BinarySpace::Bytes f = binary_sieve_->file_at(b.index, mode_);
+                    b.file_size = f.size();
+                    b.head.assign(f.begin(), f.begin() + std::ptrdiff_t(std::min<size_t>(16, f.size())));
+                    b.content = binary_space_->index_of(f, AddressMode::Positional);
+                }
                 b.survivor = true;
                 b.survivor_number = binary_sieve_->rank_of_index(b.index, mode_);
                 b.fraction = b.index.is_zero() ? 0.0 : std::pow(10.0, b.index.log10_approx() - binary_sieve_->count().log10_approx());
             }
             else
             {
-                b.index = unit_of_pos(b.index);
+                b.index = file_place(dt, slot, b.index);
                 const TitledSpace& ts = *titled_[kBinaryLine];
-                const TitledSpace::Parts tp = ts.parts_at(b.index, mode_);
-                b.title = tp.title;
                 b.is_file = true; // its bytes and hex on demand: file_of(), hex_of()
-                b.head = file_head(tp.content, 16, b.file_size);
-                b.content = tp.content;
+                const auto found = dt == 0 && found_gen_ == room_gen_ ? found_.find(slot) : found_.end();
+                bool judged = false;
+                if (found != found_.end())
+                {
+                    // Worked out ahead, with the rest of the room (find_room_files).
+                    b.title = std::move(found->second.title);
+                    b.head = std::move(found->second.head);
+                    b.file_size = found->second.size;
+                    b.content = std::move(found->second.content);
+                    judged = found->second.judged;
+                    b.failed_by = std::move(found->second.failed_by);
+                    found_.erase(found);
+                }
+                else
+                {
+                    TitledSpace::Parts tp = ts.parts_at(b.index, mode_);
+                    b.title = std::move(tp.title);
+                    b.head = file_head(tp.content, 16, b.file_size);
+                    b.content = std::move(tp.content);
+                }
                 b.fraction = b.index.is_zero() ? 0.0 : std::pow(10.0, b.index.log10_approx() - ts.size().log10_approx());
                 if (binary_sieve_ && !binary_sieve_->empty())
                 {
                     // From its head alone, unless a filter needs the whole file (not-an-item-v1).
-                    b.failed_by = binary_sieve_->needs_file() ? binary_sieve_->first_failure_of(binary_space_->bytes_at(tp.content, AddressMode::Positional))
-                                                              : binary_sieve_->first_failure(b.head, b.file_size);
+                    if (!judged)
+                        b.failed_by = binary_sieve_->needs_file() ? binary_sieve_->first_failure_of(binary_space_->bytes_at(*b.content, AddressMode::Positional))
+                                                                  : binary_sieve_->first_failure(b.head, b.file_size);
                     b.passes = b.failed_by.empty();
                 }
             }
@@ -2188,9 +2217,93 @@ void Hallway::busy(const std::string& word, const std::function<void()>& job)
     work.get(); // rethrows here anything the job threw
 }
 
+std::optional<BigUint> Hallway::room_unit(uint32_t slot)
+{
+    if (room_first_gen_ != room_gen_)
+    {
+        room_first_ = loop_.unit_index(offset_loop_tile(0), 0);
+        room_first_file_.reset();
+        if (room_first_ && on_binary()) room_first_file_ = unit_of_pos(*room_first_);
+        room_first_gen_ = room_gen_;
+    }
+    if (!room_first_) return std::nullopt;
+    BigUint i = *room_first_;
+    i.add_small(slot);
+    if (!(i < loop_.units())) return std::nullopt;
+    return i;
+}
+
+BigUint Hallway::file_place(int64_t dt, uint32_t slot, const BigUint& pos)
+{
+    const uint32_t half = uint32_t(sieve::books_per_tile() / 2);
+    if (dt != 0 || slot >= half || room_first_gen_ != room_gen_ || !room_first_file_) return unit_of_pos(pos);
+    BigUint f = *room_first_file_;
+    f.add_small(slot);
+    return f;
+}
+
+void Hallway::find_room_files()
+{
+    sieve::cli::timings::Scope timed("hallway.walk.find"); // the room's files, side by side
+    found_.clear();
+    found_gen_ = room_gen_;
+    if (!on_binary()) return;
+    const bool compact = effective_mode() == FilterMode::Compact;
+    if (compact && (!binary_sieve_ || !binary_sieve_->can_rank())) return;
+    const bool judge = !compact && binary_sieve_ && !binary_sieve_->empty() && binary_sieve_->needs_file();
+    // The slots of your room that hold files (the left wall), each to its survivor number.
+    std::vector<std::pair<uint32_t, BigUint>> todo;
+    const uint32_t half = uint32_t(sieve::books_per_tile() / 2);
+    for (uint32_t slot = 0; slot < half; ++slot)
+    {
+        if (cache_.count(int64_t(slot))) continue;
+        if (const auto idx = room_unit(slot)) todo.emplace_back(slot, file_place(0, slot, *idx));
+    }
+    if (todo.size() < 2) return;
+    std::vector<FoundFile> out(todo.size());
+    std::vector<char> ok(todo.size(), 0);
+    std::atomic<size_t> next{0};
+    auto work = [&] {
+        for (size_t i; (i = next++) < todo.size();)
+            try
+            {
+                if (compact)
+                {
+                    const BinarySpace::Bytes f = binary_sieve_->file_at(todo[i].second, mode_);
+                    out[i].size = f.size();
+                    out[i].head.assign(f.begin(), f.begin() + std::ptrdiff_t(std::min<size_t>(16, f.size())));
+                    out[i].content = binary_space_->index_of(f, AddressMode::Positional);
+                }
+                else
+                {
+                    TitledSpace::Parts tp = titled_[kBinaryLine]->parts_at(todo[i].second, mode_);
+                    out[i].title = std::move(tp.title);
+                    out[i].head = file_head(tp.content, 16, out[i].size);
+                    if (judge)
+                    {
+                        out[i].failed_by = binary_sieve_->first_failure_of(BinarySpace::file_at_place(tp.content));
+                        out[i].judged = true;
+                    }
+                    out[i].content = std::move(tp.content);
+                }
+                ok[i] = 1;
+            }
+            catch (...) {} // left to book(), which says why
+    };
+    const unsigned n = std::max(1u, std::min<unsigned>(std::thread::hardware_concurrency(), unsigned(todo.size())));
+    std::vector<std::thread> threads;
+    for (unsigned t = 1; t < n; ++t) threads.emplace_back(work);
+    work();
+    for (auto& t : threads) t.join();
+    for (size_t i = 0; i < todo.size(); ++i)
+        if (ok[i]) found_.emplace(todo[i].first, std::move(out[i]));
+}
+
 void Hallway::warm_room()
 {
+    find_room_files();
     for (uint32_t slot = 0; slot < sieve::books_per_tile(); ++slot) (void)book(0, slot);
+    found_.clear();
     if (in_hand_ && in_hand_->is_file)
     {
         (void)file_of(*in_hand_);

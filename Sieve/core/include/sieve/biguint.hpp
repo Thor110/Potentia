@@ -62,6 +62,7 @@ public:
     void mul_small(uint32_t m);
     void add_small(uint32_t a);
     uint32_t divmod_small(uint32_t d); // divides in place, returns remainder
+    uint32_t mod_small(uint32_t d) const; // the remainder alone, without touching (or copying) the value
     // a mod m for any m >= 1 (a mask when m is a power of two, else long division).
     static BigUint mod(const BigUint& a, const BigUint& m);
     // a * b, and a = q * b + r with 0 <= r < b for b >= 1. Both choose their algorithm by the

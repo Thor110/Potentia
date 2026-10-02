@@ -1062,3 +1062,23 @@ floor(first unit of your tile x 360 x 10^d / units) in integers (exact_degrees i
 shared with the navigator's bearing field), worked out in refresh_labels() when you move, not per
 frame. "359." and 20 places is 25 characters, 200 px under a 214 px compass. Scripted runs apply
 Angle Precision before --press keys (make_hallway's angle_decimals), as a person's would be.
+Stuck at LOCATING with every filter maxed (Edward, 2 October 2026: all display modes compact,
+every filter at its most, hallway.exe walked to from the node graph). The cause was
+BinarySieve::unrank with not-an-item-v1: it binary-searched the survivor number across every page
+it excludes (27^32, about 2^152, on an 8.5 MB line), so about 152 whole-file unranks of 140 ms each
+per item, for the 64 items of the room: it never finished. Now, exactly and with the same files:
+files are ordered shortest first and every page is page_bytes long, so a survivor past the
+page-length block has every page below it, and its file is the counter's unrank of k + pages_in_
+(the search remains for survivors of page length or shorter). KindCounter::shorter_than is public
+for it. Then the room: find_room_files() works out the left wall's files on every core (an atomic
+slot index, std::thread per hardware thread) before book() picks them up (found_, keyed by slot
+and room_gen_, emptied after warm_room): compact, each found by its survivor number (file_at,
+head, place); otherwise its title, head and place and, where a filter needs the whole file
+(utf8-valid-v1, not-an-item-v1), its verdict. The room's first unit and its file are worked out
+once per room (room_unit, file_place; room_first_, room_first_file_), not once per item. The
+helpers in filekind.cpp make their numbers from bytes, not hex text; BigUint::mod_small gives a
+remainder without a copy (short_big). Timings phases hallway.walk.length, .place, .room, .find.
+Measured here (4 cores, hallway.exe of 8.5 MB, graph walk): binary-kind-v1 compact 9.9 s to 5.1
+s; not-an-item-v1 compact never to 5.7 s; utf8-valid-v1 (it cannot rank that long, so it hides)
+7.0 s to 3.0 s; all three 7.0 s to 2.9 s. On fewer cores the room takes proportionally longer.
+busy() still cannot cancel a job that is running.

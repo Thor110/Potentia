@@ -73,28 +73,20 @@ std::string lower(std::string s)
 }
 
 // "01" written n times, then shifted up a byte: 256 + 256^2 + ... + 256^n.
+// (Built from its bytes, n ones and a zero, rather than from a hex string twice as long: on a line of
+// files of megabytes these run several times for every file found by rank.)
 BigUint powers_from_one(uint64_t n)
 {
     if (n == 0) return {};
-    std::string h;
-    h.reserve(size_t(2 * n + 2));
-    for (uint64_t i = 0; i < n; ++i) h += "01";
-    h += "00";
-    return BigUint::from_hex(h);
+    std::vector<uint8_t> b(size_t(n + 1), 1);
+    b.back() = 0;
+    return BigUint::from_bytes(b);
 }
 
 BigUint bytes_value(const std::vector<uint8_t>& b, size_t from)
 {
-    static const char kHex[] = "0123456789abcdef";
     if (from >= b.size()) return {};
-    std::string h;
-    h.reserve(2 * (b.size() - from));
-    for (size_t i = from; i < b.size(); ++i)
-    {
-        h += kHex[b[i] >> 4];
-        h += kHex[b[i] & 15];
-    }
-    return BigUint::from_hex(h);
+    return BigUint::from_bytes(std::span<const uint8_t>(b).subspan(from));
 }
 
 } // namespace
@@ -359,9 +351,8 @@ std::vector<uint8_t> KindCounter::unrank(const BigUint& k) const
     }
     if (tail_bytes)
     {
-        const std::string hx = tail.to_hex(size_t(2 * tail_bytes));
-        auto nib = [](char c) { return uint8_t(c <= '9' ? c - '0' : c - 'a' + 10); };
-        for (uint64_t i = 0; i < tail_bytes; ++i) out[size_t(kKindHead + i)] = uint8_t(nib(hx[size_t(2 * i)]) << 4 | nib(hx[size_t(2 * i + 1)]));
+        const std::vector<uint8_t> t = tail.to_bytes(size_t(tail_bytes));
+        std::copy(t.begin(), t.end(), out.begin() + std::ptrdiff_t(kKindHead));
     }
     return out;
 }
@@ -381,10 +372,7 @@ uint64_t length_at(const BigUint& v)
 BigUint ones_of(uint64_t n)
 {
     if (n == 0) return {};
-    std::string h;
-    h.reserve(size_t(2 * n));
-    for (uint64_t i = 0; i < n; ++i) h += "01";
-    return BigUint::from_hex(h);
+    return BigUint::from_bytes(std::vector<uint8_t>(size_t(n), 1));
 }
 
 // Its first min(length, 16) bytes, and the rest as a number.
@@ -403,12 +391,8 @@ std::vector<uint8_t> head_at(const BigUint& v, uint64_t length, BigUint* tail)
         *tail = w;
         *tail -= top;
     }
-    std::vector<uint8_t> out(static_cast<size_t>(h), 0);
-    if (h == 0) return out;
-    const std::string hx = head.to_hex(size_t(2 * h));
-    auto nib = [](char c) { return uint8_t(c <= '9' ? c - '0' : c - 'a' + 10); };
-    for (size_t i = 0; i < out.size(); ++i) out[i] = uint8_t(nib(hx[2 * i]) << 4 | nib(hx[2 * i + 1]));
-    return out;
+    if (h == 0) return {};
+    return head.to_bytes(static_cast<size_t>(h));
 }
 
 } // namespace
@@ -778,6 +762,21 @@ std::vector<uint8_t> BinarySieve::unrank(const BigUint& k) const
 {
     if (utf8_) return utf8_->unrank(k);
     if (!exclude_pages_ || pages_table_.empty()) return counter_->unrank(k);
+    // Files come shortest first, and every page is a file of exactly the page's length, so a
+    // survivor past that length has all the pages below it: it is the kind survivor k + (the
+    // pages there are), found directly. Only survivors of up to the page's length need the search
+    // below (which on a line of files of megabytes would otherwise unrank one about 150 times).
+    {
+        const uint64_t page_bytes = items_.pages->allowed.size();
+        BigUint kept_up_to = counter_->shorter_than(page_bytes + 1);
+        kept_up_to -= pages_in_;
+        if (k >= kept_up_to)
+        {
+            BigUint at = k;
+            at += pages_in_;
+            return counter_->unrank(at);
+        }
+    }
     // The smallest j (a place among the kind survivors) with more than k survivors in 0..j, the
     // pages among them taken away: between k and k + (the pages there are).
     auto kept_through = [&](const BigUint& j, std::vector<uint8_t>& f) {

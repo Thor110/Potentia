@@ -295,9 +295,8 @@ inline std::string short_big(const BigUint& v, bool negative = false)
     const uint64_t digits = uint64_t(std::floor(lg)) + 1;
     char lead[16];
     std::snprintf(lead, sizeof lead, "%06.0f", std::floor(std::pow(10.0, lg - std::floor(lg) + 5)));
-    BigUint t = v;
     char tail[8];
-    std::snprintf(tail, sizeof tail, "%04u", t.divmod_small(10000));
+    std::snprintf(tail, sizeof tail, "%04u", v.mod_small(10000)); // (a copy of a number of megabytes cost more than this)
     return std::string(negative ? "-" : "") + lead + "..." + tail + " (~" + std::to_string(digits) + " digits)";
 }
 
@@ -1002,6 +1001,31 @@ private:
     // The room you stand in worked out ahead of drawing it, and the file in hand's bytes and hex,
     // so the first frame after a long walk does not do it.
     void warm_room();
+    // The binary line: your room's files worked out side by side on every core during a walk (each
+    // is independent, and one of megabytes takes a tenth of a second or more), then picked up by
+    // book(). Compact: each found by its survivor number. Otherwise: its title, head and place,
+    // and, where a filter needs the whole file to judge it, its verdict. Only what the shelf keeps.
+    struct FoundFile
+    {
+        uint64_t size = 0;
+        std::vector<uint8_t> head;
+        BigUint content;
+        Space::Digits title;      // (not compact) its title
+        std::string failed_by;    // (not compact) the first filter it fails, where the stack needs the
+        bool judged = false;      // whole file to say (judged then)
+    };
+    std::unordered_map<uint32_t, FoundFile> found_; // slot -> its file, for found_gen_
+    uint64_t found_gen_ = ~uint64_t(0);
+    void find_room_files();
+    // The first unit of the tile you stand in, and the binary line's first file there (the left
+    // wall's first slot), kept for the room: every item of the room is one of these plus its slot,
+    // which on a line of files of megabytes saves a few shifts of numbers that size per item.
+    std::optional<BigUint> room_first_, room_first_file_;
+    uint64_t room_first_gen_ = ~uint64_t(0);
+    std::optional<BigUint> room_unit(uint32_t slot); // the unit at a slot of your room, or none past the line
+    // A binary item's file by its place in the corridor: unit_of_pos(pos), or, in your room, the
+    // room's first file plus the slot (the same number: the left wall's slots run on from it).
+    BigUint file_place(int64_t dt, uint32_t slot, const BigUint& pos);
 
     // ---- the node graph (node_graph.cpp): maps of verified anchors, O or the pause menu, and
     // the item page's SORT tab

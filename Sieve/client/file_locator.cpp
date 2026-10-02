@@ -308,10 +308,18 @@ void Hallway::walk_to_file(const std::vector<uint8_t>& bytes, const std::string&
         set_line(kBinaryLine);
     }
     busy(tr("locating"), [&] {
-        if (past) set_binary_length(bytes.size());
+        if (past)
+        {
+            sieve::cli::timings::Scope t1("hallway.walk.length"); // the line made long enough
+            set_binary_length(bytes.size());
+        }
         const Space::Digits title = title_for_name(name); // its name is its title
         walked_names_[cli::sha256_hex(bytes)] = name;
-        go_to_file(bytes, true, &title);
+        {
+            sieve::cli::timings::Scope t2("hallway.walk.place"); // the file's place, and you there
+            go_to_file(bytes, true, &title);
+        }
+        sieve::cli::timings::Scope t3("hallway.walk.room"); // the room's items, ahead of drawing them
         warm_room();
     });
     message(trf(past ? "loc.went_past" : "msg.warped.file", {std::to_string(bytes.size())}));

@@ -133,6 +133,8 @@ private:
     uint64_t max_bytes_;
     BigUint count_, short_total_; // all survivors; those of 16 bytes or fewer
     int kind_of(uint32_t h, uint32_t s) const; // index into file_kinds() of a head of h bytes ending in s
+
+public:
     BigUint shorter_than(uint64_t length) const; // survivors shorter than `length` bytes
 };
 
