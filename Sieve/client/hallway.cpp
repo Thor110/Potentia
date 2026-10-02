@@ -321,6 +321,13 @@ void Hallway::refresh_labels()
     tile_label_ = short_big(tile_.magnitude, tile_.negative);
     loop_label_ = short_big(loop_.tiles());
     for (int i = 0; i < kLines; ++i) line_fraction_[i] = compute_line_fraction(i);
+    // The compass's bearing, exactly, from the first unit of the tile you stand in (where its
+    // needle points), to Angle Precision's places.
+    BigUint first = all_loop_tiles_[size_t(li_)];
+    first <<= sieve::books_per_tile_bits();
+    const BigUint units = units_of(li_);
+    if (first >= units) first = BigUint();
+    bearing_text_ = exact_degrees(first, units, angle_decimals_);
 }
 
 void Hallway::rebase()

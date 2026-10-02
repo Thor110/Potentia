@@ -30,3 +30,4 @@ Unzip over the Potentia repository root (the paths start with `Sieve/`), or appl
 - docs/IDEAS.md 3.6: the angle-reduction proposal, the arithmetic, and what is kept
 - client/hallway.cpp, hallway.hpp, file_locator.cpp, item_save.cpp, app_main.cpp, data/lang/en.txt: LOCATING... while walking to a file (work on a worker, window kept answering); thin mode no longer rebuilds the neighbouring rooms every frame; file heads worked out faster
 - core/biguint, core/binaryspace: files to and from numbers without hex text (same results, 4-8x faster); client: hover over long files no longer stalls (short address from the number, vault verdict kept per item and worked out ahead for your room)
+- Angle Precision up to 20 places, the compass bearing now exact (integer arithmetic, not a double)

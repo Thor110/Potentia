@@ -110,20 +110,7 @@ void Hallway::nav_set(size_t d, uint32_t v)
 }
 
 // A position's bearing, exactly: floor(v * 360 * 10^d / units), written with d decimal places.
-std::string Hallway::nav_angle_of(const BigUint& v) const
-{
-    const int d = angle_decimals_;
-    const BigUint units = line_units();
-    if (units.is_zero()) return "0";
-    BigUint scale = BigUint::pow(10, uint64_t(d));
-    scale.mul_small(360);
-    BigUint q, r;
-    BigUint::divmod(BigUint::mul(v, scale), units, q, r);
-    std::string digits = q.to_decimal();
-    if (d == 0) return digits;
-    if (digits.size() <= size_t(d)) digits.insert(0, size_t(d) + 1 - digits.size(), '0');
-    return digits.substr(0, digits.size() - size_t(d)) + "." + digits.substr(digits.size() - size_t(d));
-}
+std::string Hallway::nav_angle_of(const BigUint& v) const { return exact_degrees(v, line_units(), angle_decimals_); }
 
 // The typed bearing, checked against the Angle Precision, as a position: the first unit at or past
 // it, round the loop to the start when it falls past the last unit.
@@ -175,7 +162,7 @@ void Hallway::nav_angle_key(SDL_Keycode k)
     {
         if (nav_angle_fresh_) nav_angle_.clear();
         nav_angle_fresh_ = false;
-        if (nav_angle_.size() < 16) nav_angle_ += c;
+        if (nav_angle_.size() < size_t(4 + kMaxAngleDecimals)) nav_angle_ += c; // "359." and every place
     }
     else if (k == SDLK_BACKSPACE)
     {

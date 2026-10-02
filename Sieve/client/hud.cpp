@@ -101,7 +101,7 @@ void Hallway::draw_compass(float W, float H)
     const SDL_FRect at{cx + rad * sn - 3, cy - rad * cs - 3, 7, 7};
     SDL_RenderFillRect(r_, &at);
     // And the same bearing written out, to whatever precision Settings > Graphics asks for.
-    const std::string deg = degrees(line_fraction(li_), angle_decimals_);
+    const std::string deg = bearing_text_ + "\xc2\xb0";
     text(cx - text_width(deg, 1) / 2, by + bh - row + 4, deg, 1, ink);
 }
 

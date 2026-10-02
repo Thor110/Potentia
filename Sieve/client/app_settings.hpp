@@ -10,7 +10,7 @@
 //   real_graphics = off         ; Real Graphics (at most one of these two is on)
 //   door_portals = off          ; the doorways filled with procedural data noise
 //   model_cache_mb = 64         ; memory for the rendered faces of the models line's crates
-//   angle_decimals = 1          ; decimal places on the compass's degree readout
+//   angle_decimals = 1          ; decimal places on the compass's degree readout (0 to 20)
 //   fps_counter = off           ; frames per second, top right of the hallway
 //   [controls]
 //   mouse_sensitivity = 100     ; percent
@@ -78,6 +78,10 @@ DisplayInfo detect_display();
 // shape that leaves room around a window (or the desktop itself in fullscreen).
 Resolution default_resolution(const DisplayInfo& d);
 
+// The most decimal places Angle Precision offers: the bearing is worked out exactly (a big-integer
+// division), so every one of them is right, and 20 still fits under the compass (359.999...°).
+inline constexpr int kMaxAngleDecimals = 20;
+
 struct AppSettings
 {
     Resolution resolution;       // {0, 0}: not chosen yet
@@ -90,7 +94,7 @@ struct AppSettings
     // The two below describe the generated world rather than how it is drawn, so they are set in
     // the setup menu, not in Graphics. They are kept here, in [world], so that they are saved.
     int model_cache_mb = 64;     // the display cache: memory for the pictures on items, 8..4096
-    int angle_decimals = 1;      // decimal places on the compass's degree readout, 0..8
+    int angle_decimals = 1;      // decimal places on the compass's degree readout, 0..kMaxAngleDecimals
     bool fps_counter = false;    // show frames per second in the hallway
     int mouse_sensitivity = 100; // percent, 10..400
     bool invert_mouse_y = false;

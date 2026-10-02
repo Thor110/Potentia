@@ -187,7 +187,7 @@ std::vector<std::pair<SDL_Keycode, SDL_Keymod>> parse_presses(const std::string&
 
 // Builds the hallway from options, and applies the start-up and scripting options.
 std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer, const Args& a, bool scripted,
-                                      const FilterConfig& filters)
+                                      const FilterConfig& filters, int angle_decimals)
 {
     // The corridor's tile size, before any line's loop is worked out from it. It changes no
     // address: only the tile and slot that name a unit's place in the corridor (corridor.hpp).
@@ -215,6 +215,7 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
     auto hall = std::make_unique<Hallway>(window, renderer, std::move(lines), filters,
                                           a.has("book-pages") ? a.get_u32("book-pages", 4) : 4, shape);
     hall->set_line(start_line);
+    hall->set_angle_decimals(angle_decimals); // before any scripted keys, which may type a bearing
     if (a.has("mode"))
     {
         if (a.get("mode") == "guided")
@@ -438,7 +439,7 @@ int run(const Args& a)
     {
         auto hall = [&] {
             sieve::cli::timings::Scope timed("hallway.build");
-            return make_hallway(window, renderer, a, true, filters);
+            return make_hallway(window, renderer, a, true, filters, app.angle_decimals);
         }();
         {
             const bool glow = app.edge_glow || a.has("edge-glow"), real = app.real_graphics || a.has("real-graphics");
@@ -550,7 +551,7 @@ int run(const Args& a)
         music_colours_default();
         auto building = std::async(std::launch::async, [&] {
             sieve::cli::timings::Scope timed("hallway.build");
-            return make_hallway(window, renderer, ha, first, filters);
+            return make_hallway(window, renderer, ha, first, filters, app.angle_decimals);
         });
         const Uint64 building_since = SDL_GetTicks();
         while (building.wait_for(std::chrono::milliseconds(16)) != std::future_status::ready)

@@ -149,7 +149,7 @@ AppSettings AppSettings::load(const fs::path& path)
         {
             if (key == "angle_decimals")
             {
-                try { s.angle_decimals = std::clamp(std::stoi(value), 0, 8); } catch (...) {}
+                try { s.angle_decimals = std::clamp(std::stoi(value), 0, kMaxAngleDecimals); } catch (...) {}
             }
             else if (key == "model_cache_mb")
             {

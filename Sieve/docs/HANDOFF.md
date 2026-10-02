@@ -1055,3 +1055,10 @@ of the wall first, keyed by slot and room generation (room_gen_, bumped whenever
 cleared or moved), so a file is usually checked before you look at it. The worker reads only the
 files' places (BinarySpace::file_at_place, static, so a line rebuilt meanwhile cannot dangle) and
 the vault, which is read-only once loaded. Timings phases hallway.file.bytes, .vault, .hex.
+Angle Precision to 20 places (Edward, 2 October 2026; kMaxAngleDecimals in app_settings.hpp, used
+by the settings file, the setup menu and the hallway). The compass bearing was a double (about 16
+figures, from log10 approximations), so places past the tenth or so were noise; it is now exact,
+floor(first unit of your tile x 360 x 10^d / units) in integers (exact_degrees in hallway.hpp,
+shared with the navigator's bearing field), worked out in refresh_labels() when you move, not per
+frame. "359." and 20 places is 25 characters, 200 px under a 214 px compass. Scripted runs apply
+Angle Precision before --press keys (make_hallway's angle_decimals), as a person's would be.

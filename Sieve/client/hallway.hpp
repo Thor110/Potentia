@@ -254,14 +254,22 @@ inline std::string percent(double f)
 }
 
 // The same position as an angle. Every line is a loop, so where you stand in it is a bearing:
-// 0 degrees is where the loop starts and finishes, and it comes round to 0 again. How many
-// decimal places is Angle Precision in Settings > Graphics.
-inline std::string degrees(double f, int decimals)
+// 0 degrees is where the loop starts and finishes, and it comes round to 0 again. How many decimal
+// places is Angle Precision in the setup menu. Exact: floor(v * 360 * 10^d / units), written with
+// d places, so all of them are right however many there are (a double would run out at about 16
+// figures, and the lines are far longer than that).
+inline std::string exact_degrees(const BigUint& v, const BigUint& units, int decimals)
 {
-    char fmt[16], buf[48];
-    std::snprintf(fmt, sizeof fmt, "%%.%df", std::clamp(decimals, 0, 8));
-    std::snprintf(buf, sizeof buf, fmt, f * 360.0);
-    return std::string(buf) + "\xc2\xb0";
+    const int d = std::clamp(decimals, 0, kMaxAngleDecimals);
+    if (units.is_zero()) return d ? "0." + std::string(size_t(d), '0') : "0";
+    BigUint scale = BigUint::pow(10, uint64_t(d));
+    scale.mul_small(360);
+    BigUint q, r;
+    BigUint::divmod(BigUint::mul(v, scale), units, q, r);
+    std::string digits = q.to_decimal();
+    if (d == 0) return digits;
+    if (digits.size() <= size_t(d)) digits.insert(0, size_t(d) + 1 - digits.size(), '0');
+    return digits.substr(0, digits.size() - size_t(d)) + "." + digits.substr(digits.size() - size_t(d));
 }
 
 // ---------------------------------------------------------------- the hallway
@@ -835,7 +843,11 @@ public:
     void release_textures();
     void set_controls(int sensitivity_percent, bool invert_y);
     void set_fps_counter(bool on) { fps_counter_ = on; }
-    void set_angle_decimals(int d) { angle_decimals_ = std::clamp(d, 0, 8); }
+    void set_angle_decimals(int d)
+    {
+        angle_decimals_ = std::clamp(d, 0, kMaxAngleDecimals);
+        refresh_labels(); // the bearing's text is worked out to this many places
+    }
     void set_face_px(uint32_t px);
     // The close-up display size (0 turns close-ups off); see sharp_.
     void set_closeup_px(uint32_t px)
@@ -929,6 +941,7 @@ private:
     };
     std::vector<DoorBack> door_back_;
     double line_fraction_[kLines] = {}; // how far along each line you stand; see refresh_labels()
+    std::string bearing_text_;          // the line you are on, as an exact bearing (refresh_labels())
     std::unordered_map<int64_t, Book> cache_;
     std::optional<BookSlot> hover_;
     std::optional<Book> in_hand_;

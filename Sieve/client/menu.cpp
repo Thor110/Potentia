@@ -622,7 +622,7 @@ void Menu::adjust(int dir, int step)
     case kAngleRow:
         if (app_)
         {
-            app_->angle_decimals = std::clamp(app_->angle_decimals + dir, 0, 8);
+            app_->angle_decimals = std::clamp(app_->angle_decimals + dir, 0, kMaxAngleDecimals);
             save_app();
         }
         break;
