@@ -20,6 +20,32 @@
   h1{font-size:16px;letter-spacing:0.3em;text-transform:uppercase;color:#666;margin-bottom:12px;text-align:center;white-space:nowrap;}
   .sub{font-size:16px;color:#444;margin-bottom:24px;letter-spacing:0.15em;text-align:center;max-width:2000px;line-height:1.6;}
   
+  /* Counter block matching the audio archive aesthetic */
+  .counter-box {
+    width: 100%;
+    max-width: 800px;
+    border: 1px solid #2a2a3a;
+    background: #0d0d14;
+    padding: 20px;
+    margin-bottom: 24px;
+    text-align: center;
+  }
+  .counter-title {
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: #666;
+    margin-bottom: 8px;
+    white-space: nowrap;
+  }
+  .counter-value {
+    font-size: 16px;
+    color: #e0ddd8;
+    letter-spacing: 0.1em;
+    font-weight: bold;
+    white-space: nowrap;
+  }
+
   .box {
     width: 100%;
     max-width: 800px;
@@ -215,6 +241,12 @@
   Planetary Departure & Trajectory Simulation (v0.1)
 </div>
 
+<!-- Live Calculation Counter Box -->
+<div class="counter-box">
+  <div class="counter-title">Light Bound Limitation Factor</div>
+  <div class="counter-value" id="limitation-counter">0.00000000%</div>
+</div>
+
 <div class="box" id="sim-container">
   <div class="sim-viewport" id="viewport">
     <button id="fs-btn" class="btn-action fs-toggle">[ ] Fullscreen</button>
@@ -245,6 +277,28 @@
   const viewportSub = document.getElementById('viewport-sub');
 
   let simState = 'READY'; // States: READY, RUNNING, CONFIRM_RESET
+
+  // Live Counter Logic (Base epoch + incremental drift per second)
+  // Real-world baseline: ~95.9% of the observable universe's volume is already unreachable
+  const launchEpoch = new Date("2026-04-24T00:00:00Z").getTime();
+  const baseFactor = 95.90000000; 
+  const growthRatePerSecond = 0.00000005; // Incremental cosmic horizon loss rate per real-time second
+
+  function updateLimitationCounter() {
+    const now = new Date().getTime();
+    const elapsedSeconds = (now - launchEpoch) / 1000;
+    if (elapsedSeconds > 0) {
+      // Clamped asymptotically so it never quite hits an impossible 100% flat instantly
+      const currentFactor = Math.min(99.99999999, baseFactor + (elapsedSeconds * growthRatePerSecond));
+      document.getElementById('limitation-counter').innerText = `${currentFactor.toFixed(8)}%`;
+    }
+  }
+
+  setInterval(updateLimitationCounter, 1000);
+  updateLimitationCounter();
+
+  setInterval(updateLimitationCounter, 1000);
+  updateLimitationCounter();
 
   // Handle Timeline Slider Updates
   slider.addEventListener('input', (e) => {
