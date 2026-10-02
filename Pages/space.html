@@ -44,13 +44,38 @@
     letter-spacing: 0.1em;
     font-weight: bold;
     white-space: nowrap;
+    margin-bottom: 12px;
   }
   .counter-group {
-    font-size: 16px;
-    text-transform: uppercase;
-    letter-spacing: 0.2em;
-    color: #666;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #888;
+    text-align: left;
+    margin-top: 12px;
+    border-top: 1px solid #1a1a24;
+    padding-top: 12px;
+  }
+  .counter-group p {
     margin-bottom: 8px;
+  }
+  .counter-group p:last-child {
+    margin-bottom: 0;
+  }
+
+  /* Star loss divider and standalone counter styling */
+  .star-loss-divider {
+    border: none;
+    border-top: 1px solid #2a2a3a;
+    margin: 16px 0;
+  }
+  .star-loss-value {
+    font-size: 16px;
+    color: #ffffff;
+    letter-spacing: 0.1em;
+    font-weight: bold;
+    text-align: center;
+    margin-top: 8px;
+    white-space: nowrap;
   }
 
   .box {
@@ -250,9 +275,18 @@
 
 <!-- Live Calculation Counter Box -->
 <div class="counter-box">
-  <div class="counter-title">Light Bound Limitation Factor</div>
-  <div class="counter-group">This percentage represents how much of the universe is inaccessible to humanity due to the speed of light and the ever vanishing horizon of the observable universe.</div>
-  <div class="counter-value" id="limitation-counter">0.00000000%</div>
+  <div class="counter-title">Cosmic Horizon & Reachability Metric</div>
+  <div class="counter-value" id="limitation-counter">95.4% Unreachable</div>
+  <div class="counter-group">
+    <p>95.4% of the observable universe is already out of reach forever.</p>
+    <p>Even a signal sent at the speed of light, today, could never get there: space is expanding faster and faster, and the gap grows faster than light can cross it.</p>
+    <p>We can still see those galaxies, by light they sent billions of years ago, but nothing we send will ever arrive.</p>
+    <p>And the reachable part keeps shrinking: every second, tens of thousands more stars slip past the edge.</p>
+    
+    <hr class="star-loss-divider">
+    
+    <div class="star-loss-value" id="star-loss-ticker">(~0 stars crossed permanently since epoch start)</div>
+  </div>
 </div>
 
 <div class="box" id="sim-container">
@@ -284,29 +318,36 @@
   const viewportStatus = document.getElementById('viewport-status');
   const viewportSub = document.getElementById('viewport-sub');
 
-  let simState = 'READY'; // States: READY, RUNNING, CONFIRM_RESET
+  let simState = 'READY';
 
-  // Live Counter Logic (Base epoch + incremental drift per second)
-  // Real-world baseline: ~95.9% of the observable universe's volume is already unreachable
-  const launchEpoch = new Date("2026-04-24T00:00:00Z").getTime();
-  const baseFactor = 95.90000000; 
-  const growthRatePerSecond = 0.00000005; // Incremental cosmic horizon loss rate per real-time second
+  // Planck 2018 Constants & Live Calculations
+  const EPOCH = Date.UTC(2026, 0, 1); 
+  const REACH_GLY = 16.58, SEEN_GLY = 46.18;
+  const SECONDS_PER_YEAR = 31557600;
+  
+  // Estimated stellar loss rate scaling (~24,500 stars/sec)
+  const STARS_LOST_PER_SECOND = 24500; 
 
-  function updateLimitationCounter() {
-    const now = new Date().getTime();
-    const elapsedSeconds = (now - launchEpoch) / 1000;
-    if (elapsedSeconds > 0) {
-      // Clamped asymptotically so it never quite hits an impossible 100% flat instantly
-      const currentFactor = Math.min(99.99999999, baseFactor + (elapsedSeconds * growthRatePerSecond));
-      document.getElementById('limitation-counter').innerText = `${currentFactor.toFixed(8)}%`;
-    }
+  function updateCosmicMetrics() {
+    const now = Date.now();
+    const yearsElapsed = (now - EPOCH) / (SECONDS_PER_YEAR * 1000);
+    
+    // Dynamic horizon shifting for baseline accuracy
+    const currentReach = REACH_GLY - (yearsElapsed * 1e-9);
+    const currentSeen = SEEN_GLY + (yearsElapsed * 1e-9);
+    const unreachablePct = 100 * (1 - (currentReach / currentSeen) ** 3);
+
+    // Cumulative stars lost since epoch start
+    const totalSecondsElapsed = (now - EPOCH) / 1000;
+    const starsLostTotal = Math.floor(totalSecondsElapsed * STARS_LOST_PER_SECOND).toLocaleString();
+
+    document.getElementById('limitation-counter').innerText = `${unreachablePct.toFixed(1)}% Unreachable`;
+    document.getElementById('star-loss-ticker').innerText = `~${starsLostTotal} stars crossed permanently since epoch start.`;
   }
 
-  setInterval(updateLimitationCounter, 1000);
-  updateLimitationCounter();
-
-  setInterval(updateLimitationCounter, 1000);
-  updateLimitationCounter();
+  // Single clean interval
+  setInterval(updateCosmicMetrics, 1000);
+  updateCosmicMetrics();
 
   // Handle Timeline Slider Updates
   slider.addEventListener('input', (e) => {
