@@ -466,15 +466,17 @@ public:
 public:
     // Thin: over the budget, only the room you stand in keeps its items and their pictures (the
     // rooms either side borrow your room's pictures, as the far rooms always do). Set when the
-    // setup menu is told to go in anyway, or the File Locator goes to a file past the budget.
-    void set_thin(bool on);
-    bool thin() const { return thin_; }
+    // setup menu is told to go in anyway (every line), or a walk to a file past the budget (the
+    // binary line only: `line`, so the other lines keep their neighbours and pictures).
+    void set_thin(bool on, int line = -1);
+    bool thin() const { return thin_ && (thin_line_ < 0 || thin_line_ == li_); }
     // The binary line made long enough for a file (the File Locator's Go to it, past the budget).
     void set_binary_length(uint64_t bytes);
 
 private:
     bool thin_ = false;
-    int face_rooms() const { return thin_ ? 0 : kFaceRooms; }
+    int thin_line_ = -1; // the one line thin is for, or -1 for every line
+    int face_rooms() const { return thin() ? 0 : kFaceRooms; }
 
 public:
 

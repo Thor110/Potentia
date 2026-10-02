@@ -61,8 +61,10 @@ On a line of every byte (`bytes256`) only `not-written-v1`, `not-a-file-v1` and
   `every-vertex-used-v1`. The three rules count together exactly.
 
 **Binary.** No conflicts: `binary-kind-v1` and `not-an-item-v1` count together exactly when
-not-an-item asks only for pages. `utf8-valid-v1` counts on its own; with either of them the line
-judges only and says why (it needs the whole file, where they read the file's head). With melodies, pictures or models it judges file by file, and
+not-an-item asks only for pages. `utf8-valid-v1` ranks on its own; with either of them it is
+counted with them exactly (the kind is decided by the first 16 bytes, so the head is walked by
+both automata side by side, then UTF-8's completions), but compact needs it alone, so the line
+hides and says why. Past its table (about 7.4 KB) its survivors are estimated (`~` in the tally). With melodies, pictures or models it judges file by file, and
 the line hides and says why (see below).
 
 ## Why each kind conflicts
@@ -99,15 +101,56 @@ These are not auto-unticked: they are the next thing to discuss.
 
 ## Retired filters
 
-`symbol-entropy-v1` and `model-information-v1` are **retired**: they judge only, so a line with one
-ticked cannot compact. They stay loadable (earlier stacks reproduce), on a third tab of the filters
-window, and are ticked only by hand (or by Z on that tab). If a countable way to express them is
-found, they come back as new versions.
+A retired filter stays loadable (earlier stacks reproduce), on a third tab of the filters window,
+and is ticked only by hand (or by Z on that tab). There are two reasons to retire one.
+
+**It judges only.** `symbol-entropy-v1` and `model-information-v1`: a line with one ticked cannot
+compact. If a countable way to express them is found, they come back as new versions.
+
+**An automaton does the same** (`FilterSpec::replaced_by`, shown in the list and by `sieve
+filters`). The built-ins below count with their own machinery, so they clash with every automaton;
+their replacements are the same rule as automata, which count at any length and merge with all the
+other automata, so retiring them loses nothing and removes the clashes. Each pair was checked to be
+the same set, not only the same size: equal exact counts at several lengths, and survivors of each
+sampled and judged by the other, both ways (and the unit tests and the oracle as listed).
+
+| Retired | Replaced by | Checked |
+| :--- | :--- | :--- |
+| `clean-v1` | `clean-data-v1` | counts at lengths 1 to 200, every unit judged the same (existing tests) |
+| `clean-v2` | `clean-data-v2` (new) | counts at 1, 2, 3, 4, 6, 32, 200; every unit up to 4 symbols; padding-heavy units at 32 and 200; the oracle's own engine at 1, 2, 5, 17, 40 |
+| `key-v1` | `key-data-v2` | counts and sampled survivors on all 12 tonics x 6 scales at lengths 6 and 16; `key-data-v2` also covers every note set, `key-v1` only notes104 |
+| `key-data-v1` | `key-data-v2` | its tonic-only major key is `key-data-v2`'s major (plugins are retired by name and SHA-256, so someone else's file of the same name is not) |
+
+## Merging and retiring: what is left
+
+With each filter's share alone in the list (Filtered: X%), the remaining duplicates and clashes, and
+what stands in the way of each:
+
+- **`words-v1` and `window-v1`** have exact automaton twins (`words-data-v1`, `window-data-v1`: the
+  same counts at 20 and 32 and no disagreement on sampled survivors), but a dictionary's automaton
+  counts only while its table fits (512 MB: units of a few hundred characters), where the
+  built-ins count to 20,000 with their own method. Retire them once the token form can count long
+  units (a table kept for the lengths in use rather than all of them, or the built-ins' own
+  method of counting by word lengths, used for an automaton whose tokens are a plain dictionary).
+- **`words-v2`, `window-v2` and `title-v1`** (trailing padding; title: words, then SPACEs) need a
+  `padding` option in the token form, in the engine and the oracle; then `words-data-v2` and
+  `window-data-v2` can replace them as `clean-data-v2` replaced `clean-v2`.
+- **`max-run-v1` and `max-run-data-v1`** are the same rule, both automata (so they do not clash).
+  The built-in covers every text alphabet, the plugin only lower27, but `tidy-data-v1` requires the
+  plugin. A `tidy-data-v2` requiring `max-run-v1` would let `max-run-data-v1` and `tidy-data-v1` retire.
+- **Pictures:** `neighbour-agreement-v1`, `palette-size-v1` and `row-runs-v1` count with their own
+  machinery and clash with each other and with `not-packed-v1`. `row-runs-v1` is an automaton on
+  small palettes (its state is the column, the changes and the last colour), and `palette-size-v1`
+  on the smallest; exposing those automata where they are small would let them merge.
+  `neighbour-agreement-v1` (a transfer matrix) does not count at all at 16x16 or 5x5x8.
+- **Arithmetic** (`not-a-file-v1`, `not-a-pattern-v1`) conflicts with everything that counts; that
+  is in their nature (they test the unit's number, not its symbols) and is not a merge to make.
 
 ## Ticking many at once
 
 Z (this tab), C (both main tabs) and X (both main tabs of every line) untick everything in reach if
 anything is ticked, and otherwise tick it all, skipping any filter that clashes with one already
-ticked. The kept one of a clashing pair is the more useful: newer versions first, the arithmetic
-filters last. `title-v1` is ticked only on a book's title part, and retired filters never. A settings file edited by hand
+ticked. The kept one of a clashing pair is the one that filters more on its own, its settings as
+they stand (each is counted alone on the workers first, which can take seconds: the footer says so,
+and the window answers meanwhile); then newer versions first, the arithmetic filters last. `title-v1` is ticked only on a book's title part, and retired filters never. A settings file edited by hand
 is never changed when it is loaded: a stack with a conflict in it simply hides, and says why.

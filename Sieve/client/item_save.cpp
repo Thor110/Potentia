@@ -233,7 +233,7 @@ void Hallway::jump_kind()
         // A file longer than the binary line makes the line long enough for it (only the room you
         // stand in keeps its pictures past 64 KB, as the File Locator does past the budget).
         const bool longer = bytes.size() > binary_space_->max_bytes();
-        if (longer && bytes.size() > 65536) set_thin(true);
+        if (longer && bytes.size() > 65536) set_thin(true, kBinaryLine);
         clear_faces();
         const Space::Digits title = bk.title; // the item is let go below
         drop_in_hand();

@@ -4905,10 +4905,136 @@ def utf8_unrank(n, text_only, k):
     return out
 
 
+# utf8-valid-v1 counted with binary-kind-v1 and not-an-item-v1's pages. The kind is decided by the
+# first 16 bytes, so the heads are walked byte by byte with two states: the kind walk's, and the
+# bytes Python's own incremental UTF-8 decoder is holding back (a character begun). Held-back bytes
+# are grouped by what the decoder will take next and how many bytes the character still needs, which
+# is all that matters to what follows. Past the head, a file needs only to finish its character and
+# then be any valid UTF-8, counted by code points (utf8_counts).
+
+def utf8_control(c):
+    return (ord(c) < 0x20 and c not in "\t\n\r") or 0x7F <= ord(c) <= 0x9F
+
+
+def utf8_feed(pend, b, text_only):
+    """The bytes the decoder holds back after `pend` then byte b, or None if it refuses them."""
+    import codecs
+    d = codecs.getincrementaldecoder("utf-8")("strict")
+    try:
+        out = d.decode(pend + bytes([b]), final=False)
+    except UnicodeDecodeError:
+        return None
+    if text_only and any(utf8_control(c) for c in out):
+        return None
+    return d.getstate()[0]
+
+
+_UTF8_HELD = {}
+
+
+def utf8_held(text_only):
+    """The decoder's held-back states: start key, moves[key][b] (a key or None), needs[key]."""
+    if text_only not in _UTF8_HELD:
+        def needs(pend):
+            if not pend:
+                return 0
+            return (2 if pend[0] < 0xE0 else 3 if pend[0] < 0xF0 else 4) - len(pend)
+
+        # Two held-back states are the same when they lead the same way after every byte, all the
+        # way to the end of the character (at most 3 bytes): the decoder may hold back bytes it
+        # refuses one byte later (ED A0, a surrogate's start), so what it takes next is not enough.
+        keys = {}
+
+        def key(pend):
+            if not pend:
+                return ()
+            if pend not in keys:
+                fut = []
+                for b in range(256):
+                    q = utf8_feed(pend, b, text_only)
+                    if q is not None and (q == b"" or needs(q) > 0):
+                        fut.append((b, key(q)))
+                keys[pend] = (needs(pend), frozenset(fut))
+            return keys[pend]
+
+        start = key(b"")
+        reps, moves, todo = {start: b""}, {}, [start]
+        while todo:
+            k = todo.pop()
+            row = []
+            for b in range(256):
+                q = utf8_feed(reps[k], b, text_only)
+                if q is None:
+                    row.append(None)
+                    continue
+                k2 = key(q)
+                if k2 not in reps:
+                    reps[k2] = q
+                    todo.append(k2)
+                row.append(k2)
+            moves[k] = row
+        _UTF8_HELD[text_only] = (start, moves, {k: k[0] if k else 0 for k in reps})
+    return _UTF8_HELD[text_only]
+
+
+_UTF8_HEADS = {}
+
+
+def utf8_heads(text_only):
+    """levels[p]: {(kind state, held key): heads of p bytes}, p = 0..16."""
+    if text_only not in _UTF8_HEADS:
+        kstart, _levels, kmoves, _groups = kind_walk()
+        ustart, umoves, _needs = utf8_held(text_only)
+        levels = [{(kstart, ustart): 1}]
+        for p in range(KIND_HEAD):
+            nxt = {}
+            for (st, k), n in levels[p].items():
+                for b in range(256):
+                    k2 = umoves[k][b]
+                    if k2 is None:
+                        continue
+                    t = (kmoves[p][st][b], k2)
+                    nxt[t] = nxt.get(t, 0) + n
+            levels.append(nxt)
+        _UTF8_HEADS[text_only] = levels
+    return _UTF8_HEADS[text_only]
+
+
+def utf8_joint(n, text_only, kinds, pages=None):
+    levels = utf8_heads(text_only)
+    start, umoves, needs = utf8_held(text_only)
+    total = 0
+    for h in range(min(n, KIND_HEAD) + 1):  # whole files within the head: nothing held back
+        total += sum(c for (st, k), c in levels[h].items() if k == start and KindHeads.kind(h, st) in kinds)
+    if n > KIND_HEAD:
+        a = utf8_counts(n - KIND_HEAD, text_only)
+
+        done = {}
+
+        def finish(k, r):  # ways to end the character begun: r more bytes through the decoder
+            if r == 0:
+                return 1 if k == start else 0
+            if (k, r) not in done:
+                done[k, r] = sum(finish(k2, r - 1) for k2 in umoves[k] if k2 is not None)
+            return done[k, r]
+
+        for (st, k), c in levels[KIND_HEAD].items():
+            if KindHeads.kind(KIND_HEAD, st) not in kinds:
+                continue
+            need = needs[k]
+            ways = finish(k, need)
+            total += c * ways * sum(a[r - need] for r in range(max(1, need), n - KIND_HEAD + 1))
+    if pages is not None and len(pages) <= n:
+        assert all(utf8_ok(bytes([b]), text_only) for place in pages for b in place)  # pages are ASCII text
+        total -= pattern_in_kinds(kinds, pages)
+    return total
+
+
 def cmd_utf8_vectors(_args):
     print("# utf8-valid-v1 on the binary line (core/src/filekind.cpp, Utf8Counter).")
     print("# utf8       max_bytes controls survivors")
     print("# utf8-unit  max_bytes controls rank file_hex")
+    print("# utf8-joint max_bytes controls kinds keep pages(- or alphabet:length) survivors (with binary-kind-v1, and not-an-item-v1's pages)")
     from itertools import product
     for text_only in (False, True):
         ctl = "text" if text_only else "any"
@@ -4917,6 +5043,12 @@ def cmd_utf8_vectors(_args):
         kept = [f for f in files if utf8_ok(f, text_only)]
         assert len(kept) == sum(utf8_counts(2, text_only))
         assert all(utf8_unrank(2, text_only, i) == f for i, f in enumerate(kept))
+        # Counted with the kinds: every file of up to 2 bytes, judged, against the walk.
+        kinds_of = [(f, file_kind(f, len(f)), utf8_ok(f, text_only)) for f in files]
+        for name in KIND_SET_NAMES:
+            for keep in ("keep", "exclude"):
+                ks = kind_set(name, keep)
+                assert utf8_joint(2, text_only, ks) == sum(1 for _f, k, ok in kinds_of if ok and k in ks), (name, keep)
         g = stream("utf8/" + ctl)
         for n in (1, 2, 3, 4, 16, 32, 100, 1000):  # a binary line holds files of 0 .. n bytes, n >= 1
             total = sum(utf8_counts(n, text_only))
@@ -4925,6 +5057,14 @@ def cmd_utf8_vectors(_args):
                 f = utf8_unrank(n, text_only, i)
                 assert utf8_ok(f, text_only)
                 print(f"utf8-unit\t{n}\t{ctl}\t{i}\t{f.hex() or '-'}")
+
+    for text_only in (False, True):
+        ctl = "text" if text_only else "any"
+        for n in (1, 2, 16, 17, 20, 32, 100, 1000):
+            for kinds, keep in (("any", "keep"), ("text", "keep"), ("text", "exclude"), ("signed", "keep"), ("unknown", "keep"), ("pdf", "keep"), ("exe", "exclude")):
+                for pages in ("-", "lower27:20"):
+                    pat = None if pages == "-" else pages_pattern(ALPHABETS[pages.split(":")[0]], int(pages.split(":")[1]))
+                    print(f"utf8-joint\t{n}\t{ctl}\t{kinds}\t{keep}\t{pages}\t{utf8_joint(n, text_only, kind_set(kinds, keep), pat)}")
 
 
 def main():

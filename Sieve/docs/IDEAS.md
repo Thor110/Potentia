@@ -611,3 +611,25 @@ are cheap and because they are the sort of thing that is lost otherwise.
   `notes104`'s e q h w: on `notes2` they step aside, so a `notes2` track need not end on the tonic.
 - **Rules between voices** of a `notes2` unit (whether notes sounding together agree): harder than
   per-voice filters, because each voice keeps its own time.
+- **Optimise all with the COST pages** (Edward, 2 October 2026: "the optimise all eventually needs
+  wiring into the COST system, so that we can use both the filter pages and the cost pages to work
+  out the best possible values for everything"). X (optimise all) now ticks every filter in reach
+  and, of two that cannot be counted together, keeps the one that removes more on its own, its
+  settings as they stand (each filter's own share is in the list: Filtered: X%). That is a greedy
+  choice of which filters, not of their values, and it measures only the shelves. The aim:
+  - **Both pages as one measure.** The filter pages say how much of the line a stack removes (its
+    survivors); the COST page says what naming one survivor costs (its address in bits, chars and
+    bytes, against the unit itself, and the guided model's shorter form). The best settings are
+    those that make known content cheapest to name while still holding it: survivors fewer, and
+    the content we care about still among them. So the score needs anchors, real text, melodies and
+    pictures that must survive, and reads their compact addresses off the COST page.
+  - **Values, not only ticks.** Each parameter (max-run's `max`, key's tonic and scale, row-runs'
+    `changes`, palette-size's colours, the dictionaries) searched for its best value under that
+    score, a filter at a time and then together, with the anchors' verdicts as the hard limit
+    (a setting that drops an anchor is out).
+  - **Sets, not pairs.** Of filters that clash, the best set rather than the stronger of each pair;
+    and a filter that another ticked one implies is dropped (X now ticks `clean-data-v1` and
+    `clean-data-v2` together: harmless, as the stricter decides, but it costs a product state).
+  - **Lines that judge only** (utf8-valid past its table, not-an-item asking for melodies) can be
+    scored by estimate (`~` in the tally) but not by compact address, so COST shows them as
+    unavailable rather than wrong.

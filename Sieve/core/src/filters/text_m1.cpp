@@ -687,6 +687,8 @@ void add_text_m1_filters(std::vector<FilterSpec>& out)
     clean.description = "No two SPACEs in a row, and at least one letter. Can rank (compact).";
     clean.applies = is_lower27;
     clean.counts_as = "own";
+    clean.retired = true; // the same rule as an automaton, which counts at any length and merges
+    clean.replaced_by = "clean-data-v1";
     clean.make = [](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
         return make_m1(SieveFilter::Clean, l, v, r, *find_filter("clean-v1"));
     };
@@ -723,6 +725,8 @@ void add_text_m1_filters(std::vector<FilterSpec>& out)
     FilterSpec clean2 = clean;
     clean2.version = 2;
     clean2.description = "As clean-v1, but a unit may end in SPACE padding (the last unit of warped text). Can rank (compact).";
+    clean2.retired = true;
+    clean2.replaced_by = "clean-data-v2";
     clean2.make = [](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
         return make_m1(SieveFilter::Clean, l, v, r, *find_filter("clean-v2"));
     };

@@ -409,7 +409,7 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
     // room of them; the rooms either side stand bare. (Working them out and dropping them again,
     // as this once did, rebuilt both neighbours on every frame: tens of seconds a room of files of
     // megabytes, with the window not answering.)
-    if (thin_ && dt != 0)
+    if (thin() && dt != 0)
     {
         static const Book bare = [] {
             Book e;
@@ -2170,10 +2170,12 @@ bool Hallway::refuse_if_withheld()
     return true;
 }
 
-void Hallway::set_thin(bool on)
+void Hallway::set_thin(bool on, int line)
 {
-    if (thin_ == on) return;
+    if (on && thin_ && thin_line_ < 0) return; // already thin everywhere
+    if (thin_ == on && (!on || thin_line_ == line)) return;
     thin_ = on;
+    thin_line_ = on ? line : -1;
     cache_.clear();
     ++room_gen_;
     clear_faces();

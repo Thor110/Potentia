@@ -1815,6 +1815,21 @@ FilterSpec plugin_spec(std::shared_ptr<const PluginDef> p)
     s.plugin_sha256 = h.sha256;
     s.counts_as = "automaton";
     s.prerequisites = h.prerequisites;
+    // Shipped plugins a later one has replaced: the file, pinned by its SHA-256 (a plugin of the same
+    // name but other bytes is someone else's, and stays as it is).
+    struct Retired
+    {
+        const char *name, *sha256, *by;
+    };
+    static const Retired retired[] = {
+        {"key-data-v1", "4981edc7b09c4de28a0b39c8f920f7b55c149ed34815e3be37408ab3bec3751d", "key-data-v2"}, // v2 adds the scale
+    };
+    for (const Retired& r : retired)
+        if (s.name() == r.name && h.sha256 == r.sha256)
+        {
+            s.retired = true;
+            s.replaced_by = r.by;
+        }
     s.applies = [p](const FilterLine& l) { return plugin_applies(*p, l); };
     s.make = [p](const FilterLine& l, const FilterValues& v, const FilterResources& r) -> std::unique_ptr<Filter> {
         std::string prov = "plugin sha256=" + p->header.sha256;

@@ -1,0 +1,29 @@
+sieve-filter-v1
+; The built-in clean-v2, written as data: clean-data-v1 with trailing padding, so it counts and
+; merges with the other automata where clean-v2 counts on its own (its survivors must be
+; clean-v2's, exactly, at every length).
+id        clean-data
+version   2
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     text
+symbols   lower27
+describe  As clean-data-v1, but a unit may end in SPACE padding: two or more SPACEs after the last letter (clean-v2, as a plugin).
+
+class     space   " "
+class     letter  a-z
+
+; 0 start, 1 space before any letter, 2 after a letter, 3 space after a letter, 4 padding (a
+; second SPACE after a letter: only SPACEs follow)
+states    5
+start     0
+accept    2 3 4
+t   0   space   1
+t   0   letter  2
+t   1   letter  2
+t   2   letter  2
+t   2   space   3
+t   3   letter  2
+t   3   space   4
+t   4   space   4
+end

@@ -144,10 +144,13 @@ struct FilterSpec
     //   "model-rule"  the models line's own rules: combine with each other
     //   ""            judges only, or has no rule about combining (never unticks anything)
     std::string counts_as;
-    // Retired: kept, and loadable, so earlier stacks still reproduce, but it judges only and would
-    // stop a line compacting (its condensed address space). The menus list retired filters on a
-    // tab of their own, tick them only by hand, and leave them out of "tick all".
+    // Retired: kept, and loadable, so earlier stacks still reproduce, but no longer offered beside
+    // the others: it judges only and would stop a line compacting (its condensed address space), or
+    // another filter does the same as an automaton, which counts and merges (`replaced_by`). The
+    // menus list retired filters on a tab of their own, tick them only by hand, and leave them out
+    // of "tick all".
     bool retired = false;
+    std::string replaced_by; // the filter that does the same, when that is why it is retired
     // Hard or soft (docs/FILTER-PLUGINS.md §17): "hard" sets aside only noise, with no collateral
     // (structural and exclusion rules: content of another line, a re-encoding of the same mesh, a
     // pattern); "soft" may set aside things a person would keep (a dictionary, a model, a key, a

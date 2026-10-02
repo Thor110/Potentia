@@ -1465,6 +1465,38 @@ void test_plugins(const std::string& dir)
         }
     }
 
+    // clean-data-v2 is clean-v2 (trailing SPACE padding) as a table: the same counts, and every unit
+    // of up to 4 symbols, and padding-heavy units at 32 and 200, judged the same.
+    const auto clean2 = load_plugin_file(filters + "clean-data-v2.sfilter");
+    const FilterSpec clean2_spec = plugin_spec(clean2);
+    for (uint32_t L : {1u, 2u, 3u, 4u, 6u, 32u, 200u})
+    {
+        const FilterStack plug(text_line(L), {{&clean2_spec, {}}}, none), built(text_line(L), {{find_filter("clean-v2"), {}}}, none);
+        CHECK(plug.ranker() && built.ranker() && plug.ranker()->count() == built.ranker()->count());
+        if (L <= 4)
+        {
+            bool same = true;
+            std::vector<uint32_t> u(L);
+            uint64_t all = 1;
+            for (uint32_t i = 0; i < L; ++i) all *= 27;
+            for (uint64_t x = 0; x < all; ++x)
+            {
+                uint64_t y = x;
+                for (uint32_t i = L; i-- > 0; y /= 27) u[i] = uint32_t(y % 27);
+                same = same && plug.passes(u) == built.passes(u);
+            }
+            CHECK(same);
+        }
+        for (int i = 0; i < 300; ++i)
+        {
+            std::vector<uint32_t> u(L);
+            const uint32_t pad = uint32_t(rng() % (L + 1)); // a run of SPACEs at the end, of any length
+            for (uint32_t k = 0; k < L; ++k) u[k] = k >= L - pad ? 0 : uint32_t(rng() % 4 == 0 ? 0 : rng() % 27);
+            CHECK(plug.passes(u) == built.passes(u));
+            if (plug.passes(u)) CHECK(plug.ranker()->unrank(plug.ranker()->rank(u)) == u);
+        }
+    }
+
     // max-run-data-v1 judges as max-run-v1 at every setting, exhaustively at length 3 and on
     // run-heavy random units at 24, and (unlike the built-in) counts.
     const auto run = load_plugin_file(filters + "max-run-data-v1.sfilter");
@@ -3503,6 +3535,26 @@ void test_utf8_vectors(const std::string& dir)
                      bs.first_failure_of(file).empty() && bs.needs_file();
             }
         }
+        else if (f[0] == "utf8-joint" && f.size() == 7)
+        {
+            // Counted with binary-kind-v1, and not-an-item-v1's pages when a page shape is given.
+            const BinarySpace space(std::stoull(f[1]), "sieve");
+            std::vector<FilterStack::Entry> entries{{utf8, {{"controls", f[2]}}}, kind_entry(f[3], f[4])};
+            BinaryItems items;
+            if (f[5] != "-")
+            {
+                const size_t colon = f[5].find(':');
+                const Alphabet& a = alphabet_of(f[5].substr(0, colon));
+                KindCounter::Pattern p;
+                std::array<bool, 256> at{};
+                for (uint32_t d = 0; d < a.size(); ++d) at[a.symbol(d) & 0xff] = true;
+                p.allowed.assign(std::stoul(f[5].substr(colon + 1)), at);
+                items.pages = p;
+                entries.push_back({find_filter("not-an-item-v1"), {{"items", "pages"}}});
+            }
+            const BinarySieve bs(space, entries, &items);
+            ok = bs.can_count() && bs.count_exact() && !bs.can_rank() && bs.survivors().to_decimal() == f[6];
+        }
         CHECK(ok);
         if (!ok)
         {
@@ -3513,7 +3565,7 @@ void test_utf8_vectors(const std::string& dir)
         ++n;
     }
     std::cout << "utf8 vectors checked: " << n << "\n";
-    CHECK(n >= 80);
+    CHECK(n >= 300);
     // Malformed and unwanted files fail; with a kind filter the stack judges only.
     const BinarySpace space(8, "sieve");
     const BinarySieve text(space, {{utf8, {{"controls", "text"}}}});
@@ -3522,7 +3574,103 @@ void test_utf8_vectors(const std::string& dir)
         CHECK(text.first_failure_of(bad) == "utf8-valid-v1");
     CHECK(text.first_failure_of({'h', 0xC3, 0xA9, '\n'}).empty());
     const BinarySieve both(space, {{utf8, {}}, {find_filter("binary-kind-v1"), {{"kinds", "text"}}}});
-    CHECK(!both.can_rank() && !both.blocker().empty());
+    CHECK(!both.can_rank() && !both.blocker().empty() && both.can_count() && both.count_exact());
+}
+
+// utf8-valid-v1 counted with binary-kind-v1 and not-an-item-v1's pages (KindCounter::utf8_count):
+// against every file of up to 2 bytes judged one by one; with every kind it is
+// utf8-valid-v1's own count; and the estimate past the table agrees with the exact count where
+// both can be had.
+void test_utf8_joint()
+{
+    const FilterSpec* utf8 = find_filter("utf8-valid-v1");
+    const FilterSpec* not_item = find_filter("not-an-item-v1");
+    CHECK(utf8 && not_item);
+    if (!utf8 || !not_item) return;
+    auto pattern = [](std::initializer_list<int> bytes, size_t length) {
+        KindCounter::Pattern p;
+        std::array<bool, 256> at{};
+        for (int b : bytes) at[size_t(b)] = true;
+        p.allowed.assign(length, at);
+        return p;
+    };
+    std::array<bool, 256> lower{};
+    lower[' '] = true;
+    for (int c = 'a'; c <= 'z'; ++c) lower[size_t(c)] = true;
+    KindCounter::Pattern pages;
+    pages.allowed.assign(2, lower);
+    const std::vector<KindCounter::Pattern> patterns{pages, pattern({0xC3, 0xA9, 'a', 0x80}, 2)};
+    int mismatches = 0, checked = 0;
+    auto brute = [&](uint32_t most, const std::vector<FilterStack::Entry>& entries, const BinaryItems* items) {
+        const BinarySpace space(most, "sieve");
+        const BinarySieve bs(space, entries, items);
+        uint64_t kept = 0;
+        std::vector<uint8_t> f;
+        for (uint32_t len = 0; len <= most; ++len)
+        {
+            f.assign(len, 0);
+            for (uint64_t v = 0; v < (uint64_t(1) << (8 * len)); ++v)
+            {
+                for (uint32_t i = 0; i < len; ++i) f[i] = uint8_t(v >> (8 * (len - 1 - i)));
+                kept += bs.first_failure_of(f).empty() ? 1 : 0;
+            }
+        }
+        ++checked;
+        if (!bs.can_count() || !bs.count_exact() || bs.survivors() != BigUint(kept))
+        {
+            if (++mismatches <= 5)
+                std::cerr << "  utf8 joint mismatch at " << most << ": counted " << (bs.can_count() ? bs.survivors().to_decimal() : "-") << ", judged " << kept << "\n";
+        }
+    };
+    for (const std::string ctl : {"any", "text"})
+    {
+        for (const std::string& kinds : kind_set_names())
+            for (const std::string keep : {"keep", "exclude"})
+            {
+                brute(2, {{utf8, {{"controls", ctl}}}, kind_entry(kinds, keep)}, nullptr);
+                for (const auto& pat : patterns)
+                {
+                    BinaryItems items;
+                    items.pages = pat;
+                    brute(2, {kind_entry(kinds, keep), {utf8, {{"controls", ctl}}}, {not_item, {{"items", "pages"}}}}, &items);
+                }
+            }
+    }
+    CHECK(mismatches == 0);
+    std::cout << "utf8 joint counts checked against every file: " << checked << "\n";
+    // Every kind: utf8-valid-v1's own count, past the head too.
+    for (uint32_t most : {17u, 40u, 1000u})
+        for (const std::string ctl : {"any", "text"})
+        {
+            const BinarySpace space(most, "sieve");
+            const BinarySieve alone(space, {{utf8, {{"controls", ctl}}}});
+            const BinarySieve with(space, {{utf8, {{"controls", ctl}}}, kind_entry("any", "keep")});
+            CHECK(alone.can_rank() && !with.can_rank() && with.can_count() && with.count_exact());
+            CHECK(with.survivors() == alone.count());
+        }
+    // The estimate (a matrix power in doubles) against the exact count, with kinds and pages.
+    for (uint32_t most : {20u, 300u, 3000u})
+        for (const std::string ctl : {"any", "text"})
+            for (const std::string kinds : {"any", "text", "signed", "pdf"})
+            {
+                const KindCounter kc(most, kind_set_of(kinds));
+                const Utf8Counter u(most, ctl == "text");
+                const BigUint exact = kc.utf8_count(ctl == "text", u.tail_sums(most - 16));
+                const Scaled est = kc.utf8_estimate(ctl == "text", Utf8Counter::tail_estimate(ctl == "text", most - 16));
+                const bool close = exact.is_zero() ? est.is_zero() : std::abs(est.log10() - exact.log10_approx()) < 1e-9;
+                if (!close) std::cerr << "  utf8 estimate off at " << most << " " << ctl << " " << kinds << ": " << est.log10() << " vs " << exact.log10_approx() << "\n";
+                CHECK(close);
+            }
+    // Past the table: estimated, not ranked, and said why.
+    {
+        const BinarySpace space(1000000, "sieve");
+        BinaryItems items;
+        items.pages = pages;
+        const BinarySieve bs(space, {kind_entry("text", "keep"), {utf8, {{"controls", "text"}}}, {not_item, {{"items", "pages"}}}}, &items);
+        CHECK(bs.can_count() && !bs.count_exact() && !bs.can_rank() && !bs.blocker().empty());
+        const double share = bs.survivors_log10() - space.size().log10_approx();
+        CHECK(std::isfinite(share) && share < -1000 && share > -8.0 * 1000000);
+    }
 }
 
 // BigUint's byte conversions (a file read as one number and back), against the hex path they
@@ -3635,6 +3783,7 @@ void run_all(int argc, char** argv)
         test_cross_vectors(dir);
         test_picture_vectors(dir);
         test_utf8_vectors(dir);
+        test_utf8_joint();
         test_byte_conversions();
     }
 }

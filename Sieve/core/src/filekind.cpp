@@ -7,6 +7,8 @@
 #include "sieve/sha256.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <map>
 #include <stdexcept>
 
@@ -642,6 +644,249 @@ std::vector<uint8_t> Utf8Counter::unrank(const BigUint& k) const
     return out;
 }
 
+// ---------------------------------------------------------------- counting utf8-valid-v1 with the kinds
+
+Scaled::Scaled(double v)
+{
+    if (v <= 0) return;
+    int x = 0;
+    m = std::frexp(v, &x);
+    e = x;
+}
+
+Scaled Scaled::of(const BigUint& v)
+{
+    const size_t bits = v.bit_length();
+    if (bits == 0) return {};
+    // Its top 64 bits as a double (rounded there: 53 bits are kept), times 2^(the rest).
+    BigUint x = v;
+    const size_t drop = bits > 64 ? bits - 64 : 0;
+    x >>= drop;
+    const uint64_t lo = x.low_bits(32);
+    x >>= 32;
+    const uint64_t hi = x.low_bits(32);
+    Scaled out(double(hi) * 4294967296.0 + double(lo));
+    out.e += int64_t(drop);
+    return out;
+}
+
+Scaled& Scaled::operator+=(const Scaled& o)
+{
+    if (o.m == 0) return *this;
+    if (m == 0) return *this = o;
+    // The smaller is lost entirely past 64 bits below the larger, as a double would lose it.
+    const int64_t d = e - o.e;
+    if (d >= 64) return *this;
+    if (d <= -64) return *this = o;
+    const int64_t top = std::max(e, o.e);
+    const double sum = std::ldexp(m, int(e - top)) + std::ldexp(o.m, int(o.e - top));
+    *this = Scaled(sum);
+    e += top;
+    return *this;
+}
+
+Scaled& Scaled::operator-=(const Scaled& o)
+{
+    if (o.m == 0) return *this;
+    const int64_t d = e - o.e;
+    if (d >= 64) return *this;
+    const double diff = m - std::ldexp(o.m, int(-d));
+    const int64_t top = e;
+    *this = Scaled(std::max(0.0, diff));
+    if (m != 0) e += top;
+    return *this;
+}
+
+Scaled& Scaled::operator*=(const Scaled& o)
+{
+    if (m == 0 || o.m == 0) return *this = Scaled();
+    const int64_t top = e + o.e;
+    *this = Scaled(m * o.m);
+    e += top;
+    return *this;
+}
+
+double Scaled::log10() const
+{
+    if (m == 0) return -std::numeric_limits<double>::infinity();
+    return std::log10(m) + double(e) * std::log10(2.0);
+}
+
+namespace {
+void times(BigUint& a, const BigUint& b) { a = BigUint::mul(a, b); }
+void times(Scaled& a, const Scaled& b) { a *= b; }
+} // namespace
+
+template <class T>
+T KindCounter::utf8_joint(bool text_only, const std::vector<T>& tail, const Pattern* pat) const
+{
+    constexpr uint32_t K = Utf8Counter::kStates;
+    const uint64_t last = pat ? pat->allowed.size() : max_bytes_; // the longest file counted
+    if (pat && last > max_bytes_) return T();
+    const size_t head = size_t(std::min<uint64_t>(kKindHead, last));
+    // cur[s * K + u]: heads of p bytes through kind state s and UTF-8 state u.
+    std::vector<T> cur(states_[0].size() * K);
+    cur[0] = T(1);
+    T total;
+    auto files_of = [&](size_t h) { // the files of exactly h <= 16 bytes: whole heads
+        if (pat && h != last) return;
+        for (uint32_t s = 0; s < states_[h].size(); ++s)
+            if (kinds_[size_t(kind_of(uint32_t(h), s))]) total += cur[s * K];
+    };
+    files_of(0);
+    for (size_t p = 0; p < head; ++p)
+    {
+        std::vector<T> nxt(states_[p + 1].size() * K);
+        for (uint32_t s = 0; s < states_[p].size(); ++s)
+            for (uint32_t u = 0; u < K; ++u)
+            {
+                const T& c = cur[s * K + u];
+                if (c.is_zero()) continue;
+                // Many bytes lead to the same pair of states: count each pair once.
+                std::map<uint64_t, uint32_t> pairs;
+                for (uint32_t b = 0; b < 256; ++b)
+                {
+                    if (pat && !pat->allowed[p][b]) continue;
+                    const uint8_t t = Utf8Counter::step(uint8_t(u), uint8_t(b), text_only);
+                    if (t == Utf8Counter::kDead) continue;
+                    ++pairs[uint64_t(next_[p][s * 256 + b]) * K + t];
+                }
+                for (const auto& [key, n] : pairs)
+                {
+                    T add = c;
+                    add.mul_small(n);
+                    nxt[size_t(key)] += add;
+                }
+            }
+        cur = std::move(nxt);
+        files_of(p + 1);
+    }
+    if (last <= kKindHead) return total;
+    // Longer files: the kind is decided by the head; the rest need only finish on a whole character.
+    std::vector<T> finish = tail;
+    if (pat)
+    {
+        // The pattern's one length: backwards over its places after the head, ending between characters.
+        std::vector<T> w(K);
+        w[0] = T(1);
+        for (uint64_t q = last; q-- > kKindHead;)
+        {
+            std::vector<T> before(K);
+            for (uint32_t u = 0; u < K; ++u)
+            {
+                std::array<uint32_t, K> to{};
+                for (uint32_t b = 0; b < 256; ++b)
+                    if (pat->allowed[size_t(q)][b])
+                        if (const uint8_t t = Utf8Counter::step(uint8_t(u), uint8_t(b), text_only); t != Utf8Counter::kDead) ++to[t];
+                for (uint32_t t = 0; t < K; ++t)
+                    if (to[t])
+                    {
+                        T add = w[t];
+                        add.mul_small(to[t]);
+                        before[u] += add;
+                    }
+            }
+            w = std::move(before);
+        }
+        finish = std::move(w);
+    }
+    if (finish.size() != K) throw std::logic_error("utf8 tail: one sum per state");
+    for (uint32_t s = 0; s < states_[kKindHead].size(); ++s)
+        if (kinds_[size_t(kind_of(kKindHead, s))])
+            for (uint32_t u = 0; u < K; ++u)
+            {
+                if (cur[s * K + u].is_zero() || finish[u].is_zero()) continue;
+                T add = cur[s * K + u];
+                times(add, finish[u]);
+                total += add;
+            }
+    return total;
+}
+
+BigUint KindCounter::utf8_count(bool text_only, const std::vector<BigUint>& tail, const Pattern* pat) const
+{
+    return utf8_joint<BigUint>(text_only, tail, pat);
+}
+
+Scaled KindCounter::utf8_estimate(bool text_only, const std::vector<Scaled>& tail, const Pattern* pat) const
+{
+    return utf8_joint<Scaled>(text_only, tail, pat);
+}
+
+std::vector<BigUint> Utf8Counter::tail_sums(uint64_t most) const
+{
+    if (!can_rank_ || most > max_bytes_) throw std::logic_error("utf8-valid-v1: no table for these sums");
+    std::vector<BigUint> out(kStates);
+    for (uint64_t r = 1; r <= most; ++r)
+        for (uint32_t u = 0; u < kStates; ++u) out[u] += ways_[r][u];
+    return out;
+}
+
+std::vector<Scaled> Utf8Counter::tail_estimate(bool text_only, uint64_t most)
+{
+    // x(r) = (W(r), S(r)): W(r)[u] the ways to finish from u in exactly r bytes, S(r) their sum
+    // over 1..r. W(r) = M W(r - 1) and S(r) = S(r - 1) + M W(r - 1), with M[u][t] the bytes that
+    // take u to t; so x(most) = A^most x(0), A = [[M, 0], [M, I]], by squaring. Every entry is a
+    // count, so a matrix is kept as doubles over one power of two, rescaled after each product.
+    constexpr uint32_t K = kStates, N = 2 * K;
+    struct Mat
+    {
+        std::array<double, N * N> a{};
+        int64_t e = 0;
+    };
+    auto rescale = [](double* v, size_t n, int64_t& e) {
+        double top = 0;
+        for (size_t i = 0; i < n; ++i) top = std::max(top, v[i]);
+        if (top == 0) return;
+        int x = 0;
+        std::frexp(top, &x);
+        for (size_t i = 0; i < n; ++i) v[i] = std::ldexp(v[i], -x);
+        e += x;
+    };
+    Mat a;
+    for (uint32_t u = 0; u < K; ++u)
+        for (uint32_t b = 0; b < 256; ++b)
+            if (const uint8_t t = step(uint8_t(u), uint8_t(b), text_only); t != kDead)
+            {
+                a.a[u * N + t] += 1;      // W' = M W
+                a.a[(K + u) * N + t] += 1; // S' = S + M W
+            }
+    for (uint32_t u = 0; u < K; ++u) a.a[(K + u) * N + K + u] = 1;
+    std::array<double, N> x{};
+    int64_t xe = 0;
+    x[0] = 1; // W(0): only state 0 is already between characters
+    for (uint64_t r = most; r; r >>= 1)
+    {
+        if (r & 1)
+        {
+            std::array<double, N> y{};
+            for (uint32_t i = 0; i < N; ++i)
+                for (uint32_t j = 0; j < N; ++j) y[i] += a.a[i * N + j] * x[j];
+            x = y;
+            xe += a.e;
+            rescale(x.data(), N, xe);
+        }
+        if (r > 1)
+        {
+            Mat sq;
+            for (uint32_t i = 0; i < N; ++i)
+                for (uint32_t k = 0; k < N; ++k)
+                    if (const double v = a.a[i * N + k]; v != 0)
+                        for (uint32_t j = 0; j < N; ++j) sq.a[i * N + j] += v * a.a[k * N + j];
+            sq.e = 2 * a.e;
+            rescale(sq.a.data(), N * N, sq.e);
+            a = sq;
+        }
+    }
+    std::vector<Scaled> out(K);
+    for (uint32_t u = 0; u < K; ++u)
+    {
+        out[u] = Scaled(x[K + u]);
+        if (!out[u].is_zero()) out[u].e += xe;
+    }
+    return out;
+}
+
 BinarySieve::BinarySieve(const BinarySpace& space, const std::vector<FilterStack::Entry>& entries, const BinaryItems* items)
 {
     provenance_ = space.shape();
@@ -700,22 +945,35 @@ BinarySieve::BinarySieve(const BinarySpace& space, const std::vector<FilterStack
         blocker_ = judged ? "not-an-item-v1 judges " + f + " file by file, so the survivors cannot be counted"
                           : "not-an-item-v1 needs the other lines' shapes to recognise " + f;
     }
-    // utf8-valid-v1 counts on its own; with the kind filters or not-an-item-v1 the stack judges.
+    // utf8-valid-v1 ranks on its own (its table); with the kind filters or not-an-item-v1's pages
+    // it is counted with them (KindCounter::utf8_count), and past its table estimated.
+    if (!can_rank_) can_count_ = false; // a form judged file by file: nothing to count
     if (utf8_filter_ >= 0)
     {
         utf8_ = std::make_unique<Utf8Counter>(space.max_bytes(), utf8_text_only_);
-        if (names_.size() > 1)
+        const bool alone = names_.size() == 1;
+        const uint64_t rest = space.max_bytes() > kKindHead ? space.max_bytes() - kKindHead : 0;
+        if (alone && utf8_->can_rank()) count_ = utf8_->count();
+        else if (can_count_ && utf8_->can_rank())
         {
+            survivors_ = counter_->utf8_count(utf8_text_only_, utf8_->tail_sums(rest));
+            if (exclude_pages_) survivors_ -= counter_->utf8_count(utf8_text_only_, {}, &*items_.pages);
+            survivors_log10_ = survivors_.is_zero() ? -std::numeric_limits<double>::infinity() : survivors_.log10_approx();
             can_rank_ = false;
-            blocker_ = "utf8-valid-v1 counts on its own, not together with binary-kind-v1 or not-an-item-v1";
+            blocker_ = "utf8-valid-v1 is counted with binary-kind-v1 and not-an-item-v1, but ranked only on its own";
         }
-        else if (!utf8_->can_rank())
+        else if (can_count_)
         {
+            Scaled n = counter_->utf8_estimate(utf8_text_only_, Utf8Counter::tail_estimate(utf8_text_only_, rest));
+            if (exclude_pages_) n -= Scaled::of(counter_->utf8_count(utf8_text_only_, {}, &*items_.pages));
+            survivors_log10_ = n.log10();
+            count_exact_ = false;
             can_rank_ = false;
-            blocker_ = "utf8-valid-v1's table is too large at this length: it judges only";
+            blocker_ = "utf8-valid-v1's table is too large at this length: its survivors are estimated, and it judges only";
         }
-        else count_ = utf8_->count();
+        else count_exact_ = false;
     }
+    if (can_rank_) survivors_log10_ = count_.is_zero() ? -std::numeric_limits<double>::infinity() : count_.log10_approx();
     shuffle_ = std::make_unique<Shuffle>(count_.is_zero() ? BigUint(1) : count_, space.key(), id_);
     BigUint top = count_;
     if (!top.is_zero()) top -= BigUint(1);

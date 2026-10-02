@@ -1082,3 +1082,43 @@ Measured here (4 cores, hallway.exe of 8.5 MB, graph walk): binary-kind-v1 compa
 s; not-an-item-v1 compact never to 5.7 s; utf8-valid-v1 (it cannot rank that long, so it hides)
 7.0 s to 3.0 s; all three 7.0 s to 2.9 s. On fewer cores the room takes proportionally longer.
 busy() still cannot cancel a job that is running.
+Thin stayed on for every line after a walk to a long file (Edward, 2 October 2026: titles gone
+from most items, no record covers, tapes only drawn when stepped up to). A walk past the budget
+(the File Locator, the node graph, J to a long file) set thin for the whole hallway, so on every
+other line the rooms either side stood bare and only your own room had pictures (face_rooms 0).
+Now set_thin(on, line) records the one line it is for (thin_line_; -1 for every line), and thin()
+asks whether it applies to the line you are on: a walk makes only the binary line thin, while the
+setup menu's go-in-anyway and --thin still make every line thin, as before.
+Filter list round (Edward, 2 October 2026: utf8-valid broke binary's percentage; X ticked
+neighbour-agreement instead of row-runs on video; a Filtered: X% beside each filter; start merging
+and retiring; a note on optimise all and COST).
+- utf8-valid-v1 is counted with binary-kind-v1 and not-an-item-v1's pages: KindCounter::utf8_count
+  walks the head automaton and UTF-8's side by side over the first 16 bytes, then multiplies by
+  UTF-8's completions (Utf8Counter::tail_sums from its table). Past the table (about 7.4 KB) the same
+  walk runs on Scaled (a double and a power of two) with Utf8Counter::tail_estimate (a matrix power
+  of [[M,0],[M,I]], 18x18, rescaled after each product), so 8.5 MB takes microseconds. BinarySieve
+  gains can_count / count_exact / survivors / survivors_log10, apart from can_rank (compact still
+  needs utf8-valid alone). The menu shows the exact share, or `~` and the estimate
+  (filtered_estimate), and two new footers (status.survivors_no_compact, survivors_estimated).
+  Oracle: utf8-joint rows in vectors_utf8_v1.tsv (224, written by utf8_joint, whose UTF-8 states are
+  Python's own incremental decoder's held-back bytes, grouped by their whole future, since the
+  decoder holds back ED A0 and refuses it a byte later); asserted against every file of up to 2
+  bytes for every kind set. Tests: those vectors, every file of up to 2 bytes judged against the
+  count for every kind set, controls and two page patterns, every kind = utf8-valid's own count,
+  and estimate = exact (to 1e-9 in log10) at 20, 300 and 3000 bytes.
+- Each filter row shows Filtered: X%, its share alone with its settings as they stand (and what
+  ticking it ticks too): Menu::stack_job is the line tally's key and work, now shared; filter_share
+  runs one per filter on the workers and keeps it (shares_). StackInfo::kept_log10 carries the share
+  as a number.
+- X (and Z, C): of two filters that clash, the one that removes more alone is kept (then arithmetic
+  last, then newer versions). The shares are counted on the workers first (seconds: the books'
+  pages with the grammars); toggle_all_filters starts them and poll_toggle (each frame) ticks when
+  they are in, the footer saying so meanwhile; a scripted key waits for it. Unticking is at once.
+  Result at defaults: row-runs-v1 on image and video; the text automata (function-words first).
+- Retired, as replaced by an automaton (FilterSpec::replaced_by, in the list and `sieve filters`):
+  clean-v1 by clean-data-v1, clean-v2 by the new clean-data-v2 (a table: clean-data-v1 and a
+  padding state), key-v1 and key-data-v1 by key-data-v2. Plugins are retired by name and SHA-256
+  (plugin_spec). Checked: equal counts and sampled survivors both ways; clean-data-v2 also
+  exhaustively to 4 symbols, against the oracle's engine at 5 lengths (added to CI's plugin loop),
+  and key-data-v2 on all 72 keys. What is left, and what blocks each: FILTERS-CONFLICTS.md, "Merging
+  and retiring: what is left". The optimise-all and COST note: IDEAS.md §12.

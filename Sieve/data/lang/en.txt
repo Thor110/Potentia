@@ -196,6 +196,11 @@ filters.filtered = - amount of content filtered: {0}
 filters.filtered.kept = kept {0}
 filters.filtered.removed = removed {0}
 filters.filtered.unknown = not countable with these filters
+filters.share = Filtered: {0}
+filters.share.counting = Filtered: counting...
+filters.share.unknown = not countable alone
+filters.replaced_by = Retired: {0} is the same rule as an automaton, which counts at any length and merges with the other automata.
+filters.weighing = weighing the filters that clash, to keep the stronger of each pair...
 filters.intro = A unit is shelved only if it passes every ticked filter.
 filters.intro.books = A book is shelved only if its cover, title and pages pass their ticked filters.
 filters.mode = display mode: {0}
@@ -239,6 +244,8 @@ status.survivors = survivors: {0} (exact); compact in every ordering
 status.survivors_none = survivors: {0} (exact): nothing to shelve
 status.books = surviving books: ~10^{0} (exact); compact in every ordering
 status.not_countable = survivors not countable exactly: {0}
+status.survivors_no_compact = {0} (exact); compact unavailable: {1}
+status.survivors_estimated = survivors: ~10^{0} (estimated); compact unavailable: {1}
 status.error = error: {0}
 
 ; ---- the hallway: top bar, the book you look at, the book in hand, messages

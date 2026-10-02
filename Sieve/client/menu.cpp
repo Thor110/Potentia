@@ -705,6 +705,12 @@ void Menu::press(SDL_Keycode key, SDL_Keymod mod)
     bool done = false;
     Result r = Result::Enter;
     handle(e, done, r);
+    // A scripted key waits, as a person would, for what it started (X weighing filters that clash).
+    if (toggling_)
+    {
+        finish_filter_warmup();
+        poll_toggle();
+    }
 }
 
 void Menu::handle(const SDL_Event& event, bool& done, Result& result)
@@ -866,6 +872,7 @@ Menu::Result Menu::run()
             handle(e, done, result);
             while (SDL_PollEvent(&e)) handle(e, done, result);
         }
+        poll_toggle(); // X: the ticks, once the filters that clash are weighed
         {
             sieve::cli::timings::Scope timed("menu.setup.frame"); // its slowest: the first, which counts the lines
             render();
@@ -1254,83 +1261,179 @@ static std::string filtered_text(const sieve::BigUint& kept, const sieve::BigUin
     return out;
 }
 
+// The same from an estimate of the survivors (their log10), where they are too many to count
+// exactly (utf8-valid-v1 past its table): marked "~", worked out in doubles, so its last figures
+// are not guaranteed, but read the same way.
+static std::string filtered_estimate(double kept_log10, const sieve::BigUint& total)
+{
+    const double lt = total.log10_approx(), lk = std::min(0.0, kept_log10 - lt);
+    if (!std::isfinite(kept_log10)) return "~100%";
+    const double kept = std::pow(10.0, lk), removed = -std::expm1(lk * std::log(10.0));
+    if (removed <= 0) return "~0%";
+    std::string pct;
+    bool cut = false, extra = false;
+    if (kept < 1e-14)
+    {
+        pct = "99.999999999999";
+        cut = true;
+    }
+    else
+        for (uint32_t d = 1;; ++d)
+        {
+            char buf[64];
+            std::snprintf(buf, sizeof buf, "%.0f", std::floor(removed * std::pow(10.0, double(d + 2))));
+            std::string digits = buf;
+            if (digits.size() < d + 1) digits.insert(0, d + 1 - digits.size(), '0');
+            const std::string whole = digits.substr(0, digits.size() - d), frac = digits.substr(digits.size() - d);
+            pct = whole + "." + frac;
+            const bool all_zero = whole == "0" && frac.find_first_not_of('0') == std::string::npos;
+            const bool all_nine = whole == "99" && frac.find_first_not_of('9') == std::string::npos;
+            if (!all_zero && !all_nine)
+            {
+                if (d > 1 && !extra)
+                {
+                    extra = true;
+                    continue;
+                }
+                break;
+            }
+            if (d == 12)
+            {
+                cut = true;
+                break;
+            }
+        }
+    std::string out = "~" + pct + (cut ? "...%" : "%");
+    const double lr = std::log10(removed);
+    if (lk <= lr) out += "  (" + trf("filters.filtered.kept", {"10^" + fixed(lk, 2)}) + ")";
+    else out += "  (" + trf("filters.filtered.removed", {"10^" + fixed(lr, 2)}) + ")";
+    return out;
+}
+
 // Which tab of the filters window lists a filter: 0 built-in, 1 custom (plugins), 2 retired.
 int tab_of(const sieve::FilterSpec& f) { return f.retired ? 2 : f.plugin_sha256.empty() ? 0 : 1; }
 
-const Menu::StackInfo& Menu::stack_info(int i)
+// A stack's tally from its survivors: the share removed, the survivors and the footer's line.
+void Menu::survivors_of(StackInfo& out, const sieve::BigUint& n, const sieve::BigUint& total)
 {
-    if (i == 4) return book_stack_info();
-    auto survivors = [](StackInfo& out, const sieve::BigUint& n, const sieve::BigUint& total) {
-        out.filtered = filtered_text(n, total);
-        out.survivor_bits = n.is_zero() ? 0 : n.log10_approx() / std::log10(2.0);
-        out.status = trf(n.is_zero() ? "status.survivors_none" : "status.survivors",
-                         {n.log10_approx() < 15 ? n.to_decimal() : "~10^" + fixed(n.log10_approx(), 1)});
-    };
-    auto none = [](StackInfo& out) {
-        out.status = tr("status.none_units");
-        out.filtered = "0%";
-    };
-    auto settings_key = [](const sieve::cli::LineFilters& lf) {
-        std::string key = std::string(to_string(lf.mode)) + ":";
-        for (const auto& n : lf.enabled) key += n + ",";
-        for (const auto& [n, vals] : lf.values)
-            for (const auto& [k, v] : vals) key += n + "." + k + "=" + v + ";";
-        return key;
-    };
+    out.filtered = filtered_text(n, total);
+    out.survivor_bits = n.is_zero() ? 0 : n.log10_approx() / std::log10(2.0);
+    out.kept_log10 = n.is_zero() ? -std::numeric_limits<double>::infinity() : n.log10_approx() - total.log10_approx();
+    out.status = trf(n.is_zero() ? "status.survivors_none" : "status.survivors",
+                     {n.log10_approx() < 15 ? n.to_decimal() : "~10^" + fixed(n.log10_approx(), 1)});
+}
+
+void Menu::none_of(StackInfo& out)
+{
+    out.status = tr("status.none_units");
+    out.filtered = "0%";
+    out.kept_log10 = 0;
+}
+
+static std::string settings_key(const sieve::cli::LineFilters& lf)
+{
+    std::string key = std::string(to_string(lf.mode)) + ":";
+    for (const auto& n : lf.enabled) key += n + ",";
+    for (const auto& [n, vals] : lf.values)
+        for (const auto& [k, v] : vals) key += n + "." + k + "=" + v + ";";
+    return key;
+}
+
+// The key and the work for one stack's tally: line i (0-3 text, image, audio, video; 5 models;
+// 6 binary; 4 with a part, one part of the books) with filters `lf`. The work runs on a worker, so
+// it takes copies of everything it needs. Used for each line's own stack (stack_info) and for each
+// filter alone (filter_share).
+std::pair<std::string, std::function<Menu::StackInfo()>> Menu::stack_job(int i, const sieve::cli::LineFilters& lf, int part) const
+{
     // The models line: its own stack on a model's number (sieve/modelsieve.hpp).
     if (i == 5)
     {
-        const sieve::cli::LineFilters lf = cfg_.models;
         const uint32_t v = s_.model_vertices, f = s_.model_faces, c = s_.model_coords;
         const std::string key = "models/" + std::to_string(v) + "/" + std::to_string(f) + "/" + std::to_string(c) + "/" + settings_key(lf);
-        return resolve(i, key, [lf, v, f, c, survivors, none]() {
-            StackInfo out;
-            const sieve::ModelSpace space(v, f, c, "sieve");
-            const sieve::ModelSieve ms = sieve::cli::build_model_sieve(space, lf);
-            if (!ms.empty() && !ms.can_rank()) out.status = trf("status.not_countable", {ms.blocker()});
-            else if (ms.empty()) none(out);
-            else survivors(out, ms.count(), space.size());
-            return out;
-        });
+        return {key, [lf, v, f, c]() {
+                    StackInfo out;
+                    const sieve::ModelSpace space(v, f, c, "sieve");
+                    const sieve::ModelSieve ms = sieve::cli::build_model_sieve(space, lf);
+                    if (!ms.empty() && !ms.can_rank()) out.status = trf("status.not_countable", {ms.blocker()});
+                    else if (ms.empty()) none_of(out);
+                    else survivors_of(out, ms.count(), space.size());
+                    return out;
+                }};
     }
     // The binary line: its files' kinds, counted exactly at any length (sieve/filekind.hpp), and
     // the pages as its items (counted exactly; the other forms need the lines built).
     if (i == 6)
     {
-        const sieve::cli::LineFilters lf = cfg_.binary;
         const uint32_t bytes = s_.binary_bytes, length = s_.length;
         const std::string alphabet = s_.alphabet;
         const std::string key = "binary/" + std::to_string(bytes) + "/" + alphabet + "/" + std::to_string(length) + "/" + settings_key(lf);
-        return resolve(i, key, [lf, bytes, length, alphabet, survivors, none]() {
-            StackInfo out;
-            const sieve::BinarySpace space(std::max<uint32_t>(1, bytes), "sieve");
-            sieve::BinaryItems items;
-            items.pages = sieve::cli::page_pattern(sieve::alphabet_of(alphabet), length);
-            const sieve::BinarySieve bs = sieve::cli::build_binary_sieve(space, lf, &items);
-            if (!bs.empty() && !bs.can_rank()) out.status = trf("status.not_countable", {bs.blocker()});
-            else if (bs.empty()) none(out);
-            else survivors(out, bs.count(), space.size());
-            return out;
-        });
+        return {key, [lf, bytes, length, alphabet]() {
+                    StackInfo out;
+                    const sieve::BinarySpace space(std::max<uint32_t>(1, bytes), "sieve");
+                    sieve::BinaryItems items;
+                    items.pages = sieve::cli::page_pattern(sieve::alphabet_of(alphabet), length);
+                    const sieve::BinarySieve bs = sieve::cli::build_binary_sieve(space, lf, &items);
+                    if (bs.empty()) none_of(out);
+                    else if (bs.can_rank()) survivors_of(out, bs.count(), space.size());
+                    else if (!bs.can_count()) out.status = trf("status.not_countable", {bs.blocker()});
+                    else if (bs.count_exact())
+                    {
+                        // Counted, though compact cannot number them (utf8-valid-v1 with the kind filters).
+                        survivors_of(out, bs.survivors(), space.size());
+                        out.status = trf("status.survivors_no_compact", {out.status.substr(0, out.status.find(" (exact)")), bs.blocker()});
+                    }
+                    else
+                    {
+                        // Past utf8-valid-v1's table: estimated.
+                        const double l = bs.survivors_log10();
+                        out.filtered = filtered_estimate(l, space.size());
+                        out.survivor_bits = std::isfinite(l) ? l / std::log10(2.0) : 0;
+                        out.kept_log10 = l - space.size().log10_approx();
+                        out.status = trf("status.survivors_estimated", {fixed(l, 1), bs.blocker()});
+                    }
+                    return out;
+                }};
     }
+    const sieve::FilterLine fl = i == 4 ? book_part_line(std::max(0, part)) : filter_line_of(i);
+    const std::string key = (i == 4 ? "part" + std::to_string(part) + "/" : std::string()) + fl.symbols_id + "/" + std::to_string(fl.length) + "/" + settings_key(lf);
     if (line_sizes()[size_t(i)].bits > kTooLargeBits)
+        return {key, [] { return StackInfo{"too large", tr("status.too_large"), -1, ""}; }};
+    return {key, [fl, lf]() {
+                StackInfo out;
+                sieve::cli::timings::Scope timed("menu.survivors"); // a line's stack built and counted
+                const sieve::FilterStack st = sieve::cli::build_stack(fl, lf);
+                if (st.empty()) none_of(out);
+                else if (st.ranker()) survivors_of(out, st.ranker()->count(), sieve::BigUint::pow(fl.base, fl.length));
+                else out.status = trf("status.not_countable", {st.compact_blocker()});
+                return out;
+            }};
+}
+
+const Menu::StackInfo& Menu::stack_info(int i)
+{
+    if (i == 4) return book_stack_info();
+    if (i < 4 && line_sizes()[size_t(i)].bits > kTooLargeBits)
     {
         info_[i] = StackInfo{"too large", tr("status.too_large"), -1, ""};
         return info_[i];
     }
-    const sieve::FilterLine fl = filter_line_of(i);
-    const sieve::cli::LineFilters lf = cfg_.lines[i];
-    const std::string key = fl.symbols_id + "/" + std::to_string(fl.length) + "/" + settings_key(lf);
-    return resolve(i, key, [fl, lf, survivors, none]() {
-        StackInfo out;
-        sieve::cli::timings::Scope timed("menu.survivors"); // a line's stack built and counted
-        const sieve::FilterStack st = sieve::cli::build_stack(fl, lf);
-        if (st.empty()) none(out);
-        else if (st.ranker()) survivors(out, st.ranker()->count(), sieve::BigUint::pow(fl.base, fl.length));
-        else out.status = trf("status.not_countable", {st.compact_blocker()});
-        return out;
-    });
+    const sieve::cli::LineFilters& lf = i == 5 ? cfg_.models : i == 6 ? cfg_.binary : cfg_.lines[i];
+    auto [key, work] = stack_job(i, lf);
+    return resolve(i, key, std::move(work));
 }
+
+// One filter alone on its line (with what ticking it ticks too, its prerequisites), with its
+// settings as they stand: the share of the line it removes, for comparing filters at a glance and
+// for X to keep the stronger of two that clash. Counted on a worker like a line's stack, and kept.
+sieve::cli::LineFilters Menu::alone(const sieve::cli::LineFilters& lf, const std::string& filter)
+{
+    sieve::cli::LineFilters one;
+    one.mode = sieve::cli::FilterMode::Mark;
+    one.values = lf.values;
+    (void)sieve::cli::tick_filter(one, filter, true);
+    return one;
+}
+
 
 // The books line: each part's stack, counted exactly where every part with filters can rank
 // (a part with no filters keeps all its units), on a worker like the other lines.
@@ -1519,6 +1622,34 @@ Workers& workers()
 
 void finish_filter_warmup() { workers().finish(); }
 
+const Menu::StackInfo* Menu::filter_share(int line, int part, const sieve::cli::LineFilters& lf, const std::string& filter)
+{
+    auto [key, work] = stack_job(line, alone(lf, filter), part);
+    key = std::to_string(line) + "|" + key;
+    auto it = shares_.find(key);
+    if (it == shares_.end())
+    {
+        if (shares_.size() > 1024) shares_.clear(); // settings long gone; a page of filters is far fewer
+        auto job = std::make_shared<Job>();
+        it = shares_.emplace(key, job).first;
+        auto done = std::make_shared<std::atomic<bool>>(false);
+        std::thread t([job, done, work = std::move(work)] {
+            try
+            {
+                job->result = work();
+            }
+            catch (const std::exception& e)
+            {
+                job->result = StackInfo{"", trf("status.error", {e.what()}), -1, ""};
+            }
+            job->ready = true;
+            *done = true;
+        });
+        workers().add(std::move(t), done);
+    }
+    return it->second->ready ? &it->second->result : nullptr;
+}
+
 bool filter_workers_busy()
 {
     Workers& w = workers();
@@ -1566,58 +1697,107 @@ const Menu::StackInfo& Menu::resolve(int i, const std::string& key, std::functio
     return waiting_[size_t(i)];
 }
 
-void Menu::toggle_all_filters(ToggleScope scope)
+// The filters a toggle reaches: this tab of the open line (Z), both main tabs of it (C), or both
+// main tabs of every line (X).
+std::vector<Menu::Reach> Menu::reach_of(ToggleScope scope, int overlay, int tab)
 {
     const bool both_tabs = scope != ToggleScope::ThisTab;
-    std::vector<std::pair<sieve::cli::LineFilters*, sieve::FilterLine>> stacks;
+    struct Stack
+    {
+        sieve::cli::LineFilters* lf;
+        sieve::FilterLine line;
+        int li, part; // the line (0-6) and, on the books, the part
+    };
+    std::vector<Stack> stacks;
     if (scope == ToggleScope::EveryLine)
     {
-        for (int i = 0; i < 4; ++i) stacks.emplace_back(&cfg_.lines[i], filter_line_of(i));
-        for (int part = 0; part < 3; ++part) stacks.emplace_back(&cfg_.books.parts[part], book_part_line(part));
-        stacks.emplace_back(&cfg_.models, filter_line_of(5));
-        stacks.emplace_back(&cfg_.binary, filter_line_of(6));
+        for (int i = 0; i < 4; ++i) stacks.push_back({&cfg_.lines[i], filter_line_of(i), i, -1});
+        for (int part = 0; part < 3; ++part) stacks.push_back({&cfg_.books.parts[part], book_part_line(part), 4, part});
+        stacks.push_back({&cfg_.models, filter_line_of(5), 5, -1});
+        stacks.push_back({&cfg_.binary, filter_line_of(6), 6, -1});
     }
-    else if (overlay_ == 4)
-        for (int part = 0; part < 3; ++part) stacks.emplace_back(&cfg_.books.parts[part], book_part_line(part));
-    else if (overlay_ >= 0 && overlay_ < 4) stacks.emplace_back(&cfg_.lines[overlay_], filter_line_of(overlay_));
-    else if (overlay_ == 5) stacks.emplace_back(&cfg_.models, filter_line_of(5));
-    else if (overlay_ == 6) stacks.emplace_back(&cfg_.binary, filter_line_of(6));
-    std::vector<std::pair<sieve::cli::LineFilters*, std::string>> in_reach;
-    for (auto& [lf, line] : stacks)
-        for (const sieve::FilterSpec* f : sieve::filters_for(line))
+    else if (overlay == 4)
+        for (int part = 0; part < 3; ++part) stacks.push_back({&cfg_.books.parts[part], book_part_line(part), 4, part});
+    else if (overlay >= 0 && overlay < 4) stacks.push_back({&cfg_.lines[overlay], filter_line_of(overlay), overlay, -1});
+    else if (overlay == 5) stacks.push_back({&cfg_.models, filter_line_of(5), 5, -1});
+    else if (overlay == 6) stacks.push_back({&cfg_.binary, filter_line_of(6), 6, -1});
+    std::vector<Reach> in_reach;
+    for (const Stack& st : stacks)
+        for (const sieve::FilterSpec* f : sieve::filters_for(st.line))
             // This tab, or the two main tabs: retired filters are ticked only by hand, or by Z
             // on their own tab.
             // title-v1 is for a book's title page (words, then SPACEs): ticking all ticks it
             // only there, never on pages, where it would leave little but short lines.
-            if ((both_tabs ? tab_of(*f) != 2 : tab_of(*f) == otab_) && (f->id != "title" || lf == &cfg_.books.parts[1]))
-                in_reach.emplace_back(lf, f->name());
-    // Where two clash, the one kept is the more useful: newer versions first, and the filters
-    // counted by arithmetic (a sliver each, and clashing with everything) last.
-    std::stable_sort(in_reach.begin(), in_reach.end(), [](const auto& x, const auto& y) {
-        const sieve::FilterSpec* a = sieve::find_filter(x.second);
-        const sieve::FilterSpec* b = sieve::find_filter(y.second);
+            if ((both_tabs ? tab_of(*f) != 2 : tab_of(*f) == tab) && (f->id != "title" || st.lf == &cfg_.books.parts[1]))
+                in_reach.push_back({st.lf, st.li, st.part, f->name()});
+    // Which of them clash with another in reach on the same stack: those are weighed.
+    for (Reach& r : in_reach)
+    {
+        const sieve::FilterSpec* a = sieve::find_filter(r.name);
+        for (const Reach& o : in_reach)
+            if (o.lf == r.lf && o.name != r.name)
+                if (const sieve::FilterSpec* b = sieve::find_filter(o.name); a && b && !sieve::filter_conflict(*a, *b).empty()) r.clashes = true;
+    }
+    return in_reach;
+}
+
+void Menu::toggle_all_filters(ToggleScope scope)
+{
+    std::vector<Reach> in_reach = reach_of(scope, overlay_, otab_);
+    // Anything in reach ticked: untick them all, at once. Otherwise tick them all (bar those that
+    // clash), once the filters that clash have been weighed. ("All ticked" can never be reached
+    // when some clash, so it is not the test.)
+    if (std::any_of(in_reach.begin(), in_reach.end(), [](const Reach& e) { return e.lf->is_enabled(e.name); }))
+    {
+        toggling_.reset();
+        for (const Reach& r : in_reach) (void)sieve::cli::tick_filter(*r.lf, r.name, false);
+        save_filters();
+        return;
+    }
+    // Where two clash, the one kept is the one that filters more on its own, its settings as they
+    // stand. Weighing them can take seconds (a grammar over the books' pages), so it is done on the
+    // workers while the window answers, and the ticking is done when they are in (poll_toggle).
+    for (const Reach& r : in_reach)
+        if (r.clashes) (void)filter_share(r.li, r.part, *r.lf, r.name);
+    toggling_ = Toggling{scope, overlay_, otab_};
+    poll_toggle();
+}
+
+void Menu::poll_toggle()
+{
+    if (!toggling_) return;
+    std::vector<Reach> in_reach = reach_of(toggling_->scope, toggling_->overlay, toggling_->tab);
+    for (Reach& r : in_reach)
+        if (r.clashes)
+        {
+            const StackInfo* sh = filter_share(r.li, r.part, *r.lf, r.name);
+            if (!sh) return; // still weighing
+            r.kept = sh->kept_log10;
+        }
+    toggling_.reset();
+    // The filters counted by arithmetic (a sliver each, and clashing with everything) last; then
+    // the stronger alone first, a filter that could not be counted alone after those that could;
+    // then newer versions first.
+    std::stable_sort(in_reach.begin(), in_reach.end(), [](const Reach& x, const Reach& y) {
+        const sieve::FilterSpec* a = sieve::find_filter(x.name);
+        const sieve::FilterSpec* b = sieve::find_filter(y.name);
         if (!a || !b) return false;
         const bool arith_a = a->counts_as == "arithmetic", arith_b = b->counts_as == "arithmetic";
         if (arith_a != arith_b) return arith_b;
+        const bool known_a = !std::isnan(x.kept), known_b = !std::isnan(y.kept);
+        if (known_a != known_b) return known_a;
+        if (known_a && x.kept != y.kept) return x.kept < y.kept;
         return a->version > b->version;
     });
-    // Anything in reach ticked: untick them all. Otherwise tick them all (bar those that clash).
-    // ("All ticked" can never be reached when some clash, so it is not the test.)
-    const bool all_on = std::any_of(in_reach.begin(), in_reach.end(), [](const auto& e) { return e.first->is_enabled(e.second); });
-    // Ticking all keeps the first of any two that cannot be counted together (the list's order),
+    // Ticking all keeps the first of any two that cannot be counted together (the order above),
     // and skips the other: docs/FILTERS-CONFLICTS.md.
-    for (auto& [lf, name] : in_reach)
+    for (const Reach& r : in_reach)
     {
-        if (all_on)
-        {
-            (void)sieve::cli::tick_filter(*lf, name, false);
-            continue;
-        }
-        const sieve::FilterSpec* a = sieve::find_filter(name);
+        const sieve::FilterSpec* a = sieve::find_filter(r.name);
         bool clash = false;
-        for (const std::string& other : lf->enabled)
+        for (const std::string& other : r.lf->enabled)
             if (const sieve::FilterSpec* b = sieve::find_filter(other); a && b && !sieve::filter_conflict(*a, *b).empty()) clash = true;
-        if (!clash) (void)sieve::cli::tick_filter(*lf, name, true);
+        if (!clash) (void)sieve::cli::tick_filter(*r.lf, r.name, true);
     }
     save_filters();
 }
@@ -1994,8 +2174,16 @@ void Menu::render_overlay(float W, float H)
         else if (row.kind == ORow::Kind::Filter)
         {
             const sieve::FilterSpec* f = sieve::find_filter(row.filter);
-            it.lines = {std::string(lf.is_enabled(row.filter) ? "[x] " : "[ ] ") + f->name()};
+            // Beside its name, the share of the line it removes on its own, as its settings stand,
+            // to compare filters at a glance (counted on a worker; "counting..." until then).
+            const StackInfo* share = filter_share(overlay_, row.part, lf, row.filter);
+            const std::string tally = !share ? tr("filters.share.counting")
+                                             : trf("filters.share", {share->filtered.empty() ? tr("filters.share.unknown") : share->filtered});
+            std::string head = std::string(lf.is_enabled(row.filter) ? "[x] " : "[ ] ") + f->name();
+            head += std::string(std::max<size_t>(3, 28 > head.size() ? 28 - head.size() : 3), ' ') + tally;
+            it.lines = {head};
             std::string d = tr_or("filter." + f->name(), f->description);
+            if (!f->replaced_by.empty()) d += " " + trf("filters.replaced_by", {f->replaced_by});
             while (!d.empty())
             {
                 size_t cut = d.size() <= cols - 4 ? d.size() : d.rfind(' ', cols - 4);
@@ -2077,7 +2265,8 @@ void Menu::render_overlay(float W, float H)
     if (oscroll_ > 0) text(r_, box_.x + box_.w - 90, top - 12, tr("filters.more_above"), 1, grey);
     if (y < bottom && false) {}
     const StackInfo& info = stack_info(overlay_);
-    text(r_, x, box_.y + box_.h - 36, info.status.substr(0, cols), 1, white);
+    const std::string footer = toggling_ ? tr("filters.weighing") : info.status;
+    text(r_, x, box_.y + box_.h - 36, footer.substr(0, cols), 1, white);
     text(r_, x, box_.y + box_.h - 20, tr("filters.footer"), 1, grey);
 }
 

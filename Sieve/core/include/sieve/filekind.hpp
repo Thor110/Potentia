@@ -83,6 +83,24 @@ KindSet kind_set_of(const std::string& name);
 // The setting's choices, in the order the menu offers them.
 const std::vector<std::string>& kind_set_names();
 
+// A positive number as a double and a power of two: an estimate (about 15 significant figures) of a
+// count far too long to hold exactly, such as the well-formed UTF-8 files of megabytes. Only sums
+// and products of counts, so nothing cancels and the figures hold.
+struct Scaled
+{
+    double m = 0;  // in [0.5, 1), or 0
+    int64_t e = 0; // the value is m * 2^e
+    Scaled() = default;
+    explicit Scaled(double v);
+    static Scaled of(const BigUint& v);
+    Scaled& operator+=(const Scaled& o);
+    Scaled& operator-=(const Scaled& o); // o <= this (a part taken from its whole)
+    Scaled& operator*=(const Scaled& o);
+    void mul_small(uint64_t n) { *this *= Scaled(double(n)); }
+    bool is_zero() const { return m == 0; }
+    double log10() const; // -infinity for zero
+};
+
 // The files of 0..max_bytes bytes whose kind is in a set: counted, ranked and unranked exactly, in
 // the binary line's positional order (see above).
 class KindCounter
@@ -136,6 +154,18 @@ private:
 
 public:
     BigUint shorter_than(uint64_t length) const; // survivors shorter than `length` bytes
+
+    // With utf8-valid-v1 (Utf8Counter): the files whose kind is chosen and that are well-formed
+    // UTF-8. The head automaton and UTF-8's are walked side by side over the first 16 bytes, where
+    // the kind is decided; after that only UTF-8's matters. `tail[u]`: the ways to finish a file
+    // from UTF-8 state u with 1 to max_bytes - 16 more bytes, summed (Utf8Counter::tail_sums, or
+    // tail_estimate). With a pattern, only its files (of its one length), and `tail` is not used.
+    BigUint utf8_count(bool text_only, const std::vector<BigUint>& tail, const Pattern* pat = nullptr) const;
+    Scaled utf8_estimate(bool text_only, const std::vector<Scaled>& tail, const Pattern* pat = nullptr) const;
+
+private:
+    template <class T>
+    T utf8_joint(bool text_only, const std::vector<T>& tail, const Pattern* pat) const;
 };
 
 // The other lines' items as the binary line holds them (not-an-item-v1): each a file that is
@@ -177,6 +207,12 @@ public:
     static constexpr uint8_t kDead = 0xFF;
     static uint8_t step(uint8_t state, uint8_t byte, bool text_only); // state 0 is a whole character
 
+    // For each state u, the ways to end on a whole character after 1 to `most` more bytes, summed:
+    // exactly from the table (can_rank() only), or estimated at any length (a power of a small
+    // matrix, so a line of megabytes takes microseconds).
+    std::vector<BigUint> tail_sums(uint64_t most) const;
+    static std::vector<Scaled> tail_estimate(bool text_only, uint64_t most);
+
 private:
     uint64_t max_bytes_;
     bool text_only_, can_rank_ = true;
@@ -202,6 +238,13 @@ public:
     bool needs_file() const { return !item_forms_.empty() || utf8_filter_ >= 0; }
     // Whether the survivors can be counted and ranked (not when a form is judged file by file).
     bool can_rank() const { return can_rank_; }
+    // Whether they can at least be counted (for the share a stack filters): exactly, as count_of()
+    // gives, or estimated, as survivors_log10() gives. utf8-valid-v1 counts with the kind filters
+    // and not-an-item-v1's pages but ranks only on its own, and past its table it is estimated.
+    bool can_count() const { return can_count_; }
+    bool count_exact() const { return count_exact_; }
+    const BigUint& survivors() const { return can_rank_ ? count_ : survivors_; } // count_exact() only
+    double survivors_log10() const { return survivors_log10_; }
     std::string blocker() const { return blocker_; }
 
     const BigUint& count() const { return count_; }
@@ -233,6 +276,9 @@ private:
     BigUint count_, pages_in_;             // survivors; pages among the kind survivors
     KindCounter::PatternTable pages_table_; // the pages' pattern table, worked out once
     bool can_rank_ = true, exclude_pages_ = false;
+    bool can_count_ = true, count_exact_ = true;
+    BigUint survivors_;            // counted (exactly) though not ranked
+    double survivors_log10_ = 0;
     std::string blocker_;
     std::unique_ptr<Shuffle> shuffle_;
     size_t hex_width_ = 1;

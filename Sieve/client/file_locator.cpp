@@ -297,7 +297,7 @@ void Hallway::walk_to_file(const std::vector<uint8_t>& bytes, const std::string&
     // which for a file of megabytes takes seconds, on a worker while the window says LOCATING.
     if (past)
     {
-        set_thin(true);
+        set_thin(true, kBinaryLine);
         mode_ = AddressMode::Positional;
     }
     clear_faces();

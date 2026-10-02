@@ -1492,7 +1492,7 @@ int cmd_filters(const Args& a)
     for (const FilterSpec* f : list)
     {
         std::cout << (lf.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << (f->category.empty() ? "" : "   (" + f->category + ")")
-                  << (f->plugin_sha256.empty() ? "" : "   (custom)") << (f->retired ? "   (retired: judges only)" : "") << "\n";
+                  << (f->plugin_sha256.empty() ? "" : "   (custom)") << (!f->retired ? "" : f->replaced_by.empty() ? "   (retired: judges only)" : "   (retired: replaced by " + f->replaced_by + ")") << "\n";
         print_indented(f->description, "      ");
         if (!f->plugin_sha256.empty())
         {

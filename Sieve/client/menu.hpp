@@ -25,6 +25,9 @@
 #include <array>
 #include <memory>
 #include <functional>
+#include <limits>
+#include <map>
+#include <optional>
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
@@ -188,6 +191,25 @@ private:
     // Z: this tab of this line; C: both tabs of this line; X: both tabs of every line.
     enum class ToggleScope { ThisTab, BothTabs, EveryLine };
     void toggle_all_filters(ToggleScope scope);
+    // A filter a toggle reaches: its stack, line and part, and, where it clashes with another in
+    // reach, its share kept alone (log10) once weighed.
+    struct Reach
+    {
+        sieve::cli::LineFilters* lf;
+        int li, part;
+        std::string name;
+        bool clashes = false;
+        double kept = std::numeric_limits<double>::quiet_NaN();
+    };
+    std::vector<Reach> reach_of(ToggleScope scope, int overlay, int tab);
+    // Ticking all waits on the weighing (poll_toggle, each frame): the toggle asked for, and where.
+    struct Toggling
+    {
+        ToggleScope scope;
+        int overlay, tab;
+    };
+    std::optional<Toggling> toggling_;
+    void poll_toggle();
 
     void render_overlay(float W, float H);
     sieve::FilterLine filter_line_of(int line) const;
@@ -203,9 +225,19 @@ private:
         // The tally beside the overlay's title: how much of the line the ticked filters remove,
         // as a percentage ("99.999999999999...% (kept 10^-19.27)"), or empty when it cannot be counted.
         std::string filtered;
+        // The same as a number, for comparing stacks: log10 of the share kept (0 nothing removed,
+        // -infinity everything), or NaN when it cannot be counted.
+        double kept_log10 = std::numeric_limits<double>::quiet_NaN();
     };
+    static void survivors_of(StackInfo& out, const sieve::BigUint& n, const sieve::BigUint& total);
+    static void none_of(StackInfo& out);
     const StackInfo& stack_info(int line);
     const StackInfo& book_stack_info();
+    // The key and the work for a stack's tally (menu.cpp); `part` is the books' part for line 4.
+    std::pair<std::string, std::function<StackInfo()>> stack_job(int line, const sieve::cli::LineFilters& lf, int part = -1) const;
+    // One filter alone (and what ticking it ticks too): its tally, or null while it is counted on a
+    // worker (filter_share).
+    static sieve::cli::LineFilters alone(const sieve::cli::LineFilters& lf, const std::string& filter);
     // Stack info is worked out on worker threads (menu.cpp): the result when it is ready, else a
     // "counting" placeholder, asked again each frame.
     struct Job
@@ -221,6 +253,8 @@ private:
     std::array<Pending, 7> pending_;
     std::array<StackInfo, 7> waiting_;
     const StackInfo& resolve(int i, const std::string& key, std::function<StackInfo()> work);
+    std::map<std::string, std::shared_ptr<Job>> shares_; // filter_share's tallies, by line and settings
+    const StackInfo* filter_share(int line, int part, const sieve::cli::LineFilters& lf, const std::string& filter);
     void save_filters();
 
     SDL_Window* window_;

@@ -224,6 +224,7 @@ every length checked, and the same verdict on every unit.
 | Plugin | Ports | Form |
 | :--- | :--- | :--- |
 | `clean-data-v1` | `clean-v1` | table (above) |
+| `clean-data-v2` | `clean-v2` (trailing SPACE padding) | table: `clean-data-v1` and a padding state |
 | `words-data-v1` | `words-v1` | tokens, one set, whole edges |
 | `window-data-v1` | `window-v1` | tokens, one set, cut edges |
 | `key-data-v1` | `key-v1` (C major) | table over the note alphabet |
