@@ -3713,6 +3713,56 @@ void test_utf8_joint()
     }
 }
 
+// The filter memory (plugin.hpp): a setting, not a constant. Each kind of table counts with it set
+// just above what it needs and judges only just below, says so naming it, and reports its size.
+void test_filter_memory(const std::string& dir)
+{
+    const std::string filters = dir + "../data/filters/";
+    const TestResources none(nullptr, nullptr);
+    const double before = filter_memory();
+    CHECK(before == kDefaultFilterMemory);
+    // Two plugins merged into one automaton.
+    const auto clean = load_plugin_file(filters + "clean-data-v1.sfilter");
+    const auto pairs = load_plugin_file(filters + "letter-pairs-v1.sfilter");
+    const FilterSpec cs = plugin_spec(clean), ps = plugin_spec(pairs);
+    auto merged = [&] { return FilterStack(text_line(2000), {{&cs, {}}, {&ps, {}}}, none); };
+    const double need = merged().table_bytes();
+    CHECK(need > 4.0 * 1024 * 1024); // past the setting's least (1 MB), so both sides of it can be set
+    set_filter_memory(need * 1.01);
+    CHECK(merged().ranker() != nullptr);
+    set_filter_memory(need * 0.99);
+    {
+        const FilterStack st = merged();
+        CHECK(st.ranker() == nullptr && st.compact_blocker().find("the filter memory") != std::string::npos);
+        CHECK(st.table_bytes() == need);
+    }
+    // utf8-valid-v1's table on the binary line: exact above, estimated below.
+    const FilterSpec* utf8 = find_filter("utf8-valid-v1");
+    const BinarySpace space(4000, "sieve");
+    set_filter_memory(Utf8Counter::table_bytes(4000) * 1.01);
+    {
+        const BinarySieve bs(space, {{utf8, {}}});
+        CHECK(bs.can_rank() && bs.table_bytes() == Utf8Counter::table_bytes(4000));
+    }
+    set_filter_memory(Utf8Counter::table_bytes(4000) * 0.99);
+    {
+        const BinarySieve bs(space, {{utf8, {}}});
+        CHECK(!bs.can_rank() && bs.can_count() && !bs.count_exact() && bs.blocker().find("the filter memory") != std::string::npos);
+    }
+    // A built-in word filter's rows (clean-v1): ranks above, judges below.
+    {
+        set_filter_memory(kDefaultFilterMemory);
+        const double m1 = FilterStack(text_line(3000), {{find_filter("clean-v1"), {}}}, none).table_bytes();
+        CHECK(m1 > 0);
+        set_filter_memory(m1 * 1.01);
+        CHECK(FilterStack(text_line(3000), {{find_filter("clean-v1"), {}}}, none).ranker() != nullptr);
+        set_filter_memory(m1 * 0.99);
+        CHECK(FilterStack(text_line(3000), {{find_filter("clean-v1"), {}}}, none).ranker() == nullptr);
+    }
+    set_filter_memory(before);
+    CHECK(memory_text(512.0 * 1024 * 1024) == "512 MB" && memory_text(2.5 * 1024 * 1024 * 1024) == "2.5 GB");
+}
+
 // Variable length addressing (corridor.hpp shortest_path): on small loops, against every bearing
 // of up to the given places and every walk either way round, worked out with plain integers; and
 // the path it gives, followed as the navigator would, leads to the unit.
@@ -3911,6 +3961,7 @@ void run_all(int argc, char** argv)
         test_utf8_vectors(dir);
         test_utf8_joint();
         test_shortest_path();
+        test_filter_memory(dir);
         test_byte_conversions();
     }
 }

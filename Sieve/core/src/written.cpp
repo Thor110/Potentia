@@ -1209,7 +1209,11 @@ bool written_by_rule(const WrittenRule& rule, std::span<const uint32_t> unit)
 
 namespace {
 
-constexpr size_t kJointBudget = 3000000; // walked (two symbols named) states x lengths kept
+// The walk of two-symbol units keeps a count for each (state, length) it has been through: about
+// this many bytes each (the key, the number, the hash table's own), so as many as the filter memory
+// holds (3,000,000 in 512 MB).
+constexpr double kJointEntryBytes = 179;
+size_t joint_budget() { return size_t(filter_memory() / kJointEntryBytes); }
 
 // kept = |P| - |P and O| - |P and Bn| + |P and O and Bn| (see the header), from a state of all
 // three at once: p in P (none: every unit), q in P-and-O, and Bn's state with its two symbols.
@@ -1416,7 +1420,7 @@ private:
             if (nbeta < 0) continue;
             sum += small_joint(k, t, nbeta, r - 1);
         }
-        if (memo_.size() >= kJointBudget) throw std::length_error("the walk of two-symbol units is over its budget");
+        if (memo_.size() >= joint_budget()) throw std::length_error("the walk of two-symbol units is over its budget");
         return memo_.emplace(key, sum).first->second;
     }
 
@@ -1446,7 +1450,7 @@ private:
             if (nbeta < 0) continue;
             sum += joint(d, y, na, nb, nbeta, r - 1);
         }
-        if (memo_.size() >= kJointBudget) throw std::length_error("the walk of two-symbol units is over its budget");
+        if (memo_.size() >= joint_budget()) throw std::length_error("the walk of two-symbol units is over its budget");
         return memo_.emplace(key, sum).first->second;
     }
 
@@ -1468,7 +1472,7 @@ private:
 
 } // namespace
 
-std::unique_ptr<Ranker> written_ranker(std::shared_ptr<const WrittenRule> rule, const Dfa* keep, uint32_t length, std::string& why)
+std::unique_ptr<Ranker> written_ranker(std::shared_ptr<const WrittenRule> rule, const Dfa* keep, uint32_t length, std::string& why, double* need)
 {
     if (!rule->blocker.empty())
     {
@@ -1484,27 +1488,29 @@ std::unique_ptr<Ranker> written_ranker(std::shared_ptr<const WrittenRule> rule, 
     std::optional<Dfa> p;
     if (keep) p = minimise(*keep);
     const double fixed = (p ? bytes_of(p->states()) : 0.0) + bytes_of(rule->bnext.size());
-    if (fixed > kPluginTableBudget)
+    if (need) *need = fixed;
+    if (fixed > filter_memory())
     {
-        why = keep ? "the plugins' combined table is over the budget at this length: they judge only"
-                   : "not-written-v1's tables are over the budget at this length: it judges only";
+        why = keep ? over_table_limit("the plugins' combined table", fixed) + ": they judge only"
+                   : over_table_limit("not-written-v1's tables", fixed) + ": it judges only";
         return nullptr;
     }
     Dfa q;
     try
     {
         // As many pairs as could still fit, with room for the minimising to shrink them.
-        const size_t room = size_t(std::max(1.0, (kPluginTableBudget - fixed) / per_state)) * 4;
+        const size_t room = size_t(std::max(1.0, (filter_memory() - fixed) / per_state)) * 4;
         q = p ? intersect(*p, *rule->others, room) : minimise(*rule->others);
     }
     catch (const std::length_error&)
     {
-        why = "not-written-v1's tables are over the budget at this length: it judges only";
+        why = over_table_limit("not-written-v1's tables") + ": it judges only";
         return nullptr;
     }
-    if (fixed + bytes_of(q.states()) > kPluginTableBudget)
+    if (need) *need = fixed + bytes_of(q.states());
+    if (fixed + bytes_of(q.states()) > filter_memory())
     {
-        why = "not-written-v1's tables are over the budget at this length: it judges only";
+        why = over_table_limit("not-written-v1's tables", fixed + bytes_of(q.states())) + ": it judges only";
         return nullptr;
     }
     try

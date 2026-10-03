@@ -190,12 +190,13 @@ struct BinaryItems
 // Judged byte by byte through a small automaton; counted length by length from its table of
 // completions, and ranked in the binary line's order (shortest first, then by the bytes), so the
 // survivors compact. The table holds states x (max_bytes + 1) numbers of up to 8 max_bytes bits,
-// so past a budget (kMaxTableBits) it judges only.
+// so past the filter memory (plugin.hpp filter_memory) it judges only.
 class Utf8Counter
 {
 public:
-    static constexpr uint64_t kMaxTableBits = uint64_t(1) << 32; // 512 MB
     Utf8Counter(uint64_t max_bytes, bool text_only);
+    // Its table's memory at a line of files up to max_bytes: kStates x (n + 1) numbers of up to 8n bits.
+    static double table_bytes(uint64_t max_bytes) { return double(kStates) * double(max_bytes + 1) * double(8 * max_bytes + 64) / 8.0; }
 
     static bool valid(std::span<const uint8_t> file, bool text_only);
     bool can_rank() const { return can_rank_; }
@@ -245,6 +246,9 @@ public:
     bool count_exact() const { return count_exact_; }
     const BigUint& survivors() const { return can_rank_ ? count_ : survivors_; } // count_exact() only
     double survivors_log10() const { return survivors_log10_; }
+    // The memory its count's tables need (utf8-valid-v1's; the kinds' are small): what the filter
+    // memory must hold for it to count exactly.
+    double table_bytes() const { return table_bytes_; }
     std::string blocker() const { return blocker_; }
 
     const BigUint& count() const { return count_; }
@@ -279,6 +283,7 @@ private:
     bool can_count_ = true, count_exact_ = true;
     BigUint survivors_;            // counted (exactly) though not ranked
     double survivors_log10_ = 0;
+    double table_bytes_ = 0;
     std::string blocker_;
     std::unique_ptr<Shuffle> shuffle_;
     size_t hex_width_ = 1;

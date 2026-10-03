@@ -278,7 +278,7 @@ a conformance check, not a replacement.
   grouped by target. `sieve/plugin.hpp`: the parser (errors name their line), the compiler (the
   body run with the parameters' values), the plugin filter, and the registry that `find_filter`
   and `filters_for` read after the built-in filters. A stack of plugins ranks through the product
-  of their automata. Counting needs a table of states x (length + 1) numbers; past 512 MB a plugin
+  of their automata. Counting needs a table of states x (length + 1) numbers; past the filter memory (512 MB unless set: the setup menu's FILTER MEMORY, `--filter-memory`) a plugin
   judges only, and says so.
 - **Loading.** `tools/cli/plugins.*`: every `*.sfilter` in the installation's `filters/` folder
   (the build copies `data/filters/` there; the release ships it) and in `data/filters/` when run
@@ -315,7 +315,7 @@ a conformance check, not a replacement.
   The unit tests find the ports judging exactly as `words-v1` and `window-v1`, exhaustively at
   lengths 1 to 4 and counting the same to 9, and the grammar accepting and refusing the sentences
   it should. Compiled automata are kept for the run (the default dictionary takes about 3 s).
-  Counting needs the table to fit (512 MB): a dictionary's automaton counts at page lengths of a
+  Counting needs the table to fit the filter memory (512 MB unless set): a dictionary's automaton counts at page lengths of a
   few hundred characters; past that the plugin judges only, where the built-in `words` still
   counts with its own method. `--relations` finds `words-data-v1` stricter than `window-data-v1`,
   as it should be.
@@ -444,7 +444,7 @@ in short:
   sentence.
 - **Cost.** 258,024 distinct words. Compiling takes about 6 s cold in a release build (reading 0.4 s,
   building 0.3 s, minimising 1.6 million states 2.4 s, counting at length 32 about 3 s), then instant
-  from the cache. Both count at page lengths within the 512 MB table budget.
+  from the cache. Both count at page lengths within the filter memory (512 MB unless set).
 - **Checked.** The unit tests judge sentences with both (real order passes, the same words shuffled
   fail, "quickly the of" fails because "of" is no noun, a strict sentence may not start with a verb).
   `tests/plugins/toy-tags-v1` and `toy-tags-cut-v1` test tagged lists against the oracle in CI: two
@@ -979,7 +979,7 @@ and the oracle at four lengths.
 - **utf8-valid** is a 9-state automaton over bytes counted length by length, ranked in the binary
   line's order (shortest first, then by the bytes), so the binary line compacts to text files.
   With binary-kind-v1 or not-an-item-v1 it judges only (it needs the whole file, where they read
-  the head). Past 512 MB of table it judges only. Oracle: `utf8-vectors`, with Python's strict
+  the head). Past the filter memory (512 MB unless set) it judges only. Oracle: `utf8-vectors`, with Python's strict
   decoder as the judge and a recurrence over code points by encoded length as the count.
 - **Hard and soft** (§17): every built-in filter is labelled; the new hard one is canonical-mesh.
 

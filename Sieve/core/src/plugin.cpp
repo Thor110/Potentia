@@ -15,6 +15,9 @@
 #include "sieve/utf8.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <atomic>
+#include <cstdio>
 #include <cctype>
 #include <cstdint>
 #include <cstdio>
@@ -1766,7 +1769,8 @@ public:
     PluginFilter(Dfa dfa, uint32_t length, std::string provenance) : dfa_(std::move(dfa)), length_(length)
     {
         provenance_ = std::move(provenance);
-        fits_ = DfaRanker::table_bytes(dfa_.states(), dfa_.base, length) <= kPluginTableBudget;
+        table_bytes_ = DfaRanker::table_bytes(dfa_.states(), dfa_.base, length);
+        fits_ = table_bytes_ <= filter_memory();
     }
     bool passes(std::span<const uint32_t> unit) const override { return dfa_.accepts(unit); }
     // The counting table is built the first time it is asked for: a stack that judges only (or
@@ -1799,6 +1803,28 @@ const Dfa* plugin_dfa(const Filter& f)
 std::unique_ptr<Filter> make_dfa_filter(Dfa dfa, uint32_t length, std::string provenance)
 {
     return std::make_unique<PluginFilter>(std::move(dfa), length, std::move(provenance));
+}
+
+namespace {
+std::atomic<double> g_filter_memory{kDefaultFilterMemory};
+} // namespace
+
+double filter_memory() { return g_filter_memory.load(std::memory_order_relaxed); }
+void set_filter_memory(double bytes) { g_filter_memory.store(std::max(1024.0 * 1024, bytes), std::memory_order_relaxed); }
+
+std::string memory_text(double b)
+{
+    char buf[32];
+    if (b >= 1024.0 * 1024 * 1024) std::snprintf(buf, sizeof buf, "%.1f GB", b / (1024.0 * 1024 * 1024));
+    else std::snprintf(buf, sizeof buf, "%.0f MB", std::ceil(b / (1024.0 * 1024)));
+    return buf;
+}
+
+std::string over_table_limit(const std::string& what, double bytes)
+{
+    const std::string limit = "the filter memory (" + memory_text(filter_memory()) + ")";
+    if (bytes <= 0) return what + " would need more memory at this length than " + limit;
+    return what + " needs " + memory_text(bytes) + " of memory at this length, over " + limit;
 }
 
 FilterSpec plugin_spec(std::shared_ptr<const PluginDef> p)

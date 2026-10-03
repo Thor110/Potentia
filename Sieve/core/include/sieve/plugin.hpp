@@ -136,7 +136,19 @@ Dfa compile_plugin(const PluginDef& p, const FilterLine& line, const FilterValue
 
 // Counting needs a table of states x (length + 1) numbers; past this many bytes a plugin judges
 // only (mark, hide, excluded), and the menu says why.
-inline constexpr double kPluginTableBudget = 512.0 * 1024 * 1024;
+// The filter memory: what one count may take for its tables, in bytes. Every filter that counts by
+// a table, and the automata merged for a stack, keep within it, and judge only past it. It is a
+// setting, not a constant (the setup menu's FILTER MEMORY, saved with the application's settings;
+// `sieve --filter-memory MB`), 512 MB until it is set. Safe to read from any thread.
+inline constexpr double kDefaultFilterMemory = 512.0 * 1024 * 1024;
+double filter_memory();
+void set_filter_memory(double bytes);
+// A size for a person: "2.1 GB", "512 MB".
+std::string memory_text(double bytes);
+// Why a counting table is refused, in words: "<what> needs 2.1 GB of memory at this length, over
+// the filter memory (512 MB)". Without a size (bytes <= 0): "<what> would need more memory at this
+// length than the filter memory (512 MB)".
+std::string over_table_limit(const std::string& what, double bytes = 0);
 
 // The registered filter for a plugin: its make() compiles for the line and values, and builds the
 // ranker when the table fits the budget.

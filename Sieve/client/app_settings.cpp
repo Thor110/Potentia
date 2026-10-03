@@ -151,6 +151,10 @@ AppSettings AppSettings::load(const fs::path& path)
             {
                 try { s.angle_decimals = std::clamp(std::stoi(value), 0, kMaxAngleDecimals); } catch (...) {}
             }
+            else if (key == "filter_memory_mb")
+            {
+                try { s.filter_memory_mb = std::clamp(std::stoi(value), 64, 1048576); } catch (...) {}
+            }
             else if (key == "model_cache_mb")
             {
                 try { s.model_cache_mb = std::clamp(std::stoi(value), 8, 4096); } catch (...) {}
@@ -187,6 +191,7 @@ bool AppSettings::save(const fs::path& path) const
       << "\n[world]\n"
       << "model_cache_mb = " << model_cache_mb << "   ; the models line: memory for rendered crate faces\n"
       << "angle_decimals = " << angle_decimals << "   ; decimal places on the compass's degree readout\n"
+      << "filter_memory_mb = " << filter_memory_mb << "   ; the most one count of the filters' survivors may take for its tables\n"
       << "\n[controls]\n"
       << "mouse_sensitivity = " << mouse_sensitivity << "   ; percent\n"
       << "invert_mouse_y = " << on_off(invert_mouse_y) << "\n"

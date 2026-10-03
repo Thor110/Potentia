@@ -162,6 +162,12 @@ jobs:
           downs=$(python -c "print(','.join(['Down']*8))")
           $H --menu --settings mc.ini --press "$downs,Right,Right" --screenshot mc.png > /dev/null
           grep -q "^model_cache_mb = 80" mc.ini
+          # The filter memory, the last GLOBAL row (11): what one count's tables may take, in steps of
+          # 256 MB from 512, saved with the application's settings.
+          rm -f fm.ini
+          downs=$(python -c "print(','.join(['Down']*11))")
+          $H --menu --settings fm.ini --press "$downs,Right" --screenshot fm.png > /dev/null
+          grep -q "^filter_memory_mb = 768" fm.ini
           # ...and Graphics Memory, which the setup menu's budget keeps it within, is a graphics
           # setting: Settings, Graphics, then the seventh row.
           rm -f gm.ini
@@ -187,7 +193,7 @@ jobs:
           # line's list. Each row here ticks a mode and the saved file says which line it was.
           # Closing the overlay is what writes it, which also covers that path.
           # (The audio rows are six: its notes, its note set, and notes2's range, durations and voices.)
-          for pair in "11 text" "15 image" "18 audio" "21 audio" "24 video" "28 books" "29 models" "32 binary"; do
+          for pair in "12 text" "16 image" "19 audio" "22 audio" "25 video" "29 books" "30 models" "33 binary"; do
             set -- $pair
             rm -f row$1.ini
             downs=$(python -c "print(','.join(['Down']*$1))")

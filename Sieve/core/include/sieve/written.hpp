@@ -89,7 +89,8 @@ std::string written_summary(const WrittenRule& rule);
 // A ranker for the units that pass (not written out) and that `keep` accepts (the stack's
 // plugins' automaton, minimal; nullptr: every unit), at one length. Null, with `why` said, when
 // the rule cannot count or the tables would pass the budget.
-std::unique_ptr<Ranker> written_ranker(std::shared_ptr<const WrittenRule> rule, const Dfa* keep, uint32_t length, std::string& why);
+// `need`, if given: the memory its tables take, or would (what the filter memory must hold).
+std::unique_ptr<Ranker> written_ranker(std::shared_ptr<const WrittenRule> rule, const Dfa* keep, uint32_t length, std::string& why, double* need = nullptr);
 
 // A not-written-v1 filter's rule (for a stack that counts it with its plugins), or nullptr.
 std::shared_ptr<const WrittenRule> written_rule_of(const Filter& f);

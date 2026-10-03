@@ -3,6 +3,7 @@
 // over the first 16 bytes (every longer file is a head of 16 and any bytes after it).
 
 #include "sieve/filekind.hpp"
+#include "sieve/plugin.hpp"
 
 #include "sieve/sha256.hpp"
 
@@ -571,8 +572,8 @@ bool Utf8Counter::valid(std::span<const uint8_t> file, bool text_only)
 
 Utf8Counter::Utf8Counter(uint64_t max_bytes, bool text_only) : max_bytes_(max_bytes), text_only_(text_only)
 {
-    // About kStates x (n + 1) numbers of up to 8n bits.
-    if (double(kStates) * double(max_bytes + 1) * double(8 * max_bytes + 64) > double(kMaxTableBits))
+    // About kStates x (n + 1) numbers of up to 8n bits: past the filter memory, it judges only.
+    if (table_bytes(max_bytes) > filter_memory())
     {
         can_rank_ = false;
         return;
@@ -951,6 +952,7 @@ BinarySieve::BinarySieve(const BinarySpace& space, const std::vector<FilterStack
     if (utf8_filter_ >= 0)
     {
         utf8_ = std::make_unique<Utf8Counter>(space.max_bytes(), utf8_text_only_);
+        table_bytes_ = Utf8Counter::table_bytes(space.max_bytes());
         const bool alone = names_.size() == 1;
         const uint64_t rest = space.max_bytes() > kKindHead ? space.max_bytes() - kKindHead : 0;
         if (alone && utf8_->can_rank()) count_ = utf8_->count();
@@ -969,7 +971,7 @@ BinarySieve::BinarySieve(const BinarySpace& space, const std::vector<FilterStack
             survivors_log10_ = n.log10();
             count_exact_ = false;
             can_rank_ = false;
-            blocker_ = "utf8-valid-v1's table is too large at this length: its survivors are estimated, and it judges only";
+            blocker_ = over_table_limit("utf8-valid-v1's table") + ": its survivors are estimated, and it judges only";
         }
         else count_exact_ = false;
     }

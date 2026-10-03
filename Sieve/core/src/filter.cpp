@@ -328,7 +328,11 @@ void FilterStack::settle_now() const
         bool covers = true;
         for (size_t j = 0; j < entries.size(); ++j)
             if (j != i && !implied_by(entries[i], entries[j])) covers = false;
-        if (covers) compact_ = filters_[i]->ranker(); // built here, only for the filter that is used
+        if (covers)
+        {
+            compact_ = filters_[i]->ranker(); // built here, only for the filter that is used
+            table_bytes_ = filters_[i]->table_bytes();
+        }
     }
     // A stack of plugins only: their automata combined into one (the units every one accepts),
     // which ranks the stack exactly when its table fits. With not-written-v1 among them, its rule
@@ -351,7 +355,7 @@ void FilterStack::settle_now() const
             for (const auto& f : filters_)
                 if (const Dfa* d = plugin_dfa(*f)) keep = keep ? intersect(*keep, *d) : *d;
             std::string why;
-            own_ranker_ = written_ranker(written, keep ? &*keep : nullptr, line.length, why);
+            own_ranker_ = written_ranker(written, keep ? &*keep : nullptr, line.length, why, &table_bytes_);
             if (own_ranker_) compact_ = own_ranker_.get();
             else blocker_ = why;
         }
@@ -359,12 +363,14 @@ void FilterStack::settle_now() const
         {
             Dfa d = *plugin_dfa(*filters_[0]);
             for (size_t i = 1; i < filters_.size(); ++i) d = intersect(d, *plugin_dfa(*filters_[i]));
-            if (DfaRanker::table_bytes(d.states(), d.base, line.length) <= kPluginTableBudget)
+            const double bytes = DfaRanker::table_bytes(d.states(), d.base, line.length);
+            table_bytes_ = bytes;
+            if (bytes <= filter_memory())
             {
                 own_ranker_ = std::make_unique<DfaRanker>(d, line.length);
                 compact_ = own_ranker_.get();
             }
-            else blocker_ = "the plugins' combined table is over the budget at this length: they judge only";
+            else blocker_ = over_table_limit("the plugins' combined table", bytes) + ": they judge only";
         }
     }
     if (compact_ && voices_ > 1)
@@ -420,6 +426,17 @@ std::string FilterStack::compact_blocker() const
 {
     settle();
     return blocker_;
+}
+
+double FilterStack::table_bytes() const
+{
+    settle();
+    // The one filter that ranks the stack, or the plugins merged (with not-written or without), as
+    // worked out in settle; where nothing ranks it, the largest any filter's table would need.
+    if (table_bytes_ > 0 || compact_) return table_bytes_;
+    double most = 0;
+    for (const auto& f : filters_) most = std::max(most, f->table_bytes());
+    return most;
 }
 
 const Ranker* FilterStack::ranker() const

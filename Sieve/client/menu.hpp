@@ -150,13 +150,13 @@ private:
     void find_limits();        // set every line to the largest shape this machine can open
     void reset_settings();     // every shape back to its default // a line this machine cannot open
     void adjust(int dir, int step);
-    // 0-31 are the settings rows, in the order render() lists them and adjust() switches on;
+    // 0-32 are the settings rows, in the order render() lists them and adjust() switches on;
     // then FIND MY LIMITS, RESET, and ENTER THE HALLWAY, which is the only row that opens it.
     // The GLOBAL rows come first; each line's rows are counted from kFirstLineRow, so a row added
     // to GLOBAL moves them all with one change here.
     static constexpr int kAngleRow = 4, kTitleRow = 5, kLettersRow = 6, kDisplaySizeRow = 7, kDisplayCacheRow = 8,
-                         kCloseUpRow = 9, kFocusRow = 10;
-    static constexpr int kFirstLineRow = 11;
+                         kCloseUpRow = 9, kFocusRow = 10, kFilterMemoryRow = 11;
+    static constexpr int kFirstLineRow = 12;
     // The audio rows: its notes, then its note set and the notes2 set's range, durations and voices.
     static constexpr int kPagesRows = kFirstLineRow, kImageRows = kFirstLineRow + 4, kAudioRow = kFirstLineRow + 7,
                          kVideoRows = kFirstLineRow + 13, kBooksRow = kFirstLineRow + 17, kModelsRows = kFirstLineRow + 18;
@@ -191,6 +191,10 @@ private:
     // Z: this tab of this line; C: both tabs of this line; X: both tabs of every line.
     enum class ToggleScope { ThisTab, BothTabs, EveryLine };
     void toggle_all_filters(ToggleScope scope);
+    bool memory_pending() const; // the filter memory setting is not yet the limit the tallies use
+    double filter_memory_setting() const; // the setting, in bytes
+    // The lines whose tally is still being counted (on the workers), by name; "" when none is.
+    std::string counting_lines() const;
     // A filter a toggle reaches: its stack, line and part, and, where it clashes with another in
     // reach, its share kept alone (log10) once weighed.
     struct Reach
@@ -228,6 +232,8 @@ private:
         // The same as a number, for comparing stacks: log10 of the share kept (0 nothing removed,
         // -infinity everything), or NaN when it cannot be counted.
         double kept_log10 = std::numeric_limits<double>::quiet_NaN();
+        // The memory the count's tables need (or would): what the filter memory must hold for it.
+        double table_bytes = 0;
     };
     static void survivors_of(StackInfo& out, const sieve::BigUint& n, const sieve::BigUint& total);
     static void none_of(StackInfo& out);

@@ -95,6 +95,7 @@ struct AppSettings
     // the setup menu, not in Graphics. They are kept here, in [world], so that they are saved.
     int model_cache_mb = 64;     // the display cache: memory for the pictures on items, 8..4096
     int angle_decimals = 1;      // decimal places on the compass's degree readout, 0..kMaxAngleDecimals
+    int filter_memory_mb = 512;  // the filter memory: the most one count's tables may take (plugin.hpp), 64..1048576
     bool fps_counter = false;    // show frames per second in the hallway
     int mouse_sensitivity = 100; // percent, 10..400
     bool invert_mouse_y = false;

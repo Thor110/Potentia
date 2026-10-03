@@ -629,6 +629,18 @@ void Menu::adjust(int dir, int step)
     // Title length: how long every line's titles are, in characters.
     case kLettersRow: s_.letters_px = uint32_t(std::clamp(int(s_.letters_px) + dir, 1, 64)); break;
     case kFocusRow: s_.limits_focus = cycle(kFocuses, s_.limits_focus, dir); break;
+    // The filter memory: what one count's tables may take. 256 MB a step (Shift and Ctrl ten and a
+    // hundred times that), PgUp/PgDn double and halve. Kept with the application's settings, and
+    // only that: nothing is counted again until X (memory_pending), so it can be stepped freely.
+    case kFilterMemoryRow:
+        if (app_)
+        {
+            const int64_t mb = app_->filter_memory_mb;
+            const int64_t to = step == 0 ? (dir > 0 ? mb * 2 : mb / 2) : mb + int64_t(dir) * 256 * step;
+            app_->filter_memory_mb = int(std::clamp<int64_t>(to, 64, 1048576));
+            save_app();
+        }
+        break;
     // Off, then 256, 512, 1024.
     case kCloseUpRow:
         s_.closeup_px = dir > 0 ? (s_.closeup_px == 0 ? 256u : std::min(1024u, s_.closeup_px * 2))
@@ -805,6 +817,11 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         // The alphabet picker: the built-ins, then every Unicode block, to stack as you like.
         open_alphabets();
         break;
+    case SDLK_X:
+        // Optimise all dimensions, as X in a filters window does (and, after the filter memory has
+        // changed, with it). Not on the key's row, where X is a letter of the key.
+        if (row_ != 2) toggle_all_filters(ToggleScope::EveryLine);
+        break;
     case SDLK_F:
         // The filters of the line whose settings are selected.
         // Rows 6-9 pages, 10-12 image, 13 audio, 14-17 video, 18 books, then the models rows and
@@ -902,13 +919,20 @@ float Menu::draw_budget(float y)
     }
     const double gb = 1073741824.0;
     const double gfx_have = app_ ? double(app_->graphics_memory_gb) * 1024.0 : 0.0;
+    // The filter memory: the most any line's count needs for its tables (the books' parts are counted
+    // one at a time, so their largest), against the setting; past it, that line judges only.
+    double filters_need = 0;
+    for (int i = 0; i < 7; ++i) filters_need = std::max(filters_need, stack_info(i).table_bytes); // (worked out on the workers, and kept)
+    const double filters_have = filter_memory_setting(); // as set: what X will count with
     struct Bar { std::string label, figure; double used, have; };
-    const Bar bars[3] = {
+    const Bar bars[4] = {
         {tr("setup.budget.memory"), trf("setup.budget.gb", {fixed(cache / gb, 2), fixed(b.cache_bytes / gb, 1)}), cache, b.cache_bytes},
         {tr("setup.budget.graphics"), trf("setup.budget.gb", {fixed(graphics_mb_needed() / 1024.0, 2), fixed(gfx_have / 1024.0, 0)}),
          graphics_mb_needed(), gfx_have},
         {tr("setup.budget.time"), trf("setup.budget.ms", {fixed(slowest, 1), fixed(b.ms_per_unit_at_limit, 0)}),
          slowest, b.ms_per_unit_at_limit},
+        {tr("setup.budget.filters"), trf("setup.budget.filters.value", {sieve::memory_text(filters_need), sieve::memory_text(filters_have)}),
+         filters_need, filters_have},
     };
     for (const Bar& bar : bars)
     {
@@ -927,7 +951,22 @@ float Menu::draw_budget(float y)
         text(r_, bx + bw + 10, y, known ? bar.figure : tr("value.none"), 1, over ? red : grey);
         y += 14;
     }
+    // Under the bars, one line, always kept free so nothing moves: the filter memory changed and
+    // not yet counted with (until X), or which lines are still being counted.
+    const std::string counting = counting_lines();
+    if (memory_pending()) text(r_, 40, y, tr("setup.memory_changed"), 1, red);
+    else if (toggling_ || !counting.empty()) text(r_, 40, y, trf("setup.calculating", {counting.empty() ? tr("setup.calculating.weighing") : counting}), 1, grey);
+    y += 14;
     return y;
+}
+
+std::string Menu::counting_lines() const
+{
+    static const char* const names[7] = {"line.pages", "line.image", "line.audio", "line.video", "line.books", "line.models", "line.binary"};
+    std::string out;
+    for (int i = 0; i < 7; ++i)
+        if (pending_[size_t(i)].job && !pending_[size_t(i)].job->ready) out += (out.empty() ? "" : ", ") + tr(names[i]);
+    return out;
 }
 
 void Menu::render()
@@ -982,6 +1021,7 @@ void Menu::render()
         {-1, tr("setup.closeup"), s_.closeup_px == 0 ? tr("setup.closeup.off")
                                                      : trf("setup.closeup.value", {n(s_.closeup_px), std::to_string(size_t(std::ceil(closeup_mb())))})},
         {-1, tr("setup.focus"), s_.limits_focus == "all" ? tr("setup.focus.all") : trf("setup.focus.line", {tr(s_.limits_focus == "text" ? "line.pages" : "line." + s_.limits_focus)})},
+        {-1, tr("setup.filter_memory"), trf("setup.filter_memory.value", {sieve::memory_text(filter_memory_setting())})},
         {0, tr("setup.length"), trf("setup.length.value", {n(s_.length)})},
         {-1, tr("setup.alphabet"), trf("setup.alphabet.value", {s_.alphabet, n(alphabet_size(s_.alphabet))})},
         {-1, tr("setup.canon"), "canon-text-" + s_.canon},
@@ -1018,8 +1058,8 @@ void Menu::render()
         // and the footer below, so the list can grow without them ever running into either.
         if (r.section == -2)
         {
-            y = draw_budget(y + 12);
-            y = std::max(y + 6, H - 118);
+            y = draw_budget(y + 4);
+            y = std::max(y, H - 118);
         }
         if (r.section >= 0)
         {
@@ -1117,11 +1157,16 @@ void Menu::render()
             else if (line_ms(binary ? 6 : i, machine_budget()) > kUnitMs / 4) text(r_, x, label - 14, clip(tr("map.slow")), 1, grey);
         }
         // The bar: the line's own two colours; never shorter than min_bar, never past the bottom.
+        // Its body in the line's colour, its frame and what survives in the edges'. A line whose
+        // edges are too dark to see on the black menu (books: grey, with black edges) has the two
+        // swapped, so it reads like the others: a dark body in a light frame.
+        const bool dark_edges = (edge.r * 3 + edge.g * 6 + edge.b) / 10 < 60;
+        const SDL_Color body = dark_edges ? edge : th.bg, frame = dark_edges ? th.bg : edge;
         const float len = std::isfinite(z.bits) ? std::clamp(float(z.bits / scale_bits) * span, min_bar, span) : span;
         const SDL_FRect bar{x + 8, top, 40, len};
-        SDL_SetRenderDrawColor(r_, th.bg.r, th.bg.g, th.bg.b, 255);
+        SDL_SetRenderDrawColor(r_, body.r, body.g, body.b, 255);
         SDL_RenderFillRect(r_, &bar);
-        SDL_SetRenderDrawColor(r_, edge.r, edge.g, edge.b, 255);
+        SDL_SetRenderDrawColor(r_, frame.r, frame.g, frame.b, 255);
         SDL_RenderRect(r_, &bar);
         const SDL_FRect inner{x + 9, top + 1, 38, len - 2};
         SDL_RenderRect(r_, &inner);
@@ -1131,7 +1176,7 @@ void Menu::render()
         {
             const float slen = std::clamp(float(info.survivor_bits / scale_bits) * span, 3.0f, len - 4);
             const SDL_FRect sv{x + 14, top + 2, 28, slen};
-            SDL_SetRenderDrawColor(r_, th.edge.r, th.edge.g, th.edge.b, 200);
+            SDL_SetRenderDrawColor(r_, frame.r, frame.g, frame.b, 200);
             SDL_RenderFillRect(r_, &sv);
             text(r_, x, label + 82, clip(trf("map.survivors", {fixed(info.survivor_bits, 0)})), 1, th.edge);
         }
@@ -1332,7 +1377,8 @@ void Menu::none_of(StackInfo& out)
 
 static std::string settings_key(const sieve::cli::LineFilters& lf)
 {
-    std::string key = std::string(to_string(lf.mode)) + ":";
+    // (With the filter memory: what can be counted changes with it.)
+    std::string key = std::to_string(uint64_t(sieve::filter_memory())) + "/" + std::string(to_string(lf.mode)) + ":";
     for (const auto& n : lf.enabled) key += n + ",";
     for (const auto& [n, vals] : lf.values)
         for (const auto& [k, v] : vals) key += n + "." + k + "=" + v + ";";
@@ -1373,6 +1419,7 @@ std::pair<std::string, std::function<Menu::StackInfo()>> Menu::stack_job(int i, 
                     sieve::BinaryItems items;
                     items.pages = sieve::cli::page_pattern(sieve::alphabet_of(alphabet), length);
                     const sieve::BinarySieve bs = sieve::cli::build_binary_sieve(space, lf, &items);
+                    out.table_bytes = bs.table_bytes();
                     if (bs.empty()) none_of(out);
                     else if (bs.can_rank()) survivors_of(out, bs.count(), space.size());
                     else if (!bs.can_count()) out.status = trf("status.not_countable", {bs.blocker()});
@@ -1402,6 +1449,7 @@ std::pair<std::string, std::function<Menu::StackInfo()>> Menu::stack_job(int i, 
                 StackInfo out;
                 sieve::cli::timings::Scope timed("menu.survivors"); // a line's stack built and counted
                 const sieve::FilterStack st = sieve::cli::build_stack(fl, lf);
+                if (!st.empty()) out.table_bytes = st.table_bytes();
                 if (st.empty()) none_of(out);
                 else if (st.ranker()) survivors_of(out, st.ranker()->count(), sieve::BigUint::pow(fl.base, fl.length));
                 else out.status = trf("status.not_countable", {st.compact_blocker()});
@@ -1444,7 +1492,7 @@ const Menu::StackInfo& Menu::book_stack_info()
         info_[4] = StackInfo{"too large", tr("status.too_large"), -1, ""};
         return info_[4];
     }
-    std::string key = std::string("books/") + to_string(cfg_.books.mode) + "/";
+    std::string key = std::string("books/") + std::to_string(uint64_t(sieve::filter_memory())) + "/" + to_string(cfg_.books.mode) + "/";
     std::array<std::pair<sieve::FilterLine, sieve::cli::LineFilters>, 3> parts;
     for (int part = 0; part < 3; ++part)
     {
@@ -1478,6 +1526,7 @@ const Menu::StackInfo& Menu::book_stack_info()
                 continue;
             }
             const sieve::FilterStack st = sieve::cli::build_stack(fl, lf);
+            out.table_bytes = std::max(out.table_bytes, st.table_bytes()); // the parts are counted one at a time
             if (st.empty())
             {
                 bits += all;
@@ -1741,8 +1790,21 @@ std::vector<Menu::Reach> Menu::reach_of(ToggleScope scope, int overlay, int tab)
     return in_reach;
 }
 
+// Whether the filter memory has been changed since the tallies were counted: the setting against the
+// limit in use (sieve::filter_memory), which only X (or going into the hallway) brings up to it.
+bool Menu::memory_pending() const { return filter_memory_setting() != sieve::filter_memory(); }
+
+double Menu::filter_memory_setting() const { return app_ ? double(app_->filter_memory_mb) * 1024 * 1024 : sieve::filter_memory(); }
+
 void Menu::toggle_all_filters(ToggleScope scope)
 {
+    // X after the filter memory has changed: re-optimise every line with it, whatever is ticked
+    // (everything in reach is unticked, then ticked again, the clashes weighed with the new limit).
+    if (scope == ToggleScope::EveryLine && memory_pending())
+    {
+        sieve::set_filter_memory(filter_memory_setting());
+        for (const Reach& r : reach_of(scope, overlay_, otab_)) (void)sieve::cli::tick_filter(*r.lf, r.name, false);
+    }
     std::vector<Reach> in_reach = reach_of(scope, overlay_, otab_);
     // Anything in reach ticked: untick them all, at once. Otherwise tick them all (bar those that
     // clash), once the filters that clash have been weighed. ("All ticked" can never be reached
@@ -2233,7 +2295,18 @@ void Menu::render_overlay(float W, float H)
         it.h = float(it.lines.size()) * 12 + 8;
         items.push_back(it);
     }
-    const float top = box_.y + 54, bottom = box_.y + box_.h - 44;
+    // The footer: what the stack counts, or why it cannot, on as many as two lines (a reason that
+    // names a table's size and the limit it passes is longer than one), the list making room.
+    const StackInfo& info = stack_info(overlay_);
+    std::vector<std::string> footer;
+    for (std::string f = toggling_ ? tr("filters.weighing") : info.status; !f.empty() && footer.size() < 2;)
+    {
+        size_t cut = f.size() <= cols ? f.size() : footer.empty() ? f.rfind(' ', cols) : cols;
+        if (cut == std::string::npos || cut == 0) cut = std::min(f.size(), cols);
+        footer.push_back(f.substr(0, cut));
+        f = f.substr(std::min(f.size(), cut + (cut < f.size() && f[cut] == ' ' ? 1 : 0)));
+    }
+    const float top = box_.y + 54, bottom = box_.y + box_.h - 44 - 12.0f * float(footer.size() > 1 ? footer.size() - 1 : 0);
     // Scroll: first row shown.
     oscroll_ = std::clamp(oscroll_, 0, std::max(0, int(items.size()) - 1));
     if (orow_ < oscroll_) oscroll_ = orow_;
@@ -2264,9 +2337,8 @@ void Menu::render_overlay(float W, float H)
     }
     if (oscroll_ > 0) text(r_, box_.x + box_.w - 90, top - 12, tr("filters.more_above"), 1, grey);
     if (y < bottom && false) {}
-    const StackInfo& info = stack_info(overlay_);
-    const std::string footer = toggling_ ? tr("filters.weighing") : info.status;
-    text(r_, x, box_.y + box_.h - 36, footer.substr(0, cols), 1, white);
+    for (size_t k = 0; k < footer.size(); ++k)
+        text(r_, x, box_.y + box_.h - 36 - 12.0f * float(footer.size() - 1 - k), footer[k], 1, white);
     text(r_, x, box_.y + box_.h - 20, tr("filters.footer"), 1, grey);
 }
 

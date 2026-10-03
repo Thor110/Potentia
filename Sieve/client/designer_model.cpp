@@ -455,7 +455,7 @@ TestResult test(const Doc& d, uint32_t length, Progress* progress)
         sieve::Dfa dfa = sieve::compile_plugin(*p, r.line, {}, resources, &r.declared, &r.data, [&](const std::string& s) { say(s); });
         r.minimal = dfa.states();
         r.dfa = std::make_shared<const sieve::Dfa>(std::move(dfa));
-        if (sieve::DfaRanker::table_bytes(r.dfa->states(), r.dfa->base, r.line.length) <= sieve::kPluginTableBudget)
+        if (sieve::DfaRanker::table_bytes(r.dfa->states(), r.dfa->base, r.line.length) <= sieve::filter_memory())
         {
             say("counting the survivors at length " + std::to_string(r.line.length) + " (" + std::to_string(r.minimal) + " states)");
             const sieve::DfaRanker rk(*r.dfa, r.line.length);

@@ -1,17 +1,33 @@
-# Version 0.13.1
+# Filter memory: counted only on X (relative to origin/main 86ae73f)
 
-Every "0.13.0" in the repository is now "0.13.1" (16 places; `sieve version` reports `sieve 0.13.1`):
-- **The build:** `Sieve/CMakeLists.txt` (`project(... VERSION ...)`, which the tools and the hallway
-  are built with) and `Sieve/vcpkg.json`.
-- **The release tool:** `Sieve/tools/make_release.py`, in its examples and help.
-- **Folder-name examples:** `Sieve/docs/SIEVE-INSTALL-USAGE.md`, and a comment in
-  `Sieve/client/unpack_7z.hpp`.
-- **The release checklist** in `Sieve/docs/HANDOFF.md`.
-- **The status line** in the root `README.md` ("released (v0.13.1)").
+`this-round-only.patch` applies on top of the filter-memory round. `files/` and
+`full-vs-origin-main.patch` include the earlier rounds not yet on origin/main (the books bar and
+message, and the filter memory setting).
 
-Left alone: digit strings in the test vectors that happen to contain "0.13", a colour value in
-`build_mesh_templates.py`, and a 0.13 ms timing in HANDOFF.
+## What changed
+- **Changing the filter memory row only saves it.** Nothing is counted again, so it can be stepped
+  freely without stutter.
+- **A red line under the four memory bars:** "Memory Limit Change Detected : Press X to re-optimise
+  all dimensions." It shows while the setting differs from the limit the tallies were counted with.
+- **X re-optimises.** It applies the new limit, unticks everything in reach and ticks it all again,
+  with the clashes weighed under the new limit. Then the red line goes. X now also works on the setup
+  screen itself, except on the key's row, where X is a letter of the key.
+- **"Calculating Dimension... (PAGES, BOOKS)"** appears in the same place while any line is still
+  being counted, or while X is weighing clashes. It names the lines still in progress and clears
+  when they're done.
+- **The row and the filter memory bar show your setting**, which is what X will count with, not the
+  limit currently in use.
+- **Going into the hallway** uses the setting as it stands, X or not.
+- **Spacing:** the line under the bars is always reserved, so nothing jumps when it appears. The
+  spacing around the bars is tighter, so ENTER THE HALLWAY stays clear of the footer.
 
-`version-only.patch` is this change on its own, except HANDOFF.md, which also holds the earlier
-rounds' notes. `full-vs-origin-main-ac9096e.patch` and `files/` are everything not yet on origin/main:
-the Variable Length Addressing round, the not-written fix, and this.
+## Screenshots
+- `pend1.png`: the setting stepped from 512 to 768 MB. The red line shows, the bar reads 2.0 GB of
+  768 MB, and nothing was re-counted.
+- `pend2.png`: after X, everything is counted with 768 MB and the line is gone. The filters were
+  re-ticked, not unticked.
+- `calc.png`: mid-count, "Calculating Dimension... (PAGES, AUDIO, BOOKS, BINARY)".
+
+## Checked
+The setup menu checks all pass: the filter memory row saves its value, the line rows still open the
+right filters, and the display cache and FIND MY LIMITS work as before.

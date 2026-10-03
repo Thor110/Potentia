@@ -11,6 +11,7 @@
 // does). Everything else is exactly version 1.
 
 #include "sieve/filter.hpp"
+#include "sieve/plugin.hpp"
 
 #include <algorithm>
 #include <functional>
@@ -25,9 +26,10 @@ namespace {
 
 constexpr char kLower27[] = " abcdefghijklmnopqrstuvwxyz";
 
-// Above this unit length the rankers' count tables would take too much memory on today's
-// machines (they grow with the square of the length). Describes the hardware, not the design.
-constexpr uint32_t kMaxRankLength = 20000;
+// The rankers' count tables grow with the square of the length: about two rows of L + 1 numbers of
+// up to L log2(27) bits (words and window keep two, clean one). Past the filter memory (plugin.hpp)
+// a unit is judged and not ranked: at 512 MB that is about 21,000 characters.
+double m1_table_bytes(uint32_t L, int rows = 2) { return double(rows) * (double(L) + 1) * (double(L) * 4.754887502163468 / 8.0 + 32.0); }
 
 bool is_lower27(const FilterLine& line) { return line.kind == "text" && line.symbols_id == "lower27"; }
 
@@ -650,7 +652,8 @@ std::unique_ptr<Filter> make_m1(SieveFilter kind, bool padding, const FilterLine
     auto dict = kind == SieveFilter::Clean ? std::make_shared<const Dictionary>(Dictionary::from_words({}))
                                            : res.dictionary(param_value(spec, values, "dictionary"));
     LazyRanker::Make ranker;
-    if (line.length <= kMaxRankLength)
+    const double bytes = m1_table_bytes(line.length, kind == SieveFilter::Clean ? 1 : 2);
+    if (bytes <= filter_memory())
     {
         const uint32_t L = line.length;
         ranker = [kind, dict, L, padding]() -> std::unique_ptr<Ranker> {
@@ -660,6 +663,7 @@ std::unique_ptr<Filter> make_m1(SieveFilter kind, bool padding, const FilterLine
         };
     }
     auto f = std::make_unique<M1Filter>(kind, padding, dict, std::move(ranker));
+    f->set_table_bytes(bytes);
     if (kind != SieveFilter::Clean)
     {
         const std::string id = param_value(spec, values, "dictionary");
@@ -769,7 +773,8 @@ void add_text_m1_filters(std::vector<FilterSpec>& out)
         auto f = std::make_unique<TitleFilter>(dict, l.length, max_length,
                                                "dictionary=" + (id.empty() ? std::string("default") : id) + " sha256=" + dict->sha256() +
                                                    " max_length=" + std::to_string(max_length));
-        if (n <= kMaxRankLength)
+        f->set_table_bytes(m1_table_bytes(n));
+        if (m1_table_bytes(n) <= filter_memory())
         {
             const uint32_t L = l.length;
             f->set_ranker([dict, n, L]() -> std::unique_ptr<Ranker> { return std::make_unique<TitleRanker>(std::make_unique<WordsRanker>(*dict, n, true), L); });

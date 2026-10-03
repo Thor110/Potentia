@@ -1151,3 +1151,42 @@ counts, walked length by length) is exact in 1.7 s at 32, 12.8 s at 128 and 114 
 tens of MB; it would give the tallies, the Filtered shares and X's weighing, not compact. Tests:
 words-data-v1 (scowl-en-60) and not-written at 32 ranks, below words-data's own count, and survivors
 drawn by number pass both and come back to their number; intersect's cap throws early.
+The map's books bar, and what "the budget" was (Edward, 3 October 2026). The books theme is grey
+with black edges, so on the black setup menu its frame (and any survivors bar, drawn in the edge
+colour) vanished and the bar read as a plain grey block; a line whose edges are dark (luminance under
+60) now has its two colours swapped on the map: a black body in a grey frame, survivors in grey.
+With X's stack books still shows no survivors bar, because its pages part (128 characters) cannot be
+counted. The "budget" in "over the budget at this length" was kPluginTableBudget, a fixed 512 MB on
+one counting table, not the setup menu's memory budget: over_table_limit (plugin.hpp) now says what
+the table would need and against what ("the plugins' combined table needs 2.0 GB of memory at this
+length, over the 512 MB limit on a counting table"), in the stack, not-written, utf8-valid and
+`sieve` messages. The filters window's footer wraps to two lines so the reason is not cut off.
+The filter memory (Edward, 3 October 2026: a setting, not a hardcoded limit, at the foot of GLOBAL).
+plugin.hpp: filter_memory() / set_filter_memory() (an atomic, 512 MB until set) replace every fixed
+memory limit on counting: kPluginTableBudget (plugin tables, the plugins merged, not-written with
+them, the designer's check), Utf8Counter's kMaxTableBits (now Utf8Counter::table_bytes against it),
+not-written's walk memo (kJointBudget: now filter_memory / 179 bytes an entry, 3,000,000 at 512 MB)
+and text_m1's kMaxRankLength (20,000 characters: now the words/window rankers' two rows of counts,
+m1_table_bytes, against it; about 21,000 at 512 MB). memory_text and over_table_limit name the
+setting in every refusal. Filter::table_bytes / FilterStack::table_bytes / BinarySieve::table_bytes
+report what a count needs (or would), recorded where the stack picks its ranker, so nothing is built
+to ask. Client: AppSettings::filter_memory_mb ([world], 64..1048576), applied at start-up
+(--filter-memory MB too, and on the `sieve` tool); the setup menu's row 11 (kFilterMemoryRow; the
+line rows moved down one, kFirstLineRow 12, and CI's row numbers with them), in 256 MB steps; the
+tallies' cache keys carry it, so they count again when it changes; and a fourth budget bar, "filter
+memory (largest count)", the most any line needs (stack_info's table_bytes; the books' largest part)
+against it. Tests: each kind of table counts with the setting just above its need and judges just
+below, naming it. Seen: X's pages stack at 128 characters needs 2.0 GB; with 3 GB set it counts
+exactly (28 s) and books gains its survivors bar.
+The filter memory, counted only on X (Edward, 3 October 2026: re-counting on every step of the
+setting stuttered, and X is what asks for a count). The row now only saves the setting
+(AppSettings::filter_memory_mb); sieve::filter_memory, the limit the tallies are counted with (and
+their cache keys carry), changes only on X (toggle_all_filters with EveryLine: it applies the setting,
+unticks everything in reach and ticks it all again with the clashes weighed) or on going into the
+hallway (app_main sets it before building). memory_pending() is the two differing: a red line under
+the four budget bars says "Memory Limit Change Detected : Press X to re-optimise all dimensions."; else,
+while any line's tally is on a worker (counting_lines, from pending_) or X is weighing, it says
+"Calculating Dimension... (PAGES, BOOKS)". The line is always kept, so nothing below it moves; the
+budget's spacing is tighter so ENTER THE HALLWAY stays clear of the footer. X now works on the setup
+screen too (not on the key's row, where it is a letter). The row and the filter-memory bar show the
+setting, which is what X will count with.

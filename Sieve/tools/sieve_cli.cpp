@@ -1258,9 +1258,9 @@ int cmd_filters_plugin(const Args& a)
             std::cout << "judge      " << (!spelled ? "unspellable" : d.accepts(u) ? "pass" : "FAIL") << "  " << l << "\n";
         }
     };
-    if (DfaRanker::table_bytes(d.states(), d.base, one.length) > kPluginTableBudget)
+    if (DfaRanker::table_bytes(d.states(), d.base, one.length) > filter_memory())
     {
-        std::cout << "survivors  (judge only: the table is over the budget at this length)\n";
+        std::cout << "survivors  (judge only: " << over_table_limit("the table") << ")\n";
         judge_lines();
         return 0;
     }
@@ -2284,6 +2284,9 @@ int main(int argc, char** argv)
         if (a.help && print_help(a.command == "sieve" ? "sift" : a.command)) return 0;
         // --timings, on any command: how long each phase took, to standard error at exit.
         if (a.has("timings")) timings::enable();
+        // --filter-memory MB, on any command: what one count's tables may take (the setup menu's
+        // FILTER MEMORY; 512 MB unless given).
+        if (a.has("filter-memory")) set_filter_memory(double(a.get_positive("filter-memory", 512)) * 1024 * 1024);
         load_plugins(); // the filter plugins, registered beside the built-in filters
         const std::string command_phase = "sieve " + a.command;
         timings::Scope timed(command_phase.c_str());
@@ -2292,7 +2295,7 @@ int main(int argc, char** argv)
             const auto known = documented_options(a.command == "sieve" ? "sift" : a.command);
             if (!known.empty())
                 for (const auto& [key, value] : a.opts)
-                    if (key != "timings" && std::find(known.begin(), known.end(), key) == known.end())
+                    if (key != "timings" && key != "filter-memory" && std::find(known.begin(), known.end(), key) == known.end())
                         std::cerr << "warning: --" << key << " is not an option of 'sieve " << a.command << "' (see: sieve help " << a.command
                                   << "); ignored\n";
         }

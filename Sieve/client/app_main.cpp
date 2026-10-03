@@ -6,6 +6,7 @@
 #include "designer.hpp"
 #include "cli/timings.hpp"
 #include "hallway.hpp"
+#include "sieve/plugin.hpp"
 
 #include <SDL3/SDL_main.h>
 
@@ -112,7 +113,9 @@ const char* kUsage =
     "  --map PATH          choose a map for the node graph: a .map file, or a folder to map\n"
     "  --graph             open the node graph (on --map, or on this installation)\n"
     "  --new-map PATH      the node graph's New map..., at once\n"
-    "  --thin              keep only the room you stand in (what going in past the budget does)\n\n"
+    "  --thin              keep only the room you stand in (what going in past the budget does)\n"
+    "  --filter-memory MB  the most one count of the filters' survivors may take for its tables (default\n"
+    "                      the setup menu's, 512 MB at first)\n\n"
     "Controls: WASD move, mouse look, Shift run, E or click take a book, T warp, G go to,\n"
     "M switch ordering (positional, scrambled, guided), - and = zoom out/in (guided; Shift: 8x),\n"
     "wheel/PgUp/PgDn/[ ] jump 1/1000/1000000 tiles, Home to corridor tile 0 (every line's start line),\n"
@@ -326,6 +329,9 @@ int run(const Args& a)
     sieve::cli::load_plugins(); // the filter plugins in the filters folder, beside the built-in filters
     AppSettings app = shot ? AppSettings{} : AppSettings::load(app_path);
     if (shot && a.has("settings")) app = AppSettings::load(app_path);
+    // The filter memory (the setup menu's FILTER MEMORY): what one count's tables may take.
+    if (a.has("filter-memory")) app.filter_memory_mb = std::clamp(int(a.get_positive("filter-memory", 512)), 64, 1048576);
+    sieve::set_filter_memory(double(app.filter_memory_mb) * 1024 * 1024);
     const DisplayInfo display = detect_display();
     if (!shot && app.resolution.w <= 0)
     {
@@ -549,6 +555,9 @@ int run(const Args& a)
         bool quit_while_building = false;
         music_mode(MusicMode::Menus); // building is still the menus
         music_colours_default();
+        // The hallway counts with the filter memory as set, pressed X or not (and the setup menu,
+        // built again when it next opens, counts with it too).
+        sieve::set_filter_memory(double(app.filter_memory_mb) * 1024 * 1024);
         auto building = std::async(std::launch::async, [&] {
             sieve::cli::timings::Scope timed("hallway.build");
             return make_hallway(window, renderer, ha, first, filters, app.angle_decimals);

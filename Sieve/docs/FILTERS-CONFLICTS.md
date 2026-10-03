@@ -128,7 +128,7 @@ what stands in the way of each:
 
 - **`words-v1` and `window-v1`** have exact automaton twins (`words-data-v1`, `window-data-v1`: the
   same counts at 20 and 32 and no disagreement on sampled survivors), but a dictionary's automaton
-  counts only while its table fits (512 MB: units of a few hundred characters), where the
+  counts only while its table fits the filter memory (at 512 MB, units of a few hundred characters), where the
   built-ins count to 20,000 with their own method. Retire them once the token form can count long
   units (a table kept for the lengths in use rather than all of them, or the built-ins' own
   method of counting by word lengths, used for an automaton whose tokens are a plain dictionary).

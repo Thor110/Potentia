@@ -119,9 +119,14 @@ public:
     virtual bool can_rank() const { return ranker() != nullptr; }
     // Parameters and data hashes, for provenance ("dictionary=scowl-en-60 sha256=...").
     const std::string& provenance() const { return provenance_; }
+    // The memory its ranker's tables take, or would take where they pass the filter memory
+    // (plugin.hpp): what counting it needs. 0 where that is small or there is no table.
+    double table_bytes() const { return table_bytes_; }
+    void set_table_bytes(double bytes) { table_bytes_ = bytes; }
 
 protected:
     std::string provenance_;
+    double table_bytes_ = 0;
 };
 
 // A registered filter: identity, parameters, where it applies, and how to build it.
@@ -221,6 +226,9 @@ public:
     // Worked out on first use (see filter.cpp), so a stack that only judges costs nothing for it.
     const Ranker* ranker() const;
     std::string compact_blocker() const; // why there is no ranker ("" if there is one)
+    // The memory the stack's count needs for its tables (the plugins' combined automaton's, not-written
+    // with them, or the one filter that ranks it): what the filter memory must hold for it to count.
+    double table_bytes() const;
 
     // "words-v1{dictionary=scowl-en-60 sha256=...}; max-run-v1{max_run=2}" and its SHA-256.
     const std::string& provenance() const { return provenance_; }
@@ -242,6 +250,7 @@ private:
     mutable std::unique_ptr<Ranker> own_ranker_; // a stack of plugins: their combined automaton's ranker
     mutable std::unique_ptr<Ranker> voices_ranker_; // several voices: one voice's ranker, for them all
     mutable std::string blocker_;
+    mutable double table_bytes_ = 0;
     std::string provenance_, id_;
 };
 
