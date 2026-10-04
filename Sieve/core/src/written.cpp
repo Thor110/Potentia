@@ -1235,13 +1235,14 @@ class WrittenRanker : public Ranker
 public:
     // `p`: the plugins' automaton, minimal (none: every unit); `q`: the units it keeps that a
     // reading writes as a file (p and others, or others alone), minimal: written_ranker builds both.
-    WrittenRanker(std::shared_ptr<const WrittenRule> rule, std::optional<Dfa> p, Dfa q, uint32_t length) : rule_(std::move(rule)), length_(length)
+    // `pr`: the plugins' table (P), or null for none; it holds P itself, which p_ points into.
+    WrittenRanker(std::shared_ptr<const WrittenRule> rule, std::shared_ptr<const DfaRanker> pr, Dfa q, uint32_t length) : rule_(std::move(rule)), length_(length)
     {
         const WrittenRule& r = *rule_;
-        if (p)
+        if (pr)
         {
-            p_ = std::move(p);
-            pr_ = std::make_unique<DfaRanker>(*p_, length);
+            pr_ = std::move(pr);
+            p_ = &pr_->dfa();
         }
         if (q.start >= 0)
         {
@@ -1266,10 +1267,7 @@ public:
                     BigUint sum = bn_[k - 1][s];
                     sum.mul_small(r.spaces);
                     auto add = [&](int32_t t, uint32_t times) {
-                        if (t < 0 || times == 0) return;
-                        BigUint c = bn_[k - 1][size_t(t)];
-                        c.mul_small(times);
-                        sum += c;
+                        if (t >= 0) sum.add_mul_small(bn_[k - 1][size_t(t)], times);
                     };
                     switch (r.bphase[s])
                     {
@@ -1469,8 +1467,10 @@ private:
 
     std::shared_ptr<const WrittenRule> rule_;
     uint32_t length_;
-    std::optional<Dfa> p_, q_;
-    std::unique_ptr<DfaRanker> pr_, qr_;
+    std::shared_ptr<const DfaRanker> pr_; // P's table, perhaps shared with another stack
+    const Dfa* p_ = nullptr;             // P, inside pr_
+    std::optional<Dfa> q_;
+    std::unique_ptr<DfaRanker> qr_;
     std::vector<BigUint> powers_;
     std::vector<std::vector<BigUint>> bn_;
     State start_ = kDead;
@@ -1485,7 +1485,8 @@ private:
 
 } // namespace
 
-std::unique_ptr<Ranker> written_ranker(std::shared_ptr<const WrittenRule> rule, const Dfa* keep, uint32_t length, std::string& why, double* need)
+std::unique_ptr<Ranker> written_ranker(std::shared_ptr<const WrittenRule> rule, const Dfa* keep, uint32_t length, std::string& why, double* need,
+                                       const std::function<std::shared_ptr<const DfaRanker>()>& keep_table)
 {
     if (!rule->blocker.empty())
     {
@@ -1498,8 +1499,7 @@ std::unique_ptr<Ranker> written_ranker(std::shared_ptr<const WrittenRule> rule, 
     // every text plugin at 32 characters, where a bound of P times O's states had it at 13 GB).
     const auto bytes_of = [&](size_t states) { return DfaRanker::table_bytes(states, rule->base, length); };
     const double per_state = bytes_of(1);
-    std::optional<Dfa> p;
-    if (keep) p = *keep; // minimal already (see the header): minimising it again took a second
+    const Dfa* p = keep; // minimal already (see the header): minimising it again took a second
     const double fixed = (p ? bytes_of(p->states()) : 0.0) + bytes_of(rule->bnext.size());
     if (need) *need = fixed;
     if (fixed > filter_memory())
@@ -1528,7 +1528,9 @@ std::unique_ptr<Ranker> written_ranker(std::shared_ptr<const WrittenRule> rule, 
     }
     try
     {
-        return std::make_unique<WrittenRanker>(std::move(rule), std::move(p), std::move(q), length);
+        std::shared_ptr<const DfaRanker> pr;
+        if (p) pr = keep_table ? keep_table() : std::make_shared<const DfaRanker>(*p, length);
+        return std::make_unique<WrittenRanker>(std::move(rule), std::move(pr), std::move(q), length);
     }
     catch (const std::length_error&)
     {

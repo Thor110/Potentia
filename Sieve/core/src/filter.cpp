@@ -7,6 +7,7 @@
 #include "sieve/written.hpp"
 
 #include <algorithm>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -285,7 +286,8 @@ bool implied_by(const FilterStack::Entry& i, const FilterStack::Entry& j)
 // instead of 13.3 s for every text plugin at 32 characters. Minimising makes the result the same
 // automaton in any order, so ranks and counts do not depend on it.
 //
-// Results are kept for the process, by the line and the automata's provenance: the menu counts
+// Results are kept for the process, by the line and the automata's provenance (with their
+// counting tables: shared_table, below): the menu counts
 // the same plugins for the text line and for the books' title, and again on every visit, and a
 // large merge takes seconds. They are kept in up to merge_cache_share() of the filter memory (a
 // half by default; the rest is for the counting tables built from them), and a stack that is
@@ -294,6 +296,10 @@ std::mutex g_merged_mx;
 std::map<std::string, std::shared_ptr<const Dfa>> g_merged;          // (g_merged_mx)
 std::map<std::string, std::shared_ptr<std::mutex>> g_merging;        // one merge at a time per key
 double g_merged_bytes = 0;                                           // (g_merged_mx)
+// The merges' counting tables (shared_table, below): those still used by a stack, those kept.
+std::map<std::string, std::weak_ptr<const DfaRanker>> g_tables_used;    // (g_merged_mx)
+std::map<std::string, std::shared_ptr<const DfaRanker>> g_tables_kept;  // (g_merged_mx), in g_merged_bytes
+std::map<std::string, std::shared_ptr<std::mutex>> g_tabling;           // one build at a time per key
 
 double dfa_bytes(const Dfa& d) { return double(d.next.size()) * sizeof(int32_t) + double(d.accept.size()); }
 
@@ -303,7 +309,9 @@ bool accepts_all(const Dfa& d)
     return d.states() == 1 && d.start == 0 && d.accept[0] && std::all_of(d.next.begin(), d.next.end(), [](int32_t t) { return t == 0; });
 }
 
-std::shared_ptr<const Dfa> merge_plugins(const std::vector<const Filter*>& filters, const std::string& line)
+// `key`, if given, is set to what the result is kept under ("" when it is not kept: an automaton
+// that does not say what it is), for its counting table to be kept with it (shared_table).
+std::shared_ptr<const Dfa> merge_plugins(const std::vector<const Filter*>& filters, const std::string& line, std::string* key_out = nullptr)
 {
     std::vector<std::pair<const Dfa*, const std::string*>> parts;
     for (const Filter* f : filters)
@@ -331,6 +339,7 @@ std::shared_ptr<const Dfa> merge_plugins(const std::vector<const Filter*>& filte
         return std::make_shared<const Dfa>(merged ? std::move(d) : minimise(d));
     };
     if (!named) return merge();
+    if (key_out) *key_out = key;
     std::shared_ptr<std::mutex> own;
     {
         std::lock_guard<std::mutex> lock(g_merged_mx);
@@ -350,7 +359,8 @@ std::shared_ptr<const Dfa> merge_plugins(const std::vector<const Filter*>& filte
     const double room = filter_memory() * merge_cache_share();
     if (g_merged_bytes + bytes > room) // (also when the share or the filter memory was lowered)
     {
-        g_merged.clear(); // older stacks' merges: made again if they are asked for
+        g_merged.clear(); // older stacks' merges and tables: made again if they are asked for
+        g_tables_kept.clear();
         g_merged_bytes = 0;
     }
     if (bytes <= room)
@@ -360,6 +370,58 @@ std::shared_ptr<const Dfa> merge_plugins(const std::vector<const Filter*>& filte
     }
     g_merging.erase(key);
     return d;
+}
+
+// The counting table of a merged automaton at one length, shared. The pages line and the books'
+// title count the same plugins at the same length, and building that table (every text plugin at
+// 32 characters: 236,034 states, about 320 MB) took a second each. A table is built once while
+// any stack still uses it: a second stack asking meanwhile waits for it and uses the same one.
+// It is also kept between counts, with the merges and in the same share of the filter memory
+// (merge_cache_share), when it fits there. Read-only once built, so stacks on several threads
+// share it safely. `key` is merge_plugins'; empty, the table is the asker's alone.
+
+std::shared_ptr<const DfaRanker> shared_table(const std::string& merge_key, const Dfa& d, uint32_t length)
+{
+    if (merge_key.empty()) return std::make_shared<const DfaRanker>(d, length);
+    const std::string key = merge_key + "\nL" + std::to_string(length);
+    auto find = [&]() -> std::shared_ptr<const DfaRanker> {
+        if (const auto it = g_tables_kept.find(key); it != g_tables_kept.end()) return it->second;
+        if (const auto it = g_tables_used.find(key); it != g_tables_used.end()) return it->second.lock();
+        return nullptr;
+    };
+    std::shared_ptr<std::mutex> own;
+    {
+        std::lock_guard<std::mutex> lock(g_merged_mx);
+        if (auto t = find()) return t;
+        auto& m = g_tabling[key];
+        if (!m) m = std::make_shared<std::mutex>();
+        own = m;
+    }
+    std::lock_guard<std::mutex> building(*own);
+    {
+        std::lock_guard<std::mutex> lock(g_merged_mx);
+        if (auto t = find()) return t; // built meanwhile
+    }
+    auto t = std::make_shared<const DfaRanker>(d, length);
+    std::lock_guard<std::mutex> lock(g_merged_mx);
+    for (auto it = g_tables_used.begin(); it != g_tables_used.end();) // (those no stack uses any more)
+        it = it->second.expired() ? g_tables_used.erase(it) : std::next(it);
+    g_tables_used[key] = t;
+    const double bytes = DfaRanker::table_bytes(d.states(), d.base, length);
+    const double room = filter_memory() * merge_cache_share();
+    if (g_merged_bytes + bytes > room)
+    {
+        g_merged.clear(); // what was kept before: made again if it is asked for
+        g_tables_kept.clear();
+        g_merged_bytes = 0;
+    }
+    if (bytes <= room)
+    {
+        g_tables_kept[key] = t;
+        g_merged_bytes += bytes;
+    }
+    g_tabling.erase(key);
+    return t;
 }
 
 } // namespace
@@ -426,6 +488,9 @@ void FilterStack::settle_now() const
     {
         std::vector<const Filter*> raw;
         for (const auto& f : filters_) raw.push_back(f.get());
+        // The line alone ("text/lower27/L32"), not the filters in the order they were ticked: the
+        // merge is the same in any order, and is kept by the automata themselves.
+        const std::string line_id = provenance_.substr(0, provenance_.find("; "));
         bool all_plugins = true;
         std::shared_ptr<const WrittenRule> written;
         size_t written_count = 0;
@@ -438,21 +503,24 @@ void FilterStack::settle_now() const
             else if (!plugin_dfa(*f)) all_plugins = false;
         if (all_plugins && written_count == 1)
         {
-            const std::shared_ptr<const Dfa> keep = merge_plugins(raw, provenance_);
+            std::string key;
+            const std::shared_ptr<const Dfa> keep = merge_plugins(raw, line_id, &key);
             std::string why;
-            own_ranker_ = written_ranker(written, keep.get(), line.length, why, &table_bytes_);
+            own_ranker_ = written_ranker(written, keep.get(), line.length, why, &table_bytes_,
+                                         [&] { return shared_table(key, *keep, line.length); });
             if (own_ranker_) compact_ = own_ranker_.get();
             else blocker_ = why;
         }
         else if (all_plugins && written_count == 0)
         {
-            const std::shared_ptr<const Dfa> d = merge_plugins(raw, provenance_);
+            std::string key;
+            const std::shared_ptr<const Dfa> d = merge_plugins(raw, line_id, &key);
             const double bytes = DfaRanker::table_bytes(d->states(), d->base, line.length);
             table_bytes_ = bytes;
             if (bytes <= filter_memory())
             {
-                own_ranker_ = std::make_unique<DfaRanker>(*d, line.length);
-                compact_ = own_ranker_.get();
+                shared_ranker_ = shared_table(key, *d, line.length);
+                compact_ = shared_ranker_.get();
             }
             else blocker_ = over_table_limit("the plugins' combined table", bytes) + ": they judge only";
         }

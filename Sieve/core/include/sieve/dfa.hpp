@@ -67,6 +67,7 @@ public:
     State next(State s, uint32_t symbol) const override;
     BigUint completions(State s, uint32_t remaining) const override;
     bool alive(State s, uint32_t remaining) const override;
+    const Dfa& dfa() const { return dfa_; } // the automaton it counts (minimal)
 
     // The table's size estimate, in bytes, before building it: states x (length + 1) numbers of
     // up to length x log2(base) bits. Used to decide whether counting fits the budget.

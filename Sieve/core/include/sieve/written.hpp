@@ -50,6 +50,7 @@
 #include "sieve/dfa.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -94,7 +95,10 @@ std::string written_summary(const WrittenRule& rule);
 // every unit), at one length. Null, with `why` said, when
 // the rule cannot count or the tables would pass the budget.
 // `need`, if given: the memory its tables take, or would (what the filter memory must hold).
-std::unique_ptr<Ranker> written_ranker(std::shared_ptr<const WrittenRule> rule, const Dfa* keep, uint32_t length, std::string& why, double* need = nullptr);
+// `keep_table`, if given, makes keep's counting table (one shared with another stack: filter.cpp)
+// once the memory is known to hold it; else it is built here.
+std::unique_ptr<Ranker> written_ranker(std::shared_ptr<const WrittenRule> rule, const Dfa* keep, uint32_t length, std::string& why, double* need = nullptr,
+                                       const std::function<std::shared_ptr<const DfaRanker>()>& keep_table = {});
 
 // A not-written-v1 filter's rule (for a stack that counts it with its plugins), or nullptr.
 std::shared_ptr<const WrittenRule> written_rule_of(const Filter& f);

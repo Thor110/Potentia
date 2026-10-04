@@ -428,6 +428,10 @@ public:
         // Anything that would take, save or describe it decides it on the spot (withheld()).
         mutable bool withheld = false;
         mutable bool vault_pending = false;
+        // COST's guided row: the unit's guided address under `guided_by`, worked out the first time
+        // the tab shows it (6.5 ms for a page of 3,000 characters, every frame before).
+        mutable std::optional<sieve::GuidedLine::Code> guided_code;
+        mutable const sieve::GuidedLine* guided_by = nullptr;
         // A file's verdict once worked out (-1 not yet, 0 shown, 1 withheld), kept with the item so
         // looking back at a file costs nothing, and its slot when it stands in your room (-1
         // otherwise), where the vault worker (vault_ahead) may have worked it out already.

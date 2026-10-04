@@ -1,49 +1,66 @@
-# Counting memory and merge cache are settings (relative to origin/main 515b816)
+# Shared counting tables, and the test fixes (relative to origin/main 303dc41)
 
-- `this-round-only.patch` applies on top of the first review batch (review-batch-1).
-- `files/` and `full-vs-origin-main.patch` include that batch too, since it isn't on origin/main
-  yet.
+- `this-round-only.patch` applies on top of review-batch-2.
+- `files/` and `full-vs-origin-main.patch` include batch 2, since it isn't on origin/main yet.
 
-## What changed
-Two new GLOBAL rows under FILTER MEMORY. Both are saved in `[world]` of the application's settings.
+## The test failures
+The failing check was in a test I wrote in batch 1:
 
-**COUNTING MEMORY** (row 12): the share of installed memory the setup menu's counts may take at
-once.
-- 50% at first, from 5 to 100. Left and Right step by 5; PgUp and PgDn step by 25.
-- The row shows how many counts that allows on this machine with your filter memory setting, for
-  example "50% of 15.7 GB (3 at once)". It's still never more than one per core, less one for
-  drawing.
-- Before this, the 50% was fixed in the code.
+    CHECK(written_max_states(a.size()) * 2 <= [&] { set_filter_memory(2.0 * 1024 * 1024); return written_max_states(a.size()); }());
 
-**MERGE CACHE** (row 13): the share of the filter memory that keeps the plugins' merged automata
-between counts.
-- 50% at first, from 0 to 100. 0 keeps none.
-- The row shows the size, for example "50% (keeps 256 MB)".
-- Lowering it clears what no longer fits.
+The right-hand side changes the filter memory to 2 MB. C++ doesn't fix which side of `<=` is worked
+out first.
+- **GCC (here):** worked out the left side at 1 MB first, so the check passed.
+- **MSVC (yours):** worked out the right side first, so both sides were taken at 2 MB, and
+  "x × 2 ≤ x" failed.
 
-**Common to both:**
-- Neither changes any count, only how fast the counts arrive. So they take effect at once, with no
-  red line and no X.
-- Flags: `--counting-memory PCT` and `--merge-cache PCT` on the hallway, and `--merge-cache PCT` on
-  the `sieve` tool.
-- The line rows moved down two (`kFirstLineRow` is 14), and CI's row numbers moved with them.
+It now takes the two values on separate lines. The code under test was always right.
 
-## Files
-- **Core:** `core/include/sieve/plugin.hpp` and `core/src/plugin.cpp` (merge_cache_share /
-  set_merge_cache_share), `core/src/filter.cpp`.
-- **Client:** `client/app_settings.*`, `client/app_main.cpp` (flags, applied at start-up),
-  `client/menu.*` (the rows, set_counting_share, counting_slots), `data/lang/en.txt`.
-- **sieve tool:** `tools/sieve_cli.cpp`, `tools/cli/help.cpp`.
-- **Docs:** `README.md`, `docs/HANDOFF.md`.
-- **CI** (`.github/workflows/build.yml`): a check that both rows save (55 and 40 after a step each),
-  and the moved row numbers.
-- **Tests** (`tests/test_core.cpp`): the merge cache share stays within 0 to 1, and with none kept
-  the count is the same.
+The same test had a second problem, already fixed in review-batch-2. The suite runs twice where
+the CPU has SHA instructions (portable, then hardware SHA-256), and the test assumed it ran once.
 
-## Screenshot
-`rows.png`: the two rows under FILTER MEMORY, set to 55% and 40%.
+## Shared counting tables (`core/src/filter.cpp`, `shared_table`)
+The pages line and the books' title count the same plugins at the same length. The table for every
+text plugin at 32 characters (236,034 states) is about 308 MB and takes about a second to build.
+Each was building its own.
+
+**While in use:**
+- A table is built once while any stack still uses it.
+- A second stack that needs it in the meantime waits for that build and uses the same table.
+- This holds whatever the merge cache is set to, and costs no extra memory: the table goes when
+  the last stack using it is done.
+
+**Between counts:**
+- The table is also kept with the merged automata, in the MERGE CACHE share of the filter memory,
+  when it fits there.
+- At the defaults (50% of 512 MB, so 256 MB) the 308 MB table doesn't fit. Raise MERGE CACHE to
+  about 65% and it's kept, so counting the line again doesn't rebuild it.
+
+**Effect:**
+- **Memory at the peak:** X uses one 308 MB table where it used two.
+- **CPU:** a second of build work saved.
+- **Wall time:** X is unchanged at about 10–11 s, because the two builds used to run side by side
+  on separate cores.
+- **Counts:** unchanged. The screenshot after X is byte-identical.
+
+**Also:**
+- not-written's ranker now holds the plugins' table as a shared table and reads the automaton from
+  it. It no longer keeps a second copy of the automaton (about 25 MB).
+- Merges are now keyed by the line alone, not by the order the filters were ticked in, so two
+  stacks with the same plugins ticked in a different order share too. This was a bug in batch 1's
+  merge cache, which this test found.
+
+## Tests (tests/test_core.cpp)
+- **The evaluation-order fix** above.
+- **Sharing:** the same plugins in either order now give the same table (one object), and a table
+  still in use is shared even with the merge cache at 0.
 
 ## Checked
-- tests/test_core.cpp: 28,127 checks, 0 failures.
-- Run locally, both CI steps pass: the models and setup menu step (including the new row checks)
-  and the whole hallway step.
+- tests/test_core.cpp: 56,258 checks over both passes, 0 failures.
+- Run locally, all these CI steps pass:
+  - same addresses;
+  - filters judge, count and rank the same;
+  - models and the setup menu;
+  - the bytes256 line;
+  - books;
+  - the whole hallway step.

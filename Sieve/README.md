@@ -277,7 +277,7 @@ What stands in a slot is **scaled to the slot, uniformly**. Scaling only along t
 
 **Counting memory and merge cache.** The last two GLOBAL rows share out memory among the counts.
 - **COUNTING MEMORY** is the share of installed memory the setup menu's counts may take at once (50% at first; 5 to 100, Left/Right in steps of 5, PgUp/PgDn 25). Counts wait in a queue and run on one thread per core but the one that draws, and no more of them at once than this share holds, at the whole filter memory each. The row says how many that is on this machine ("50% of 15.7 GB (3 at once)").
-- **MERGE CACHE** is the share of the filter memory that keeps the plugins' merged automata between counts (50% at first; 0 to 100). With it, the pages line and the books' title merge the same plugins only once, and a line counted again doesn't merge them again. 0 keeps none.
+- **MERGE CACHE** is the share of the filter memory that keeps the plugins' merged automata, and their counting tables when they fit, between counts (50% at first; 0 to 100). With it, the pages line and the books' title merge the same plugins only once, and a line counted again doesn't merge them again. 0 keeps none. Whatever this is set to, a table two counts need at the same time is built once and used by both.
 
 Both change no count, only how fast the counts arrive, so they take effect at once without pressing X. Both are saved with the application's settings. `--counting-memory PCT` and `--merge-cache PCT` set them for the hallway, and `--merge-cache` for the `sieve` tool.
 

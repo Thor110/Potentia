@@ -128,6 +128,29 @@ void test_biguint()
         BigUint y = x;
         y.mul_small(0xdeadbeef);
         CHECK(BigUint::mul(x, BigUint(0xdeadbeef)) == y);
+        // add_mul_small: the same as a copy multiplied and added, for shorter, longer and equal
+        // lengths, a carry that runs through every limb, m = 0 and 1, and a number added to itself.
+        {
+            auto slow = [](BigUint acc, const BigUint& v, uint32_t m) {
+                BigUint t = v;
+                t.mul_small(m);
+                return acc += t;
+            };
+            const BigUint ones = BigUint::from_hex("ffffffffffffffffffffffffffffffffffffffffffffffff");
+            bool same = true;
+            for (const BigUint& acc : {BigUint(), BigUint(7), x, ones, BigUint::pow(27, 100)})
+                for (const BigUint& v : {BigUint(), BigUint(1), x, ones, BigUint::pow(3, 200)})
+                    for (uint32_t m : {0u, 1u, 2u, 255u, 0xffffffffu})
+                    {
+                        BigUint fast = acc;
+                        fast.add_mul_small(v, m);
+                        same = same && fast == slow(acc, v, m);
+                    }
+            BigUint self = ones;
+            self.add_mul_small(self, 3);
+            same = same && self == slow(ones, ones, 3);
+            CHECK(same);
+        }
         CHECK(BigUint::mul(BigUint::pow(27, 40), BigUint::pow(27, 60)) == BigUint::pow(27, 100));
         BigUint q, r;
         BigUint::divmod(BigUint::pow(27, 100), BigUint::pow(27, 60), q, r);
@@ -3768,6 +3791,8 @@ void test_filter_memory(const std::string& dir)
         BigUint k = ab.ranker()->count();
         k.divmod_small(7);
         CHECK(ab.ranker()->unrank(k) == ba.ranker()->unrank(k));
+        // One table for both, built once: the same plugins at the same length, in either order.
+        CHECK(ab.ranker() == ba.ranker());
         // The merge cache's share of the filter memory: kept within 0..1, and with none kept the
         // same count.
         CHECK(merge_cache_share() == kDefaultMergeCacheShare);
@@ -3777,15 +3802,24 @@ void test_filter_memory(const std::string& dir)
         CHECK(merge_cache_share() == 0.0);
         const FilterStack uncached(text_line(40), {{&cs, {}}, {&ps, {}}}, none);
         CHECK(uncached.ranker() && uncached.ranker()->count() == ab.ranker()->count());
+        // ...and a table still in use is shared even with nothing kept between counts.
+        CHECK(uncached.ranker() == ab.ranker());
         set_merge_cache_share(kDefaultMergeCacheShare);
     }
     // not-written-v1's automaton walks as many states as the filter memory holds: refused in 1 MB,
-    // made again (not the refusal kept) once there is more.
+    // made again (not the refusal kept) once there is more. Rules are kept for the process and the
+    // suite runs twice (portable and hardware SHA-256), so each run asks for readings not asked
+    // for before; a rule that was made is kept whatever the memory later is.
     {
+        static int run = 0;
         const Alphabet& a = alphabet_of("ascii96");
-        const uint32_t mask = written_mask_of("hex") | written_mask_of("base64");
+        const uint32_t mask = written_mask_of("hex") | written_mask_of(run++ == 0 ? "base64" : "base32");
+        // (Each on its own line: the two sides of one comparison may be worked out in either order.)
         set_filter_memory(1024 * 1024);
-        CHECK(written_max_states(a.size()) * 2 <= [&] { set_filter_memory(2.0 * 1024 * 1024); return written_max_states(a.size()); }());
+        const size_t one_mb = written_max_states(a.size());
+        set_filter_memory(2.0 * 1024 * 1024);
+        const size_t two_mb = written_max_states(a.size());
+        CHECK(one_mb * 2 <= two_mb);
         set_filter_memory(1024 * 1024);
         const auto small = written_rule(a, mask);
         CHECK(written_blocker(*small).find("the filter memory (1 MB)") != std::string::npos);

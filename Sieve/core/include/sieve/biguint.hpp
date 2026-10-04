@@ -60,6 +60,9 @@ public:
     // value / 2^bits as a double. DISPLAY ONLY (approximate), never used for addressing.
     double ratio_to_power_of_two(size_t bits) const;
     void mul_small(uint32_t m);
+    // this += x * m, in place: no copy of x is made (the shape of every counting table's sums,
+    // where a copy of each term was most of the time).
+    void add_mul_small(const BigUint& x, uint32_t m);
     void add_small(uint32_t a);
     uint32_t divmod_small(uint32_t d); // divides in place, returns remainder
     uint32_t mod_small(uint32_t d) const; // the remainder alone, without touching (or copying) the value

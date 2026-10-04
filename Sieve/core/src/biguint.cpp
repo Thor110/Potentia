@@ -655,6 +655,32 @@ void BigUint::mul_small(uint32_t m)
     trim();
 }
 
+void BigUint::add_mul_small(const BigUint& x, uint32_t m)
+{
+    if (m == 0 || x.limbs_.empty()) return;
+    if (&x == this)
+    {
+        const BigUint copy = x; // (its limbs would change under the loop)
+        add_mul_small(copy, m);
+        return;
+    }
+    if (limbs_.size() < x.limbs_.size()) limbs_.resize(x.limbs_.size(), 0);
+    uint64_t carry = 0;
+    size_t i = 0;
+    for (; i < x.limbs_.size(); ++i)
+    {
+        const Wide t = mul_add2(x.limbs_[i], m, limbs_[i], carry);
+        limbs_[i] = t.lo;
+        carry = t.hi;
+    }
+    for (; carry && i < limbs_.size(); ++i)
+    {
+        limbs_[i] += carry;
+        carry = limbs_[i] < carry ? 1 : 0;
+    }
+    if (carry) limbs_.push_back(carry);
+}
+
 BigUint& BigUint::operator+=(const BigUint& other)
 {
     if (other.limbs_.size() > limbs_.size()) limbs_.resize(other.limbs_.size(), 0);

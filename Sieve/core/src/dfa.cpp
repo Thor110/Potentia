@@ -398,20 +398,13 @@ DfaRanker::DfaRanker(const Dfa& minimal, uint32_t length) : dfa_(minimal), lengt
     for (uint32_t r = 1; r <= length; ++r)
         for (size_t s = 0; s < n; ++s)
         {
-            BigUint acc;
+            BigUint& acc = table_[r][s]; // summed in place: no copy of a term
             for (const auto& [t, mult] : groups[s])
-            {
-                const BigUint& prev = table_[r - 1][size_t(t)];
-                if (prev.is_zero()) continue;
-                if (mult == 1) acc += prev;
-                else
+                if (const BigUint& prev = table_[r - 1][size_t(t)]; !prev.is_zero())
                 {
-                    BigUint x = prev;
-                    x.mul_small(mult);
-                    acc += x;
+                    if (mult == 1) acc += prev;
+                    else acc.add_mul_small(prev, mult);
                 }
-            }
-            table_[r][s] = std::move(acc);
         }
     set_count();
 }

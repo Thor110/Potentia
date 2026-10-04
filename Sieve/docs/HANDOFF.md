@@ -1215,3 +1215,24 @@ Then the two shares became settings (Edward: "it just sticks to the ethos of the
   the filter memory kept for merged automata.
 - **Effect:** both apply at once (they change no count). kFirstLineRow is 14, and CI's row numbers
   moved with it.
+The second batch (4 October 2026).
+- **Tables summed in place:** BigUint::add_mul_small (this += x * m) in every counting table's
+  sums: DfaRanker, not-written's Bn, the kind counter, the word filters, two picture tables. The
+  236,034-state table at 32 characters builds in 1.0 s, not 2.2 s.
+- **COST's guided row:** kept on the Book (guided_code, guided_by).
+- **Measured and left alone:**
+  - E6 and E7: the menu's per-frame keys and sizes. A menu frame is 2-3 ms in Release, and taking
+    the share lookups out changed nothing.
+  - E10: not-written's per-step lock, which is never contended.
+- **Tables shared** (filter.cpp shared_table):
+  - A merged automaton's table, by merge key and length, is built once while any stack uses it. A
+    second stack waits and uses the same one, through a weak_ptr.
+  - It is kept between counts in the merge cache's share when it fits (the 308 MB pages table does
+    not fit the default 256 MB).
+  - WrittenRanker holds P's table as a shared_ptr and reads P from it (DfaRanker::dfa()).
+  - Merges are keyed by the line alone, so stacks that ticked the same plugins in another order
+    share too.
+- **Two test bugs fixed:**
+  - A comparison whose two sides changed the filter memory: MSVC evaluated the right side first.
+  - A rule-cache test that assumed one run of the suite: it runs twice where the CPU has SHA
+    instructions.

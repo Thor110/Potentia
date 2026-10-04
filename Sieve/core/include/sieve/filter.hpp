@@ -247,7 +247,8 @@ private:
     void settle() const;
     void settle_now() const;
     mutable const Ranker* compact_ = nullptr;
-    mutable std::unique_ptr<Ranker> own_ranker_; // a stack of plugins: their combined automaton's ranker
+    mutable std::unique_ptr<Ranker> own_ranker_; // a stack of plugins with not-written: its ranker
+    mutable std::shared_ptr<const Ranker> shared_ranker_; // plugins alone: their combined table, perhaps shared
     mutable std::unique_ptr<Ranker> voices_ranker_; // several voices: one voice's ranker, for them all
     mutable std::string blocker_;
     mutable double table_bytes_ = 0;

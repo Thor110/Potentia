@@ -641,7 +641,13 @@ void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float botto
     {
         try
         {
-            const auto code = line().guided->code(bk.unit);
+            const sieve::GuidedLine* g = line().guided.get();
+            if (!bk.guided_code || bk.guided_by != g)
+            {
+                bk.guided_code = g->code(bk.unit);
+                bk.guided_by = g;
+            }
+            const auto& code = *bk.guided_code;
             row(tr("ordering.guided"), double(code.bits), trf("cost.chars", {std::to_string(code.hex.size())}),
                 double(code.bits) < bits * 0.9 ? tr("cost.likely") : tr("cost.unlikely"));
         }

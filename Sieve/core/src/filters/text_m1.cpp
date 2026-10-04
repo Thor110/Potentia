@@ -310,12 +310,7 @@ private:
         BigUint total;
         if (r < h.size() && h[r]) total = BigUint(h[r]);
         for (uint32_t m = 0; m < h.size() && m + 1 <= r; ++m)
-            if (h[m])
-            {
-                BigUint t = A_[r - m - 1];
-                t.mul_small(h[m]);
-                total += t;
-            }
+            if (h[m]) total.add_mul_small(A_[r - m - 1], h[m]);
         return total;
     }
 
@@ -546,12 +541,7 @@ private:
         BigUint t;
         if (r < D.size() && D[r]) t = BigUint(D[r]);
         for (uint32_t m = m0; m < W.size() && m + 1 <= r; ++m)
-            if (W[m])
-            {
-                BigUint x = B_[r - m - 1];
-                x.mul_small(W[m]);
-                t += x;
-            }
+            if (W[m]) t.add_mul_small(B_[r - m - 1], W[m]);
         if (pad_)
         {
             uint64_t k = 0;

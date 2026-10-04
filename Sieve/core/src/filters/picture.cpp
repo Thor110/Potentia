@@ -74,11 +74,9 @@ public:
         for (uint32_t r = 1; r <= s_; ++r)
             for (uint32_t m = 0; m <= k_; ++m)
             {
-                BigUint c = comp_[m][r - 1];
-                c.mul_small(m);
-                BigUint n = comp_[m + 1][r - 1];
-                n.mul_small(b_ - m);
-                comp_[m][r] = c += n;
+                BigUint& c = comp_[m][r];
+                c.add_mul_small(comp_[m][r - 1], m);
+                c.add_mul_small(comp_[m + 1][r - 1], b_ - m);
             }
         whole_.push_back(BigUint(1));
         for (uint32_t f = 0; f < l_ / s_; ++f) whole_.push_back(BigUint::mul(whole_.back(), comp_[0][s_]));
@@ -248,9 +246,8 @@ public:
                     g_[t][r] = x;
                     continue;
                 }
-                BigUint other = g_[t + 1][r - 1];
-                other.mul_small(b_ - 1);
-                g_[t][r] = BigUint(g_[t][r - 1]) += other;
+                g_[t][r] = g_[t][r - 1];
+                g_[t][r].add_mul_small(g_[t + 1][r - 1], b_ - 1);
             }
         }
         start_ = states_.id({0, 0, 0});

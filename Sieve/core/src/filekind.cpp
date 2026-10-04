@@ -222,14 +222,8 @@ KindCounter::KindCounter(uint64_t max_bytes, KindSet kinds) : kinds_(std::move(k
                 // Many bytes lead to the same state: count each target once.
                 std::map<uint32_t, uint32_t> times;
                 for (uint32_t b = 0; b < 256; ++b) ++times[next_[p][s * 256 + b]];
-                BigUint sum;
-                for (const auto& [t, n] : times)
-                {
-                    BigUint c = comp_[h][p + 1][t];
-                    c.mul_small(n);
-                    sum += c;
-                }
-                comp_[h][p][s] = sum;
+                BigUint& sum = comp_[h][p][s]; // summed in place
+                for (const auto& [t, n] : times) sum.add_mul_small(comp_[h][p + 1][t], n);
             }
         }
     }
