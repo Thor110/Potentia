@@ -705,6 +705,26 @@ std::unique_ptr<Filter> make_m1(SieveFilter kind, bool padding, const FilterLine
     return f;
 }
 
+} // namespace
+
+// A plain dictionary counted by its words' lengths (plugin.hpp): the words and window rankers.
+WordCounting word_counting(std::shared_ptr<const Dictionary> dict, bool cut, bool padding, uint32_t length)
+{
+    const SieveFilter kind = cut ? SieveFilter::Window : SieveFilter::Words;
+    auto make = [kind, dict, padding](uint32_t L) -> std::unique_ptr<Ranker> {
+        if (kind == SieveFilter::Words) return std::make_unique<WordsRanker>(*dict, L, padding);
+        return std::make_unique<WindowRanker>(*dict, L, padding);
+    };
+    WordCounting out;
+    out.bytes = m1_table_bytes(length);
+    if (out.bytes > filter_memory()) // at the most it could be: so measure what it is
+        out.bytes = m1_table_bytes(length, m1_growth(std::to_string(int(kind)) + "/" + std::to_string(padding) + "/" + dict->sha256(), make));
+    if (out.bytes <= filter_memory()) out.make = [make, length]() { return make(length); };
+    return out;
+}
+
+namespace {
+
 // Version 2 and later of clean and words allow trailing SPACE padding.
 std::unique_ptr<Filter> make_m1(SieveFilter kind, const FilterLine& line, const FilterValues& values, const FilterResources& res,
                                 const FilterSpec& spec)
@@ -740,6 +760,10 @@ void add_text_m1_filters(std::vector<FilterSpec>& out)
     window.implies = {"clean-v1"};
     window.applies = is_lower27;
     window.counts_as = "own";
+    // The same rule in the token form (window-data-v1), an automaton that merges, and that counts
+    // long pages as this does, by its words' lengths (plugin.hpp word_counting).
+    window.retired = true;
+    window.replaced_by = "window-data-v1";
     window.make = [](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
         return make_m1(SieveFilter::Window, l, v, r, *find_filter("window-v1"));
     };
@@ -753,6 +777,8 @@ void add_text_m1_filters(std::vector<FilterSpec>& out)
     words.implies = {"clean-v1", "window-v1"};
     words.applies = is_lower27;
     words.counts_as = "own";
+    words.retired = true; // as window-v1
+    words.replaced_by = "words-data-v1";
     words.make = [](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
         return make_m1(SieveFilter::Words, l, v, r, *find_filter("words-v1"));
     };
@@ -772,6 +798,7 @@ void add_text_m1_filters(std::vector<FilterSpec>& out)
     words2.version = 2;
     words2.description = "As words-v1, but a unit may end in SPACE padding (the last unit of warped text). Can rank (compact).";
     words2.implies = {"clean-v2", "window-v2"};
+    words2.replaced_by = "words-data-v2"; // (retired, as words-v1)
     words2.make = [](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
         return make_m1(SieveFilter::Words, l, v, r, *find_filter("words-v2"));
     };
@@ -783,6 +810,7 @@ void add_text_m1_filters(std::vector<FilterSpec>& out)
     window2.description = "As window-v1, but a unit may end in SPACE padding (the last page of a text). Pages cut from "
                           "real books pass: words cut by the page edges are allowed. Can rank (compact).";
     window2.implies = {"clean-v2"};
+    window2.replaced_by = "window-data-v2"; // (retired, as window-v1)
     window2.make = [](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
         return make_m1(SieveFilter::Window, l, v, r, *find_filter("window-v2"));
     };
@@ -797,6 +825,8 @@ void add_text_m1_filters(std::vector<FilterSpec>& out)
     title.implies = {"clean-v2", "window-v2", "words-v2"};
     title.applies = is_lower27;
     title.counts_as = "own";
+    title.retired = true; // the same rule in the token form, with padding and within
+    title.replaced_by = "title-data-v1";
     title.make = [](const FilterLine& l, const FilterValues& v, const FilterResources& r) -> std::unique_ptr<Filter> {
         const FilterSpec& spec = *find_filter("title-v1");
         const std::string id = param_value(spec, v, "dictionary");

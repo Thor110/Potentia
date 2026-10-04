@@ -1,0 +1,18 @@
+sieve-filter-v1
+; The built-in words-v2, written in the token form: words-data-v1 with trailing padding, so the last
+; unit of a text (its words, then SPACEs to the end) passes. It must judge and count exactly as
+; words-v2 does, with the same dictionary.
+id        words-data
+version   2
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     text
+symbols   lower27
+describe  Every token is a complete dictionary word, and a unit may end in SPACE padding (words-v2, as a plugin).
+param     dictionary  dict  default  the word list (a registered dictionary)
+
+tokens    separator " "
+edges     whole
+padding   trailing
+set       word  dict:{dictionary}
+end

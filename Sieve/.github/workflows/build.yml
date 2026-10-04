@@ -524,14 +524,18 @@ jobs:
           if build/sieve filters --length 8 | grep -q "clean-data-v1"; then exit 1; fi
           rm build/filters/broken.sfilter build/filters/clean-edited.sfilter
           build/sieve filters --length 8 | q "clean-data-v1"
-          # `requires`: ticking tidy-data-v1 alone brings clean-data-v1 and max-run-data-v1 (at the
-          # max it pins) into the stack, which still counts; a different setting is flagged; and a
+          # `requires`: ticking tidy-data-v2 alone brings clean-data-v1 and the built-in max-run-v1
+          # (at the max_run it pins) into the stack, which still counts, exactly as tidy-data-v1 and
+          # max-run-data-v1 did (both retired for them); a different setting is flagged; and a
           # copy of a plugin under another name is found to be the same rule.
-          printf "[text]\nmode = compact\nfilters = tidy-data-v1\n" > tidy.ini
-          build/sieve filters --length 12 --filters tidy.ini | q "max-run-data-v1{plugin sha256=[0-9a-f]* max=3}; clean-data-v1"
-          build/sieve filters --length 12 --filters tidy.ini | q "compact mode available"
-          printf "[text]\nfilters = tidy-data-v1, max-run-data-v1\n[text.max-run-data-v1]\nmax = 5\n" > tidy5.ini
-          build/sieve filters --length 12 --filters tidy5.ini | q "requires max-run-data-v1 at max=3; it is set to max=5"
+          printf "[text]\nmode = compact\nfilters = tidy-data-v2\n" > tidy.ini
+          build/sieve filters --length 12 --filters tidy.ini | q "max-run-v1{max_run=3}; clean-data-v1"
+          build/sieve filters --length 12 --filters tidy.ini | q "^survivors    147852209843303498 (exact; compact mode available)"
+          printf "[text]\nmode = compact\nfilters = tidy-data-v1\n" > tidy1.ini
+          build/sieve filters --length 12 --filters tidy1.ini | q "^survivors    147852209843303498 (exact; compact mode available)"
+          build/sieve filters --length 12 | q "tidy-data-v1   (custom)   (retired: replaced by tidy-data-v2)"
+          printf "[text]\nfilters = tidy-data-v2, max-run-v1\n[text.max-run-v1]\nmax_run = 5\n" > tidy5.ini
+          build/sieve filters --length 12 --filters tidy5.ini | q "requires max-run-v1 at max_run=3; it is set to max_run=5"
           sed 's/^id        clean-data/id        clean-copy/' data/filters/clean-data-v1.sfilter > clean-copy.sfilter
           build/sieve filters --plugin clean-copy.sfilter --relations | q "the same rule as clean-data-v1  -- a duplicate"
           # The filter designer (main menu): it opens a plugin and writes it back as it would save
@@ -837,7 +841,7 @@ jobs:
           # settings, reported identically by the engine and by the oracle's own parser and engine
           # (states declared and minimal, survivors, excluded, and survivors by rank).
           for L in 1 2 5 17 40; do
-            for spec in "clean-data-v1:" "clean-data-v2:" "max-run-data-v1:max=1" "max-run-data-v1:max=3" "max-run-data-v1:max=5" "key-data-v1:tonic=0" "key-data-v1:tonic=5" "key-data-v1:tonic=11" "tidy-data-v1:" "tidy-data-v1:longest=3"; do
+            for spec in "clean-data-v1:" "clean-data-v2:" "max-run-data-v1:max=1" "max-run-data-v1:max=3" "max-run-data-v1:max=5" "key-data-v1:tonic=0" "key-data-v1:tonic=5" "key-data-v1:tonic=11" "tidy-data-v1:" "tidy-data-v1:longest=3" "tidy-data-v2:" "tidy-data-v2:longest=3"; do
               f=${spec%%:*}; p=${spec#*:}
               python sieve_ref.py plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} > plugin.oracle
               $S filters --plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
@@ -847,13 +851,18 @@ jobs:
           # The token form: the ports of words-v1 and window-v1 (a dictionary each, built another way
           # by the oracle: an NFA and the subset construction, then Hopcroft), and a toy grammar
           # (word lists, follow, first and last, a word in two sets; whole and cut edges).
-          for f in words-data-v1 window-data-v1; do
+          for f in words-data-v1 window-data-v1 words-data-v2 window-data-v2 title-data-v1; do
             python sieve_ref.py plugin ../data/filters/$f.sfilter --length 6 --params dictionary=scowl-en-35 > plugin.oracle
             $S filters --plugin ../data/filters/$f.sfilter --length 6 --params dictionary=scowl-en-35 | tr -d '\r' > plugin.engine
             diff plugin.oracle plugin.engine
           done
+          # title-data-v1 with its words held to fewer symbols than the unit has (`within`).
+          python sieve_ref.py plugin ../data/filters/title-data-v1.sfilter --length 9 --params dictionary=scowl-en-35,max_length=4 > plugin.oracle
+          $S filters --plugin ../data/filters/title-data-v1.sfilter --length 9 --params dictionary=scowl-en-35,max_length=4 | tr -d '\r' > plugin.engine
+          diff plugin.oracle plugin.engine
           # toy-tags: tagged lists (two files as one, an excluded tag, capitals folded, lines skipped).
-          for f in toy-grammar-v1 toy-grammar-cut-v1 toy-tags-v1 toy-tags-cut-v1; do
+          # toy-padding: trailing padding and `within` with two separators, cut and whole edges.
+          for f in toy-grammar-v1 toy-grammar-cut-v1 toy-tags-v1 toy-tags-cut-v1 toy-padding-v1 toy-padding-whole-v1; do
             for L in 1 3 11 25; do
               python sieve_ref.py plugin ../tests/plugins/$f.sfilter --length $L > plugin.oracle
               $S filters --plugin ../tests/plugins/$f.sfilter --length $L | tr -d '\r' > plugin.engine
@@ -917,7 +926,7 @@ jobs:
           # voices, each voice judged on its own (counts to the power of the voices, ranks by voice).
           for set in "--low C3 --high C6 --durations seEqQhHw" "--low F#3 --high G5 --durations EQH"; do
             for V in 1 2 3; do
-              for spec in "key-data-v2:tonic=D,scale=blues" "melody-leap-v1:leap=3" "melody-rests-v1:run=1,total=2,leading=yes" "melody-range-v1:low=62,high=70"; do
+              for spec in "key-data-v2:tonic=D,scale=blues" "melody-leap-v1:leap=3" "melody-rests-v1:run=1,total=2,leading=yes" "melody-range-v1:low=62,high=70" "melody-lengths-v2:shortest=e,longest=h,eighths=1" "melody-ending-v2:tonic=G,hold=Q"; do
                 f=${spec%%:*}; p=${spec#*:}
                 for L in 1 2 5; do
                   python sieve_ref.py plugin ../data/filters/$f.sfilter --line audio --note-set notes2 $set --voices $V --length $L --params $p > plugin.oracle
@@ -936,7 +945,9 @@ jobs:
             $S filters --plugin ../data/filters/$f.sfilter --length 6 --judge ../tests/plugins/moby-sentences.txt | tr -d '\r' | grep -v "^states" > plugin.engine
             diff plugin.oracle plugin.engine
           done
-          $S filters --plugins | grep -c "^loaded" | grep -qx 23
+          # Every shipped plugin loads: as many as data/filters holds (not a fixed number, which went
+          # stale when key-data-v2 was added).
+          test "$($S filters --plugins | grep -c "^loaded")" = "$(ls ../data/filters/*.sfilter | wc -l | tr -d ' ')"
           $S filters --plugin ../data/filters/words-data-v1.sfilter --length 6 --relations | grep -q "stricter than (implies) window-data-v1"
           rm -rf addr
           $S locate ../tests/manifest_fixture --manifest fixture.manifest --addresses addr --compare > locate.out

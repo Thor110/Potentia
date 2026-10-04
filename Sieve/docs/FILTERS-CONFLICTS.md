@@ -17,9 +17,9 @@ counts (`FilterSpec::counts_as`):
 
 | Counts as | Filters | Combines with |
 | :--- | :--- | :--- |
-| automaton | every custom filter (the `.sfilter` plugins: clean-data, max-run-data, tidy-data, window-data, words-data, the Moby grammars, key-data, the melody filters), `max-run-v1`, `not-other-line-v1`, `not-packed-v1` | other automata, and `not-written-v1` |
+| automaton | every custom filter (the `.sfilter` plugins: clean-data, max-run-data, tidy-data, window-data, words-data, the Moby grammars, key-data, the melody filters; not title-data, which has `within`), `max-run-v1`, `not-other-line-v1`, `not-packed-v1`, and on a small palette `palette-size-v1` and `row-runs-v1` | other automata, and `not-written-v1` |
 | written | `not-written-v1` | automata |
-| own ranker | `clean-v1`, `window-v1`, `words-v1`, `clean-v2`, `window-v2`, `words-v2`, `title-v1`, `neighbour-agreement-v1`, `key-v1`, `palette-size-v1`, `row-runs-v1`, `utf8-valid-v1` | only a filter it implies, or that implies it |
+| own ranker | `clean-v1`, `window-v1`, `words-v1`, `clean-v2`, `window-v2`, `words-v2`, `title-v1`, `title-data-v1` (all but the last retired), `neighbour-agreement-v1`, `key-v1`, `utf8-valid-v1`, and on a large palette (rgb24) `palette-size-v1` and `row-runs-v1` | only a filter it implies, or that implies it |
 | arithmetic | `not-a-file-v1`, `not-a-pattern-v1` | nothing |
 | model rule | `distinct-vertices-v1`, `distinct-indices-v1`, `every-vertex-used-v1`, `canonical-mesh-v1` | each other (canonical-mesh implies the first two and counts with every-vertex-used) |
 | judges only | `symbol-entropy-v1`, `model-information-v1`; on the binary line `binary-kind-v1` and `not-an-item-v1` | not part of this rule (see below) |
@@ -44,10 +44,11 @@ On a line of every byte (`bytes256`) only `not-written-v1`, `not-a-file-v1` and
 `not-a-pattern-v1` count, and the last two conflict with the first and with each other.
 
 **Image and video.**
-- *Filters need merging:* `neighbour-agreement-v1` with `not-packed-v1`; `palette-size-v1` and
-  `row-runs-v1` with each other and with both of those. row-runs is an automaton underneath on a
-  small palette (its state is the column, the changes and the last colour); palette-size's state is
-  the set of colours used, an automaton only on the smallest palettes.
+- *Filters need merging:* `neighbour-agreement-v1` with `not-packed-v1`, `palette-size-v1` and
+  `row-runs-v1`. On a small palette `palette-size-v1` and `row-runs-v1` are automata (FilterSpec
+  `counts_as_on`: built where states times symbols stay under 2^24, judged at the largest settings
+  the line allows), so they merge with each other and with `not-packed-v1`; on a large one (rgb24)
+  they count their own ways and need merging with each other and with `not-packed-v1` too.
 - *Conflicting filters:* `not-a-file-v1` and `not-a-pattern-v1` with each other, with
   `neighbour-agreement-v1` and with `not-packed-v1`.
 
@@ -120,29 +121,36 @@ sampled and judged by the other, both ways (and the unit tests and the oracle as
 | `clean-v2` | `clean-data-v2` (new) | counts at 1, 2, 3, 4, 6, 32, 200; every unit up to 4 symbols; padding-heavy units at 32 and 200; the oracle's own engine at 1, 2, 5, 17, 40 |
 | `key-v1` | `key-data-v2` | counts and sampled survivors on all 12 tonics x 6 scales at lengths 6 and 16; `key-data-v2` also covers every note set, `key-v1` only notes104 |
 | `key-data-v1` | `key-data-v2` | its tonic-only major key is `key-data-v2`'s major (plugins are retired by name and SHA-256, so someone else's file of the same name is not) |
+| `max-run-data-v1` | `max-run-v1` (built-in) | the same rule, both automata; the built-in covers every text alphabet. Exhaustive at length 3, run-heavy units at 24 (tests) |
+| `tidy-data-v1` | `tidy-data-v2` | it requires `max-run-v1` (`max_run=3`) in place of `max-run-data-v1`; with what each brings, the same counts at 1, 2, 5, 12, 32, 64, 200 and 400 and the same verdicts (tests, CLI, and the oracle in CI) |
+| `title-v1` | `title-data-v1` | the token form with `padding trailing` and `within max_length`: the same counts at 12, 80 and 200 with `max_length` 10 and 64, every unit to length 4, and the oracle's own build in CI. Both count on their own (not a merge, but one machinery fewer) |
+| `melody-lengths-v1`, `melody-ending-v1` | `melody-lengths-v2`, `melody-ending-v2` | the same rules on every note set, by real lengths (`LENGTH`, `SIXTEENTHS`): on notes104 the same counts at every setting of their choices (tests, and the CLI at 3 and 8 notes) |
+| `words-v1`, `window-v1` | `words-data-v1`, `window-data-v1` | the token form; where its automaton's table does not fit (long pages) it counts by its words' lengths as the built-ins do: the same counts at 1 to 9 (every unit to 4), 20, 32, 400, 1,500 (forced, at 1 MB) and 3,200 |
+| `words-v2`, `window-v2` | `words-data-v2`, `window-data-v2` | the token form with `padding trailing`: the same counts at 1, 2, 5, 12, 32, 80, 400, 1,500 (forced) and 3,200, every unit to length 4, padding-heavy random units, and the oracle's own build in CI |
 
 ## Merging and retiring: what is left
 
 With each filter's share alone in the list (Filtered: X%), the remaining duplicates and clashes, and
 what stands in the way of each:
 
-- **`words-v1` and `window-v1`** have exact automaton twins (`words-data-v1`, `window-data-v1`: the
-  same counts at 20 and 32 and no disagreement on sampled survivors), but a dictionary's automaton
-  counts only while its table fits the filter memory (at 512 MB, units of a few hundred characters), where the
-  built-ins count to 20,000 with their own method. Retire them once the token form can count long
-  units (a table kept for the lengths in use rather than all of them, or the built-ins' own
-  method of counting by word lengths, used for an automaton whose tokens are a plain dictionary).
-- **`words-v2`, `window-v2` and `title-v1`** (trailing padding; title: words, then SPACEs) need a
-  `padding` option in the token form, in the engine and the oracle; then `words-data-v2` and
-  `window-data-v2` can replace them as `clean-data-v2` replaced `clean-v2`.
-- **`max-run-v1` and `max-run-data-v1`** are the same rule, both automata (so they do not clash).
-  The built-in covers every text alphabet, the plugin only lower27, but `tidy-data-v1` requires the
-  plugin. A `tidy-data-v2` requiring `max-run-v1` would let `max-run-data-v1` and `tidy-data-v1` retire.
-- **Pictures:** `neighbour-agreement-v1`, `palette-size-v1` and `row-runs-v1` count with their own
-  machinery and clash with each other and with `not-packed-v1`. `row-runs-v1` is an automaton on
-  small palettes (its state is the column, the changes and the last colour), and `palette-size-v1`
-  on the smallest; exposing those automata where they are small would let them merge.
-  `neighbour-agreement-v1` (a transfer matrix) does not count at all at 16x16 or 5x5x8.
+- *Done (4 October 2026).* **`words-v1`, `window-v1`, `words-v2` and `window-v2`** retired for
+  `words-data-v1`, `window-data-v1`, `words-data-v2` and `window-data-v2`. A plugin of one
+  dictionary set and no grammar (SPACE between tokens, on lower27) now counts long units the way the
+  built-ins did, by its words' lengths, wherever its automaton's table would not fit the filter
+  memory (plugin.hpp `word_counting`); below that it is an automaton and merges as before. The same
+  counts at 400 and 3,200 characters, and 20,000 counts in under a second.
+- *Done (4 October 2026).* **`title-v1`** retired for **`title-data-v1`** (words with padding,
+  `within max_length`), the same counts at every length and setting tried. Both count on their own.
+- *Done (4 October 2026).* **`max-run-data-v1` and `tidy-data-v1`** retired for the built-in
+  **`max-run-v1`** and **`tidy-data-v2`**, which requires it (`max_run=3`): the same counts.
+- *Done (4 October 2026).* **Pictures:** `palette-size-v1` and `row-runs-v1` are automata where
+  they are small (row-runs: the column, the changes so far in the row and the last colour;
+  palette-size: the colours used, and per frame the place in the frame), and merge with each other,
+  with `not-packed-v1` and with plugins: on the black-and-white image line, one colour with both and
+  `not-packed-v1` counts exactly (2). On rgb24 they keep their own rankers. Every picture vector
+  (counts, ranks both ways, rgb24 included) passes through the automata unchanged.
+  `neighbour-agreement-v1` (a transfer matrix) is left as it is: it does not count at all at 16x16
+  or 5x5x8, so there is nothing to merge.
 - **Arithmetic** (`not-a-file-v1`, `not-a-pattern-v1`) conflicts with everything that counts; that
   is in their nature (they test the unit's number, not its symbols) and is not a merge to make.
 

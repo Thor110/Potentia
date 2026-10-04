@@ -322,7 +322,7 @@ std::vector<std::string> tick_filter(LineFilters& settings, const std::string& n
     return added;
 }
 
-std::vector<std::string> tick_filter_by_hand(LineFilters& settings, const std::string& name, bool on)
+std::vector<std::string> tick_filter_by_hand(LineFilters& settings, const std::string& name, bool on, const FilterLine* line)
 {
     std::vector<std::string> unticked;
     if (!on)
@@ -338,7 +338,7 @@ std::vector<std::string> tick_filter_by_hand(LineFilters& settings, const std::s
         const FilterSpec* b = find_filter(other);
         if (!b) continue;
         for (const std::string& n : fresh)
-            if (const FilterSpec* a = find_filter(n); a && !filter_conflict(*a, *b).empty())
+            if (const FilterSpec* a = find_filter(n); a && !filter_conflict(*a, *b, line).empty())
             {
                 settings.set_enabled(other, false);
                 unticked.push_back(other);

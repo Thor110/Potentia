@@ -149,6 +149,10 @@ struct FilterSpec
     //   "model-rule"  the models line's own rules: combine with each other
     //   ""            judges only, or has no rule about combining (never unticks anything)
     std::string counts_as;
+    // Where how it counts depends on the line (a filter that is an automaton on small palettes and
+    // counts its own way on large ones): what it counts as there, at the largest settings the line
+    // allows, so it is never said to merge where it cannot. Empty: counts_as everywhere.
+    std::function<std::string(const FilterLine&)> counts_as_on;
     // Retired: kept, and loadable, so earlier stacks still reproduce, but no longer offered beside
     // the others: it judges only and would stop a line compacting (its condensed address space), or
     // another filter does the same as an automaton, which counts and merges (`replaced_by`). The
@@ -187,7 +191,8 @@ std::vector<const FilterSpec*> filters_for(const FilterLine& line);
 // judges only), "merge" (both are automata underneath but are not merged yet: "filters need
 // merging") or "conflict" (one is counted by arithmetic: "conflicting filters"). A filter implied
 // by the other never conflicts with it. See docs/FILTERS-CONFLICTS.md.
-std::string filter_conflict(const FilterSpec& a, const FilterSpec& b);
+// With a line, a filter's counts_as_on decides how it counts there; without one, counts_as does.
+std::string filter_conflict(const FilterSpec& a, const FilterSpec& b, const FilterLine* line = nullptr);
 
 // The value of a parameter, or its default. Throws if an integer is malformed or out of range.
 std::string param_value(const FilterSpec& spec, const FilterValues& values, const std::string& key);

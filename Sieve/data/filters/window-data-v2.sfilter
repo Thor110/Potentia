@@ -1,0 +1,18 @@
+sieve-filter-v1
+; The built-in window-v2, written in the token form: window-data-v1 with trailing padding, so the
+; last page of a text passes, its last word cut by the end of the text as any page's may be. It must
+; judge and count exactly as window-v2 does, with the same dictionary.
+id        window-data
+version   2
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     text
+symbols   lower27
+describe  Could be cut from running English, and a unit may end in SPACE padding (window-v2, as a plugin).
+param     dictionary  dict  default  the word list (a registered dictionary)
+
+tokens    separator " "
+edges     cut
+padding   trailing
+set       word  dict:{dictionary}
+end

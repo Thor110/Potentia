@@ -2006,17 +2006,19 @@ std::vector<Menu::Reach> Menu::reach_of(ToggleScope scope, int overlay, int tab)
         for (const sieve::FilterSpec* f : sieve::filters_for(st.line))
             // This tab, or the two main tabs: retired filters are ticked only by hand, or by Z
             // on their own tab.
-            // title-v1 is for a book's title page (words, then SPACEs): ticking all ticks it
-            // only there, never on pages, where it would leave little but short lines.
-            if ((both_tabs ? tab_of(*f) != 2 : tab_of(*f) == tab) && (f->id != "title" || st.lf == &cfg_.books.parts[1]))
+            // The title filters (title-v1, title-data-v1) are for a book's title page (words, then
+            // SPACEs): ticking all ticks them only there, never on pages, where they would leave
+            // little but short lines.
+            if ((both_tabs ? tab_of(*f) != 2 : tab_of(*f) == tab) && (f->id.rfind("title", 0) != 0 || st.lf == &cfg_.books.parts[1]))
                 in_reach.push_back({st.lf, st.li, st.part, f->name()});
     // Which of them clash with another in reach on the same stack: those are weighed.
     for (Reach& r : in_reach)
     {
         const sieve::FilterSpec* a = sieve::find_filter(r.name);
+        const sieve::FilterLine line = r.part >= 0 ? book_part_line(r.part) : filter_line_of(r.li);
         for (const Reach& o : in_reach)
             if (o.lf == r.lf && o.name != r.name)
-                if (const sieve::FilterSpec* b = sieve::find_filter(o.name); a && b && !sieve::filter_conflict(*a, *b).empty()) r.clashes = true;
+                if (const sieve::FilterSpec* b = sieve::find_filter(o.name); a && b && !sieve::filter_conflict(*a, *b, &line).empty()) r.clashes = true;
     }
     return in_reach;
 }
@@ -2092,9 +2094,10 @@ void Menu::poll_toggle()
     for (const Reach& r : in_reach)
     {
         const sieve::FilterSpec* a = sieve::find_filter(r.name);
+        const sieve::FilterLine line = r.part >= 0 ? book_part_line(r.part) : filter_line_of(r.li);
         bool clash = false;
         for (const std::string& other : r.lf->enabled)
-            if (const sieve::FilterSpec* b = sieve::find_filter(other); a && b && !sieve::filter_conflict(*a, *b).empty()) clash = true;
+            if (const sieve::FilterSpec* b = sieve::find_filter(other); a && b && !sieve::filter_conflict(*a, *b, &line).empty()) clash = true;
         if (!clash) (void)sieve::cli::tick_filter(*r.lf, r.name, true);
     }
     save_filters();
@@ -2125,7 +2128,13 @@ void Menu::overlay_change(int dir, bool big)
         mode = order[((m + dir) % 5 + 5) % 5];
         break;
     }
-    case ORow::Kind::Filter: (void)sieve::cli::tick_filter_by_hand(lf, row.filter, !lf.is_enabled(row.filter)); break; // with its prerequisites, unticking conflicts
+    case ORow::Kind::Filter:
+    {
+        // With its prerequisites, unticking what it cannot be counted with on this line.
+        const sieve::FilterLine line = overlay_ == 4 ? book_part_line(row.part) : filter_line_of(overlay_);
+        (void)sieve::cli::tick_filter_by_hand(lf, row.filter, !lf.is_enabled(row.filter), &line);
+        break;
+    }
     case ORow::Kind::Param:
     {
         const sieve::FilterSpec* spec = sieve::find_filter(row.filter);
@@ -2497,7 +2506,7 @@ void Menu::render_overlay(float W, float H)
                 std::string merge, hard;
                 for (const sieve::FilterSpec* g : sieve::filters_for(line))
                 {
-                    const std::string why = sieve::filter_conflict(*f, *g);
+                    const std::string why = sieve::filter_conflict(*f, *g, &line);
                     if (why.empty()) continue;
                     std::string& list = why == "conflict" ? hard : merge;
                     list += (list.empty() ? "" : ", ") + g->name() + (lf.is_enabled(g->name()) ? " " + tr("filters.conflict.ticked") : "");

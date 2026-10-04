@@ -20,14 +20,21 @@
 // G(t, r - 1) + (B - 1) G(t + 1, r - 1) inside it (G(changes + 1, .) = 0, G(t, 0) = 1). Below a
 // pixel inside a row stand the same colour as its left neighbour (if smaller) and the others.
 //
-// Both are counted as their own rankers ("own" in docs/FILTERS-CONFLICTS.md): they combine with
-// no other filter until rankers can be merged by the state they share.
+// On a small palette each is also an automaton over the pixels (row-runs: the column, the changes
+// so far in the row and the last colour; palette-size: the colours used so far, and on a video
+// counted per frame the place in the frame), built when it is small enough (as max-run-v1's is):
+// then it combines with every other automaton (not-packed-v1, the other one, plugins) and the
+// stack counts as one. On a large palette (rgb24) the automaton would be too large, and each counts
+// with its own ranker above ("own" in docs/FILTERS-CONFLICTS.md); counts_as_on says which a line
+// gets, judged at the largest settings it allows.
 
 #include "sieve/filter.hpp"
+#include "sieve/plugin.hpp"
 
 #include <algorithm>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <tuple>
 
@@ -392,6 +399,104 @@ bool picture(const FilterLine& l)
     return (l.kind == "image" || l.kind == "video") && l.width && l.height && l.base >= 2 && l.length % l.width == 0;
 }
 
+// An automaton is built where its states times its symbols stay under this (max-run-v1's bound).
+constexpr uint64_t kMaxDfaCells = uint64_t(1) << 24;
+// Whether `states` states over `base` symbols are small enough (worked out without overflow).
+bool cells_fit(uint64_t states, uint64_t base) { return base > 0 && states <= kMaxDfaCells / base; }
+
+// row-runs' states: the row's start, then (column 1..W-1, changes 0..c, last colour), or past the
+// bound, the bound and one.
+uint64_t row_runs_states(uint64_t B, uint64_t W, uint64_t c)
+{
+    if (W <= 1) return 1;
+    if (B > kMaxDfaCells || (c + 1) > kMaxDfaCells / B || (W - 1) > kMaxDfaCells / ((c + 1) * B)) return kMaxDfaCells + 1;
+    return 1 + (W - 1) * (c + 1) * B;
+}
+
+std::optional<Dfa> row_runs_dfa(uint32_t B, uint32_t W, uint32_t changes)
+{
+    const uint32_t c = std::min(changes, W > 0 ? W - 1 : 0); // more changes than a row has places allows anything
+    const uint64_t n = row_runs_states(B, W, c);
+    if (!cells_fit(n, B)) return std::nullopt;
+    Dfa d;
+    d.base = B;
+    d.start = 0;
+    d.accept.assign(size_t(n), 1);
+    d.next.assign(size_t(n) * B, Dfa::kDead);
+    auto at = [&](uint32_t x, uint32_t t, uint32_t last) { return int32_t(1 + (uint64_t(x - 1) * (c + 1) + t) * B + last); };
+    for (uint32_t col = 0; col < B; ++col) d.next[col] = W == 1 ? 0 : at(1, 0, col);
+    for (uint32_t x = 1; x < W; ++x)
+        for (uint32_t t = 0; t <= c; ++t)
+            for (uint32_t last = 0; last < B; ++last)
+            {
+                const size_t s = size_t(at(x, t, last));
+                for (uint32_t col = 0; col < B; ++col)
+                {
+                    const uint32_t tt = t + (col != last ? 1 : 0);
+                    if (tt > c) continue;
+                    d.next[s * B + col] = x + 1 == W ? 0 : at(x + 1, tt, col);
+                }
+            }
+    return minimise(d);
+}
+
+// palette-size's states: the sets of at most k colours, and per frame the place in the frame.
+uint64_t palette_states(uint64_t B, uint64_t k, uint64_t scope, bool per_frame)
+{
+    uint64_t sets = 0, c = 1; // sum of C(B, i), i <= k, stopping once it is too many to build
+    for (uint64_t i = 0; i <= std::min(k, B) && sets <= kMaxDfaCells; ++i)
+    {
+        sets += c;
+        c = c * (B - i) / (i + 1);
+    }
+    if (sets > kMaxDfaCells) return kMaxDfaCells + 1;
+    return per_frame ? (scope > kMaxDfaCells / std::max<uint64_t>(sets, 1) ? kMaxDfaCells + 1 : sets * scope) : sets;
+}
+
+std::optional<Dfa> palette_dfa(uint32_t B, uint32_t length, uint32_t scope, uint32_t colours)
+{
+    const uint32_t k = std::min({colours, B, scope});
+    const bool per_frame = scope < length;
+    if (!cells_fit(palette_states(B, k, scope, per_frame), B)) return std::nullopt;
+    // Breadth first from the empty set (at the frame's first pixel): only the states reached.
+    std::map<std::pair<uint32_t, std::vector<uint32_t>>, int32_t> id;
+    std::vector<std::pair<uint32_t, std::vector<uint32_t>>> keys;
+    auto get = [&](uint32_t pos, const std::vector<uint32_t>& used) {
+        const auto [it, added] = id.emplace(std::make_pair(pos, used), int32_t(keys.size()));
+        if (added) keys.emplace_back(pos, used);
+        return it->second;
+    };
+    Dfa d;
+    d.base = B;
+    d.start = get(0, {});
+    for (size_t i = 0; i < keys.size(); ++i)
+    {
+        const auto [pos, used] = keys[i];
+        d.accept.push_back(1);
+        for (uint32_t col = 0; col < B; ++col)
+        {
+            std::vector<uint32_t> u = used;
+            if (!std::binary_search(u.begin(), u.end(), col))
+            {
+                if (u.size() >= k)
+                {
+                    d.next.push_back(Dfa::kDead);
+                    continue;
+                }
+                u.insert(std::upper_bound(u.begin(), u.end(), col), col);
+            }
+            uint32_t p = per_frame ? pos + 1 : 0;
+            if (per_frame && p == scope)
+            {
+                p = 0;
+                u.clear();
+            }
+            d.next.push_back(get(p, u));
+        }
+    }
+    return minimise(d);
+}
+
 } // namespace
 
 void add_picture_filters(std::vector<FilterSpec>& out)
@@ -411,8 +516,17 @@ void add_picture_filters(std::vector<FilterSpec>& out)
         const FilterSpec& spec = *find_filter("palette-size-v1");
         const int64_t k = param_int(spec, v, "colours");
         const std::string scope = param_value(spec, v, "scope");
-        return std::make_unique<PaletteSize>(l, uint32_t(k), scope == "frame",
-                                             "colours=" + std::to_string(k) + (l.kind == "video" ? " scope=" + scope : ""));
+        const std::string prov = "colours=" + std::to_string(k) + (l.kind == "video" ? " scope=" + scope : "");
+        const uint32_t sc = scope == "frame" && l.frames > 1 ? l.width * l.height : l.length;
+        if (auto dfa = palette_dfa(l.base, l.length, sc, uint32_t(k))) return make_dfa_filter(std::move(*dfa), l.length, prov);
+        return std::make_unique<PaletteSize>(l, uint32_t(k), scope == "frame", prov);
+    };
+    // An automaton where every setting's would be small enough on this line: all its colours, and on
+    // a video counted per frame.
+    p.counts_as_on = [](const FilterLine& l) -> std::string {
+        const bool per_frame = l.frames > 1;
+        const uint64_t scope = per_frame ? uint64_t(l.width) * l.height : l.length;
+        return cells_fit(palette_states(l.base, std::min<uint64_t>(l.base, scope), scope, per_frame), l.base) ? "automaton" : "own";
     };
     out.push_back(p);
 
@@ -427,7 +541,12 @@ void add_picture_filters(std::vector<FilterSpec>& out)
     r.counts_as = "own";
     r.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
         const int64_t c = param_int(*find_filter("row-runs-v1"), v, "changes");
+        if (auto dfa = row_runs_dfa(l.base, l.width, uint32_t(c))) return make_dfa_filter(std::move(*dfa), l.length, "changes=" + std::to_string(c));
         return std::make_unique<RowRuns>(l, uint32_t(c), "changes=" + std::to_string(c));
+    };
+    // An automaton where every setting's would be small enough on this line (a row's worth of changes).
+    r.counts_as_on = [](const FilterLine& l) -> std::string {
+        return cells_fit(row_runs_states(l.base, l.width, l.width > 0 ? l.width - 1 : 0), l.base) ? "automaton" : "own";
     };
     out.push_back(r);
 }

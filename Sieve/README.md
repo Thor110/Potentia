@@ -329,13 +329,15 @@ Every filter is a separate, versioned module compiled into the core. Every decis
 | `window-v1` | text | could be cut from running English (see `sift` below) | |
 | `words-v1` | text | every token is a dictionary word | yes |
 | `clean-v2`, `words-v2` | text | as v1, but the unit may end in SPACE padding, as the last unit of warped text does | yes |
+
+The word filters above (`clean`, `window`, `words`, v1 and v2) and `title-v1` are retired for the same rules as plugins (`clean-data`, `window-data`, `words-data`, `title-data`), which merge with the other automata and count long pages too: they stay loadable, so earlier stacks reproduce (docs/FILTERS-CONFLICTS.md).
 | `max-run-v1` | text | no letter repeated more than `max_run` times in a row (3) | |
 | `symbol-entropy-v1` | all | the unit's own Shannon entropy per symbol lies within [min, max] | in black and white |
 | `model-information-v1` | text | information under the pinned frequency model is at most `max` bits per symbol (5) | |
 | `neighbour-agreement-v1` | image, video | enough neighbouring pixels (and frames) share a colour | while colours^width is small (video: colours^(width×height)) |
 | `key-v1` | audio | every note is in one key (tonic C…B; major, minor, harmonic minor, major or minor pentatonic, blues); rests always pass | yes |
-| `palette-size-v1` | image, video | at most so many distinct colours (or in each frame) | yes, on every palette, rgb24 included |
-| `row-runs-v1` | image, video | at most so many colour changes along each row of pixels | yes, at any width |
+| `palette-size-v1` | image, video | at most so many distinct colours (or in each frame) | yes, on every palette, rgb24 included; on small palettes an automaton that merges with the others |
+| `row-runs-v1` | image, video | at most so many colour changes along each row of pixels | yes, at any width; on small palettes an automaton that merges with the others |
 | `canonical-mesh-v1` | models | one encoding of each mesh (vertices and faces in order): 10^-19 of the line is re-orderings | yes |
 | `utf8-valid-v1` | binary | the whole file is well-formed UTF-8 (and, by default, text: no control characters) | yes, on its own |
 

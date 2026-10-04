@@ -1405,3 +1405,37 @@ The viewer's views (4 October 2026).
   shelf does.
 - **CI:** the hallway step saves a page's picture and a book's cover as PNGs and a book's title as
   text, through --save-view.
+Filters, section 1 of the list (4 October 2026).
+- **1a. tidy-data-v2** (data/filters): tidy-data-v1 requiring the built-in max-run-v1 (max_run=3)
+  in place of max-run-data-v1. max-run-data-v1 and tidy-data-v1 retire (plugin.cpp's retired list,
+  by name and SHA-256): the same counts at every length tried.
+- **1b. The token form's padding and within** (plugin.cpp, plugin.hpp, the oracle):
+  - `padding trailing`: pad_trailing transforms the compiled automaton (each state also remembers
+    whether the part before the last separator passes; a second separator after one goes to a
+    padding state taking only separators). Still one automaton, so it merges.
+  - `within N` (an expression over the parameters): WithinFilter and WithinRanker, the automaton's
+    table at n = min(N, L) and every string of separators after, ranked prefix first. Counts on its
+    own (spec counts_as "own"; plugin_dfa gives nothing for it, so it is never merged).
+  - plugin_within, plugin_separators and make_plugin_filter are public; the CLI's --plugin report
+    has a `within` line, and so has the oracle's (padding as two NFA states, within as a product).
+  - words-data-v2, window-data-v2 and title-data-v1 equal words-v2, window-v2 and title-v1;
+    title-v1 retires. tests/plugins/toy-padding-v1 and toy-padding-whole-v1 (two separators, cut
+    and whole edges) are compared with the oracle in CI.
+- **1c. Long units:** a token-form plugin of one dict set, no grammar, SPACE between tokens, on
+  lower27 gets PluginFilter's fallback where its automaton's table does not fit: word_counting
+  (text_m1.cpp), the built-ins' words and window rankers over the same dictionary. words-v1,
+  window-v1, words-v2 and window-v2 retire for the -data twins (the same counts to 3,200; 20,000 in
+  under a second). Compiled automata are kept by dictionary id, so a test with a dictionary of its
+  own gives it an id of its own.
+- **1d. Pictures:** palette-size-v1 and row-runs-v1 build an automaton where states x symbols stay
+  under 2^24 (picture.cpp row_runs_dfa, palette_dfa), and make_dfa_filter it, so they merge with
+  each other, not-packed-v1 and plugins; on rgb24 they keep their own rankers. FilterSpec gained
+  counts_as_on(line) (judged at the line's largest settings), and filter_conflict and
+  tick_filter_by_hand take the line where it is known (the setup menu passes it).
+- **notes2 melody filters:** melody-lengths-v2 and melody-ending-v2 (`symbols notes*`), with
+  LENGTH(i) and SIXTEENTHS(k) added to the v2 expressions in the engine and the oracle; the v1s
+  retire.
+- **Left in section 1:** optimise-all wired into COST (needs a source of anchors per line: a
+  decision), ascii85 in not-written, the cross-line filters (pictures as text or files, MIDI as
+  something else, pages as models and the reverse), transformed copies, models' third tier and
+  an .obj filter, signed files checked past their signatures, titled lines filtered bottom-up.

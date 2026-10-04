@@ -277,9 +277,23 @@ private:
         skip();
         if (i_ >= s_.size() || s_[i_] != ')') fail(line_, "a ( without its ) in '" + s_ + "'");
         ++i_;
-        const size_t want = name == "abs" ? 1 : 2;
+        const size_t want = name == "min" || name == "max" ? 2 : 1;
         if (args.size() != want) fail(line_, name + " takes " + std::to_string(want) + (want == 1 ? " argument" : " arguments"));
         if (name == "abs") return checked(args[0] < 0 ? -args[0] : args[0], line_);
+        // A duration's length in sixteenths: of the k-th of the eight codes s e E q Q h H w, or of
+        // the line's own i-th duration (a note line only).
+        if (name == "SIXTEENTHS")
+        {
+            static const int64_t lengths[] = {1, 2, 3, 4, 6, 8, 12, 16};
+            if (args[0] < 0 || args[0] > 7) fail(line_, "SIXTEENTHS takes a code's place, 0 (s) to 7 (w)");
+            return lengths[args[0]];
+        }
+        if (name == "LENGTH")
+        {
+            const auto it = env_.find("#len" + std::to_string(args[0]));
+            if (it == env_.end()) fail(line_, "LENGTH(i) is the line's i-th duration: on a note line, i from 0 to DURATIONS - 1");
+            return it->second;
+        }
         return name == "min" ? std::min(args[0], args[1]) : std::max(args[0], args[1]);
     }
     int64_t atom()
@@ -310,7 +324,7 @@ private:
         {
             std::string name;
             while (i_ < s_.size() && (std::isalnum(static_cast<unsigned char>(s_[i_])) || s_[i_] == '_')) name += s_[i_++];
-            if (v2_ && (name == "min" || name == "max" || name == "abs")) return call(name);
+            if (v2_ && (name == "min" || name == "max" || name == "abs" || name == "LENGTH" || name == "SIXTEENTHS")) return call(name);
             const auto it = env_.find(name);
             if (it == env_.end()) fail(line_, "'" + name + "' is not a parameter or a for variable");
             return it->second;
@@ -328,7 +342,8 @@ private:
 // Names a v2 file keeps for itself: the functions and the line's constants.
 bool reserved_v2(const std::string& n)
 {
-    return n == "min" || n == "max" || n == "abs" || n == "BASE" || n == "PITCHES" || n == "DURATIONS" || n == "LOW";
+    return n == "min" || n == "max" || n == "abs" || n == "BASE" || n == "PITCHES" || n == "DURATIONS" || n == "LOW" || n == "LENGTH" ||
+           n == "SIXTEENTHS";
 }
 
 // A number field: an integer, a name, or {an expression}.
@@ -383,6 +398,11 @@ struct PluginDef
     std::vector<std::pair<std::string, std::string>> follows;
     std::vector<std::string> first, last;
     bool has_first = false, has_last = false;
+    // `padding trailing`: a unit ending in two or more separators passes when what comes before
+    // them passes on its own. `within N`: every symbol past the first N is a separator.
+    bool padding = false;
+    std::optional<Tok> within;
+    int within_line = 0;
     std::string folder;
 };
 
@@ -587,6 +607,22 @@ std::shared_ptr<const PluginDef> parse_plugin(const std::string& text, const std
             if (toks[1].text != "whole" && toks[1].text != "cut") fail(line, "edges is whole or cut");
             def->cut = toks[1].text == "cut";
             has_edges = true;
+        }
+        else if (k == "padding")
+        {
+            once();
+            want(2);
+            if (toks[1].text != "trailing") fail(line, "padding is trailing (two or more separators at the end)");
+            def->padding = true;
+            token_form = true;
+        }
+        else if (k == "within")
+        {
+            once();
+            want(2);
+            def->within = toks[1];
+            def->within_line = line;
+            token_form = true;
         }
         else if (k == "set")
         {
@@ -794,6 +830,10 @@ public:
                 env_["PITCHES"] = int64_t(set.pitches());
                 env_["DURATIONS"] = int64_t(set.duration_count());
                 env_["LOW"] = int64_t(set.low);
+                // LENGTH(i): each of the set's durations in sixteenths (s e E q Q h H w).
+                static const int64_t sixteenths[] = {1, 2, 3, 4, 6, 8, 12, 16};
+                for (size_t i = 0; i < set.durations.size(); ++i)
+                    env_["#len" + std::to_string(i)] = sixteenths[std::string(kNoteDurationCodes).find(set.durations[i])];
             }
         }
         for (const auto& par : p.header.params)
@@ -1039,6 +1079,75 @@ private:
 
 // ---------------------------------------------------------------- the token form
 
+// The token form's separators on a line, as a mask over its symbols.
+std::vector<uint8_t> separator_mask(const PluginDef& p, const FilterLine& line)
+{
+    if (!line.alphabet) fail(p.separator_line, "the token form needs a text line");
+    std::vector<uint8_t> sep(line.base, 0);
+    for (const Tok& t : p.separator)
+    {
+        std::u32string u = t.quoted ? utf8_decode(t.text) : std::u32string();
+        if (!t.quoted)
+        {
+            const std::u32string r = utf8_decode(t.text);
+            if (r.size() == 3 && r[1] == U'-')
+                for (char32_t c = r[0]; c <= r[2]; ++c) u.push_back(c);
+            else fail(p.separator_line, "separator symbols are \"quoted\" or a range a-z");
+        }
+        for (char32_t cp : u)
+        {
+            const auto d = line.alphabet->digit_of(cp);
+            if (!d) fail(p.separator_line, "a separator is not a symbol of " + line.symbols_id);
+            sep[*d] = 1;
+        }
+    }
+    return sep;
+}
+
+// `padding trailing`: d, and also every unit that ends in two or more separators after a part that
+// d accepts on its own. A state is d's state and whether the symbols before the last separator
+// would have passed (so a second separator starts the padding), and one more state is the padding
+// itself, where only separators follow.
+Dfa pad_trailing(const Dfa& d, const std::vector<uint8_t>& sep)
+{
+    const uint32_t B = d.base;
+    const int32_t dead = int32_t(d.states()); // d's dead end, as a state of its own here
+    std::map<std::pair<int32_t, bool>, int32_t> id;
+    std::vector<std::pair<int32_t, bool>> keys;
+    Dfa out;
+    out.base = B;
+    if (d.start < 0) return out;
+    auto get = [&](int32_t q, bool f) {
+        const auto [it, added] = id.emplace(std::make_pair(q, f), int32_t(keys.size()) + 1);
+        if (added) keys.emplace_back(q, f);
+        return it->second;
+    };
+    // State 0 is the padding; the rest are (d's state, passed-before-the-separator).
+    out.accept.push_back(1);
+    for (uint32_t c = 0; c < B; ++c) out.next.push_back(sep[c] ? 0 : Dfa::kDead);
+    out.start = get(d.start, false);
+    for (size_t i = 0; i < keys.size(); ++i)
+    {
+        const auto [q, f] = keys[i];
+        const bool acc = q != dead && d.accept[size_t(q)];
+        out.accept.push_back(acc ? 1 : 0);
+        for (uint32_t c = 0; c < B; ++c)
+        {
+            int32_t t = Dfa::kDead;
+            if (sep[c] && f) t = 0; // a second separator after a part that passes: padding
+            else
+            {
+                const int32_t r = q == dead ? Dfa::kDead : d.step(q, c);
+                const int32_t qq = r < 0 ? dead : r;
+                const bool ff = sep[c] && acc;
+                if (qq != dead || ff) t = get(qq, ff);
+            }
+            out.next.push_back(t);
+        }
+    }
+    return out;
+}
+
 // Words as the line's symbols, in one trie; each node knows which sets it ends a word of. The DFA
 // is made directly (a subset construction folded in): between tokens the state is the set of
 // readings the last token can have; inside a token it is the trie node and the readings the
@@ -1069,7 +1178,13 @@ public:
             build_dawg();
         }
         say("building the automaton from " + std::to_string(all_words_.size()) + " words (" + std::to_string(kids_.size()) + " word nodes)");
-        return build(declared);
+        Dfa d = build(declared);
+        if (p_.padding)
+        {
+            say("allowing trailing padding");
+            d = pad_trailing(d, sep_);
+        }
+        return d;
     }
 
 private:
@@ -1082,29 +1197,7 @@ private:
         return d ? *d : 0;
     }
 
-    void separators()
-    {
-        if (!line_.alphabet) fail(p_.separator_line, "the token form needs a text line");
-        sep_.assign(B_, 0);
-        for (const Tok& t : p_.separator)
-        {
-            std::u32string u = t.quoted ? utf8_decode(t.text) : std::u32string();
-            if (!t.quoted)
-            {
-                const std::u32string r = utf8_decode(t.text);
-                if (r.size() == 3 && r[1] == U'-')
-                    for (char32_t c = r[0]; c <= r[2]; ++c) u.push_back(c);
-                else fail(p_.separator_line, "separator symbols are \"quoted\" or a range a-z");
-            }
-            for (char32_t cp : u)
-            {
-                bool ok = false;
-                const uint32_t d = symbol(cp, ok);
-                if (!ok) fail(p_.separator_line, "a separator is not a symbol of " + line_.symbols_id);
-                sep_[d] = 1;
-            }
-        }
-    }
+    void separators() { sep_ = separator_mask(p_, line_); }
 
     int32_t child(int32_t n, uint32_t c) const
     {
@@ -1774,11 +1867,22 @@ namespace {
 class PluginFilter : public Filter
 {
 public:
-    PluginFilter(std::shared_ptr<const Dfa> dfa, uint32_t length, std::string provenance) : dfa_(std::move(dfa)), length_(length)
+    // `words`: for a plain dictionary (one dict set, no grammar), its words counted by their lengths,
+    // used where the automaton's table does not fit and that does (word_counting).
+    PluginFilter(std::shared_ptr<const Dfa> dfa, uint32_t length, std::string provenance,
+                 std::function<WordCounting()> words = {})
+        : dfa_(std::move(dfa)), length_(length)
     {
         provenance_ = std::move(provenance);
         table_bytes_ = DfaRanker::table_bytes(dfa_->states(), dfa_->base, length);
         fits_ = table_bytes_ <= filter_memory();
+        if (!fits_ && words)
+            if (WordCounting w = words(); w.make)
+            {
+                words_ = std::move(w.make);
+                table_bytes_ = w.bytes;
+                fits_ = true;
+            }
     }
     bool passes(std::span<const uint32_t> unit) const override { return dfa_->accepts(unit); }
     // The counting table is built the first time it is asked for: a stack that judges only (or
@@ -1786,7 +1890,10 @@ public:
     const Ranker* ranker() const override
     {
         if (!fits_) return nullptr;
-        std::call_once(built_, [this] { ranker_ = std::make_unique<DfaRanker>(dfa_, length_); }); // (the automaton shared, not copied)
+        std::call_once(built_, [this] {
+            if (words_) ranker_ = words_();
+            else ranker_ = std::make_unique<DfaRanker>(dfa_, length_); // (the automaton shared, not copied)
+        });
         return ranker_.get();
     }
     bool can_rank() const override { return fits_; }
@@ -1796,11 +1903,177 @@ private:
     std::shared_ptr<const Dfa> dfa_; // the compile kept for the process, or this filter's own
     uint32_t length_;
     bool fits_ = false;
+    std::function<std::unique_ptr<Ranker>()> words_; // the words counted by their lengths, where used
     mutable std::once_flag built_;
-    mutable std::unique_ptr<DfaRanker> ranker_;
+    mutable std::unique_ptr<Ranker> ranker_;
 };
 
+// `within N`: the plugin's automaton on the first N symbols (or all of a shorter unit), and only
+// separators after them. Its survivors are the automaton's at length N, each followed by every
+// string of separators, ranked as the automaton ranks the first N and then, past them, the
+// separators in symbol order (title-v1's order, where SPACE is the only separator).
+class WithinRanker : public Ranker
+{
+public:
+    WithinRanker(std::unique_ptr<Ranker> inner, uint32_t L, std::vector<uint32_t> seps)
+        : inner_(std::move(inner)), L_(L), N_(inner_->length()), seps_(std::move(seps)), is_sep_(inner_->base(), 0)
+    {
+        for (uint32_t c : seps_) is_sep_[c] = 1;
+        pow_.assign(size_t(L_ - N_) + 1, BigUint(1));
+        for (size_t k = 1; k < pow_.size(); ++k)
+        {
+            pow_[k] = pow_[k - 1];
+            pow_[k].mul_small(uint32_t(seps_.size()));
+        }
+        set_count();
+    }
+    uint32_t length() const override { return L_; }
+    uint32_t base() const override { return inner_->base(); }
+    State start() const override { return pack(0, inner_->start()); }
+    State next(State s, uint32_t c) const override
+    {
+        const uint32_t p = pos_of(s);
+        if (p >= L_) return kDead;
+        if (p >= N_) return is_sep_[c] ? pack(p + 1, 0) : kDead;
+        const State t = inner_->next(inner_of(s), c);
+        if (t == kDead || t > 0xFFFFFFFFull) return kDead;
+        if (p + 1 == N_ && !inner_->alive(t, 0)) return kDead;
+        return pack(p + 1, t);
+    }
+    BigUint completions(State s, uint32_t) const override
+    {
+        const uint32_t p = pos_of(s);
+        if (p >= N_) return pow_[L_ - p];
+        BigUint c = inner_->completions(inner_of(s), N_ - p);
+        if (!c.is_zero() && L_ > N_) c = BigUint::mul(c, pow_[L_ - N_]);
+        return c;
+    }
+    bool alive(State s, uint32_t) const override
+    {
+        const uint32_t p = pos_of(s);
+        if (p >= N_) return L_ == p || !seps_.empty();
+        return inner_->alive(inner_of(s), N_ - p) && (L_ == N_ || !seps_.empty());
+    }
+
+private:
+    static State pack(uint32_t pos, State inner) { return (State(pos) << 32) | inner; }
+    static uint32_t pos_of(State s) { return uint32_t(s >> 32); }
+    static State inner_of(State s) { return s & 0xFFFFFFFFull; }
+    std::unique_ptr<Ranker> inner_;
+    uint32_t L_, N_;
+    std::vector<uint32_t> seps_;
+    std::vector<uint8_t> is_sep_;
+    std::vector<BigUint> pow_; // separators' choices over k symbols, k = 0 .. L - N
+};
+
+// A plugin with `within`: not a plain automaton over the whole unit, so a stack counts it on its
+// own (as title-v1), never merged with the other automata (plugin_dfa gives nothing for it).
+class WithinFilter : public Filter
+{
+public:
+    WithinFilter(std::shared_ptr<const Dfa> dfa, uint32_t length, uint32_t within, std::vector<uint8_t> sep, std::string provenance)
+        : dfa_(std::move(dfa)), length_(length), n_(std::min(length, within)), sep_(std::move(sep))
+    {
+        provenance_ = std::move(provenance);
+        table_bytes_ = DfaRanker::table_bytes(dfa_->states(), dfa_->base, n_);
+        fits_ = table_bytes_ <= filter_memory();
+    }
+    bool passes(std::span<const uint32_t> unit) const override
+    {
+        for (size_t i = n_; i < unit.size(); ++i)
+            if (unit[i] >= sep_.size() || !sep_[unit[i]]) return false;
+        return dfa_->accepts(unit.first(std::min<size_t>(n_, unit.size())));
+    }
+    const Ranker* ranker() const override
+    {
+        if (!fits_) return nullptr;
+        std::call_once(built_, [this] {
+            std::vector<uint32_t> seps;
+            for (uint32_t c = 0; c < sep_.size(); ++c)
+                if (sep_[c]) seps.push_back(c);
+            ranker_ = std::make_unique<WithinRanker>(std::make_unique<DfaRanker>(dfa_, n_), length_, std::move(seps));
+        });
+        return ranker_.get();
+    }
+    bool can_rank() const override { return fits_; }
+
+private:
+    std::shared_ptr<const Dfa> dfa_;
+    uint32_t length_, n_;
+    std::vector<uint8_t> sep_;
+    bool fits_ = false;
+    mutable std::once_flag built_;
+    mutable std::unique_ptr<Ranker> ranker_;
+};
+
+// The plugin's integer parameters (and choices, by place) at these values, for `within`.
+Env plugin_env(const PluginDef& p, const FilterValues& values)
+{
+    Env env;
+    for (const auto& par : p.header.params)
+    {
+        if (par.kind != FilterParam::Kind::Integer) continue;
+        const auto it = values.find(par.key);
+        env[par.key] = std::stoll(it == values.end() ? par.default_value : it->second);
+    }
+    return env;
+}
+
 } // namespace
+
+uint32_t plugin_within(const PluginDef& p, const FilterValues& values)
+{
+    if (!p.within) return 0;
+    const int64_t n = eval(*p.within, plugin_env(p, values), p.within_line, p.v2);
+    if (n < 1) throw std::invalid_argument(p.header.name() + ": within must be at least 1");
+    return uint32_t(std::min<int64_t>(n, UINT32_MAX));
+}
+
+std::vector<uint32_t> plugin_separators(const PluginDef& p, const FilterLine& line)
+{
+    std::vector<uint32_t> out;
+    if (p.header.form != "tokens") return out;
+    const std::vector<uint8_t> m = separator_mask(p, line);
+    for (uint32_t c = 0; c < m.size(); ++c)
+        if (m[c]) out.push_back(c);
+    return out;
+}
+
+std::unique_ptr<Filter> make_plugin_filter(std::shared_ptr<const PluginDef> p, const FilterLine& l, const FilterValues& v, const FilterResources& r)
+{
+    std::string prov = "plugin sha256=" + p->header.sha256;
+    for (const auto& par : p->header.params)
+    {
+        const auto it = v.find(par.key);
+        prov += " " + par.key + "=" + (it == v.end() ? par.default_value : it->second);
+    }
+    std::string data;
+    std::shared_ptr<const Dfa> d = compile_plugin_shared(*p, l, v, r, nullptr, &data);
+    if (!data.empty()) prov += " " + data;
+    if (const uint32_t n = plugin_within(*p, v))
+        return std::make_unique<WithinFilter>(std::move(d), l.length, n, separator_mask(*p, l), prov);
+    // A plain dictionary (one dict set, no grammar, SPACE between tokens, on lower27): counted by its
+    // words' lengths where its automaton's table would not fit, as words-v1 and window-v1 count.
+    std::function<WordCounting()> words;
+    const PluginDef& def = *p;
+    if (def.header.form == "tokens" && def.sets.size() == 1 && def.sets[0].kind == "dict" && def.follows.empty() && !def.has_first &&
+        !def.has_last && l.symbols_id == "lower27" && plugin_separators(def, l) == std::vector<uint32_t>{0})
+    {
+        std::string id = def.sets[0].source;
+        if (id.size() > 2 && id.front() == '{')
+        {
+            const std::string pn = id.substr(1, id.size() - 2);
+            const auto it = v.find(pn);
+            const auto par = std::find_if(def.header.params.begin(), def.header.params.end(), [&](const FilterParam& q) { return q.key == pn; });
+            id = it != v.end() ? it->second : par != def.header.params.end() ? par->default_value : std::string();
+        }
+        if (id == "default") id.clear();
+        const bool cut = def.cut, padding = def.padding;
+        const uint32_t L = l.length;
+        words = [&r, id, cut, padding, L] { return word_counting(r.dictionary(id), cut, padding, L); };
+    }
+    return std::make_unique<PluginFilter>(std::move(d), l.length, prov, std::move(words));
+}
 
 const Dfa* plugin_dfa(const Filter& f)
 {
@@ -1861,7 +2134,7 @@ FilterSpec plugin_spec(std::shared_ptr<const PluginDef> p)
     s.author = h.author;
     s.origin = h.origin;
     s.plugin_sha256 = h.sha256;
-    s.counts_as = "automaton";
+    s.counts_as = p->within ? "own" : "automaton"; // within: counted on its own (WithinFilter)
     s.prerequisites = h.prerequisites;
     // Shipped plugins a later one has replaced: the file, pinned by its SHA-256 (a plugin of the same
     // name but other bytes is someone else's, and stays as it is).
@@ -1871,6 +2144,12 @@ FilterSpec plugin_spec(std::shared_ptr<const PluginDef> p)
     };
     static const Retired retired[] = {
         {"key-data-v1", "4981edc7b09c4de28a0b39c8f920f7b55c149ed34815e3be37408ab3bec3751d", "key-data-v2"}, // v2 adds the scale
+        // the built-in max-run-v1 is the same rule, an automaton on every text alphabet
+        {"max-run-data-v1", "5f7a9467e8d94f336f902ece8a14446aae07381082dcbc548cbef06dd3ec55c8", "max-run-v1"},
+        {"tidy-data-v1", "d2df6ddda682da71d11e276215df09c97f837fb01d8925fad233d0105dc7f343", "tidy-data-v2"}, // requires max-run-v1
+        // v2: the same on notes104, and by real lengths on every notes2 set (LENGTH, SIXTEENTHS)
+        {"melody-lengths-v1", "55fe83f46d872fad50cea66f413a5a0f0216799250312aca20725703be542be5", "melody-lengths-v2"},
+        {"melody-ending-v1", "c357d586eceb8bd153e7b35b516b9407e05d5e19a227e6132a55982af39c6900", "melody-ending-v2"},
     };
     for (const Retired& r : retired)
         if (s.name() == r.name && h.sha256 == r.sha256)
@@ -1880,16 +2159,7 @@ FilterSpec plugin_spec(std::shared_ptr<const PluginDef> p)
         }
     s.applies = [p](const FilterLine& l) { return plugin_applies(*p, l); };
     s.make = [p](const FilterLine& l, const FilterValues& v, const FilterResources& r) -> std::unique_ptr<Filter> {
-        std::string prov = "plugin sha256=" + p->header.sha256;
-        for (const auto& par : p->header.params)
-        {
-            const auto it = v.find(par.key);
-            prov += " " + par.key + "=" + (it == v.end() ? par.default_value : it->second);
-        }
-        std::string data;
-        std::shared_ptr<const Dfa> d = compile_plugin_shared(*p, l, v, r, nullptr, &data);
-        if (!data.empty()) prov += " " + data;
-        return std::make_unique<PluginFilter>(std::move(d), l.length, prov);
+        return make_plugin_filter(p, l, v, r);
     };
     return s;
 }

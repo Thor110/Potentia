@@ -51,6 +51,11 @@
 //   follow    det   noun                which set may follow which (none at all: any order)
 //   first     det noun                  the sets the first token may be (default: all)
 //   last      noun                      the sets the last token may be (default: all)
+//   padding   trailing                  a unit ending in two or more separators passes when what
+//                                       comes before them passes on its own (the last page of a
+//                                       text); still one automaton, so it merges in a stack
+//   within    {max_length}              past the first N symbols only separators (a title on a
+//                                       page): counted on its own, never merged into a stack
 //
 // A word in several sets may be any of them: a unit passes if some reading of its tokens chains
 // by `follow`. A token cut by an edge (cut) may be any set. A dictionary's words take the line's
@@ -77,6 +82,8 @@
 //                                       before the * (here the note lines: notes104 and
 //                                       every notes2 set; on several voices a plugin judges each)
 //
+// and, in expressions, LENGTH(i) (the line's i-th duration in sixteenths, on a note line) and
+// SIXTEENTHS(k) (the k-th of the codes s e E q Q h H w in sixteenths: 1 2 3 4 6 8 12 16),
 // and constants of the line, in expressions: BASE (its number of symbols), and on a note line
 // PITCHES (pitches, not counting the rest), DURATIONS and LOW (the MIDI number of the lowest
 // pitch; notes104: 25, 4, 60; a notes2 set: its own): a note's symbol is pitch * DURATIONS + duration, pitch 0 the rest and pitch 1 LOW. A
@@ -138,6 +145,28 @@ Dfa compile_plugin(const PluginDef& p, const FilterLine& line, const FilterValue
 std::shared_ptr<const Dfa> compile_plugin_shared(const PluginDef& p, const FilterLine& line, const FilterValues& values,
                                                  const FilterResources& resources, size_t* declared_states = nullptr,
                                                  std::string* data = nullptr, const std::function<void(const std::string&)>& step = {});
+
+// A plain dictionary's tokens counted by their lengths (the built-in words-v1 and window-v1 rankers,
+// text_m1.cpp; `cut` is window's edges, `padding` the v2 rule): what a token-form plugin of one
+// dictionary set counts with on lower27 where its automaton's table (states x length) would not
+// fit the filter memory, since this keeps one row of counts. `make` is empty where even that does
+// not fit; `bytes` is what it takes.
+struct WordCounting
+{
+    std::function<std::unique_ptr<Ranker>()> make;
+    double bytes = 0;
+};
+WordCounting word_counting(std::shared_ptr<const Dictionary> dict, bool cut, bool padding, uint32_t length);
+
+// The token form's `within N` at these values (0 when the plugin has none): every symbol past the
+// first N must be a separator, and the automaton judges the first N.
+uint32_t plugin_within(const PluginDef& p, const FilterValues& values);
+// The token form's separators on this line, in symbol order (none for a table).
+std::vector<uint32_t> plugin_separators(const PluginDef& p, const FilterLine& line);
+// The plugin's filter on this line: its automaton, or with `within`, its automaton on the first N
+// symbols and only separators after (counted on its own, never merged into a stack's automaton).
+std::unique_ptr<Filter> make_plugin_filter(std::shared_ptr<const PluginDef> p, const FilterLine& line, const FilterValues& values,
+                                           const FilterResources& resources);
 
 // Counting needs a table of states x (length + 1) numbers; past this many bytes a plugin judges
 // only (mark, hide, excluded), and the menu says why.

@@ -1,0 +1,29 @@
+sieve-filter-v1
+; A test of `padding trailing` and `within`: the toy grammar with cut edges, two separators (SPACE
+; and q, so the symbols past `within` have two choices each), trailing padding, and the words held
+; to the first `room` symbols. Not shipped: CI checks the engine against the oracle with it.
+id        toy-padding-whole
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     text
+symbols   lower27
+describe  A toy grammar with two separators and trailing padding (whole edges).
+
+tokens    separator " " "q"
+edges     whole
+padding   trailing
+set       det   list:det.txt
+set       adj   list:adj.txt
+set       noun  list:noun.txt
+set       verb  list:verb.txt
+follow    det   adj
+follow    det   noun
+follow    adj   adj
+follow    adj   noun
+follow    noun  verb
+follow    verb  det
+follow    verb  noun
+first     det noun
+last      noun verb
+end

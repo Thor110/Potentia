@@ -161,6 +161,36 @@ As built: one separator between tokens, at most one at each end, at least one to
 is part of every token filter, as it is of `words` and `window`). A token cut by an edge may be any
 set.
 
+Two more lines (4 October 2026):
+
+```
+padding   trailing                    ; a unit ending in two or more separators passes when what
+                                      ; comes before them passes on its own
+within    {max_length}                ; past the first N symbols, only separators
+```
+
+`padding trailing` is the rule `clean-v2`, `words-v2` and `window-v2` have: the last unit of a text
+ends in SPACEs. It is a change to the automaton (each state also remembers whether the symbols
+before the last separator would pass, and a second separator after such a part goes to a state that
+takes only separators), so a padded plugin is still one automaton and merges in a stack. With
+`edges cut` the part before the padding is judged with its own end as the unit's end, so its last
+word may be cut, as on the last page of a book. `within N` (an expression over the parameters)
+holds the tokens to the first N symbols: past them only separators. It is what `title-v1` does on a
+book's title page, and it is not one automaton over the whole unit (the position would multiply the
+states), so a plugin with `within` counts on its own (`counts_as own`, as `title-v1`), with the
+automaton's table at length N and every string of separators after; its survivors are ranked by
+their first N symbols, then by the separators in symbol order. The oracle builds both its own way:
+padding as two more states of its NFA (a separator from any state where the unit could end may
+also go to a pending state; a second one to the padding), and `within` as the count at N times the
+separators' choices.
+
+**Long units.** A token-form plugin of one `dict:` set and no grammar (no `follow`, `first` or
+`last`; SPACE between tokens; on lower27) is the built-in `words` or `window` rule, so where its
+automaton's table (states by length) would not fit the filter memory it counts the built-ins' way,
+by its words' lengths, keeping one row of counts (`word_counting`, plugin.hpp). Below that it is an
+automaton and merges with the others as before. That is what let `words-v1`, `window-v1`,
+`words-v2` and `window-v2` retire for their `-data` twins (FILTERS-CONFLICTS.md).
+
 **Tagged lists** (`tags:FILES:TAGS`) are files of `word<TAB>tags`, each tag one character, beside
 the plugin; several are read as one when joined with `+`, and each file's SHA-256 is in the
 provenance. `TAGS` is the tags a word must carry at least one of, and `TAGS-EXCLUDED` adds the tags
@@ -490,8 +520,13 @@ upgrades a filter to v2 when it uses something only v2 has.
   of the voices), and so does the oracle. `key-data-v2`, `melody-leap-v1`, `melody-rests-v1` and
   `melody-range-v1` are checked against the oracle on `notes2` sets of other ranges and durations
   with one to three voices (CI). `melody-lengths-v1` and `melody-ending-v1` name `notes104`'s four
-  durations in their choices, so they are for `notes104` only; `notes2` versions would name its
-  eight.
+  durations in their choices, so they are for `notes104` only. *Done (4 October 2026):*
+  `melody-lengths-v2` and `melody-ending-v2` are for every note set (`symbols notes*`), judging
+  durations by their real lengths with two functions added to the v2 expressions: `LENGTH(i)`, the
+  line's i-th duration in sixteenths, and `SIXTEENTHS(k)`, the k-th of the eight codes
+  `s e E q Q h H w` in sixteenths (1, 2, 3, 4, 6, 8, 12, 16). Their choices name all eight codes. On
+  `notes104` they count exactly as the v1s at every setting (tests), which retire for them, and on
+  `notes2` sets of other ranges and durations the oracle and the engine agree (CI).
 
 The engine and the oracle each have their own reading of it. The oracle's comparison with the
 engine caught a real error in the oracle's first `if` (a variable reused for the block's end cut

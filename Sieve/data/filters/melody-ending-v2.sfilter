@@ -1,0 +1,30 @@
+sieve-filter-v2
+; melody-ending-v1 on every note set (notes104 and notes2): the last event is a note on the tonic
+; (any octave), at least `hold` long by its real length in sixteenths (LENGTH, SIXTEENTHS). On
+; notes104 it is exactly melody-ending-v1.
+id        melody-ending
+version   2
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     audio
+symbols   notes*
+describe  The last note is the tonic, held at least so long, on every note set.
+param     tonic  choice  C C,C#,D,D#,E,F,F#,G,G#,A,A#,B the note to end on
+param     hold   choice  e s,e,E,q,Q,h,H,w the shortest the last note may be
+
+states    2
+start     0
+accept    1
+for s 0 1
+  for d 0 {DURATIONS - 1}
+    t {s} @{d} 0
+    for p 1 {PITCHES}
+      if {(LOW + p - 1) % 12 == tonic && LENGTH(d) >= SIXTEENTHS(hold)}
+        t {s} @{p * DURATIONS + d} 1
+      else
+        t {s} @{p * DURATIONS + d} 0
+      fi
+    done
+  done
+done
+end

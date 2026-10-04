@@ -2013,7 +2013,8 @@ PLUGIN_FORMAT = "sieve-filter-v1"
 PLUGIN_FORMAT2 = "sieve-filter-v2"  # v1, and comparisons, && || !, min max abs, if/else/fi, choice
                                     # parameters, the line's constants, and symbols families (notes*)
 NOTES_BASE = 104
-V2_RESERVED = {"min", "max", "abs", "BASE", "PITCHES", "DURATIONS", "LOW"}
+V2_RESERVED = {"min", "max", "abs", "BASE", "PITCHES", "DURATIONS", "LOW", "LENGTH", "SIXTEENTHS"}
+SIXTEENTHS = [1, 2, 3, 4, 6, 8, 12, 16]  # s e E q Q h H w, in sixteenths
 
 
 class PluginError(Exception):
@@ -2111,6 +2112,23 @@ def _plugin_expr(s, env, n, v2=False):
         take()
         if t.isdigit():
             return chk(int(t))
+        if v2 and t in ("LENGTH", "SIXTEENTHS"):
+            # a duration's length in sixteenths: the k-th code's, or the line's own i-th duration's
+            if peek() != "(":
+                raise PluginError(f"line {n}: {t} takes its argument in brackets")
+            take()
+            a = top()
+            if peek() != ")":
+                raise PluginError(f"line {n}: a ( without its ) in '{s}'")
+            take()
+            if t == "SIXTEENTHS":
+                if not 0 <= a <= 7:
+                    raise PluginError(f"line {n}: SIXTEENTHS takes a code's place, 0 (s) to 7 (w)")
+                return SIXTEENTHS[a]
+            lengths = env.get("#lengths", [])
+            if not 0 <= a < len(lengths):
+                raise PluginError(f"line {n}: LENGTH(i) is the line's i-th duration")
+            return lengths[a]
         if v2 and t in ("min", "max", "abs"):
             if peek() != "(":
                 raise PluginError(f"line {n}: {t} takes its arguments in brackets")
@@ -2248,6 +2266,15 @@ def parse_plugin(text):
             head["separator"] = toks[2:]
         elif k == "edges":
             head["edges"] = toks[1][0]
+        elif k == "padding":
+            # padding trailing: a unit ending in two or more separators passes when what comes
+            # before them passes on its own
+            if toks[1][0] != "trailing":
+                raise PluginError(f"line {n}: padding is trailing")
+            head["padding"] = True
+        elif k == "within":
+            # within N: past the first N symbols, only separators
+            head["within"] = (toks[1], n)
         elif k == "set":
             kind, _, src = toks[2][0].partition(":")
             head.setdefault("sets", []).append((toks[1][0], kind, src))
@@ -2323,8 +2350,10 @@ def compile_plugin(head, body, values, base, notes=None):
         env["BASE"] = base
         if notes is not None:  # a notes2 set: its own
             env.update(PITCHES=notes.P, DURATIONS=notes.D, LOW=notes.low)
+            env["#lengths"] = [SIXTEENTHS[NOTE2_CODES.index(c)] for c in notes.durations]
         elif head["symbols"].startswith("notes"):
             env.update(PITCHES=25, DURATIONS=4, LOW=60)  # notes104: C4 (MIDI 60) .. C6, e q h w
+            env["#lengths"] = [2, 4, 8, 16]
     for name, d, lo, hi in head["params"]:
         if lo == "dict":
             continue
@@ -2601,6 +2630,28 @@ def token_nfa(head, values, base, folder):
             node, p = divmod(q - IN0, n + 1)
             return cut or any(r in follow[p] and r in last for r in ends[node])
         return True  # Suf: the whole unit, a substring of a word
+
+    if head.get("padding"):
+        # Trailing padding, as two more NFA states: from any state where the unit could end, a
+        # separator may also lead to PEND (one separator after a part that passes); a second leads
+        # to PAD, which takes only separators and accepts.
+        PEND, PAD = SUF0 + NT, SUF0 + NT + 1
+        plain_step, plain_accepting = step, accepting
+
+        def step(q, c):
+            if q == PEND or q == PAD:
+                return {PAD} if c in sep else set()
+            out = plain_step(q, c)
+            if c in sep and plain_accepting(q):
+                out = out | {PEND}
+            return out
+
+        def accepting(q):
+            if q == PAD:
+                return True
+            if q == PEND:
+                return False
+            return plain_accepting(q)
 
     words_n = sum(1 for e in ends if e)  # distinct words: the token form's "declared" figure
     return words_n, step, accepting, " ".join(data)
@@ -2905,13 +2956,30 @@ def cmd_plugin(args):
     print(f"form       {head['form']}" + (f"  {word_data}" if word_data else ""))
     kind_word = 'words' if head['form'] == 'tokens' else 'declared'
     print(f"states     {N} {kind_word}, " + ("(not determinised: --lazy)" if lazy else f"{len(m_next)} minimal"))
-    print(f"length     {args.length * voices}")
     L = args.length
+    # within N: the automaton judges the first n = min(N, L) symbols, and each symbol after them is
+    # any separator: so a survivor is the automaton's at n, then a string of separators, ranked
+    # first by its first n symbols and then by the separators, in symbol order.
+    within, seps = None, []
+    if "within" in head:
+        tok, wn = head["within"]
+        env = {name: int(values.get(name, d)) for name, d, *rest in head["params"] if rest and rest[0] not in ("dict", "choice")}
+        within = _plugin_num(tok, env, wn, head["v2"])
+        print(f"within     {within}")
+        alpha = ALPHABETS[head["symbols"]]
+        for text, quoted in head["separator"]:
+            chars = text if quoted else "".join(chr(c) for c in range(ord(text[0]), ord(text[2]) + 1))
+            seps += [alpha.index(c) for c in chars]
+        seps = sorted(set(seps))
+    n_first = min(within, L) if within else L
+    tail = len(seps) ** (L - n_first) if within else 1
+    print(f"length     {args.length * voices}")
     if lazy:
-        count = lazy.count(lazy.id_of(frozenset([0])), L)
+        count = lazy.count(lazy.id_of(frozenset([0])), n_first)
     else:
-        table = dfa_count_table(m_next, m_acc, L) if m_next else [[0]]
-        count = table[L][0] if m_next else 0
+        table = dfa_count_table(m_next, m_acc, n_first) if m_next else [[0]]
+        count = table[n_first][0] if m_next else 0
+    count *= tail
     one = count
     count = one ** voices  # every voice a survivor of its own
     print(f"survivors  {count}")
@@ -2929,7 +2997,10 @@ def cmd_plugin(args):
                 rest, r = divmod(rest, one)
                 parts.append(r)
             for part in reversed(parts):
-                u += lazy.unrank(L, part) if lazy else dfa_unrank(m_next, table, L, part)
+                head_k, rest_k = divmod(part, tail)
+                u += lazy.unrank(n_first, head_k) if lazy else dfa_unrank(m_next, table, n_first, head_k)
+                for i in range(L - n_first - 1, -1, -1):  # the separators past n, most significant first
+                    u.append(seps[rest_k // len(seps) ** i % len(seps)])
             print(f"rank       {k}  {','.join(map(str, u)) or '-'}")
     if args.judge:
         # each line of a text file judged as one unit of its own length, as `sieve filters --plugin
@@ -2945,11 +3016,15 @@ def cmd_plugin(args):
                 verdict = "unspellable"
             else:
                 unit = [alpha.index(ch) for ch in line]
-                if lazy:
-                    ok = lazy.accepts(unit)
+                # within N: the first N symbols judged, and only separators after them
+                cut_at = min(within, len(unit)) if within is not None else len(unit)
+                if any(c not in seps for c in unit[cut_at:]):
+                    ok = False
+                elif lazy:
+                    ok = lazy.accepts(unit[:cut_at])
                 else:
                     s = 0 if m_next else -1
-                    for c in unit:
+                    for c in unit[:cut_at]:
                         if s < 0:
                             break
                         s = m_next[s][c]

@@ -575,15 +575,16 @@ int FilterStack::first_failure(std::span<const uint32_t> unit) const
     return -1;
 }
 
-std::string filter_conflict(const FilterSpec& a, const FilterSpec& b)
+std::string filter_conflict(const FilterSpec& a, const FilterSpec& b, const FilterLine* line)
 {
     if (a.name() == b.name() || a.counts_as.empty() || b.counts_as.empty()) return {};
     auto implies = [](const FilterSpec& x, const FilterSpec& y) {
         return std::find(x.implies.begin(), x.implies.end(), y.name()) != x.implies.end();
     };
     if (implies(a, b) || implies(b, a)) return {};
-    const std::string& x = a.counts_as;
-    const std::string& y = b.counts_as;
+    auto how = [line](const FilterSpec& f) { return line && f.counts_as_on ? f.counts_as_on(*line) : f.counts_as; };
+    const std::string x = how(a);
+    const std::string y = how(b);
     auto pair = [&](const char* p, const char* q) { return (x == p && y == q) || (x == q && y == p); };
     if (pair("automaton", "automaton") || pair("automaton", "written") || pair("model-rule", "model-rule")) return {};
     if (x == "arithmetic" || y == "arithmetic") return "conflict";

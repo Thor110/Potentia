@@ -89,7 +89,8 @@ std::vector<std::string> tick_filter(LineFilters& settings, const std::string& n
 // Ticking by hand (the menus): as tick_filter, and then any ticked filter that cannot be counted
 // together with what was just ticked is unticked (filter_conflict; docs/FILTERS-CONFLICTS.md).
 // Returns the names unticked. Settings files are never changed this way when they are loaded.
-std::vector<std::string> tick_filter_by_hand(LineFilters& settings, const std::string& name, bool on);
+// `line`, where known, decides how a filter whose way of counting depends on it counts (filter_conflict).
+std::vector<std::string> tick_filter_by_hand(LineFilters& settings, const std::string& name, bool on, const FilterLine* line = nullptr);
 // What the ticked filters' prerequisites say about the stack: one line for each prerequisite that
 // is not ticked, or is ticked at a setting other than the one pinned. Empty when all is well.
 std::vector<std::string> prerequisite_notes(const LineFilters& settings);

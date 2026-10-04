@@ -1231,8 +1231,12 @@ int cmd_filters_plugin(const Args& a)
     std::cout << "requires   " << (reqs.empty() ? "(none)" : reqs) << "\n"
               << "form       " << h.form << (data.empty() ? std::string() : "  " + data) << "\n"
               << "states     " << (h.form == "tokens" ? std::to_string(declared) + " words, " : std::to_string(declared) + " declared, ") << d.states()
-              << " minimal\n"
-              << "length     " << fl.length << "\n";
+              << " minimal\n";
+    // `within N` (the token form): the automaton judges the first N, and only separators follow.
+    const uint32_t within = plugin_within(*def, values);
+    const std::unique_ptr<Filter> within_filter = within ? make_plugin_filter(def, one, values, resources) : nullptr;
+    if (within) std::cout << "within     " << within << "\n";
+    std::cout << "length     " << fl.length << "\n";
     if (a.has("relations")) print_relations(h.name(), d, fl);
     // --judge FILE: each line of a text file judged as one unit of its own length (the oracle's
     // `plugin --judge` prints the same, so CI compares verdicts on real and shuffled sentences).
@@ -1255,18 +1259,19 @@ int cmd_filters_plugin(const Args& a)
                 if (!dg) { spelled = false; break; }
                 u.push_back(*dg);
             }
-            std::cout << "judge      " << (!spelled ? "unspellable" : d.accepts(u) ? "pass" : "FAIL") << "  " << l << "\n";
+            const bool ok = spelled && (within_filter ? within_filter->passes(u) : d.accepts(u));
+            std::cout << "judge      " << (!spelled ? "unspellable" : ok ? "pass" : "FAIL") << "  " << l << "\n";
         }
     };
-    if (DfaRanker::table_bytes(d.states(), d.base, one.length) > filter_memory())
+    if (DfaRanker::table_bytes(d.states(), d.base, within ? std::min(within, one.length) : one.length) > filter_memory())
     {
         std::cout << "survivors  (judge only: " << over_table_limit("the table") << ")\n";
         judge_lines();
         return 0;
     }
-    const DfaRanker one_voice(d, one.length);
+    const DfaRanker one_voice(d, within ? std::min(within, one.length) : one.length);
     const std::unique_ptr<Ranker> all_voices = voices > 1 ? voices_ranker(one_voice, voices) : nullptr;
-    const Ranker& r = all_voices ? *all_voices : static_cast<const Ranker&>(one_voice);
+    const Ranker& r = within_filter ? *within_filter->ranker() : all_voices ? *all_voices : static_cast<const Ranker&>(one_voice);
     BigUint excluded = BigUint::pow(fl.base, fl.length);
     excluded -= r.count();
     std::cout << "survivors  " << r.count().to_decimal() << "\n"

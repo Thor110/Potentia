@@ -1548,6 +1548,151 @@ void test_plugins(const std::string& dir)
         }
     }
 
+    // tidy-data-v2 is tidy-data-v1 with the built-in max-run-v1 in place of max-run-data-v1: with the
+    // prerequisites each brings, the same count at every length tried and the same verdicts, so
+    // max-run-data-v1 and tidy-data-v1 can retire for them.
+    {
+        const auto t1 = load_plugin_file(filters + "tidy-data-v1.sfilter"), t2 = load_plugin_file(filters + "tidy-data-v2.sfilter");
+        const auto clean = load_plugin_file(filters + "clean-data-v1.sfilter");
+        const FilterSpec t1_spec = plugin_spec(t1), t2_spec = plugin_spec(t2), clean_spec = plugin_spec(clean);
+        CHECK(t1_spec.retired && t1_spec.replaced_by == "tidy-data-v2" && !t2_spec.retired);
+        CHECK(run_spec.retired && run_spec.replaced_by == "max-run-v1");
+        CHECK(t2_spec.prerequisites.size() == 2);
+        for (uint32_t L : {1u, 2u, 5u, 12u, 32u, 200u})
+            for (const char* longest : {"3", "20"})
+            {
+                const FilterValues lv{{"longest", longest}};
+                const FilterStack v1(text_line(L), {{&t1_spec, lv}, {&clean_spec, {}}, {&run_spec, {{"max", "3"}}}}, none);
+                const FilterStack v2(text_line(L), {{&t2_spec, lv}, {&clean_spec, {}}, {find_filter("max-run-v1"), {{"max_run", "3"}}}}, none);
+                CHECK(v1.ranker() && v2.ranker() && v1.ranker()->count() == v2.ranker()->count());
+                for (int i = 0; i < (L <= 12 ? 200 : 40); ++i)
+                {
+                    std::vector<uint32_t> u(L);
+                    for (size_t k = 0; k < u.size(); ++k) u[k] = k > 0 && rng() % 3 == 0 ? u[k - 1] : uint32_t(rng() % 5 == 0 ? 0 : rng() % 27);
+                    CHECK(v1.passes(u) == v2.passes(u));
+                }
+            }
+    }
+
+    // The token form's padding and within: words-data-v2, window-data-v2 and title-data-v1 judge as
+    // words-v2, window-v2 and title-v1 do (padding-heavy units, cut words at both ends), count the
+    // same, and a padded plugin still merges into a stack's automaton (title-data-v1, with within,
+    // counts on its own, as title-v1 does).
+    {
+        struct Pair { const char* plugin; const char* builtin; FilterValues pv, bv; };
+        // (A dictionary id of its own: compiled automata are kept by the plugin, the line and the
+        // settings, a dictionary by its id, and the other tests' dictionaries come by the default.)
+        const FilterValues own{{"dictionary", "padtest"}};
+        const std::vector<Pair> pairs = {
+            {"words-data-v2", "words-v2", own, own},
+            {"window-data-v2", "window-v2", own, own},
+            {"title-data-v1", "title-v1", {{"dictionary", "padtest"}, {"max_length", "9"}}, {{"dictionary", "padtest"}, {"max_length", "9"}}},
+        };
+        static const char* const words[] = {"the", "cat", "sat", "on", "a", "mat", "dog", "ran", "of", "and", "zq", "xx"};
+        auto pdict = std::make_shared<const Dictionary>(Dictionary::from_words({"the", "cat", "sat", "on", "a", "mat", "dog", "ran", "of", "and"}));
+        const TestResources pres(pdict, nullptr);
+        for (const Pair& pr : pairs)
+        {
+            const auto def = load_plugin_file(filters + std::string(pr.plugin) + ".sfilter");
+            const FilterSpec spec = plugin_spec(def);
+            CHECK(spec.counts_as == (std::string(pr.plugin) == "title-data-v1" ? "own" : "automaton"));
+            for (uint32_t L : {1u, 4u, 9u, 16u})
+            {
+                const FilterStack p(text_line(L), {{&spec, pr.pv}}, pres), b(text_line(L), {{find_filter(pr.builtin), pr.bv}}, pres);
+                CHECK(p.ranker() && b.ranker() && p.ranker()->count() == b.ranker()->count());
+                if (L <= 4) // every unit
+                {
+                    uint64_t total = 1;
+                    for (uint32_t k = 0; k < L; ++k) total *= 27;
+                    std::vector<uint32_t> u(L);
+                    bool same = true;
+                    for (uint64_t x = 0; x < total; ++x)
+                    {
+                        uint64_t y = x;
+                        for (uint32_t k = 0; k < L; ++k, y /= 27) u[k] = uint32_t(y % 27);
+                        same = same && p.passes(u) == b.passes(u);
+                    }
+                    CHECK(same);
+                }
+                for (int i = 0; i < 300; ++i)
+                {
+                    // Words and SPACEs (sometimes two together), cut anywhere, then padding of any length.
+                    std::vector<uint32_t> u;
+                    while (u.size() < L)
+                    {
+                        const char* w = words[rng() % 12];
+                        for (const char* c = w; *c; ++c) u.push_back(uint32_t(*c - 'a' + 1));
+                        for (uint32_t sp = 1 + (rng() % 7 == 0); sp-- > 0;) u.push_back(0);
+                    }
+                    const size_t from = rng() % 3 == 0 ? rng() % 3 : 0;
+                    std::vector<uint32_t> v(u.begin() + std::ptrdiff_t(from), u.begin() + std::ptrdiff_t(std::min(u.size(), from + L)));
+                    while (v.size() < L) v.push_back(0);
+                    const uint32_t pad = uint32_t(rng() % (L + 1));
+                    for (uint32_t k = L - pad; k < L; ++k) v[k] = 0;
+                    CHECK(p.passes(v) == b.passes(v));
+                }
+            }
+        }
+        // Long pages: where a plain dictionary plugin's automaton table does not fit the filter
+        // memory, it counts by its words' lengths, as the built-ins do (plugin.hpp word_counting),
+        // with the same count, and ranks and unranks its survivors.
+        {
+            const double was = filter_memory();
+            set_filter_memory(1024.0 * 1024); // 1 MB: the automaton's table at 1,500 symbols is far over it
+            for (const char* port : {"words-data-v1", "window-data-v1", "words-data-v2", "window-data-v2"})
+            {
+                const auto def = load_plugin_file(filters + std::string(port) + ".sfilter");
+                const FilterSpec spec = plugin_spec(def);
+                const std::string builtin = std::string(port).substr(0, std::string(port).find("-data")) + std::string(port).substr(std::string(port).size() - 3);
+                const FilterStack p(text_line(1500), {{&spec, own}}, pres), b(text_line(1500), {{find_filter(builtin), own}}, pres);
+                const Ranker* pr = p.ranker();
+                CHECK(pr && b.ranker() && pr->count() == b.ranker()->count());
+                CHECK(pr && dynamic_cast<const DfaRanker*>(pr) == nullptr); // counted by word lengths, not the table
+                if (pr && !pr->count().is_zero())
+                {
+                    BigUint k = pr->count();
+                    k.divmod_small(7);
+                    const auto u = pr->unrank(k);
+                    CHECK(p.passes(u) && b.passes(u) && pr->rank(u) == k);
+                }
+            }
+            set_filter_memory(was);
+        }
+        // Padding keeps a plugin an automaton: words-data-v2 and clean-data-v2 merge, and the stack counts as words-v2 alone.
+        const auto w2 = load_plugin_file(filters + "words-data-v2.sfilter"), c2 = load_plugin_file(filters + "clean-data-v2.sfilter");
+        const FilterSpec w2s = plugin_spec(w2), c2s = plugin_spec(c2);
+        const FilterStack both(text_line(20), {{&w2s, own}, {&c2s, {}}}, pres), alone(text_line(20), {{find_filter("words-v2"), own}}, pres);
+        CHECK(both.ranker() && alone.ranker() && both.ranker()->count() == alone.ranker()->count());
+    }
+
+    // melody-lengths-v2 and melody-ending-v2 (every note set, by real lengths: LENGTH, SIXTEENTHS)
+    // count as the v1s on notes104 at every setting of their choices, so the v1s retire.
+    {
+        const auto l1 = load_plugin_file(filters + "melody-lengths-v1.sfilter"), l2 = load_plugin_file(filters + "melody-lengths-v2.sfilter");
+        const auto e1 = load_plugin_file(filters + "melody-ending-v1.sfilter"), e2 = load_plugin_file(filters + "melody-ending-v2.sfilter");
+        const FilterSpec l1s = plugin_spec(l1), l2s = plugin_spec(l2), e1s = plugin_spec(e1), e2s = plugin_spec(e2);
+        CHECK(l1s.retired && l1s.replaced_by == "melody-lengths-v2" && e1s.retired && e1s.replaced_by == "melody-ending-v2");
+        const FilterLine audio{"audio", "notes104", 104, 4, nullptr, 0, 0, 0};
+        static const char* const codes[] = {"e", "q", "h", "w"};
+        bool same = true;
+        for (const char* lo : codes)
+            for (const char* hi : codes)
+                for (const char* n : {"0", "1", "3"})
+                {
+                    const FilterValues v{{"shortest", lo}, {"longest", hi}, {"eighths", n}};
+                    const FilterStack a1(audio, {{&l1s, v}}, none), a2(audio, {{&l2s, v}}, none);
+                    same = same && a1.ranker() && a2.ranker() && a1.ranker()->count() == a2.ranker()->count();
+                }
+        for (const char* t : {"C", "F#", "B"})
+            for (const char* h : codes)
+            {
+                const FilterValues v{{"tonic", t}, {"hold", h}};
+                const FilterStack a1(audio, {{&e1s, v}}, none), a2(audio, {{&e2s, v}}, none);
+                same = same && a1.ranker() && a2.ranker() && a1.ranker()->count() == a2.ranker()->count();
+            }
+        CHECK(same);
+    }
+
     // key-data-v1 counts as key-v1 in the major key on every tonic.
     static const char* const tonics[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
     const auto key = load_plugin_file(filters + "key-data-v1.sfilter");
@@ -3617,7 +3762,17 @@ void test_picture_vectors(const std::string& dir)
     {
         const FilterLine line{"video", "picture", 3, 2 * 1 * 3, nullptr, 2, 1, 3};
         const FilterStack st(line, {{palette, {{"scope", "frame"}, {"colours", "1"}}}, {runs, {}}}, none);
-        CHECK(!st.ranker() && !st.compact_blocker().empty()); // two own rankers: judged, not counted
+        // On a small palette both are automata, so together they count (each frame one colour: 27).
+        CHECK(st.ranker() && st.ranker()->count() == BigUint(27));
+        CHECK(filter_conflict(*palette, *runs, &line).empty() && filter_conflict(*palette, *runs) == "merge");
+        // On rgb24 neither automaton could be built: they count their own ways, so together they
+        // are judged and not counted, and the line says they clash.
+        const FilterLine big{"video", "picture", 1u << 24, 2 * 1 * 3, nullptr, 2, 1, 3};
+        const FilterStack both(big, {{palette, {{"scope", "frame"}, {"colours", "1"}}}, {runs, {}}}, none);
+        CHECK(!both.ranker() && !both.compact_blocker().empty());
+        CHECK(filter_conflict(*palette, *runs, &big) == "merge");
+        const FilterStack alone(big, {{palette, {{"scope", "frame"}, {"colours", "1"}}}}, none);
+        CHECK(alone.ranker() && alone.ranker()->count() == BigUint::pow(1u << 24, 3));
         const FilterStack one(line, {{palette, {{"scope", "frame"}, {"colours", "1"}}}}, none);
         std::vector<uint32_t> u(6, 0);
         uint64_t kept = 0;
