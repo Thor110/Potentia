@@ -52,7 +52,7 @@ public:
 
     bool is_word(std::string_view t) const { return words_.find(t) != words_.end(); }
     bool is_suffix(std::string_view t) const { return suffixes_.find(t) != suffixes_.end(); }
-    bool is_word_prefix(std::string_view t) const;
+    bool is_word_prefix(std::string_view t) const; // the start of some word (a word itself included)
     bool is_substring(std::string_view t) const;
 
     // Number of distinct words / word prefixes / word suffixes / word substrings of length k.
@@ -68,6 +68,8 @@ public:
     const std::string& sha256() const { return sha256_; }
 
 private:
+    // The sets and the counts by length above, from the words (sorted and made distinct here).
+    // Throws on a word with anything but a-z.
     void build(std::vector<std::string> words);
     static uint32_t at(const std::vector<uint32_t>& v, uint32_t k) { return k < v.size() ? v[k] : 0; }
     std::vector<uint32_t> words_by_len_, prefixes_by_len_, suffixes_by_len_, substrings_by_len_;
@@ -100,6 +102,8 @@ struct PrunedResult
     uint64_t states_explored = 0; // prefix-tree nodes visited, including the root
 };
 
+// Every unit of the length tested one by one (27^length of them, on `threads` threads): the check
+// on the counted and pruned answers below, for short lengths only.
 SieveCount sieve_brute(uint32_t length, const Dictionary& dict, unsigned threads);
 PrunedResult sieve_pruned(uint32_t length, SieveFilter f, const Dictionary& dict, unsigned threads);
 SieveCount sieve_counted(uint32_t length, const Dictionary& dict);

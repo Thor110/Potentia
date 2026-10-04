@@ -911,10 +911,11 @@ std::unique_ptr<Machine> machine(uint32_t r)
 }
 
 // The machine's states over the alphabet's symbols, walked from the start: a Dfa (minimised), or
-// nullopt past max_states.
+// nullopt past max_states (0: written_max_states).
 std::optional<Dfa> walk(const Machine& m, const std::vector<std::vector<uint32_t>>& inputs, size_t max_states)
 {
     const uint32_t B = uint32_t(inputs.size());
+    if (max_states == 0) max_states = written_max_states(B);
     std::unordered_map<St, int32_t, StHash> id;
     std::vector<St> states;
     auto get = [&](const St& s) {
@@ -1002,9 +1003,18 @@ std::optional<WrittenReading> written_as_bytes(std::span<const uint32_t> digits)
     return std::nullopt;
 }
 
+size_t written_max_states(uint32_t base)
+{
+    // A state's transitions (walked, then twice while minimised), its machine state (kept in the
+    // list and in the map that finds it), and the map's own entry.
+    const double per_state = 3.0 * double(base) * sizeof(int32_t) + 2.0 * sizeof(St) + 48.0;
+    return std::max<size_t>(1, size_t(filter_memory() / per_state));
+}
+
 std::optional<Dfa> written_dfa(const Alphabet& a, uint32_t mask, size_t max_states)
 {
     const uint32_t B = a.size();
+    if (max_states == 0) max_states = written_max_states(B);
     if (holds_all_bytes(a))
     {
         std::vector<std::vector<uint32_t>> inputs(B);
@@ -1045,6 +1055,7 @@ public:
     uint32_t mask = 0, base = 0;
     bool bytes = false;           // a line of every byte: read as its own bytes only
     std::optional<Dfa> others;    // O: every chosen reading but binary (nullopt: too large)
+    double memory = 0;            // the filter memory it was made under (a refusal is retried with more)
     bool binary = false;          // the binary reading chosen, and walked as Bn
     std::string blocker;          // why it cannot count
     // Bn, over what a symbol is to it: 0 the first symbol, 1 the other. Its states' phase: 0
@@ -1077,15 +1088,17 @@ std::shared_ptr<const WrittenRule> written_rule(const Alphabet& a, uint32_t mask
     const auto key = std::pair{a.id(), mask};
     {
         std::lock_guard<std::mutex> lock(mx);
-        if (auto it = cache.find(key); it != cache.end()) return it->second;
+        if (auto it = cache.find(key); it != cache.end())
+            if (it->second->others || filter_memory() <= it->second->memory) return it->second;
     }
     auto r = std::make_shared<WrittenRule>();
+    r->memory = filter_memory();
     r->alphabet = &a;
     r->mask = mask;
     r->base = a.size();
     r->bytes = holds_all_bytes(a);
     r->others = written_dfa(a, mask);
-    if (!r->others) r->blocker = "the readings' automaton is too large for this alphabet: it judges only";
+    if (!r->others) r->blocker = "the readings' automaton is too large for this alphabet in the filter memory (" + memory_text(filter_memory()) + "): it judges only";
     r->space.resize(r->base);
     bool ascii = true;
     for (uint32_t c = 0; c < r->base; ++c)
@@ -1177,7 +1190,7 @@ std::shared_ptr<const WrittenRule> written_rule(const Alphabet& a, uint32_t mask
         }
     }
     std::lock_guard<std::mutex> lock(mx);
-    return cache.emplace(key, std::shared_ptr<const WrittenRule>(r)).first->second;
+    return cache.insert_or_assign(key, std::shared_ptr<const WrittenRule>(r)).first->second; // (over a refusal made with less memory)
 }
 
 std::string written_blocker(const WrittenRule& rule) { return rule.blocker; }
@@ -1486,7 +1499,7 @@ std::unique_ptr<Ranker> written_ranker(std::shared_ptr<const WrittenRule> rule, 
     const auto bytes_of = [&](size_t states) { return DfaRanker::table_bytes(states, rule->base, length); };
     const double per_state = bytes_of(1);
     std::optional<Dfa> p;
-    if (keep) p = minimise(*keep);
+    if (keep) p = *keep; // minimal already (see the header): minimising it again took a second
     const double fixed = (p ? bytes_of(p->states()) : 0.0) + bytes_of(rule->bnext.size());
     if (need) *need = fixed;
     if (fixed > filter_memory())

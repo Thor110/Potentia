@@ -36,6 +36,9 @@
 
 #include <algorithm>
 #include <atomic>
+#include <condition_variable>
+#include <deque>
+#include <mutex>
 #include <thread>
 #include <functional>
 #include <array>
@@ -121,7 +124,6 @@ constexpr double kTooLargeBits = 8.0e9; // above this, one address would need a 
 //
 // None is a limit of the design. They describe the machine of the day, and a bigger one finds
 // bigger numbers with the same arithmetic.
-constexpr double kCachedUnits = 4096;     // the hallway's cache clears itself past this many
 constexpr double kWorldAllowanceMB = 512; // graphics memory for everything but the crate faces
 constexpr double kUnitMs = 50;            // the longest one unit may take to open
 constexpr double kGrowth = 1.6;           // how the time to open grows with the address (Karatsuba)
@@ -135,6 +137,13 @@ double tallest_face()
     double a = 1.0;
     for (const char* m : {"pages", "image", "audio", "video", "books", "models"}) a = std::max(a, double(load_face_rect(m).aspect()));
     return a;
+}
+
+// Installed memory in words ("16.0 GB"), or "?" when SDL cannot tell.
+std::string installed_memory_text()
+{
+    const int mb = SDL_GetSystemRAM();
+    return mb > 0 ? sieve::memory_text(double(mb) * 1048576.0) : std::string("?");
 }
 
 std::string fixed(double v, int d)
@@ -402,7 +411,7 @@ double Menu::line_cache_bytes(int i) const
                              uint64_t(s_.book_pages + 1) * s_.length + cover,
                              3ull * s_.model_vertices + 3ull * s_.model_faces + t,
                              (uint64_t(s_.binary_bytes) + 3) / 4 + t};
-    const double units = std::min(kCachedUnits, 14.0 * double(s_.items_per_wall));
+    const double units = std::min(double(kCachedUnits), 14.0 * double(s_.items_per_wall));
     // A binary file is kept lazily (hallway.hpp, Book::is_file): only its place on the line, a
     // number as long as the file, its title, and its first sixteen bytes; its bytes and hex only for the one
     // looked at. And only half a tile's slots hold files.
@@ -617,8 +626,8 @@ void Menu::adjust(int dir, int step)
     case 2: break; // key: typed
     // Items per wall: the two values that use a whole byte well (see setup.items_per_wall).
     case 3: s_.items_per_wall = s_.items_per_wall == 128 ? 256u : 128u; break;
-    // Angle precision: decimal places on the compass, 0 to 8. Kept with the application's
-    // settings so that it is saved.
+    // Angle precision: decimal places on the compass, 0 to kMaxAngleDecimals. Kept with the
+    // application's settings so that it is saved.
     case kAngleRow:
         if (app_)
         {
@@ -638,6 +647,21 @@ void Menu::adjust(int dir, int step)
             const int64_t mb = app_->filter_memory_mb;
             const int64_t to = step == 0 ? (dir > 0 ? mb * 2 : mb / 2) : mb + int64_t(dir) * 256 * step;
             app_->filter_memory_mb = int(std::clamp<int64_t>(to, 64, 1048576));
+            save_app();
+        }
+        break;
+    // The counting memory and the merge cache: percentages, 5 a step (Shift and Ctrl ten and a
+    // hundred times that), PgUp/PgDn 25. They change no count, only how many run at once and what
+    // is kept between them, so they take effect at once, with nothing counted again.
+    case kCountingMemoryRow:
+    case kMergeCacheRow:
+        if (app_)
+        {
+            const bool counting = row_ == kCountingMemoryRow;
+            int& pct = counting ? app_->counting_memory_pct : app_->merge_cache_pct;
+            pct = std::clamp(pct + dir * (step == 0 ? 25 : 5 * step), counting ? 5 : 0, 100);
+            if (counting) set_counting_share(pct);
+            else sieve::set_merge_cache_share(pct / 100.0);
             save_app();
         }
         break;
@@ -824,9 +848,10 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         break;
     case SDLK_F:
         // The filters of the line whose settings are selected.
-        // Rows 6-9 pages, 10-12 image, 13 audio, 14-17 video, 18 books, then the models rows and
-        // the binary row. Anywhere else (the GLOBAL rows, and the three at the foot), F opens the
-        // filters of the line you will start on (the "line" row); F again closes them.
+        // From kPagesRows to kBooksRow the pages, image, audio, video and books rows, then the
+        // models rows and the binary row (menu.hpp has their numbers). Anywhere else (the GLOBAL
+        // rows, and the three at the foot), F opens the filters of the line you will start on (the
+        // "line" row); F again closes them.
         if (row_ >= kPagesRows && row_ <= kBooksRow)
             open_filters(row_ >= kImageRows && row_ < kAudioRow ? 1 : row_ >= kAudioRow && row_ < kVideoRows ? 2 : row_ == kBooksRow ? 4 : row_ >= kVideoRows ? 3 : 0);
         else if (row_ >= kModelsRows && row_ < kBinaryRow) open_filters(5);
@@ -901,11 +926,13 @@ Menu::Result Menu::run()
     return result;
 }
 
-// The budget, drawn as three bars under the settings the way a game's graphics menu shows its
+// The budget, drawn as four bars under the settings the way a game's graphics menu shows its
 // memory: what the largest line's cache of units takes against the memory it is given, what the
-// crate faces and the world take against the graphics memory, and how long the slowest line's
-// unit takes to open against the time allowed. A bar that is over is red, and so is its figure.
-// Returns the y below it.
+// crate faces and the world take against the graphics memory, how long the slowest line's unit
+// takes to open against the time allowed, and what the largest count of the filters needs against
+// the filter memory. A bar that is over is red, and so is its figure. Under them, one status line
+// (a changed filter memory waiting for X, or the dimensions still being worked out). Returns the
+// y below it.
 float Menu::draw_budget(float y)
 {
     const Budget b = machine_budget();
@@ -1022,6 +1049,10 @@ void Menu::render()
                                                      : trf("setup.closeup.value", {n(s_.closeup_px), std::to_string(size_t(std::ceil(closeup_mb())))})},
         {-1, tr("setup.focus"), s_.limits_focus == "all" ? tr("setup.focus.all") : trf("setup.focus.line", {tr(s_.limits_focus == "text" ? "line.pages" : "line." + s_.limits_focus)})},
         {-1, tr("setup.filter_memory"), trf("setup.filter_memory.value", {sieve::memory_text(filter_memory_setting())})},
+        {-1, tr("setup.counting_memory"), trf("setup.counting_memory.value", {std::to_string(app_ ? app_->counting_memory_pct : 50),
+                                                                             installed_memory_text(), std::to_string(counting_slots(filter_memory_setting()))})},
+        {-1, tr("setup.merge_cache"), trf("setup.merge_cache.value", {std::to_string(app_ ? app_->merge_cache_pct : 50),
+                                                                     sieve::memory_text(filter_memory_setting() * (app_ ? app_->merge_cache_pct : 50) / 100.0)})},
         {0, tr("setup.length"), trf("setup.length.value", {n(s_.length)})},
         {-1, tr("setup.alphabet"), trf("setup.alphabet.value", {s_.alphabet, n(alphabet_size(s_.alphabet))})},
         {-1, tr("setup.canon"), "canon-text-" + s_.canon},
@@ -1400,6 +1431,7 @@ std::pair<std::string, std::function<Menu::StackInfo()>> Menu::stack_job(int i, 
                     StackInfo out;
                     const sieve::ModelSpace space(v, f, c, "sieve");
                     const sieve::ModelSieve ms = sieve::cli::build_model_sieve(space, lf);
+                    out.table_bytes = ms.table_bytes();
                     if (!ms.empty() && !ms.can_rank()) out.status = trf("status.not_countable", {ms.blocker()});
                     else if (ms.empty()) none_of(out);
                     else survivors_of(out, ms.count(), space.size());
@@ -1629,37 +1661,88 @@ void Menu::save_filters()
 // tick them all (with their prerequisites). On the books line, every part's list.
 namespace {
 
-// The menu's counting workers (Menu::resolve): each line's stack is built and counted off the
-// drawing thread. Their threads are kept here, not in the menu, so leaving the menu never waits
+// The menu's counting workers (Menu::resolve, Menu::filter_share): each line's stack is built
+// and counted off the drawing thread. Jobs wait in a queue and are taken by at most
+// counting_slots() threads at once, so pressing X (dozens of counts) neither starts dozens of threads nor holds
+// dozens of tables. The threads are kept here, not in the menu, so leaving the menu never waits
 // for one; building the hallway, and leaving the program, wait for them all first (they use the
 // same caches, and statics must outlive them).
 struct Workers
 {
     std::mutex mx;
-    std::vector<std::pair<std::thread, std::shared_ptr<std::atomic<bool>>>> running;
-    void add(std::thread t, std::shared_ptr<std::atomic<bool>> done)
+    std::condition_variable idle;          // signalled as each thread runs out of work
+    std::deque<std::function<void()>> queue; // jobs not yet started, oldest first
+    // Every thread started and not yet joined, with whether it has returned.
+    std::vector<std::pair<std::thread, std::shared_ptr<std::atomic<bool>>>> threads;
+    int alive = 0;   // threads still taking jobs
+    int working = 0; // jobs being run now
+
+    static int limit() { return counting_slots(); }
+    void add(std::function<void()> job)
     {
         std::lock_guard<std::mutex> lock(mx);
-        for (auto it = running.begin(); it != running.end();)
+        for (auto it = threads.begin(); it != threads.end();)
             if (*it->second)
             {
                 it->first.join();
-                it = running.erase(it);
+                it = threads.erase(it);
             }
             else ++it;
-        running.emplace_back(std::move(t), std::move(done));
+        queue.push_back(std::move(job));
+        if (alive >= limit()) return; // a thread takes it when one comes free
+        ++alive;
+        auto done = std::make_shared<std::atomic<bool>>(false);
+        threads.emplace_back(std::thread([this, done] { run(*done); }), done);
     }
+    // A thread's loop: jobs from the queue until there are none.
+    void run(std::atomic<bool>& done)
+    {
+        for (;;)
+        {
+            std::function<void()> job;
+            {
+                std::lock_guard<std::mutex> lock(mx);
+                if (queue.empty())
+                {
+                    --alive;
+                    done = true;
+                    idle.notify_all();
+                    return;
+                }
+                job = std::move(queue.front());
+                queue.pop_front();
+                ++working;
+            }
+            job();
+            std::lock_guard<std::mutex> lock(mx);
+            --working;
+        }
+    }
+    bool busy()
+    {
+        std::lock_guard<std::mutex> lock(mx);
+        return working > 0 || !queue.empty();
+    }
+    // Waits for every job queued, then joins the threads.
     void finish()
     {
         std::vector<std::pair<std::thread, std::shared_ptr<std::atomic<bool>>>> all;
         {
-            std::lock_guard<std::mutex> lock(mx);
-            all.swap(running);
+            std::unique_lock<std::mutex> lock(mx);
+            idle.wait(lock, [this] { return alive == 0; });
+            all.swap(threads);
         }
         for (auto& [t, done] : all)
             if (t.joinable()) t.join();
     }
-    ~Workers() { finish(); }
+    ~Workers()
+    {
+        {
+            std::lock_guard<std::mutex> lock(mx);
+            queue.clear(); // at exit, counts not yet started are not wanted
+        }
+        finish();
+    }
 };
 Workers& workers()
 {
@@ -1671,6 +1754,39 @@ Workers& workers()
 
 void finish_filter_warmup() { workers().finish(); }
 
+namespace {
+std::atomic<int> g_counting_share{50};
+} // namespace
+
+void set_counting_share(int percent) { g_counting_share = std::clamp(percent, 5, 100); }
+
+// One per core but the one that draws, and no more than the counting memory holds when each
+// count's tables may take the whole filter memory (at least one, however small the share).
+int counting_slots(double filter_bytes)
+{
+    if (filter_bytes <= 0) filter_bytes = sieve::filter_memory();
+    const int cores = std::max(1, int(std::thread::hardware_concurrency()) - 1);
+    const int mb = SDL_GetSystemRAM(); // 0 if SDL cannot tell: then the cores alone
+    if (mb <= 0) return cores;
+    const double room = double(mb) * 1048576.0 * (g_counting_share / 100.0) / std::max(filter_bytes, 1.0);
+    return std::clamp(int(room), 1, cores);
+}
+
+void Menu::start_job(std::shared_ptr<Job> job, std::function<StackInfo()> work)
+{
+    workers().add([job = std::move(job), work = std::move(work)] {
+        try
+        {
+            if (job->wanted) job->result = work();
+        }
+        catch (const std::exception& e)
+        {
+            job->result = StackInfo{"", trf("status.error", {e.what()}), -1, ""};
+        }
+        job->ready = true;
+    });
+}
+
 const Menu::StackInfo* Menu::filter_share(int line, int part, const sieve::cli::LineFilters& lf, const std::string& filter)
 {
     auto [key, work] = stack_job(line, alone(lf, filter), part);
@@ -1678,35 +1794,19 @@ const Menu::StackInfo* Menu::filter_share(int line, int part, const sieve::cli::
     auto it = shares_.find(key);
     if (it == shares_.end())
     {
-        if (shares_.size() > 1024) shares_.clear(); // settings long gone; a page of filters is far fewer
+        if (shares_.size() > 1024) // settings long gone; a page of filters is far fewer
+        {
+            for (auto& [k, j] : shares_) j->wanted = false;
+            shares_.clear();
+        }
         auto job = std::make_shared<Job>();
         it = shares_.emplace(key, job).first;
-        auto done = std::make_shared<std::atomic<bool>>(false);
-        std::thread t([job, done, work = std::move(work)] {
-            try
-            {
-                job->result = work();
-            }
-            catch (const std::exception& e)
-            {
-                job->result = StackInfo{"", trf("status.error", {e.what()}), -1, ""};
-            }
-            job->ready = true;
-            *done = true;
-        });
-        workers().add(std::move(t), done);
+        start_job(job, std::move(work));
     }
     return it->second->ready ? &it->second->result : nullptr;
 }
 
-bool filter_workers_busy()
-{
-    Workers& w = workers();
-    std::lock_guard<std::mutex> lock(w.mx);
-    for (const auto& [t, done] : w.running)
-        if (!*done) return true;
-    return false;
-}
+bool filter_workers_busy() { return workers().busy(); }
 
 // A line's stack info for `key`: at once if it has been worked out, else worked out by `work` on a
 // worker thread while the menu says it is counting (and asked again each frame).
@@ -1717,23 +1817,10 @@ const Menu::StackInfo& Menu::resolve(int i, const std::string& key, std::functio
     Pending& p = pending_[size_t(i)];
     if (p.key != key || !p.job)
     {
+        if (p.job) p.job->wanted = false; // the settings it was for have changed
         p.key = key;
         p.job = std::make_shared<Job>();
-        auto job = p.job;
-        auto done = std::make_shared<std::atomic<bool>>(false);
-        std::thread t([job, done, work = std::move(work)] {
-            try
-            {
-                job->result = work();
-            }
-            catch (const std::exception& e)
-            {
-                job->result = StackInfo{"", trf("status.error", {e.what()}), -1, ""};
-            }
-            job->ready = true;
-            *done = true;
-        });
-        workers().add(std::move(t), done);
+        start_job(p.job, std::move(work));
     }
     if (p.job->ready)
     {

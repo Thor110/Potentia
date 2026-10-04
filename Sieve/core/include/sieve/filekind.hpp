@@ -73,6 +73,7 @@ struct FileSignature
     std::array<int16_t, kKindHead> fixed;
     uint32_t end = 0;
 };
+// The table, worked out once from the kinds' signatures.
 const std::vector<FileSignature>& file_signatures();
 
 // A set of kinds: one flag per entry of file_kinds().
@@ -91,7 +92,7 @@ struct Scaled
     double m = 0;  // in [0.5, 1), or 0
     int64_t e = 0; // the value is m * 2^e
     Scaled() = default;
-    explicit Scaled(double v);
+    explicit Scaled(double v); // zero for v <= 0
     static Scaled of(const BigUint& v);
     Scaled& operator+=(const Scaled& o);
     Scaled& operator-=(const Scaled& o); // o <= this (a part taken from its whole)
@@ -110,7 +111,7 @@ public:
 
     uint64_t max_bytes() const { return max_bytes_; }
     const BigUint& count() const { return count_; }
-    BigUint count_of_length(uint64_t length) const;
+    BigUint count_of_length(uint64_t length) const; // the files of exactly this many bytes in the set
     bool passes(std::span<const uint8_t> head, uint64_t size) const;
 
     BigUint rank(const std::vector<uint8_t>& file) const;   // the file must pass

@@ -51,11 +51,11 @@ struct TileIndex
     bool negative = false; // never true with a zero magnitude
     BigUint magnitude;
 
-    static TileIndex of(int64_t t);
+    static TileIndex of(int64_t t); // from an ordinary integer
     TileIndex& operator+=(int64_t delta);
     friend TileIndex operator+(TileIndex a, int64_t d) { return a += d; }
     friend bool operator==(const TileIndex& a, const TileIndex& b) { return a.negative == b.negative && a.magnitude == b.magnitude; }
-    std::string to_decimal() const;
+    std::string to_decimal() const; // with a leading '-' when negative
     static TileIndex parse(std::string_view dec); // optional leading '-'
 };
 

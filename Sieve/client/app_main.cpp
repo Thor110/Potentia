@@ -115,7 +115,11 @@ const char* kUsage =
     "  --new-map PATH      the node graph's New map..., at once\n"
     "  --thin              keep only the room you stand in (what going in past the budget does)\n"
     "  --filter-memory MB  the most one count of the filters' survivors may take for its tables (default\n"
-    "                      the setup menu's, 512 MB at first)\n\n"
+    "                      the setup menu's, 512 MB at first)\n"
+    "  --counting-memory PCT  the share of installed memory the setup menu's counts may take at once\n"
+    "                      (5 to 100; the setup menu's, 50 at first)\n"
+    "  --merge-cache PCT   the share of the filter memory kept for merged filters between counts (0 to\n"
+    "                      100; the setup menu's, 50 at first)\n\n"
     "Controls: WASD move, mouse look, Shift run, E or click take a book, T warp, G go to,\n"
     "M switch ordering (positional, scrambled, guided), - and = zoom out/in (guided; Shift: 8x),\n"
     "wheel/PgUp/PgDn/[ ] jump 1/1000/1000000 tiles, Home to corridor tile 0 (every line's start line),\n"
@@ -332,6 +336,12 @@ int run(const Args& a)
     // The filter memory (the setup menu's FILTER MEMORY): what one count's tables may take.
     if (a.has("filter-memory")) app.filter_memory_mb = std::clamp(int(a.get_positive("filter-memory", 512)), 64, 1048576);
     sieve::set_filter_memory(double(app.filter_memory_mb) * 1024 * 1024);
+    // How much of installed memory the setup menu's counts may take at once (COUNTING MEMORY), and
+    // how much of the filter memory keeps merged automata between counts (MERGE CACHE).
+    if (a.has("counting-memory")) app.counting_memory_pct = std::clamp(int(a.get_positive("counting-memory", 50)), 5, 100);
+    if (a.has("merge-cache")) app.merge_cache_pct = std::clamp(int(a.get_u32("merge-cache", 50)), 0, 100);
+    set_counting_share(app.counting_memory_pct);
+    sieve::set_merge_cache_share(app.merge_cache_pct / 100.0);
     const DisplayInfo display = detect_display();
     if (!shot && app.resolution.w <= 0)
     {
@@ -495,6 +505,7 @@ int run(const Args& a)
             }
         }
         hall->render(); // computes what you are looking at
+        hall->settle_vault(); // the vault's verdicts on the pictures in view, so the picture shows them
         if (a.has("take")) hall->take_hovered();
         if (a.has("save-item")) hall->save_in_hand_to(a.get("save-item")); // F, without the dialog
         hall->render();

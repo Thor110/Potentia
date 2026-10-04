@@ -1190,3 +1190,28 @@ while any line's tally is on a worker (counting_lines, from pending_) or X is we
 budget's spacing is tighter so ENTER THE HALLWAY stays clear of the footer. X now works on the setup
 screen too (not on the key's row, where it is a letter). The row and the filter-memory bar show the
 setting, which is what X will count with.
+The first batch of the code review (3 October 2026).
+- **Counting pool:** the menu's counts go through a bounded pool (menu.cpp Workers: a queue,
+  counting_slots() threads; a job whose settings went stale before it started is skipped).
+- **Vault pictures:** checked on workers (hallway.cpp vault_queue / vault_collect: an item is held
+  back as withheld, Book::vault_pending, until its verdict is in; withheld() decides it on the spot
+  for anything that takes, saves or describes it; settle_vault() before a screenshot).
+- **Item page:** hex_of returns a reference and caches a compact survivor's address too.
+- **line_units():** returns a reference.
+- **Plugin merge:** the plugins' automata are merged smallest first and kept (filter.cpp
+  merge_plugins: by line and provenance, one merge per key at a time; not-written's ranker takes it
+  as minimal).
+- **not-written-v1's state limit:** written_max_states(base), from the filter memory (a refusal is
+  retried when the memory grows).
+- **canonical-mesh-v1 with every-vertex-used-v1:** ranks while its 2^V-row table fits the filter
+  memory (16 vertices at 512 MB; ModelSieve::table_bytes feeds the budget bar).
+- **symbol-entropy-v1's 2,048:** stays. It is a time limit (one rank is about L^3: 1 s at 2,048,
+  66 s at 8,192), not a memory one.
+
+Then the two shares became settings (Edward: "it just sticks to the ethos of the project").
+- **COUNTING MEMORY** (row 12, AppSettings::counting_memory_pct, 5..100, set_counting_share):
+  installed memory the counts may take at once, each up to the filter memory.
+- **MERGE CACHE** (row 13, AppSettings::merge_cache_pct, 0..100, sieve::set_merge_cache_share):
+  the filter memory kept for merged automata.
+- **Effect:** both apply at once (they change no count). kFirstLineRow is 14, and CI's row numbers
+  moved with it.

@@ -3759,6 +3759,55 @@ void test_filter_memory(const std::string& dir)
         set_filter_memory(m1 * 0.99);
         CHECK(FilterStack(text_line(3000), {{find_filter("clean-v1"), {}}}, none).ranker() == nullptr);
     }
+    // The plugins merged the same in either order (smallest first, and kept): the same survivors in
+    // the same order.
+    {
+        set_filter_memory(kDefaultFilterMemory);
+        const FilterStack ab(text_line(40), {{&cs, {}}, {&ps, {}}}, none), ba(text_line(40), {{&ps, {}}, {&cs, {}}}, none);
+        CHECK(ab.ranker() && ba.ranker() && ab.ranker()->count() == ba.ranker()->count());
+        BigUint k = ab.ranker()->count();
+        k.divmod_small(7);
+        CHECK(ab.ranker()->unrank(k) == ba.ranker()->unrank(k));
+        // The merge cache's share of the filter memory: kept within 0..1, and with none kept the
+        // same count.
+        CHECK(merge_cache_share() == kDefaultMergeCacheShare);
+        set_merge_cache_share(2.0);
+        CHECK(merge_cache_share() == 1.0);
+        set_merge_cache_share(-1.0);
+        CHECK(merge_cache_share() == 0.0);
+        const FilterStack uncached(text_line(40), {{&cs, {}}, {&ps, {}}}, none);
+        CHECK(uncached.ranker() && uncached.ranker()->count() == ab.ranker()->count());
+        set_merge_cache_share(kDefaultMergeCacheShare);
+    }
+    // not-written-v1's automaton walks as many states as the filter memory holds: refused in 1 MB,
+    // made again (not the refusal kept) once there is more.
+    {
+        const Alphabet& a = alphabet_of("ascii96");
+        const uint32_t mask = written_mask_of("hex") | written_mask_of("base64");
+        set_filter_memory(1024 * 1024);
+        CHECK(written_max_states(a.size()) * 2 <= [&] { set_filter_memory(2.0 * 1024 * 1024); return written_max_states(a.size()); }());
+        set_filter_memory(1024 * 1024);
+        const auto small = written_rule(a, mask);
+        CHECK(written_blocker(*small).find("the filter memory (1 MB)") != std::string::npos);
+        set_filter_memory(kDefaultFilterMemory);
+        const auto big = written_rule(a, mask);
+        CHECK(written_blocker(*big).empty() && big != small && written_rule(a, mask) == big);
+    }
+    // canonical-mesh-v1 with every-vertex-used-v1 ranks while its table (2^V rows) fits: 13
+    // vertices in the default, not in less than its table.
+    {
+        set_filter_memory(kDefaultFilterMemory);
+        const ModelSpace space(13, 20, 16);
+        const std::vector<FilterStack::Entry> both{{find_filter("canonical-mesh-v1"), {}}, {find_filter("every-vertex-used-v1"), {}}};
+        const ModelSieve fits(space, both);
+        CHECK(fits.can_rank() && fits.table_bytes() > 8.0 * 1024 * 1024);
+        BigUint k = fits.count();
+        k.divmod_small(3);
+        CHECK(fits.index_of(fits.model_at(k, AddressMode::Positional), AddressMode::Positional) == k);
+        set_filter_memory(fits.table_bytes() * 0.99);
+        const ModelSieve over(space, both);
+        CHECK(!over.can_rank() && over.blocker().find("the filter memory") != std::string::npos);
+    }
     set_filter_memory(before);
     CHECK(memory_text(512.0 * 1024 * 1024) == "512 MB" && memory_text(2.5 * 1024 * 1024 * 1024) == "2.5 GB");
 }

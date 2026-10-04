@@ -2287,6 +2287,9 @@ int main(int argc, char** argv)
         // --filter-memory MB, on any command: what one count's tables may take (the setup menu's
         // FILTER MEMORY; 512 MB unless given).
         if (a.has("filter-memory")) set_filter_memory(double(a.get_positive("filter-memory", 512)) * 1024 * 1024);
+        // --merge-cache PCT: the share of it kept for merged automata between counts (the setup
+        // menu's MERGE CACHE; 50 unless given).
+        if (a.has("merge-cache")) set_merge_cache_share(std::min(a.get_u32("merge-cache", 50), 100u) / 100.0);
         load_plugins(); // the filter plugins, registered beside the built-in filters
         const std::string command_phase = "sieve " + a.command;
         timings::Scope timed(command_phase.c_str());
@@ -2295,7 +2298,7 @@ int main(int argc, char** argv)
             const auto known = documented_options(a.command == "sieve" ? "sift" : a.command);
             if (!known.empty())
                 for (const auto& [key, value] : a.opts)
-                    if (key != "timings" && key != "filter-memory" && std::find(known.begin(), known.end(), key) == known.end())
+                    if (key != "timings" && key != "filter-memory" && key != "merge-cache" && std::find(known.begin(), known.end(), key) == known.end())
                         std::cerr << "warning: --" << key << " is not an option of 'sieve " << a.command << "' (see: sieve help " << a.command
                                   << "); ignored\n";
         }

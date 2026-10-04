@@ -71,6 +71,7 @@ struct Settings
     // Which line FIND MY LIMITS grows: "all", or one line's name, the others left as they are.
     std::string limits_focus = "all";
 
+    // The settings the hallway's options give (--line, --length, ...), the defaults for the rest.
     static Settings from_args(const sieve::cli::Args& a);
     // Writes these settings into `a` (as the hallway's own options), keeping everything else.
     void apply(sieve::cli::Args& a) const;
@@ -83,7 +84,13 @@ struct LineSize
     uint32_t padding = 0; // empty slots in the last tile of each copy
     std::string units;    // e.g. "27^32 = ~10^45.8 units"
 };
+// For a line of `length` symbols of `base` each.
 LineSize line_size(uint32_t base, uint64_t length);
+
+// The most items the hallway keeps worked out (its cache clears itself past this many): what the
+// budget's memory bar counts on, and the cache itself (hallway.cpp, book()). More than a
+// screenful, which is 14 rooms of up to 256 items.
+inline constexpr size_t kCachedUnits = 4096;
 
 // What this machine can open (menu.cpp: machine_budget). A shape has to fit all three.
 struct Budget
@@ -96,6 +103,7 @@ struct Budget
     // other lines need, so it has a measurement of its own and grows in proportion from it.
     double binary_ref_bits = 0, binary_ref_ms = 0;
 };
+// Measured once, the first time it is asked for (about 100 ms), and the same after.
 Budget machine_budget();
 // Roughly how long one unit with an address of this many bits takes to open here. For the
 // budget's display only: it is an estimate from one measurement, never used to address anything.
@@ -106,6 +114,12 @@ double unit_ms(const Budget& b, double bits);
 void finish_filter_warmup();
 // Whether a counting worker is still running (at exit: see app_main.cpp).
 bool filter_workers_busy();
+// The share of installed memory (percent, 5 to 100) the counting workers may take at once, each
+// count up to the whole filter memory (the setup menu's COUNTING MEMORY; 50 until it is set), and
+// how many counts that lets run at once on this machine (at most one per core but the one that
+// draws), with a filter memory of `filter_bytes` (0: the one in use, sieve::filter_memory).
+void set_counting_share(int percent);
+int counting_slots(double filter_bytes = 0);
 
 // Which tab of the filters window lists a filter: 0 built-in, 1 custom (plugins), 2 retired.
 int tab_of(const sieve::FilterSpec& f);
@@ -132,6 +146,7 @@ public:
     void open_filters(int line) { overlay_ = line; orow_ = 0; oscroll_ = 0; otab_ = 0; }
 
 private:
+    // One event (a key, the mouse, the window); sets `done` and `result` when the menu is left.
     void handle(const SDL_Event& e, bool& done, Result& result);
     std::array<LineSize, 7> line_sizes() const; // pages, image, audio, video, books, models, binary
     bool too_large() const;
@@ -146,17 +161,17 @@ private:
     bool graphics_over() const;
     int model_cache_mb() const { return app_ ? app_->model_cache_mb : 64; }
     void save_app() const;
-    float draw_budget(float y); // the budget's three bars; returns the y below them
+    float draw_budget(float y); // the budget's four bars and status line; returns the y below them
     void find_limits();        // set every line to the largest shape this machine can open
     void reset_settings();     // every shape back to its default // a line this machine cannot open
     void adjust(int dir, int step);
-    // 0-32 are the settings rows, in the order render() lists them and adjust() switches on;
+    // 0-34 are the settings rows, in the order render() lists them and adjust() switches on;
     // then FIND MY LIMITS, RESET, and ENTER THE HALLWAY, which is the only row that opens it.
     // The GLOBAL rows come first; each line's rows are counted from kFirstLineRow, so a row added
     // to GLOBAL moves them all with one change here.
     static constexpr int kAngleRow = 4, kTitleRow = 5, kLettersRow = 6, kDisplaySizeRow = 7, kDisplayCacheRow = 8,
-                         kCloseUpRow = 9, kFocusRow = 10, kFilterMemoryRow = 11;
-    static constexpr int kFirstLineRow = 12;
+                         kCloseUpRow = 9, kFocusRow = 10, kFilterMemoryRow = 11, kCountingMemoryRow = 12, kMergeCacheRow = 13;
+    static constexpr int kFirstLineRow = 14;
     // The audio rows: its notes, then its note set and the notes2 set's range, durations and voices.
     static constexpr int kPagesRows = kFirstLineRow, kImageRows = kFirstLineRow + 4, kAudioRow = kFirstLineRow + 7,
                          kVideoRows = kFirstLineRow + 13, kBooksRow = kFirstLineRow + 17, kModelsRows = kFirstLineRow + 18;
@@ -249,6 +264,7 @@ private:
     struct Job
     {
         std::atomic<bool> ready{false};
+        std::atomic<bool> wanted{true}; // false once its settings are gone: skipped if not yet begun
         StackInfo result;
     };
     struct Pending
@@ -259,6 +275,8 @@ private:
     std::array<Pending, 7> pending_;
     std::array<StackInfo, 7> waiting_;
     const StackInfo& resolve(int i, const std::string& key, std::function<StackInfo()> work);
+    // Queues `work` for a counting worker; its result (or its error, said as a status) lands in `job`.
+    static void start_job(std::shared_ptr<Job> job, std::function<StackInfo()> work);
     std::map<std::string, std::shared_ptr<Job>> shares_; // filter_share's tallies, by line and settings
     const StackInfo* filter_share(int line, int part, const sieve::cli::LineFilters& lf, const std::string& filter);
     void save_filters();

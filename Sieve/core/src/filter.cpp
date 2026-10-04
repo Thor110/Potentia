@@ -7,6 +7,8 @@
 #include "sieve/written.hpp"
 
 #include <algorithm>
+#include <map>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
@@ -277,6 +279,89 @@ bool implied_by(const FilterStack::Entry& i, const FilterStack::Entry& j)
     return true;
 }
 
+// The plugins' automata of a stack intersected into one (the units every one accepts), minimal.
+// The smallest go in first: each step costs about the size of what has been merged so far, so
+// merging the dictionaries' automata (nearly 300,000 states) last rather than first took 5.4 s
+// instead of 13.3 s for every text plugin at 32 characters. Minimising makes the result the same
+// automaton in any order, so ranks and counts do not depend on it.
+//
+// Results are kept for the process, by the line and the automata's provenance: the menu counts
+// the same plugins for the text line and for the books' title, and again on every visit, and a
+// large merge takes seconds. They are kept in up to merge_cache_share() of the filter memory (a
+// half by default; the rest is for the counting tables built from them), and a stack that is
+// counted on several threads at once is merged once, the others waiting for it.
+std::mutex g_merged_mx;
+std::map<std::string, std::shared_ptr<const Dfa>> g_merged;          // (g_merged_mx)
+std::map<std::string, std::shared_ptr<std::mutex>> g_merging;        // one merge at a time per key
+double g_merged_bytes = 0;                                           // (g_merged_mx)
+
+double dfa_bytes(const Dfa& d) { return double(d.next.size()) * sizeof(int32_t) + double(d.accept.size()); }
+
+// Every unit passes: one accepting state that every symbol leads back to (nothing to intersect).
+bool accepts_all(const Dfa& d)
+{
+    return d.states() == 1 && d.start == 0 && d.accept[0] && std::all_of(d.next.begin(), d.next.end(), [](int32_t t) { return t == 0; });
+}
+
+std::shared_ptr<const Dfa> merge_plugins(const std::vector<const Filter*>& filters, const std::string& line)
+{
+    std::vector<std::pair<const Dfa*, const std::string*>> parts;
+    for (const Filter* f : filters)
+        if (const Dfa* d = plugin_dfa(*f)) parts.emplace_back(d, &f->provenance());
+    if (parts.empty()) return nullptr;
+    std::sort(parts.begin(), parts.end(), [](const auto& a, const auto& b) {
+        return a.first->states() != b.first->states() ? a.first->states() < b.first->states() : *a.second < *b.second;
+    });
+    bool named = true;
+    std::string key = line;
+    for (const auto& [d, prov] : parts)
+    {
+        if (prov->empty()) named = false; // an automaton that does not say what it is is never shared
+        key += "\n" + *prov;
+    }
+    auto merge = [&] {
+        Dfa d = *parts[0].first;
+        bool merged = false; // intersect minimises; a lone automaton is minimised here
+        for (size_t i = 1; i < parts.size(); ++i)
+            if (!accepts_all(*parts[i].first))
+            {
+                d = intersect(d, *parts[i].first);
+                merged = true;
+            }
+        return std::make_shared<const Dfa>(merged ? std::move(d) : minimise(d));
+    };
+    if (!named) return merge();
+    std::shared_ptr<std::mutex> own;
+    {
+        std::lock_guard<std::mutex> lock(g_merged_mx);
+        if (const auto it = g_merged.find(key); it != g_merged.end()) return it->second;
+        auto& m = g_merging[key];
+        if (!m) m = std::make_shared<std::mutex>();
+        own = m;
+    }
+    std::lock_guard<std::mutex> merging(*own);
+    {
+        std::lock_guard<std::mutex> lock(g_merged_mx);
+        if (const auto it = g_merged.find(key); it != g_merged.end()) return it->second; // merged meanwhile
+    }
+    auto d = merge();
+    std::lock_guard<std::mutex> lock(g_merged_mx);
+    const double bytes = dfa_bytes(*d);
+    const double room = filter_memory() * merge_cache_share();
+    if (g_merged_bytes + bytes > room) // (also when the share or the filter memory was lowered)
+    {
+        g_merged.clear(); // older stacks' merges: made again if they are asked for
+        g_merged_bytes = 0;
+    }
+    if (bytes <= room)
+    {
+        g_merged[key] = d;
+        g_merged_bytes += bytes;
+    }
+    g_merging.erase(key);
+    return d;
+}
+
 } // namespace
 
 FilterStack::FilterStack(const FilterLine& whole, const std::vector<Entry>& entries, const FilterResources& resources)
@@ -339,6 +424,8 @@ void FilterStack::settle_now() const
     // counts the units the plugins keep that it keeps too (sieve/written.hpp).
     if (!compact_ && filters_.size() > 1)
     {
+        std::vector<const Filter*> raw;
+        for (const auto& f : filters_) raw.push_back(f.get());
         bool all_plugins = true;
         std::shared_ptr<const WrittenRule> written;
         size_t written_count = 0;
@@ -351,23 +438,20 @@ void FilterStack::settle_now() const
             else if (!plugin_dfa(*f)) all_plugins = false;
         if (all_plugins && written_count == 1)
         {
-            std::optional<Dfa> keep;
-            for (const auto& f : filters_)
-                if (const Dfa* d = plugin_dfa(*f)) keep = keep ? intersect(*keep, *d) : *d;
+            const std::shared_ptr<const Dfa> keep = merge_plugins(raw, provenance_);
             std::string why;
-            own_ranker_ = written_ranker(written, keep ? &*keep : nullptr, line.length, why, &table_bytes_);
+            own_ranker_ = written_ranker(written, keep.get(), line.length, why, &table_bytes_);
             if (own_ranker_) compact_ = own_ranker_.get();
             else blocker_ = why;
         }
         else if (all_plugins && written_count == 0)
         {
-            Dfa d = *plugin_dfa(*filters_[0]);
-            for (size_t i = 1; i < filters_.size(); ++i) d = intersect(d, *plugin_dfa(*filters_[i]));
-            const double bytes = DfaRanker::table_bytes(d.states(), d.base, line.length);
+            const std::shared_ptr<const Dfa> d = merge_plugins(raw, provenance_);
+            const double bytes = DfaRanker::table_bytes(d->states(), d->base, line.length);
             table_bytes_ = bytes;
             if (bytes <= filter_memory())
             {
-                own_ranker_ = std::make_unique<DfaRanker>(d, line.length);
+                own_ranker_ = std::make_unique<DfaRanker>(*d, line.length);
                 compact_ = own_ranker_.get();
             }
             else blocker_ = over_table_limit("the plugins' combined table", bytes) + ": they judge only";

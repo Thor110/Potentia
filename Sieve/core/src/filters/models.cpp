@@ -42,7 +42,8 @@ void add_model_filters(std::vector<FilterSpec>& out)
     spec("canonical-mesh", "One encoding of each mesh: vertices in increasing order as grid points, each face rotated to "
                            "start at its smallest index (winding kept), faces in increasing order. Removes only "
                            "re-orderings of the same mesh: about 10^-19 of the default line. Exact: C(C^3, V) x "
-                           "C(V(V-1)(V-2)/3, F); with every-vertex-used it ranks up to 12 vertices.",
+                           "C(V(V-1)(V-2)/3, F); with every-vertex-used it ranks while its table fits in the filter "
+                           "memory (16 vertices in 512 MB).",
          {"distinct-vertices-v1", "distinct-indices-v1"});
 }
 

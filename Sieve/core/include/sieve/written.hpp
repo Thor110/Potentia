@@ -59,7 +59,10 @@
 namespace sieve {
 
 inline constexpr const char* kWrittenVersion = "not-written-v1";
-inline constexpr size_t kWrittenMaxStates = 400000;
+// The most states the readings' automata may reach as they are walked over an alphabet of `base`
+// symbols: as many as the filter memory holds (sieve/plugin.hpp), each state its transitions three
+// times over (walked, minimised) and its machine state twice. Past it the rule judges only.
+size_t written_max_states(uint32_t base);
 
 // The readings, in the order they are tried; a mask has bit i for reading i.
 const std::vector<std::string>& written_decoders(); // text hex base64 base32 decimal nibbles spelled binary
@@ -87,7 +90,8 @@ std::string written_blocker(const WrittenRule& rule);
 std::string written_summary(const WrittenRule& rule);
 
 // A ranker for the units that pass (not written out) and that `keep` accepts (the stack's
-// plugins' automaton, minimal; nullptr: every unit), at one length. Null, with `why` said, when
+// plugins' automaton, which must be minimal, as sieve::minimise and intersect leave it; nullptr:
+// every unit), at one length. Null, with `why` said, when
 // the rule cannot count or the tables would pass the budget.
 // `need`, if given: the memory its tables take, or would (what the filter memory must hold).
 std::unique_ptr<Ranker> written_ranker(std::shared_ptr<const WrittenRule> rule, const Dfa* keep, uint32_t length, std::string& why, double* need = nullptr);
@@ -96,8 +100,9 @@ std::unique_ptr<Ranker> written_ranker(std::shared_ptr<const WrittenRule> rule, 
 std::shared_ptr<const WrittenRule> written_rule_of(const Filter& f);
 
 // The union of the readings in `mask` other than binary (what the rule calls O), over the
-// alphabet's symbols; nullopt when it would pass `max_states` states before minimising.
-std::optional<Dfa> written_dfa(const Alphabet& a, uint32_t mask, size_t max_states = kWrittenMaxStates);
+// alphabet's symbols; nullopt when it would pass `max_states` states before minimising (0: what
+// written_max_states allows).
+std::optional<Dfa> written_dfa(const Alphabet& a, uint32_t mask, size_t max_states = 0);
 
 // ---- not-other-line-v1 (text): a page that is another line's content written as text
 
@@ -110,8 +115,8 @@ const std::vector<std::string>& other_line_forms();
 uint32_t other_line_mask_of(const std::string& name); // "all", "notes" or "obj"
 // The form the text is, decided outright (not by the automaton), or nullopt.
 std::optional<std::string> other_line_as(const std::u32string& text, uint32_t mask);
-// The automaton of the texts in those forms, over the alphabet's symbols.
-std::optional<Dfa> other_line_dfa(const Alphabet& a, uint32_t mask, size_t max_states = kWrittenMaxStates);
+// The automaton of the texts in those forms, over the alphabet's symbols (max_states as above).
+std::optional<Dfa> other_line_dfa(const Alphabet& a, uint32_t mask, size_t max_states = 0);
 
 // ---- not-packed-v1 (image, video): a unit whose symbols, `bits` each, packed into bytes are a
 // file with a signature

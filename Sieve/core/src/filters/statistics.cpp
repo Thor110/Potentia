@@ -123,7 +123,9 @@ private:
     //   completions(j ones so far, r left) = sum over k in K of C(r, k - j).
     // rank and unrank walk the unit once, keeping C(r, k - j) for every k in K and stepping each
     // to the next position with one small multiply and divide, instead of rebuilding binomial
-    // rows at every position. Above this length compact is not offered (a hardware limit).
+    // rows at every position. Above this length compact is not offered. The limit is time, not
+    // memory (the walk keeps L numbers of L bits, 0.5 MB at 2048): one rank or unrank costs about
+    // L^3, measured at 0.15 s for 1024 symbols, 1 s for 2048, 7 s for 4096 and 66 s for 8192.
     static constexpr uint32_t kMaxBinaryRankLength = 2048;
     class BinaryRanker : public Ranker
     {

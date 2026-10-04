@@ -143,6 +143,13 @@ Dfa compile_plugin(const PluginDef& p, const FilterLine& line, const FilterValue
 inline constexpr double kDefaultFilterMemory = 512.0 * 1024 * 1024;
 double filter_memory();
 void set_filter_memory(double bytes);
+// The merge cache: what share of the filter memory (0 to 1) keeps the plugins' merged automata
+// between counts (filter.cpp), so a stack counted again, or the same plugins on another line of
+// the same shape, does not merge them again. The rest is left for the counting tables. A setting
+// (the setup menu's MERGE CACHE; `sieve --merge-cache PCT`), a half until it is set. 0 keeps none.
+inline constexpr double kDefaultMergeCacheShare = 0.5;
+double merge_cache_share();
+void set_merge_cache_share(double share);
 // A size for a person: "2.1 GB", "512 MB".
 std::string memory_text(double bytes);
 // Why a counting table is refused, in words: "<what> needs 2.1 GB of memory at this length, over

@@ -78,6 +78,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -421,8 +422,12 @@ public:
         std::optional<BigUint> content;
         Space::Digits title, cover;                  // a titled line: its title, and its cover if it has one
         // The vault (tools/cli/vault.hpp): withheld content keeps its place but is never shown,
-        // taken, saved or passed on. A file's is worked out with its bytes (file_withheld).
-        bool withheld = false;
+        // taken, saved or passed on. A file's is worked out with its bytes (file_withheld). An item
+        // with pictures (an image, a video, a cover) has its verdict worked out on a worker
+        // (vault_pictures below) and is held back, as if withheld, until it is in: `vault_pending`.
+        // Anything that would take, save or describe it decides it on the spot (withheld()).
+        mutable bool withheld = false;
+        mutable bool vault_pending = false;
         // A file's verdict once worked out (-1 not yet, 0 shown, 1 withheld), kept with the item so
         // looking back at a file costs nothing, and its slot when it stands in your room (-1
         // otherwise), where the vault worker (vault_ahead) may have worked it out already.
@@ -433,7 +438,8 @@ public:
     const Book& book(int64_t dt, uint32_t slot);
     // A book's address in hex, and a binary file's bytes: kept on the book where they are small,
     // worked out on demand where they are not (the binary line), remembering the last one asked.
-    std::string hex_of(const Book& b);
+    // The reference holds until another file's is asked for.
+    const std::string& hex_of(const Book& b);
     // What kind of file this is, from its first bytes (its signature, as the file itself says):
     // ZIP, PNG, EXE, ... TXT for readable text, EMPTY, or "?" for anything else.
     static std::string file_type(const std::vector<uint8_t>& head, uint64_t size);
@@ -461,6 +467,7 @@ public:
     std::string memo_hex_;
     BinarySpace::Bytes memo_file_;
     bool memo_hex_ok_ = false, memo_file_ok_ = false;
+    bool memo_hex_survivor_ = false; // memo_hex_ is a survivor's compact address, not its place
     bool memo_withheld_ = false; // the vault's verdict on memo_file_
 
 public:
@@ -489,9 +496,64 @@ public:
     std::string title_text(const Book& b) const;
     // The vault: whether an item is withheld (its content, its title, a book's pages, a model's
     // .obj; a file by its bytes, worked out when they are), and putting one down if it is in hand.
-    bool vault_withholds(const Book& b) const;
+    // What it reads of an item is gathered first (VaultCheck), so that the check itself can run
+    // off the main thread: it needs nothing of the hallway that can change meanwhile.
+    struct VaultCheck
+    {
+        const Line* line = nullptr;          // the line its unit and pages are read on
+        const ImageFormat* covers = nullptr; // how a cover is drawn (the image line's format)
+        Space::Digits cover, unit;           // its cover (as a picture), and its content
+        std::optional<BookSpace::Parts> parts;
+        std::string title, obj;              // a titled unit's title as text; a model's .obj
+        bool model = false, file = false;
+        // Whether it draws a picture: the part of the vault (PDQ) that takes time.
+        bool pictures() const;
+        bool verdict() const;
+    };
+    VaultCheck vault_check(const Book& b) const;
+    bool vault_withholds(const Book& b) const { return vault_check(b).verdict(); }
     bool file_withheld(const Book& b);
-    bool withheld(const Book& b) { return b.withheld || (b.is_file && file_withheld(b)); }
+    bool withheld(const Book& b)
+    {
+        if (b.vault_pending) // not in from the worker yet: decided now, for this one item
+        {
+            try
+            {
+                b.withheld = vault_withholds(b);
+            }
+            catch (const std::exception&)
+            {
+                b.withheld = true; // failed closed, as everywhere in the vault
+            }
+            b.vault_pending = false;
+        }
+        return b.withheld || (b.is_file && file_withheld(b));
+    }
+    // The vault's checks of items with pictures, on workers (one per core but the one that draws):
+    // queued by book() as each item is built, and their verdicts put on the items by
+    // vault_collect() each frame, for the room they were asked for (room_gen_). A picture costs
+    // about 0.13 ms (PDQ), a video unit eight of them: on the main thread that was most of a new
+    // room's time (600 ms for a room of videos).
+    struct VaultJob
+    {
+        int64_t key;  // the item's place in cache_
+        uint64_t gen; // room_gen_ when it was asked
+        VaultCheck check;
+    };
+    void vault_queue(int64_t key, VaultCheck check);
+    void vault_collect();
+    void stop_vault_pictures();
+    std::mutex vault_pic_mx_;
+    std::condition_variable vault_pic_cv_;
+    std::deque<VaultJob> vault_pic_jobs_;                          // (vault_pic_mx_)
+    std::vector<std::tuple<int64_t, uint64_t, bool>> vault_pic_done_; // key, gen, verdict (vault_pic_mx_)
+    int vault_pic_running_ = 0;                                    // jobs being checked (vault_pic_mx_)
+    bool vault_pic_stop_ = false;                                  // (vault_pic_mx_)
+    std::atomic<uint64_t> vault_pic_gen_{0};                       // room_gen_, for skipping old rooms' jobs
+    std::vector<std::thread> vault_pic_threads_;
+    // Waits for every vault check asked so far and puts its verdict on its item (a screenshot,
+    // so that what it shows does not depend on how fast the workers were).
+    void settle_vault();
     bool refuse_if_withheld();
     bool refused_ = false; // set when refuse_if_withheld puts something down, so its message stands
     float draw_null_title(float x, float y, float scale); // "[Null Title]"; returns its width
@@ -1326,8 +1388,10 @@ private:
     void rebuild_model_sieve();
     BigUint loop_pos(const BigUint& unit) const;   // unit index -> loop position
     BigUint unit_of_pos(const BigUint& pos) const; // loop position (left-wall slot) -> unit index
-    // How many units the current line holds: its loop's count, except on binary (see above).
-    BigUint line_units() const;
+    // How many units the current line holds: its loop's count, except on binary (see above). A
+    // reference to the space's own number (megabytes on a long binary line), so callers that only
+    // read it copy nothing; it changes when the line, the mode or the filters do.
+    const BigUint& line_units() const;
     // Every titled line's space (null for books and binary), built with the lines.
     std::array<std::unique_ptr<TitledSpace>, kLines> titled_;
     int book_page_ = 0;                // the page open in a book in hand

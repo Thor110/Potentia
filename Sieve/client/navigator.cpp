@@ -139,7 +139,7 @@ void Hallway::nav_angle_apply()
         nav_note_ = tr("nav.angle_range");
         return;
     }
-    const BigUint units = line_units();
+    const BigUint& units = line_units();
     BigUint q, r;
     BigUint::divmod(BigUint::mul(a, units), scale, q, r);
     if (!r.is_zero()) q.add_small(1);

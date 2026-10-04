@@ -91,6 +91,9 @@ public:
     bool can_rank() const { return can_rank_; }
     const std::string& blocker() const { return blocker_; }
     const BigUint& count() const { return count_; } // can_rank() only
+    // The memory its count's tables need (canonical-mesh-v1 with every-vertex-used-v1's; the
+    // others are small): what the filter memory must hold for it to rank.
+    double table_bytes() const;
     const std::string& provenance() const { return provenance_; }
     const std::string& id() const { return id_; }
 

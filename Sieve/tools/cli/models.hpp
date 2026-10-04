@@ -22,7 +22,7 @@ struct ModelRegistry
 {
     std::filesystem::path folder;
     std::vector<ModelEntry> entries;
-    const ModelEntry* find(const std::string& id) const;
+    const ModelEntry* find(const std::string& id) const; // nullptr if no entry has this id
     const ModelEntry* default_for(const std::string& symbols) const;
 };
 
@@ -54,6 +54,7 @@ struct Corpus
     std::string manifest_sha256;
     std::vector<CorpusFile> files;
 };
+// Reads and checks the manifest (not the files it lists: read_corpus_file). Throws if malformed.
 Corpus load_corpus(const std::string& manifest_path);
 
 // Reads one corpus file from `dir`, checks its hash and returns it as UTF-8.

@@ -155,6 +155,14 @@ AppSettings AppSettings::load(const fs::path& path)
             {
                 try { s.filter_memory_mb = std::clamp(std::stoi(value), 64, 1048576); } catch (...) {}
             }
+            else if (key == "counting_memory_pct")
+            {
+                try { s.counting_memory_pct = std::clamp(std::stoi(value), 5, 100); } catch (...) {}
+            }
+            else if (key == "merge_cache_pct")
+            {
+                try { s.merge_cache_pct = std::clamp(std::stoi(value), 0, 100); } catch (...) {}
+            }
             else if (key == "model_cache_mb")
             {
                 try { s.model_cache_mb = std::clamp(std::stoi(value), 8, 4096); } catch (...) {}
@@ -192,6 +200,8 @@ bool AppSettings::save(const fs::path& path) const
       << "model_cache_mb = " << model_cache_mb << "   ; the models line: memory for rendered crate faces\n"
       << "angle_decimals = " << angle_decimals << "   ; decimal places on the compass's degree readout\n"
       << "filter_memory_mb = " << filter_memory_mb << "   ; the most one count of the filters' survivors may take for its tables\n"
+      << "counting_memory_pct = " << counting_memory_pct << "   ; percent of installed memory the setup menu's counts may take at once\n"
+      << "merge_cache_pct = " << merge_cache_pct << "   ; percent of the filter memory kept for merged filters between counts\n"
       << "\n[controls]\n"
       << "mouse_sensitivity = " << mouse_sensitivity << "   ; percent\n"
       << "invert_mouse_y = " << on_off(invert_mouse_y) << "\n"

@@ -970,8 +970,8 @@ and the oracle at four lengths.
   of ten small lines by brute force.
 - **canonical-mesh** counts C(C^3, V) × C(V(V-1)(V-2)/3, F) and ranks as combinations by the
   hockey-stick identity; with every-vertex-used, inclusion and exclusion over the subsets of
-  unused vertices against a table of the triples avoiding each, so it ranks up to 12 vertices and
-  counts beyond. It sets aside only re-orderings of the same mesh: a hard filter. `sieve mesh --warp
+  unused vertices against a table of the triples avoiding each (2^V rows), so it ranks while that
+  table fits in the filter memory (16 vertices in the default 512 MB) and counts beyond. It sets aside only re-orderings of the same mesh: a hard filter. `sieve mesh --warp
   FILE --canonical` puts a real .obj into its canonical encoding (`canonical_mesh`, modelsieve.hpp);
   without it a warped mesh is almost never canonical. Oracle: rows `c`, `cu`, `cviu` in
   `cross-vectors`, by brute force of every 3-vertex, 2-face, 2-step model and a walk over (last

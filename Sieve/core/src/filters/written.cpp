@@ -96,15 +96,18 @@ uint32_t bits_of(uint32_t base)
 std::shared_ptr<const std::optional<Dfa>> kept_dfa(const std::string& key, const std::function<std::optional<Dfa>()>& make)
 {
     static std::mutex mx;
-    static std::map<std::string, std::shared_ptr<const std::optional<Dfa>>> cache;
+    // With the filter memory each was made under: one too large then is made again with more.
+    static std::map<std::string, std::pair<double, std::shared_ptr<const std::optional<Dfa>>>> cache;
     {
         std::lock_guard<std::mutex> lock(mx);
-        if (auto it = cache.find(key); it != cache.end()) return it->second;
+        if (auto it = cache.find(key); it != cache.end())
+            if (*it->second.second || filter_memory() <= it->second.first) return it->second.second;
     }
+    const double memory = filter_memory();
     std::optional<Dfa> d = make();
     auto made = std::make_shared<const std::optional<Dfa>>(d ? std::optional<Dfa>(complement(*d)) : std::nullopt);
     std::lock_guard<std::mutex> lock(mx);
-    return cache.emplace(key, made).first->second;
+    return cache.insert_or_assign(key, std::pair{memory, made}).first->second.second;
 }
 
 class JudgeOther : public Filter

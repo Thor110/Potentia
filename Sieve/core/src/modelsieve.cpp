@@ -4,11 +4,13 @@
 
 #include "sieve/modelsieve.hpp"
 
+#include "sieve/plugin.hpp"
 #include "sieve/sha256.hpp"
 
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cmath>
 #include <optional>
 #include <stdexcept>
 
@@ -325,14 +327,13 @@ private:
 // for the block below each element. With every-vertex-used, the faces still to come must name
 // every vertex not yet used: by inclusion and exclusion over the subsets S of those vertices,
 //     completions = sum over S of (-1)^|S| C(triples from here on that avoid S, faces left),
-// with the triples avoiding each S counted once into a table. That table has 2^V rows, so with
-// every-vertex-used the faces rank up to kMaxUsedVertices vertices and are counted, in closed
-// form, beyond: sum over j of (-1)^j C(V, j) C(T(V - j), F).
+// with the triples avoiding each S counted once into a table. That table has 2^V rows of T + 1
+// counts, so with every-vertex-used the faces rank as far as the table fits in the filter memory
+// (sieve/plugin.hpp: 16 vertices in 512 MB, where it takes 294 MB; ranking stays quick, a few
+// milliseconds) and are counted, in closed form, beyond: sum over j of (-1)^j C(V, j) C(T(V - j), F).
 class CanonicalMesh
 {
 public:
-    static constexpr uint32_t kMaxUsedVertices = 12;
-
     CanonicalMesh(uint32_t v, uint32_t f, uint32_t c, bool all_used) : v_(v), f_(f), c_(c), au_(all_used)
     {
         points_ = uint64_t(c) * c * c;
@@ -344,7 +345,8 @@ public:
             for (uint32_t j = 0; j <= v; ++j)
                 (j % 2 ? minus : plus) += BigUint::mul(binom(v, j), binom(triples_on(v - j), f));
             fcount_ = plus -= minus;
-            can_rank_ = v <= kMaxUsedVertices;
+            table_bytes_ = avoid_table_bytes(v, f);
+            can_rank_ = v < 32 && table_bytes_ <= filter_memory(); // (a set of vertices is a 32-bit mask)
             if (can_rank_) build_avoid_table();
         }
         else fcount_ = binom(triples_, f);
@@ -353,6 +355,7 @@ public:
 
     bool can_rank() const { return can_rank_; }
     const BigUint& count() const { return count_; }
+    double table_bytes() const { return table_bytes_; } // every-vertex-used's table (0 without it)
 
     bool passes(const ModelSpace::Parts& p) const
     {
@@ -438,6 +441,7 @@ public:
 private:
     uint32_t v_, f_, c_;
     bool au_, can_rank_ = true;
+    double table_bytes_ = 0;
     uint64_t points_ = 0, triples_ = 0;
     BigUint vcount_, fcount_, count_;
     // every-vertex-used: avoid_[S][i] is the number of triples from index i on naming no vertex of
@@ -446,6 +450,15 @@ private:
     std::vector<std::vector<BigUint>> bin_;
 
     static uint64_t triples_on(uint64_t n) { return n < 3 ? 0 : n * (n - 1) * (n - 2) / 3; }
+    // The memory build_avoid_table takes: avoid_'s 2^V rows of T + 1 counts (and each row's own
+    // header), and bin_'s (T + 1)(F + 1) binomials, none longer than C(T, F).
+    static double avoid_table_bytes(uint32_t v, uint32_t f)
+    {
+        const double t = double(triples_on(v)) + 1;
+        const double row = t * sizeof(uint32_t) + sizeof(std::vector<uint32_t>);
+        const double binomial = sizeof(BigUint) + 8.0 * std::ceil((double(f) * std::log2(std::max(t, 2.0)) + 64) / 64);
+        return std::ldexp(row, int(std::min<uint32_t>(v, 1000))) + t * (double(f) + 1) * binomial;
+    }
 
     // C(n, k), exactly: each partial product of i + 1 consecutive integers is divisible by (i + 1)!.
     static BigUint binom(uint64_t n, uint64_t k)
@@ -657,8 +670,7 @@ ModelSieve::ModelSieve(const ModelSpace& space, const std::vector<FilterStack::E
     else if (canon_ && !canon_->can_rank())
     {
         can_rank_ = false;
-        blocker_ = "canonical-mesh-v1 with every-vertex-used-v1 counts this shape but ranks only up to " +
-                   std::to_string(CanonicalMesh::kMaxUsedVertices) + " vertices: it judges only";
+        blocker_ = over_table_limit("canonical-mesh-v1 with every-vertex-used-v1's table", canon_->table_bytes()) + ": it judges only";
     }
     count_ = files_ && !rules_ && !canon_ ? files_->count()
            : canon_ && !files_            ? canon_->count()
@@ -670,6 +682,8 @@ ModelSieve::ModelSieve(const ModelSpace& space, const std::vector<FilterStack::E
     if (!top.is_zero()) top -= BigUint(1);
     hex_width_ = std::max<size_t>(1, (top.bit_length() + 3) / 4);
 }
+
+double ModelSieve::table_bytes() const { return canon_ ? canon_->table_bytes() : 0.0; }
 
 std::string ModelSieve::first_failure(const BigUint& index) const
 {

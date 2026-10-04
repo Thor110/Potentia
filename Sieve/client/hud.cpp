@@ -592,8 +592,8 @@ void Hallway::draw_in_hand(float W, float H)
     cy += 12;
     int shown = 0;
     // (At most six lines of it are shown, so a file's address, as long as the file, is cut short.)
-    const std::string whole = bk.guided ? bk.own_hex : hex_of(bk);
-    for (const auto& l : wrap(whole.size() > 6 * cols1 + 1 ? whole.substr(0, 6 * cols1 + 1) : whole, cols1))
+    const std::string& whole = bk.guided ? bk.own_hex : hex_of(bk);
+    for (const auto& l : wrap(whole.substr(0, 6 * cols1 + 1), cols1))
     {
         if (++shown > 6) { text(x + 14, cy, "...", 1, ink); break; }
         text(x + 14, cy, l, 1, ink);
@@ -655,7 +655,7 @@ void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float botto
     // leading part of the position, and the walk the rest. A unit that sits on a short bearing,
     // or near the start or the end of the loop, is the exception, and this finds it.
     {
-        const BigUint units = line_units();
+        const BigUint& units = line_units();
         if (bk.index < units)
         {
             if (const sieve::ShortestPath* p = shortest_path_of(bk.index, units))

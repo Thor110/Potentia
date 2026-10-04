@@ -419,9 +419,9 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
         return bare;
     }
     sieve::cli::timings::Scope timed("hallway.item"); // one item worked out: content, filters, vault
-    if (cache_.size() > 4096)
+    if (cache_.size() > kCachedUnits)
     {
-        cache_.clear(); // more than a screenful (14 tiles of 128 books)
+        cache_.clear(); // more than a screenful (menu.hpp)
         ++room_gen_;
     }
     Book b;
@@ -611,7 +611,15 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
         }
         if (b.survivor) b.survivor_label = short_big(b.survivor_number);
         sieve::cli::timings::Scope timed_vault("hallway.item.vault");
-        b.withheld = vault_withholds(b); // the vault: kept in its place, never shown
+        // The vault: kept in its place, never shown. Pictures are checked on a worker, the item
+        // held back meanwhile; anything else here is quick.
+        VaultCheck check = vault_check(b);
+        if (check.pictures())
+        {
+            b.withheld = b.vault_pending = true;
+            vault_queue(key, std::move(check));
+        }
+        else b.withheld = check.verdict();
     }
     catch (const std::exception& e)
     {
@@ -1433,6 +1441,7 @@ void Hallway::render()
     ++portal_frame_;
     item_save_poll(); // an item F asked to save, once the dialog has said where
     vault_ahead();    // your room's files checked by the vault ahead of a look at them
+    vault_collect();  // and the verdicts on pictures, from their workers
     const Theme& th = theme();
     SDL_SetRenderDrawColor(r_, th.bg.r, th.bg.g, th.bg.b, 255);
     SDL_RenderClear(r_);
@@ -1843,6 +1852,7 @@ Hallway::~Hallway()
 {
     if (vla_thread_.joinable()) vla_thread_.join(); // a unit's shortest route: seconds at most
     stop_vault_ahead();
+    stop_vault_pictures(); // before the lines they read from go
     stop_locator();
     stop_graph();
     stop_face_workers(); // before the model space they read from goes
@@ -2006,16 +2016,19 @@ Space::Digits Hallway::title_for_name(const std::string& name) const
     return c.units.empty() ? ts.blank_title() : t.digits_of(c.units[0]);
 }
 
-std::string Hallway::hex_of(const Book& b)
+const std::string& Hallway::hex_of(const Book& b)
 {
     if (!b.is_file) return b.hex;
-    if (b.survivor && binary_sieve_) return binary_sieve_->hex_of(b.index); // its compact address
-    if (!(memo_hex_ok_ && memo_index_ == b.index))
+    // A survivor's compact address and a file's place on the line are both kept, for the last
+    // file asked: the item page asks every frame, and either is as long as the file.
+    const bool survivor = b.survivor && binary_sieve_;
+    if (!(memo_hex_ok_ && memo_index_ == b.index && memo_hex_survivor_ == survivor))
     {
         if (!(memo_index_ == b.index)) memo_file_ok_ = false;
         memo_index_ = b.index;
+        memo_hex_survivor_ = survivor;
         sieve::cli::timings::Scope timed("hallway.file.hex");
-        memo_hex_ = titled_[kBinaryLine]->hex_of(b.index);
+        memo_hex_ = survivor ? binary_sieve_->hex_of(b.index) : titled_[kBinaryLine]->hex_of(b.index);
         memo_hex_ok_ = true;
     }
     return memo_hex_;
@@ -2026,7 +2039,10 @@ const BinarySpace::Bytes& Hallway::file_of(const Book& b)
     static const BinarySpace::Bytes kNone;
     if (!b.is_file) return kNone;
     // By its place on binary-v1 itself, which neither the ordering nor the filters change.
-    const BigUint content = b.content ? *b.content : titled_[kBinaryLine]->parts_at(b.index, mode_).content;
+    // (Read in place when the item keeps it: it is as large as the file, and this runs every frame.)
+    BigUint found;
+    if (!b.content) found = titled_[kBinaryLine]->parts_at(b.index, mode_).content;
+    const BigUint& content = b.content ? *b.content : found;
     if (!(memo_file_ok_ && memo_content_ == content))
     {
         memo_content_ = content;
@@ -2061,7 +2077,7 @@ bool Hallway::file_withheld(const Book& b)
 std::string Hallway::short_hex_of(const Book& b)
 {
     if (!b.is_file || (b.survivor && binary_sieve_)) return short_address(hex_of(b));
-    if (memo_hex_ok_ && memo_index_ == b.index) return short_address(memo_hex_);
+    if (memo_hex_ok_ && memo_index_ == b.index && !memo_hex_survivor_) return short_address(memo_hex_);
     // The same text short_address(hex_of(b)) gives: the number zero-padded to the line's width,
     // its first and last twelve digits, and the width, from a shift and the low limb alone.
     const size_t width = titled_[kBinaryLine]->hex_width();
@@ -2131,34 +2147,141 @@ void Hallway::vault_ahead()
 // (vault_decode.hpp): a title, a book's each page, and its pages read as one, since a file too long
 // for a page runs on over the next. Never by what the text says (docs/VAULT.md). Failed closed,
 // everything is withheld.
-bool Hallway::vault_withholds(const Book& b) const
+Hallway::VaultCheck Hallway::vault_check(const Book& b) const
 {
-    if (b.empty) return false;
+    VaultCheck c;
+    if (b.empty) return c;
+    c.line = &line();
+    c.covers = &lines_[1].image;
+    if (b.parts) c.parts = *b.parts;
+    c.cover = b.cover;
+    if (!b.parts && !b.title.empty()) c.title = title_text(b);
+    if (b.model && model_space_) c.obj = model_space_->to_obj(*b.model);
+    c.model = b.model && model_space_;
+    c.file = b.is_file; // worked out with its bytes: file_withheld
+    if (!c.parts && !c.model && !c.file) c.unit = b.unit;
+    return c;
+}
+
+bool Hallway::VaultCheck::pictures() const
+{
+    if (!line) return false;
+    if (parts || !cover.empty()) return true;
+    return !unit.empty() && (line->kind == LineKind::Image || line->kind == LineKind::Video);
+}
+
+bool Hallway::VaultCheck::verdict() const
+{
+    if (!line) return false; // an empty slot
     // A cover (a book's, or an audio or video unit's on a titled line) is a picture of its own.
-    if (b.parts && cli::picture_withheld(lines_[1].image, b.parts->cover)) return true;
-    if (!b.cover.empty() && cli::picture_withheld(lines_[1].image, b.cover)) return true;
-    if (!b.parts && !b.title.empty() && cli::vault::withheld_written(title_text(b))) return true;
-    if (b.parts)
+    if (parts && cli::picture_withheld(*covers, parts->cover)) return true;
+    if (!cover.empty() && cli::picture_withheld(*covers, cover)) return true;
+    if (!title.empty() && cli::vault::withheld_written(title)) return true;
+    if (parts)
     {
-        const Line& l = line();
-        if (cli::vault::withheld_written(utf8_encode(l.space.text_of(b.parts->title)))) return true;
+        const Line& l = *line;
+        if (cli::vault::withheld_written(utf8_encode(l.space.text_of(parts->title)))) return true;
         std::string all;
-        for (const auto& page : b.parts->pages)
+        for (const auto& page : parts->pages)
         {
             if (cli::unit_withheld(l, page)) return true;
             std::string t = utf8_encode(l.space.text_of(page));
             while (!t.empty() && t.back() == ' ') t.pop_back();
             all += t + "\n";
         }
-        return b.parts->pages.size() > 1 && cli::vault::withheld_written(all);
+        return parts->pages.size() > 1 && cli::vault::withheld_written(all);
     }
-    if (b.model && model_space_)
+    if (model) return cli::vault::withheld_bytes(std::vector<uint8_t>(obj.begin(), obj.end()));
+    if (file) return false;
+    return !unit.empty() && cli::unit_withheld(*line, unit);
+}
+
+void Hallway::vault_queue(int64_t key, VaultCheck check)
+{
     {
-        const std::string obj = model_space_->to_obj(*b.model);
-        return cli::vault::withheld_bytes(std::vector<uint8_t>(obj.begin(), obj.end()));
+        std::lock_guard<std::mutex> lock(vault_pic_mx_);
+        vault_pic_jobs_.push_back({key, room_gen_, std::move(check)});
     }
-    if (b.is_file) return false; // worked out with its bytes: file_withheld
-    return !b.unit.empty() && cli::unit_withheld(line(), b.unit);
+    vault_pic_gen_ = room_gen_;
+    if (vault_pic_threads_.empty())
+    {
+        const unsigned n = std::max(2u, std::thread::hardware_concurrency()) - 1; // (0 when it cannot tell)
+        for (unsigned i = 0; i < n; ++i)
+            vault_pic_threads_.emplace_back([this] {
+                for (;;)
+                {
+                    VaultJob job;
+                    {
+                        std::unique_lock<std::mutex> lock(vault_pic_mx_);
+                        vault_pic_cv_.wait(lock, [this] { return vault_pic_stop_ || !vault_pic_jobs_.empty(); });
+                        if (vault_pic_stop_) return;
+                        job = std::move(vault_pic_jobs_.front());
+                        vault_pic_jobs_.pop_front();
+                        if (job.gen != vault_pic_gen_) continue; // a room since left: its items are gone
+                        ++vault_pic_running_;
+                    }
+                    bool verdict = true; // failed closed, as everywhere in the vault
+                    try
+                    {
+                        verdict = job.check.verdict();
+                    }
+                    catch (const std::exception&)
+                    {
+                    }
+                    std::lock_guard<std::mutex> lock(vault_pic_mx_);
+                    vault_pic_done_.emplace_back(job.key, job.gen, verdict);
+                    --vault_pic_running_;
+                }
+            });
+    }
+    vault_pic_cv_.notify_one();
+}
+
+void Hallway::vault_collect()
+{
+    vault_pic_gen_ = room_gen_;
+    std::vector<std::tuple<int64_t, uint64_t, bool>> done;
+    {
+        std::lock_guard<std::mutex> lock(vault_pic_mx_);
+        if (vault_pic_done_.empty()) return;
+        done.swap(vault_pic_done_);
+    }
+    for (const auto& [key, gen, verdict] : done)
+    {
+        if (gen != room_gen_) continue;
+        const auto it = cache_.find(key);
+        if (it == cache_.end() || !it->second.vault_pending) continue; // (decided on the spot already)
+        it->second.withheld = verdict;
+        it->second.vault_pending = false;
+    }
+}
+
+void Hallway::settle_vault()
+{
+    for (;;)
+    {
+        {
+            std::lock_guard<std::mutex> lock(vault_pic_mx_);
+            const bool idle = vault_pic_running_ == 0 && std::none_of(vault_pic_jobs_.begin(), vault_pic_jobs_.end(),
+                                                                      [this](const VaultJob& j) { return j.gen == room_gen_; });
+            if (idle) break;
+        }
+        SDL_Delay(1);
+    }
+    vault_collect();
+}
+
+void Hallway::stop_vault_pictures()
+{
+    {
+        std::lock_guard<std::mutex> lock(vault_pic_mx_);
+        vault_pic_stop_ = true;
+        vault_pic_jobs_.clear();
+    }
+    vault_pic_cv_.notify_all();
+    for (auto& t : vault_pic_threads_)
+        if (t.joinable()) t.join();
+    vault_pic_threads_.clear();
 }
 
 // Puts down what is in hand if the vault withholds it; true if it did.
@@ -2341,6 +2464,7 @@ void Hallway::rebuild_model_sieve()
 
 void Hallway::rebuild_binary_sieve()
 {
+    if (memo_hex_survivor_) memo_hex_ok_ = false; // a survivor's compact address changes with the filters
     try
     {
         // The other lines as not-an-item-v1 recognises their items (text, image, audio, video, models).
@@ -2354,7 +2478,7 @@ void Hallway::rebuild_binary_sieve()
     }
 }
 
-BigUint Hallway::line_units() const
+const BigUint& Hallway::line_units() const
 {
     if (!on_binary()) return loop_.units();
     return effective_mode() == FilterMode::Compact ? binary_sieve_->count() : titled_[kBinaryLine]->size();
