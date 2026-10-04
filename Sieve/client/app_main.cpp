@@ -92,6 +92,7 @@ const char* kUsage =
     "  --tile N            then move N tiles along the corridor\n"
     "  --take              take the book you are looking at off the shelf\n"
     "  --save-item PATH    then save it as a file (F on the item page), to PATH\n"
+    "  --save-view PATH    with the viewer open (--press E,Z,Tab...): save what it shows (F), to PATH\n"
     "  --walk DX,DZ;...    walk these distances in metres first (doors work as when walking)\n"
     "  --press K,K,...     then press these keys (e.g. M,M,-,Shift+=; Click: a left click where the\n"
     "                      crosshair is), printing where you are\n"
@@ -543,6 +544,7 @@ int run(const Args& a)
         hall->settle_vault(); // the vault's verdicts on the pictures in view, so the picture shows them
         if (a.has("take")) hall->take_hovered();
         if (a.has("save-item")) hall->save_in_hand_to(a.get("save-item")); // F, without the dialog
+        if (a.has("save-view")) hall->save_view_to(a.get("save-view"));   // F in the viewer, without the dialog
         hall->render();
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         std::cout << "saved " << a.get("screenshot") << "\n";

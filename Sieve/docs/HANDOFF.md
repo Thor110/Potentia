@@ -1386,3 +1386,22 @@ The item viewer (4 October 2026).
 - **--press Click:** a left click in the middle of the window, where the crosshair is.
 - **CI:** the hallway step opens a 4,000-character page by click (52 columns of 77 rows), zooms it
   with Z and Shift+=, and checks that Esc closes it with the page still in hand.
+The viewer's views (4 October 2026).
+- **ViewKind (hallway.hpp):** Raw (the thing itself), Picture (face_painter's picture, drawn again),
+  Cover (bk.cover or a book's cover, at the image line's pixels) and Title (title_text, or a book's
+  title page, laid out with page_rows). open_viewer lists the ones the item has; view_show(i)
+  builds one. Buttons along the top (view_buttons_, hit-tested on a click) and Tab / Shift+Tab.
+- **Picture:** view_picture_px is the larger of display_px's width for its letters and the screen's
+  width rounded up to a power of two (closeup_width), held to what fits the display cache
+  (widest_display_px for one picture). The painter runs on std::async (view_job_); the view
+  says "drawing the picture..." until draw_viewer collects it. The viewer keeps one ARGB buffer
+  (view_.px, frame after frame) for pixels, frames, covers and the picture alike.
+- **Saving (item_save.cpp):** F or the button calls save_view. Raw goes to save_in_hand as before;
+  view_file makes the other views' files (a PNG at one pixel a pixel through cli::encode_png, or
+  the title's text) into save_blob_, which item_save_poll writes once the dialog answers. The name
+  is the item's own with -picture.png, -cover.png or -title.txt. --save-view PATH does the same
+  without the dialog, for CI.
+- **display_text_here()** is split out of display_px_here, so the viewer sizes the picture as the
+  shelf does.
+- **CI:** the hallway step saves a page's picture and a book's cover as PNGs and a book's title as
+  text, through --save-view.

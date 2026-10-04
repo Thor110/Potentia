@@ -759,13 +759,18 @@ void Hallway::drop_stale_sharp()
 
 // The width the current line's displays are drawn at (display.hpp): the display size setting,
 // or wider for the letters its items carry.
-int Hallway::display_px_here() const
+DisplayText Hallway::display_text_here() const
 {
     const TitledSpace* ts = titled_here();
     const double title = ts && ts->title_space() ? double(ts->title_space()->unit_length()) : 0.0;
-    DisplayText t = display_text_titled(title);
-    if (on_books()) t = display_text_books(double(lines_[0].space.unit_length()));
-    else if (!on_models() && !on_binary() && line().kind == LineKind::Text) t = display_text_pages(double(line().space.unit_length()), title);
+    if (on_books()) return display_text_books(double(lines_[0].space.unit_length()));
+    if (!on_models() && !on_binary() && line().kind == LineKind::Text) return display_text_pages(double(line().space.unit_length()), title);
+    return display_text_titled(title);
+}
+
+int Hallway::display_px_here() const
+{
+    const DisplayText t = display_text_here();
     // As wide as the letters need, while every picture of the rooms with pictures still fits the
     // display cache (display.hpp widest_display_px).
     const double pictures = double(2 * face_rooms() + 1) * double(sieve::books_per_tile());

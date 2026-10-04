@@ -816,6 +816,7 @@ public:
     int letters_px_ = 8; // the letter size the width is chosen for; smaller letters are dashes
     int line_px_ = 64;   // what the current line's displays are drawn at
     int display_px_here() const;
+    DisplayText display_text_here() const; // what the displays on this line carry
     // A display is line_px_ wide and as tall as the item's front is, in proportion.
     int face_w() const { return line_px_; }
     int face_h() const { return std::max(1, int(std::lround(float(face_w()) * face_aspect_))); }
@@ -1163,6 +1164,7 @@ private:
 public:
     void item_save_chosen(const std::string& path);
     void save_in_hand_to(const std::string& path);
+    void save_view_to(const std::string& path); // F in the viewer, to PATH (--save-view)
 private:
     void save_in_hand();
     // J: between an item and its file. On any other line, the item in hand as the file F saves
@@ -1178,6 +1180,7 @@ private:
     std::mutex save_mx_;
     std::optional<std::string> save_pending_;
     std::optional<Book> save_item_;
+    std::optional<std::vector<uint8_t>> save_blob_; // or a file made already: a view's picture or text
     std::string save_ext_;
     int hand_tabs();                       // 3, or 4 with META
     void draw_meta(const Book& bk, float x, float cy, float pw, float bottom);
@@ -1265,20 +1268,29 @@ private:
 
     // ---- the item viewer (viewer.cpp): Z, or a click on the thing in hand, opens it over the
     // whole window, scrolled both ways and zoomed
+    // What the thing can be seen as, the buttons along the top: what it is (its text, pixels, notes,
+    // .obj or bytes), the picture on the item, its cover, and its title.
+    enum class ViewKind { Raw, Picture, Cover, Title };
     struct ViewDoc
     {
         std::string heading;               // what is open, above it
         std::vector<std::u32string> rows;  // text, as laid out
         sieve::BinarySpace::Bytes bytes;   // a file: its hex dump, worked out a row at a time
         size_t cols = 0, row_count = 0;    // the text's size in characters
-        bool picture = false;              // a picture or a film, in pixels
-        ImageFormat f;
-        std::vector<Rgb> rgb;              // every frame's pixels
+        bool picture = false;              // a picture, in pixels
+        std::vector<uint32_t> px;          // ARGB, frame after frame (empty while it is being drawn)
+        uint32_t pw = 0, ph = 0, frames = 1;
         int frame = 0;
         bool playing = true;
         Uint64 next_frame = 0;
     };
     void open_viewer();
+    void view_show(size_t at);
+    void view_raw();
+    std::string view_label(ViewKind k) const;
+    int view_picture_px(double aspect) const;
+    void save_view();
+    std::optional<std::pair<std::vector<uint8_t>, std::string>> view_file(); // the file F saves from a view: bytes, extension
     void close_viewer();
     bool over_hand_view(const SDL_Event& e) const;
     void viewer_event(const SDL_Event& e, bool& quit);
@@ -1293,6 +1305,10 @@ private:
     void view_zoom_at(float factor, float sx, float sy);
     void view_clamp();
     ViewDoc view_;
+    std::vector<ViewKind> view_kinds_;              // the views this thing has
+    size_t view_at_ = 0;                            // the one shown
+    std::future<std::vector<uint32_t>> view_job_;   // the picture on the item, being drawn
+    std::vector<std::pair<SDL_FRect, int>> view_buttons_; // the buttons last drawn: a view, or -1 to save
     bool view_open_ = false, view_had_mouse_ = false, view_drag_ = false, view_dirty_ = true;
     float view_zoom_ = 1, view_x_ = 0, view_y_ = 0; // the zoom, and the point of the thing at the view's top left
     double view_aspect_ = 1.0;                      // a page's shape, height over width

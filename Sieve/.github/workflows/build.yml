@@ -739,10 +739,18 @@ jobs:
           # The item viewer: a click on the page in hand opens all of it, laid out as the picture on
           # the item lays it out (52 columns of 77 rows, in cells 8 x 10); Z opens it too, Shift+=
           # doubles the zoom, and Esc closes it with the page still in hand.
-          $H --no-menu --length 4000 --pose 0.9,3,94,-30 --press "E,Click" --screenshot view.png | q "viewing it, 416 x 770 at one to one"
+          $H --no-menu --length 4000 --pose 0.9,3,94,-30 --press "E,Click" --screenshot view.png | q "viewing its TEXT, 416 x 770 at one to one"
           $H --no-menu --length 4000 --pose 0.9,3,94,-30 --press "E,Z,Shift+=,End" --screenshot view2.png | tail -2 | sed -n 1p | q "viewing at 400%"
           $H --no-menu --length 4000 --pose 0.9,3,94,-30 --press "E,Z,Escape" --screenshot view3.png | tail -2 | sed -n 1p > view3.txt
           if grep -q "viewing at" view3.txt; then echo "Esc left the viewer open"; exit 1; fi
+          # Its views (Tab): the picture on the item, drawn again and saved as a PNG (F, here
+          # --save-view); a book's cover and its title page, saved as a PNG and as text.
+          $H --no-menu --length 4000 --pose 0.9,3,94,-30 --press "E,Z,Tab" --save-view vpic.png --screenshot vpic-shot.png | q "viewing its PICTURE"
+          test "$(head -c 4 vpic.png | tail -c 3)" = "PNG"
+          $H --no-menu --line books --mode scrambled --pose 0.9,3,94,-30 --press "E,Z,Tab,Tab" --save-view vcover.png --screenshot vcover-shot.png | q "viewing its COVER, 10 x 10"
+          test "$(head -c 4 vcover.png | tail -c 3)" = "PNG"
+          $H --no-menu --line books --mode scrambled --pose 0.9,3,94,-30 --press "E,Z,Tab,Tab,Tab" --save-view vtitle.txt --screenshot vtitle-shot.png | q "viewing its TITLE"
+          test -s vtitle.txt
           # Every line filtered by every other (FILTER-PLUGINS.md section 16): the CLI's counts are
           # the oracle's cross-vectors; a page's file fails not-an-item-v1 on the binary line, and
           # the hallway says why the binary line cannot compact with every item form asked for.

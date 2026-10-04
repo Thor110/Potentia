@@ -395,6 +395,13 @@ A door **keeps your corridor position** and only changes which line reads it:
 - **A picture or a film:** its pixels, one to one or as large as you like. A film plays; **Space** stops it, **N** and **B** step a frame.
 - **A book:** the open page (**N** and **B** turn them). **A track:** its notes. **A model:** its `.obj` text. **A file:** all of it, as a hex dump.
 
+That is the thing itself. The buttons along the top (or **Tab**, **Shift+Tab** back) show what else was made of it on the way to the shelf:
+- **PICTURE:** the picture on the item, drawn again by the same painter as the shelf's, as wide as its letters or your screen need (while it fits the display cache), on a worker so a long page's does not hold up the window.
+- **COVER:** a book's, a track's or a film's cover, at its own pixels.
+- **TITLE:** its title, and a book's whole title page, laid out as a page.
+
+**F** (or the button at the right) saves what is shown: the thing itself as **F** on the item page saves it (text, PNG, MIDI, `.obj`, the file's bytes), the picture on the item or a cover as a PNG at its own pixels, a title as text.
+
 The wheel scrolls down, **Shift** and the wheel across, **Ctrl** and the wheel zooms about the pointer, and dragging moves it. Arrows or WASD move it too, PgUp/PgDn by a screen, Home/End to the top and the foot, **+** and **-** zoom (**Shift**: twice as far), **0** fits it to the window and **1** is one to one. **Esc** or **Z** closes it, with the thing still in your hands. Only what is in view is drawn, so a page of any length scrolls as fast as a short one.
 
 ![A picture taken off the shelf](docs/images/hallway-image-in-hand.png)

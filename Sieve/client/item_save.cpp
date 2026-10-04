@@ -12,6 +12,7 @@
 
 #include "hallway.hpp"
 
+#include "cli/image_io.hpp"
 #include "cli/lines.hpp"
 #include "cli/locate.hpp"
 #include "cli/vault.hpp"
@@ -119,6 +120,76 @@ std::string Hallway::prepare_save()
     return name;
 }
 
+// The viewer's F: what the view shows, saved. The thing itself is saved as F on the item page saves
+// it; the picture on the item and a cover as a PNG at their own pixels; a title as text.
+std::optional<std::pair<std::vector<uint8_t>, std::string>> Hallway::view_file()
+{
+    if (!in_hand_ || view_kinds_.empty()) return std::nullopt;
+    const Book& bk = *in_hand_;
+    switch (view_kinds_[view_at_])
+    {
+    case ViewKind::Raw: return std::nullopt;
+    case ViewKind::Title:
+    {
+        std::string t = bk.parts ? utf8_encode(lines_[0].space.text_of(bk.parts->title)) : title_text(bk);
+        while (!t.empty() && t.back() == ' ') t.pop_back();
+        return std::make_pair(std::vector<uint8_t>(t.begin(), t.end()), std::string("-title.txt"));
+    }
+    case ViewKind::Picture:
+    case ViewKind::Cover:
+    {
+        if (view_job_.valid()) view_.px = view_job_.get(); // the picture on the item, waited for
+        view_dirty_ = true;
+        if (view_.px.empty()) return std::nullopt;
+        // The frame shown, at one pixel a pixel.
+        const size_t n = size_t(view_.pw) * view_.ph, base = size_t(view_.frame) * n;
+        std::vector<Rgb> rgb(n);
+        for (size_t i = 0; i < n && base + i < view_.px.size(); ++i)
+        {
+            const uint32_t c = view_.px[base + i];
+            rgb[i] = Rgb{uint8_t(c >> 16), uint8_t(c >> 8), uint8_t(c)};
+        }
+        const std::string png = cli::encode_png(view_.pw, view_.ph, rgb, 1);
+        return std::make_pair(std::vector<uint8_t>(png.begin(), png.end()),
+                              std::string(view_kinds_[view_at_] == ViewKind::Cover ? "-cover.png" : "-picture.png"));
+    }
+    }
+    return std::nullopt;
+}
+
+// F in the viewer: asks where to save what is shown.
+void Hallway::save_view()
+{
+    std::string name = prepare_save(); // the item's own name, and a copy of it
+    if (name.empty()) return;
+    auto file = view_file();
+    if (!file)
+    {
+        if (view_kinds_.empty() || view_kinds_[view_at_] == ViewKind::Raw) save_in_hand();
+        else message(tr("view.drawing"));
+        return;
+    }
+    if (!save_ext_.empty() && name.size() > save_ext_.size()) name.resize(name.size() - save_ext_.size());
+    save_blob_ = std::move(file->first);
+    save_ext_ = file->second.substr(file->second.rfind('.'));
+    name += file->second;
+    const char* docs = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
+    const std::string start = docs ? std::string(docs) + name : name;
+    SDL_ShowSaveFileDialog(save_chosen, this, window_, nullptr, 0, start.c_str());
+}
+
+// For testing without a person (--save-view PATH): the same, to PATH, without the dialog.
+void Hallway::save_view_to(const std::string& path)
+{
+    if (prepare_save().empty()) return;
+    if (auto file = view_file())
+    {
+        save_blob_ = std::move(file->first);
+        save_ext_ = file->second.substr(file->second.rfind('.'));
+    }
+    item_save_chosen(path);
+}
+
 // Called every frame: writes the item once the dialog has said where.
 void Hallway::item_save_poll()
 {
@@ -130,6 +201,8 @@ void Hallway::item_save_poll()
     if (!to || !save_item_) return;
     const Book bk = std::move(*save_item_);
     save_item_.reset();
+    std::optional<std::vector<uint8_t>> blob;
+    blob.swap(save_blob_);
     fs::path path = from_u8(*to);
     if (!save_ext_.empty() && path.extension().empty()) path += from_u8(save_ext_);
     const std::string shown = [&] {
@@ -139,6 +212,12 @@ void Hallway::item_save_poll()
     try
     {
         if (withheld(bk)) throw cli::VaultWithheld("withheld by the vault");
+        if (blob) // a view's picture or title, made when F was pressed
+        {
+            write_all(path, blob->data(), blob->size());
+            message(trf("hand.saved", {shown}));
+            return;
+        }
         if (bk.is_file)
         {
             const auto& bytes = file_of(bk);

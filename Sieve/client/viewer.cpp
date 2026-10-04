@@ -8,6 +8,10 @@
 //   - a picture or a film: its pixels, one to one or as large as you like, a frame at a time;
 //   - a book: the page open in it (N and B turn the pages here too);
 //   - a track: its notes; a model: its .obj text; a file: all of it as a hex dump.
+// That is what the thing is. The buttons along the top show what else was made of it on the way to
+// the shelf: the PICTURE on the item (drawn again by the same painter, as large as its letters or
+// the screen need), its COVER, and its TITLE (a book's whole title page). F saves what is shown:
+// the thing itself as F on the item page saves it, a picture or a cover as a PNG, a title as text.
 // Nothing is made larger than the window: text is drawn a row at a time, only the rows in view,
 // and a picture is sampled into one texture the size of the view whenever the view moves.
 //
@@ -15,12 +19,13 @@
 // the wheel zooms about the pointer; dragging moves it. Arrows or WASD move it, PgUp and PgDn by a
 // screen, Home and End to the top and the foot, + and - zoom (Shift: twice as far), 0 fits it to
 // the window and 1 is one to one. N and B turn a book's page or a film's frame, Space plays or
-// stops a film. Esc or Z closes it.
+// stops a film. Tab (Shift: back) or a click on a button changes the view, F saves. Esc or Z closes it.
 
 #include "hallway.hpp"
 #include "gpu_memory.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 
 namespace hallway::hall {
@@ -30,7 +35,7 @@ namespace {
 // A character's cell at zoom 1: the font's 8 pixels across, and a line's 10 down (font.hpp).
 constexpr float kCellW = 8, kCellH = 10;
 // The bands above the view (what is open, the zoom, where you are) and below it (the keys).
-constexpr float kHead = 40, kFoot = 22;
+constexpr float kHead = 60, kFoot = 22;
 
 // The columns of `n` characters laid out a character to a square cell in a rectangle `aspect`
 // times as tall as it is wide, as paint_text lays out a page on an item: the fewest whose rows,
@@ -72,6 +77,14 @@ std::vector<std::u32string> page_rows(const std::u32string& text, double aspect,
     return rows;
 }
 
+// A picture as ARGB, from the RGB the image line renders.
+std::vector<uint32_t> argb_of(const std::vector<Rgb>& rgb)
+{
+    std::vector<uint32_t> px(rgb.size());
+    for (size_t i = 0; i < rgb.size(); ++i) px[i] = 0xFF000000u | uint32_t(rgb[i].r) << 16 | uint32_t(rgb[i].g) << 8 | uint32_t(rgb[i].b);
+    return px;
+}
+
 std::vector<std::u32string> utf32_rows(const std::vector<std::string>& lines)
 {
     std::vector<std::u32string> rows;
@@ -95,8 +108,8 @@ SDL_FRect Hallway::view_area() const
 }
 
 // The thing's size at zoom 1: its characters' cells, or its pixels.
-float Hallway::view_content_w() const { return view_.picture ? float(view_.f.width) : float(view_.cols) * kCellW; }
-float Hallway::view_content_h() const { return view_.picture ? float(view_.f.height) : float(view_.row_count) * kCellH; }
+float Hallway::view_content_w() const { return view_.picture ? float(view_.pw) : float(view_.cols) * kCellW; }
+float Hallway::view_content_h() const { return view_.picture ? float(view_.ph) : float(view_.row_count) * kCellH; }
 
 // One row of the text: laid out already, or (a file) worked out from its bytes as it is shown.
 std::u32string Hallway::view_row(size_t r) const
@@ -121,7 +134,11 @@ std::u32string Hallway::view_row(size_t r) const
 void Hallway::view_book_page()
 {
     const uint32_t n = books_->pages();
-    view_.heading = trf("view.book", {title_text(*in_hand_), std::to_string(book_page_ + 1), std::to_string(n)});
+    // A book's title is a page of its own (the TITLE view): the heading has the start of it.
+    std::string title = utf8_encode(lines_[0].space.text_of(in_hand_->parts->title));
+    while (!title.empty() && title.back() == ' ') title.pop_back();
+    view_.heading = (title.find_first_not_of(" ") == std::string::npos ? std::string() : "\"" + title + "\"   ") +
+                    trf("view.book", {std::to_string(book_page_ + 1), std::to_string(n)});
     if (n == 0)
     {
         view_.rows = {utf8_decode(tr("hand.no_pages"))};
@@ -173,17 +190,46 @@ void Hallway::view_clamp()
     view_dirty_ = true;
 }
 
-void Hallway::open_viewer()
+std::string Hallway::view_label(ViewKind k) const
 {
-    if (!in_hand_ || withheld(*in_hand_)) return;
-    const Book& bk = *in_hand_;
-    view_ = ViewDoc{};
-    // A page opens shaped as the picture on a page is: the pages line's display, less its margins.
-    view_aspect_ = 1.0;
+    switch (k)
     {
-        const double a = double(load_face_rect("pages").aspect());
-        view_aspect_ = std::max(0.1, (a - 0.125) / (1.0 - 0.125)); // a sixteenth of the width either side
+    case ViewKind::Picture: return tr("view.tab.picture");
+    case ViewKind::Cover: return tr("view.tab.cover");
+    case ViewKind::Title: return tr("view.tab.title");
+    case ViewKind::Raw: break;
     }
+    // What the thing itself is, on this line.
+    const Book& bk = *in_hand_;
+    if (bk.model) return tr("view.tab.obj");
+    if (bk.parts) return tr("view.tab.page");
+    if (bk.is_file) return tr("view.tab.hex");
+    switch (line().kind)
+    {
+    case LineKind::Text: return tr("view.tab.text");
+    case LineKind::Audio: return tr("view.tab.notes");
+    case LineKind::Video: return tr("view.tab.frames");
+    default: return tr("view.tab.pixels");
+    }
+}
+
+// How wide the picture on the item is drawn for the viewer: as wide as its letters need, or as the
+// screen (a close-up's width at most, display.hpp closeup_width), whichever is more, while it fits
+// the display cache on its own.
+int Hallway::view_picture_px(double aspect) const
+{
+    int w = 0, h = 0;
+    SDL_GetCurrentRenderOutputSize(r_, &w, &h);
+    const int roomy = INT32_MAX / 2; // the picture is sampled to the view, so no texture limits it
+    const int widest = widest_display_px(double(face_budget_mb_) * 1048576.0, 1.0, aspect, roomy);
+    const int screen = closeup_width(kCloseUpScreen, w, roomy);
+    return std::min(widest, display_px(std::max(face_px_, screen), letters_px_, aspect, display_text_here(), widest));
+}
+
+// The thing itself: its text, pixels, notes, .obj or bytes.
+void Hallway::view_raw()
+{
+    const Book& bk = *in_hand_;
     const std::string title = title_text(bk);
     const std::string named = title.empty() ? std::string() : "\"" + title + "\"   ";
     if (bk.model)
@@ -215,11 +261,70 @@ void Hallway::open_viewer()
         break;
     case LineKind::Image:
     case LineKind::Video:
+    {
+        const ImageFormat& f = line().image;
         view_.picture = true;
-        view_.f = line().image;
-        view_.rgb = render_image(bk.unit, view_.f);
-        view_.heading = named + trf("view.picture", {std::to_string(view_.f.width), std::to_string(view_.f.height)});
+        view_.px = argb_of(render_image(bk.unit, f));
+        view_.pw = f.width;
+        view_.ph = f.height;
+        view_.frames = std::max(1u, f.frames);
+        view_.heading = named + trf("view.picture", {std::to_string(f.width), std::to_string(f.height)});
         break;
+    }
+    }
+}
+
+// Shows view `at` of the thing in hand, from the top, a picture fitted to the window.
+void Hallway::view_show(size_t at)
+{
+    if (!in_hand_ || view_kinds_.empty()) return;
+    if (view_job_.valid()) view_job_.wait(); // a picture still being drawn for the last view
+    view_job_ = {};
+    view_at_ = at % view_kinds_.size();
+    view_ = ViewDoc{};
+    const Book& bk = *in_hand_;
+    const std::string title = title_text(bk);
+    const std::string named = title.empty() ? std::string() : "\"" + title + "\"   ";
+    switch (view_kinds_[view_at_])
+    {
+    case ViewKind::Raw: view_raw(); break;
+    case ViewKind::Cover:
+    {
+        // A book's cover, or a track's or a film's: a picture of the image line.
+        const ImageFormat& f = lines_[1].image;
+        view_.picture = true;
+        view_.px = argb_of(render_image(bk.parts ? bk.parts->cover : bk.cover, f));
+        view_.pw = f.width;
+        view_.ph = f.height;
+        view_.heading = named + trf("view.cover", {std::to_string(f.width), std::to_string(f.height)});
+        break;
+    }
+    case ViewKind::Title:
+    {
+        // A book's title is a whole page; any other title, as long as the line's titles are.
+        const std::u32string t = bk.parts ? lines_[0].space.text_of(bk.parts->title) : utf8_decode(title);
+        view_.rows = page_rows(t, view_aspect_, view_.cols);
+        view_.heading = trf("view.title", {std::to_string(written_length(t))});
+        break;
+    }
+    case ViewKind::Picture:
+    {
+        // The picture on the item, drawn again by the same painter as the shelf's, larger, on a
+        // worker: a long page's takes a moment.
+        const double aspect = double(face_rect().aspect());
+        const int w = view_picture_px(aspect), h = std::max(1, int(std::lround(double(w) * aspect)));
+        view_.picture = true;
+        view_.pw = uint32_t(w);
+        view_.ph = uint32_t(h);
+        view_.heading = named + trf("view.on_item", {std::to_string(w), std::to_string(h)});
+        if (Painter paint = face_painter(bk))
+            view_job_ = std::async(std::launch::async, [paint, w, h] {
+                std::vector<uint32_t> px;
+                paint(px, w, h);
+                return px;
+            });
+        break;
+    }
     }
     if (!view_.picture && view_.bytes.empty())
     {
@@ -228,21 +333,43 @@ void Hallway::open_viewer()
         for (const auto& r : view_.rows) view_.cols = std::max(view_.cols, r.size());
         view_.cols = std::max<size_t>(1, view_.cols);
     }
-    view_open_ = true;
-    view_had_mouse_ = SDL_GetWindowRelativeMouseMode(window_);
-    SDL_SetWindowRelativeMouseMode(window_, false);
     // A picture opens to fit the view; text at the size the item page draws it, from the top.
     view_x_ = view_y_ = 0;
     view_set_zoom(view_.picture ? view_fit_zoom() : 2.0f);
     view_clamp();
-    message(trf("msg.view", {std::to_string(size_t(view_content_w())), std::to_string(size_t(view_content_h()))}));
+    message(trf("msg.view", {view_label(view_kinds_[view_at_]), std::to_string(size_t(view_content_w())),
+                             std::to_string(size_t(view_content_h()))}));
+}
+
+void Hallway::open_viewer()
+{
+    if (!in_hand_ || withheld(*in_hand_)) return;
+    const Book& bk = *in_hand_;
+    // A page opens shaped as the picture on a page is: the pages line's display, less its margins.
+    {
+        const double a = double(load_face_rect("pages").aspect());
+        view_aspect_ = std::max(0.1, (a - 0.125) / (1.0 - 0.125)); // a sixteenth of the width either side
+    }
+    // The views it has: itself, and what was made of it for the shelf.
+    view_kinds_ = {ViewKind::Raw};
+    if (face_painter(bk)) view_kinds_.push_back(ViewKind::Picture);
+    if (bk.parts || !bk.cover.empty()) view_kinds_.push_back(ViewKind::Cover);
+    if (bk.parts || !title_text(bk).empty()) view_kinds_.push_back(ViewKind::Title);
+    view_open_ = true;
+    view_had_mouse_ = SDL_GetWindowRelativeMouseMode(window_);
+    SDL_SetWindowRelativeMouseMode(window_, false);
+    view_show(0);
 }
 
 void Hallway::close_viewer()
 {
+    if (view_job_.valid()) view_job_.wait();
+    view_job_ = {};
     view_open_ = false;
     view_drag_ = false;
     view_ = ViewDoc{}; // a picture's pixels, a file's bytes
+    view_kinds_.clear();
+    view_buttons_.clear();
     if (view_tex_) gpu::destroy(view_tex_);
     view_tex_ = nullptr;
     view_tex_w_ = view_tex_h_ = 0;
@@ -299,7 +426,20 @@ void Hallway::viewer_event(const SDL_Event& e, bool& quit)
         break;
     }
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
-        if (e.button.button == SDL_BUTTON_LEFT) view_drag_ = true;
+        if (e.button.button == SDL_BUTTON_LEFT)
+        {
+            // The buttons along the top: a view, or save; anywhere else, a drag.
+            SDL_FPoint p{};
+            SDL_RenderCoordinatesFromWindow(r_, e.button.x, e.button.y, &p.x, &p.y);
+            for (const auto& [box, which] : view_buttons_)
+                if (SDL_PointInRectFloat(&p, &box))
+                {
+                    if (which < 0) save_view();
+                    else view_show(size_t(which));
+                    return;
+                }
+            view_drag_ = true;
+        }
         break;
     case SDL_EVENT_MOUSE_BUTTON_UP:
         if (e.button.button == SDL_BUTTON_LEFT) view_drag_ = false;
@@ -336,17 +476,22 @@ void Hallway::viewer_event(const SDL_Event& e, bool& quit)
             if (in_hand_ && in_hand_->parts)
             {
                 turn_page(dir);
-                view_book_page();
-                view_y_ = 0;
+                if (view_kinds_[view_at_] == ViewKind::Raw)
+                {
+                    view_book_page();
+                    view_y_ = 0;
+                }
             }
-            else if (view_.picture && view_.f.frames > 1)
+            else if (view_.picture && view_.frames > 1)
             {
                 view_.playing = false;
-                view_.frame = int((uint32_t(view_.frame) + view_.f.frames + uint32_t(dir)) % view_.f.frames);
+                view_.frame = int((uint32_t(view_.frame) + view_.frames + uint32_t(dir)) % view_.frames);
             }
             break;
         }
         case SDLK_SPACE: view_.playing = !view_.playing; break;
+        case SDLK_TAB: view_show(view_at_ + ((mod & SDL_KMOD_SHIFT) ? view_kinds_.size() - 1 : 1)); return;
+        case SDLK_F: save_view(); return;
         default: return;
         }
         message(trf("msg.view.at", {std::to_string(int(std::lround(view_zoom_ * 100))),
@@ -370,8 +515,14 @@ void Hallway::draw_viewer(float W, float H)
     SDL_SetRenderClipRect(r_, &clip);
     if (view_.picture)
     {
+        // The picture on the item, once its worker has drawn it.
+        if (view_job_.valid() && view_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+        {
+            view_.px = view_job_.get();
+            view_dirty_ = true;
+        }
         // A film plays at the item page's four frames a second, until N, B or Space stops it.
-        const uint32_t frames = std::max(1u, view_.f.frames);
+        const uint32_t frames = std::max(1u, view_.frames);
         if (frames > 1 && view_.playing && SDL_GetTicks() >= view_.next_frame)
         {
             view_.frame = int((uint32_t(view_.frame) + 1) % frames);
@@ -393,25 +544,29 @@ void Hallway::draw_viewer(float W, float H)
             // view has pixels, however large the picture or the zoom.
             view_px_.resize(size_t(vw) * size_t(vh));
             const uint32_t ground = 0xFF000000u | uint32_t(th.bg.r) << 16 | uint32_t(th.bg.g) << 8 | th.bg.b;
-            const size_t base = size_t(view_.frame) * view_.f.width * view_.f.height;
+            const size_t base = size_t(view_.frame) * view_.pw * view_.ph;
             for (int y = 0; y < vh; ++y)
             {
                 const float fy = view_y_ + (float(y) + 0.5f) / z;
-                const bool in_y = fy >= 0 && fy < float(view_.f.height);
+                const bool in_y = fy >= 0 && fy < float(view_.ph);
                 uint32_t* out = view_px_.data() + size_t(y) * size_t(vw);
                 for (int x = 0; x < vw; ++x)
                 {
                     const float fx = view_x_ + (float(x) + 0.5f) / z;
-                    if (!in_y || fx < 0 || fx >= float(view_.f.width)) { out[x] = ground; continue; }
-                    const size_t i = base + size_t(fy) * view_.f.width + size_t(fx);
-                    const Rgb& c = i < view_.rgb.size() ? view_.rgb[i] : Rgb{};
-                    out[x] = 0xFF000000u | uint32_t(c.r) << 16 | uint32_t(c.g) << 8 | uint32_t(c.b);
+                    if (!in_y || fx < 0 || fx >= float(view_.pw)) { out[x] = ground; continue; }
+                    const size_t i = base + size_t(fy) * view_.pw + size_t(fx);
+                    out[x] = i < view_.px.size() ? view_.px[i] : ground;
                 }
             }
             SDL_UpdateTexture(view_tex_, nullptr, view_px_.data(), vw * 4);
             view_dirty_ = false;
         }
         if (view_tex_) SDL_RenderTexture(r_, view_tex_, nullptr, &a);
+        if (view_.px.empty())
+        {
+            const std::string wait = tr("view.drawing");
+            text(a.x + (a.w - text_width(wait, 2)) * 0.5f, a.y + a.h * 0.5f - 8, wait, 2, ink);
+        }
     }
     else
     {
@@ -482,8 +637,8 @@ void Hallway::draw_viewer(float W, float H)
     SDL_SetRenderClipRect(r_, nullptr);
     // The heading: what is open, and the zoom, the frame and the rows in view.
     std::string where = trf("view.zoom", {std::to_string(int(std::lround(z * 100)))});
-    if (view_.picture && view_.f.frames > 1)
-        where += "   " + trf("hand.frame", {std::to_string(view_.frame + 1), std::to_string(view_.f.frames)});
+    if (view_.picture && view_.frames > 1)
+        where += "   " + trf("hand.frame", {std::to_string(view_.frame + 1), std::to_string(view_.frames)});
     if (!view_.picture)
     {
         const size_t first = size_t(std::max(0.0f, view_y_ / kCellH)) + 1;
@@ -492,12 +647,34 @@ void Hallway::draw_viewer(float W, float H)
                                            std::to_string(view_.row_count)});
     }
     const float ww = text_width(where, 1);
-    text(14, 10, fit(view_.heading, W - ww - 48, 2), 2, ink);
-    text(W - 14 - ww, 14, where, 1, ink);
+    text(14, 8, fit(view_.heading, W - ww - 48, 2), 2, ink);
+    text(W - 14 - ww, 12, where, 1, ink);
+    // The buttons: the views, the one shown lit, and at the right, saving what is shown.
+    view_buttons_.clear();
+    float bx = 14;
+    const float by = 32;
+    auto button = [&](float x, const std::string& label, bool lit, int which) {
+        const float bw = text_width(label, 1) + 16;
+        const SDL_FRect box{x, by, bw, 18};
+        SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, lit ? 90 : 0);
+        if (lit) SDL_RenderFillRect(r_, &box);
+        SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 255);
+        SDL_RenderRect(r_, &box);
+        text(x + 8, by + 5, label, 1, ink);
+        view_buttons_.emplace_back(box, which);
+        return bw;
+    };
+    for (size_t i = 0; i < view_kinds_.size(); ++i) bx += button(bx, view_label(view_kinds_[i]), i == view_at_, int(i)) + 6;
+    {
+        const std::string save = tr(view_kinds_.empty() || view_kinds_[view_at_] == ViewKind::Raw ? "view.save.raw"
+                                    : view_kinds_[view_at_] == ViewKind::Title                    ? "view.save.text"
+                                                                                                  : "view.save.png");
+        button(W - 14 - (text_width(save, 1) + 16), save, false, -1);
+    }
     SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 255);
     SDL_RenderLine(r_, 0, a.y - 1, W, a.y - 1);
     SDL_RenderLine(r_, 0, a.y + a.h, W, a.y + a.h);
-    text(14, H - kFoot + 7, fit(tr(view_.picture ? (view_.f.frames > 1 ? "view.keys.film" : "view.keys") : in_hand_ && in_hand_->parts ? "view.keys.book" : "view.keys"),
+    text(14, H - kFoot + 7, fit(tr(view_.picture ? (view_.frames > 1 ? "view.keys.film" : "view.keys") : in_hand_ && in_hand_->parts ? "view.keys.book" : "view.keys"),
                                 W - 28, 1),
          1, ink);
 }
