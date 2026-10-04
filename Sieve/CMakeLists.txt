@@ -279,6 +279,7 @@ if(SIEVE_BUILD_CLIENT)
         client/main_menu.cpp
         client/menu.cpp
         client/media_player.cpp
+        client/viewer.cpp
         client/mesh.cpp
         client/music.cpp
         client/strings.cpp

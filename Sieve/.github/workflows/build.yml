@@ -736,6 +736,13 @@ jobs:
           $H --no-menu --warp "hello world" --press "J,J" --screenshot j2.png | q "^PAGES line.*a TXT file, opened on the PAGES line"
           $H --no-menu --line image --walk "0,0" --press "E,J,J" --screenshot j3.png | q "^IMAGE line.*a PNG file, opened on the IMAGE line"
           $H --no-menu --line audio --warp "C4q E4q G4h Re B4e C5w" --press "J,J" --screenshot j4.png | q "^AUDIO line.*a MID file, opened on the AUDIO line"
+          # The item viewer: a click on the page in hand opens all of it, laid out as the picture on
+          # the item lays it out (52 columns of 77 rows, in cells 8 x 10); Z opens it too, Shift+=
+          # doubles the zoom, and Esc closes it with the page still in hand.
+          $H --no-menu --length 4000 --pose 0.9,3,94,-30 --press "E,Click" --screenshot view.png | q "viewing it, 416 x 770 at one to one"
+          $H --no-menu --length 4000 --pose 0.9,3,94,-30 --press "E,Z,Shift+=,End" --screenshot view2.png | tail -2 | sed -n 1p | q "viewing at 400%"
+          $H --no-menu --length 4000 --pose 0.9,3,94,-30 --press "E,Z,Escape" --screenshot view3.png | tail -2 | sed -n 1p > view3.txt
+          if grep -q "viewing at" view3.txt; then echo "Esc left the viewer open"; exit 1; fi
           # Every line filtered by every other (FILTER-PLUGINS.md section 16): the CLI's counts are
           # the oracle's cross-vectors; a page's file fails not-an-item-v1 on the binary line, and
           # the hallway says why the binary line cannot compact with every item form asked for.

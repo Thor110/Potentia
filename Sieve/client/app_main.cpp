@@ -93,7 +93,8 @@ const char* kUsage =
     "  --take              take the book you are looking at off the shelf\n"
     "  --save-item PATH    then save it as a file (F on the item page), to PATH\n"
     "  --walk DX,DZ;...    walk these distances in metres first (doors work as when walking)\n"
-    "  --press K,K,...     then press these keys (e.g. M,M,-,Shift+=), printing where you are\n"
+    "  --press K,K,...     then press these keys (e.g. M,M,-,Shift+=; Click: a left click where the\n"
+    "                      crosshair is), printing where you are\n"
     "  --edge-glow         draw with Geometry Edge Glow (or --settings a file that has it on)\n"
     "  --real-graphics     draw with Real Graphics: the models in the meshes folder\n"
     "  --door-portals      fill the doorways with procedural data noise (Real Graphics turns this on)\n"
@@ -182,6 +183,10 @@ std::vector<Line> make_lines(const Args& a)
 }
 
 // "M,M,-,Shift+=" -> key presses.
+// "Click" in --press: a left click in the middle of the window, where the crosshair is (the hallway
+// only; a menu takes it as a key it does not know).
+constexpr SDL_Keycode kClickPress = SDLK_SCANCODE_MASK | 0xFFFF;
+
 std::vector<std::pair<SDL_Keycode, SDL_Keymod>> parse_presses(const std::string& spec)
 {
     std::vector<std::pair<SDL_Keycode, SDL_Keymod>> out;
@@ -192,7 +197,7 @@ std::vector<std::pair<SDL_Keycode, SDL_Keymod>> parse_presses(const std::string&
         SDL_Keymod mod = SDL_KMOD_NONE;
         if (name.rfind("Shift+", 0) == 0) { mod = SDL_KMOD_LSHIFT; name = name.substr(6); }
         if (name.rfind("Ctrl+", 0) == 0) { mod = SDL_KMOD_LCTRL; name = name.substr(5); }
-        const SDL_Keycode key = name == "-" ? SDLK_MINUS : name == "=" ? SDLK_EQUALS : SDL_GetKeyFromName(name.c_str());
+        const SDL_Keycode key = name == "-" ? SDLK_MINUS : name == "=" ? SDLK_EQUALS : name == "Click" ? kClickPress : SDL_GetKeyFromName(name.c_str());
         if (key == SDLK_UNKNOWN) throw std::invalid_argument("--press: unknown key '" + name + "'");
         out.emplace_back(key, mod);
         start = end + 1;
@@ -315,6 +320,16 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
             e.type = SDL_EVENT_KEY_DOWN;
             e.key.key = key;
             e.key.mod = mod;
+            if (key == kClickPress)
+            {
+                int w = 0, h = 0;
+                SDL_GetWindowSize(window, &w, &h);
+                e = SDL_Event{};
+                e.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+                e.button.button = SDL_BUTTON_LEFT;
+                e.button.x = float(w) * 0.5f;
+                e.button.y = float(h) * 0.5f;
+            }
             bool quit = false;
             hall->render(); // so the key sees what you are looking at
             hall->handle(e, quit);

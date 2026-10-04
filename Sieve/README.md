@@ -390,13 +390,21 @@ A door **keeps your corridor position** and only changes which line reads it:
 - **Video:** the frames, animated.
 - **Audio:** the notes; **P** plays them.
 
+**The viewer.** The item page draws the thing at the page's size, so a long page stops at its foot. **Z**, or a click on the thing, opens it over the whole window instead, as large as you like and scrolled both ways:
+- **A page:** all of it, a character to a cell, in rows as wide as the picture on the item lays them out, so what opens is that picture, larger. Letters smaller than the **letters on items** size are drawn as bars, as on the item.
+- **A picture or a film:** its pixels, one to one or as large as you like. A film plays; **Space** stops it, **N** and **B** step a frame.
+- **A book:** the open page (**N** and **B** turn them). **A track:** its notes. **A model:** its `.obj` text. **A file:** all of it, as a hex dump.
+
+The wheel scrolls down, **Shift** and the wheel across, **Ctrl** and the wheel zooms about the pointer, and dragging moves it. Arrows or WASD move it too, PgUp/PgDn by a screen, Home/End to the top and the foot, **+** and **-** zoom (**Shift**: twice as far), **0** fits it to the window and **1** is one to one. **Esc** or **Z** closes it, with the thing still in your hands. Only what is in view is drawn, so a page of any length scrolls as fast as a short one.
+
 ![A picture taken off the shelf](docs/images/hallway-image-in-hand.png)
 
 | Key | Action |
 | :--- | :--- |
 | W A S D / arrows | Walk and turn. **Shift** runs. |
 | Mouse | Look around. **Tab** frees or captures the mouse. |
-| E / left click | Take the book you are looking at off the shelf, or put it back |
+| E / left click | Take the book you are looking at off the shelf, or put it back (with it in hand, a click on the thing itself opens the viewer) |
+| Z | Holding something: the **viewer**, the thing over the whole window, zoomed and scrolled both ways (above) |
 | T | **Warp:** type text, notes, or a picture file path (for image and video), then Enter. You land facing it, in the first copy of the line (where your position equals its address), and it opens in hand. Ctrl+V pastes. |
 | G | **Go to** a hex address or a percentage such as `50%` or `36.25%` (these open the book too), or `@T` for corridor tile T |
 | (doors) | Every doorway has a sign over it naming the line it leads to, in that line's colours |

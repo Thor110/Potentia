@@ -1365,3 +1365,24 @@ The four left for decision (4 October 2026).
     keeps one close-up's room when it sizes the display cache.
   - A page reads only where it shows wide enough on screen for its letters (about 660 px for 4,000
     characters at 8 px letters); past that, it needs the item in hand, scrolled.
+The item viewer (4 October 2026).
+- **client/viewer.cpp:** Z, or a click on the thing in hand (over_hand_view: hand_view_rect_, where
+  draw_in_hand drew it; the pointer, or the crosshair when the mouse is held), opens the thing over
+  the whole window.
+  - Pages: page_columns and page_rows lay it out as paint_text does, a character to a square cell
+    in the pages display's shape less its margins.
+  - Pictures and films: render_image's pixels, sampled to one streaming texture of the view's size
+    whenever the view moves, so the work is the view's pixels whatever the picture's size or zoom.
+  - Books: the open page (N and B turn it). Tracks: notes_to_notation, wrapped. Models: to_obj.
+    Files: a hex dump worked out a row at a time from file_of's bytes.
+- **Drawing:** text a row at a time, only the rows and columns in view. Below the letters on items
+  size a cell is drawn as bars for its words, as on the item, at most a row to a pixel and runs
+  closer than a pixel joined, so a page of any length costs about a screen's worth. render()
+  draws only the viewer while it is open (the corridor is hidden behind it), 16.7 ms a frame at a
+  30,000-character page on the software renderer, where the corridor and the item page took 36 ms.
+- **Keys:** the wheel, Shift and the wheel, Ctrl and the wheel (zoom about the pointer), dragging,
+  arrows or WASD, PgUp/PgDn, Home/End, + and - (Shift: twice), 0 fit, 1 one to one, N/B, Space,
+  Esc or Z to close. A key's modifiers are read from the event, so --press can script them.
+- **--press Click:** a left click in the middle of the window, where the crosshair is.
+- **CI:** the hallway step opens a 4,000-character page by click (52 columns of 77 rows), zooms it
+  with Z and Shift+=, and checks that Esc closes it with the page still in hand.

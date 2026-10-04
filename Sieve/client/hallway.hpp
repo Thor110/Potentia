@@ -1262,6 +1262,44 @@ private:
     void media_event(const SDL_Event& e, bool& quit);
     void draw_media_player(float W, float H);
     bool media_open_ = false, media_had_mouse_ = false;
+
+    // ---- the item viewer (viewer.cpp): Z, or a click on the thing in hand, opens it over the
+    // whole window, scrolled both ways and zoomed
+    struct ViewDoc
+    {
+        std::string heading;               // what is open, above it
+        std::vector<std::u32string> rows;  // text, as laid out
+        sieve::BinarySpace::Bytes bytes;   // a file: its hex dump, worked out a row at a time
+        size_t cols = 0, row_count = 0;    // the text's size in characters
+        bool picture = false;              // a picture or a film, in pixels
+        ImageFormat f;
+        std::vector<Rgb> rgb;              // every frame's pixels
+        int frame = 0;
+        bool playing = true;
+        Uint64 next_frame = 0;
+    };
+    void open_viewer();
+    void close_viewer();
+    bool over_hand_view(const SDL_Event& e) const;
+    void viewer_event(const SDL_Event& e, bool& quit);
+    void draw_viewer(float W, float H);
+    void view_book_page();
+    std::u32string view_row(size_t r) const;
+    SDL_FRect view_area() const;
+    float view_content_w() const;
+    float view_content_h() const;
+    float view_fit_zoom() const;
+    void view_set_zoom(float z);
+    void view_zoom_at(float factor, float sx, float sy);
+    void view_clamp();
+    ViewDoc view_;
+    bool view_open_ = false, view_had_mouse_ = false, view_drag_ = false, view_dirty_ = true;
+    float view_zoom_ = 1, view_x_ = 0, view_y_ = 0; // the zoom, and the point of the thing at the view's top left
+    double view_aspect_ = 1.0;                      // a page's shape, height over width
+    SDL_Texture* view_tex_ = nullptr;               // a picture, sampled to the view's size
+    int view_tex_w_ = 0, view_tex_h_ = 0;
+    std::vector<uint32_t> view_px_;
+    SDL_FRect hand_view_rect_{};                    // where the thing in hand was drawn on its page
     int media_area_ = 1;          // 0 recent, 1 the controls, 2 favourites
     int media_list_ = 0;          // the list the actions act on: 0 recent, 2 favourites
     int media_row_ = 0, media_sel_[3] = {0, 0, 0}, media_top_ = 0;

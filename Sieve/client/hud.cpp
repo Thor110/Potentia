@@ -527,6 +527,7 @@ void Hallway::draw_in_hand(float W, float H)
         }
         cy += 22;
     }
+    hand_view_rect_ = {};
     if (hand_tab_ == 1) { draw_cost(bk, x, cy, pw, y + ph); return; }
     if (hand_tab_ == 2) { draw_sort(bk, x, cy, pw, y + ph - 16); return; }
     if (hand_tab_ == 3) { draw_meta(bk, x, cy, pw, y + ph - 16); return; }
@@ -545,6 +546,7 @@ void Hallway::draw_in_hand(float W, float H)
         cy += bk.cover.empty() ? 44 : 100;
     }
     const size_t cols2 = size_t((pw - 28) / 16), cols1 = size_t((pw - 28) / 8);
+    const float thing_top = cy; // the thing itself starts here: a click on it opens the viewer
     if (bk.model) cy = draw_model(*bk.model, x, cy, pw, y + ph - 110);
     else if (bk.parts) cy = draw_book(*bk.parts, x, cy, pw, y + ph - 110);
     else if (bk.is_file)
@@ -586,6 +588,7 @@ void Hallway::draw_in_hand(float W, float H)
         break;
     }
     }
+    hand_view_rect_ = {x, thing_top, pw, std::max(0.0f, cy - thing_top)};
     cy = std::max(cy, y + ph - 110);
     const std::string kind = bk.survivor ? "hand.compact_address" : "hand.address";
     text(x + 14, cy,

@@ -1155,6 +1155,11 @@ void Hallway::handle(const SDL_Event& e, bool& quit)
 void Hallway::handle_event(const SDL_Event& e, bool& quit)
 {
     if (e.type == SDL_EVENT_QUIT) quit = true;
+    if (view_open_) // over everything: it is the thing in your hands, larger
+    {
+        viewer_event(e, quit);
+        return;
+    }
     if (graph_open_)
     {
         graph_event(e);
@@ -1228,7 +1233,10 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
     }
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
     {
-        if (!SDL_GetWindowRelativeMouseMode(window_)) SDL_SetWindowRelativeMouseMode(window_, true);
+        // A click on the thing in hand opens it in the viewer; anywhere else, as before, it takes
+        // the mouse back or puts the thing down.
+        if (e.button.button == SDL_BUTTON_LEFT && over_hand_view(e)) open_viewer();
+        else if (!SDL_GetWindowRelativeMouseMode(window_)) SDL_SetWindowRelativeMouseMode(window_, true);
         else if (e.button.button == SDL_BUTTON_LEFT) take_or_return();
     }
     if (e.type == SDL_EVENT_MOUSE_WHEEL)
@@ -1338,6 +1346,9 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
     case SDLK_J:
         if (in_hand_) jump_kind();
         break;
+    case SDLK_Z:
+        if (in_hand_) open_viewer();
+        break;
     case SDLK_HOME:
         tile_ = TileIndex{};
         rebase();
@@ -1431,6 +1442,7 @@ std::string Hallway::status()
         else if (line().kind == LineKind::Text) where += " \"" + ascii(utf8_encode(line().space.text_of(first.unit))) + "\"";
         if (first.guided) where += " (" + std::to_string(first.bits) + " bits)";
     }
+    if (view_open_) where += ", viewing at " + std::to_string(int(std::lround(view_zoom_ * 100))) + "%";
     return where + (message_.empty() ? "" : "  | " + message_);
 }
 
@@ -1448,6 +1460,12 @@ void Hallway::render()
     SDL_SetRenderDrawColor(r_, th.bg.r, th.bg.g, th.bg.b, 255);
     SDL_RenderClear(r_);
     SDL_SetRenderDrawBlendMode(r_, SDL_BLENDMODE_BLEND);
+    // The viewer covers the whole window: the corridor behind it is not drawn until it closes.
+    if (view_open_)
+    {
+        draw_viewer(float(w), float(h));
+        return;
+    }
 
     // Nothing stands on the binary line's shelves, so there is nothing to look at or take.
     {
@@ -1868,6 +1886,12 @@ void Hallway::release_textures()
     models_batch_.release();
     clear_faces();
     release_signs();
+    if (view_tex_)
+    {
+        gpu::destroy(view_tex_);
+        view_tex_ = nullptr;
+        view_tex_w_ = view_tex_h_ = 0;
+    }
     if (portal_.tex)
     {
         gpu::destroy(portal_.tex);
