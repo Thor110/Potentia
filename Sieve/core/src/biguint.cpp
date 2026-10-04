@@ -657,19 +657,24 @@ void BigUint::mul_small(uint32_t m)
 
 void BigUint::add_mul_small(const BigUint& x, uint32_t m)
 {
-    if (m == 0 || x.limbs_.empty()) return;
     if (&x == this)
     {
         const BigUint copy = x; // (its limbs would change under the loop)
         add_mul_small(copy, m);
         return;
     }
-    if (limbs_.size() < x.limbs_.size()) limbs_.resize(x.limbs_.size(), 0);
+    add_mul_small(std::span<const uint64_t>(x.limbs_), m);
+}
+
+void BigUint::add_mul_small(std::span<const uint64_t> x, uint32_t m)
+{
+    if (m == 0 || x.empty()) return;
+    if (limbs_.size() < x.size()) limbs_.resize(x.size(), 0);
     uint64_t carry = 0;
     size_t i = 0;
-    for (; i < x.limbs_.size(); ++i)
+    for (; i < x.size(); ++i)
     {
-        const Wide t = mul_add2(x.limbs_[i], m, limbs_[i], carry);
+        const Wide t = mul_add2(x[i], m, limbs_[i], carry);
         limbs_[i] = t.lo;
         carry = t.hi;
     }
@@ -759,6 +764,14 @@ BigUint BigUint::from_limbs(std::span<const uint32_t> limbs)
     BigUint v;
     v.limbs_.assign((limbs.size() + 1) / 2, 0);
     for (size_t i = 0; i < limbs.size(); ++i) v.limbs_[i / 2] |= uint64_t(limbs[i]) << (32 * (i % 2));
+    v.trim();
+    return v;
+}
+
+BigUint BigUint::from_limbs64(std::span<const uint64_t> limbs)
+{
+    BigUint v;
+    v.limbs_.assign(limbs.begin(), limbs.end());
     v.trim();
     return v;
 }

@@ -1,62 +1,82 @@
-# Shared counting tables, and the test fixes (relative to origin/main 303dc41)
+# Packed counting tables, shared automata, faster utf8-valid (relative to origin/main 41f20f8)
 
-- `this-round-only.patch` applies on top of review-batch-2.
-- `files/` and `full-vs-origin-main.patch` include batch 2, since it isn't on origin/main yet.
+Unzip `files/` over the Potentia repository root, or apply `packed-tables.patch` with `git apply`
+from the repository root.
 
-## The test failures
-The failing check was in a test I wrote in batch 1:
+## Packed counting tables (`core/src/dfa.cpp`, `DfaRanker`)
+**The waste.** Every number in a counting table used to be its own BigUint: a vector plus a heap
+allocation each, even for zero. Measured on the table for every text plugin at 32 characters
+(236,034 states × 33 rows = 7.8 million numbers), it held 358 MB to store 68 MB of numbers.
 
-    CHECK(written_max_states(a.size()) * 2 <= [&] { set_filter_memory(2.0 * 1024 * 1024); return written_max_states(a.size()); }());
+**The packing.** Each row is now one block of limbs, plus where each state's number starts.
 
-The right-hand side changes the filter memory to 2 MB. C++ doesn't fix which side of `<=` is worked
-out first.
-- **GCC (here):** worked out the left side at 1 MB first, so the check passed.
-- **MSVC (yours):** worked out the right side first, so both sides were taken at 2 MB, and
-  "x × 2 ≤ x" failed.
+| That table | Before | After |
+| :--- | :--- | :--- |
+| Memory held | 358 MB | 98 MB |
+| Build time | about 1.0 s | 0.4 s |
 
-It now takes the two values on separate lines. The code under test was always right.
+**The estimate** (`table_bytes`) now follows the packed size. It's still on the safe side: 160 MB
+estimated against 98 MB measured. More stacks therefore count within the same filter memory. The
+pages stack at 128 characters now needs 1.4 GB, where it needed 2.0 GB.
 
-The same test had a second problem, already fixed in review-batch-2. The suite runs twice where
-the CPU has SHA instructions (portable, then hardware SHA-256), and the test assumed it ran once.
+## No more copies of the automaton
+- **Counting tables:** a table holds its automaton by shared pointer rather than its own copy (25 MB
+  for the table above).
+- **Plugins:** each stack used to receive its own copy of every plugin's compiled automaton, tens of
+  MB per stack for the dictionary plugins, across the 97 counts X runs. `compile_plugin_shared` hands
+  out the kept compile instead.
 
-## Shared counting tables (`core/src/filter.cpp`, `shared_table`)
-The pages line and the books' title count the same plugins at the same length. The table for every
-text plugin at 32 characters (236,034 states) is about 308 MB and takes about a second to build.
-Each was building its own.
+## A longer table serves shorter lengths
+Rows 0 to r of a table answer every length up to r.
 
-**While in use:**
-- A table is built once while any stack still uses it.
-- A second stack that needs it in the meantime waits for that build and uses the same table.
-- This holds whatever the merge cache is set to, and costs no extra memory: the table goes when
-  the last stack using it is done.
+**Shorter rankers.** A ranker at a shorter length can use a longer table, with nothing built.
+`shared_table` looks for the shortest table of the same plugins at the asked length or longer.
 
-**Between counts:**
-- The table is also kept with the merged automata, in the MERGE CACHE share of the filter memory,
-  when it fits there.
-- At the defaults (50% of 512 MB, so 256 MB) the 308 MB table doesn't fit. Raise MERGE CACHE to
-  about 65% and it's kept, so counting the line again doesn't rebuild it.
+**Merges no longer depend on length.** They're kept by the line's kind and symbols alone. An
+automaton filter's automaton never depends on the length (the plugin compile cache already relied
+on this).
+- The books' pages (128 characters) now reuse the pages line's merge instead of merging the same
+  plugins again (about 5 s).
+- A table built at one length serves every shorter one.
 
-**Effect:**
-- **Memory at the peak:** X uses one 308 MB table where it used two.
-- **CPU:** a second of build work saved.
-- **Wall time:** X is unchanged at about 10–11 s, because the two builds used to run side by side
-  on separate cores.
-- **Counts:** unchanged. The screenshot after X is byte-identical.
+## utf8-valid (`core/src/filekind.cpp`, `Utf8Counter`)
+**Grouped sums.** Building the table, ranking and unranking each added one number for every byte
+value: 256 additions of numbers up to 8n bits. A byte only ever leads to one of 9 states, so a small
+precomputed table now counts how many bytes lead where, and each step is at most 9 multiply-adds.
+Unrank finds the byte by binary search instead of trying them one by one.
 
-**Also:**
-- not-written's ranker now holds the plugins' table as a shared table and reads the automaton from
-  it. It no longer keeps a second copy of the automaton (about 25 MB).
-- Merges are now keyed by the line alone, not by the order the filters were ticked in, so two
-  stacks with the same plugins ticked in a different order share too. This was a bug in batch 1's
-  merge cache, which this test found.
+**The estimate.** It took every number at full length. They grow with the bytes left, so on
+average they're half that, and the old figure was twice the real table.
+
+At 4,000-byte files, measured against the committed code:
+
+| | Before | After |
+| :--- | :--- | :--- |
+| Table build | 1,694 ms | 74 ms |
+| Rank | 225 ms | 3 ms |
+| Unrank | 192 ms | 13 ms |
+| Memory estimate | 138 MB | 78 MB |
+| Memory actually held | 71 MB | 76 MB |
+
+So utf8-valid now counts files about a third longer in the same filter memory.
+
+## Overall
+**X with every filter:** 10 s before this round, 5.8 s now (28.6 s before the review started).
+
+**Counts are unchanged.** Every survivor bar and figure is identical. The screenshot after X differs
+in one place: the filter memory bar now reads 1.4 GB instead of 2.0 GB, from the corrected estimate.
 
 ## Tests (tests/test_core.cpp)
-- **The evaluation-order fix** above.
-- **Sharing:** the same plugins in either order now give the same table (one object), and a table
-  still in use is shared even with the merge cache at 0.
+- **Shorter lengths:** a ranker on a longer table gives the same count, ranks and units as a table
+  built at its own length, at every length from 0 to 30. Asking for a longer length than the table
+  is refused.
+- **Stacks:** a shorter stack of the same plugins is served by the longest matching table in use or
+  kept.
+- **utf8-valid:** the existing 304 vectors, and the joint counts checked against every file, still
+  pass with the grouped sums.
 
 ## Checked
-- tests/test_core.cpp: 56,258 checks over both passes, 0 failures.
+- tests/test_core.cpp: 56,264 checks over both passes, 0 failures.
 - Run locally, all these CI steps pass:
   - same addresses;
   - filters judge, count and rank the same;

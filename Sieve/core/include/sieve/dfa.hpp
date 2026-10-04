@@ -13,6 +13,7 @@
 #include "sieve/filter.hpp"
 
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <vector>
 
@@ -57,26 +58,48 @@ bool subset(const Dfa& a, const Dfa& b);
 // Counts, ranks and unranks what a Dfa accepts at one length. completions(s, r) is a table built
 // backwards from the accepting states, r = 0 .. length, in exact integers, with each state's
 // transitions grouped by where they lead (every letter after a letter goes to one state).
+//
+// The table is packed: each row's numbers stored one after another as their limbs, with where each
+// starts, rather than as a BigUint each (a vector and an allocation apiece: 358 MB held for 68 MB
+// of numbers in the 236,034-state table of every text plugin at 32 characters, 99 MB packed).
+// Rows 0 .. r of a table answer every length up to r, so a ranker at a shorter length can share a
+// longer one's table (the constructor from a DfaRanker), and the automaton is shared, not copied.
 class DfaRanker : public Ranker
 {
 public:
     DfaRanker(const Dfa& minimal, uint32_t length);
+    DfaRanker(std::shared_ptr<const Dfa> minimal, uint32_t length);
+    // The same automaton at `length` <= longer.length(), on longer's table: nothing is built.
+    DfaRanker(const DfaRanker& longer, uint32_t length);
     uint32_t length() const override { return length_; }
-    uint32_t base() const override { return dfa_.base; }
-    State start() const override { return dfa_.start < 0 ? kDead : State(dfa_.start); }
+    uint32_t base() const override { return dfa().base; }
+    State start() const override { return dfa().start < 0 ? kDead : State(dfa().start); }
     State next(State s, uint32_t symbol) const override;
     BigUint completions(State s, uint32_t remaining) const override;
     bool alive(State s, uint32_t remaining) const override;
-    const Dfa& dfa() const { return dfa_; } // the automaton it counts (minimal)
+    const Dfa& dfa() const { return *table_->dfa; } // the automaton it counts (minimal)
+    uint32_t table_length() const { return uint32_t(table_->rows.size() - 1); } // the longest it answers
 
-    // The table's size estimate, in bytes, before building it: states x (length + 1) numbers of
-    // up to length x log2(base) bits. Used to decide whether counting fits the budget.
+    // The table's size, in bytes, before building it: states x (length + 1) numbers, each where it
+    // starts (4 bytes) and its limbs, a number on average half the longest (the counts grow with
+    // r) and rounded up a limb. An overestimate (measured: 99 MB against 137 MB estimated for the
+    // table above). Used to decide whether counting fits the filter memory.
     static double table_bytes(size_t states, uint32_t base, uint32_t length);
 
 private:
-    Dfa dfa_;
+    struct Row
+    {
+        std::vector<uint64_t> limbs;  // every state's number, one after another
+        std::vector<uint32_t> start;  // state s's limbs are [start[s], start[s + 1])
+    };
+    struct Table
+    {
+        std::shared_ptr<const Dfa> dfa;
+        std::vector<Row> rows; // rows[r]: the completions with r symbols left
+    };
+    void build();
+    std::shared_ptr<Table> table_;
     uint32_t length_;
-    std::vector<std::vector<BigUint>> table_; // table_[r][s]
 };
 
 } // namespace sieve

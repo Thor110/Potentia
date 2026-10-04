@@ -24,6 +24,11 @@ public:
     // same value with repeated shift-and-add would be O(n^2). The words are 32 bits because that
     // is how a SHA-256 digest arrives; a limb holds two of them.
     static BigUint from_limbs(std::span<const uint32_t> limbs);
+    // The same from whole 64-bit limbs, least significant first, and the value's own limbs (no
+    // trailing zero limb; none for zero): for storing many numbers packed in one block of memory
+    // (sieve/dfa.hpp's tables), without a vector and its allocation for each.
+    static BigUint from_limbs64(std::span<const uint64_t> limbs);
+    std::span<const uint64_t> limbs() const { return limbs_; }
     // A value from bytes, most significant first (a file read as one number), and back to exactly
     // `length` bytes (throws if it does not fit): eight bytes to a limb, linear, with no hex text
     // between (a file of megabytes went through a string of twice its size each way).
@@ -63,6 +68,9 @@ public:
     // this += x * m, in place: no copy of x is made (the shape of every counting table's sums,
     // where a copy of each term was most of the time).
     void add_mul_small(const BigUint& x, uint32_t m);
+    // The same with x given as its limbs (a number stored packed: sieve/dfa.hpp's tables).
+    void add_mul_small(std::span<const uint64_t> x, uint32_t m);
+    void set_zero() { limbs_.clear(); } // keeps its memory, for a value worked out again and again
     void add_small(uint32_t a);
     uint32_t divmod_small(uint32_t d); // divides in place, returns remainder
     uint32_t mod_small(uint32_t d) const; // the remainder alone, without touching (or copying) the value

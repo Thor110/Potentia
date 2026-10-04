@@ -1236,3 +1236,26 @@ The second batch (4 October 2026).
   - A comparison whose two sides changed the filter memory: MSVC evaluated the right side first.
   - A rule-cache test that assumed one run of the suite: it runs twice where the CPU has SHA
     instructions.
+Packed tables (4 October 2026: "every last byte of saving will compound").
+- **DfaRanker's table is packed:** per row, one block of limbs and where each state's number
+  starts, not a BigUint each. The 236,034-state table at 32 characters holds 98 MB (it held
+  358 MB) and builds in 0.4 s (1.0 s). table_bytes follows the packed size, still an overestimate:
+  160 MB against 98 MB measured; the pages stack at 128 characters is estimated at 1.4 GB, not
+  2.0 GB.
+- **The automaton is held by shared_ptr:** a DfaRanker shares it with the merge cache and the
+  compile cache (compile_plugin_shared hands out an aliasing pointer to the kept compile), so no
+  stack copies a plugin's automaton any more.
+- **DfaRanker(longer, length) serves a shorter length on a longer table**, with nothing built
+  (rows 0..r answer every length up to r).
+- **Merges are kept by the line's kind and symbols, not its length:** an automaton filter's
+  automaton never depends on the length, as the compile cache already assumed. So the books' pages
+  at 128 characters reuse the pages line's merge, and shared_table finds the shortest table of the
+  same merge at the asked length or longer.
+- **utf8-valid (Utf8Counter):**
+  - below_[s][x][t] counts the bytes under x leading from s to t, so the table, rank and unrank
+    sum over at most 9 states, not 256 bytes, and unrank finds the byte by halving.
+  - At 4,000 bytes: build 1,694 ms to 74 ms, rank 225 ms to 3 ms, unrank 192 ms to 13 ms.
+  - Its table_bytes counts numbers at half the longest, as they are on average (78 MB estimated,
+    76 MB held; it said 138 MB), so it counts files about a third longer in the same memory.
+- **X with every filter:** 10 s to 5.8 s, with the same counts (the screenshot after X differs only
+  in the filter memory bar's 1.4 GB).

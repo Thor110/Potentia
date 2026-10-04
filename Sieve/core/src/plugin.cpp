@@ -1677,6 +1677,13 @@ bool plugin_compiled(const std::string& sha256, const FilterLine& line, const st
 Dfa compile_plugin(const PluginDef& p, const FilterLine& line, const FilterValues& values, const FilterResources& resources,
                    size_t* declared_states, std::string* data, const std::function<void(const std::string&)>& step)
 {
+    return *compile_plugin_shared(p, line, values, resources, declared_states, data, step);
+}
+
+std::shared_ptr<const Dfa> compile_plugin_shared(const PluginDef& p, const FilterLine& line, const FilterValues& values,
+                                                 const FilterResources& resources, size_t* declared_states, std::string* data,
+                                                 const std::function<void(const std::string&)>& step)
+{
     auto say = [&](const std::string& s) {
         if (step) step(s);
     };
@@ -1686,10 +1693,11 @@ Dfa compile_plugin(const PluginDef& p, const FilterLine& line, const FilterValue
     // automaton (a dictionary is pinned by its hash, so its id is enough), and a large one takes
     // seconds, where the menu and the hallway rebuild stacks often.
     const std::string key = compiled_key(p.header.sha256, line, p.header.params, values);
-    auto give = [&](const Compiled& c) {
-        if (declared_states) *declared_states = c.declared;
-        if (data) *data = c.data;
-        return c.dfa;
+    // The automaton inside the kept compile (an aliasing pointer: it keeps the compile alive).
+    auto give = [&](const std::shared_ptr<const Compiled>& c) {
+        if (declared_states) *declared_states = c->declared;
+        if (data) *data = c->data;
+        return std::shared_ptr<const Dfa>(c, &c->dfa);
     };
     std::shared_ptr<std::mutex> own;
     {
@@ -1705,7 +1713,7 @@ Dfa compile_plugin(const PluginDef& p, const FilterLine& line, const FilterValue
         if (const auto it = g_compiled.find(key); it != g_compiled.end() && !p.header.sha256.empty())
         {
             say("compiled already (kept from before)");
-            return give(*it->second);
+            return give(it->second);
         }
         if (!g_cache_dir.empty() && !p.header.sha256.empty()) file = cache_file(key);
     }
@@ -1719,7 +1727,7 @@ Dfa compile_plugin(const PluginDef& p, const FilterLine& line, const FilterValue
             std::lock_guard<std::mutex> lock(g_compiled_mx);
             if (g_compiled.size() > 64) g_compiled.clear();
             g_compiled[key] = c;
-            return give(*c);
+            return give(c);
         }
     }
     try
@@ -1751,7 +1759,7 @@ Dfa compile_plugin(const PluginDef& p, const FilterLine& line, const FilterValue
         std::lock_guard<std::mutex> lock(g_compiled_mx);
         if (g_compiled.size() > 64) g_compiled.clear();
         g_compiled[key] = c;
-        return give(*c);
+        return give(c);
     }
     catch (const std::invalid_argument& e)
     {
@@ -1766,26 +1774,26 @@ namespace {
 class PluginFilter : public Filter
 {
 public:
-    PluginFilter(Dfa dfa, uint32_t length, std::string provenance) : dfa_(std::move(dfa)), length_(length)
+    PluginFilter(std::shared_ptr<const Dfa> dfa, uint32_t length, std::string provenance) : dfa_(std::move(dfa)), length_(length)
     {
         provenance_ = std::move(provenance);
-        table_bytes_ = DfaRanker::table_bytes(dfa_.states(), dfa_.base, length);
+        table_bytes_ = DfaRanker::table_bytes(dfa_->states(), dfa_->base, length);
         fits_ = table_bytes_ <= filter_memory();
     }
-    bool passes(std::span<const uint32_t> unit) const override { return dfa_.accepts(unit); }
+    bool passes(std::span<const uint32_t> unit) const override { return dfa_->accepts(unit); }
     // The counting table is built the first time it is asked for: a stack that judges only (or
     // that combines the plugins' automata into one) never needs it.
     const Ranker* ranker() const override
     {
         if (!fits_) return nullptr;
-        std::call_once(built_, [this] { ranker_ = std::make_unique<DfaRanker>(dfa_, length_); });
+        std::call_once(built_, [this] { ranker_ = std::make_unique<DfaRanker>(dfa_, length_); }); // (the automaton shared, not copied)
         return ranker_.get();
     }
     bool can_rank() const override { return fits_; }
-    const Dfa& dfa() const { return dfa_; }
+    const Dfa& dfa() const { return *dfa_; }
 
 private:
-    Dfa dfa_;
+    std::shared_ptr<const Dfa> dfa_; // the compile kept for the process, or this filter's own
     uint32_t length_;
     bool fits_ = false;
     mutable std::once_flag built_;
@@ -1802,7 +1810,7 @@ const Dfa* plugin_dfa(const Filter& f)
 
 std::unique_ptr<Filter> make_dfa_filter(Dfa dfa, uint32_t length, std::string provenance)
 {
-    return std::make_unique<PluginFilter>(std::move(dfa), length, std::move(provenance));
+    return std::make_unique<PluginFilter>(std::make_shared<const Dfa>(std::move(dfa)), length, std::move(provenance));
 }
 
 namespace {
@@ -1872,7 +1880,7 @@ FilterSpec plugin_spec(std::shared_ptr<const PluginDef> p)
             prov += " " + par.key + "=" + (it == v.end() ? par.default_value : it->second);
         }
         std::string data;
-        Dfa d = compile_plugin(*p, l, v, r, nullptr, &data);
+        std::shared_ptr<const Dfa> d = compile_plugin_shared(*p, l, v, r, nullptr, &data);
         if (!data.empty()) prov += " " + data;
         return std::make_unique<PluginFilter>(std::move(d), l.length, prov);
     };

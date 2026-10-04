@@ -375,57 +375,98 @@ bool subset(const Dfa& a, const Dfa& b)
 
 double DfaRanker::table_bytes(size_t states, uint32_t base, uint32_t length)
 {
-    // On average a number in the table is half the longest (the counts grow with r).
     const double bits = double(length) * std::log2(double(std::max<uint32_t>(base, 2)));
-    return double(states) * (double(length) + 1) * (bits / 16.0 + 32.0);
+    const double limbs = bits / 2.0 / 64.0 + 1.0; // half the longest, rounded up a limb
+    return double(states) * (double(length) + 1) * (sizeof(uint32_t) + limbs * sizeof(uint64_t));
 }
 
-DfaRanker::DfaRanker(const Dfa& minimal, uint32_t length) : dfa_(minimal), length_(length)
+DfaRanker::DfaRanker(const Dfa& minimal, uint32_t length) : DfaRanker(std::make_shared<const Dfa>(minimal), length) {}
+
+DfaRanker::DfaRanker(std::shared_ptr<const Dfa> minimal, uint32_t length) : table_(std::make_shared<Table>()), length_(length)
 {
-    const size_t n = dfa_.states(), B = dfa_.base;
+    table_->dfa = std::move(minimal);
+    build();
+    set_count();
+}
+
+DfaRanker::DfaRanker(const DfaRanker& longer, uint32_t length) : table_(longer.table_), length_(length)
+{
+    if (length > longer.table_length()) throw std::invalid_argument("a shorter ranker cannot be longer than the table it shares");
+    set_count();
+}
+
+void DfaRanker::build()
+{
+    const Dfa& d = *table_->dfa;
+    const size_t n = d.states(), B = d.base;
+    if (n >= UINT32_MAX) throw std::length_error("an automaton too large to count");
     // Each state's transitions grouped by where they lead, with how many symbols lead there.
     std::vector<std::vector<std::pair<int32_t, uint32_t>>> groups(n);
     for (size_t s = 0; s < n; ++s)
     {
         std::map<int32_t, uint32_t> m;
         for (size_t c = 0; c < B; ++c)
-            if (const int32_t t = dfa_.next[s * B + c]; t >= 0) ++m[t];
+            if (const int32_t t = d.next[s * B + c]; t >= 0) ++m[t];
         groups[s].assign(m.begin(), m.end());
     }
-    table_.assign(size_t(length) + 1, std::vector<BigUint>(n));
-    for (size_t s = 0; s < n; ++s)
-        if (dfa_.accept[s]) table_[0][s] = BigUint(1);
-    for (uint32_t r = 1; r <= length; ++r)
+    std::vector<Row>& rows = table_->rows;
+    rows.resize(size_t(length_) + 1);
+    {
+        Row& r0 = rows[0];
+        r0.start.reserve(n + 1);
         for (size_t s = 0; s < n; ++s)
         {
-            BigUint& acc = table_[r][s]; // summed in place: no copy of a term
-            for (const auto& [t, mult] : groups[s])
-                if (const BigUint& prev = table_[r - 1][size_t(t)]; !prev.is_zero())
-                {
-                    if (mult == 1) acc += prev;
-                    else acc.add_mul_small(prev, mult);
-                }
+            r0.start.push_back(uint32_t(r0.limbs.size()));
+            if (d.accept[s]) r0.limbs.push_back(1);
         }
-    set_count();
+        r0.start.push_back(uint32_t(r0.limbs.size()));
+    }
+    BigUint acc; // one number worked out at a time, its memory reused
+    std::vector<uint64_t> limbs;
+    for (uint32_t r = 1; r <= length_; ++r)
+    {
+        const Row& prev = rows[r - 1];
+        Row& row = rows[r];
+        row.start.reserve(n + 1);
+        limbs.clear();
+        for (size_t s = 0; s < n; ++s)
+        {
+            acc.set_zero();
+            for (const auto& [t, mult] : groups[s])
+            {
+                const uint32_t a = prev.start[size_t(t)], b = prev.start[size_t(t) + 1];
+                if (a != b) acc.add_mul_small(std::span<const uint64_t>(prev.limbs.data() + a, b - a), mult);
+            }
+            if (limbs.size() + acc.limbs().size() > UINT32_MAX) throw std::length_error("a row of the counting table too large to store");
+            row.start.push_back(uint32_t(limbs.size()));
+            limbs.insert(limbs.end(), acc.limbs().begin(), acc.limbs().end());
+        }
+        row.start.push_back(uint32_t(limbs.size()));
+        row.limbs.assign(limbs.begin(), limbs.end()); // exactly its size
+    }
 }
 
 Ranker::State DfaRanker::next(State s, uint32_t symbol) const
 {
-    if (s == kDead || s >= dfa_.states() || symbol >= dfa_.base) return kDead;
-    const int32_t t = dfa_.next[size_t(s) * dfa_.base + symbol];
+    const Dfa& d = dfa();
+    if (s == kDead || s >= d.states() || symbol >= d.base) return kDead;
+    const int32_t t = d.next[size_t(s) * d.base + symbol];
     return t < 0 ? kDead : State(t);
 }
 
 BigUint DfaRanker::completions(State s, uint32_t remaining) const
 {
-    if (s == kDead || s >= dfa_.states() || remaining > length_) return BigUint();
-    return table_[remaining][size_t(s)];
+    if (s == kDead || s >= dfa().states() || remaining > length_) return BigUint();
+    const Row& row = table_->rows[remaining];
+    const uint32_t a = row.start[size_t(s)], b = row.start[size_t(s) + 1];
+    return BigUint::from_limbs64(std::span<const uint64_t>(row.limbs.data() + a, b - a));
 }
 
 bool DfaRanker::alive(State s, uint32_t remaining) const
 {
-    if (s == kDead || s >= dfa_.states() || remaining > length_) return false;
-    return !table_[remaining][size_t(s)].is_zero();
+    if (s == kDead || s >= dfa().states() || remaining > length_) return false;
+    const Row& row = table_->rows[remaining];
+    return row.start[size_t(s)] != row.start[size_t(s) + 1];
 }
 
 } // namespace sieve

@@ -253,6 +253,7 @@ private:
     mutable std::string blocker_;
     mutable double table_bytes_ = 0;
     std::string provenance_, id_;
+    std::string symbols_id_; // the line's kind and symbols, without its length: what merges are kept by
 };
 
 } // namespace sieve

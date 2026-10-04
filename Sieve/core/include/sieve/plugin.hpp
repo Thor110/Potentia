@@ -133,6 +133,11 @@ bool plugin_applies(const PluginDef& p, const FilterLine& line);
 Dfa compile_plugin(const PluginDef& p, const FilterLine& line, const FilterValues& values, const FilterResources& resources,
                    size_t* declared_states = nullptr, std::string* data = nullptr,
                    const std::function<void(const std::string&)>& step = {});
+// The same, without a copy: the automaton kept for the process, shared (a dictionary's is tens of
+// MB, and every stack built with the plugin used to take its own copy).
+std::shared_ptr<const Dfa> compile_plugin_shared(const PluginDef& p, const FilterLine& line, const FilterValues& values,
+                                                 const FilterResources& resources, size_t* declared_states = nullptr,
+                                                 std::string* data = nullptr, const std::function<void(const std::string&)>& step = {});
 
 // Counting needs a table of states x (length + 1) numbers; past this many bytes a plugin judges
 // only (mark, hide, excluded), and the menu says why.

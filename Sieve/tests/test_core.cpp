@@ -1728,6 +1728,36 @@ void test_plugins(const std::string& dir)
         CHECK(DfaRanker(m, 2).count() == BigUint(1));
     }
 
+    // DfaRanker's packed table, and a ranker on a longer one's table: the same counts, ranks and
+    // units as a table built at that length, at every length up to the longer one's.
+    {
+        const auto p = parse_plugin(h2 + "states 3\nstart 0\naccept 0 1\nt 0 @1 1\nt 0 @2 0\nt 1 @2 0\nt 1 @3 2\nend\n", "packed");
+        const Dfa m = minimise(compile_plugin(*p, text_line(30), {}, none));
+        const DfaRanker longer(m, 30);
+        bool same = longer.table_length() == 30;
+        for (uint32_t L = 0; L <= 30; ++L)
+        {
+            const DfaRanker own(m, L), view(longer, L);
+            same = same && own.count() == view.count() && view.table_length() == 30;
+            if (own.count().is_zero()) continue;
+            BigUint k = own.count();
+            k.divmod_small(3);
+            const auto u = own.unrank(k);
+            same = same && view.unrank(k) == u && view.rank(u) == k;
+        }
+        CHECK(same);
+        bool threw = false;
+        try
+        {
+            (void)DfaRanker(longer, 31);
+        }
+        catch (const std::invalid_argument&)
+        {
+            threw = true;
+        }
+        CHECK(threw);
+    }
+
     // The melody plugins (data/filters, sieve-filter-v2 on notes104): what they let through, in
     // notation, and a stack of three counted exactly, against every unit at length 3.
     {
@@ -3804,6 +3834,13 @@ void test_filter_memory(const std::string& dir)
         CHECK(uncached.ranker() && uncached.ranker()->count() == ab.ranker()->count());
         // ...and a table still in use is shared even with nothing kept between counts.
         CHECK(uncached.ranker() == ab.ranker());
+        // A shorter stack of the same plugins is served by that longer table, with nothing built,
+        // and counts and ranks exactly as a table of its own would.
+        const FilterStack shorter(text_line(25), {{&cs, {}}, {&ps, {}}}, none);
+        const auto* view = dynamic_cast<const DfaRanker*>(shorter.ranker());
+        // (The longest table of them in use or kept serves: here the 2,000-character one above.)
+        const auto* longer = dynamic_cast<const DfaRanker*>(ab.ranker());
+        CHECK(view && longer && view->length() == 25 && view->table_length() == longer->table_length() && longer->table_length() >= 40);
         set_merge_cache_share(kDefaultMergeCacheShare);
     }
     // not-written-v1's automaton walks as many states as the filter memory holds: refused in 1 MB,

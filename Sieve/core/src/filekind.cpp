@@ -572,19 +572,19 @@ Utf8Counter::Utf8Counter(uint64_t max_bytes, bool text_only) : max_bytes_(max_by
         can_rank_ = false;
         return;
     }
+    below_.assign(kStates, {});
+    for (uint8_t s = 0; s < kStates; ++s)
+        for (uint32_t x = 1; x <= 256; ++x)
+        {
+            below_[s][x] = below_[s][x - 1];
+            if (const uint8_t t = step(s, uint8_t(x - 1), text_only); t != kDead) ++below_[s][x][t];
+        }
     ways_.assign(max_bytes + 1, std::vector<BigUint>(kStates));
     ways_[0][0] = BigUint(1);
     for (uint64_t r = 1; r <= max_bytes; ++r)
         for (uint8_t s = 0; s < kStates; ++s)
-        {
-            BigUint w;
-            for (uint32_t b = 0; b < 256; ++b)
-            {
-                const uint8_t t = step(s, uint8_t(b), text_only);
-                if (t != kDead) w += ways_[r - 1][t];
-            }
-            ways_[r][s] = w;
-        }
+            for (uint8_t t = 0; t < kStates; ++t)
+                if (const uint16_t n = below_[s][256][t]) ways_[r][s].add_mul_small(ways_[r - 1][t], n);
     before_.assign(max_bytes + 2, BigUint());
     for (uint64_t l = 0; l <= max_bytes; ++l) before_[l + 1] = BigUint(before_[l]) += ways_[l][0];
     count_ = before_[max_bytes + 1];
@@ -599,14 +599,19 @@ BigUint Utf8Counter::rank(const std::vector<uint8_t>& file) const
     for (size_t i = 0; i < file.size(); ++i)
     {
         const uint64_t left = file.size() - i - 1;
-        for (uint32_t b = 0; b < file[i]; ++b)
-        {
-            const uint8_t t = step(s, uint8_t(b), text_only_);
-            if (t != kDead) r += ways_[left][t];
-        }
+        for (uint8_t t = 0; t < kStates; ++t) // every byte under this one, by where it leads
+            if (const uint16_t n = below_[s][file[i]][t]) r.add_mul_small(ways_[left][t], n);
         s = step(s, file[i], text_only_);
     }
     return r;
+}
+
+BigUint Utf8Counter::below_value(uint8_t s, uint32_t x, uint64_t left) const
+{
+    BigUint v;
+    for (uint8_t t = 0; t < kStates; ++t)
+        if (const uint16_t n = below_[s][x][t]) v.add_mul_small(ways_[left][t], n);
+    return v;
 }
 
 std::vector<uint8_t> Utf8Counter::unrank(const BigUint& k) const
@@ -622,19 +627,20 @@ std::vector<uint8_t> Utf8Counter::unrank(const BigUint& k) const
     for (uint64_t i = 0; i < l; ++i)
     {
         const uint64_t left = l - i - 1;
-        for (uint32_t b = 0;; ++b)
+        // The byte: the largest b whose bytes below skip no more than `rest` (below_value grows
+        // with b, and rest is under the value at 256), found by halving, not byte by byte.
+        uint32_t lo = 0, hi = 255;
+        while (lo < hi)
         {
-            if (b > 255) throw std::logic_error("utf8 unrank ran past the bytes");
-            const uint8_t t = step(s, uint8_t(b), text_only_);
-            if (t == kDead) continue;
-            if (rest < ways_[left][t])
-            {
-                out.push_back(uint8_t(b));
-                s = t;
-                break;
-            }
-            rest -= ways_[left][t];
+            const uint32_t mid = (lo + hi + 1) / 2;
+            if (below_value(s, mid, left) <= rest) lo = mid;
+            else hi = mid - 1;
         }
+        const uint8_t t = step(s, uint8_t(lo), text_only_);
+        if (t == kDead) throw std::logic_error("utf8 unrank landed on a byte that cannot follow");
+        rest -= below_value(s, lo, left);
+        out.push_back(uint8_t(lo));
+        s = t;
     }
     return out;
 }

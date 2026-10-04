@@ -196,8 +196,15 @@ class Utf8Counter
 {
 public:
     Utf8Counter(uint64_t max_bytes, bool text_only);
-    // Its table's memory at a line of files up to max_bytes: kStates x (n + 1) numbers of up to 8n bits.
-    static double table_bytes(uint64_t max_bytes) { return double(kStates) * double(max_bytes + 1) * double(8 * max_bytes + 64) / 8.0; }
+    // Its table's memory at a line of files up to max_bytes: kStates x (n + 1) numbers, and the
+    // n + 2 running totals, each of up to 8n bits but half that on average (a count grows with the
+    // bytes left), with a BigUint's own 40 bytes or so apiece. (Taken at the full 8n bits, as it
+    // was, it was twice the table, and refused lengths that fit.)
+    static double table_bytes(uint64_t max_bytes)
+    {
+        const double n = double(max_bytes), each = n / 2.0 + 8.0 + 40.0;
+        return (double(kStates) + 1.0) * (n + 2.0) * each;
+    }
 
     static bool valid(std::span<const uint8_t> file, bool text_only);
     bool can_rank() const { return can_rank_; }
@@ -219,6 +226,11 @@ private:
     uint64_t max_bytes_;
     bool text_only_, can_rank_ = true;
     std::vector<std::vector<BigUint>> ways_; // ways_[r][s]: completions from state s with r bytes left
+    // below_[s][x][t]: how many bytes under x lead from state s to state t. Every byte from a state
+    // goes to one of kStates states, so a sum over bytes (256 additions of numbers of up to 8n
+    // bits) is a sum over states (at most kStates multiply-adds): the table, rank and unrank.
+    std::vector<std::array<std::array<uint16_t, kStates>, 257>> below_;
+    BigUint below_value(uint8_t s, uint32_t x, uint64_t left) const; // the survivors byte x would skip
     std::vector<BigUint> before_;            // before_[l]: survivors shorter than l bytes
     BigUint count_;
 };
