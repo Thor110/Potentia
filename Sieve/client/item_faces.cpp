@@ -633,6 +633,8 @@ void Hallway::draw_item_faces(const bool* visible, int back, int ahead)
     bool asked_one = false;
     const int64_t per = int64_t(sieve::books_per_tile());
     size_t near = 0; // items close enough for a close-up, this frame
+    const int closeup = closeup_px();
+    const size_t sharp_max = this->sharp_max();
     for (const Want& w : want)
     {
         // At least one item a frame is worked out and handed on, however long it takes, so
@@ -645,7 +647,7 @@ void Hallway::draw_item_faces(const bool* visible, int back, int ahead)
         const bool seen = w.dt >= -back && w.dt <= ahead && visible[w.dt + back];
         if (!seen) continue;
         // A close-up, where the display is drawn wider on screen than it has pixels.
-        if (closeup_px_ >= 2 * line_px_ && near < kSharpMax)
+        if (closeup >= 2 * line_px_ && near < sharp_max)
         {
             const BookSlot bs = BookSlot::of(w.dt, w.slot);
             Vec3 f[4];
@@ -655,8 +657,8 @@ void Hallway::draw_item_faces(const bool* visible, int back, int ahead)
             {
                 ++near;
                 int level = 2 * line_px_;
-                while (float(level) < sw && level < closeup_px_) level *= 2;
-                level = std::min(level, closeup_px_);
+                while (float(level) < sw && level < closeup) level *= 2;
+                level = std::min(level, closeup);
                 const int64_t place = w.dt * per + w.slot + face_shift_ * per;
                 auto it = sharp_.find(place);
                 if (it != sharp_.end())
@@ -711,10 +713,31 @@ float Hallway::screen_width(const Vec3 f[4]) const
     return std::max(len(p[0], p[1]), len(p[3], p[2]));
 }
 
+// The widest a close-up is drawn now: the setting, or the screen's width rounded up to a power of
+// two (display.hpp closeup_width).
+int Hallway::closeup_px() const
+{
+    int w = 0, h = 0;
+    SDL_GetRenderOutputSize(r_, &w, &h);
+    return closeup_width(closeup_setting_, w, texture_px_);
+}
+
+// How many close-ups are kept: as many at their widest as the graphics memory holds beside the
+// world (the renderer's three frames and what gpu_memory counts for it) and the display cache.
+size_t Hallway::sharp_max() const
+{
+    int w = 0, h = 0;
+    SDL_GetRenderOutputSize(r_, &w, &h);
+    const double world = 3.0 * double(w) * double(h) * 4.0 + gpu::bytes(gpu::Use::World);
+    const double room = graphics_bytes_ - world - double(face_budget_mb_) * 1048576.0;
+    return closeup_count(room, closeup_px(), double(face_aspect_), sieve::books_per_tile());
+}
+
 // Close-ups unused for two seconds go, and then the least recently used while there are more
-// than kSharpMax.
+// than sharp_max().
 void Hallway::drop_stale_sharp()
 {
+    const size_t keep = sharp_max();
     for (auto it = sharp_.begin(); it != sharp_.end();)
     {
         if (portal_frame_ - it->second.used > 120)
@@ -724,7 +747,7 @@ void Hallway::drop_stale_sharp()
         }
         else ++it;
     }
-    while (sharp_.size() > kSharpMax)
+    while (sharp_.size() > keep)
     {
         auto oldest = sharp_.begin();
         for (auto it = sharp_.begin(); it != sharp_.end(); ++it)

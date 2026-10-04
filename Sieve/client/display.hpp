@@ -11,7 +11,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <string>
 
 namespace hallway {
 
@@ -68,5 +70,46 @@ inline int display_px(int setting_px, int letters_px, double aspect, const Displ
 inline DisplayText display_text_pages(double page_chars, double title_chars) { return {page_chars, 0.6, title_chars}; }
 inline DisplayText display_text_books(double page_chars) { return {0, 0, page_chars}; }
 inline DisplayText display_text_titled(double title_chars) { return {0, 0, title_chars}; }
+
+// Close-ups (hallway.hpp sharp_): the displays nearest you drawn again, as wide as they show on
+// screen, up to the close-up size setting. 0 turns them off; kCloseUpScreen, the default, follows
+// the screen (saved as "screen"); anything else is that many pixels.
+inline constexpr uint32_t kCloseUpScreen = 1;
+inline uint32_t closeup_setting(const std::string& v, uint32_t otherwise)
+{
+    if (v == "screen") return kCloseUpScreen;
+    try { return uint32_t(std::stoul(v)); } catch (...) { return otherwise; }
+}
+inline std::string closeup_text(uint32_t setting) { return setting == kCloseUpScreen ? "screen" : std::to_string(setting); }
+
+// The widest a close-up is drawn: the setting, or for kCloseUpScreen the power of two that covers
+// the screen's width, since a display that shows wider than the screen shows no more of itself;
+// never wider than texture_px, the renderer's widest texture. 2048 at 1920 x 1080, 4096 at 4K.
+inline int closeup_width(uint32_t setting, int screen_w, int texture_px)
+{
+    if (setting == 0) return 0;
+    int px = 256;
+    if (setting != kCloseUpScreen) px = int(std::min<uint32_t>(setting, uint32_t(texture_px)));
+    else
+        while (px < screen_w && px <= texture_px / 2) px *= 2;
+    return std::min(px, texture_px);
+}
+
+// How many close-ups are kept: as many at their widest as the graphics memory left beside the
+// world and the display cache (`room_bytes`) holds, at least one, and no more than a room's items.
+// They were 24, whatever the memory.
+inline size_t closeup_count(double room_bytes, int width, double aspect, size_t room_items)
+{
+    if (width <= 0) return 0;
+    const double one = double(width) * std::ceil(double(width) * aspect) * 4.0;
+    const double fit = room_bytes > 0 ? std::floor(room_bytes / one) : 0.0;
+    return std::clamp<size_t>(size_t(std::min(fit, double(room_items))), 1, std::max<size_t>(1, room_items));
+}
+
+// What the close-ups can take at once, whatever their number: each is drawn under twice as wide as
+// it shows (the power of two above that width), so under four times its area on screen, and the
+// displays on screen do not cover one another, so together under four screens; twice that for the
+// ones kept a couple of seconds after they go out of view.
+inline double closeup_bytes_most(int screen_w, int screen_h) { return 2.0 * 4.0 * double(screen_w) * double(screen_h) * 4.0; }
 
 } // namespace hallway

@@ -103,7 +103,8 @@ const char* kUsage =
     "  --item-letters PX   letter size on item displays: pages and titles are drawn wide enough\n"
     "                      for it, and smaller letters are dashes (default 8)\n"
     "  --close-up PX       the displays nearest you are drawn again up to this wide (0: off;\n"
-    "                      powers of two from 256 to the renderer's widest texture; 1024 the default)\n"
+    "                      \"screen\", the default, for the screen's width rounded up to a power of\n"
+    "                      two; or a power of two from 256 to the renderer's widest texture)\n"
     "  --items-per-wall N  units on one tile of the corridor (128 or 256; changes no address,\n"
     "                      only the tile and slot that name a unit's place in the corridor)\n"
     "  --fps-counter       show the FPS counter\n"
@@ -486,7 +487,8 @@ int run(const Args& a)
             hall->set_angle_decimals(app.angle_decimals);
             hall->set_face_px(a.get_u32("model-tile", 64));
             hall->set_letters_px(a.has("item-letters") ? a.get_u32("item-letters", 8) : 8);
-            hall->set_closeup_px(a.has("close-up") ? a.get_u32("close-up", 1024) : 1024);
+            hall->set_closeup_px(closeup_setting(a.get("close-up", "screen"), kCloseUpScreen));
+            hall->set_graphics_memory(app.graphics_memory_gb);
             hall->set_fps_counter(app.fps_counter || a.has("fps-counter"));
             if (a.has("thin")) hall->set_thin(true); // (a walk to a long file in --press may have made it thin already)
             // On stderr: stdout is where the readout goes, which scripts read line by line.
@@ -620,7 +622,8 @@ int run(const Args& a)
         hall->set_angle_decimals(app.angle_decimals);
         hall->set_face_px(ha.get_u32("model-tile", 64));
         hall->set_letters_px(ha.has("item-letters") ? ha.get_u32("item-letters", 8) : 8);
-        hall->set_closeup_px(ha.has("close-up") ? ha.get_u32("close-up", 1024) : 1024);
+        hall->set_closeup_px(closeup_setting(ha.get("close-up", "screen"), kCloseUpScreen));
+        hall->set_graphics_memory(app.graphics_memory_gb);
         hall->set_fps_counter(app.fps_counter);
         hall->set_thin(went_in_thin || ha.has("thin"));
         first = false;
@@ -667,6 +670,7 @@ int run(const Args& a)
                 if (in_game_menu == Menu::Result::Back)
                 {
                     hall->set_model_cache(app.model_cache_mb);
+                    hall->set_graphics_memory(app.graphics_memory_gb);
                     SDL_SetWindowRelativeMouseMode(window, !hall->back_from_menu());
                     continue;
                 }

@@ -930,14 +930,17 @@ public:
         refresh_labels(); // the bearing's text is worked out to this many places
     }
     void set_face_px(uint32_t px);
-    // The close-up display size (0 turns close-ups off); see sharp_.
+    // The close-up display size (0 turns close-ups off, kCloseUpScreen follows the screen); see
+    // sharp_.
     void set_closeup_px(uint32_t px)
     {
-        const int v = px == 0 ? 0 : std::clamp(int(std::min<uint32_t>(px, INT32_MAX)), 64, texture_px_);
-        if (v == closeup_px_) return;
-        closeup_px_ = v;
+        const uint32_t v = px == 0 || px == kCloseUpScreen ? px : std::clamp<uint32_t>(px, 64, uint32_t(texture_px_));
+        if (v == closeup_setting_) return;
+        closeup_setting_ = v;
         clear_faces();
     }
+    // The graphics card's memory (Settings > Graphics), which the close-ups have what is left of.
+    void set_graphics_memory(int gb) { graphics_bytes_ = double(std::max(gb, 1)) * 1073741824.0; }
     // The smallest letters drawn on item pictures, in picture pixels: a title or a page that
     // would need smaller ones is drawn as short bars instead. Changing it redraws the pictures.
     void set_letters_px(uint32_t px)
@@ -1338,12 +1341,14 @@ private:
     // that do are drawn again, larger: at the power of two that covers the width they take on
     // screen, from twice line_px_ up to the close-up size setting. The ordinary display stands in
     // until the close-up arrives, and a close-up is dropped once it has gone unused for a couple
-    // of seconds or kSharpMax newer ones need its room. They are keyed by place (as the jobs
+    // of seconds or sharp_max() newer ones need its room. They are keyed by place (as the jobs
     // are), which does not change as you walk from room to room.
     std::unordered_map<int64_t, Face> sharp_;
     std::unordered_set<int64_t> sharp_pending_;
-    int closeup_px_ = 1024; // 0: no close-ups
-    static constexpr size_t kSharpMax = 24;
+    uint32_t closeup_setting_ = kCloseUpScreen; // 0: no close-ups
+    double graphics_bytes_ = 4.0 * 1073741824.0; // set_graphics_memory
+    int closeup_px() const;  // the widest a close-up is drawn now (display.hpp closeup_width)
+    size_t sharp_max() const; // how many are kept (display.hpp closeup_count)
     float screen_width(const Vec3 f[4]) const; // how many pixels wide a display is drawn, 0 if not
     void drop_stale_sharp();
     // The Binary Edge: the rain's texture, and the characters the current font can draw.

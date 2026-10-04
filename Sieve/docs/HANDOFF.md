@@ -255,11 +255,15 @@ their titles fit. Letters that still come out smaller are dashes. A title's lett
 a sixteenth of the width so a large display is not all title.
 
 **Close-ups** are a level of detail on top (GLOBAL **close-up display size**, `--close-up`: off,
-or a power of two from 256 to the renderer's widest texture; 1024 the default). An item whose display is drawn more than 1.25 times wider on screen
+**screen**, the default, for the screen's width rounded up to a power of two, or a power of two from 256
+to the renderer's widest texture). An item whose display is drawn more than 1.25 times wider on screen
 than it has pixels is drawn again at the power of two that covers its width on screen, from twice
 the line's width up to the setting, by the same render workers, ahead of the ordinary queue. The
-ordinary display stands in until it arrives. At most 24 are kept; one unused for two seconds is
-dropped. The budget allows 24 at the close-up size (about 140 MB at 1024).
+ordinary display stands in until it arrives. As many are kept as the graphics memory left beside
+the world and the display cache holds at the close-up size (no more than a room's items); one
+unused for two seconds is dropped. The budget counts them at what the screen can show of them,
+under four screens' worth and twice that for the ones kept (display.hpp closeup_bytes_most):
+63 MB at 1920 x 1080.
 
 The setup menu's minimum height is now worked out from its rows, so it no longer needs raising by
 hand when a row is added. The setup menu's line rows are now counted from named constants
@@ -1349,3 +1353,15 @@ The four left for decision (4 October 2026).
     display cache row says what they would take.
   - So a long page at a small cache is drawn narrower, with every item pictured, where before a
     few items had wide pictures and the rest stand-ins. Close-ups still draw the nearest wide.
+- **Close-ups follow the screen and the memory (display.hpp closeup_width, closeup_count):**
+  - The close-up size's default is **screen** (kCloseUpScreen, saved as "screen"): the screen's
+    width rounded up to a power of two, 2048 at 1920 x 1080 and 4096 at 4K. It was 1024. A close-up
+    is drawn at the width it shows, so pixels past the screen's are never seen.
+  - The row goes off, screen, then 256 up to the renderer's widest texture.
+  - How many are kept (kSharpMax, 24) is as many at that width as the graphics memory left beside
+    the world (gpu_memory's count and the renderer's frames) and the display cache holds, at least
+    one and at most a room's items. Hallway::set_graphics_memory gives the hallway the setting.
+  - The menu counts them at the lesser of that and closeup_bytes_most (eight screens' worth), and
+    keeps one close-up's room when it sizes the display cache.
+  - A page reads only where it shows wide enough on screen for its letters (about 660 px for 4,000
+    characters at 8 px letters); past that, it needs the item in hand, scrolled.

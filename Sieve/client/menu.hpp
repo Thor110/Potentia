@@ -17,6 +17,7 @@
 #pragma once
 
 #include "app_settings.hpp"
+#include "display.hpp"
 #include "cli/args.hpp"
 #include "cli/filter_config.hpp"
 
@@ -66,7 +67,7 @@ struct Settings
     // §11, "Titled lines"). The books line keeps a page as its title.
     uint32_t title_length = 32;
     uint32_t letters_px = 8;   // the letter size item displays are drawn for; smaller letters are dashes
-    uint32_t closeup_px = 1024; // the widest close-up display (0: none)
+    uint32_t closeup_px = kCloseUpScreen; // the widest close-up display (0: none; display.hpp)
     uint32_t binary_bytes = 32; // the binary line: every file up to this many bytes
     // Which line FIND MY LIMITS grows: "all", or one line's name, the others left as they are.
     std::string limits_focus = "all";
@@ -186,7 +187,10 @@ private:
     int display_px_line(int i, bool cache_held = true) const;
     double display_mb(bool cache_held = true) const;
     int widest_px() const;                 // the widest the display cache lets displays be drawn
-    double closeup_mb() const;             // the close-ups at their largest
+    int closeup_px() const;                // the widest a close-up is drawn (display.hpp closeup_width)
+    double closeup_one_mb() const;         // one close-up at that width (0 with them off)
+    size_t closeup_count() const;          // how many the graphics memory left over holds
+    double closeup_mb() const;             // what they take at most
     bool graphics_over() const;
     int model_cache_mb() const { return app_ ? app_->model_cache_mb : 64; }
     void save_app() const;

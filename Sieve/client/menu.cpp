@@ -283,7 +283,7 @@ Settings Settings::from_args(const sieve::cli::Args& a)
     s.items_per_wall = parse_u32(a, "items-per-wall", s.items_per_wall);
     if (a.has("title-length")) s.title_length = a.get_u32("title-length", s.title_length); // 0 is allowed: no titles
     s.letters_px = parse_u32(a, "item-letters", s.letters_px);
-    if (a.has("close-up")) s.closeup_px = a.get_u32("close-up", s.closeup_px); // 0 is allowed: off
+    if (a.has("close-up")) s.closeup_px = closeup_setting(a.get("close-up", ""), s.closeup_px); // 0 is allowed: off
     s.limits_focus = a.get("limits-focus", s.limits_focus);
     if (s.limits_focus == "pages") s.limits_focus = "text";
     s.binary_bytes = parse_u32(a, "binary-length", s.binary_bytes);
@@ -321,7 +321,7 @@ void Settings::apply(sieve::cli::Args& a) const
     a.opts["items-per-wall"] = std::to_string(items_per_wall);
     a.opts["title-length"] = std::to_string(title_length);
     a.opts["item-letters"] = std::to_string(letters_px);
-    a.opts["close-up"] = std::to_string(closeup_px);
+    a.opts["close-up"] = closeup_text(closeup_px);
     a.opts["binary-length"] = std::to_string(binary_bytes);
     a.opts["limits-focus"] = limits_focus;
 }
@@ -521,11 +521,36 @@ double Menu::display_mb(bool cache_held) const
     return double(px) * (double(px) * tallest_face()) * 4 / 1048576.0;
 }
 
-// The close-ups, all kSharpMax of them at the close-up size (hallway.hpp).
+// The close-ups, as the hallway works them out (item_faces.cpp closeup_px and sharp_max): as wide
+// as the setting, or the screen's, and as many as the graphics memory holds beside the world and
+// the display cache.
+int Menu::closeup_px() const
+{
+    int w = 0, h = 0;
+    SDL_GetRenderOutputSize(r_, &w, &h);
+    return closeup_width(s_.closeup_px, w, texture_px_);
+}
+
+double Menu::closeup_one_mb() const
+{
+    const double w = double(closeup_px());
+    return w * std::ceil(w * tallest_face()) * 4 / 1048576.0;
+}
+
+size_t Menu::closeup_count() const
+{
+    const double gfx = app_ ? double(app_->graphics_memory_gb) * 1024.0 : 4096.0;
+    const double room = (gfx - world_graphics_mb() - double(model_cache_mb())) * 1048576.0;
+    return ::hallway::closeup_count(room, closeup_px(), tallest_face(), s_.items_per_wall);
+}
+
+// What they take: all of them at their widest, or what the screen can show of them
+// (closeup_bytes_most), whichever is less. 63 MB at 1920 x 1080, 253 MB at 4K.
 double Menu::closeup_mb() const
 {
-    const double w = double(s_.closeup_px);
-    return 24.0 * w * (w * tallest_face()) * 4 / 1048576.0;
+    int w = 0, h = 0;
+    SDL_GetRenderOutputSize(r_, &w, &h);
+    return std::min(double(closeup_count()) * closeup_one_mb(), closeup_bytes_most(w, h) / 1048576.0);
 }
 
 bool Menu::graphics_over() const { return app_ && graphics_mb_needed() > double(app_->graphics_memory_gb) * 1024.0; }
@@ -640,7 +665,7 @@ void Menu::find_limits()
     if (app_)
     {
         const double rooms = double(2 * picture_rooms() + 1) * s_.items_per_wall * display_mb(false);
-        const double room = double(app_->graphics_memory_gb) * 1024.0 - world_graphics_mb() - closeup_mb();
+        const double room = double(app_->graphics_memory_gb) * 1024.0 - world_graphics_mb() - closeup_one_mb(); // room for one close-up at least
         const int mb = int(std::ceil(std::min(rooms, room) / 8.0)) * 8;
         app_->model_cache_mb = std::max(8, mb);
         save_app();
@@ -770,8 +795,13 @@ void Menu::adjust(int dir, int step)
         break;
     // Off, then 256, 512, 1024.
     case kCloseUpRow:
-        s_.closeup_px = dir > 0 ? (s_.closeup_px == 0 ? 256u : std::min(uint32_t(texture_px_), s_.closeup_px * 2))
-                                : (s_.closeup_px <= 256 ? 0u : s_.closeup_px / 2);
+        // Off, then the screen's width, then the powers of two from 256 up to the renderer's widest.
+        if (dir > 0)
+            s_.closeup_px = s_.closeup_px == 0 ? kCloseUpScreen
+                            : s_.closeup_px == kCloseUpScreen ? 256u
+                                                              : std::min(uint32_t(texture_px_), s_.closeup_px * 2);
+        else
+            s_.closeup_px = s_.closeup_px == kCloseUpScreen ? 0u : s_.closeup_px <= 256 ? kCloseUpScreen : s_.closeup_px / 2;
         break;
     case kTitleRow:
     {
@@ -825,7 +855,7 @@ void Menu::adjust(int dir, int step)
     case kDisplayCacheRow:
         if (app_)
         {
-            const int room = int(double(app_->graphics_memory_gb) * 1024.0 - world_graphics_mb() - closeup_mb());
+            const int room = int(double(app_->graphics_memory_gb) * 1024.0 - world_graphics_mb() - closeup_one_mb());
             const int top = std::max(8, room);
             app_->model_cache_mb = std::clamp(app_->model_cache_mb + dir * 8, 8, top);
             save_app();
@@ -1153,7 +1183,8 @@ void Menu::render()
                                                                       n(s_.model_tile), std::to_string(rooms_mb),
                                                                       std::to_string(picture_rooms_here)})},
         {-1, tr("setup.closeup"), s_.closeup_px == 0 ? tr("setup.closeup.off")
-                                                     : trf("setup.closeup.value", {n(s_.closeup_px), std::to_string(size_t(std::ceil(closeup_mb())))})},
+                                                     : trf(s_.closeup_px == kCloseUpScreen ? "setup.closeup.screen" : "setup.closeup.value",
+                                                           {std::to_string(closeup_px()), std::to_string(closeup_count()), std::to_string(size_t(std::ceil(closeup_mb())))})},
         {-1, tr("setup.focus"), s_.limits_focus == "all" ? tr("setup.focus.all") : trf("setup.focus.line", {tr(s_.limits_focus == "text" ? "line.pages" : "line." + s_.limits_focus)})},
         {-1, tr("setup.filter_memory"), trf("setup.filter_memory.value", {sieve::memory_text(filter_memory_setting())})},
         {-1, tr("setup.counting_memory"), trf("setup.counting_memory.value", {std::to_string(app_ ? app_->counting_memory_pct : 50),
