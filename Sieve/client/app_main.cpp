@@ -97,12 +97,13 @@ const char* kUsage =
     "  --edge-glow         draw with Geometry Edge Glow (or --settings a file that has it on)\n"
     "  --real-graphics     draw with Real Graphics: the models in the meshes folder\n"
     "  --door-portals      fill the doorways with procedural data noise (Real Graphics turns this on)\n"
-    "  --model-cache MB    display cache: memory for the pictures on items (8-4096, default 64)\n"
-    "  --model-tile PX     display size: how wide each item's picture is drawn (16-1024, default 64)\n"
+    "  --model-cache MB    display cache: memory for the pictures on items (8 up, default 64)\n"
+    "  --model-tile PX     display size: how wide each item's picture is drawn (16 up to the\n"
+    "                      renderer's widest texture, default 64)\n"
     "  --item-letters PX   letter size on item displays: pages and titles are drawn wide enough\n"
     "                      for it, and smaller letters are dashes (default 8)\n"
     "  --close-up PX       the displays nearest you are drawn again up to this wide (0: off;\n"
-    "                      256, 512 or 1024, the default)\n"
+    "                      powers of two from 256 to the renderer's widest texture; 1024 the default)\n"
     "  --items-per-wall N  units on one tile of the corridor (128 or 256; changes no address,\n"
     "                      only the tile and slot that name a unit's place in the corridor)\n"
     "  --fps-counter       show the FPS counter\n"
@@ -121,7 +122,11 @@ const char* kUsage =
     "  --merge-cache PCT   the share of the filter memory kept for merged filters between counts (0 to\n"
     "                      100; the setup menu's, 50 at first)\n"
     "  --unit-time MS      the time budget: the longest one unit may take to open (5 to 60000; the\n"
-    "                      setup menu's, 50 at first)\n\n"
+    "                      setup menu's, 50 at first)\n"
+    "  --item-memory PCT   the share of installed memory the items around you may take (5 to 90; the\n"
+    "                      setup menu's, 25 at first)\n"
+    "  --view-rooms N      rooms drawn and kept either side of you (2 to 64; 7 at first)\n"
+    "  --picture-rooms N   rooms either side of yours with item pictures of their own (0 to 8; 1)\n\n"
     "Controls: WASD move, mouse look, Shift run, E or click take a book, T warp, G go to,\n"
     "M switch ordering (positional, scrambled, guided), - and = zoom out/in (guided; Shift: 8x),\n"
     "wheel/PgUp/PgDn/[ ] jump 1/1000/1000000 tiles, Home to corridor tile 0 (every line's start line),\n"
@@ -348,6 +353,13 @@ int run(const Args& a)
     if (a.has("unit-time")) app.unit_time_ms = std::clamp(int(a.get_positive("unit-time", 50)), 5, 60000);
     sieve::set_unit_time_ms(app.unit_time_ms);
     set_time_budget(app.unit_time_ms);
+    // The items around you (ITEM MEMORY): what the hallway's cache of them may take.
+    if (a.has("item-memory")) app.item_memory_pct = std::clamp(int(a.get_positive("item-memory", 25)), 5, 90);
+    set_item_memory_share(app.item_memory_pct);
+    // The view distance (Settings > Graphics): the rooms drawn and kept, and those with pictures.
+    if (a.has("view-rooms")) app.view_rooms = std::clamp(int(a.get_positive("view-rooms", 7)), 2, 64);
+    if (a.has("picture-rooms")) app.picture_rooms = std::clamp(int(a.get_u32("picture-rooms", 1)), 0, 8);
+    set_view(app.view_rooms, app.picture_rooms);
     const DisplayInfo display = detect_display();
     if (!shot && app.resolution.w <= 0)
     {
@@ -576,6 +588,7 @@ int run(const Args& a)
         // built again when it next opens, counts with it too).
         sieve::set_filter_memory(double(app.filter_memory_mb) * 1024 * 1024);
         sieve::set_unit_time_ms(app.unit_time_ms); // (and the time budget, as set)
+        set_view(app.view_rooms, app.picture_rooms); // (and the view distance, as Settings > Graphics has it)
         auto building = std::async(std::launch::async, [&] {
             sieve::cli::timings::Scope timed("hallway.build");
             return make_hallway(window, renderer, ha, first, filters, app.angle_decimals);

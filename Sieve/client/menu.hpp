@@ -87,15 +87,19 @@ struct LineSize
 // For a line of `length` symbols of `base` each.
 LineSize line_size(uint32_t base, uint64_t length);
 
-// Tiles drawn behind and ahead of the one you are in, and kept in the item cache.
-inline constexpr int kCacheBack = 6, kCacheAhead = 7;
-inline constexpr int kTilesKept = kCacheBack + kCacheAhead + 1;
+// The view distance (Settings > Graphics): the tiles drawn and kept in the item cache either side
+// of the one you are in, as many behind as ahead, and the rooms either side of yours whose items
+// have pictures of their own. 7 and 1 until set.
+void set_view(int view_rooms, int picture_rooms);
+int view_rooms();
+int tiles_kept(); // view_rooms() either side, and yours
+int picture_rooms();
 // The most items the hallway keeps worked out (its cache clears itself past this many): the tiles
-// kept and one more either side, at the items a tile holds now (sieve::books_per_tile). What the
+// kept (tiles_kept) and one more either side, at the items a tile holds now (sieve::books_per_tile). What the
 // budget's memory bar counts on (as the setting stands), and the cache itself (hallway.cpp book()).
 size_t cached_units();
 // The longest address the menu lets a shape have: one that alone would fill the memory the item
-// cache is given (Budget::cache_bytes, a quarter of installed memory), held as a number and as hex
+// cache is given (Budget::cache_bytes, ITEM MEMORY's share of installed memory), held as a number and as hex
 // (three eighths of a byte a bit). Past it a line is "too large" and nothing of it is worked out.
 double too_large_bits();
 // A file long enough that opening it is noticed: one whose bytes take a quarter of the time budget
@@ -136,6 +140,10 @@ int counting_slots(double filter_bytes = 0);
 // The time budget as set (the setup menu's TIME BUDGET, in ms): what the budget's time bar and
 // FIND MY LIMITS hold a line to. (What can rank follows sieve::unit_time_ms, which X applies.)
 void set_time_budget(double ms);
+// The share of installed memory (percent, 5 to 90) the hallway's cache of the items around you may
+// take (the setup menu's ITEM MEMORY; 25 until it is set): the budget's memory bar and how long an
+// address may be (too_large_bits) follow it.
+void set_item_memory_share(int percent);
 
 // Which tab of the filters window lists a filter: 0 built-in, 1 custom (plugins), 2 retired.
 int tab_of(const sieve::FilterSpec& f);
@@ -171,8 +179,13 @@ private:
     double line_ms(int i, const Budget& b) const; // how long a unit of line i takes to open, estimated
     double line_cache_bytes(int i) const;  // what line i's cached units would take in memory
     double graphics_mb_needed() const;     // the display cache, the close-ups and the world, in megabytes
-    int display_px_line(int i) const;      // what line i's displays are drawn at (display.hpp)
-    double display_mb() const;             // one display on the line whose displays are largest
+    double world_graphics_mb() const;      // the world's part of that, from what it makes (menu.cpp)
+    // What line i's displays are drawn at (display.hpp), and one display on the line whose
+    // displays are largest: held to what the display cache can hold (widest_px), or, with
+    // `cache_held` false, as wide as the letters ask, which is what the cache would need.
+    int display_px_line(int i, bool cache_held = true) const;
+    double display_mb(bool cache_held = true) const;
+    int widest_px() const;                 // the widest the display cache lets displays be drawn
     double closeup_mb() const;             // the close-ups at their largest
     bool graphics_over() const;
     int model_cache_mb() const { return app_ ? app_->model_cache_mb : 64; }
@@ -181,14 +194,14 @@ private:
     void find_limits();        // set every line to the largest shape this machine can open
     void reset_settings();     // every shape back to its default // a line this machine cannot open
     void adjust(int dir, int step);
-    // 0-35 are the settings rows, in the order render() lists them and adjust() switches on;
+    // 0-36 are the settings rows, in the order render() lists them and adjust() switches on;
     // then FIND MY LIMITS, RESET, and ENTER THE HALLWAY, which is the only row that opens it.
     // The GLOBAL rows come first; each line's rows are counted from kFirstLineRow, so a row added
     // to GLOBAL moves them all with one change here.
     static constexpr int kAngleRow = 4, kTitleRow = 5, kLettersRow = 6, kDisplaySizeRow = 7, kDisplayCacheRow = 8,
                          kCloseUpRow = 9, kFocusRow = 10, kFilterMemoryRow = 11, kCountingMemoryRow = 12, kMergeCacheRow = 13,
-                         kTimeBudgetRow = 14;
-    static constexpr int kFirstLineRow = 15;
+                         kTimeBudgetRow = 14, kItemMemoryRow = 15;
+    static constexpr int kFirstLineRow = 16;
     // The audio rows: its notes, then its note set and the notes2 set's range, durations and voices.
     static constexpr int kPagesRows = kFirstLineRow, kImageRows = kFirstLineRow + 4, kAudioRow = kFirstLineRow + 7,
                          kVideoRows = kFirstLineRow + 13, kBooksRow = kFirstLineRow + 17, kModelsRows = kFirstLineRow + 18;
@@ -301,6 +314,7 @@ private:
 
     SDL_Window* window_;
     SDL_Renderer* r_;
+    int texture_px_ = 1024; // the renderer's widest texture (gpu::max_texture_px)
     Settings s_;
     int row_ = 0;
     sieve::cli::FilterConfig cfg_;

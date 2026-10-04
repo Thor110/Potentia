@@ -17,9 +17,11 @@
 #include "music.hpp"
 
 #include "font.hpp"
+#include "gpu_memory.hpp"
 #include "mesh.hpp"
 #include "strings.hpp"
 #include "theme.hpp"
+#include "world.hpp"
 
 #include "cli/dictionaries.hpp"
 #include "cli/plugins.hpp"
@@ -108,11 +110,11 @@ uint32_t parse_u32(const sieve::cli::Args& a, const char* key, uint32_t def) { r
 //
 //   memory    the hallway keeps the units around you in a cache -- up to cached_units() of them,
 //             each its characters, pixels, notes or coordinates at four bytes a position, and its
-//             address twice, as a number and as hex -- and that cache is given a quarter of
-//             installed memory. Only one line is walked at a time, so the largest line is what
+//             address twice, as a number and as hex -- and that cache is given ITEM MEMORY's share
+//             of installed memory (a quarter at first). Only one line is walked at a time, so the largest line is what
 //             has to fit.
-//   graphics  the models line's crate faces (the model image cache) and an allowance for the
-//             world itself -- the corridor, the portals, the text -- have to fit the graphics
+//   graphics  the models line's crate faces (the model image cache) and the world itself -- the
+//             frames, the portals, the signs, the text (world_graphics_mb) -- have to fit the graphics
 //             memory set in Settings > Graphics, since SDL cannot ask the card.
 //   time      opening one unit means turning its address into its content, and that grows faster
 //             than the address. It is measured on this machine, once, at two lengths (which gives
@@ -122,7 +124,6 @@ uint32_t parse_u32(const sieve::cli::Args& a, const char* key, uint32_t def) { r
 //
 // None is a limit of the design. They describe the machine of the day, and a bigger one finds
 // bigger numbers with the same arithmetic.
-constexpr double kWorldAllowanceMB = 512; // graphics memory for everything but the crate faces
 std::atomic<double> g_time_budget{50};   // the longest one unit may take to open (set_time_budget)
 
 void text(SDL_Renderer* r, float x, float y, const std::string& s, float scale, SDL_Color c) { draw_text(r, x, y, s, scale, c); }
@@ -152,13 +153,16 @@ std::string fixed(double v, int d)
 
 } // namespace
 
-// What the hallway's cache of units may take: a quarter of installed memory, or the default when
-// SDL cannot tell (Budget's, which is careful).
+// What the hallway's cache of units may take: ITEM MEMORY's share of installed memory (a quarter at
+// first), or the default when SDL cannot tell (Budget's, which is careful).
+std::atomic<int> g_item_memory_pct{25};
 static double cache_bytes_here()
 {
     const int mb = SDL_GetSystemRAM();
-    return mb > 0 ? double(mb) * 1048576.0 * 0.25 : Budget{}.cache_bytes;
+    return mb > 0 ? double(mb) * 1048576.0 * (g_item_memory_pct / 100.0) : Budget{}.cache_bytes;
 }
+
+void set_item_memory_share(int percent) { g_item_memory_pct = std::clamp(percent, 5, 90); }
 
 Budget machine_budget()
 {
@@ -220,7 +224,21 @@ double unit_ms(const Budget& b, double bits) { return b.ref_ms * std::pow(std::m
 
 void set_time_budget(double ms) { g_time_budget = std::max(1.0, ms); }
 
-size_t cached_units() { return size_t(kTilesKept + 2) * sieve::books_per_tile(); }
+namespace {
+std::atomic<int> g_view_rooms{7}, g_picture_rooms{1};
+} // namespace
+
+void set_view(int rooms, int pictures)
+{
+    g_view_rooms = std::clamp(rooms, 2, 64);
+    // No pictures past the rooms drawn: those are not seen.
+    g_picture_rooms = std::clamp(pictures, 0, std::min(8, g_view_rooms.load()));
+}
+int view_rooms() { return g_view_rooms; }
+int tiles_kept() { return 2 * view_rooms() + 1; }
+int picture_rooms() { return g_picture_rooms; }
+
+size_t cached_units() { return size_t(tiles_kept() + 2) * sieve::books_per_tile(); }
 
 double too_large_bits() { return cache_bytes_here() * 8.0 / 3.0; }
 
@@ -430,7 +448,7 @@ int Menu::over_budget() const
 
 // What line i's cache of units would take: each unit its positions at four bytes and its address
 // held twice, as a number (an eighth of a byte a bit) and as hex (a quarter), for as many units
-// as the hallway keeps around you (the tiles it keeps, kTilesKept: menu.hpp).
+// as the hallway keeps around you (the tiles it keeps: tiles_kept, the view distance).
 double Menu::line_cache_bytes(int i) const
 {
     const auto sizes = line_sizes();
@@ -444,7 +462,7 @@ double Menu::line_cache_bytes(int i) const
                              uint64_t(s_.book_pages + 1) * s_.length + cover,
                              3ull * s_.model_vertices + 3ull * s_.model_faces + t,
                              (uint64_t(s_.binary_bytes) + 3) / 4 + t};
-    const double units = double(kTilesKept) * double(s_.items_per_wall);
+    const double units = double(tiles_kept()) * double(s_.items_per_wall);
     // A binary file is kept lazily (hallway.hpp, Book::is_file): only its place on the line, a
     // number as long as the file, its title, and its first sixteen bytes; its bytes and hex only for the one
     // looked at. And only half a tile's slots hold files.
@@ -452,25 +470,54 @@ double Menu::line_cache_bytes(int i) const
     return units * (4.0 * double(pos[i]) + 0.375 * sizes[size_t(i)].bits + 256.0);
 }
 
-double Menu::graphics_mb_needed() const { return double(model_cache_mb()) + closeup_mb() + kWorldAllowanceMB; }
+double Menu::graphics_mb_needed() const { return double(model_cache_mb()) + closeup_mb() + world_graphics_mb(); }
+
+// The world's share of the graphics memory, from what it makes (gpu_memory.hpp counts it): the
+// renderer's own frames (the one shown, the one being drawn and one queued, each the window's
+// size), Real Graphics' frame (the window's size) and the doorways' portal noise (a kPortalGrain-th
+// of it each way) when they are on, a sign over the doors for each line, and the item in hand's
+// picture (two, at an image's or a video frame's pixels). Or what is held already, where that is
+// more (in the hallway: the letters' atlases and whatever else it has made). It was 512 MB, taken
+// for granted: at 1920 x 1080 with everything on it comes to 37 MB.
+double Menu::world_graphics_mb() const
+{
+    int w = 0, h = 0;
+    SDL_GetRenderOutputSize(r_, &w, &h);
+    const double screen = double(w) * double(h) * 4.0;
+    double planned = 0;
+    if (app_ && app_->real_graphics) planned += screen;
+    if (app_ && app_->door_portals) planned += screen / double(kPortalGrain * kPortalGrain);
+    planned += double(kLines.size()) * kSignPxW * kSignPxH * 4.0;
+    const uint64_t picture = std::max(uint64_t(s_.image_w) * s_.image_h, uint64_t(s_.video_w) * s_.video_h);
+    planned += 2.0 * double(picture) * 3.0;
+    return (3.0 * screen + std::max(planned, gpu::bytes(gpu::Use::World))) / 1048576.0;
+}
 
 // The width line i's displays are drawn at, as the hallway works it out (display.hpp), taking
 // the tallest item's shape so that the figures are never under what it will use. Lines in
 // setup order: 0 pages, 1 image, 2 audio, 3 video, 4 books, 5 models.
-int Menu::display_px_line(int i) const
+int Menu::display_px_line(int i, bool cache_held) const
 {
     const double title = double(s_.title_length);
     // (Binary, 6, carries a title, and its kind drawn large below it, which the letters do not size.)
     const DisplayText t = i == 0 ? display_text_pages(double(s_.length), title)
                           : i == 4 ? display_text_books(double(s_.length))
                                    : display_text_titled(title);
-    return display_px(int(s_.model_tile), int(s_.letters_px), tallest_face(), t);
+    return display_px(int(s_.model_tile), int(s_.letters_px), tallest_face(), t, cache_held ? widest_px() : texture_px_);
 }
 
-double Menu::display_mb() const
+// Every picture of the rooms with pictures (yours and the picture distance either side) at the
+// widest the display cache holds them all, as the hallway works it out (item_faces.cpp).
+int Menu::widest_px() const
+{
+    const double pictures = double(2 * picture_rooms() + 1) * double(s_.items_per_wall);
+    return widest_display_px(double(model_cache_mb()) * 1048576.0, pictures, tallest_face(), texture_px_);
+}
+
+double Menu::display_mb(bool cache_held) const
 {
     int px = 0;
-    for (int i = 0; i < 7; ++i) px = std::max(px, display_px_line(i));
+    for (int i = 0; i < 7; ++i) px = std::max(px, display_px_line(i, cache_held));
     return double(px) * (double(px) * tallest_face()) * 4 / 1048576.0;
 }
 
@@ -587,13 +634,14 @@ void Menu::find_limits()
     // Vertices and faces grow together, so a mesh gets both rather than all of one.
     if (on("models")) grow_pair(s_.model_vertices, s_.model_faces, [&] { return fits(5); }, [&] { return fits(5); }, false);
     if (on("binary")) grow(s_.binary_bytes, 6);
-    // And the model image cache: three rooms of crate faces at the chosen size, or as many as
-    // the graphics memory has room for beside the world.
+    // And the model image cache: the rooms with pictures of their own (yours and the picture
+    // distance either side) at the chosen size, or as many as the graphics memory has room for
+    // beside the world.
     if (app_)
     {
-        const double three_rooms = 3.0 * s_.items_per_wall * display_mb();
-        const double room = double(app_->graphics_memory_gb) * 1024.0 - kWorldAllowanceMB - closeup_mb();
-        const int mb = int(std::ceil(std::min({three_rooms, room, 4096.0}) / 8.0)) * 8;
+        const double rooms = double(2 * picture_rooms() + 1) * s_.items_per_wall * display_mb(false);
+        const double room = double(app_->graphics_memory_gb) * 1024.0 - world_graphics_mb() - closeup_mb();
+        const int mb = int(std::ceil(std::min(rooms, room) / 8.0)) * 8;
         app_->model_cache_mb = std::max(8, mb);
         save_app();
     }
@@ -636,6 +684,7 @@ Menu::Menu(SDL_Window* window, SDL_Renderer* renderer, Settings settings, sieve:
     : window_(window), r_(renderer), s_(std::move(settings)), cfg_(std::move(filters)), cfg_path_(std::move(filters_path)),
       app_(app), app_path_(std::move(app_path))
 {
+    texture_px_ = gpu::max_texture_px(r_);
 }
 
 // The settings rows, then ENTER THE HALLWAY last. adjust() switches on the same numbering, and
@@ -686,6 +735,14 @@ void Menu::adjust(int dir, int step)
     // The counting memory and the merge cache: percentages, 5 a step (Shift and Ctrl ten and a
     // hundred times that), PgUp/PgDn 25. They change no count, only how many run at once and what
     // is kept between them, so they take effect at once, with nothing counted again.
+    case kItemMemoryRow:
+        if (app_)
+        {
+            app_->item_memory_pct = std::clamp(app_->item_memory_pct + dir * (step == 0 ? 25 : 5 * step), 5, 90);
+            set_item_memory_share(app_->item_memory_pct);
+            save_app();
+        }
+        break;
     case kCountingMemoryRow:
     case kMergeCacheRow:
         if (app_)
@@ -713,7 +770,7 @@ void Menu::adjust(int dir, int step)
         break;
     // Off, then 256, 512, 1024.
     case kCloseUpRow:
-        s_.closeup_px = dir > 0 ? (s_.closeup_px == 0 ? 256u : std::min(1024u, s_.closeup_px * 2))
+        s_.closeup_px = dir > 0 ? (s_.closeup_px == 0 ? 256u : std::min(uint32_t(texture_px_), s_.closeup_px * 2))
                                 : (s_.closeup_px <= 256 ? 0u : s_.closeup_px / 2);
         break;
     case kTitleRow:
@@ -763,13 +820,13 @@ void Menu::adjust(int dir, int step)
     case kBinaryRow: num(s_.binary_bytes); break;
     case kModelsRows + 2: s_.model_coords = std::clamp(dir > 0 ? s_.model_coords * 2 : s_.model_coords / 2, 2u, 4096u); break;
     // The display size is a power of two, so it doubles and halves like the grid.
-    case kDisplaySizeRow: s_.model_tile = std::clamp(dir > 0 ? s_.model_tile * 2 : s_.model_tile / 2, 16u, 1024u); break;
+    case kDisplaySizeRow: s_.model_tile = std::clamp(dir > 0 ? s_.model_tile * 2 : s_.model_tile / 2, 16u, uint32_t(texture_px_)); break;
     // The display cache, in steps of 8 MB, as far as the graphics memory allows.
     case kDisplayCacheRow:
         if (app_)
         {
-            const int room = int(double(app_->graphics_memory_gb) * 1024.0 - kWorldAllowanceMB - closeup_mb());
-            const int top = std::max(8, std::min(4096, room));
+            const int room = int(double(app_->graphics_memory_gb) * 1024.0 - world_graphics_mb() - closeup_mb());
+            const int top = std::max(8, room);
             app_->model_cache_mb = std::clamp(app_->model_cache_mb + dir * 8, 8, top);
             save_app();
         }
@@ -1078,8 +1135,10 @@ void Menu::render()
     };
     auto n = [](uint32_t v) { return std::to_string(v); };
     const std::string start_key = s_.start_line == "text" ? "line.pages" : "line." + s_.start_line;
-    // Three rooms of crate faces, which is what the models line renders (hallway.hpp: kCrateRooms).
-    const size_t three_rooms_mb = size_t(std::ceil(3.0 * s_.items_per_wall * display_mb()));
+    // The rooms with pictures of their own: yours and the picture distance either side.
+    const int picture_rooms_here = 2 * picture_rooms() + 1;
+    // What they would take drawn as wide as their letters ask, which the display cache may hold back.
+    const size_t rooms_mb = size_t(std::ceil(double(picture_rooms_here) * s_.items_per_wall * display_mb(false)));
     const std::vector<Row> rows = {
         {5, tr("setup.line"), tr(start_key)},
         {-1, tr("setup.ordering"), tr("ordering." + s_.mode)},
@@ -1091,7 +1150,8 @@ void Menu::render()
         {-1, tr("setup.model_tile"), trf("setup.model_tile.value", {n(s_.model_tile), std::to_string(display_px_line(0)), std::to_string(display_px_line(4))})},
         {-1, tr("setup.model_cache"), trf("setup.model_cache.value", {std::to_string(model_cache_mb()),
                                                                       std::to_string(size_t(double(model_cache_mb()) / display_mb())),
-                                                                      n(s_.model_tile), std::to_string(three_rooms_mb)})},
+                                                                      n(s_.model_tile), std::to_string(rooms_mb),
+                                                                      std::to_string(picture_rooms_here)})},
         {-1, tr("setup.closeup"), s_.closeup_px == 0 ? tr("setup.closeup.off")
                                                      : trf("setup.closeup.value", {n(s_.closeup_px), std::to_string(size_t(std::ceil(closeup_mb())))})},
         {-1, tr("setup.focus"), s_.limits_focus == "all" ? tr("setup.focus.all") : trf("setup.focus.line", {tr(s_.limits_focus == "text" ? "line.pages" : "line." + s_.limits_focus)})},
@@ -1101,6 +1161,8 @@ void Menu::render()
         {-1, tr("setup.merge_cache"), trf("setup.merge_cache.value", {std::to_string(app_ ? app_->merge_cache_pct : 50),
                                                                      sieve::memory_text(filter_memory_setting() * (app_ ? app_->merge_cache_pct : 50) / 100.0)})},
         {-1, tr("setup.time_budget"), trf("setup.time_budget.value", {std::to_string(app_ ? app_->unit_time_ms : 50)})},
+        {-1, tr("setup.item_memory"), trf("setup.item_memory.value", {std::to_string(app_ ? app_->item_memory_pct : 25),
+                                                                     sieve::memory_text(machine_budget().cache_bytes)})},
         {0, tr("setup.length"), trf("setup.length.value", {n(s_.length)})},
         {-1, tr("setup.alphabet"), trf("setup.alphabet.value", {s_.alphabet, n(alphabet_size(s_.alphabet))})},
         {-1, tr("setup.canon"), "canon-text-" + s_.canon},

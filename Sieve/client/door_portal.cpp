@@ -4,6 +4,7 @@
 // portal titles: the sign over every doorway that names the line through it.
 
 #include "hallway.hpp"
+#include "gpu_memory.hpp"
 
 namespace hallway::hall {
 
@@ -212,10 +213,10 @@ void Hallway::draw_portal(const std::vector<Vec3>& quad, const Theme& dest, cons
     if (!any) return;
     if (!portal_.tex || portal_.w < nw || portal_.h < nh)
     {
-        if (portal_.tex) SDL_DestroyTexture(portal_.tex);
+        if (portal_.tex) gpu::destroy(portal_.tex);
         portal_.w = std::max(portal_.w, nw);
         portal_.h = std::max(portal_.h, nh);
-        portal_.tex = SDL_CreateTexture(r_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, portal_.w, portal_.h);
+        portal_.tex = gpu::create(r_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, portal_.w, portal_.h);
         if (portal_.tex)
         {
             SDL_SetTextureBlendMode(portal_.tex, SDL_BLENDMODE_BLEND);
@@ -260,7 +261,7 @@ SDL_Texture* Hallway::sign_texture(int line)
     const float x0 = (float(w) - cell * float(name.size())) * 0.5f, y0 = (float(h) - cell) * 0.5f;
     for (size_t i = 0; i < name.size(); ++i)
         if (name[i] != U' ') paint_glyph(px.data(), w, h, x0 + float(i) * cell, y0, cell, cell, name[i], ink);
-    c.tex = SDL_CreateTexture(r_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, w, h);
+    c.tex = gpu::create(r_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, w, h);
     if (!c.tex) return nullptr;
     SDL_UpdateTexture(c.tex, nullptr, px.data(), w * 4);
     SDL_SetTextureBlendMode(c.tex, SDL_BLENDMODE_BLEND);
@@ -307,7 +308,7 @@ void Hallway::release_signs()
     for (SignCache& c : signs_)
         if (c.tex)
         {
-            SDL_DestroyTexture(c.tex);
+            gpu::destroy(c.tex);
             c.tex = nullptr;
         }
 }

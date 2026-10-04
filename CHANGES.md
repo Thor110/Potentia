@@ -1,94 +1,113 @@
-# Exact word-filter estimate, the time budget, and fixed numbers made dynamic (relative to origin/main 54fd218)
+# Item memory, measured world graphics, view distance and the widest picture (relative to origin/main e1be880)
 
-Unzip `files/` over the Potentia repository root, or apply `budgets-round.patch` with `git apply`
-from the repository root.
+To apply it, do one of these from the Potentia repository root:
+- unzip `files/` over the repository;
+- or run `git apply view-and-graphics.patch`.
 
-## 1. The word filters' estimate, exact (`core/src/filters/text_m1.cpp`)
-**One row, not two.** Each word ranker (clean, words, window, title) keeps one row of counts, and
-the estimate assumed two. Each count is now trimmed to exactly its size as it's stored (numbers
-built by repeated adds over-allocate).
+Two files are new: `Sieve/client/gpu_memory.hpp` and `Sieve/client/gpu_memory.cpp`.
 
-**The formula.** The row is (L + 1) × 56 + g·L·(L + 1) / 16 bytes, where g is the bits a count gains
-per character.
-- **The upper bound:** g starts at log2(27) = 4.75.
-- **Measured when needed:** if the bound doesn't fit the filter memory, the real g is measured on a
-  512-character table, once per filter, padding and dictionary, then cached.
+## D. The item cache's share of memory is a setting
+**The new row.** GLOBAL has a new row, ITEM MEMORY: the share of installed memory the items around
+you may take.
+- **Values:** 25% at first, 5% to 90%, in steps of 5. PgUp/PgDn step by 25.
+- **Saved as:** `item_memory_pct` in [world]. On the command line, `--item-memory PCT`.
+- **What follows it:** the item cache and the "too large" address limit.
+- **The row shows** the share and how much memory it comes to here.
 
-**Measured against the allocator's own heap figures:**
+**The rows below it.** The line rows moved down one (`kFirstLineRow` is 16). CI moved with them,
+and CI now checks that the new row saves.
 
-| Filter | Length | Estimated | Actually held |
-| :--- | :--- | :--- | :--- |
-| clean-v1 | 30,000 | 257 MB | 256 MB |
-| words-v1 | 30,000 | 156 MB | 153 MB |
-| window-v1 | 30,000 | 156 MB | 152 MB |
+## A. The world's graphics, measured rather than assumed
+**What changed.** The graphics bar used to count a fixed 512 MB for everything but the item
+pictures. Every texture the program makes now goes through `gpu::create` and `gpu::destroy`
+(`client/gpu_memory.hpp`). These keep a running count of the bytes, split into the world and the
+item pictures.
 
-**Longest pages ranked in 512 MB:**
+**How the world's figure is worked out.** It is the renderer's three frames, plus the larger of
+two figures:
+- **What the settings will make:**
+  - Real Graphics' frame;
+  - the door portals;
+  - the seven door signs;
+  - two picture-sized frames.
+- **What the world holds now**, from the running count.
 
-| Filter | At the start of the review | Last round | Now |
-| :--- | :--- | :--- | :--- |
-| clean | about 21,000 characters | about 30,000 | about 42,000 |
-| words and window (default dictionary) | about 21,000 | about 30,000 | about 54,000 |
+**Where the sizes come from.** The portal grain and the sign size now live in `world.hpp`. Both the
+hallway and the menu read them from there.
 
-**Test:** a words filter whose row wouldn't fit at 27 symbols per character, but does at its
-dictionary's real growth. It ranks, with the same count as with memory to spare.
+**The result.** About 37 MB at 1080p, where 512 MB was counted before. So the display cache and
+FIND MY LIMITS have about 475 MB more graphics memory to use.
 
-## 2. The time budget (H3 and H11)
-**A new GLOBAL row, TIME BUDGET.** The longest one unit may take to open.
-- 50 ms at first, 5 ms a step, PgUp/PgDn double or halve.
-- Saved as `unit_time_ms`; `--unit-time MS` on the hallway and the `sieve` tool.
-- The line rows moved down one (`kFirstLineRow` is 15), and CI moved with them, with a new check
-  that the row saves.
+## B. View distance (Settings > Graphics)
+There are two new rows, after the FPS counter (screenshot: `view-distance-rows.png`).
 
-**The budget bars and FIND MY LIMITS** follow it at once.
+| Row | What it sets | At first | Range | Command line |
+| :--- | :--- | :--- | :--- | :--- |
+| **View Distance** | Rooms drawn and kept either side of you, as many behind as ahead | 7 either side (it was 7 ahead, 6 behind) | 2 to 64 | `--view-rooms N` |
+| **Picture Distance** | Rooms either side of yours whose items get pictures of their own | 1 | 0 to 8 | `--picture-rooms N` |
 
-**The growth figure (H3).** How opening time grows with the address used to be assumed (1.6). It's
-now measured at start-up, from conversions at 10,000 and 40,000 characters.
+**Picture Distance's limit.** It never goes past the View Distance, and its help line says
+so.
 
-**symbol-entropy on black-and-white pictures (H11).** Its fixed 2,048 limit followed neither memory
-nor time, and one rank there took about a second, against 50 ms.
-- **How it's set:** the rank is timed at 256 and 512 symbols. The length that fits the budget is
-  then timed itself, brought in until it fits, and kept per budget. The filter memory caps it first.
-- **Measured here:**
+**Where they're saved.** Both are saved in [graphics].
 
-| Budget | Ranks up to | One unrank there takes |
+**What follows them.**
+- The constants they replace are gone: `kCacheBack`, `kCacheAhead`, `kTilesKept` and `kFaceRooms`.
+  One `view_rooms()` in `menu.hpp` now serves both directions.
+- At the default, 15 rooms are kept rather than 14: the one more behind you.
+- The item cache follows them, and so does the line cache's estimate.
+- So does the render window.
+- FIND MY LIMITS' display cache follows them too.
+- The setup menu's display cache row names how many rooms with pictures it's counting.
+
+**Checked in CI.** A new CI check sets View Distance to 8 and Picture Distance to 3, then checks
+that both save.
+
+## C. The widest picture follows the display cache
+**What changed.** `kMaxDisplayPx` (1,024 px) is gone. Displays still widen for their letters, but
+only up to the widest power of two at which every picture of the rooms with pictures fits the
+display cache. They are also never wider than the renderer's widest texture.
+
+**The display size setting comes first.** The new limit only holds back the letters' widening. It
+never pulls a display below the display size setting.
+
+**Example: 4,000-character pages.** At this length the letters ask for 1,024 px (screenshots:
+`long-pages-64MB-cache.png` and `long-pages-1024MB-cache.png`).
+
+| Display cache | Before | Now |
 | :--- | :--- | :--- |
-| 50 ms | 960 symbols | 50 ms |
-| 200 ms | 1,498 symbols | 217 ms |
-| 1,000 ms | 2,588 symbols | 1,107 ms |
+| 64 MB (the default) | 1,024 px, about ten items with pictures, the rest stand-ins | 128 px, every item in the three rooms pictured |
+| 1,024 MB | 1,024 px, about 170 items with pictures | 512 px, every item pictured |
 
-**Applied like the filter memory.** What can rank depends on it, so the row only saves it. X, or
-going into the hallway, applies it. Meanwhile a red line says *Time Budget Change Detected : Press X
-to re-optimise all dimensions*, and the counts' cache keys carry it.
+Close-ups still draw the items nearest you wide.
 
-## 3. Fixed numbers now taken from the machine (H1, H4, H5, H6, H7)
-| What | Was | Now |
-| :--- | :--- | :--- |
-| H1. Item cache | 4,096 items | the tiles kept plus one either side, × items per tile (2,048 at 128 a wall, 4,096 at 256) |
-| H4. Largest address | 8×10⁹ bits | one that alone would fill the item cache's memory (a quarter of installed memory): about 11×10⁹ bits on a 16 GB machine |
-| H5. Face time per frame | 4 ms | a quarter of a frame at the display's refresh rate (4 ms at 60 Hz, 1.7 ms at 144 Hz) |
-| H6. Face worker threads | at most 6 | one per core, less the one that draws |
-| H7. "Large file" | 65,536 bytes, written twice | one threshold: a file whose bytes take a quarter of the time budget to work out, measured (about 10 KB here at 50 ms) |
+**Other limits that went with it.**
+- **The display size row and the close-up row** now go up to the renderer's widest texture. They
+  stopped at 1,024 before.
+- **The display cache** now goes as far as the graphics memory has room for. It stopped at 4 GB
+  before, in the menu, the settings file and the hallway.
 
-The hallway bench runs at about 16.6 ms per frame on the video, image and pages lines, where the
-video and image lines measured 23–26 ms earlier in the review. Item pictures draw fully.
-
-## Left for you to decide
-- **The world's graphics allowance (512 MB):** the graphics bar counts it for everything but the
-  item pictures. It could be measured from the textures the world actually makes.
-- **The rooms drawn and kept (6 back, 7 ahead) and the rooms with pictures (1 either side):**
-  these could become a graphics "view distance" setting.
-- **The widest item picture (1,024 px):** raised to the renderer's own limit, a long page's picture
-  could be 16,384 px wide, which is 1 GB each. It would need to follow the display cache instead.
-- **The item cache's share of memory (a quarter of installed memory):** it could become a setting,
-  as the counting memory is.
+**FIND MY LIMITS and the display cache row.**
+- FIND MY LIMITS sizes the cache for the widths the letters ask for, so a bigger cache is what
+  brings back the wide pictures.
+- The display cache row's "rooms: N MB" shows the same figure: what the letters ask for, which the
+  current cache may hold back.
 
 ## Checked
-- tests/test_core.cpp: 56,274 checks over both passes, 0 failures.
-- Run locally, all these CI steps pass:
+- **Tests:** `tests/test_core.cpp`: 56,274 checks over both passes, 0 failures.
+- **CI, run locally:** all these steps pass:
   - same addresses;
   - filters judge, count and rank the same;
-  - models and the setup menu (with the new row check);
+  - models and the setup menu (with the item memory check);
   - the bytes256 line;
   - books;
-  - the whole hallway step.
-- X takes 5.4 s.
+  - the whole hallway step (with the new view distance check).
+- **Hallway bench** (software renderer, 60 frames):
+
+| Settings | Time per frame |
+| :--- | :--- |
+| 4,000-character pages | 17.8 ms |
+| 4,000-character pages, 1,024 MB cache | 21.3 ms |
+| 4,000-character pages, View 3, Pictures 5 (held to 3) | 16.5 ms |
+| Default settings, 7 either side | 16.6 ms |
+| View Distance 20 either side | 16.8 ms |

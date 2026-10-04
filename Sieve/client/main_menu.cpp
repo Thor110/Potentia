@@ -58,6 +58,7 @@ std::vector<MainMenu::Item> MainMenu::items() const
         return {{Kind::Action, "graphics"}, {Kind::Action, "controls"}, {Kind::Action, "language"}, {Kind::Action, "back"}};
     case Screen::Graphics:
         return {{Kind::Choice, "resolution"}, {Kind::Toggle, "fullscreen"}, {Kind::Toggle, "vsync"}, {Kind::Toggle, "edge_glow"}, {Kind::Toggle, "real_graphics"}, {Kind::Toggle, "door_portals"}, {Kind::Number, "graphics_memory"}, {Kind::Toggle, "fps_counter"},
+                {Kind::Number, "view_rooms"}, {Kind::Number, "picture_rooms"},
                 {Kind::Action, "back"}};
     case Screen::Controls: return {{Kind::Number, "mouse_sensitivity"}, {Kind::Toggle, "invert_mouse_y"}, {Kind::Action, "back"}};
     case Screen::Language: return {{Kind::Choice, "language_choice"}, {Kind::Action, "back"}};
@@ -76,6 +77,8 @@ std::string MainMenu::value_of(const Item& it) const
     if (it.id == "door_portals") return onoff(s_.door_portals);
     if (it.id == "graphics_memory") return trf("value.graphics_memory", {std::to_string(s_.graphics_memory_gb)});
     if (it.id == "fps_counter") return onoff(s_.fps_counter);
+    if (it.id == "view_rooms") return trf("value.view_rooms", {std::to_string(s_.view_rooms)});
+    if (it.id == "picture_rooms") return trf("value.picture_rooms", {std::to_string(s_.picture_rooms)});
     if (it.id == "mouse_sensitivity") return std::to_string(s_.mouse_sensitivity) + "%";
     if (it.id == "invert_mouse_y") return onoff(s_.invert_mouse_y);
     if (it.id == "language_choice")
@@ -192,6 +195,8 @@ void MainMenu::change(int dir)
         return;
     case Kind::Number:
         if (it.id == "graphics_memory") s_.graphics_memory_gb = std::clamp(s_.graphics_memory_gb + dir, 1, 128);
+        else if (it.id == "view_rooms") s_.view_rooms = std::clamp(s_.view_rooms + dir, 2, 64);
+        else if (it.id == "picture_rooms") s_.picture_rooms = std::clamp(s_.picture_rooms + dir, 0, 8);
         else s_.mouse_sensitivity = std::clamp(s_.mouse_sensitivity + dir * 10, 10, 400);
         save();
         return;

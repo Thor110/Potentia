@@ -142,6 +142,14 @@ AppSettings AppSettings::load(const fs::path& path)
             {
                 try { s.graphics_memory_gb = std::clamp(std::stoi(value), 1, 128); } catch (...) {}
             }
+            else if (key == "view_rooms")
+            {
+                try { s.view_rooms = std::clamp(std::stoi(value), 2, 64); } catch (...) {}
+            }
+            else if (key == "picture_rooms")
+            {
+                try { s.picture_rooms = std::clamp(std::stoi(value), 0, 8); } catch (...) {}
+            }
             else if (key == "fps_counter") s.fps_counter = on_off(value, false);
         }
         // [world], and [graphics] too, where files written before the two moved kept them.
@@ -167,9 +175,13 @@ AppSettings AppSettings::load(const fs::path& path)
             {
                 try { s.unit_time_ms = std::clamp(std::stoi(value), 5, 60000); } catch (...) {}
             }
+            else if (key == "item_memory_pct")
+            {
+                try { s.item_memory_pct = std::clamp(std::stoi(value), 5, 90); } catch (...) {}
+            }
             else if (key == "model_cache_mb")
             {
-                try { s.model_cache_mb = std::clamp(std::stoi(value), 8, 4096); } catch (...) {}
+                try { s.model_cache_mb = std::max(std::stoi(value), 8); } catch (...) {}
             }
         }
         else if (section == "controls")
@@ -199,6 +211,8 @@ bool AppSettings::save(const fs::path& path) const
       << "real_graphics = " << on_off(real_graphics) << "   ; Real Graphics (only one of the two is on)\n"
       << "door_portals = " << on_off(door_portals) << "    ; Door Portals: procedural data noise in the doorways\n"
       << "graphics_memory_gb = " << graphics_memory_gb << "   ; the graphics card's memory, for the setup menu's budget\n"
+      << "view_rooms = " << view_rooms << "   ; View Distance: rooms drawn and kept either side of yours\n"
+      << "picture_rooms = " << picture_rooms << "   ; Picture Distance: rooms either side of yours with item pictures of their own\n"
       << "fps_counter = " << on_off(fps_counter) << "\n"
       << "\n[world]\n"
       << "model_cache_mb = " << model_cache_mb << "   ; the models line: memory for rendered crate faces\n"
@@ -207,6 +221,7 @@ bool AppSettings::save(const fs::path& path) const
       << "counting_memory_pct = " << counting_memory_pct << "   ; percent of installed memory the setup menu's counts may take at once\n"
       << "merge_cache_pct = " << merge_cache_pct << "   ; percent of the filter memory kept for merged filters between counts\n"
       << "unit_time_ms = " << unit_time_ms << "   ; the time budget: the longest one unit may take to open\n"
+      << "item_memory_pct = " << item_memory_pct << "   ; percent of installed memory the items around you may take\n"
       << "\n[controls]\n"
       << "mouse_sensitivity = " << mouse_sensitivity << "   ; percent\n"
       << "invert_mouse_y = " << on_off(invert_mouse_y) << "\n"

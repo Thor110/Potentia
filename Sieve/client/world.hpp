@@ -18,6 +18,12 @@
 
 namespace hallway {
 
+// The doorways' textures (door_portal.cpp), here so the setup menu's graphics bar counts the same:
+// a door's portal noise is one cell to kPortalGrain screen pixels square, and its sign over it
+// kSignPxW by kSignPxH (1.2 m by 0.4 m, 400 px a metre), one for each line.
+inline constexpr int kPortalGrain = 2;
+inline constexpr int kSignPxW = 480, kSignPxH = 160;
+
 inline constexpr float kHalfWidth = 2.0f;   // walls at x = -2 and +2
 inline constexpr float kHeight = 3.0f;
 inline constexpr float kCaseFront = 1.65f;  // bookcase faces at x = -1.65 and +1.65

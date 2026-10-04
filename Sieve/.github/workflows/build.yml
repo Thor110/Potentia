@@ -175,12 +175,18 @@ jobs:
           $H --menu --settings cm.ini --press "$downs,Right,Down,Left,Left" --screenshot cm.png > /dev/null
           grep -q "^counting_memory_pct = 55" cm.ini
           grep -q "^merge_cache_pct = 40" cm.ini
-          # The time budget, the last GLOBAL row (14): 5 ms a step from 50, saved with the application's
+          # The time budget, GLOBAL row 14: 5 ms a step from 50, saved with the application's
           # settings; the menu says it is waiting for X.
           rm -f tb.ini
           downs=$(python -c "print(','.join(['Down']*14))")
           $H --menu --settings tb.ini --press "$downs,Right,Right" --screenshot tb.png > /dev/null
           grep -q "^unit_time_ms = 60" tb.ini
+          # The item memory, the last GLOBAL row (15): percent of installed memory, 5 a step from 25,
+          # saved with the application's settings.
+          rm -f im.ini
+          downs=$(python -c "print(','.join(['Down']*15))")
+          $H --menu --settings im.ini --press "$downs,Right" --screenshot im.png > /dev/null
+          grep -q "^item_memory_pct = 30" im.ini
           # ...and Graphics Memory, which the setup menu's budget keeps it within, is a graphics
           # setting: Settings, Graphics, then the seventh row.
           rm -f gm.ini
@@ -206,7 +212,7 @@ jobs:
           # line's list. Each row here ticks a mode and the saved file says which line it was.
           # Closing the overlay is what writes it, which also covers that path.
           # (The audio rows are six: its notes, its note set, and notes2's range, durations and voices.)
-          for pair in "15 text" "19 image" "22 audio" "25 audio" "28 video" "32 books" "33 models" "36 binary"; do
+          for pair in "16 text" "20 image" "23 audio" "26 audio" "29 video" "33 books" "34 models" "37 binary"; do
             set -- $pair
             rm -f row$1.ini
             downs=$(python -c "print(','.join(['Down']*$1))")
@@ -667,6 +673,11 @@ jobs:
           grep -q "^edge_glow = off" app.ini
           grep -q "^real_graphics = on" app.ini
           grep -q "^door_portals = on" app.ini   # Real Graphics brings Door Portals with it
+          # View Distance and Picture Distance, the two rows after the FPS counter, save.
+          rm -f vr.ini
+          $H --main-menu --settings vr.ini --press "Down,Return,Return,Down,Down,Down,Down,Down,Down,Down,Down,Right,Down,Right,Right" --screenshot main-view.png > /dev/null
+          grep -q "^view_rooms = 8" vr.ini
+          grep -q "^picture_rooms = 3" vr.ini
           mkdir -p lt/data/lang && cp data/lang/en.txt lt/data/lang/ && printf 'language.name = Test\nitem.start = START TEST\n' > lt/data/lang/tt.txt
           (cd lt && ../$H --main-menu --language tt --screenshot ../main-tt.png) | q "main menu: language tt, font sieve8x8"
           # The language's font: sieve8x8 draws accented and Greek letters; a missing font is reported.

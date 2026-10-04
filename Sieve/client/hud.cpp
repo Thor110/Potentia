@@ -3,6 +3,7 @@
 // and COST tabs.
 
 #include "hallway.hpp"
+#include "gpu_memory.hpp"
 
 namespace hallway::hall {
 
@@ -138,10 +139,10 @@ void Hallway::draw_pixels(const Space::Digits& unit, const ImageFormat& f, float
     {
         if (c.tex && (c.w != f.width || c.h != f.height))
         {
-            SDL_DestroyTexture(c.tex);
+            gpu::destroy(c.tex);
             c.tex = nullptr;
         }
-        if (!c.tex) c.tex = SDL_CreateTexture(r_, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STATIC, int(f.width), int(f.height));
+        if (!c.tex) c.tex = gpu::create(r_, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STATIC, int(f.width), int(f.height));
         if (c.tex)
         {
             const auto px = render_image(unit, f);

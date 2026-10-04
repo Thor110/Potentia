@@ -247,14 +247,15 @@ the foot, on the line's colour.
 An item's display (the picture on its front) used to be one width on every line, the display
 size setting. It is now that setting **or wider**, on a line whose items carry text: as wide as
 its letters need to come out at the **letters on items** size (GLOBAL, `--item-letters`, default
-8 px, the font's own size), rounded up to a power of two, at most 1024 (`client/display.hpp`,
-shared by the hallway and the setup menu's budget, so the two agree). A 410-letter page is 256 px
+8 px, the font's own size), rounded up to a power of two, at most the widest at which the rooms
+with pictures all fit the display cache (`client/display.hpp` widest_display_px, 1024 until
+4 October 2026; shared by the hallway and the setup menu's budget, so the two agree). A 410-letter page is 256 px
 wide at the defaults and reads as a page; images, audio and video stay at the setting because
 their titles fit. Letters that still come out smaller are dashes. A title's letters are capped at
 a sixteenth of the width so a large display is not all title.
 
 **Close-ups** are a level of detail on top (GLOBAL **close-up display size**, `--close-up`: off,
-256, 512 or 1024, the default). An item whose display is drawn more than 1.25 times wider on screen
+or a power of two from 256 to the renderer's widest texture; 1024 the default). An item whose display is drawn more than 1.25 times wider on screen
 than it has pixels is drawn again at the power of two that covers its width on screen, from twice
 the line's width up to the setting, by the same render workers, ahead of the ordinary queue. The
 ordinary display stands in until it arrives. At most 24 are kept; one unused for two seconds is
@@ -416,8 +417,8 @@ over their cover, models their mesh with its title. They are drawn by the render
 off wear the picture of the same slot in your room. Where the picture goes on each item is
 `data/meshes/faces.ini`, measured from the item models (`data/meshes/book-<medium>.obj`, cleaned
 to flat normals). The setup menu's display size and display cache (named "picture" until 27 September)
-apply to every line and sit in GLOBAL; the display size goes up to 1024 px and the cache to 4 GB,
-since three rooms of 1024 px pictures need about 2.2 GB. `--settle N` draws N frames standing still before a
+apply to every line and sit in GLOBAL; the display size goes up to the renderer's widest texture
+and the cache as far as the graphics memory has room (1024 px and 4 GB until 4 October 2026). `--settle N` draws N frames standing still before a
 screenshot, so the pictures have arrived when it is taken.
 
 ### The hallway, split
@@ -1315,3 +1316,36 @@ The word filters' estimate made exact, and the time budget (4 October 2026).
   - The rooms drawn and kept (6 back, 7 ahead) and rooms with faces (1).
   - The display width cap (1024 px): raised to the renderer's limit, a long page's display could
     be 16,384 px wide, 1 GB each.
+The four left for decision (4 October 2026).
+- **D. The item cache's share (GLOBAL ITEM MEMORY, row 15; kFirstLineRow is 16):**
+  - item_memory_pct, 25 at first, 5 to 90 in steps of 5 (PgUp/PgDn 25), saved in [world];
+    --item-memory PCT.
+  - cache_bytes_here() is installed memory x the share, so the item cache, too_large_bits() and
+    everything sized from it follow it. CI's line rows moved down one, with a check the row saves.
+- **A. The world's graphics, measured (client/gpu_memory.hpp):**
+  - Every texture is made and destroyed through gpu::create and gpu::destroy, which count their
+    bytes as World or Pictures (item_faces.cpp's).
+  - Menu::world_graphics_mb() replaces the 512 MB allowance: the renderer's three frames, plus the
+    larger of what the world will make (Real Graphics' frame, the door portals at kPortalGrain,
+    the seven signs, two picture-sized frames) and what it holds now.
+  - About 37 MB at 1080p.
+- **B. View distance (Settings > Graphics):**
+  - VIEW DISTANCE (view_rooms, 2..64, 7 at first) is the rooms drawn and kept either side of yours, as many
+    behind as ahead (it was 6 back and 7 ahead).
+  - PICTURE DISTANCE (picture_rooms, 0..8, 1 at first) is the rooms with pictures either side
+    of yours.
+  - Both are saved in [graphics]; --view-rooms N, --picture-rooms N.
+  - menu.hpp's set_view, view_rooms, tiles_kept and picture_rooms replace
+    kCacheBack, kCacheAhead, kTilesKept and kFaceRooms.
+  - The item cache, the line cache estimate, the render window and FIND MY LIMITS' display cache
+    all follow them.
+- **C. The widest display follows the display cache (display.hpp widest_display_px):**
+  - It is the widest power of two at which every picture of the rooms with pictures fits the
+    display cache, no wider than the renderer's widest texture (gpu::max_texture_px). It holds
+    back only the letters' widening, never the display size setting.
+  - kMaxDisplayPx (1024) is gone. The display size and close-up rows go up to the renderer's
+    widest texture, and the display cache as far as the graphics memory has room (4 GB before).
+  - FIND MY LIMITS sizes the cache for the widths the letters ask (display_mb(false)), and the
+    display cache row says what they would take.
+  - So a long page at a small cache is drawn narrower, with every item pictured, where before a
+    few items had wide pictures and the rest stand-ins. Close-ups still draw the nearest wide.

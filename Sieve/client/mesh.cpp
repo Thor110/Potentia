@@ -13,6 +13,7 @@
 // standards of a GPU; it is here so that the hallway runs with no graphics driver worth the name,
 // which is also why the wireframe remains the default.
 #include "mesh.hpp"
+#include "gpu_memory.hpp"
 
 #include "cli/dictionaries.hpp"
 
@@ -338,7 +339,7 @@ MeshBatch::~MeshBatch() { release(); }
 
 void MeshBatch::release()
 {
-    if (texture_) SDL_DestroyTexture(texture_);
+    if (texture_) gpu::destroy(texture_);
     texture_ = nullptr;
     texture_owner_ = nullptr;
     tex_w_ = tex_h_ = 0;
@@ -494,7 +495,7 @@ void MeshBatch::draw(SDL_Renderer* r)
     if (texture_ && (texture_owner_ != r || tex_w_ != w_ || tex_h_ != h_)) release();
     if (!texture_)
     {
-        texture_ = SDL_CreateTexture(r, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w_, h_);
+        texture_ = gpu::create(r, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w_, h_);
         if (!texture_) return;
         SDL_SetTextureBlendMode(texture_, SDL_BLENDMODE_NONE);
         SDL_SetTextureScaleMode(texture_, SDL_SCALEMODE_NEAREST);

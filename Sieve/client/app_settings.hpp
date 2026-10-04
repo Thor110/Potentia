@@ -91,14 +91,19 @@ struct AppSettings
     bool real_graphics = false;  // Real Graphics
     bool door_portals = false;   // Door Portals: procedural data noise in the doorways
     int graphics_memory_gb = 4;  // the graphics card's memory, which the setup menu's budget keeps within
+    // View distance: the rooms drawn and kept either side of yours, 2..64, and the rooms
+    // either side of yours whose items have pictures of their own (the rest borrow yours), 0..8.
+    int view_rooms = 7;
+    int picture_rooms = 1;
     // The two below describe the generated world rather than how it is drawn, so they are set in
     // the setup menu, not in Graphics. They are kept here, in [world], so that they are saved.
-    int model_cache_mb = 64;     // the display cache: memory for the pictures on items, 8..4096
+    int model_cache_mb = 64;     // the display cache: memory for the pictures on items, 8 MB up
     int angle_decimals = 1;      // decimal places on the compass's degree readout, 0..kMaxAngleDecimals
     int filter_memory_mb = 512;  // the filter memory: the most one count's tables may take (plugin.hpp), 64..1048576
     int counting_memory_pct = 50; // installed memory the setup menu's counts may take at once (menu.cpp), 5..100
     int merge_cache_pct = 50;    // the filter memory kept for merged automata between counts (plugin.hpp), 0..100
     int unit_time_ms = 50;       // the time budget: the longest one unit may take to open (plugin.hpp), 5..60000
+    int item_memory_pct = 25;    // installed memory the hallway's items around you may take (menu.cpp), 5..90
     bool fps_counter = false;    // show frames per second in the hallway
     int mouse_sensitivity = 100; // percent, 10..400
     bool invert_mouse_y = false;

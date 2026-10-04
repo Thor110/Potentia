@@ -273,6 +273,7 @@ if(SIEVE_BUILD_CLIENT)
         client/navigator.cpp
         client/pause_menu.cpp
         client/font.cpp
+        client/gpu_memory.cpp
         client/hallway.cpp
         client/hud.cpp
         client/main_menu.cpp

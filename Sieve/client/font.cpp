@@ -7,6 +7,7 @@
 // actually uses. The atlases belong to the renderer that made them and are thrown away if the
 // renderer changes, which is what happens when the window is rebuilt for a new resolution.
 #include "font.hpp"
+#include "gpu_memory.hpp"
 
 #include "cli/dictionaries.hpp"
 
@@ -47,7 +48,7 @@ struct Font
     void release()
     {
         for (auto& [block, tex] : atlases)
-            if (tex) SDL_DestroyTexture(tex);
+            if (tex) gpu::destroy(tex);
         atlases.clear();
         renderer = nullptr;
     }
@@ -72,7 +73,7 @@ struct Font
                     if (g->second.rows[size_t(y)] >> (g->second.width - 1 - x) & 1)
                         px[size_t(oy + y) * size_t(cw * 16) + size_t(ox + x)] = 0xFFFFFFFFu;
         }
-        SDL_Texture* tex = SDL_CreateTexture(r, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, cw * 16, ch * 16);
+        SDL_Texture* tex = gpu::create(r, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, cw * 16, ch * 16);
         if (tex)
         {
             SDL_UpdateTexture(tex, nullptr, px.data(), cw * 16 * 4);

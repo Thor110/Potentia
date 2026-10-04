@@ -7,6 +7,7 @@
 // under it, as books do.
 
 #include "hallway.hpp"
+#include "gpu_memory.hpp"
 #include "cli/timings.hpp"
 
 namespace hallway::hall {
@@ -442,10 +443,10 @@ void Hallway::stop_face_workers()
 void Hallway::clear_faces()
 {
     for (auto& [key, cf] : faces_)
-        if (cf.tex) SDL_DestroyTexture(cf.tex);
+        if (cf.tex) gpu::destroy(cf.tex);
     faces_.clear();
     for (auto& [key, cf] : sharp_)
-        if (cf.tex) SDL_DestroyTexture(cf.tex);
+        if (cf.tex) gpu::destroy(cf.tex);
     sharp_.clear();
     sharp_pending_.clear();
     // Anything asked for or finished before now is for a field that no longer exists.
@@ -482,7 +483,7 @@ void Hallway::make_face_room()
             const bool out_it = outside(it->first), out_old = outside(oldest->first);
             if (out_it != out_old ? out_it : it->second.used < oldest->second.used) oldest = it;
         }
-        if (oldest->second.tex) SDL_DestroyTexture(oldest->second.tex);
+        if (oldest->second.tex) gpu::destroy(oldest->second.tex);
         faces_.erase(oldest);
     }
 }
@@ -505,12 +506,12 @@ void Hallway::collect_faces(Uint64 until)
             // A close-up replaces the one it was asked to improve on, if any.
             sharp_pending_.erase(d.place);
             if (d.generation != face_generation_) continue;
-            SDL_Texture* tex = SDL_CreateTexture(r_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, d.w, d.h);
+            SDL_Texture* tex = gpu::create(r_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, d.w, d.h, gpu::Use::Pictures);
             if (!tex) continue;
             SDL_UpdateTexture(tex, nullptr, d.pixels.data(), d.w * 4);
             SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
             SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_LINEAR);
-            if (auto it = sharp_.find(d.place); it != sharp_.end() && it->second.tex) SDL_DestroyTexture(it->second.tex);
+            if (auto it = sharp_.find(d.place); it != sharp_.end() && it->second.tex) gpu::destroy(it->second.tex);
             sharp_[d.place] = Face{tex, portal_frame_, d.w};
             continue;
         }
@@ -518,7 +519,7 @@ void Hallway::collect_faces(Uint64 until)
         if (d.generation != face_generation_ || d.w != face_w() || d.h != face_h()) continue;
         const int64_t key = d.place - face_shift_ * per;
         if (key < -int64_t(face_rooms()) * per || key >= int64_t(face_rooms() + 1) * per || faces_.count(key)) continue;
-        SDL_Texture* tex = SDL_CreateTexture(r_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, d.w, d.h);
+        SDL_Texture* tex = gpu::create(r_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, d.w, d.h, gpu::Use::Pictures);
         if (!tex) continue;
         SDL_UpdateTexture(tex, nullptr, d.pixels.data(), d.w * 4);
         SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
@@ -718,7 +719,7 @@ void Hallway::drop_stale_sharp()
     {
         if (portal_frame_ - it->second.used > 120)
         {
-            if (it->second.tex) SDL_DestroyTexture(it->second.tex);
+            if (it->second.tex) gpu::destroy(it->second.tex);
             it = sharp_.erase(it);
         }
         else ++it;
@@ -728,7 +729,7 @@ void Hallway::drop_stale_sharp()
         auto oldest = sharp_.begin();
         for (auto it = sharp_.begin(); it != sharp_.end(); ++it)
             if (it->second.used < oldest->second.used) oldest = it;
-        if (oldest->second.tex) SDL_DestroyTexture(oldest->second.tex);
+        if (oldest->second.tex) gpu::destroy(oldest->second.tex);
         sharp_.erase(oldest);
     }
 }
@@ -742,7 +743,11 @@ int Hallway::display_px_here() const
     DisplayText t = display_text_titled(title);
     if (on_books()) t = display_text_books(double(lines_[0].space.unit_length()));
     else if (!on_models() && !on_binary() && line().kind == LineKind::Text) t = display_text_pages(double(line().space.unit_length()), title);
-    return display_px(face_px_, letters_px_, double(face_aspect_), t);
+    // As wide as the letters need, while every picture of the rooms with pictures still fits the
+    // display cache (display.hpp widest_display_px).
+    const double pictures = double(2 * face_rooms() + 1) * double(sieve::books_per_tile());
+    const int widest = widest_display_px(double(face_budget_mb_) * 1048576.0, pictures, double(face_aspect_), texture_px_);
+    return display_px(face_px_, letters_px_, double(face_aspect_), t, widest);
 }
 
 } // namespace hallway::hall

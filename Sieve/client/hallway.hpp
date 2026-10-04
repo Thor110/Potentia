@@ -110,7 +110,7 @@ constexpr int kBooksLine = 4, kModelsLine = 5, kBinaryLine = 6;
 // The short wall on the binary line's open edge, under Real Graphics: dark, so the drop past it
 // is what the eye goes to.
 constexpr SDL_FColor kRailColour{0.42f, 0.44f, 0.42f, 1.0f};
-// (kCacheBack and kCacheAhead, the tiles drawn and kept either side of yours: menu.hpp.)
+// (view_rooms(), the tiles drawn and kept either side of yours: the View Distance setting, menu.hpp.)
 constexpr int kBuckets = 12; // distance fades of the wireframe
 inline const Theme& theme_of(int li)
 {
@@ -486,7 +486,7 @@ public:
 private:
     bool thin_ = false;
     int thin_line_ = -1; // the one line thin is for, or -1 for every line
-    int face_rooms() const { return thin() ? 0 : kFaceRooms; }
+    int face_rooms() const { return thin() ? 0 : picture_rooms(); } // (Picture Distance: menu.hpp)
 
 public:
 
@@ -654,7 +654,7 @@ public:
 
     // One noise cell is this many screen pixels square. Two keeps the grain visible on a big
     // display, reads as data rather than television snow, and costs a quarter of per-pixel noise.
-    static constexpr int kGrain = 2;
+    static constexpr int kGrain = kPortalGrain; // (world.hpp)
     static const std::array<uint32_t, 256>& smooth_table();
 
     static float noise_at(int x, int y, uint32_t seed);
@@ -799,7 +799,8 @@ public:
     // rendered to a small flat image and printed on its front, and then its neighbours do the
     // same, spreading outward along the shelf, for as long each frame as face_ms_per_frame() allows.
     //
-    // Only the room you are in and kFaceRooms either side of it get faces of their own: three
+    // Only the room you are in and picture_rooms() either side of it (the Picture Distance setting,
+    // 1 at first) get faces of their own: three
     // rooms is 384 crates at 128 a tile and 768 at 256, where the corridor in view can hold far
     // more. Past them a crate wears the face already rendered for the same slot in your room, so
     // the distance is filled with a stand-in that becomes the real face as you walk up to it.
@@ -820,7 +821,7 @@ public:
     int face_h() const { return std::max(1, int(std::lround(float(face_w()) * face_aspect_))); }
     size_t face_bytes() const { return size_t(face_w()) * size_t(face_h()) * 4; }
     float face_aspect_ = 0.40f / 0.28f; // height over width of the current line's picture
-    static constexpr int kFaceRooms = 1; // rooms either side of yours with faces of their own
+    int texture_px_ = 1024;               // the renderer's widest texture (gpu::max_texture_px)
     // The time each frame may spend taking in rendered faces: a quarter of a frame at the
     // display's refresh rate (4 ms at 60 Hz, 1.7 ms at 144), the rest left for drawing the world.
     double face_ms_per_frame() const;
@@ -932,7 +933,7 @@ public:
     // The close-up display size (0 turns close-ups off); see sharp_.
     void set_closeup_px(uint32_t px)
     {
-        const int v = px == 0 ? 0 : int(std::clamp(px, 64u, uint32_t(kMaxDisplayPx)));
+        const int v = px == 0 ? 0 : std::clamp(int(std::min<uint32_t>(px, INT32_MAX)), 64, texture_px_);
         if (v == closeup_px_) return;
         closeup_px_ = v;
         clear_faces();
@@ -1314,7 +1315,7 @@ private:
     // Portal titles (door_portal.cpp): one lettered sign per line, over every doorway leading to it.
     struct SignCache { SDL_Texture* tex = nullptr; };
     std::array<SignCache, kLines> signs_{};
-    static constexpr int kSignPxW = 480, kSignPxH = 160;          // 1.2 m by 0.4 m, 400 px a metre
+    // (kSignPxW by kSignPxH, 1.2 m by 0.4 m at 400 px a metre: world.hpp)
     static constexpr float kSignBottom = 2.35f, kSignTop = 2.75f; // between the door and the ceiling
     SDL_Texture* sign_texture(int line);
     void draw_door_sign(float sx, float z0, std::vector<SDL_Vertex>& verts);
@@ -1331,7 +1332,8 @@ private:
     };
     // ---- close-ups: a level of detail for the displays nearest you
     //
-    // An ordinary display is drawn once at line_px_ for every item in three rooms. Walk up to an
+    // An ordinary display is drawn once at line_px_ for every item in the rooms with pictures (yours
+    // and the Picture Distance either side: three at first). Walk up to an
     // item and its display covers far more of the screen than it has pixels, so the few items
     // that do are drawn again, larger: at the power of two that covers the width they take on
     // screen, from twice line_px_ up to the close-up size setting. The ordinary display stands in

@@ -3,6 +3,7 @@
 // drawn over it live in files of their own (hallway.hpp says which).
 
 #include "hallway.hpp"
+#include "gpu_memory.hpp"
 
 #include "cli/vault.hpp"
 #include "cli/vault_decode.hpp"
@@ -20,6 +21,7 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
       bin_case_{build_tile(false, true, -1), build_tile(false, true, 1)}, edge_geometry_{build_edge(1), build_edge(-1)},
       book_geometry_{build_books(false), build_books(true)}
 {
+    texture_px_ = gpu::max_texture_px(r_);
     // The books line: a cover from the image line, a title and book_pages pages from the pages line.
     books_ = std::make_unique<BookSpace>(lines_[1].space, lines_[0].space, book_pages);
     // The models line: V vertices and F triangles on a grid of C steps (SPECIFICATIONS §12).
@@ -176,7 +178,7 @@ void Hallway::move_tiles(int64_t d)
     if (d > -16 && d < 16)
     {
         const int64_t by = d * int64_t(sieve::books_per_tile());
-        const int64_t lo = -int64_t(kCacheBack) * int64_t(sieve::books_per_tile()), hi = int64_t(kCacheAhead + 1) * int64_t(sieve::books_per_tile());
+        const int64_t lo = -int64_t(view_rooms()) * int64_t(sieve::books_per_tile()), hi = int64_t(view_rooms() + 1) * int64_t(sieve::books_per_tile());
         for (auto& [key, b] : cache_)
             if (key - by >= lo && key - by < hi) shifted.emplace(key - by, std::move(b));
         // The rendered crate faces move with them: the same models, d tiles closer.
@@ -184,7 +186,7 @@ void Hallway::move_tiles(int64_t d)
         for (auto& [key, cf] : faces_)
         {
             if (key - by >= lo && key - by < hi) moved.emplace(key - by, cf);
-            else if (cf.tex) SDL_DestroyTexture(cf.tex);
+            else if (cf.tex) gpu::destroy(cf.tex);
         }
         faces_ = std::move(moved);
     }
@@ -1456,9 +1458,10 @@ void Hallway::render()
     if (hover_ && effective_mode() == FilterMode::Hide && !book(hover_->tile, hover_->slot()).passes) hover_.reset();
     if (hover_ && effective_mode() == FilterMode::Excluded && book(hover_->tile, hover_->slot()).passes) hover_.reset();
 
-    constexpr int kBack = kCacheBack, kAhead = kCacheAhead;
+    const int kBack = view_rooms(), kAhead = kBack; // the View Distance, as far behind as ahead
     // Only tiles that can appear on screen are drawn (usually about half of them).
-    bool visible[kBack + kAhead + 1];
+    const std::unique_ptr<bool[]> visible_rooms(new bool[size_t(kBack + kAhead + 1)]);
+    bool* visible = visible_rooms.get();
     for (int t = -kBack; t <= kAhead; ++t)
     {
         const Vec3 shift{0, 0, t * kTile};
@@ -1867,14 +1870,14 @@ void Hallway::release_textures()
     release_signs();
     if (portal_.tex)
     {
-        SDL_DestroyTexture(portal_.tex);
+        gpu::destroy(portal_.tex);
         portal_.tex = nullptr;
         portal_.w = portal_.h = 0;
     }
     for (PictureCache& c : picture_)
         if (c.tex)
         {
-            SDL_DestroyTexture(c.tex);
+            gpu::destroy(c.tex);
             c.tex = nullptr;
         }
 }
@@ -1891,7 +1894,7 @@ void Hallway::set_controls(int sensitivity_percent, bool invert_y)
 // the cache away, because every picture in it is the wrong size now.
 void Hallway::set_face_px(uint32_t px)
 {
-    const int n = int(std::clamp<uint32_t>(px, 16, 1024));
+    const int n = std::clamp(int(std::min<uint32_t>(px, INT32_MAX)), 16, texture_px_);
     if (n == face_px_) return;
     face_px_ = n;
     clear_faces();
@@ -1899,13 +1902,13 @@ void Hallway::set_face_px(uint32_t px)
 
 void Hallway::set_model_cache(int megabytes)
 {
-    face_budget_mb_ = uint32_t(std::clamp(megabytes, 8, 4096));
+    face_budget_mb_ = uint32_t(std::max(megabytes, 8));
     while (faces_.size() > face_capacity())
     {
         auto oldest = faces_.begin();
         for (auto it = faces_.begin(); it != faces_.end(); ++it)
             if (it->second.used < oldest->second.used) oldest = it;
-        if (oldest->second.tex) SDL_DestroyTexture(oldest->second.tex);
+        if (oldest->second.tex) gpu::destroy(oldest->second.tex);
         faces_.erase(oldest);
     }
 }
