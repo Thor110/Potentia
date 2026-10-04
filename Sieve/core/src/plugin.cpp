@@ -1827,6 +1827,13 @@ std::atomic<double> g_merge_cache_share{kDefaultMergeCacheShare};
 double merge_cache_share() { return g_merge_cache_share.load(std::memory_order_relaxed); }
 void set_merge_cache_share(double share) { g_merge_cache_share.store(std::clamp(share, 0.0, 1.0), std::memory_order_relaxed); }
 
+namespace {
+std::atomic<double> g_unit_time_ms{kDefaultUnitTimeMs};
+} // namespace
+
+double unit_time_ms() { return g_unit_time_ms.load(std::memory_order_relaxed); }
+void set_unit_time_ms(double ms) { g_unit_time_ms.store(std::max(1.0, ms), std::memory_order_relaxed); }
+
 std::string memory_text(double b)
 {
     char buf[32];

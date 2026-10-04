@@ -98,6 +98,7 @@ struct AppSettings
     int filter_memory_mb = 512;  // the filter memory: the most one count's tables may take (plugin.hpp), 64..1048576
     int counting_memory_pct = 50; // installed memory the setup menu's counts may take at once (menu.cpp), 5..100
     int merge_cache_pct = 50;    // the filter memory kept for merged automata between counts (plugin.hpp), 0..100
+    int unit_time_ms = 50;       // the time budget: the longest one unit may take to open (plugin.hpp), 5..60000
     bool fps_counter = false;    // show frames per second in the hallway
     int mouse_sensitivity = 100; // percent, 10..400
     bool invert_mouse_y = false;

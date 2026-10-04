@@ -163,6 +163,10 @@ AppSettings AppSettings::load(const fs::path& path)
             {
                 try { s.merge_cache_pct = std::clamp(std::stoi(value), 0, 100); } catch (...) {}
             }
+            else if (key == "unit_time_ms")
+            {
+                try { s.unit_time_ms = std::clamp(std::stoi(value), 5, 60000); } catch (...) {}
+            }
             else if (key == "model_cache_mb")
             {
                 try { s.model_cache_mb = std::clamp(std::stoi(value), 8, 4096); } catch (...) {}
@@ -202,6 +206,7 @@ bool AppSettings::save(const fs::path& path) const
       << "filter_memory_mb = " << filter_memory_mb << "   ; the most one count of the filters' survivors may take for its tables\n"
       << "counting_memory_pct = " << counting_memory_pct << "   ; percent of installed memory the setup menu's counts may take at once\n"
       << "merge_cache_pct = " << merge_cache_pct << "   ; percent of the filter memory kept for merged filters between counts\n"
+      << "unit_time_ms = " << unit_time_ms << "   ; the time budget: the longest one unit may take to open\n"
       << "\n[controls]\n"
       << "mouse_sensitivity = " << mouse_sensitivity << "   ; percent\n"
       << "invert_mouse_y = " << on_off(invert_mouse_y) << "\n"

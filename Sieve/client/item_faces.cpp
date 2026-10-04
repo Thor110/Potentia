@@ -385,10 +385,19 @@ void Hallway::fill_triangle(std::vector<uint32_t>& px, int n, const std::array<f
     }
 }
 
+double Hallway::face_ms_per_frame() const
+{
+    float hz = 0; // (60 where SDL cannot tell)
+    if (SDL_Window* w = SDL_GetRenderWindow(r_))
+        if (const SDL_DisplayMode* m = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(w))) hz = m->refresh_rate;
+    return 1000.0 / double(hz > 0 ? hz : 60.0f) / 4.0;
+}
+
 void Hallway::start_face_workers()
 {
     if (!face_workers_.empty()) return;
-    const unsigned n = std::clamp(std::thread::hardware_concurrency(), 2u, 6u) - 1;
+    // One a core but the one that draws (at least one; 0 when the system cannot tell).
+    const unsigned n = std::max(2u, std::thread::hardware_concurrency()) - 1;
     for (unsigned i = 0; i < n; ++i)
         face_workers_.emplace_back([this] {
             std::vector<uint32_t> px;
@@ -608,7 +617,7 @@ void Hallway::draw_item_faces(const bool* visible, int back, int ahead)
     }
 
     const Uint64 start = SDL_GetTicksNS();
-    const Uint64 until = start + Uint64(kFaceMsPerFrame * 1e6);
+    const Uint64 until = start + Uint64(face_ms_per_frame() * 1e6);
     collect_faces(until);
     // The workers are kept a little ahead, not given the whole field at once, so that what
     // they draw next is still what is nearest when they get to it.

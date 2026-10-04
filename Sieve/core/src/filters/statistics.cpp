@@ -7,8 +7,11 @@
 #include "sieve/plugin.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 
@@ -82,7 +85,9 @@ public:
     SymbolEntropy(int64_t min_mb, int64_t max_mb, uint32_t base, uint32_t length) : min_(min_mb), max_(max_mb)
     {
         provenance_ = "min_millibits=" + std::to_string(min_mb) + " max_millibits=" + std::to_string(max_mb);
-        if (base == 2 && length <= kMaxBinaryRankLength) ranker_ = std::make_unique<BinaryRanker>(*this, length);
+        if (base != 2) return;
+        set_table_bytes(binary_rank_bytes(length));
+        if (length <= binary_rank_limit() && table_bytes() <= filter_memory()) ranker_ = std::make_unique<BinaryRanker>(*this, length);
     }
     bool passes(std::span<const uint32_t> u) const override
     {
@@ -123,10 +128,70 @@ private:
     //   completions(j ones so far, r left) = sum over k in K of C(r, k - j).
     // rank and unrank walk the unit once, keeping C(r, k - j) for every k in K and stepping each
     // to the next position with one small multiply and divide, instead of rebuilding binomial
-    // rows at every position. Above this length compact is not offered. The limit is time, not
-    // memory (the walk keeps L numbers of L bits, 0.5 MB at 2048): one rank or unrank costs about
-    // L^3, measured at 0.15 s for 1024 symbols, 1 s for 2048, 7 s for 4096 and 66 s for 8192.
-    static constexpr uint32_t kMaxBinaryRankLength = 2048;
+    // rows at every position. The longest it is offered at follows the time budget (plugin.hpp
+    // unit_time_ms): one rank or unrank costs about L^3 (measured here at 0.15 s for 1024 symbols,
+    // 1 s for 2048, 7 s for 4096 and 66 s for 8192, against 50 ms allowed), so it is timed at 256
+    // and 512 symbols, once for the process, and the length whose rank fits the budget follows.
+    // Its memory (the walk's L numbers of up to L bits) must fit the filter memory too.
+    static double binary_rank_bytes(uint32_t L) { return (double(L) + 2) * (double(L) / 8.0 + 48.0); }
+    static uint32_t binary_rank_limit()
+    {
+        // The time of one rank or unrank at a length, whichever is slower (the quickest of three
+        // tries: a scheduler's pause is not the cost), with every count of ones allowed, the slowest.
+        auto timed = [](uint32_t L) {
+            const SymbolEntropy every(0, 1000000, L);
+            const BinaryRanker r(every, L);
+            BigUint k = r.count();
+            k.divmod_small(3);
+            double best = 1e300;
+            for (int i = 0; i < 3; ++i) // (the slower of the two: unranking, as a rule)
+            {
+                const auto t0 = std::chrono::steady_clock::now();
+                const auto u = r.unrank(k);
+                const auto t1 = std::chrono::steady_clock::now();
+                (void)r.rank(u);
+                const auto t2 = std::chrono::steady_clock::now();
+                best = std::min(best, std::max(std::chrono::duration<double, std::milli>(t1 - t0).count(),
+                                               std::chrono::duration<double, std::milli>(t2 - t1).count()));
+            }
+            return std::max(best, 1e-3);
+        };
+        // At 256 and 512 symbols: the cost there, and how it grows, at least the cube (the shorter
+        // the walk, the more its fixed costs hide how it grows).
+        static const std::pair<double, double> cost = [&] {
+            const double t256 = timed(256), t512 = timed(512);
+            return std::make_pair(t512, std::clamp(std::log2(t512 / t256), 3.0, 4.0));
+        }();
+        // The length that grows to the budget, then checked there: it grows a little faster still
+        // as its numbers outgrow the processor's caches, so where it is over, it is brought in and
+        // timed again. Kept for each budget and filter memory, so this is paid once (about the budget's
+        // own time).
+        static std::mutex mx;
+        static std::map<std::pair<double, double>, uint32_t> kept; // by budget and filter memory
+        const double budget = unit_time_ms();
+        const auto key = std::make_pair(budget, filter_memory());
+        {
+            std::lock_guard<std::mutex> lock(mx);
+            if (const auto it = kept.find(key); it != kept.end()) return it->second;
+        }
+        // (Never past what the filter memory holds: there memory is the limit, and nothing is timed.)
+        double room = 512;
+        while (binary_rank_bytes(uint32_t(room * 2)) <= filter_memory() && room < 1e7) room *= 2;
+        while (binary_rank_bytes(uint32_t(room + 1)) <= filter_memory() && room < 1e7) room += std::max(1.0, room / 64);
+        double L = 512.0 * std::pow(budget / cost.first, 1.0 / cost.second);
+        if (L >= room) L = room;
+        else
+            for (int i = 0; i < 4 && L > 512; ++i)
+            {
+                const double t = timed(uint32_t(L));
+                if (t <= budget) break;
+                L *= std::pow(budget / t, 1.0 / 3.5);
+            }
+        std::lock_guard<std::mutex> lock(mx);
+        return kept.emplace(key, uint32_t(L)).first->second;
+    }
+    // The probe's own: the rule, with no ranker of its own.
+    SymbolEntropy(int64_t min_mb, int64_t max_mb, uint32_t) : min_(min_mb), max_(max_mb) {}
     class BinaryRanker : public Ranker
     {
     public:

@@ -71,6 +71,7 @@ public:
     // The same with x given as its limbs (a number stored packed: sieve/dfa.hpp's tables).
     void add_mul_small(std::span<const uint64_t> x, uint32_t m);
     void set_zero() { limbs_.clear(); } // keeps its memory, for a value worked out again and again
+    void shrink_to_fit() { limbs_.shrink_to_fit(); } // its memory exactly its limbs, for a value kept long
     void add_small(uint32_t a);
     uint32_t divmod_small(uint32_t d); // divides in place, returns remainder
     uint32_t mod_small(uint32_t d) const; // the remainder alone, without touching (or copying) the value

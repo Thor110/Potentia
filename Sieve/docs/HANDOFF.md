@@ -1276,3 +1276,42 @@ The remaining tables (4 October 2026).
   - The models line's (vertices by faces).
   - not-written's joint memo: at most 41,000 entries in X's counts, about 7 MB, against its budget
     of 3,000,000.
+The word filters' estimate made exact, and the time budget (4 October 2026).
+- **text_m1's m1_table_bytes:**
+  - One row, not two: each ranker keeps one, clean's c2, words' A or window's B.
+  - Each count is shrink_to_fit, so it holds exactly its limbs, and the row is (L + 1) x 56 + g L (L + 1) / 16 bytes.
+  - g is log2(27) first. Where that does not fit, m1_growth measures it on a 512-character table,
+    once per filter, padding and dictionary: the growth from 256 to 512 characters, plus 2%.
+  - Measured against mallinfo2: clean 256 MB held against 257 MB estimated at 30,000 characters,
+    and words and window 153 MB against 156 MB. So at 512 MB clean ranks about 42,000 characters,
+    words and window about 54,000 (it was 21,000).
+- **The time budget:** sieve::unit_time_ms (plugin.hpp, 50 ms until set), the setup menu's TIME
+  BUDGET (row 14, AppSettings::unit_time_ms, 5..60000; kFirstLineRow is 15), and --unit-time MS.
+- **The menu side** (machine_budget):
+  - The time bar and FIND MY LIMITS follow the setting at once (set_time_budget).
+  - The growth (kGrowth 1.6 before) is measured at start-up from base-27 conversions at 10,000 and
+    40,000 characters.
+- **symbol-entropy-v1 on two symbols** (statistics.cpp binary_rank_limit):
+  - Its 2,048 limit followed neither memory nor time. The rank is timed at 256 and 512 symbols
+    (growth at least the cube); the length that fits the budget is then timed itself and brought
+    in until it fits, and kept per budget.
+  - Here: 960 symbols at 50 ms (the unrank there takes 50 ms), 1,498 at 200 ms, 2,588 at 1,000 ms.
+  - Its walk's memory is held to the filter memory too.
+- **Applied like the filter memory:** since what can rank follows it, X or going in applies it
+  (time_pending, a red line in its own words), and the tallies' keys carry it.
+- **symbol-entropy's limit is held to the filter memory first:** nothing is timed past that
+  (a budget set huge once had the check time a rank at ten million symbols).
+- **The fixed numbers that now follow the machine:**
+  - **The item cache:** cached_units() is (kTilesKept + 2) x books_per_tile, the tiles kept and one
+    more either side. It was 4096. kCacheBack and kCacheAhead moved to menu.hpp.
+  - **Too large:** too_large_bits() is an address that alone fills the item cache's memory (a
+    quarter of installed memory, at three eighths of a byte a bit). It was 8e9.
+  - **Faces:** face_ms_per_frame() is a quarter of a frame at the display's refresh rate (4 ms at
+    60 Hz before). The face workers are a core each but the one that draws, with no cap of 6.
+  - **Large files:** large_file_bytes() is a file whose bytes take a quarter of the time budget,
+    from the binary measurement. It was 65,536 in two places: vault_ahead and thin on taking a file.
+- **Left as they are, for a decision:**
+  - The world's graphics allowance (512 MB).
+  - The rooms drawn and kept (6 back, 7 ahead) and rooms with faces (1).
+  - The display width cap (1024 px): raised to the renderer's limit, a long page's display could
+    be 16,384 px wide, 1 GB each.

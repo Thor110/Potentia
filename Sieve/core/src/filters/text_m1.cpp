@@ -19,6 +19,7 @@
 #include <mutex>
 #include <unordered_map>
 #include <stdexcept>
+#include <map>
 
 namespace sieve {
 
@@ -26,14 +27,24 @@ namespace {
 
 constexpr char kLower27[] = " abcdefghijklmnopqrstuvwxyz";
 
-// The rankers' count tables grow with the square of the length: about two rows of L + 1 numbers
-// (words and window keep two, clean one), the r-th of up to r log2(27) bits: half the longest on
-// average, with a BigUint's own 40 bytes or so apiece. Past the filter memory (plugin.hpp) a unit is
-// judged and not ranked: at 512 MB that is about 30,000 characters. (Taken at the full L log2(27)
-// bits, as it was, the estimate was twice the rows and stopped at 21,000. It is still above them:
-// measured at 16,000 characters, clean's row holds 87 MB against 146 MB estimated, and words' two
-// about 48 MB against 291 MB, since text of words alone has far fewer units than 27 a letter.)
-double m1_table_bytes(uint32_t L, int rows = 2) { return double(rows) * (double(L) + 1) * (double(L) * 4.754887502163468 / 16.0 + 8.0 + 40.0); }
+// The rankers' count tables grow with the square of the length: each keeps one row of L + 1
+// counts (clean's c2, words' A, window's B), the r-th of r g bits, g the bits a count gains a
+// character. Each count is a BigUint trimmed to its limbs (about 40 bytes of its own and up to a
+// limb rounded up), so the row takes
+//     (L + 1) x 56 + g L (L + 1) / 16 bytes.
+// g is at most log2(27) = 4.75 (27 symbols), which is what is assumed first; where that does not fit
+// the filter memory, the real g is measured on a table of 512 characters (once for each filter,
+// padding and dictionary: m1_growth) and the row judged by it. Words-only text gains far fewer bits
+// a character than 27 symbols would. Past the filter memory (plugin.hpp) a unit is judged and not
+// ranked. Measured against the heap: clean at 30,000 characters holds 256 MB (257 estimated), and
+// words and window 153 MB (156 estimated, against 257 at log2(27)), so in 512 MB clean ranks
+// pages of about 42,000 characters, words and window about 54,000 with the default dictionary.
+constexpr double kM1MaxGrowth = 4.754887502163468; // log2(27)
+double m1_table_bytes(uint32_t L, double g = kM1MaxGrowth)
+{
+    const double n = double(L) + 1;
+    return n * 56.0 + g * double(L) * n / 16.0;
+}
 
 bool is_lower27(const FilterLine& line) { return line.kind == "text" && line.symbols_id == "lower27"; }
 
@@ -67,6 +78,7 @@ public:
         {
             c2_[r] = c3(r - 1);
             c2_[r] += c1(r);
+            c2_[r].shrink_to_fit(); // (kept for the ranker's life: m1_table_bytes counts it exact)
         }
         set_count();
     }
@@ -231,6 +243,7 @@ public:
         {
             A_[r] = F(0, r);
             if (padding) A_[r].add_small(1); // v2: the rest is padding
+            A_[r].shrink_to_fit();
         }
         set_count();
     }
@@ -405,6 +418,7 @@ public:
         {
             B_[r] = G(0, r, true);
             if (pad_) B_[r].add_small(1);
+            B_[r].shrink_to_fit();
         }
         set_count();
     }
@@ -639,6 +653,28 @@ private:
     std::unique_ptr<LazyRanker> ranker_;
 };
 
+// The bits a count of this filter gains a character (m1_table_bytes' g), measured: how its count
+// grows from 256 to 512 characters, two percent over for what a prefix may leave out, and never
+// above log2(27). Kept per filter, padding and dictionary (`key`), since the measuring builds the
+// dictionary's trie: so it is done only where log2(27) would not fit the filter memory (make_m1).
+double m1_growth(const std::string& key, const std::function<std::unique_ptr<Ranker>(uint32_t)>& make)
+{
+    static std::mutex mx;
+    static std::map<std::string, double> kept;
+    {
+        std::lock_guard<std::mutex> lock(mx);
+        if (const auto it = kept.find(key); it != kept.end()) return it->second;
+    }
+    constexpr uint32_t K = 512;
+    const auto r = make(K);
+    const BigUint whole = r->completions(r->start(), K), half = r->completions(r->start(), K / 2);
+    double g = kM1MaxGrowth;
+    if (!whole.is_zero() && !half.is_zero())
+        g = std::min(kM1MaxGrowth, (whole.log10_approx() - half.log10_approx()) * 3.321928094887362 / (K / 2) * 1.02);
+    std::lock_guard<std::mutex> lock(mx);
+    return kept.emplace(key, std::max(g, 0.0)).first->second;
+}
+
 std::unique_ptr<Filter> make_m1(SieveFilter kind, bool padding, const FilterLine& line, const FilterValues& values, const FilterResources& res,
                                 const FilterSpec& spec)
 {
@@ -646,15 +682,18 @@ std::unique_ptr<Filter> make_m1(SieveFilter kind, bool padding, const FilterLine
     auto dict = kind == SieveFilter::Clean ? std::make_shared<const Dictionary>(Dictionary::from_words({}))
                                            : res.dictionary(param_value(spec, values, "dictionary"));
     LazyRanker::Make ranker;
-    const double bytes = m1_table_bytes(line.length, kind == SieveFilter::Clean ? 1 : 2);
+    auto make = [kind, dict, padding](uint32_t L) -> std::unique_ptr<Ranker> {
+        if (kind == SieveFilter::Clean) return std::make_unique<CleanRanker>(L, padding);
+        if (kind == SieveFilter::Words) return std::make_unique<WordsRanker>(*dict, L, padding);
+        return std::make_unique<WindowRanker>(*dict, L, padding);
+    };
+    double bytes = m1_table_bytes(line.length);
+    if (bytes > filter_memory()) // at the most it could be: so measure what it is
+        bytes = m1_table_bytes(line.length, m1_growth(std::to_string(int(kind)) + "/" + std::to_string(padding) + "/" + dict->sha256(), make));
     if (bytes <= filter_memory())
     {
         const uint32_t L = line.length;
-        ranker = [kind, dict, L, padding]() -> std::unique_ptr<Ranker> {
-            if (kind == SieveFilter::Clean) return std::make_unique<CleanRanker>(L, padding);
-            if (kind == SieveFilter::Words) return std::make_unique<WordsRanker>(*dict, L, padding);
-            return std::make_unique<WindowRanker>(*dict, L, padding);
-        };
+        ranker = [make, L]() { return make(L); };
     }
     auto f = std::make_unique<M1Filter>(kind, padding, dict, std::move(ranker));
     f->set_table_bytes(bytes);
@@ -767,8 +806,13 @@ void add_text_m1_filters(std::vector<FilterSpec>& out)
         auto f = std::make_unique<TitleFilter>(dict, l.length, max_length,
                                                "dictionary=" + (id.empty() ? std::string("default") : id) + " sha256=" + dict->sha256() +
                                                    " max_length=" + std::to_string(max_length));
-        f->set_table_bytes(m1_table_bytes(n));
-        if (m1_table_bytes(n) <= filter_memory())
+        double bytes = m1_table_bytes(n);
+        if (bytes > filter_memory())
+            bytes = m1_table_bytes(n, m1_growth("words/1/" + dict->sha256(), [dict](uint32_t k) -> std::unique_ptr<Ranker> {
+                                       return std::make_unique<WordsRanker>(*dict, k, true);
+                                   }));
+        f->set_table_bytes(bytes);
+        if (bytes <= filter_memory())
         {
             const uint32_t L = l.length;
             f->set_ranker([dict, n, L]() -> std::unique_ptr<Ranker> { return std::make_unique<TitleRanker>(std::make_unique<WordsRanker>(*dict, n, true), L); });

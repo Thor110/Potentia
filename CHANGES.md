@@ -1,62 +1,94 @@
-# The remaining counting tables (relative to origin/main c8a8653)
+# Exact word-filter estimate, the time budget, and fixed numbers made dynamic (relative to origin/main 54fd218)
 
-Unzip `files/` over the Potentia repository root, or apply `remaining-tables.patch` with
-`git apply` from the repository root.
+Unzip `files/` over the Potentia repository root, or apply `budgets-round.patch` with `git apply`
+from the repository root.
 
-## Every table, looked at
-| Table | Grows with | What was done |
+## 1. The word filters' estimate, exact (`core/src/filters/text_m1.cpp`)
+**One row, not two.** Each word ranker (clean, words, window, title) keeps one row of counts, and
+the estimate assumed two. Each count is now trimmed to exactly its size as it's stored (numbers
+built by repeated adds over-allocate).
+
+**The formula.** The row is (L + 1) × 56 + g·L·(L + 1) / 16 bytes, where g is the bits a count gains
+per character.
+- **The upper bound:** g starts at log2(27) = 4.75.
+- **Measured when needed:** if the bound doesn't fit the filter memory, the real g is measured on a
+  512-character table, once per filter, padding and dictionary, then cached.
+
+**Measured against the allocator's own heap figures:**
+
+| Filter | Length | Estimated | Actually held |
+| :--- | :--- | :--- | :--- |
+| clean-v1 | 30,000 | 257 MB | 256 MB |
+| words-v1 | 30,000 | 156 MB | 153 MB |
+| window-v1 | 30,000 | 156 MB | 152 MB |
+
+**Longest pages ranked in 512 MB:**
+
+| Filter | At the start of the review | Last round | Now |
+| :--- | :--- | :--- | :--- |
+| clean | about 21,000 characters | about 30,000 | about 42,000 |
+| words and window (default dictionary) | about 21,000 | about 30,000 | about 54,000 |
+
+**Test:** a words filter whose row wouldn't fit at 27 symbols per character, but does at its
+dictionary's real growth. It ranks, with the same count as with memory to spare.
+
+## 2. The time budget (H3 and H11)
+**A new GLOBAL row, TIME BUDGET.** The longest one unit may take to open.
+- 50 ms at first, 5 ms a step, PgUp/PgDn double or halve.
+- Saved as `unit_time_ms`; `--unit-time MS` on the hallway and the `sieve` tool.
+- The line rows moved down one (`kFirstLineRow` is 15), and CI moved with them, with a new check
+  that the row saves.
+
+**The budget bars and FIND MY LIMITS** follow it at once.
+
+**The growth figure (H3).** How opening time grows with the address used to be assumed (1.6). It's
+now measured at start-up, from conversions at 10,000 and 40,000 characters.
+
+**symbol-entropy on black-and-white pictures (H11).** Its fixed 2,048 limit followed neither memory
+nor time, and one rank there took about a second, against 50 ms.
+- **How it's set:** the rank is timed at 256 and 512 symbols. The length that fits the budget is
+  then timed itself, brought in until it fits, and kept per budget. The filter memory caps it first.
+- **Measured here:**
+
+| Budget | Ranks up to | One unrank there takes |
 | :--- | :--- | :--- |
-| Plugins (DfaRanker) | states × length | packed last round, now through the shared class below |
-| not-written's binary table (Bn) | 872 states × length | **packed** (a bug fix, below) |
-| Word filters (clean, words, window) | length² | **estimate corrected** |
-| utf8-valid | 9 states × length² | done last round |
-| not-written's joint memo | the walk of two-symbol units | measured: at most 41,000 entries (about 7 MB) in X's counts; left alone |
-| Picture tables (palette-size, row-runs) | colours × pixels in scope | small; left alone |
-| File kinds and page patterns | a 16-byte head | small; left alone |
-| Models line (rules, canonical-mesh's binomials) | vertices × faces | small; left alone |
+| 50 ms | 960 symbols | 50 ms |
+| 200 ms | 1,498 symbols | 217 ms |
+| 1,000 ms | 2,588 symbols | 1,107 ms |
 
-## PackedRows (`core/include/sieve/packed.hpp`, new)
-The packing from last round is now one small reusable class: rows of exact numbers, each row one
-block of limbs plus where each number starts. A row is worked out number by number into one
-BigUint whose memory is reused, then stored at exactly its size. The plugins' tables (DfaRanker)
-and not-written's Bn table both use it.
+**Applied like the filter memory.** What can rank depends on it, so the row only saves it. X, or
+going into the hallway, applies it. Meanwhile a red line says *Time Budget Change Detected : Press X
+to re-optimise all dimensions*, and the counts' cache keys carry it.
 
-## not-written's Bn table, packed: a fix
-**The problem.** Last round the memory estimate for counting tables (`DfaRanker::table_bytes`)
-changed to the packed size. not-written's budget check also uses it for its Bn table, but Bn still
-held one BigUint per number, so the check underestimated it. Bn has 872 states, and on a
-3,000-character page its table would have been about 150 MB against an estimate of a fraction of
-that.
-
-**The fix.** Bn is now packed, so the estimate is true of it again. Its counts are unchanged: the
-585 not-written vectors pass.
-
-## The word filters' estimate (`core/src/filters/text_m1.cpp`)
-**The problem.** It took every count at full length. Counts grow along the row, so on average
-they're half that, and the estimate was twice the real rows.
-
-**The fix.** Corrected, the word filters now rank pages up to about 30,000 characters within
-512 MB, where they stopped at about 21,000.
-
-**Still on the safe side.** Measured at 16,000 characters:
-
-| Filter | Estimated | Actually held |
+## 3. Fixed numbers now taken from the machine (H1, H4, H5, H6, H7)
+| What | Was | Now |
 | :--- | :--- | :--- |
-| clean-v1 | 146 MB | 87 MB |
-| words-v1 | 291 MB | about 48 MB |
+| H1. Item cache | 4,096 items | the tiles kept plus one either side, × items per tile (2,048 at 128 a wall, 4,096 at 256) |
+| H4. Largest address | 8×10⁹ bits | one that alone would fill the item cache's memory (a quarter of installed memory): about 11×10⁹ bits on a 16 GB machine |
+| H5. Face time per frame | 4 ms | a quarter of a frame at the display's refresh rate (4 ms at 60 Hz, 1.7 ms at 144 Hz) |
+| H6. Face worker threads | at most 6 | one per core, less the one that draws |
+| H7. "Large file" | 65,536 bytes, written twice | one threshold: a file whose bytes take a quarter of the time budget to work out, measured (about 10 KB here at 50 ms) |
 
-Words-only text has far fewer units than 27 per letter, so its numbers are shorter still. A growth
-rate measured on a short prefix could make words' estimate exact. That's possible if you want it.
+The hallway bench runs at about 16.6 ms per frame on the video, image and pages lines, where the
+video and image lines measured 23–26 ms earlier in the review. Item pictures draw fully.
+
+## Left for you to decide
+- **The world's graphics allowance (512 MB):** the graphics bar counts it for everything but the
+  item pictures. It could be measured from the textures the world actually makes.
+- **The rooms drawn and kept (6 back, 7 ahead) and the rooms with pictures (1 either side):**
+  these could become a graphics "view distance" setting.
+- **The widest item picture (1,024 px):** raised to the renderer's own limit, a long page's picture
+  could be 16,384 px wide, which is 1 GB each. It would need to follow the display cache instead.
+- **The item cache's share of memory (a quarter of installed memory):** it could become a setting,
+  as the counting memory is.
 
 ## Checked
-- **Tests** (`tests/test_core.cpp`): 56,268 checks over both passes, 0 failures. A new test checks
-  PackedRows: numbers of every size come back exactly, zeros are known without reading them, a row
-  can be read while the next is worked out, and the estimate is never under what's held.
-- **X:** 5.4 s, and the screenshot after it is byte-identical to the last round.
-- **CI:** all of these steps pass locally:
+- tests/test_core.cpp: 56,274 checks over both passes, 0 failures.
+- Run locally, all these CI steps pass:
   - same addresses;
   - filters judge, count and rank the same;
-  - models and the setup menu;
+  - models and the setup menu (with the new row check);
   - the bytes256 line;
   - books;
   - the whole hallway step.
+- X takes 5.4 s.

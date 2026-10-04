@@ -168,13 +168,19 @@ jobs:
           downs=$(python -c "print(','.join(['Down']*11))")
           $H --menu --settings fm.ini --press "$downs,Right" --screenshot fm.png > /dev/null
           grep -q "^filter_memory_mb = 768" fm.ini
-          # The counting memory and the merge cache, the last GLOBAL rows (12, 13): percentages, 5 a
+          # The counting memory and the merge cache, GLOBAL rows 12 and 13: percentages, 5 a
           # step from 50, saved with the application's settings.
           rm -f cm.ini
           downs=$(python -c "print(','.join(['Down']*12))")
           $H --menu --settings cm.ini --press "$downs,Right,Down,Left,Left" --screenshot cm.png > /dev/null
           grep -q "^counting_memory_pct = 55" cm.ini
           grep -q "^merge_cache_pct = 40" cm.ini
+          # The time budget, the last GLOBAL row (14): 5 ms a step from 50, saved with the application's
+          # settings; the menu says it is waiting for X.
+          rm -f tb.ini
+          downs=$(python -c "print(','.join(['Down']*14))")
+          $H --menu --settings tb.ini --press "$downs,Right,Right" --screenshot tb.png > /dev/null
+          grep -q "^unit_time_ms = 60" tb.ini
           # ...and Graphics Memory, which the setup menu's budget keeps it within, is a graphics
           # setting: Settings, Graphics, then the seventh row.
           rm -f gm.ini
@@ -200,7 +206,7 @@ jobs:
           # line's list. Each row here ticks a mode and the saved file says which line it was.
           # Closing the overlay is what writes it, which also covers that path.
           # (The audio rows are six: its notes, its note set, and notes2's range, durations and voices.)
-          for pair in "14 text" "18 image" "21 audio" "24 audio" "27 video" "31 books" "32 models" "35 binary"; do
+          for pair in "15 text" "19 image" "22 audio" "25 audio" "28 video" "32 books" "33 models" "36 binary"; do
             set -- $pair
             rm -f row$1.ini
             downs=$(python -c "print(','.join(['Down']*$1))")

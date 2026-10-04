@@ -103,13 +103,10 @@ uint32_t clamp32(uint64_t v) { return uint32_t(std::min<uint64_t>(v, UINT32_MAX)
 
 uint32_t parse_u32(const sieve::cli::Args& a, const char* key, uint32_t def) { return a.has(key) ? a.get_positive(key, def) : def; }
 
-// What this machine can open. The design has no limit; these only describe the hardware of the
-// day, and a future machine only needs them raised.
-constexpr double kTooLargeBits = 8.0e9; // above this, one address would need a gigabyte
 
 // The budget. Three things bound what this machine can open, and a shape has to fit all three:
 //
-//   memory    the hallway keeps the units around you in a cache -- up to kCachedUnits of them,
+//   memory    the hallway keeps the units around you in a cache -- up to cached_units() of them,
 //             each its characters, pixels, notes or coordinates at four bytes a position, and its
 //             address twice, as a number and as hex -- and that cache is given a quarter of
 //             installed memory. Only one line is walked at a time, so the largest line is what
@@ -118,15 +115,15 @@ constexpr double kTooLargeBits = 8.0e9; // above this, one address would need a 
 //             world itself -- the corridor, the portals, the text -- have to fit the graphics
 //             memory set in Settings > Graphics, since SDL cannot ask the card.
 //   time      opening one unit means turning its address into its content, and that grows faster
-//             than the address. It is measured on this machine, once, and the longest address
-//             that opens within kUnitMs is the limit, so a slow build or a slow machine gets
-//             smaller limits rather than a hallway that freezes.
+//             than the address. It is measured on this machine, once, at two lengths (which gives
+//             how it grows, Karatsuba's 1.6 or so), and the longest address that opens within the
+//             time budget (TIME BUDGET, 50 ms at first) is the limit, so a slow build or a slow
+//             machine gets smaller limits rather than a hallway that freezes.
 //
 // None is a limit of the design. They describe the machine of the day, and a bigger one finds
 // bigger numbers with the same arithmetic.
 constexpr double kWorldAllowanceMB = 512; // graphics memory for everything but the crate faces
-constexpr double kUnitMs = 50;            // the longest one unit may take to open
-constexpr double kGrowth = 1.6;           // how the time to open grows with the address (Karatsuba)
+std::atomic<double> g_time_budget{50};   // the longest one unit may take to open (set_time_budget)
 
 void text(SDL_Renderer* r, float x, float y, const std::string& s, float scale, SDL_Color c) { draw_text(r, x, y, s, scale, c); }
 
@@ -155,21 +152,44 @@ std::string fixed(double v, int d)
 
 } // namespace
 
+// What the hallway's cache of units may take: a quarter of installed memory, or the default when
+// SDL cannot tell (Budget's, which is careful).
+static double cache_bytes_here()
+{
+    const int mb = SDL_GetSystemRAM();
+    return mb > 0 ? double(mb) * 1048576.0 * 0.25 : Budget{}.cache_bytes;
+}
+
 Budget machine_budget()
 {
     // The measurement is taken once: a unit of a line of 27 symbols, 40,000 long (about 190,000
     // bits, a long page), turned from its address into its digits. The first turn builds the
     // powers the conversion keeps for that base, so the second is the one that is timed.
-    static const std::pair<double, double> measured = [] {
+    // A quarter of that length too, for how the time grows (the quickest of three each: a
+    // scheduler's pause is not the cost).
+    struct Measured
+    {
+        double bits, ms, growth;
+    };
+    static const Measured measured = [] {
         sieve::cli::timings::Scope timed("menu.budget.measure");
-        const uint32_t base = 27, length = 40000;
-        sieve::BigUint v = sieve::BigUint::pow(base, length);
-        v -= sieve::BigUint(1);
-        (void)v.to_digits(base, length);
-        const auto t0 = std::chrono::steady_clock::now();
-        (void)v.to_digits(base, length);
-        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-        return std::make_pair(double(v.bit_length()), std::max(ms, 0.01));
+        const uint32_t base = 27;
+        auto time_at = [&](uint32_t length) {
+            sieve::BigUint v = sieve::BigUint::pow(base, length);
+            v -= sieve::BigUint(1);
+            (void)v.to_digits(base, length);
+            double best = 1e300;
+            for (int i = 0; i < 3; ++i)
+            {
+                const auto t0 = std::chrono::steady_clock::now();
+                (void)v.to_digits(base, length);
+                best = std::min(best, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
+            }
+            return std::make_pair(double(v.bit_length()), std::max(best, 0.01));
+        };
+        const auto [bits, ms] = time_at(40000);
+        const auto [qbits, qms] = time_at(10000);
+        return Measured{bits, ms, std::clamp(std::log(ms / qms) / std::log(bits / qbits), 1.0, 2.5)};
     }();
     // And the binary line's: a file of 64 KB turned from its place on the line into its bytes,
     // in scrambled order, which is the slower of the two (the keyed shuffle over a number of
@@ -185,18 +205,31 @@ Budget machine_budget()
         return std::make_pair(double(top.bit_length()), std::max(ms, 0.01));
     }();
     Budget b;
-    b.ref_bits = measured.first;
-    b.ref_ms = measured.second;
+    b.ref_bits = measured.bits;
+    b.ref_ms = measured.ms;
+    b.growth = measured.growth;
     b.binary_ref_bits = measured_binary.first;
     b.binary_ref_ms = measured_binary.second;
-    b.ms_per_unit_at_limit = kUnitMs;
-    b.bits = std::min(kTooLargeBits, b.ref_bits * std::pow(kUnitMs / b.ref_ms, 1.0 / kGrowth));
-    const int mb = SDL_GetSystemRAM(); // 0 if SDL cannot tell: then the default, which is careful
-    if (mb > 0) b.cache_bytes = double(mb) * 1048576.0 * 0.25;
+    b.ms_per_unit_at_limit = g_time_budget;
+    b.bits = std::min(too_large_bits(), b.ref_bits * std::pow(b.ms_per_unit_at_limit / b.ref_ms, 1.0 / b.growth));
+    b.cache_bytes = cache_bytes_here();
     return b;
 }
 
-double unit_ms(const Budget& b, double bits) { return b.ref_ms * std::pow(std::max(bits, 1.0) / b.ref_bits, kGrowth); }
+double unit_ms(const Budget& b, double bits) { return b.ref_ms * std::pow(std::max(bits, 1.0) / b.ref_bits, b.growth); }
+
+void set_time_budget(double ms) { g_time_budget = std::max(1.0, ms); }
+
+size_t cached_units() { return size_t(kTilesKept + 2) * sieve::books_per_tile(); }
+
+double too_large_bits() { return cache_bytes_here() * 8.0 / 3.0; }
+
+uint64_t large_file_bytes()
+{
+    const Budget b = machine_budget();
+    const double ms_per_byte = b.binary_ref_ms / (b.binary_ref_bits / 8.0);
+    return uint64_t(std::max(1.0, b.ms_per_unit_at_limit / 4.0 / std::max(ms_per_byte, 1e-12)));
+}
 
 // ---------------------------------------------------------------- settings
 
@@ -382,7 +415,7 @@ SDL_Color menu_ink(const Theme& th)
 bool Menu::too_large() const
 {
     for (const auto& z : line_sizes())
-        if (z.bits > kTooLargeBits) return true;
+        if (z.bits > too_large_bits()) return true;
     return false;
 }
 
@@ -397,7 +430,7 @@ int Menu::over_budget() const
 
 // What line i's cache of units would take: each unit its positions at four bytes and its address
 // held twice, as a number (an eighth of a byte a bit) and as hex (a quarter), for as many units
-// as the hallway keeps around you (fourteen tiles, or kCachedUnits if that is fewer).
+// as the hallway keeps around you (the tiles it keeps, kTilesKept: menu.hpp).
 double Menu::line_cache_bytes(int i) const
 {
     const auto sizes = line_sizes();
@@ -411,7 +444,7 @@ double Menu::line_cache_bytes(int i) const
                              uint64_t(s_.book_pages + 1) * s_.length + cover,
                              3ull * s_.model_vertices + 3ull * s_.model_faces + t,
                              (uint64_t(s_.binary_bytes) + 3) / 4 + t};
-    const double units = std::min(double(kCachedUnits), 14.0 * double(s_.items_per_wall));
+    const double units = double(kTilesKept) * double(s_.items_per_wall);
     // A binary file is kept lazily (hallway.hpp, Book::is_file): only its place on the line, a
     // number as long as the file, its title, and its first sixteen bytes; its bytes and hex only for the one
     // looked at. And only half a tile's slots hold files.
@@ -571,7 +604,7 @@ void Menu::find_limits()
 bool Menu::over_budget_line(int i, const Budget& b) const
 {
     const double bits = line_sizes()[size_t(i)].bits;
-    const bool in_time = i == 6 ? line_ms(i, b) <= kUnitMs : bits <= b.bits;
+    const bool in_time = i == 6 ? line_ms(i, b) <= b.ms_per_unit_at_limit : bits <= b.bits;
     return in_time && line_cache_bytes(i) <= b.cache_bytes;
 }
 
@@ -662,6 +695,19 @@ void Menu::adjust(int dir, int step)
             pct = std::clamp(pct + dir * (step == 0 ? 25 : 5 * step), counting ? 5 : 0, 100);
             if (counting) set_counting_share(pct);
             else sieve::set_merge_cache_share(pct / 100.0);
+            save_app();
+        }
+        break;
+    // The time budget: 5 ms a step (Shift and Ctrl ten and a hundred times that), PgUp/PgDn double
+    // and halve. The budget's bars follow it at once; what can rank follows it on X (time_pending),
+    // as the filter memory does.
+    case kTimeBudgetRow:
+        if (app_)
+        {
+            const int64_t ms = app_->unit_time_ms;
+            const int64_t to = step == 0 ? (dir > 0 ? ms * 2 : ms / 2) : ms + int64_t(dir) * 5 * step;
+            app_->unit_time_ms = int(std::clamp<int64_t>(to, 5, 60000));
+            set_time_budget(app_->unit_time_ms);
             save_app();
         }
         break;
@@ -873,7 +919,7 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         if (s_.key.empty()) s_.key = "sieve";
         // Over the budget, the foot of the list says which limit and which line, and the first
         // Enter only says what going in anyway means: slower than this machine's budget, with only
-        // the room you stand in kept (thin). A second Enter goes in. Past kTooLargeBits, where one
+        // the room you stand in kept (thin). A second Enter goes in. Past too_large_bits(), where one
         // address would need a gigabyte, the way stays shut.
         if (too_large()) break;
         if (over_budget() >= 0 || graphics_over())
@@ -982,6 +1028,7 @@ float Menu::draw_budget(float y)
     // not yet counted with (until X), or which lines are still being counted.
     const std::string counting = counting_lines();
     if (memory_pending()) text(r_, 40, y, tr("setup.memory_changed"), 1, red);
+    else if (time_pending()) text(r_, 40, y, tr("setup.time_changed"), 1, red);
     else if (toggling_ || !counting.empty()) text(r_, 40, y, trf("setup.calculating", {counting.empty() ? tr("setup.calculating.weighing") : counting}), 1, grey);
     y += 14;
     return y;
@@ -1053,6 +1100,7 @@ void Menu::render()
                                                                              installed_memory_text(), std::to_string(counting_slots(filter_memory_setting()))})},
         {-1, tr("setup.merge_cache"), trf("setup.merge_cache.value", {std::to_string(app_ ? app_->merge_cache_pct : 50),
                                                                      sieve::memory_text(filter_memory_setting() * (app_ ? app_->merge_cache_pct : 50) / 100.0)})},
+        {-1, tr("setup.time_budget"), trf("setup.time_budget.value", {std::to_string(app_ ? app_->unit_time_ms : 50)})},
         {0, tr("setup.length"), trf("setup.length.value", {n(s_.length)})},
         {-1, tr("setup.alphabet"), trf("setup.alphabet.value", {s_.alphabet, n(alphabet_size(s_.alphabet))})},
         {-1, tr("setup.canon"), "canon-text-" + s_.canon},
@@ -1123,7 +1171,8 @@ void Menu::render()
         // Not a limit of the design: a limit of this machine, named so it can be reduced, and
         // which of the limits it is.
         const Theme& th = over == 4 ? kBooksTheme : over == 5 ? kModelsTheme : over == 6 ? kBinaryTheme : kThemes[over];
-        const bool slow = line_ms(over, machine_budget()) > kUnitMs;
+        const Budget mb = machine_budget();
+        const bool slow = line_ms(over, mb) > mb.ms_per_unit_at_limit;
         text(r_, 20, H - 54, trf(slow ? "setup.over_time" : "setup.over_budget", {tr(th.key)}), 1, red);
     }
     else if (graphics_over()) text(r_, 20, H - 54, tr("setup.over_graphics"), 1, red);
@@ -1183,9 +1232,9 @@ void Menu::render()
             text(r_, x, label + 46, clip(trf("map.bits", {fixed(z.bits, 0)})), 1, th.edge);
             text(r_, x, label + 58, clip(trf("map.tiles", {fixed(std::max(0.0, z.bits * std::log10(2.0) - std::log10(128.0)), 1)})), 1, th.edge);
             text(r_, x, label + 70, clip(z.padding ? trf("map.empty_slots", {std::to_string(z.padding)}) : tr("map.whole_tiles")), 1, th.edge);
-            if (z.bits > kTooLargeBits) text(r_, x, label - 14, clip(tr("map.too_large")), 1, white);
+            if (z.bits > too_large_bits()) text(r_, x, label - 14, clip(tr("map.too_large")), 1, white);
             // Slow: a unit of it takes more than a quarter of the time allowed to open, measured here.
-            else if (line_ms(binary ? 6 : i, machine_budget()) > kUnitMs / 4) text(r_, x, label - 14, clip(tr("map.slow")), 1, grey);
+            else if (const Budget mb = machine_budget(); line_ms(binary ? 6 : i, mb) > mb.ms_per_unit_at_limit / 4) text(r_, x, label - 14, clip(tr("map.slow")), 1, grey);
         }
         // The bar: the line's own two colours; never shorter than min_bar, never past the bottom.
         // Its body in the line's colour, its frame and what survives in the edges'. A line whose
@@ -1408,8 +1457,9 @@ void Menu::none_of(StackInfo& out)
 
 static std::string settings_key(const sieve::cli::LineFilters& lf)
 {
-    // (With the filter memory: what can be counted changes with it.)
-    std::string key = std::to_string(uint64_t(sieve::filter_memory())) + "/" + std::string(to_string(lf.mode)) + ":";
+    // (With the filter memory and the time budget: what can be counted changes with them.)
+    std::string key = std::to_string(uint64_t(sieve::filter_memory())) + "/" + std::to_string(uint64_t(sieve::unit_time_ms())) + "/" +
+                      std::string(to_string(lf.mode)) + ":";
     for (const auto& n : lf.enabled) key += n + ",";
     for (const auto& [n, vals] : lf.values)
         for (const auto& [k, v] : vals) key += n + "." + k + "=" + v + ";";
@@ -1475,7 +1525,7 @@ std::pair<std::string, std::function<Menu::StackInfo()>> Menu::stack_job(int i, 
     }
     const sieve::FilterLine fl = i == 4 ? book_part_line(std::max(0, part)) : filter_line_of(i);
     const std::string key = (i == 4 ? "part" + std::to_string(part) + "/" : std::string()) + fl.symbols_id + "/" + std::to_string(fl.length) + "/" + settings_key(lf);
-    if (line_sizes()[size_t(i)].bits > kTooLargeBits)
+    if (line_sizes()[size_t(i)].bits > too_large_bits())
         return {key, [] { return StackInfo{"too large", tr("status.too_large"), -1, ""}; }};
     return {key, [fl, lf]() {
                 StackInfo out;
@@ -1492,7 +1542,7 @@ std::pair<std::string, std::function<Menu::StackInfo()>> Menu::stack_job(int i, 
 const Menu::StackInfo& Menu::stack_info(int i)
 {
     if (i == 4) return book_stack_info();
-    if (i < 4 && line_sizes()[size_t(i)].bits > kTooLargeBits)
+    if (i < 4 && line_sizes()[size_t(i)].bits > too_large_bits())
     {
         info_[i] = StackInfo{"too large", tr("status.too_large"), -1, ""};
         return info_[i];
@@ -1519,12 +1569,13 @@ sieve::cli::LineFilters Menu::alone(const sieve::cli::LineFilters& lf, const std
 // (a part with no filters keeps all its units), on a worker like the other lines.
 const Menu::StackInfo& Menu::book_stack_info()
 {
-    if (line_sizes()[4].bits > kTooLargeBits)
+    if (line_sizes()[4].bits > too_large_bits())
     {
         info_[4] = StackInfo{"too large", tr("status.too_large"), -1, ""};
         return info_[4];
     }
-    std::string key = std::string("books/") + std::to_string(uint64_t(sieve::filter_memory())) + "/" + to_string(cfg_.books.mode) + "/";
+    std::string key = std::string("books/") + std::to_string(uint64_t(sieve::filter_memory())) + "/" + std::to_string(uint64_t(sieve::unit_time_ms())) +
+                      "/" + to_string(cfg_.books.mode) + "/";
     std::array<std::pair<sieve::FilterLine, sieve::cli::LineFilters>, 3> parts;
     for (int part = 0; part < 3; ++part)
     {
@@ -1881,15 +1932,20 @@ std::vector<Menu::Reach> Menu::reach_of(ToggleScope scope, int overlay, int tab)
 // limit in use (sieve::filter_memory), which only X (or going into the hallway) brings up to it.
 bool Menu::memory_pending() const { return filter_memory_setting() != sieve::filter_memory(); }
 
+// Whether the time budget has been changed since the tallies were counted (what can rank follows
+// it: symbol-entropy-v1 on two symbols), likewise brought up to it by X or by going in.
+bool Menu::time_pending() const { return app_ && double(app_->unit_time_ms) != sieve::unit_time_ms(); }
+
 double Menu::filter_memory_setting() const { return app_ ? double(app_->filter_memory_mb) * 1024 * 1024 : sieve::filter_memory(); }
 
 void Menu::toggle_all_filters(ToggleScope scope)
 {
     // X after the filter memory has changed: re-optimise every line with it, whatever is ticked
     // (everything in reach is unticked, then ticked again, the clashes weighed with the new limit).
-    if (scope == ToggleScope::EveryLine && memory_pending())
+    if (scope == ToggleScope::EveryLine && (memory_pending() || time_pending()))
     {
         sieve::set_filter_memory(filter_memory_setting());
+        if (app_) sieve::set_unit_time_ms(app_->unit_time_ms);
         for (const Reach& r : reach_of(scope, overlay_, otab_)) (void)sieve::cli::tick_filter(*r.lf, r.name, false);
     }
     std::vector<Reach> in_reach = reach_of(scope, overlay_, otab_);

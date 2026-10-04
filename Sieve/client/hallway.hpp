@@ -110,8 +110,7 @@ constexpr int kBooksLine = 4, kModelsLine = 5, kBinaryLine = 6;
 // The short wall on the binary line's open edge, under Real Graphics: dark, so the drop past it
 // is what the eye goes to.
 constexpr SDL_FColor kRailColour{0.42f, 0.44f, 0.42f, 1.0f};
-// Tiles drawn behind and ahead of the one you are in (and kept in the book cache).
-constexpr int kCacheBack = 6, kCacheAhead = 7;
+// (kCacheBack and kCacheAhead, the tiles drawn and kept either side of yours: menu.hpp.)
 constexpr int kBuckets = 12; // distance fades of the wireframe
 inline const Theme& theme_of(int li)
 {
@@ -798,7 +797,7 @@ public:
     // On the models line every slot holds the same crate, because a mesh cannot be read at a
     // hundred and twenty-eight to a tile. Instead, the crate you are looking at has its model
     // rendered to a small flat image and printed on its front, and then its neighbours do the
-    // same, spreading outward along the shelf, for as long each frame as kFaceMsPerFrame allows.
+    // same, spreading outward along the shelf, for as long each frame as face_ms_per_frame() allows.
     //
     // Only the room you are in and kFaceRooms either side of it get faces of their own: three
     // rooms is 384 crates at 128 a tile and 768 at 256, where the corridor in view can hold far
@@ -821,8 +820,10 @@ public:
     int face_h() const { return std::max(1, int(std::lround(float(face_w()) * face_aspect_))); }
     size_t face_bytes() const { return size_t(face_w()) * size_t(face_h()) * 4; }
     float face_aspect_ = 0.40f / 0.28f; // height over width of the current line's picture
-    static constexpr int kFaceRooms = 1;          // rooms either side of yours with faces of their own
-    static constexpr double kFaceMsPerFrame = 4.0; // time each frame may spend rendering faces
+    static constexpr int kFaceRooms = 1; // rooms either side of yours with faces of their own
+    // The time each frame may spend taking in rendered faces: a quarter of a frame at the
+    // display's refresh rate (4 ms at 60 Hz, 1.7 ms at 144), the rest left for drawing the world.
+    double face_ms_per_frame() const;
 
     static void render_model_face(const ModelSpace& space, const ModelSpace::Parts& p, int n, float spin, float tilt,
                                   SDL_Color edge, std::vector<uint32_t>& px);

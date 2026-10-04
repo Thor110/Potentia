@@ -730,6 +730,7 @@ void print_usage()
                  "--filter-memory MB sets what one count of the filters' survivors may take for its\n"
                  "tables (512 MB unless given; the setup menu's FILTER MEMORY); past it a stack judges only.\n"
                  "--merge-cache PCT sets how much of it keeps merged filters between counts (50 unless given).\n"
+                 "--unit-time MS sets the time budget, the longest ranking one unit may take (50 unless given).\n"
                  "\nDetailed help and examples:\n"
                  "  sieve help warp        (or: sieve warp --help)\n"
                  "  sieve help lines       the four lines and their options\n\n"

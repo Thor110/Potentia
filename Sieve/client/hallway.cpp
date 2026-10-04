@@ -419,7 +419,7 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
         return bare;
     }
     sieve::cli::timings::Scope timed("hallway.item"); // one item worked out: content, filters, vault
-    if (cache_.size() > kCachedUnits)
+    if (cache_.size() > cached_units())
     {
         cache_.clear(); // more than a screenful (menu.hpp)
         ++room_gen_;
@@ -2101,7 +2101,7 @@ void Hallway::stop_vault_ahead()
 void Hallway::vault_ahead()
 {
     // Worth it only where a file's bytes take noticeable time: a binary line of long files.
-    if (!on_binary() || binary_space_->max_bytes() < 65536 || vault_started_gen_ == room_gen_) return;
+    if (!on_binary() || binary_space_->max_bytes() < large_file_bytes() || vault_started_gen_ == room_gen_) return;
     // Once your room's files are all on the shelf (book() has been asked for each).
     const uint32_t half = uint32_t(sieve::books_per_tile() / 2);
     std::vector<std::pair<uint32_t, BigUint>> todo;

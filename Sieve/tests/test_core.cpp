@@ -2619,8 +2619,10 @@ void test_booksieve()
 void test_review_additions()
 {
     TestResources none(nullptr, nullptr);
-    // Black-and-white entropy at its limit: the fast walk agrees with the generic one, both ways.
+    // Black-and-white entropy at 2048 symbols, with time to spare (the longest it ranks at follows
+    // the time budget): the fast walk agrees with the generic one, both ways.
     {
+        set_unit_time_ms(1e9);
         const FilterLine img{"image", "image/mono/2048x1", 2, 2048, nullptr, 2048, 1, 1};
         const FilterStack st(img, {{find_filter("symbol-entropy-v1"), {{"max_millibits", "500"}}}}, none);
         const Ranker* rk = st.ranker();
@@ -2645,8 +2647,14 @@ void test_review_additions()
             for (size_t i = 0; i < half.size(); i += 2) half[i] = 1; // one bit per symbol: fails max 0.5
             CHECK(throws([&] { (void)rk->rank(half); }));
         }
+        // With a millisecond allowed, a unit that long takes far longer to rank than that: none offered.
+        set_unit_time_ms(1);
         const FilterLine img2{"image", "image/mono/2049x1", 2, 2049, nullptr, 2049, 1, 1};
         CHECK(FilterStack(img2, {{find_filter("symbol-entropy-v1"), {}}}, none).ranker() == nullptr);
+        // ...and a short one still ranks (the limit follows the budget, by the cube of the length).
+        const FilterLine img3{"image", "image/mono/8x1", 2, 8, nullptr, 8, 1, 1};
+        CHECK(FilterStack(img3, {{find_filter("symbol-entropy-v1"), {}}}, none).ranker() != nullptr);
+        set_unit_time_ms(kDefaultUnitTimeMs);
     }
     // clean-v2 at paragraph length: round trips through the slimmed tables.
     {
@@ -3826,6 +3834,21 @@ void test_filter_memory(const std::string& dir)
     {
         const BinarySieve bs(space, {{utf8, {}}});
         CHECK(!bs.can_rank() && bs.can_count() && !bs.count_exact() && bs.blocker().find("the filter memory") != std::string::npos);
+    }
+    // A word filter whose row would not fit at 27 symbols a character, but does at the growth its
+    // dictionary really has (measured on 512 characters): it ranks, with the same count as with
+    // room to spare, and says what it needs by that growth.
+    {
+        const auto small = std::make_shared<const Dictionary>(Dictionary::from_words({"a", "an", "the", "cat", "sat", "on", "mat"}));
+        const TestResources few(small, nullptr);
+        set_filter_memory(kDefaultFilterMemory);
+        const FilterStack roomy(text_line(2000), {{find_filter("words-v2"), {}}}, few);
+        const double bound = roomy.table_bytes();
+        set_filter_memory(1.2 * 1024 * 1024);
+        const FilterStack tight(text_line(2000), {{find_filter("words-v2"), {}}}, few);
+        CHECK(bound > filter_memory() && tight.table_bytes() < filter_memory());
+        CHECK(tight.ranker() && roomy.ranker() && tight.ranker()->count() == roomy.ranker()->count());
+        set_filter_memory(kDefaultFilterMemory);
     }
     // A built-in word filter's rows (clean-v1): ranks above, judges below.
     {

@@ -155,6 +155,14 @@ void set_filter_memory(double bytes);
 inline constexpr double kDefaultMergeCacheShare = 0.5;
 double merge_cache_share();
 void set_merge_cache_share(double share);
+// The time budget: the longest one unit may take to open, in milliseconds: its address turned
+// into its content, or its survivor number into the survivor. A setting (the setup menu's TIME
+// BUDGET; `--unit-time MS`), 50 until it is set. Where ranking a unit takes time that grows with its
+// length faster than its table's memory (symbol-entropy-v1 on two symbols), the length a ranker is
+// offered at follows it, measured on this machine. Safe to read from any thread.
+inline constexpr double kDefaultUnitTimeMs = 50;
+double unit_time_ms();
+void set_unit_time_ms(double ms);
 // A size for a person: "2.1 GB", "512 MB".
 std::string memory_text(double bytes);
 // Why a counting table is refused, in words: "<what> needs 2.1 GB of memory at this length, over

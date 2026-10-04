@@ -119,7 +119,9 @@ const char* kUsage =
     "  --counting-memory PCT  the share of installed memory the setup menu's counts may take at once\n"
     "                      (5 to 100; the setup menu's, 50 at first)\n"
     "  --merge-cache PCT   the share of the filter memory kept for merged filters between counts (0 to\n"
-    "                      100; the setup menu's, 50 at first)\n\n"
+    "                      100; the setup menu's, 50 at first)\n"
+    "  --unit-time MS      the time budget: the longest one unit may take to open (5 to 60000; the\n"
+    "                      setup menu's, 50 at first)\n\n"
     "Controls: WASD move, mouse look, Shift run, E or click take a book, T warp, G go to,\n"
     "M switch ordering (positional, scrambled, guided), - and = zoom out/in (guided; Shift: 8x),\n"
     "wheel/PgUp/PgDn/[ ] jump 1/1000/1000000 tiles, Home to corridor tile 0 (every line's start line),\n"
@@ -342,6 +344,10 @@ int run(const Args& a)
     if (a.has("merge-cache")) app.merge_cache_pct = std::clamp(int(a.get_u32("merge-cache", 50)), 0, 100);
     set_counting_share(app.counting_memory_pct);
     sieve::set_merge_cache_share(app.merge_cache_pct / 100.0);
+    // The time budget (TIME BUDGET): the longest one unit may take to open.
+    if (a.has("unit-time")) app.unit_time_ms = std::clamp(int(a.get_positive("unit-time", 50)), 5, 60000);
+    sieve::set_unit_time_ms(app.unit_time_ms);
+    set_time_budget(app.unit_time_ms);
     const DisplayInfo display = detect_display();
     if (!shot && app.resolution.w <= 0)
     {
@@ -569,6 +575,7 @@ int run(const Args& a)
         // The hallway counts with the filter memory as set, pressed X or not (and the setup menu,
         // built again when it next opens, counts with it too).
         sieve::set_filter_memory(double(app.filter_memory_mb) * 1024 * 1024);
+        sieve::set_unit_time_ms(app.unit_time_ms); // (and the time budget, as set)
         auto building = std::async(std::launch::async, [&] {
             sieve::cli::timings::Scope timed("hallway.build");
             return make_hallway(window, renderer, ha, first, filters, app.angle_decimals);

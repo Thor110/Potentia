@@ -87,17 +87,30 @@ struct LineSize
 // For a line of `length` symbols of `base` each.
 LineSize line_size(uint32_t base, uint64_t length);
 
-// The most items the hallway keeps worked out (its cache clears itself past this many): what the
-// budget's memory bar counts on, and the cache itself (hallway.cpp, book()). More than a
-// screenful, which is 14 rooms of up to 256 items.
-inline constexpr size_t kCachedUnits = 4096;
+// Tiles drawn behind and ahead of the one you are in, and kept in the item cache.
+inline constexpr int kCacheBack = 6, kCacheAhead = 7;
+inline constexpr int kTilesKept = kCacheBack + kCacheAhead + 1;
+// The most items the hallway keeps worked out (its cache clears itself past this many): the tiles
+// kept and one more either side, at the items a tile holds now (sieve::books_per_tile). What the
+// budget's memory bar counts on (as the setting stands), and the cache itself (hallway.cpp book()).
+size_t cached_units();
+// The longest address the menu lets a shape have: one that alone would fill the memory the item
+// cache is given (Budget::cache_bytes, a quarter of installed memory), held as a number and as hex
+// (three eighths of a byte a bit). Past it a line is "too large" and nothing of it is worked out.
+double too_large_bits();
+// A file long enough that opening it is noticed: one whose bytes take a quarter of the time budget
+// to work out from its place on the binary line, measured here (machine_budget). Past it the
+// hallway checks your room's files with the vault ahead of a look (vault_ahead), and a file taken
+// there by its own length keeps only the room you stand in (thin).
+uint64_t large_file_bytes();
 
 // What this machine can open (menu.cpp: machine_budget). A shape has to fit all three.
 struct Budget
 {
-    double bits = 4.0e6;                     // the longest address that opens in kUnitMs, measured here
+    double bits = 4.0e6;                     // the longest address that opens in the time budget, measured here
     double cache_bytes = 256.0 * 1048576.0;  // what the hallway's cache of units may take
-    double ms_per_unit_at_limit = 50;        // the time `bits` was worked out for
+    double ms_per_unit_at_limit = 50;        // the time `bits` was worked out for (the time budget)
+    double growth = 1.6;                     // how the time to open grows with the address, measured
     double ref_bits = 0, ref_ms = 0;         // the measurement it was worked out from
     // The binary line's conversions are hex, linear in the length, not the base conversion the
     // other lines need, so it has a measurement of its own and grows in proportion from it.
@@ -120,6 +133,9 @@ bool filter_workers_busy();
 // draws), with a filter memory of `filter_bytes` (0: the one in use, sieve::filter_memory).
 void set_counting_share(int percent);
 int counting_slots(double filter_bytes = 0);
+// The time budget as set (the setup menu's TIME BUDGET, in ms): what the budget's time bar and
+// FIND MY LIMITS hold a line to. (What can rank follows sieve::unit_time_ms, which X applies.)
+void set_time_budget(double ms);
 
 // Which tab of the filters window lists a filter: 0 built-in, 1 custom (plugins), 2 retired.
 int tab_of(const sieve::FilterSpec& f);
@@ -165,13 +181,14 @@ private:
     void find_limits();        // set every line to the largest shape this machine can open
     void reset_settings();     // every shape back to its default // a line this machine cannot open
     void adjust(int dir, int step);
-    // 0-34 are the settings rows, in the order render() lists them and adjust() switches on;
+    // 0-35 are the settings rows, in the order render() lists them and adjust() switches on;
     // then FIND MY LIMITS, RESET, and ENTER THE HALLWAY, which is the only row that opens it.
     // The GLOBAL rows come first; each line's rows are counted from kFirstLineRow, so a row added
     // to GLOBAL moves them all with one change here.
     static constexpr int kAngleRow = 4, kTitleRow = 5, kLettersRow = 6, kDisplaySizeRow = 7, kDisplayCacheRow = 8,
-                         kCloseUpRow = 9, kFocusRow = 10, kFilterMemoryRow = 11, kCountingMemoryRow = 12, kMergeCacheRow = 13;
-    static constexpr int kFirstLineRow = 14;
+                         kCloseUpRow = 9, kFocusRow = 10, kFilterMemoryRow = 11, kCountingMemoryRow = 12, kMergeCacheRow = 13,
+                         kTimeBudgetRow = 14;
+    static constexpr int kFirstLineRow = 15;
     // The audio rows: its notes, then its note set and the notes2 set's range, durations and voices.
     static constexpr int kPagesRows = kFirstLineRow, kImageRows = kFirstLineRow + 4, kAudioRow = kFirstLineRow + 7,
                          kVideoRows = kFirstLineRow + 13, kBooksRow = kFirstLineRow + 17, kModelsRows = kFirstLineRow + 18;
@@ -207,6 +224,7 @@ private:
     enum class ToggleScope { ThisTab, BothTabs, EveryLine };
     void toggle_all_filters(ToggleScope scope);
     bool memory_pending() const; // the filter memory setting is not yet the limit the tallies use
+    bool time_pending() const;   // nor the time budget (X applies both)
     double filter_memory_setting() const; // the setting, in bytes
     // The lines whose tally is still being counted (on the workers), by name; "" when none is.
     std::string counting_lines() const;
