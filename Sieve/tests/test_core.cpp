@@ -12,6 +12,7 @@
 #include "sieve/filekind.hpp"
 #include "sieve/modelsieve.hpp"
 #include "sieve/written.hpp"
+#include "sieve/packed.hpp"
 #include "sieve/plugin.hpp"
 #include "sieve/compact.hpp"
 #include "sieve/corridor.hpp"
@@ -1728,6 +1729,30 @@ void test_plugins(const std::string& dir)
         CHECK(DfaRanker(m, 2).count() == BigUint(1));
     }
 
+    // PackedRows: numbers of every size back exactly (zeros known without reading them), a row
+    // read while the next is worked out, and its estimate never under what it holds.
+    {
+        PackedRows rows;
+        rows.add_row(5, [](size_t i, BigUint& v) {
+            if (i % 2) v = BigUint::pow(3, uint64_t(i) * 50);
+        });
+        rows.add_row(5, [&](size_t i, BigUint& v) {
+            v.add_mul_small(rows.limbs(0, i), 7);
+            v.add_mul_small(rows.limbs(0, 4 - i), 2);
+        });
+        rows.finish();
+        bool same = rows.rows() == 2;
+        for (size_t i = 0; i < 5; ++i)
+        {
+            const BigUint a = i % 2 ? BigUint::pow(3, uint64_t(i) * 50) : BigUint();
+            const BigUint b4 = (4 - i) % 2 ? BigUint::pow(3, uint64_t(4 - i) * 50) : BigUint();
+            BigUint want = BigUint::mul(a, BigUint(7));
+            want += BigUint::mul(b4, BigUint(2));
+            same = same && rows.value(0, i) == a && rows.is_zero(0, i) == a.is_zero() && rows.value(1, i) == want;
+        }
+        CHECK(same);
+        CHECK(PackedRows::estimate(2, 5, 3 * std::log2(3.0) * 150) >= rows.bytes());
+    }
     // DfaRanker's packed table, and a ranker on a longer one's table: the same counts, ranks and
     // units as a table built at that length, at every length up to the longer one's.
     {

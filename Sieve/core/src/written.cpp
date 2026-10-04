@@ -10,6 +10,7 @@
 #include "sieve/written.hpp"
 
 #include "sieve/filekind.hpp"
+#include "sieve/packed.hpp"
 #include "sieve/plugin.hpp"
 #include "sieve/utf8.hpp"
 
@@ -1258,25 +1259,27 @@ public:
         }
         if (r.binary)
         {
-            // |Bn| from each of its states: by what a symbol is to it, times how many symbols are that.
-            bn_.assign(length + 1, std::vector<BigUint>(r.bnext.size()));
-            for (size_t s = 0; s < r.bnext.size(); ++s) bn_[0][s] = BigUint(r.baccept[s]);
+            // |Bn| from each of its states: by what a symbol is to it, times how many symbols are
+            // that. Packed (sieve/packed.hpp), as written_ranker's budget counts it.
+            const size_t n = r.bnext.size();
+            bn_.reserve(size_t(length) + 1);
+            bn_.add_row(n, [&](size_t s, BigUint& v) {
+                if (r.baccept[s]) v.add_small(1);
+            });
             for (uint32_t k = 1; k <= length; ++k)
-                for (size_t s = 0; s < r.bnext.size(); ++s)
-                {
-                    BigUint sum = bn_[k - 1][s];
-                    sum.mul_small(r.spaces);
+                bn_.add_row(n, [&](size_t s, BigUint& v) {
                     auto add = [&](int32_t t, uint32_t times) {
-                        if (t >= 0) sum.add_mul_small(bn_[k - 1][size_t(t)], times);
+                        if (t >= 0) v.add_mul_small(bn_.limbs(k - 1, size_t(t)), times);
                     };
+                    add(int32_t(s), r.spaces); // whitespace leaves it where it is
                     switch (r.bphase[s])
                     {
                     case 0: add(r.bnext[s][0], r.others_count); break;
                     case 1: add(r.bnext[s][0], 1); add(r.bnext[s][1], r.others_count - 1); break;
                     default: add(r.bnext[s][0], 1); add(r.bnext[s][1], 1); break;
                     }
-                    bn_[k][s] = sum;
-                }
+                });
+            bn_.finish();
         }
         start_ = intern({p_ ? p_->start : 0, q_ ? q_->start : -1, -1, -1, r.binary ? r.bstart : -1});
         set_count();
@@ -1311,7 +1314,7 @@ public:
         BigUint kept = p_ ? pr_->completions(State(j.p), remaining) : powers_[remaining];
         if (j.beta >= 0 && j.q >= 0) kept += joint(1, j.q, j.a, j.b, j.beta, remaining);
         if (j.q >= 0) kept -= qr_->completions(State(j.q), remaining);
-        if (j.beta >= 0) kept -= p_ ? joint(0, j.p, j.a, j.b, j.beta, remaining) : bn_[remaining][size_t(j.beta)];
+        if (j.beta >= 0) kept -= p_ ? joint(0, j.p, j.a, j.b, j.beta, remaining) : bn_.value(remaining, size_t(j.beta));
         return kept;
     }
 
@@ -1419,7 +1422,7 @@ private:
     {
         const Small& sm = smalls_[size_t(k)];
         if (r == 0) return BigUint(sm.dfa.accept[size_t(s)] && rule_->baccept[size_t(beta)] ? 1 : 0);
-        if (sm.universal[size_t(s)]) return bn_[r][size_t(beta)];
+        if (sm.universal[size_t(s)]) return bn_.value(r, size_t(beta));
         const Key key{uint64_t(1) << 62 | uint64_t(uint32_t(k)) << 24 | uint64_t(uint32_t(beta)), uint64_t(uint32_t(s)) << 32 | r};
         if (auto it = memo_.find(key); it != memo_.end()) return it->second;
         BigUint sum;
@@ -1472,7 +1475,7 @@ private:
     std::optional<Dfa> q_;
     std::unique_ptr<DfaRanker> qr_;
     std::vector<BigUint> powers_;
-    std::vector<std::vector<BigUint>> bn_;
+    PackedRows bn_; // |Bn| from each of its states, by symbols left
     State start_ = kDead;
     mutable std::mutex mx_;
     mutable std::vector<Joint> joints_;

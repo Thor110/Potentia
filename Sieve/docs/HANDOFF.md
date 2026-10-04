@@ -1259,3 +1259,20 @@ Packed tables (4 October 2026: "every last byte of saving will compound").
     76 MB held; it said 138 MB), so it counts files about a third longer in the same memory.
 - **X with every filter:** 10 s to 5.8 s, with the same counts (the screenshot after X differs only
   in the filter memory bar's 1.4 GB).
+The remaining tables (4 October 2026).
+- **PackedRows (sieve/packed.hpp):** rows of exact numbers packed, one block of limbs a row, built
+  number by number into a reused BigUint. DfaRanker's table and not-written's Bn table use it.
+- **Bn needed it:** written_ranker's budget counted Bn at DfaRanker::table_bytes, which became the
+  packed size, while Bn still held a BigUint per number. That was an underestimate, about 150 MB
+  against a fraction of that on a 3,000-character page.
+- **The word filters' estimate (text_m1 m1_table_bytes):** counts at half the longest, as utf8's.
+  At 512 MB they rank about 30,000 characters, not 21,000. Measured at 16,000 characters, it is
+  still well above the real size: clean 87 MB held against 146 MB estimated; words' rows about
+  48 MB against 291 MB, since words-only text has fewer units than 27 a letter. A growth rate
+  measured on a short prefix would make it tighter.
+- **Left alone, measured small:**
+  - The picture tables (colours by pixels in scope).
+  - The kind and pattern tables (a 16-byte head).
+  - The models line's (vertices by faces).
+  - not-written's joint memo: at most 41,000 entries in X's counts, about 7 MB, against its budget
+    of 3,000,000.

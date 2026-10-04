@@ -26,10 +26,14 @@ namespace {
 
 constexpr char kLower27[] = " abcdefghijklmnopqrstuvwxyz";
 
-// The rankers' count tables grow with the square of the length: about two rows of L + 1 numbers of
-// up to L log2(27) bits (words and window keep two, clean one). Past the filter memory (plugin.hpp)
-// a unit is judged and not ranked: at 512 MB that is about 21,000 characters.
-double m1_table_bytes(uint32_t L, int rows = 2) { return double(rows) * (double(L) + 1) * (double(L) * 4.754887502163468 / 8.0 + 32.0); }
+// The rankers' count tables grow with the square of the length: about two rows of L + 1 numbers
+// (words and window keep two, clean one), the r-th of up to r log2(27) bits: half the longest on
+// average, with a BigUint's own 40 bytes or so apiece. Past the filter memory (plugin.hpp) a unit is
+// judged and not ranked: at 512 MB that is about 30,000 characters. (Taken at the full L log2(27)
+// bits, as it was, the estimate was twice the rows and stopped at 21,000. It is still above them:
+// measured at 16,000 characters, clean's row holds 87 MB against 146 MB estimated, and words' two
+// about 48 MB against 291 MB, since text of words alone has far fewer units than 27 a letter.)
+double m1_table_bytes(uint32_t L, int rows = 2) { return double(rows) * (double(L) + 1) * (double(L) * 4.754887502163468 / 16.0 + 8.0 + 40.0); }
 
 bool is_lower27(const FilterLine& line) { return line.kind == "text" && line.symbols_id == "lower27"; }
 

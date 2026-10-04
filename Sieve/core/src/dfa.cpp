@@ -376,8 +376,7 @@ bool subset(const Dfa& a, const Dfa& b)
 double DfaRanker::table_bytes(size_t states, uint32_t base, uint32_t length)
 {
     const double bits = double(length) * std::log2(double(std::max<uint32_t>(base, 2)));
-    const double limbs = bits / 2.0 / 64.0 + 1.0; // half the longest, rounded up a limb
-    return double(states) * (double(length) + 1) * (sizeof(uint32_t) + limbs * sizeof(uint64_t));
+    return PackedRows::estimate(double(length) + 1, double(states), bits);
 }
 
 DfaRanker::DfaRanker(const Dfa& minimal, uint32_t length) : DfaRanker(std::make_shared<const Dfa>(minimal), length) {}
@@ -409,41 +408,17 @@ void DfaRanker::build()
             if (const int32_t t = d.next[s * B + c]; t >= 0) ++m[t];
         groups[s].assign(m.begin(), m.end());
     }
-    std::vector<Row>& rows = table_->rows;
-    rows.resize(size_t(length_) + 1);
-    {
-        Row& r0 = rows[0];
-        r0.start.reserve(n + 1);
-        for (size_t s = 0; s < n; ++s)
-        {
-            r0.start.push_back(uint32_t(r0.limbs.size()));
-            if (d.accept[s]) r0.limbs.push_back(1);
-        }
-        r0.start.push_back(uint32_t(r0.limbs.size()));
-    }
-    BigUint acc; // one number worked out at a time, its memory reused
-    std::vector<uint64_t> limbs;
+    PackedRows& rows = table_->rows;
+    rows.reserve(size_t(length_) + 1);
+    rows.add_row(n, [&](size_t s, BigUint& v) {
+        if (d.accept[s]) v.add_small(1);
+    });
     for (uint32_t r = 1; r <= length_; ++r)
-    {
-        const Row& prev = rows[r - 1];
-        Row& row = rows[r];
-        row.start.reserve(n + 1);
-        limbs.clear();
-        for (size_t s = 0; s < n; ++s)
-        {
-            acc.set_zero();
+        rows.add_row(n, [&](size_t s, BigUint& v) {
             for (const auto& [t, mult] : groups[s])
-            {
-                const uint32_t a = prev.start[size_t(t)], b = prev.start[size_t(t) + 1];
-                if (a != b) acc.add_mul_small(std::span<const uint64_t>(prev.limbs.data() + a, b - a), mult);
-            }
-            if (limbs.size() + acc.limbs().size() > UINT32_MAX) throw std::length_error("a row of the counting table too large to store");
-            row.start.push_back(uint32_t(limbs.size()));
-            limbs.insert(limbs.end(), acc.limbs().begin(), acc.limbs().end());
-        }
-        row.start.push_back(uint32_t(limbs.size()));
-        row.limbs.assign(limbs.begin(), limbs.end()); // exactly its size
-    }
+                if (!rows.is_zero(r - 1, size_t(t))) v.add_mul_small(rows.limbs(r - 1, size_t(t)), mult);
+        });
+    rows.finish();
 }
 
 Ranker::State DfaRanker::next(State s, uint32_t symbol) const
@@ -457,16 +432,13 @@ Ranker::State DfaRanker::next(State s, uint32_t symbol) const
 BigUint DfaRanker::completions(State s, uint32_t remaining) const
 {
     if (s == kDead || s >= dfa().states() || remaining > length_) return BigUint();
-    const Row& row = table_->rows[remaining];
-    const uint32_t a = row.start[size_t(s)], b = row.start[size_t(s) + 1];
-    return BigUint::from_limbs64(std::span<const uint64_t>(row.limbs.data() + a, b - a));
+    return table_->rows.value(remaining, size_t(s));
 }
 
 bool DfaRanker::alive(State s, uint32_t remaining) const
 {
     if (s == kDead || s >= dfa().states() || remaining > length_) return false;
-    const Row& row = table_->rows[remaining];
-    return row.start[size_t(s)] != row.start[size_t(s) + 1];
+    return !table_->rows.is_zero(remaining, size_t(s));
 }
 
 } // namespace sieve

@@ -11,6 +11,7 @@
 #pragma once
 
 #include "sieve/filter.hpp"
+#include "sieve/packed.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -78,24 +79,18 @@ public:
     BigUint completions(State s, uint32_t remaining) const override;
     bool alive(State s, uint32_t remaining) const override;
     const Dfa& dfa() const { return *table_->dfa; } // the automaton it counts (minimal)
-    uint32_t table_length() const { return uint32_t(table_->rows.size() - 1); } // the longest it answers
+    uint32_t table_length() const { return uint32_t(table_->rows.rows() - 1); } // the longest it answers
 
-    // The table's size, in bytes, before building it: states x (length + 1) numbers, each where it
-    // starts (4 bytes) and its limbs, a number on average half the longest (the counts grow with
-    // r) and rounded up a limb. An overestimate (measured: 99 MB against 137 MB estimated for the
-    // table above). Used to decide whether counting fits the filter memory.
+    // The table's size, in bytes, before building it: states x (length + 1) numbers of up to
+    // length x log2(base) bits, packed (PackedRows::estimate: an overestimate, 160 MB against
+    // 98 MB measured for the table above). Used to decide whether counting fits the filter memory.
     static double table_bytes(size_t states, uint32_t base, uint32_t length);
 
 private:
-    struct Row
-    {
-        std::vector<uint64_t> limbs;  // every state's number, one after another
-        std::vector<uint32_t> start;  // state s's limbs are [start[s], start[s + 1])
-    };
     struct Table
     {
         std::shared_ptr<const Dfa> dfa;
-        std::vector<Row> rows; // rows[r]: the completions with r symbols left
+        PackedRows rows; // row r: each state's completions with r symbols left
     };
     void build();
     std::shared_ptr<Table> table_;
