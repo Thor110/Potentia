@@ -7,6 +7,7 @@
 #include "sieve/canon.hpp"
 #include "sieve/guided.hpp"
 #include "sieve/image.hpp"
+#include "sieve/sound.hpp"
 #include "sieve/space.hpp"
 
 #include <memory>
@@ -51,8 +52,14 @@ WarpInput read_warp_input(const Line& line, const Args& a);
 // Multi-line console preview of one unit (quoted text, ASCII-art image/frames, note list).
 std::string preview(const Line& line, const std::vector<uint32_t>& digits);
 
+// An audio unit's file: a MIDI file for a note set, a WAV file for a pcm set (sieve/sound.hpp).
+std::string audio_file(const Line& line, const std::vector<uint32_t>& digits);
+// A pcm unit as text: each channel a row of `columns` shades, each the loudest sample over its
+// share of the unit.
+std::string pcm_preview(const PcmFormat& f, const std::vector<uint32_t>& digits, uint32_t columns);
+
 // The vault (vault.hpp): whether a unit is withheld. A unit of a byte line by its bytes (it is a
-// file), a melody by its MIDI file, other text as a file written out (its own bytes, and each
+// file), a melody by its MIDI file, a sound by its WAV file, other text as a file written out (its own bytes, and each
 // well-known encoding decoded: vault_decode.hpp), never by what it says; a picture or a video by
 // each frame, by PDQ (picture_withheld).
 bool unit_withheld(const Line& line, const std::vector<uint32_t>& digits);
@@ -60,9 +67,28 @@ bool unit_withheld(const Line& line, const std::vector<uint32_t>& digits);
 bool picture_withheld(const ImageFormat& format, const std::vector<uint32_t>& digits);
 
 // The file a unit saves as, in bytes: a PNG for image/video (video frames side by side, `scale`
-// pixels a pixel), MIDI for audio, UTF-8 text for text. Refuses (VaultWithheld) what the vault
+// pixels a pixel), MIDI for a note set and WAV for a pcm set, UTF-8 text for text. Refuses (VaultWithheld) what the vault
 // holds. save_unit writes it to a file.
 std::vector<uint8_t> unit_file(const Line& line, const std::vector<uint32_t>& digits, uint32_t scale);
-void save_unit(const Line& line, const std::vector<uint32_t>& digits, const std::string& path, uint32_t scale);
+// save_unit chooses by the path's extension: one of export_formats, or any other for the line's own.
+inline constexpr uint32_t kDefaultExportFps = 8; // a video saved as video: frames a second, unless given
+void save_unit(const Line& line, const std::vector<uint32_t>& digits, const std::string& path, uint32_t scale,
+               uint32_t fps = kDefaultExportFps);
+
+// ---- saving as other formats
+
+// A format a unit can be saved as: its extension (".mp3"), a name for a file dialog, and the
+// ffmpeg encoder that writes it (empty: Sieve writes it itself).
+struct ExportFormat
+{
+    std::string ext, name, encoder;
+};
+// The formats a unit of this line can be saved as: its own first (PNG, MIDI, WAV, TXT), then those
+// the ffmpeg found has an encoder for (none without one).
+std::vector<ExportFormat> export_formats(const Line& line);
+// A unit as a file of one of those formats (by its extension, case aside): its own through
+// unit_file, else written through ffmpeg from its own (pictures `scale` pixels a pixel, video at
+// `fps` frames a second). Refuses what the vault holds, as unit_file does.
+std::vector<uint8_t> export_unit(const Line& line, const std::vector<uint32_t>& digits, const std::string& ext, uint32_t scale, uint32_t fps);
 
 } // namespace sieve::cli

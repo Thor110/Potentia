@@ -939,7 +939,7 @@ bool Hallway::warp(const std::string& input)
         }
         Args a;
         a.opts["line"] = to_string(line().kind);
-        if (line().kind == LineKind::Image || line().kind == LineKind::Video) a.opts["file"] = input;
+        if (line().kind == LineKind::Image || line().kind == LineKind::Video || on_sound()) a.opts["file"] = input;
         else a.positional = {input};
         const WarpInput w = read_warp_input(line(), a);
         if (w.units.empty()) throw std::invalid_argument(tr("msg.warp.empty"));
@@ -1322,8 +1322,17 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
         if (in_hand_ && !on_books() && line().kind == LineKind::Audio)
         {
             // Through the music player when there is one, which fades the music out under it.
-            const sieve::NoteSet set = note_set_of(line().space.symbols_id());
-            const std::string err = music() ? music()->play_item(set, in_hand_->unit) : synth_.play(set, in_hand_->unit);
+            std::string err;
+            if (sieve::is_pcm_symbols(line().space.symbols_id()))
+            {
+                const sieve::PcmFormat f = sieve::pcm_format_of(line().space.symbols_id());
+                err = music() ? music()->play_sound(f, in_hand_->unit) : synth_.play_sound(f, in_hand_->unit);
+            }
+            else
+            {
+                const sieve::NoteSet set = note_set_of(line().space.symbols_id());
+                err = music() ? music()->play_item(set, in_hand_->unit) : synth_.play(set, in_hand_->unit);
+            }
             message(err.empty() ? tr("msg.playing") : err);
         }
         break;

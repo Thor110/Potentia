@@ -45,6 +45,7 @@
 #include "cli/lines.hpp"
 
 #include "sieve/audio.hpp"
+#include "sieve/sound.hpp"
 #include "sieve/booksieve.hpp"
 #include "sieve/bookspace.hpp"
 #include "sieve/compact.hpp"
@@ -890,6 +891,10 @@ public:
     std::string model_line_summary(const ModelSpace::Parts& p) const;
 
     static std::vector<std::string> split_lines(const std::string& s);
+    // An audio unit as text: a note set's notation, or a pcm unit's waveform, each channel a row of
+    // `columns` shades (cli::pcm_preview).
+    std::string audio_text(const Space::Digits& u, uint32_t columns) const;
+    bool on_sound() const; // on the audio line, holding a pcm set (sound itself)
 
     void draw_in_hand(float W, float H);
 
@@ -1162,7 +1167,7 @@ private:
     // F: the item in hand saved as a file (item_save.cpp). The dialog's answer arrives on the
     // system's thread (item_save_chosen) and is written at the next frame (item_save_poll).
 public:
-    void item_save_chosen(const std::string& path);
+    void item_save_chosen(const std::string& path, int filter = -1);
     void save_in_hand_to(const std::string& path);
     void save_view_to(const std::string& path); // F in the viewer, to PATH (--save-view)
 private:
@@ -1179,6 +1184,12 @@ private:
     std::string binary_file_name(const Book& bk, const std::string& sha);
     std::mutex save_mx_;
     std::optional<std::string> save_pending_;
+    int save_filter_ = -1; // the dialog's chosen filter: an index into save_formats_, or -1
+    // The formats F offers for the item in hand (cli::export_formats: its own, then ffmpeg's), and
+    // the dialog's filters made from them (kept while the dialog is open).
+    std::vector<cli::ExportFormat> save_formats_;
+    std::vector<std::string> save_filter_text_;
+    std::vector<SDL_DialogFileFilter> save_filters_;
     std::optional<Book> save_item_;
     std::optional<std::vector<uint8_t>> save_blob_; // or a file made already: a view's picture or text
     std::string save_ext_;

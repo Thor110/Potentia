@@ -1,138 +1,122 @@
-# Filters, section 1: merges, retirements, padding, long pages, pictures, notes2 melodies (relative to origin/main e4d6866)
+# Sound itself on the audio line, and saving in other formats (relative to origin/main 2262e74)
+
+**This package includes the earlier ffmpeg one** (`ffmpeg-media.zip`), so apply this one alone.
 
 To apply it, do one of these from the Potentia repository root:
 - unzip `files/` over the repository;
-- or run `git apply filters-section1.patch`.
+- or run `git apply media-and-sound.patch`.
 
 **New files:**
-- six plugins in `Sieve/data/filters/`: `tidy-data-v2`, `words-data-v2`, `window-data-v2`, `title-data-v1`, `melody-lengths-v2`, `melody-ending-v2`;
-- two test plugins in `Sieve/tests/plugins/`: `toy-padding-v1`, `toy-padding-whole-v1`.
+- `Sieve/core/include/sieve/sound.hpp` and `Sieve/core/src/sound.cpp`;
+- `Sieve/tools/cli/media_decode.cpp` and `media_decode.hpp`;
+- `Sieve/tests/vectors_pcm_v1.tsv`.
 
-## What retired, and for what
-| Retired | Replaced by | What the replacement does better |
-| :--- | :--- | :--- |
-| `max-run-data-v1` | `max-run-v1` (built-in) | Works on every text alphabet, not only lower27 |
-| `tidy-data-v1` | `tidy-data-v2` | Requires the built-in `max-run-v1` |
-| `words-v1`, `window-v1` | `words-data-v1`, `window-data-v1` | Merges with the other automata, and still counts long pages |
-| `words-v2`, `window-v2` | `words-data-v2`, `window-data-v2` | The same, with padding |
-| `title-v1` | `title-data-v1` | The same rule as a plugin (padding and `within`) |
-| `melody-lengths-v1`, `melody-ending-v1` | `melody-lengths-v2`, `melody-ending-v2` | Works on every note set, by real note lengths |
+## 1. Reading pictures and video through ffmpeg (from the earlier package)
+- **What Sieve reads itself:** PNG, JPEG, BMP, GIF and TGA, exactly as before, so their addresses don't change.
+- **Through ffmpeg:** every other format, when an ffmpeg is found:
+  1. `--ffmpeg PATH`, or `ffmpeg=PATH` in the hallway's settings;
+  2. the `SIEVE_FFMPEG` environment variable;
+  3. an ffmpeg beside Sieve;
+  4. the `PATH`.
+- **Without one:** nothing calls it, and a file Sieve can't read itself says where to put an ffmpeg.
+- **Long videos:** frames are fitted one at a time. The whole of your 52 MB anchor video took 57 s at 308 MB peak memory.
 
-**Retired filters stay loadable:**
-- earlier stacks and settings files reproduce exactly;
-- they're marked retired;
-- X and tick-all skip them.
+## 2. Sound itself: the `pcm` set on the audio line
+**It's not a new dimension.** It's a third set on the existing audio line, beside `notes104` and `notes2`, and **`notes104` stays the default**.
+- **In the CLI:** `--note-set pcm` with `--rate` (8000), `--bits` (1 to 31, default 8) and `--channels` (default 1). `--length` is samples per channel, one second at the rate unless given.
+- **In the hallway:** setup menu, AUDIO SET.
 
-**Each pair counts the same.** Every pair was checked at many lengths, and every unit was checked to
-length 4 where that's possible. The details are in `docs/FILTERS-CONFLICTS.md`'s table.
+**What a unit is.**
+- Each sample is one digit, its own bits read as a number, so digit 0 is silence.
+- A unit is channel 1's samples, then channel 2's, the way `notes2` lays out its voices.
+- The address is the sound itself, read as one number.
 
-## 1a. `tidy-data-v2`
-**What it is.** It's `tidy-data-v1`, but requiring the built-in `max-run-v1` (`max_run=3`) in place
-of `max-run-data-v1`.
+**How a file is fitted to the set** (`canon-pcm-v1`), by fixed rules:
+1. Channels are mixed or split: to one channel, their mean; to fewer, the first ones; to more, the last repeated.
+2. The rate is resampled by area, the same way pictures are stretched, rounded half up.
+3. The samples are rounded to the set's bits; anything outside the range is clipped and reported.
+4. The sound is cut into units, and the last is padded with silence.
 
-**Checked.** The same counts at 12, 64 and 400 characters as v1. A different `max_run` in the stack
-is flagged, as before.
+**Files.**
+- **In:** a WAV file is read by Sieve itself. MP3, FLAC, OGG, Opus, AAC and a video's sound go through ffmpeg.
+- **Out:** a unit saves as a WAV file.
+- **Round trip:** the WAV a unit saves as reads back to exactly the same unit, at any rate, depth and channel count I tried (1 to 31 bits, 1 to 6 channels, 3 Hz to 48 kHz).
 
-## 1b. Padding and `within` in the token form
-**`padding trailing`.** A unit ending in two or more SPACEs passes when what comes before them
-passes on its own: the last page of a text.
-- **How:** it changes the compiled automaton.
-- **So:** a padded plugin is still one automaton and merges with the others.
+**In the hallway.**
+- **Setup menu:** on pcm, the six existing audio rows become samples, audio set, sample rate, bits, (notes2) and channels. No rows were added, so the CI's row pins stand.
+  - **Sample rate** steps through 8000, 11025, 16000, 22050, 32000, 44100, 48000, 96000 and 192000 Hz. The settings file takes any rate.
+  - **"note set" is renamed "audio set",** since it now chooses sound as well as notes.
+- **P** plays the sound in hand. The music fades under it, as it does under a melody.
+- **The item page and viewer** show each channel as a row of shades, on a SOUND tab with the format in its heading.
+- **T** warps to a sound file.
+- **F** saves a WAV file.
+- **J on the binary line:**
+  - WAV, MP3, OGG and FLAC open on the audio line when its set is pcm, and MIDI when it holds notes;
+  - otherwise it says which set is needed.
 
-**`within N`.** Past the first N symbols, only separators are allowed: a title on a page.
-- **Counts on its own:** it does, as `title-v1` did. Merging it would multiply the automaton's
-  states by the length.
-- **N is an expression:** so `max_length` is a setting.
+**Filters.**
+- The note filters don't apply to pcm.
+- The general filters do (`not-a-file-v1`, `not-a-pattern-v1`, entropy).
+- Filters of its own, and filters between sound and notes, are next (IDEAS §12).
 
-**The new plugins.** `words-data-v2`, `window-data-v2` and `title-data-v1` count exactly as their
-built-ins. Words and window were checked from 1 to 80 characters. Titles were checked at 12, 80 and
-200 characters, with `max_length` 10 and 64.
+## 3. Saving in other formats through ffmpeg
+**What's offered.** A unit always saves in its own format: PNG, MIDI, WAV or text. With ffmpeg it can also save as:
 
-**The oracle has both, built its own way:**
-- padding as two more states of its NFA;
-- `within` as the count at N times the separators' choices.
+| Kind | Formats |
+| :--- | :--- |
+| Pictures | JPEG, WebP, BMP, TIFF |
+| Video | animated GIF, MP4, WebM (`--fps`, 8 unless given) |
+| Sound | FLAC, MP3, Ogg Vorbis, Opus, AAC |
 
-**Engine and oracle agree:**
-- on the new plugins;
-- on two toy grammars with two separators and cut and whole edges.
+**Each format is offered only when your ffmpeg has its encoder.** Sieve asks ffmpeg for its encoder list once, so nothing is assumed about how it was built. That keeps a stripped-down LGPL build of ffmpeg workable.
 
-## 1c. Dictionary plugins count long pages
-**The problem.** A dictionary plugin's automaton needs a table of states × length. On a 3,200-character
-page that doesn't fit, so it could only judge.
+**How you choose.**
+- **CLI:** `read --out x.flac` chooses by extension. An extension none of these formats uses saves the line's own file, as before.
+- **Hallway:** F lists the formats as filters in the save dialog. Typing an extension also chooses one.
+- **Without ffmpeg:** a format that needs it says so, and lists what it can save instead.
 
-**The fix.** A plugin of one dictionary set, with no grammar, now counts the built-ins' way where that
-table won't fit: by its words' lengths, keeping one row of counts.
-
-**Checked.** The same counts as the built-ins at 400 and 3,200 characters. A 20,000-character page
-counts exactly in under a second.
-
-**So the four word built-ins retired.** Below those lengths the plugins are automata and merge as
-before.
-
-## 1d. Picture filters merge on small palettes
-**What changed.** `palette-size-v1` and `row-runs-v1` now build an automaton where it's small enough:
-states × symbols under 2^24, the bound `max-run-v1` uses. Each automaton's state:
-- **row-runs:** the column, the changes so far in the row, and the last colour.
-- **palette-size:** the colours used, plus the place in the frame when counting per frame.
-
-**What merges.** The two filters merge with each other, with `not-packed-v1`, and with plugins.
-- **Example:** on the black-and-white image line, a one-colour palette, both filters and
-  `not-packed-v1` count exactly (2).
-- **rgb24:** they keep their own arithmetic rankers.
-- **Picture vectors:** every one still passes, rgb24 included.
-
-**Whether filters clash now depends on the line.** A spec can say what it counts as on a given line
-(`counts_as_on`), judged at the largest settings that line allows. The setup menu passes the line,
-so X and the filter list see the picture filters merging where they do.
-
-## `notes2` melody filters
-**The new functions.** The v2 expression language gains `LENGTH(i)` and `SIXTEENTHS(k)`, in the
-engine and the oracle. They give a duration's real length in sixteenths:
-- `LENGTH(i)`: the line's own i-th duration;
-- `SIXTEENTHS(k)`: the k-th of the codes `s e E q Q h H w`.
-
-**The plugins.** `melody-lengths-v2` and `melody-ending-v2` work on every note set (`symbols notes*`).
-- **On `notes104`:** they count exactly as the v1s at every setting.
-- **On `notes2` sets:** engine and oracle agree on sets of other ranges and durations, with one and
-  two voices.
-
-## A CI fix on main
-**What was wrong.** The oracle step checked that exactly 23 shipped plugins load. Commit ac9096e
-added a 24th, so this check has been failing on main since then.
-
-**The fix.** CI now compares the loaded count with the number of `.sfilter` files in `data/filters`,
-with no fixed number.
+**Which come back exactly.**
+- **Lossless:** PNG, BMP, a GIF of the line's palette, WAV and FLAC read back to the same address.
+- **Checked:** MP4 and WebM of a black-and-white video also came back exactly here.
+- **Lossy:** other lossy saves may not come back.
 
 ## Checked
-**Tests.** `tests/test_core.cpp`: 67,136 checks, 0 failures. New tests cover:
-- the retirements, and the `tidy-data` equivalence;
-- padding and `within`, including exhaustive comparisons to length 4;
-- the long-page fallback, forced with 1 MB of filter memory at 1,500 characters;
-- merging the picture filters, and rgb24 staying apart;
-- the melody v2s on `notes104` at every setting.
+- **Unit tests:** 33,735 checks, 0 failures. That's 166 more than before. The total is half of earlier ones because this machine has no SHA instructions, so the SHA-256 checks run once, not twice. New tests:
+  - the 13 pcm vectors, handed over in blocks of 3 frames so the resampling crosses block edges, each checked against its SHA-256;
+  - each WAV written out reads back to the same unit;
+  - every digit at 1 to 31 bits;
+  - malformed ids are refused;
+  - an empty sound is refused.
+- **The oracle** has its own `canon-pcm-v1`, in exact fractions, with its own WAV reader and writer. It covers:
+  - 8-, 16-, 24- and 32-bit WAV, float32 and float64, extensible headers, and streamed sizes;
+  - mixing 2, 4 and 6 channels, keeping the first channels, repeating the last;
+  - rates up and down, including 1 Hz to 2 Hz and 16 kHz to 7 Hz;
+  - 1 to 31 bits, and clipping.
+  
+  The engine matched all 13 cases on its first run. CI diffs the vectors.
+- **New CI step: sound needs no ffmpeg.** It checks:
+  - a stereo 16-bit WAV mixed to 8 kHz 8-bit mono;
+  - read back as WAV to the same address;
+  - 12-bit, 3-channel at 22050 Hz;
+  - notes104 still the default, and pcm options refused on notes;
+  - the message when ffmpeg is missing.
+- **The ffmpeg CI step now also checks:**
+  - FLAC landing where the same WAV does;
+  - FLAC and GIF exports coming back to the same address.
+- **Run here and passing:** every CI step (same addresses, filters, models, the bytes256 line, both media steps, books, the whole hallway step, and the whole reference-oracle step), with a static ffmpeg 7.0.2.
+- **By hand:**
+  - MP3, FLAC, OGG and Opus in;
+  - every format out;
+  - the hallway saving GIF and FLAC through F;
+  - screenshots of the item page, the viewer and the setup menu on pcm.
 
-**CI, run locally.** Every step I can run here passes:
-- same addresses;
-- filters;
-- models and the setup menu;
-- the bytes256 line;
-- books;
-- the whole hallway step;
-- the reference oracle, with its new comparisons.
+**Not run:**
+- Windows and macOS, which CI covers;
+- listening to the playback, since this machine has no sound device.
 
-**Not run.** I didn't time X in the setup menu.
-
-## Still to do in section 1
-- **Optimise-all wired into COST:** it needs known real content per line to protect. Where that
-  content comes from is your decision.
-- **Ascii85 in `not-written`.**
-- **The cross-line filters:**
-  - pictures that are text or files;
-  - MIDI that's also something else;
-  - pages that are models, and the reverse.
-- **Transformed copies.**
-- **Models:** the third tier and an `.obj` filter.
-- **Signed files:** checked past their signatures.
-- **Titled lines:** filtered bottom-up.
-- **Left as it is:** `neighbour-agreement-v1` doesn't count at all at 16×16 or 5×5×8, so there's
-  nothing to merge.
+## Not yet
+- **Filters for sound:** its own (silence, clipping, then pitch and timbre), and between sound and the note sets.
+- **Open-ended notes between `notes2` and `pcm`:** every MIDI pitch, lengths in ticks, loudness, instruments.
+- **Waveform:** a drawn waveform in place of the shaded text one.
+- **Hallway frame rate:** a setting for saving video, which is 8 frames a second for now.
+- **MP3 without an ID3 tag:** its kind is unknown, so J tries it as a picture. With the audio line on pcm, warp it with T instead.

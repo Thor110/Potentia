@@ -2003,6 +2003,202 @@ def cmd_notes2_vectors(args):
               f"{notes2_notation(ns, units[0])}\t{hashlib.sha256(notes2_midi(ns, units[0])).hexdigest()}")
 
 
+# ---------------------------------------------------------------- canon-pcm-v1 (sound itself)
+# Written from SPECIFICATIONS 3.3 and sieve/sound.hpp's rules, not from sound.cpp: its own WAV
+# reader and writer, and the resampling done in exact fractions of a second rather than in the
+# engine's integer spans.
+
+from fractions import Fraction
+
+
+class PcmFormat:
+    def __init__(self, rate, bits, channels):
+        if not (1 <= rate < 2**31) or not (1 <= bits <= 31) or not (1 <= channels <= 65535):
+            raise ValueError("bad pcm set")
+        self.rate, self.bits, self.channels = rate, bits, channels
+
+    def id(self):
+        return f"pcm/{self.rate}/{self.bits}/C{self.channels}"
+
+
+def _wav_float_to_s32(x):
+    if x != x:
+        return 0
+    v = math.floor(x * 2**31 + 0.5)
+    return max(-2**31, min(2**31 - 1, v))
+
+
+def wav_read(b):
+    """(rate, channels, frames as lists of signed 32-bit samples)."""
+    if b[:4] != b"RIFF" or b[8:12] != b"WAVE":
+        raise ValueError("not a WAV file")
+    at, fmt = 12, None
+    while at + 8 <= len(b):
+        cid, size = b[at:at + 4], struct.unpack_from("<I", b, at + 4)[0]
+        body = at + 8
+        if cid == b"fmt ":
+            tag, ch, rate = struct.unpack_from("<HHI", b, body)
+            align, bits = struct.unpack_from("<HH", b, body + 12)
+            if tag == 0xFFFE:
+                tag = struct.unpack_from("<H", b, body + 24)[0]
+            fmt = (tag, ch, rate, align, bits)
+        elif cid == b"data":
+            tag, ch, rate, align, bits = fmt
+            end = len(b) if size in (0, 0xFFFFFFFF) else min(len(b), body + size)
+            n = (end - body) // align
+            frames = []
+            w = bits // 8
+            for i in range(n):
+                fr = []
+                for c in range(ch):
+                    p = body + (i * ch + c) * w
+                    raw = b[p:p + w]
+                    if tag == 3:
+                        x = struct.unpack("<f" if bits == 32 else "<d", raw)[0]
+                        fr.append(_wav_float_to_s32(x))
+                    elif bits == 8:
+                        fr.append((raw[0] - 128) * 2**24)
+                    else:
+                        v = int.from_bytes(raw, "little", signed=True)
+                        fr.append(v * 2**(32 - bits))
+                frames.append(fr)
+            return rate, ch, frames
+        at = body + size + (size & 1)
+    raise ValueError("no data")
+
+
+def _round_half_up(x):  # x a Fraction
+    return math.floor(x + Fraction(1, 2))
+
+
+def canon_pcm(wav, f, L):
+    """canon-pcm-v1: units (lists of digits) and the report (source frames, samples, clipped, padding)."""
+    srate, sch, frames = wav_read(wav)
+    # 1. channels
+    chans = []
+    for fr in frames:
+        if f.channels == 1 and sch > 1:
+            chans.append([_round_half_up(Fraction(sum(fr), sch))])
+        else:
+            chans.append([fr[min(c, sch - 1)] for c in range(f.channels)])
+    # 2. rate: target t spans [t/R, (t+1)/R) seconds; the source i spans [i/S, (i+1)/S).
+    n = len(chans)
+    total = Fraction(n, srate)
+    count = math.ceil(total * f.rate)
+    out = [[] for _ in range(f.channels)]
+    clipped = 0
+    hi, lo = 2**(f.bits - 1) - 1, -2**(f.bits - 1)
+    for t in range(count):
+        a, b = Fraction(t, f.rate), min(Fraction(t + 1, f.rate), total)
+        first, last = math.floor(a * srate), math.ceil(b * srate)
+        for c in range(f.channels):
+            acc = Fraction(0)
+            for i in range(first, min(last, n)):
+                lo_i, hi_i = max(a, Fraction(i, srate)), min(b, Fraction(i + 1, srate))
+                if hi_i > lo_i:
+                    acc += chans[i][c] * (hi_i - lo_i)
+            v = _round_half_up(acc / (b - a))
+            # 3. depth
+            s = _round_half_up(Fraction(v, 2**(32 - f.bits)))
+            if s > hi or s < lo:
+                s = max(lo, min(hi, s))
+                clipped += 1
+            out[c].append(s)
+    # 4. units
+    runs = max(1, -(-count // L))
+    units = []
+    for k in range(runs):
+        u = []
+        for c in range(f.channels):
+            for i in range(k * L, (k + 1) * L):
+                s = out[c][i] if i < count else 0
+                u.append(s % 2**f.bits)
+        units.append(u)
+    return units, (n, count, clipped, (runs * L - count) * f.channels)
+
+
+def pcm_wav(f, unit):
+    """A unit as a WAV file, as SPECIFICATIONS 3.3 says it is written."""
+    nb = (f.bits + 7) // 8
+    shift = nb * 8 - f.bits
+    L = len(unit) // f.channels
+    data = bytearray()
+    for i in range(L):
+        for c in range(f.channels):
+            d = unit[c * L + i]
+            s = d - 2**f.bits if d >= 2**(f.bits - 1) else d
+            s <<= shift
+            data += bytes([s + 128]) if nb == 1 else (s % 2**(8 * nb)).to_bytes(nb, "little")
+    plain = f.bits in (8, 16, 24) and f.channels <= 2
+    if plain:
+        fmt = struct.pack("<HHIIHH", 1, f.channels, f.rate, f.rate * f.channels * nb, f.channels * nb, nb * 8)
+    else:
+        mask = 4 if f.channels == 1 else 3 if f.channels == 2 else 0
+        guid = bytes([1, 0, 0, 0, 0, 0, 0x10, 0, 0x80, 0, 0, 0xAA, 0, 0x38, 0x9B, 0x71])
+        fmt = struct.pack("<HHIIHHHHI", 0xFFFE, f.channels, f.rate, f.rate * f.channels * nb, f.channels * nb, nb * 8, 22, f.bits, mask) + guid
+    return b"RIFF" + struct.pack("<I", 4 + 8 + len(fmt) + 8 + len(data)) + b"WAVE" + b"fmt " + struct.pack("<I", len(fmt)) + fmt + \
+        b"data" + struct.pack("<I", len(data)) + bytes(data)
+
+
+def _wav_of(rate, ch, tag, bits, samples, extensible=False, stream=False):
+    """A test WAV file: samples are ints for PCM (in the file's own range) or floats."""
+    nb = bits // 8
+    data = bytearray()
+    for v in samples:
+        if tag == 3:
+            data += struct.pack("<f" if bits == 32 else "<d", v)
+        elif bits == 8:
+            data += bytes([v])
+        else:
+            data += (v % 2**bits).to_bytes(nb, "little")
+    fmt = struct.pack("<HHIIHH", 0xFFFE if extensible else tag, ch, rate, rate * ch * nb, ch * nb, bits)
+    if extensible:
+        guid = bytes([tag, 0, 0, 0, 0, 0, 0x10, 0, 0x80, 0, 0, 0xAA, 0, 0x38, 0x9B, 0x71])
+        fmt += struct.pack("<HHI", 22, bits, 0) + guid
+    size = 0xFFFFFFFF if stream else len(data)
+    return b"RIFF" + struct.pack("<I", 0xFFFFFFFF if stream else 4 + 8 + len(fmt) + 8 + len(data)) + b"WAVE" + b"fmt " + \
+        struct.pack("<I", len(fmt)) + fmt + b"LIST" + struct.pack("<I", 3) + b"abc\0" + b"data" + struct.pack("<I", size) + bytes(data)
+
+
+def _pcm_cases():
+    seed = [12345]
+
+    def rnd(lo, hi):
+        seed[0] = (seed[0] * 1103515245 + 12345) % 2**31
+        return lo + seed[0] % (hi - lo + 1)
+
+    def ints(n, bits):
+        return [rnd(0, 255) if bits == 8 else rnd(-2**(bits - 1), 2**(bits - 1) - 1) for _ in range(n)]
+
+    cases = []
+    # (source WAV, target rate, bits, channels, L)
+    cases.append((_wav_of(8000, 1, 1, 8, ints(20, 8)), 8000, 8, 1, 8))           # identity, 3 units
+    cases.append((_wav_of(8000, 1, 1, 16, ints(20, 16)), 8000, 8, 1, 32))        # depth down, padding
+    cases.append((_wav_of(44100, 2, 1, 16, ints(2 * 50, 16)), 8000, 8, 1, 16))   # mix, rate down
+    cases.append((_wav_of(11025, 1, 1, 24, ints(30, 24)), 22050, 12, 2, 40))     # rate up, channel repeated
+    cases.append((_wav_of(48000, 3, 1, 32, ints(3 * 25, 32)), 32000, 31, 2, 9))  # first two channels, 31 bits
+    cases.append((_wav_of(16000, 2, 3, 32, [((i * 37) % 200 - 100) / 64.0 for i in range(2 * 21)]), 7, 5, 2, 3))  # float, clipping, odd rate
+    cases.append((_wav_of(22050, 1, 3, 64, [math.sin(i / 3.0) for i in range(40)]), 22050, 16, 1, 40))  # double
+    cases.append((_wav_of(8000, 2, 1, 16, ints(2 * 12, 16), extensible=True), 3, 1, 1, 2))  # extensible, 1-bit, 3 Hz
+    cases.append((_wav_of(44100, 6, 1, 16, ints(6 * 9, 16), extensible=True, stream=True), 44100, 24, 6, 9))  # stream sizes, 6 ch
+    cases.append((_wav_of(9600, 1, 1, 8, [0, 255, 128, 127, 1] * 4), 4800, 3, 1, 4))  # 8-bit extremes, halves
+    cases.append((_wav_of(1, 1, 1, 16, [32767, -32768, 1]), 2, 16, 1, 6))           # 1 Hz up to 2 Hz
+    cases.append((_wav_of(8000, 4, 1, 16, ints(4 * 7, 16)), 8000, 16, 1, 7))       # four mixed to one
+    cases.append((_wav_of(8000, 1, 1, 32, [2**31 - 1, -2**31, 2**31 - 2**23, 2**23]), 8000, 8, 1, 4))  # rounded past the top: clipped
+    return cases
+
+
+def cmd_pcm_vectors(args):
+    """canon-pcm-v1: the source WAV file (hex), the set and L in; every unit's digits, the report and
+    the first unit's WAV file's SHA-256 out."""
+    print("# set\tlength\twav_hex\tunits\treport\twav_sha256")
+    for wav, rate, bits, ch, L in _pcm_cases():
+        f = PcmFormat(rate, bits, ch)
+        units, rep = canon_pcm(wav, f, L)
+        print(f"{f.id()}\t{L}\t{wav.hex()}\t{';'.join(','.join(map(str, u)) for u in units)}\t{','.join(map(str, rep))}\t"
+              f"{hashlib.sha256(pcm_wav(f, units[0])).hexdigest()}")
+
+
 # ---------------------------------------------------------------- filter plugins (sieve-filter-v1)
 # Written from the format in core/include/sieve/plugin.hpp and docs/FILTER-PLUGINS.md, not from
 # plugin.cpp: its own tokenizer, expression reader and interpreter, and Hopcroft's minimisation
@@ -5180,6 +5376,7 @@ def main():
     sub.add_parser("binary-vectors")
     sub.add_parser("chunk-vectors")
     sub.add_parser("notes2-vectors")
+    sub.add_parser("pcm-vectors")
     sub.add_parser("kind-vectors")
     sub.add_parser("written-vectors")
     sub.add_parser("cross-vectors")
@@ -5254,6 +5451,8 @@ def main():
         cmd_chunk_vectors(args)
     elif args.cmd == "notes2-vectors":
         cmd_notes2_vectors(args)
+    elif args.cmd == "pcm-vectors":
+        cmd_pcm_vectors(args)
     elif args.cmd == "kind-vectors":
         cmd_kind_vectors(args)
     elif args.cmd == "written-vectors":

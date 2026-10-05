@@ -14,6 +14,13 @@ Everything in Sieve that was not written for it, with its licence. The folders h
 | PDQ (Meta's reference C++) | ThreatExchange commit ec3671b (2026-09-25) | BSD | The vault's perceptual check for pictures (`tools/cli/pdq_hash.cpp`), in every program that checks the vault, the installer included; the files are in `third_party/pdq` | `pdq/LICENSE` |
 | liblzma (XZ Utils) | 5.8.1 when CMake fetches it (else the system's) | 0BSD for liblzma, the only part built; the rest of XZ Utils (command line tools, scripts, build system) is not built or shipped | The `sieve` tool's comparison page: 7z's LZMA2 (`tools/cli/compare.cpp`). Fetched and built by CMake if the system has none; not stored in this repository | `xz/COPYING`, `xz/COPYING.0BSD` |
 
+**ffmpeg is not part of Sieve.** Sieve reads picture and video formats beyond stb_image's with an ffmpeg program it finds on the machine (`tools/cli/media_decode.cpp`), run as a separate process: none of ffmpeg is linked, built or stored here, and Sieve works without it.
+- **If you ship one beside Sieve,** that copy comes with its own licence, and its terms are the ones you follow:
+  - **LGPL 2.1 or later:** the default build, whose decoders read every common format, H.264 included.
+  - **GPL:** a build made with `--enable-gpl`, for example with x264.
+- **Either way, shipping one means** its licence text, its notices, and its source (or a written offer of it) go with it.
+- **Patents:** some codecs (H.264, HEVC) are covered by patent licences in some countries, separately from ffmpeg's copyright licence.
+
 **Parts of SDL with their own notices.** A static build of the hallway compiles in code from SDL's source tree that carries its own licence. The notices it asks to be kept are here:
 
 | Part | Licence | Compiled in when | File |

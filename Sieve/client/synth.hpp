@@ -4,6 +4,7 @@
 #pragma once
 
 #include "sieve/audio.hpp"
+#include "sieve/sound.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -19,6 +20,9 @@ public:
     ~Synth();
     // Starts playing the melody, replacing anything already playing. Returns "" or an error message.
     std::string play(const sieve::NoteSet& set, const std::vector<uint32_t>& notes);
+    // Plays a unit of a pcm set as it is, at its own rate (its channels as they are, up to the
+    // eight a device takes; more are mixed to one).
+    std::string play_sound(const sieve::PcmFormat& f, const std::vector<uint32_t>& samples);
     void stop();
 
 private:

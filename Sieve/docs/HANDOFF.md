@@ -1439,3 +1439,51 @@ Filters, section 1 of the list (4 October 2026).
   decision), ascii85 in not-written, the cross-line filters (pictures as text or files, MIDI as
   something else, pages as models and the reverse), transformed copies, models' third tier and
   an .obj filter, signed files checked past their signatures, titled lines filtered bottom-up.
+
+### Other picture and video formats through ffmpeg (5 October 2026)
+- **What:** `tools/cli/media_decode.*` (in sieve_lines).
+  - `read_media_frames` hands every frame to a callback.
+  - **stb_image first**, as before, for the PNG/JPG/GIF/BMP signatures and anything `image_info` reads, so those addresses never change.
+  - **ffmpeg otherwise:** an ffmpeg program run with popen (`_wpopen` on Windows), never linked.
+- **The ffmpeg call:** `-map 0:v:0 -frames:v N+1 -fps_mode passthrough -sws_flags +accurate_rnd+full_chroma_int+bitexact -flags +bitexact -pix_fmt rgba -c:v pam -f image2pipe -`, with stderr to a temporary file (reported as "ffmpeg reported: ..." when a file is damaged).
+- **Streaming:** a reader thread hands frames over, at most two at a time, to `ImageCanoniser` (sieve/image.hpp). That's a frame-at-a-time `canonicalise_image`, which is now built on it.
+- **Which ffmpeg:** `--ffmpeg PATH` (CLI, global), the hallway's `ffmpeg` setting, `SIEVE_FFMPEG`, beside the executable, then the `PATH`. The environment is read wide on Windows.
+- **Where it's used:** `sieve warp --line image|video --file`, and J on the binary line for MP4, AVI, WEBP and unknown kinds (more than one frame goes to the video line).
+- **Measured:**
+  - an ffv1 MKV frame lands where the same frame as a PNG does, at rgb24;
+  - the 52 MB 1080p anchor video, all 3,105 frames, took 57 s at 308 MB peak (ffmpeg alone takes 30 s here);
+  - 5 frames of it take 0.3 s.
+- **CI:** a new step. Linux installs ffmpeg if it's missing; other runners skip the ffmpeg half if they have none.
+- **Next:** the cross-line filters (pictures as text, audio as text, a still as a video, models and pages), then the locator reading a file on every line.
+
+### Sound itself on the audio line, and saving as other formats (5 October 2026)
+- **The `pcm` set** (sieve/sound.hpp, core/src/sound.cpp; SPECIFICATIONS §3.3):
+  - id `pcm/RATE/BITS/Cn`;
+  - each digit a two's-complement sample;
+  - units channel by channel.
+- **`canon-pcm-v1`:** `PcmCanoniser`, a block at a time.
+  - **Rate:** spans in units of 1/(R·S) seconds reduced by their gcd, sums in int64, so rates up to 2^31 can't overflow.
+  - **Rounding:** `round_half_up(a, b) = floor((a + floor(b/2)) / b)`.
+- **WAV:** `read_wav`, `wav_format` and `wav_sample` (also used on ffmpeg's piped WAV), and `pcm_to_wav`.
+- **Oracle:** `canon_pcm` in exact Fractions, `pcm-vectors` → `tests/vectors_pcm_v1.tsv` (13 cases). The engine matched on the first run. CI diffs them.
+- **CLI:**
+  - `--note-set pcm --rate --bits --channels`, with `--length` = samples per channel (default: one second);
+  - warp `--file` reads WAV itself, else ffmpeg (`read_media_audio`: `-map 0:a:0? -c:a pcm_s32le -f wav`, parsed as it streams);
+  - `preview` draws a row of shades per channel;
+  - `audio_file()` gives WAV or MIDI, for both the vault and `unit_file`.
+- **Hallway:**
+  - **Settings:** `samples`, `pcm-rate`, `pcm-bits`, `pcm-channels`. When on pcm, the six audio rows are samples, AUDIO SET (notes104 → notes2 → pcm), sample rate (standard rates; the ini takes any), bits, (notes2) and channels, so no row number moves.
+  - **Playback:** P plays through `MusicPlayer::play_sound` (mixed to mono, linear interpolation, the music fading under it) or `Synth::play_sound`.
+  - **Viewer:** a SOUND tab.
+  - **Warp:** T takes a sound file path.
+  - **F and J:** F saves `.wav`. J opens WAV, MP3, OGG and FLAC when the audio line is pcm and MID when it holds notes, and says which set is needed otherwise.
+- **Export:** `cli::export_formats` and `export_unit` (lines.hpp).
+  - **What's offered:** the line's own format, then the candidates whose encoder `ffmpeg -encoders` lists (`ffmpeg_has_encoder`, asked once per ffmpeg).
+  - **How:** `ffmpeg_convert` quotes every argument. Pictures and video go through a PAM sequence (`-f pam_pipe`) and nearest-neighbour scaling; a GIF gets palettegen/paletteuse without dithering; MP4 and WebM get even sizes and yuv420p.
+  - **Choosing:** `save_unit` goes by the extension, where an unknown one keeps the old behaviour. The hallway's save dialog lists the formats as filters, and the chosen filter is used when no extension is typed.
+- **Not yet:**
+  - filters of the pcm set's own, and filters between it and the note sets;
+  - open-ended notes between notes2 and pcm;
+  - an MP3 without an ID3 tag reads as an unknown kind, so J tries it as a picture;
+  - a drawn waveform in place of the text one;
+  - a hallway setting for `--fps`.

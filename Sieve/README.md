@@ -30,6 +30,7 @@ Special thanks to Claude Opus 5.5 for helping to build out the Sieve system base
 | `tests/` | Core tests and the conformance vectors |
 | `results/` | M1 sieve output (CSV and chart) |
 | `third_party/stb/` | stb_image and stb_image_write (public domain or MIT), used to read and write image files |
+| `tools/cli/media_decode.*` | Every other picture and video format, read by an ffmpeg program if there is one (not linked or shipped) |
 | `third_party_licenses/` | The licence of every third-party component (SDL3 and the parts of it with their own notices, stb, SCOWL, Moby, font8x8), with an inventory in its README; copied next to the executables when you build |
 | `data/lang/`, `data/fonts/`, `data/meshes/` | Menu languages, bitmap fonts, and the Real Graphics models (templates in `data/meshes/templates/`) |
 | `.github/workflows/build.yml` | Builds and tests on Windows, Linux and macOS on every push |
@@ -110,8 +111,8 @@ Choose a line with `--line`; the default is `text`. Each line has its own option
 | :--- | :--- | :--- | :--- |
 | `text` | `--length` characters | `--length L` (required), `--alphabet SPEC` (lower27; see `sieve alphabets`), `--canon v2\|v1` (v2) | text in quotes, or `--file` |
 | `image` | a WxH picture | `--width` (10), `--height` (10), `--palette mono\|ega16\|rgb332\|rgb24` (mono) | `--file` PNG, JPEG, BMP, GIF, TGA |
-| `audio` | a melody of N notes | `--length N` (16) | notes such as `"C4q E4q G4h Rq"`, or `--file` |
-| `video` | F pictures of WxH | `--width` (5), `--height` (5), `--frames` (8), `--palette` (mono) | `--file`, usually an animated GIF |
+| `audio` | a melody of N notes, or with `--note-set pcm` sound itself | `--length N` (16); pcm: `--rate` (8000) `--bits` (8) `--channels` (1), `--length` samples per channel | notes such as `"C4q E4q G4h Rq"`, or `--file`; pcm: `--file` with a WAV, or any sound ffmpeg reads |
+| `video` | F pictures of WxH | `--width` (5), `--height` (5), `--frames` (8), `--palette` (mono) | `--file`: an animated GIF, or any video ffmpeg reads |
 
 Every line also takes `--key K` (default `sieve`), which seeds the scrambled ordering.
 
@@ -223,9 +224,9 @@ The rain only ever falls as characters the font can actually draw, so it never b
 
 **The vault.** Sieve refuses to show, save or pass on files, pictures, melodies and models whose hash is in its vault (`docs/VAULT.md`), in any form it recognises, including written out as text (as it is, or in hex, base64 and other well-known encodings, decoded); text is never judged by what it says. Pictures are matched by PDQ, Meta's open perceptual hash, so resized, recompressed, recoloured, rotated or flipped copies are caught too, whether drawn in the hallway or found in a file. Files can also be listed by their content-defined chunks (`cdc-v1`), so a piece of one of a couple of kilobytes, cut out anywhere and put anywhere, is caught too. A withheld item keeps its address and place, so every count stays exact, but it is drawn blank, cannot be taken or saved, and never appears in the excluded view; files matching it are not located, installed or mapped. It cannot make an address secret (that is arithmetic); it makes sure Sieve is not what hands it over. It is not a filter and has no setting. `sieve vault` says what it holds (`--pdq` prints a picture's PDQ hash). The built-in entries are harmless tests: the 16 bytes "sieve vault test", a test picture of grey noise (`sieve vault --test-picture`), and a test file listed by its chunks (`sieve vault --test-file`).
 
-**Saving an item: F.** Holding an item, press **F** on any tab to save it as a file, wherever you choose: a page as text, a picture as a PNG, a video's frames side by side in one PNG, notes as a MIDI file, a model as its `.obj`, a book as text (its title, then its pages), and a file on the binary line as exactly its bytes, named as V would name it.
+**Saving an item: F.** Holding an item, press **F** on any tab to save it as a file, wherever you choose: a page as text, a picture as a PNG, a video's frames side by side in one PNG, notes as a MIDI file, sound (the `pcm` set) as a WAV file, a model as its `.obj`, a book as text (its title, then its pages), and a file on the binary line as exactly its bytes, named as V would name it.
 
-**Between an item and its file: J.** Holding an item on any line, press **J** to go to its file on the binary line: the same file F would save (a picture at one pixel a pixel), with the item's title. Holding a file on the binary line, press **J** to open it on the line that holds its kind: text on the pages line, a PNG, JPG, GIF or BMP on the image line (an animated GIF on the video line), a MIDI file on the audio line, and a book record on the books line, fitted to the line as T fits what you warp in. So J twice takes an item to its file and back.
+**Between an item and its file: J.** Holding an item on any line, press **J** to go to its file on the binary line: the same file F would save (a picture at one pixel a pixel), with the item's title. Holding a file on the binary line, press **J** to open it on the line that holds its kind: text on the pages line, a PNG, JPG, GIF or BMP on the image line (an animated GIF on the video line), an MP4, AVI, WebP or other video through ffmpeg if you have it, a MIDI file on the audio line, and a book record on the books line, fitted to the line as T fits what you warp in. So J twice takes an item to its file and back.
 
 Every row on the COST tab is the same number written a different way, which is the point:
 
@@ -827,6 +828,25 @@ These rules are versioned, because they decide which unit a pasted input lands o
 3. Set each pixel to the nearest palette colour by squared RGB distance; ties go to the lowest index.
 
 A video takes up to `--frames` frames, adding black frames if the source is short.
+
+**Other formats through ffmpeg.** Sieve reads PNG, JPEG, BMP, GIF and TGA itself. Anything else, such as MP4, WebM, MKV, MOV, AVI, WebP or TIFF, is read by ffmpeg, if you have it:
+- **Where it looks:** `--ffmpeg PATH` (in the hallway, `ffmpeg=PATH` in its settings), then the `SIEVE_FFMPEG` environment variable, then `ffmpeg` beside Sieve's own program, then your `PATH`.
+- **How:** it runs ffmpeg as a separate program and links none of it. Each frame the file stores is read once, in order, and fitted by `canon-image-v1` as above.
+- **Exactly:** a lossless video lands where the same frames as PNGs do.
+- **Long videos:** frames are fitted one at a time and reading stops one frame past `--frames`. The whole of a 52 MB 1080p video (3,105 frames) went in at 308 MB peak memory.
+
+**Sound itself: the `pcm` set.** The audio line holds notes by default (`notes104`, or `notes2`). With `--note-set pcm` (in the hallway, AUDIO SET in the setup menu) it holds sound itself instead:
+- **Its settings:** a sample rate (`--rate`, 8000), bits a sample (`--bits`, 1 to 31, 8) and channels (`--channels`, 1). `--length` is samples per channel, a second at the rate unless given.
+- **What a unit is:** each sample is one digit, and silence is digit 0, so a unit is a WAV file's samples and its address is the sound read as a number.
+- **Files in:** `--file` takes a WAV file, or any sound ffmpeg reads (MP3, FLAC, OGG, a video's sound). It's mixed or split to the channels, resampled by area and rounded to the bits by fixed rules (`canon-pcm-v1`).
+- **Files out:** `read --out x.wav` saves it; P in the hallway plays it.
+
+**Saving as other formats.** With ffmpeg, `read --out` and the hallway's F also save:
+- **Pictures** as JPEG, WebP, BMP or TIFF.
+- **Video** as an animated GIF, MP4 or WebM (`--fps`, 8 unless given).
+- **Sound** as FLAC, MP3, Ogg Vorbis, Opus or AAC.
+
+Each is offered only when your ffmpeg has its encoder. Lossless ones (PNG, BMP, GIF of a small palette, WAV, FLAC) read back to the same address.
 
 **`canon-notes-v1`**:
 1. Flats are written as sharps.

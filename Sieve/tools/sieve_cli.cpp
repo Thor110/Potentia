@@ -27,6 +27,7 @@
 #include "cli/filter_config.hpp"
 #include "cli/lines.hpp"
 #include "cli/locate.hpp"
+#include "cli/media_decode.hpp"
 #include "cli/vault.hpp"
 #include "cli/vault_decode.hpp"
 #include "cli/plugins.hpp"
@@ -349,7 +350,7 @@ int read_at(const Line& line, const Args& a, const std::string& mode)
     else std::cout << preview(line, digits) << "\n";
     if (a.has("out"))
     {
-        save_unit(line, digits, a.get("out"), a.get_positive("scale", 16));
+        save_unit(line, digits, a.get("out"), a.get_positive("scale", 16), a.get_positive("fps", kDefaultExportFps));
         std::cerr << "saved " << a.get("out") << "\n";
     }
     return 0;
@@ -481,7 +482,7 @@ int cmd_read(const Args& a)
     }
     if (a.has("out"))
     {
-        save_unit(line, digits, a.get("out"), a.get_positive("scale", 16));
+        save_unit(line, digits, a.get("out"), a.get_positive("scale", 16), a.get_positive("fps", kDefaultExportFps));
         std::cerr << "saved " << a.get("out") << "\n";
     }
     return 0;
@@ -2298,6 +2299,8 @@ int main(int argc, char** argv)
         // --unit-time MS: the time budget, what a ranker whose time grows faster than its table may
         // take a unit (the setup menu's TIME BUDGET; 50 unless given).
         if (a.has("unit-time")) set_unit_time_ms(double(a.get_positive("unit-time", 50)));
+        // --ffmpeg PATH: the ffmpeg that reads other picture and video formats (cli/media_decode.hpp).
+        if (a.has("ffmpeg")) set_ffmpeg_path(a.get("ffmpeg"));
         load_plugins(); // the filter plugins, registered beside the built-in filters
         const std::string command_phase = "sieve " + a.command;
         timings::Scope timed(command_phase.c_str());
@@ -2306,7 +2309,7 @@ int main(int argc, char** argv)
             const auto known = documented_options(a.command == "sieve" ? "sift" : a.command);
             if (!known.empty())
                 for (const auto& [key, value] : a.opts)
-                    if (key != "timings" && key != "filter-memory" && key != "merge-cache" && key != "unit-time" && std::find(known.begin(), known.end(), key) == known.end())
+                    if (key != "timings" && key != "filter-memory" && key != "merge-cache" && key != "unit-time" && key != "ffmpeg" && std::find(known.begin(), known.end(), key) == known.end())
                         std::cerr << "warning: --" << key << " is not an option of 'sieve " << a.command << "' (see: sieve help " << a.command
                                   << "); ignored\n";
         }

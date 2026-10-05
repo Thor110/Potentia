@@ -601,6 +601,8 @@ are cheap and because they are the sort of thing that is lost otherwise.
     the reverse);
   - ascii85 in `not-written` (its groups of five are base 85: countable by comparing each group
     with the bounds digit by digit, a second version);
+  - sound itself (the `pcm` set, SPECIFICATIONS §3.3) against the note sets: a recording that is exactly a melody played by the synth belongs on the note line; and filters of its own (silence, clipping, a held sample, then pitch and timbre: what tells sound from noise);
+  - open-ended notes between `notes2` and `pcm`: every MIDI pitch, lengths in ticks, loudness, an instrument a voice, tempo;
   - a check that a signed file is well formed past its signature (a PNG's chunks and CRCs): judging
     only, since it cannot be counted.
   The binary line as the ground the other lines stand on is already true in one direction: every

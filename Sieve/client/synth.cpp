@@ -61,4 +61,34 @@ std::string Synth::play(const sieve::NoteSet& set, const std::vector<uint32_t>& 
     return "";
 }
 
+std::string Synth::play_sound(const sieve::PcmFormat& f, const std::vector<uint32_t>& samples)
+{
+    stop();
+    if (!SDL_WasInit(SDL_INIT_AUDIO) && !SDL_InitSubSystem(SDL_INIT_AUDIO))
+        return std::string("audio unavailable: ") + SDL_GetError();
+    constexpr uint32_t kDeviceChannels = 8;
+    std::vector<int16_t> pcm = sieve::pcm_to_s16(f, samples);
+    uint32_t channels = f.channels;
+    if (channels > kDeviceChannels)
+    {
+        const size_t frames = pcm.size() / channels;
+        std::vector<int16_t> mono(frames);
+        for (size_t i = 0; i < frames; ++i)
+        {
+            int64_t v = 0;
+            for (uint32_t c = 0; c < channels; ++c) v += pcm[i * channels + c];
+            mono[i] = int16_t(v / int64_t(channels));
+        }
+        pcm = std::move(mono);
+        channels = 1;
+    }
+    const SDL_AudioSpec spec{SDL_AUDIO_S16, int(channels), int(std::min<uint32_t>(f.rate, uint32_t(INT32_MAX)))};
+    stream_ = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr);
+    if (!stream_) return std::string("audio unavailable: ") + SDL_GetError();
+    SDL_PutAudioStreamData(stream_, pcm.data(), int(std::min<size_t>(pcm.size() * sizeof(int16_t), size_t(INT32_MAX))));
+    SDL_FlushAudioStream(stream_);
+    SDL_ResumeAudioStreamDevice(stream_);
+    return "";
+}
+
 } // namespace hallway

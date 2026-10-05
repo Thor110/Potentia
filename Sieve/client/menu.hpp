@@ -53,8 +53,13 @@ struct Settings
     // range, durations (codes of s e E q Q h H w) and voices (sieve/audio.hpp).
     std::string note_set = "notes104", note_low = "C3", note_high = "C6", note_durations = "seEqQhHw";
     uint32_t voices = 1;
+    // The pcm set (sieve/sound.hpp): sound itself, `samples` a channel per book.
+    uint32_t samples = 8000, pcm_rate = 8000, pcm_bits = 8, pcm_channels = 1;
     uint32_t video_w = 5, video_h = 5, frames = 8;
     std::string video_palette = "mono";
+    // The ffmpeg that reads picture and video formats stb_image does not (cli/media_decode.hpp);
+    // empty: SIEVE_FFMPEG, then one beside Sieve, then the PATH.
+    std::string ffmpeg;
     uint32_t book_pages = 4; // books: a cover (image line), a title and this many pages (pages line)
     // models: V vertices and F triangles, each coordinate one of C steps across [-1, 1]
     uint32_t model_vertices = 8, model_faces = 12, model_coords = 16;

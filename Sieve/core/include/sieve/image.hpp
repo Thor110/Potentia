@@ -92,6 +92,22 @@ std::vector<uint32_t> canonicalise_frame(const RgbaImage& image, const ImageForm
 std::vector<uint32_t> canonicalise_image(const std::vector<RgbaImage>& frames, const ImageFormat& format,
                                          ImageCanonReport* report = nullptr);
 
+// The same, a frame at a time, for frames read one after another (a long video need never be held
+// whole): add each frame in order, then finish. canonicalise_image is this.
+class ImageCanoniser
+{
+public:
+    explicit ImageCanoniser(const ImageFormat& format);
+    void add(const RgbaImage& frame);
+    std::vector<uint32_t> finish(ImageCanonReport* report = nullptr);
+
+private:
+    ImageFormat f_;
+    ImageCanonReport r_;
+    std::vector<uint32_t> digits_;
+    uint32_t kept_ = 0;
+};
+
 // Unit digits -> RGB pixels (all frames, frame after frame, row-major).
 std::vector<Rgb> render_image(const std::vector<uint32_t>& digits, const ImageFormat& format);
 

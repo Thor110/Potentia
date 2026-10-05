@@ -53,6 +53,7 @@ add_library(sieve_core STATIC
     core/src/intlog.cpp
     core/src/sha256.cpp
     core/src/sieve.cpp
+    core/src/sound.cpp
     core/src/space.cpp
     core/src/utf8.cpp)
 target_include_directories(sieve_core PUBLIC core/include)
@@ -80,6 +81,7 @@ add_library(sieve_lines STATIC
     tools/cli/dictionaries.cpp
     tools/cli/filter_config.cpp
     tools/cli/lines.cpp
+    tools/cli/media_decode.cpp
     tools/cli/models.cpp
     tools/cli/plugins.cpp)
 target_include_directories(sieve_lines PUBLIC tools)

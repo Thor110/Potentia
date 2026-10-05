@@ -15,6 +15,7 @@
 #include "cli/image_io.hpp"
 #include "cli/lines.hpp"
 #include "cli/locate.hpp"
+#include "cli/media_decode.hpp"
 #include "cli/vault.hpp"
 #include "sieve/filekind.hpp"
 
@@ -46,11 +47,11 @@ void write_all(const fs::path& to, const void* data, size_t n)
     if (!out) throw std::runtime_error("cannot write the file");
 }
 
-void SDLCALL save_chosen(void* user, const char* const* files, int)
+void SDLCALL save_chosen(void* user, const char* const* files, int filter)
 {
     auto* h = static_cast<Hallway*>(user);
     if (!files || !files[0]) return; // cancelled, or the dialog failed
-    h->item_save_chosen(files[0]);
+    h->item_save_chosen(files[0], filter);
 }
 
 } // namespace
@@ -66,10 +67,11 @@ std::string Hallway::binary_file_name(const Book& bk, const std::string& sha)
     return safe_name((t.empty() ? "anchor-" + sha.substr(0, 12) : t) + (kind == "?" || kind == "empty" ? "" : "." + kind));
 }
 
-void Hallway::item_save_chosen(const std::string& path)
+void Hallway::item_save_chosen(const std::string& path, int filter)
 {
     std::lock_guard<std::mutex> lock(save_mx_);
     save_pending_ = path;
+    save_filter_ = filter;
 }
 
 // F: asks where to save the item in hand.
@@ -79,7 +81,18 @@ void Hallway::save_in_hand()
     if (name.empty()) return;
     const char* docs = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
     const std::string start = docs ? std::string(docs) + name : name;
-    SDL_ShowSaveFileDialog(save_chosen, this, window_, nullptr, 0, start.c_str());
+    // Every format the item can be saved as, its own first: typing an extension chooses one too.
+    save_filter_text_.clear();
+    save_filters_.clear();
+    for (const cli::ExportFormat& f : save_formats_)
+    {
+        save_filter_text_.push_back(f.name);
+        save_filter_text_.push_back(f.ext.substr(1));
+    }
+    for (size_t i = 0; i < save_formats_.size(); ++i)
+        save_filters_.push_back({save_filter_text_[2 * i].c_str(), save_filter_text_[2 * i + 1].c_str()});
+    SDL_ShowSaveFileDialog(save_chosen, this, window_, save_filters_.empty() ? nullptr : save_filters_.data(), int(save_filters_.size()),
+                           start.c_str());
 }
 
 // For testing without a person (--save-item PATH): the same, to PATH, without the dialog.
@@ -106,7 +119,7 @@ std::string Hallway::prepare_save()
             case LineKind::Text: ext = ".txt"; break;
             case LineKind::Image:
             case LineKind::Video: ext = ".png"; break;
-            case LineKind::Audio: ext = ".mid"; break;
+            case LineKind::Audio: ext = on_sound() ? ".wav" : ".mid"; break;
             default: ext = ".bin"; break;
             }
         std::string title = bk.parts ? utf8_encode(line().space.text_of(bk.parts->title)) : title_text(bk);
@@ -117,6 +130,9 @@ std::string Hallway::prepare_save()
     }
     save_item_ = bk; // what F was pressed on, whatever is in hand when the dialog answers
     save_ext_ = ext;
+    // An item of the image, video or audio line can be saved in other formats through ffmpeg.
+    save_formats_.clear();
+    if (!bk.is_file && !bk.model && !bk.parts && line().kind != LineKind::Text) save_formats_ = cli::export_formats(line());
     return name;
 }
 
@@ -199,6 +215,13 @@ void Hallway::item_save_poll()
         to.swap(save_pending_);
     }
     if (!to || !save_item_) return;
+    int filter = -1;
+    {
+        std::lock_guard<std::mutex> lock(save_mx_);
+        filter = save_filter_;
+    }
+    // No extension typed: the format of the filter chosen, else the item's own.
+    if (from_u8(*to).extension().empty() && filter >= 0 && size_t(filter) < save_formats_.size()) *to += save_formats_[size_t(filter)].ext;
     const Book bk = std::move(*save_item_);
     save_item_.reset();
     std::optional<std::vector<uint8_t>> blob;
@@ -282,7 +305,7 @@ std::vector<uint8_t> Hallway::item_file(const Book& bk, std::string& name)
     switch (line().kind)
     {
     case LineKind::Text: named(".txt"); break;
-    case LineKind::Audio: named(".mid"); break;
+    case LineKind::Audio: named(on_sound() ? ".wav" : ".mid"); break;
     default: named(".png"); break;
     }
     return cli::unit_file(line(), bk.unit, 1);
@@ -343,8 +366,22 @@ void Hallway::open_as_kind(const std::vector<uint8_t>& bytes)
     int to = -1;
     if (kind == "TXT") to = 0;
     else if (kind == "PNG" || kind == "JPG" || kind == "GIF" || kind == "BMP") to = 1;
-    else if (kind == "MID") to = 2;
+    // Sound files on the audio line when it holds sound itself (pcm), MIDI when it holds notes.
+    else if (kind == "MID" || kind == "WAV" || kind == "MP3" || kind == "OGG" || kind == "FLAC")
+    {
+        const bool sound = sieve::is_pcm_symbols(lines_[2].space.symbols_id());
+        if (sound == (kind != "MID")) to = 2;
+        else
+        {
+            message(trf(sound ? "msg.jump.needs_notes" : "msg.jump.needs_pcm", {kind}));
+            return;
+        }
+    }
     else if (kind == "BOOK") to = kBooksLine;
+    // Every other picture or video format is ffmpeg's to read, if there is one: the video and picture
+    // kinds the table knows, and files whose kind it does not know (MKV, WebM, TIFF, ...), which
+    // fail if ffmpeg cannot read them either.
+    else if ((kind == "MP4" || kind == "AVI" || kind == "WEBP" || kind == "?") && cli::find_ffmpeg()) to = 1;
     if (to < 0)
     {
         message(trf("msg.jump.no_line", {kind}));
@@ -368,15 +405,45 @@ void Hallway::open_as_kind(const std::vector<uint8_t>& bytes)
     std::string report;
     if (to == 1)
     {
-        std::vector<RgbaImage> frames = decode_image_frames(bytes.data(), bytes.size(), kind);
-        if (kind == "GIF" && frames.size() > 1) to = 3; // an animation: the video line
-        const Line& l = lines_[size_t(to)];
-        if (to == 1) frames.resize(1);
+        // Read frame by frame into both lines' fittings: how many frames there are decides the line.
+        ImageCanoniser still(lines_[1].image), moving(lines_[3].image);
+        const cli::MediaRead m = cli::read_media_frames(bytes.data(), bytes.size(), kind, std::max<uint32_t>(2, lines_[3].image.frames),
+                                                        [&](const RgbaImage& f) {
+                                                            still.add(f);
+                                                            moving.add(f);
+                                                        });
         ImageCanonReport r;
-        units.push_back(canonicalise_image(frames, l.image, &r));
+        std::vector<uint32_t> s = still.finish(&r);
+        if (r.source_frames > 1) // an animation: the video line
+        {
+            to = 3;
+            s = moving.finish(&r);
+        }
+        const Line& l = lines_[size_t(to)];
+        units.push_back(std::move(s));
         report = std::string(kImageCanonVersion) + ": " + std::to_string(r.source_width) + "x" + std::to_string(r.source_height) + " -> " +
                  l.image.symbols_id();
+        if (m.decoder != "stb_image") report += "; decoded by " + m.decoder;
+        if (!m.complaints.empty()) report += "; ffmpeg reported: " + m.complaints;
         if (cli::unit_withheld(l, units[0])) throw cli::VaultWithheld("withheld by the vault");
+    }
+    else if (to == 2 && sieve::is_pcm_symbols(lines_[2].space.symbols_id()))
+    {
+        const Line& l = lines_[2];
+        const sieve::PcmFormat f = sieve::pcm_format_of(l.space.symbols_id());
+        std::optional<sieve::PcmCanoniser> c;
+        const cli::AudioRead m = cli::read_media_audio(
+            bytes.data(), bytes.size(), kind,
+            [&](uint32_t rate, uint32_t channels) { c.emplace(f, l.space.unit_length() / f.channels, rate, channels); },
+            [&](std::span<const int32_t> b) { c->add(b); });
+        const sieve::PcmCanonResult r = c->finish();
+        units = r.units;
+        report = std::string(sieve::kPcmCanonVersion) + ": " + std::to_string(r.source_frames) + " sample(s) at " + std::to_string(r.source_rate) +
+                 ", " + std::to_string(r.source_channels) + " channel(s) -> " + f.id() + ", " + std::to_string(units.size()) + " unit(s)";
+        if (m.decoder != "sieve-wav") report += "; decoded by " + m.decoder;
+        if (!m.complaints.empty()) report += "; ffmpeg reported: " + m.complaints;
+        for (const auto& u : units)
+            if (cli::unit_withheld(l, u)) throw cli::VaultWithheld("withheld by the vault");
     }
     else if (to == 2)
     {

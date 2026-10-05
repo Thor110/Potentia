@@ -401,8 +401,32 @@ std::string MusicPlayer::play_item(const sieve::NoteSet& set, const std::vector<
 {
     if (!stream_) return status_.empty() ? std::string("audio unavailable") : status_;
     std::lock_guard<std::mutex> lock(mx_);
+    sound_.clear();
     load(item_, set, notes, 120, Voice::Square, 0, 1.0f);
     item_.gain = item_.target = 1;
+    retarget();
+    return "";
+}
+
+std::string MusicPlayer::play_sound(const sieve::PcmFormat& f, const std::vector<uint32_t>& samples)
+{
+    if (!stream_) return status_.empty() ? std::string("audio unavailable") : status_;
+    // Each frame's channels added and scaled to -1..1 (divided by the channels, so it cannot clip).
+    const size_t frames = samples.size() / f.channels;
+    std::vector<float> mono(frames);
+    const float full = float(uint64_t(1) << (f.bits - 1)) * float(f.channels);
+    for (size_t i = 0; i < frames; ++i)
+    {
+        float v = 0;
+        for (uint32_t ch = 0; ch < f.channels; ++ch) v += float(sieve::pcm_sample(f, samples[ch * frames + i]));
+        mono[i] = v / full;
+    }
+    std::lock_guard<std::mutex> lock(mx_);
+    item_.active = false;
+    item_.done = true;
+    sound_ = std::move(mono);
+    sound_at_ = 0;
+    sound_step_ = double(f.rate) / kRate;
     retarget();
     return "";
 }
@@ -410,7 +434,8 @@ std::string MusicPlayer::play_item(const sieve::NoteSet& set, const std::vector<
 void MusicPlayer::stop_item()
 {
     std::lock_guard<std::mutex> lock(mx_);
-    if (!item_.active) return;
+    if (!item_.active && sound_.empty()) return;
+    sound_.clear();
     item_.active = false;
     item_.done = true;
     retarget();
@@ -494,7 +519,7 @@ std::string MusicPlayer::status() const
 // melody in hand is playing; the gains then move to their targets in the mixer.
 void MusicPlayer::retarget()
 {
-    const bool item = item_.active && !item_.done;
+    const bool item = in_hand();
     for (int m = 0; m < 2; ++m) music_[m].target = (m == int(mode_) && settings_[m].on && !item) ? 1.0f : 0.0f;
 }
 
@@ -617,7 +642,7 @@ void MusicPlayer::mix(float* out, int n)
 {
     std::lock_guard<std::mutex> lock(mx_);
     const float step = 1.0f / (kFadeSeconds * kRate);
-    const bool item_before = item_.active && !item_.done;
+    const bool item_before = in_hand();
     for (int i = 0; i < n; ++i)
     {
         float v = 0;
@@ -630,9 +655,18 @@ void MusicPlayer::mix(float* out, int n)
             v += sample_of(c) * c.gain * c.level;
         }
         if (item_.active && !item_.done) v += sample_of(item_) * item_.level;
+        if (!sound_.empty())
+        {
+            // Between two samples of the sound, the straight line between them.
+            const size_t k = size_t(sound_at_);
+            const float t = float(sound_at_ - double(k));
+            v += sound_[k] + (k + 1 < sound_.size() ? (sound_[k + 1] - sound_[k]) * t : 0.0f);
+            sound_at_ += sound_step_;
+            if (sound_at_ >= double(sound_.size())) sound_.clear();
+        }
         out[i] = std::clamp(v, -1.0f, 1.0f);
     }
-    if (item_before && item_.done) retarget(); // the melody in hand ended: the music comes back
+    if (item_before && !in_hand()) retarget(); // what was in hand ended: the music comes back
 }
 
 void SDLCALL MusicPlayer::callback(void* user, SDL_AudioStream* stream, int additional, int)
@@ -719,7 +753,7 @@ void MusicPlayer::worker()
         const int m = int(mode_);
         const Channel& c = music_[m];
         const MusicSettings& s = settings_[m];
-        const bool item = item_.active && !item_.done;
+        const bool item = in_hand();
         const Uint64 now = SDL_GetTicks();
         // The first track straight away; the next after the quiet between tracks.
         const bool due = skip_[m] || (c.done && (c.notes.empty() || now >= c.done_at + Uint64(std::max(0, s.gap)) * 1000));

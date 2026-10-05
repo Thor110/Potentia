@@ -171,34 +171,50 @@ std::vector<uint32_t> canonicalise_frame(const RgbaImage& img, const ImageFormat
     return digits;
 }
 
+ImageCanoniser::ImageCanoniser(const ImageFormat& format) : f_(format)
+{
+    if (f_.frames == 0) throw std::invalid_argument("frame count must be at least 1");
+    digits_.reserve(f_.unit_length());
+}
+
+void ImageCanoniser::add(const RgbaImage& frame)
+{
+    if (r_.source_frames == 0)
+    {
+        r_.source_width = frame.width;
+        r_.source_height = frame.height;
+    }
+    ++r_.source_frames;
+    if (kept_ >= f_.frames)
+    {
+        ++r_.frames_dropped;
+        return;
+    }
+    for (size_t p = 3; p < frame.rgba.size(); p += 4)
+        if (frame.rgba[p] != 255) ++r_.transparent_pixels;
+    const auto d = canonicalise_frame(frame, f_);
+    digits_.insert(digits_.end(), d.begin(), d.end());
+    ++kept_;
+}
+
+std::vector<uint32_t> ImageCanoniser::finish(ImageCanonReport* report)
+{
+    if (r_.source_frames == 0) throw std::invalid_argument("no image frames given");
+    for (; kept_ < f_.frames; ++kept_)
+    {
+        digits_.insert(digits_.end(), f_.pixels_per_frame(), 0u); // black
+        ++r_.frames_padded;
+    }
+    if (report) *report = r_;
+    return std::move(digits_);
+}
+
 std::vector<uint32_t> canonicalise_image(const std::vector<RgbaImage>& frames, const ImageFormat& f, ImageCanonReport* report)
 {
     if (frames.empty()) throw std::invalid_argument("no image frames given");
-    if (f.frames == 0) throw std::invalid_argument("frame count must be at least 1");
-    ImageCanonReport r;
-    r.source_width = frames[0].width;
-    r.source_height = frames[0].height;
-    r.source_frames = static_cast<uint32_t>(frames.size());
-    std::vector<uint32_t> digits;
-    digits.reserve(f.unit_length());
-    for (uint32_t i = 0; i < f.frames; ++i)
-    {
-        if (i < frames.size())
-        {
-            for (size_t p = 3; p < frames[i].rgba.size(); p += 4)
-                if (frames[i].rgba[p] != 255) ++r.transparent_pixels;
-            const auto d = canonicalise_frame(frames[i], f);
-            digits.insert(digits.end(), d.begin(), d.end());
-        }
-        else
-        {
-            digits.insert(digits.end(), f.pixels_per_frame(), 0u); // black
-            ++r.frames_padded;
-        }
-    }
-    if (frames.size() > f.frames) r.frames_dropped = static_cast<uint32_t>(frames.size() - f.frames);
-    if (report) *report = r;
-    return digits;
+    ImageCanoniser c(f);
+    for (const RgbaImage& frame : frames) c.add(frame);
+    return c.finish(report);
 }
 
 std::vector<Rgb> render_image(const std::vector<uint32_t>& digits, const ImageFormat& f)

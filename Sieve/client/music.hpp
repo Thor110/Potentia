@@ -45,6 +45,7 @@
 #include "cli/filter_config.hpp"
 #include "cli/lines.hpp"
 #include "sieve/audio.hpp"
+#include "sieve/sound.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -119,6 +120,9 @@ public:
 
     // The melody in hand: square tones at 120 bpm, over the music, which fades out under it.
     std::string play_item(const sieve::NoteSet& set, const std::vector<uint32_t>& notes);
+    // The sound in hand (a unit of a pcm set: sieve/sound.hpp), its channels mixed to one, at its
+    // own rate, over the music, which fades out under it as under a melody.
+    std::string play_sound(const sieve::PcmFormat& f, const std::vector<uint32_t>& samples);
     void stop_item();
 
     MusicSettings settings(MusicMode m) const;
@@ -186,6 +190,11 @@ private:
     int line_ = 0;
     MusicSettings settings_[2];
     Channel music_[2], item_;
+    // The sound in hand: its samples as -1..1, where the mixer is in them, and how far it moves a
+    // sample of the mixer's (its rate over the mixer's).
+    std::vector<float> sound_;
+    double sound_at_ = 0, sound_step_ = 1;
+    bool in_hand() const { return (item_.active && !item_.done) || !sound_.empty(); } // under mx_
     bool skip_[2] = {false, false};
     std::optional<MusicTrack> playing_[2];
     std::vector<MusicTrack> recent_, favourites_;

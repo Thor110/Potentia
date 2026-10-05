@@ -2,6 +2,7 @@
 
 #include "sieve/alphabet.hpp"
 #include "sieve/audio.hpp"
+#include "sieve/sound.hpp"
 #include "sieve/biguint.hpp"
 #include "sieve/booksieve.hpp"
 #include "sieve/bookspace.hpp"
@@ -850,6 +851,82 @@ void test_notes2_vectors(const std::string& path)
     }
     std::cout << "notes2 vectors checked: " << n << "\n";
     CHECK(n >= 12);
+}
+
+void test_pcm_vectors(const std::string& path)
+{
+    int n = 0;
+    for (const auto& f : read_tsv(path, 6))
+    {
+        const PcmFormat fmt = pcm_format_of(f[0]);
+        CHECK(fmt.id() == f[0]);
+        const uint32_t L = uint32_t(std::stoul(f[1]));
+        std::vector<uint8_t> wav;
+        for (size_t i = 0; i + 1 < f[2].size(); i += 2) wav.push_back(uint8_t(std::stoul(f[2].substr(i, 2), nullptr, 16)));
+        const PcmAudio a = read_wav(wav);
+        // Handed over in blocks of 3 frames, so the spans cross the blocks' edges.
+        PcmCanoniser c(fmt, L, a.rate, a.channels);
+        for (size_t at = 0; at < a.samples.size(); at += 3 * a.channels)
+            c.add(std::span<const int32_t>(a.samples.data() + at, std::min<size_t>(3 * a.channels, a.samples.size() - at)));
+        const PcmCanonResult r = c.finish();
+        std::string units;
+        for (const auto& u : r.units)
+        {
+            if (!units.empty()) units += ";";
+            for (size_t i = 0; i < u.size(); ++i) units += (i ? "," : "") + std::to_string(u[i]);
+        }
+        const std::string report = std::to_string(r.source_frames) + "," + std::to_string(r.samples) + "," + std::to_string(r.clipped) + "," +
+                                   std::to_string(r.padding);
+        const std::string out = pcm_to_wav(fmt, r.units.front());
+        const bool ok = units == f[3] && report == f[4] && Sha256::hex(Sha256::hash(out)) == f[5];
+        CHECK(ok);
+        if (!ok) std::cerr << "  pcm vector mismatch: " << f[0] << " L=" << f[1] << " -> " << units << " | " << report << "\n";
+        // The WAV file written out reads back to the same unit, at the set's own rate and channels.
+        const PcmAudio back = read_wav(std::vector<uint8_t>(out.begin(), out.end()));
+        CHECK(back.rate == fmt.rate && back.channels == fmt.channels);
+        PcmCanoniser again(fmt, L, back.rate, back.channels);
+        again.add(back.samples);
+        CHECK(again.finish().units.front() == r.units.front());
+        ++n;
+    }
+    std::cout << "pcm vectors checked: " << n << "\n";
+    CHECK(n >= 13);
+}
+
+void test_pcm_digits()
+{
+    // A digit is the sample's own bits: digit 0 is silence, and every value comes back.
+    for (uint32_t bits : {1u, 2u, 8u, 16u, 24u, 31u})
+    {
+        const PcmFormat f = make_pcm_format(8000, bits, 1);
+        const int64_t lo = -(int64_t(1) << (bits - 1)), hi = (int64_t(1) << (bits - 1)) - 1;
+        for (int64_t s : {lo, lo + 1, int64_t(-1), int64_t(0), int64_t(1), hi - 1, hi})
+            if (s >= lo && s <= hi)
+            {
+                CHECK(pcm_sample(f, pcm_digit(f, int32_t(s))) == s);
+                CHECK(pcm_digit(f, int32_t(s)) < f.base());
+            }
+        CHECK(pcm_digit(f, 0) == 0);
+    }
+    // Ids: written one way only, and checked.
+    CHECK(pcm_format_of("pcm/44100/16/C2").id() == "pcm/44100/16/C2");
+    for (const char* bad : {"pcm/0/8/C1", "pcm/8000/0/C1", "pcm/8000/32/C1", "pcm/8000/8/C0", "pcm/8000/8/C65536", "pcm/08000/8/C1", "pcm/8000/8/1",
+                            "pcm/8000/8"})
+        CHECK(!is_pcm_symbols(bad));
+    CHECK(!is_pcm_symbols("notes104") && !is_note_symbols("pcm/8000/8/C1"));
+    // No sound at all is refused, not made into silence.
+    PcmCanoniser c(make_pcm_format(8000, 8, 1), 4, 8000, 1);
+    bool threw = false;
+    try
+    {
+        c.finish();
+    }
+    catch (const std::invalid_argument&)
+    {
+        threw = true;
+    }
+    CHECK(threw);
+    std::cout << "pcm digits and ids checked\n";
 }
 
 void test_chunk_vectors(const std::string& path)
@@ -4273,6 +4350,8 @@ void run_all(int argc, char** argv)
         test_binary_vectors(dir + "vectors_binary_v1.tsv");
         test_chunk_vectors(dir + "vectors_chunks_v1.tsv");
         test_notes2_vectors(dir + "vectors_notes2_v1.tsv");
+        test_pcm_vectors(dir + "vectors_pcm_v1.tsv");
+        test_pcm_digits();
         test_notes2(dir);
         test_plugins(dir);
         test_book_filter_vectors(dir);

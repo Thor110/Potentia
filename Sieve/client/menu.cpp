@@ -29,6 +29,7 @@
 
 #include "sieve/alphabet.hpp"
 #include "sieve/audio.hpp"
+#include "sieve/sound.hpp"
 #include "sieve/filter.hpp"
 #include "sieve/plugin.hpp"
 #include "sieve/corridor.hpp"
@@ -78,6 +79,31 @@ sieve::NoteSet note_set_of_settings(const Settings& s)
     }
 }
 const std::vector<std::string> kNoteDurationPresets = {"seEqQhHw", "seqhw", "eEqQhHw", "eqhw", "qhw", "sq"};
+// The audio line's sets, in the order NOTE SET steps through them.
+const std::vector<std::string> kNoteSets = {"notes104", "notes2", "pcm"};
+// The sample rates SAMPLE RATE steps through; the settings file takes any rate.
+const std::vector<uint32_t> kPcmRates = {8000, 11025, 16000, 22050, 32000, 44100, 48000, 96000, 192000};
+bool is_pcm(const Settings& s) { return s.note_set == "pcm"; }
+bool pcm_ok(const Settings& s)
+{
+    try
+    {
+        sieve::make_pcm_format(s.pcm_rate, s.pcm_bits, s.pcm_channels);
+        return true;
+    }
+    catch (const std::exception&)
+    {
+        return false;
+    }
+}
+// The audio line's shape from the settings: how many symbols a position has, and how many
+// positions a unit has (a pcm set the settings cannot make falls back to notes104, as notes2 does).
+std::pair<uint32_t, uint64_t> audio_shape(const Settings& s)
+{
+    if (is_pcm(s) && pcm_ok(s)) return {uint32_t(1) << s.pcm_bits, uint64_t(s.samples) * s.pcm_channels};
+    const sieve::NoteSet set = note_set_of_settings(s);
+    return {set.base(), uint64_t(s.notes) * set.voices};
+}
 
 std::string cycle(const std::vector<std::string>& v, const std::string& cur, int dir)
 {
@@ -271,6 +297,10 @@ Settings Settings::from_args(const sieve::cli::Args& a)
     s.note_high = a.get("note-high", s.note_high);
     s.note_durations = a.get("note-durations", s.note_durations);
     s.voices = parse_u32(a, "voices", s.voices);
+    s.samples = parse_u32(a, "samples", s.samples);
+    s.pcm_rate = parse_u32(a, "pcm-rate", s.pcm_rate);
+    s.pcm_bits = parse_u32(a, "pcm-bits", s.pcm_bits);
+    s.pcm_channels = parse_u32(a, "pcm-channels", s.pcm_channels);
     s.video_w = parse_u32(a, "video-width", s.video_w);
     s.video_h = parse_u32(a, "video-height", s.video_h);
     s.frames = parse_u32(a, "video-frames", s.frames);
@@ -287,6 +317,7 @@ Settings Settings::from_args(const sieve::cli::Args& a)
     s.limits_focus = a.get("limits-focus", s.limits_focus);
     if (s.limits_focus == "pages") s.limits_focus = "text";
     s.binary_bytes = parse_u32(a, "binary-length", s.binary_bytes);
+    s.ffmpeg = a.get("ffmpeg", s.ffmpeg);
     return s;
 }
 
@@ -309,6 +340,10 @@ void Settings::apply(sieve::cli::Args& a) const
     a.opts["note-high"] = note_high;
     a.opts["note-durations"] = note_durations;
     a.opts["voices"] = std::to_string(voices);
+    a.opts["samples"] = std::to_string(samples);
+    a.opts["pcm-rate"] = std::to_string(pcm_rate);
+    a.opts["pcm-bits"] = std::to_string(pcm_bits);
+    a.opts["pcm-channels"] = std::to_string(pcm_channels);
     a.opts["video-width"] = std::to_string(video_w);
     a.opts["video-height"] = std::to_string(video_h);
     a.opts["video-frames"] = std::to_string(frames);
@@ -324,6 +359,8 @@ void Settings::apply(sieve::cli::Args& a) const
     a.opts["close-up"] = closeup_text(closeup_px);
     a.opts["binary-length"] = std::to_string(binary_bytes);
     a.opts["limits-focus"] = limits_focus;
+    if (ffmpeg.empty()) a.opts.erase("ffmpeg");
+    else a.opts["ffmpeg"] = ffmpeg;
 }
 
 LineSize line_size(uint32_t base, uint64_t length)
@@ -411,8 +448,8 @@ std::array<LineSize, 7> Menu::line_sizes() const
         binary.padding = uint32_t((wall - m) % wall);
         binary.units = "title*files<=" + std::to_string(s_.binary_bytes) + "B = ~10^" + fixed(binary.bits * std::log10(2.0), 1);
     }
-    const sieve::NoteSet notes = note_set_of_settings(s_);
-    std::array<LineSize, 7> out{titled(page, false), titled(image, false), titled(line_size(notes.base(), s_.notes * notes.voices), true),
+    const auto [audio_base, audio_positions] = audio_shape(s_);
+    std::array<LineSize, 7> out{titled(page, false), titled(image, false), titled(line_size(audio_base, audio_positions), true),
                                 titled(line_size(palette_size(s_.video_palette), positions(s_.video_w, s_.video_h, s_.frames)), true),
                                 books, titled(models, false), binary};
     // A unit has at most 2^32 - 1 positions: a larger picture cannot be opened at all.
@@ -457,7 +494,7 @@ double Menu::line_cache_bytes(int i) const
     // (The binary line's file is bytes, a quarter of a position each.)
     const uint64_t pos[7] = {s_.length + t,
                              cover + t,
-                             uint64_t(s_.notes) * note_set_of_settings(s_).voices + t + cover,
+                             audio_shape(s_).second + t + cover,
                              positions(s_.video_w, s_.video_h, s_.frames) + t + cover,
                              uint64_t(s_.book_pages + 1) * s_.length + cover,
                              3ull * s_.model_vertices + 3ull * s_.model_faces + t,
@@ -654,7 +691,7 @@ void Menu::find_limits()
     if (focus == "text" || focus == "image") s_.book_pages = 1;
     if (focus == "text") grow_pair(s_.length, s_.length, [&] { return fits(0) && fits(4); }, [&] { return true; }, true);
     if (focus == "image") grow_pair(s_.image_w, s_.image_h, [&] { return fits(1) && fits(4); }, [&] { return true; }, true);
-    if (on("audio")) grow(s_.notes, 2);
+    if (on("audio")) grow(is_pcm(s_) ? s_.samples : s_.notes, 2);
     if (on("video")) grow(s_.frames, 3);
     // Vertices and faces grow together, so a mesh gets both rather than all of one.
     if (on("models")) grow_pair(s_.model_vertices, s_.model_faces, [&] { return fits(5); }, [&] { return fits(5); }, false);
@@ -818,11 +855,36 @@ void Menu::adjust(int dir, int step)
     case kImageRows: num(s_.image_w); break;
     case kImageRows + 1: num(s_.image_h); break;
     case kImageRows + 2: s_.image_palette = cycle(kPalettes, s_.image_palette, dir); break;
-    case kAudioRow: num(s_.notes); break;
-    case kAudioRow + 1: s_.note_set = s_.note_set == "notes2" ? "notes104" : "notes2"; break;
+    case kAudioRow: num(is_pcm(s_) ? s_.samples : s_.notes); break;
+    case kAudioRow + 1: s_.note_set = cycle(kNoteSets, s_.note_set, dir); break;
+    // On the pcm set the four rows below are its sample rate, bits, (none) and channels.
     case kAudioRow + 2:
+        if (is_pcm(s_))
+        {
+            // The standard rates in turn (PgUp/PgDn: double or halve); from a rate not among them,
+            // the nearest in the direction asked.
+            if (step == 0) num(s_.pcm_rate);
+            else if (dir > 0)
+            {
+                auto it = std::upper_bound(kPcmRates.begin(), kPcmRates.end(), s_.pcm_rate);
+                s_.pcm_rate = it == kPcmRates.end() ? kPcmRates.front() : *it;
+            }
+            else
+            {
+                auto it = std::lower_bound(kPcmRates.begin(), kPcmRates.end(), s_.pcm_rate);
+                s_.pcm_rate = it == kPcmRates.begin() ? kPcmRates.back() : *(it - 1);
+            }
+            s_.pcm_rate = std::min<uint32_t>(s_.pcm_rate, 0x7FFFFFFFu);
+            break;
+        }
+        [[fallthrough]];
     case kAudioRow + 3:
     {
+        if (is_pcm(s_))
+        {
+            s_.pcm_bits = uint32_t(std::clamp(int(s_.pcm_bits) + dir, 1, int(sieve::kPcmMaxBits)));
+            break;
+        }
         // A semitone at a time (Shift: an octave), within C2..C7 and at least an octave apart.
         if (s_.note_set != "notes2") break;
         const int by = dir * (step >= 10 ? 12 : 1);
@@ -838,6 +900,11 @@ void Menu::adjust(int dir, int step)
         break;
     case kAudioRow + 5:
         if (s_.note_set == "notes2") s_.voices = uint32_t(std::clamp(int(s_.voices) + dir, 1, int(sieve::kMaxVoices)));
+        if (is_pcm(s_))
+        {
+            num(s_.pcm_channels);
+            s_.pcm_channels = std::min(s_.pcm_channels, sieve::kPcmMaxChannels);
+        }
         break;
     case kVideoRows: num(s_.video_w); break;
     case kVideoRows + 1: num(s_.video_h); break;
@@ -1201,14 +1268,20 @@ void Menu::render()
         {1, tr("setup.width"), trf("setup.px", {n(s_.image_w)})},
         {-1, tr("setup.height"), trf("setup.px", {n(s_.image_h)})},
         {-1, tr("setup.palette"), trf("setup.palette.value", {s_.image_palette, n(palette_size(s_.image_palette))})},
-        {2, tr(note_set_of_settings(s_).voices > 1 ? "setup.notes.per_voice" : "setup.notes"), n(s_.notes)},
-        {-1, tr("setup.note_set"), note_set_of_settings(s_).legacy && s_.note_set == "notes2" ? tr("setup.note_set.bad")
+        is_pcm(s_) ? Row{2, tr(s_.pcm_channels > 1 ? "setup.samples.per_channel" : "setup.samples"), n(s_.samples)}
+                   : Row{2, tr(note_set_of_settings(s_).voices > 1 ? "setup.notes.per_voice" : "setup.notes"), n(s_.notes)},
+        {-1, tr("setup.note_set"), is_pcm(s_) ? (pcm_ok(s_) ? trf("setup.note_set.pcm", {n(sieve::make_pcm_format(s_.pcm_rate, s_.pcm_bits, s_.pcm_channels).base())})
+                                                            : tr("setup.note_set.pcm_bad"))
+                                   : note_set_of_settings(s_).legacy && s_.note_set == "notes2" ? tr("setup.note_set.bad")
                                    : s_.note_set == "notes2" ? trf("setup.note_set.value", {n(note_set_of_settings(s_).base())})
                                                              : tr("setup.note_set.fixed")},
-        {-1, tr("setup.note_low"), s_.note_set == "notes2" ? s_.note_low : tr("setup.notes2_only")},
-        {-1, tr("setup.note_high"), s_.note_set == "notes2" ? s_.note_high : tr("setup.notes2_only")},
+        is_pcm(s_) ? Row{-1, tr("setup.pcm_rate"), trf("setup.pcm_rate.value", {n(s_.pcm_rate)})}
+                   : Row{-1, tr("setup.note_low"), s_.note_set == "notes2" ? s_.note_low : tr("setup.notes2_only")},
+        is_pcm(s_) ? Row{-1, tr("setup.pcm_bits"), n(s_.pcm_bits)}
+                   : Row{-1, tr("setup.note_high"), s_.note_set == "notes2" ? s_.note_high : tr("setup.notes2_only")},
         {-1, tr("setup.note_durations"), s_.note_set == "notes2" ? s_.note_durations : tr("setup.notes2_only")},
-        {-1, tr("setup.voices"), s_.note_set == "notes2" ? n(s_.voices) : tr("setup.notes2_only")},
+        is_pcm(s_) ? Row{-1, tr("setup.pcm_channels"), n(s_.pcm_channels)}
+                   : Row{-1, tr("setup.voices"), s_.note_set == "notes2" ? n(s_.voices) : tr("setup.notes2_only")},
         {3, tr("setup.width"), trf("setup.px", {n(s_.video_w)})},
         {-1, tr("setup.height"), trf("setup.px", {n(s_.video_h)})},
         {-1, tr("setup.frames"), n(s_.frames)},

@@ -2,11 +2,13 @@
 // the checks, and the event loop. The hallway itself is in hallway.hpp and the files beside it.
 
 #include "window_icon.hpp"
+#include "cli/media_decode.hpp"
 #include "cli/plugins.hpp"
 #include "designer.hpp"
 #include "cli/timings.hpp"
 #include "hallway.hpp"
 #include "sieve/plugin.hpp"
+#include "sieve/sound.hpp"
 
 #include <SDL3/SDL_main.h>
 
@@ -48,13 +50,19 @@ const char* kUsage =
     "  --canon v2|v1       text: warp rules (default v2)\n"
     "  --image-width W  --image-height H  --image-palette ID    image line (10, 10, mono)\n"
     "  --notes N           audio: notes per book (default 16; per voice on notes2)\n"
-    "  --note-set notes104|notes2  --note-low C3  --note-high C6  --note-durations seEqQhHw  --voices 1..4\n"
-    "                      audio: the note set (default notes104; the rest are notes2's)\n"
+    "  --note-set notes104|notes2|pcm  --note-low C3  --note-high C6  --note-durations seEqQhHw  --voices 1..4\n"
+    "                      audio: the note set (default notes104; low to voices are notes2's)\n"
+    "  --samples N  --pcm-rate HZ  --pcm-bits B  --pcm-channels C\n"
+    "                      audio, --note-set pcm: sound itself, N samples a channel per book\n"
+    "                      (default 8000), at 8000 a second, 8 bits (1-31), 1 channel\n"
     "  --video-width W  --video-height H  --video-frames F  --video-palette ID   video (5, 5, 8, mono)\n"
     "  --title-length T    every line's titles: characters (default 32; 0: no titles; books keep a page)\n"
     "  --binary-length N   binary: every file of up to N bytes (default 32)\n"
     "  --book-pages N      books: pages per book (default 4); a book is a cover (an image of the\n"
     "                      image line), a title and N pages (pages of the pages line)\n"
+    "  --ffmpeg PATH       the ffmpeg that reads and writes picture, video and sound formats beyond\n"
+    "                      PNG, JPEG, BMP, GIF, TGA, WAV and MIDI (default: SIEVE_FFMPEG, then beside\n"
+    "                      the hallway, then the PATH); kept in the settings\n"
     "  --key K             scramble key (default sieve)\n"
     "  --mode positional|scrambled|guided   starting ordering (default positional)\n"
     "  --model ID|PATH|none  text: model for the guided ordering (default: the alphabet's default)\n"
@@ -139,6 +147,21 @@ const char* kUsage =
     "checkered start line marks where each repeat begins. Black doors lead to the next line\n"
     "(left wall) or the previous line (right wall) at the same corridor position.\n";
 
+// Whether the settings make a pcm set (a set they cannot make falls back to notes104, as the setup
+// menu says).
+bool pcm_settings_ok(const Args& a)
+{
+    try
+    {
+        sieve::make_pcm_format(a.get_positive("pcm-rate", 8000), a.get_positive("pcm-bits", 8), a.get_positive("pcm-channels", 1));
+        return uint64_t(a.get_positive("samples", 8000)) * a.get_positive("pcm-channels", 1) <= 0xFFFFFFFFull;
+    }
+    catch (const std::exception&)
+    {
+        return false;
+    }
+}
+
 std::vector<Line> make_lines(const Args& a)
 {
     std::vector<Line> lines;
@@ -162,7 +185,15 @@ std::vector<Line> make_lines(const Args& a)
             break;
         case LineKind::Audio:
             la.opts["length"] = a.get("notes", "16");
-            if (a.get("note-set", "notes104") == "notes2")
+            if (a.get("note-set", "notes104") == "pcm" && pcm_settings_ok(a))
+            {
+                la.opts["note-set"] = "pcm";
+                la.opts["length"] = a.get("samples", "8000");
+                la.opts["rate"] = a.get("pcm-rate", "8000");
+                la.opts["bits"] = a.get("pcm-bits", "8");
+                la.opts["channels"] = a.get("pcm-channels", "1");
+            }
+            else if (a.get("note-set", "notes104") == "notes2")
             {
                 la.opts["note-set"] = "notes2";
                 la.opts["low"] = a.get("note-low", "C3");
@@ -413,6 +444,7 @@ int run(const Args& a)
     };
 
     Settings settings = Settings::from_args(a);
+    sieve::cli::set_ffmpeg_path(settings.ffmpeg);
     // Filter settings: --filters PATH, or sieve-filters.ini next to the executable.
     const std::string filters_path = a.has("filters") ? a.get("filters") : FilterConfig::default_path().string();
     if (a.has("filters") && !std::filesystem::exists(filters_path))

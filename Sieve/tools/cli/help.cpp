@@ -46,8 +46,10 @@ const Option kLineOptions = {
     "text   --length L (required)  --alphabet SPEC (lower27)  --canon v2|v1\n"
     "       --model ID|PATH|none  (guided ordering; default: the alphabet's default model)\n"
     "image  --width W (10)  --height H (10)  --palette mono|ega16|rgb332|rgb24 (mono)\n"
-    "audio  --length N note events (16)  --note-set notes104|notes2 (notes104)\n"
+    "audio  --length N note events (16)  --note-set notes104|notes2|pcm (notes104)\n"
     "       notes2: --low C3  --high C6  --durations seEqQhHw  --voices 1..4; --length is per voice\n"
+    "       pcm: sound itself, --rate HZ (8000)  --bits 1..31 (8)  --channels C (1); --length is\n"
+    "       samples per channel (one second at the rate unless given)\n"
     "video  --width W (5)  --height H (5)  --frames F (8)  --palette ... (mono)\n"
     "These must match between warp and read, or you will read a different unit."};
 
@@ -91,11 +93,13 @@ const std::vector<Page>& pages()
          "then prints the address of each unit plus a preview of what is on that shelf.\n"
          "  text   TEXT or --file. Lower-cased, accents folded, punctuation turned into spaces,\n"
          "         then split into units of --length characters (a long text becomes a trail).\n"
-         "  image  --file PATH (PNG, JPEG, BMP, GIF, TGA). Stretched to WxH by area averaging,\n"
-         "         then each pixel set to the nearest palette colour.\n"
+         "  image  --file PATH (PNG, JPEG, BMP, GIF, TGA; any other format through ffmpeg).\n"
+         "         Stretched to WxH by area averaging, then each pixel set to the nearest palette colour.\n"
          "  audio  Notes such as \"C4q E4q G4h Rq\", or --file with notes. See `sieve help lines`.\n"
-         "  video  --file PATH, normally an animated GIF. Frames beyond --frames are dropped;\n"
-         "         missing frames are filled with black.\n"
+         "         With --note-set pcm, --file PATH is a sound: WAV, or any format ffmpeg reads.\n"
+         "  video  --file PATH: an animated GIF, or any video ffmpeg reads (MP4, WebM, MKV, ...),\n"
+         "         its frames as stored. Frames beyond --frames are dropped; missing frames are\n"
+         "         filled with black.\n"
          "Put multi-word text in quotes.",
          {kLine, kLineOptions, kKey,
           {"--mode MODE", "positional, scrambled, guided or all (default all: every ordering the line has;\n"
@@ -111,7 +115,8 @@ const std::vector<Page>& pages()
           {"sieve warp --line image --file sprite.png", "a picture as a 10x10 black-and-white image"},
           {"sieve warp --line image --palette ega16 --width 16 --height 16 --file sprite.png", "16x16 in EGA colours"},
           {"sieve warp --line audio \"E4q D4q C4q D4q E4q E4q E4h\"", "a melody"},
-          {"sieve warp --line video --file walk.gif", "an animation as 8 frames of 5x5"}}},
+          {"sieve warp --line video --file walk.gif", "an animation as 8 frames of 5x5"},
+          {"sieve warp --line video --file film.mp4", "the first 8 frames of a film, read by ffmpeg"}}},
 
         {"read", "Give an address and get back what is stored there.",
          "sieve read [--line LINE] [line options] [--key K] --mode MODE [--compact] [--out PATH] [--scale S] (ADDRESS | --address-file PATH | --at TILE:SLOT | --survivor K)",
@@ -124,12 +129,15 @@ const std::vector<Page>& pages()
                           "A guided ADDRESS is any hex fraction (\"8\" is halfway along); it reads the unit whose\n"
                           "stretch of the line contains that point."},
           {"--out PATH", "Also save the unit: .png for image and video (frames side by side), .mid for\n"
-                         "audio (a playable MIDI file), a .txt file for text."},
+                         "notes (a playable MIDI file), .wav for sound (pcm), a .txt file for text. With\n"
+                         "ffmpeg, its extension may also be .jpg .webp .bmp .tiff (image), .gif .mp4 .webm\n"
+                         "(video), .flac .mp3 .ogg .opus .m4a (sound), as its encoders allow."},
           {"--address-file PATH", "Instead of an ADDRESS on the command line: read it from this file, which must\n"
                                   "hold the hex address as one unbroken run (any surrounding whitespace is\n"
                                   "ignored). A long unit's address is long -- a 20,000 byte file on the bytes256\n"
                                   "line has one of 40,000 digits -- and a command line will not hold it."},
-          {"--scale S", "Enlarge each pixel to SxS in the saved PNG. Default 16."},
+          {"--scale S", "Enlarge each pixel to SxS in the saved picture or video. Default 16."},
+          {"--fps N", "A video saved as a video (.gif .mp4 .webm): frames a second. Default 8."},
           {"--around N", "Also show the N units on either side, in the chosen ordering: what the hallway\n"
                          "shows around this shelf. In positional order the neighbours differ only at\n"
                          "the end; in scrambled order they are unrelated. The line loops, so the last\n"
@@ -685,17 +693,24 @@ const std::vector<Page>& pages()
          "  with its own time). --length is then events per voice. Notation adds s and the dotted\n"
          "  e. q. h., and // between voices: C4q E4q. // C3w. Durations the set lacks become the\n"
          "  nearest it has. Filters judge each voice on its own (canon-notes-v2).\n"
+         "  --note-set pcm holds sound itself rather than notes: --rate samples a second (8000),\n"
+         "  --bits a sample (1 to 31, default 8) and --channels (1). --length is samples per\n"
+         "  channel (a second at the rate unless given). Each sample is one digit, silence digit 0.\n"
+         "  Input: --file PATH, a WAV file, or any sound ffmpeg reads (MP3, FLAC, OGG, a video's\n"
+         "  sound). It is mixed or split to the channels, resampled by area and rounded to the bits\n"
+         "  by fixed rules (canon-pcm-v1). read --out saves a WAV file.\n"
          "\n"
          "VIDEO\n"
          "  A unit is --frames pictures of WxH. Defaults are small because the space grows fast.\n"
          "  --width W (5)  --height H (5)  --frames F (8)  --palette ID (mono)\n"
-         "  Input: --file PATH, usually an animated GIF.\n"
+         "  Input: --file PATH, an animated GIF, or any video ffmpeg reads.\n"
          "\n"
          "All lines also take --key K (default sieve), which seeds the scrambled ordering.",
          {},
          {{"sieve info --line image --width 16 --height 16 --palette ega16", "size of the 16x16 EGA image space"},
           {"sieve warp --line audio --length 8 \"C4q E4q G4q C5h\"", "an 8-event melody"},
           {"sieve warp --line audio --note-set notes2 --voices 2 --length 8 \"C4q E4q. G4h // C3w\"", "two voices on the larger note set"},
+          {"sieve warp --line audio --note-set pcm --rate 8000 --bits 8 --file voice.wav", "a second of sound at a time, as samples"},
           {"sieve browse --line video --count 1", "one random animation, frames side by side"}}},
     };
     return list;
@@ -731,6 +746,9 @@ void print_usage()
                  "tables (512 MB unless given; the setup menu's FILTER MEMORY); past it a stack judges only.\n"
                  "--merge-cache PCT sets how much of it keeps merged filters between counts (50 unless given).\n"
                  "--unit-time MS sets the time budget, the longest ranking one unit may take (50 unless given).\n"
+                 "--ffmpeg PATH sets the ffmpeg that reads pictures and video in formats Sieve does not read\n"
+                 "itself (MP4, WebM, MKV, MOV, AVI, WebP, TIFF, ...); unless given, SIEVE_FFMPEG, then an\n"
+                 "ffmpeg beside sieve, then the first on the PATH. PNG, JPEG, BMP, GIF and TGA never need it.\n"
                  "\nDetailed help and examples:\n"
                  "  sieve help warp        (or: sieve warp --help)\n"
                  "  sieve help lines       the four lines and their options\n\n"

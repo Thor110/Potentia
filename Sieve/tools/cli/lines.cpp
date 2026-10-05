@@ -5,11 +5,16 @@
 #include "models.hpp"
 
 #include "image_io.hpp"
+#include "media_decode.hpp"
 
 #include "sieve/audio.hpp"
+#include "sieve/sound.hpp"
 #include "sieve/utf8.hpp"
 
 #include <algorithm>
+#include <cctype>
+#include <chrono>
+#include <atomic>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -134,6 +139,19 @@ Line make_line(const Args& a)
         // notes104 (the default), or a notes2 set: --note-set notes2 with --low, --high,
         // --durations and --voices; --length is then events per voice, and a unit is voices x that.
         const std::string family = a.get("note-set", "notes104");
+        if (family == "pcm")
+        {
+            // Sound itself (sieve/sound.hpp): --rate, --bits, --channels; --length is samples per
+            // channel, one second at the rate unless given.
+            for (const char* k : {"low", "high", "durations", "voices"})
+                if (a.has(k)) throw std::invalid_argument(std::string("--") + k + " is for --note-set notes2 (pcm takes --rate, --bits and --channels)");
+            const PcmFormat f = make_pcm_format(a.get_positive("rate", 8000), a.get_positive("bits", 8), a.get_positive("channels", 1));
+            const uint32_t samples = a.get_positive("length", f.rate);
+            if (uint64_t(samples) * f.channels > 0xFFFFFFFFull) throw std::invalid_argument("too many samples in one unit (2^32 - 1 at most)");
+            return Line{kind, nullptr, kDefaultCanon, {}, Space(f.id(), f.base(), samples * f.channels, key), nullptr, {}};
+        }
+        for (const char* k : {"rate", "bits", "channels"})
+            if (a.has(k)) throw std::invalid_argument(std::string("--") + k + " is for --note-set pcm");
         const uint32_t length = a.get_positive("length", 16);
         if (family == "notes104")
         {
@@ -141,7 +159,7 @@ Line make_line(const Args& a)
                 if (a.has(k)) throw std::invalid_argument(std::string("--") + k + " is for --note-set notes2 (notes104 is fixed: C4-C6, e q h w, one voice)");
             return Line{kind, nullptr, kDefaultCanon, {}, Space(kNotesSymbolsId, kNoteSymbols, length, key), nullptr, {}};
         }
-        if (family != "notes2") throw std::invalid_argument("unknown note set '" + family + "' (notes104 or notes2)");
+        if (family != "notes2") throw std::invalid_argument("unknown note set '" + family + "' (notes104, notes2 or pcm)");
         const NoteSet set = make_note_set(note_midi_of(a.get("low", "C3")), note_midi_of(a.get("high", "C6")), a.get("durations", kNoteDurationCodes),
                                           a.get_positive("voices", 1));
         if (uint64_t(length) * set.voices > 0xFFFFFFFFull) throw std::invalid_argument("too many events in one unit");
@@ -167,6 +185,13 @@ std::string Line::describe_symbols() const
                image.palette->description() + ")";
     case LineKind::Audio:
     {
+        if (is_pcm_symbols(space.symbols_id()))
+        {
+            const PcmFormat f = pcm_format_of(space.symbols_id());
+            return std::to_string(f.channels) + " channel(s) x " + std::to_string(space.unit_length() / f.channels) + " samples at " +
+                   std::to_string(f.rate) + " a second, each one of " + std::to_string(f.base()) + " (" + std::to_string(f.bits) +
+                   "-bit, two's complement)";
+        }
         const NoteSet set = note_set_of(space.symbols_id());
         if (set.legacy) return std::to_string(space.unit_length()) + " note events, each one of 104 (rest or C4-C6, x 4 durations)";
         std::string names;
@@ -215,6 +240,30 @@ WarpInput read_warp_input(const Line& line, const Args& a)
     }
     case LineKind::Audio:
     {
+        if (is_pcm_symbols(line.space.symbols_id()))
+        {
+            if (!a.has("file")) throw std::invalid_argument("give the sound with --file PATH (WAV; any other sound format through ffmpeg)");
+            if (!a.positional.empty()) throw std::invalid_argument("the pcm set takes --file PATH, not notes");
+            const PcmFormat f = pcm_format_of(line.space.symbols_id());
+            std::optional<PcmCanoniser> c;
+            const AudioRead m = read_media_audio(
+                a.get("file"), [&](uint32_t rate, uint32_t channels) { c.emplace(f, line.space.unit_length() / f.channels, rate, channels); },
+                [&](std::span<const int32_t> b) { c->add(b); });
+            if (m.decoder != "sieve-wav") w.report.push_back("decoded by " + m.decoder);
+            if (!m.complaints.empty()) w.report.push_back("ffmpeg reported: " + m.complaints);
+            const PcmCanonResult r = c->finish();
+            w.report.push_back(std::string(kPcmCanonVersion) + ": " + std::to_string(r.source_frames) + " sample(s) per channel at " +
+                               std::to_string(r.source_rate) + " a second, " + std::to_string(r.source_channels) + " channel(s) -> " + f.id() +
+                               ", " + std::to_string(r.units.size()) + " unit(s)");
+            if (r.source_channels != f.channels)
+                w.report.push_back(count_line("channels", r.source_channels,
+                                              f.channels == 1 ? "mixed to one" : r.source_channels > f.channels ? "the first kept" : "the last repeated"));
+            if (r.source_rate != f.rate) w.report.push_back(count_line("samples made", r.samples, "resampled by area"));
+            if (r.clipped) w.report.push_back(count_line("clipped", r.clipped));
+            if (r.padding) w.report.push_back(count_line("padding", r.padding, "silence filling the channels"));
+            w.units = r.units;
+            break;
+        }
         const std::string input = a.has("file") ? read_file(a.get("file")) : joined_positional(a);
         if (input.empty()) throw std::invalid_argument("nothing to warp: give notes like \"C4q E4q G4h\" or --file PATH");
         const NoteSet set = note_set_of(line.space.symbols_id());
@@ -234,20 +283,27 @@ WarpInput read_warp_input(const Line& line, const Args& a)
     case LineKind::Image:
     case LineKind::Video:
     {
-        if (!a.has("file")) throw std::invalid_argument("give the picture with --file PATH (PNG, JPEG, BMP, GIF, TGA)");
+        if (!a.has("file"))
+            throw std::invalid_argument("give the picture with --file PATH (PNG, JPEG, BMP, GIF, TGA; any other picture or "
+                                        "video format through ffmpeg)");
         if (!a.positional.empty()) throw std::invalid_argument("the image line takes --file PATH, not text");
-        std::vector<RgbaImage> frames = load_image_frames(a.get("file"));
-        const size_t source_frames = frames.size();
-        if (line.kind == LineKind::Image) frames.resize(1); // first frame of an animation
+        const uint32_t wanted = line.kind == LineKind::Image ? 1 : line.image.frames;
+        ImageCanoniser c(line.image); // frame by frame: a long video is never held whole
+        const MediaRead m = read_media_frames(a.get("file"), wanted, [&](const RgbaImage& f) { c.add(f); });
+        if (m.decoder != "stb_image")
+            w.report.push_back("decoded by " + m.decoder +
+                               (m.more ? ", which stopped after " + std::to_string(wanted) + " frame(s): the file has more" : ""));
+        if (!m.complaints.empty()) w.report.push_back("ffmpeg reported: " + m.complaints);
         ImageCanonReport r;
-        w.units.push_back(canonicalise_image(frames, line.image, &r));
+        w.units.push_back(c.finish(&r));
+        const size_t source_frames = r.source_frames;
         w.report.push_back(std::string(kImageCanonVersion) + ": " + std::to_string(r.source_width) + "x" +
                            std::to_string(r.source_height) + " source, " + std::to_string(source_frames) +
                            " frame(s) -> " + line.image.symbols_id());
         if (line.kind == LineKind::Image && source_frames > 1)
             w.report.push_back(count_line("frames ignored", source_frames - 1, "the image line uses the first frame"));
         if (r.transparent_pixels) w.report.push_back(count_line("transparent pixels", r.transparent_pixels, "composited onto black"));
-        if (r.frames_dropped) w.report.push_back(count_line("frames dropped", r.frames_dropped));
+        if (r.frames_dropped && line.kind == LineKind::Video) w.report.push_back(count_line("frames dropped", r.frames_dropped));
         if (r.frames_padded) w.report.push_back(count_line("frames padded", r.frames_padded, "black frames added"));
         break;
     }
@@ -265,7 +321,9 @@ std::string preview(const Line& line, const std::vector<uint32_t>& digits)
     switch (line.kind)
     {
     case LineKind::Text: return "\"" + utf8_encode(line.space.text_of(digits)) + "\"";
-    case LineKind::Audio: return notes_to_notation(note_set_of(line.space.symbols_id()), digits);
+    case LineKind::Audio:
+        if (is_pcm_symbols(line.space.symbols_id())) return pcm_preview(pcm_format_of(line.space.symbols_id()), digits, 64);
+        return notes_to_notation(note_set_of(line.space.symbols_id()), digits);
     case LineKind::Image:
     case LineKind::Video:
     {
@@ -297,6 +355,40 @@ std::string preview(const Line& line, const std::vector<uint32_t>& digits)
     return "";
 }
 
+std::string audio_file(const Line& line, const std::vector<uint32_t>& digits)
+{
+    const std::string& id = line.space.symbols_id();
+    if (is_pcm_symbols(id)) return pcm_to_wav(pcm_format_of(id), digits);
+    return notes_to_midi(note_set_of(id), digits);
+}
+
+std::string pcm_preview(const PcmFormat& f, const std::vector<uint32_t>& digits, uint32_t columns)
+{
+    // Each channel a row: each column the loudest sample over its share of the unit, as a share of
+    // full scale.
+    static const char kShades[] = " .:-=+*#%@";
+    const uint64_t L = digits.size() / f.channels;
+    const uint32_t cols = uint32_t(std::min<uint64_t>(columns, std::max<uint64_t>(1, L)));
+    const double full = double(uint64_t(1) << (f.bits - 1));
+    std::string out;
+    for (uint32_t c = 0; c < f.channels; ++c)
+    {
+        if (c) out += "\n";
+        if (f.channels > 1) out += "C" + std::to_string(c + 1) + " ";
+        out += "|";
+        for (uint32_t x = 0; x < cols; ++x)
+        {
+            const uint64_t lo = L * x / cols, hi = std::max(lo + 1, L * (x + 1) / cols);
+            int64_t peak = 0;
+            for (uint64_t i = lo; i < hi && i < L; ++i) peak = std::max<int64_t>(peak, std::abs(int64_t(pcm_sample(f, digits[size_t(c * L + i)]))));
+            const double share = double(peak) / full;
+            out += kShades[peak == 0 ? 0 : std::min<size_t>(9, 1 + size_t(share * 9))];
+        }
+        out += "|";
+    }
+    return out;
+}
+
 bool unit_withheld(const Line& line, const std::vector<uint32_t>& digits)
 {
     switch (line.kind)
@@ -317,8 +409,8 @@ bool unit_withheld(const Line& line, const std::vector<uint32_t>& digits)
     }
     case LineKind::Audio:
     {
-        const std::string midi = notes_to_midi(note_set_of(line.space.symbols_id()), digits);
-        return vault::withheld_bytes(std::vector<uint8_t>(midi.begin(), midi.end()));
+        const std::string file = audio_file(line, digits);
+        return vault::withheld_bytes(std::vector<uint8_t>(file.begin(), file.end()));
     }
     case LineKind::Image:
     case LineKind::Video: return picture_withheld(line.image, digits);
@@ -372,8 +464,8 @@ std::vector<uint8_t> unit_file(const Line& line, const std::vector<uint32_t>& di
     }
     case LineKind::Audio:
     {
-        const std::string midi = notes_to_midi(note_set_of(line.space.symbols_id()), digits);
-        return std::vector<uint8_t>(midi.begin(), midi.end());
+        const std::string file = audio_file(line, digits);
+        return std::vector<uint8_t>(file.begin(), file.end());
     }
     case LineKind::Image:
     case LineKind::Video:
@@ -395,9 +487,160 @@ std::vector<uint8_t> unit_file(const Line& line, const std::vector<uint32_t>& di
     return {};
 }
 
-void save_unit(const Line& line, const std::vector<uint32_t>& digits, const std::string& path, uint32_t scale)
+namespace {
+
+struct Candidate
 {
-    const std::vector<uint8_t> bytes = unit_file(line, digits, scale);
+    const char* ext;
+    const char* name;
+    std::vector<const char*> encoders; // the first the ffmpeg has is used
+};
+
+// What ffmpeg can be asked to write, for each kind of unit.
+const std::vector<Candidate>& candidates(const Line& line)
+{
+    static const std::vector<Candidate> picture = {{".jpg", "JPEG", {"mjpeg"}}, {".webp", "WebP", {"libwebp"}}, {".bmp", "BMP", {"bmp"}},
+                                                   {".tiff", "TIFF", {"tiff"}}};
+    static const std::vector<Candidate> video = {{".gif", "Animated GIF", {"gif"}}, {".mp4", "MP4 video", {"libx264", "mpeg4"}},
+                                                 {".webm", "WebM video", {"libvpx-vp9", "libvpx"}}};
+    static const std::vector<Candidate> sound = {{".flac", "FLAC", {"flac"}}, {".mp3", "MP3", {"libmp3lame"}}, {".ogg", "Ogg Vorbis", {"libvorbis"}},
+                                                 {".opus", "Opus", {"libopus"}}, {".m4a", "AAC", {"aac"}}};
+    static const std::vector<Candidate> none;
+    if (line.kind == LineKind::Image) return picture;
+    if (line.kind == LineKind::Video) return video;
+    if (line.kind == LineKind::Audio && is_pcm_symbols(line.space.symbols_id())) return sound;
+    return none;
+}
+
+std::string lower(std::string s)
+{
+    for (char& c : s) c = char(std::tolower(static_cast<unsigned char>(c)));
+    return s;
+}
+
+// A file of our own in the temporary folder, removed when this goes.
+struct Temp
+{
+    std::filesystem::path path;
+    explicit Temp(const std::string& ext)
+    {
+        static std::atomic<uint64_t> n{0};
+        path = std::filesystem::temp_directory_path() /
+               ("sieve-export-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + "-" + std::to_string(n++) + ext);
+    }
+    ~Temp()
+    {
+        std::error_code ec;
+        std::filesystem::remove(path, ec);
+    }
+    std::string u8() const
+    {
+        const std::u8string s = path.u8string();
+        return std::string(s.begin(), s.end());
+    }
+};
+
+void write_bytes(const std::filesystem::path& p, const void* data, size_t n)
+{
+    std::ofstream out(p, std::ios::binary);
+    out.write(static_cast<const char*>(data), std::streamsize(n));
+    if (!out) throw std::runtime_error("cannot write a temporary file for ffmpeg");
+}
+
+std::vector<uint8_t> read_bytes(const std::filesystem::path& p)
+{
+    std::ifstream in(p, std::ios::binary);
+    return std::vector<uint8_t>((std::istreambuf_iterator<char>(in)), {});
+}
+
+} // namespace
+
+std::vector<ExportFormat> export_formats(const Line& line)
+{
+    std::vector<ExportFormat> out;
+    switch (line.kind)
+    {
+    case LineKind::Text: out.push_back({".txt", "Text", ""}); break;
+    case LineKind::Image: out.push_back({".png", "PNG", ""}); break;
+    case LineKind::Video: out.push_back({".png", "PNG (frames side by side)", ""}); break;
+    case LineKind::Audio:
+        out.push_back(is_pcm_symbols(line.space.symbols_id()) ? ExportFormat{".wav", "WAV", ""} : ExportFormat{".mid", "MIDI", ""});
+        break;
+    }
+    for (const Candidate& c : candidates(line))
+        for (const char* e : c.encoders)
+            if (ffmpeg_has_encoder(e))
+            {
+                out.push_back({c.ext, c.name, e});
+                break;
+            }
+    return out;
+}
+
+std::vector<uint8_t> export_unit(const Line& line, const std::vector<uint32_t>& digits, const std::string& ext_in, uint32_t scale, uint32_t fps)
+{
+    const std::string ext = lower(ext_in);
+    const std::vector<ExportFormat> formats = export_formats(line);
+    if (formats.empty() || ext.empty() || ext == formats.front().ext) return unit_file(line, digits, scale);
+    const auto f = std::find_if(formats.begin(), formats.end(), [&](const ExportFormat& x) { return x.ext == ext; });
+    if (f == formats.end())
+    {
+        // An extension none of ffmpeg's formats has: the line's own file, as it always was.
+        const auto& cs = candidates(line);
+        if (std::none_of(cs.begin(), cs.end(), [&](const Candidate& c) { return ext == c.ext; })) return unit_file(line, digits, scale);
+        std::string have;
+        for (const auto& x : formats) have += (have.empty() ? "" : ", ") + x.ext;
+        if (const std::string why = ffmpeg_missing(); !why.empty())
+            throw std::invalid_argument("saving as " + ext + " needs ffmpeg, and " + why + "; without it this line saves as " + have);
+        throw std::invalid_argument("this ffmpeg has no encoder for " + ext + "; it saves this line as " + have);
+    }
+    if (unit_withheld(line, digits)) throw VaultWithheld("withheld by the vault: the unit");
+    const Temp out(ext);
+    if (line.kind == LineKind::Audio)
+    {
+        const std::string wav = audio_file(line, digits);
+        const Temp in(".wav");
+        write_bytes(in.path, wav.data(), wav.size());
+        ffmpeg_convert({}, in.u8(), {"-map_metadata", "-1", "-c:a", f->encoder}, out.u8());
+    }
+    else
+    {
+        // The frames as PAM images, one after another, for ffmpeg's pam_pipe; each pixel scaled up
+        // to a block (nearest neighbour), to even sizes where the video codecs need them.
+        const auto px = render_image(digits, line.image);
+        const uint32_t W = line.image.width, H = line.image.height, F = line.image.frames;
+        std::string pam;
+        for (uint32_t k = 0; k < F; ++k)
+        {
+            pam += "P7\nWIDTH " + std::to_string(W) + "\nHEIGHT " + std::to_string(H) + "\nDEPTH 3\nMAXVAL 255\nTUPLTYPE RGB\nENDHDR\n";
+            for (size_t i = 0; i < size_t(W) * H; ++i)
+            {
+                const Rgb& c = px[size_t(k) * W * H + i];
+                pam += char(c.r);
+                pam += char(c.g);
+                pam += char(c.b);
+            }
+        }
+        const Temp in(".pam");
+        write_bytes(in.path, pam.data(), pam.size());
+        const std::string S = std::to_string(std::max<uint32_t>(1, scale));
+        const bool codec = ext == ".mp4" || ext == ".webm";
+        std::string vf = codec ? "scale=ceil(iw*" + S + "/2)*2:ceil(ih*" + S + "/2)*2:flags=neighbor" : "scale=iw*" + S + ":ih*" + S + ":flags=neighbor";
+        // A GIF keeps the line's own colours: its palette is made from the frames, without dithering.
+        if (ext == ".gif") vf += ",split[a][b];[a]palettegen=reserve_transparent=0[p];[b][p]paletteuse=dither=none";
+        std::vector<std::string> opts = {"-map_metadata", "-1", "-vf", vf, "-c:v", f->encoder};
+        if (codec) opts.insert(opts.end(), {"-pix_fmt", "yuv420p"});
+        if (line.kind == LineKind::Image) opts.insert(opts.end(), {"-frames:v", "1", "-update", "1"});
+        ffmpeg_convert({"-f", "pam_pipe", "-framerate", std::to_string(std::max<uint32_t>(1, fps))}, in.u8(), opts, out.u8());
+    }
+    return read_bytes(out.path);
+}
+
+void save_unit(const Line& line, const std::vector<uint32_t>& digits, const std::string& path, uint32_t scale, uint32_t fps)
+{
+    // By the path's extension: a format of the line's own, or one ffmpeg writes from it.
+    const std::string ext = std::filesystem::path(std::u8string(path.begin(), path.end())).extension().string();
+    const std::vector<uint8_t> bytes = export_unit(line, digits, ext, scale, fps);
     std::ofstream out(std::filesystem::path(path), std::ios::binary);
     if (!out) throw std::runtime_error("cannot write '" + path + "'");
     out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));

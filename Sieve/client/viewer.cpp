@@ -207,7 +207,7 @@ std::string Hallway::view_label(ViewKind k) const
     switch (line().kind)
     {
     case LineKind::Text: return tr("view.tab.text");
-    case LineKind::Audio: return tr("view.tab.notes");
+    case LineKind::Audio: return tr(on_sound() ? "view.tab.sound" : "view.tab.notes");
     case LineKind::Video: return tr("view.tab.frames");
     default: return tr("view.tab.pixels");
     }
@@ -256,8 +256,18 @@ void Hallway::view_raw()
         break;
     }
     case LineKind::Audio:
-        view_.rows = utf32_rows(wrap_words(notes_to_notation(note_set_of(line().space.symbols_id()), bk.unit), 64));
-        view_.heading = named + tr("view.notes");
+        if (on_sound())
+        {
+            const sieve::PcmFormat f = sieve::pcm_format_of(line().space.symbols_id());
+            view_.rows = utf32_rows(split_lines(audio_text(bk.unit, 64)));
+            view_.heading = named + trf("view.sound", {std::to_string(bk.unit.size() / f.channels), std::to_string(f.rate), std::to_string(f.bits),
+                                                       std::to_string(f.channels)});
+        }
+        else
+        {
+            view_.rows = utf32_rows(wrap_words(audio_text(bk.unit, 0), 64));
+            view_.heading = named + tr("view.notes");
+        }
         break;
     case LineKind::Image:
     case LineKind::Video:

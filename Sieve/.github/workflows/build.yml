@@ -325,6 +325,73 @@ jobs:
           # ...and the address it prints for that file is exactly that hex dump.
           $exe warp --alphabet bytes256 --length 256 --file all.bin | tr -d '\r' | q "000102030405"
 
+      - name: Sound itself is a set of the audio line, and comes back as the same WAV
+        run: |
+          q() { grep -c "$@" > /dev/null; }
+          exe=build/sieve
+          [ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
+          # A quarter second of a 440 Hz tone, 16-bit stereo at 22050 a second, written here.
+          python -c "import math,struct; n=5512; d=b''.join(struct.pack('<hh', int(12000*math.sin(2*math.pi*440*i/22050)), int(6000*math.sin(2*math.pi*660*i/22050))) for i in range(n)); open('tone.wav','wb').write(b'RIFF'+struct.pack('<I',36+len(d))+b'WAVEfmt '+struct.pack('<IHHIIHH',16,1,2,22050,22050*4,4,16)+b'data'+struct.pack('<I',len(d))+d)"
+          # Mixed to one channel, resampled to 8000 a second and rounded to 8 bits: one unit of a second.
+          out=$($exe warp --line audio --note-set pcm --mode positional --file tone.wav)
+          echo "$out" | tr -d '\r' | q "canon-pcm-v1: 5512 sample(s) per channel at 22050 a second, 2 channel(s) -> pcm/8000/8/C1, 1 unit(s)"
+          echo "$out" | tr -d '\r' | q "mixed to one"
+          echo "$out" | tr -d '\r' | awk '$1 == "positional" {print $2}' > a.hex
+          # Read back as a WAV file, which warps to the same address.
+          $exe read --line audio --note-set pcm --mode positional --address-file a.hex --out back.wav > /dev/null
+          $exe warp --line audio --note-set pcm --mode positional --file back.wav | tr -d '\r' | awk '$1 == "positional" {print $2}' > b.hex
+          cmp a.hex b.hex
+          # Any depth and channels: 12 bits, three channels (the last repeated), at its own rate.
+          $exe warp --line audio --note-set pcm --rate 22050 --bits 12 --channels 3 --length 6000 --mode positional --file tone.wav | tr -d '\r' | awk '$1 == "positional" {print $2}' > c.hex
+          $exe read --line audio --note-set pcm --rate 22050 --bits 12 --channels 3 --length 6000 --mode positional --address-file c.hex --out back3.wav > /dev/null
+          $exe warp --line audio --note-set pcm --rate 22050 --bits 12 --channels 3 --length 6000 --mode positional --file back3.wav | tr -d '\r' | awk '$1 == "positional" {print $2}' | cmp - c.hex
+          # Notes stay notes: notes104 is still the default, and pcm options are refused there.
+          $exe info --line audio | tr -d '\r' | q "notes104"
+          if $exe info --line audio --rate 8000 > /dev/null 2>&1; then exit 1; fi
+          # Saving as a format that needs ffmpeg says so when there is none.
+          if out=$($exe read --ffmpeg no-such-ffmpeg --line audio --note-set pcm --mode positional --address-file a.hex --out x.mp3 2>&1); then exit 1; fi
+          echo "$out" | tr -d '\r' | q "there is no ffmpeg at"
+
+      - name: Other picture and video formats come in through ffmpeg
+        run: |
+          q() { grep -c "$@" > /dev/null; }
+          exe=build/sieve
+          [ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
+          # Without an ffmpeg, a format stb_image does not read says where to give one.
+          printf '\x1aE\xdf\xa3 not really a video' > fake.webm
+          if out=$($exe warp --ffmpeg no-such-ffmpeg --line video --file fake.webm 2>&1); then exit 1; fi
+          echo "$out" | tr -d '\r' | q "there is no ffmpeg at"
+          if [ "$RUNNER_OS" = "Linux" ] && ! command -v ffmpeg > /dev/null; then sudo apt-get update && sudo apt-get install -y ffmpeg || true; fi
+          if ! command -v ffmpeg > /dev/null; then echo "no ffmpeg on this runner: the rest is checked where there is one"; exit 0; fi
+          ffmpeg -hide_banner -version | head -1
+          # A lossless video's frame lands exactly where the same frame as a PNG (read by stb_image) does.
+          ffmpeg -v error -y -f lavfi -i testsrc=size=16x12:rate=10 -frames:v 1 -pix_fmt rgb24 f.png
+          ffmpeg -v error -y -i f.png -c:v ffv1 -pix_fmt bgr0 f.mkv
+          a=$($exe warp --line image --width 16 --height 12 --palette rgb24 --mode positional --file f.png | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          b=$($exe warp --line image --width 16 --height 12 --palette rgb24 --mode positional --file f.mkv | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          test -n "$a" && test "$a" = "$b"
+          # A video in a folder whose name needs quoting: every stored frame, in order, up to --frames.
+          mkdir -p "it's a folder"
+          ffmpeg -v error -y -f lavfi -i testsrc=size=64x48:rate=10 -frames:v 12 -c:v ffv1 "it's a folder/clip.mkv"
+          $exe warp --line video --frames 16 --file "it's a folder/clip.mkv" | tr -d '\r' | q "12 frame(s)"
+          $exe warp --line video --frames 8 --file "it's a folder/clip.mkv" | tr -d '\r' | q "stopped after 8 frame(s)"
+          # The same file gives the same address every time.
+          c=$($exe warp --line video --frames 8 --mode positional --file "it's a folder/clip.mkv" | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          d=$($exe warp --line video --frames 8 --mode positional --file "it's a folder/clip.mkv" | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          test -n "$c" && test "$c" = "$d"
+          # Sound in any format ffmpeg reads: FLAC lands where the same sound as WAV does.
+          ffmpeg -v error -y -f lavfi -i "sine=frequency=440:sample_rate=16000:duration=0.2" -c:a pcm_s16le s.wav
+          ffmpeg -v error -y -i s.wav s.flac
+          e=$($exe warp --line audio --note-set pcm --mode positional --file s.wav | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          f=$($exe warp --line audio --note-set pcm --mode positional --file s.flac | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          test -n "$e" && test "$e" = "$f"
+          # And saved through ffmpeg: a lossless format comes back to the same address.
+          echo "$e" > e.hex
+          $exe read --line audio --note-set pcm --mode positional --address-file e.hex --out back.flac > /dev/null
+          $exe warp --line audio --note-set pcm --mode positional --file back.flac | tr -d '\r' | awk '$1 == "positional" {print $2}' | cmp - e.hex
+          $exe read --line video --mode positional --out v.gif 00ff00ff00ff0f00ff > /dev/null
+          $exe warp --line video --mode positional --file v.gif | tr -d '\r' | q "00ff00ff00ff0f00ff"
+
       - name: Books bind, unbind and keep their id in every ordering
         run: |
           # q PATTERN: like grep -q, but reads all its input, so the command before it never
@@ -814,6 +881,7 @@ jobs:
           python sieve_ref.py binary-vectors | diff - ../tests/vectors_binary_v1.tsv
           python sieve_ref.py chunk-vectors | diff - ../tests/vectors_chunks_v1.tsv
           python sieve_ref.py notes2-vectors | diff - ../tests/vectors_notes2_v1.tsv
+          python sieve_ref.py pcm-vectors | diff - ../tests/vectors_pcm_v1.tsv
           # One line filtered by another (FILTER-PLUGINS.md section 15): file kinds and the binary
           # line's filter by them, and not-written-v1, counted by the oracle's own machines, its
           # closed form for the binary reading and the overlap walked pair by pair (about 3 minutes).

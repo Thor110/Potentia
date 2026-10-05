@@ -198,9 +198,18 @@ std::string Hallway::one_line_preview(const Space::Digits& u)
     if (on_binary()) return ""; // a file is written out by binary_preview
     if (on_models()) return ""; // a model is drawn, not written out: see draw_model
     if (line().kind == LineKind::Text) return "\"" + ascii(utf8_encode(line().space.text_of(u))) + "\"";
-    if (line().kind == LineKind::Audio) return notes_to_notation(note_set_of(line().space.symbols_id()), u);
+    if (line().kind == LineKind::Audio) return audio_text(u, 32);
     return "";
 }
+
+std::string Hallway::audio_text(const Space::Digits& u, uint32_t columns) const
+{
+    const std::string& id = line().space.symbols_id();
+    if (sieve::is_pcm_symbols(id)) return cli::pcm_preview(sieve::pcm_format_of(id), u, columns);
+    return notes_to_notation(note_set_of(id), u);
+}
+
+bool Hallway::on_sound() const { return line().kind == LineKind::Audio && sieve::is_pcm_symbols(line().space.symbols_id()); }
 
 // A blank title (all spaces, as the first titles of a line in positional order are) is shown as
 // [Null Title]: white brackets, red words, so an empty title reads as a fact about the item rather
@@ -368,6 +377,7 @@ void Hallway::draw_hud(int w, int h)
         const std::string prompt = input_ == Input::Warp
                                        ? tr(on_books() ? "prompt.warp.book" : on_binary() ? "prompt.warp.file"
                                             : line().kind == LineKind::Image || line().kind == LineKind::Video ? "prompt.warp.picture"
+                                            : on_sound()                                                       ? "prompt.warp.sound"
                                             : line().kind == LineKind::Audio                                   ? "prompt.warp.notes"
                                                                                                                : "prompt.warp.text")
                                        : tr("prompt.goto");
@@ -565,7 +575,7 @@ void Hallway::draw_in_hand(float W, float H)
         }
         break;
     case LineKind::Audio:
-        for (const auto& l : wrap(notes_to_notation(note_set_of(line().space.symbols_id()), u), cols2))
+        for (const auto& l : on_sound() ? split_lines(audio_text(u, uint32_t(std::max<size_t>(8, cols2 > 6 ? cols2 - 6 : 0)))) : wrap(audio_text(u, 0), cols2))
         {
             if (cy > y + ph - 150) { text(x + 14, cy, "...", 2, ink); cy += 20; break; }
             text(x + 14, cy, l, 2, ink);
