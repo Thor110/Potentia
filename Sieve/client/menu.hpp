@@ -54,6 +54,10 @@ struct Settings
     // range, durations (codes of s e E q Q h H w) and voices (sieve/audio.hpp).
     std::string note_set = "notes104", note_low = "C3", note_high = "C6", note_durations = "seEqQhHw";
     uint32_t voices = 1;
+    // The notes3 set (sieve/notes3.hpp): open-ended notes. Levels, tempo and instruments are set
+    // in the settings file only.
+    std::string n3_low = "C-1", n3_high = "G9", n3_instruments = "0";
+    uint32_t n3_tpq = 4, n3_longest = 16, n3_levels = 8, n3_voices = 1, n3_tempo = 120;
     // The pcm set (sieve/sound.hpp): sound itself, `samples` a channel per book.
     uint32_t samples = 8000, pcm_rate = 8000, pcm_bits = 8, pcm_channels = 1;
     uint32_t video_w = 5, video_h = 5, frames = 8;

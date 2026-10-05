@@ -1510,3 +1510,17 @@ Filters, section 1 of the list (4 October 2026).
 - **J:**
   - `cli::looks_like_mpeg_audio` (MPEG audio frame or ADTS header) sends a file of unknown kind to sound first, without touching file-kinds-v1;
   - an MP4, AVI, WebP or unknown file that ffmpeg finds no picture in (an .m4a) is tried as sound when the audio line holds pcm.
+
+### The filter survey, and open-ended notes (6 October 2026)
+- **tools/survey/survey.py** drives `sieve filters` for every combination in `grid.tsv` (lists, ranges `lo..hi`, `:step`, `*k`, `key==other`; stacks `each`, `all`, `a-v1+b-v1`, `a-v1[p=1,2]`).
+  - **Bounds:** a hardware profile (`profiles.tsv`: ram_gb, cores, filter_memory_mb, time_limit_s, each overridable) bounds each count. Jobs = min(cores, 3/4 of the RAM / filter memory).
+  - **Exactness:** exact percentages come from the printed survivor and excluded counts, as Python fractions, with as many decimals as it takes to get past the leading 9s or 0s. Python 3.11's limit on reading long numbers is lifted.
+  - **Measurement:** peak memory by `wait4` (Linux and macOS). A row's own failure is recorded as its error.
+  - **First run** (average profile, this machine: 4 cores, 15 GB): 471 counts, 402 exact and 69 judged only, 138 s of counting (`results/survey-average-2026-10-05.*`).
+- **notes3** (sieve/notes3.hpp, core/src/notes3.cpp; SPECIFICATIONS §3.4):
+  - `Notes3Set` and its id; `canonicalise_notes3`, notation, `notes3_to_midi`, `midi_to_notes3`;
+  - the oracle's own `canon_notes3`/`notes3_midi` (Fractions), with `notes3-vectors` → `tests/vectors_notes3_v1.tsv` (8 cases). The engine matched on the first run, and a MIDI round trip is tested;
+  - **CLI:** `--note-set notes3 --low --high --tpq --longest --levels --voices --tempo --instruments`, and warp reads a MIDI file itself;
+  - **Filters:** `line_voices` takes notes3's voices;
+  - **Hallway:** `render_notes3` (synth.cpp) makes square tones at the levels and tempo, played through `play_samples`; J opens MIDI on a notes3 line through warp; the setup menu's six audio rows become notes, set (notes104 → notes2 → notes3 → pcm), lowest, highest, lengths (presets of TPQ and longest) and voices; levels, tempo and instruments live in the settings file only.
+  - **Not yet:** the melody plugins for notes3's digits (with levels), and drawing it as notes on a staff.

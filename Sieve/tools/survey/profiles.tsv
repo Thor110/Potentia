@@ -1,0 +1,13 @@
+# Hardware profiles for tools/survey/survey.py: what each count may take on a kind of machine.
+#
+#   ram_gb            the machine's memory; three quarters of it is shared by the counts running at once
+#   cores             the most counts that run at once (fewer if their filter memory will not fit)
+#   filter_memory_mb  what one count's tables may take: the setup menu's FILTER MEMORY (512 MB at first)
+#   time_limit_s      how long one count may take before it is recorded as over time
+#
+# Any of them can be overridden on the command line (--ram-gb, --cores, --filter-memory, --time-limit).
+#
+# name    | ram_gb | cores | filter_memory_mb | time_limit_s
+low       | 8      | 2     | 512              | 60
+average   | 16     | 4     | 2048             | 120
+high      | 64     | 8     | 8192             | 300

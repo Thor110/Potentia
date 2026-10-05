@@ -53,6 +53,7 @@ add_library(sieve_core STATIC
     core/src/image.cpp
     core/src/intlog.cpp
     core/src/sha256.cpp
+    core/src/notes3.cpp
     core/src/sieve.cpp
     core/src/sound.cpp
     core/src/space.cpp

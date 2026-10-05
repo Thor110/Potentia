@@ -213,6 +213,7 @@ std::string Hallway::audio_text(const Space::Digits& u, uint32_t columns) const
 {
     const std::string& id = line().space.symbols_id();
     if (sieve::is_pcm_symbols(id)) return cli::pcm_preview(sieve::pcm_format_of(id), u, columns);
+    if (sieve::is_notes3_symbols(id)) return sieve::notes3_to_notation(sieve::notes3_set_of(id), u);
     return notes_to_notation(note_set_of(id), u);
 }
 

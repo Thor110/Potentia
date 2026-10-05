@@ -512,8 +512,9 @@ upgrades a filter to v2 when it uses something only v2 has.
   `notes104`), `DURATIONS` (4) and `LOW` (60, the MIDI number of pitch 1): a note's symbol is
   `pitch * DURATIONS + duration`, pitch 0 the rest. A parameter or `for` variable may not take
   these names, nor `min`, `max` or `abs`.
-- **Families of symbols:** `symbols notes*` applies to every line whose symbols' id begins `notes`:
-  `notes104` and every `notes2` set (SPECIFICATIONS §3.2), with the constants taken from the set
+- **Families of symbols:** `symbols notes*` applies to the note sets whose digits its constants
+  describe: `notes104` and every `notes2` set (SPECIFICATIONS §3.2), not `notes3`, whose digits
+  carry lengths in ticks and loudness levels (§3.4). The constants are taken from the set
   (a `notes2` set's own `PITCHES`, `DURATIONS` and `LOW`). On a line of several voices the stack
   hands a plugin one voice at a time, so a plugin is always written for one line of events;
   `sieve filters --plugin` reports it the same way (one voice's automaton; the count to the power

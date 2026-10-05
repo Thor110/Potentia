@@ -25,6 +25,7 @@ Special thanks to Claude Opus 5.5 for helping to build out the Sieve system base
 | `tools/build_anchor_plugins.py` | Makes plugins for the units near known pages, or holding known fragments |
 | `data/dictionaries/` | The dictionary registry (`dictionaries.tsv`) and pinned English word lists (SCOWL 2020.12.07) |
 | `data/models/` | The model registry (`models.tsv`), the pinned text model, and the training corpus manifest (`corpus/gutenberg-nltk.tsv`) |
+| `tools/survey/` | The filter survey: how much each filter and stack keeps of each line, over a grid of settings, on a given machine (`survey.py`, `grid.tsv`, `profiles.tsv`) |
 | `tools/fetch_corpus.py` | Downloads the training corpus into `corpus/` (not stored in the repository) and checks every file's hash |
 | `reference/sieve_ref.py` | Independent Python oracle; generates every conformance vector file |
 | `tests/` | Core tests and the conformance vectors |
@@ -111,7 +112,7 @@ Choose a line with `--line`; the default is `text`. Each line has its own option
 | :--- | :--- | :--- | :--- |
 | `text` | `--length` characters | `--length L` (required), `--alphabet SPEC` (lower27; see `sieve alphabets`), `--canon v2\|v1` (v2) | text in quotes, or `--file` |
 | `image` | a WxH picture | `--width` (10), `--height` (10), `--palette mono\|ega16\|rgb332\|rgb24` (mono) | `--file` PNG, JPEG, BMP, GIF, TGA |
-| `audio` | a melody of N notes, or with `--note-set pcm` sound itself | `--length N` (16); pcm: `--rate` (8000) `--bits` (8) `--channels` (1), `--length` samples per channel | notes such as `"C4q E4q G4h Rq"`, or `--file`; pcm: `--file` with a WAV, or any sound ffmpeg reads |
+| `audio` | a melody of N notes (notes104, notes2, or open-ended notes3), or with `--note-set pcm` sound itself | `--length N` (16); pcm: `--rate` (8000) `--bits` (8) `--channels` (1), `--length` samples per channel | notes such as `"C4q E4q G4h Rq"`, or `--file`; pcm: `--file` with a WAV, or any sound ffmpeg reads |
 | `video` | F pictures of WxH | `--width` (5), `--height` (5), `--frames` (8), `--palette` (mono) | `--file`: an animated GIF, or any video ffmpeg reads |
 
 Every line also takes `--key K` (default `sieve`), which seeds the scrambled ordering.
@@ -482,6 +483,31 @@ On a machine without a display, set `SDL_VIDEO_DRIVER=offscreen` and `SDL_RENDER
 
 Doors work the same in guided order. At zoom *d* the guided loop is 2^*d* books long, and the lines without a model (image, audio, video) keep their raw ordering.
 
+## The filter survey
+
+`tools/survey/survey.py` counts, for a grid of settings on every line, what each filter keeps on its own and what stacks of them keep together. It runs the `sieve` tool itself, so the figures are the engine's own. Each row gives:
+- the share kept, as a power of ten;
+- the exact percentage removed;
+- whether the count is exact or the stack only judges;
+- the time and memory it took.
+
+```
+python tools/survey/survey.py                      # the average profile and the default grid
+python tools/survey/survey.py --profile low        # a smaller machine
+python tools/survey/survey.py --ram-gb 12 --cores 6 --filter-memory 1024 --time-limit 90
+python tools/survey/survey.py --only image,audio --dry-run
+```
+
+- **The grid** (`tools/survey/grid.tsv`): per line, its settings as lists or ranges (`width=5..10 height==width`, `length=64..1024*4`), and the stacks to count: `each` filter alone, `all` together, or named filters at stepped settings (`row-runs-v1[changes=0..4]`).
+- **A hardware profile** (`tools/survey/profiles.tsv`) bounds each count the way the setup menu does on that machine:
+  - the memory one count's tables may take (FILTER MEMORY);
+  - a time limit for each count;
+  - how many counts run at once.
+
+  Override any of them on the command line. A count past the bounds is recorded as such, with what it would have needed, so the tables show where counting ends on that hardware.
+- **Results:** `results/survey-<profile>-<date>.tsv` (every row) and `.md` (a table per line).
+- **The default grid:** 507 counts, in about two minutes of counting on a 4-core, 16 GB machine.
+
 ## Commands
 
 ### `info`: how big is a space?
@@ -837,6 +863,15 @@ A video takes up to `--frames` frames, adding black frames if the source is shor
 - **How:** it runs ffmpeg as a separate program and links none of it. Each frame the file stores is read once, in order, and fitted by `canon-image-v1` as above.
 - **Exactly:** a lossless video lands where the same frames as PNGs do.
 - **Long videos:** frames are fitted one at a time and reading stops one frame past `--frames`. The whole of a 52 MB 1080p video (3,105 frames) went in at 308 MB peak memory.
+
+**Open-ended notes: the `notes3` set.** `--note-set notes3` (AUDIO SET in the setup menu) is notes with nothing capped but MIDI itself:
+- **Pitch:** any MIDI pitches (`--low C-1 --high G9`).
+- **Length:** whole ticks (`--tpq` a quarter note, 4; `--longest`, 16).
+- **Loudness:** levels (`--levels`, 8).
+- **Voices:** 1 to 15.
+- **Playing and saving:** a tempo and an instrument a voice (`--tempo`, `--instruments`), which change how it plays and saves, not its addresses.
+
+`C#4:3!5` is C#4 for 3 ticks at level 5, `R:2` a rest of 2 ticks, and notes2's `E4q` works too. It saves as MIDI, and a MIDI file warps onto it. In the hallway the six audio rows become its notes, set, lowest and highest note, lengths and voices; levels, tempo and instruments are `notes3-levels`, `notes3-tempo` and `notes3-instruments` in the settings file.
 
 **Sound itself: the `pcm` set.** The audio line holds notes by default (`notes104`, or `notes2`). With `--note-set pcm` (in the hallway, AUDIO SET in the setup menu) it holds sound itself instead:
 - **Its settings:** a sample rate (`--rate`, 8000), bits a sample (`--bits`, 1 to 31, 8) and channels (`--channels`, 1). `--length` is samples per channel, a second at the rate unless given.

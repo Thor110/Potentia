@@ -1,62 +1,106 @@
-# Sound filters, a drawn waveform, video frame rate, tagless MP3 (relative to origin/main b3a72e1)
+# The filter survey, and open-ended notes (notes3) (relative to origin/main f8ba3d0)
 
 To apply it, do one of these from the Potentia repository root:
 - unzip `files/` over the repository;
-- or run `git apply sound-filters.patch`.
+- or run `git apply survey-notes3.patch`.
 
-**New files:** `Sieve/core/src/filters/sound.cpp` and `Sieve/tests/vectors_sound_v1.tsv`.
+**New files:**
+- the survey: `Sieve/tools/survey/survey.py`, `grid.tsv` and `profiles.tsv`;
+- the first results: `Sieve/results/survey-average-2026-10-05.tsv` and `.md`;
+- notes3: `Sieve/core/include/sieve/notes3.hpp` and `Sieve/core/src/notes3.cpp`;
+- notes3's vectors: `Sieve/tests/vectors_notes3_v1.tsv`.
 
-## 1. Filters for sound itself (the `pcm` set)
-**Each channel is judged on its own.** That's what a note set already does with its voices, so a stack's survivors are one channel's to the power of the channels.
-- **How:** the code that ranks several voices together now sizes its packing to the line, rather than allowing at most 7 voices of under 65,536 notes. That lets it hold up to 65,535 channels of any length.
-- **Unchanged:** note sets rank exactly as before, since the change is internal.
+## 1. The filter survey
+`tools/survey/survey.py` counts what each filter keeps on its own, and what stacks of them keep together, over a grid of settings on every line.
+- **The engine's own figures:** it runs the `sieve` tool itself.
+- **Each row records:**
+  - the share kept, as a power of ten;
+  - the exact percentage removed, with as many decimals as it takes to get past the leading 9s or 0s;
+  - whether the count is exact or the stack only judges (with the reason);
+  - the time and peak memory it took.
 
-**Three filters:**
+**The grid** (`tools/survey/grid.tsv`) is data:
+- **Settings per line:** lists `a,b,c`; ranges `lo..hi`, `lo..hi:step` or `lo..hi*k`; and `height==width` for paired settings, so 5×5 to 10×10 is one row.
+- **Stacks to count:**
+  - `each` filter on its own;
+  - `all` of them together;
+  - named filters together (`a-v1+b-v1`);
+  - a filter at stepped settings (`row-runs-v1[changes=0..4]`).
 
-| Filter | Passes when | Counting | Keeps |
-| :--- | :--- | :--- | :--- |
-| `sound-peak-v1` | no sample is louder than `percent` of full scale (90) | exact at every depth: an automaton to 24 bits, then its own count | 8-bit, 800 samples: 10^-35.70; 16-bit stereo, 8000: 10^-732.05 |
-| `sound-step-v1` | neighbouring samples differ by at most `percent` of the range (50): noise jumps about, sound mostly moves a little | an automaton up to 11 bits; judged past that | 8-bit, 800 samples: 10^-86.76 |
-| `silence-run-v1` | no run of more than `samples` silent samples (4000) | an automaton while it fits; judged past that | removes mostly-silent units |
+**Hardware profiles** (`tools/survey/profiles.tsv`): low (8 GB, 2 cores), average (16 GB, 4 cores) and high (64 GB, 8 cores).
+- **What each sets:**
+  - the filter memory one count may take (the setup menu's FILTER MEMORY);
+  - a time limit for each count;
+  - how many counts run at once, no more than three quarters of the RAM allows.
+- **Your own machine:** `--ram-gb`, `--cores`, `--filter-memory` and `--time-limit` override any of them.
+- **Past the bounds:** a count is recorded as "over time" or "judge only", with what it would have needed.
 
-**Together.**
-- **At 800 samples (8-bit):** the three merge into one automaton and count exactly in about 6 s. They keep 10^-102.20 of the line, with `silence-run-v1` set to 800.
-- **At the default 8000 samples:** counting would need about 31 GB, so they judge only there. They still mark and hide items; the hallway just can't close up the gaps between survivors (compact mode).
+**Output:** `results/survey-<profile>-<date>.tsv` (every row) and `.md` (a table per line).
 
-**Checked by hand:**
-- white noise fails `sound-step-v1`;
-- a loud tone passes all three;
-- a 0.25 s tone padded to a full second fails `silence-run-v1`.
+**First run included:** the average profile on this machine (4 cores, 15 GB), as `results/survey-average-2026-10-05.*`.
+- **Result:** 507 counts; 426 exact and 81 judge-only, none with an error and none over time.
+- **Time:** 130 s of counting in all, four at once.
 
-**The oracle has its own implementation:**
-- a closed form for peak;
-- tables for step and silence, each checked by brute force over every unit of small lines.
+## 2. Open-ended notes: `notes3`
+A third note family on the audio line, beside `notes104` and `notes2`, with nothing capped but MIDI:
 
-The engine matched all 69 vectors on its first run, and CI diffs them.
+| Part | Range |
+| :--- | :--- |
+| Pitches | any MIDI pitches, C-1 to G9 (at least an octave) |
+| Lengths | whole ticks: 1 to 960 ticks a quarter, longest 1 to 65,535 |
+| Loudness | 1 to 127 levels; level k plays at velocity round(127k / levels) |
+| Voices | 1 to 15, each on its own MIDI channel (the drums' channel 10 left out) |
+| Tempo, instruments | a tempo, and an instrument a voice: how it plays and saves, not its addresses |
 
-## 2. A drawn waveform
-- **Item page:** in hand, a sound draws as its waveform: each channel a band, each column the line from its lowest to its highest sample. Each column reaches back to the middle of the one before, so samples a column apart join into a line rather than dots.
-- **Viewer:** the SOUND tab is now a picture of the waveform. It's drawn a column a sample where the view is wide enough, and zooms and pans like any picture.
-- **Text previews:** the CLI's text preview uses the same envelope. The one-line preview under the crosshair puts the channels side by side, where a line break used to show as `?`.
+- **The id** names everything: `notes3/C-1..G9/q4/d16/v8/V1/t120/i0`.
+- **Size:** at full range, 8 levels and lengths up to 16 ticks, each event is one of 16,400 symbols.
+- **Notation:**
+  - `C#4:3!5` is C#4 for 3 ticks at level 5;
+  - `R:2` is a rest of 2 ticks;
+  - notes2's codes (`E4q`, `Bb3e.`) work too;
+  - ` // ` goes between voices.
+- **Fitting (`canon-notes-v3`):**
+  - flats become sharps;
+  - pitches move by octaves into range;
+  - a length beyond the longest becomes the event then rests;
+  - a level above the most is clamped;
+  - a missing level is the one nearest velocity 96, what the other sets play at.
 
-## 3. The video frame rate in the hallway
-- **The setting:** `video-fps` in the settings file, or `--video-fps N` (8 unless given).
-- **What it does:** sets the frame rate F uses when saving a video as GIF, MP4 or WebM through ffmpeg.
+  Every change is reported.
+- **MIDI:**
+  - **Saving:** a unit saves as MIDI with its tempo, instruments and loudness.
+  - **Reading:** a MIDI file warps onto the line, and J opens one there. It comes back as the same music. A run of rests may come back as fewer events, because MIDI has no rest events (the same as notes2).
+- **Hallway:**
+  - **Setup menu:** AUDIO SET steps notes104 → notes2 → notes3 → pcm. On notes3 the six existing audio rows become notes, set, lowest note, highest note, lengths (ticks a quarter and the longest, from presets) and voices, so no rows were added.
+  - **Settings file only:** levels, tempo and instruments (`notes3-levels`, `notes3-tempo`, `notes3-instruments`).
+  - **P** plays it as square tones at its levels and tempo. The instruments are what the MIDI file asks for; the synth plays every voice the same way.
+- **Filters:** each voice is judged on its own, and the general filters apply.
+  - **The melody plugins don't apply yet:** they're written for notes2's digits.
+  - **A fix along the way:** plugins written for `symbols notes*` were matched by prefix, so the survey found them offered on notes3 lines, where they failed. `notes*` now means notes104 and notes2 only, and FILTER-PLUGINS.md says so.
+- **The oracle has its own `canon-notes-v3`:** MIDI writing in exact fractions, 8 cases covering:
+  - every part of the notation;
+  - code lengths that round;
+  - splitting;
+  - clamping;
+  - octave moves;
+  - all 15 voices;
+  - the extremes (960 ticks, 127 levels, 1000 a minute).
 
-## 4. J and sound with no signature
-- **Tagless MP3 and AAC:** a file the kinds table doesn't know, whose first bytes are an MPEG audio frame header or an AAC (ADTS) header, opens as sound. This decides where J opens it, never what's filtered, so the file-kinds table and every count stay as they were.
-- **Sound without pictures:** an MP4, AVI, WebP or unknown file in which ffmpeg finds no picture (an `.m4a`, or a video's sound alone) opens as sound when the audio line holds pcm.
-- **Tried in the hallway from the binary line:** a tagless MP3 and an `.m4a` both opened on the audio line.
+  The engine matched all 8 on its first run.
+
+## Also
+`docs/IDEAS.md` §13 records the composition plan:
+- **The pairs:** pages → books, audio → tracks, clips → video.
+- **The far-off ideas:** a tile dimension for images, and a world space for models.
+- **The problems to solve first:** address stability on renaming, the crowded setup menu, and the hallway's fixed count of seven dimensions.
+- **The suggested order.**
 
 ## Checked
-- **Unit tests:** 33,875 checks, 0 failures (the 69 sound vectors among them).
-- **CI steps, run here, all passing:** same addresses, filters, models, the bytes256 line, both sound and media steps (now also pinning the sound filters' counts), books, the whole hallway step and the whole reference-oracle step (now also diffing the sound vectors).
-- **Screenshots:** the item page, and the viewer showing a tone as a continuous line.
-
-## Still to come (package B, next)
-**Open-ended notes:** a note set between `notes2` and `pcm`, with:
-- every MIDI pitch;
-- lengths in ticks;
-- loudness;
-- an instrument per voice;
-- tempo.
+- **Unit tests:** 33,918 checks, 0 failures.
+- **CI steps run here, all passing:**
+  - same addresses, filters, models, the bytes256 line, books;
+  - the sound and media steps, which now also warp and read back a notes3 MIDI file;
+  - the whole hallway step;
+  - the whole reference-oracle step, which now also diffs the notes3 vectors.
+- **The hallway:** the setup menu on notes3, and a two-voice melody in hand with P playing.
+- **By hand:** a notes3 MIDI file saved and warped back to the same address.

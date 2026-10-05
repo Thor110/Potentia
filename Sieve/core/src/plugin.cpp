@@ -798,7 +798,12 @@ bool plugin_applies(const PluginDef& p, const FilterLine& line)
     if (line.base == 0 || line.base > 65536) return false; // a table of states x symbols must stay small
     if (h.symbols == "any") return true;
     if (h.format >= 2 && h.symbols.size() >= 2 && h.symbols.back() == '*') // a family: notes*
+    {
+        // notes* is the note sets whose digits its constants describe (pitch x durations +
+        // duration): notes104 and notes2, not notes3, whose digits carry lengths in ticks and levels.
+        if (h.symbols == "notes*") return is_note_symbols(line.symbols_id);
         return line.symbols_id.compare(0, h.symbols.size() - 1, h.symbols, 0, h.symbols.size() - 1) == 0;
+    }
     if (h.symbols.rfind("palette:", 0) == 0)
     {
         if (line.kind != "image" && line.kind != "video") return false;

@@ -1323,7 +1323,14 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
         {
             // Through the music player when there is one, which fades the music out under it.
             std::string err;
-            if (sieve::is_pcm_symbols(line().space.symbols_id()))
+            if (sieve::is_notes3_symbols(line().space.symbols_id()))
+            {
+                // Open-ended notes, made into sound at the set's tempo and played as sound.
+                const uint32_t rate = kSynthRate;
+                std::vector<float> s = render_notes3(sieve::notes3_set_of(line().space.symbols_id()), in_hand_->unit, rate);
+                err = music() ? music()->play_samples(std::move(s), rate) : synth_.play_samples(s, rate);
+            }
+            else if (sieve::is_pcm_symbols(line().space.symbols_id()))
             {
                 const sieve::PcmFormat f = sieve::pcm_format_of(line().space.symbols_id());
                 err = music() ? music()->play_sound(f, in_hand_->unit) : synth_.play_sound(f, in_hand_->unit);

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "sieve/audio.hpp"
+#include "sieve/notes3.hpp"
 #include "sieve/sound.hpp"
 
 #include <SDL3/SDL.h>
@@ -14,6 +15,14 @@
 
 namespace hallway {
 
+// The rate the synth makes sound at.
+inline constexpr uint32_t kSynthRate = 44100;
+
+// Open-ended notes (sieve/notes3.hpp) as sound: each voice square tones at its level's loudness,
+// at the set's tempo, the voices added together; one channel at `rate`, at most ten minutes. The
+// instruments are what a MIDI file asks for; this plays every voice the same way.
+std::vector<float> render_notes3(const sieve::Notes3Set& set, const std::vector<uint32_t>& digits, uint32_t rate);
+
 class Synth
 {
 public:
@@ -23,6 +32,8 @@ public:
     // Plays a unit of a pcm set as it is, at its own rate (its channels as they are, up to the
     // eight a device takes; more are mixed to one).
     std::string play_sound(const sieve::PcmFormat& f, const std::vector<uint32_t>& samples);
+    // Plays sound already made: one channel, -1..1, at `rate` samples a second.
+    std::string play_samples(const std::vector<float>& mono, uint32_t rate);
     void stop();
 
 private:

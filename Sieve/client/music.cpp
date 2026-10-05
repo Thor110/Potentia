@@ -421,12 +421,18 @@ std::string MusicPlayer::play_sound(const sieve::PcmFormat& f, const std::vector
         for (uint32_t ch = 0; ch < f.channels; ++ch) v += float(sieve::pcm_sample(f, samples[ch * frames + i]));
         mono[i] = v / full;
     }
+    return play_samples(std::move(mono), f.rate);
+}
+
+std::string MusicPlayer::play_samples(std::vector<float> mono, uint32_t rate)
+{
+    if (!stream_) return status_.empty() ? std::string("audio unavailable") : status_;
     std::lock_guard<std::mutex> lock(mx_);
     item_.active = false;
     item_.done = true;
     sound_ = std::move(mono);
     sound_at_ = 0;
-    sound_step_ = double(f.rate) / kRate;
+    sound_step_ = double(rate) / kRate;
     retarget();
     return "";
 }

@@ -1,4 +1,5 @@
 #include "sieve/filter.hpp"
+#include "sieve/notes3.hpp"
 #include "sieve/sound.hpp"
 
 #include "sieve/audio.hpp"
@@ -284,6 +285,7 @@ uint32_t line_voices(const FilterLine& l)
     if (l.kind != "audio") return 1;
     if (is_note_symbols(l.symbols_id)) return note_set_of(l.symbols_id).voices;
     if (is_pcm_symbols(l.symbols_id)) return pcm_format_of(l.symbols_id).channels;
+    if (is_notes3_symbols(l.symbols_id)) return notes3_set_of(l.symbols_id).voices;
     return 1;
 }
 

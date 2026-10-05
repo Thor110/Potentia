@@ -2,6 +2,7 @@
 
 #include "sieve/alphabet.hpp"
 #include "sieve/audio.hpp"
+#include "sieve/notes3.hpp"
 #include "sieve/sound.hpp"
 #include "sieve/biguint.hpp"
 #include "sieve/booksieve.hpp"
@@ -891,6 +892,51 @@ void test_pcm_vectors(const std::string& path)
     }
     std::cout << "pcm vectors checked: " << n << "\n";
     CHECK(n >= 13);
+}
+
+void test_notes3_vectors(const std::string& path)
+{
+    int n = 0;
+    for (const auto& f : read_tsv(path, 7))
+    {
+        const Notes3Set set = notes3_set_of(f[0]);
+        CHECK(set.id() == f[0]);
+        const Notes3CanonResult r = canonicalise_notes3(f[2], set, uint32_t(std::stoul(f[1])));
+        std::string units;
+        for (const auto& u : r.units)
+        {
+            if (!units.empty()) units += ";";
+            for (size_t i = 0; i < u.size(); ++i) units += (i ? "," : "") + std::to_string(u[i]);
+        }
+        const std::string report = std::to_string(r.events) + "," + std::to_string(r.flats_rewritten) + "," + std::to_string(r.octave_shifted) + "," +
+                                   std::to_string(r.default_lengths) + "," + std::to_string(r.default_levels) + "," + std::to_string(r.lengths_rounded) +
+                                   "," + std::to_string(r.lengths_split) + "," + std::to_string(r.levels_clamped) + "," + std::to_string(r.padding);
+        const std::string midi = notes3_to_midi(set, r.units.front());
+        const bool ok = units == f[3] && report == f[4] && notes3_to_notation(set, r.units.front()) == f[5] && Sha256::hex(Sha256::hash(midi)) == f[6];
+        CHECK(ok);
+        if (!ok) std::cerr << "  notes3 vector mismatch: " << f[0] << " " << f[2] << " -> " << units << " | " << report << "\n";
+        // The notation written out reads back to the same unit.
+        CHECK(canonicalise_notes3(notes3_to_notation(set, r.units.front()), set, uint32_t(std::stoul(f[1]))).units.front() == r.units.front());
+        ++n;
+    }
+    std::cout << "notes3 vectors checked: " << n << "\n";
+    CHECK(n >= 8);
+
+    // A MIDI file saved reads back as the same music: here, with no two rests in a row (MIDI has no
+    // rest events, so a run of rests comes back as one), the same unit.
+    const Notes3Set set = make_notes3_set(0, 127, 4, 16, 8, 2, 100, {0, 40});
+    const Notes3CanonResult r = canonicalise_notes3("C#4:3!5 R:1 D4:16!8 E4:1!1 // C2:16!3 R:2 G9:1!8 C-1:3!2", set, 4);
+    std::vector<std::string> notes;
+    const std::string file = notes3_to_midi(set, r.units.front());
+    const std::string back = midi_to_notes3(std::vector<uint8_t>(file.begin(), file.end()), set, &notes);
+    CHECK(canonicalise_notes3(back, set, 4).units.front() == r.units.front());
+    // Ids: one spelling, and the limits.
+    for (const char* bad : {"notes3/C-1..G9/q4/d16/v8/V1/t120", "notes3/C-1..G9/q0/d16/v8/V1/t120/i0", "notes3/C4..C4/q4/d16/v8/V1/t120/i0",
+                            "notes3/C-1..G9/q4/d16/v8/V16/t120/i0", "notes3/C-1..G9/q4/d16/v8/V2/t120/i0,1,2", "notes3/Db4..G9/q4/d16/v8/V1/t120/i0",
+                            "notes3/C-1..G9/q4/d16/v128/V1/t120/i0"})
+        CHECK(!is_notes3_symbols(bad));
+    CHECK(!is_note_symbols("notes3/C-1..G9/q4/d16/v8/V1/t120/i0") && !is_notes3_symbols("notes104"));
+    std::cout << "notes3 MIDI and ids checked\n";
 }
 
 void test_pcm_digits()
@@ -4384,6 +4430,7 @@ void run_all(int argc, char** argv)
         test_notes2_vectors(dir + "vectors_notes2_v1.tsv");
         test_pcm_vectors(dir + "vectors_pcm_v1.tsv");
         test_pcm_digits();
+        test_notes3_vectors(dir + "vectors_notes3_v1.tsv");
         test_sound_vectors(dir);
         test_notes2(dir);
         test_plugins(dir);

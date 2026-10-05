@@ -123,6 +123,8 @@ public:
     // The sound in hand (a unit of a pcm set: sieve/sound.hpp), its channels mixed to one, at its
     // own rate, over the music, which fades out under it as under a melody.
     std::string play_sound(const sieve::PcmFormat& f, const std::vector<uint32_t>& samples);
+    // Sound already made, -1..1 at `rate` samples a second (open-ended notes, rendered: synth.hpp).
+    std::string play_samples(std::vector<float> mono, uint32_t rate);
     void stop_item();
 
     MusicSettings settings(MusicMode m) const;

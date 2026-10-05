@@ -2188,6 +2188,202 @@ def _pcm_cases():
     return cases
 
 
+# ---------------------------------------------------------------- canon-notes-v3 (open-ended notes)
+# Written from SPECIFICATIONS 3.4 and sieve/notes3.hpp's rules, not from notes3.cpp.
+
+N3_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+N3_LETTERS = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
+N3_CODES = {"s": 1, "e": 2, "e.": 3, "q": 4, "q.": 6, "h": 8, "h.": 12, "w": 16}  # sixteenths
+
+
+def n3_name(m):
+    return N3_NAMES[m % 12] + str(m // 12 - 1)
+
+
+class Notes3:
+    def __init__(self, low, high, tpq, longest, levels, voices, tempo, instruments):
+        assert 0 <= low and high <= 127 and high >= low + 11 and 1 <= tpq <= 960 and 1 <= longest <= 65535
+        assert 1 <= levels <= 127 and 1 <= voices <= 15 and 1 <= tempo <= 1000
+        if len(instruments) == 1:
+            instruments = instruments * voices
+        assert len(instruments) == voices
+        self.low, self.high, self.tpq, self.longest, self.levels = low, high, tpq, longest, levels
+        self.voices, self.tempo, self.instruments = voices, tempo, instruments
+
+    def id(self):
+        return (f"notes3/{n3_name(self.low)}..{n3_name(self.high)}/q{self.tpq}/d{self.longest}/v{self.levels}/V{self.voices}"
+                f"/t{self.tempo}/i{','.join(map(str, self.instruments))}")
+
+    def velocity(self, k):
+        return _round_half_up(Fraction(127 * k, self.levels))
+
+    def default_level(self):
+        # The level whose velocity is nearest 96, a tie to the louder.
+        return min(range(1, self.levels + 1), key=lambda k: (abs(self.velocity(k) - 96), -k))
+
+    def digit(self, rest, midi, level, ticks):
+        cls = 0 if rest else 1 + (midi - self.low) * self.levels + (level - 1)
+        return (ticks - 1) + self.longest * cls
+
+    def parts(self, d):
+        cls, ticks = divmod(d, self.longest)
+        if cls == 0:
+            return None, None, ticks + 1
+        p, k = divmod(cls - 1, self.levels)
+        return self.low + p, k + 1, ticks + 1
+
+
+def canon_notes3(text, ns, L):
+    """units, and the report (events, flats, octave, default lengths, default levels, rounded,
+    split, clamped, padding)."""
+    rep = dict(events=0, flats=0, octave=0, dlen=0, dlev=0, rounded=0, split=0, clamped=0, padding=0)
+    parts = text.split("//")
+    if len(parts) > ns.voices:
+        raise ValueError("too many voices")
+    voices = [[] for _ in range(ns.voices)]
+    for v, part in enumerate(parts):
+        for tok in re.split(r"[\s|,]+", part):
+            if not tok:
+                continue
+            m = re.fullmatch(r"(?:([A-Ga-g])([#b]?)(-?\d)|([Rr]))(?::(\d+)|([sehqwSEHQW]\.?))?(?:!(\d+))?", tok)
+            if not m:
+                raise ValueError(f"cannot read {tok}")
+            rest = m[4] is not None
+            midi = 0
+            if not rest:
+                semi = N3_LETTERS[m[1].upper()] + (1 if m[2] == "#" else -1 if m[2] == "b" else 0)
+                if m[2] == "b":
+                    rep["flats"] += 1
+                midi = (int(m[3]) + 1) * 12 + semi
+                shifted = False
+                while midi < ns.low:
+                    midi += 12
+                    shifted = True
+                while midi > ns.high:
+                    midi -= 12
+                    shifted = True
+                rep["octave"] += shifted
+            if m[5] is not None:
+                ticks = int(m[5])
+                if ticks == 0:
+                    raise ValueError("a length of 0")
+            elif m[6] is not None:
+                six = N3_CODES[m[6].lower()]
+                exact = Fraction(six * ns.tpq, 4)
+                ticks = max(1, _round_half_up(exact))
+                rep["rounded"] += exact.denominator != 1
+            else:
+                ticks = ns.tpq
+                rep["dlen"] += 1
+            level = ns.default_level()
+            if m[7] is not None:
+                if rest:
+                    raise ValueError("a rest has no level")
+                lv = int(m[7])
+                if lv == 0:
+                    raise ValueError("level 0")
+                rep["clamped"] += lv > ns.levels
+                level = min(lv, ns.levels)
+            elif not rest:
+                rep["dlev"] += 1
+            rep["split"] += ticks > ns.longest
+            first = True
+            while ticks > 0:
+                t = min(ticks, ns.longest)
+                voices[v].append(ns.digit(rest or not first, midi, level, t))
+                ticks -= t
+                first = False
+            rep["events"] += 1
+    longest = max(len(x) for x in voices)
+    runs = max(1, -(-longest // L))
+    units = []
+    for k in range(runs):
+        u = []
+        for x in voices:
+            for e in range(L):
+                at = k * L + e
+                if at < len(x):
+                    u.append(x[at])
+                else:
+                    u.append(0)
+                    rep["padding"] += 1
+        units.append(u)
+    return units, rep
+
+
+def notes3_notation(ns, unit):
+    per = len(unit) // ns.voices
+    out = []
+    for v in range(ns.voices):
+        toks = []
+        for d in unit[v * per:(v + 1) * per]:
+            midi, level, ticks = ns.parts(d)
+            toks.append(f"R:{ticks}" if midi is None else f"{n3_name(midi)}:{ticks}!{level}")
+        out.append(" ".join(toks))
+    return " // ".join(out)
+
+
+def notes3_midi(ns, unit):
+    def vlq(v):
+        b = [v & 0x7F]
+        v >>= 7
+        while v:
+            b.append(0x80 | (v & 0x7F))
+            v >>= 7
+        return bytes(reversed(b))
+
+    def chunk(t):
+        return b"MTrk" + struct.pack(">I", len(t)) + t
+    us = _round_half_up(Fraction(60000000, ns.tempo))
+    out = b"MThd" + struct.pack(">IHHH", 6, 1, 1 + ns.voices, ns.tpq)
+    out += chunk(vlq(0) + bytes([0xFF, 0x51, 0x03]) + us.to_bytes(3, "big") + vlq(0) + bytes([0xFF, 0x2F, 0]))
+    per = len(unit) // ns.voices
+    for v in range(ns.voices):
+        ch = v if v < 9 else v + 1
+        t = vlq(0) + bytes([0xC0 | ch, ns.instruments[v]])
+        pending = 0
+        for d in unit[v * per:(v + 1) * per]:
+            midi, level, ticks = ns.parts(d)
+            if midi is None:
+                pending += ticks
+                continue
+            t += vlq(pending) + bytes([0x90 | ch, midi, ns.velocity(level)]) + vlq(ticks) + bytes([0x80 | ch, midi, 0])
+            pending = 0
+        t += vlq(pending) + bytes([0xFF, 0x2F, 0])
+        out += chunk(t)
+    return out
+
+
+NOTES3_CASES = [
+    # (low, high, tpq, longest, levels, voices, tempo, instruments, L, notation)
+    ("C-1", "G9", 4, 16, 8, 1, 120, [0], 6, "C#4:3!5 R:1 Eb4q C4:40 G9:1!8 C-1e"),
+    ("C-1", "G9", 4, 16, 8, 2, 90, [0, 40], 5, "C4 D4:2!1 // C2:16!3 R:2 A4h."),
+    ("C3", "C6", 12, 48, 4, 1, 120, [19], 4, "C4e. D4q. E4s!9 F8w Bb1:100"),
+    ("C2", "B2", 3, 6, 1, 3, 60, [0, 1, 2], 2, "C2s // D2e // E2q"),
+    ("C4", "B4", 1, 1, 127, 1, 1000, [127], 3, "C4!127 D4!1 R E4:3!64"),
+    ("C-1", "G9", 960, 3840, 16, 15, 120, [0], 1, " // ".join(f"C{v % 10}w!{v + 1}" for v in range(15))),
+    ("C-1", "B0", 2, 4, 2, 2, 120, [0], 3, "// C9e B-1:5"),
+    ("A0", "C8", 8, 64, 10, 1, 72, [5], 4, "a0 c8:64!10 Ab4q.!3 r:65"),
+]
+
+
+def cmd_notes3_vectors(args):
+    """canon-notes-v3: the set, events per voice and notation in; every unit's digits, the report,
+    the first unit's notation and its MIDI file's SHA-256 out."""
+    print("# set\tlength\tnotation\tunits\treport\tnotation_out\tmidi_sha256")
+    for low, high, tpq, longest, levels, voices, tempo, ins, L, text in NOTES3_CASES:
+        ns = Notes3(_n3_midi(low), _n3_midi(high), tpq, longest, levels, voices, tempo, ins)
+        units, rep = canon_notes3(text, ns, L)
+        report = ",".join(str(rep[k]) for k in ("events", "flats", "octave", "dlen", "dlev", "rounded", "split", "clamped", "padding"))
+        print(f"{ns.id()}\t{L}\t{text}\t{';'.join(','.join(map(str, u)) for u in units)}\t{report}\t"
+              f"{notes3_notation(ns, units[0])}\t{hashlib.sha256(notes3_midi(ns, units[0])).hexdigest()}")
+
+
+def _n3_midi(name):
+    m = re.fullmatch(r"([A-G])([#b]?)(-?\d)", name)
+    return (int(m[3]) + 1) * 12 + N3_LETTERS[m[1]] + (1 if m[2] == "#" else -1 if m[2] == "b" else 0)
+
+
 # ---- the sound filters (core/src/filters/sound.cpp), counted their own way: one channel by a
 # table over the last sample or the silent run, the channels as a number in base (one channel's count).
 
@@ -5503,6 +5699,7 @@ def main():
     sub.add_parser("notes2-vectors")
     sub.add_parser("pcm-vectors")
     sub.add_parser("sound-vectors")
+    sub.add_parser("notes3-vectors")
     sub.add_parser("kind-vectors")
     sub.add_parser("written-vectors")
     sub.add_parser("cross-vectors")
@@ -5581,6 +5778,8 @@ def main():
         cmd_pcm_vectors(args)
     elif args.cmd == "sound-vectors":
         cmd_sound_vectors(args)
+    elif args.cmd == "notes3-vectors":
+        cmd_notes3_vectors(args)
     elif args.cmd == "kind-vectors":
         cmd_kind_vectors(args)
     elif args.cmd == "written-vectors":

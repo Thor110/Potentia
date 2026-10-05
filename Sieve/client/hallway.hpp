@@ -45,6 +45,7 @@
 #include "cli/lines.hpp"
 
 #include "sieve/audio.hpp"
+#include "sieve/notes3.hpp"
 #include "sieve/sound.hpp"
 #include "sieve/booksieve.hpp"
 #include "sieve/bookspace.hpp"

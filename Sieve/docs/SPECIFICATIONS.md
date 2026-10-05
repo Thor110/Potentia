@@ -76,6 +76,7 @@ Rules:
 | Audio | Symbolic: 104 note events × 16 events | ~10^32 | Guided only |
 | Audio | `notes2`, C3–C6 × 8 durations (304 events) × 32 events, one voice | ~10^79 | Compact with ranking filters |
 | Audio | `notes2`, C2–C7 × 8 durations (496 events) × 4 voices × 32 events | ~10^345 | Compact with ranking filters |
+| Audio | `notes3`, every MIDI pitch × 8 levels × lengths of 1-16 ticks (16,400 events) × 16 events, one voice | ~10^67 | Open-ended notes (§3.4) |
 | Audio | `pcm`, 8000 a second, 8-bit, one channel × 8000 samples (one second) | ~10^19,266 | Sound itself (§3.3): positional and scrambled; no model yet |
 | Video | 5×5, 1-bit × 8 frames | ~10^60 | Guided only (deferred) |
 
@@ -94,6 +95,21 @@ Audio begins as a **symbolic** line (note sequences), not raw samples. Raw audio
 - **Playback:** the voices sound together. Saved, a unit is a format-1 MIDI file, a tempo track and a track per voice on its own channel (120 bpm, 480 ticks a quarter).
 - **MIDI read back** (`midi_to_notation`, for J in the hallway, §12.1): each track with notes, or with a length and none (a voice of rests), is a voice, as many as the set has; one note at a time in each (a note starting inside another is left out); times rounded to the set's shortest duration; each note and gap written in the set's durations, longest first. A file the hallway saved comes back as the same music, though a run of rests may come back as fewer events.
 - **Books:** `sieve-book-v1` gives an audio section only its length, so books hold `notes104` melodies alone; making a book section of a `notes2` line is refused rather than misread.
+
+### 3.4 Open-Ended Notes: the `notes3` Family (as built)
+
+A third note family, beside `notes104` and `notes2` and before sound itself, with nothing capped but MIDI. Each set is named by its id, `notes3/<LOW>..<HIGH>/q<TPQ>/d<LONGEST>/v<LEVELS>/V<VOICES>/t<TEMPO>/i<INSTRUMENTS>` (e.g. `notes3/C-1..G9/q4/d16/v8/V1/t120/i0`):
+
+- **Pitches:** every semitone from `LOW` to `HIGH` within MIDI 0-127 (C-1 to G9), at least an octave apart.
+- **Lengths:** whole ticks, `TPQ` to a quarter note (1-960), from 1 to `LONGEST` ticks (1-65,535).
+- **Loudness:** `LEVELS` levels (1-127); level k plays at velocity round(127 k / LEVELS).
+- **Voices:** 1 to 15, each on its own MIDI channel (the drums' channel 10 left out).
+- **Tempo and instruments:** quarter notes a minute (1-1000) and a General MIDI program a voice. They are how the set plays and saves, not which units it has: they do not change an address.
+- **Digits:** `(length − 1) + LONGEST × class`, class 0 a rest and `1 + p × LEVELS + (k − 1)` pitch p at level k. A set has `LONGEST × (1 + PITCHES × LEVELS)` symbols; digit 0, a rest of one tick, is the padding symbol. A unit is `VOICES × L` events, voice by voice.
+- **Notation:** `C#4:3!5` is C#4 for 3 ticks at level 5; `R:2` a rest of 2 ticks; voices between ` // `. The length may be one of notes2's codes instead (`E4q`, `Bb3e.`), and either part may be left out.
+- **Files:** a unit saves as a format-1 MIDI file with `TPQ` ticks a quarter, a tempo track, and a track per voice with its instrument and each note at its level's velocity. A MIDI file reads back with times rounded to the set's ticks and velocities to the nearest level (a tie to the louder); its tempo and instruments are not read, being the line's. It comes back as the same music, though a run of rests may come back as fewer events (MIDI has no rests).
+- **Filters:** a stack judges each voice on its own (`line_voices`). The general filters apply; the melody plugins (`symbols notes*`) do not yet, being written for notes2's digits.
+- **Books:** refused, as `notes2` and `pcm` are.
 
 ### 3.3 Sound Itself: the `pcm` Set (as built)
 
@@ -253,6 +269,7 @@ Pasted input is fitted to the line's parameter set by **fixed, versioned rules**
 - **Audio (`canon-notes-v1`):** note notation (`C4q F#5e Bb4h Rq`) converts to the 104-symbol event alphabet (a rest or C4–C6, each with four durations). Flats are written as sharps, out-of-range notes move by whole octaves into C4–C6, and the last unit is padded with eighth rests.
 - **Audio, `notes2` (`canon-notes-v2`):** as v1, with the durations `s e e. q q. h h. w` (a missing one is `q`), voices separated by `//` (fewer voices than the line's are filled with rests; more are an error), pitches moved by whole octaves into the set's range, and a duration the set lacks replaced by the nearest it has by length, a tie going to the longer. Each voice is cut into runs of `L`, every voice is padded to the same number of runs with digit 0, and unit `k` holds run `k` of every voice. Output uses sharps and ` // ` between voices. The oracle has its own implementation, and `tests/vectors_notes2_v1.tsv` pins the units, the report, the notation and each MIDI file's SHA-256.
 
+- **Audio, `notes3` (`canon-notes-v3`):** a missing length is a quarter (`TPQ` ticks); a notes2 code is round(sixteenths × TPQ / 4) ticks, at least 1 (reported when not whole); a missing level is the one whose velocity is nearest 96 (what notes104 and notes2 play at), a tie to the louder, and a level above `LEVELS` is `LEVELS` (reported); flats become sharps; a pitch outside the range moves by whole octaves into it; a length beyond `LONGEST` is the event for `LONGEST` ticks, then rests of at most `LONGEST` for the remainder (reported); fewer voices than the set's are filled with rests, more are an error; each voice is cut into runs of L and padded with digit 0. A MIDI file given to warp is read back first. The oracle has its own implementation, and `tests/vectors_notes3_v1.tsv` pins the units, the report, the notation and each MIDI file's SHA-256.
 - **Audio, `pcm` (`canon-pcm-v1`):** a sound file (WAV, read by Sieve itself: PCM of 8, 16, 24 or 32 bits, or 32- or 64-bit floating point, plain or extensible; any other format through ffmpeg, its first audio stream decoded as stored, `-flags +bitexact`, never resampled or mixed there). Every sample is first a signed 32-bit number: 8-bit WAV's unsigned bytes centred, shorter samples shifted up, floating point scaled by 2^31, rounded half up and clamped. Then, in this order: (1) channels: to one channel, the mean of all of them, rounded half up; to C of more, the first C; to more than there are, the last repeated; (2) rate: exact area-averaging, as pictures are stretched: target sample t spans [t/R, (t+1)/R) seconds and is the mean of the source samples over that span, each weighted by how much of it it covers, rounded half up (the same rule up and down; upward it holds each sample), with ceil(n·R/S) samples made and the last, if the sound ends inside it, the mean of what it covers; (3) depth: rounded half up to the set's bits and clamped (reported as clipped); (4) units: each channel cut into runs of L, every channel padded with silence to the same number of runs; unit k holds run k of every channel. The engine does it a block at a time in integer spans; the oracle has its own implementation in exact fractions, and `tests/vectors_pcm_v1.tsv` pins the units, the report and each WAV file's SHA-256 (every WAV encoding, mixing, splitting, rates up and down, 1 to 31 bits, clipping).
 
 Palettes are pinned by the implementation: `mono` (2), `ega16` (16), `rgb332` (256) and `rgb24` (16,777,216). Index 0 is black in every palette.

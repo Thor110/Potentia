@@ -46,8 +46,10 @@ const Option kLineOptions = {
     "text   --length L (required)  --alphabet SPEC (lower27)  --canon v2|v1\n"
     "       --model ID|PATH|none  (guided ordering; default: the alphabet's default model)\n"
     "image  --width W (10)  --height H (10)  --palette mono|ega16|rgb332|rgb24 (mono)\n"
-    "audio  --length N note events (16)  --note-set notes104|notes2|pcm (notes104)\n"
+    "audio  --length N note events (16)  --note-set notes104|notes2|notes3|pcm (notes104)\n"
     "       notes2: --low C3  --high C6  --durations seEqQhHw  --voices 1..4; --length is per voice\n"
+    "       notes3: --low C-1  --high G9  --tpq 4  --longest 16  --levels 8  --voices 1..15\n"
+    "               --tempo 120  --instruments 0[,0...]; --length is per voice\n"
     "       pcm: sound itself, --rate HZ (8000)  --bits 1..31 (8)  --channels C (1); --length is\n"
     "       samples per channel (one second at the rate unless given)\n"
     "video  --width W (5)  --height H (5)  --frames F (8)  --palette ... (mono)\n"
@@ -693,6 +695,11 @@ const std::vector<Page>& pages()
          "  with its own time). --length is then events per voice. Notation adds s and the dotted\n"
          "  e. q. h., and // between voices: C4q E4q. // C3w. Durations the set lacks become the\n"
          "  nearest it has. Filters judge each voice on its own (canon-notes-v2).\n"
+         "  --note-set notes3 is open-ended notes: any MIDI pitches (--low C-1 --high G9), lengths in\n"
+         "  ticks (--tpq ticks a quarter note, 4; --longest, 16), loudness (--levels, 8), 1 to 15\n"
+         "  voices, a tempo (--tempo, 120) and an instrument a voice (--instruments, General MIDI\n"
+         "  programs). Notation C#4:3!5 is C#4 for 3 ticks at level 5; R:2 a rest of 2 ticks; notes2's\n"
+         "  codes (E4q, Bb3e.) work too. --file may be a MIDI file (canon-notes-v3).\n"
          "  --note-set pcm holds sound itself rather than notes: --rate samples a second (8000),\n"
          "  --bits a sample (1 to 31, default 8) and --channels (1). --length is samples per\n"
          "  channel (a second at the rate unless given). Each sample is one digit, silence digit 0.\n"
@@ -710,6 +717,7 @@ const std::vector<Page>& pages()
          {{"sieve info --line image --width 16 --height 16 --palette ega16", "size of the 16x16 EGA image space"},
           {"sieve warp --line audio --length 8 \"C4q E4q G4q C5h\"", "an 8-event melody"},
           {"sieve warp --line audio --note-set notes2 --voices 2 --length 8 \"C4q E4q. G4h // C3w\"", "two voices on the larger note set"},
+          {"sieve warp --line audio --note-set notes3 --voices 2 --length 8 \"C#4:3!5 R:1 E4q // C2:16!3\"", "open-ended notes, in ticks and levels"},
           {"sieve warp --line audio --note-set pcm --rate 8000 --bits 8 --file voice.wav", "a second of sound at a time, as samples"},
           {"sieve browse --line video --count 1", "one random animation, frames side by side"}}},
     };

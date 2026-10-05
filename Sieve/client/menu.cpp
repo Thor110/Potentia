@@ -29,6 +29,7 @@
 
 #include "sieve/alphabet.hpp"
 #include "sieve/audio.hpp"
+#include "sieve/notes3.hpp"
 #include "sieve/sound.hpp"
 #include "sieve/filter.hpp"
 #include "sieve/plugin.hpp"
@@ -38,6 +39,7 @@
 #include "sieve/image.hpp"
 
 #include <algorithm>
+#include <optional>
 #include <atomic>
 #include <condition_variable>
 #include <deque>
@@ -80,7 +82,32 @@ sieve::NoteSet note_set_of_settings(const Settings& s)
 }
 const std::vector<std::string> kNoteDurationPresets = {"seEqQhHw", "seqhw", "eEqQhHw", "eqhw", "qhw", "sq"};
 // The audio line's sets, in the order NOTE SET steps through them.
-const std::vector<std::string> kNoteSets = {"notes104", "notes2", "pcm"};
+const std::vector<std::string> kNoteSets = {"notes104", "notes2", "notes3", "pcm"};
+// notes3's lengths, as LENGTHS steps through them: ticks a quarter note, and the longest length in
+// ticks. The settings file takes any.
+const std::vector<std::pair<uint32_t, uint32_t>> kNotes3Lengths = {{4, 16}, {4, 32}, {2, 8}, {8, 32}, {12, 48}, {24, 96}, {4, 64}};
+bool is_notes3(const Settings& s) { return s.note_set == "notes3"; }
+// The notes3 set the settings make, or nothing if they cannot make one (notes104 is used then).
+std::optional<sieve::Notes3Set> notes3_of_settings(const Settings& s)
+{
+    try
+    {
+        std::vector<uint32_t> ins;
+        for (size_t at = 0;;)
+        {
+            const size_t c = s.n3_instruments.find(',', at);
+            ins.push_back(uint32_t(std::stoul(s.n3_instruments.substr(at, c == std::string::npos ? std::string::npos : c - at))));
+            if (c == std::string::npos) break;
+            at = c + 1;
+        }
+        return sieve::make_notes3_set(sieve::notes3_midi_of(s.n3_low), sieve::notes3_midi_of(s.n3_high), s.n3_tpq, s.n3_longest, s.n3_levels,
+                                      s.n3_voices, s.n3_tempo, ins);
+    }
+    catch (const std::exception&)
+    {
+        return std::nullopt;
+    }
+}
 // The sample rates SAMPLE RATE steps through; the settings file takes any rate.
 const std::vector<uint32_t> kPcmRates = {8000, 11025, 16000, 22050, 32000, 44100, 48000, 96000, 192000};
 bool is_pcm(const Settings& s) { return s.note_set == "pcm"; }
@@ -101,6 +128,8 @@ bool pcm_ok(const Settings& s)
 std::pair<uint32_t, uint64_t> audio_shape(const Settings& s)
 {
     if (is_pcm(s) && pcm_ok(s)) return {uint32_t(1) << s.pcm_bits, uint64_t(s.samples) * s.pcm_channels};
+    if (is_notes3(s))
+        if (const auto n3 = notes3_of_settings(s)) return {n3->base(), uint64_t(s.notes) * n3->voices};
     const sieve::NoteSet set = note_set_of_settings(s);
     return {set.base(), uint64_t(s.notes) * set.voices};
 }
@@ -297,6 +326,14 @@ Settings Settings::from_args(const sieve::cli::Args& a)
     s.note_high = a.get("note-high", s.note_high);
     s.note_durations = a.get("note-durations", s.note_durations);
     s.voices = parse_u32(a, "voices", s.voices);
+    s.n3_low = a.get("notes3-low", s.n3_low);
+    s.n3_high = a.get("notes3-high", s.n3_high);
+    s.n3_instruments = a.get("notes3-instruments", s.n3_instruments);
+    s.n3_tpq = parse_u32(a, "notes3-tpq", s.n3_tpq);
+    s.n3_longest = parse_u32(a, "notes3-longest", s.n3_longest);
+    s.n3_levels = parse_u32(a, "notes3-levels", s.n3_levels);
+    s.n3_voices = parse_u32(a, "notes3-voices", s.n3_voices);
+    s.n3_tempo = parse_u32(a, "notes3-tempo", s.n3_tempo);
     s.samples = parse_u32(a, "samples", s.samples);
     s.pcm_rate = parse_u32(a, "pcm-rate", s.pcm_rate);
     s.pcm_bits = parse_u32(a, "pcm-bits", s.pcm_bits);
@@ -341,6 +378,14 @@ void Settings::apply(sieve::cli::Args& a) const
     a.opts["note-high"] = note_high;
     a.opts["note-durations"] = note_durations;
     a.opts["voices"] = std::to_string(voices);
+    a.opts["notes3-low"] = n3_low;
+    a.opts["notes3-high"] = n3_high;
+    a.opts["notes3-instruments"] = n3_instruments;
+    a.opts["notes3-tpq"] = std::to_string(n3_tpq);
+    a.opts["notes3-longest"] = std::to_string(n3_longest);
+    a.opts["notes3-levels"] = std::to_string(n3_levels);
+    a.opts["notes3-voices"] = std::to_string(n3_voices);
+    a.opts["notes3-tempo"] = std::to_string(n3_tempo);
     a.opts["samples"] = std::to_string(samples);
     a.opts["pcm-rate"] = std::to_string(pcm_rate);
     a.opts["pcm-bits"] = std::to_string(pcm_bits);
@@ -861,6 +906,15 @@ void Menu::adjust(int dir, int step)
     case kAudioRow + 1: s_.note_set = cycle(kNoteSets, s_.note_set, dir); break;
     // On the pcm set the four rows below are its sample rate, bits, (none) and channels.
     case kAudioRow + 2:
+        if (is_notes3(s_))
+        {
+            // A semitone at a time (Shift: an octave), within MIDI 0..127 and at least an octave apart.
+            const int by = dir * (step >= 10 ? 12 : 1);
+            int lo = int(sieve::notes3_midi_of(s_.n3_low)), hi = int(sieve::notes3_midi_of(s_.n3_high));
+            lo = std::clamp(lo + by, 0, hi - 11);
+            s_.n3_low = sieve::notes3_name(uint32_t(lo));
+            break;
+        }
         if (is_pcm(s_))
         {
             // The standard rates in turn (PgUp/PgDn: double or halve); from a rate not among them,
@@ -882,6 +936,14 @@ void Menu::adjust(int dir, int step)
         [[fallthrough]];
     case kAudioRow + 3:
     {
+        if (is_notes3(s_))
+        {
+            const int by = dir * (step >= 10 ? 12 : 1);
+            int lo = int(sieve::notes3_midi_of(s_.n3_low)), hi = int(sieve::notes3_midi_of(s_.n3_high));
+            hi = std::clamp(hi + by, lo + 11, 127);
+            s_.n3_high = sieve::notes3_name(uint32_t(hi));
+            break;
+        }
         if (is_pcm(s_))
         {
             s_.pcm_bits = uint32_t(std::clamp(int(s_.pcm_bits) + dir, 1, int(sieve::kPcmMaxBits)));
@@ -899,9 +961,17 @@ void Menu::adjust(int dir, int step)
     }
     case kAudioRow + 4:
         if (s_.note_set == "notes2") s_.note_durations = cycle(kNoteDurationPresets, s_.note_durations, dir);
+        if (is_notes3(s_))
+        {
+            // The presets in turn; from lengths not among them, the first.
+            auto it = std::find(kNotes3Lengths.begin(), kNotes3Lengths.end(), std::make_pair(s_.n3_tpq, s_.n3_longest));
+            const int n = int(kNotes3Lengths.size()), i = it == kNotes3Lengths.end() ? (dir > 0 ? -1 : 0) : int(it - kNotes3Lengths.begin());
+            std::tie(s_.n3_tpq, s_.n3_longest) = kNotes3Lengths[size_t(((i + dir) % n + n) % n)];
+        }
         break;
     case kAudioRow + 5:
         if (s_.note_set == "notes2") s_.voices = uint32_t(std::clamp(int(s_.voices) + dir, 1, int(sieve::kMaxVoices)));
+        if (is_notes3(s_)) s_.n3_voices = uint32_t(std::clamp(int(s_.n3_voices) + dir, 1, int(sieve::kNotes3MaxVoices)));
         if (is_pcm(s_))
         {
             num(s_.pcm_channels);
@@ -1270,20 +1340,27 @@ void Menu::render()
         {1, tr("setup.width"), trf("setup.px", {n(s_.image_w)})},
         {-1, tr("setup.height"), trf("setup.px", {n(s_.image_h)})},
         {-1, tr("setup.palette"), trf("setup.palette.value", {s_.image_palette, n(palette_size(s_.image_palette))})},
-        is_pcm(s_) ? Row{2, tr(s_.pcm_channels > 1 ? "setup.samples.per_channel" : "setup.samples"), n(s_.samples)}
-                   : Row{2, tr(note_set_of_settings(s_).voices > 1 ? "setup.notes.per_voice" : "setup.notes"), n(s_.notes)},
-        {-1, tr("setup.note_set"), is_pcm(s_) ? (pcm_ok(s_) ? trf("setup.note_set.pcm", {n(sieve::make_pcm_format(s_.pcm_rate, s_.pcm_bits, s_.pcm_channels).base())})
+        is_pcm(s_)      ? Row{2, tr(s_.pcm_channels > 1 ? "setup.samples.per_channel" : "setup.samples"), n(s_.samples)}
+        : is_notes3(s_) ? Row{2, tr(s_.n3_voices > 1 ? "setup.notes.per_voice" : "setup.notes"), n(s_.notes)}
+                        : Row{2, tr(note_set_of_settings(s_).voices > 1 ? "setup.notes.per_voice" : "setup.notes"), n(s_.notes)},
+        {-1, tr("setup.note_set"), is_notes3(s_) ? (notes3_of_settings(s_) ? trf("setup.note_set.notes3", {n(notes3_of_settings(s_)->base())})
+                                                                          : tr("setup.note_set.notes3_bad"))
+                                   : is_pcm(s_) ? (pcm_ok(s_) ? trf("setup.note_set.pcm", {n(sieve::make_pcm_format(s_.pcm_rate, s_.pcm_bits, s_.pcm_channels).base())})
                                                             : tr("setup.note_set.pcm_bad"))
                                    : note_set_of_settings(s_).legacy && s_.note_set == "notes2" ? tr("setup.note_set.bad")
                                    : s_.note_set == "notes2" ? trf("setup.note_set.value", {n(note_set_of_settings(s_).base())})
                                                              : tr("setup.note_set.fixed")},
-        is_pcm(s_) ? Row{-1, tr("setup.pcm_rate"), trf("setup.pcm_rate.value", {n(s_.pcm_rate)})}
-                   : Row{-1, tr("setup.note_low"), s_.note_set == "notes2" ? s_.note_low : tr("setup.notes2_only")},
-        is_pcm(s_) ? Row{-1, tr("setup.pcm_bits"), n(s_.pcm_bits)}
-                   : Row{-1, tr("setup.note_high"), s_.note_set == "notes2" ? s_.note_high : tr("setup.notes2_only")},
-        {-1, tr("setup.note_durations"), s_.note_set == "notes2" ? s_.note_durations : tr("setup.notes2_only")},
-        is_pcm(s_) ? Row{-1, tr("setup.pcm_channels"), n(s_.pcm_channels)}
-                   : Row{-1, tr("setup.voices"), s_.note_set == "notes2" ? n(s_.voices) : tr("setup.notes2_only")},
+        is_pcm(s_)      ? Row{-1, tr("setup.pcm_rate"), trf("setup.pcm_rate.value", {n(s_.pcm_rate)})}
+        : is_notes3(s_) ? Row{-1, tr("setup.note_low"), s_.n3_low}
+                        : Row{-1, tr("setup.note_low"), s_.note_set == "notes2" ? s_.note_low : tr("setup.notes2_only")},
+        is_pcm(s_)      ? Row{-1, tr("setup.pcm_bits"), n(s_.pcm_bits)}
+        : is_notes3(s_) ? Row{-1, tr("setup.note_high"), s_.n3_high}
+                        : Row{-1, tr("setup.note_high"), s_.note_set == "notes2" ? s_.note_high : tr("setup.notes2_only")},
+        is_notes3(s_) ? Row{-1, tr("setup.notes3_lengths"), trf("setup.notes3_lengths.value", {n(s_.n3_tpq), n(s_.n3_longest)})}
+                      : Row{-1, tr("setup.note_durations"), s_.note_set == "notes2" ? s_.note_durations : tr(is_pcm(s_) ? "setup.pcm_unused" : "setup.notes2_only")},
+        is_pcm(s_)      ? Row{-1, tr("setup.pcm_channels"), n(s_.pcm_channels)}
+        : is_notes3(s_) ? Row{-1, tr("setup.voices"), n(s_.n3_voices)}
+                        : Row{-1, tr("setup.voices"), s_.note_set == "notes2" ? n(s_.voices) : tr("setup.notes2_only")},
         {3, tr("setup.width"), trf("setup.px", {n(s_.video_w)})},
         {-1, tr("setup.height"), trf("setup.px", {n(s_.video_h)})},
         {-1, tr("setup.frames"), n(s_.frames)},

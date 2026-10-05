@@ -641,3 +641,56 @@ are cheap and because they are the sort of thing that is lost otherwise.
   - **Lines that judge only** (utf8-valid past its table, not-an-item asking for melodies) can be
     scored by estimate (`~` in the tally) but not by compact address, so COST shows them as
     unavailable rather than wrong.
+
+## 13. Composition dimensions (discussed 5 October 2026; not decided, nothing built)
+
+**The principle.** Keep every dimension's unit as small as it can be, and get length and arrangement
+from a dimension of compositions above it, as books are made of pages. A composition of N units
+keeps its base's filtered share to the power of N (before any filter at the seams), so filtering
+compounds upward, and exact counting stays where it fits: the short units. The sound filters show
+why: they count a tenth of a second exactly and only judge a whole second, whose table would need
+about 31 GB.
+
+**The shape Edward chose.** Each composition dimension holds one kind of thing, so none is vaster
+than before:
+
+| Base (short units) | Composition |
+| :--- | :--- |
+| pages | books (as now) |
+| audio (a stretch of sound, or a bar of notes) | tracks |
+| video (as now) | movies |
+
+No existing line is renamed: audio and video keep their names and ids, and the two new dimensions
+take new names, so every address made so far stands. A track or movie holds base units whose length
+is a setting, as a book holds pages of any length.
+
+- **Images and models** have no lower dimension of this kind. Two far-off ideas belong here,
+  though:
+  - **A tile dimension for images:** pictures made of small tiles, as the vault's PDQ check
+    reads a picture in blocks. Tiles reduce the combinations a picture can have to those its
+    tiles allow. It has no name yet.
+  - **A world space for models:** a higher dimension that composes models and textures.
+- **Seam filters:** each composition gets filters at its joins: sound that doesn't jump between
+  seconds, a key kept across bars, frames that carry on from one video unit to the next.
+- **The same content in two places:** a base line set long enough to hold a whole composition
+  overlaps it, as the pages and books lines already overlap. Either it stands, or a
+  cross-dimension filter removes one from the other, as `not-a-file-v1` does with the binary line.
+
+**The problems to solve first.**
+- **Address stability:**
+  - Line names are in the symbol ids that scrambled addresses are keyed on (`video/mono/5x5x8`),
+    in settings files, in `--line`, in book records' section shapes and in CI's pinned outputs.
+    Renaming a line would move its addresses, so none is renamed: the names above add tracks and
+    movies and leave every existing line as it is.
+  - Moving the cover and title from the audio and video lines up to their compositions would
+    reshape (and readdress) those lines: a deliberate decision.
+- **The setup menu** is already crowded. Two more dimensions, each with its own settings, need a
+  different layout (per-dimension pages, or settings collapsed until chosen).
+- **The hallway counts seven dimensions in about 26 places.** The list of dimensions should become
+  data (each defined once: theme, settings, filters, doors) before any is added.
+
+**The order suggested.**
+1. Make the dimensions data, with no change in behaviour.
+2. Build a composition engine, a generalised `BookSpace`, and move books onto it unchanged
+   (`bookspace-v1` addresses kept).
+3. Add tracks and movies, one at a time.

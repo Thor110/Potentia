@@ -461,6 +461,17 @@ void Hallway::open_as_kind(const std::vector<uint8_t>& bytes)
         for (const auto& u : units)
             if (cli::unit_withheld(l, u)) throw cli::VaultWithheld("withheld by the vault");
     }
+    else if (to == 2 && sieve::is_notes3_symbols(lines_[2].space.symbols_id()))
+    {
+        // Open-ended notes read a MIDI file as warp does (canon-notes-v3, MIDI read back first).
+        Args a;
+        a.opts["line"] = "audio";
+        a.positional = {std::string(bytes.begin(), bytes.end())};
+        const WarpInput w = read_warp_input(lines_[2], a);
+        units = w.units;
+        report = w.report.front();
+        for (size_t i = 1; i < w.report.size(); ++i) report += "; " + w.report[i];
+    }
     else if (to == 2)
     {
         const Line& l = lines_[2];

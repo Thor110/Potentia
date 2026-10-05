@@ -8,6 +8,7 @@
 #include "media_decode.hpp"
 
 #include "sieve/audio.hpp"
+#include "sieve/notes3.hpp"
 #include "sieve/sound.hpp"
 #include "sieve/utf8.hpp"
 
@@ -153,13 +154,38 @@ Line make_line(const Args& a)
         for (const char* k : {"rate", "bits", "channels"})
             if (a.has(k)) throw std::invalid_argument(std::string("--") + k + " is for --note-set pcm");
         const uint32_t length = a.get_positive("length", 16);
+        if (family == "notes3")
+        {
+            // Open-ended notes (sieve/notes3.hpp): --low, --high (any MIDI notes), --tpq, --longest,
+            // --levels, --voices, --tempo, --instruments; --length is events per voice.
+            if (a.has("durations")) throw std::invalid_argument("--durations is for notes2 (notes3 takes --tpq and --longest)");
+            std::vector<uint32_t> ins;
+            const std::string list = a.get("instruments", "0");
+            for (size_t at = 0;;)
+            {
+                const size_t c = list.find(',', at);
+                const std::string one = list.substr(at, c == std::string::npos ? std::string::npos : c - at);
+                if (one.empty() || one.find_first_not_of("0123456789") != std::string::npos)
+                    throw std::invalid_argument("--instruments is General MIDI programs, comma separated (e.g. 0,40)");
+                ins.push_back(uint32_t(std::stoul(one)));
+                if (c == std::string::npos) break;
+                at = c + 1;
+            }
+            const Notes3Set set = make_notes3_set(notes3_midi_of(a.get("low", "C-1")), notes3_midi_of(a.get("high", "G9")), a.get_positive("tpq", 4),
+                                                  a.get_positive("longest", 16), a.get_positive("levels", 8), a.get_positive("voices", 1),
+                                                  a.get_positive("tempo", 120), ins);
+            if (uint64_t(length) * set.voices > 0xFFFFFFFFull) throw std::invalid_argument("too many events in one unit");
+            return Line{kind, nullptr, kDefaultCanon, {}, Space(set.id(), set.base(), length * set.voices, key), nullptr, {}};
+        }
+        for (const char* k : {"tpq", "longest", "levels", "tempo", "instruments"})
+            if (a.has(k)) throw std::invalid_argument(std::string("--") + k + " is for --note-set notes3");
         if (family == "notes104")
         {
             for (const char* k : {"low", "high", "durations", "voices"})
                 if (a.has(k)) throw std::invalid_argument(std::string("--") + k + " is for --note-set notes2 (notes104 is fixed: C4-C6, e q h w, one voice)");
             return Line{kind, nullptr, kDefaultCanon, {}, Space(kNotesSymbolsId, kNoteSymbols, length, key), nullptr, {}};
         }
-        if (family != "notes2") throw std::invalid_argument("unknown note set '" + family + "' (notes104, notes2 or pcm)");
+        if (family != "notes2") throw std::invalid_argument("unknown note set '" + family + "' (notes104, notes2, notes3 or pcm)");
         const NoteSet set = make_note_set(note_midi_of(a.get("low", "C3")), note_midi_of(a.get("high", "C6")), a.get("durations", kNoteDurationCodes),
                                           a.get_positive("voices", 1));
         if (uint64_t(length) * set.voices > 0xFFFFFFFFull) throw std::invalid_argument("too many events in one unit");
@@ -191,6 +217,14 @@ std::string Line::describe_symbols() const
             return std::to_string(f.channels) + " channel(s) x " + std::to_string(space.unit_length() / f.channels) + " samples at " +
                    std::to_string(f.rate) + " a second, each one of " + std::to_string(f.base()) + " (" + std::to_string(f.bits) +
                    "-bit, two's complement)";
+        }
+        if (is_notes3_symbols(space.symbols_id()))
+        {
+            const Notes3Set s = notes3_set_of(space.symbols_id());
+            return std::to_string(s.voices) + " voice(s) x " + std::to_string(space.unit_length() / s.voices) + " note events, each one of " +
+                   std::to_string(s.base()) + " (a rest or one of " + std::to_string(s.pitches()) + " pitches " + notes3_name(s.low) + "-" +
+                   notes3_name(s.high) + " at " + std::to_string(s.levels) + " levels, x lengths of 1 to " + std::to_string(s.longest) + " ticks, " +
+                   std::to_string(s.tpq) + " a quarter; " + std::to_string(s.tempo) + " a minute)";
         }
         const NoteSet set = note_set_of(space.symbols_id());
         if (set.legacy) return std::to_string(space.unit_length()) + " note events, each one of 104 (rest or C4-C6, x 4 durations)";
@@ -266,6 +300,31 @@ WarpInput read_warp_input(const Line& line, const Args& a)
         }
         const std::string input = a.has("file") ? read_file(a.get("file")) : joined_positional(a);
         if (input.empty()) throw std::invalid_argument("nothing to warp: give notes like \"C4q E4q G4h\" or --file PATH");
+        if (is_notes3_symbols(line.space.symbols_id()))
+        {
+            const Notes3Set s = notes3_set_of(line.space.symbols_id());
+            // A MIDI file (by its signature) is read back as notation first.
+            std::string notation = input;
+            if (input.rfind("MThd", 0) == 0)
+            {
+                std::vector<std::string> notes;
+                notation = midi_to_notes3(std::vector<uint8_t>(input.begin(), input.end()), s, &notes);
+                for (const std::string& n : notes) w.report.push_back("midi: " + n);
+            }
+            const Notes3CanonResult c = canonicalise_notes3(notation, s, line.space.unit_length() / s.voices);
+            w.report.insert(w.report.begin(), std::string(kNotes3CanonVersion) + ": " + std::to_string(c.events) + " event(s), " +
+                                                  std::to_string(c.units.size()) + " unit(s)");
+            if (c.flats_rewritten) w.report.push_back(count_line("flats as sharps", c.flats_rewritten));
+            if (c.octave_shifted) w.report.push_back(count_line("octave shifted", c.octave_shifted, "moved into the line's range"));
+            if (c.default_lengths) w.report.push_back(count_line("no length", c.default_lengths, "a quarter used"));
+            if (c.default_levels) w.report.push_back(count_line("no level", c.default_levels, "the level nearest velocity 96"));
+            if (c.lengths_rounded) w.report.push_back(count_line("lengths rounded", c.lengths_rounded, "to whole ticks"));
+            if (c.lengths_split) w.report.push_back(count_line("too long", c.lengths_split, "the event for the longest, then rests"));
+            if (c.levels_clamped) w.report.push_back(count_line("levels too high", c.levels_clamped, "the loudest used"));
+            if (c.padding) w.report.push_back(count_line("padding", c.padding, "rests filling the voices"));
+            w.units = c.units;
+            break;
+        }
         const NoteSet set = note_set_of(line.space.symbols_id());
         const NotesCanonResult c = set.legacy ? canonicalise_notes(input, line.space.unit_length())
                                               : canonicalise_notes2(input, set, line.space.unit_length() / set.voices);
@@ -323,6 +382,7 @@ std::string preview(const Line& line, const std::vector<uint32_t>& digits)
     case LineKind::Text: return "\"" + utf8_encode(line.space.text_of(digits)) + "\"";
     case LineKind::Audio:
         if (is_pcm_symbols(line.space.symbols_id())) return pcm_preview(pcm_format_of(line.space.symbols_id()), digits, 64);
+        if (is_notes3_symbols(line.space.symbols_id())) return notes3_to_notation(notes3_set_of(line.space.symbols_id()), digits);
         return notes_to_notation(note_set_of(line.space.symbols_id()), digits);
     case LineKind::Image:
     case LineKind::Video:
@@ -359,6 +419,7 @@ std::string audio_file(const Line& line, const std::vector<uint32_t>& digits)
 {
     const std::string& id = line.space.symbols_id();
     if (is_pcm_symbols(id)) return pcm_to_wav(pcm_format_of(id), digits);
+    if (is_notes3_symbols(id)) return notes3_to_midi(notes3_set_of(id), digits);
     return notes_to_midi(note_set_of(id), digits);
 }
 

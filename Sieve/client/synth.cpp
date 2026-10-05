@@ -6,7 +6,7 @@
 namespace hallway {
 
 namespace {
-constexpr int kRate = 44100;
+constexpr int kRate = int(kSynthRate);
 constexpr float kSixteenth = 0.125f; // seconds, at 120 bpm
 } // namespace
 
@@ -86,6 +86,51 @@ std::string Synth::play_sound(const sieve::PcmFormat& f, const std::vector<uint3
     stream_ = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr);
     if (!stream_) return std::string("audio unavailable: ") + SDL_GetError();
     SDL_PutAudioStreamData(stream_, pcm.data(), int(std::min<size_t>(pcm.size() * sizeof(int16_t), size_t(INT32_MAX))));
+    SDL_FlushAudioStream(stream_);
+    SDL_ResumeAudioStreamDevice(stream_);
+    return "";
+}
+
+std::vector<float> render_notes3(const sieve::Notes3Set& set, const std::vector<uint32_t>& digits, uint32_t rate)
+{
+    const double seconds_a_tick = 60.0 / double(set.tempo) / double(set.tpq);
+    const size_t most = size_t(rate) * 600;
+    const size_t voices = std::max<uint32_t>(1, set.voices), per = digits.size() / voices;
+    std::vector<float> pcm;
+    for (size_t v = 0; v < voices; ++v)
+    {
+        double at = 0; // seconds
+        for (size_t e = v * per; e < (v + 1) * per; ++e)
+        {
+            const uint32_t d = digits[e];
+            const double len = double(set.ticks(d)) * seconds_a_tick;
+            const size_t from = size_t(at * rate), n = size_t(len * rate);
+            at += len;
+            if (from >= most) break;
+            if (set.rest(d) || n == 0) continue;
+            const float freq = 440.0f * std::pow(2.0f, (float(set.midi(d)) - 69.0f) / 12.0f);
+            const float loud = 0.12f * float(set.velocity(set.level(d))) / 127.0f / std::sqrt(float(voices));
+            if (pcm.size() < std::min(most, from + n)) pcm.resize(std::min(most, from + n), 0.0f);
+            for (size_t i = 0; i < n && from + i < most; ++i)
+            {
+                const float phase = std::fmod(float(i) * freq / float(rate), 1.0f);
+                const float env = std::fmin(1.0f, std::fmin(float(i) / 200.0f, float(n - i) / 800.0f));
+                pcm[from + i] += (phase < 0.5f ? loud : -loud) * env;
+            }
+        }
+    }
+    return pcm;
+}
+
+std::string Synth::play_samples(const std::vector<float>& mono, uint32_t rate)
+{
+    stop();
+    if (!SDL_WasInit(SDL_INIT_AUDIO) && !SDL_InitSubSystem(SDL_INIT_AUDIO))
+        return std::string("audio unavailable: ") + SDL_GetError();
+    const SDL_AudioSpec spec{SDL_AUDIO_F32, 1, int(rate)};
+    stream_ = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr);
+    if (!stream_) return std::string("audio unavailable: ") + SDL_GetError();
+    SDL_PutAudioStreamData(stream_, mono.data(), int(std::min<size_t>(mono.size() * sizeof(float), size_t(INT32_MAX))));
     SDL_FlushAudioStream(stream_);
     SDL_ResumeAudioStreamDevice(stream_);
     return "";

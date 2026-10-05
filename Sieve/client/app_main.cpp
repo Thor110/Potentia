@@ -50,8 +50,11 @@ const char* kUsage =
     "  --canon v2|v1       text: warp rules (default v2)\n"
     "  --image-width W  --image-height H  --image-palette ID    image line (10, 10, mono)\n"
     "  --notes N           audio: notes per book (default 16; per voice on notes2)\n"
-    "  --note-set notes104|notes2|pcm  --note-low C3  --note-high C6  --note-durations seEqQhHw  --voices 1..4\n"
+    "  --note-set notes104|notes2|notes3|pcm  --note-low C3  --note-high C6  --note-durations seEqQhHw  --voices 1..4\n"
     "                      audio: the note set (default notes104; low to voices are notes2's)\n"
+    "  --notes3-low C-1  --notes3-high G9  --notes3-tpq 4  --notes3-longest 16  --notes3-levels 8\n"
+    "  --notes3-voices 1..15  --notes3-tempo 120  --notes3-instruments 0[,0...]\n"
+    "                      audio, --note-set notes3: open-ended notes (lengths in ticks, loudness levels)\n"
     "  --samples N  --pcm-rate HZ  --pcm-bits B  --pcm-channels C\n"
     "                      audio, --note-set pcm: sound itself, N samples a channel per book\n"
     "                      (default 8000), at 8000 a second, 8 bits (1-31), 1 channel\n"
@@ -163,6 +166,25 @@ bool pcm_settings_ok(const Args& a)
     }
 }
 
+// Whether the settings make a notes3 set (one they cannot make falls back to notes104).
+bool notes3_settings_ok(const Args& a)
+{
+    try
+    {
+        Args la;
+        la.opts["line"] = "audio";
+        la.opts["note-set"] = "notes3";
+        for (const char* k : {"low", "high", "tpq", "longest", "levels", "voices", "tempo", "instruments"})
+            if (a.has(std::string("notes3-") + k)) la.opts[k] = a.get(std::string("notes3-") + k);
+        (void)make_line(la);
+        return true;
+    }
+    catch (const std::exception&)
+    {
+        return false;
+    }
+}
+
 std::vector<Line> make_lines(const Args& a)
 {
     std::vector<Line> lines;
@@ -193,6 +215,18 @@ std::vector<Line> make_lines(const Args& a)
                 la.opts["rate"] = a.get("pcm-rate", "8000");
                 la.opts["bits"] = a.get("pcm-bits", "8");
                 la.opts["channels"] = a.get("pcm-channels", "1");
+            }
+            else if (a.get("note-set", "notes104") == "notes3" && notes3_settings_ok(a))
+            {
+                la.opts["note-set"] = "notes3";
+                la.opts["low"] = a.get("notes3-low", "C-1");
+                la.opts["high"] = a.get("notes3-high", "G9");
+                la.opts["tpq"] = a.get("notes3-tpq", "4");
+                la.opts["longest"] = a.get("notes3-longest", "16");
+                la.opts["levels"] = a.get("notes3-levels", "8");
+                la.opts["voices"] = a.get("notes3-voices", "1");
+                la.opts["tempo"] = a.get("notes3-tempo", "120");
+                la.opts["instruments"] = a.get("notes3-instruments", "0");
             }
             else if (a.get("note-set", "notes104") == "notes2")
             {
