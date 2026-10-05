@@ -1,0 +1,32 @@
+Verified Anchor System
+
+Anchors are loaded locally from sieve maps.				Remainder To Find
+
+My Anchors (data\anchors\edward-james-gordon-thor110)	- Audio
+
+- Binary	- Sieve v0.13.0 Self Extracting Installer (repository current [previous] release on the GitHub releases page) -> progressively adding each version with subsequent releases.
+- Pages		- Potentia/README.md? (contains my alignment thesis)
+- Image		- Potentia/Images/gallery-preview.png? (old image preview of originally planned library of babel like space for Potentia)
+Audio		- 
+- Video		- 2026-09-21 23-25-35.mp4 (first video preview of the Sieve system) (doesn't contain any audio)
+- Books		- Rope Around The Clock.txt (a paper I wrote on a simple mechanical tool I designed, presented in plain text)
+- Models	- An unfinished 3D model of a Spitfire which I never completed.
+
+Public Domain Anchors (data\anchors\public-domain)		- Binary - Pages - Audio
+
+Binary		- 
+Pages		-
+- Image		- Vitruvian.jpg - Leonardo Da Vinci's Vitruvian Man
+https://commons.wikimedia.org/wiki/File:Vitruvian.jpg
+Audio		- Hurrian Hymn No. 6
+Information sourced from
+https://virtual-museum-syria.org/damascus/56-tablet-musical-staff/
+Then reproduced under Sieve architecture
+- Video		- The Roundhay Garden Scene (1888) is widely considered the most historically significant public domain video as the oldest surviving film in existence.
+https://archive.org/details/roundhay-garden-scene-1888_202409
+- Books		- Kurd Lasswitz’s "The Universal Library" (1901): This is the German science fiction short story ("Die Universalbibliothek") that directly inspired Borges' take on the concept. Because Lasswitz died in 1910, his work is safely and fully in the public domain globally.
+https://www.math.tugraz.at/~prodinger/universalbibliothek.pdf
+Extracted to plain text
+- Models	- Utah Teapot
+https://graphics.cs.utah.edu/teapot/
+resolution 8, 1975 version, y-up
