@@ -258,8 +258,17 @@ void Hallway::view_raw()
     case LineKind::Audio:
         if (on_sound())
         {
+            // A picture of the waveform: a column a sample where the view is wide enough (as wide as
+            // the picture on an item may be drawn), each channel a band an eighth as tall as wide.
             const sieve::PcmFormat f = sieve::pcm_format_of(line().space.symbols_id());
-            view_.rows = utf32_rows(split_lines(audio_text(bk.unit, 64)));
+            const uint64_t L = bk.unit.size() / f.channels;
+            const double aspect = double(f.channels) / 8.0;
+            const uint32_t w = uint32_t(std::max<uint64_t>(1, std::min<uint64_t>(L, uint64_t(view_picture_px(aspect)))));
+            const uint32_t h = std::max<uint32_t>(f.channels, uint32_t(std::lround(double(w) * aspect)));
+            view_.picture = true;
+            view_.px = waveform_argb(bk.unit, w, h);
+            view_.pw = w;
+            view_.ph = h;
             view_.heading = named + trf("view.sound", {std::to_string(bk.unit.size() / f.channels), std::to_string(f.rate), std::to_string(f.bits),
                                                        std::to_string(f.channels)});
         }
@@ -282,6 +291,34 @@ void Hallway::view_raw()
         break;
     }
     }
+}
+
+std::vector<uint32_t> Hallway::waveform_argb(const Space::Digits& u, uint32_t w, uint32_t h) const
+{
+    const sieve::PcmFormat f = sieve::pcm_format_of(line().space.symbols_id());
+    const SDL_Color bg = theme().bg, ink = theme().edge;
+    const uint32_t back = argb(bg), fore = argb(ink);
+    // The silence line halfway between the two colours.
+    const uint32_t dim = 0xFF000000u | uint32_t((bg.r + ink.r) / 2) << 16 | uint32_t((bg.g + ink.g) / 2) << 8 | uint32_t((bg.b + ink.b) / 2);
+    std::vector<uint32_t> px(size_t(w) * h, back);
+    const double full = double(uint64_t(1) << (f.bits - 1));
+    for (uint32_t c = 0; c < f.channels; ++c)
+    {
+        const uint32_t top = uint32_t(uint64_t(h) * c / f.channels), bottom = uint32_t(uint64_t(h) * (c + 1) / f.channels);
+        const double band = double(bottom - top), mid = double(top) + band / 2.0, half = band * 0.45;
+        const std::vector<sieve::PcmSpan> env = sieve::pcm_envelope(f, u, c, w);
+        for (uint32_t x = 0; x < w; ++x)
+        {
+            const uint32_t m = std::min(bottom - 1, uint32_t(mid));
+            px[size_t(m) * w + x] = dim;
+            // Reaching back to the middle of the column before, as the item page draws it.
+            const double before = x ? (double(env[x - 1].lo) + double(env[x - 1].hi)) / 2 : double(env[x].lo);
+            const double hi = std::max(double(env[x].hi), before), lo = std::min(double(env[x].lo), before);
+            const int64_t y0 = std::lround(mid - hi / full * half), y1 = std::lround(mid - lo / full * half);
+            for (int64_t y = std::max<int64_t>(top, y0); y <= std::min<int64_t>(int64_t(bottom) - 1, y1); ++y) px[size_t(y) * w + x] = fore;
+        }
+    }
+    return px;
 }
 
 // Shows view `at` of the thing in hand, from the top, a picture fitted to the window.

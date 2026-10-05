@@ -318,6 +318,7 @@ Settings Settings::from_args(const sieve::cli::Args& a)
     if (s.limits_focus == "pages") s.limits_focus = "text";
     s.binary_bytes = parse_u32(a, "binary-length", s.binary_bytes);
     s.ffmpeg = a.get("ffmpeg", s.ffmpeg);
+    s.video_fps = parse_u32(a, "video-fps", s.video_fps);
     return s;
 }
 
@@ -359,6 +360,7 @@ void Settings::apply(sieve::cli::Args& a) const
     a.opts["close-up"] = closeup_text(closeup_px);
     a.opts["binary-length"] = std::to_string(binary_bytes);
     a.opts["limits-focus"] = limits_focus;
+    a.opts["video-fps"] = std::to_string(video_fps);
     if (ffmpeg.empty()) a.opts.erase("ffmpeg");
     else a.opts["ffmpeg"] = ffmpeg;
 }

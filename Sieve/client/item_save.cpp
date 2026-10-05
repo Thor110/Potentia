@@ -264,7 +264,7 @@ void Hallway::item_save_poll()
         else
         {
             const std::u8string s = path.u8string();
-            cli::save_unit(line(), bk.unit, std::string(s.begin(), s.end()), 16);
+            cli::save_unit(line(), bk.unit, std::string(s.begin(), s.end()), 16, export_fps_);
         }
         message(trf("hand.saved", {shown}));
     }
@@ -363,17 +363,17 @@ void Hallway::jump_kind()
 void Hallway::open_as_kind(const std::vector<uint8_t>& bytes)
 {
     const std::string kind = file_kind(bytes, bytes.size());
+    const bool on_pcm = sieve::is_pcm_symbols(lines_[2].space.symbols_id());
     int to = -1;
     if (kind == "TXT") to = 0;
     else if (kind == "PNG" || kind == "JPG" || kind == "GIF" || kind == "BMP") to = 1;
     // Sound files on the audio line when it holds sound itself (pcm), MIDI when it holds notes.
     else if (kind == "MID" || kind == "WAV" || kind == "MP3" || kind == "OGG" || kind == "FLAC")
     {
-        const bool sound = sieve::is_pcm_symbols(lines_[2].space.symbols_id());
-        if (sound == (kind != "MID")) to = 2;
+        if (on_pcm == (kind != "MID")) to = 2;
         else
         {
-            message(trf(sound ? "msg.jump.needs_notes" : "msg.jump.needs_pcm", {kind}));
+            message(trf(on_pcm ? "msg.jump.needs_notes" : "msg.jump.needs_pcm", {kind}));
             return;
         }
     }
@@ -381,7 +381,10 @@ void Hallway::open_as_kind(const std::vector<uint8_t>& bytes)
     // Every other picture or video format is ffmpeg's to read, if there is one: the video and picture
     // kinds the table knows, and files whose kind it does not know (MKV, WebM, TIFF, ...), which
     // fail if ffmpeg cannot read them either.
-    else if ((kind == "MP4" || kind == "AVI" || kind == "WEBP" || kind == "?") && cli::find_ffmpeg()) to = 1;
+    // A file the table does not know whose first bytes are an MPEG audio or AAC frame (an MP3
+    // without an ID3 tag) is sound first.
+    else if ((kind == "MP4" || kind == "AVI" || kind == "WEBP" || kind == "?") && cli::find_ffmpeg())
+        to = kind == "?" && on_pcm && cli::looks_like_mpeg_audio(bytes) ? 2 : 1;
     if (to < 0)
     {
         message(trf("msg.jump.no_line", {kind}));
@@ -403,15 +406,28 @@ void Hallway::open_as_kind(const std::vector<uint8_t>& bytes)
     }
     std::vector<std::vector<uint32_t>> units;
     std::string report;
+    // Read frame by frame into both lines' fittings: how many frames there are decides the line.
+    // A container with no picture in it (an .m4a, a video's sound alone) is sound, when the audio
+    // line holds sound.
+    ImageCanoniser still(lines_[1].image), moving(lines_[3].image);
+    cli::MediaRead m;
     if (to == 1)
     {
-        // Read frame by frame into both lines' fittings: how many frames there are decides the line.
-        ImageCanoniser still(lines_[1].image), moving(lines_[3].image);
-        const cli::MediaRead m = cli::read_media_frames(bytes.data(), bytes.size(), kind, std::max<uint32_t>(2, lines_[3].image.frames),
-                                                        [&](const RgbaImage& f) {
-                                                            still.add(f);
-                                                            moving.add(f);
-                                                        });
+        try
+        {
+            m = cli::read_media_frames(bytes.data(), bytes.size(), kind, std::max<uint32_t>(2, lines_[3].image.frames), [&](const RgbaImage& f) {
+                still.add(f);
+                moving.add(f);
+            });
+        }
+        catch (const std::exception&)
+        {
+            if (!on_pcm || kind == "PNG" || kind == "JPG" || kind == "GIF" || kind == "BMP") throw;
+            to = 2;
+        }
+    }
+    if (to == 1)
+    {
         ImageCanonReport r;
         std::vector<uint32_t> s = still.finish(&r);
         if (r.source_frames > 1) // an animation: the video line
@@ -427,7 +443,7 @@ void Hallway::open_as_kind(const std::vector<uint8_t>& bytes)
         if (!m.complaints.empty()) report += "; ffmpeg reported: " + m.complaints;
         if (cli::unit_withheld(l, units[0])) throw cli::VaultWithheld("withheld by the vault");
     }
-    else if (to == 2 && sieve::is_pcm_symbols(lines_[2].space.symbols_id()))
+    else if (to == 2 && on_pcm)
     {
         const Line& l = lines_[2];
         const sieve::PcmFormat f = sieve::pcm_format_of(l.space.symbols_id());

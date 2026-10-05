@@ -991,6 +991,9 @@ and the oracle at four lengths.
 | Filter | Line | Rule | Keeps |
 | :--- | :--- | :--- | ---: |
 | `palette-size-v1` (own) | image, video | at most `colours` distinct colours (16); on video, `scope` film or each frame on its own | rgb332 10×10: 10^-95.42; rgb24: 10^-499.80; ega16 video, 2 a frame: 10^-163.98 |
+| `sound-peak-v1` (automaton; own past 24 bits) | audio, `pcm` | no sample louder than `percent` of full scale (90), each channel on its own | 8-bit, 800 samples: 10^-35.70; 16-bit stereo, 8000: 10^-732.05 |
+| `sound-step-v1` (automaton to 11 bits; judged past that) | audio, `pcm` | neighbouring samples within `percent` of the range (50) | 8-bit, 800 samples: 10^-86.76 |
+| `silence-run-v1` (automaton while it fits) | audio, `pcm` | no run of more than `samples` silent samples (4000) | mostly-silent units only; nothing on lines shorter than the run |
 | `row-runs-v1` (own) | image, video | at most `changes` colour changes along each row (3) | mono 10×10: 10^-5.95; ega16: 10^-53.72; rgb24: 10^-414.24 |
 | `canonical-mesh-v1` (model rule) | models | one encoding of each mesh: vertices increasing as grid points, faces rotated to their smallest index (winding kept) and increasing | with every-vertex-used: 10^-21.48 (the three old rules: 10^-2.21) |
 | `utf8-valid-v1` (own) | binary | well-formed UTF-8 throughout; `controls = text` also refuses control characters but tab, LF and CR | 32 bytes: text 10^-10.75, any 10^-8.00 |

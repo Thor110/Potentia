@@ -351,6 +351,11 @@ jobs:
           # Saving as a format that needs ffmpeg says so when there is none.
           if out=$($exe read --ffmpeg no-such-ffmpeg --line audio --note-set pcm --mode positional --address-file a.hex --out x.mp3 2>&1); then exit 1; fi
           echo "$out" | tr -d '\r' | q "there is no ffmpeg at"
+          # Its filters judge each channel; the three of them merge and count exactly at 800 samples.
+          printf '[audio]\nmode = mark\nfilters = sound-peak-v1, sound-step-v1, silence-run-v1\n[audio.silence-run-v1]\nsamples = 800\n' > sound.ini
+          $exe filters --line audio --note-set pcm --length 800 --filters sound.ini | tr -d '\r' | q "keeps 10^-102.20"
+          printf '[audio]\nmode = mark\nfilters = sound-peak-v1\n' > peak.ini
+          $exe filters --line audio --note-set pcm --bits 16 --channels 2 --filters peak.ini | tr -d '\r' | q "keeps 10^-732.05"
 
       - name: Other picture and video formats come in through ffmpeg
         run: |
@@ -882,6 +887,7 @@ jobs:
           python sieve_ref.py chunk-vectors | diff - ../tests/vectors_chunks_v1.tsv
           python sieve_ref.py notes2-vectors | diff - ../tests/vectors_notes2_v1.tsv
           python sieve_ref.py pcm-vectors | diff - ../tests/vectors_pcm_v1.tsv
+          python sieve_ref.py sound-vectors | diff - ../tests/vectors_sound_v1.tsv
           # One line filtered by another (FILTER-PLUGINS.md section 15): file kinds and the binary
           # line's filter by them, and not-written-v1, counted by the oracle's own machines, its
           # closed form for the binary reading and the overlap walked pair by pair (about 3 minutes).

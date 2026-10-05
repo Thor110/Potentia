@@ -1205,9 +1205,9 @@ int cmd_filters_plugin(const Args& a)
     // it is compiled for one voice's line and counted through the voices.
     uint32_t voices = 1;
     FilterLine one = fl;
-    if (fl.kind == "audio" && is_note_symbols(fl.symbols_id))
+    if (line_voices(fl) > 1 || (fl.kind == "audio" && is_note_symbols(fl.symbols_id)))
     {
-        voices = note_set_of(fl.symbols_id).voices;
+        voices = line_voices(fl);
         one.length = fl.length / voices;
     }
     const Dfa d = compile_plugin(*def, one, values, resources, &declared, &data);

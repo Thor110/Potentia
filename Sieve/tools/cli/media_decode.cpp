@@ -636,4 +636,13 @@ void ffmpeg_convert(const std::vector<std::string>& input_options, const std::st
     }
 }
 
+bool looks_like_mpeg_audio(std::span<const uint8_t> h)
+{
+    if (h.size() < 4 || h[0] != 0xFF) return false;
+    if ((h[1] & 0xF6) == 0xF0) return ((h[2] >> 2) & 0x0F) < 13; // ADTS: a sampling index in use
+    if ((h[1] & 0xE0) != 0xE0) return false;
+    const uint8_t version = (h[1] >> 3) & 3, layer = (h[1] >> 1) & 3, bitrate = h[2] >> 4, rate = (h[2] >> 2) & 3;
+    return version != 1 && layer != 0 && bitrate != 15 && rate != 3;
+}
+
 } // namespace sieve::cli

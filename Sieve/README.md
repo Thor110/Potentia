@@ -339,6 +339,9 @@ The word filters above (`clean`, `window`, `words`, v1 and v2) and `title-v1` ar
 | `key-v1` | audio | every note is in one key (tonic C…B; major, minor, harmonic minor, major or minor pentatonic, blues); rests always pass | yes |
 | `palette-size-v1` | image, video | at most so many distinct colours (or in each frame) | yes, on every palette, rgb24 included; on small palettes an automaton that merges with the others |
 | `row-runs-v1` | image, video | at most so many colour changes along each row of pixels | yes, at any width; on small palettes an automaton that merges with the others |
+| `sound-peak-v1` | audio (`pcm`) | no sample louder than a share of full scale (90%) | yes, at every depth |
+| `sound-step-v1` | audio (`pcm`) | neighbouring samples within a share of the range (50%): noise jumps, sound mostly moves a little | an automaton to 11 bits a sample; judged past that |
+| `silence-run-v1` | audio (`pcm`) | no run of more than so many silent samples (4000) | an automaton while it fits |
 | `canonical-mesh-v1` | models | one encoding of each mesh (vertices and faces in order): 10^-19 of the line is re-orderings | yes |
 | `utf8-valid-v1` | binary | the whole file is well-formed UTF-8 (and, by default, text: no control characters) | yes, on its own |
 
@@ -839,11 +842,13 @@ A video takes up to `--frames` frames, adding black frames if the source is shor
 - **Its settings:** a sample rate (`--rate`, 8000), bits a sample (`--bits`, 1 to 31, 8) and channels (`--channels`, 1). `--length` is samples per channel, a second at the rate unless given.
 - **What a unit is:** each sample is one digit, and silence is digit 0, so a unit is a WAV file's samples and its address is the sound read as a number.
 - **Files in:** `--file` takes a WAV file, or any sound ffmpeg reads (MP3, FLAC, OGG, a video's sound). It's mixed or split to the channels, resampled by area and rounded to the bits by fixed rules (`canon-pcm-v1`).
-- **Files out:** `read --out x.wav` saves it; P in the hallway plays it.
+- **Files out:** `read --out x.wav` saves it; P in the hallway plays it, and the item page and the viewer's SOUND tab draw its waveform (each channel a band; the viewer a column a sample where it is wide enough).
+- **Filters:** each channel is judged on its own, as each voice of a note set is. Its own are `sound-peak-v1`, `sound-step-v1` and `silence-run-v1`.
+- **J** opens WAV, MP3 (a tagless one too, by its frame header), OGG, FLAC and an `.m4a` or a video's sound alone on the audio line when it holds sound.
 
 **Saving as other formats.** With ffmpeg, `read --out` and the hallway's F also save:
 - **Pictures** as JPEG, WebP, BMP or TIFF.
-- **Video** as an animated GIF, MP4 or WebM (`--fps`, 8 unless given).
+- **Video** as an animated GIF, MP4 or WebM (`--fps`, 8 unless given; in the hallway the `video-fps` setting).
 - **Sound** as FLAC, MP3, Ogg Vorbis, Opus or AAC.
 
 Each is offered only when your ffmpeg has its encoder. Lossless ones (PNG, BMP, GIF of a small palette, WAV, FLAC) read back to the same address.

@@ -1,4 +1,5 @@
 #include "sieve/filter.hpp"
+#include "sieve/sound.hpp"
 
 #include "sieve/audio.hpp"
 #include "sieve/dfa.hpp"
@@ -175,15 +176,23 @@ bool Ranker::accepts(std::span<const uint32_t> unit) const
 
 namespace {
 
-// Several voices, one ranker: V copies of one voice's walk, one after another. A state is the
-// voice, the place in it and the one voice's own state, packed into 64 bits (3, 16 and 45 bits),
-// which every ranker a note line has (their states are automata's states) fits.
+// Several voices (or a sound's channels), one ranker: V copies of one voice's walk, one after
+// another. A state is the voice, the place in it and the one voice's own state, packed into 64
+// bits: as many as the voices and the places need, and the rest for the one voice's state.
 class VoicesRanker : public Ranker
 {
 public:
     VoicesRanker(const Ranker& one, uint32_t voices) : one_(one), v_(voices), L_(one.length())
     {
-        if (L_ >= (1u << 16)) throw std::invalid_argument("a voice of 65536 or more events is too long to rank");
+        const auto bits = [](uint64_t n) { // bits to write 0..n
+            uint32_t b = 0;
+            while (b < 64 && (n >> b) != 0) ++b;
+            return b;
+        };
+        vbits_ = bits(v_); // the voice runs to v_ (all of them done)
+        pbits_ = bits(L_ > 0 ? L_ - 1 : 0);
+        if (vbits_ + pbits_ >= 64) throw std::invalid_argument("too many voices or places to rank them together");
+        ibits_ = 64 - vbits_ - pbits_;
         per_ = one_.count();
         set_count();
     }
@@ -209,8 +218,13 @@ public:
         if (v >= v_) return remaining == 0 ? BigUint(1) : BigUint();
         const uint32_t left = L_ - p, after = v_ - 1 - v;
         if (uint64_t(remaining) != uint64_t(left) + uint64_t(after) * L_) return BigUint();
-        BigUint c = one_.completions(inner(s), left);
-        for (uint32_t i = 0; i < after; ++i) c = BigUint::mul(c, per_);
+        // per_ to the power of the voices after this one, by squaring.
+        BigUint c = one_.completions(inner(s), left), sq = per_;
+        for (uint32_t e = after; e > 0; e >>= 1)
+        {
+            if (e & 1) c = BigUint::mul(c, sq);
+            if (e > 1) sq = BigUint::mul(sq, sq);
+        }
         return c;
     }
     std::vector<uint32_t> unrank(const BigUint& k0) const override
@@ -247,24 +261,31 @@ public:
     }
 
 private:
-    static constexpr uint64_t kInnerBits = 45;
-    static State pack(uint32_t v, uint32_t p, State inner)
+    State pack(uint32_t v, uint32_t p, State inner) const
     {
-        if (inner >= (State(1) << kInnerBits)) throw std::invalid_argument("a voice's ranker state is too large to rank several voices");
-        return (State(v) << 61) | (State(p) << kInnerBits) | inner;
+        if (ibits_ < 64 && inner >= (State(1) << ibits_)) throw std::invalid_argument("a voice's ranker state is too large to rank several voices");
+        return (State(v) << (pbits_ + ibits_)) | (State(p) << ibits_) | inner;
     }
-    static uint32_t voice(State s) { return uint32_t(s >> 61); }
-    static uint32_t place(State s) { return uint32_t((s >> kInnerBits) & 0xFFFF); }
-    static State inner(State s) { return s & ((State(1) << kInnerBits) - 1); }
+    uint32_t voice(State s) const { return uint32_t(s >> (pbits_ + ibits_)); }
+    uint32_t place(State s) const { return pbits_ ? uint32_t((s >> ibits_) & ((State(1) << pbits_) - 1)) : 0; }
+    State inner(State s) const { return s & ((State(1) << ibits_) - 1); }
 
     const Ranker& one_;
-    uint32_t v_, L_;
+    uint32_t v_, L_, vbits_ = 0, pbits_ = 0, ibits_ = 0;
     BigUint per_;
 };
 
 } // namespace
 
 std::unique_ptr<Ranker> voices_ranker(const Ranker& one, uint32_t voices) { return std::make_unique<VoicesRanker>(one, voices); }
+
+uint32_t line_voices(const FilterLine& l)
+{
+    if (l.kind != "audio") return 1;
+    if (is_note_symbols(l.symbols_id)) return note_set_of(l.symbols_id).voices;
+    if (is_pcm_symbols(l.symbols_id)) return pcm_format_of(l.symbols_id).channels;
+    return 1;
+}
 
 namespace {
 
@@ -444,9 +465,9 @@ FilterStack::FilterStack(const FilterLine& whole, const std::vector<Entry>& entr
     symbols_id_ = whole.kind + "/" + whole.symbols_id;
     // Several voices: the filters are made for one voice and judge each (see the header).
     FilterLine line = whole;
-    if (whole.kind == "audio" && is_note_symbols(whole.symbols_id))
+    if (const uint32_t v = line_voices(whole); v > 1 || (whole.kind == "audio" && is_note_symbols(whole.symbols_id)))
     {
-        voices_ = note_set_of(whole.symbols_id).voices;
+        voices_ = v;
         if (whole.length % voices_ != 0) throw std::invalid_argument("a unit of " + std::to_string(voices_) + " voices has a length they divide");
         line.length = whole.length / voices_;
         if (voices_ > 1) provenance_ += " (each of " + std::to_string(voices_) + " voices)";

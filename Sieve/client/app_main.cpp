@@ -63,6 +63,7 @@ const char* kUsage =
     "  --ffmpeg PATH       the ffmpeg that reads and writes picture, video and sound formats beyond\n"
     "                      PNG, JPEG, BMP, GIF, TGA, WAV and MIDI (default: SIEVE_FFMPEG, then beside\n"
     "                      the hallway, then the PATH); kept in the settings\n"
+    "  --video-fps N       a video saved as GIF, MP4 or WebM (with ffmpeg): frames a second (default 8)\n"
     "  --key K             scramble key (default sieve)\n"
     "  --mode positional|scrambled|guided   starting ordering (default positional)\n"
     "  --model ID|PATH|none  text: model for the guided ordering (default: the alphabet's default)\n"
@@ -535,6 +536,7 @@ int run(const Args& a)
             hall->set_angle_decimals(app.angle_decimals);
             hall->set_face_px(a.get_u32("model-tile", 64));
             hall->set_letters_px(a.has("item-letters") ? a.get_u32("item-letters", 8) : 8);
+            hall->set_export_fps(a.has("video-fps") ? a.get_u32("video-fps", sieve::cli::kDefaultExportFps) : sieve::cli::kDefaultExportFps);
             hall->set_closeup_px(closeup_setting(a.get("close-up", "screen"), kCloseUpScreen));
             hall->set_graphics_memory(app.graphics_memory_gb);
             hall->set_fps_counter(app.fps_counter || a.has("fps-counter"));
@@ -671,6 +673,7 @@ int run(const Args& a)
         hall->set_angle_decimals(app.angle_decimals);
         hall->set_face_px(ha.get_u32("model-tile", 64));
         hall->set_letters_px(ha.has("item-letters") ? ha.get_u32("item-letters", 8) : 8);
+        hall->set_export_fps(ha.has("video-fps") ? ha.get_u32("video-fps", sieve::cli::kDefaultExportFps) : sieve::cli::kDefaultExportFps);
         hall->set_closeup_px(closeup_setting(ha.get("close-up", "screen"), kCloseUpScreen));
         hall->set_graphics_memory(app.graphics_memory_gb);
         hall->set_fps_counter(app.fps_counter);

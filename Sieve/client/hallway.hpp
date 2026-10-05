@@ -210,6 +210,9 @@ inline std::vector<std::string> wrap(const std::string& s, size_t width)
 
 // Greedy word wrap: lines of at most `width` characters, broken at spaces where possible;
 // trailing spaces (a page's padding) are dropped.
+// An opaque colour as ARGB, as the item pictures are kept.
+inline uint32_t argb(SDL_Color c) { return 0xFF000000u | uint32_t(c.r) << 16 | uint32_t(c.g) << 8 | uint32_t(c.b); }
+
 inline std::vector<std::string> wrap_words(std::string s, size_t width)
 {
     while (!s.empty() && s.back() == ' ') s.pop_back();
@@ -895,6 +898,10 @@ public:
     // `columns` shades (cli::pcm_preview).
     std::string audio_text(const Space::Digits& u, uint32_t columns) const;
     bool on_sound() const; // on the audio line, holding a pcm set (sound itself)
+    // A pcm unit's waveform: each channel a band of h / channels, each column the line from its
+    // lowest to its highest sample (sieve::pcm_envelope), over a dimmer line at silence.
+    void draw_waveform(const Space::Digits& u, float x, float y, float w, float h, SDL_Color ink);
+    std::vector<uint32_t> waveform_argb(const Space::Digits& u, uint32_t w, uint32_t h) const;
 
     void draw_in_hand(float W, float H);
 
@@ -949,6 +956,8 @@ public:
     void set_graphics_memory(int gb) { graphics_bytes_ = double(std::max(gb, 1)) * 1073741824.0; }
     // The smallest letters drawn on item pictures, in picture pixels: a title or a page that
     // would need smaller ones is drawn as short bars instead. Changing it redraws the pictures.
+    // A video saved as a video (GIF, MP4, WebM through ffmpeg): frames a second (the "video-fps" setting).
+    void set_export_fps(uint32_t fps) { export_fps_ = std::max(1u, fps); }
     void set_letters_px(uint32_t px)
     {
         const int v = int(std::clamp(px, 1u, 64u));
@@ -1184,7 +1193,8 @@ private:
     std::string binary_file_name(const Book& bk, const std::string& sha);
     std::mutex save_mx_;
     std::optional<std::string> save_pending_;
-    int save_filter_ = -1; // the dialog's chosen filter: an index into save_formats_, or -1
+    int save_filter_ = -1;
+    uint32_t export_fps_ = cli::kDefaultExportFps; // the dialog's chosen filter: an index into save_formats_, or -1
     // The formats F offers for the item in hand (cli::export_formats: its own, then ffmpeg's), and
     // the dialog's filters made from them (kept while the dialog is open).
     std::vector<cli::ExportFormat> save_formats_;

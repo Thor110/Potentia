@@ -14,8 +14,6 @@ namespace hallway::hall {
 
 namespace {
 
-uint32_t argb(SDL_Color c) { return 0xFF000000u | uint32_t(c.r) << 16 | uint32_t(c.g) << 8 | uint32_t(c.b); }
-
 void fill_rect(std::vector<uint32_t>& px, int w, int h, int x0, int y0, int x1, int y1, uint32_t colour)
 {
     x0 = std::max(x0, 0), y0 = std::max(y0, 0), x1 = std::min(x1, w), y1 = std::min(y1, h);

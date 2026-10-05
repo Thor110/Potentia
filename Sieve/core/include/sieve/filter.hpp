@@ -200,6 +200,9 @@ int64_t param_int(const FilterSpec& spec, const FilterValues& values, const std:
 
 // V voices' ranker from one voice's (the one kept alive by the caller); see FilterStack.
 std::unique_ptr<Ranker> voices_ranker(const Ranker& one, uint32_t voices);
+// How many voices a line's filters judge one at a time: a note set's voices, a sound's channels
+// (sieve/sound.hpp), else 1.
+uint32_t line_voices(const FilterLine& l);
 
 // The ticked filters of one line.
 //

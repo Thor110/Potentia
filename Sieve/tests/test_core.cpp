@@ -3793,6 +3793,38 @@ std::vector<std::vector<int>> sounding(const NoteSet& set, const std::vector<uin
 // palette-size-v1 and row-runs-v1 against the oracle's vectors (tests/vectors_picture_v1.tsv):
 // counts, ranks both ways and verdicts, on small lines checked there by brute force and on the
 // image line's palettes (rgb24 included) and video.
+void test_sound_vectors(const std::string& dir)
+{
+    const TestResources none(nullptr, nullptr);
+    int n = 0;
+    for (const auto& f : read_rows(dir + "vectors_sound_v1.tsv"))
+    {
+        if (!((f[0] == "count" && f.size() == 7) || (f[0] == "unit" && f.size() == 8))) continue;
+        const std::string id = f[1] == "sound-silence" ? "silence-run-v1" : f[1] + "-v1";
+        const FilterSpec* spec = find_filter(id);
+        CHECK(spec != nullptr);
+        if (!spec) continue;
+        const uint32_t bits = uint32_t(std::stoul(f[2])), ch = uint32_t(std::stoul(f[3])), L = uint32_t(std::stoul(f[4]));
+        const PcmFormat fmt = make_pcm_format(8000, bits, ch);
+        const FilterLine line{"audio", fmt.id(), fmt.base(), ch * L, nullptr, 0, 0, 0};
+        const FilterValues v{{f[1] == "sound-silence" ? "samples" : "percent", f[5]}};
+        const FilterStack st(line, {{spec, v}}, none);
+        bool ok = st.ranker() != nullptr;
+        if (ok && f[0] == "count") ok = st.ranker()->count().to_decimal() == f[6];
+        else if (ok)
+        {
+            const BigUint k = BigUint::from_decimal(f[6]);
+            const std::vector<uint32_t> want = split_u32(f[7]);
+            ok = st.ranker()->unrank(k) == want && st.ranker()->rank(want) == k && st.passes(want) && st.ranker()->accepts(want);
+        }
+        CHECK(ok);
+        if (!ok) std::cerr << "  sound vector mismatch: " << f[0] << " " << f[1] << " bits=" << f[2] << " ch=" << f[3] << " L=" << f[4] << "\n";
+        ++n;
+    }
+    std::cout << "sound filter vectors checked: " << n << "\n";
+    CHECK(n >= 60);
+}
+
 void test_picture_vectors(const std::string& dir)
 {
     const TestResources none(nullptr, nullptr);
@@ -4352,6 +4384,7 @@ void run_all(int argc, char** argv)
         test_notes2_vectors(dir + "vectors_notes2_v1.tsv");
         test_pcm_vectors(dir + "vectors_pcm_v1.tsv");
         test_pcm_digits();
+        test_sound_vectors(dir);
         test_notes2(dir);
         test_plugins(dir);
         test_book_filter_vectors(dir);

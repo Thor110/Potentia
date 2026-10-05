@@ -1487,3 +1487,26 @@ Filters, section 1 of the list (4 October 2026).
   - an MP3 without an ID3 tag reads as an unknown kind, so J tries it as a picture;
   - a drawn waveform in place of the text one;
   - a hallway setting for `--fps`.
+
+### Sound: filters, a drawn waveform, video-fps, tagless MP3 (5 October 2026)
+- **Channels are judged one at a time** (filter.cpp):
+  - `line_voices(FilterLine)` gives a note set's voices, a pcm set's channels, else 1;
+  - FilterStack and `sieve filters --plugin` use it;
+  - `VoicesRanker` packs its state into bits sized to the line (voice, place, inner) rather than fixed 3/16/45, and raises one voice's count to the voices after by squaring.
+  - **Unchanged:** ranks and units are unchanged, since states are internal.
+- **core/src/filters/sound.cpp:**
+  - `sound-peak-v1`: a one-state automaton to 24 bits; past that `PeakRanker`, a mixed-radix count over the allowed digits in digit order.
+  - `sound-step-v1`: an automaton over the last sample when (base+1)·base ≤ 2^24, i.e. up to 11 bits; else judged.
+  - `silence-run-v1`: an automaton over the run so far while it fits; else judged.
+  - **Oracle:** `sound-vectors`, with a closed form for peak and tables for step and silence, each checked by brute force on small lines, in `tests/vectors_sound_v1.tsv` (69 rows). The engine matched on the first run.
+  - **Measured:** at 800 samples, 8-bit mono, the three merged (silence-run at 800) count exactly in about 6 s (10^-102.20). At 8000 the merged table needs 30.8 GB, so the stack judges only.
+  - **Judged by hand:** white noise fails step; a loud tone passes all three; a 0.25 s tone padded to 1 s fails silence-run.
+- **Waveform:**
+  - `sieve::pcm_envelope` gives each column's lowest and highest sample;
+  - `Hallway::draw_waveform` draws the item page's bands with lines, each column reaching back to the middle of the one before, so samples join;
+  - `waveform_argb` is the viewer's picture: a column a sample up to `view_picture_px`, each band an eighth as tall as wide;
+  - the CLI preview uses the envelope too, and the one-line preview puts the channels side by side.
+- **video-fps:** an ini key, `Hallway::set_export_fps`, `--video-fps`; F's video saves use it.
+- **J:**
+  - `cli::looks_like_mpeg_audio` (MPEG audio frame or ADTS header) sends a file of unknown kind to sound first, without touching file-kinds-v1;
+  - an MP4, AVI, WebP or unknown file that ffmpeg finds no picture in (an .m4a) is tried as sound when the audio line holds pcm.

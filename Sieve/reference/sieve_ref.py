@@ -2188,6 +2188,131 @@ def _pcm_cases():
     return cases
 
 
+# ---- the sound filters (core/src/filters/sound.cpp), counted their own way: one channel by a
+# table over the last sample or the silent run, the channels as a number in base (one channel's count).
+
+def _pcm_signed(bits, d):
+    return d - 2**bits if d >= 2**(bits - 1) else d
+
+
+def _sound_rule(name, bits, pct):
+    """A channel's rule: (allowed first digits, allowed next digit given the state, next state)."""
+    B = 2**bits
+    if name == "peak":
+        a = 2**(bits - 1) * pct // 100
+        return (lambda st, d: -a <= _pcm_signed(bits, d) <= a), (lambda st, d: 0), 0
+    if name == "step":
+        lim = 2**bits * pct // 100
+        return (lambda st, d: st is None or abs(_pcm_signed(bits, d) - _pcm_signed(bits, st)) <= lim), (lambda st, d: d), None
+    if name == "silence":
+        n = pct  # the most silent samples in a run
+        return (lambda st, d: d != 0 or st + 1 <= n), (lambda st, d: st + 1 if d == 0 else 0), 0
+    raise ValueError(name)
+
+
+def _sound_table(name, bits, pct, L):
+    """completions[r][state]: the ways to finish a channel with r samples left, from each state."""
+    B = 2**bits
+    ok, step, start = _sound_rule(name, bits, pct)
+    from functools import lru_cache
+
+    @lru_cache(maxsize=None)
+    def comp(r, st):
+        if r == 0:
+            return 1
+        return sum(comp(r - 1, step(st, d)) for d in range(B) if ok(st, d))
+    return comp, ok, step, start
+
+
+def _peak_digits(bits, pct):
+    """sound-peak's survivors' digits, in digit order: 0 up to the limit, then the negative ones."""
+    a = 2**(bits - 1) * pct // 100
+    hi, lo = min(a, 2**(bits - 1) - 1), min(a, 2**(bits - 1))
+    return hi, lo
+
+
+def sound_count(name, bits, ch, L, pct):
+    if name == "peak":
+        hi, lo = _peak_digits(bits, pct)
+        return (hi + 1 + lo) ** (L * ch)
+    comp, _, _, start = _sound_table(name, bits, pct, L)
+    return comp(L, start) ** ch
+
+
+def sound_unrank(name, bits, ch, L, pct, k):
+    if name == "peak":
+        # Every sample on its own: the rank is a number in base |set|, each digit its sample's place.
+        hi, lo = _peak_digits(bits, pct)
+        n = hi + 1 + lo
+        out = []
+        for _ in range(L * ch):
+            i = k % n
+            k //= n
+            out.append(i if i <= hi else 2**bits - lo + (i - hi - 1))
+        return out[::-1]
+    comp, ok, step, start = _sound_table(name, bits, pct, L)
+    per = comp(L, start)
+    parts = []
+    for _ in range(ch):
+        parts.append(k % per)
+        k //= per
+    out = []
+    for part in reversed(parts):
+        st = start
+        for r in range(L, 0, -1):
+            for d in range(2**bits):
+                if not ok(st, d):
+                    continue
+                c = comp(r - 1, step(st, d))
+                if part < c:
+                    out.append(d)
+                    st = step(st, d)
+                    break
+                part -= c
+    return out
+
+
+def _sound_ok_whole(name, bits, ch, L, pct, u):
+    ok, step, start = _sound_rule(name, bits, pct)
+    for c in range(ch):
+        st = start
+        for d in u[c * L:(c + 1) * L]:
+            if not ok(st, d):
+                return False
+            st = step(st, d)
+    return True
+
+
+def cmd_sound_vectors(args):
+    """The sound filters: survivors of a pcm line (bits, channels, samples a channel) under each, and
+    a few survivors by rank."""
+    from itertools import product
+    print("# Sound filters (core/src/filters/sound.cpp): sound-peak-v1 (percent), sound-step-v1 (percent),")
+    print("# silence-run-v1 (samples). The channels are judged one at a time.")
+    print("# count  filter  bits  channels  samples  value  survivors")
+    print("# unit   filter  bits  channels  samples  value  rank  digits(comma)")
+    # Every unit of small lines against the counts and the unranking.
+    for name, bits, ch, L, v in (("peak", 2, 1, 4, 50), ("peak", 3, 2, 2, 60), ("peak", 1, 1, 5, 100), ("step", 2, 1, 5, 25),
+                                 ("step", 3, 2, 2, 30), ("step", 2, 1, 4, 100), ("silence", 2, 1, 6, 1), ("silence", 1, 2, 3, 0),
+                                 ("silence", 3, 1, 4, 2)):
+        kept = [list(u) for u in product(range(2**bits), repeat=ch * L) if _sound_ok_whole(name, bits, ch, L, v, u)]
+        assert len(kept) == sound_count(name, bits, ch, L, v), (name, bits, ch, L, v)
+        assert all(sound_unrank(name, bits, ch, L, v, i) == u for i, u in enumerate(kept))
+        print(f"count\tsound-{name}\t{bits}\t{ch}\t{L}\t{v}\t{len(kept)}")
+        for i in sorted({0, len(kept) // 3, len(kept) - 1}):
+            print(f"unit\tsound-{name}\t{bits}\t{ch}\t{L}\t{v}\t{i}\t{','.join(map(str, kept[i]))}")
+    # Larger: by the tables alone.
+    g = stream("sound")
+    for name, bits, ch, L, v in (("peak", 8, 1, 64, 90), ("peak", 16, 2, 32, 50), ("peak", 31, 1, 8, 75), ("step", 8, 1, 40, 10),
+                                 ("step", 6, 2, 30, 25), ("silence", 8, 1, 60, 5), ("silence", 4, 3, 20, 0)):
+        n = sound_count(name, bits, ch, L, v)
+        print(f"count\tsound-{name}\t{bits}\t{ch}\t{L}\t{v}\t{n}")
+        for i in sorted({0, n // 7, n - 1, int.from_bytes(bytes(next(g) for _ in range(40)), "big") % n}):
+            u = sound_unrank(name, bits, ch, L, v, i)
+            assert _sound_ok_whole(name, bits, ch, L, v, u)
+            print(f"unit\tsound-{name}\t{bits}\t{ch}\t{L}\t{v}\t{i}\t{','.join(map(str, u))}")
+
+
 def cmd_pcm_vectors(args):
     """canon-pcm-v1: the source WAV file (hex), the set and L in; every unit's digits, the report and
     the first unit's WAV file's SHA-256 out."""
@@ -5377,6 +5502,7 @@ def main():
     sub.add_parser("chunk-vectors")
     sub.add_parser("notes2-vectors")
     sub.add_parser("pcm-vectors")
+    sub.add_parser("sound-vectors")
     sub.add_parser("kind-vectors")
     sub.add_parser("written-vectors")
     sub.add_parser("cross-vectors")
@@ -5453,6 +5579,8 @@ def main():
         cmd_notes2_vectors(args)
     elif args.cmd == "pcm-vectors":
         cmd_pcm_vectors(args)
+    elif args.cmd == "sound-vectors":
+        cmd_sound_vectors(args)
     elif args.cmd == "kind-vectors":
         cmd_kind_vectors(args)
     elif args.cmd == "written-vectors":

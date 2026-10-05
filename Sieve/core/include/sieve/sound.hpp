@@ -120,6 +120,14 @@ bool is_wav(std::span<const uint8_t> head);
 // bits as its valid bits.
 std::string pcm_to_wav(const PcmFormat& f, const std::vector<uint32_t>& digits);
 
+// A channel of a unit drawn `columns` wide: for each column, the lowest and the highest sample over
+// its share of the unit (a column with no sample of its own takes the one it falls on).
+struct PcmSpan
+{
+    int32_t lo = 0, hi = 0;
+};
+std::vector<PcmSpan> pcm_envelope(const PcmFormat& f, const std::vector<uint32_t>& digits, uint32_t channel, uint32_t columns);
+
 // The interleaved signed 16-bit samples of a unit, for playing it.
 std::vector<int16_t> pcm_to_s16(const PcmFormat& f, const std::vector<uint32_t>& digits);
 

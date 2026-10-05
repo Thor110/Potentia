@@ -17,9 +17,9 @@ counts (`FilterSpec::counts_as`):
 
 | Counts as | Filters | Combines with |
 | :--- | :--- | :--- |
-| automaton | every custom filter (the `.sfilter` plugins: clean-data, max-run-data, tidy-data, window-data, words-data, the Moby grammars, key-data, the melody filters; not title-data, which has `within`), `max-run-v1`, `not-other-line-v1`, `not-packed-v1`, and on a small palette `palette-size-v1` and `row-runs-v1` | other automata, and `not-written-v1` |
+| automaton | every custom filter (the `.sfilter` plugins: clean-data, max-run-data, tidy-data, window-data, words-data, the Moby grammars, key-data, the melody filters; not title-data, which has `within`), `max-run-v1`, `not-other-line-v1`, `not-packed-v1`, on a small palette `palette-size-v1` and `row-runs-v1`, and on sound (`pcm`) `sound-peak-v1` (to 24 bits), `sound-step-v1` (to 11 bits) and `silence-run-v1` (while its run fits) | other automata, and `not-written-v1` |
 | written | `not-written-v1` | automata |
-| own ranker | `clean-v1`, `window-v1`, `words-v1`, `clean-v2`, `window-v2`, `words-v2`, `title-v1`, `title-data-v1` (all but the last retired), `neighbour-agreement-v1`, `key-v1`, `utf8-valid-v1`, and on a large palette (rgb24) `palette-size-v1` and `row-runs-v1` | only a filter it implies, or that implies it |
+| own ranker | `clean-v1`, `window-v1`, `words-v1`, `clean-v2`, `window-v2`, `words-v2`, `title-v1`, `title-data-v1` (all but the last retired), `neighbour-agreement-v1`, `key-v1`, `utf8-valid-v1`, on a large palette (rgb24) `palette-size-v1` and `row-runs-v1`, and `sound-peak-v1` past 24 bits | only a filter it implies, or that implies it |
 | arithmetic | `not-a-file-v1`, `not-a-pattern-v1` | nothing |
 | model rule | `distinct-vertices-v1`, `distinct-indices-v1`, `every-vertex-used-v1`, `canonical-mesh-v1` | each other (canonical-mesh implies the first two and counts with every-vertex-used) |
 | judges only | `symbol-entropy-v1`, `model-information-v1`; on the binary line `binary-kind-v1` and `not-an-item-v1` | not part of this rule (see below) |

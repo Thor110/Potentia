@@ -198,7 +198,14 @@ std::string Hallway::one_line_preview(const Space::Digits& u)
     if (on_binary()) return ""; // a file is written out by binary_preview
     if (on_models()) return ""; // a model is drawn, not written out: see draw_model
     if (line().kind == LineKind::Text) return "\"" + ascii(utf8_encode(line().space.text_of(u))) + "\"";
-    if (line().kind == LineKind::Audio) return audio_text(u, 32);
+    if (line().kind == LineKind::Audio)
+    {
+        // One line: a sound's channels side by side.
+        std::string t = audio_text(u, 32);
+        for (char& c : t)
+            if (c == '\n') c = ' ';
+        return t;
+    }
     return "";
 }
 
@@ -207,6 +214,30 @@ std::string Hallway::audio_text(const Space::Digits& u, uint32_t columns) const
     const std::string& id = line().space.symbols_id();
     if (sieve::is_pcm_symbols(id)) return cli::pcm_preview(sieve::pcm_format_of(id), u, columns);
     return notes_to_notation(note_set_of(id), u);
+}
+
+void Hallway::draw_waveform(const Space::Digits& u, float x, float y, float w, float h, SDL_Color ink)
+{
+    const sieve::PcmFormat f = sieve::pcm_format_of(line().space.symbols_id());
+    const uint32_t cols = uint32_t(std::max(1.0f, w));
+    const float band = h / float(f.channels), full = float(uint64_t(1) << (f.bits - 1));
+    for (uint32_t c = 0; c < f.channels; ++c)
+    {
+        const float mid = y + band * (float(c) + 0.5f), half = band * 0.45f;
+        SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 90);
+        SDL_RenderLine(r_, x, mid, x + w, mid);
+        SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 255);
+        const std::vector<sieve::PcmSpan> env = sieve::pcm_envelope(f, u, c, cols);
+        for (uint32_t i = 0; i < cols; ++i)
+        {
+            // Upward is louder positive. Each column also reaches back to the middle of the one
+            // before, so samples a column apart are joined by a line rather than left as dots.
+            const float before = i ? (float(env[i - 1].lo) + float(env[i - 1].hi)) / 2 : float(env[i].lo);
+            const float hi = std::max(float(env[i].hi), before), lo = std::min(float(env[i].lo), before);
+            const float top = mid - hi / full * half, bottom = mid - lo / full * half;
+            SDL_RenderLine(r_, x + float(i), top, x + float(i), bottom);
+        }
+    }
 }
 
 bool Hallway::on_sound() const { return line().kind == LineKind::Audio && sieve::is_pcm_symbols(line().space.symbols_id()); }
@@ -575,7 +606,17 @@ void Hallway::draw_in_hand(float W, float H)
         }
         break;
     case LineKind::Audio:
-        for (const auto& l : on_sound() ? split_lines(audio_text(u, uint32_t(std::max<size_t>(8, cols2 > 6 ? cols2 - 6 : 0)))) : wrap(audio_text(u, 0), cols2))
+        if (on_sound())
+        {
+            // As tall as the rest of the page allows, at most a quarter of its width.
+            const float h = std::max(40.0f, std::min(y + ph - 150 - cy, (pw - 28) / 4));
+            draw_waveform(u, x + 14, cy, pw - 28, h, ink);
+            cy += h + 10;
+            text(x + 14, cy + 6, tr("hand.play"), 1, ink);
+            cy += 20;
+            break;
+        }
+        for (const auto& l : wrap(audio_text(u, 0), cols2))
         {
             if (cy > y + ph - 150) { text(x + 14, cy, "...", 2, ink); cy += 20; break; }
             text(x + 14, cy, l, 2, ink);

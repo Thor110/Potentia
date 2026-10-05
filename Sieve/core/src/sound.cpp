@@ -332,6 +332,26 @@ std::string pcm_to_wav(const PcmFormat& f, const std::vector<uint32_t>& digits)
     return out;
 }
 
+std::vector<PcmSpan> pcm_envelope(const PcmFormat& f, const std::vector<uint32_t>& digits, uint32_t channel, uint32_t columns)
+{
+    const uint64_t L = digits.size() / f.channels;
+    std::vector<PcmSpan> out(columns);
+    if (L == 0 || columns == 0 || channel >= f.channels) return out;
+    for (uint32_t x = 0; x < columns; ++x)
+    {
+        const uint64_t lo = L * x / columns, hi = std::max(lo + 1, L * (uint64_t(x) + 1) / columns);
+        PcmSpan s{INT32_MAX, INT32_MIN};
+        for (uint64_t i = lo; i < hi && i < L; ++i)
+        {
+            const int32_t v = pcm_sample(f, digits[size_t(channel * L + i)]);
+            s.lo = std::min(s.lo, v);
+            s.hi = std::max(s.hi, v);
+        }
+        out[x] = s;
+    }
+    return out;
+}
+
 std::vector<int16_t> pcm_to_s16(const PcmFormat& f, const std::vector<uint32_t>& digits)
 {
     const uint64_t L = digits.size() / f.channels;

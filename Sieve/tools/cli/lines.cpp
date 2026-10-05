@@ -376,13 +376,10 @@ std::string pcm_preview(const PcmFormat& f, const std::vector<uint32_t>& digits,
         if (c) out += "\n";
         if (f.channels > 1) out += "C" + std::to_string(c + 1) + " ";
         out += "|";
-        for (uint32_t x = 0; x < cols; ++x)
+        for (const PcmSpan& s : pcm_envelope(f, digits, c, cols))
         {
-            const uint64_t lo = L * x / cols, hi = std::max(lo + 1, L * (x + 1) / cols);
-            int64_t peak = 0;
-            for (uint64_t i = lo; i < hi && i < L; ++i) peak = std::max<int64_t>(peak, std::abs(int64_t(pcm_sample(f, digits[size_t(c * L + i)]))));
-            const double share = double(peak) / full;
-            out += kShades[peak == 0 ? 0 : std::min<size_t>(9, 1 + size_t(share * 9))];
+            const int64_t peak = std::max(std::abs(int64_t(s.lo)), std::abs(int64_t(s.hi)));
+            out += kShades[peak == 0 ? 0 : std::min<size_t>(9, 1 + size_t(double(peak) / full * 9))];
         }
         out += "|";
     }

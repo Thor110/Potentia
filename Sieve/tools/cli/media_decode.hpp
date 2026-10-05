@@ -69,6 +69,11 @@ using AudioBlock = std::function<void(std::span<const int32_t>)>;
 AudioRead read_media_audio(const std::string& path, const AudioStart& start, const AudioBlock& block);
 AudioRead read_media_audio(const uint8_t* data, size_t size, const std::string& what, const AudioStart& start, const AudioBlock& block);
 
+// Whether a file's first bytes are an MPEG audio frame header (MP1-3: 11 sync bits, a layer, a
+// bitrate and a rate that are not reserved) or an AAC ADTS header: sound without a signature the
+// file-kinds table names (an MP3 with no ID3 tag). Used to choose where J opens it, never to filter.
+bool looks_like_mpeg_audio(std::span<const uint8_t> head);
+
 // ---- writing other formats
 
 // Whether the ffmpeg found can encode with this encoder (by `ffmpeg -encoders`, asked once per ffmpeg).

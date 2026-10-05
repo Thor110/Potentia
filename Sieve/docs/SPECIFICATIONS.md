@@ -106,7 +106,7 @@ Beside the note sets, the audio line can hold sound itself: the `pcm` set, chose
 - **Units:** `CHANNELS × L` samples, channel by channel, as a `notes2` unit is voice by voice: `L` is the line's length in samples per channel (one second at the rate unless given). Addresses read the whole unit as one number, as every line does.
 - **Files:** a unit saves as a WAV file: interleaved, in the smallest whole-byte container that holds the bits (8-bit unsigned, else signed little-endian), each sample shifted up to fill it; plain PCM for 8, 16 and 24 bits on one or two channels, `WAVE_FORMAT_EXTENSIBLE` otherwise, with the set's own bits as its valid bits. The WAV a unit saves as reads back to the same unit.
 - **Playing:** the hallway plays the sound in hand at its own rate (the music player mixes its channels to one; the fallback synth plays up to eight as they are).
-- **Filters:** the note filters do not apply; the filters for any line do (`not-a-file-v1`, `not-a-pattern-v1`, entropy). Filters of its own, and between it and the note sets, are still to come (IDEAS.md §12).
+- **Filters:** a stack judges each channel on its own, as it does each voice of a note set, so its survivors are one channel's to the power of the channels (`line_voices`, `VoicesRanker`, which packs a channel, a place and the one channel's state into 64 bits sized to the line). Its own filters are `sound-peak-v1`, `sound-step-v1` and `silence-run-v1` (§8 table; the oracle's `sound-vectors` pins their counts and ranks); the filters for any line apply too (`not-a-file-v1`, `not-a-pattern-v1`, entropy), and the note filters do not. Filters between sound and the note sets are still to come (IDEAS.md §12).
 - **Books:** `sieve-book-v1` holds `notes104` melodies only, so a `pcm` section is refused, as a `notes2` one is.
 
 ---
@@ -383,6 +383,9 @@ The structure tests of §8.1 are built as **filters**: small, self-contained mod
 | `not-an-item-v1` | binary | the file is not exactly another line's item as F saves it (`items`: pages, melodies, pictures, models, all); pages count exactly, the rest are judged file by file | pages only |
 | `palette-size-v1` | image, video | at most `colours` distinct colours (default 16); on video, `scope` film or each frame (FILTER-PLUGINS §19) | yes, on every palette: completions depend only on the colours used so far |
 | `row-runs-v1` | image, video | along each row of pixels, at most `changes` places where a pixel differs from its left neighbour (default 3) | yes, at any width and palette |
+| `sound-peak-v1` | audio (`pcm`) | every sample s has −A ≤ s ≤ A, A = ⌊2^(BITS−1) · `percent` / 100⌋ (default 90) | yes, at every depth: an automaton of one state to 24 bits, past that a mixed-radix count of its own |
+| `sound-step-v1` | audio (`pcm`) | neighbouring samples differ by at most ⌊2^BITS · `percent` / 100⌋ (default 50) | an automaton (its state the sample before) to 11 bits; judged past that |
+| `silence-run-v1` | audio (`pcm`) | no run of more than `samples` silent samples, digit 0 (default 4000) | an automaton (its state the run so far) while it fits; judged past that |
 | `canonical-mesh-v1` | models | the vertices increase as grid points, each face starts at its smallest index (rotation only, so winding is kept), the faces increase as triples: one encoding of each mesh | yes: C(C³, V) · C(V(V−1)(V−2)/3, F); with every-vertex-used, while its table fits in the filter memory (16 vertices in 512 MB) |
 | `utf8-valid-v1` | binary | well-formed UTF-8 throughout (RFC 3629); `controls = text`: no control character but tab, LF, CR | yes, on its own, while its table fits |
 

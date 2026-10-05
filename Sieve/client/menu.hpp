@@ -20,6 +20,7 @@
 #include "display.hpp"
 #include "cli/args.hpp"
 #include "cli/filter_config.hpp"
+#include "cli/lines.hpp" // kDefaultExportFps
 
 #include <SDL3/SDL.h>
 
@@ -60,6 +61,7 @@ struct Settings
     // The ffmpeg that reads picture and video formats stb_image does not (cli/media_decode.hpp);
     // empty: SIEVE_FFMPEG, then one beside Sieve, then the PATH.
     std::string ffmpeg;
+    uint32_t video_fps = sieve::cli::kDefaultExportFps; // a video saved as a video through ffmpeg: frames a second
     uint32_t book_pages = 4; // books: a cover (image line), a title and this many pages (pages line)
     // models: V vertices and F triangles, each coordinate one of C steps across [-1, 1]
     uint32_t model_vertices = 8, model_faces = 12, model_coords = 16;
