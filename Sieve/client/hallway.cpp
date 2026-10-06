@@ -79,6 +79,8 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
                 modes_[li] = FilterMode::Off;
             }
         }
+        // The music's tracks are this hallway's: their addresses take its cover and title shapes.
+        set_track_shape(image.space, title);
         // The binary line: every file up to binary_bytes, titled, with a cover as audio and video have.
         binary_space_ = std::make_unique<BinarySpace>(std::max<uint64_t>(1, shape.binary_bytes), key);
         // (No cover: a file's kind is read from its own first bytes instead, and shown on its front.)
@@ -804,6 +806,7 @@ void Hallway::go_to_unit(const Space::Digits& unit, bool open)
             b.passes = false;
             b.failed_by = failed_by;
             b.withheld = vault_withholds(b);
+            drop_in_hand();
             in_hand_ = b;
             hand_tab_ = 0;
             in_hand_where_ = trf("hand.not_shelved", {b.failed_by});
@@ -1518,6 +1521,8 @@ void Hallway::turn_page(int dir)
 void Hallway::drop_in_hand()
 {
     in_hand_.reset();
+    model_spin_ = kModelSpin; // the next model taken comes to hand at the resting turn
+    model_tilt_ = kModelTilt;
     synth_.stop();
     if (music()) music()->stop_item(); // and the music comes back
 }

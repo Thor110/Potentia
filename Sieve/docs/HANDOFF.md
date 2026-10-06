@@ -1692,3 +1692,25 @@ IDEAS §13's open steps, and one fix:
   and the hallway saving the same track (plain and compact through the joined stack), joined counts
   on movies, notes3 stacks compact both ways, and the oracle against the engine on every notes3
   plugin.
+
+### The music's melodies, and tracks as a source (6 October 2026)
+
+- **"Melody", not "track", for what the music plays**, now that TRACKS is a line: the Media Player's
+  labels (RECENT MELODIES, "A new melody now", "Quiet between melodies" ...), the README, and the
+  code (`MusicMelody`, `go_to_melody()`, `Request::GoToMelody`). `sieve-music.ini` writes recent
+  entries as `melody =` and still reads `track =`.
+- **Draws from: the audio line or the tracks line** (per mode; `source` and `units` in
+  `sieve-music.ini`). From the tracks line a melody is a real track: N units of the mode's length,
+  blank cover and title, its notes the units joined; the mode's filters judge the whole joined
+  track, as a JOINED stack does. `MusicMelody::units` (0 for the audio line) is kept in the recent
+  list (`tracks:N`) and in favourites.tsv (a sixth field). Its address is its tracks-line address,
+  from the hallway's cover and title shapes (`set_track_shape()`, called when a hallway is built;
+  the setup menu's defaults before that). G walks to it on TRACKS, building the hallway again with
+  that length and number of units when it differs.
+- **A door literal fixed:** "go to" set the line to door 2, which was audio before the doors were
+  reordered and is books now; it goes by name (`line_of(LineKind::Audio)`, or tracks).
+- **The model in hand** turns back to its resting angle whenever it is put down, so it comes back
+  upright; the one path that put an unshelved item in hand without putting the last one down
+  (compact, no shelf) now does.
+- **The NOW PLAYING box** is 21 px lower and 6 px further right (`y = 73`, right edge at `W - 6`):
+  below the FPS counter, flush with its right edge, and clear of the setup menu's budget rows.

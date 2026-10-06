@@ -1,9 +1,9 @@
 // Sieve hallway — the music player (music.hpp): the mixer on SDL's audio thread, the worker that
-// chooses tracks by the modes' filter stacks, and the settings, recent tracks and favourites kept
+// chooses melodies by the modes' filter stacks, and the settings, recent melodies and favourites kept
 // between runs.
 //
-// The mixer synthesises as it goes, a sample at a time, rather than rendering a track before it
-// plays: a slow track of long notes with an echo would be minutes of samples to hold. Each channel
+// The mixer synthesises as it goes, a sample at a time, rather than rendering a melody before it
+// plays: a slow melody of long notes with an echo would be minutes of samples to hold. Each channel
 // knows its note, how far into it it is, its phase and its echo's delay line; a music channel also
 // has a gain that moves towards its target over a second and a half, which is all the fading
 // there is. A music channel whose gain has reached nothing waits where it is.
@@ -16,6 +16,7 @@
 #include "cli/lines.hpp"
 #include "cli/locate.hpp"
 #include "sieve/audio.hpp"
+#include "sieve/composition.hpp"
 #include "sieve/space.hpp"
 
 #include <algorithm>
@@ -40,6 +41,9 @@ constexpr float kFadeSeconds = 1.5f;
 constexpr size_t kRecent = 10;
 
 MusicPlayer* g_player = nullptr;
+// A track's cover and title shapes (set_track_shape): the setup menu's defaults until a hallway is built.
+std::mutex g_shape_mx;
+std::optional<sieve::Space> g_cover, g_title; // no cover yet: the defaults (made when first asked for)
 std::mutex g_colour_mx; // the hallway may set them while it is built, on a worker
 SDL_Color g_bg{0, 0, 0, 255}, g_ink{255, 255, 255, 255}; // the box's colours: where you are
 
@@ -65,12 +69,12 @@ constexpr int fifths_at(int door)
 }
 static_assert(fifths_at(0) == 0 && fifths_at(1) == -5 && fifths_at(2) == 2 && fifths_at(6) == 6);
 
-// "world/binary" and back: where a track played, in the files.
-std::string where_id(const MusicTrack& t)
+// "world/binary" and back: where a melody played, in the files.
+std::string where_id(const MusicMelody& t)
 {
     return std::string(mode_id(t.mode)) + (t.mode == MusicMode::World && t.line >= 0 && t.line < kLines ? std::string("/") + kDimensions[t.line].id : "");
 }
-void where_from(const std::string& id, MusicTrack& t)
+void where_from(const std::string& id, MusicMelody& t)
 {
     const size_t slash = id.find('/');
     t.mode = id.substr(0, slash) == "menus" ? MusicMode::Menus : MusicMode::World;
@@ -116,7 +120,7 @@ MusicSettings defaults(MusicMode m)
     // mode is heard: the pentatonic lacks the steps Lydian and Mixolydian change), small steps,
     // long notes, few rests, a register kept low, ending home on the tonic, soft struck tones and
     // more echo. Both are starting points to be tuned by ear in the Media Player. The melody
-    // plugins (data/filters) all count, so the stack counts and a track is drawn by rank; without
+    // plugins (data/filters) all count, so the stack counts and a melody is drawn by rank; without
     // them (a filters folder not found) only key-v1, which counts on its own.
     MusicSettings s;
     const bool plugins = sieve::find_filter("key-data-v2") && sieve::find_filter("melody-leap-v1") && sieve::find_filter("melody-lengths-v1") &&
@@ -165,7 +169,7 @@ Voice voice_from(const std::string& s)
     return Voice::Soft;
 }
 
-// A notation read back into its unit (the whole notation is one unit, its length the track's; on
+// A notation read back into its unit (the whole notation is one unit, its length the melody's; on
 // several voices, the first voice's events are each voice's).
 std::optional<std::vector<uint32_t>> notes_of(const sieve::NoteSet& set, const std::string& notation)
 {
@@ -281,19 +285,63 @@ void present(SDL_Renderer* r)
     SDL_RenderPresent(r);
 }
 
-std::string MusicTrack::notation() const { return sieve::notes_to_notation(set, notes); }
+std::string MusicMelody::notation() const { return sieve::notes_to_notation(set, notes); }
 
-std::string MusicTrack::where() const
+std::string MusicMelody::where() const
 {
     const std::string m = tr(std::string("music.mode.") + mode_id(mode));
     return mode == MusicMode::World && line >= 0 && line < kLines ? m + " [" + tr(line_key(line)) + "]" : m;
 }
 
-std::string MusicTrack::address() const
+void set_track_shape(const sieve::Space& cover, const std::optional<sieve::Space>& title)
+{
+    std::lock_guard<std::mutex> lock(g_shape_mx);
+    g_cover = cover;
+    g_title = title;
+}
+
+std::string MusicMelody::address() const
 {
     if (notes.empty()) return "";
-    const sieve::Space sp(set.id(), set.base(), uint32_t(notes.size()));
-    return sp.hex_of(sp.address_digits(notes, sieve::AddressMode::Positional));
+    if (units == 0)
+    {
+        const sieve::Space sp(set.id(), set.base(), uint32_t(notes.size()));
+        return sp.hex_of(sp.address_digits(notes, sieve::AddressMode::Positional));
+    }
+    // A track: its units split from the joined notes, a blank cover and title, on the tracks line.
+    std::optional<sieve::Space> cover, title;
+    {
+        std::lock_guard<std::mutex> lock(g_shape_mx);
+        if (!g_cover)
+        {
+            g_cover = sieve::Space("image/mono/10x10", 2, 100);
+            g_title = sieve::Space(sieve::alphabet_of("lower27"), 32);
+        }
+        cover = g_cover;
+        title = g_title;
+    }
+    try
+    {
+        const sieve::Space unit(set.id(), set.base(), uint32_t(notes.size() / units));
+        const sieve::CompositionSpace cs("tracks", *cover, title, unit, units);
+        sieve::CompositionSpace::Parts p;
+        p.cover.assign(cover->unit_length(), 0);
+        if (title) p.title.assign(title->unit_length(), 0);
+        p.units = sieve::split_units(notes, std::max<uint32_t>(1, set.voices), units);
+        return cs.hex_of(cs.index_of(p, sieve::AddressMode::Positional));
+    }
+    catch (const std::exception&)
+    {
+        return "?";
+    }
+}
+
+std::string MusicMelody::short_address(size_t n) const
+{
+    const std::string a = address();
+    if (a.size() <= n || n < 4) return a;
+    const size_t half = (n - 2) / 2;
+    return a.substr(0, half) + ".." + a.substr(a.size() - half);
 }
 
 // ---------------------------------------------------------------- the player
@@ -349,7 +397,7 @@ void MusicPlayer::set_line(int li)
     recharacter();
 }
 
-// WORLD's pitch shifts for the line you are on: each note of the track's scale (key-v1's, in
+// WORLD's pitch shifts for the line you are on: each note of the melody's scale (key-v1's, in
 // WORLD's stack) moved to the same step of the line's mode, on the same tonic, and the whole key
 // round the circle of fifths if that is on. Taken up from the next note.
 void MusicPlayer::recharacter()
@@ -357,7 +405,7 @@ void MusicPlayer::recharacter()
     const MusicSettings& s = settings_[int(MusicMode::World)];
     int* shift = music_[int(MusicMode::World)].shift;
     const int transpose = s.fifths ? fifths_at(line_) : 0;
-    // The track's scale, read as the seven-note scale it comes from.
+    // The melody's scale, read as the seven-note scale it comes from.
     const int* parent = nullptr;
     int tonic = 0;
     static const int ionian[7] = {0, 2, 4, 5, 7, 9, 11}, aeolian[7] = {0, 2, 3, 5, 7, 8, 10}, harmonic[7] = {0, 2, 3, 5, 7, 8, 11};
@@ -459,7 +507,7 @@ void MusicPlayer::set_settings(MusicMode m, const MusicSettings& s)
 {
     std::lock_guard<std::mutex> lock(mx_);
     MusicSettings& now = settings_[int(m)];
-    // Volume, voice, tempo and echo change the track playing; length and filters the next one.
+    // Volume, voice, tempo and echo change the melody playing; length, source and filters the next one.
     now = s;
     Channel& c = music_[int(m)];
     c.level = float(s.volume) / 100.0f;
@@ -482,7 +530,7 @@ void MusicPlayer::next(MusicMode m)
     cv_.notify_all();
 }
 
-void MusicPlayer::play(const MusicTrack& t)
+void MusicPlayer::play(const MusicMelody& t)
 {
     // In the mode where you are, so it is heard now, with that mode's sound; it keeps its own
     // mode's name.
@@ -490,27 +538,27 @@ void MusicPlayer::play(const MusicTrack& t)
     const int m = int(mode_);
     const MusicSettings& s = settings_[m];
     load(music_[m], t.set, t.notes, float(s.tempo), s.voice, float(s.echo) / 100.0f, float(s.volume) / 100.0f);
-    MusicTrack now = t;
+    MusicMelody now = t;
     now.when = clock_now();
     playing_[m] = now;
-    toast_ = trf("music.now_playing", {now.where(), now.address().substr(0, 12)});
+    toast_ = trf(now.units ? "music.now_playing.track" : "music.now_playing", {now.where(), now.short_address(14)});
     toast_until_ = SDL_GetTicks() + 5000;
     retarget();
 }
 
-std::vector<MusicTrack> MusicPlayer::recent() const
+std::vector<MusicMelody> MusicPlayer::recent() const
 {
     std::lock_guard<std::mutex> lock(mx_);
     return recent_;
 }
 
-std::vector<MusicTrack> MusicPlayer::favourites() const
+std::vector<MusicMelody> MusicPlayer::favourites() const
 {
     std::lock_guard<std::mutex> lock(mx_);
     return favourites_;
 }
 
-std::optional<MusicTrack> MusicPlayer::now_playing(MusicMode m) const
+std::optional<MusicMelody> MusicPlayer::now_playing(MusicMode m) const
 {
     std::lock_guard<std::mutex> lock(mx_);
     return playing_[int(m)];
@@ -690,18 +738,20 @@ void SDLCALL MusicPlayer::callback(void* user, SDL_AudioStream* stream, int addi
     }
 }
 
-// ---------------------------------------------------------------- choosing tracks
+// ---------------------------------------------------------------- choosing melodies
 
 std::optional<std::vector<uint32_t>> MusicPlayer::pick(const MusicSettings& s, std::string& why) const
 {
     try
     {
         const sieve::NoteSet set = s.notes();
-        const sieve::cli::Line line = audio_line(set, s.length);
+        // A track's units joined are one unit of the audio line N units long, and the filters
+        // judge that, as a track's JOINED stack does.
+        const sieve::cli::Line line = s.tracks ? sieve::cli::joined_line(audio_line(set, s.length), s.units) : audio_line(set, s.length);
         const sieve::FilterStack st = sieve::cli::build_stack(line, s.filters);
         std::mt19937_64 rng(std::random_device{}() ^ uint64_t(SDL_GetTicksNS()));
         auto any_unit = [&] {
-            std::vector<uint32_t> u(size_t(s.length) * set.voices);
+            std::vector<uint32_t> u(line.space.unit_length());
             for (auto& d : u) d = uint32_t(rng() % set.base());
             return u;
         };
@@ -762,7 +812,7 @@ void MusicPlayer::worker()
         const MusicSettings& s = settings_[m];
         const bool item = in_hand();
         const Uint64 now = SDL_GetTicks();
-        // The first track straight away; the next after the quiet between tracks.
+        // The first melody straight away; the next after the quiet between melodies.
         const bool due = skip_[m] || (c.done && (c.notes.empty() || now >= c.done_at + Uint64(std::max(0, s.gap)) * 1000));
         if (!s.on || item || !due || now < retry_at_[m]) continue;
         skip_[m] = false;
@@ -781,18 +831,19 @@ void MusicPlayer::worker()
         status_.clear();
         const MusicSettings& cur = settings_[m];
         load(music_[m], chosen_with.notes(), *notes, float(cur.tempo), cur.voice, float(cur.echo) / 100.0f, float(cur.volume) / 100.0f);
-        MusicTrack t;
+        MusicMelody t;
         t.mode = MusicMode(m);
         t.set = chosen_with.notes();
         t.line = t.mode == MusicMode::World ? line_ : -1;
         t.when = clock_now();
         t.notes = *notes;
+        t.units = chosen_with.tracks ? chosen_with.units : 0;
         playing_[m] = t;
         recent_.insert(recent_.begin(), t);
         if (recent_.size() > kRecent) recent_.resize(kRecent);
         if (m == int(mode_))
         {
-            toast_ = trf("music.now_playing", {t.where(), t.address().substr(0, 12)});
+            toast_ = trf(t.units ? "music.now_playing.track" : "music.now_playing", {t.where(), t.short_address(14)});
             toast_until_ = SDL_GetTicks() + 5000;
         }
         retarget();
@@ -811,7 +862,7 @@ void MusicPlayer::draw_overlay(SDL_Renderer* r, float W, float, SDL_Color bg, SD
         msg = toast_;
     }
     const std::string head = tr("music.box");
-    const float w = std::max(text_width(msg, 1), text_width(head, 2)) + 24, h = 48, x = W - w - 12, y = 52; // below the hallway's two lines of readout
+    const float w = std::max(text_width(msg, 1), text_width(head, 2)) + 24, h = 48, x = W - w - 6, y = 73; // below the hallway's two lines of readout, the FPS counter and the setup menu's budget
     SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(r, bg.r, bg.g, bg.b, 235);
     const SDL_FRect box{x, y, w, h};
@@ -846,15 +897,23 @@ void MusicPlayer::load_settings()
         const std::string k = trim(line.substr(0, eq)), v = trim(line.substr(eq + 1));
         try
         {
-            if (section == "recent" && k == "track")
+            if (section == "recent" && (k == "melody" || k == "track")) // ("track" before tracks were a line)
             {
-                // mode when [set] notation... (the set named when it is not notes104)
+                // mode when [tracks:N] [set] notation... (tracks:N for a track of N units; the set
+                // named when it is not notes104)
                 std::istringstream w(v);
                 std::string mode, when;
                 w >> mode >> when;
                 std::string rest;
                 std::getline(w, rest);
                 rest = trim(rest);
+                uint32_t units = 0;
+                if (rest.rfind("tracks:", 0) == 0)
+                {
+                    const size_t sp = rest.find(' ');
+                    units = uint32_t(std::stoul(rest.substr(7, sp - 7)));
+                    rest = sp == std::string::npos ? "" : trim(rest.substr(sp));
+                }
                 sieve::NoteSet set;
                 if (rest.rfind("notes2/", 0) == 0)
                 {
@@ -865,11 +924,12 @@ void MusicPlayer::load_settings()
                 if (auto notes = notes_of(set, rest))
                     if (recent_.size() < kRecent)
                     {
-                        MusicTrack t;
+                        MusicMelody t;
                         t.set = set;
                         where_from(mode, t);
                         t.when = when;
                         t.notes = *notes;
+                        if (units && t.notes.size() % (size_t(units) * std::max<uint32_t>(1, set.voices)) == 0) t.units = units;
                         recent_.push_back(t);
                     }
                 continue;
@@ -880,6 +940,8 @@ void MusicPlayer::load_settings()
             if (k == "on") s.on = v == "on";
             else if (k == "volume") s.volume = std::clamp(std::stoi(v), 0, 100);
             else if (k == "length") s.length = uint32_t(std::clamp(std::stoi(v), 1, 4096));
+            else if (k == "source") s.tracks = v == "tracks";
+            else if (k == "units") s.units = uint32_t(std::clamp(std::stoi(v), 1, 64));
             else if (k == "notes")
             {
                 // notes = notes104, or notes = notes2 LOW HIGH DURATIONS VOICES
@@ -948,7 +1010,7 @@ void MusicPlayer::load_settings()
 void MusicPlayer::save() const
 {
     std::ostringstream o;
-    o << "; Sieve hallway - the music player's settings and its last ten tracks (client/music.hpp).\n"
+    o << "; Sieve hallway - the music player's settings and its last ten melodies (client/music.hpp).\n"
          "; Written by the Media Player in the pause menu; edit it with the hallway closed.\n";
     for (int m = 0; m < 2; ++m)
     {
@@ -957,6 +1019,8 @@ void MusicPlayer::save() const
           << "on = " << (s.on ? "on" : "off") << "\n"
           << "volume = " << s.volume << "\n"
           << "length = " << s.length << "\n"
+          << "source = " << (s.tracks ? "tracks" : "audio") << "\n"
+          << "units = " << s.units << "\n"
           << "notes = " << (s.note_set == "notes2" ? "notes2 " + s.low + " " + s.high + " " + s.durations + " " + std::to_string(s.voices) : std::string("notes104")) << "\n"
           << "tempo = " << s.tempo << "\n"
           << "voice = " << voice_id(s.voice) << "\n"
@@ -978,15 +1042,17 @@ void MusicPlayer::save() const
             for (const auto& [n, v] : vals) o << "param = " << f << " " << n << " " << v << "\n";
     }
     o << "\n[recent]\n";
-    for (const MusicTrack& t : recent_)
-        o << "track = " << where_id(t) << " " << (t.when.empty() ? "--:--" : t.when) << " " << (t.set.legacy ? std::string() : t.set.id() + " ") << t.notation() << "\n";
+    for (const MusicMelody& t : recent_)
+        o << "melody = " << where_id(t) << " " << (t.when.empty() ? "--:--" : t.when) << " " << (t.units ? "tracks:" + std::to_string(t.units) + " " : std::string())
+          << (t.set.legacy ? std::string() : t.set.id() + " ") << t.notation() << "\n";
     std::ofstream out(ini_path_, std::ios::binary);
     out << o.str();
 }
 
 // Favourites: Sieve instructions (a sieve-manifest-v3, as its address) holding favourites.tsv
-// (one line a track: file, mode, when, notes) and each track as a MIDI file.
-void MusicPlayer::write_favourites(const std::vector<MusicTrack>& favs) const
+// (one line a melody: file, mode, when, notes, its note set and, for a track, its units) and
+// each melody as a MIDI file.
+void MusicPlayer::write_favourites(const std::vector<MusicMelody>& favs) const
 {
     std::error_code ec;
     if (favs.empty())
@@ -1004,9 +1070,11 @@ void MusicPlayer::write_favourites(const std::vector<MusicTrack>& favs) const
         std::snprintf(name, sizeof name, "%03zu-%s.mid", i + 1, where.c_str());
         const std::string midi = sieve::notes_to_midi(favs[i].set, favs[i].notes);
         files.emplace_back(name, std::vector<uint8_t>(midi.begin(), midi.end()));
-        // file, where, when, notes, and the note set when it is not notes104
+        // file, where, when, notes, then the note set when it is not notes104 and, for a track,
+        // tracks:N (with an empty set field before it on notes104)
         index += std::string(name) + "\t" + where_id(favs[i]) + "\t" + (favs[i].when.empty() ? "--:--" : favs[i].when) + "\t" + favs[i].notation() +
-                 (favs[i].set.legacy ? std::string() : "\t" + favs[i].set.id()) + "\n";
+                 (favs[i].set.legacy && !favs[i].units ? std::string() : "\t" + (favs[i].set.legacy ? std::string() : favs[i].set.id())) +
+                 (favs[i].units ? "\ttracks:" + std::to_string(favs[i].units) : std::string()) + "\n";
     }
     files.emplace_back("favourites.tsv", std::vector<uint8_t>(index.begin(), index.end()));
     std::sort(files.begin(), files.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
@@ -1048,15 +1116,22 @@ void MusicPlayer::read_favourites()
                     std::istringstream w(l);
                     std::string file, mode, when, notation, set_id;
                     if (!std::getline(w, file, '\t') || !std::getline(w, mode, '\t') || !std::getline(w, when, '\t') || !std::getline(w, notation, '\t')) continue;
-                    std::getline(w, set_id);
+                    std::getline(w, set_id, '\t');
+                    std::string units_field;
+                    std::getline(w, units_field);
                     const sieve::NoteSet set = set_id.empty() ? sieve::NoteSet{} : set_of(set_id);
                     if (auto notes = notes_of(set, notation))
                     {
-                        MusicTrack t;
+                        MusicMelody t;
                         t.set = set;
                         where_from(mode, t);
                         t.when = when;
                         t.notes = *notes;
+                        if (units_field.rfind("tracks:", 0) == 0)
+                        {
+                            const uint32_t units = uint32_t(std::stoul(units_field.substr(7)));
+                            if (units && t.notes.size() % (size_t(units) * std::max<uint32_t>(1, set.voices)) == 0) t.units = units;
+                        }
                         favourites_.push_back(t);
                     }
                 }
@@ -1070,10 +1145,10 @@ void MusicPlayer::read_favourites()
     }
 }
 
-std::string MusicPlayer::add_favourite(const MusicTrack& t)
+std::string MusicPlayer::add_favourite(const MusicMelody& t)
 {
     std::lock_guard<std::mutex> lock(mx_);
-    for (const MusicTrack& f : favourites_)
+    for (const MusicMelody& f : favourites_)
         if (f.notes == t.notes) return tr("music.fav_already");
     if (sieve::cli::unit_withheld(audio_line(t.set, uint32_t(t.notes.size() / std::max<uint32_t>(1, t.set.voices))), t.notes)) return tr("music.withheld");
     auto next = favourites_;

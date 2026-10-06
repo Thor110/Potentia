@@ -1,20 +1,21 @@
-// The Media Player, from the pause menu: the background music's settings, the tracks it has
+// The Media Player, from the pause menu: the background music's settings, the melodies it has
 // played and the ones kept (music.hpp has the player itself).
 //
-// Three columns, as the filter designer has: on the left the last ten tracks the player chose,
+// Three columns, as the filter designer has: on the left the last ten melodies the player chose,
 // each with the mode it played in (MENUS or WORLD) and when; in the middle the controls; on the
 // right the favourites. The controls show one mode's settings at a time (MODE at the top switches
 // between MENUS and WORLD, which have one form and two sets of values): the music on or off, its
-// volume, the tracks' length, tempo, voice, echo and the quiet between them, a new track now, and
-// the mode's own stack of audio filters with their settings, apart from the setup menu's. Below
-// them the actions, which act on the highlighted track of whichever list was used last: play it,
-// go to it (on the audio line, in hand; a track of another length than this hallway's audio line
-// builds the hallway again at that length), save it as MIDI, and add it to the favourites or take
-// it off them.
+// volume, where its melodies come from (the audio line, or tracks of the tracks line and how many
+// units), their length, tempo, voice, echo and the quiet between them, a new melody now, and the
+// mode's own stack of audio filters with their settings, apart from the setup menu's. Below them
+// the actions, which act on the highlighted melody of whichever list was used last: play it, go to
+// it (on the audio line, or the tracks line for a track, in hand; one this hallway does not have
+// builds the hallway again with it), save it as MIDI, and add it to the favourites or take it off
+// them.
 //
 // Keys: Tab moves between the columns, Up and Down along one, Left and Right change a setting
-// (Shift: ten steps), ENTER plays a track or presses a button, G goes to the track, F saves it,
-// V adds it to the favourites (or takes it off, in that list), N plays a new track now, Esc
+// (Shift: ten steps), ENTER plays a melody or presses a button, G goes to the melody, F saves it,
+// V adds it to the favourites (or takes it off, in that list), N plays a new melody now, Esc
 // goes back to the pause menu.
 
 #include "hallway.hpp"
@@ -35,9 +36,9 @@ void SDLCALL media_save_chosen(void* user, const char* const* files, int)
 
 std::string mode_name(MusicMode m) { return tr(m == MusicMode::Menus ? "music.mode.menus" : "music.mode.world"); }
 
-std::string track_line(const MusicTrack& t)
+std::string melody_line(const MusicMelody& t)
 {
-    return (t.when.empty() ? "--:--" : t.when) + "  " + t.where() + "  " + t.address().substr(0, 10) + "  " + t.notation();
+    return (t.when.empty() ? "--:--" : t.when) + "  " + t.where() + "  " + t.short_address(14) + "  " + t.notation();
 }
 
 } // namespace
@@ -67,7 +68,7 @@ std::vector<Hallway::MediaRow> Hallway::media_rows() const
 {
     using K = MediaRow::Kind;
     std::vector<MediaRow> rows;
-    for (K k : {K::Mode, K::On, K::Volume, K::Length, K::NoteSet, K::Low, K::High, K::Durations, K::Voices, K::Tempo, K::Voice, K::Echo, K::Gap})
+    for (K k : {K::Mode, K::On, K::Volume, K::Source, K::Units, K::Length, K::NoteSet, K::Low, K::High, K::Durations, K::Voices, K::Tempo, K::Voice, K::Echo, K::Gap})
         rows.push_back({k, {}, {}, -1});
     // WORLD's character: a mode for each line, and the key round the circle of fifths.
     if (media_mode_ == MusicMode::World)
@@ -81,7 +82,8 @@ std::vector<Hallway::MediaRow> Hallway::media_rows() const
     {
         const MusicSettings s = p->settings(media_mode_);
         const sieve::NoteSet set = s.notes();
-        sieve::FilterLine fl{"audio", set.id(), set.base(), s.length * set.voices, nullptr, 0, 0, 0};
+        // The filters judge a melody, or a track's units joined (N units long).
+        sieve::FilterLine fl{"audio", set.id(), set.base(), s.length * set.voices * (s.tracks ? s.units : 1), nullptr, 0, 0, 0};
         for (const sieve::FilterSpec* f : sieve::filters_for(fl))
         {
             rows.push_back({K::Filter, f->name(), {}, -1});
@@ -93,7 +95,7 @@ std::vector<Hallway::MediaRow> Hallway::media_rows() const
     return rows;
 }
 
-std::optional<MusicTrack> Hallway::media_selected() const
+std::optional<MusicMelody> Hallway::media_selected() const
 {
     if (!music()) return std::nullopt;
     const auto list = media_list_ == 2 ? music()->favourites() : music()->recent();
@@ -126,17 +128,21 @@ void Hallway::media_saved(const std::string& path)
     media_status_ = done;
 }
 
-// Walk to a track: the audio line at the track's slot, the track in hand. Only a hallway whose
-// audio line is the track's note set and length has it; otherwise the application builds one that
-// does.
-void Hallway::go_to_track(const sieve::NoteSet& set, const std::vector<uint32_t>& notes)
+// Walk to a melody: the audio line at its slot, or for a track the tracks line at its, in hand.
+// Only a hallway whose audio line is the melody's note set and length (and, for a track, whose
+// tracks are as many units) has it; otherwise the application builds one that does.
+void Hallway::go_to_melody(const MusicMelody& m)
 {
-    if (notes.empty()) return;
-    if (unit_line(LineKind::Audio).space.unit_length() != notes.size() || unit_line(LineKind::Audio).space.symbols_id() != set.id())
+    if (m.notes.empty()) return;
+    const uint32_t units = std::max<uint32_t>(1, m.units);
+    const Space& audio = unit_line(LineKind::Audio).space;
+    const int tracks = line_of(Media::Tracks);
+    const bool here = audio.symbols_id() == m.set.id() && uint64_t(audio.unit_length()) * units == m.notes.size() &&
+                      (!m.units || (comps_[size_t(tracks)].space && comps_[size_t(tracks)].space->units() == m.units));
+    if (!here)
     {
-        track_to_go_ = notes;
-        track_set_to_go_ = set;
-        request_ = Request::GoToTrack;
+        melody_to_go_ = m;
+        request_ = Request::GoToMelody;
         return;
     }
     if (media_open_) close_media_player();
@@ -144,9 +150,9 @@ void Hallway::go_to_track(const sieve::NoteSet& set, const std::vector<uint32_t>
     drop_in_hand();
     trail_.clear();
     door_back_.clear();
-    set_line(2);
-    go_to_unit(notes, true);
-    message(trf("media.went", {std::to_string(notes.size())}));
+    set_line(m.units ? tracks : line_of(LineKind::Audio)); // by name: the doors have moved before
+    go_to_unit(m.notes, true);
+    message(trf(m.units ? "media.went.track" : "media.went", {std::to_string(m.notes.size())}));
 }
 
 void Hallway::media_act(MediaRow::Kind k, bool& quit)
@@ -177,8 +183,8 @@ void Hallway::media_act(MediaRow::Kind k, bool& quit)
         say(trf("media.playing", {mode_name(t->mode)}));
         break;
     case K::GoTo:
-        go_to_track(t->set, t->notes);
-        if (request_ == Request::GoToTrack) quit = true; // the application builds the hallway again
+        go_to_melody(*t);
+        if (request_ == Request::GoToMelody) quit = true; // the application builds the hallway again
         break;
     case K::Save:
     {
@@ -188,7 +194,9 @@ void Hallway::media_act(MediaRow::Kind k, bool& quit)
             media_saving_set_ = t->set;
         }
         const char* docs = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
-        const std::string name = "sieve-audio-" + t->address().substr(0, 12) + ".mid";
+        // Named by twelve digits of its address: a track's last twelve, since it begins with zeros.
+        const std::string addr = t->address();
+        const std::string name = (t->units ? "sieve-tracks-" + addr.substr(addr.size() - std::min<size_t>(12, addr.size())) : "sieve-audio-" + addr.substr(0, 12)) + ".mid";
         const std::string start = docs ? std::string(docs) + name : name;
         SDL_ShowSaveFileDialog(media_save_chosen, this, window_, nullptr, 0, start.c_str());
         break;
@@ -236,6 +244,11 @@ void Hallway::media_change(int dir, bool big, bool& quit)
     {
     case K::On: s.on = !s.on; break;
     case K::Volume: s.volume = std::clamp(s.volume + by * 5, 0, 100); break;
+    case K::Source: s.tracks = !s.tracks; break;
+    case K::Units:
+        if (!s.tracks) return;
+        s.units = uint32_t(std::clamp(int(s.units) + by, 1, 64));
+        break;
     case K::Length: s.length = uint32_t(std::clamp(int(s.length) + by, 1, 4096)); break;
     case K::NoteSet: s.note_set = s.note_set == "notes2" ? "notes104" : "notes2"; break;
     case K::Low:
@@ -397,7 +410,7 @@ void Hallway::draw_media_player(float W, float H)
     };
 
     // The two lists.
-    auto list = [&](float x, float w, int area, const std::vector<MusicTrack>& tracks, const std::string& title, const std::string& empty) {
+    auto list = [&](float x, float w, int area, const std::vector<MusicMelody>& tracks, const std::string& title, const std::string& empty) {
         frame(x, w, area, title);
         if (tracks.empty()) text(x + 8, top + 28, fit(empty, w - 16, 1), 1, dim);
         int& sel = media_sel_[area];
@@ -408,7 +421,7 @@ void Hallway::draw_media_player(float W, float H)
             const float y = top + 28 + float(i - first) * kRowH;
             const bool chosen = i == sel && media_list_ == area;
             if (i == sel) highlight(x, y, w, media_area_ == area);
-            text(x + 8, y, fit(track_line(tracks[size_t(i)]), w - 16, 1), 1, chosen ? white : ink);
+            text(x + 8, y, fit(melody_line(tracks[size_t(i)]), w - 16, 1), 1, chosen ? white : ink);
             media_rects_.push_back({SDL_FRect{x, y - 3, w, kRowH}, {area, i}});
         }
     };
@@ -435,8 +448,10 @@ void Hallway::draw_media_player(float W, float H)
         case K::Mode: label = tr("media.mode"); value = "< " + mode_name(media_mode_) + " >"; break;
         case K::On: label = tr("media.on"); value = tr(s.on ? "media.value.on" : "media.value.off"); break;
         case K::Volume: label = tr("media.volume"); value = std::to_string(s.volume) + "%"; break;
+        case K::Source: label = tr("media.source"); value = tr(s.tracks ? "media.source.tracks" : "media.source.audio"); break;
+        case K::Units: label = "   " + tr("media.units"); value = s.tracks ? std::to_string(s.units) : tr("media.tracks_only"); break;
         case K::Length:
-            label = tr(s.notes().voices > 1 ? "media.length.per_voice" : "media.length");
+            label = tr(s.tracks ? (s.notes().voices > 1 ? "media.length.unit_voice" : "media.length.unit") : s.notes().voices > 1 ? "media.length.per_voice" : "media.length");
             value = trf("media.value.notes", {std::to_string(s.length)});
             break;
         case K::NoteSet:
@@ -458,7 +473,7 @@ void Hallway::draw_media_player(float W, float H)
         case K::LineMode: label = "   " + tr(line_key(row.line)); value = tr(std::string("media.mode.") + music_mode_name(s.modes[size_t(kDimensions[row.line].media)])); break;
         case K::Fifths: label = tr("media.fifths"); value = tr(s.fifths ? "media.value.on" : "media.value.off"); break;
         case K::Next: label = tr("media.next"); break;
-        case K::Filters: label = tr("media.filters"); header = true; break;
+        case K::Filters: label = tr(s.tracks ? "media.filters.tracks" : "media.filters"); header = true; break;
         case K::Filter:
         {
             const sieve::FilterSpec* f = sieve::find_filter(row.filter);
@@ -491,12 +506,12 @@ void Hallway::draw_media_player(float W, float H)
     for (MusicMode m : {MusicMode::Menus, MusicMode::World})
     {
         const auto now = p->now_playing(m);
-        const std::string on = now ? now->address().substr(0, 16) + "  " + now->notation() : tr("media.nothing_yet");
+        const std::string on = now ? now->short_address(18) + "  " + now->notation() : tr("media.nothing_yet");
         text(20, y, fit(trf("media.now", {mode_name(m), on}), W - 40, 1), 1, m == (in_menu() ? MusicMode::Menus : MusicMode::World) ? ink : grey);
         y += 14;
     }
     if (const auto t = media_selected())
-        text(20, y, fit(trf("media.selected", {tr(from_favs ? "media.favourites" : "media.recent"), t->address().substr(0, 24), std::to_string(t->notes.size())}), W - 40, 1), 1, grey);
+        text(20, y, fit(trf("media.selected", {tr(from_favs ? "media.favourites" : "media.recent"), t->short_address(26), std::to_string(t->notes.size())}), W - 40, 1), 1, grey);
     y += 14;
     std::string status;
     {

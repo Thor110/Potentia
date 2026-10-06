@@ -626,8 +626,7 @@ int run(const Args& a)
     bool went_in_thin = false;    // the setup menu was told to go in past the budget
     bool show_main = show_menu;
     bool first = true;
-    std::vector<uint32_t> pending_track; // a music track to go to in the next hallway built
-    sieve::NoteSet pending_set;          // and its note set
+    std::optional<MusicMelody> pending_melody; // a melody of the music to go to in the next hallway built
     while (true)
     {
         if (show_main)
@@ -711,10 +710,10 @@ int run(const Args& a)
         hall->set_fps_counter(app.fps_counter);
         hall->set_thin(went_in_thin || ha.has("thin"));
         first = false;
-        if (!pending_track.empty())
+        if (pending_melody)
         {
-            hall->go_to_track(pending_set, pending_track);
-            pending_track.clear();
+            hall->go_to_melody(*pending_melody);
+            pending_melody.reset();
         }
         SDL_SetWindowRelativeMouseMode(window, true);
         Menu::Result in_game_menu = Menu::Result::Back;
@@ -778,13 +777,16 @@ int run(const Args& a)
             hall->settings_changed();
             SDL_SetWindowRelativeMouseMode(window, false);
         }
-        if (hall->request() == Hallway::Request::GoToTrack)
+        if (hall->request() == Hallway::Request::GoToMelody && hall->melody_to_go())
         {
-            // A music track on an audio line of another length: the hallway again at that length,
-            // on the audio line, and there the track.
-            const std::vector<uint32_t> track = hall->track_to_go();
-            const sieve::NoteSet set = hall->track_set_to_go();
-            settings.notes = uint32_t(track.size() / std::max<uint32_t>(1, set.voices));
+            // A melody of the music on an audio line of another length or note set (or a track of
+            // another number of units): the hallway again with that audio line (and tracks), on
+            // the audio or tracks line, and there the melody.
+            const MusicMelody melody = *hall->melody_to_go();
+            const sieve::NoteSet& set = melody.set;
+            const uint32_t units = std::max<uint32_t>(1, melody.units);
+            settings.notes = uint32_t(melody.notes.size() / std::max<uint32_t>(1, set.voices) / units);
+            if (melody.units) settings.track_units = melody.units;
             settings.note_set = set.legacy ? "notes104" : "notes2";
             if (!set.legacy)
             {
@@ -793,9 +795,8 @@ int run(const Args& a)
                 settings.note_durations = set.durations;
                 settings.voices = set.voices;
             }
-            settings.start_line = "audio";
-            pending_track = track;
-            pending_set = set;
+            settings.start_line = melody.units ? "tracks" : "audio";
+            pending_melody = melody;
             show_menu = false;
             settings_chosen = true;
             continue;

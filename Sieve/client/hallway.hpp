@@ -1251,9 +1251,10 @@ private:
 public:
     // What the pause menu has asked the application to open: the settings (after which the same
     // hallway goes on, paused) or the main menu (after which a new one is built).
-    // GoToTrack: a music track to walk to, on an audio line of another length than this one's,
-    // so the application builds a hallway of that length and hands it the track (track_to_go()).
-    enum class Request { None, Settings, MainMenu, GoToTrack };
+    // GoToMelody: a melody of the music to walk to, on an audio line (or with tracks of a number
+    // of units) other than this one's, so the application builds a hallway that has it and hands
+    // it the melody (melody_to_go()).
+    enum class Request { None, Settings, MainMenu, GoToMelody };
     Request request() const { return request_; }
     void clear_request() { request_ = Request::None; }
     // After Settings, the new graphics and language: signs are lettered again, the rest is set.
@@ -1270,7 +1271,7 @@ private:
     Request request_ = Request::None;
     std::vector<SDL_FRect> pause_rects_; // the rows as last drawn, for the pointer
 
-    // ---- the media player (media_player.cpp): the music's settings, its recent tracks and
+    // ---- the media player (media_player.cpp): the music's settings, its recent melodies and
     // favourites, from the pause menu
 public:
     // Whether a menu is over the world (the pause menu or a tool opened from it): the music
@@ -1280,23 +1281,24 @@ public:
     // WORLD's character. At every change of line, and when the hallway is back from a menu.
     void music_line();
     void open_media_player();
-    // Walk to a track: on the audio line, facing it, the item in hand. A track of another length
-    // than this hallway's audio line cannot be reached here: request() is then GoToTrack.
-    void go_to_track(const sieve::NoteSet& set, const std::vector<uint32_t>& notes);
-    const std::vector<uint32_t>& track_to_go() const { return track_to_go_; }
-    const sieve::NoteSet& track_set_to_go() const { return track_set_to_go_; }
+    // Walk to a melody of the music: on the audio line (or the tracks line, for a track), facing
+    // it, the item in hand. One of another length or note set than this hallway's audio line, or a
+    // track of another number of units than its tracks', cannot be reached here: request() is then
+    // GoToMelody.
+    void go_to_melody(const MusicMelody& m);
+    const std::optional<MusicMelody>& melody_to_go() const { return melody_to_go_; }
     void media_saved(const std::string& path); // the save dialog's choice (any thread)
 
 private:
     struct MediaRow
     {
-        enum class Kind { Mode, On, Volume, Length, NoteSet, Low, High, Durations, Voices, Tempo, Voice, Echo, Gap, Character, Fifths, LineMode, Next, Filters, Filter, Param, Play, GoTo, Save, Favourite };
+        enum class Kind { Mode, On, Volume, Source, Units, Length, NoteSet, Low, High, Durations, Voices, Tempo, Voice, Echo, Gap, Character, Fifths, LineMode, Next, Filters, Filter, Param, Play, GoTo, Save, Favourite };
         Kind kind;
         std::string filter, key; // Filter and Param rows
         int line = -1;           // LineMode rows
     };
     std::vector<MediaRow> media_rows() const;
-    std::optional<MusicTrack> media_selected() const; // the highlighted entry of the list last used
+    std::optional<MusicMelody> media_selected() const; // the highlighted entry of the list last used
     void media_change(int dir, bool big, bool& quit);
     void media_act(MediaRow::Kind k, bool& quit);
     void close_media_player();
@@ -1361,8 +1363,9 @@ private:
     std::vector<std::pair<SDL_FRect, std::pair<int, int>>> media_rects_; // area, row
     std::mutex media_mx_;
     std::string media_status_;
-    std::vector<uint32_t> media_saving_, track_to_go_;
-    sieve::NoteSet media_saving_set_, track_set_to_go_;
+    std::vector<uint32_t> media_saving_;
+    sieve::NoteSet media_saving_set_;
+    std::optional<MusicMelody> melody_to_go_;
 
     // ---- the address navigator (navigator.cpp): X opens the whole address, digit by digit
     void open_navigator();

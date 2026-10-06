@@ -1,45 +1,49 @@
-// Sieve hallway — the music player: melodies from the audio line, played quietly behind
-// everything, chosen by filters.
+// Sieve hallway — the music player: melodies from the audio line (or tracks from the tracks
+// line), played quietly behind everything, chosen by filters.
 //
 // There are two modes, each with its own settings and its own stack of audio filters: MENUS (every
 // menu and screen that is not the world: the main menu, the setup menu, the designer, the pause
-// menu and the tools opened from it) and WORLD (walking the hallway). A track is one unit of the
-// audio line at the mode's own length and note set (notes104, or a notes2 set of 1-4 voices),
-// picked at random from the survivors of the mode's stack: the stack counts them, a rank is
-// drawn uniformly below the count, and the unit at that rank is played. So every track is on a
-// shelf, with an address, and nothing is searched for.
-// With no filter ticked a track is any unit at all; with a stack that cannot count (a judge-only
-// filter) units are drawn at random until one passes, a few thousand tries at most.
+// menu and the tools opened from it) and WORLD (walking the hallway). Each draws its melodies from
+// one of two lines, its source:
+//   - the audio line: a melody is one unit of the audio line at the mode's own length and note set
+//     (notes104, or a notes2 set of 1-4 voices);
+//   - the tracks line: a melody is a track of N such units (the mode's own N), with a blank cover
+//     and title, as T gives a track warped in, its units joined as the hallway plays a track
+//     (strand by strand). The mode's filters judge the whole track, joined, as a track's JOINED
+//     stack does (sieve/composition.hpp), so they judge across the seams between its units.
+// Either way it is picked at random from the survivors of the mode's stack: the stack counts them,
+// a rank is drawn uniformly below the count, and the melody at that rank is played. So every
+// melody is on a shelf, with an address, and nothing is searched for.
+// With no filter ticked a melody is any unit at all; with a stack that cannot count (a judge-only
+// filter) melodies are drawn at random until one passes, a few thousand tries at most.
 //
-// How a track sounds is the player's, not the track's: its tempo, its voice (the shape of the
-// tone: soft, sine, triangle or square) and its echo. The unit, its address and a saved track
+// How a melody sounds is the player's, not the melody's: its tempo, its voice (the shape of the
+// tone: soft, sine, triangle or square) and its echo. The melody, its address and a saved melody
 // (MIDI, as the hallway saves any melody) are the same whatever they are set to.
 //
 // So is each line's character, in WORLD: every line plays in a mode of its own, brightest to
-// darkest Lydian, Ionian, Mixolydian, Dorian, Aeolian, Phrygian, Locrian (by default image,
-// pages, audio, video, books, models, binary, in that order of brightness). A note is moved from
-// its step of the track's scale to the same step of the line's mode, on the same tonic; the scale
-// and tonic are those of the key filter in WORLD's stack (key-data-v2, or key-v1), so without
-// one the modes do nothing. Scales of fewer than seven notes are read as the seven-note scale
-// they come from (the major
-// pentatonic as the major scale's steps 1 2 3 5 6), and then lack the steps some modes change:
-// on the major pentatonic, Lydian, Ionian and Mixolydian sound the same. Optionally the key
-// follows the line round the circle of fifths too (pages C, image G, audio D, video A, books E,
-// models B, binary F#, each folded within six semitones). A change of line takes effect from the
-// next note. MENUS belongs to no line and is never moved.
+// darkest Lydian, Ionian, Mixolydian, Dorian, Aeolian, Phrygian, Locrian (by default each
+// dimension's own, dimensions.hpp). A note is moved from its step of the melody's scale to the same
+// step of the line's mode, on the same tonic; the scale and tonic are those of the key filter in
+// WORLD's stack (key-data-v2, or key-v1), so without one the modes do nothing. Scales of fewer than
+// seven notes are read as the seven-note scale they come from (the major pentatonic as the major
+// scale's steps 1 2 3 5 6), and then lack the steps some modes change: on the major pentatonic,
+// Lydian, Ionian and Mixolydian sound the same. Optionally the key follows the line round the
+// circle of fifths too. A change of line takes effect from the next note. MENUS belongs to no line
+// and is never moved.
 //
 // One audio stream carries everything, mixed on SDL's audio thread: a channel per mode and one for
 // the melody in hand (P in the hallway, played as before, square and at 120 bpm). Moving between
 // the menus and the world crossfades from one mode's channel to the other's, which waits where it
 // was and picks up there when its mode comes back; playing a melody in hand fades the music out,
-// and it fades back in when the melody ends or is put down. Tracks are chosen on a worker thread
+// and it fades back in when the melody ends or is put down. Melodies are chosen on a worker thread
 // (a large plugin can take seconds to compile), with a few seconds of quiet between them.
 //
-// The last ten tracks the player chose are listed (recent), with the mode they played in and when;
-// tracks you play yourself are not. Favourites are kept as Sieve instructions, a .sieve holding
-// each favourite as a MIDI file and an index (favourites.tsv) of their notes, so the file installs
-// with `sieve install` like any other. Settings and the recent list are kept in sieve-music.ini
-// beside the hallway's settings.
+// The last ten melodies the player chose are listed (recent), with the mode they played in and
+// when; melodies you play yourself are not. Favourites are kept as Sieve instructions, a .sieve
+// holding each favourite as a MIDI file and an index (favourites.tsv) of their notes, so the file
+// installs with `sieve install` like any other. Settings and the recent list are kept in
+// sieve-music.ini beside the hallway's settings.
 #pragma once
 
 #include "dimensions.hpp"
@@ -79,15 +83,18 @@ struct MusicSettings
 {
     bool on = true;
     int volume = 30;       // percent
-    uint32_t length = 32;  // notes in a track (in each voice, on notes2)
-    // The note set tracks are drawn from: notes104, or notes2 with its range, durations and voices.
+    uint32_t length = 32;  // notes in a melody (in each voice, on notes2); in each unit of a track
+    // Where melodies come from: a unit of the audio line, or a track of `units` units (tracks line).
+    bool tracks = false;
+    uint32_t units = 4;
+    // The note set melodies are drawn from: notes104, or notes2 with its range, durations and voices.
     std::string note_set = "notes104", low = "C3", high = "C6", durations = "seEqQhHw";
     uint32_t voices = 1;
     sieve::NoteSet notes() const; // the set (notes104 if the notes2 fields cannot make one)
     int tempo = 80;        // quarter notes a minute
     Voice voice = Voice::Soft;
     int echo = 25;         // percent fed back
-    int gap = 5;           // seconds of quiet between tracks
+    int gap = 5;           // seconds of quiet between melodies
     sieve::cli::LineFilters filters;
     // WORLD only: each line's mode (an index into music_modes(), brightest first), and whether the
     // key follows the line round the circle of fifths.
@@ -102,17 +109,28 @@ const char* music_mode_name(int i);
 inline constexpr int kMusicModes = 7;
 const char* line_key(int li);
 
-struct MusicTrack
+struct MusicMelody
 {
     MusicMode mode = MusicMode::World;
     int line = -1;                // WORLD: the door it began on (dimensions.hpp), else -1
     sieve::NoteSet set;           // what its notes are (notes104 unless said)
     std::string when;             // "14:05", when it began
-    std::vector<uint32_t> notes;  // the unit, its length the track's (voices x events on notes2)
+    std::vector<uint32_t> notes;  // the unit (voices x events on notes2); a track's units joined
+    uint32_t units = 0;           // 0: a unit of the audio line; N: a track of N units (tracks line)
     std::string notation() const;
-    std::string address() const;  // positional, in hex, on the audio line of its length
+    // Positional, in hex: on the audio line of its length, or a track's on the tracks line (its
+    // cover and title blank, their shapes the hallway's: set_track_shape).
+    std::string address() const;
+    // At most n characters: the address whole, or its first and last digits either side of "..",
+    // since a track's begins with the zeros of its blank cover and title.
+    std::string short_address(size_t n) const;
     std::string where() const;    // "WORLD [BINARY]", "MENUS"
 };
+
+// The shapes of a track's cover and title, which its address needs: the hallway's, set when one is
+// built (until then the setup menu's defaults: a 10x10 black-and-white cover and 32 letters of
+// lower27).
+void set_track_shape(const sieve::Space& cover, const std::optional<sieve::Space>& title);
 
 class MusicPlayer
 {
@@ -141,26 +159,26 @@ public:
 
     MusicSettings settings(MusicMode m) const;
     void set_settings(MusicMode m, const MusicSettings& s); // applied at once, saved
-    void next(MusicMode m);                    // a new track now
-    void play(const MusicTrack& t);            // a listed track, now, where you are (not listed again)
+    void next(MusicMode m);                    // a new melody now
+    void play(const MusicMelody& t);           // a listed melody, now, where you are (not listed again)
 
-    std::vector<MusicTrack> recent() const;    // newest first
-    std::vector<MusicTrack> favourites() const;
-    std::string add_favourite(const MusicTrack& t); // "" or why not
+    std::vector<MusicMelody> recent() const;    // newest first
+    std::vector<MusicMelody> favourites() const;
+    std::string add_favourite(const MusicMelody& t); // "" or why not
     std::string remove_favourite(size_t i);
     std::filesystem::path favourites_path() const { return fav_path_; }
 
-    std::optional<MusicTrack> now_playing(MusicMode m) const;
+    std::optional<MusicMelody> now_playing(MusicMode m) const;
     std::string status() const;                // what went wrong last, if anything
     bool audio() const { return stream_ != nullptr; }
 
-    // The "Now playing" box, for a few seconds after a track begins: every screen draws it last.
+    // The "Now playing" box, for a few seconds after a melody begins: every screen draws it last.
     // In the colours of where you are: the line's background and edges in the hallway, white on
     // black in the menus.
     void draw_overlay(SDL_Renderer* r, float W, float H, SDL_Color bg, SDL_Color ink) const;
 
 private:
-    // One voice of a track as it plays: its stretch of the unit, the note it is on, and how far in.
+    // One voice of a melody as it plays: its stretch of the unit, the note it is on, and how far in.
     struct Part
     {
         size_t from = 0, to = 0, note = 0, sample = 0, note_samples = 0;
@@ -191,7 +209,7 @@ private:
     std::optional<std::vector<uint32_t>> pick(const MusicSettings& s, std::string& why) const;
     void save() const;                            // under mx_
     void load_settings();
-    void write_favourites(const std::vector<MusicTrack>& favs) const;
+    void write_favourites(const std::vector<MusicMelody>& favs) const;
     void read_favourites();
 
     std::filesystem::path ini_path_, fav_path_;
@@ -210,8 +228,8 @@ private:
     double sound_at_ = 0, sound_step_ = 1;
     bool in_hand() const { return (item_.active && !item_.done) || !sound_.empty(); } // under mx_
     bool skip_[2] = {false, false};
-    std::optional<MusicTrack> playing_[2];
-    std::vector<MusicTrack> recent_, favourites_;
+    std::optional<MusicMelody> playing_[2];
+    std::vector<MusicMelody> recent_, favourites_;
     std::string status_, toast_;
     Uint64 toast_until_ = 0, retry_at_[2] = {0, 0};
 };
