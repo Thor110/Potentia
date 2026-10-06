@@ -41,7 +41,7 @@ Text estimates assume ~1 bit/char of real information in meaningful English (Sha
 
 ## 3. Lines (State Spaces)
 
-The Gallery consists of **four lines**, one per modality. Each line is a one-dimensional address space defined by a parameter set, so every line can be dialled from trivially small to full scale.
+The Gallery is built on **four unit lines**, one per modality. Each line is a one-dimensional address space defined by a parameter set, so every line can be dialled from trivially small to full scale. The hallway has nine lines in all: these four, the books, tracks and movies composed of them (§11), the models line (§12) and the binary line (§12.1).
 
 | Parameter | Description |
 | :--- | :--- |
@@ -235,13 +235,19 @@ None of this changes an address, a filter or a count: it is presentation only.
 
 The hallway is a wireframe. Each line has exactly two colours, a solid background and the colour of every edge, and doors are solid black:
 
-| Line | Background | Edges |
+| Line (in door order) | Background | Edges |
 | :--- | :--- | :--- |
-| Text | black | white |
 | Image | blue | cyan |
-| Audio | green | amber |
-| Video | red | yellow |
+| Text (pages) | black | white |
 | Books | grey | black |
+| Audio | green | amber |
+| Tracks | green | black |
+| Video | red | yellow |
+| Movies | red | black |
+| Models | clay | green |
+| Binary | black | green |
+
+Black edges mark a line composed of another's units: books of pages, tracks of audio, movies of video. Each line's colours, names and place in the door order are defined once, in `client/dimensions.hpp`.
 
 The text line's units are pages, so the hallway and the setup menu call it PAGES; `--line pages` is accepted as another name for `--line text`.
 

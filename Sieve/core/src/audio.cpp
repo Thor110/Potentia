@@ -239,6 +239,9 @@ uint32_t NoteSet::sixteenths(uint32_t digit) const
 
 bool is_note_symbols(std::string_view id)
 {
+    // Anything else is answered without parsing (and so without an exception): this is asked
+    // while drawing.
+    if (id != kNotesSymbolsId && id.substr(0, 7) != "notes2/") return false;
     try
     {
         (void)note_set_of(id);

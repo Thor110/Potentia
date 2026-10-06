@@ -17,18 +17,6 @@ std::string shape_id(const std::string& kind, const Space& cover, const std::opt
            std::to_string(units) + "/key=" + unit.key() + "/" + kCompositionVersion;
 }
 
-// b^e by squaring: the surviving units' count to the power of the units.
-BigUint power(const BigUint& b, uint32_t e)
-{
-    BigUint result(1), sq = b;
-    for (; e; e >>= 1)
-    {
-        if (e & 1) result = BigUint::mul(result, sq);
-        if (e > 1) sq = BigUint::mul(sq, sq);
-    }
-    return result;
-}
-
 size_t width_of(const BigUint& size)
 {
     BigUint top = size;
@@ -38,6 +26,7 @@ size_t width_of(const BigUint& size)
 
 BigUint size_of(const Space& cover, const std::optional<Space>& title, const Space& unit, uint32_t units)
 {
+    if (units == 0) throw std::invalid_argument("a composition holds at least one unit");
     BigUint n = unit_count(cover);
     if (title) n = BigUint::mul(n, unit_count(*title));
     return BigUint::mul(n, BigUint::pow(unit.base(), uint64_t(units) * unit.unit_length()));
@@ -49,7 +38,6 @@ CompositionSpace::CompositionSpace(std::string kind, const Space& cover, std::op
     : kind_(std::move(kind)), cover_(cover), title_(std::move(title)), unit_(unit), units_(units),
       size_(size_of(cover_, title_, unit_, units_)), hex_width_(width_of(size_)), shuffle_(size_, unit_.key(), shape_id(kind_, cover_, title_, unit_, units_))
 {
-    if (units_ == 0) throw std::invalid_argument("a composition holds at least one unit");
 }
 
 std::string CompositionSpace::id() const { return shape_id(kind_, cover_, title_, unit_, units_); }
@@ -171,7 +159,7 @@ CompositionSieve::CompositionSieve(const CompositionSpace& space, const FilterSt
         }
     }
     if (!ranks_) return;
-    units_count_ = power(parts_[2].count, space.units());
+    units_count_ = BigUint::pow(parts_[2].count, space.units());
     count_ = BigUint::mul(BigUint::mul(parts_[0].count, parts_[1].count), units_count_);
     if (!count_.is_zero())
     {

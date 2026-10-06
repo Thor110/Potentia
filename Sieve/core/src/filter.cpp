@@ -219,14 +219,8 @@ public:
         if (v >= v_) return remaining == 0 ? BigUint(1) : BigUint();
         const uint32_t left = L_ - p, after = v_ - 1 - v;
         if (uint64_t(remaining) != uint64_t(left) + uint64_t(after) * L_) return BigUint();
-        // per_ to the power of the voices after this one, by squaring.
-        BigUint c = one_.completions(inner(s), left), sq = per_;
-        for (uint32_t e = after; e > 0; e >>= 1)
-        {
-            if (e & 1) c = BigUint::mul(c, sq);
-            if (e > 1) sq = BigUint::mul(sq, sq);
-        }
-        return c;
+        // per_ to the power of the voices after this one.
+        return BigUint::mul(one_.completions(inner(s), left), BigUint::pow(per_, after));
     }
     std::vector<uint32_t> unrank(const BigUint& k0) const override
     {

@@ -434,14 +434,22 @@ void Settings::apply(sieve::cli::Args& a) const
     else a.opts["ffmpeg"] = ffmpeg;
 }
 
+// b^e mod the tile (books_per_tile), by squaring: how many slots a count leaves in its last tile.
+static uint64_t tile_pow(uint64_t b, uint64_t e)
+{
+    const uint64_t per = sieve::books_per_tile();
+    uint64_t m = 1;
+    for (b %= per; e; e >>= 1, b = b * b % per)
+        if (e & 1) m = m * b % per;
+    return m;
+}
+
 LineSize line_size(uint32_t base, uint64_t length)
 {
     LineSize z;
     z.bits = double(length) * std::log2(double(base));
-    // base^length mod 128, by repeated squaring; padding fills the last tile to 128 slots.
-    uint64_t m = 1, b = base % sieve::books_per_tile();
-    for (uint64_t e = length; e; e >>= 1, b = b * b % sieve::books_per_tile())
-        if (e & 1) m = m * b % sieve::books_per_tile();
+    // base^length mod the tile; padding fills the last tile.
+    const uint64_t m = tile_pow(base, length);
     const bool tiny = z.bits < 7; // fewer units than one tile
     uint64_t exact = 1;
     if (tiny)
@@ -464,14 +472,8 @@ std::array<LineSize, kLines> Menu::line_sizes() const
     const uint64_t parts = uint64_t(s_.book_pages) + 1;
     books.bits = image.bits + double(parts) * page.bits;
     {
-        auto modpow = [](uint64_t b, uint64_t e) {
-            uint64_t m = 1;
-            for (b %= sieve::books_per_tile(); e; e >>= 1, b = b * b % sieve::books_per_tile())
-                if (e & 1) m = m * b % sieve::books_per_tile();
-            return m;
-        };
-        const uint64_t m = modpow(palette_size(s_.image_palette), uint64_t(s_.image_w) * s_.image_h) *
-                           modpow(alphabet_size(s_.alphabet), parts * s_.length) % sieve::books_per_tile();
+        const uint64_t m = tile_pow(palette_size(s_.image_palette), uint64_t(s_.image_w) * s_.image_h) *
+                           tile_pow(alphabet_size(s_.alphabet), parts * s_.length) % sieve::books_per_tile();
         books.padding = uint32_t((sieve::books_per_tile() - m) % sieve::books_per_tile()); // books.bits >= 7 always
         const double log10 = books.bits * std::log10(2.0);
         books.units = "cov*pg^" + std::to_string(parts) + " = ~10^" + fixed(log10, 1);
@@ -527,9 +529,7 @@ std::array<LineSize, kLines> Menu::line_sizes() const
     auto composed = [&](const LineSize& unit, uint32_t n, const char* name) {
         const uint64_t per = sieve::books_per_tile();
         const auto rem = [per](const LineSize& x) { return (per - x.padding) % per; };
-        uint64_t m = rem(image) * rem(title) % per, r = rem(unit);
-        for (uint32_t e = n; e; e >>= 1, r = r * r % per)
-            if (e & 1) m = m * r % per;
+        const uint64_t m = rem(image) * rem(title) % per * tile_pow(rem(unit), n) % per;
         LineSize z;
         z.bits = image.bits + title.bits + double(n) * unit.bits;
         z.padding = uint32_t((per - m) % per);
@@ -1716,18 +1716,6 @@ sieve::cli::FilterMode& Menu::mode_of(int line)
     return line == kBooksLine ? cfg_.books.mode : cfg_.lines[unit_at(line)].mode;
 }
 
-// b^e by squaring: a track's or movie's units, each counted alone, to the power of their number.
-static sieve::BigUint power_of(const sieve::BigUint& b, uint32_t e)
-{
-    sieve::BigUint result(1), sq = b;
-    for (; e; e >>= 1)
-    {
-        if (e & 1) result = sieve::BigUint::mul(result, sq);
-        if (e > 1) sq = sieve::BigUint::mul(sq, sq);
-    }
-    return result;
-}
-
 // How much of a line its filters remove, exactly, as a percentage: truncated (so 100% means every
 // unit, and 0% none), with as many decimals as it takes to get past the leading 9s or 0s (up to
 // twelve, then "..."), and, where one side is too small to read as a percentage, that side
@@ -2000,7 +1988,7 @@ const Menu::StackInfo& Menu::parts_stack_info(int line)
             const double all = double(fl.length) * std::log2(double(fl.base));
             const uint32_t times = part == 2 ? repeat : 1;
             const bool absent = (part == 2 && book_pages == 0) || (part == 1 && !has_title);
-            const sieve::BigUint whole = absent ? sieve::BigUint(1) : power_of(sieve::BigUint::pow(fl.base, fl.length), times);
+            const sieve::BigUint whole = absent ? sieve::BigUint(1) : sieve::BigUint::pow(sieve::BigUint::pow(fl.base, fl.length), times);
             total = sieve::BigUint::mul(total, whole);
             if (lf.enabled.empty() || absent)
             {
@@ -2024,7 +2012,7 @@ const Menu::StackInfo& Menu::parts_stack_info(int line)
                 continue;
             }
             const sieve::BigUint& n = st.ranker()->count();
-            kept = sieve::BigUint::mul(kept, power_of(n, times));
+            kept = sieve::BigUint::mul(kept, sieve::BigUint::pow(n, times));
             if (n.is_zero()) none_survive = true;
             else bits += times * n.log10_approx() / std::log10(2.0);
         }

@@ -15,6 +15,7 @@
 #include "sieve/image.hpp"
 
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <optional>
 #include <span>
@@ -22,6 +23,18 @@
 #include <vector>
 
 namespace sieve::cli {
+
+// A file of our own in the system's temporary folder, named so no two clash, removed when this
+// goes: what ffmpeg reads from or writes to, and where its complaints go.
+struct TempFile
+{
+    std::filesystem::path path;
+    explicit TempFile(const std::string& suffix);
+    ~TempFile();
+    TempFile(const TempFile&) = delete;
+    TempFile& operator=(const TempFile&) = delete;
+    std::string u8() const; // the path as UTF-8
+};
 
 // Sets the ffmpeg to use (empty: look for one as above).
 void set_ffmpeg_path(const std::string& path);

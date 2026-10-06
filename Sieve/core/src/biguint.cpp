@@ -939,6 +939,17 @@ BigUint BigUint::pow(uint32_t base, uint64_t exponent)
     return v;
 }
 
+BigUint BigUint::pow(const BigUint& base, uint64_t exponent)
+{
+    BigUint result(1), sq = base;
+    for (uint64_t e = exponent; e; e >>= 1)
+    {
+        if (e & 1) result = mul(result, sq);
+        if (e > 1) sq = mul(sq, sq);
+    }
+    return result;
+}
+
 std::string BigUint::to_hex(size_t width) const
 {
     static const char* digits = "0123456789abcdef";

@@ -99,7 +99,7 @@ padding spaces as real characters, so a padded page scores as *more* text-like t
 also folds SCOWL's abbreviations and chemical symbols, so "zn" and "tb" now pass. Fix: a version
 that keeps proper names and drops short all-caps tokens.
 
-**2.4 No colour-blindness pass.** Seven lines, filter verdicts and the map all encode meaning in
+**2.4 No colour-blindness pass.** Nine lines, filter verdicts and the map all encode meaning in
 hue, with no non-colour fallback and no simulation check.
 
 **2.5 Layouts are built for 8-pixel text.** Unifont draws at half size, so CJK and much of Cyrillic
@@ -233,7 +233,7 @@ starts, not a claim that the bytes are universal.
 ## 5. The hallway's shape
 
 **5.1 One wall of shelves, everywhere.** The binary line is one-sided now, and the argument for
-doing the same to the other six is good: there is only one address space, and a double-sided
+doing the same to the others is good: there is only one address space, and a double-sided
 corridor draws it twice. Open question to settle: what the empty side becomes — blank wall, the
 portals, or something else. Worth trying on one line before committing.
 
@@ -403,7 +403,8 @@ disturbing position tracking. Needed the moment 7.9 exists.
 give frequently-walked paths a larger share of the cache, so the thing you are about to reach for
 is already there.
 
-**7.12 Reels — video as a composition, not a line.** F frames of W×H is the same set of
+**7.12 Reels — video as a composition, not a line.** *Built as the movies line (§13): a cover, a
+title and N units of video, `composition-v1`; the video line stays, as the units.* F frames of W×H is the same set of
 possibilities as F image units in a row, so the video line adds bundling and no content. A reel is
 frame rate, image shape, a list of frame addresses, audio shape, a list of audio addresses. A still
 scene stores one address and a count; filters work per frame on the image line; and one mechanism

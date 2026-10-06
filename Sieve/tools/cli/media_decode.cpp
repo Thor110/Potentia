@@ -162,23 +162,6 @@ std::string run(const std::string& command)
     return out;
 }
 
-// A file of our own in the system's temporary folder, removed when this goes.
-struct TempFile
-{
-    fs::path path;
-    explicit TempFile(const std::string& suffix)
-    {
-        static std::atomic<uint64_t> n{0};
-        const auto t = std::chrono::steady_clock::now().time_since_epoch().count();
-        path = fs::temp_directory_path() / ("sieve-" + std::to_string(t) + "-" + std::to_string(n++) + suffix);
-    }
-    ~TempFile()
-    {
-        std::error_code ec;
-        fs::remove(path, ec);
-    }
-};
-
 std::string read_text(const fs::path& p)
 {
     std::ifstream in(p, std::ios::binary);
@@ -217,6 +200,25 @@ bool next_pam(Pipe& p, RgbaImage& frame)
 }
 
 } // namespace
+
+TempFile::TempFile(const std::string& suffix)
+{
+    static std::atomic<uint64_t> n{0};
+    const auto t = std::chrono::steady_clock::now().time_since_epoch().count();
+    path = fs::temp_directory_path() / ("sieve-" + std::to_string(t) + "-" + std::to_string(n++) + suffix);
+}
+
+TempFile::~TempFile()
+{
+    std::error_code ec;
+    fs::remove(path, ec);
+}
+
+std::string TempFile::u8() const
+{
+    const std::u8string s = path.u8string();
+    return std::string(s.begin(), s.end());
+}
 
 std::string ffmpeg_missing()
 {
@@ -621,6 +623,12 @@ void ffmpeg_convert(const std::vector<std::string>& input_options, const std::st
 {
     const std::string exe = ffmpeg_or_throw("cannot write '" + output + "'", "writes PNG, WAV and MIDI");
     const TempFile err(".txt");
+    // A file already there (the one being saved over: ffmpeg's -y replaces it) goes first, so one
+    // ffmpeg fails to write is not taken for its work below.
+    {
+        std::error_code ec;
+        fs::remove(from_u8(output), ec);
+    }
     // Every argument quoted on its own: a filter graph's ; and [ ] are the shell's otherwise.
     std::string cmd = quoted(exe) + " -hide_banner -nostdin -v error -y";
     for (const std::string& o : input_options) cmd += " " + quoted(o);

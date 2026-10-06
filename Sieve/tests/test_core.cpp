@@ -937,6 +937,27 @@ void test_notes3_vectors(const std::string& path)
                             "notes3/C-1..G9/q4/d16/v128/V1/t120/i0"})
         CHECK(!is_notes3_symbols(bad));
     CHECK(!is_note_symbols("notes3/C-1..G9/q4/d16/v8/V1/t120/i0") && !is_notes3_symbols("notes104"));
+    // An event asking to be split into more than 2^24 rests is refused, not built.
+    {
+        const Notes3Set tiny = make_notes3_set(48, 72, 4, 1, 8, 1, 120, {0});
+        bool refused = false;
+        try
+        {
+            (void)canonicalise_notes3("C4:999999999", tiny, 16);
+        }
+        catch (const std::invalid_argument&)
+        {
+            refused = true;
+        }
+        CHECK(refused);
+    }
+    // The kind checks answer quickly and the same either way.
+    CHECK(is_notes3_symbols("notes3/C-1..G9/q4/d16/v8/V1/t120/i0") && !is_notes3_symbols("notes104") && !is_notes3_symbols("notes3/x"));
+    CHECK(is_pcm_symbols("pcm/8000/8/C1") && !is_pcm_symbols("notes104") && !is_pcm_symbols("pcm/8000"));
+    CHECK(is_note_symbols("notes104") && !is_note_symbols("pcm/8000/8/C1") && !is_note_symbols("notes2/x"));
+    // A power of a big number is the same however it is reached.
+    CHECK(BigUint::pow(BigUint(27), 40) == BigUint::pow(27u, 40) && BigUint::pow(BigUint::pow(3u, 50), 7) == BigUint::pow(3u, 350) &&
+          BigUint::pow(BigUint(5), 0) == BigUint(1));
     std::cout << "notes3 MIDI and ids checked\n";
 }
 

@@ -14,8 +14,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <chrono>
-#include <atomic>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -576,28 +574,6 @@ std::string lower(std::string s)
     return s;
 }
 
-// A file of our own in the temporary folder, removed when this goes.
-struct Temp
-{
-    std::filesystem::path path;
-    explicit Temp(const std::string& ext)
-    {
-        static std::atomic<uint64_t> n{0};
-        path = std::filesystem::temp_directory_path() /
-               ("sieve-export-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + "-" + std::to_string(n++) + ext);
-    }
-    ~Temp()
-    {
-        std::error_code ec;
-        std::filesystem::remove(path, ec);
-    }
-    std::string u8() const
-    {
-        const std::u8string s = path.u8string();
-        return std::string(s.begin(), s.end());
-    }
-};
-
 void write_bytes(const std::filesystem::path& p, const void* data, size_t n)
 {
     std::ofstream out(p, std::ios::binary);
@@ -653,11 +629,11 @@ std::vector<uint8_t> export_unit(const Line& line, const std::vector<uint32_t>& 
         throw std::invalid_argument("this ffmpeg has no encoder for " + ext + "; it saves this line as " + have);
     }
     if (unit_withheld(line, digits)) throw VaultWithheld("withheld by the vault: the unit");
-    const Temp out(ext);
+    const TempFile out(ext);
     if (line.kind == LineKind::Audio)
     {
         const std::string wav = audio_file(line, digits);
-        const Temp in(".wav");
+        const TempFile in(".wav");
         write_bytes(in.path, wav.data(), wav.size());
         ffmpeg_convert({}, in.u8(), {"-map_metadata", "-1", "-c:a", f->encoder}, out.u8());
     }
@@ -679,7 +655,7 @@ std::vector<uint8_t> export_unit(const Line& line, const std::vector<uint32_t>& 
                 pam += char(c.b);
             }
         }
-        const Temp in(".pam");
+        const TempFile in(".pam");
         write_bytes(in.path, pam.data(), pam.size());
         const std::string S = std::to_string(std::max<uint32_t>(1, scale));
         const bool codec = ext == ".mp4" || ext == ".webm";

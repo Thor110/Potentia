@@ -38,6 +38,7 @@ public:
     std::vector<uint32_t> to_digits(uint32_t base, size_t length) const;
 
     static BigUint pow(uint32_t base, uint64_t exponent);
+    static BigUint pow(const BigUint& base, uint64_t exponent); // by squaring: a count to the power of its parts
 
     // Lowercase hex, zero-padded to `width` characters. Throws if it does not fit.
     std::string to_hex(size_t width = 0) const;

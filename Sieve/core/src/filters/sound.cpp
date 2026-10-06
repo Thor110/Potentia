@@ -71,13 +71,7 @@ public:
     BigUint completions(State s, uint32_t remaining) const override
     {
         if (s == kDead) return BigUint();
-        BigUint c(1), p = k_;
-        for (uint32_t e = remaining; e > 0; e >>= 1)
-        {
-            if (e & 1) c = BigUint::mul(c, p);
-            if (e > 1) p = BigUint::mul(p, p);
-        }
-        return c;
+        return BigUint::pow(k_, remaining);
     }
     bool alive(State s, uint32_t) const override { return s != kDead; }
     std::vector<uint32_t> unrank(const BigUint& k0) const override

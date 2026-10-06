@@ -43,13 +43,16 @@ These are not preferences. Work that breaks one of them is wrong.
 - **Purely functional.** Nothing is stored. The engine sieves the state space; it does not keep a
   database of what it found.
 
-## The seven lines
+## The nine lines
 
-    binary | pages  image  audio  video  books  models | binary
+    binary | image  pages  books  audio  tracks  video  movies  models | binary
 
-`kLines = 7`, with `binary` at index 6. The six middle lines used to loop into each other through
-the doors; they no longer do. They start and finish at the binary line, which is why it is listed
-at both ends of the map.
+Defined once, in door order, in `client/dimensions.hpp` (`kDimensions`): `kLines = 9`, with
+`binary` last (a static_assert holds it there). Each part stands before what is composed of it,
+and image, a part of nearly all of them, first. The middle lines used to loop into each other
+through the doors; they no longer do. They start and finish at the binary line, which is why it is
+listed at both ends of the map. A door's number (`li`) is only where a line stands; what it is,
+and everything saved per line, goes by `Media`.
 
 The binary line is **one line met from either end** — one ordinary tile of corridor, the same
 width and height and bookcase as any other, with one side missing. Where the other wall would
@@ -58,8 +61,8 @@ green rain falls past it for ever. The room is always the same way round: shelve
 line's left, the drop on its right. It used to be mirrored depending on which end you came in
 from, which made it two rooms; since 27 September you are **turned round** instead when you come
 in from models (`cross()`), so the two halves of the ring run in opposite directions, as the two
-ends of one line do. Its one door leads back to where you came from (`binary_from_`, pages when
-you start there), and its sign says so. A scripted `--walk` is in the walker's frame, so a door
+ends of one line do. Its one door leads back to where you came from (`binary_from_`, the first
+line, image, when you start there), and its sign says so. A scripted `--walk` is in the walker's frame, so a door
 that turns you round turns the rest of the walk with you.
 
 **Its units (`binary-v1`, since 27 September).** Every file of 0 to N bytes, N the BINARY
@@ -80,11 +83,12 @@ positional order; scrambled order is several times that, since the keyed shuffle
 number of 8N bits. The setup menu measures the binary line's time on its own (scrambled, the
 slower) rather than with the other lines' base-conversion growth.
 
-**FIND MY LIMITS focus** (GLOBAL, `--limits-focus`: all, binary, pages, image, audio, video,
-books, models): grows the one line and leaves the rest as they are. Each line is judged on its
-own against the budget, so a line grown alone reaches the same largest shape it would with every
-other line at its smallest; pages and image grown together is what "books" and "all" do, since a
-book is made of both.
+**FIND MY LIMITS focus** (GLOBAL, `--limits-focus`: all, or any one line): grows the one line and
+leaves the rest as they are. Each line is judged on its own against the budget, so a line grown
+alone reaches the same largest shape it would with every other line at its smallest; pages and
+image grown together is what "books" and "all" do, since a book is made of both, and audio
+(video) grows only while a one-unit track (movie) still fits, before the track (movie) takes the
+units left.
 
 Its alphabet is `bytes256` — U+0000 to U+00FF in byte order — and its canonicalisation is
 `canon-bytes-v1`, the identity. A file of N bytes is one unit of a length-N line, and its
@@ -199,8 +203,9 @@ Built and green as of this handoff: the binary line and its edge, the compass HU
 units, the limits finder, `bytes256` end to end, the COST tab on the item page, the 64-bit
 `BigUint` with Karatsuba multiplication, reciprocal division and conversion by halves,
 items-per-wall as a global setting, uniform shelf scaling, and the filters-overlay crash fix. The
-core suite is 16,270 checks, 0 failures, run once with each SHA-256 implementation, and passes
-under `SIEVE_BIGUINT_PORTABLE` too.
+core suite was then 16,270 checks, 0 failures, run once with each SHA-256 implementation, and
+passes under `SIEVE_BIGUINT_PORTABLE` too. (It is 36,415 now; what came since is in the dated
+entries at the end.)
 
 `BigUint` at 152,000 bits (a pages-line address) now measures multiply 1.01 ms, divmod 4.80 ms,
 `to_digits(27)` 2.90 ms and `to_decimal` 3.31 ms; before-and-after figures are in
@@ -1617,3 +1622,40 @@ IDEAS §13, steps 2 to 4.
 - **Docs:** `data/meshes/templates/README.md` lists every line's files in door order, binary's room
   model, and which item models began as copies; README's file map lists the nine lines.
 - **CI:** tracks and movies each load their own item model under Real Graphics.
+
+### A review of the session's work (6 October 2026)
+
+Everything since `2262e74` read again: the core (composition, notes3, sound and its filters,
+image, filter), the CLI (ffmpeg, lines, filter settings) and the client, and the docs against the
+code. Fixed:
+- **A typed length could fill memory:** a notes3 event of `C4:999999999` on a set with a short
+  longest length split into up to a billion rests before anything checked; more than 2^24 pieces
+  is now refused, with the event and the lengths named.
+- **A failed save could pass for a good one:** `ffmpeg_convert()` judged success by the output
+  existing, so saving over a file ffmpeg then failed to write reported success with the old file
+  still there. The output is removed first.
+- **Exceptions while drawing:** `is_pcm_symbols()`, `is_notes3_symbols()` and `is_note_symbols()`
+  parsed the id and caught the failure, and some are asked every frame (`on_sound()`, the item
+  panel); a cheap prefix test answers every other id first.
+- **One power of a big number:** `BigUint::pow(const BigUint&, n)`, by squaring, replaces four
+  hand-written copies (composition, the voices ranker, sound-peak, the menu); the menu's three
+  copies of a power modulo the tile are one `tile_pow()`.
+- **One temporary file:** `TempFile` (`cli/media_decode.hpp`) replaces the two copies in
+  `media_decode.cpp` and `lines.cpp`.
+- `CompositionSpace` refuses no units before building its shuffle; notes3 works out the default
+  level once a warp, not once an event.
+- **Docs:** this file's line overview (nine lines, in door order); SPECIFICATIONS §3 (the nine
+  lines) and §5.4 (every line's colours, in door order); README (models "a sixth line"); IDEAS
+  (nine lines; §7.12 built as movies); `hallway --help` lists every line for `--line`.
+
+Left, as notes:
+- `silence-run-v1` tells the menu "judged" whenever the whole unit's run would not fit an
+  automaton, though it counts exactly whenever the chosen run does (4000 samples on an 8000-sample
+  line). `counts_as_on` cannot see the filter's settings; it needs them passed to be exact.
+- On Windows, ffmpeg runs through `cmd.exe` (`_wpopen`), which expands `%NAME%` in a path when a
+  variable of that name exists; a path with two `%` signs could be changed. `CreateProcessW` with
+  pipes would avoid the shell altogether.
+- `read_media_audio()` on a WAV path reads the whole file before decoding it.
+- Composition ranking and the sound-peak ranker divide a long number once a unit or sample, so
+  their cost grows with the square of the length; fine at the sizes the menu allows, and
+  divide-and-conquer (as `to_digits` does) if they are ever pushed.

@@ -115,6 +115,7 @@ Notes3Set make_notes3_set(uint32_t low, uint32_t high, uint32_t tpq, uint32_t lo
 
 bool is_notes3_symbols(std::string_view id)
 {
+    if (id.substr(0, 7) != "notes3/") return false; // without parsing: this is asked while drawing
     try
     {
         (void)notes3_set_of(id);
@@ -173,6 +174,10 @@ Notes3CanonResult canonicalise_notes3(std::string_view text, const Notes3Set& se
     if (parts.size() > set.voices)
         throw std::invalid_argument("the notation has " + std::to_string(parts.size()) + " voices; the line has " + std::to_string(set.voices));
     std::vector<std::vector<uint32_t>> voices(set.voices);
+    const uint32_t default_level = set.default_level();
+    // An event longer than the longest becomes the event and rests (below); one asking for more
+    // than this many of them is refused rather than filling memory.
+    constexpr uint64_t kMostSplits = uint64_t(1) << 24;
     for (size_t v = 0; v < parts.size(); ++v)
     {
         const std::string_view part = parts[v];
@@ -236,7 +241,7 @@ Notes3CanonResult canonicalise_notes3(std::string_view text, const Notes3Set& se
             }
             else ++r.default_lengths;
             // The level: "!LEVEL", or the one nearest velocity 96.
-            uint32_t level = set.default_level();
+            uint32_t level = default_level;
             if (k < tok.size() && tok[k] == '!')
             {
                 if (is_rest) throw bad();
@@ -255,6 +260,9 @@ Notes3CanonResult canonicalise_notes3(std::string_view text, const Notes3Set& se
             uint64_t left = ticks;
             bool first = true;
             if (left > set.longest) ++r.lengths_split;
+            if ((left + set.longest - 1) / set.longest > kMostSplits)
+                throw std::invalid_argument("the event '" + tok + "' is " + std::to_string(left) + " ticks: more than " + std::to_string(kMostSplits) +
+                                            " of the longest length (" + std::to_string(set.longest) + " ticks)");
             while (left > 0)
             {
                 const uint32_t t = uint32_t(std::min<uint64_t>(left, set.longest));

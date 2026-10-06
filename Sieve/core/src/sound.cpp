@@ -76,6 +76,7 @@ PcmFormat make_pcm_format(uint32_t rate, uint32_t bits, uint32_t channels)
 
 bool is_pcm_symbols(std::string_view id)
 {
+    if (id.substr(0, 4) != "pcm/") return false; // without parsing: this is asked while drawing
     try
     {
         pcm_format_of(id);
