@@ -182,7 +182,7 @@ void paint_cover_front(std::vector<uint32_t>& px, int w, int h, const std::u32st
 
 const FaceRect& Hallway::face_rect()
 {
-    const std::string medium = kDimensions[li_].models; // the Real Graphics models' own faces.ini
+    const std::string medium = kDimensions[li_].id; // its section of faces.ini
     auto it = face_rects_.find(medium);
     if (it == face_rects_.end()) it = face_rects_.emplace(medium, load_face_rect(medium)).first;
     return it->second;

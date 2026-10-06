@@ -346,14 +346,16 @@ void MainMenu::render()
     while (ts > 1 && text_width(title, ts) > W - 40) ts -= 0.5f;
     draw_centred(r_, cx, 50, title, ts, kWhite);
     draw_centred(r_, cx, 50 + 8 * ts + 14, tr("main.subtitle"), 1, kGrey);
-    // A thin rule under the title in the colours of the lines, in door order.
+    // A thin rule under the title in the colours of the lines, as the corridor runs: binary at
+    // both ends, the others in door order between.
     {
         const float rw = std::min(W - 80, 700.0f), x0 = cx - rw / 2, y = 50 + 8 * ts + 36;
-        for (int i = 0; i < kLines; ++i)
+        constexpr int bands = kLines + 1;
+        for (int i = 0; i < bands; ++i)
         {
-            const SDL_Color c = menu_ink(theme_of(i));
+            const SDL_Color c = menu_ink(theme_of(i == 0 ? kBinaryLine : i - 1));
             SDL_SetRenderDrawColor(r_, c.r, c.g, c.b, 255);
-            const SDL_FRect band{x0 + rw * float(i) / kLines, y, rw / kLines - 4, 3};
+            const SDL_FRect band{x0 + rw * float(i) / bands, y, rw / bands - 4, 3};
             SDL_RenderFillRect(r_, &band);
         }
     }

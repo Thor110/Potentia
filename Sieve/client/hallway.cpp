@@ -1793,7 +1793,7 @@ const Hallway::Models& Hallway::models()
     Models& m = models_[li_];
     if (!m.loaded)
     {
-        const std::string medium = kDimensions[li_].models; // a composition borrows its line's
+        const std::string medium = kDimensions[li_].id; // <model>-<id>.obj, else the template
         m.hallway = load_model("hallway", medium);
         m.bookshelf = load_model("bookshelf", medium);
         m.book = load_model("book", medium);

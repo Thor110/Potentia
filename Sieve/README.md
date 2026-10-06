@@ -16,7 +16,7 @@ Special thanks to Claude Opus 5.5 for helping to build out the Sieve system base
 | :--- | :--- |
 | `core/` | Dependency-free C++20 library: alphabets, palettes, notes, exact big integers, SHA-256, address map, canonicalisation, sieve, guided coder, the filtration stack (`core/src/filters/`) |
 | `tools/sieve_cli.cpp`, `tools/cli/` | The `sieve` command-line tool |
-| `client/` | The `hallway`: a 3D wireframe walk along the lines: pages, image, audio, video, books, models and binary (SDL3) |
+| `client/` | The `hallway`: a 3D wireframe walk along the lines: image, pages, books, audio, tracks, video, movies, models and binary (SDL3) |
 | `tools/plot_sieve.py` | Plots sieve results (needs matplotlib) |
 | `tools/build_dictionary.py` | Rebuilds the English dictionaries from SCOWL |
 | `data/filters/` | The reference filter plugins (`.sfilter`), and the tagged lists the grammar plugins read (the Moby part-of-speech list, its inflections and names; `moby-pos-v1.md`) |

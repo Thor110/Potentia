@@ -757,6 +757,10 @@ jobs:
           # here) and the templates for the rest.
           out=$($H --line audio --real-graphics --walk "0,0" --screenshot real.png 2>&1)
           echo "$out" | q "real graphics for the audio line: hallway=hallway.obj bookshelf=bookshelf.obj book=book-audio.obj marker=marker.obj"
+          # Tracks and movies have models of their own (begun as copies of audio's and video's).
+          for l in tracks movies; do
+            $H --line $l --real-graphics --walk "0,0" --screenshot real-$l.png 2>&1 | q "real graphics for the $l line: .* book=book-$l.obj"
+          done
           out=$($H --real-graphics --fps-counter --bench 5 --walk "0,0" --screenshot fps.png 2>&1)
           echo "$out" | q "^bench: 5 frames"
           echo "$out" | q "graphics: edge glow off, real graphics on, door portals on, fps counter on"

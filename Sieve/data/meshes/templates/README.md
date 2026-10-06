@@ -16,19 +16,25 @@ Each has a `.mtl` beside it with one placeholder material per part (`floor`, `wa
 
 Every line gets its own set. Copy each template to `<model>-<medium>.obj`, together with its `.mtl`, and model from there:
 
+The medium is the line's id, and the lines are listed in door order:
+
 | Medium | Files |
 | :--- | :--- |
-| pages | `hallway-pages.obj`, `bookshelf-pages.obj`, `book-pages.obj`, `marker-pages.obj` |
 | image | `hallway-image.obj`, `bookshelf-image.obj`, `book-image.obj`, `marker-image.obj` |
-| audio | `hallway-audio.obj`, `bookshelf-audio.obj`, `book-audio.obj`, `marker-audio.obj` |
-| video | `hallway-video.obj`, `bookshelf-video.obj`, `book-video.obj`, `marker-video.obj` |
+| pages | `hallway-pages.obj`, `bookshelf-pages.obj`, `book-pages.obj`, `marker-pages.obj` |
 | books | `hallway-books.obj`, `bookshelf-books.obj`, `book-books.obj`, `marker-books.obj` |
+| audio | `hallway-audio.obj`, `bookshelf-audio.obj`, `book-audio.obj`, `marker-audio.obj` |
+| tracks | `hallway-tracks.obj`, `bookshelf-tracks.obj`, `book-tracks.obj`, `marker-tracks.obj` |
+| video | `hallway-video.obj`, `bookshelf-video.obj`, `book-video.obj`, `marker-video.obj` |
+| movies | `hallway-movies.obj`, `bookshelf-movies.obj`, `book-movies.obj`, `marker-movies.obj` |
+| models | `hallway-models.obj`, `bookshelf-models.obj`, `book-models.obj`, `marker-models.obj` |
+| binary | `edge-binary.obj` (its one-sided room; without it, `hallway-binary.obj` with the open side cut away), `bookshelf-binary.obj`, `book-binary.obj`, `marker-binary.obj` |
 
-The item models for pages, image, audio, video, models and binary are already there (`book-<medium>.obj`; `book-binary.obj` began as a copy of the models line's crate); books still uses the template.
+The item models for image, pages, audio, tracks, video, movies, models and binary are already there (`book-<medium>.obj`). Some began as copies: `book-binary.obj` of the models line's crate, `book-tracks.obj` of audio's record sleeve and `book-movies.obj` of video's tape box, so each line can be modelled on its own from there. Books still uses the template.
 
 **The picture on the front.** Every line's items carry a pre-rendered picture of what they are (a page's text, an image, a video's first frame, a book's title and cover, a model's mesh). `data/meshes/faces.ini` says where on the item it goes, per medium, in the model's own metres: `bottom` and `top` up from the shelf board, and `half_width` either side of the slot's centre, on the front face at x = 0. When you change an item model, measure its front again and change its section to match; the picture is stretched with the model on lines whose items vary in height.
 
-Put the copies in `data/meshes/` (one folder up); `book-pages`, `book-image`, `book-audio`, `book-video` and `book-models` are already there. The game loads `<model>-<medium>.obj` for the line you are on. It falls back to the template of the same model, and then to wireframe for just that part, and prints to the console which file it used for each part. Only `v`, `vn`, `f`, `mtllib`, `usemtl` and each material's `Kd` colour are read. Faces can have any number of corners, faces pointing away from the camera are not drawn, and textures are not supported yet. When you rename a copy, also change its `mtllib` line to point at the renamed `.mtl`. The "book" of a line is whatever stands in its slots: a page, a canvas (image), a record (audio), a tape (video) or a book.
+Put the copies in `data/meshes/` (one folder up), where the item models above already are. The game loads `<model>-<medium>.obj` for the line you are on. It falls back to the template of the same model, and then to wireframe for just that part, and prints to the console which file it used for each part. Only `v`, `vn`, `f`, `mtllib`, `usemtl` and each material's `Kd` colour are read. Faces can have any number of corners, faces pointing away from the camera are not drawn, and textures are not supported yet. When you rename a copy, also change its `mtllib` line to point at the renamed `.mtl`. The "book" of a line is whatever stands in its slots: a page, a canvas (image), a record (audio, tracks), a tape (video, movies), a book, a crate (models) or a file (binary).
 
 ## Coordinates
 
@@ -43,10 +49,10 @@ Put the copies in `data/meshes/` (one folder up); `book-pages`, `book-image`, `b
 
 ## Book sizes
 
-- **Pages, image and books** vary in height from slot to slot, from 0.34 m to 0.46 m, just as the wireframe does. The engine scales the book model in Y by the slot's height ÷ 0.40.
-- **Audio (records) and video (tapes)** never vary. Every slot is exactly the model's own size.
+- **Image, pages and books** vary in height from slot to slot, from 0.34 m to 0.46 m, just as the wireframe does. The engine scales the book model in Y by the slot's height ÷ 0.40.
+- **Audio and tracks (records), video and movies (tapes), models and binary** never vary. Every slot is exactly the model's own size.
 
-`media_sizes_vary()` in `client/world.hpp` is that switch, and the wireframe already follows it. Model the audio and video books at the size they should be. A record sleeve or a tape box can be any shape, as long as it fits its slot: 0.375 m along the shelf, 0.50 m up to the next board, 0.35 m deep.
+Each line's `sizes_vary` in `client/dimensions.hpp` is that switch (`media_sizes_vary()` reads it), and the wireframe already follows it. Model the audio and video books at the size they should be. A record sleeve or a tape box can be any shape, as long as it fits its slot: 0.375 m along the shelf, 0.50 m up to the next board, 0.35 m deep.
 
 ## The picture on the front
 

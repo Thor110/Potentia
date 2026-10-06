@@ -1587,8 +1587,8 @@ IDEAS §13, steps 2 to 4.
     sieve is checked against brute force, with and without filters on each part.
 - **Client:**
   - `dimensions.hpp` gains `Media::Tracks` and `Media::Movies` (at the end of the enum, so saved
-    music settings still read), `composes` (the base line), `models` (Real Graphics' folder: a
-    composition borrows its line's) and `sizes_vary`; the table is in the decided order.
+    music settings still read), `composes` (the base line) and `sizes_vary`; the table is in the
+    decided order. (Real Graphics' models follow each line's id: see the next entry.)
   - The hallway holds a `Composition` per door (space, stacks, sieve, joined line). `line_at()` of
     a composition is its **joined line**, the base line N units long, so the item panel, P, the
     viewer and F work as on audio and video. Items, warps (T), addresses (X), M and the status
@@ -1605,3 +1605,15 @@ IDEAS §13, steps 2 to 4.
   order (`find_limits`, the books' count's `resolve(4, ...)`), now named.
 - **CI:** the checks that walk through doors or count the menu's rows follow the new order, and new
   checks cover tracks and movies (both orderings, a warp, saving, compact).
+
+### Real Graphics for tracks and movies, and binary at both ends of the title rule (6 October 2026)
+
+- **Models of their own:** `data/meshes/book-tracks.obj` and `book-movies.obj` (with their `.mtl`),
+  begun as copies of `book-audio` and `book-video`, so each can be modelled from there. `faces.ini`
+  has `[tracks]` and `[movies]` (copies of audio's and video's), and its sections are in door order.
+  The table's separate `models` folder field is gone: every line loads `<model>-<id>.obj`, then the
+  template.
+- **The main menu's rule** is a band per line as the corridor runs, binary at both ends: ten bands.
+- **Docs:** `data/meshes/templates/README.md` lists every line's files in door order, binary's room
+  model, and which item models began as copies; README's file map lists the nine lines.
+- **CI:** tracks and movies each load their own item model under Real Graphics.

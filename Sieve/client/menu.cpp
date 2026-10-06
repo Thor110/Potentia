@@ -208,7 +208,7 @@ double tallest_face()
 {
     double a = 1.0;
     for (const Dimension& d : kDimensions)
-        if (d.media != Media::Binary) a = std::max(a, double(load_face_rect(d.models).aspect())); // binary's files draw no picture
+        if (d.media != Media::Binary) a = std::max(a, double(load_face_rect(d.id).aspect())); // binary's files draw no picture
     return a;
 }
 

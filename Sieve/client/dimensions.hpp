@@ -29,7 +29,7 @@ inline constexpr int kMedia = 9;
 struct Dimension
 {
     Media media;
-    const char* id;   // "pages": the music files, the setup menu's focus, Real Graphics' folders
+    const char* id;   // "pages": the music files, the setup menu's focus, Real Graphics' models (<model>-<id>.obj, faces.ini)
     const char* line; // the --line name and the setup menu's start line ("text" for pages)
     std::optional<sieve::cli::LineKind> unit; // the unit line it is (text, image, audio or video), if it is one
     // The unit line it is a composition of (audio for tracks, video for movies; sieve/composition.hpp):
@@ -38,7 +38,6 @@ struct Dimension
     std::optional<sieve::cli::LineKind> composes;
     Theme theme;      // its two colours: a solid background and the colour of every edge (SPECIFICATIONS §5.4)
     int music_mode;   // WORLD's mode on it until changed in the media player (music.hpp: 0 lydian ... 6 locrian)
-    const char* models; // Real Graphics' folder for its hallway, shelves and items (a composition borrows its line's)
     // Whether its items vary in size from slot to slot. Pages, pictures (canvases) and books do;
     // audio (a record), video (a tape) and models (a crate, all the same box until you open it) do
     // not, since the real things come in one size. The wireframe follows it, and so must any Real
@@ -53,24 +52,24 @@ using sieve::cli::LineKind;
 inline constexpr Dimension kDimensions[] = {
     // Each part stands before what it composes, and image, a part of nearly all of them (covers,
     // frames), first.
-    {Media::Image, "image", "image", LineKind::Image, std::nullopt, {{0, 0, 140, 255}, {0, 255, 255, 255}, "IMAGE", "IMAGE", "line.image"}, 0, "image", true},
-    {Media::Pages, "pages", "text", LineKind::Text, std::nullopt, {{0, 0, 0, 255}, {255, 255, 255, 255}, "PAGES", "PAGES", "line.pages"}, 1, "pages", true},
+    {Media::Image, "image", "image", LineKind::Image, std::nullopt, {{0, 0, 140, 255}, {0, 255, 255, 255}, "IMAGE", "IMAGE", "line.image"}, 0, true},
+    {Media::Pages, "pages", "text", LineKind::Text, std::nullopt, {{0, 0, 0, 255}, {255, 255, 255, 255}, "PAGES", "PAGES", "line.pages"}, 1, true},
     // Books (SPECIFICATIONS §11): a cover from the image line, a title and pages from the pages line.
     // Grey, with black edges.
-    {Media::Books, "books", "books", std::nullopt, std::nullopt, {{150, 150, 150, 255}, {0, 0, 0, 255}, "BOOKS", "BOOKS", "line.books"}, 4, "books", true},
-    {Media::Audio, "audio", "audio", LineKind::Audio, std::nullopt, {{0, 90, 0, 255}, {255, 176, 0, 255}, "AUDIO", "AUDIO", "line.audio"}, 2, "audio", false},
+    {Media::Books, "books", "books", std::nullopt, std::nullopt, {{150, 150, 150, 255}, {0, 0, 0, 255}, "BOOKS", "BOOKS", "line.books"}, 4, true},
+    {Media::Audio, "audio", "audio", LineKind::Audio, std::nullopt, {{0, 90, 0, 255}, {255, 176, 0, 255}, "AUDIO", "AUDIO", "line.audio"}, 2, false},
     // Tracks (SPECIFICATIONS §11.4): a cover, a title and N units of audio. Audio's green with black
     // edges, as a composition's are.
-    {Media::Tracks, "tracks", "tracks", std::nullopt, LineKind::Audio, {{0, 90, 0, 255}, {0, 0, 0, 255}, "TRACKS", "TRACKS", "line.tracks"}, 2, "audio", false},
-    {Media::Video, "video", "video", LineKind::Video, std::nullopt, {{140, 0, 0, 255}, {255, 255, 0, 255}, "VIDEO", "VIDEO", "line.video"}, 3, "video", false},
+    {Media::Tracks, "tracks", "tracks", std::nullopt, LineKind::Audio, {{0, 90, 0, 255}, {0, 0, 0, 255}, "TRACKS", "TRACKS", "line.tracks"}, 2, false},
+    {Media::Video, "video", "video", LineKind::Video, std::nullopt, {{140, 0, 0, 255}, {255, 255, 0, 255}, "VIDEO", "VIDEO", "line.video"}, 3, false},
     // Movies (SPECIFICATIONS §11.4): a cover, a title and N units of video. Video's red, black edges.
-    {Media::Movies, "movies", "movies", std::nullopt, LineKind::Video, {{140, 0, 0, 255}, {0, 0, 0, 255}, "MOVIES", "MOVIES", "line.movies"}, 3, "video", false},
+    {Media::Movies, "movies", "movies", std::nullopt, LineKind::Video, {{140, 0, 0, 255}, {0, 0, 0, 255}, "MOVIES", "MOVIES", "line.movies"}, 3, false},
     // Models (SPECIFICATIONS §12): clay behind green wireframe, because a mesh is drawn as lines and
     // a mesh is modelled in clay.
-    {Media::Models, "models", "models", std::nullopt, std::nullopt, {{140, 120, 0, 255}, {0, 255, 0, 255}, "MODELS", "MODELS", "line.models"}, 5, "models", false},
+    {Media::Models, "models", "models", std::nullopt, std::nullopt, {{140, 120, 0, 255}, {0, 255, 0, 255}, "MODELS", "MODELS", "line.models"}, 5, false},
     // Binary (SPECIFICATIONS §12.1): black, with green edges and green text. What is unusual about it
     // is its shape, not its palette: one wall of shelves, and on the other side the edge and the drop.
-    {Media::Binary, "binary", "binary", std::nullopt, std::nullopt, {{0, 0, 0, 255}, {32, 220, 80, 255}, "BINARY", "BINARY", "line.binary"}, 6, "binary", false},
+    {Media::Binary, "binary", "binary", std::nullopt, std::nullopt, {{0, 0, 0, 255}, {32, 220, 80, 255}, "BINARY", "BINARY", "line.binary"}, 6, false},
 };
 inline constexpr int kLines = int(std::size(kDimensions));
 static_assert(kLines == kMedia, "every medium has a door");

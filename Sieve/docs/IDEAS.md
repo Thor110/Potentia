@@ -707,7 +707,8 @@ is a setting, as a book holds pages of any length.
   (grey) has. Black edges then mean a composition, whose background says what of. The
   colour-blindness pass (2.4) is still to do: audio's and video's dark green and dark red differ
   mostly in hue, which red–green colour blindness loses.
-- **Their models:** the constituent dimensions' own, for now.
+- **Their models:** their own (`book-tracks.obj`, `book-movies.obj`), begun as copies of audio's and
+  video's, to be modelled from there.
 
 **The order suggested.**
 1. ~~Make the dimensions data, with no change in behaviour.~~ Done.
