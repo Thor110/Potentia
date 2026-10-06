@@ -190,7 +190,6 @@ setup.closeup.value = {0} px, up to {1} items ({2} MB)
 setup.closeup.screen = screen {0} px, up to {1} items ({2} MB)
 setup.closeup.off = off
 setup.limits = >> FIND MY LIMITS <<
-setup.limits.value = the largest that fit the budget
 setup.budget.memory = unit cache (largest line)
 setup.budget.graphics = graphics memory
 setup.budget.time = opening one unit (slowest line)

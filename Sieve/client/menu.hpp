@@ -206,7 +206,9 @@ private:
     bool graphics_over() const;
     int model_cache_mb() const { return app_ ? app_->model_cache_mb : 64; }
     void save_app() const;
-    float draw_budget(float y); // the budget's four bars and status line; returns the y below them
+    // The budget's four bars and status line, at the menu's top right, kBudgetW wide from x; returns the y below them.
+    static constexpr float kBudgetW = 600;
+    float draw_budget(float x, float y);
     void find_limits();        // set every line to the largest shape this machine can open
     void reset_settings();     // every shape back to its default // a line this machine cannot open
     void adjust(int dir, int step);

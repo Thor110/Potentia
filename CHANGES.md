@@ -1,7 +1,8 @@
-# The dimensions as data
+# The dimensions as data, and the setup menu on one screen
 
 Against `0c5c268` (survey notes ideas). Client and docs only: no address, file format or saved
-setting changes.
+setting changes. `dimensions.patch` is everything; `menu-on-one-screen.patch` is the menu part
+alone, for a tree that already has the earlier dimensions.zip.
 
 ## What changed
 
@@ -35,11 +36,26 @@ setting changes.
     the separate settings window ruled out, and step 1 done.
   - HANDOFF has a new entry and a row in the file map.
 
+## The setup menu on one screen
+
+- **The budget's four bars and status line** move from under the settings to the top right, and
+  the map starts below them.
+- **"the largest that fit the budget"** beside FIND MY LIMITS is gone, along with its language key.
+- **Values start just past the widest label** (worked out from the rows, not fixed at 320 px), so
+  every value fits whole at 1920 x 1080. One too long for its column now stops at the map's edge
+  with "..", instead of running into the map; the edge is one constant, `kMapX`.
+- **The menu's smallest size** is worked out from what it draws (the subtitle and the budget beside
+  it, the rows and their headings). A window smaller than that shows the whole menu scaled down, as
+  before.
+- **Docs:** README (the setup menu, and where the filter memory bar is), IDEAS §13 (the layout
+  decided), HANDOFF (an entry).
+- **Screenshots:** `setup-1920x1080.png` and `setup-1280x720.png` (the same layout, scaled down).
+
 ## Not changed
 
 - Nothing has been reordered or added: the doors are where they were.
-- The setup menu's rows are still one fixed list, as before. Moving each dimension's settings into
-  its entry is part of the menu layout still being decided.
+- The setup menu's rows keep their order (GLOBAL, pages ... binary); they follow the doors' new
+  order when the doors are reordered.
 
 ## Checked
 
@@ -48,7 +64,8 @@ setting changes.
   - same addresses, filters, models, the bytes256 line, sound, other formats, books;
   - the whole hallway step (renders, doors, scripted presses);
   - the reference oracle.
-- **Unit tests:** 33,918 checks, 0 failures.
+- **Unit tests:** 33,918 checks, 0 failures (and again after the menu changes, with the hallway
+  step).
 - **The same screens as before:** `setup-now.png` shows the setup menu, with headings and map
   columns unchanged. `main-now.png` shows the main menu, whose rule now has seven bands.
 - **The reorder test:** a scratch copy with only the table reordered (image, pages, books, audio,

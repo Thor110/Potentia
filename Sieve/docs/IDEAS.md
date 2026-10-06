@@ -686,10 +686,12 @@ is a setting, as a book holds pages of any length.
     title and a cover as well as the composition holding it, so tracks and movies get their own
     and audio and video keep theirs. Moving them up would reshape (and readdress) those lines;
     nothing calls for it.
-- **The setup menu** is already crowded: the two new dimensions take about as much height as the
-  general settings. A separate settings window would cost the bars moving as a setting is turned,
-  the reason the menu reads as it does, so that is ruled out. Still open: most likely the settings
-  list scrolls, beside a map that stays whole.
+- **The setup menu** was already crowded. A separate settings window would cost the bars moving as
+  a setting is turned, the reason the menu reads as it does, so that is ruled out. Decided (6
+  October): everything on one screen, laid out for 1920 x 1080. The budget's bars moved to the top
+  right and "the largest that fit the budget" went, which leaves room for tracks and movies with
+  no scrolling. A mock-up of settings in the map's columns was tried and set aside (values cut
+  short, the bars pushed down); a scrolling list stays the fallback if the rows outgrow the screen.
 - **Done (6 October): the dimensions are data.** `client/dimensions.hpp` defines each once, in door
   order: its identity (`Media`), its names, its two colours, the unit line it is, its music mode.
   Doors, themes, the map's columns, the HUD's rings, the menu's lists, J's routing and the music
@@ -709,7 +711,7 @@ is a setting, as a book holds pages of any length.
 
 **The order suggested.**
 1. ~~Make the dimensions data, with no change in behaviour.~~ Done.
-2. Reorder the doors as decided, and settle the setup menu's layout.
+2. Reorder the doors as decided (the setup menu's layout is settled: one screen, see above).
 3. Build a composition engine, a generalised `BookSpace`, and move books onto it unchanged
    (`bookspace-v1` addresses kept).
 4. Add tracks and movies, one at a time.

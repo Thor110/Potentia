@@ -1554,3 +1554,17 @@ doors, is an entry in a table rather than a hunt through the client.
 - **Checked:** a copy with the doors reordered as decided (image first, then pages, books, audio,
   video, models, binary) builds with nothing else changed, and its corridor and menus come up in
   that order.
+
+### The setup menu on one screen (6 October 2026)
+
+Every setting stays on screen at once, beside the map, so turning one shows at once what it does to
+the bars (IDEAS §13). Laid out for 1920 x 1080, which now holds every row with room for tracks and
+movies; a smaller window shows it whole, scaled down, as before.
+- **The budget's four bars and status line** moved from under the settings to the top right
+  (`draw_budget(x, y)`, `kBudgetW` wide). The map starts below them.
+- **"the largest that fit the budget"**, the value beside FIND MY LIMITS, is gone.
+- **The values start just past the widest label**, worked out from the rows rather than fixed at
+  320 px, so every value fits whole; one too long for its column stops at the map's edge with "..".
+  The map's edge is one constant, `kMapX`.
+- **The menu's smallest size** is worked out from what it draws: as wide as the subtitle and the
+  budget beside it (at least 1240), and as tall as the rows and a heading for GLOBAL and each line.

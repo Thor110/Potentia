@@ -77,6 +77,8 @@ std::vector<std::string> focuses()
     return out;
 }
 const std::vector<std::string> kFocuses = focuses();
+// Where the map starts: the settings' labels and values take the screen's left to here.
+constexpr float kMapX = 620;
 // The unit line at door li, as its kind's index into the filter settings (cfg_.lines), or -1.
 int unit_at(int li) { return li >= 0 && li < kLines && kDimensions[li].unit ? int(*kDimensions[li].unit) : -1; }
 const std::vector<std::string> kModes = {"positional", "scrambled", "guided"};
@@ -1227,9 +1229,9 @@ Menu::Result Menu::run()
 // crate faces and the world take against the graphics memory, how long the slowest line's unit
 // takes to open against the time allowed, and what the largest count of the filters needs against
 // the filter memory. A bar that is over is red, and so is its figure. Under them, one status line
-// (a changed filter memory waiting for X, or the dimensions still being worked out). Returns the
-// y below it.
-float Menu::draw_budget(float y)
+// (a changed filter memory waiting for X, or the dimensions still being worked out). Drawn at the
+// menu's top right, out of the settings' way; returns the y below it.
+float Menu::draw_budget(float x, float y)
 {
     const Budget b = machine_budget();
     const SDL_Color white{255, 255, 255, 255}, grey{150, 150, 150, 255}, red{255, 80, 80, 255};
@@ -1261,8 +1263,8 @@ float Menu::draw_budget(float y)
     {
         const bool known = bar.have > 0;
         const bool over = known && bar.used > bar.have;
-        text(r_, 40, y, bar.label, 1, grey);
-        const float bx = 320, bw = 150, bh = 8;
+        text(r_, x, y, bar.label, 1, grey);
+        const float bx = x + 280, bw = 150, bh = 8;
         SDL_SetRenderDrawColor(r_, 90, 90, 90, 255);
         const SDL_FRect frame{bx, y, bw, bh};
         SDL_RenderRect(r_, &frame);
@@ -1277,9 +1279,11 @@ float Menu::draw_budget(float y)
     // Under the bars, one line, always kept free so nothing moves: the filter memory changed and
     // not yet counted with (until X), or which lines are still being counted.
     const std::string counting = counting_lines();
-    if (memory_pending()) text(r_, 40, y, tr("setup.memory_changed"), 1, red);
-    else if (time_pending()) text(r_, 40, y, tr("setup.time_changed"), 1, red);
-    else if (toggling_ || !counting.empty()) text(r_, 40, y, trf("setup.calculating", {counting.empty() ? tr("setup.calculating.weighing") : counting}), 1, grey);
+    const size_t cells = size_t(kBudgetW / 8);
+    auto fit = [cells](const std::string& t) { return text_cells(t) <= cells ? t : fit_cells(t, cells - 2) + ".."; };
+    if (memory_pending()) text(r_, x, y, fit(tr("setup.memory_changed")), 1, red);
+    else if (time_pending()) text(r_, x, y, fit(tr("setup.time_changed")), 1, red);
+    else if (toggling_ || !counting.empty()) text(r_, x, y, fit(trf("setup.calculating", {counting.empty() ? tr("setup.calculating.weighing") : counting})), 1, grey);
     y += 14;
     return y;
 }
@@ -1294,13 +1298,15 @@ std::string Menu::counting_lines() const
 
 void Menu::render()
 {
-    // The menu needs about 1240 wide (settings on the left, the map on the right), and as tall as
-    // its rows: 16 px each, 22 more for each of the eight section headings, the budget's bars
-    // and the footer. In a smaller window it is drawn at that size and scaled down to fit,
+    // The menu needs to be as wide as the title's subtitle and the budget beside it (and at least
+    // 1240, for the settings on the left and the map on the right), and as tall as its rows: 16 px
+    // each, 22 more for each section heading (GLOBAL and a line's), and the footer. Every setting
+    // is on screen at once, so that turning one shows at once what it does to the bars; 1920 x
+    // 1080 holds them all. In a smaller window it is drawn at that size and scaled down to fit,
     // instead of running off the edge or the actions at the foot running into the footer; worked
-    // out from the rows, so a row added later cannot bring that back.
-    constexpr int kMinW = 1240;
-    const int kMinH = 80 + row_count() * 16 + 8 * 22 + 12 + 3 * 14 + 6 + 60;
+    // out from the rows and the text, so a row added later cannot bring that back.
+    const int kMinW = std::max(1240, int(std::ceil(20 + text_width(tr("setup.subtitle"), 1) + 20 + kBudgetW + 20)));
+    const int kMinH = 80 + row_count() * 16 + (kLines + 1) * 22 + 12 + 60;
     int w = 0, h = 0;
     SDL_GetRenderOutputSize(r_, &w, &h);
     if (w < kMinW || h < kMinH)
@@ -1318,6 +1324,7 @@ void Menu::render()
 
     text(r_, 20, 16, tr("setup.title"), 3, white);
     text(r_, 20, 48, tr("setup.subtitle"), 1, grey);
+    const float budget_bottom = draw_budget(W - kBudgetW - 20, 16);
 
     // Settings.
     struct Row
@@ -1396,21 +1403,23 @@ void Menu::render()
         {-1, tr("setup.model_faces"), n(s_.model_faces)},
         {-1, tr("setup.model_coords"), trf("setup.model_coords.value", {n(s_.model_coords)})},
         {kBinaryLine, tr("setup.binary_length"), trf("setup.binary_length.value", {n(s_.binary_bytes)})},
-        {-2, tr("setup.limits"), tr("setup.limits.value")},
+        {-2, tr("setup.limits"), ""},
         {-1, tr("setup.reset"), ""},
         {-1, tr("setup.enter"), ""},
     };
+    // The values start just past the widest label ("> " and the label, from x 24), not at a fixed
+    // place, so the longest values still end short of the map.
+    size_t widest = 0;
+    for (const Row& r : rows) widest = std::max(widest, text_cells(r.label));
+    const float value_x = 24 + float(2 + widest + 2) * 8;
+    const size_t value_cells = size_t(std::max(8.0f, kMapX - value_x - 8) / 8);
     float y = 80;
     for (int i = 0; i < int(rows.size()); ++i)
     {
         const Row& r = rows[size_t(i)];
-        // The budget, then the three actions at the foot of the list, clear of the settings above
-        // and the footer below, so the list can grow without them ever running into either.
-        if (r.section == -2)
-        {
-            y = draw_budget(y + 4);
-            y = std::max(y, H - 118);
-        }
+        // The three actions at the foot of the list, clear of the settings above and the footer
+        // below, so the list can grow without them ever running into either.
+        if (r.section == -2) y = std::max(y + 8, H - 118);
         if (r.section >= 0 || r.section == kGlobal)
         {
             y += 4;
@@ -1422,13 +1431,14 @@ void Menu::render()
         if (i == row_)
         {
             SDL_SetRenderDrawColor(r_, 255, 255, 255, 40);
-            const SDL_FRect sel{14, y - 3, 600, 16};
+            const SDL_FRect sel{14, y - 3, kMapX - 20, 16};
             SDL_RenderFillRect(r_, &sel);
         }
         text(r_, 24, y, std::string(i == row_ ? "> " : "  ") + r.label, 1, white);
-        // The value column starts clear of the longest label, and the rows are tight enough
-        // that the whole list still fits above the three actions at the foot of it.
-        text(r_, 320, y, r.value, 1, i == row_ ? white : grey);
+        // The rows are tight enough that the whole list fits above the three actions at the foot
+        // of it. A value too long for its column stops short of the map rather than running into it.
+        const std::string value = text_cells(r.value) <= value_cells ? r.value : fit_cells(r.value, value_cells - 2) + "..";
+        text(r_, value_x, y, value, 1, i == row_ ? white : grey);
         y += 16;
     }
     text(r_, 20, H - 40, tr("setup.footer1"), 1, grey);
@@ -1461,12 +1471,14 @@ void Menu::render()
     // which end of the corridor you meet it at decides which side of it the edge is on. It is
     // drawn like any other line, with its own two colours and a bar of the same width, and its
     // size is every file up to the BINARY length (SPECIFICATIONS §12.1).
-    const float x0 = 620, pitch = std::max(80.0f, (W - x0 - 20) / float(kLines + 1));
-    const float label = 118, top = 216, bottom = H - 60, span = bottom - top, min_bar = 12;
+    const float x0 = kMapX, pitch = std::max(80.0f, (W - x0 - 20) / float(kLines + 1));
+    // The map starts below the budget, top right; at 1920 wide it is beside the subtitle instead.
+    const float map_y = std::max(80.0f, budget_bottom + 6);
+    const float label = map_y + 38, top = map_y + 136, bottom = H - 60, span = bottom - top, min_bar = 12;
     // Line names are drawn at double size where a column is wide enough to hold one.
     const float name_scale = pitch >= 110 ? 2.0f : 1.0f;
-    text(r_, x0, 80, tr("map.title"), 1, white);
-    text(r_, x0, 92, trf("map.scale", {fixed(scale_bits, 0)}), 1, grey);
+    text(r_, x0, map_y, tr("map.title"), 1, white);
+    text(r_, x0, map_y + 12, trf("map.scale", {fixed(scale_bits, 0)}), 1, grey);
     for (int c = 0; c < kLines + 1; ++c)
     {
         const bool binary = c == 0 || c == kLines;
