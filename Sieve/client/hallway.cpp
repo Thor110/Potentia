@@ -14,6 +14,34 @@
 
 namespace hallway::hall {
 
+namespace {
+
+// How many runs a unit of this line is, one after another: an audio unit's voices or channels (a
+// unit of notes2, notes3 or sound itself is laid out strand by strand), and 1 for anything else.
+uint32_t strands_of(const Line& l)
+{
+    if (l.kind != LineKind::Audio) return 1;
+    const std::string& id = l.space.symbols_id();
+    if (sieve::is_pcm_symbols(id)) return sieve::pcm_format_of(id).channels;
+    if (sieve::is_notes3_symbols(id)) return sieve::notes3_set_of(id).voices;
+    return sieve::note_set_of(id).voices;
+}
+
+// A composition's joined line: the base line with its units N long (a video's frames N times as
+// many), the same symbols and key. What a track or movie is shown, played and saved as.
+Line joined_line(const Line& base, uint32_t n)
+{
+    Line l = base;
+    const uint64_t length = uint64_t(base.space.unit_length()) * n;
+    if (length > 0xFFFFFFFFull) throw std::length_error("a composition this long is beyond what a unit can hold");
+    l.space = Space(base.space.symbols_id(), base.space.base(), uint32_t(length), base.space.key());
+    l.image.frames *= n;
+    l.guided.reset();
+    return l;
+}
+
+} // namespace
+
 Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> lines, const FilterConfig& filters, uint32_t book_pages,
         ModelShape shape)
 : window_(window), r_(renderer), lines_(std::move(lines)), tile_geometry_(build_tile()), hall_geometry_(build_tile(true, false)), case_geometry_(build_tile(false, true)),
@@ -47,6 +75,38 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
         titled_[kModelsLine] = std::make_unique<TitledSpace>(
             title, std::nullopt, model_space_->size(),
             "models/V" + std::to_string(shape.vertices) + "/F" + std::to_string(shape.faces) + "/C" + std::to_string(shape.coords), key);
+        // Tracks and movies: a cover, the same title as the titled lines and N units of their line
+        // (composition-v1), filtered part by part, each unit on its own.
+        for (int li = 0; li < kLines; ++li)
+        {
+            if (!is_composition(li)) continue;
+            const LineKind base = *kDimensions[li].composes;
+            const bool tracks = kDimensions[li].media == Media::Tracks;
+            const uint32_t n = std::max<uint32_t>(1, tracks ? shape.track_units : shape.movie_units);
+            Composition& c = comps_[size_t(li)];
+            c.space = std::make_unique<CompositionSpace>(kDimensions[li].id, image.space, title, unit_line(base).space, n);
+            c.joined = joined_line(unit_line(base), n);
+            c.strands = strands_of(unit_line(base));
+            const CompositionFilters& cf = tracks ? filters.tracks : filters.movies;
+            modes_[li] = cf.mode;
+            try
+            {
+                std::optional<sieve::FilterLine> title_line;
+                if (title)
+                {
+                    title_line = filter_line(text);
+                    title_line->length = title->unit_length();
+                }
+                c.stacks = build_composition_stacks(image, title_line, unit_line(base), cf);
+                c.sieve = std::make_unique<CompositionSieve>(*c.space, c.stacks.cover, c.stacks.title, c.stacks.units);
+            }
+            catch (const std::exception& e)
+            {
+                std::cerr << "filters for the " << kDimensions[li].id << " line: " << e.what() << "\n";
+                c.sieve.reset();
+                modes_[li] = FilterMode::Off;
+            }
+        }
         // The binary line: every file up to binary_bytes, titled, with a cover as audio and video have.
         binary_space_ = std::make_unique<BinarySpace>(std::max<uint64_t>(1, shape.binary_bytes), key);
         // (No cover: a file's kind is read from its own first bytes instead, and shown on its front.)
@@ -220,6 +280,13 @@ FilterMode Hallway::effective_mode(int i) const
         if (modes_[i] != FilterMode::Compact) return modes_[i];
         return books_compact() ? FilterMode::Compact : FilterMode::Hide;
     }
+    if (is_composition(i))
+    {
+        const CompositionSieve* cs = comps_[size_t(i)].sieve.get();
+        if (!cs || cs->empty()) return FilterMode::Off;
+        if (modes_[i] != FilterMode::Compact) return modes_[i];
+        return cs->can_rank() && !cs->count().is_zero() ? FilterMode::Compact : FilterMode::Hide;
+    }
     const FilterStack& st = stacks_[i];
     if (st.empty()) return FilterMode::Off;
     const FilterMode m = modes_[i];
@@ -232,6 +299,7 @@ bool Hallway::has_filters() const
 {
     if (on_models()) return model_sieve_ && !model_sieve_->empty();
     if (on_binary()) return binary_sieve_ && !binary_sieve_->empty();
+    if (on_composition()) return comp().sieve && !comp().sieve->empty();
     return on_books() ? book_sieve_ && !book_sieve_->empty() : !stack().empty();
 }
 
@@ -249,6 +317,21 @@ std::string Hallway::compute_filter_status() const
             s += trf("hud.filters.excluded", {short_big(BigUint(books_->size()) -= book_sieve_->count())});
         else if (modes_[li_] == FilterMode::Compact)
             s += book_sieve_->can_rank() ? tr("hud.filters.no_book") : trf("hud.filters.blocked", {book_sieve_->blocker()});
+        return s;
+    }
+    if (on_composition())
+    {
+        if (!has_filters()) return tr("hud.filters.none");
+        const FilterMode m = effective_mode();
+        const CompositionStacks& st = comp().stacks;
+        const CompositionSieve& cs = *comp().sieve;
+        const auto parts = std::to_string(st.cover.size()) + "+" + std::to_string(st.title.size()) + "+" + std::to_string(st.units.size());
+        std::string s = trf("hud.filters", {parts, tr(std::string("mode.") + to_string(m))});
+        if (m == FilterMode::Compact) s += trf("hud.filters.units", {short_big(cs.count())});
+        else if (m == FilterMode::Excluded && cs.can_rank())
+            s += trf("hud.filters.excluded", {short_big(BigUint(comp().space->size()) -= cs.count())});
+        else if (modes_[li_] == FilterMode::Compact)
+            s += cs.can_rank() ? tr("hud.filters.no_unit") : trf("hud.filters.blocked", {cs.blocker()});
         return s;
     }
     if (on_models())
@@ -302,6 +385,8 @@ BigUint Hallway::units_of(int i) const
     // Compact: only the surviving models, closed up (their titles blank, as a compact line's are).
     if (i == kModelsLine) return effective_mode(i) == FilterMode::Compact ? model_sieve_->count() : titled_[kModelsLine]->size();
     if (i == kBooksLine) return effective_mode(i) == FilterMode::Compact ? book_sieve_->count() : books_->size();
+    if (is_composition(i))
+        return effective_mode(i) == FilterMode::Compact ? comps_[size_t(i)].sieve->count() : comps_[size_t(i)].space->size();
     if (guided_ && line_at(i).guided) return BigUint::pow(2, zoom_);
     if (effective_mode(i) == FilterMode::Compact) return compact_[i]->count();
     return titled_[size_t(i)] ? titled_[size_t(i)]->size() : line_at(i).space.size();
@@ -454,6 +539,36 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
                 }
             }
         }
+        else if (on_composition())
+        {
+            // A track or movie: its cover, its title and its units, the units joined into one unit
+            // of the joined line to be shown, played and saved.
+            const Composition& c = comp();
+            CompositionSpace::Parts p;
+            if (compact_here)
+            {
+                // Only survivors stand here, closed up, like a compact line.
+                p = c.sieve->parts_at(b.index, mode_);
+                b.hex = c.sieve->hex_of(b.index);
+                b.survivor = true;
+                b.survivor_number = mode_ == AddressMode::Positional ? b.index : c.sieve->rank(p);
+                b.fraction = b.index.is_zero() ? 0.0 : std::pow(10.0, b.index.log10_approx() - c.sieve->count().log10_approx());
+            }
+            else
+            {
+                p = c.space->parts_at(b.index, mode_);
+                b.hex = c.space->hex_of(b.index);
+                b.fraction = b.index.is_zero() ? 0.0 : std::pow(10.0, b.index.log10_approx() - c.space->size().log10_approx());
+                if (c.sieve && !c.sieve->empty())
+                {
+                    b.failed_by = c.sieve->first_failure(p);
+                    b.passes = b.failed_by.empty();
+                }
+            }
+            b.cover = std::move(p.cover);
+            b.title = std::move(p.title);
+            b.unit = join_units(p.units, c.strands);
+        }
         else if (on_binary())
         {
             // A file: its title, its cover, and the file itself by its own positional index. Only
@@ -600,7 +715,7 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
             b.hex = sp.hex_of(address);
             b.fraction = sp.fraction_of(address);
         }
-        if (!on_books() && !on_models() && !b.survivor && !stack().empty())
+        if (!on_books() && !on_models() && !on_composition() && !b.survivor && !stack().empty())
         {
             sieve::cli::timings::Scope timed_filters("hallway.item.filters");
             const int fail = stack().first_failure(b.unit);
@@ -645,8 +760,9 @@ const TitledSpace* Hallway::titled_here() const { return titled_of(li_); }
 std::string Hallway::title_text(const Book& b) const
 {
     const TitledSpace* ts = titled_of(li_);
-    if (!ts || b.title.empty() || !ts->title_space()) return {};
-    std::u32string t = ts->title_space()->text_of(b.title);
+    const std::optional<Space>* title = on_composition() ? &comp().space->title_space() : ts ? &ts->title_space() : nullptr;
+    if (!title || b.title.empty() || !*title) return {};
+    std::u32string t = (*title)->text_of(b.title);
     while (!t.empty() && (t.back() == U' ' || t.back() == 0)) t.pop_back();
     while (!t.empty() && (t.front() == U' ' || t.front() == 0)) t.erase(t.begin());
     return utf8_encode(t);
@@ -663,6 +779,11 @@ BigUint Hallway::index_of(const Space::Digits& unit)
         i >>= g.scale_bits() - zoom_;
         return i;
     }
+    if (on_composition())
+    {
+        const CompositionSpace::Parts p = composition_of(unit);
+        return effective_mode() == FilterMode::Compact ? comp().sieve->index_of(p, mode_) : comp().space->index_of(p, mode_);
+    }
     if (effective_mode() == FilterMode::Compact) return compact().index_of(unit, mode_);
     // On a titled line a unit warped in on its own carries a blank title and a blank cover.
     if (const TitledSpace* ts = titled_here())
@@ -672,20 +793,43 @@ BigUint Hallway::index_of(const Space::Digits& unit)
 
 // Go to a unit: its slot in the first copy of the loop, facing it. In compact mode a unit
 // that fails the stack has no shelf; it is shown in hand instead (SPECIFICATIONS 6.4).
+// A track or movie from one unit of its joined line, as warped in: the units split strand by
+// strand, with a blank cover and a blank title, as a unit warped in on its own has on a titled line.
+CompositionSpace::Parts Hallway::composition_of(const Space::Digits& joined) const
+{
+    const CompositionSpace& cs = *comp().space;
+    CompositionSpace::Parts p;
+    p.cover.assign(cs.cover_space().unit_length(), 0);
+    if (cs.title_space()) p.title.assign(cs.title_space()->unit_length(), 0);
+    p.units = split_units(joined, comp().strands, cs.units());
+    return p;
+}
+
 void Hallway::go_to_unit(const Space::Digits& unit, bool open)
 {
     if (effective_mode() == FilterMode::Compact)
     {
-        const int fail = stack().first_failure(unit);
-        if (fail >= 0)
+        std::string failed_by;
+        if (on_composition()) failed_by = comp().sieve->first_failure(composition_of(unit));
+        else if (const int fail = stack().first_failure(unit); fail >= 0) failed_by = stack().filter_name(size_t(fail));
+        if (!failed_by.empty())
         {
             Book b;
             b.unit = unit;
-            const auto address = line().space.address_digits(unit, AddressMode::Positional);
-            b.hex = line().space.hex_of(address);
-            b.fraction = line().space.fraction_of(address);
+            if (on_composition())
+            {
+                const BigUint index = comp().space->index_of(composition_of(unit), AddressMode::Positional);
+                b.hex = comp().space->hex_of(index);
+                b.fraction = index.is_zero() ? 0.0 : std::pow(10.0, index.log10_approx() - comp().space->size().log10_approx());
+            }
+            else
+            {
+                const auto address = line().space.address_digits(unit, AddressMode::Positional);
+                b.hex = line().space.hex_of(address);
+                b.fraction = line().space.fraction_of(address);
+            }
             b.passes = false;
-            b.failed_by = stack().filter_name(size_t(fail));
+            b.failed_by = failed_by;
             b.withheld = vault_withholds(b);
             in_hand_ = b;
             hand_tab_ = 0;
@@ -860,6 +1004,24 @@ void Hallway::cycle_ordering()
         message(trf(mode_ == AddressMode::Positional ? "msg.ordering.books_positional" : "msg.ordering.books_scrambled", {ordering_name()}));
         return;
     }
+    if (on_composition())
+    {
+        // A track or movie keeps its cover and title across the change, as a book does.
+        const Book* ref = reference_book();
+        std::optional<CompositionSpace::Parts> parts;
+        if (ref && !ref->empty)
+        {
+            parts = composition_of(ref->unit);
+            parts->cover = ref->cover;
+            parts->title = ref->title;
+        }
+        mode_ = mode_ == AddressMode::Positional ? AddressMode::Scrambled : AddressMode::Positional;
+        rebase();
+        if (parts)
+            place(effective_mode() == FilterMode::Compact ? comp().sieve->index_of(*parts, mode_) : comp().space->index_of(*parts, mode_), false);
+        message(trf(mode_ == AddressMode::Positional ? "msg.ordering.positional" : "msg.ordering.scrambled", {ordering_name()}));
+        return;
+    }
     const Book* ref = reference_book();
     const Space::Digits unit = ref ? ref->unit : Space::Digits{};
     if (guided_on()) { guided_ = false; mode_ = AddressMode::Positional; }
@@ -1001,6 +1163,7 @@ bool Hallway::go_to(std::string input)
         else if (on_models()) index = effective_mode() == FilterMode::Compact ? model_sieve_->parse(input) : titled_[kModelsLine]->parse(input);
         else if (on_binary()) index = effective_mode() == FilterMode::Compact ? binary_sieve_->parse(input) : titled_[kBinaryLine]->parse(input);
         else if (on_books()) index = effective_mode() == FilterMode::Compact ? book_sieve_->parse(input) : books_->parse(input);
+        else if (on_composition()) index = effective_mode() == FilterMode::Compact ? comp().sieve->parse(input) : comp().space->parse(input);
         else if (effective_mode() == FilterMode::Compact) index = compact().parse(input); // a compact address, as the books show
         else if (const TitledSpace* ts = titled_here()) index = ts->parse(input);
         else index = BigUint::from_digits(line().space.parse_address(input), line().space.base());
@@ -1622,19 +1785,7 @@ void Hallway::render()
 }
 
 // ---- Real Graphics
-const char* Hallway::media_name(Media m)
-{
-    switch (m)
-    {
-    case Media::Image: return "image";
-    case Media::Audio: return "audio";
-    case Media::Video: return "video";
-    case Media::Books: return "books";
-    case Media::Models: return "models";
-    case Media::Binary: return "binary";
-    default: return "pages";
-    }
-}
+const char* Hallway::media_name(Media m) { return kDimensions[line_of(m)].id; }
 
 // The current line's models, loaded the first time they are needed.
 const Hallway::Models& Hallway::models()
@@ -1642,7 +1793,7 @@ const Hallway::Models& Hallway::models()
     Models& m = models_[li_];
     if (!m.loaded)
     {
-        const std::string medium = media_name(media());
+        const std::string medium = kDimensions[li_].models; // a composition borrows its line's
         m.hallway = load_model("hallway", medium);
         m.bookshelf = load_model("bookshelf", medium);
         m.book = load_model("book", medium);

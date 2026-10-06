@@ -33,6 +33,7 @@ std::string trim(std::string s)
 }
 
 const char* kBookParts[3] = {"cover", "title", "pages"};
+const char* kCompositionParts[3] = {"cover", "title", "units"};
 
 void read_filters(LineFilters& lf, const std::string& value)
 {
@@ -95,6 +96,13 @@ FilterMode mode_at(const std::string& value, const fs::path& path, int line_no)
 } // namespace
 
 const char* BookFilters::part_name(int i) { return kBookParts[i]; }
+const char* CompositionFilters::part_name(int i) { return kCompositionParts[i]; }
+int CompositionFilters::part_index(const std::string& name)
+{
+    for (int i = 0; i < 3; ++i)
+        if (name == kCompositionParts[i]) return i;
+    return -1;
+}
 
 int BookFilters::part_index(const std::string& name)
 {
@@ -175,6 +183,26 @@ FilterConfig FilterConfig::load(const fs::path& path)
         const std::string key = trim(line.substr(0, eq)), value = trim(line.substr(eq + 1));
         const size_t dot = section.find('.');
         const std::string line_name = section.substr(0, dot);
+        if (line_name == "tracks" || line_name == "movies")
+        {
+            CompositionFilters& cf = line_name == "tracks" ? c.tracks : c.movies;
+            const std::string where = path.string() + ": unknown key '" + key + "' in [" + section + "]";
+            if (dot == std::string::npos)
+            {
+                if (key != "mode") throw std::runtime_error(where);
+                cf.mode = mode_at(value, path, line_no);
+                continue;
+            }
+            const std::string rest = section.substr(dot + 1);
+            const size_t dot2 = rest.find('.');
+            const int pi = CompositionFilters::part_index(rest.substr(0, dot2));
+            if (pi < 0) throw std::runtime_error(path.string() + ": unknown section [" + section + "] (" + line_name + " have cover, title and units)");
+            LineFilters& lf = cf.parts[pi];
+            if (dot2 != std::string::npos) lf.values[rest.substr(dot2 + 1)][key] = value;
+            else if (key == "filters") read_filters(lf, value);
+            else throw std::runtime_error(where);
+            continue;
+        }
         if (line_name == "books")
         {
             const std::string where = path.string() + ": unknown key '" + key + "' in [" + section + "]";
@@ -208,6 +236,8 @@ FilterConfig FilterConfig::load(const fs::path& path)
     }
     for (auto& lf : c.lines) canonicalise(lf);
     for (auto& lf : c.books.parts) canonicalise(lf);
+    for (auto& lf : c.tracks.parts) canonicalise(lf);
+    for (auto& lf : c.movies.parts) canonicalise(lf);
     canonicalise(c.models);
     canonicalise(c.binary);
     return c;
@@ -237,6 +267,19 @@ void FilterConfig::save(const fs::path& path) const
         o << "\n[books." << kBookParts[i] << "]\n";
         write_filters(o, books.parts[i]);
         write_values(o, std::string("books.") + kBookParts[i], books.parts[i]);
+    }
+    o << "\n; Tracks and movies: one mode each; the cover is judged as a picture, the title as a title,\n"
+      << "; and each unit on its own as a unit of audio or video.\n";
+    for (const auto& [name, cf] : {std::pair<const char*, const CompositionFilters*>{"tracks", &tracks}, {"movies", &movies}})
+    {
+        o << "[" << name << "]\nmode = " << to_string(cf->mode) << "\n";
+        for (int i = 0; i < 3; ++i)
+        {
+            o << "\n[" << name << "." << kCompositionParts[i] << "]\n";
+            write_filters(o, cf->parts[i]);
+            write_values(o, std::string(name) + "." + kCompositionParts[i], cf->parts[i]);
+        }
+        o << "\n";
     }
     o << "\n; The models line: no filters are registered for it yet; its mode is kept for then. The binary\n"
       << "; line (one line, met at both ends) has its files' kinds: binary-kind-v1.\n";
@@ -553,6 +596,15 @@ BookStacks build_book_stacks(const Line& cover, const Line& page, uint32_t pages
         b.pages = build_stack(body, settings.parts[2]);
     }
     return b;
+}
+
+CompositionStacks build_composition_stacks(const Line& cover, const std::optional<FilterLine>& title, const Line& unit, const CompositionFilters& settings)
+{
+    CompositionStacks c;
+    c.cover = build_stack(cover, settings.parts[0]);
+    if (title) c.title = build_stack(*title, settings.parts[1]);
+    c.units = build_stack(unit, settings.parts[2]);
+    return c;
 }
 
 } // namespace sieve::cli

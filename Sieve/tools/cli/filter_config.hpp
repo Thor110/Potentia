@@ -27,6 +27,7 @@
 #include "sieve/filter.hpp"
 
 #include <filesystem>
+#include <optional>
 #include <map>
 #include <string>
 #include <vector>
@@ -58,10 +59,21 @@ struct BookFilters
     static int part_index(const std::string& name); // -1 if unknown
 };
 
+// A composition dimension's (tracks, movies; sieve/composition.hpp): one mode, and a stack for its
+// cover, its title and each of its units, judged one at a time.
+struct CompositionFilters
+{
+    FilterMode mode = FilterMode::Off;
+    LineFilters parts[3]; // cover, title, units
+    static const char* part_name(int i);
+    static int part_index(const std::string& name); // -1 if unknown
+};
+
 struct FilterConfig
 {
     LineFilters lines[4]; // text, image, audio, video
     BookFilters books;
+    CompositionFilters tracks, movies;
     // The models and binary lines: a mode and a stack each. The models line has no filters yet;
     // the binary line has binary-kind-v1 (sieve/filekind.hpp). The binary line is one line, met at
     // both ends of the corridor, so it has one section.
@@ -122,5 +134,13 @@ struct BookStacks
     FilterStack cover, title, pages;
 };
 BookStacks build_book_stacks(const Line& cover, const Line& page, uint32_t pages, const BookFilters& settings);
+
+// A composition's three stacks: its cover on the image line, its title (a unit of `title`, the
+// titled lines' title, or none) and its units on their own line, each unit judged by itself.
+struct CompositionStacks
+{
+    FilterStack cover, title, units;
+};
+CompositionStacks build_composition_stacks(const Line& cover, const std::optional<FilterLine>& title, const Line& unit, const CompositionFilters& settings);
 
 } // namespace sieve::cli

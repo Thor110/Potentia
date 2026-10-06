@@ -50,6 +50,7 @@
 #include "sieve/sound.hpp"
 #include "sieve/booksieve.hpp"
 #include "sieve/bookspace.hpp"
+#include "sieve/composition.hpp"
 #include "sieve/compact.hpp"
 #include "sieve/corridor.hpp"
 #include "sieve/guided.hpp"
@@ -337,6 +338,7 @@ public:
         uint32_t vertices = 8, faces = 12, coords = 16;
         uint32_t title_length = 32;
         uint64_t binary_bytes = 32; // the binary line holds every file up to this many bytes
+        uint32_t track_units = 4, movie_units = 4; // units of audio a track, of video a movie
     };
 
     Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> lines, const FilterConfig& filters, uint32_t book_pages,
@@ -353,10 +355,17 @@ public:
     // The models line has no Line of its own (it is not made of one alphabet), so it borrows the
     // pages line's, as the books line does, for the few things that ask about a Line.
     const Line& line() const { return line_at(li_); }
-    const Line& line_at(int li) const { return unit_line(kDimensions[li].unit.value_or(LineKind::Text)); }
+    // A composition's is its joined line (Composition::joined): the base line, N units long.
+    const Line& line_at(int li) const
+    {
+        if (is_composition(li)) return *comps_[size_t(li)].joined;
+        return unit_line(kDimensions[li].unit.value_or(LineKind::Text));
+    }
     // A unit line, wherever its door is.
     const Line& unit_line(LineKind k) const { return lines_[size_t(k)]; }
     bool on_books() const { return li_ == kBooksLine; }
+    // Tracks or movies: a composition of another line's units (sieve/composition.hpp).
+    bool on_composition() const { return is_composition(li_); }
     bool on_models() const { return li_ == kModelsLine; }
     // The binary line. It has no state space of its own yet -- its shelves stand empty, and how
     // they are addressed is still to be worked out (SPECIFICATIONS §12.1) -- so like the books
@@ -1462,6 +1471,20 @@ private:
     FilterStack stacks_[kLines]; // the books line's are in book_stacks_
     BookStacks book_stacks_;
     std::unique_ptr<BookSieve> book_sieve_; // null if the books' filters failed to build
+    // Tracks and movies, by door (empty at every other door). Each item is shown, played and saved
+    // as one unit of `joined`, the base line N units long, its units joined strand by strand
+    // (join_units: voice by voice, channel by channel).
+    struct Composition
+    {
+        std::unique_ptr<CompositionSpace> space;
+        CompositionStacks stacks;
+        std::unique_ptr<CompositionSieve> sieve; // null if its filters failed to build
+        std::optional<Line> joined;
+        uint32_t strands = 1;
+    };
+    std::array<Composition, kLines> comps_;
+    const Composition& comp() const { return comps_[size_t(li_)]; }
+    CompositionSpace::Parts composition_of(const Space::Digits& joined) const;
     std::unique_ptr<CompactLine> compact_[kLines]; // survivors in every ordering, where the stack can rank
     FilterMode modes_[kLines] = {}; // all Off
     std::unique_ptr<BookSpace> books_; // the books line

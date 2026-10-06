@@ -182,7 +182,7 @@ void paint_cover_front(std::vector<uint32_t>& px, int w, int h, const std::u32st
 
 const FaceRect& Hallway::face_rect()
 {
-    const std::string medium = media_name(media());
+    const std::string medium = kDimensions[li_].models; // the Real Graphics models' own faces.ini
     auto it = face_rects_.find(medium);
     if (it == face_rects_.end()) it = face_rects_.emplace(medium, load_face_rect(medium)).first;
     return it->second;
@@ -760,7 +760,8 @@ void Hallway::drop_stale_sharp()
 DisplayText Hallway::display_text_here() const
 {
     const TitledSpace* ts = titled_here();
-    const double title = ts && ts->title_space() ? double(ts->title_space()->unit_length()) : 0.0;
+    const std::optional<Space>* ttl = on_composition() ? &comp().space->title_space() : ts ? &ts->title_space() : nullptr;
+    const double title = ttl && *ttl ? double((*ttl)->unit_length()) : 0.0;
     if (on_books()) return display_text_books(double(unit_line(LineKind::Text).space.unit_length()));
     if (!on_models() && !on_binary() && line().kind == LineKind::Text) return display_text_pages(double(line().space.unit_length()), title);
     return display_text_titled(title);

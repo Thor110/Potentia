@@ -120,6 +120,7 @@ thirty-two-column shelf is half of it; never larger than one.
 | `core/src/corridor.cpp` | Address → (tile, slot). Holds the tile-size setting. |
 | `core/src/guided.cpp` | `guided-ac-v1`, the entropy-ordered addressing. |
 | `core/src/filter.cpp`, `core/src/filters/` | The filtration stack. |
+| `core/src/composition.cpp` | `composition-v1`: tracks and movies, a cover, a title and N units; their filters. |
 | `client/dimensions.hpp` | The dimensions, each defined once, in door order: identity, names, colours, unit line, music mode. Reorder the doors here. |
 | `client/hallway.hpp` | The `Hallway` class and the helpers its parts share (namespace `hallway::hall`). |
 | `client/hallway.cpp` | The corridor itself: lines, position, filters, movement, input, the frame, Real Graphics. |
@@ -1568,3 +1569,39 @@ movies; a smaller window shows it whole, scaled down, as before.
   The map's edge is one constant, `kMapX`.
 - **The menu's smallest size** is worked out from what it draws: as wide as the subtitle and the
   budget beside it (at least 1240), and as tall as the rows and a heading for GLOBAL and each line.
+
+### Tracks and movies, and the doors in their new order (6 October 2026)
+
+IDEAS §13, steps 2 to 4.
+- **Core: `composition-v1`** (`core/include/sieve/composition.hpp`, `core/src/composition.cpp`;
+  SPECIFICATIONS §11).
+  - `CompositionSpace`: a cover, a title (or none) and N units of a base line, as one mixed-radix
+    number, scrambled with shuffle-sha256-v1. The id names the kind ("tracks", "movies").
+  - `CompositionSieve`: a stack each for the cover, the title and the units, each unit judged on
+    its own, so the count is exact (`Nc * Nt * Nu^N`) and compact works in both orderings
+    (`composition-compact-v1`).
+  - `join_units` / `split_units`: a track's units as one unit of audio, strand by strand (voices
+    or channels), as items are shown, played, saved and warped in.
+  - **Checked:** `reference/sieve_ref.py composition-vectors` (an independent implementation) gives
+    `tests/vectors_compositions_v1.tsv`, 48 vectors, which CI diffs and the unit tests read; the
+    sieve is checked against brute force, with and without filters on each part.
+- **Client:**
+  - `dimensions.hpp` gains `Media::Tracks` and `Media::Movies` (at the end of the enum, so saved
+    music settings still read), `composes` (the base line), `models` (Real Graphics' folder: a
+    composition borrows its line's) and `sizes_vary`; the table is in the decided order.
+  - The hallway holds a `Composition` per door (space, stacks, sieve, joined line). `line_at()` of
+    a composition is its **joined line**, the base line N units long, so the item panel, P, the
+    viewer and F work as on audio and video. Items, warps (T), addresses (X), M and the status
+    line have composition branches.
+  - `sieve-filters.ini` gains `[tracks]` and `[movies]` with `.cover`, `.title` and `.units`.
+  - The setup menu: units per track and per movie; the rows follow the doors (`setup_rows_of`,
+    `setup_row_of` in `menu.hpp`, so the row constants are computed); the filters window treats
+    books, tracks and movies alike as lines with parts (`has_parts`, `part_line`,
+    `parts_stack_info`); FIND MY LIMITS grows audio and video only while a one-unit track or movie
+    still fits, then the units. `--track-units`, `--movie-units`.
+  - `menu_ink()` lightens a dark background when the edges are dark too, so TRACKS and MOVIES read
+    on black.
+- **Found and fixed on the way:** door numbers written as literals that only worked in the old
+  order (`find_limits`, the books' count's `resolve(4, ...)`), now named.
+- **CI:** the checks that walk through doors or count the menu's rows follow the new order, and new
+  checks cover tracks and movies (both orderings, a warp, saving, compact).

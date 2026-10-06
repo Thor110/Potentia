@@ -22,6 +22,7 @@ add_library(sieve_core STATIC
     core/src/audio.cpp
     core/src/biguint.cpp
     core/src/booksieve.cpp
+    core/src/composition.cpp
     core/src/bookspace.cpp
     core/src/titledspace.cpp
     core/src/binaryspace.cpp

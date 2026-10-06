@@ -152,7 +152,7 @@ jobs:
           out=$($H --no-menu --line models --goto "$a" --walk "0,0" --take --screenshot cube.png)
           echo "$out"
           echo "$out" | q "8/8 vertices used"
-          $H --no-menu --line books --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door6.png | sed -n 1p | q "^MODELS line"
+          $H --no-menu --line movies --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door6.png | sed -n 1p | q "^MODELS line"
           # The crates render their models onto their faces, and the cache has a budget.
           $H --no-menu --line models --model-cache 8 --walk "0,0" --bench 12 --screenshot crates.png 2>&1 | q "^bench: 12 frames"
           # The display cache is a world setting, in the setup menu's GLOBAL section (row 8),
@@ -211,8 +211,10 @@ jobs:
           # mapping has to be pinned or a row inserted anywhere above silently opens the wrong
           # line's list. Each row here ticks a mode and the saved file says which line it was.
           # Closing the overlay is what writes it, which also covers that path.
-          # (The audio rows are six: its notes, its note set, and notes2's range, durations and voices.)
-          for pair in "16 text" "20 image" "23 audio" "26 audio" "29 video" "33 books" "34 models" "37 binary"; do
+          # The lines' rows follow the doors (image, pages, books, audio, tracks, video, movies,
+          # models, binary); the audio rows are six: its notes, its note set, and notes2's range,
+          # durations and voices.
+          for pair in "16 image" "19 text" "23 books" "24 audio" "27 audio" "30 tracks" "31 video" "35 movies" "36 models" "39 binary"; do
             set -- $pair
             rm -f row$1.ini
             downs=$(python -c "print(','.join(['Down']*$1))")
@@ -224,7 +226,7 @@ jobs:
           rm -f start.ini start2.ini
           $H --menu --filters start.ini --press "F,Space,Escape" --screenshot start.png > /dev/null
           grep -A1 "^\[text\]" start.ini | q "mode = mark"
-          $H --menu --filters start2.ini --press "Right,Right,Right,Right,Right,F,Space,Escape" --screenshot start2.png > /dev/null
+          $H --menu --filters start2.ini --press "Right,Right,Right,Right,Right,Right,F,Space,Escape" --screenshot start2.png > /dev/null
           grep -A1 "^\[models\]" start2.ini | q "mode = mark"
           # Items per wall: the corridor's tile size is a setting. It changes no address -- the
           # same unit, at the same percentage along the same line -- only the tile and slot that
@@ -269,8 +271,8 @@ jobs:
           $H --no-menu --line models --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door7.png | sed -n 1p | q "^BINARY line"
           # (A walk is in the walker's frame, so after being turned round, 4.2 is back the way you came.)
           $H --no-menu --line models --pose "-1.7,7.0,0,0" --walk "-1,0;4.2,0" --screenshot door8.png | sed -n 2p | q "^MODELS line"
-          $H --no-menu --line pages --pose "1.7,7.0,0,0" --walk "1,0" --screenshot door9.png | sed -n 1p | q "^BINARY line"
-          $H --no-menu --line pages --pose "1.7,7.0,0,0" --walk "1,0;-1,0" --screenshot door10.png | sed -n 2p | q "^PAGES line"
+          $H --no-menu --line image --pose "1.7,7.0,0,0" --walk "1,0" --screenshot door9.png | sed -n 1p | q "^BINARY line"
+          $H --no-menu --line image --pose "1.7,7.0,0,0" --walk "1,0;-1,0" --screenshot door10.png | sed -n 2p | q "^IMAGE line"
           # Binary's other side is the drop, always on its right: the short wall stops you at the
           # edge of the floor. No door, no crossing, whatever the doorway is doing at that z.
           $H --no-menu --line models --pose "-1.7,7.0,0,0" --walk "-1,0;-9,0" --screenshot walk.png | sed -n 2p | q "^BINARY line.*x 1.650000"
@@ -459,13 +461,13 @@ jobs:
           # Through a door and straight back: exactly where you were.
           out=$($H --warp "$W" --pose 0,7,-90,0 --walk "-2.3,0;2.5,0" --screenshot door.png)
           echo "$out"
-          echo "$out" | sed -n 1p | q "through the door into the IMAGE line"
+          echo "$out" | sed -n 1p | q "through the door into the BOOKS line"
           test "$(echo "$out" | tail -2 | book)" = "$here"
-          # A door keeps your angle: 36.25% along pages is 36.25% along images; one tile along
+          # A door keeps your angle: 36.25% along pages is 36.25% along books; one tile along
           # there and back through the door is still 36.25% (to the readout's ten places), on pages.
           out=$($H --goto "36.25%" --pose 0,7,-90,0 --walk "-2.3,0;-0.8,0;0,8;1.5,0" --screenshot loop.png)
           echo "$out"
-          echo "$out" | sed -n 1p | q "IMAGE line.* 36.2500000000% along"
+          echo "$out" | sed -n 1p | q "BOOKS line.* 36.2500000000% along"
           echo "$out" | tail -2 | sed -n 1p | q "PAGES line.* 36.2500000000% along"
           # Guided order: M cycles to it and - zooms out.
           $H --warp "$W" --press "M,M,-" --screenshot keys.png | tail -2 | sed -n 1p | q "PAGES line, guided zoom 57"
@@ -694,15 +696,18 @@ jobs:
           $H --warp "$W" --press "X,Tab,1,8,0,Return" --screenshot navangle.png | tail -2 | sed -n 1p | q "50.0000000000% along"
           if $H --warp "$W" --press "X,Tab,3,6,0,Return" --screenshot navangle2.png | tail -2 | sed -n 1p | grep -q "went to"; then exit 1; fi
           start=$($H --mode guided --warp "$W" --zoom 20 --walk "0,0" --screenshot start.png | book)
-          # The corridor end to end and back: six doors left from pages reach binary, which is
-          # where the run finishes, and six right brings you back to the same book on pages.
-          out=$($H --mode guided --warp "$W" --zoom 20 --pose 0,7,-90,0 --walk "-2.3,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0" --screenshot guided.png)
+          # The corridor end to end and back: seven doors left from pages reach binary (books,
+          # audio, tracks, video, movies, models), which is where the run finishes, and seven
+          # right brings you back to the same book on pages.
+          out=$($H --mode guided --warp "$W" --zoom 20 --pose 0,7,-90,0 --walk "-2.3,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0" --screenshot guided.png)
           echo "$out"
-          echo "$out" | q "VIDEO line"
           echo "$out" | q "BOOKS line"
+          echo "$out" | q "TRACKS line"
+          echo "$out" | q "VIDEO line"
+          echo "$out" | q "MOVIES line"
           echo "$out" | q "MODELS line"
           echo "$out" | q "BINARY line"
-          echo "$out" | sed -n 6p | q "^BINARY line"
+          echo "$out" | sed -n 7p | q "^BINARY line"
           echo "$out" | tail -2 | sed -n 1p | q "^PAGES line"
           test "$(echo "$out" | tail -2 | book)" = "$start"
           # Loops: a 2-character line is 729 units = 6 tiles, so tile 6 starts the second copy,
@@ -730,6 +735,20 @@ jobs:
           printf '[books]\nmode = compact\n[books.title]\nfilters = title-v1\n[books.pages]\nfilters = words-v2\n' > books.ini
           $H --filters books.ini --line books --length 400 --book-pages 3 --warp tests/example_book_v1.book --walk "0,0" --screenshot book-compact.png | sed -n 1p | q "surviving books"
           $H --filters books.ini --line books --length 400 --book-pages 3 --mode scrambled --walk "0,0" --take --screenshot book-compact2.png | sed -n 1p | q "BOOKS line, scrambled, filters: 0+1+1 compact"
+          # Tracks and movies (composition-v1): each line comes up in both orderings; a warp onto
+          # tracks splits into its units; an item saves as one unit of its line N units long; and
+          # a units filter that can rank makes the line compact, in either ordering.
+          $H --no-menu --line tracks --walk "0,0" --screenshot tracks.png | sed -n 1p | q "^TRACKS line, positional, filters: none"
+          $H --no-menu --line movies --mode scrambled --walk "0,0" --screenshot movies.png | sed -n 1p | q "^MOVIES line, scrambled, filters: none"
+          $H --no-menu --line tracks --warp "C4q E4q G4h Re B4e C5w" --walk "0,0" --screenshot trackwarp.png | sed -n 1p | q "warped: canon-notes-v1: 6 event(s), 1 unit(s)"
+          $H --no-menu --line tracks --settle 30 --walk "0,0" --take --save-item track.mid --screenshot tracksave.png > /dev/null
+          head -c 4 track.mid | q MThd
+          $H --no-menu --line movies --settle 30 --walk "0,0" --take --save-item movie.png --screenshot moviesave.png > /dev/null
+          test -s movie.png
+          printf '[movies]\nmode = compact\n\n[movies.units]\nfilters = neighbour-agreement-v1\n' > mv.ini
+          for m in positional scrambled; do
+            $H --no-menu --line movies --video-width 2 --video-height 2 --video-frames 2 --filters mv.ini --mode $m --walk "0,0" --screenshot mc-$m.png | sed -n 1p | q "^MOVIES line, $m, filters: 0+0+1 compact"
+          done
           $H --menu --screenshot menu5.png | q "saved menu5.png"
           # The main menu, its settings screens and a language file with gaps (English fills them).
           $H --main-menu --screenshot main.png | q "saved main.png"
@@ -888,6 +907,7 @@ jobs:
           python sieve_ref.py filter-vectors | diff - ../tests/vectors_filters_v1.tsv
           python sieve_ref.py compact-vectors | diff - ../tests/vectors_compact_v1.tsv
           python sieve_ref.py book-vectors | diff - ../tests/vectors_books_v1.tsv
+          python sieve_ref.py composition-vectors | diff - ../tests/vectors_compositions_v1.tsv
           python sieve_ref.py titled-vectors | diff - ../tests/vectors_titled_v1.tsv
           python sieve_ref.py binary-vectors | diff - ../tests/vectors_binary_v1.tsv
           python sieve_ref.py chunk-vectors | diff - ../tests/vectors_chunks_v1.tsv

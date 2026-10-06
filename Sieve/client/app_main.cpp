@@ -63,6 +63,9 @@ const char* kUsage =
     "  --binary-length N   binary: every file of up to N bytes (default 32)\n"
     "  --book-pages N      books: pages per book (default 4); a book is a cover (an image of the\n"
     "                      image line), a title and N pages (pages of the pages line)\n"
+    "  --track-units N     tracks: units of audio per track (default 4); a track is a cover, a title\n"
+    "                      and N units of the audio line (composition-v1)\n"
+    "  --movie-units N     movies: units of video per movie (default 4), as tracks are of audio\n"
     "  --ffmpeg PATH       the ffmpeg that reads and writes picture, video and sound formats beyond\n"
     "                      PNG, JPEG, BMP, GIF, TGA, WAV and MIDI (default: SIEVE_FFMPEG, then beside\n"
     "                      the hallway, then the PATH); kept in the settings\n"
@@ -290,7 +293,9 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
 
     const Hallway::ModelShape shape{a.get_positive("vertices", 8), a.get_positive("faces", 12), a.get_positive("coords", 16),
                                     a.has("title-length") ? a.get_u32("title-length", 32) : 32u,
-                                    a.has("binary-length") ? a.get_positive("binary-length", 32) : 32u};
+                                    a.has("binary-length") ? a.get_positive("binary-length", 32) : 32u,
+                                    a.has("track-units") ? a.get_positive("track-units", 4) : 4u,
+                                    a.has("movie-units") ? a.get_positive("movie-units", 4) : 4u};
     auto hall = std::make_unique<Hallway>(window, renderer, std::move(lines), filters,
                                           a.has("book-pages") ? a.get_u32("book-pages", 4) : 4, shape);
     hall->set_line(start_line);

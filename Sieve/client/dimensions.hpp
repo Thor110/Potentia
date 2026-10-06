@@ -23,8 +23,8 @@ namespace hallway {
 
 // The kinds of media on the shelves: a dimension's identity. This order is the order of anything
 // saved as a list per dimension (the music settings' modes), so it only ever grows at the end.
-enum class Media { Pages, Image, Audio, Video, Books, Models, Binary };
-inline constexpr int kMedia = 7;
+enum class Media { Pages, Image, Audio, Video, Books, Models, Binary, Tracks, Movies };
+inline constexpr int kMedia = 9;
 
 struct Dimension
 {
@@ -32,28 +32,45 @@ struct Dimension
     const char* id;   // "pages": the music files, the setup menu's focus, Real Graphics' folders
     const char* line; // the --line name and the setup menu's start line ("text" for pages)
     std::optional<sieve::cli::LineKind> unit; // the unit line it is (text, image, audio or video), if it is one
+    // The unit line it is a composition of (audio for tracks, video for movies; sieve/composition.hpp):
+    // each of its items is a cover, a title and N of that line's units. Books predate this and are
+    // their own case (bookspace-v1).
+    std::optional<sieve::cli::LineKind> composes;
     Theme theme;      // its two colours: a solid background and the colour of every edge (SPECIFICATIONS §5.4)
     int music_mode;   // WORLD's mode on it until changed in the media player (music.hpp: 0 lydian ... 6 locrian)
+    const char* models; // Real Graphics' folder for its hallway, shelves and items (a composition borrows its line's)
+    // Whether its items vary in size from slot to slot. Pages, pictures (canvases) and books do;
+    // audio (a record), video (a tape) and models (a crate, all the same box until you open it) do
+    // not, since the real things come in one size. The wireframe follows it, and so must any Real
+    // Graphics models.
+    bool sizes_vary;
 };
 
 using sieve::cli::LineKind;
 
 // In door order. Walking left goes to the next and right to the previous, and binary, last, wraps
-// round the outside of the rest: the corridor runs binary | pages ... models | binary.
+// round the outside of the rest: the corridor runs binary | image ... models | binary.
 inline constexpr Dimension kDimensions[] = {
-    {Media::Pages, "pages", "text", LineKind::Text, {{0, 0, 0, 255}, {255, 255, 255, 255}, "PAGES", "PAGES", "line.pages"}, 1},
-    {Media::Image, "image", "image", LineKind::Image, {{0, 0, 140, 255}, {0, 255, 255, 255}, "IMAGE", "IMAGE", "line.image"}, 0},
-    {Media::Audio, "audio", "audio", LineKind::Audio, {{0, 90, 0, 255}, {255, 176, 0, 255}, "AUDIO", "AUDIO", "line.audio"}, 2},
-    {Media::Video, "video", "video", LineKind::Video, {{140, 0, 0, 255}, {255, 255, 0, 255}, "VIDEO", "VIDEO", "line.video"}, 3},
+    // Each part stands before what it composes, and image, a part of nearly all of them (covers,
+    // frames), first.
+    {Media::Image, "image", "image", LineKind::Image, std::nullopt, {{0, 0, 140, 255}, {0, 255, 255, 255}, "IMAGE", "IMAGE", "line.image"}, 0, "image", true},
+    {Media::Pages, "pages", "text", LineKind::Text, std::nullopt, {{0, 0, 0, 255}, {255, 255, 255, 255}, "PAGES", "PAGES", "line.pages"}, 1, "pages", true},
     // Books (SPECIFICATIONS §11): a cover from the image line, a title and pages from the pages line.
     // Grey, with black edges.
-    {Media::Books, "books", "books", std::nullopt, {{150, 150, 150, 255}, {0, 0, 0, 255}, "BOOKS", "BOOKS", "line.books"}, 4},
+    {Media::Books, "books", "books", std::nullopt, std::nullopt, {{150, 150, 150, 255}, {0, 0, 0, 255}, "BOOKS", "BOOKS", "line.books"}, 4, "books", true},
+    {Media::Audio, "audio", "audio", LineKind::Audio, std::nullopt, {{0, 90, 0, 255}, {255, 176, 0, 255}, "AUDIO", "AUDIO", "line.audio"}, 2, "audio", false},
+    // Tracks (SPECIFICATIONS §11.4): a cover, a title and N units of audio. Audio's green with black
+    // edges, as a composition's are.
+    {Media::Tracks, "tracks", "tracks", std::nullopt, LineKind::Audio, {{0, 90, 0, 255}, {0, 0, 0, 255}, "TRACKS", "TRACKS", "line.tracks"}, 2, "audio", false},
+    {Media::Video, "video", "video", LineKind::Video, std::nullopt, {{140, 0, 0, 255}, {255, 255, 0, 255}, "VIDEO", "VIDEO", "line.video"}, 3, "video", false},
+    // Movies (SPECIFICATIONS §11.4): a cover, a title and N units of video. Video's red, black edges.
+    {Media::Movies, "movies", "movies", std::nullopt, LineKind::Video, {{140, 0, 0, 255}, {0, 0, 0, 255}, "MOVIES", "MOVIES", "line.movies"}, 3, "video", false},
     // Models (SPECIFICATIONS §12): clay behind green wireframe, because a mesh is drawn as lines and
     // a mesh is modelled in clay.
-    {Media::Models, "models", "models", std::nullopt, {{140, 120, 0, 255}, {0, 255, 0, 255}, "MODELS", "MODELS", "line.models"}, 5},
+    {Media::Models, "models", "models", std::nullopt, std::nullopt, {{140, 120, 0, 255}, {0, 255, 0, 255}, "MODELS", "MODELS", "line.models"}, 5, "models", false},
     // Binary (SPECIFICATIONS §12.1): black, with green edges and green text. What is unusual about it
     // is its shape, not its palette: one wall of shelves, and on the other side the edge and the drop.
-    {Media::Binary, "binary", "binary", std::nullopt, {{0, 0, 0, 255}, {32, 220, 80, 255}, "BINARY", "BINARY", "line.binary"}, 6},
+    {Media::Binary, "binary", "binary", std::nullopt, std::nullopt, {{0, 0, 0, 255}, {32, 220, 80, 255}, "BINARY", "BINARY", "line.binary"}, 6, "binary", false},
 };
 inline constexpr int kLines = int(std::size(kDimensions));
 static_assert(kLines == kMedia, "every medium has a door");
@@ -79,6 +96,8 @@ constexpr int line_named(std::string_view name)
 }
 
 inline constexpr int kBooksLine = line_of(Media::Books), kModelsLine = line_of(Media::Models), kBinaryLine = line_of(Media::Binary);
+// Whether the line at door li is a composition of another's units (tracks, movies).
+constexpr bool is_composition(int li) { return li >= 0 && li < kLines && kDimensions[li].composes.has_value(); }
 static_assert(kBinaryLine == kLines - 1, "binary is last: the corridor starts and ends at it");
 static_assert(line_of(LineKind::Text) >= 0 && line_of(LineKind::Image) >= 0 && line_of(LineKind::Audio) >= 0 && line_of(LineKind::Video) >= 0,
               "every unit line has a door");
@@ -88,11 +107,15 @@ constexpr const Theme& theme_of(Media m) { return kDimensions[line_of(m)].theme;
 inline constexpr SDL_Color kEdgeInk = theme_of(Media::Binary).edge; // the rain off the edge
 
 // The colour to write a line's name in on black: its edge colour, or its background colour when
-// the edges are too dark to read (books: black edges on grey).
+// the edges are too dark to read (books: black edges on grey), lightened halfway to white when that
+// is too dark as well (tracks: black edges on dark green).
 constexpr SDL_Color menu_ink(const Theme& th)
 {
-    const int lum = (th.edge.r * 3 + th.edge.g * 6 + th.edge.b) / 10;
-    return lum < 60 ? th.bg : th.edge;
+    auto lum = [](SDL_Color c) { return (c.r * 3 + c.g * 6 + c.b) / 10; };
+    if (lum(th.edge) >= 60) return th.edge;
+    if (lum(th.bg) >= 60) return th.bg;
+    auto half = [](Uint8 x) { return Uint8(x + (255 - x) / 2); };
+    return {half(th.bg.r), half(th.bg.g), half(th.bg.b), 255};
 }
 
 } // namespace hallway

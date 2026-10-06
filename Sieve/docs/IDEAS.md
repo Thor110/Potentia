@@ -642,7 +642,7 @@ are cheap and because they are the sort of thing that is lost otherwise.
     scored by estimate (`~` in the tally) but not by compact address, so COST shows them as
     unavailable rather than wrong.
 
-## 13. Composition dimensions (discussed 5–6 October 2026; the dimensions are data, the rest not built)
+## 13. Composition dimensions (discussed 5–6 October 2026; built 6 October, but for what is still open below)
 
 **The principle.** Keep every dimension's unit as small as it can be, and get length and arrangement
 from a dimension of compositions above it, as books are made of pages. A composition of N units
@@ -711,7 +711,19 @@ is a setting, as a book holds pages of any length.
 
 **The order suggested.**
 1. ~~Make the dimensions data, with no change in behaviour.~~ Done.
-2. Reorder the doors as decided (the setup menu's layout is settled: one screen, see above).
-3. Build a composition engine, a generalised `BookSpace`, and move books onto it unchanged
-   (`bookspace-v1` addresses kept).
-4. Add tracks and movies, one at a time.
+2. ~~Reorder the doors as decided.~~ Done: image, pages, books, audio, tracks, video, movies,
+   models, binary; the setup menu's rows follow the doors.
+3. ~~Build a composition engine.~~ Done as `composition-v1` (`sieve/composition.hpp`,
+   SPECIFICATIONS §11): a cover, a title and N units, one mixed-radix number, with exact filters
+   part by part, an oracle and vectors. Books were left on `bookspace-v1` rather than moved: their
+   title is a whole page and their pages are filtered as one text, so moving them would change
+   neither their addresses nor their behaviour, only add risk.
+4. ~~Add tracks and movies.~~ Done, both at once.
+
+**Still open.**
+- **Seam filters:** judging the joins between units (a note held across the boundary, a key kept,
+  frames that carry on). Each unit is judged alone for now, which is what keeps the count exact.
+- **The `sieve` tool** has no `--line tracks` or `--line movies` yet: their addresses are checked
+  by the vectors and the hallway, not by `sieve warp`.
+- **A record format for them** (a book record holds sections of any line, so `sieve-book-v1` may
+  already serve, with a label for the units) and J opening one onto its shelf.

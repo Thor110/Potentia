@@ -1,74 +1,70 @@
-# The dimensions as data, and the setup menu on one screen
+# Tracks and movies, and the doors in their new order
 
-Against `0c5c268` (survey notes ideas). Client and docs only: no address, file format or saved
-setting changes. `dimensions.patch` is everything; `menu-on-one-screen.patch` is the menu part
-alone, for a tree that already has the earlier dimensions.zip.
+Against `fa96f24` (dimensions menu).
 
 ## What changed
 
-- **New: `client/dimensions.hpp`.** `kDimensions` defines each dimension once, in door order:
-  - its identity (`Media`, moved here from `world.hpp`);
-  - its id ("pages") and `--line` name ("text");
-  - the unit line it is, if it is one;
-  - its two colours (moved here from `theme.hpp`, which now holds only the `Theme` struct);
-  - its default WORLD music mode.
+### The doors
+The corridor now runs, as decided:
 
-  `kLines`, `kBooksLine`, `kModelsLine`, `kBinaryLine`, `theme_of()`, `line_of()`, `line_named()`
-  and `menu_ink()` are all derived from it. Binary must stay last, and a static_assert enforces it.
-- **A door and an identity are kept apart.**
-  - **By door** (where a line stands): walking, the map's columns, the HUD's rings, and the key a
-    fifth further at each door. That key is now generated (`fifths_at()`) and gives the same
-    C G D A E B F# as before.
-  - **By identity** (what a line is): everything configured or saved per dimension. The music
-    settings' `modes` list is saved in `Media` order, as before, so existing settings files read
-    identically.
-- **The hallway** looks up its unit lines by kind (`unit_line()`, `line_at()`), no longer as
-  `lines_[0..3]`. J's routing (`open_as_kind`) does the same.
-- **The setup menu** takes its start lines, focus list, map columns, section headings, filter
-  windows and line sizes from the table. Its own list of start lines is now `kStartLines`.
-- **The media player's** per-line music modes, and the music's "world/<line>" ids, also come from
-  the table.
-- **One visible change:** the main menu's rule under the title was five hardcoded colours, pages
-  to books; models and binary had never been added. It is now one band per door, each in the
-  colour the setup menu writes that line's name in.
-- **Docs:**
-  - IDEAS §13 records the decisions so far: the order, the colours, covers kept at both levels,
-    the separate settings window ruled out, and step 1 done.
-  - HANDOFF has a new entry and a row in the file map.
+    binary | image  pages  books  audio  tracks  video  movies  models | binary
 
-## The setup menu on one screen
+The setup menu's settings rows follow the same order. Their row numbers are now computed from the
+doors, so a later reorder needs no other change.
 
-- **The budget's four bars and status line** move from under the settings to the top right, and
-  the map starts below them.
-- **"the largest that fit the budget"** beside FIND MY LIMITS is gone, along with its language key.
-- **Values start just past the widest label** (worked out from the rows, not fixed at 320 px), so
-  every value fits whole at 1920 x 1080. One too long for its column now stops at the map's edge
-  with "..", instead of running into the map; the edge is one constant, `kMapX`.
-- **The menu's smallest size** is worked out from what it draws (the subtitle and the budget beside
-  it, the rows and their headings). A window smaller than that shows the whole menu scaled down, as
-  before.
-- **Docs:** README (the setup menu, and where the filter memory bar is), IDEAS §13 (the layout
-  decided), HANDOFF (an entry).
-- **Screenshots:** `setup-1920x1080.png` and `setup-1280x720.png` (the same layout, scaled down).
+### Tracks and movies
+- **What they are:** a track is a cover (an image unit), a title (the titled lines' title) and N
+  units of audio. A movie is the same with N units of video. N is "units per track" / "units per
+  movie" in the setup menu (4 by default; `--track-units`, `--movie-units`).
+- **Colours:** audio's green and video's red, each with black edges, as books have.
+- **Real Graphics:** they use audio's and video's models.
+- **Addresses: `composition-v1`** (new, SPECIFICATIONS §11):
+  - one mixed-radix number, cover first, then title, then each unit; neighbours differ in the last
+    unit;
+  - scrambled with shuffle-sha256-v1, keyed, the id as the domain.
+  - Books keep bookspace-v1, so **no existing address changes**.
+- **In the hallway** an item is one long unit of its line, its units joined. Joining goes voice by
+  voice (or channel by channel), so a track of two-voice units is still two voices:
+  - the panel shows the notes or frames;
+  - P plays a track, and a movie shows all its frames;
+  - F saves (a track as MIDI or WAV, a movie as frames, or through ffmpeg);
+  - T warps in, splitting into units with a blank cover and title;
+  - X goes to an address, and M changes ordering keeping the item's cover and title.
+- **Filters:** three stacks each, as books have: cover, title and units, with each unit judged on
+  its own. Counts are exact (cover × title × units^N), and compact works in both orderings
+  (`composition-compact-v1`). They're saved as `[tracks]`, `[tracks.cover]`, `[tracks.title]`,
+  `[tracks.units]`, and the same for movies.
+- **FIND MY LIMITS** treats audio and tracks (and video and movies) as it treats pages and books:
+  the line grows only while a one-unit track still fits, then the track takes the units left.
 
-## Not changed
+### Found on the way
+Door numbers written as literals that only worked in the old order: `find_limits()` (0, 1, 2, 3,
+4, 5, 6) and the books' count (`resolve(4, ...)`). They're now named doors.
 
-- Nothing has been reordered or added: the doors are where they were.
-- The setup menu's rows keep their order (GLOBAL, pages ... binary); they follow the doors' new
-  order when the doors are reordered.
+### CI
+- **Door order:** the checks that walk through doors or pin the menu's rows now follow the new
+  order. Pages' left door leads to BOOKS, and the corridor end to end is seven doors from pages.
+- **New checks:** tracks and movies in both orderings; a warp onto tracks; saving a track (MIDI)
+  and a movie (PNG); compact movies in both orderings; the composition vectors diffed against the
+  oracle.
+
+### Docs
+- **SPECIFICATIONS:** §11 composition-v1; the door order in §12.1.
+- **README:** a tracks and movies section, and the new order.
+- **IDEAS §13:** steps 2 to 4 done, with what is still open.
+- **HANDOFF:** an entry and file-map row.
+
+## Not done (in IDEAS §13)
+- **Seam filters:** filters that judge the joins between units.
+- **The `sieve` tool:** it has no `--line tracks` / `--line movies` yet.
+- **Records:** a record format for tracks and movies, and J opening one onto its shelf.
 
 ## Checked
-
-- **Builds** with no warnings (Linux, GCC 13).
-- **Every CI step passes,** run here:
-  - same addresses, filters, models, the bytes256 line, sound, other formats, books;
-  - the whole hallway step (renders, doors, scripted presses);
-  - the reference oracle.
-- **Unit tests:** 33,918 checks, 0 failures (and again after the menu changes, with the hallway
-  step).
-- **The same screens as before:** `setup-now.png` shows the setup menu, with headings and map
-  columns unchanged. `main-now.png` shows the main menu, whose rule now has seven bands.
-- **The reorder test:** a scratch copy with only the table reordered (image, pages, books, audio,
-  video, models, binary) builds with nothing else changed.
-  - `setup-reordered.png`: the map in that order.
-  - `hall-reordered.png`: the image line, with its left door now leading to pages.
+- **Build:** no warnings (Linux, GCC 13).
+- **Unit tests:** 36,410 checks, 0 failures. That includes the 48 composition vectors, and the
+  composition sieve checked against brute force with and without filters on each part.
+- **Every CI step passes,** run here: same addresses, filters, models, bytes256, sound, other
+  formats, books, the whole hallway step (with the new checks) and the reference oracle (with the
+  new vectors).
+- **Screenshots:** `setup.png`, `hall-tracks.png`, `hall-movies.png`, `hand-tracks.png`,
+  `hand-movies.png`.

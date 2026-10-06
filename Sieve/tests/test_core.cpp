@@ -7,6 +7,7 @@
 #include "sieve/biguint.hpp"
 #include "sieve/booksieve.hpp"
 #include "sieve/bookspace.hpp"
+#include "sieve/composition.hpp"
 #include "sieve/modelspace.hpp"
 #include "sieve/canon.hpp"
 #include "sieve/chunks.hpp"
@@ -3004,6 +3005,94 @@ void test_book_vectors(const std::string& dir)
     CHECK(n == 60); // a truncated or emptied vector file must fail, not pass quietly
 }
 
+// composition-v1 (tracks, movies): the oracle's vectors, both orderings, with and without a title.
+void test_composition_vectors(const std::string& dir)
+{
+    std::ifstream in(dir + "vectors_compositions_v1.tsv");
+    CHECK(bool(in));
+    auto digits = [](const std::string& t) {
+        std::vector<uint32_t> d;
+        std::stringstream ss(t);
+        std::string x;
+        while (std::getline(ss, x, '.'))
+            if (!x.empty()) d.push_back(uint32_t(std::stoul(x)));
+        return d;
+    };
+    std::string line;
+    int n = 0;
+    while (std::getline(in, line))
+    {
+        if (line.empty() || line[0] == '#') continue;
+        std::vector<std::string> f;
+        std::stringstream ss(line);
+        std::string x;
+        while (std::getline(ss, x, '\t')) f.push_back(x);
+        while (f.size() < 18) f.push_back("");
+        auto u32 = [&](size_t i) { return uint32_t(std::stoul(f[i])); };
+        const std::string& key = f[12];
+        std::optional<Space> title;
+        if (f[5] != "-") title = Space(f[5], u32(6), u32(7), key);
+        const CompositionSpace cs(f[1], Space(f[2], u32(3), u32(4), key), title, Space(f[8], u32(9), u32(10), key), u32(11));
+        const AddressMode m = address_mode_from_string(f[13]);
+        CompositionSpace::Parts p;
+        p.cover = digits(f[15]);
+        p.title = digits(f[16]);
+        std::stringstream us(f[17]);
+        std::string u;
+        while (std::getline(us, u, '|')) p.units.push_back(digits(u));
+        const BigUint k = BigUint::from_hex(f[14]);
+        CHECK(cs.parts_at(k, m) == p);
+        CHECK(cs.hex_of(cs.index_of(p, m)) == f[14]);
+        CHECK(cs.hex_of(k) == f[14]); // the width is the space's
+        ++n;
+    }
+    std::cout << "composition vectors checked: " << n << "\n";
+    CHECK(n == 48); // a truncated or emptied vector file must fail, not pass quietly
+}
+
+// The composition filters against brute force: a 2x2 two-colour cover and units of 2x1 two-colour
+// video of 2 frames, two units a movie, no title, neighbour-agreement-v1 on cover and units. The
+// count is the cover's survivors times the unit's squared; unrank walks the survivors in
+// increasing positional address, rank inverts it, and the compact addresses round-trip.
+void test_composition_sieve()
+{
+    TestResources res(nullptr, nullptr);
+    const Space cover("image/mono/2x2", 2, 4, "sieve"), unit("video/mono/2x1x2", 2, 4, "sieve");
+    const CompositionSpace cs("movies", cover, std::nullopt, unit, 2);
+    const FilterLine image{"image", "image/mono/2x2", 2, 4, nullptr, 2, 2, 1};
+    const FilterLine video{"video", "video/mono/2x1x2", 2, 4, nullptr, 2, 1, 2};
+    const FilterStack none;
+    const FilterStack cst(image, {{find_filter("neighbour-agreement-v1"), {}}}, res);
+    const FilterStack ust(video, {{find_filter("neighbour-agreement-v1"), {}}}, res);
+    for (int variant = 0; variant < 3; ++variant)
+    {
+        const FilterStack& c = variant == 1 ? none : cst;
+        const FilterStack& u = variant == 2 ? none : ust;
+        const CompositionSieve sv(cs, c, none, u);
+        CHECK(sv.can_rank());
+        uint64_t k = 0;
+        const uint64_t total = std::stoull(cs.size().to_decimal()); // 16 x 16^2
+        for (uint64_t v = 0; v < total; ++v)
+        {
+            const CompositionSpace::Parts p = cs.parts_at(BigUint(v), AddressMode::Positional);
+            if (!sv.first_failure(p).empty()) continue;
+            CHECK(sv.rank(p) == BigUint(k));
+            CHECK(sv.unrank(BigUint(k)) == p);
+            for (AddressMode m : {AddressMode::Positional, AddressMode::Scrambled}) CHECK(sv.parts_at(sv.index_of(p, m), m) == p);
+            ++k;
+        }
+        CHECK(sv.count() == BigUint(k));
+        if (variant == 0) CHECK(sv.domain().rfind("composition-compact-v1/movies/image/mono/2x2/L4+-+video/mono/2x1x2/L4x2/key=sieve/composition-v1/", 0) == 0);
+    }
+    // Joining: two units of two voices (a1 a2 | b1 b2, each voice two events) join voice by voice.
+    const std::vector<std::vector<uint32_t>> two = {{1, 2, 3, 4}, {5, 6, 7, 8}};
+    CHECK((join_units(two, 2) == std::vector<uint32_t>{1, 2, 5, 6, 3, 4, 7, 8}));
+    CHECK((join_units(two, 1) == std::vector<uint32_t>{1, 2, 3, 4, 5, 6, 7, 8}));
+    const std::vector<uint32_t> j = join_units(two, 2);
+    CHECK(split_units(j, 2, 2) == two);
+    std::cout << "composition filters checked against brute force\n";
+}
+
 void test_book_filter_vectors(const std::string& dir)
 {
     std::ifstream in(dir + "vectors_book_filters_v1.tsv");
@@ -4424,6 +4513,8 @@ void run_all(int argc, char** argv)
         test_booksieve();
         test_review_additions();
         test_book_vectors(dir);
+        test_composition_vectors(dir);
+        test_composition_sieve();
         test_titled_vectors(dir + "vectors_titled_v1.tsv");
         test_binary_vectors(dir + "vectors_binary_v1.tsv");
         test_chunk_vectors(dir + "vectors_chunks_v1.tsv");

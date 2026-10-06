@@ -87,14 +87,8 @@ struct BookSlot
 
 // (Media, the kinds of media on the shelves, one per line: dimensions.hpp.)
 
-// Whether a line's books vary in size from slot to slot. Pages, pictures (canvases) and books do;
-// audio (a record), video (a tape) and models (a crate, all the same box until you open it) must
-// not, since the real things come in one size. This is the one switch for it: the wireframe
-// follows it, and so must any Real Graphics models.
-constexpr bool media_sizes_vary(Media m)
-{
-    return m != Media::Audio && m != Media::Video && m != Media::Models && m != Media::Binary; // a box, like a crate
-}
+// Whether a line's books vary in size from slot to slot: its dimension's (dimensions.hpp).
+constexpr bool media_sizes_vary(Media m) { return kDimensions[line_of(m)].sizes_vary; }
 
 // Height of a book's spine: varies a little per slot so shelves do not look like a grid, unless
 // `varied` is false (then every book is kUniformBookHeight).

@@ -1681,6 +1681,69 @@ def cmd_book_vectors(_args):
                       f"{''.join(map(str, cover))}\t{txt(title)}\t{'|'.join(txt(p) for p in pages)}")
 
 
+# -- compositions (composition-v1): a cover, a title (or none) and N units of a base line as one
+#    mixed-radix number, cover first; scrambled through shuffle-sha256-v1 over the whole count,
+#    keyed with the unit space's key. Tracks are units of audio, movies units of video.
+def composition_space_id(kind, cover, title, unit, n, key):
+    part = lambda sp: f"{sp[0]}/L{sp[2]}"
+    return f"{kind}/{part(cover)}+{part(title) if title else '-'}+{part(unit)}x{n}/key={key}/composition-v1"
+
+
+def composition_index(cover_d, title_d, units_d, cover, title, unit):
+    v = 0
+    for d in cover_d:
+        v = v * cover[1] + d
+    if title:
+        for d in title_d:
+            v = v * title[1] + d
+    for u in units_d:
+        for d in u:
+            v = v * unit[1] + d
+    return v
+
+
+def composition_parts(v, cover, title, unit, n):
+    def take(length, base):
+        nonlocal v
+        out = []
+        for _ in range(length):
+            v, r = divmod(v, base)
+            out.append(r)
+        return out[::-1]
+    units = [take(unit[2], unit[1]) for _ in range(n)][::-1]
+    title_d = take(title[2], title[1]) if title else []
+    cover_d = take(cover[2], cover[1])
+    assert v == 0
+    return cover_d, title_d, units
+
+
+def cmd_composition_vectors(_args):
+    """Composition addresses (tracks, movies): positional (mixed radix) and scrambled."""
+    print("# sieve composition vectors v1 (composition-v1 over shuffle-sha256-v1)")
+    print("# composition <kind> <cover symbols> <base> <length> <title symbols or -> <base> <length> <unit symbols> <base> <length> "
+          "<units> <key> <mode> <address> <cover digits> <title digits> <units' digits, | between units> (digits . separated)")
+    g = stream("compositions")
+    cases = (
+        ("tracks", ("image/mono/2x1", 2, 2), ("lower27", 27, 1), ("notes104", 104, 2), 2, "sieve"),
+        ("movies", ("image/mono/2x2", 2, 4), None, ("video/mono/2x2x2", 2, 8), 3, "sieve"),
+        ("tracks", ("image/ega16/4x4", 16, 16), ("lower27", 27, 4), ("notes104", 104, 16), 4, "other"),
+        ("movies", ("image/mono/3x3", 2, 9), ("lower27", 27, 2), ("video/rgb332/2x2x4", 256, 16), 2, "sieve"),
+    )
+    for kind, cover, title, unit, n, key in cases:
+        size = cover[1] ** cover[2] * (title[1] ** title[2] if title else 1) * unit[1] ** (unit[2] * n)
+        dom = composition_space_id(kind, cover, title, unit, n, key)
+        width = max(1, ((size - 1).bit_length() + 3) // 4)
+        for mode in ("positional", "scrambled"):
+            for k in [0, size - 1, size // 3] + [int.from_bytes(bytes(next(g) for _ in range(width)), "little") % size for _ in range(3)]:
+                pos = shuffle(key, dom, size, k, inverse=True) if mode == "scrambled" else k
+                cover_d, title_d, units = composition_parts(pos, cover, title, unit, n)
+                assert composition_index(cover_d, title_d, units, cover, title, unit) == pos
+                dots = lambda d: ".".join(map(str, d))
+                t = title or ("-", 1, 0)
+                print(f"composition\t{kind}\t{cover[0]}\t{cover[1]}\t{cover[2]}\t{t[0]}\t{t[1]}\t{t[2]}\t{unit[0]}\t{unit[1]}\t{unit[2]}\t{n}\t{key}\t"
+                      f"{mode}\t{format(k, 'x').zfill(width)}\t{dots(cover_d)}\t{dots(title_d)}\t{'|'.join(dots(u) for u in units)}")
+
+
 # -- titled lines (titled-v1): a cover (some lines), a title and a content index as one
 #    mixed-radix number, cover first; scrambled through shuffle-sha256-v1 over the whole count.
 def titled_space_id(content_shape, title_sym, title_len, cover, key):
@@ -5700,6 +5763,7 @@ def main():
     sub.add_parser("pcm-vectors")
     sub.add_parser("sound-vectors")
     sub.add_parser("notes3-vectors")
+    sub.add_parser("composition-vectors")
     sub.add_parser("kind-vectors")
     sub.add_parser("written-vectors")
     sub.add_parser("cross-vectors")
@@ -5780,6 +5844,8 @@ def main():
         cmd_sound_vectors(args)
     elif args.cmd == "notes3-vectors":
         cmd_notes3_vectors(args)
+    elif args.cmd == "composition-vectors":
+        cmd_composition_vectors(args)
     elif args.cmd == "kind-vectors":
         cmd_kind_vectors(args)
     elif args.cmd == "written-vectors":

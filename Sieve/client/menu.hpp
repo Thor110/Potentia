@@ -68,6 +68,8 @@ struct Settings
     std::string ffmpeg;
     uint32_t video_fps = sieve::cli::kDefaultExportFps; // a video saved as a video through ffmpeg: frames a second
     uint32_t book_pages = 4; // books: a cover (image line), a title and this many pages (pages line)
+    // Tracks and movies (sieve/composition.hpp): a cover, a title and this many units of audio, of video.
+    uint32_t track_units = 4, movie_units = 4;
     // models: V vertices and F triangles, each coordinate one of C steps across [-1, 1]
     uint32_t model_vertices = 8, model_faces = 12, model_coords = 16;
     // How big the picture on the front of a crate is drawn, pixels square (a power of two).
@@ -161,6 +163,36 @@ void set_item_memory_share(int percent);
 // Which tab of the filters window lists a filter: 0 built-in, 1 custom (plugins), 2 retired.
 int tab_of(const sieve::FilterSpec& f);
 
+// How many rows each line has in the setup menu, and where they start: in door order after the
+// GLOBAL rows (nullopt: where the lines' rows end, FIND MY LIMITS).
+inline constexpr int kSetupFirstLineRow = 16;
+constexpr int setup_rows_of(Media m)
+{
+    switch (m)
+    {
+    case Media::Pages: return 4;  // length, alphabet, warp rules, model
+    case Media::Image: return 3;  // width, height, palette
+    case Media::Audio: return 6;  // notes (samples), the set, and its four rows
+    case Media::Video: return 4;  // width, height, frames, palette
+    case Media::Books: return 1;  // pages per book
+    case Media::Tracks: return 1; // units per track
+    case Media::Movies: return 1; // units per movie
+    case Media::Models: return 3; // vertices, triangles, grid
+    case Media::Binary: return 1; // length
+    }
+    return 0;
+}
+constexpr int setup_row_of(std::optional<Media> m)
+{
+    int r = kSetupFirstLineRow;
+    for (const Dimension& d : kDimensions)
+    {
+        if (m && d.media == *m) return r;
+        r += setup_rows_of(d.media);
+    }
+    return r;
+}
+
 class Menu
 {
 public:
@@ -212,19 +244,22 @@ private:
     void find_limits();        // set every line to the largest shape this machine can open
     void reset_settings();     // every shape back to its default // a line this machine cannot open
     void adjust(int dir, int step);
-    // 0-36 are the settings rows, in the order render() lists them and adjust() switches on;
-    // then FIND MY LIMITS, RESET, and ENTER THE HALLWAY, which is the only row that opens it.
-    // The GLOBAL rows come first; each line's rows are counted from kFirstLineRow, so a row added
-    // to GLOBAL moves them all with one change here.
+    // The settings rows, in the order render() lists them and adjust() switches on; then FIND MY
+    // LIMITS, RESET, and ENTER THE HALLWAY, which is the only row that opens it. The GLOBAL rows
+    // come first; then each line's (setup_rows_of) in door order, from kFirstLineRow (setup_row_of),
+    // so reordering the doors reorders them, and a row added to GLOBAL moves them all with one
+    // change here.
     static constexpr int kAngleRow = 4, kTitleRow = 5, kLettersRow = 6, kDisplaySizeRow = 7, kDisplayCacheRow = 8,
                          kCloseUpRow = 9, kFocusRow = 10, kFilterMemoryRow = 11, kCountingMemoryRow = 12, kMergeCacheRow = 13,
                          kTimeBudgetRow = 14, kItemMemoryRow = 15;
-    static constexpr int kFirstLineRow = 16;
+    static constexpr int kFirstLineRow = kSetupFirstLineRow;
     // The audio rows: its notes, then its note set and the notes2 set's range, durations and voices.
-    static constexpr int kPagesRows = kFirstLineRow, kImageRows = kFirstLineRow + 4, kAudioRow = kFirstLineRow + 7,
-                         kVideoRows = kFirstLineRow + 13, kBooksRow = kFirstLineRow + 17, kModelsRows = kFirstLineRow + 18;
-    static constexpr int kBinaryRow = kModelsRows + 3;
-    static constexpr int kLimitsRow = kBinaryRow + 1, kResetRow = kLimitsRow + 1, kEnterRow = kLimitsRow + 2;
+    static constexpr int kPagesRows = setup_row_of(Media::Pages), kImageRows = setup_row_of(Media::Image),
+                         kAudioRow = setup_row_of(Media::Audio), kVideoRows = setup_row_of(Media::Video),
+                         kBooksRow = setup_row_of(Media::Books), kTracksRow = setup_row_of(Media::Tracks),
+                         kMoviesRow = setup_row_of(Media::Movies), kModelsRows = setup_row_of(Media::Models),
+                         kBinaryRow = setup_row_of(Media::Binary);
+    static constexpr int kLimitsRow = setup_row_of(std::nullopt), kResetRow = kLimitsRow + 1, kEnterRow = kLimitsRow + 2;
     int row_count() const;
 
     // The filter overlay.
@@ -282,6 +317,13 @@ private:
     void render_overlay(float W, float H);
     sieve::FilterLine filter_line_of(int line) const;
     sieve::FilterLine book_part_line(int part) const; // books: the line a part's filters see
+    // Lines whose items have parts, each with its own filters (cover, title, and pages or units):
+    // books, tracks and movies. part_line: the line a part's filters see.
+    static bool has_parts(int line) { return line == kBooksLine || is_composition(line); }
+    sieve::FilterLine part_line(int line, int part) const;
+    sieve::cli::CompositionFilters& comp_cfg(int line) { return kDimensions[line].media == Media::Tracks ? cfg_.tracks : cfg_.movies; }
+    const sieve::cli::CompositionFilters& comp_cfg(int line) const { return kDimensions[line].media == Media::Tracks ? cfg_.tracks : cfg_.movies; }
+    uint32_t comp_units(int line) const { return kDimensions[line].media == Media::Tracks ? s_.track_units : s_.movie_units; }
     sieve::cli::LineFilters& filters_of(const ORow& row);
     const sieve::cli::LineFilters& filters_of(const ORow& row) const;
     sieve::cli::FilterMode& mode_of(int line);
@@ -302,7 +344,8 @@ private:
     static void survivors_of(StackInfo& out, const sieve::BigUint& n, const sieve::BigUint& total);
     static void none_of(StackInfo& out);
     const StackInfo& stack_info(int line);
-    const StackInfo& book_stack_info();
+    const StackInfo& parts_stack_info(int line); // books, tracks, movies: every part counted, the whole exact
+    const StackInfo& book_stack_info() { return parts_stack_info(kBooksLine); }
     // The key and the work for a stack's tally (menu.cpp); `part` is the books' part for line 4.
     std::pair<std::string, std::function<StackInfo()>> stack_job(int line, const sieve::cli::LineFilters& lf, int part = -1) const;
     // One filter alone (and what ticking it ticks too): its tally, or null while it is counted on a
