@@ -135,7 +135,7 @@ void Hallway::view_book_page()
 {
     const uint32_t n = books_->pages();
     // A book's title is a page of its own (the TITLE view): the heading has the start of it.
-    std::string title = utf8_encode(lines_[0].space.text_of(in_hand_->parts->title));
+    std::string title = utf8_encode(unit_line(LineKind::Text).space.text_of(in_hand_->parts->title));
     while (!title.empty() && title.back() == ' ') title.pop_back();
     view_.heading = (title.find_first_not_of(" ") == std::string::npos ? std::string() : "\"" + title + "\"   ") +
                     trf("view.book", {std::to_string(book_page_ + 1), std::to_string(n)});
@@ -338,7 +338,7 @@ void Hallway::view_show(size_t at)
     case ViewKind::Cover:
     {
         // A book's cover, or a track's or a film's: a picture of the image line.
-        const ImageFormat& f = lines_[1].image;
+        const ImageFormat& f = unit_line(LineKind::Image).image;
         view_.picture = true;
         view_.px = argb_of(render_image(bk.parts ? bk.parts->cover : bk.cover, f));
         view_.pw = f.width;
@@ -349,7 +349,7 @@ void Hallway::view_show(size_t at)
     case ViewKind::Title:
     {
         // A book's title is a whole page; any other title, as long as the line's titles are.
-        const std::u32string t = bk.parts ? lines_[0].space.text_of(bk.parts->title) : utf8_decode(title);
+        const std::u32string t = bk.parts ? unit_line(LineKind::Text).space.text_of(bk.parts->title) : utf8_decode(title);
         view_.rows = page_rows(t, view_aspect_, view_.cols);
         view_.heading = trf("view.title", {std::to_string(written_length(t))});
         break;

@@ -59,9 +59,26 @@ namespace hallway {
 
 namespace {
 
-const std::vector<std::string> kLines = {"text", "image", "audio", "video", "books", "models", "binary"};
-// What FIND MY LIMITS can be told to spend the budget on: every line, or one of them.
-const std::vector<std::string> kFocuses = {"all", "binary", "text", "image", "audio", "video", "books", "models"};
+// The lines to start on, by --line name, in door order (dimensions.hpp).
+std::vector<std::string> start_lines()
+{
+    std::vector<std::string> out;
+    for (const Dimension& d : kDimensions) out.push_back(d.line);
+    return out;
+}
+const std::vector<std::string> kStartLines = start_lines();
+// What FIND MY LIMITS can be told to spend the budget on: every line, or one of them (binary
+// first, as it stands first on the map).
+std::vector<std::string> focuses()
+{
+    std::vector<std::string> out = {"all", kDimensions[kBinaryLine].line};
+    for (const Dimension& d : kDimensions)
+        if (d.media != Media::Binary) out.push_back(d.line);
+    return out;
+}
+const std::vector<std::string> kFocuses = focuses();
+// The unit line at door li, as its kind's index into the filter settings (cfg_.lines), or -1.
+int unit_at(int li) { return li >= 0 && li < kLines && kDimensions[li].unit ? int(*kDimensions[li].unit) : -1; }
 const std::vector<std::string> kModes = {"positional", "scrambled", "guided"};
 const std::vector<std::string> kAlphabets = {"lower27", "babel29", "ascii95"};
 const std::vector<std::string> kCanons = {"v2", "v1"};
@@ -430,7 +447,7 @@ LineSize line_size(uint32_t base, uint64_t length)
 
 // ---------------------------------------------------------------- menu
 
-std::array<LineSize, 7> Menu::line_sizes() const
+std::array<LineSize, kLines> Menu::line_sizes() const
 {
     const LineSize page = line_size(alphabet_size(s_.alphabet), s_.length);
     const LineSize image = line_size(palette_size(s_.image_palette), uint64_t(s_.image_w) * s_.image_h);
@@ -496,23 +513,22 @@ std::array<LineSize, 7> Menu::line_sizes() const
         binary.units = "title*files<=" + std::to_string(s_.binary_bytes) + "B = ~10^" + fixed(binary.bits * std::log10(2.0), 1);
     }
     const auto [audio_base, audio_positions] = audio_shape(s_);
-    std::array<LineSize, 7> out{titled(page, false), titled(image, false), titled(line_size(audio_base, audio_positions), true),
-                                titled(line_size(palette_size(s_.video_palette), positions(s_.video_w, s_.video_h, s_.frames)), true),
-                                books, titled(models, false), binary};
+    std::array<LineSize, kLines> out;
+    out[size_t(line_of(Media::Pages))] = titled(page, false);
+    out[size_t(line_of(Media::Image))] = titled(image, false);
+    out[size_t(line_of(Media::Audio))] = titled(line_size(audio_base, audio_positions), true);
+    out[size_t(line_of(Media::Video))] = titled(line_size(palette_size(s_.video_palette), positions(s_.video_w, s_.video_h, s_.frames)), true);
+    out[size_t(kBooksLine)] = books;
+    out[size_t(kModelsLine)] = titled(models, false);
+    out[size_t(kBinaryLine)] = binary;
     // A unit has at most 2^32 - 1 positions: a larger picture cannot be opened at all.
     const uint64_t kMaxPositions = 0xFFFFFFFFull;
-    if (uint64_t(s_.image_w) * s_.image_h > kMaxPositions) out[1].bits = out[4].bits = HUGE_VAL;
-    if (positions(s_.video_w, s_.video_h, s_.frames) > kMaxPositions) out[3].bits = HUGE_VAL;
+    if (uint64_t(s_.image_w) * s_.image_h > kMaxPositions) out[size_t(line_of(Media::Image))].bits = out[size_t(kBooksLine)].bits = HUGE_VAL;
+    if (positions(s_.video_w, s_.video_h, s_.frames) > kMaxPositions) out[size_t(line_of(Media::Video))].bits = HUGE_VAL;
     return out;
 }
 
-// The colour to write a line's name in on the menu's black background: its edge colour, or its
-// background colour when the edges are too dark to read (books: black edges on grey).
-SDL_Color menu_ink(const Theme& th)
-{
-    const int lum = (th.edge.r * 3 + th.edge.g * 6 + th.edge.b) / 10;
-    return lum < 60 ? th.bg : th.edge;
-}
+// (menu_ink(), the colour a line's name is written in on black: dimensions.hpp.)
 
 bool Menu::too_large() const
 {
@@ -525,7 +541,7 @@ bool Menu::too_large() const
 int Menu::over_budget() const
 {
     const Budget b = machine_budget();
-    for (int i = 0; i < 7; ++i)
+    for (int i = 0; i < kLines; ++i)
         if (!over_budget_line(i, b)) return i;
     return -1;
 }
@@ -539,19 +555,23 @@ double Menu::line_cache_bytes(int i) const
     // Each unit's positions: its content, its title and, on audio and video, its cover.
     const uint64_t cover = uint64_t(s_.image_w) * s_.image_h, t = s_.title_length;
     // (The binary line's file is bytes, a quarter of a position each.)
-    const uint64_t pos[7] = {s_.length + t,
-                             cover + t,
-                             audio_shape(s_).second + t + cover,
-                             positions(s_.video_w, s_.video_h, s_.frames) + t + cover,
-                             uint64_t(s_.book_pages + 1) * s_.length + cover,
-                             3ull * s_.model_vertices + 3ull * s_.model_faces + t,
-                             (uint64_t(s_.binary_bytes) + 3) / 4 + t};
+    uint64_t pos = 0;
+    switch (kDimensions[i].media)
+    {
+    case Media::Pages: pos = s_.length + t; break;
+    case Media::Image: pos = cover + t; break;
+    case Media::Audio: pos = audio_shape(s_).second + t + cover; break;
+    case Media::Video: pos = positions(s_.video_w, s_.video_h, s_.frames) + t + cover; break;
+    case Media::Books: pos = uint64_t(s_.book_pages + 1) * s_.length + cover; break;
+    case Media::Models: pos = 3ull * s_.model_vertices + 3ull * s_.model_faces + t; break;
+    case Media::Binary: pos = (uint64_t(s_.binary_bytes) + 3) / 4 + t; break;
+    }
     const double units = double(tiles_kept()) * double(s_.items_per_wall);
     // A binary file is kept lazily (hallway.hpp, Book::is_file): only its place on the line, a
     // number as long as the file, its title, and its first sixteen bytes; its bytes and hex only for the one
     // looked at. And only half a tile's slots hold files.
-    if (i == 6) return units / 2 * (double(s_.binary_bytes) + 4.0 * double(s_.title_length) + 16.0 + 256.0) + 3.0 * double(s_.binary_bytes);
-    return units * (4.0 * double(pos[i]) + 0.375 * sizes[size_t(i)].bits + 256.0);
+    if (i == kBinaryLine) return units / 2 * (double(s_.binary_bytes) + 4.0 * double(s_.title_length) + 16.0 + 256.0) + 3.0 * double(s_.binary_bytes);
+    return units * (4.0 * double(pos) + 0.375 * sizes[size_t(i)].bits + 256.0);
 }
 
 double Menu::graphics_mb_needed() const { return double(model_cache_mb()) + closeup_mb() + world_graphics_mb(); }
@@ -571,7 +591,7 @@ double Menu::world_graphics_mb() const
     double planned = 0;
     if (app_ && app_->real_graphics) planned += screen;
     if (app_ && app_->door_portals) planned += screen / double(kPortalGrain * kPortalGrain);
-    planned += double(kLines.size()) * kSignPxW * kSignPxH * 4.0;
+    planned += double(kLines) * kSignPxW * kSignPxH * 4.0;
     const uint64_t picture = std::max(uint64_t(s_.image_w) * s_.image_h, uint64_t(s_.video_w) * s_.video_h);
     planned += 2.0 * double(picture) * 3.0;
     return (3.0 * screen + std::max(planned, gpu::bytes(gpu::Use::World))) / 1048576.0;
@@ -583,9 +603,9 @@ double Menu::world_graphics_mb() const
 int Menu::display_px_line(int i, bool cache_held) const
 {
     const double title = double(s_.title_length);
-    // (Binary, 6, carries a title, and its kind drawn large below it, which the letters do not size.)
-    const DisplayText t = i == 0 ? display_text_pages(double(s_.length), title)
-                          : i == 4 ? display_text_books(double(s_.length))
+    // (Binary carries a title, and its kind drawn large below it, which the letters do not size.)
+    const DisplayText t = i == line_of(Media::Pages) ? display_text_pages(double(s_.length), title)
+                          : i == kBooksLine ? display_text_books(double(s_.length))
                                    : display_text_titled(title);
     return display_px(int(s_.model_tile), int(s_.letters_px), tallest_face(), t, cache_held ? widest_px() : texture_px_);
 }
@@ -601,7 +621,7 @@ int Menu::widest_px() const
 double Menu::display_mb(bool cache_held) const
 {
     int px = 0;
-    for (int i = 0; i < 7; ++i) px = std::max(px, display_px_line(i, cache_held));
+    for (int i = 0; i < kLines; ++i) px = std::max(px, display_px_line(i, cache_held));
     return double(px) * (double(px) * tallest_face()) * 4 / 1048576.0;
 }
 
@@ -761,7 +781,7 @@ void Menu::find_limits()
 bool Menu::over_budget_line(int i, const Budget& b) const
 {
     const double bits = line_sizes()[size_t(i)].bits;
-    const bool in_time = i == 6 ? line_ms(i, b) <= b.ms_per_unit_at_limit : bits <= b.bits;
+    const bool in_time = i == kBinaryLine ? line_ms(i, b) <= b.ms_per_unit_at_limit : bits <= b.bits;
     return in_time && line_cache_bytes(i) <= b.cache_bytes;
 }
 
@@ -770,7 +790,7 @@ bool Menu::over_budget_line(int i, const Budget& b) const
 double Menu::line_ms(int i, const Budget& b) const
 {
     const double bits = line_sizes()[size_t(i)].bits;
-    if (i == 6) return b.binary_ref_ms * std::max(bits, 1.0) / b.binary_ref_bits;
+    if (i == kBinaryLine) return b.binary_ref_ms * std::max(bits, 1.0) / b.binary_ref_bits;
     return unit_ms(b, bits);
 }
 
@@ -812,7 +832,7 @@ void Menu::adjust(int dir, int step)
     switch (row_)
     {
     // GLOBAL: what belongs to the corridor rather than to any one line.
-    case 0: s_.start_line = cycle(kLines, s_.start_line, dir); break;
+    case 0: s_.start_line = cycle(kStartLines, s_.start_line, dir); break;
     case 1: s_.mode = cycle(kModes, s_.mode, dir); break;
     case 2: break; // key: typed
     // Items per wall: the two values that use a whole byte well (see setup.items_per_wall).
@@ -1073,7 +1093,7 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
                 }
             return;
         }
-        for (int c = 0; c < 8; ++c)
+        for (int c = 0; c < kLines + 1; ++c)
             if (inside(magnifier_[c], mx, my)) open_filters(overlay_of_column(c));
         return;
     }
@@ -1125,13 +1145,17 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         // rows, and the three at the foot), F opens the filters of the line you will start on (the
         // "line" row); F again closes them.
         if (row_ >= kPagesRows && row_ <= kBooksRow)
-            open_filters(row_ >= kImageRows && row_ < kAudioRow ? 1 : row_ >= kAudioRow && row_ < kVideoRows ? 2 : row_ == kBooksRow ? 4 : row_ >= kVideoRows ? 3 : 0);
-        else if (row_ >= kModelsRows && row_ < kBinaryRow) open_filters(5);
-        else if (row_ == kBinaryRow) open_filters(6);
+            open_filters(row_ >= kImageRows && row_ < kAudioRow                ? line_of(Media::Image)
+                         : row_ >= kAudioRow && row_ < kVideoRows           ? line_of(Media::Audio)
+                         : row_ == kBooksRow                                ? kBooksLine
+                         : row_ >= kVideoRows                               ? line_of(Media::Video)
+                                                                            : line_of(Media::Pages));
+        else if (row_ >= kModelsRows && row_ < kBinaryRow) open_filters(kModelsLine);
+        else if (row_ == kBinaryRow) open_filters(kBinaryLine);
         else
         {
-            const auto at = std::find(kLines.begin(), kLines.end(), s_.start_line); // text image audio video books models binary
-            open_filters(at == kLines.end() ? 0 : int(at - kLines.begin()));
+            const auto at = std::find(kStartLines.begin(), kStartLines.end(), s_.start_line); // in door order
+            open_filters(at == kStartLines.end() ? 0 : int(at - kStartLines.begin()));
         }
         break;
     case SDLK_RETURN:
@@ -1210,7 +1234,7 @@ float Menu::draw_budget(float y)
     const Budget b = machine_budget();
     const SDL_Color white{255, 255, 255, 255}, grey{150, 150, 150, 255}, red{255, 80, 80, 255};
     double cache = 0, slowest = 0;
-    for (int i = 0; i < 7; ++i)
+    for (int i = 0; i < kLines; ++i)
     {
         const double c = line_cache_bytes(i), ms = line_ms(i, b);
         if (std::isfinite(c)) cache = std::max(cache, c);
@@ -1221,7 +1245,7 @@ float Menu::draw_budget(float y)
     // The filter memory: the most any line's count needs for its tables (the books' parts are counted
     // one at a time, so their largest), against the setting; past it, that line judges only.
     double filters_need = 0;
-    for (int i = 0; i < 7; ++i) filters_need = std::max(filters_need, stack_info(i).table_bytes); // (worked out on the workers, and kept)
+    for (int i = 0; i < kLines; ++i) filters_need = std::max(filters_need, stack_info(i).table_bytes); // (worked out on the workers, and kept)
     const double filters_have = filter_memory_setting(); // as set: what X will count with
     struct Bar { std::string label, figure; double used, have; };
     const Bar bars[4] = {
@@ -1262,10 +1286,9 @@ float Menu::draw_budget(float y)
 
 std::string Menu::counting_lines() const
 {
-    static const char* const names[7] = {"line.pages", "line.image", "line.audio", "line.video", "line.books", "line.models", "line.binary"};
     std::string out;
-    for (int i = 0; i < 7; ++i)
-        if (pending_[size_t(i)].job && !pending_[size_t(i)].job->ready) out += (out.empty() ? "" : ", ") + tr(names[i]);
+    for (int i = 0; i < kLines; ++i)
+        if (pending_[size_t(i)].job && !pending_[size_t(i)].job->ready) out += (out.empty() ? "" : ", ") + tr(theme_of(i).key);
     return out;
 }
 
@@ -1299,9 +1322,12 @@ void Menu::render()
     // Settings.
     struct Row
     {
-        int section; // -1: none; 0-4 and 6: the line (its colour); 5: GLOBAL
+        int section; // -1: none; -2: the budget; kGlobal: GLOBAL; otherwise the door of the line (its colour)
         std::string label, value;
     };
+    constexpr int kGlobal = -3;
+    const int text_line = line_of(LineKind::Text), image_line = line_of(LineKind::Image);
+    const int audio_line = line_of(LineKind::Audio), video_line = line_of(LineKind::Video);
     auto n = [](uint32_t v) { return std::to_string(v); };
     const std::string start_key = s_.start_line == "text" ? "line.pages" : "line." + s_.start_line;
     // The rooms with pictures of their own: yours and the picture distance either side.
@@ -1309,7 +1335,7 @@ void Menu::render()
     // What they would take drawn as wide as their letters ask, which the display cache may hold back.
     const size_t rooms_mb = size_t(std::ceil(double(picture_rooms_here) * s_.items_per_wall * display_mb(false)));
     const std::vector<Row> rows = {
-        {5, tr("setup.line"), tr(start_key)},
+        {kGlobal, tr("setup.line"), tr(start_key)},
         {-1, tr("setup.ordering"), tr("ordering." + s_.mode)},
         {-1, tr("setup.key"), s_.key + (row_ == 2 ? "_" : "")},
         {-1, tr("setup.items_per_wall"), trf("setup.items_per_wall.value", {n(s_.items_per_wall), n(s_.items_per_wall / 2)})},
@@ -1333,16 +1359,16 @@ void Menu::render()
         {-1, tr("setup.time_budget"), trf("setup.time_budget.value", {std::to_string(app_ ? app_->unit_time_ms : 50)})},
         {-1, tr("setup.item_memory"), trf("setup.item_memory.value", {std::to_string(app_ ? app_->item_memory_pct : 25),
                                                                      sieve::memory_text(machine_budget().cache_bytes)})},
-        {0, tr("setup.length"), trf("setup.length.value", {n(s_.length)})},
+        {text_line, tr("setup.length"), trf("setup.length.value", {n(s_.length)})},
         {-1, tr("setup.alphabet"), trf("setup.alphabet.value", {s_.alphabet, n(alphabet_size(s_.alphabet))})},
         {-1, tr("setup.canon"), "canon-text-" + s_.canon},
         {-1, tr("setup.model"), tr(s_.model ? "setup.model.default" : "setup.model.none")},
-        {1, tr("setup.width"), trf("setup.px", {n(s_.image_w)})},
+        {image_line, tr("setup.width"), trf("setup.px", {n(s_.image_w)})},
         {-1, tr("setup.height"), trf("setup.px", {n(s_.image_h)})},
         {-1, tr("setup.palette"), trf("setup.palette.value", {s_.image_palette, n(palette_size(s_.image_palette))})},
-        is_pcm(s_)      ? Row{2, tr(s_.pcm_channels > 1 ? "setup.samples.per_channel" : "setup.samples"), n(s_.samples)}
-        : is_notes3(s_) ? Row{2, tr(s_.n3_voices > 1 ? "setup.notes.per_voice" : "setup.notes"), n(s_.notes)}
-                        : Row{2, tr(note_set_of_settings(s_).voices > 1 ? "setup.notes.per_voice" : "setup.notes"), n(s_.notes)},
+        is_pcm(s_)      ? Row{audio_line, tr(s_.pcm_channels > 1 ? "setup.samples.per_channel" : "setup.samples"), n(s_.samples)}
+        : is_notes3(s_) ? Row{audio_line, tr(s_.n3_voices > 1 ? "setup.notes.per_voice" : "setup.notes"), n(s_.notes)}
+                        : Row{audio_line, tr(note_set_of_settings(s_).voices > 1 ? "setup.notes.per_voice" : "setup.notes"), n(s_.notes)},
         {-1, tr("setup.note_set"), is_notes3(s_) ? (notes3_of_settings(s_) ? trf("setup.note_set.notes3", {n(notes3_of_settings(s_)->base())})
                                                                           : tr("setup.note_set.notes3_bad"))
                                    : is_pcm(s_) ? (pcm_ok(s_) ? trf("setup.note_set.pcm", {n(sieve::make_pcm_format(s_.pcm_rate, s_.pcm_bits, s_.pcm_channels).base())})
@@ -1361,15 +1387,15 @@ void Menu::render()
         is_pcm(s_)      ? Row{-1, tr("setup.pcm_channels"), n(s_.pcm_channels)}
         : is_notes3(s_) ? Row{-1, tr("setup.voices"), n(s_.n3_voices)}
                         : Row{-1, tr("setup.voices"), s_.note_set == "notes2" ? n(s_.voices) : tr("setup.notes2_only")},
-        {3, tr("setup.width"), trf("setup.px", {n(s_.video_w)})},
+        {video_line, tr("setup.width"), trf("setup.px", {n(s_.video_w)})},
         {-1, tr("setup.height"), trf("setup.px", {n(s_.video_h)})},
         {-1, tr("setup.frames"), n(s_.frames)},
         {-1, tr("setup.palette"), trf("setup.palette.value", {s_.video_palette, n(palette_size(s_.video_palette))})},
-        {4, tr("setup.book_pages"), trf("setup.book_pages.value", {n(s_.book_pages)})},
-        {6, tr("setup.model_vertices"), n(s_.model_vertices)},
+        {kBooksLine, tr("setup.book_pages"), trf("setup.book_pages.value", {n(s_.book_pages)})},
+        {kModelsLine, tr("setup.model_vertices"), n(s_.model_vertices)},
         {-1, tr("setup.model_faces"), n(s_.model_faces)},
         {-1, tr("setup.model_coords"), trf("setup.model_coords.value", {n(s_.model_coords)})},
-        {7, tr("setup.binary_length"), trf("setup.binary_length.value", {n(s_.binary_bytes)})},
+        {kBinaryLine, tr("setup.binary_length"), trf("setup.binary_length.value", {n(s_.binary_bytes)})},
         {-2, tr("setup.limits"), tr("setup.limits.value")},
         {-1, tr("setup.reset"), ""},
         {-1, tr("setup.enter"), ""},
@@ -1385,13 +1411,12 @@ void Menu::render()
             y = draw_budget(y + 4);
             y = std::max(y, H - 118);
         }
-        if (r.section >= 0)
+        if (r.section >= 0 || r.section == kGlobal)
         {
             y += 4;
-            const int li = r.section;
-            const Theme* th = li == 4 ? &kBooksTheme : li == 6 ? &kModelsTheme : li == 7 ? &kBinaryTheme : li < 4 ? &kThemes[li] : nullptr;
+            const Theme* th = r.section >= 0 ? &theme_of(r.section) : nullptr;
             const std::string head = th ? tr(th->key) : tr("setup.start");
-            text(r_, 20, y, head, 2, th ? (li == 4 ? menu_ink(kBooksTheme) : th->edge) : white);
+            text(r_, 20, y, head, 2, th ? menu_ink(*th) : white);
             y += 18;
         }
         if (i == row_)
@@ -1415,7 +1440,7 @@ void Menu::render()
     {
         // Not a limit of the design: a limit of this machine, named so it can be reduced, and
         // which of the limits it is.
-        const Theme& th = over == 4 ? kBooksTheme : over == 5 ? kModelsTheme : over == 6 ? kBinaryTheme : kThemes[over];
+        const Theme& th = theme_of(over);
         const Budget mb = machine_budget();
         const bool slow = line_ms(over, mb) > mb.ms_per_unit_at_limit;
         text(r_, 20, H - 54, trf(slow ? "setup.over_time" : "setup.over_budget", {tr(th.key)}), 1, red);
@@ -1430,26 +1455,26 @@ void Menu::render()
         if (std::isfinite(z.bits)) scale_bits = std::max(scale_bits, z.bits);
     // The binary line takes a column at each end, because that is where it is:
     //
-    //     binary | pages image audio video books models | binary
+    //     binary | pages image audio video books models | binary   (the doors' order: dimensions.hpp)
     //
-    // It is one line drawn twice, not two: it wraps around the outside of the other six, and
+    // It is one line drawn twice, not two: it wraps around the outside of the others, and
     // which end of the corridor you meet it at decides which side of it the edge is on. It is
     // drawn like any other line, with its own two colours and a bar of the same width, and its
     // size is every file up to the BINARY length (SPECIFICATIONS §12.1).
-    const float x0 = 620, pitch = std::max(80.0f, (W - x0 - 20) / 8);
+    const float x0 = 620, pitch = std::max(80.0f, (W - x0 - 20) / float(kLines + 1));
     const float label = 118, top = 216, bottom = H - 60, span = bottom - top, min_bar = 12;
     // Line names are drawn at double size where a column is wide enough to hold one.
     const float name_scale = pitch >= 110 ? 2.0f : 1.0f;
     text(r_, x0, 80, tr("map.title"), 1, white);
     text(r_, x0, 92, trf("map.scale", {fixed(scale_bits, 0)}), 1, grey);
-    for (int c = 0; c < 8; ++c)
+    for (int c = 0; c < kLines + 1; ++c)
     {
-        const bool binary = c == 0 || c == 7;
-        const int i = c - 1; // which of the six, when it is one of them
-        Theme th = binary ? kBinaryTheme : i == 4 ? kBooksTheme : i == 5 ? kModelsTheme : kThemes[i];
+        const bool binary = c == 0 || c == kLines;
+        const int i = binary ? kBinaryLine : c - 1; // the door
+        Theme th = theme_of(i);
         const SDL_Color ink = menu_ink(th);
         const float x = x0 + float(c) * pitch;
-        const LineSize& z = sizes[size_t(binary ? 6 : i)];
+        const LineSize& z = sizes[size_t(i)];
         // Labels above the bar, so a full-length bar never runs into them.
         const size_t cols = size_t(std::max(8.0f, pitch - 8) / 8);
         auto clip = [&](const std::string& t) { return text_cells(t) <= cols ? t : fit_cells(t, cols - 2) + ".."; };
@@ -1479,7 +1504,7 @@ void Menu::render()
             text(r_, x, label + 70, clip(z.padding ? trf("map.empty_slots", {std::to_string(z.padding)}) : tr("map.whole_tiles")), 1, th.edge);
             if (z.bits > too_large_bits()) text(r_, x, label - 14, clip(tr("map.too_large")), 1, white);
             // Slow: a unit of it takes more than a quarter of the time allowed to open, measured here.
-            else if (const Budget mb = machine_budget(); line_ms(binary ? 6 : i, mb) > mb.ms_per_unit_at_limit / 4) text(r_, x, label - 14, clip(tr("map.slow")), 1, grey);
+            else if (const Budget mb = machine_budget(); line_ms(i, mb) > mb.ms_per_unit_at_limit / 4) text(r_, x, label - 14, clip(tr("map.slow")), 1, grey);
         }
         // The bar: the line's own two colours; never shorter than min_bar, never past the bottom.
         // Its body in the line's colour, its frame and what survives in the edges'. A line whose
@@ -1496,7 +1521,7 @@ void Menu::render()
         const SDL_FRect inner{x + 9, top + 1, 38, len - 2};
         SDL_RenderRect(r_, &inner);
         // What survives the ticked filters, where it can be counted exactly: a filled bar inside.
-        const StackInfo& info = stack_info(binary ? 6 : i);
+        const StackInfo& info = stack_info(i);
         if (info.survivor_bits >= 0)
         {
             const float slen = std::clamp(float(info.survivor_bits / scale_bits) * span, 3.0f, len - 4);
@@ -1508,11 +1533,11 @@ void Menu::render()
         else
         {
             size_t ticked = 0;
-            if (i == 4)
+            if (i == kBooksLine)
                 for (const auto& part : cfg_.books.parts) ticked += part.enabled.size();
-            else if (binary) ticked = cfg_.binary.enabled.size();
-            else if (i == 5) ticked = cfg_.models.enabled.size();
-            else if (i < 4) ticked = cfg_.lines[i].enabled.size();
+            else if (i == kBinaryLine) ticked = cfg_.binary.enabled.size();
+            else if (i == kModelsLine) ticked = cfg_.models.enabled.size();
+            else if (unit_at(i) >= 0) ticked = cfg_.lines[unit_at(i)].enabled.size();
             if (ticked) text(r_, x, label + 82, clip(trf("map.ticked", {std::to_string(ticked)})), 1, th.edge);
         }
     }
@@ -1526,27 +1551,27 @@ void Menu::render()
 sieve::FilterLine Menu::filter_line_of(int i) const
 {
     sieve::FilterLine f;
-    switch (i)
+    switch (kDimensions[i].media)
     {
-    case 0:
+    case Media::Pages:
     {
         const sieve::Alphabet& a = sieve::alphabet_of(s_.alphabet);
         f = {"text", a.id(), a.size(), s_.length, &a, 0, 0, 0};
         break;
     }
-    case 1:
+    case Media::Image:
         f = {"image", "image/" + s_.image_palette + "/" + std::to_string(s_.image_w) + "x" + std::to_string(s_.image_h),
              palette_size(s_.image_palette), clamp32(positions(s_.image_w, s_.image_h)), nullptr, s_.image_w, s_.image_h, 1};
         break;
-    case 2:
+    case Media::Audio:
     {
         const sieve::NoteSet set = note_set_of_settings(s_);
         f = {"audio", set.id(), set.base(), s_.notes * set.voices, nullptr, 0, 0, 0};
         break;
     }
-    case 5: f = sieve::cli::models_filter_line(s_.model_vertices, s_.model_faces, s_.model_coords); break;
-    case 6: f = sieve::cli::binary_filter_line(s_.binary_bytes); break;
-    default:
+    case Media::Models: f = sieve::cli::models_filter_line(s_.model_vertices, s_.model_faces, s_.model_coords); break;
+    case Media::Binary: f = sieve::cli::binary_filter_line(s_.binary_bytes); break;
+    default: // video (and books, whose parts are book_part_line's)
         f = {"video", "video/" + s_.video_palette + "/" + std::to_string(s_.video_w) + "x" + std::to_string(s_.video_h) + "x" + std::to_string(s_.frames),
              palette_size(s_.video_palette), clamp32(positions(s_.video_w, s_.video_h, s_.frames)), nullptr, s_.video_w, s_.video_h, s_.frames};
         break;
@@ -1556,31 +1581,31 @@ sieve::FilterLine Menu::filter_line_of(int i) const
 
 sieve::FilterLine Menu::book_part_line(int part) const
 {
-    if (part == 0) return filter_line_of(1);
-    sieve::FilterLine f = filter_line_of(0);
+    if (part == 0) return filter_line_of(line_of(Media::Image));
+    sieve::FilterLine f = filter_line_of(line_of(Media::Pages));
     if (part == 2) f.length = uint32_t(std::min<uint64_t>(uint64_t(f.length) * s_.book_pages, UINT32_MAX));
     return f;
 }
 
 sieve::cli::LineFilters& Menu::filters_of(const ORow& row)
 {
-    if (overlay_ == 5) return cfg_.models;
-    if (overlay_ == 6) return cfg_.binary;
-    return overlay_ == 4 ? cfg_.books.parts[std::max(0, row.part)] : cfg_.lines[overlay_];
+    if (overlay_ == kModelsLine) return cfg_.models;
+    if (overlay_ == kBinaryLine) return cfg_.binary;
+    return overlay_ == kBooksLine ? cfg_.books.parts[std::max(0, row.part)] : cfg_.lines[unit_at(overlay_)];
 }
 
 const sieve::cli::LineFilters& Menu::filters_of(const ORow& row) const
 {
-    if (overlay_ == 5) return cfg_.models;
-    if (overlay_ == 6) return cfg_.binary;
-    return overlay_ == 4 ? cfg_.books.parts[std::max(0, row.part)] : cfg_.lines[overlay_];
+    if (overlay_ == kModelsLine) return cfg_.models;
+    if (overlay_ == kBinaryLine) return cfg_.binary;
+    return overlay_ == kBooksLine ? cfg_.books.parts[std::max(0, row.part)] : cfg_.lines[unit_at(overlay_)];
 }
 
 sieve::cli::FilterMode& Menu::mode_of(int line)
 {
-    if (line == 5) return cfg_.models.mode;
-    if (line == 6) return cfg_.binary.mode;
-    return line == 4 ? cfg_.books.mode : cfg_.lines[line].mode;
+    if (line == kModelsLine) return cfg_.models.mode;
+    if (line == kBinaryLine) return cfg_.binary.mode;
+    return line == kBooksLine ? cfg_.books.mode : cfg_.lines[unit_at(line)].mode;
 }
 
 // How much of a line its filters remove, exactly, as a percentage: truncated (so 100% means every
@@ -1711,14 +1736,14 @@ static std::string settings_key(const sieve::cli::LineFilters& lf)
     return key;
 }
 
-// The key and the work for one stack's tally: line i (0-3 text, image, audio, video; 5 models;
-// 6 binary; 4 with a part, one part of the books) with filters `lf`. The work runs on a worker, so
+// The key and the work for one stack's tally: the line at door i (the books' with a part: one part
+// of the books) with filters `lf`. The work runs on a worker, so
 // it takes copies of everything it needs. Used for each line's own stack (stack_info) and for each
 // filter alone (filter_share).
 std::pair<std::string, std::function<Menu::StackInfo()>> Menu::stack_job(int i, const sieve::cli::LineFilters& lf, int part) const
 {
     // The models line: its own stack on a model's number (sieve/modelsieve.hpp).
-    if (i == 5)
+    if (i == kModelsLine)
     {
         const uint32_t v = s_.model_vertices, f = s_.model_faces, c = s_.model_coords;
         const std::string key = "models/" + std::to_string(v) + "/" + std::to_string(f) + "/" + std::to_string(c) + "/" + settings_key(lf);
@@ -1735,7 +1760,7 @@ std::pair<std::string, std::function<Menu::StackInfo()>> Menu::stack_job(int i, 
     }
     // The binary line: its files' kinds, counted exactly at any length (sieve/filekind.hpp), and
     // the pages as its items (counted exactly; the other forms need the lines built).
-    if (i == 6)
+    if (i == kBinaryLine)
     {
         const uint32_t bytes = s_.binary_bytes, length = s_.length;
         const std::string alphabet = s_.alphabet;
@@ -1768,8 +1793,8 @@ std::pair<std::string, std::function<Menu::StackInfo()>> Menu::stack_job(int i, 
                     return out;
                 }};
     }
-    const sieve::FilterLine fl = i == 4 ? book_part_line(std::max(0, part)) : filter_line_of(i);
-    const std::string key = (i == 4 ? "part" + std::to_string(part) + "/" : std::string()) + fl.symbols_id + "/" + std::to_string(fl.length) + "/" + settings_key(lf);
+    const sieve::FilterLine fl = i == kBooksLine ? book_part_line(std::max(0, part)) : filter_line_of(i);
+    const std::string key = (i == kBooksLine ? "part" + std::to_string(part) + "/" : std::string()) + fl.symbols_id + "/" + std::to_string(fl.length) + "/" + settings_key(lf);
     if (line_sizes()[size_t(i)].bits > too_large_bits())
         return {key, [] { return StackInfo{"too large", tr("status.too_large"), -1, ""}; }};
     return {key, [fl, lf]() {
@@ -1786,13 +1811,13 @@ std::pair<std::string, std::function<Menu::StackInfo()>> Menu::stack_job(int i, 
 
 const Menu::StackInfo& Menu::stack_info(int i)
 {
-    if (i == 4) return book_stack_info();
-    if (i < 4 && line_sizes()[size_t(i)].bits > too_large_bits())
+    if (i == kBooksLine) return book_stack_info();
+    if (unit_at(i) >= 0 && line_sizes()[size_t(i)].bits > too_large_bits())
     {
         info_[i] = StackInfo{"too large", tr("status.too_large"), -1, ""};
         return info_[i];
     }
-    const sieve::cli::LineFilters& lf = i == 5 ? cfg_.models : i == 6 ? cfg_.binary : cfg_.lines[i];
+    const sieve::cli::LineFilters& lf = i == kModelsLine ? cfg_.models : i == kBinaryLine ? cfg_.binary : cfg_.lines[unit_at(i)];
     auto [key, work] = stack_job(i, lf);
     return resolve(i, key, std::move(work));
 }
@@ -1814,10 +1839,10 @@ sieve::cli::LineFilters Menu::alone(const sieve::cli::LineFilters& lf, const std
 // (a part with no filters keeps all its units), on a worker like the other lines.
 const Menu::StackInfo& Menu::book_stack_info()
 {
-    if (line_sizes()[4].bits > too_large_bits())
+    if (line_sizes()[size_t(kBooksLine)].bits > too_large_bits())
     {
-        info_[4] = StackInfo{"too large", tr("status.too_large"), -1, ""};
-        return info_[4];
+        info_[kBooksLine] = StackInfo{"too large", tr("status.too_large"), -1, ""};
+        return info_[kBooksLine];
     }
     std::string key = std::string("books/") + std::to_string(uint64_t(sieve::filter_memory())) + "/" + std::to_string(uint64_t(sieve::unit_time_ms())) +
                       "/" + to_string(cfg_.books.mode) + "/";
@@ -1922,7 +1947,7 @@ void Menu::add_filter_rows(std::vector<ORow>& rows, const sieve::FilterLine& lin
 std::vector<Menu::ORow> Menu::overlay_rows() const
 {
     std::vector<ORow> rows{{ORow::Kind::Mode, "", ""}, {ORow::Kind::Tabs, "", ""}};
-    if (overlay_ == 4)
+    if (overlay_ == kBooksLine)
     {
         for (int part = 0; part < 3; ++part)
         {
@@ -1930,9 +1955,9 @@ std::vector<Menu::ORow> Menu::overlay_rows() const
             add_filter_rows(rows, book_part_line(part), cfg_.books.parts[part], part);
         }
     }
-    else if (overlay_ >= 0 && overlay_ < 4) add_filter_rows(rows, filter_line_of(overlay_), cfg_.lines[overlay_], -1);
-    else if (overlay_ == 5) add_filter_rows(rows, filter_line_of(5), cfg_.models, -1);
-    else if (overlay_ == 6) add_filter_rows(rows, filter_line_of(6), cfg_.binary, -1);
+    else if (unit_at(overlay_) >= 0) add_filter_rows(rows, filter_line_of(overlay_), cfg_.lines[unit_at(overlay_)], -1);
+    else if (overlay_ == kModelsLine) add_filter_rows(rows, filter_line_of(kModelsLine), cfg_.models, -1);
+    else if (overlay_ == kBinaryLine) add_filter_rows(rows, filter_line_of(kBinaryLine), cfg_.binary, -1);
     else return {{ORow::Kind::Mode, "", ""}}; // closed, or a line with no filters yet
     // Custom filter files that did not load, with why: never skipped without a word.
     if (otab_ == 1)
@@ -2138,21 +2163,22 @@ std::vector<Menu::Reach> Menu::reach_of(ToggleScope scope, int overlay, int tab)
     {
         sieve::cli::LineFilters* lf;
         sieve::FilterLine line;
-        int li, part; // the line (0-6) and, on the books, the part
+        int li, part; // the line's door and, on the books, the part
     };
     std::vector<Stack> stacks;
     if (scope == ToggleScope::EveryLine)
     {
-        for (int i = 0; i < 4; ++i) stacks.push_back({&cfg_.lines[i], filter_line_of(i), i, -1});
-        for (int part = 0; part < 3; ++part) stacks.push_back({&cfg_.books.parts[part], book_part_line(part), 4, part});
-        stacks.push_back({&cfg_.models, filter_line_of(5), 5, -1});
-        stacks.push_back({&cfg_.binary, filter_line_of(6), 6, -1});
+        for (LineKind k : {LineKind::Text, LineKind::Image, LineKind::Audio, LineKind::Video})
+            stacks.push_back({&cfg_.lines[size_t(k)], filter_line_of(line_of(k)), line_of(k), -1});
+        for (int part = 0; part < 3; ++part) stacks.push_back({&cfg_.books.parts[part], book_part_line(part), kBooksLine, part});
+        stacks.push_back({&cfg_.models, filter_line_of(kModelsLine), kModelsLine, -1});
+        stacks.push_back({&cfg_.binary, filter_line_of(kBinaryLine), kBinaryLine, -1});
     }
-    else if (overlay == 4)
-        for (int part = 0; part < 3; ++part) stacks.push_back({&cfg_.books.parts[part], book_part_line(part), 4, part});
-    else if (overlay >= 0 && overlay < 4) stacks.push_back({&cfg_.lines[overlay], filter_line_of(overlay), overlay, -1});
-    else if (overlay == 5) stacks.push_back({&cfg_.models, filter_line_of(5), 5, -1});
-    else if (overlay == 6) stacks.push_back({&cfg_.binary, filter_line_of(6), 6, -1});
+    else if (overlay == kBooksLine)
+        for (int part = 0; part < 3; ++part) stacks.push_back({&cfg_.books.parts[part], book_part_line(part), kBooksLine, part});
+    else if (unit_at(overlay) >= 0) stacks.push_back({&cfg_.lines[unit_at(overlay)], filter_line_of(overlay), overlay, -1});
+    else if (overlay == kModelsLine) stacks.push_back({&cfg_.models, filter_line_of(kModelsLine), kModelsLine, -1});
+    else if (overlay == kBinaryLine) stacks.push_back({&cfg_.binary, filter_line_of(kBinaryLine), kBinaryLine, -1});
     std::vector<Reach> in_reach;
     for (const Stack& st : stacks)
         for (const sieve::FilterSpec* f : sieve::filters_for(st.line))
@@ -2283,7 +2309,7 @@ void Menu::overlay_change(int dir, bool big)
     case ORow::Kind::Filter:
     {
         // With its prerequisites, unticking what it cannot be counted with on this line.
-        const sieve::FilterLine line = overlay_ == 4 ? book_part_line(row.part) : filter_line_of(overlay_);
+        const sieve::FilterLine line = overlay_ == kBooksLine ? book_part_line(row.part) : filter_line_of(overlay_);
         (void)sieve::cli::tick_filter_by_hand(lf, row.filter, !lf.is_enabled(row.filter), &line);
         break;
     }
@@ -2313,7 +2339,7 @@ void Menu::overlay_change(int dir, bool big)
                     for (const auto& e : sieve::cli::load_registry().entries) choices.push_back(e.id);
                 if (p->key == "model")
                     for (const auto& e : sieve::cli::load_model_registry().entries)
-                        if (e.symbols == (overlay_ == 4 ? book_part_line(row.part) : filter_line_of(overlay_)).symbols_id) choices.push_back(e.id);
+                        if (e.symbols == (overlay_ == kBooksLine ? book_part_line(row.part) : filter_line_of(overlay_)).symbols_id) choices.push_back(e.id);
             }
             catch (const std::exception&)
             {
@@ -2467,7 +2493,7 @@ void Menu::render_alphabets(float W, float H)
     SDL_RenderRect(r_, &inner);
     const float x = box_.x + 14;
     const size_t cols = size_t((box_.w - 60) / 8);
-    text(r_, x, box_.y + 10, tr("alphabets.title"), 2, kThemes[0].edge);
+    text(r_, x, box_.y + 10, tr("alphabets.title"), 2, theme_of(Media::Pages).edge);
     text(r_, x, box_.y + 32, tr("alphabets.intro"), 1, grey);
 
     const std::vector<std::string> rows = alpha_rows();
@@ -2545,8 +2571,8 @@ void Menu::render_alphabets(float W, float H)
 void Menu::render_overlay(float W, float H)
 {
     const SDL_Color white{255, 255, 255, 255}, grey{150, 150, 150, 255};
-    const Theme& th = overlay_ == 4 ? kBooksTheme : overlay_ == 5 ? kModelsTheme : overlay_ == 6 ? kBinaryTheme : kThemes[overlay_];
-    const SDL_Color title_ink = overlay_ == 4 ? menu_ink(kBooksTheme) : th.edge;
+    const Theme& th = theme_of(overlay_);
+    const SDL_Color title_ink = menu_ink(th);
     box_ = {600, 70, W - 614, H - 124};
     SDL_SetRenderDrawColor(r_, 0, 0, 0, 250);
     SDL_RenderFillRect(r_, &box_);
@@ -2564,7 +2590,7 @@ void Menu::render_overlay(float W, float H)
         text(r_, x + text_width(title, 2) + 24, box_.y + 16,
              trf("filters.filtered", {tally.filtered.empty() ? tr("filters.filtered.unknown") : tally.filtered}), 1, white);
     }
-    text(r_, x, box_.y + 32, tr(overlay_ == 4 ? "filters.intro.books" : overlay_ == 6 ? "filters.intro.binary" : overlay_ == 5 ? "filters.intro.models" : "filters.intro"), 1, grey);
+    text(r_, x, box_.y + 32, tr(overlay_ == kBooksLine ? "filters.intro.books" : overlay_ == kBinaryLine ? "filters.intro.binary" : overlay_ == kModelsLine ? "filters.intro.models" : "filters.intro"), 1, grey);
 
     const sieve::cli::FilterMode mode = mode_of(overlay_);
     const auto rows = overlay_rows();
@@ -2605,7 +2631,7 @@ void Menu::render_overlay(float W, float H)
             auto count = [&](const sieve::FilterLine& l) {
                 for (const sieve::FilterSpec* f : sieve::filters_for(l)) ++n[tab_of(*f)];
             };
-            if (overlay_ == 4)
+            if (overlay_ == kBooksLine)
                 for (int part = 0; part < 3; ++part) count(book_part_line(part));
             else count(filter_line_of(overlay_));
             static const char* const keys[3] = {"filters.tab.builtin", "filters.tab.custom", "filters.tab.retired"};
@@ -2654,7 +2680,7 @@ void Menu::render_overlay(float W, float H)
             // the other). "filters need merging" or "conflicting filters": docs/FILTERS-CONFLICTS.md.
             if (selected)
             {
-                const sieve::FilterLine line = overlay_ == 4 ? book_part_line(row.part) : filter_line_of(overlay_);
+                const sieve::FilterLine line = overlay_ == kBooksLine ? book_part_line(row.part) : filter_line_of(overlay_);
                 std::string merge, hard;
                 for (const sieve::FilterSpec* g : sieve::filters_for(line))
                 {

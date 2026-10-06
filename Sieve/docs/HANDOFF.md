@@ -120,6 +120,7 @@ thirty-two-column shelf is half of it; never larger than one.
 | `core/src/corridor.cpp` | Address → (tile, slot). Holds the tile-size setting. |
 | `core/src/guided.cpp` | `guided-ac-v1`, the entropy-ordered addressing. |
 | `core/src/filter.cpp`, `core/src/filters/` | The filtration stack. |
+| `client/dimensions.hpp` | The dimensions, each defined once, in door order: identity, names, colours, unit line, music mode. Reorder the doors here. |
 | `client/hallway.hpp` | The `Hallway` class and the helpers its parts share (namespace `hallway::hall`). |
 | `client/hallway.cpp` | The corridor itself: lines, position, filters, movement, input, the frame, Real Graphics. |
 | `client/hud.cpp` | Everything in screen space: the compass, the panels, the readout, the item page and COST tab. |
@@ -1524,3 +1525,32 @@ Filters, section 1 of the list (4 October 2026).
   - **Filters:** `line_voices` takes notes3's voices;
   - **Hallway:** `render_notes3` (synth.cpp) makes square tones at the levels and tempo, played through `play_samples`; J opens MIDI on a notes3 line through warp; the setup menu's six audio rows become notes, set (notes104 → notes2 → notes3 → pcm), lowest, highest, lengths (presets of TPQ and longest) and voices; levels, tempo and instruments live in the settings file only.
   - **Not yet:** the melody plugins for notes3's digits (with levels), and drawing it as notes on a staff.
+
+### The dimensions as data (6 October 2026)
+
+The first step of IDEAS §13: every dimension defined once, so that adding one, or reordering the
+doors, is an entry in a table rather than a hunt through the client.
+- **`client/dimensions.hpp`:** `kDimensions`, in door order. Each entry is the dimension's
+  identity (`Media`, moved here from `world.hpp`), its id ("pages"), its `--line` name ("text"),
+  the unit line it is, if any, its two colours (moved here from `theme.hpp`) and its default
+  WORLD music mode. `kLines`, `kBooksLine`, `kModelsLine`, `kBinaryLine`, `theme_of()`,
+  `line_of()`, `line_named()` and `menu_ink()` all come from it. Binary must be last: the
+  corridor starts and ends at it, and a static_assert says so.
+- **Two numbers, kept apart:** a dimension's door (`li`, where it stands) and its identity
+  (`Media`, what it is).
+  - **By door:** walking, the map's columns, the HUD's rings, and the key that moves a fifth at
+    each door (`fifths_at()`, generated, so it extends to any number of doors).
+  - **By identity:** everything configured or saved per dimension. The music settings' `modes`
+    list is saved in `Media` order, exactly as before, so existing settings files read the same.
+    The filter settings were by kind already.
+- **The hallway's unit lines are looked up by kind** (`unit_line(LineKind)`, `line_at(li)`), no
+  longer as `lines_[0..3]`, which tied a door's number to the line behind it.
+- **The setup menu** takes its start lines, focus list, map columns, section headings and filter
+  windows from the table. `menu_ink()` replaces the books-only special case; its output is the
+  same for every line.
+- **One visible change:** the main menu's rule under the title was five hardcoded colours (pages
+  to books; models and binary were never added). It is now a band per door, in each line's
+  colour as the setup menu writes its name.
+- **Checked:** a copy with the doors reordered as decided (image first, then pages, books, audio,
+  video, models, binary) builds with nothing else changed, and its corridor and menus come up in
+  that order.

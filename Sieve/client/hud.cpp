@@ -120,7 +120,7 @@ void Hallway::panel(float x, float y, float w, float h, Uint8 alpha)
 
 void Hallway::draw_pixels(const Space::Digits& unit, float x, float y, float size, int frame)
 {
-    draw_pixels(unit, on_books() ? lines_[1].image : line().image, x, y, size, frame);
+    draw_pixels(unit, on_books() ? unit_line(LineKind::Image).image : line().image, x, y, size, frame);
 }
 
 void Hallway::draw_pixels(const Space::Digits& unit, const ImageFormat& f, float x, float y, float size, int frame)
@@ -133,7 +133,7 @@ void Hallway::draw_pixels(const Space::Digits& unit, const ImageFormat& f, float
     static_assert(sizeof(Rgb) == 3, "Rgb must be packed RGB24");
     // The image line's format drawn anywhere but the image line is a cover (a book's, a record's,
     // a tape's), and gets a texture of its own so it does not fight the picture beside it.
-    PictureCache& c = picture_[&f == &lines_[1].image && li_ != 1 ? 1 : 0];
+    PictureCache& c = picture_[&f == &unit_line(LineKind::Image).image && kDimensions[li_].unit != LineKind::Image ? 1 : 0];
     const bool same = c.tex && c.unit == unit && c.frame == frame && c.w == f.width && c.h == f.height;
     if (!same)
     {
@@ -382,7 +382,7 @@ void Hallway::draw_hud(int w, int h)
                 const float panel_w = std::min(W - 20, 900.0f);
                 const bool covered = !bk.cover.empty();
                 const float tx = covered ? 96.0f : 20.0f;
-                if (covered) draw_pixels(bk.cover, lines_[1].image, 20, y, 60, 0);
+                if (covered) draw_pixels(bk.cover, unit_line(LineKind::Image).image, 20, y, 60, 0);
                 if (!title.empty()) text(tx, y, fit("\"" + title + "\"", panel_w - tx, 2), 2, ink);
                 else if (has_titles()) draw_null_title(tx, y, 2);
                 const float below = y + 26;
@@ -579,7 +579,7 @@ void Hallway::draw_in_hand(float W, float H)
         float tx = x + 14;
         if (!bk.cover.empty())
         {
-            draw_pixels(bk.cover, lines_[1].image, x + 14, cy, 90, 0);
+            draw_pixels(bk.cover, unit_line(LineKind::Image).image, x + 14, cy, 90, 0);
             tx += 104;
         }
         text(tx, cy, tr("hand.title_label"), 1, ink);
@@ -772,7 +772,7 @@ float Hallway::draw_book(const BookSpace::Parts& p, float x, float cy, float pw,
 {
     const SDL_Color ink = theme().edge;
     const float cover = 170;
-    draw_pixels(p.cover, lines_[1].image, x + 14, cy, cover, 0);
+    draw_pixels(p.cover, unit_line(LineKind::Image).image, x + 14, cy, cover, 0);
     const float tx = x + 14 + cover + 20;
     const size_t tcols = size_t(std::max(10.0f, (x + pw - 14 - tx) / 16));
     text(tx, cy, tr("hand.title_label"), 1, ink);

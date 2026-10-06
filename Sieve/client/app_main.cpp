@@ -280,21 +280,13 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
     // address: only the tile and slot that name a unit's place in the corridor (corridor.hpp).
     if (a.has("items-per-wall")) sieve::set_books_per_tile(a.get_u32("items-per-wall", 128));
     std::vector<Line> lines = make_lines(a);
-    int start_line = 0;
-    if (a.get("line") == "books") start_line = kBooksLine;
-    else if (a.get("line") == "models") start_line = kModelsLine;
-    else if (a.get("line") == "binary") start_line = kBinaryLine;
-    else
-    {
-        const LineKind wanted = line_from_string(a.get("line", "text")); // "pages" is the text line
-        for (int i = 0; i < 4; ++i)
-            if (wanted == kLineOrder[i]) start_line = i;
-    }
-    const bool text_has_model = lines[0].guided != nullptr;
+    // The door to start at, by name: an id ("pages") or a --line name ("text"). Any other name is
+    // refused, by line_from_string(), with the names it takes.
+    int start_line = line_named(a.get("line", "text"));
+    if (start_line < 0) start_line = line_of(line_from_string(a.get("line", "text")));
+    const bool text_has_model = lines[size_t(LineKind::Text)].guided != nullptr;
     // Books and models are not made of one alphabet, so neither starts with the text greeting.
-    const LineKind start_kind = start_line == kBooksLine || start_line == kModelsLine || start_line == kBinaryLine
-                                    ? LineKind::Image
-                                    : lines[size_t(start_line)].kind;
+    const LineKind start_kind = kDimensions[start_line].unit.value_or(LineKind::Image);
 
     const Hallway::ModelShape shape{a.get_positive("vertices", 8), a.get_positive("faces", 12), a.get_positive("coords", 16),
                                     a.has("title-length") ? a.get_u32("title-length", 32) : 32u,

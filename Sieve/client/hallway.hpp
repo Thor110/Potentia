@@ -34,6 +34,7 @@
 #include "strings.hpp"
 #include "music.hpp"
 #include "synth.hpp"
+#include "dimensions.hpp"
 #include "theme.hpp"
 #include "world.hpp"
 
@@ -83,6 +84,7 @@
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 
@@ -93,30 +95,33 @@ using namespace sieve::cli;
 
 constexpr float kPi = 3.14159265358979f;
 
-// ---------------------------------------------------------------- themes (theme.hpp)
+// ---------------------------------------------------------------- the lines (dimensions.hpp)
 
+// The unit lines, in the order the hallway holds them: lines_[size_t(kind)]. Which door each stands
+// at is kDimensions' business, not this.
 constexpr LineKind kLineOrder[4] = {LineKind::Text, LineKind::Image, LineKind::Audio, LineKind::Video};
-// The corridor's lines: the four above, then books (made of pages and a picture).
-// The corridor's lines, in door order: the four unit lines, books, models, and then binary,
-// which is the line the others are bounded by. Walking left goes to the next line and right to
-// the previous one, so the sequence runs
-//
-//     binary | pages  image  audio  video  books  models | binary
-//
-// with binary at both ends: the six no longer loop into one another, they start and finish at
-// it. Binary is one line, not two -- it wraps around the outside of the other six. Its room is
-// always the same way round, shelves on one side of the line and the drop on the other; coming in
-// from models you are turned to face the other way along it (see binary_from_).
-constexpr int kLines = 7;
-constexpr int kBooksLine = 4, kModelsLine = 5, kBinaryLine = 6;
+static_assert(int(LineKind::Text) == 0 && int(LineKind::Image) == 1 && int(LineKind::Audio) == 2 && int(LineKind::Video) == 3);
+// (The doors, kLines of them, and kBooksLine, kModelsLine and kBinaryLine, theme_of() and walking
+// round them: dimensions.hpp. Binary is one line, not two -- it wraps around the outside of the
+// others. Its room is always the same way round, shelves on one side of the line and the drop on
+// the other; coming in from the last door before it you are turned to face the other way along it
+// (see binary_from_).)
 // The short wall on the binary line's open edge, under Real Graphics: dark, so the drop past it
 // is what the eye goes to.
 constexpr SDL_FColor kRailColour{0.42f, 0.44f, 0.42f, 1.0f};
 // (view_rooms(), the tiles drawn and kept either side of yours: the View Distance setting, menu.hpp.)
 constexpr int kBuckets = 12; // distance fades of the wireframe
-inline const Theme& theme_of(int li)
+
+// An array of N copies of v, for the per-line arrays of things with no default.
+template <class T, size_t... I>
+std::array<T, sizeof...(I)> filled_(const T& v, std::index_sequence<I...>)
 {
-    return li == kBooksLine ? kBooksTheme : li == kModelsLine ? kModelsTheme : li == kBinaryLine ? kBinaryTheme : kThemes[li];
+    return {{((void)I, v)...}};
+}
+template <size_t N, class T>
+std::array<T, N> filled(const T& v)
+{
+    return filled_(v, std::make_index_sequence<N>());
 }
 
 inline SDL_Color mix(SDL_Color a, SDL_Color b, float t)
@@ -347,7 +352,10 @@ public:
     // The current line's units (the four unit lines; the books line has its own BookSpace).
     // The models line has no Line of its own (it is not made of one alphabet), so it borrows the
     // pages line's, as the books line does, for the few things that ask about a Line.
-    const Line& line() const { return lines_[size_t(on_books() || on_models() || on_binary() ? 0 : li_)]; }
+    const Line& line() const { return line_at(li_); }
+    const Line& line_at(int li) const { return unit_line(kDimensions[li].unit.value_or(LineKind::Text)); }
+    // A unit line, wherever its door is.
+    const Line& unit_line(LineKind k) const { return lines_[size_t(k)]; }
     bool on_books() const { return li_ == kBooksLine; }
     bool on_models() const { return li_ == kModelsLine; }
     // The binary line. It has no state space of its own yet -- its shelves stand empty, and how
@@ -996,7 +1004,7 @@ private:
     std::vector<Segment> bin_tile_[2], bin_hall_[2], bin_case_[2], edge_geometry_[2];
     int binary_shelf_ = 0;
     // The line you came into binary from, which its one door leads back to and its sign names:
-    // pages, or models. Pages when you start there.
+    // the first door or the last before binary. The first when you start there.
     int binary_from_ = 0;
     // Where a door in the wall at sx (-1 left, +1 right) leads.
     int door_to(float sx) const
@@ -1027,8 +1035,7 @@ private:
     std::string tile_label_, loop_label_; // the readout's short forms of tile_ and the loop length
     LineLoop loop_{BigUint(1)};
     BigUint loop_tile_;   // tile_ mod loop_.tiles()
-    LineLoop all_loops_[kLines] = {LineLoop(BigUint(1)), LineLoop(BigUint(1)), LineLoop(BigUint(1)), LineLoop(BigUint(1)),
-                                   LineLoop(BigUint(1)), LineLoop(BigUint(1)), LineLoop(BigUint(1))};
+    std::array<LineLoop, kLines> all_loops_ = filled<kLines>(LineLoop(BigUint(1)));
     BigUint all_loop_tiles_[kLines]; // where you last stood on each line (the current: where you are)
     // The doors you came through since you last moved, so that going straight back returns
     // exactly: each time, you came from `to_tile` of `to_line` to `on_tile` of `on_line`.
@@ -1456,8 +1463,7 @@ private:
     BookStacks book_stacks_;
     std::unique_ptr<BookSieve> book_sieve_; // null if the books' filters failed to build
     std::unique_ptr<CompactLine> compact_[kLines]; // survivors in every ordering, where the stack can rank
-    FilterMode modes_[kLines] = {FilterMode::Off, FilterMode::Off, FilterMode::Off,
-                                 FilterMode::Off, FilterMode::Off, FilterMode::Off};
+    FilterMode modes_[kLines] = {}; // all Off
     std::unique_ptr<BookSpace> books_; // the books line
     std::unique_ptr<ModelSpace> model_space_; // the models line (Models above is Real Graphics)
     // The binary line: every file of 0..N bytes (SPECIFICATIONS §12.1, binary-v1). It has one

@@ -221,8 +221,8 @@ Hallway::Painter Hallway::face_painter(const Book& b) const
         if (!b.parts) return {};
         // A book's front: its title on a band across the top, its cover below.
         const Space::Digits cover = b.parts->cover;
-        const ImageFormat cf = lines_[1].image;
-        const std::u32string title = trimmed(lines_[0].space.text_of(b.parts->title));
+        const ImageFormat cf = unit_line(LineKind::Image).image;
+        const std::u32string title = trimmed(unit_line(LineKind::Text).space.text_of(b.parts->title));
         return [cover, cf, title, nw, lp](std::vector<uint32_t>& px, int w, int h) {
             paint_cover_front(px, w, h, title, cover, cf, argb({150, 26, 26, 255}), argb({235, 225, 205, 255}), nw, lp);
         };
@@ -265,7 +265,7 @@ Hallway::Painter Hallway::face_painter(const Book& b) const
     if (!b.cover.empty())
     {
         const Space::Digits cover = b.cover;
-        const ImageFormat cf = lines_[1].image;
+        const ImageFormat cf = unit_line(LineKind::Image).image;
         const SDL_Color c = theme_of(li_).edge;
         const uint32_t ground = argb({Uint8(c.r / 3), Uint8(c.g / 3), Uint8(c.b / 3), 255});
         return [cover, cf, title, ground, nw, lp](std::vector<uint32_t>& px, int w, int h) {
@@ -761,7 +761,7 @@ DisplayText Hallway::display_text_here() const
 {
     const TitledSpace* ts = titled_here();
     const double title = ts && ts->title_space() ? double(ts->title_space()->unit_length()) : 0.0;
-    if (on_books()) return display_text_books(double(lines_[0].space.unit_length()));
+    if (on_books()) return display_text_books(double(unit_line(LineKind::Text).space.unit_length()));
     if (!on_models() && !on_binary() && line().kind == LineKind::Text) return display_text_pages(double(line().space.unit_length()), title);
     return display_text_titled(title);
 }

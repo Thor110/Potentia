@@ -73,7 +73,7 @@ std::vector<Hallway::MediaRow> Hallway::media_rows() const
     if (media_mode_ == MusicMode::World)
     {
         rows.push_back({K::Character, {}, {}, -1});
-        for (int li = 0; li < 7; ++li) rows.push_back({K::LineMode, {}, {}, li});
+        for (int li = 0; li < kLines; ++li) rows.push_back({K::LineMode, {}, {}, li}); // in door order
         rows.push_back({K::Fifths, {}, {}, -1});
     }
     for (K k : {K::Next, K::Filters}) rows.push_back({k, {}, {}, -1});
@@ -132,7 +132,7 @@ void Hallway::media_saved(const std::string& path)
 void Hallway::go_to_track(const sieve::NoteSet& set, const std::vector<uint32_t>& notes)
 {
     if (notes.empty()) return;
-    if (lines_[2].space.unit_length() != notes.size() || lines_[2].space.symbols_id() != set.id())
+    if (unit_line(LineKind::Audio).space.unit_length() != notes.size() || unit_line(LineKind::Audio).space.symbols_id() != set.id())
     {
         track_to_go_ = notes;
         track_set_to_go_ = set;
@@ -269,7 +269,12 @@ void Hallway::media_change(int dir, bool big, bool& quit)
     case K::Echo: s.echo = std::clamp(s.echo + by * 5, 0, 80); break;
     case K::Gap: s.gap = std::clamp(s.gap + by, 0, 600); break;
     case K::Fifths: s.fifths = !s.fifths; break;
-    case K::LineMode: s.modes[row.line] = ((s.modes[row.line] + dir) % kMusicModes + kMusicModes) % kMusicModes; break;
+    case K::LineMode:
+    {
+        int& mode = s.modes[size_t(kDimensions[row.line].media)];
+        mode = ((mode + dir) % kMusicModes + kMusicModes) % kMusicModes;
+        break;
+    }
     case K::Filter: (void)cli::tick_filter_by_hand(s.filters, row.filter, !s.filters.is_enabled(row.filter)); break; // with its prerequisites
     case K::Param:
     {
@@ -450,7 +455,7 @@ void Hallway::draw_media_player(float W, float H)
             label = tr(s.filters.is_enabled("key-data-v2") || s.filters.is_enabled("key-v1") ? "media.character" : "media.character.no_key");
             header = true;
             break;
-        case K::LineMode: label = "   " + tr(line_key(row.line)); value = tr(std::string("media.mode.") + music_mode_name(s.modes[row.line])); break;
+        case K::LineMode: label = "   " + tr(line_key(row.line)); value = tr(std::string("media.mode.") + music_mode_name(s.modes[size_t(kDimensions[row.line].media)])); break;
         case K::Fifths: label = tr("media.fifths"); value = tr(s.fifths ? "media.value.on" : "media.value.off"); break;
         case K::Next: label = tr("media.next"); break;
         case K::Filters: label = tr("media.filters"); header = true; break;

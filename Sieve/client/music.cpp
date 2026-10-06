@@ -56,25 +56,26 @@ constexpr ModeSteps kModes[kMusicModes] = {
     {"dorian", {0, 2, 3, 5, 7, 9, 10}},  {"aeolian", {0, 2, 3, 5, 7, 8, 10}}, {"phrygian", {0, 1, 3, 5, 7, 8, 10}},
     {"locrian", {0, 1, 3, 5, 6, 8, 10}},
 };
-constexpr const char* kLineKeys[7] = {"line.pages", "line.image", "line.audio", "line.video", "line.books", "line.models", "line.binary"};
-constexpr const char* kLineIds[7] = {"pages", "image", "audio", "video", "books", "models", "binary"};
-// The key each line is in when the key follows the line: a fifth further round the circle at each
-// door (C G D A E B F#), folded within six semitones of C.
-constexpr int kFifths[7] = {0, -5, 2, -3, 4, -1, 6};
+// The key each door is in when the key follows the line: a fifth further round the circle at each
+// door (C G D A E B F# ...), folded within six semitones of C.
+constexpr int fifths_at(int door)
+{
+    const int up = 7 * door % 12;
+    return up > 6 ? up - 12 : up;
+}
+static_assert(fifths_at(0) == 0 && fifths_at(1) == -5 && fifths_at(2) == 2 && fifths_at(6) == 6);
 
 // "world/binary" and back: where a track played, in the files.
 std::string where_id(const MusicTrack& t)
 {
-    return std::string(mode_id(t.mode)) + (t.mode == MusicMode::World && t.line >= 0 && t.line < 7 ? std::string("/") + kLineIds[t.line] : "");
+    return std::string(mode_id(t.mode)) + (t.mode == MusicMode::World && t.line >= 0 && t.line < kLines ? std::string("/") + kDimensions[t.line].id : "");
 }
 void where_from(const std::string& id, MusicTrack& t)
 {
     const size_t slash = id.find('/');
     t.mode = id.substr(0, slash) == "menus" ? MusicMode::Menus : MusicMode::World;
     t.line = -1;
-    if (slash != std::string::npos)
-        for (int i = 0; i < 7; ++i)
-            if (id.substr(slash + 1) == kLineIds[i]) t.line = i;
+    if (slash != std::string::npos) t.line = line_named(id.substr(slash + 1));
 }
 
 // A tonic's name ("C", "F#", "Bb") as a pitch class.
@@ -245,7 +246,7 @@ MusicPlayer* music() { return g_player; }
 void set_music(MusicPlayer* p) { g_player = p; }
 
 const char* music_mode_name(int i) { return kModes[std::clamp(i, 0, kMusicModes - 1)].name; }
-const char* line_key(int li) { return kLineKeys[std::clamp(li, 0, 6)]; }
+const char* line_key(int li) { return theme_of(std::clamp(li, 0, kLines - 1)).key; }
 
 void music_colours(SDL_Color bg, SDL_Color ink)
 {
@@ -285,7 +286,7 @@ std::string MusicTrack::notation() const { return sieve::notes_to_notation(set, 
 std::string MusicTrack::where() const
 {
     const std::string m = tr(std::string("music.mode.") + mode_id(mode));
-    return mode == MusicMode::World && line >= 0 && line < 7 ? m + " [" + tr(kLineKeys[line]) + "]" : m;
+    return mode == MusicMode::World && line >= 0 && line < kLines ? m + " [" + tr(line_key(line)) + "]" : m;
 }
 
 std::string MusicTrack::address() const
@@ -344,7 +345,7 @@ void MusicPlayer::set_line(int li)
 {
     std::lock_guard<std::mutex> lock(mx_);
     if (line_ == li) return;
-    line_ = std::clamp(li, 0, 6);
+    line_ = std::clamp(li, 0, kLines - 1);
     recharacter();
 }
 
@@ -355,7 +356,7 @@ void MusicPlayer::recharacter()
 {
     const MusicSettings& s = settings_[int(MusicMode::World)];
     int* shift = music_[int(MusicMode::World)].shift;
-    const int transpose = s.fifths ? kFifths[line_] : 0;
+    const int transpose = s.fifths ? fifths_at(line_) : 0;
     // The track's scale, read as the seven-note scale it comes from.
     const int* parent = nullptr;
     int tonic = 0;
@@ -376,7 +377,7 @@ void MusicPlayer::recharacter()
         else if (scale == "minor" || scale == "minor-pentatonic" || scale == "blues") parent = aeolian;
         else if (scale == "harmonic-minor") parent = harmonic;
     }
-    const int* target = kModes[std::clamp(s.modes[line_], 0, kMusicModes - 1)].steps;
+    const int* target = kModes[std::clamp(s.modes[size_t(kDimensions[line_].media)], 0, kMusicModes - 1)].steps;
     const sieve::NoteSet set = s.notes();
     for (int pitch = 1; pitch <= int(set.pitches()) && pitch < 62; ++pitch)
     {
@@ -902,15 +903,15 @@ void MusicPlayer::load_settings()
             else if (k == "fifths") s.fifths = v == "on";
             else if (k == "modes")
             {
-                // modes = the seven lines' modes by name, in the lines' order
+                // modes = each medium's mode by name, in Media's order (dimensions.hpp), not the doors'
                 std::istringstream w(v);
                 std::string name;
-                int li = 0;
-                while (std::getline(w, name, ',') && li < 7)
+                size_t m = 0;
+                while (std::getline(w, name, ',') && m < s.modes.size())
                 {
                     for (int i = 0; i < kMusicModes; ++i)
-                        if (trim(name) == kModes[i].name) s.modes[li] = i;
-                    ++li;
+                        if (trim(name) == kModes[i].name) s.modes[m] = i;
+                    ++m;
                 }
             }
             else if (k == "filters")
@@ -964,8 +965,10 @@ void MusicPlayer::save() const
         if (m == int(MusicMode::World))
         {
             o << "modes = ";
-            for (int li = 0; li < 7; ++li) o << (li ? ", " : "") << kModes[s.modes[li]].name;
-            o << "   ; pages, image, audio, video, books, models, binary\n"
+            for (size_t m = 0; m < s.modes.size(); ++m) o << (m ? ", " : "") << kModes[s.modes[m]].name;
+            o << "   ;";
+            for (size_t m = 0; m < s.modes.size(); ++m) o << (m ? ", " : " ") << kDimensions[line_of(Media(m))].id;
+            o << "\n"
               << "fifths = " << (s.fifths ? "on" : "off") << "\n";
         }
         o << "filters = ";

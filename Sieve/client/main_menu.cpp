@@ -9,6 +9,7 @@
 #include "main_menu.hpp"
 #include "cli/timings.hpp"
 
+#include "dimensions.hpp"
 #include "font.hpp"
 #include "music.hpp"
 #include "strings.hpp"
@@ -345,14 +346,14 @@ void MainMenu::render()
     while (ts > 1 && text_width(title, ts) > W - 40) ts -= 0.5f;
     draw_centred(r_, cx, 50, title, ts, kWhite);
     draw_centred(r_, cx, 50 + 8 * ts + 14, tr("main.subtitle"), 1, kGrey);
-    // A thin rule under the title in the colours of the five lines.
+    // A thin rule under the title in the colours of the lines, in door order.
     {
-        const SDL_Color bands[5] = {{255, 255, 255, 255}, {0, 255, 255, 255}, {255, 176, 0, 255}, {255, 255, 0, 255}, {150, 150, 150, 255}};
         const float rw = std::min(W - 80, 700.0f), x0 = cx - rw / 2, y = 50 + 8 * ts + 36;
-        for (int i = 0; i < 5; ++i)
+        for (int i = 0; i < kLines; ++i)
         {
-            SDL_SetRenderDrawColor(r_, bands[i].r, bands[i].g, bands[i].b, 255);
-            const SDL_FRect band{x0 + rw * float(i) / 5, y, rw / 5 - 4, 3};
+            const SDL_Color c = menu_ink(theme_of(i));
+            SDL_SetRenderDrawColor(r_, c.r, c.g, c.b, 255);
+            const SDL_FRect band{x0 + rw * float(i) / kLines, y, rw / kLines - 4, 3};
             SDL_RenderFillRect(r_, &band);
         }
     }

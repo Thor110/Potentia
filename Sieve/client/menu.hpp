@@ -17,6 +17,7 @@
 #pragma once
 
 #include "app_settings.hpp"
+#include "dimensions.hpp"
 #include "display.hpp"
 #include "cli/args.hpp"
 #include "cli/filter_config.hpp"
@@ -184,7 +185,7 @@ public:
 private:
     // One event (a key, the mouse, the window); sets `done` and `result` when the menu is left.
     void handle(const SDL_Event& e, bool& done, Result& result);
-    std::array<LineSize, 7> line_sizes() const; // pages, image, audio, video, books, models, binary
+    std::array<LineSize, kLines> line_sizes() const; // by door (dimensions.hpp)
     bool too_large() const;
     int over_budget() const;   // which line is beyond this machine, or -1
     bool over_budget_line(int i, const Budget& b) const;
@@ -318,8 +319,8 @@ private:
         std::string key;
         std::shared_ptr<Job> job;
     };
-    std::array<Pending, 7> pending_;
-    std::array<StackInfo, 7> waiting_;
+    std::array<Pending, kLines> pending_;
+    std::array<StackInfo, kLines> waiting_;
     const StackInfo& resolve(int i, const std::string& key, std::function<StackInfo()> work);
     // Queues `work` for a counting worker; its result (or its error, said as a status) lands in `job`.
     static void start_job(std::shared_ptr<Job> job, std::function<StackInfo()> work);
@@ -338,15 +339,15 @@ private:
     std::filesystem::path app_path_;
     int otab_ = 0;     // the filters window's tab: 0 built-in filters, 1 custom filters (plugins), 2 retired filters
     void add_filter_rows(std::vector<ORow>& rows, const sieve::FilterLine& line, const sieve::cli::LineFilters& lf, int part) const;
-    int overlay_ = -1; // line whose filters are open (0-3 text/image/audio/video, 4 books, 5 models, 6 binary), or -1
+    int overlay_ = -1; // the door of the line whose filters are open (dimensions.hpp), or -1
     int orow_ = 0;
     int oscroll_ = 0;
     float wheel_ = 0; // wheel movement not yet whole notches
-    StackInfo info_[7]; // one per line of the map: text, image, audio, video, books, models, binary
-    // One glass per column of the map: binary, the six lines, binary again. Both binary columns
-    // open the same filters (overlay 6), because it is one line met at both ends.
-    SDL_FRect magnifier_[8] = {};
-    static int overlay_of_column(int c) { return c == 0 || c == 7 ? 6 : c - 1; }
+    StackInfo info_[kLines]; // one per line of the map, by door
+    // One glass per column of the map: binary, the lines between, binary again. Both binary columns
+    // open the same filters, because it is one line met at both ends.
+    SDL_FRect magnifier_[kLines + 1] = {};
+    static int overlay_of_column(int c) { return c == 0 || c == kLines ? kBinaryLine : c - 1; }
     SDL_FRect box_ = {};
     std::vector<std::pair<SDL_FRect, int>> row_rects_; // overlay rows on screen
     bool in_game_ = false;

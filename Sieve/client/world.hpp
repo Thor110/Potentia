@@ -10,6 +10,7 @@
 #pragma once
 
 #include "camera.hpp"
+#include "dimensions.hpp"
 
 #include "sieve/corridor.hpp"
 
@@ -84,8 +85,7 @@ struct BookSlot
     }
 };
 
-// The kinds of media on the shelves, one per line.
-enum class Media { Pages, Image, Audio, Video, Books, Models, Binary };
+// (Media, the kinds of media on the shelves, one per line: dimensions.hpp.)
 
 // Whether a line's books vary in size from slot to slot. Pages, pictures (canvases) and books do;
 // audio (a record), video (a tape) and models (a crate, all the same box until you open it) must

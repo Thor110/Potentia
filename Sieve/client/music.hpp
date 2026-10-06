@@ -42,6 +42,8 @@
 // beside the hallway's settings.
 #pragma once
 
+#include "dimensions.hpp"
+
 #include "cli/filter_config.hpp"
 #include "cli/lines.hpp"
 #include "sieve/audio.hpp"
@@ -49,6 +51,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <array>
 #include <condition_variable>
 #include <cstdint>
 #include <filesystem>
@@ -63,6 +66,14 @@ namespace hallway {
 enum class MusicMode { Menus = 0, World = 1 };
 enum class Voice { Soft = 0, Sine, Triangle, Square };
 const char* voice_id(Voice v); // "soft", "sine", "triangle", "square"
+
+// Each medium's WORLD mode until it is changed: its dimension's (dimensions.hpp).
+constexpr std::array<int, kMedia> default_music_modes()
+{
+    std::array<int, kMedia> m{};
+    for (const Dimension& d : kDimensions) m[size_t(d.media)] = d.music_mode;
+    return m;
+}
 
 struct MusicSettings
 {
@@ -80,12 +91,13 @@ struct MusicSettings
     sieve::cli::LineFilters filters;
     // WORLD only: each line's mode (an index into music_modes(), brightest first), and whether the
     // key follows the line round the circle of fifths.
-    int modes[7] = {1, 0, 2, 3, 4, 5, 6};
+    // (By medium, not door: modes[size_t(Media::Pages)] is the pages line's, wherever its door is.)
+    std::array<int, kMedia> modes = default_music_modes();
     bool fifths = false;
 };
 
-// The seven modes, brightest first ("lydian" ... "locrian"), and the lines' names ("line.pages"
-// ... "line.binary": language keys), in the hallway's order of lines.
+// The seven modes, brightest first ("lydian" ... "locrian"), and a door's name ("line.pages"
+// ... "line.binary": language keys).
 const char* music_mode_name(int i);
 inline constexpr int kMusicModes = 7;
 const char* line_key(int li);
@@ -93,7 +105,7 @@ const char* line_key(int li);
 struct MusicTrack
 {
     MusicMode mode = MusicMode::World;
-    int line = -1;                // WORLD: the line it began on (the hallway's numbering), else -1
+    int line = -1;                // WORLD: the door it began on (dimensions.hpp), else -1
     sieve::NoteSet set;           // what its notes are (notes104 unless said)
     std::string when;             // "14:05", when it began
     std::vector<uint32_t> notes;  // the unit, its length the track's (voices x events on notes2)

@@ -23,24 +23,26 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
 {
     texture_px_ = gpu::max_texture_px(r_);
     // The books line: a cover from the image line, a title and book_pages pages from the pages line.
-    books_ = std::make_unique<BookSpace>(lines_[1].space, lines_[0].space, book_pages);
+    const Line& text = unit_line(LineKind::Text);
+    const Line& image = unit_line(LineKind::Image);
+    books_ = std::make_unique<BookSpace>(image.space, text.space, book_pages);
     // The models line: V vertices and F triangles on a grid of C steps (SPECIFICATIONS §12).
-    model_space_ = std::make_unique<ModelSpace>(shape.vertices, shape.faces, shape.coords, lines_[0].space.key());
+    model_space_ = std::make_unique<ModelSpace>(shape.vertices, shape.faces, shape.coords, text.space.key());
     // Every line but books and binary carries a title, and audio and video a cover from the image
     // line (SPECIFICATIONS §11, "Titled lines"). A title is written in the pages line's alphabet.
     {
-        const std::string key = lines_[0].space.key();
+        const std::string key = text.space.key();
         std::optional<Space> title; // a title length of 0 is no title
         if (shape.title_length > 0)
-            title = lines_[0].alphabet ? Space(*lines_[0].alphabet, shape.title_length, key)
-                                       : Space(lines_[0].space.symbols_id(), lines_[0].space.base(), shape.title_length, key);
-        for (int i = 0; i < 4; ++i)
+            title = text.alphabet ? Space(*text.alphabet, shape.title_length, key)
+                                  : Space(text.space.symbols_id(), text.space.base(), shape.title_length, key);
+        for (LineKind k : kLineOrder)
         {
-            const Space& content = lines_[size_t(i)].space;
+            const Space& content = unit_line(k).space;
             std::optional<Space> cover;
-            if (lines_[size_t(i)].kind == LineKind::Audio || lines_[size_t(i)].kind == LineKind::Video) cover = lines_[1].space;
-            titled_[size_t(i)] = std::make_unique<TitledSpace>(title, cover, content.size(),
-                                                               content.symbols_id() + "/L" + std::to_string(content.unit_length()), key);
+            if (k == LineKind::Audio || k == LineKind::Video) cover = image.space;
+            titled_[size_t(line_of(k))] = std::make_unique<TitledSpace>(title, cover, content.size(),
+                                                                        content.symbols_id() + "/L" + std::to_string(content.unit_length()), key);
         }
         titled_[kModelsLine] = std::make_unique<TitledSpace>(
             title, std::nullopt, model_space_->size(),
@@ -59,16 +61,19 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
     modes_[kModelsLine] = filters.models.mode;
     rebuild_model_sieve();
     // Each line's filter stack and mode (sieve-filters.ini, edited in the setup menu).
-    for (int i = 0; i < 4; ++i)
+    // (filters.lines[] is by kind, text image audio video, and the arrays here by door.)
+    for (LineKind k : kLineOrder)
     {
-        modes_[i] = filters.lines[i].mode;
+        const int i = line_of(k);
+        const LineFilters& lf = filters.lines[size_t(k)];
+        modes_[i] = lf.mode;
         try
         {
-            stacks_[i] = build_stack(lines_[size_t(i)], filters.lines[i]);
+            stacks_[i] = build_stack(unit_line(k), lf);
         }
         catch (const std::exception& e)
         {
-            std::cerr << "filters for the " << to_string(lines_[size_t(i)].kind) << " line: " << e.what() << "\n";
+            std::cerr << "filters for the " << to_string(k) << " line: " << e.what() << "\n";
             modes_[i] = FilterMode::Off;
             continue;
         }
@@ -79,21 +84,21 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
             const Ranker* rk = modes_[i] == FilterMode::Compact ? stacks_[i].ranker() : nullptr;
             if (rk && !rk->count().is_zero())
             {
-                const Line& ln = lines_[size_t(i)];
+                const Line& ln = unit_line(k);
                 compact_[i] = std::make_unique<CompactLine>(*rk, ln.space.key(), stacks_[i].id(),
                                                             ln.guided ? ln.guided->model_ptr() : nullptr);
             }
         }
         catch (const std::exception& e)
         {
-            std::cerr << "compact for the " << to_string(lines_[size_t(i)].kind) << " line: " << e.what() << " (hiding instead)\n";
+            std::cerr << "compact for the " << to_string(k) << " line: " << e.what() << " (hiding instead)\n";
         }
     }
     // The books line: a stack per part (cover, title, and all pages as one text), one mode.
     modes_[kBooksLine] = filters.books.mode;
     try
     {
-        book_stacks_ = build_book_stacks(lines_[1], lines_[0], book_pages, filters.books);
+        book_stacks_ = build_book_stacks(image, text, book_pages, filters.books);
         book_sieve_ = std::make_unique<BookSieve>(*books_, book_stacks_.cover, book_stacks_.title, book_stacks_.pages);
     }
     catch (const std::exception& e)
@@ -118,16 +123,7 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
 // records (audio) and tapes (video) are all one size, as the real things are (world.hpp).
 Media Hallway::media() const
 {
-    if (on_books()) return Media::Books;
-    if (on_models()) return Media::Models;
-    if (on_binary()) return Media::Binary;
-    switch (line().kind)
-    {
-    case LineKind::Image: return Media::Image;
-    case LineKind::Audio: return Media::Audio;
-    case LineKind::Video: return Media::Video;
-    default: return Media::Pages;
-    }
+    return kDimensions[li_].media;
 }
 
 // The guided line in use: in compact mode, the one restricted to survivors.
@@ -306,9 +302,9 @@ BigUint Hallway::units_of(int i) const
     // Compact: only the surviving models, closed up (their titles blank, as a compact line's are).
     if (i == kModelsLine) return effective_mode(i) == FilterMode::Compact ? model_sieve_->count() : titled_[kModelsLine]->size();
     if (i == kBooksLine) return effective_mode(i) == FilterMode::Compact ? book_sieve_->count() : books_->size();
-    if (guided_ && lines_[size_t(i)].guided) return BigUint::pow(2, zoom_);
+    if (guided_ && line_at(i).guided) return BigUint::pow(2, zoom_);
     if (effective_mode(i) == FilterMode::Compact) return compact_[i]->count();
-    return titled_[size_t(i)] ? titled_[size_t(i)]->size() : lines_[size_t(i)].space.size();
+    return titled_[size_t(i)] ? titled_[size_t(i)]->size() : line_at(i).space.size();
 }
 
 // The loop of the current line in the current ordering, and which of its tiles you are in.
@@ -335,7 +331,7 @@ void Hallway::refresh_labels()
 void Hallway::rebase()
 {
     // The guided zoom can never be finer than the line's own precision (16 bits per character).
-    if (lines_[0].guided) zoom_ = std::clamp<uint32_t>(zoom_, 1, uint32_t(std::min<size_t>(lines_[0].guided->scale_bits(), UINT32_MAX)));
+    if (unit_line(LineKind::Text).guided) zoom_ = std::clamp<uint32_t>(zoom_, 1, uint32_t(std::min<size_t>(unit_line(LineKind::Text).guided->scale_bits(), UINT32_MAX)));
     loop_ = LineLoop(units_of(li_));
     loop_tile_ = loop_.loop_tile(tile_);
     // Every line's loop too, and where you last stood on each: the line you are on is where you
@@ -639,7 +635,7 @@ const TitledSpace* Hallway::titled_of(int i) const
 {
     if (i < 0 || i >= kLines || !titled_[size_t(i)]) return nullptr;
     if (i == kModelsLine || i == kBinaryLine) return titled_[size_t(i)].get();
-    if (guided_ && lines_[size_t(i)].guided) return nullptr; // guided order: the content alone, for now
+    if (guided_ && line_at(i).guided) return nullptr; // guided order: the content alone, for now
     if (effective_mode(i) == FilterMode::Compact) return nullptr; // compact: the content's survivors, for now
     return titled_[size_t(i)].get();
 }
@@ -2053,9 +2049,9 @@ std::string Hallway::file_type(const std::vector<uint8_t>& h, uint64_t size) { r
 Space::Digits Hallway::title_for_name(const std::string& name) const
 {
     const TitledSpace& ts = *titled_[kBinaryLine];
-    if (!ts.title_space() || !lines_[0].alphabet) return ts.blank_title();
+    if (!ts.title_space() || !unit_line(LineKind::Text).alphabet) return ts.blank_title();
     const Space& t = *ts.title_space();
-    const CanonResult c = canonicalise_text(name, *lines_[0].alphabet, t.unit_length(), lines_[0].canon);
+    const CanonResult c = canonicalise_text(name, *unit_line(LineKind::Text).alphabet, t.unit_length(), unit_line(LineKind::Text).canon);
     return c.units.empty() ? ts.blank_title() : t.digits_of(c.units[0]);
 }
 
@@ -2195,7 +2191,7 @@ Hallway::VaultCheck Hallway::vault_check(const Book& b) const
     VaultCheck c;
     if (b.empty) return c;
     c.line = &line();
-    c.covers = &lines_[1].image;
+    c.covers = &unit_line(LineKind::Image).image;
     if (b.parts) c.parts = *b.parts;
     c.cover = b.cover;
     if (!b.parts && !b.title.empty()) c.title = title_text(b);
@@ -2483,7 +2479,7 @@ void Hallway::warm_room()
 void Hallway::set_binary_length(uint64_t bytes)
 {
     if (bytes == binary_space_->max_bytes()) return;
-    const std::string key = lines_[0].space.key();
+    const std::string key = unit_line(LineKind::Text).space.key();
     const TitledSpace& old = *titled_[kBinaryLine];
     binary_space_ = std::make_unique<BinarySpace>(std::max<uint64_t>(1, bytes), key);
     titled_[kBinaryLine] = std::make_unique<TitledSpace>(old.title_space(), std::nullopt, binary_space_->size(), binary_space_->shape(), key);
@@ -2511,7 +2507,7 @@ void Hallway::rebuild_binary_sieve()
     try
     {
         // The other lines as not-an-item-v1 recognises their items (text, image, audio, video, models).
-        const BinaryItems items = binary_items(&lines_[0], &lines_[1], &lines_[3], &lines_[2], model_space_.get());
+        const BinaryItems items = binary_items(&unit_line(LineKind::Text), &unit_line(LineKind::Image), &unit_line(LineKind::Video), &unit_line(LineKind::Audio), model_space_.get());
         binary_sieve_ = std::make_unique<BinarySieve>(build_binary_sieve(*binary_space_, binary_filters_, &items));
     }
     catch (const std::exception& e)

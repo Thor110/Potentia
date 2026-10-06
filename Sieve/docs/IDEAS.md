@@ -642,7 +642,7 @@ are cheap and because they are the sort of thing that is lost otherwise.
     scored by estimate (`~` in the tally) but not by compact address, so COST shows them as
     unavailable rather than wrong.
 
-## 13. Composition dimensions (discussed 5 October 2026; not decided, nothing built)
+## 13. Composition dimensions (discussed 5–6 October 2026; the dimensions are data, the rest not built)
 
 **The principle.** Keep every dimension's unit as small as it can be, and get length and arrangement
 from a dimension of compositions above it, as books are made of pages. A composition of N units
@@ -682,15 +682,34 @@ is a setting, as a book holds pages of any length.
     in settings files, in `--line`, in book records' section shapes and in CI's pinned outputs.
     Renaming a line would move its addresses, so none is renamed: the names above add tracks and
     movies and leave every existing line as it is.
-  - Moving the cover and title from the audio and video lines up to their compositions would
-    reshape (and readdress) those lines: a deliberate decision.
-- **The setup menu** is already crowded. Two more dimensions, each with its own settings, need a
-  different layout (per-dimension pages, or settings collapsed until chosen).
-- **The hallway counts seven dimensions in about 26 places.** The list of dimensions should become
-  data (each defined once: theme, settings, filters, doors) before any is added.
+  - **Covers and titles stay where they are.** A second of sound or a short video can have a
+    title and a cover as well as the composition holding it, so tracks and movies get their own
+    and audio and video keep theirs. Moving them up would reshape (and readdress) those lines;
+    nothing calls for it.
+- **The setup menu** is already crowded: the two new dimensions take about as much height as the
+  general settings. A separate settings window would cost the bars moving as a setting is turned,
+  the reason the menu reads as it does, so that is ruled out. Still open: most likely the settings
+  list scrolls, beside a map that stays whole.
+- **Done (6 October): the dimensions are data.** `client/dimensions.hpp` defines each once, in door
+  order: its identity (`Media`), its names, its two colours, the unit line it is, its music mode.
+  Doors, themes, the map's columns, the HUD's rings, the menu's lists, J's routing and the music
+  all read it, and anything saved per dimension is keyed by identity, never by door, so
+  reordering the doors is reordering the table.
+
+**Decided since.**
+- **The order,** each part before what it composes, and image, a part of nearly all of them, first:
+
+      binary | image | pages books | audio tracks | video movies | models | binary
+
+- **The colours:** tracks audio's green, movies video's red, each with black edges, as books
+  (grey) has. Black edges then mean a composition, whose background says what of. The
+  colour-blindness pass (2.4) is still to do: audio's and video's dark green and dark red differ
+  mostly in hue, which red–green colour blindness loses.
+- **Their models:** the constituent dimensions' own, for now.
 
 **The order suggested.**
-1. Make the dimensions data, with no change in behaviour.
-2. Build a composition engine, a generalised `BookSpace`, and move books onto it unchanged
+1. ~~Make the dimensions data, with no change in behaviour.~~ Done.
+2. Reorder the doors as decided, and settle the setup menu's layout.
+3. Build a composition engine, a generalised `BookSpace`, and move books onto it unchanged
    (`bookspace-v1` addresses kept).
-3. Add tracks and movies, one at a time.
+4. Add tracks and movies, one at a time.

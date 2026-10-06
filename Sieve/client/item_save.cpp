@@ -147,7 +147,7 @@ std::optional<std::pair<std::vector<uint8_t>, std::string>> Hallway::view_file()
     case ViewKind::Raw: return std::nullopt;
     case ViewKind::Title:
     {
-        std::string t = bk.parts ? utf8_encode(lines_[0].space.text_of(bk.parts->title)) : title_text(bk);
+        std::string t = bk.parts ? utf8_encode(unit_line(LineKind::Text).space.text_of(bk.parts->title)) : title_text(bk);
         while (!t.empty() && t.back() == ' ') t.pop_back();
         return std::make_pair(std::vector<uint8_t>(t.begin(), t.end()), std::string("-title.txt"));
     }
@@ -363,14 +363,17 @@ void Hallway::jump_kind()
 void Hallway::open_as_kind(const std::vector<uint8_t>& bytes)
 {
     const std::string kind = file_kind(bytes, bytes.size());
-    const bool on_pcm = sieve::is_pcm_symbols(lines_[2].space.symbols_id());
+    const bool on_pcm = sieve::is_pcm_symbols(unit_line(LineKind::Audio).space.symbols_id());
+    // `to` is the door of the line the file goes to.
+    const int text_line = line_of(LineKind::Text), image_line = line_of(LineKind::Image);
+    const int audio_line = line_of(LineKind::Audio), video_line = line_of(LineKind::Video);
     int to = -1;
-    if (kind == "TXT") to = 0;
-    else if (kind == "PNG" || kind == "JPG" || kind == "GIF" || kind == "BMP") to = 1;
+    if (kind == "TXT") to = text_line;
+    else if (kind == "PNG" || kind == "JPG" || kind == "GIF" || kind == "BMP") to = image_line;
     // Sound files on the audio line when it holds sound itself (pcm), MIDI when it holds notes.
     else if (kind == "MID" || kind == "WAV" || kind == "MP3" || kind == "OGG" || kind == "FLAC")
     {
-        if (on_pcm == (kind != "MID")) to = 2;
+        if (on_pcm == (kind != "MID")) to = audio_line;
         else
         {
             message(trf(on_pcm ? "msg.jump.needs_notes" : "msg.jump.needs_pcm", {kind}));
@@ -384,7 +387,7 @@ void Hallway::open_as_kind(const std::vector<uint8_t>& bytes)
     // A file the table does not know whose first bytes are an MPEG audio or AAC frame (an MP3
     // without an ID3 tag) is sound first.
     else if ((kind == "MP4" || kind == "AVI" || kind == "WEBP" || kind == "?") && cli::find_ffmpeg())
-        to = kind == "?" && on_pcm && cli::looks_like_mpeg_audio(bytes) ? 2 : 1;
+        to = kind == "?" && on_pcm && cli::looks_like_mpeg_audio(bytes) ? audio_line : image_line;
     if (to < 0)
     {
         message(trf("msg.jump.no_line", {kind}));
@@ -409,13 +412,13 @@ void Hallway::open_as_kind(const std::vector<uint8_t>& bytes)
     // Read frame by frame into both lines' fittings: how many frames there are decides the line.
     // A container with no picture in it (an .m4a, a video's sound alone) is sound, when the audio
     // line holds sound.
-    ImageCanoniser still(lines_[1].image), moving(lines_[3].image);
+    ImageCanoniser still(unit_line(LineKind::Image).image), moving(unit_line(LineKind::Video).image);
     cli::MediaRead m;
-    if (to == 1)
+    if (to == image_line)
     {
         try
         {
-            m = cli::read_media_frames(bytes.data(), bytes.size(), kind, std::max<uint32_t>(2, lines_[3].image.frames), [&](const RgbaImage& f) {
+            m = cli::read_media_frames(bytes.data(), bytes.size(), kind, std::max<uint32_t>(2, unit_line(LineKind::Video).image.frames), [&](const RgbaImage& f) {
                 still.add(f);
                 moving.add(f);
             });
@@ -423,19 +426,19 @@ void Hallway::open_as_kind(const std::vector<uint8_t>& bytes)
         catch (const std::exception&)
         {
             if (!on_pcm || kind == "PNG" || kind == "JPG" || kind == "GIF" || kind == "BMP") throw;
-            to = 2;
+            to = audio_line;
         }
     }
-    if (to == 1)
+    if (to == image_line)
     {
         ImageCanonReport r;
         std::vector<uint32_t> s = still.finish(&r);
         if (r.source_frames > 1) // an animation: the video line
         {
-            to = 3;
+            to = video_line;
             s = moving.finish(&r);
         }
-        const Line& l = lines_[size_t(to)];
+        const Line& l = line_at(to);
         units.push_back(std::move(s));
         report = std::string(kImageCanonVersion) + ": " + std::to_string(r.source_width) + "x" + std::to_string(r.source_height) + " -> " +
                  l.image.symbols_id();
@@ -443,9 +446,9 @@ void Hallway::open_as_kind(const std::vector<uint8_t>& bytes)
         if (!m.complaints.empty()) report += "; ffmpeg reported: " + m.complaints;
         if (cli::unit_withheld(l, units[0])) throw cli::VaultWithheld("withheld by the vault");
     }
-    else if (to == 2 && on_pcm)
+    else if (to == audio_line && on_pcm)
     {
-        const Line& l = lines_[2];
+        const Line& l = unit_line(LineKind::Audio);
         const sieve::PcmFormat f = sieve::pcm_format_of(l.space.symbols_id());
         std::optional<sieve::PcmCanoniser> c;
         const cli::AudioRead m = cli::read_media_audio(
@@ -461,20 +464,20 @@ void Hallway::open_as_kind(const std::vector<uint8_t>& bytes)
         for (const auto& u : units)
             if (cli::unit_withheld(l, u)) throw cli::VaultWithheld("withheld by the vault");
     }
-    else if (to == 2 && sieve::is_notes3_symbols(lines_[2].space.symbols_id()))
+    else if (to == audio_line && sieve::is_notes3_symbols(unit_line(LineKind::Audio).space.symbols_id()))
     {
         // Open-ended notes read a MIDI file as warp does (canon-notes-v3, MIDI read back first).
         Args a;
         a.opts["line"] = "audio";
         a.positional = {std::string(bytes.begin(), bytes.end())};
-        const WarpInput w = read_warp_input(lines_[2], a);
+        const WarpInput w = read_warp_input(unit_line(LineKind::Audio), a);
         units = w.units;
         report = w.report.front();
         for (size_t i = 1; i < w.report.size(); ++i) report += "; " + w.report[i];
     }
-    else if (to == 2)
+    else if (to == audio_line)
     {
-        const Line& l = lines_[2];
+        const Line& l = unit_line(LineKind::Audio);
         const sieve::NoteSet set = note_set_of(l.space.symbols_id());
         std::vector<std::string> notes;
         const std::string notation = midi_to_notation(bytes, set, &notes);
@@ -492,7 +495,7 @@ void Hallway::open_as_kind(const std::vector<uint8_t>& bytes)
         Args a;
         a.opts["line"] = "text";
         a.positional = {std::string(bytes.begin(), bytes.end())};
-        const WarpInput w = read_warp_input(lines_[0], a);
+        const WarpInput w = read_warp_input(unit_line(LineKind::Text), a);
         units = w.units;
         report = w.report.front();
     }
