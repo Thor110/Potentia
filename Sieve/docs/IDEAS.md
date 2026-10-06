@@ -722,10 +722,17 @@ is a setting, as a book holds pages of any length.
    neither their addresses nor their behaviour, only add risk.
 4. ~~Add tracks and movies.~~ Done, both at once.
 
+- ~~**Seam filters.**~~ Done (6 October) as a fourth stack, **joined**: the units joined into one
+  unit of their line and judged as one, as a book's pages are read as one text, so any filter of
+  the line judges across the seams. It counts and ranks when the units have no filters of their own
+  (the joined unit is then the part); with both, items are judged but not counted.
+- ~~**The `sieve` tool.**~~ Done (6 October): `info`, `warp`, `read` and `filters` take `--line
+  tracks` and `--line movies`, with the hallway's option names, and CI checks that the tool and the
+  hallway give the same item at the same address, plainly and compact.
+
 **Still open.**
-- **Seam filters:** judging the joins between units (a note held across the boundary, a key kept,
-  frames that carry on). Each unit is judged alone for now, which is what keeps the count exact.
-- **The `sieve` tool** has no `--line tracks` or `--line movies` yet: their addresses are checked
-  by the vectors and the hallway, not by `sieve warp`.
+- **Filters made for seams:** the joined stack uses the line's own filters over the whole joined
+  unit. Filters that look only at the joins (a note held across the boundary, a cut between frames)
+  would judge less and count more easily.
 - **A record format for them** (a book record holds sections of any line, so `sieve-book-v1` may
   already serve, with a label for the units) and J opening one onto its shelf.

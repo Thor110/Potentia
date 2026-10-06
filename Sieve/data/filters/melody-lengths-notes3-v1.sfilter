@@ -1,0 +1,42 @@
+sieve-filter-v2
+; melody-lengths-v2 for the notes3 family: note and rest lengths from shortest to longest (length
+; codes, as that many sixteenths of TPQ ticks), and at most so many of an eighth or shorter in a
+; row. The state is how many short ones have come in a row.
+id        melody-lengths-notes3
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     audio
+symbols   notes3*
+describe  Note lengths from shortest to longest, and at most so many eighths (or shorter) in a row.
+param     shortest  choice  s s,e,E,q,Q,h,H,w the shortest note or rest allowed
+param     longest   choice  w s,e,E,q,Q,h,H,w the longest note or rest allowed
+param     eighths   int     2  0  32  the most notes or rests of an eighth or shorter in a row
+
+states    {eighths + 1}
+start     0
+accept    0..{eighths}
+for s 0 {eighths}
+  for n 1 {LONGEST}
+    if {n * 4 >= SIXTEENTHS(shortest) * TPQ && n * 4 <= SIXTEENTHS(longest) * TPQ}
+      if {n * 2 <= TPQ}
+        if {s < eighths}
+          t {s} @{REST(n)} {s + 1}
+          for p 1 {PITCHES}
+            for k 1 {LEVELS}
+              t {s} @{NOTE(p, k, n)} {s + 1}
+            done
+          done
+        fi
+      else
+        t {s} @{REST(n)} 0
+        for p 1 {PITCHES}
+          for k 1 {LEVELS}
+            t {s} @{NOTE(p, k, n)} 0
+          done
+        done
+      fi
+    fi
+  done
+done
+end

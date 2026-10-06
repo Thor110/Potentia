@@ -36,10 +36,11 @@ const std::string kModeText =
     "              (about 2 bits per character instead of 4.75) and noise gets long ones. The\n"
     "              address length is the unit's information content, to within 2 bits.";
 
-const Option kLine = {"--line text|image|audio|video",
+const Option kLine = {"--line text|image|audio|video|tracks|movies",
                       "Which line (kind of content) to work on. Default: text. Each line has its own\n"
                       "options below; `sieve help lines` explains them in full. (`sieve filters` also\n"
-                      "takes --line books: the books line's cover, title and pages stacks.)"};
+                      "takes --line books: the books line's cover, title and pages stacks. Tracks and\n"
+                      "movies are taken by info, warp, read and filters.)"};
 
 const Option kLineOptions = {
     "line options",
@@ -53,6 +54,10 @@ const Option kLineOptions = {
     "       pcm: sound itself, --rate HZ (8000)  --bits 1..31 (8)  --channels C (1); --length is\n"
     "       samples per channel (one second at the rate unless given)\n"
     "video  --width W (5)  --height H (5)  --frames F (8)  --palette ... (mono)\n"
+    "tracks, movies  N units of audio or video (their options as above), a cover and a title:\n"
+    "       --track-units N or --movie-units N (4)  --title-length T (32; 0: no title), in\n"
+    "       --alphabet  --image-width W (10)  --image-height H (10)  --image-palette ID (mono),\n"
+    "       the cover. The hallway's options of the same names give the same addresses.\n"
     "These must match between warp and read, or you will read a different unit."};
 
 const Option kKey = {"--key K",
@@ -138,6 +143,8 @@ const std::vector<Page>& pages()
                                   "hold the hex address as one unbroken run (any surrounding whitespace is\n"
                                   "ignored). A long unit's address is long -- a 20,000 byte file on the bytes256\n"
                                   "line has one of 40,000 digits -- and a command line will not hold it."},
+          {"--cover-out PATH", "Tracks and movies: also save the cover, as --out saves a picture. (--out saves\n"
+                               "the units joined: one unit of the audio or video line N units long.)"},
           {"--scale S", "Enlarge each pixel to SxS in the saved picture or video. Default 16."},
           {"--fps N", "A video saved as a video (.gif .mp4 .webm): frames a second. Default 8."},
           {"--around N", "Also show the N units on either side, in the chosen ordering: what the hallway\n"
@@ -712,6 +719,16 @@ const std::vector<Page>& pages()
          "  --width W (5)  --height H (5)  --frames F (8)  --palette ID (mono)\n"
          "  Input: --file PATH, an animated GIF, or any video ffmpeg reads.\n"
          "\n"
+         "TRACKS AND MOVIES (composition-v1)\n"
+         "  A track is a cover (a picture of the image line), a title and N units of the audio line;\n"
+         "  a movie the same with units of the video line. The units take the audio or video\n"
+         "  options above; --track-units N or --movie-units N (4) is how many; --title-length T\n"
+         "  (32; 0 for none) in --alphabet, and --image-width, --image-height and --image-palette\n"
+         "  (10, 10, mono) shape the title and cover, as the hallway's options of the same names do.\n"
+         "  Warp reads the input as the units joined (N units long, voice by voice) and gives it a\n"
+         "  blank cover and title; read prints the title, the cover and the units joined, and --out\n"
+         "  saves the units joined (--cover-out the cover). There is no guided ordering.\n"
+         "\n"
          "All lines also take --key K (default sieve), which seeds the scrambled ordering.",
          {},
          {{"sieve info --line image --width 16 --height 16 --palette ega16", "size of the 16x16 EGA image space"},
@@ -719,7 +736,9 @@ const std::vector<Page>& pages()
           {"sieve warp --line audio --note-set notes2 --voices 2 --length 8 \"C4q E4q. G4h // C3w\"", "two voices on the larger note set"},
           {"sieve warp --line audio --note-set notes3 --voices 2 --length 8 \"C#4:3!5 R:1 E4q // C2:16!3\"", "open-ended notes, in ticks and levels"},
           {"sieve warp --line audio --note-set pcm --rate 8000 --bits 8 --file voice.wav", "a second of sound at a time, as samples"},
-          {"sieve browse --line video --count 1", "one random animation, frames side by side"}}},
+          {"sieve browse --line video --count 1", "one random animation, frames side by side"},
+          {"sieve warp --line tracks --length 4 \"C4q E4q G4h C5w E5q D5q C5h G4w\"", "a track of four 4-note units"},
+          {"sieve read --line movies --mode scrambled <address> --out film.gif", "a movie's frames as one GIF"}}},
     };
     return list;
 }

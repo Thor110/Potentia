@@ -72,6 +72,17 @@ jobs:
           echo "guided address: $got"
           test "$got" = "90922c700685e28"
           test "$($exe read --length 32 --mode guided "$got" | tr -d '\r' | sed 's/ *$//')" = "it was the best of times"
+          # Tracks and movies (composition-v1): a melody warped onto tracks, a cover and a title of
+          # its own (blank), and read back in both orderings.
+          out=$($exe warp --line tracks --length 4 "C4q E4q G4h C5w E5q D5q C5h G4w" | tr -d '\r')
+          echo "$out"
+          echo "$out" | q "positional  000000000000000000000000000000000000000000000000000000000000000076516a4a50a2870d43b3000000"
+          echo "$out" | q "scrambled   433166bee32c17ef720059c6681dc521b6da066d6111b72bd12451e56d8079d892befd71917b3804ca8f28a0f9"
+          for m in positional scrambled; do
+            a=$(echo "$out" | awk -v m=$m '$1 == m {print $2}')
+            $exe read --line tracks --length 4 --mode $m "$a" | tr -d '\r' | tail -1 | q "C4q E4q G4h C5w E5q D5q C5h G4w Re Re"
+          done
+          $exe info --line movies --title-length 0 | tr -d '\r' | q "^line         movies  (movies/image/mono/10x10/L100+-+video/mono/5x5x8/L200x4/key=sieve/composition-v1)"
 
       - name: Filters judge, count and rank the same on every platform
         run: |
@@ -117,6 +128,34 @@ jobs:
           $exe filters --line audio --note-set notes2 --voices 1 --length 3 --filters n2.ini | tr -d '\r' | q "^survivors    218112 "
           $exe filters --line audio --note-set notes2 --voices 2 --length 3 --filters n2.ini | tr -d '\r' | q "^survivors    47572844544 "
           $exe browse --line audio --note-set notes2 --voices 2 --length 3 --filters n2.ini --compact --count 2 --seed 4 | tr -d '\r' | q " // "
+          # The notes3 family: its own melody plugins, stacked, counted, and compact both ways.
+          N="--line audio --note-set notes3 --low C3 --high C6 --voices 2 --length 6"
+          printf '[audio]\nmode = compact\nfilters = key-notes3-v1, melody-leap-notes3-v1, melody-loudness-notes3-v1\n[audio.key-notes3-v1]\ntonic = D\n[audio.melody-loudness-notes3-v1]\nstep = 1\n' > n3.ini
+          $exe filters $N --filters n3.ini | tr -d '\r' | q "^survivors    3895893800931124287377439195136 "
+          out=$($exe warp $N --filters n3.ini --compact "D4q E4q F#4h A4q // D3w F#3w" 2>/dev/null | tr -d '\r')
+          echo "$out" | q "survivor number 1703397087741355665989795315712 of"
+          for m in positional scrambled; do
+            a=$(echo "$out" | awk -v m=$m '/compact/ {seen = 1; next} seen && $1 == m {print $2; exit}')
+            $exe read $N --filters n3.ini --compact --mode $m "$a" 2>/dev/null | tr -d '\r' | q "^D4:4!6 E4:4!6 F#4:8!6 A4:4!6 R:1 R:1 // D3:16!6 F#3:16!6"
+          done
+          $exe warp $N --filters n3.ini --compact "D4q E4q F#4h A4q // D3w A3w" 2>/dev/null | tr -d '\r' | q "not a survivor: fails melody-leap-notes3-v1"
+          # Tracks and movies: the units joined into one are judged as one (the joined stack), and
+          # counted exactly when the units have no filters of their own.
+          V="--width 2 --height 2 --frames 2 --movie-units 2 --title-length 0 --image-width 2 --image-height 2"
+          printf '[movies]\nmode = compact\n\n[movies.joined]\nfilters = neighbour-agreement-v1\n' > mj.ini
+          $exe filters --line movies $V --filters mj.ini | tr -d '\r' | q "^survivors    173984 movies"
+          printf '[movies]\nmode = compact\n\n[movies.units]\nfilters = neighbour-agreement-v1\n\n[movies.joined]\nfilters = neighbour-agreement-v1\n' > mb.ini
+          $exe filters --line movies $V --filters mb.ini | tr -d '\r' | q "^compact      unavailable: units and joined"
+          T="--length 4 --track-units 2 --title-length 0 --image-width 1 --image-height 1"
+          printf '[tracks]\nmode = compact\n\n[tracks.joined]\nfilters = key-v1\n\n[tracks.joined.key-v1]\ntonic = A\nscale = minor-pentatonic\n' > tj.ini
+          out=$($exe warp --line tracks $T --filters tj.ini --compact "A4q C5q D5q E5q G5q A4q C5q E5q" 2>/dev/null | tr -d '\r')
+          echo "$out"
+          echo "$out" | q "survivor number 12641768583633 of 56358560858112"
+          for m in positional scrambled; do
+            a=$(echo "$out" | awk -v m=$m '/compact/ {seen = 1; next} seen && $1 == m {print $2; exit}')
+            $exe read --line tracks $T --filters tj.ini --compact --mode $m "$a" 2>/dev/null | tr -d '\r' | tail -1 | q "A4q C5q D5q E5q G5q A4q C5q E5q"
+          done
+          $exe warp --line tracks $T --filters tj.ini --compact "A4q C5q D5q E5q G5q A4q C5q F5q" 2>/dev/null | tr -d '\r' | q "not a survivor: fails joined: key-v1"
 
       - name: A model is one object with an address on two lines
         run: |
@@ -747,7 +786,26 @@ jobs:
           test -s movie.png
           printf '[movies]\nmode = compact\n\n[movies.units]\nfilters = neighbour-agreement-v1\n' > mv.ini
           for m in positional scrambled; do
-            $H --no-menu --line movies --video-width 2 --video-height 2 --video-frames 2 --filters mv.ini --mode $m --walk "0,0" --screenshot mc-$m.png | sed -n 1p | q "^MOVIES line, $m, filters: 0+0+1 compact"
+            $H --no-menu --line movies --video-width 2 --video-height 2 --video-frames 2 --filters mv.ini --mode $m --walk "0,0" --screenshot mc-$m.png | sed -n 1p | q "^MOVIES line, $m, filters: 0+0+1+0 compact"
+          done
+          # The same tracks in the sieve tool and the hallway: an address from one is the same item
+          # in the other, plainly and compact through the joined stack (the MIDI files identical).
+          S=build/sieve
+          out=$($S warp --line tracks --length 4 "C4q E4q G4h C5w E5q D5q C5h G4w")
+          for m in positional scrambled; do
+            a=$(echo "$out" | awk -v m=$m '$1 == m {print $2}')
+            $S read --line tracks --length 4 --mode $m "$a" --out cli-$m.mid > /dev/null 2>&1
+            $H --no-menu --line tracks --notes 4 --mode $m --goto "$a" --walk "0,0" --take --save-item hall-$m.mid --screenshot tx-$m.png > /dev/null
+            cmp cli-$m.mid hall-$m.mid
+          done
+          T="--track-units 2 --title-length 0 --image-width 1 --image-height 1"
+          printf '[tracks]\nmode = compact\n\n[tracks.joined]\nfilters = key-v1\n\n[tracks.joined.key-v1]\ntonic = A\nscale = minor-pentatonic\n' > tj.ini
+          out=$($S warp --line tracks --length 4 $T --filters tj.ini --compact "A4q C5q D5q E5q G5q A4q C5q E5q" 2>/dev/null)
+          for m in positional scrambled; do
+            a=$(echo "$out" | awk -v m=$m '/compact/ {seen = 1; next} seen && $1 == m {print $2; exit}')
+            $S read --line tracks --length 4 $T --filters tj.ini --compact --mode $m "$a" --out clic-$m.mid > /dev/null 2>&1
+            $H --no-menu --line tracks --notes 4 $T --filters tj.ini --mode $m --goto "$a" --walk "0,0" --take --save-item hallc-$m.mid --screenshot tj-$m.png | sed -n 1p | q "^TRACKS line, $m, filters: 0+0+0+1 compact"
+            cmp clic-$m.mid hallc-$m.mid
           done
           $H --menu --screenshot menu5.png | q "saved menu5.png"
           # The main menu, its settings screens and a language file with gaps (English fills them).
@@ -1036,6 +1094,20 @@ jobs:
                 for L in 1 2 5; do
                   python sieve_ref.py plugin ../data/filters/$f.sfilter --line audio --note-set notes2 $set --voices $V --length $L --params $p > plugin.oracle
                   $S filters --plugin ../data/filters/$f.sfilter --line audio --note-set notes2 $set --voices $V --length $L --params $p | tr -d '\r' > plugin.engine
+                  diff plugin.oracle plugin.engine
+                done
+              done
+            done
+          done
+          # The notes3 family (symbols notes3*, NOTE() and REST()): every notes3 plugin, on two small
+          # sets of other ranges, ticks and levels, one and two voices.
+          for set in "--low C4 --high C5 --tpq 2 --longest 4 --levels 2" "--low A3 --high B4 --tpq 3 --longest 5 --levels 3"; do
+            for V in 1 2; do
+              for spec in "key-notes3-v1:" "key-notes3-v1:tonic=A,scale=minor" "melody-leap-notes3-v1:leap=2,rest_resets=yes" "melody-range-notes3-v1:low=62,high=70" "melody-ambitus-notes3-v1:span=4" "melody-rests-notes3-v1:run=1,total=2,leading=yes" "melody-gapfill-notes3-v1:leap=2,step=3,resolve=yes" "melody-metre-notes3-v1:" "melody-metre-notes3-v1:time=6-8,complete=yes" "melody-ending-notes3-v1:tonic=G,hold=q" "melody-lengths-notes3-v1:shortest=e,longest=h,eighths=1" "melody-loudness-notes3-v1:softest=2,loudest=3,step=1"; do
+                f=${spec%%:*}; p=${spec#*:}
+                for L in 1 2 4; do
+                  python sieve_ref.py plugin ../data/filters/$f.sfilter --line audio --note-set notes3 $set --voices $V --length $L ${p:+--params $p} > plugin.oracle
+                  $S filters --plugin ../data/filters/$f.sfilter --line audio --note-set notes3 $set --voices $V --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
                   diff plugin.oracle plugin.engine
                 done
               done

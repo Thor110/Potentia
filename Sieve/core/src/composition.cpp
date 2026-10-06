@@ -135,9 +135,11 @@ std::vector<std::vector<uint32_t>> split_units(std::span<const uint32_t> joined,
 
 // ---------------------------------------------------------------- the filters
 
-CompositionSieve::CompositionSieve(const CompositionSpace& space, const FilterStack& cover, const FilterStack& title, const FilterStack& unit)
-    : space_(&space), cover_(&cover), title_(&title), unit_(&unit)
+CompositionSieve::CompositionSieve(const CompositionSpace& space, const FilterStack& cover, const FilterStack& title, const FilterStack& unit,
+                                   const FilterStack* joined, uint32_t strands)
+    : space_(&space), cover_(&cover), title_(&title), unit_(&unit), joined_(joined), strands_(strands)
 {
+    if (strands_ == 0 || space.unit_space().unit_length() % strands_) throw std::invalid_argument("a unit is not a whole number of strands");
     const Space& c = space.cover_space();
     const Space& u = space.unit_space();
     const std::optional<Space>& t = space.title_space();
@@ -146,6 +148,23 @@ CompositionSieve::CompositionSieve(const CompositionSpace& space, const FilterSt
     parts_[2] = {&unit, {}, u.base(), u.unit_length()};
     const char* names[3] = {"cover", "title", "unit"};
     ranks_ = true;
+    if (has_joined())
+    {
+        const uint64_t length = uint64_t(u.unit_length()) * space.units();
+        if (length > 0xFFFFFFFFull) throw std::length_error("the units are too long to judge joined");
+        if (unit.empty())
+        {
+            // The units are one part: the joined unit, counted by the joined stack.
+            by_joined_ = true;
+            parts_[2] = {joined_, {}, u.base(), uint32_t(length)};
+            names[2] = "joined";
+        }
+        else
+        {
+            ranks_ = false;
+            blocker_ = "units and joined: units judged one by one and joined as well cannot be counted";
+        }
+    }
     for (int i = 0; i < 3; ++i)
     {
         Part& part = parts_[i];
@@ -159,7 +178,7 @@ CompositionSieve::CompositionSieve(const CompositionSpace& space, const FilterSt
         }
     }
     if (!ranks_) return;
-    units_count_ = BigUint::pow(parts_[2].count, space.units());
+    units_count_ = by_joined_ ? parts_[2].count : BigUint::pow(parts_[2].count, space.units());
     count_ = BigUint::mul(BigUint::mul(parts_[0].count, parts_[1].count), units_count_);
     if (!count_.is_zero())
     {
@@ -172,7 +191,9 @@ std::string CompositionSieve::domain() const
 {
     auto part = [](const FilterStack* st) { return st->empty() ? std::string("-") : st->id(); };
     const std::string title = space_->title_space() ? part(title_) : std::string("-");
-    return std::string(kCompositionCompactVersion) + "/" + space_->id() + "/" + part(cover_) + "/" + title + "/" + part(unit_);
+    std::string d = std::string(kCompositionCompactVersion) + "/" + space_->id() + "/" + part(cover_) + "/" + title + "/" + part(unit_);
+    if (has_joined()) d += "/" + joined_->id();
+    return d;
 }
 
 std::string CompositionSieve::first_failure(const CompositionSpace::Parts& p) const
@@ -183,6 +204,8 @@ std::string CompositionSieve::first_failure(const CompositionSpace::Parts& p) co
         if (int f = title_->first_failure(p.title); f >= 0) return "title: " + title_->filter_name(size_t(f));
     for (size_t k = 0; k < p.units.size(); ++k)
         if (int f = unit_->first_failure(p.units[k]); f >= 0) return "unit " + std::to_string(k + 1) + ": " + unit_->filter_name(size_t(f));
+    if (has_joined())
+        if (int f = joined_->first_failure(join_units(p.units, strands_)); f >= 0) return "joined: " + joined_->filter_name(size_t(f));
     return "";
 }
 
@@ -208,6 +231,12 @@ BigUint CompositionSieve::rank(const CompositionSpace::Parts& p) const
         k = BigUint::mul(k, parts_[1].count);
         k += parts_[1].rank(p.title);
     }
+    if (by_joined_)
+    {
+        k = BigUint::mul(k, parts_[2].count);
+        k += parts_[2].rank(join_units(p.units, strands_));
+        return k;
+    }
     for (const auto& u : p.units)
     {
         k = BigUint::mul(k, parts_[2].count);
@@ -223,7 +252,14 @@ CompositionSpace::Parts CompositionSieve::unrank(const BigUint& k) const
     CompositionSpace::Parts p;
     p.units.resize(space_->units());
     BigUint rest = k;
-    for (size_t i = p.units.size(); i-- > 0;)
+    if (by_joined_)
+    {
+        BigUint q, r;
+        BigUint::divmod(rest, parts_[2].count, q, r);
+        p.units = split_units(parts_[2].unrank(r), strands_, space_->units());
+        rest = std::move(q);
+    }
+    else for (size_t i = p.units.size(); i-- > 0;)
     {
         BigUint q, r;
         BigUint::divmod(rest, parts_[2].count, q, r);

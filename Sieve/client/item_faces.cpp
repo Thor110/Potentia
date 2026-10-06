@@ -199,14 +199,13 @@ Hallway::Painter Hallway::face_painter(const Book& b) const
         if (!b.model) return {};
         const ModelSpace* space = model_space_.get();
         const ModelSpace::Parts parts = *b.model;
-        const float spin = model_spin_, tilt = model_tilt_;
         const SDL_Color edge = theme_of(kModelsLine).edge;
         const std::u32string title = utf8_decode(title_text(b));
         const bool titled = has_titles();
         // The title, then the mesh, drawn square, as wide as the picture, centred in what is left.
-        return [space, parts, spin, tilt, edge, title, titled, nw, lp](std::vector<uint32_t>& px, int w, int h) {
+        return [space, parts, edge, title, titled, nw, lp](std::vector<uint32_t>& px, int w, int h) {
             std::vector<uint32_t> sq;
-            render_model_face(*space, parts, w, spin, tilt, edge, sq);
+            render_model_face(*space, parts, w, kModelSpin, kModelTilt, edge, sq);
             px.assign(size_t(w) * size_t(h), 0u);
             const int top = paint_title_band(px, w, h, title, titled, 0xFF1C1C1Cu, argb(edge), nw, lp);
             const int oy = top + (h - top - w) / 2;

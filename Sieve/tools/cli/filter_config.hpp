@@ -60,11 +60,12 @@ struct BookFilters
 };
 
 // A composition dimension's (tracks, movies; sieve/composition.hpp): one mode, and a stack for its
-// cover, its title and each of its units, judged one at a time.
+// cover, its title, each of its units judged one at a time, and its units joined, judged as one.
 struct CompositionFilters
 {
+    static constexpr int kParts = 4;
     FilterMode mode = FilterMode::Off;
-    LineFilters parts[3]; // cover, title, units
+    LineFilters parts[kParts]; // cover, title, units, joined
     static const char* part_name(int i);
     static int part_index(const std::string& name); // -1 if unknown
 };
@@ -135,12 +136,17 @@ struct BookStacks
 };
 BookStacks build_book_stacks(const Line& cover, const Line& page, uint32_t pages, const BookFilters& settings);
 
-// A composition's three stacks: its cover on the image line, its title (a unit of `title`, the
-// titled lines' title, or none) and its units on their own line, each unit judged by itself.
+// A composition's four stacks: its cover on the image line, its title (a unit of `title`, the
+// titled lines' title, or none), its units on their own line, each unit judged by itself, and its
+// `units` units joined, on that line `units` units long (joined_filter_line).
 struct CompositionStacks
 {
-    FilterStack cover, title, units;
+    FilterStack cover, title, units, joined;
 };
-CompositionStacks build_composition_stacks(const Line& cover, const std::optional<FilterLine>& title, const Line& unit, const CompositionFilters& settings);
+CompositionStacks build_composition_stacks(const Line& cover, const std::optional<FilterLine>& title, const Line& unit, uint32_t units,
+                                           const CompositionFilters& settings);
+// A unit line `n` units long, as the joined stack sees it: n times the positions (a video's
+// frames n times as many). Throws if that is beyond what a unit can hold.
+FilterLine joined_filter_line(const FilterLine& unit, uint32_t n);
 
 } // namespace sieve::cli

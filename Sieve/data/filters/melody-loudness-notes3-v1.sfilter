@@ -1,0 +1,32 @@
+sieve-filter-v2
+; Loudness, which only the notes3 family has: every note between the softest and loudest levels
+; allowed, and no jump in loudness between neighbouring notes of more than `step` levels, so a
+; melody swells and fades rather than lurching. Rests are passed over. The state is the last
+; note's level (0: none yet).
+id        melody-loudness-notes3
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     audio
+symbols   notes3*
+describe  Notes between the softest and loudest levels, and no jump of more than the step between neighbours.
+param     softest  int  1    1  127  the softest level allowed
+param     loudest  int  127  1  127  the loudest level allowed (levels above the set's own are none)
+param     step     int  2    0  126  the most the level may change from one note to the next
+
+states    {LEVELS + 1}
+start     0
+accept    0..{LEVELS}
+for n 1 {LONGEST}
+  for from 0 {LEVELS}
+    t {from} @{REST(n)} {from}
+    for k {max(softest, 1)} {min(loudest, LEVELS)}
+      if {from == 0 || abs(k - from) <= step}
+        for p 1 {PITCHES}
+          t {from} @{NOTE(p, k, n)} {k}
+        done
+      fi
+    done
+  done
+done
+end

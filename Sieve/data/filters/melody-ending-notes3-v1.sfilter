@@ -1,0 +1,31 @@
+sieve-filter-v2
+; melody-ending-v2 for the notes3 family: the last note is the tonic, held at least so long (a
+; length code, as that many sixteenths of TPQ ticks: a q is TPQ ticks).
+id        melody-ending-notes3
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     audio
+symbols   notes3*
+describe  The last note is the tonic, held at least so long.
+param     tonic  choice  C C,C#,D,D#,E,F,F#,G,G#,A,A#,B the note to end on
+param     hold   choice  e s,e,E,q,Q,h,H,w the shortest the last note may be
+
+states    2
+start     0
+accept    1
+for s 0 1
+  for n 1 {LONGEST}
+    t {s} @{REST(n)} 0
+    for p 1 {PITCHES}
+      for k 1 {LEVELS}
+        if {(LOW + p - 1) % 12 == tonic && n * 4 >= SIXTEENTHS(hold) * TPQ}
+          t {s} @{NOTE(p, k, n)} 1
+        else
+          t {s} @{NOTE(p, k, n)} 0
+        fi
+      done
+    done
+  done
+done
+end

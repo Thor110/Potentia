@@ -1,0 +1,41 @@
+sieve-filter-v2
+; melody-gapfill-v1 for the notes3 family: after a leap, the next note steps back the other way.
+; Rests are passed over. The state is the last note and what it owes (0 nothing, 1 a step down,
+; 2 a step up).
+; On a notes3 line the notes of one pitch, at every level and length, are one run of symbols,
+; NOTE(p, 1, 1) to NOTE(p, LEVELS, LONGEST), and the rests another, REST(1) to REST(LONGEST).
+id        melody-gapfill-notes3
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     audio
+symbols   notes3*
+describe  After a leap, the next note steps back the other way.
+param     leap     int     4   1  24  a move wider than this many semitones is a leap
+param     step     int     2   1  12  the widest step that fills a leap, in semitones
+param     resolve  choice  no  no,yes whether a melody may end on an unfilled leap
+
+states    {1 + PITCHES * 3}
+start     0
+accept    0
+for p 1 {PITCHES}
+  accept  {1 + (p - 1) * 3}
+  if {resolve == 0}
+    accept  {1 + (p - 1) * 3 + 1} {1 + (p - 1) * 3 + 2}
+  fi
+done
+t 0 @{REST(1)}..@{REST(LONGEST)} 0
+for q 1 {PITCHES}
+  t 0 @{NOTE(q, 1, 1)}..@{NOTE(q, LEVELS, LONGEST)} {1 + (q - 1) * 3}
+done
+for p 1 {PITCHES}
+  for owed 0 2
+    t {1 + (p - 1) * 3 + owed} @{REST(1)}..@{REST(LONGEST)} {1 + (p - 1) * 3 + owed}
+    for q 1 {PITCHES}
+      if {owed == 0 || (owed == 1 && q < p && p - q <= step) || (owed == 2 && q > p && q - p <= step)}
+        t {1 + (p - 1) * 3 + owed} @{NOTE(q, 1, 1)}..@{NOTE(q, LEVELS, LONGEST)} {1 + (q - 1) * 3 + (q - p > leap) + (p - q > leap) * 2}
+      fi
+    done
+  done
+done
+end

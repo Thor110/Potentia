@@ -40,6 +40,15 @@ struct Line
 // Builds the line and its space from --line and the line's own options (and --model).
 Line make_line(const Args& a);
 
+// Tracks and movies (sieve/composition.hpp) are made of units of this line:
+// - strands_of: how many runs a unit is, one after another: an audio unit's voices or channels (a
+//   unit of notes2, notes3 or sound itself is laid out strand by strand), and 1 for anything else;
+// - joined_line: the line with its units n long (a video's frames n times as many), the same
+//   symbols and key, which is what a composition is shown, played and saved as. Throws if that is
+//   beyond what a unit can hold.
+uint32_t strands_of(const Line& line);
+Line joined_line(const Line& base, uint32_t n);
+
 struct WarpInput
 {
     std::vector<std::vector<uint32_t>> units; // digit vectors, one per unit

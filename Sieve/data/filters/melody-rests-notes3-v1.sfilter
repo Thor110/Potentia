@@ -1,0 +1,36 @@
+sieve-filter-v2
+; melody-rests-v1 for the notes3 family: at most so many rests in a row and in all, and none first
+; unless allowed, counting rests as events, whatever their lengths.
+; On a notes3 line the notes of one pitch, at every level and length, are one run of symbols,
+; NOTE(p, 1, 1) to NOTE(p, LEVELS, LONGEST), and the rests another, REST(1) to REST(LONGEST).
+id        melody-rests-notes3
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     audio
+symbols   notes3*
+describe  At most so many rests in a row and in all, and none first unless allowed.
+param     run      int     2  0  16  the most rests in a row
+param     total    int     8  0  64  the most rests in a track
+param     leading  choice  no no,yes whether a track may begin with a rest
+
+states    {1 + (total + 1) * (run + 1)}
+start     0
+accept    0..{(total + 1) * (run + 1)}
+for p 1 {PITCHES}
+  t 0 @{NOTE(p, 1, 1)}..@{NOTE(p, LEVELS, LONGEST)} 1
+  for so_far 0 {total}
+    for row 0 {run}
+      t {1 + so_far * (run + 1) + row} @{NOTE(p, 1, 1)}..@{NOTE(p, LEVELS, LONGEST)} {1 + so_far * (run + 1)}
+    done
+  done
+done
+if {leading == 1 && run >= 1 && total >= 1}
+  t 0 @{REST(1)}..@{REST(LONGEST)} {1 + (run + 1) + 1}
+fi
+for so_far 0 {total - 1}
+  for row 0 {run - 1}
+    t {1 + so_far * (run + 1) + row} @{REST(1)}..@{REST(LONGEST)} {1 + (so_far + 1) * (run + 1) + row + 1}
+  done
+done
+end

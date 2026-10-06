@@ -514,7 +514,7 @@ upgrades a filter to v2 when it uses something only v2 has.
   these names, nor `min`, `max` or `abs`.
 - **Families of symbols:** `symbols notes*` applies to the note sets whose digits its constants
   describe: `notes104` and every `notes2` set (SPECIFICATIONS §3.2), not `notes3`, whose digits
-  carry lengths in ticks and loudness levels (§3.4). The constants are taken from the set
+  carry lengths in ticks and loudness levels (§3.4) and which has a family of its own, below. The constants are taken from the set
   (a `notes2` set's own `PITCHES`, `DURATIONS` and `LOW`). On a line of several voices the stack
   hands a plugin one voice at a time, so a plugin is always written for one line of events;
   `sieve filters --plugin` reports it the same way (one voice's automaton; the count to the power
@@ -528,6 +528,23 @@ upgrades a filter to v2 when it uses something only v2 has.
   `s e E q Q h H w` in sixteenths (1, 2, 3, 4, 6, 8, 12, 16). Their choices name all eight codes. On
   `notes104` they count exactly as the v1s at every setting (tests), which retire for them, and on
   `notes2` sets of other ranges and durations the oracle and the engine agree (CI).
+- **The `notes3` family** (*done 6 October 2026*): `symbols notes3*` applies to every `notes3` set,
+  whose constants are `PITCHES`, `LOW` (the MIDI number of pitch 1), `LEVELS` (loudness levels),
+  `LONGEST` (the longest length, in ticks) and `TPQ` (ticks a quarter note). Its symbols are written
+  with two functions: `NOTE(p, k, n)`, pitch p (1 = `LOW`) at level k for n ticks, and `REST(n)`, a
+  rest of n ticks; each refuses a value outside the set, and both are refused on any other line.
+  The notes of one pitch, at every level and length, are one run of symbols, `NOTE(p, 1, 1)` to
+  `NOTE(p, LEVELS, LONGEST)`, and the rests another, `REST(1)` to `REST(LONGEST)`, so a plugin that
+  judges pitch alone names a pitch as one range (`t 0 @{NOTE(p, 1, 1)}..@{NOTE(p, LEVELS, LONGEST)} 1`)
+  instead of looping over every level and length: on the default set, `melody-ambitus-notes3-v1`
+  builds in 2.4 seconds this way and took 16 with the loops (`melody-gapfill-notes3-v1`, 1 and 9). These names
+  (and `LEVELS`, `LONGEST`, `TPQ`) are kept for the format, as the other constants are. The family's
+  plugins are `key-notes3-v1` and `melody-leap-`, `-range-`, `-ambitus-`, `-rests-`, `-gapfill-`,
+  `-metre-`, `-ending-` and `-lengths-notes3-v1`, each judging as its `notes*` namesake does
+  (metre in ticks, with 6/8 as well; ending and lengths by notes2's codes, a quarter being `TPQ`
+  ticks), and `melody-loudness-notes3-v1`: notes between the softest and loudest levels, and no jump
+  in loudness of more than `step` levels between neighbours. The oracle and the engine agree on all
+  of them on two `notes3` sets with one and two voices (CI).
 
 The engine and the oracle each have their own reading of it. The oracle's comparison with the
 engine caught a real error in the oracle's first `if` (a variable reused for the block's end cut

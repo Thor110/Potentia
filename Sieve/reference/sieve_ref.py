@@ -2593,7 +2593,8 @@ PLUGIN_FORMAT = "sieve-filter-v1"
 PLUGIN_FORMAT2 = "sieve-filter-v2"  # v1, and comparisons, && || !, min max abs, if/else/fi, choice
                                     # parameters, the line's constants, and symbols families (notes*)
 NOTES_BASE = 104
-V2_RESERVED = {"min", "max", "abs", "BASE", "PITCHES", "DURATIONS", "LOW", "LENGTH", "SIXTEENTHS"}
+V2_RESERVED = {"min", "max", "abs", "BASE", "PITCHES", "DURATIONS", "LOW", "LENGTH", "SIXTEENTHS",
+               "LEVELS", "LONGEST", "TPQ", "NOTE", "REST"}  # the last five: a notes3 line's (notes3*)
 SIXTEENTHS = [1, 2, 3, 4, 6, 8, 12, 16]  # s e E q Q h H w, in sixteenths
 
 
@@ -2709,6 +2710,30 @@ def _plugin_expr(s, env, n, v2=False):
             if not 0 <= a < len(lengths):
                 raise PluginError(f"line {n}: LENGTH(i) is the line's i-th duration")
             return lengths[a]
+        if v2 and t in ("NOTE", "REST"):
+            # a notes3 line's symbols: NOTE(p, k, n) pitch p (1 = LOW) at level k for n ticks, REST(n)
+            if peek() != "(":
+                raise PluginError(f"line {n}: {t} takes its arguments in brackets")
+            take()
+            args = [top()]
+            while peek() == ",":
+                take()
+                args.append(top())
+            if peek() != ")":
+                raise PluginError(f"line {n}: a ( without its ) in '{s}'")
+            take()
+            if len(args) != (3 if t == "NOTE" else 1):
+                raise PluginError(f"line {n}: {t} takes the wrong number of arguments")
+            if "LONGEST" not in env:
+                raise PluginError(f"line {n}: {t} is for a notes3 line (symbols notes3*)")
+            ticks = args[-1]
+            if not 1 <= ticks <= env["LONGEST"]:
+                raise PluginError(f"line {n}: {t}'s ticks must be 1 to LONGEST")
+            if t == "REST":
+                return ticks - 1
+            if not 1 <= args[0] <= env["PITCHES"] or not 1 <= args[1] <= env["LEVELS"]:
+                raise PluginError(f"line {n}: NOTE's pitch or level is out of range")
+            return (ticks - 1) + env["LONGEST"] * (1 + (args[0] - 1) * env["LEVELS"] + (args[1] - 1))
         if v2 and t in ("min", "max", "abs"):
             if peek() != "(":
                 raise PluginError(f"line {n}: {t} takes its arguments in brackets")
@@ -2918,6 +2943,8 @@ def plugin_base(symbols, base=None):
         return NOTES_BASE
     if symbols.startswith("palette:"):
         return PALETTE_SIZES[symbols[8:]]
+    if symbols == "notes3*":  # the notes3 set's own (cmd_plugin)
+        return base
     if base is None:
         raise PluginError(f"give --base for symbols {symbols}")
     return base
@@ -2928,7 +2955,9 @@ def compile_plugin(head, body, values, base, notes=None):
     v2 = head.get("v2", False)
     if v2:
         env["BASE"] = base
-        if notes is not None:  # a notes2 set: its own
+        if isinstance(notes, Notes3):  # a notes3 set (notes3*): NOTE() and REST() write its symbols
+            env.update(PITCHES=notes.high - notes.low + 1, LOW=notes.low, LEVELS=notes.levels, LONGEST=notes.longest, TPQ=notes.tpq)
+        elif notes is not None:  # a notes2 set: its own
             env.update(PITCHES=notes.P, DURATIONS=notes.D, LOW=notes.low)
             env["#lengths"] = [SIXTEENTHS[NOTE2_CODES.index(c)] for c in notes.durations]
         elif head["symbols"].startswith("notes"):
@@ -3508,8 +3537,12 @@ def cmd_plugin(args):
     notes, voices = None, 1
     if args.note_set == "notes2":
         # one voice's line; a unit is voices x --length, each voice judged on its own
-        notes = NoteSet2(note2_midi(args.low), note2_midi(args.high), args.durations, args.voices)
+        notes = NoteSet2(note2_midi(args.low or "C3"), note2_midi(args.high or "C6"), args.durations, args.voices)
         base, voices = notes.base, notes.voices
+    elif args.note_set == "notes3" or head["symbols"] == "notes3*":
+        # the same for notes3: base LONGEST * (1 + PITCHES * LEVELS)
+        notes = Notes3(_n3_midi(args.low or "C-1"), _n3_midi(args.high or "G9"), args.tpq, args.longest, args.levels, args.voices, 120, [0])
+        base, voices = notes.longest * (1 + (notes.high - notes.low + 1) * notes.levels), notes.voices
     word_data = ""
     lazy = None
     if head["form"] == "tokens" and args.lazy:
@@ -5778,10 +5811,13 @@ def main():
     s.add_argument("--judge")  # a text file: each line judged
     s.add_argument("--line")  # the engine's option, taken for the same command line (audio)
     s.add_argument("--note-set", default="notes104")
-    s.add_argument("--low", default="C3")
-    s.add_argument("--high", default="C6")
+    s.add_argument("--low")  # default C3 (notes2), C-1 (notes3)
+    s.add_argument("--high")  # default C6 (notes2), G9 (notes3)
     s.add_argument("--durations", default="seEqQhHw")
     s.add_argument("--voices", type=int, default=1)
+    s.add_argument("--tpq", type=int, default=4)  # notes3
+    s.add_argument("--longest", type=int, default=16)
+    s.add_argument("--levels", type=int, default=8)
     s = sub.add_parser("chunks")
     s.add_argument("file")
     s = sub.add_parser("manifest")

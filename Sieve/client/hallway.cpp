@@ -14,34 +14,6 @@
 
 namespace hallway::hall {
 
-namespace {
-
-// How many runs a unit of this line is, one after another: an audio unit's voices or channels (a
-// unit of notes2, notes3 or sound itself is laid out strand by strand), and 1 for anything else.
-uint32_t strands_of(const Line& l)
-{
-    if (l.kind != LineKind::Audio) return 1;
-    const std::string& id = l.space.symbols_id();
-    if (sieve::is_pcm_symbols(id)) return sieve::pcm_format_of(id).channels;
-    if (sieve::is_notes3_symbols(id)) return sieve::notes3_set_of(id).voices;
-    return sieve::note_set_of(id).voices;
-}
-
-// A composition's joined line: the base line with its units N long (a video's frames N times as
-// many), the same symbols and key. What a track or movie is shown, played and saved as.
-Line joined_line(const Line& base, uint32_t n)
-{
-    Line l = base;
-    const uint64_t length = uint64_t(base.space.unit_length()) * n;
-    if (length > 0xFFFFFFFFull) throw std::length_error("a composition this long is beyond what a unit can hold");
-    l.space = Space(base.space.symbols_id(), base.space.base(), uint32_t(length), base.space.key());
-    l.image.frames *= n;
-    l.guided.reset();
-    return l;
-}
-
-} // namespace
-
 Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> lines, const FilterConfig& filters, uint32_t book_pages,
         ModelShape shape)
 : window_(window), r_(renderer), lines_(std::move(lines)), tile_geometry_(build_tile()), hall_geometry_(build_tile(true, false)), case_geometry_(build_tile(false, true)),
@@ -76,7 +48,7 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
             title, std::nullopt, model_space_->size(),
             "models/V" + std::to_string(shape.vertices) + "/F" + std::to_string(shape.faces) + "/C" + std::to_string(shape.coords), key);
         // Tracks and movies: a cover, the same title as the titled lines and N units of their line
-        // (composition-v1), filtered part by part, each unit on its own.
+        // (composition-v1), filtered part by part, each unit on its own and the units joined.
         for (int li = 0; li < kLines; ++li)
         {
             if (!is_composition(li)) continue;
@@ -97,8 +69,8 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
                     title_line = filter_line(text);
                     title_line->length = title->unit_length();
                 }
-                c.stacks = build_composition_stacks(image, title_line, unit_line(base), cf);
-                c.sieve = std::make_unique<CompositionSieve>(*c.space, c.stacks.cover, c.stacks.title, c.stacks.units);
+                c.stacks = build_composition_stacks(image, title_line, unit_line(base), n, cf);
+                c.sieve = std::make_unique<CompositionSieve>(*c.space, c.stacks.cover, c.stacks.title, c.stacks.units, &c.stacks.joined, c.strands);
             }
             catch (const std::exception& e)
             {
@@ -325,7 +297,8 @@ std::string Hallway::compute_filter_status() const
         const FilterMode m = effective_mode();
         const CompositionStacks& st = comp().stacks;
         const CompositionSieve& cs = *comp().sieve;
-        const auto parts = std::to_string(st.cover.size()) + "+" + std::to_string(st.title.size()) + "+" + std::to_string(st.units.size());
+        const auto parts = std::to_string(st.cover.size()) + "+" + std::to_string(st.title.size()) + "+" + std::to_string(st.units.size()) + "+" +
+                           std::to_string(st.joined.size());
         std::string s = trf("hud.filters", {parts, tr(std::string("mode.") + to_string(m))});
         if (m == FilterMode::Compact) s += trf("hud.filters.units", {short_big(cs.count())});
         else if (m == FilterMode::Excluded && cs.can_rank())
@@ -1475,7 +1448,7 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
         }
         break;
     case SDLK_R:
-        if (in_hand_ && in_hand_->model) { model_spin_ = 0.6f; model_tilt_ = 0.35f; }
+        if (in_hand_ && in_hand_->model) { model_spin_ = kModelSpin; model_tilt_ = kModelTilt; }
         break;
     case SDLK_P:
         if (in_hand_ && !on_books() && line().kind == LineKind::Audio)

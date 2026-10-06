@@ -1416,8 +1416,11 @@ private:
     void draw_door_sign(float sx, float z0, std::vector<SDL_Vertex>& verts);
     void release_signs();
     bool door_portals_ = false;
-    // A model in hand turns about the upright axis; the mouse or A and D drive it.
-    float model_spin_ = 0.6f, model_tilt_ = 0.35f;
+    // A model in hand turns about the upright axis; the mouse or A and D drive it, and R sets it
+    // back. Its picture on the shelf (and in the viewer) is always drawn at the resting turn, so
+    // turning it in hand draws nothing again.
+    static constexpr float kModelSpin = 0.6f, kModelTilt = 0.35f;
+    float model_spin_ = kModelSpin, model_tilt_ = kModelTilt;
     // The crates whose models have been rendered to an image, and when each was last in view.
     struct Face
     {

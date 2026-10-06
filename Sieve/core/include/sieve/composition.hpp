@@ -26,6 +26,16 @@
 // positional = k; scrambled = shuffle-sha256-v1 of k over [0, count), keyed with the unit space's
 // key, domain "composition-compact-v1/<space id>/<cover>/<title>/<unit>", each part its stack's id or
 // "-" for a part with no filters. A part with no filters accepts everything.
+//
+// The joined stack: as a book's pages are read as one text, a composition's units can also be
+// judged together, as the one unit of their line they join into (join_units below), so that what
+// happens across the seams between units is judged: a melody that runs on from one unit into the
+// next, a picture that moves on from frame to frame. A composition passes it when its joined units
+// do. It ranks when the per-unit stack is empty: the units are then one part, the joined unit,
+// counted by its own stack (Nj of them, so N = Nc * Nt * Nj), and survivors follow the joined
+// unit's order, which is the positional order when a unit is one strand (video, one voice) and
+// strand by strand when it is more. Both stacks at once cannot be counted. The compact domain
+// gains "/<joined stack id>" when the joined stack has filters; without them it is unchanged.
 #pragma once
 
 #include "sieve/biguint.hpp"
@@ -99,11 +109,15 @@ class CompositionSieve
 {
 public:
     // The stacks are not owned and must outlive this object; any of them may be empty. `title` is
-    // ignored when the space has no title.
-    CompositionSieve(const CompositionSpace& space, const FilterStack& cover, const FilterStack& title, const FilterStack& unit);
+    // ignored when the space has no title. `joined`, if given, judges the units joined, `strands`
+    // to a unit (join_units), and must be built on the unit line N units long.
+    CompositionSieve(const CompositionSpace& space, const FilterStack& cover, const FilterStack& title, const FilterStack& unit,
+                     const FilterStack* joined = nullptr, uint32_t strands = 1);
 
-    bool empty() const { return cover_->empty() && title_->empty() && unit_->empty(); }
-    // "" if it passes, else which part fails and the filter: "cover: palette-size-v1", "unit 3: ...".
+    bool empty() const { return cover_->empty() && title_->empty() && unit_->empty() && !has_joined(); }
+    bool has_joined() const { return joined_ && !joined_->empty(); }
+    // "" if it passes, else which part fails and the filter: "cover: palette-size-v1", "unit 3: ...",
+    // "joined: ...".
     std::string first_failure(const CompositionSpace::Parts& p) const;
 
     bool can_rank() const { return ranks_; }
@@ -131,9 +145,13 @@ private:
         std::vector<uint32_t> unrank(const BigUint& k) const;
     };
     const CompositionSpace* space_;
-    const FilterStack *cover_, *title_, *unit_;
-    Part parts_[3]; // cover, title (length 0 when there is none: count 1), one unit
-    BigUint units_count_; // parts_[2].count ^ N
+    const FilterStack *cover_, *title_, *unit_, *joined_;
+    uint32_t strands_;
+    // cover, title (length 0 when there is none: count 1), and one unit, or with a joined stack the
+    // joined unit (N units long)
+    Part parts_[3];
+    bool by_joined_ = false; // parts_[2] is the joined unit
+    BigUint units_count_; // parts_[2].count ^ N, or parts_[2].count by the joined unit
     bool ranks_ = false;
     std::string blocker_;
     BigUint count_;

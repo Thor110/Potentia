@@ -1,0 +1,32 @@
+sieve-filter-v2
+; melody-leap-v1 for the notes3 family: no leap between neighbouring notes wider than `leap`
+; semitones, whatever their lengths and loudness. Rests are passed over, or, with rest_resets, let
+; the next note be anything. The state is the last note's pitch (0: none yet).
+; On a notes3 line the notes of one pitch, at every level and length, are one run of symbols,
+; NOTE(p, 1, 1) to NOTE(p, LEVELS, LONGEST), and the rests another, REST(1) to REST(LONGEST).
+id        melody-leap-notes3
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     audio
+symbols   notes3*
+describe  No two neighbouring notes further apart than the leap, in semitones.
+param     leap         int     4  1  24  the widest step between neighbouring notes, in semitones
+param     rest_resets  choice  no no,yes whether a rest lets the next note be anything
+
+states    {PITCHES + 1}
+start     0
+accept    0..{PITCHES}
+t 0 @{REST(1)}..@{REST(LONGEST)} 0
+for p 1 {PITCHES}
+  t 0 @{NOTE(p, 1, 1)}..@{NOTE(p, LEVELS, LONGEST)} {p}
+  if {rest_resets == 1}
+    t {p} @{REST(1)}..@{REST(LONGEST)} 0
+  else
+    t {p} @{REST(1)}..@{REST(LONGEST)} {p}
+  fi
+  for q {max(1, p - leap)} {min(PITCHES, p + leap)}
+    t {p} @{NOTE(q, 1, 1)}..@{NOTE(q, LEVELS, LONGEST)} {q}
+  done
+done
+end

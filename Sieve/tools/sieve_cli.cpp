@@ -1,6 +1,7 @@
 // Sieve — command-line interface to the core.
 //
 //   sieve info   [--line LINE] [line options] [--key K]
+//   (--line tracks|movies: info, warp, read and filters, with the cover's and title's options too)
 //   sieve warp   [--line LINE] [line options] [--key K] [--mode MODE] [--short] (TEXT... | --file PATH)
 //   sieve read   [--line LINE] [line options] [--key K] --mode MODE [--out PATH] [--scale S] ADDRESS
 //   sieve browse [--line LINE] [line options] [--key K] [--count N] [--short]
@@ -39,6 +40,7 @@
 #include "cli/models.hpp"
 
 #include "sieve/booksieve.hpp"
+#include "sieve/composition.hpp"
 #include "sieve/audio.hpp"
 #include "sieve/compact.hpp"
 #include "sieve/filekind.hpp"
@@ -217,6 +219,214 @@ BigUint random_below(const BigUint& n, std::mt19937_64& rng)
         v.add_small(static_cast<uint32_t>(rng()));
     }
     return BigUint::mod(v, n);
+}
+
+// ---------------------------------------------------------------- tracks and movies
+
+// A track or movie (composition-v1, sieve/composition.hpp): a cover of the image line, a title in
+// the text alphabet, and N units of the audio or video line, as the hallway builds them, from the
+// hallway's own option names, so the same options give the same addresses in both.
+struct Composed
+{
+    std::string kind;     // "tracks" or "movies"
+    Line unit, joined, cover;
+    std::optional<Space> title;
+    uint32_t strands = 1;
+    std::unique_ptr<CompositionSpace> space;
+};
+
+bool is_composed_line(const Args& a)
+{
+    const std::string l = a.get("line", "text");
+    return l == "tracks" || l == "movies";
+}
+
+Composed make_composed(const Args& a)
+{
+    const std::string kind = a.get("line");
+    const bool tracks = kind == "tracks";
+    const std::string key = a.get("key", "sieve");
+    const uint32_t n = tracks ? a.get_positive("track-units", 4) : a.get_positive("movie-units", 4);
+    Args u = a;
+    u.opts["line"] = tracks ? "audio" : "video";
+    Line unit = make_line(u);
+    Line joined = joined_line(unit, n);
+    Args cv;
+    cv.opts = {{"line", "image"}, {"key", key}, {"width", a.get("image-width", "10")}, {"height", a.get("image-height", "10")},
+               {"palette", a.get("image-palette", "mono")}};
+    Line cover = make_line(cv);
+    std::optional<Space> title;
+    if (const uint32_t length = a.get_u32("title-length", 32); length > 0) title = Space(alphabet_of(a.get("alphabet", "lower27")), length, key);
+    auto space = std::make_unique<CompositionSpace>(kind, cover.space, title, unit.space, n);
+    const uint32_t strands = strands_of(unit);
+    return Composed{kind, std::move(unit), std::move(joined), std::move(cover), std::move(title), strands, std::move(space)};
+}
+
+// Its filters ([tracks] or [movies] in the settings), and the sieve over them.
+struct ComposedFilters
+{
+    CompositionStacks stacks;
+    std::unique_ptr<CompositionSieve> sieve;
+};
+std::unique_ptr<ComposedFilters> composed_filters(const Composed& c, const Args& a)
+{
+    const FilterConfig cfg = load_filter_config(a);
+    std::optional<FilterLine> title;
+    if (c.title)
+    {
+        title = FilterLine{"text", c.title->symbols_id(), c.title->base(), c.title->unit_length(), &alphabet_of(a.get("alphabet", "lower27")), 0, 0, 0};
+    }
+    auto f = std::make_unique<ComposedFilters>();
+    f->stacks = build_composition_stacks(c.cover, title, c.unit, c.space->units(), c.kind == "tracks" ? cfg.tracks : cfg.movies);
+    f->sieve = std::make_unique<CompositionSieve>(*c.space, f->stacks.cover, f->stacks.title, f->stacks.units, &f->stacks.joined, c.strands);
+    return f;
+}
+
+std::unique_ptr<ComposedFilters> composed_compact(const Composed& c, const Args& a)
+{
+    auto f = composed_filters(c, a);
+    if (f->sieve->empty()) throw std::invalid_argument("--compact needs ticked filters (see: sieve filters --line " + c.kind + ")");
+    if (!f->sieve->can_rank()) throw std::invalid_argument("these filters cannot rank their survivors: " + f->sieve->blocker());
+    if (f->sieve->count().is_zero()) throw std::invalid_argument("nothing survives these filters");
+    std::cerr << "compact: " << f->sieve->count().to_decimal() << " survivors\n";
+    return f;
+}
+
+void print_composed_header(const Composed& c)
+{
+    std::cout << "line         " << c.kind << "  (" << c.space->id() << ")\n"
+              << "cover        " << c.cover.describe_symbols() << "\n"
+              << "title        " << (c.title ? std::to_string(c.title->unit_length()) + " characters of " + c.title->symbols_id() : std::string("none")) << "\n"
+              << "units        " << c.space->units() << " x " << c.unit.describe_symbols() << "\n";
+}
+
+void print_composed(const Composed& c, const CompositionSpace::Parts& p)
+{
+    if (c.title) std::cout << "title  \"" << utf8_encode(c.title->text_of(p.title)) << "\"\n";
+    std::cout << "cover\n";
+    print_indented(preview(c.cover, p.cover), "  ");
+    std::cout << "units, joined\n";
+    print_indented(preview(c.joined, join_units(p.units, c.strands)), "  ");
+}
+
+int cmd_info_composed(const Args& a)
+{
+    const Composed c = make_composed(a);
+    print_composed_header(c);
+    std::cout << c.kind << std::string(13 - c.kind.size(), ' ') << "~10^" << std::floor(c.space->size().log10_approx() * 100) / 100 << "\n"
+              << "address      " << c.space->size().bit_length() << " bits, " << c.space->hex_width() << " hex digits\n";
+    if (c.space->size().log10_approx() < 60) std::cout << "exact        " << c.space->size().to_decimal() << "\n";
+    return 0;
+}
+
+// Warped in as the hallway's T does: the input read as units of the joined line, each split into
+// the units, with a blank cover and a blank title.
+int cmd_warp_composed(const Args& a)
+{
+    const Composed c = make_composed(a);
+    const std::string mode = a.get("mode", "all");
+    if (mode == "guided") throw std::invalid_argument("tracks and movies have no guided ordering");
+    const bool all = mode == "all" || mode == "both";
+    const bool positional = all || address_mode_from_string(mode) == AddressMode::Positional, scrambled = all || !positional;
+    const bool abbreviate = a.has("short");
+    const WarpInput w = read_warp_input(c.joined, a);
+    const auto compact = a.has("compact") ? composed_compact(c, a) : nullptr;
+    print_composed_header(c);
+    std::cout << "canon        " << w.report.front() << "\n";
+    for (size_t i = 1; i < w.report.size(); ++i) std::cout << w.report[i] << "\n";
+    for (size_t i = 0; i < w.units.size(); ++i)
+    {
+        CompositionSpace::Parts p;
+        p.cover.assign(c.cover.space.unit_length(), 0);
+        if (c.title) p.title.assign(c.title->unit_length(), 0);
+        p.units = split_units(w.units[i], c.strands, c.space->units());
+        std::cout << "\n" << c.kind.substr(0, c.kind.size() - 1) << " " << i + 1 << "/" << w.units.size() << "\n";
+        print_indented(preview(c.joined, w.units[i]), "  ");
+        for (AddressMode m : {AddressMode::Positional, AddressMode::Scrambled})
+        {
+            if (!(m == AddressMode::Positional ? positional : scrambled)) continue;
+            std::cout << "  " << to_string(m) << (m == AddressMode::Positional ? "  " : "   ") << show_address(c.space->hex_of(c.space->index_of(p, m)), abbreviate)
+                      << "\n";
+        }
+        if (compact)
+        {
+            const CompositionSieve& sv = *compact->sieve;
+            if (const std::string f = sv.first_failure(p); !f.empty())
+            {
+                std::cout << "  compact     not a survivor: fails " << f << "\n";
+                continue;
+            }
+            std::cout << "  compact     survivor number " << sv.rank(p).to_decimal() << " of " << sv.count().to_decimal() << "\n";
+            if (positional) std::cout << "    positional  " << show_address(sv.hex_of(sv.index_of(p, AddressMode::Positional)), abbreviate) << "\n";
+            if (scrambled) std::cout << "    scrambled   " << show_address(sv.hex_of(sv.index_of(p, AddressMode::Scrambled)), abbreviate) << "\n";
+        }
+    }
+    return 0;
+}
+
+int cmd_read_composed(const Args& a)
+{
+    const Composed c = make_composed(a);
+    if (!a.has("mode")) throw std::invalid_argument("missing --mode positional|scrambled");
+    if (a.get("mode") == "guided") throw std::invalid_argument("tracks and movies have no guided ordering");
+    const AddressMode m = address_mode_from_string(a.get("mode"));
+    if (a.positional.size() != 1) throw std::invalid_argument("give exactly one ADDRESS");
+    CompositionSpace::Parts p;
+    if (a.has("compact"))
+    {
+        const auto f = composed_compact(c, a);
+        const BigUint index = f->sieve->parse(a.positional[0]);
+        p = f->sieve->parts_at(index, m);
+        std::cerr << "survivor number " << f->sieve->rank(p).to_decimal() << " of " << f->sieve->count().to_decimal() << "\n";
+    }
+    else p = c.space->parts_at(c.space->parse(a.positional[0]), m);
+    print_composed(c, p);
+    const uint32_t scale = a.get_positive("scale", 16), fps = a.get_positive("fps", kDefaultExportFps);
+    if (a.has("out"))
+    {
+        save_unit(c.joined, join_units(p.units, c.strands), a.get("out"), scale, fps);
+        std::cerr << "saved " << a.get("out") << "\n";
+    }
+    if (a.has("cover-out"))
+    {
+        save_unit(c.cover, p.cover, a.get("cover-out"), scale, fps);
+        std::cerr << "saved " << a.get("cover-out") << "\n";
+    }
+    return 0;
+}
+
+int cmd_filters_composed(const Args& a)
+{
+    const Composed c = make_composed(a);
+    const FilterConfig cfg = load_filter_config(a);
+    const CompositionFilters& cf = c.kind == "tracks" ? cfg.tracks : cfg.movies;
+    print_composed_header(c);
+    std::cout << "settings     " << filters_path(a) << "\n"
+              << "mode         " << to_string(cf.mode) << "\n";
+    const std::string base = c.kind == "tracks" ? "audio" : "video";
+    const std::string heads[4] = {"COVER: a picture of the image line", "TITLE: a title", "UNITS: each unit of the " + base + " line, judged on its own",
+                                  "JOINED: the units joined into one, judged as one"};
+    const FilterLine lines[4] = {filter_line(c.cover),
+                                 c.title ? FilterLine{"text", c.title->symbols_id(), c.title->base(), c.title->unit_length(), &alphabet_of(a.get("alphabet", "lower27")), 0, 0, 0}
+                                         : FilterLine{},
+                                 filter_line(c.unit), joined_filter_line(filter_line(c.unit), c.space->units())};
+    for (int i = 0; i < 4; ++i)
+    {
+        if (i == 1 && !c.title) continue;
+        std::cout << "\n" << heads[i] << " (" << lines[i].length << " symbols)\n";
+        for (const FilterSpec* f : filters_for(lines[i])) std::cout << "  " << (cf.parts[i].is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << "\n";
+    }
+    const auto f = composed_filters(c, a);
+    std::cout << "\n";
+    const char* names[4] = {"cover", "title", "units", "joined"};
+    const FilterStack* parts[4] = {&f->stacks.cover, &f->stacks.title, &f->stacks.units, &f->stacks.joined};
+    for (int i = 0; i < 4; ++i)
+        std::cout << names[i] << std::string(13 - std::string(names[i]).size(), ' ')
+                  << (parts[i]->empty() ? std::string("(none ticked)") : parts[i]->id().substr(0, 16) + "...  " + parts[i]->provenance()) << "\n";
+    if (f->sieve->empty()) return 0;
+    if (f->sieve->can_rank()) std::cout << "survivors    " << f->sieve->count().to_decimal() << " " << c.kind << " (exact; compact mode available)\n";
+    else std::cout << "compact      unavailable: " << f->sieve->blocker() << "\n";
+    return 0;
 }
 
 // ---------------------------------------------------------------- warp
@@ -1182,6 +1392,11 @@ int cmd_filters_plugin(const Args& a)
     if (!a.has("line"))
     {
         if (h.symbols == "notes104" || h.symbols == "notes*") b.opts["line"] = "audio"; // notes*: every note line (v2)
+        else if (h.symbols == "notes3*")
+        {
+            b.opts["line"] = "audio";
+            if (!a.has("note-set")) b.opts["note-set"] = "notes3";
+        }
         else if (h.symbols.rfind("palette:", 0) == 0)
         {
             b.opts["line"] = "image";
@@ -2312,6 +2527,14 @@ int main(int argc, char** argv)
                     if (key != "timings" && key != "filter-memory" && key != "merge-cache" && key != "unit-time" && key != "ffmpeg" && std::find(known.begin(), known.end(), key) == known.end())
                         std::cerr << "warning: --" << key << " is not an option of 'sieve " << a.command << "' (see: sieve help " << a.command
                                   << "); ignored\n";
+        }
+        if (is_composed_line(a))
+        {
+            if (a.command == "info") return cmd_info_composed(a);
+            if (a.command == "warp") return cmd_warp_composed(a);
+            if (a.command == "read") return cmd_read_composed(a);
+            if (a.command == "filters") return cmd_filters_composed(a);
+            throw std::invalid_argument("'sieve " + a.command + "' does not take --line " + a.get("line") + " (info, warp, read and filters do)");
         }
         if (a.command == "info") return cmd_info(a);
         if (a.command == "warp") return cmd_warp(a);

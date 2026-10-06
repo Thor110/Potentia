@@ -11,6 +11,7 @@
 
 #include "sieve/audio.hpp"
 #include "sieve/image.hpp"
+#include "sieve/notes3.hpp"
 #include "sieve/sha256.hpp"
 #include "sieve/utf8.hpp"
 
@@ -277,7 +278,7 @@ private:
         skip();
         if (i_ >= s_.size() || s_[i_] != ')') fail(line_, "a ( without its ) in '" + s_ + "'");
         ++i_;
-        const size_t want = name == "min" || name == "max" ? 2 : 1;
+        const size_t want = name == "min" || name == "max" ? 2 : name == "NOTE" ? 3 : 1;
         if (args.size() != want) fail(line_, name + " takes " + std::to_string(want) + (want == 1 ? " argument" : " arguments"));
         if (name == "abs") return checked(args[0] < 0 ? -args[0] : args[0], line_);
         // A duration's length in sixteenths: of the k-th of the eight codes s e E q Q h H w, or of
@@ -287,6 +288,19 @@ private:
             static const int64_t lengths[] = {1, 2, 3, 4, 6, 8, 12, 16};
             if (args[0] < 0 || args[0] > 7) fail(line_, "SIXTEENTHS takes a code's place, 0 (s) to 7 (w)");
             return lengths[args[0]];
+        }
+        // A notes3 line's symbols (sieve/notes3.hpp): NOTE(p, k, t) is pitch p (1 = LOW) at level k
+        // for t ticks, REST(t) a rest of t ticks.
+        if (name == "NOTE" || name == "REST")
+        {
+            const auto longest = env_.find("LONGEST"), levels = env_.find("LEVELS"), pitches = env_.find("PITCHES");
+            if (longest == env_.end() || levels == env_.end()) fail(line_, name + " is for a notes3 line (symbols notes3*)");
+            const int64_t t = args.back();
+            if (t < 1 || t > longest->second) fail(line_, name + "'s ticks must be 1 to LONGEST");
+            if (name == "REST") return t - 1;
+            if (args[0] < 1 || args[0] > pitches->second) fail(line_, "NOTE's pitch must be 1 to PITCHES");
+            if (args[1] < 1 || args[1] > levels->second) fail(line_, "NOTE's level must be 1 to LEVELS");
+            return (t - 1) + longest->second * (1 + (args[0] - 1) * levels->second + (args[1] - 1));
         }
         if (name == "LENGTH")
         {
@@ -324,7 +338,8 @@ private:
         {
             std::string name;
             while (i_ < s_.size() && (std::isalnum(static_cast<unsigned char>(s_[i_])) || s_[i_] == '_')) name += s_[i_++];
-            if (v2_ && (name == "min" || name == "max" || name == "abs" || name == "LENGTH" || name == "SIXTEENTHS")) return call(name);
+            if (v2_ && (name == "min" || name == "max" || name == "abs" || name == "LENGTH" || name == "SIXTEENTHS" || name == "NOTE" || name == "REST"))
+                return call(name);
             const auto it = env_.find(name);
             if (it == env_.end()) fail(line_, "'" + name + "' is not a parameter or a for variable");
             return it->second;
@@ -343,7 +358,7 @@ private:
 bool reserved_v2(const std::string& n)
 {
     return n == "min" || n == "max" || n == "abs" || n == "BASE" || n == "PITCHES" || n == "DURATIONS" || n == "LOW" || n == "LENGTH" ||
-           n == "SIXTEENTHS";
+           n == "SIXTEENTHS" || n == "LEVELS" || n == "LONGEST" || n == "TPQ" || n == "NOTE" || n == "REST";
 }
 
 // A number field: an integer, a name, or {an expression}.
@@ -800,8 +815,10 @@ bool plugin_applies(const PluginDef& p, const FilterLine& line)
     if (h.format >= 2 && h.symbols.size() >= 2 && h.symbols.back() == '*') // a family: notes*
     {
         // notes* is the note sets whose digits its constants describe (pitch x durations +
-        // duration): notes104 and notes2, not notes3, whose digits carry lengths in ticks and levels.
+        // duration): notes104 and notes2, not notes3, whose digits carry lengths in ticks and levels
+        // and have a family of their own, notes3* (NOTE and REST write its symbols).
         if (h.symbols == "notes*") return is_note_symbols(line.symbols_id);
+        if (h.symbols == "notes3*") return is_notes3_symbols(line.symbols_id);
         return line.symbols_id.compare(0, h.symbols.size() - 1, h.symbols, 0, h.symbols.size() - 1) == 0;
     }
     if (h.symbols.rfind("palette:", 0) == 0)
@@ -839,6 +856,18 @@ public:
                 static const int64_t sixteenths[] = {1, 2, 3, 4, 6, 8, 12, 16};
                 for (size_t i = 0; i < set.durations.size(); ++i)
                     env_["#len" + std::to_string(i)] = sixteenths[std::string(kNoteDurationCodes).find(set.durations[i])];
+            }
+            else if (is_notes3_symbols(line.symbols_id))
+            {
+                // A notes3 set (one voice's events, as above): its pitches from LOW, its loudness
+                // levels, its longest length and its ticks a quarter note; NOTE() and REST() write
+                // its symbols.
+                const Notes3Set set = notes3_set_of(line.symbols_id);
+                env_["PITCHES"] = int64_t(set.pitches());
+                env_["LOW"] = int64_t(set.low);
+                env_["LEVELS"] = int64_t(set.levels);
+                env_["LONGEST"] = int64_t(set.longest);
+                env_["TPQ"] = int64_t(set.tpq);
             }
         }
         for (const auto& par : p.header.params)

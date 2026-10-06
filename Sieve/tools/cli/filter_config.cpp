@@ -33,7 +33,7 @@ std::string trim(std::string s)
 }
 
 const char* kBookParts[3] = {"cover", "title", "pages"};
-const char* kCompositionParts[3] = {"cover", "title", "units"};
+const char* kCompositionParts[CompositionFilters::kParts] = {"cover", "title", "units", "joined"};
 
 void read_filters(LineFilters& lf, const std::string& value)
 {
@@ -99,7 +99,7 @@ const char* BookFilters::part_name(int i) { return kBookParts[i]; }
 const char* CompositionFilters::part_name(int i) { return kCompositionParts[i]; }
 int CompositionFilters::part_index(const std::string& name)
 {
-    for (int i = 0; i < 3; ++i)
+    for (int i = 0; i < kParts; ++i)
         if (name == kCompositionParts[i]) return i;
     return -1;
 }
@@ -196,7 +196,7 @@ FilterConfig FilterConfig::load(const fs::path& path)
             const std::string rest = section.substr(dot + 1);
             const size_t dot2 = rest.find('.');
             const int pi = CompositionFilters::part_index(rest.substr(0, dot2));
-            if (pi < 0) throw std::runtime_error(path.string() + ": unknown section [" + section + "] (" + line_name + " have cover, title and units)");
+            if (pi < 0) throw std::runtime_error(path.string() + ": unknown section [" + section + "] (" + line_name + " have cover, title, units and joined)");
             LineFilters& lf = cf.parts[pi];
             if (dot2 != std::string::npos) lf.values[rest.substr(dot2 + 1)][key] = value;
             else if (key == "filters") read_filters(lf, value);
@@ -269,11 +269,11 @@ void FilterConfig::save(const fs::path& path) const
         write_values(o, std::string("books.") + kBookParts[i], books.parts[i]);
     }
     o << "\n; Tracks and movies: one mode each; the cover is judged as a picture, the title as a title,\n"
-      << "; and each unit on its own as a unit of audio or video.\n";
+      << "; each unit on its own as a unit of audio or video, and the units joined as one longer unit.\n";
     for (const auto& [name, cf] : {std::pair<const char*, const CompositionFilters*>{"tracks", &tracks}, {"movies", &movies}})
     {
         o << "[" << name << "]\nmode = " << to_string(cf->mode) << "\n";
-        for (int i = 0; i < 3; ++i)
+        for (int i = 0; i < CompositionFilters::kParts; ++i)
         {
             o << "\n[" << name << "." << kCompositionParts[i] << "]\n";
             write_filters(o, cf->parts[i]);
@@ -598,12 +598,24 @@ BookStacks build_book_stacks(const Line& cover, const Line& page, uint32_t pages
     return b;
 }
 
-CompositionStacks build_composition_stacks(const Line& cover, const std::optional<FilterLine>& title, const Line& unit, const CompositionFilters& settings)
+FilterLine joined_filter_line(const FilterLine& unit, uint32_t n)
+{
+    FilterLine f = unit;
+    const uint64_t length = uint64_t(unit.length) * n;
+    if (length > 0xffffffffull) throw std::invalid_argument("the units are too long to filter joined");
+    f.length = uint32_t(length);
+    f.frames *= n;
+    return f;
+}
+
+CompositionStacks build_composition_stacks(const Line& cover, const std::optional<FilterLine>& title, const Line& unit, uint32_t units,
+                                           const CompositionFilters& settings)
 {
     CompositionStacks c;
     c.cover = build_stack(cover, settings.parts[0]);
     if (title) c.title = build_stack(*title, settings.parts[1]);
     c.units = build_stack(unit, settings.parts[2]);
+    if (!settings.parts[3].enabled.empty()) c.joined = build_stack(joined_filter_line(filter_line(unit), units), settings.parts[3]);
     return c;
 }
 

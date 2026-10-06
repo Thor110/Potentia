@@ -3105,6 +3105,46 @@ void test_composition_sieve()
         CHECK(sv.count() == BigUint(k));
         if (variant == 0) CHECK(sv.domain().rfind("composition-compact-v1/movies/image/mono/2x2/L4+-+video/mono/2x1x2/L4x2/key=sieve/composition-v1/", 0) == 0);
     }
+    // The joined stack: the same agreement judged across the two units joined (4 frames), the
+    // per-unit stack empty. One strand: the survivors keep the positional order.
+    const FilterLine video4{"video", "video/mono/2x1x4", 2, 8, nullptr, 2, 1, 4};
+    const FilterStack jst(video4, {{find_filter("neighbour-agreement-v1"), {}}}, res);
+    for (uint32_t strands : {1u, 2u})
+    {
+        const CompositionSieve sv(cs, cst, none, none, &jst, strands);
+        CHECK(sv.has_joined() && !sv.empty() && sv.can_rank());
+        uint64_t k = 0;
+        const uint64_t total = std::stoull(cs.size().to_decimal());
+        std::set<std::string> seen;
+        for (uint64_t v = 0; v < total; ++v)
+        {
+            const CompositionSpace::Parts p = cs.parts_at(BigUint(v), AddressMode::Positional);
+            const std::string f = sv.first_failure(p);
+            const bool joined_ok = jst.first_failure(join_units(p.units, strands)) < 0, cover_ok = cst.first_failure(p.cover) < 0;
+            CHECK(f.empty() == (joined_ok && cover_ok));
+            if (cover_ok && !joined_ok) CHECK(f.rfind("joined: ", 0) == 0);
+            if (!f.empty()) continue;
+            const BigUint r = sv.rank(p);
+            if (strands == 1) CHECK(r == BigUint(k)); // one strand: positional order
+            CHECK(sv.unrank(r) == p);
+            CHECK(seen.insert(r.to_decimal()).second);
+            for (AddressMode m : {AddressMode::Positional, AddressMode::Scrambled}) CHECK(sv.parts_at(sv.index_of(p, m), m) == p);
+            ++k;
+        }
+        CHECK(sv.count() == BigUint(k));
+        CHECK(sv.domain().size() > jst.id().size() && sv.domain().substr(sv.domain().size() - jst.id().size() - 1) == "/" + jst.id());
+    }
+    {
+        // Both unit stacks at once: judged, but not counted.
+        const CompositionSieve sv(cs, none, none, ust, &jst, 1);
+        CHECK(!sv.can_rank() && sv.blocker().rfind("units and joined", 0) == 0);
+        const CompositionSpace::Parts p = cs.parts_at(BigUint(0), AddressMode::Positional);
+        CHECK(sv.first_failure(p).empty() == (ust.first_failure(p.units[0]) < 0 && ust.first_failure(p.units[1]) < 0 &&
+                                              jst.first_failure(join_units(p.units, 1)) < 0));
+        // An empty joined stack leaves the domain as it was.
+        const CompositionSieve plain(cs, none, none, ust), with_empty(cs, none, none, ust, &none, 1);
+        CHECK(plain.domain() == with_empty.domain() && !with_empty.has_joined());
+    }
     // Joining: two units of two voices (a1 a2 | b1 b2, each voice two events) join voice by voice.
     const std::vector<std::vector<uint32_t>> two = {{1, 2, 3, 4}, {5, 6, 7, 8}};
     CHECK((join_units(two, 2) == std::vector<uint32_t>{1, 2, 5, 6, 3, 4, 7, 8}));

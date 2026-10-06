@@ -193,6 +193,27 @@ Line make_line(const Args& a)
     throw std::logic_error("unhandled line");
 }
 
+uint32_t strands_of(const Line& l)
+{
+    if (l.kind != LineKind::Audio) return 1;
+    const std::string& id = l.space.symbols_id();
+    if (is_pcm_symbols(id)) return pcm_format_of(id).channels;
+    if (is_notes3_symbols(id)) return notes3_set_of(id).voices;
+    return note_set_of(id).voices;
+}
+
+Line joined_line(const Line& base, uint32_t n)
+{
+    Line l = base;
+    const uint64_t length = uint64_t(base.space.unit_length()) * n;
+    if (length > 0xFFFFFFFFull) throw std::length_error("a composition this long is beyond what a unit can hold");
+    l.space = Space(base.space.symbols_id(), base.space.base(), uint32_t(length), base.space.key());
+    l.image.frames *= n;
+    l.guided.reset();
+    l.model_id.clear();
+    return l;
+}
+
 std::string Line::describe_symbols() const
 {
     switch (kind)

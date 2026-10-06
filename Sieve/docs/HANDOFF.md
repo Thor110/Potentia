@@ -124,7 +124,7 @@ thirty-two-column shelf is half of it; never larger than one.
 | `core/src/corridor.cpp` | Address → (tile, slot). Holds the tile-size setting. |
 | `core/src/guided.cpp` | `guided-ac-v1`, the entropy-ordered addressing. |
 | `core/src/filter.cpp`, `core/src/filters/` | The filtration stack. |
-| `core/src/composition.cpp` | `composition-v1`: tracks and movies, a cover, a title and N units; their filters. |
+| `core/src/composition.cpp` | `composition-v1`: tracks and movies, a cover, a title and N units; their filters, each unit alone and the units joined. |
 | `client/dimensions.hpp` | The dimensions, each defined once, in door order: identity, names, colours, unit line, music mode. Reorder the doors here. |
 | `client/hallway.hpp` | The `Hallway` class and the helpers its parts share (namespace `hallway::hall`). |
 | `client/hallway.cpp` | The corridor itself: lines, position, filters, movement, input, the frame, Real Graphics. |
@@ -1659,3 +1659,36 @@ Left, as notes:
 - Composition ranking and the sound-peak ranker divide a long number once a unit or sample, so
   their cost grows with the square of the length; fine at the sizes the menu allows, and
   divide-and-conquer (as `to_digits` does) if they are ever pushed.
+
+### Joined filters, tracks and movies in the `sieve` tool, notes3's melody filters (6 October 2026)
+
+IDEAS §13's open steps, and one fix:
+- **A held model no longer redraws the crates.** `face_painter()` drew each crate's picture at the
+  held model's turn (`model_spin_`, `model_tilt_`), so a face painted while one was turned came out
+  at that angle. Faces are now drawn at the resting turn, `Hallway::kModelSpin` / `kModelTilt`,
+  which R also returns to.
+- **The joined stack** (`CompositionSieve`, SPECIFICATIONS §11): a fourth stack for tracks and
+  movies, judging the units joined (`join_units`, strand by strand) as one unit of their line N
+  long, so the line's own filters judge across the seams, as a book's pages are read as one text.
+  It counts and ranks when the per-unit stack is empty: the joined unit is then the part (`Nc *
+  Nt * Nj`), and survivors follow its order. Both at once judge but do not count. The compact
+  domain gains `/<joined id>` only when it has filters, so no address made before changes.
+  `[tracks.joined]` / `[movies.joined]` in the settings; `joined_filter_line()` is the line it
+  sees; a JOINED part in the setup menu's filters window, counted in the line's survivors.
+- **`sieve info|warp|read|filters --line tracks|movies`** (`tools/sieve_cli.cpp`, "tracks and
+  movies"): built from the hallway's option names (`--track-units`, `--movie-units`,
+  `--title-length`, `--image-width/-height/-palette`), so they give the hallway's addresses. warp
+  gives a blank cover and title, as T does; read prints title, cover and the units joined (`--out`,
+  `--cover-out`); `--compact` through the composition sieve. `strands_of()` and `joined_line()`
+  moved from the hallway into `cli/lines` for both to use.
+- **The notes3 family of plugins** (`symbols notes3*`, FILTER-PLUGINS §14): constants `PITCHES`,
+  `LOW`, `LEVELS`, `LONGEST`, `TPQ`, and `NOTE(p, k, n)` / `REST(n)` to name symbols, in the engine
+  (`plugin.cpp`) and the oracle. Ten plugins in `data/filters`: `key-notes3-v1` and
+  `melody-{leap,range,ambitus,rests,gapfill,metre,ending,lengths,loudness}-notes3-v1`. A pitch's
+  notes are one run of symbols, so the pitch-only ones name a pitch as a range, which builds the
+  default set's ambitus in 2.4 s rather than 16.
+- **Checked:** unit tests (the joined stack against brute force with one and two strands, both
+  stacks at once, the unchanged domain); CI: the composition addresses pinned in the tool, the tool
+  and the hallway saving the same track (plain and compact through the joined stack), joined counts
+  on movies, notes3 stacks compact both ways, and the oracle against the engine on every notes3
+  plugin.

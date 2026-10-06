@@ -320,6 +320,13 @@ private:
     // Lines whose items have parts, each with its own filters (cover, title, and pages or units):
     // books, tracks and movies. part_line: the line a part's filters see.
     static bool has_parts(int line) { return line == kBooksLine || is_composition(line); }
+    // How many parts it has (books: cover, title, pages; tracks and movies: cover, title, units,
+    // joined), and whether a part is there to filter (a composition's title is not when titles are off).
+    static int parts_of(int line) { return line == kBooksLine ? 3 : sieve::cli::CompositionFilters::kParts; }
+    bool has_part(int line, int part) const { return !(part == 1 && is_composition(line) && s_.title_length == 0); }
+    // A composition's joined part. Z, C and X leave it alone: with the units' filters ticked too,
+    // nothing would count, so it is ticked by hand.
+    static constexpr int kJoinedPart = 3;
     sieve::FilterLine part_line(int line, int part) const;
     sieve::cli::CompositionFilters& comp_cfg(int line) { return kDimensions[line].media == Media::Tracks ? cfg_.tracks : cfg_.movies; }
     const sieve::cli::CompositionFilters& comp_cfg(int line) const { return kDimensions[line].media == Media::Tracks ? cfg_.tracks : cfg_.movies; }

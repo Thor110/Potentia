@@ -1680,8 +1680,8 @@ sieve::FilterLine Menu::book_part_line(int part) const
 sieve::FilterLine Menu::part_line(int line, int part) const
 {
     if (line == kBooksLine) return book_part_line(part);
-    // Tracks and movies: the cover a picture, the title one of the titled lines' titles, and each
-    // unit a unit of its line.
+    // Tracks and movies: the cover a picture, the title one of the titled lines' titles, each
+    // unit a unit of its line, and the units joined that line's unit N long (joined_filter_line).
     if (part == 0) return filter_line_of(line_of(Media::Image));
     if (part == 1)
     {
@@ -1689,7 +1689,13 @@ sieve::FilterLine Menu::part_line(int line, int part) const
         f.length = s_.title_length;
         return f;
     }
-    return filter_line_of(line);
+    sieve::FilterLine f = filter_line_of(line);
+    if (part == kJoinedPart)
+    {
+        f.length = uint32_t(std::min<uint64_t>(uint64_t(f.length) * comp_units(line), UINT32_MAX));
+        f.frames *= comp_units(line);
+    }
+    return f;
 }
 
 sieve::cli::LineFilters& Menu::filters_of(const ORow& row)
@@ -1943,10 +1949,11 @@ sieve::cli::LineFilters Menu::alone(const sieve::cli::LineFilters& lf, const std
 }
 
 
-// The books line: each part's stack, counted exactly where every part with filters can rank
-// (a part with no filters keeps all its units), on a worker like the other lines.
-// The books', tracks' or movies' parts, each counted on its own; the whole exact when every part
-// is (a track's or movie's units each judged alone, so their survivors to the power of N).
+// The books', tracks' or movies' parts, each counted on its own, on a worker like the other lines;
+// the whole exact when every part with filters can rank (a part with none keeps all its units). A
+// track's or movie's units are each judged alone, so their survivors count to the power of N, unless
+// the joined stack judges them: then the joined unit is the part, counted once, and with the units'
+// own filters as well nothing is counted (CompositionSieve).
 const Menu::StackInfo& Menu::parts_stack_info(int line)
 {
     if (line_sizes()[size_t(line)].bits > too_large_bits())
@@ -1955,11 +1962,12 @@ const Menu::StackInfo& Menu::parts_stack_info(int line)
         return info_[line];
     }
     const bool books = line == kBooksLine;
+    const int nparts = parts_of(line);
     const sieve::cli::LineFilters* settings = books ? cfg_.books.parts : comp_cfg(line).parts;
     std::string key = std::string(kDimensions[line].id) + "/" + std::to_string(uint64_t(sieve::filter_memory())) + "/" + std::to_string(uint64_t(sieve::unit_time_ms())) +
                       "/" + to_string(mode_of(line)) + "/";
-    std::array<std::pair<sieve::FilterLine, sieve::cli::LineFilters>, 3> parts;
-    for (int part = 0; part < 3; ++part)
+    std::vector<std::pair<sieve::FilterLine, sieve::cli::LineFilters>> parts(static_cast<size_t>(nparts));
+    for (int part = 0; part < nparts; ++part)
     {
         parts[size_t(part)] = {part_line(line, part), settings[part]};
         const auto& [fl, lf] = parts[size_t(part)];
@@ -1975,46 +1983,60 @@ const Menu::StackInfo& Menu::parts_stack_info(int line)
     const bool has_title = books || s_.title_length > 0;
     key += std::to_string(repeat) + (has_title ? "" : "/notitle");
     return resolve(line, key, [parts, book_pages, repeat, has_title, books]() {
-        const char* const names[3] = {"cover", "title", books ? "pages" : "units"};
+        const char* const names[4] = {"cover", "title", books ? "pages" : "units", "joined"};
         StackInfo out;
         sieve::cli::timings::Scope timed("menu.survivors.books");
+        const size_t n = parts.size();
+        // Each part's stack, built once (none for a part that is absent or has nothing ticked).
+        std::vector<std::optional<sieve::FilterStack>> stacks(n);
+        auto absent = [&](size_t part) { return (part == 2 && book_pages == 0) || (part == 1 && !has_title); };
+        auto filtered = [&](size_t part) { return stacks[part] && !stacks[part]->empty(); };
+        for (size_t part = 0; part < n; ++part)
+            if (!absent(part) && !parts[part].second.enabled.empty())
+            {
+                stacks[part] = sieve::cli::build_stack(parts[part].first, parts[part].second);
+                out.table_bytes = std::max(out.table_bytes, stacks[part]->table_bytes()); // the parts are counted one at a time
+            }
+        const size_t joined = kJoinedPart;
+        const bool by_joined = n > joined && filtered(joined);
         double bits = 0;
         bool exact = true, any = false, none_survive = false;
         sieve::BigUint kept(1), total(1); // exact, part by part
         std::string blocker;
-        for (int part = 0; part < 3; ++part)
+        for (size_t part = 0; part < std::min<size_t>(n, 3); ++part)
         {
-            const auto& [fl, lf] = parts[size_t(part)];
-            const double all = double(fl.length) * std::log2(double(fl.base));
+            const sieve::FilterLine& fl = parts[part].first;
             const uint32_t times = part == 2 ? repeat : 1;
-            const bool absent = (part == 2 && book_pages == 0) || (part == 1 && !has_title);
-            const sieve::BigUint whole = absent ? sieve::BigUint(1) : sieve::BigUint::pow(sieve::BigUint::pow(fl.base, fl.length), times);
+            const sieve::BigUint whole = absent(part) ? sieve::BigUint(1) : sieve::BigUint::pow(sieve::BigUint::pow(fl.base, fl.length), times);
             total = sieve::BigUint::mul(total, whole);
-            if (lf.enabled.empty() || absent)
+            // The units, judged joined: the joined unit is the part, alone or not counted at all.
+            const size_t judge = part == 2 && by_joined ? joined : part;
+            if (judge == joined && filtered(2))
             {
-                if (!absent) bits += all * times;
-                kept = sieve::BigUint::mul(kept, whole);
+                any = true;
+                exact = false;
+                if (blocker.empty()) blocker = "units and joined: units judged one by one and joined as well cannot be counted"; // as CompositionSieve says
                 continue;
             }
-            const sieve::FilterStack st = sieve::cli::build_stack(fl, lf);
-            out.table_bytes = std::max(out.table_bytes, st.table_bytes()); // the parts are counted one at a time
-            if (st.empty())
+            if (!filtered(judge))
             {
-                bits += all * times;
+                if (!absent(part)) bits += double(fl.length) * std::log2(double(fl.base)) * times;
                 kept = sieve::BigUint::mul(kept, whole);
                 continue;
             }
             any = true;
+            const sieve::FilterStack& st = *stacks[judge];
             if (!st.ranker())
             {
                 exact = false;
-                if (blocker.empty()) blocker = std::string(names[part]) + ": " + st.compact_blocker();
+                if (blocker.empty()) blocker = std::string(names[judge]) + ": " + st.compact_blocker();
                 continue;
             }
-            const sieve::BigUint& n = st.ranker()->count();
-            kept = sieve::BigUint::mul(kept, sieve::BigUint::pow(n, times));
-            if (n.is_zero()) none_survive = true;
-            else bits += times * n.log10_approx() / std::log10(2.0);
+            const uint32_t power = judge == joined ? 1 : times; // the joined unit is all N units at once
+            const sieve::BigUint& c = st.ranker()->count();
+            kept = sieve::BigUint::mul(kept, sieve::BigUint::pow(c, power));
+            if (c.is_zero()) none_survive = true;
+            else bits += power * c.log10_approx() / std::log10(2.0);
         }
         if (exact) out.filtered = filtered_text(kept, total);
         if (!any) out.status = tr(books ? "status.none_books" : "status.none_units");
@@ -2067,9 +2089,9 @@ std::vector<Menu::ORow> Menu::overlay_rows() const
     std::vector<ORow> rows{{ORow::Kind::Mode, "", ""}, {ORow::Kind::Tabs, "", ""}};
     if (has_parts(overlay_))
     {
-        for (int part = 0; part < 3; ++part)
+        for (int part = 0; part < parts_of(overlay_); ++part)
         {
-            if (part == 1 && is_composition(overlay_) && s_.title_length == 0) continue; // no titles
+            if (!has_part(overlay_, part)) continue; // no titles
             rows.push_back({ORow::Kind::Header, "", "", part});
             add_filter_rows(rows, part_line(overlay_, part), overlay_ == kBooksLine ? cfg_.books.parts[part] : comp_cfg(overlay_).parts[part], part);
         }
@@ -2292,8 +2314,8 @@ std::vector<Menu::Reach> Menu::reach_of(ToggleScope scope, int overlay, int tab)
         for (int part = 0; part < 3; ++part) stacks.push_back({&cfg_.books.parts[part], book_part_line(part), kBooksLine, part});
         for (int li = 0; li < kLines; ++li)
             if (is_composition(li))
-                for (int part = 0; part < 3; ++part)
-                    if (part != 1 || s_.title_length > 0) stacks.push_back({&comp_cfg(li).parts[part], part_line(li, part), li, part});
+                for (int part = 0; part < parts_of(li); ++part)
+                    if (has_part(li, part) && part != kJoinedPart) stacks.push_back({&comp_cfg(li).parts[part], part_line(li, part), li, part});
         stacks.push_back({&cfg_.models, filter_line_of(kModelsLine), kModelsLine, -1});
         stacks.push_back({&cfg_.binary, filter_line_of(kBinaryLine), kBinaryLine, -1});
     }
@@ -2301,8 +2323,8 @@ std::vector<Menu::Reach> Menu::reach_of(ToggleScope scope, int overlay, int tab)
         for (int part = 0; part < 3; ++part) stacks.push_back({&cfg_.books.parts[part], book_part_line(part), kBooksLine, part});
     else if (is_composition(overlay))
     {
-        for (int part = 0; part < 3; ++part)
-            if (part != 1 || s_.title_length > 0) stacks.push_back({&comp_cfg(overlay).parts[part], part_line(overlay, part), overlay, part});
+        for (int part = 0; part < parts_of(overlay); ++part)
+            if (has_part(overlay, part) && part != kJoinedPart) stacks.push_back({&comp_cfg(overlay).parts[part], part_line(overlay, part), overlay, part});
     }
     else if (unit_at(overlay) >= 0) stacks.push_back({&cfg_.lines[unit_at(overlay)], filter_line_of(overlay), overlay, -1});
     else if (overlay == kModelsLine) stacks.push_back({&cfg_.models, filter_line_of(kModelsLine), kModelsLine, -1});
@@ -2742,10 +2764,11 @@ void Menu::render_overlay(float W, float H)
         else if (row.kind == ORow::Kind::Header)
         {
             const bool comp = is_composition(overlay_);
-            static const char* const heads[3] = {"filters.part.cover", "filters.part.title", "filters.part.pages"};
+            static const char* const heads[4] = {"filters.part.cover", "filters.part.title", "filters.part.pages", "filters.part.joined"};
             const std::string head = comp && row.part == 2 ? "filters.part.units" : heads[row.part];
+            const std::string base_name = comp ? tr(theme_of(line_of(*kDimensions[overlay_].composes)).key) : std::string();
             std::string sub = comp && row.part == 1   ? trf("filters.part.title.composition.help", {std::to_string(s_.title_length)})
-                              : comp && row.part == 2 ? trf("filters.part.units.help", {std::to_string(comp_units(overlay_)), tr(theme_of(line_of(*kDimensions[overlay_].composes)).key)})
+                              : comp && row.part >= 2 ? trf(head + ".help", {std::to_string(comp_units(overlay_)), base_name})
                               : row.part == 2         ? trf(head + ".help", {std::to_string(uint64_t(s_.book_pages) * s_.length)})
                                                       : tr(head + ".help");
             it.lines = {"-- " + tr(head) + " --"};
@@ -2765,7 +2788,7 @@ void Menu::render_overlay(float W, float H)
                 for (const sieve::FilterSpec* f : sieve::filters_for(l)) ++n[tab_of(*f)];
             };
             if (has_parts(overlay_))
-                for (int part = 0; part < 3; ++part) count(part_line(overlay_, part));
+                for (int part = 0; part < parts_of(overlay_); ++part) count(part_line(overlay_, part));
             else count(filter_line_of(overlay_));
             static const char* const keys[3] = {"filters.tab.builtin", "filters.tab.custom", "filters.tab.retired"};
             std::string tabs;
