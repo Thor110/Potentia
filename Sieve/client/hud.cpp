@@ -723,10 +723,12 @@ void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float botto
     }
     const double file_bits = double(*bk.file_bytes) * 8;
 
+    // The address you hold it by.
+    const double held = bk.guided ? double(bk.bits) : compact ? compact_bits : bits;
     // The balance: the cheapest way found to name the item, under the filters and the line as they
     // are: the address you hold it by, its guided address, and its shortest route.
     {
-        double best = bk.guided ? double(bk.bits) : compact ? compact_bits : bits;
+        double best = held;
         std::string by = bk.guided ? tr("ordering.guided") : compact ? tr("cost.compact") : tr(std::string("ordering.") + to_string(mode_));
         if (guided && double(guided->bits) < best) best = double(guided->bits), by = tr("ordering.guided");
         if (route && route->bits < best) best = route->bits, by = tr("cost.vla");
@@ -782,6 +784,8 @@ void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float botto
         }
     }
     cy += 10;
+    // The filters tailored to it (tailoring.cpp).
+    cy = draw_tailor(bk, held, x, cy, pw, bottom);
     // The other half of a written-down key: the shape that gives the address its meaning.
     const std::string spec = (on_books() ? books_->id() : on_composition() ? comp().space->id() : titled_here() ? titled_here()->id() : line().space.id());
     text(x + 14, cy, tr("cost.spec"), 1, dim);

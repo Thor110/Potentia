@@ -44,6 +44,7 @@
 #include "cli/filter_config.hpp"
 #include "cli/image_io.hpp"
 #include "cli/lines.hpp"
+#include "cli/tailor.hpp"
 
 #include "sieve/audio.hpp"
 #include "sieve/notes3.hpp"
@@ -944,6 +945,32 @@ public:
     uint64_t vla_done_gen_ = 0, vla_shown_gen_ = 0;   // which answer each is (done: vla_mx_)
     std::optional<sieve::ShortestPath> vla_shown_;    // a copy for the frames, made once per answer
 
+    // COST's tailoring (cli/tailor.hpp): the line's filters searched, on a worker, for those that
+    // keep the item in hand and name it shortest. K starts it, or stops it; Return, once it is
+    // done, asks the application for a hallway with those filters (Request::Tailored), saved to
+    // the settings file, with the item in hand again. The pages, image, audio and video lines.
+    struct TailorJob
+    {
+        int line = -1;
+        Space::Digits unit;
+        sieve::cli::TailorProgress progress;
+        std::atomic<bool> ready{false};
+        sieve::cli::TailorResult result; // once ready
+        std::string error;               // once ready: why it failed, if it did
+    };
+    bool can_tailor() const;
+    void tailor_in_hand();  // K
+    void apply_tailored(bool& quit); // Return
+    void stop_tailoring();
+    // The search for the item in hand, if it is the one the job is for.
+    const TailorJob* tailor_of(const Book& bk) const;
+    float draw_tailor(const Book& bk, double unit_bits, float x, float cy, float pw, float bottom);
+    std::shared_ptr<TailorJob> tailor_;
+    std::thread tailor_thread_;
+    FilterConfig filters_;                     // the settings this hallway was built with
+    std::optional<FilterConfig> tailored_;     // Request::Tailored: the settings to build the next one with
+    std::optional<Space::Digits> tailored_unit_; // ... and the item to have in hand there
+
     float draw_book(const BookSpace::Parts& p, float x, float cy, float pw, float bottom);
 
     bool menu_requested() const { return menu_requested_; }
@@ -1261,7 +1288,9 @@ public:
     // GoToMelody: a melody of the music to walk to, on an audio line (or with tracks of a number
     // of units) other than this one's, so the application builds a hallway that has it and hands
     // it the melody (melody_to_go()).
-    enum class Request { None, Settings, MainMenu, GoToMelody };
+    // Tailored: COST's tailored filters applied (tailored_filters()), and the item to hold again
+    // (tailored_unit()) on this line.
+    enum class Request { None, Settings, MainMenu, GoToMelody, Tailored };
     Request request() const { return request_; }
     void clear_request() { request_ = Request::None; }
     // After Settings, the new graphics and language: signs are lettered again, the rest is set.
@@ -1294,6 +1323,15 @@ public:
     // GoToMelody.
     void go_to_melody(const MusicMelody& m);
     const std::optional<MusicMelody>& melody_to_go() const { return melody_to_go_; }
+    const std::optional<FilterConfig>& tailored_filters() const { return tailored_; }
+    const std::optional<Space::Digits>& tailored_unit() const { return tailored_unit_; }
+    // The line you are on, by its --line name (dimensions.hpp): where a new hallway should start.
+    const char* line_name() const { return kDimensions[li_].line; }
+    // The item at `unit` of this line in hand, on its COST tab (after Request::Tailored).
+    void hold_on_cost(const Space::Digits& unit);
+    // For screenshots and tests: K on the item in hand, waited for; with a path, what Return would
+    // apply is saved there as a settings file. Returns false if there is nothing to tailor.
+    bool tailor_now(const std::string& save_to = "");
     void media_saved(const std::string& path); // the save dialog's choice (any thread)
 
 private:

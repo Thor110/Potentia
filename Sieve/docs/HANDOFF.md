@@ -132,6 +132,7 @@ thirty-two-column shelf is half of it; never larger than one.
 | `client/door_portal.cpp`, `client/binary_edge.cpp`, `client/item_faces.cpp` | The doorway noise; the rain and the drop; every item's face (pages, pictures, covers, crates, files) and their render workers. |
 | `client/app_main.cpp` | Options, the menus, the screenshot and scripting paths, the event loop, `main`. |
 | `client/menu.cpp` | The setup menu, `find_limits()`, the budget model. |
+| `client/tailoring.cpp`, `tools/cli/tailor.cpp` | COST's K and Return, and the search behind them and `sieve tailor`: a line's filters and settings tailored to one item. |
 | `client/mesh.cpp` | The software rasteriser behind Real Graphics. |
 | `tools/sieve_cli.cpp` | The `sieve` command. |
 | `reference/sieve_ref.py` | The independent oracle and the vector generator. |
@@ -1785,3 +1786,38 @@ Edward's design (the bar) and the first part of 1e.
   route, the title making the address longer than the file), a compact image shelf.
 - **Still open in 1e:** searching the filters and their values for the cheapest address that keeps
   the item in hand (the anchor), and showing that beside what the filters as they are give.
+
+### Tailoring the filters to the item in hand (7 October 2026)
+
+1e's search, for one anchor: the item in hand.
+- **The search** (`tools/cli/tailor.*`, in sieve_lines): `tailor_filters(line, unit, current,
+  progress)`.
+  - Each filter that can count (not retired; not one that judges only everywhere) is judged
+    alone, with its prerequisites (`tick_filter`), first at `current`'s settings, then each
+    setting in turn: an integer over a grid of 7 across its range, then between the best value's
+    neighbours, until they are adjacent; a text over its choices, or every registered dictionary
+    (`load_registry`). A value is kept where the item passes and the count is lowest.
+  - The set: from each filter kept (strongest first), a stack grown greedily, a filter added where
+    `filter_conflict` allows, the stack still counts and it removes more; a filter already in a
+    grown stack seeds none. The best stack wins. Those that clash with everything (the "own"
+    counters, title-data and window-data) make stacks of one, and the automata, which merge,
+    make another.
+  - Progress and cancel through `TailorProgress`.
+- **`sieve tailor`**: prints each filter, its settings and bits alone, used or why not, the address
+  and the tailored compact address with the survivor number; `--out` writes the settings file.
+  `--unit N` picks the unit of the input. Help entry added.
+- **The hallway** (`client/tailoring.cpp`): K (any tab: it shows COST) runs the search on
+  `tailor_thread_` for the item in hand (pages, image, audio, video; not guided), K again stops it.
+  COST's section (`draw_tailor`) shows progress, then the compact address found against the held
+  one and the filters with their settings. Return sets `Request::Tailored`: the application saves
+  the new `FilterConfig` (the hallway now keeps a copy, `filters_`) to the settings file, builds a
+  hallway on the same line, and `hold_on_cost(unit)` puts the item in hand on COST.
+  `--tailor PATH` (screenshots): K, waited for, and what Return would apply saved to PATH.
+- **Measured:** a melody of 8 notes, 53.6 bits to 16.3 in 2 s (key, lengths, range, ending,
+  rests); a 32-character page, 152.2 bits to 67.3 in 30 s (words-data-v2 with scowl-en-35,
+  word-cost, letter-triples, max-run).
+- **Checked:** CI tailors the melody, checks key-data-v2's scale and the survivor number, warps it
+  compact under the file written (`012f3`) and reads it back. In the hallway: the section while
+  searching and when done, and the file it saved, opened, with the item compact at 16 bits. The
+  Return path in app_main was read, not driven: there is no way to send keys to a live window
+  here.

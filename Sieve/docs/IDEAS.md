@@ -656,8 +656,14 @@ are cheap and because they are the sort of thing that is lost otherwise.
   - *Built, 7 October 2026:* **COST's balance** (Edward's design). The anchor is the item in hand.
     The tab weighs the cheapest address found for it, under the filters as they stand, against it
     as a file (`Neutral : 0%`, `Positive : X%`, `Negative : X%`), with a bar from the centre, red
-    for longer and green for shorter. What is left is the search: the filters and values that make
-    that address cheapest while keeping the item.
+    for longer and green for shorter.
+  - *Built, 7 October 2026:* **the search, for one item** (`cli/tailor.*`; K on the COST tab,
+    Return to apply; `sieve tailor`). Each filter's settings searched one at a time for the item
+    (integers coarse to fine, texts over their choices and the registered dictionaries), then a
+    stack grown from each filter kept, the best of them chosen. Still open: several anchors at
+    once (a map's items, a folder), the line's own settings (alphabet, palette, length) as part of
+    the search, the books, models, binary, tracks and movies lines, and settings searched together
+    rather than one at a time.
 
 ## 13. Composition dimensions (discussed 5–6 October 2026; built 6 October, but for what is still open below)
 

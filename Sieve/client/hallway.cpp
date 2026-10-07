@@ -22,6 +22,7 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
       book_geometry_{build_books(false), build_books(true)}
 {
     texture_px_ = gpu::max_texture_px(r_);
+    filters_ = filters; // what COST's tailoring starts from, and changes
     // The books line: a cover from the image line, a title and book_pages pages from the pages line.
     const Line& text = unit_line(LineKind::Text);
     const Line& image = unit_line(LineKind::Image);
@@ -1526,6 +1527,13 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
     case SDLK_J:
         if (in_hand_) jump_kind();
         break;
+    case SDLK_K:
+        if (in_hand_) tailor_in_hand(); // COST: the filters tailored to it (tailoring.cpp)
+        break;
+    case SDLK_RETURN:
+    case SDLK_KP_ENTER:
+        if (in_hand_) apply_tailored(quit);
+        break;
     case SDLK_Z:
         if (in_hand_) open_viewer();
         break;
@@ -2041,6 +2049,7 @@ void Hallway::draw_face_image(SDL_Texture* tex, const Vec3 quad[4], std::vector<
 
 Hallway::~Hallway()
 {
+    stop_tailoring(); // stopped at its next setting tried
     if (vla_thread_.joinable()) vla_thread_.join(); // a unit's shortest route: seconds at most
     stop_vault_ahead();
     stop_vault_pictures(); // before the lines they read from go

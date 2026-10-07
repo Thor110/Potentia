@@ -107,6 +107,8 @@ const char* kUsage =
     "  --pose X,Z,YAW,PITCH  camera position and angles in degrees\n"
     "  --tile N            then move N tiles along the corridor\n"
     "  --take              take the book you are looking at off the shelf\n"
+    "  --tailor PATH       with --screenshot, the item in hand on COST: K, waited for, and what Return\n"
+    "                      would apply saved to PATH as a settings file\n"
     "  --save-item PATH    then save it as a file (F on the item page), to PATH\n"
     "  --save-view PATH    with the viewer open (--press E,Z,Tab...): save what it shows (F), to PATH\n"
     "  --walk DX,DZ;...    walk these distances in metres first (doors work as when walking)\n"
@@ -609,6 +611,9 @@ int run(const Args& a)
         hall->render(); // computes what you are looking at
         hall->settle_vault(); // the vault's verdicts on the pictures in view, so the picture shows them
         if (a.has("take")) hall->take_hovered();
+        // K on the item in hand, waited for, and what Return would apply saved as a settings file.
+        if (a.has("tailor") && !hall->tailor_now(a.get("tailor")))
+            std::cerr << "--tailor: nothing tailored (no item in hand on the pages, image, audio or video line)\n";
         if (a.has("save-item")) hall->save_in_hand_to(a.get("save-item")); // F, without the dialog
         if (a.has("save-view")) hall->save_view_to(a.get("save-view"));   // F in the viewer, without the dialog
         hall->render();
@@ -627,6 +632,7 @@ int run(const Args& a)
     bool show_main = show_menu;
     bool first = true;
     std::optional<MusicMelody> pending_melody; // a melody of the music to go to in the next hallway built
+    std::optional<Space::Digits> pending_unit; // an item to hold on its COST tab there (COST's tailoring)
     while (true)
     {
         if (show_main)
@@ -715,6 +721,11 @@ int run(const Args& a)
             hall->go_to_melody(*pending_melody);
             pending_melody.reset();
         }
+        if (pending_unit)
+        {
+            hall->hold_on_cost(*pending_unit);
+            pending_unit.reset();
+        }
         SDL_SetWindowRelativeMouseMode(window, true);
         Menu::Result in_game_menu = Menu::Result::Back;
         for (;;)
@@ -797,6 +808,25 @@ int run(const Args& a)
             }
             settings.start_line = melody.units ? "tracks" : "audio";
             pending_melody = melody;
+            show_menu = false;
+            settings_chosen = true;
+            continue;
+        }
+        if (hall->request() == Hallway::Request::Tailored && hall->tailored_filters() && hall->tailored_unit())
+        {
+            // COST's tailored filters (Return): kept, as the setup menu keeps what it ticks, and a
+            // hallway built with them on the same line, the item in hand again on its COST tab.
+            filters = *hall->tailored_filters();
+            try
+            {
+                filters.save(filters_path);
+            }
+            catch (const std::exception&)
+            {
+                // Read-only folder: the filters still apply to this session.
+            }
+            settings.start_line = hall->line_name();
+            pending_unit = *hall->tailored_unit();
             show_menu = false;
             settings_chosen = true;
             continue;

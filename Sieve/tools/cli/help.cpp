@@ -506,6 +506,27 @@ const std::vector<Page>& pages()
           {"sieve check --book tests/example_book_v1.book", "a whole book: cover, title and pages"},
           {"sieve check --line binary --file picture.png", "a file's kind, and where it stands among the kept files"}}},
 
+        {"tailor", "Tailor a line's filters to one item: the stack that keeps it and names it shortest.",
+         "sieve tailor [--line LINE] [line options] [--filters PATH] [--unit N] [--out PATH] (TEXT... | --file PATH)",
+         "Fits the input to the line as warp does and takes one of its units (the first, or --unit N)\n"
+         "as the anchor: whatever is chosen, it survives. Then, for every filter the line offers that\n"
+         "can be counted, its settings are searched one at a time (an integer over its range, coarsely\n"
+         "and then closer in; a text over its choices, or every registered dictionary) for those that\n"
+         "keep the unit and leave the fewest survivors. The filters found are then taken strongest\n"
+         "first, each added where it can be counted with the others and removes more. Printed: each\n"
+         "filter, its settings and its survivors alone in bits, ticked [x] where it was used and\n"
+         "otherwise why not; the line's address in bits; and the unit's compact address under the\n"
+         "stack found, with its survivor number. It is a search, not a proof (values are sampled, the\n"
+         "set chosen greedily), but every count is exact. Starts from the settings file's values.\n"
+         "Text, image, audio and video lines.",
+         {kLine, kLineOptions,
+          {"--filters PATH", "The settings file to start from. Default: sieve-filters.ini next to the executable."},
+          {"--file PATH", "Read the input from a file instead of the command line."},
+          {"--unit N", "Which unit of the input to tailor to (1 is the first). Default 1."},
+          {"--out PATH", "Write the settings file with this line's filters replaced by those found, in compact mode."}},
+         {{"sieve tailor --length 32 \"the cat sat on the mat\"", "the text filters that keep this page"},
+          {"sieve tailor --line image --file sprite.png --out tailored.ini", "a picture's filters, saved as a settings file"}}},
+
         {"bind", "Bind a title, a cover and pages into a book record.",
          "sieve bind --out FILE.book [--title TEXT] [--cover PICTURE] [--pages FILE] [--length N] [--mode MODE] [--key K]",
          "A book is an ordered list of labelled sections, each a run of units on one line: the\n"

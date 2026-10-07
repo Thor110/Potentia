@@ -156,6 +156,19 @@ jobs:
             $exe read --line tracks $T --filters tj.ini --compact --mode $m "$a" 2>/dev/null | tr -d '\r' | tail -1 | q "A4q C5q D5q E5q G5q A4q C5q E5q"
           done
           $exe warp --line tracks $T --filters tj.ini --compact "A4q C5q D5q E5q G5q A4q C5q F5q" 2>/dev/null | tr -d '\r' | q "not a survivor: fails joined: key-v1"
+          # Tailoring: the filters and settings that keep one melody and name it shortest (key,
+          # lengths, range, ending, rests), saved as a settings file, and the melody read back from
+          # its compact address under them.
+          M="A4q C5q D5q E5q G5q A4q C5q E5q"
+          printf '' > none.ini
+          out=$($exe tailor --line audio --length 8 --filters none.ini --out ta.ini "$M" | tr -d '\r')
+          echo "$out"
+          echo "$out" | q "^\[x\] key-data-v2 .* scale=major-pentatonic"
+          echo "$out" | q "^survivor     4851 of 78125"
+          out=$($exe warp --line audio --length 8 --filters ta.ini --compact "$M" 2>/dev/null | tr -d '\r')
+          a=$(echo "$out" | awk '/compact/ {seen = 1; next} seen && $1 == "positional" {print $2; exit}')
+          test "$a" = "012f3"
+          $exe read --line audio --length 8 --filters ta.ini --compact --mode positional "$a" 2>/dev/null | tr -d '\r' | tail -1 | q "^A4q C5q D5q E5q G5q A4q C5q E5q"
 
       - name: A model is one object with an address on two lines
         run: |

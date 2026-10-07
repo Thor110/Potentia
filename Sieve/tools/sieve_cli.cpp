@@ -32,6 +32,7 @@
 #include "cli/vault.hpp"
 #include "cli/vault_decode.hpp"
 #include "cli/plugins.hpp"
+#include "cli/tailor.hpp"
 #include "cli/timings.hpp"
 #include "sieve/dfa.hpp"
 #include "sieve/plugin.hpp"
@@ -1881,6 +1882,62 @@ int cmd_check(const Args& a)
     return 0;
 }
 
+// The line's filters tailored to one unit of the input (cli/tailor.hpp): each filter's settings
+// searched for those that keep it and set aside the most, then the set of them that can be counted
+// together and leaves the fewest survivors. With --out, the settings file with this line's filters
+// replaced by those found, in compact mode.
+int cmd_tailor(const Args& a)
+{
+    const std::string name = a.get("line", "text");
+    if (name == "books" || name == "binary" || name == "models")
+        throw std::invalid_argument("'sieve tailor' takes the text, image, audio and video lines (not --line " + name + ", yet)");
+    const Line line = make_line(a);
+    FilterConfig cfg = load_filter_config(a);
+    LineFilters& lf = cfg.of(line.kind);
+    const WarpInput w = read_warp_input(line, a);
+    if (w.units.empty()) throw std::invalid_argument("no input to tailor the filters to");
+    const uint32_t which = a.get_positive("unit", 1);
+    if (which > w.units.size())
+        throw std::invalid_argument("--unit " + std::to_string(which) + ": the input makes " + std::to_string(w.units.size()) + " unit(s)");
+    const auto& u = w.units[which - 1];
+    print_header(line);
+    std::cout << "canon        " << w.report.front() << "\n"
+              << "unit         " << which << "/" << w.units.size() << "  " << preview(line, u) << "\n\n";
+    const FilterLine fl = filter_line(line);
+    const TailorResult r = tailor_filters(fl, u, lf);
+    auto bits = [](double b) {
+        std::ostringstream o;
+        o << std::fixed << std::setprecision(1) << b << " bits";
+        return o.str();
+    };
+    for (const TailorChoice& c : r.choices)
+    {
+        std::cout << (c.used ? "[x] " : "[ ] ") << c.name << std::string(std::max<size_t>(1, 24 - c.name.size()), ' ');
+        if (c.bits >= 0) std::cout << bits(c.bits) << " alone";
+        for (const auto& [k, v] : c.values) std::cout << "  " << k << "=" << v;
+        std::cout << "\n";
+        if (!c.used) std::cout << "      " << c.why_not << "\n";
+    }
+    std::cout << "\naddress      " << bits(r.line_bits) << " (the line, unfiltered)\n";
+    if (r.filters.enabled.empty()) std::cout << "tailored     nothing found that keeps this unit and sets anything aside\n";
+    else
+    {
+        const FilterStack st = build_stack(fl, r.filters);
+        std::cout << "tailored     " << bits(r.bits) << " (compact), " << std::fixed << std::setprecision(1) << (r.line_bits > 0 ? r.bits / r.line_bits * 100 : 0)
+                  << "% of the address\n"
+                  << "stack        " << st.provenance() << "\n";
+        if (const Ranker* rk = st.ranker())
+            std::cout << "survivor     " << rk->rank(u).to_decimal() << " of " << rk->count().to_decimal() << "\n";
+    }
+    if (a.has("out"))
+    {
+        if (!r.filters.enabled.empty()) lf = r.filters;
+        cfg.save(std::filesystem::path(a.get("out")));
+        std::cout << "saved        " << a.get("out") << (r.filters.enabled.empty() ? " (the filters as they were)" : "") << "\n";
+    }
+    return 0;
+}
+
 // ---------------------------------------------------------------- books
 
 std::string slurp(const std::string& path)
@@ -2556,7 +2613,7 @@ bool is_command(const std::string& name)
 {
     return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" ||
            name == "version" || name == "models" || name == "train" || name == "measure" ||
-           name == "filters" || name == "check" || name == "bind" || name == "unbind";
+           name == "filters" || name == "check" || name == "tailor" || name == "bind" || name == "unbind";
 }
 
 } // namespace
@@ -2635,6 +2692,7 @@ int main(int argc, char** argv)
         if (a.command == "measure") return cmd_measure(a);
         if (a.command == "filters") return cmd_filters(a);
         if (a.command == "check") return cmd_check(a);
+        if (a.command == "tailor") return cmd_tailor(a);
         if (a.command == "bind") return cmd_bind(a);
         if (a.command == "unbind") return cmd_unbind(a);
         if (a.command == "locate") return cmd_locate(a);
