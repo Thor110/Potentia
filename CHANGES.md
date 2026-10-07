@@ -1,72 +1,57 @@
-# Tailoring the filters to the item in hand (1e, begun)
+# Full mode, and the rotation transform set aside
 
-Against `b322f7c` (balance).
+Against `cf291d1` (tailor search).
+
+## Why the titles went
+Return didn't fail to reset anything. It saves the tailored filters in compact mode, and compact
+mode on a titled line names the content alone; compact set in the setup menu does the same. The
+settings file still said compact after a restart, so the titles stayed gone. As you put it,
+compact should be compact. So the titles get a mode of their own.
 
 ## What changed
-### The search (`tools/cli/tailor.*`)
-The item is the anchor: whatever is chosen, it survives. The search looks for the filters, and
-their settings, that leave the fewest survivors with the item among them, so that its compact
-address is as short as the search can make it.
-- **Each filter on its own:** every filter that can be counted is tried at the settings it has,
-  then each setting in turn over the values it allows:
-  - an integer over its range, coarsely (7 values), then between the best value's neighbours,
-    until they are adjacent;
-  - a text over its choices, or every registered dictionary.
+### A new display mode: full
+- **What it is:** compact, with the titles and covers kept. On the pages, image, audio and video
+  lines, every survivor stands with every title and cover, as on the bare titled line. Its address
+  names its cover, its title and its number among the survivors. Compact still names a thing by
+  its content alone.
+- **The space:** cover × title × survivors, the content being the survivor's number in positional
+  order. Its id is `titled/<content>/survivors=<stack id>+title=...+cover=.../key=<key>/titled-v1`,
+  so scrambled order shuffles the whole of it, domain-separated by the stack. A unit warped in on
+  its own has a blank title and cover.
+- **Other lines:** on books, tracks and movies, which already keep their titles in compact, full is
+  compact. On the models and binary lines it is compact for now. In the guided ordering the content
+  alone is addressed, as in compact.
+- **Settings:** `mode = full` in the settings file. The setup menu cycles off, mark, hide, compact,
+  full, excluded, and the filters window explains full on a line of its own.
+- **On screen:**
+  - the readout says "N full";
+  - the shelf readout and the item page say "full address";
+  - COST's row reads "full: its cover, its title and its number among the survivors".
+- **Tailoring:** Return keeps a line that is full in full mode, and its row says "full, tailored",
+  with the title and cover bits added.
 
-  A value is kept only where the item passes, and of those the one with the fewest survivors.
-- **The set:** from each filter kept, strongest first, a stack is grown by adding every other
-  filter where it can be counted with those already there and removes more. The best stack wins.
-  A filter that counts its own way (title-data, window-data) clashes with the rest, so it makes a
-  stack of one; the automata, which merge, make another.
-- It is a search, not a proof: values are sampled and the set is grown greedily. Every count it
-  reports is exact.
-
-### The hallway: K and Return on the COST tab
-- **K**, holding an item on the pages, image, audio or video line (not guided), runs the search on
-  a worker and shows COST. The tab says how far it has got; K again stops it.
-- **When it is done,** the tab shows the item's **compact, tailored** address (bits, characters,
-  and a share of the address you hold it by) and each filter with the settings found.
-- **Return uses them:**
-  - this line's filters are replaced by those found, in compact mode;
-  - they are saved to the settings file, as the setup menu saves them;
-  - the hallway is built again on the same line, with the item in hand on its COST tab, so the
-    balance shows what the new filters do for it.
-
-### `sieve tailor`
-The same search from the command line. It prints each filter with the settings found and its
-survivors alone, ticked where it was used and otherwise why not; then the tailored compact address
-and the survivor number. `--out` writes the settings file; `--unit N` picks the unit of the input.
-
-## Measured
-| Item | Unfiltered | Tailored | Time | Stack found |
-| :--- | :--- | :--- | :--- | :--- |
-| melody, 8 notes | 53.6 bits | 16.3 bits | 2 s | key-data-v2 (C major pentatonic), melody-lengths-v2, melody-range-v1, melody-ending-v2, melody-rests-v1 |
-| page, 32 characters | 152.2 bits | 67.3 bits | 30 s | words-data-v2 (scowl-en-35), word-cost-v1, letter-triples-v1, max-run-v1 |
-| mono picture, 8×8 | 64 bits | 9.3 bits | 0.3 s | neighbour-agreement-v1 |
+### IDEAS
+- **§15, a new section of deprecated ideas:** the rotation transform and the decimal-places-only
+  format, moved from §3.7. Your note is added: you hoped for a byte at least, and it is one bit at
+  most, and nothing on an address.
+- **§12:** your bitmask entry from the last round, unchanged.
 
 ## Checked
-- **Build:** no warnings (Linux, GCC 13), client and tools.
-- **Unit tests:** 47,426 checks, 0 failures.
-- **CI** (added to the filters step, and run here): it tailors the melody, checks the scale found
-  and the survivor number (4851 of 78125), warps the melody compact under the file written
-  (`012f3`), and reads it back.
-- **Hallway screenshots** (`--tailor PATH` waits for K and saves what Return would apply):
-  - `running.png`: K pressed from the item tab, searching;
-  - `found.png`: the result, with the filters and their settings;
-  - `applied.png`: the saved settings opened, with the melody compact at 16 bits and the balance
-    at Negative 98.1%.
-- **Not run:** I read through the Return path in `app_main` (save, rebuild, the item in hand
-  again) but could not drive it: there is no way to send keys to a live window here. Please try it
-  on Windows: K, wait, Return.
+- **Build:** no warnings (Linux, GCC 13).
+- **Unit tests:** 47,426 checks, 0 failures. `sieve filters` reads `mode = full`.
+- **Screenshots:**
+  - `full-shelf.png`: the audio line full under the tailored melody filters, the shelves titled,
+    the melody survivor 4851 with a 68-digit full address;
+  - `full-cost.png`: its COST tab;
+  - `img-full.png`: the image line full under palette-size-v1;
+  - `menu.png`: the filters window's mode help.
 
 ## Docs
-- **README:** K and Return under the COST tab; `sieve tailor` with an example.
-- **`sieve help tailor`.**
-- **HANDOFF:** an entry, and a file-map row.
-- **IDEAS §12:** the search marked as built, and what is still open.
+- **SPECIFICATIONS:** §9's mode table and §11's titled lines (full mode's space and id).
+- **README:** the mode list now has full, and excluded, which it had left out (so "one of six").
+- **HANDOFF:** an entry.
 
-## Still open in 1e
-- **Several anchors at once** (a map's items, a folder).
-- **The line's own settings** (alphabet, palette, length) as part of the search.
-- **The other lines:** books, models, binary, tracks and movies, and the guided ordering.
-- **Settings searched together** rather than one at a time.
+## Still open
+- **Full mode on the models and binary lines** (their compact titles are blank).
+- **Other modes for other needs,** such as files with file names but no covers.
+- **Filters that judge the titles and covers** themselves (1f: titled lines filtered bottom-up).

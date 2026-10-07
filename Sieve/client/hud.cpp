@@ -358,7 +358,7 @@ void Hallway::draw_hud(int w, int h)
                 std::snprintf(b2, sizeof b2, "%.2f", std::log2(double(line().space.base())));
                 text(20, y, trf("hud.point", {short_address(hex_of(bk)), std::to_string(bk.bits), b1, b2}), 1, ink);
             }
-            else text(20, y, trf(bk.survivor ? "hud.compact_address" : "hud.address", {short_hex_of(bk)}), 1, ink);
+            else text(20, y, trf(!bk.survivor ? "hud.address" : full_here(li_) && !bk.guided ? "hud.full_address" : "hud.compact_address", {short_hex_of(bk)}), 1, ink);
             y += 12;
             std::string verdict;
             if (bk.survivor) verdict = trf("hud.survivor", {bk.survivor_label}) + "   ";
@@ -642,7 +642,7 @@ void Hallway::draw_in_hand(float W, float H)
     }
     hand_view_rect_ = {x, thing_top, pw, std::max(0.0f, cy - thing_top)};
     cy = std::max(cy, y + ph - 110);
-    const std::string kind = bk.survivor ? "hand.compact_address" : "hand.address";
+    const std::string kind = !bk.survivor ? "hand.address" : full_here(li_) && !bk.guided ? "hand.full_address" : "hand.compact_address";
     text(x + 14, cy,
          bk.guided ? trf(kind + ".guided", {std::to_string(bk.bits)}) : trf(kind, {tr(std::string("ordering.") + to_string(mode_))}), 1, ink);
     cy += 12;
@@ -729,7 +729,7 @@ void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float botto
     // are: the address you hold it by, its guided address, and its shortest route.
     {
         double best = held;
-        std::string by = bk.guided ? tr("ordering.guided") : compact ? tr("cost.compact") : tr(std::string("ordering.") + to_string(mode_));
+        std::string by = bk.guided ? tr("ordering.guided") : compact ? tr(full_here(li_) ? "cost.full" : "cost.compact") : tr(std::string("ordering.") + to_string(mode_));
         if (guided && double(guided->bits) < best) best = double(guided->bits), by = tr("ordering.guided");
         if (route && route->bits < best) best = route->bits, by = tr("cost.vla");
         cy = draw_balance(best, file_bits, by, x, cy, pw);
@@ -757,7 +757,10 @@ void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float botto
     // The same number stored as raw bytes, eight bits to a byte: half the hex, and what an
     // installer file holds (SPECIFICATIONS §12.2).
     row(tr("cost.raw"), bits, trf("cost.bytes", {digits_in(bits, 8)}), tr("cost.raw.note"));
-    if (compact) row(tr("cost.compact"), compact_bits, trf("cost.chars", {digits_in(compact_bits, 4)}), tr("cost.compact.note"));
+    // (In full mode, the survivors with their titles and covers: the same number as the rows above.)
+    if (compact)
+        row(tr(full_here(li_) ? "cost.full" : "cost.compact"), compact_bits, trf("cost.chars", {digits_in(compact_bits, 4)}),
+            tr(full_here(li_) ? "cost.full.note" : "cost.compact.note"));
     if (guided)
         row(tr("ordering.guided"), double(guided->bits), trf("cost.chars", {std::to_string(guided->hex.size())}),
             double(guided->bits) < bits * 0.9 ? tr("cost.likely") : tr("cost.unlikely"));

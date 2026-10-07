@@ -76,7 +76,10 @@ void Hallway::apply_tailored(bool& quit)
         return;
     }
     FilterConfig next = filters_;
-    next.lines[size_t(line().kind)] = j->result.filters;
+    LineFilters& lf = next.lines[size_t(line().kind)];
+    const bool full = lf.mode == FilterMode::Full; // a line kept full stays full
+    lf = j->result.filters;
+    if (full) lf.mode = FilterMode::Full;
     tailored_ = std::move(next);
     tailored_unit_ = j->unit;
     request_ = Request::Tailored;
@@ -153,11 +156,15 @@ float Hallway::draw_tailor(const Book& bk, double unit_bits, float x, float cy, 
         text(x + 14, cy, tr("cost.tailor.none"), 1, dim);
         return cy + 20;
     }
-    // The compact address the filters found would give it, against its address now.
-    text(x + 14, cy, tr("cost.tailor.found"), 1, ink);
-    text(x + 260, cy, trf("cost.bits", {fixed(r.bits, 0)}), 1, ink);
-    text(x + 380, cy, trf("cost.chars", {std::to_string(int(std::ceil(r.bits / 4)))}), 1, ink);
-    if (unit_bits > 0) text(x + 500, cy, trf("cost.percent", {fixed(r.bits / unit_bits * 100.0, 1)}), 1, ink);
+    // The address the filters found would give it, against its address now: compact, or in a line
+    // kept full, with the bits of its title and cover as well (Return keeps it full).
+    const TitledSpace* titled = titled_[size_t(li_)].get();
+    const bool full = filters_.lines[size_t(line().kind)].mode == FilterMode::Full && titled;
+    const double bits = r.bits + (full ? (titled->size().log10_approx() - titled->content_size().log10_approx()) * 3.321928094887362 : 0.0);
+    text(x + 14, cy, tr(full ? "cost.tailor.found.full" : "cost.tailor.found"), 1, ink);
+    text(x + 260, cy, trf("cost.bits", {fixed(bits, 0)}), 1, ink);
+    text(x + 380, cy, trf("cost.chars", {std::to_string(int(std::ceil(bits / 4)))}), 1, ink);
+    if (unit_bits > 0) text(x + 500, cy, trf("cost.percent", {fixed(bits / unit_bits * 100.0, 1)}), 1, ink);
     text(x + 580, cy, fit(trf("cost.tailor.filters", {std::to_string(r.filters.enabled.size())}), pw - 594, 1), 1, dim);
     cy += 14;
     // The filters, each with the settings found.

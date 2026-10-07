@@ -664,6 +664,43 @@ are cheap and because they are the sort of thing that is lost otherwise.
     once (a map's items, a folder), the line's own settings (alphabet, palette, length) as part of
     the search, the books, models, binary, tracks and movies lines, and settings searched together
     rather than one at a time.
+  - **The description travels too (Edward's example, 7 October 2026).** A stack tailored to one
+    item is part of that item's name unless the reader has it already: which filters are ticked,
+    and each setting, are bits like the address's. Priced at one bit for each filter the line
+    offers (a mask) and log2 of the values each setting allows, measured on two items:
+    - "welcome to the sieve", 32 characters: 152.2 bits unfiltered; tailored, 80.4 bits of
+      compact address plus 58.4 of stack (19 of mask; dictionary 2.6, word-cost's rate and slack
+      13.6, letter-triples 3.3, max-run's max_run 19.9), 138.8 in all: a saving of 13 bits, not 72.
+    - the melody `A4q C5q D5q E5q G5q A4q C5q E5q`: 53.6 bits unfiltered; tailored, 16.3 plus 59.9
+      of stack (11 of mask, 48.9 of settings), 76.2 in all: 22.6 bits *longer* than no filters.
+
+    So the search should minimise the address plus the stack's description (a two-part code, the
+    minimum description length), and COST should show both; a setting left at its default could
+    be priced at a bit or so rather than at its whole range. And the stacks worth most are those
+    agreed in advance, which is the next idea.
+  - **Predefined stacks, named by a bitmask (Edward, 7 October 2026; future development).**
+    Stacks of filters predefined for specific use cases, each with its settings fixed, pinned and
+    versioned as the canonicalisation rules are, and agreed by every reader. An address is then
+    (mask, rotation, item): the mask chooses the stack, the rotation says where on the line's loop
+    of survivors (which shelf), and the item is its number on that shelf. Edward's reference
+    example is the hallway's starting page, "welcome to the sieve", written as "1 - 0 - 112": stack
+    1, rotation 0, item 112 on the shelf. That is the idealised form: the filters are not needed to
+    find the page at all, but under a stack made for its use case it would stand on the first
+    shelf. What each part must carry, measured today:
+    - without filters the page is item 112 on the shelf of tile 427158...2915, a number 44 digits
+      long, so the rotation carries 152 bits;
+    - under the stack the search tailors to it, it is survivor 1577089591533231767573498 of
+      1626339824884908067816628 (80.4 bits), so the rotation still carries 73 of them;
+    - rotation 0 is reached when the stack leaves the page among its first shelf's 128 survivors.
+      A predefined stack does that only for the items its use case predicts; a stack made for this
+      page alone would hold the page's information in its settings (above), so the bits would
+      move into the mask's meaning rather than vanish.
+
+    Short of needing no mask at all, that is the limit: the bits that choose the stack, plus what
+    the stack leaves to say about the item. Filters are not the only way down: the guided ordering
+    under the same stack names this page in 52 bits, because the model predicts English. Averaged
+    over every item, no scheme beats the line's own size; the reduction is for the items the shared
+    choices predict, which is what a use case is.
 
 ## 13. Composition dimensions (discussed 5–6 October 2026; built 6 October, but for what is still open below)
 
@@ -832,3 +869,26 @@ predicts, and the address pays only for what it did not predict.
 - **The same pattern beyond UVs.** Textures that are procedural (noise, gradients, tiles) plus a
   delta, and models from generators plus a delta, are the same idea; UVs are the cleanest first case,
   because unwrapping is so often left as the algorithm made it.
+
+## 15. Deprecated ideas
+
+Ideas evaluated and set aside, kept with their reasons so the questions keep their answers.
+
+**15.1 A rotation transform, and numbers that hold only their decimal places (Edward, 7 October
+2026; deprecated).** The proposal: a file at 31.55591717178 degrees is named as "the rules, the line turned by -0.55591717178
+degrees, and 31": a global setting that turns the circle so that the file lands on a whole number.
+The turn has to travel with the address, and it is the same digits: 0.55591717178 is what the
+decimals carried before, so "31 after a turn of -0.55591717178" is as long as "31.55591717178",
+plus the cost of saying a turn follows. A turn agreed once for every file (a setting of the line,
+not of the file) costs nothing to send, but it is a fixed shuffle of the circle, like the
+scrambled ordering's key: it moves every file the same way, so for every file it brings onto a
+whole degree it takes another off (pigeonhole), and on average names nothing shorter. It is §3.6
+again from the other side: what an angle saves in the address it spends in the angle.
+The variant raised with it, **a number that stores only its decimal places**, has the same
+answer. Leaving out the whole degrees (31 of 360, log2(360) = 8.5 bits) works only where the
+reader already knows them; otherwise they are part of the address. "Pay only for the precision you
+need" is already how bearings work here: COST's variable length addressing writes a bearing to as
+few places as land near the unit (up to 20) and the walk carries the rest, leading zeros dropped.
+(IEEE 754's "hidden bit", the leading 1 of a normalised number left unstored, saves exactly one
+bit, because it is always 1.) Edward had hoped for a byte at least; it is one bit at most, and on
+an address nothing, so it is not worth a format of its own.

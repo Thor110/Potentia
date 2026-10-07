@@ -36,8 +36,10 @@ namespace sieve::cli {
 
 // Excluded is Hide turned round: the units that pass are left out and the ones that fail keep
 // their places, so what a stack sets aside can be walked and checked, each with the filter that
-// rejected it.
-enum class FilterMode { Off, Mark, Hide, Compact, Excluded };
+// rejected it. Full is Compact with the titled lines' titles and covers kept (SPECIFICATIONS
+// §11): the survivors, closed up, each with every title and cover; where a line has no titles of
+// its own to keep, or keeps them in compact already (books, tracks, movies), it is Compact.
+enum class FilterMode { Off, Mark, Hide, Compact, Excluded, Full };
 const char* to_string(FilterMode m);
 FilterMode filter_mode_from_string(const std::string& s);
 

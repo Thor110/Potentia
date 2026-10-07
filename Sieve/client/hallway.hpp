@@ -1562,6 +1562,12 @@ private:
     const BigUint& line_units() const;
     // Every titled line's space (null for books and binary), built with the lines.
     std::array<std::unique_ptr<TitledSpace>, kLines> titled_;
+    // Full mode (filter_config.hpp), on the pages, image, audio and video lines: compact, with
+    // each survivor's titles and covers kept. modes_ holds Compact for it, so every compact rule
+    // applies, and full_ says that the shelf is this titled space over the survivors instead of
+    // the survivors alone: Nc * Nt * survivors, its content the survivor's number (SPECIFICATIONS §11).
+    std::array<std::unique_ptr<TitledSpace>, kLines> full_;
+    bool full_here(int i) const { return full_[size_t(i)] && effective_mode(i) == FilterMode::Compact; }
     int book_page_ = 0;                // the page open in a book in hand
     Synth synth_;
 };

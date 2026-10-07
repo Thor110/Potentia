@@ -61,7 +61,7 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
             c.joined = joined_line(unit_line(base), n);
             c.strands = strands_of(unit_line(base));
             const CompositionFilters& cf = tracks ? filters.tracks : filters.movies;
-            modes_[li] = cf.mode;
+            modes_[li] = cf.mode == FilterMode::Full ? FilterMode::Compact : cf.mode; // (their titles are kept in compact)
             try
             {
                 std::optional<sieve::FilterLine> title_line;
@@ -89,11 +89,11 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
     }
     // The binary line's filters: by the files' own kinds (binary-kind-v1).
     binary_filters_ = filters.binary;
-    modes_[kBinaryLine] = filters.binary.mode;
+    modes_[kBinaryLine] = filters.binary.mode == FilterMode::Full ? FilterMode::Compact : filters.binary.mode; // (full: not yet)
     rebuild_binary_sieve();
     // The models line's filters (not-a-file-v1), on a model's own number.
     model_filters_ = filters.models;
-    modes_[kModelsLine] = filters.models.mode;
+    modes_[kModelsLine] = filters.models.mode == FilterMode::Full ? FilterMode::Compact : filters.models.mode; // (full: not yet)
     rebuild_model_sieve();
     // Each line's filter stack and mode (sieve-filters.ini, edited in the setup menu).
     // (filters.lines[] is by kind, text image audio video, and the arrays here by door.)
@@ -101,7 +101,8 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
     {
         const int i = line_of(k);
         const LineFilters& lf = filters.lines[size_t(k)];
-        modes_[i] = lf.mode;
+        const bool full = lf.mode == FilterMode::Full;
+        modes_[i] = full ? FilterMode::Compact : lf.mode;
         try
         {
             stacks_[i] = build_stack(unit_line(k), lf);
@@ -122,6 +123,16 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
                 const Line& ln = unit_line(k);
                 compact_[i] = std::make_unique<CompactLine>(*rk, ln.space.key(), stacks_[i].id(),
                                                             ln.guided ? ln.guided->model_ptr() : nullptr);
+                // Full: the titled space over the survivors, its content each survivor's number in
+                // positional order, its id naming the stack the survivors are of.
+                if (full && titled_[size_t(i)])
+                {
+                    const TitledSpace& t = *titled_[size_t(i)];
+                    full_[size_t(i)] = std::make_unique<TitledSpace>(t.title_space(), t.cover_space(), rk->count(),
+                                                                     ln.space.symbols_id() + "/L" + std::to_string(ln.space.unit_length()) +
+                                                                         "/survivors=" + stacks_[i].id(),
+                                                                     ln.space.key());
+                }
             }
         }
         catch (const std::exception& e)
@@ -130,7 +141,7 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
         }
     }
     // The books line: a stack per part (cover, title, and all pages as one text), one mode.
-    modes_[kBooksLine] = filters.books.mode;
+    modes_[kBooksLine] = filters.books.mode == FilterMode::Full ? FilterMode::Compact : filters.books.mode; // (titles kept in compact)
     try
     {
         book_stacks_ = build_book_stacks(image, text, book_pages, filters.books);
@@ -337,7 +348,7 @@ std::string Hallway::compute_filter_status() const
     const FilterStack& st = stack();
     if (st.empty()) return tr("hud.filters.none");
     const FilterMode m = effective_mode();
-    std::string s = trf("hud.filters", {std::to_string(st.size()), tr(std::string("mode.") + to_string(m))});
+    std::string s = trf("hud.filters", {std::to_string(st.size()), tr(std::string("mode.") + to_string(full_here(li_) ? FilterMode::Full : m))});
     if (m == FilterMode::Compact) s += trf("hud.filters.units", {short_big(st.ranker()->count())});
     else if (m == FilterMode::Excluded && st.ranker())
         s += trf("hud.filters.excluded", {short_big(BigUint(line().space.size()) -= st.ranker()->count())});
@@ -364,7 +375,7 @@ BigUint Hallway::units_of(int i) const
     if (is_composition(i))
         return effective_mode(i) == FilterMode::Compact ? comps_[size_t(i)].sieve->count() : comps_[size_t(i)].space->size();
     if (guided_ && line_at(i).guided) return BigUint::pow(2, zoom_);
-    if (effective_mode(i) == FilterMode::Compact) return compact_[i]->count();
+    if (effective_mode(i) == FilterMode::Compact) return full_here(i) ? full_[size_t(i)]->size() : compact_[i]->count();
     return titled_[size_t(i)] ? titled_[size_t(i)]->size() : line_at(i).space.size();
 }
 
@@ -644,6 +655,20 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
                 }
             }
         }
+        else if (compact_here && !guided_on() && full_here(li_))
+        {
+            // Full: the survivors, each with every title and cover, as a titled line (below) but
+            // with its content the survivor's number, in positional order.
+            const TitledSpace& ts = *full_[size_t(li_)];
+            const TitledSpace::Parts tp = ts.parts_at(b.index, mode_);
+            b.cover = tp.cover;
+            b.title = tp.title;
+            b.unit = compact().unit_at(tp.content, AddressMode::Positional);
+            b.survivor = true;
+            b.survivor_number = tp.content;
+            b.hex = ts.hex_of(b.index);
+            b.fraction = b.index.is_zero() ? 0.0 : std::pow(10.0, b.index.log10_approx() - ts.size().log10_approx());
+        }
         else if (compact_here && !guided_on())
         {
             // Only survivors stand here: slot i holds the survivor whose compact address is i
@@ -727,7 +752,7 @@ const TitledSpace* Hallway::titled_of(int i) const
     if (i < 0 || i >= kLines || !titled_[size_t(i)]) return nullptr;
     if (i == kModelsLine || i == kBinaryLine) return titled_[size_t(i)].get();
     if (guided_ && line_at(i).guided) return nullptr; // guided order: the content alone, for now
-    if (effective_mode(i) == FilterMode::Compact) return nullptr; // compact: the content's survivors, for now
+    if (effective_mode(i) == FilterMode::Compact) return full_here(i) ? full_[size_t(i)].get() : nullptr; // compact: the content's survivors alone
     return titled_[size_t(i)].get();
 }
 
@@ -760,7 +785,13 @@ BigUint Hallway::index_of(const Space::Digits& unit)
         const CompositionSpace::Parts p = composition_of(unit);
         return effective_mode() == FilterMode::Compact ? comp().sieve->index_of(p, mode_) : comp().space->index_of(p, mode_);
     }
-    if (effective_mode() == FilterMode::Compact) return compact().index_of(unit, mode_);
+    if (effective_mode() == FilterMode::Compact)
+    {
+        // Full: a unit warped in on its own carries a blank title and cover there too.
+        if (const TitledSpace* ts = full_here(li_) ? full_[size_t(li_)].get() : nullptr)
+            return ts->index_of({ts->blank_cover(), ts->blank_title(), compact().ranker().rank(unit)}, mode_);
+        return compact().index_of(unit, mode_);
+    }
     // On a titled line a unit warped in on its own carries a blank title and a blank cover.
     if (const TitledSpace* ts = titled_here())
         return ts->index_of({ts->blank_cover(), ts->blank_title(), BigUint::from_digits(unit, line().space.base())}, mode_);
@@ -1170,7 +1201,8 @@ bool Hallway::go_to(std::string input)
         else if (on_binary()) index = effective_mode() == FilterMode::Compact ? binary_sieve_->parse(input) : titled_[kBinaryLine]->parse(input);
         else if (on_books()) index = effective_mode() == FilterMode::Compact ? book_sieve_->parse(input) : books_->parse(input);
         else if (on_composition()) index = effective_mode() == FilterMode::Compact ? comp().sieve->parse(input) : comp().space->parse(input);
-        else if (effective_mode() == FilterMode::Compact) index = compact().parse(input); // a compact address, as the books show
+        else if (effective_mode() == FilterMode::Compact) // a compact address, as the books show (full: with its title and cover)
+            index = full_here(li_) ? full_[size_t(li_)]->parse(input) : compact().parse(input);
         else if (const TitledSpace* ts = titled_here()) index = ts->parse(input);
         else index = BigUint::from_digits(line().space.parse_address(input), line().space.base());
         trail_.clear();

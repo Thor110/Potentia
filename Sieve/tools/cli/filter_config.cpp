@@ -120,6 +120,7 @@ const char* to_string(FilterMode m)
     case FilterMode::Hide: return "hide";
     case FilterMode::Compact: return "compact";
     case FilterMode::Excluded: return "excluded";
+    case FilterMode::Full: return "full";
     }
     return "off";
 }
@@ -131,7 +132,8 @@ FilterMode filter_mode_from_string(const std::string& s)
     if (s == "hide") return FilterMode::Hide;
     if (s == "compact") return FilterMode::Compact;
     if (s == "excluded") return FilterMode::Excluded;
-    throw std::invalid_argument("filter mode must be off, mark, hide, compact or excluded, not '" + s + "'");
+    if (s == "full") return FilterMode::Full;
+    throw std::invalid_argument("filter mode must be off, mark, hide, compact, full or excluded, not '" + s + "'");
 }
 
 const FilterValues& LineFilters::values_of(const std::string& name) const
@@ -256,6 +258,7 @@ void FilterConfig::save(const fs::path& path) const
     o << "; Sieve filter stack, one section per line. Edited by the hallway's setup menu (magnifying\n"
       << "; glass beside each line); hand edits are welcome.\n"
       << ";   mode     off | mark (dim failing books) | hide (leave them out) | compact (only survivors)\n"
+      << ";            | full (only survivors, each with its titles and covers)\n"
       << ";            | excluded (only the books that fail, in their places)\n"
       << ";   filters  the ticked filters, comma-separated (list them with: sieve filters --line LINE)\n"
       << "; A [line.filter] section holds that filter's parameters.\n";

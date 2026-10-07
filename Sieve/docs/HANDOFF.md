@@ -1821,3 +1821,27 @@ Edward's design (the bar) and the first part of 1e.
   searching and when done, and the file it saved, opened, with the item compact at 16 bits. The
   Return path in app_main was read, not driven: there is no way to send keys to a live window
   here.
+
+### Full mode, and the rotation transform set aside (7 October 2026)
+
+- **Why:** Return (COST's tailoring) saves compact mode, and compact on a titled line names the
+  content alone, so the titles and covers went, and stayed after a restart, as the settings file
+  said compact. Edward: "compact should be compact"; some files need titles or file names, some do
+  not. So a mode of its own.
+- **`FilterMode::Full`** (`filter_config.*`, `full` in the settings file; the menu cycles off,
+  mark, hide, compact, full, excluded). The hallway stores it as Compact in `modes_` (so every
+  compact rule applies) and keeps `full_[i]`, a `TitledSpace` over the survivors: title and cover
+  spaces from `titled_[i]`, content size the survivor count, shape `<symbols>/L<n>/survivors=<stack
+  id>`. `full_here(i)`; `titled_of` returns it in compact; `units_of`, the book construction (content
+  = survivor number, unit by `CompactLine::unit_at(..., Positional)`), `index_of` (blank title and
+  cover) and G's parse use it. Books, tracks and movies: full is compact (their titles are kept
+  there); models and binary: compact for now. Guided: the content alone, as in compact.
+- **COST:** the row reads "full" (cover, title and survivor number); the readout and the item page
+  say "full address". Tailoring keeps a full line full on Return, and its row adds the title and
+  cover bits ("full, tailored").
+- **Docs:** SPECIFICATIONS §9 (the mode table) and §11 (titled lines in full mode, its id);
+  README's mode list (full, and excluded, which it had left out); IDEAS §15, a new section of
+  deprecated ideas, holds the rotation transform (was §3.7).
+- **Checked:** the audio line full with the tailored melody filters (survivor 4851 with its title
+  and cover, a 68-digit address, the shelves titled) and the image line full under
+  palette-size-v1.
