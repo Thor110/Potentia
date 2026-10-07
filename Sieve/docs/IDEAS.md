@@ -775,7 +775,9 @@ is fully described by what made it:
   pinned, versioned id, as the canonicalisation rules are: `unwrap-v1`) and its settings;
 - for a map someone then adjusted, that and a list of the adjustments: which UVs moved, and by how
   much (a delta);
-- for a map made wholly by hand, the UVs themselves, as now.
+- for a map made wholly by hand, the same test: it is compared against the unwrap algorithms, and
+  if one of them plus a delta is provably smaller than its UVs, it is stored that way; if none is,
+  it is stored as its UVs, as now.
 
 So a world's UVs need not be stored where an algorithm can make them: generate the bulk, then apply
 the delta over the top. That is "throwing more memory at the problem" put to use: computation and
@@ -787,18 +789,23 @@ is stored as model + texture + UV algorithm (+ delta where needed), and the engi
 UVs when it loads it. Once rebuilt (and cached) they take as much memory as the original UVs did,
 and rebuilding costs some computation and working memory; what is saved is what sits on disk and
 goes over the wire. The library is mixed: each asset keeps whichever form is smaller, the
-generated description where an algorithm made its UVs (or nearly), its UVs in their original form
-where none did.
+generated description where an algorithm and its delta come out smaller, however the UVs were
+made, and its UVs in their original form where none does.
 
 **What the reduction is, exactly.** It is the stored size, and it is not a reduction over every UV
-map that could exist: by
-counting, no description can make every one of them shorter (there are as many maps as descriptions
-of their length). It shortens the maps an algorithm makes, from O(vertices) coordinates to a
-constant (an id and its settings), and those close to one, by the size of their delta; every other
-map costs one more bit than now (a flag saying "raw UVs follow"). The maps people actually use are
-overwhelmingly of the first two kinds, which is the point. It is the same trade the guided
-ordering makes for text (SPECIFICATIONS §4.2): a model predicts, and the address pays only for what
-it did not predict.
+map that could exist: by counting, no description can make every one of them shorter (there are as
+many maps as descriptions of their length). It shortens the maps an algorithm makes, from
+O(vertices) coordinates to a constant (an id and its settings), and those close to one, by the size
+of their delta. How a map was made does not decide its form: a hand-made map that happens to lie
+close to what some algorithm gives is stored as that algorithm and a delta too. The comparison is
+exact, not estimated: the encoder builds both forms, measures them and keeps the smaller, so a map
+is stored raw only where every algorithm and setting it tried came out larger, and no map costs more
+than one bit beyond its UVs (a flag saying "raw UVs follow"). The price is computation when a map
+is stored: trying the algorithms, and their settings, against it. "Provably smaller" means smaller
+than the forms tried; a search that tries more settings can only find more maps it shortens. The
+maps people actually use are overwhelmingly made by an algorithm or close to one, which is the
+point. It is the same trade the guided ordering makes for text (SPECIFICATIONS §4.2): a model
+predicts, and the address pays only for what it did not predict.
 
 **What it would take.**
 - **A deterministic, pinned unwrap.** The same description must give the same UVs on every machine,
