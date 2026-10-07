@@ -682,7 +682,10 @@ are cheap and because they are the sort of thing that is lost otherwise.
       file's way: `x86` (programs, the x86 filter, then LZMA2), `raw`, or `lines K` (a text made
       of some of file K's lines, as a mask: each SCOWL list but the largest); two LZMA2 streams;
       unpacked by the LZMA SDK in every program that installs, and independently by the oracle.
-      A release-shaped folder: 20.00% of its size, against 21.17% for one LZMA2 stream. A release's
+      A release-shaped folder: 20.00% of its size, against 21.17% for one LZMA2 stream. Edward's
+      Windows release, the installer program: 7,403,749 bytes packed, against 7,448,947 carrying a
+      7z of the folder (`--seven-zip`), 45,198 bytes (0.61%) smaller, although 7-Zip uses BCJ2 on
+      the programs. A release's
       files are no line's items, so the weighing's item ways are not among v4's yet: they need the
       lines in `sieve-install` (pages and melodies are core; pictures need the PNG writer). Still
       open for v4: item ways, and "made from another file" ways beyond lines (a few bytes changed:
@@ -900,11 +903,56 @@ predicts, and the address pays only for what it did not predict.
   delta, and models from generators plus a delta, are the same idea; UVs are the cleanest first case,
   because unwrapping is so often left as the algorithm made it.
 
-## 15. Deprecated ideas
+## 15. An AI model's state space (Edward, 7 October 2026)
+
+**The idea.** A dimension made from a model file: given a language model's file, its tokens are the
+line's symbols, a unit is a run of tokens, and the model's weights order the line. At every place,
+the weights give a probability for every token that could come next; a run of tokens the model
+expects is near the front of the line and named in few bits, and one it does not expect is far
+out and named in many. Choose another model file and the same texts stand in another order.
+
+**It is the guided ordering with a far stronger model.** That ordering exists (SPECIFICATIONS
+§4.2): a text's address is its arithmetic code under a model, short where the model predicts it.
+Today's model is small and pinned, a character model of order 5 trained on Project Gutenberg
+(`gutenberg-lower27-o5`), and it names English at about 1.8 bits a character against the 4.75 of
+the plain line (the README's examples). A large language model predicts English far better:
+published experiments that drive an arithmetic coder with one report about one bit a character or
+less, roughly half of what the character model does. So the same idea, with a model file in place
+of the character model, would name likely text in about half the bits again, and the COST tab's
+balance and the tailoring search (§12) would weigh it like any other way.
+
+**What it would take.**
+- **Reading the file:** the formats models are published in (GGUF, safetensors), the tokenizer
+  from the file itself, and the model's id being the file's SHA-256, so an address says which model
+  it is taken under, as `canon-text-v2` and the pinned character model do now.
+- **The same probabilities everywhere, to the bit.** An arithmetic code decodes only if the reader
+  computes exactly the probabilities the writer did. Inference in floating point differs from one
+  processor, library or thread count to another, so a model line needs inference pinned as the
+  canonicalisation rules are: integer or fixed-point arithmetic on a quantised model, specified
+  exactly, with an independent implementation in the oracle to check it. That is the hard part, and
+  the part that makes it Sieve's rather than another compressor's.
+- **Text to tokens as the canon step.** One text can be split into tokens in more than one way;
+  the line takes the tokenizer's own split as canonical, so a text has one unit, and the
+  other splits are units of their own (or set aside by a filter).
+- **Time.** Every token costs one pass through the model, writing and reading alike, so reading an
+  address of a page means running the model over the page. A small model (tens of megabytes) on a
+  processor is quick enough to hold an item; walking the shelves, where every item in view is
+  decoded, wants the units short or the model smaller.
+- **The model is the shared agreement.** A reader must have the same file, so the model is paid for
+  once, as the dictionaries are, and pays back over every text named under it (§12's two-part
+  code: a model file of gigabytes is worth it only to whoever names a great deal of text).
+- **Filters as before:** token-level filters and compact mode over the token line, ranked under the
+  model as the guided ordering's survivors are now.
+
+**Another reading, for the record.** A dimension whose units are the weights themselves (every
+model of one shape) would name a model by its weights: the binary line's files again, as long as
+the files. It is the predictive reading above that shortens anything.
+
+## 16. Deprecated ideas
 
 Ideas evaluated and set aside, kept with their reasons so the questions keep their answers.
 
-**15.1 A rotation transform, and numbers that hold only their decimal places (Edward, 7 October
+**16.1 A rotation transform, and numbers that hold only their decimal places (Edward, 7 October
 2026; deprecated).** The proposal: a file at 31.55591717178 degrees is named as "the rules, the line turned by -0.55591717178
 degrees, and 31": a global setting that turns the circle so that the file lands on a whole number.
 The turn has to travel with the address, and it is the same digits: 0.55591717178 is what the

@@ -1841,7 +1841,7 @@ Edward's design (the bar) and the first part of 1e.
   say "full address". Tailoring keeps a full line full on Return, and its row adds the title and
   cover bits ("full, tailored").
 - **Docs:** SPECIFICATIONS §9 (the mode table) and §11 (titled lines in full mode, its id);
-  README's mode list (full, and excluded, which it had left out); IDEAS §15, a new section of
+  README's mode list (full, and excluded, which it had left out); IDEAS §16 (§15 when it was made), a new section of
   deprecated ideas, holds the rotation transform (was §3.7).
 - **Checked:** the audio line full with the tailored melody filters (survivor 4851 with its title
   and cover, a 68-digit address, the shelves titled) and the image line full under

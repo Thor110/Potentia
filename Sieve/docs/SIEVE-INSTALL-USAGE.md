@@ -45,6 +45,10 @@ and `sieve-install`, every data folder; Linux, 7 October 2026), 32,887,678 bytes
 | one LZMA2 stream, preset 9e (what 7z does, without its container) | 6,961,919 | 21.17% |
 | **`sieve-manifest-v4`, the installer** | **6,577,790** | **20.00%** |
 
+And a Windows release (Edward, 7 October 2026), the installer program from the same build:
+carrying a solid 7z of the folder (`make_release.py --seven-zip`), 7,448,947 bytes; packed (v4),
+**7,403,749 bytes**, 45,198 bytes (0.61%) smaller.
+
 The x86 filter takes 258 KB off the three programs; the masks take the five smaller SCOWL lists
 from what LZMA2 makes of them down to about 180 KB of masks. 7-Zip's own Ultra uses BCJ2 rather
 than BCJ on programs, which does a little better on them than the x86 filter does, so set the real
