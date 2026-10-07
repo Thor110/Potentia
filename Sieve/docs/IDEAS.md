@@ -681,7 +681,8 @@ is a setting, as a book holds pages of any length.
   - **A tile dimension for images:** pictures made of small tiles, as the vault's PDQ check
     reads a picture in blocks. Tiles reduce the combinations a picture can have to those its
     tiles allow. It has no name yet.
-  - **A world space for models:** a higher dimension that composes models and textures.
+  - **A world space for models:** a higher dimension that composes models and textures (§14:
+    what it needs for UVs).
 - **Seam filters:** each composition gets filters at its joins: sound that doesn't jump between
   seconds, a key kept across bars, frames that carry on from one video unit to the next.
 - **The same content in two places:** a base line set long enough to hold a whole composition
@@ -752,3 +753,64 @@ is a setting, as a book holds pages of any length.
 - **The `sieve` tool reads MIDI files** only on `notes3` lines; on `notes104` and `notes2` a `.mid`
   given to `warp --file` (or `bind --file`) is read as notation and refused. The hallway's J reads
   MIDI on every note set (`midi_to_notation`); the tool should too.
+
+---
+
+## 14. Worlds, and UVs described by how they were made (Edward, 7 October 2026)
+
+**Worlds.** A future dimension of compositions of models, as books are of pages and tracks of audio:
+a world places models and puts textures on them (§13, "a world space for models").
+
+**It needs UVs.** A UV map says where each point of a model's surface falls on its texture: a pair
+of coordinates for each vertex of each face. Without them a world cannot texture a model. A line of
+every possible UV map is easy to define and vast, and UVs already exist in Sieve in another form:
+the `vt` lines of an `.obj` file, a page of the `ascii96` text line.
+
+**Edward's insight.** Most UV maps made now are not drawn by hand. An algorithm unwraps the mesh
+(automatic seams, projection, packing into the square) and the result is used as it is. Such a map
+is fully described by what made it:
+
+- the mesh (an address on the models line), the texture it is packed for (an address on the
+  image line, which can matter for packing: its size and aspect), the unwrapping algorithm (a
+  pinned, versioned id, as the canonicalisation rules are: `unwrap-v1`) and its settings;
+- for a map someone then adjusted, that and a list of the adjustments: which UVs moved, and by how
+  much (a delta);
+- for a map made wholly by hand, the UVs themselves, as now.
+
+So a world's UVs need not be stored where an algorithm can make them: generate the bulk, then apply
+the delta over the top. That is "throwing more memory at the problem" put to use: computation and
+memory spent to rebuild what can be rebuilt, so that only what cannot is written down.
+
+**Where it pays: the storage footprint.** The aim is not a shorter UV map in use but less to keep:
+if Sieve's back end grows into an operating system and its front end into a game engine, an asset
+is stored as model + texture + UV algorithm (+ delta where needed), and the engine rebuilds the
+UVs when it loads it. Once rebuilt (and cached) they take as much memory as the original UVs did,
+and rebuilding costs some computation and working memory; what is saved is what sits on disk and
+goes over the wire. The library is mixed: each asset keeps whichever form is smaller, the
+generated description where an algorithm made its UVs (or nearly), its UVs in their original form
+where none did.
+
+**What the reduction is, exactly.** It is the stored size, and it is not a reduction over every UV
+map that could exist: by
+counting, no description can make every one of them shorter (there are as many maps as descriptions
+of their length). It shortens the maps an algorithm makes, from O(vertices) coordinates to a
+constant (an id and its settings), and those close to one, by the size of their delta; every other
+map costs one more bit than now (a flag saying "raw UVs follow"). The maps people actually use are
+overwhelmingly of the first two kinds, which is the point. It is the same trade the guided
+ordering makes for text (SPECIFICATIONS §4.2): a model predicts, and the address pays only for what
+it did not predict.
+
+**What it would take.**
+- **A deterministic, pinned unwrap.** The same description must give the same UVs on every machine,
+  to the bit, or addresses mean different things in different places. Blender's Smart UV Project or
+  xatlas cannot be borrowed as they are (their output depends on their version and on floating
+  point); Sieve would pin its own, specified exactly (integer or exactly-rounded arithmetic), as it
+  pins `canon-text-v2`. Maps made by other tools' unwrappers then come in as "ours plus a delta",
+  and how large that delta is decides how much is saved: worth measuring on real assets (§7.1's
+  game-format parsers would supply them).
+- **An ordering for it.** The raw UV line stays (every map has its place); a derived ordering puts
+  the generated maps first, as the guided line puts likely text first, so a generated map's address
+  is its algorithm, settings and delta.
+- **The same pattern beyond UVs.** Textures that are procedural (noise, gradients, tiles) plus a
+  delta, and models from generators plus a delta, are the same idea; UVs are the cleanest first case,
+  because unwrapping is so often left as the algorithm made it.
