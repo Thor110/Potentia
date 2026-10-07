@@ -124,6 +124,11 @@ FilterLine binary_filter_line(uint64_t max_bytes);
 // and judges for pictures (their PNG, one pixel a pixel), melodies (their MIDI file), models
 // (their .obj) and pages of other alphabets. Any line may be null (its form is then not known).
 BinaryItems binary_items(const Line* pages, const Line* image, const Line* video, const Line* audio, const ModelSpace* models);
+// The unit of `line` whose file (unit_file, one pixel a pixel) is exactly `file`, byte for byte, or
+// nothing: what not-an-item-v1 asks of a file, with the unit kept. Pages (UTF-8 of the line's
+// length, every character in its alphabet), pictures and films (their PNG, frames side by side a
+// pixel apart) and melodies (their MIDI file); not yet sound (pcm) or models.
+std::optional<std::vector<uint32_t>> item_of(const Line& line, const std::vector<uint8_t>& file);
 // Pages of `length` symbols of an alphabet as files: a pattern when every symbol is one byte.
 std::optional<KindCounter::Pattern> page_pattern(const Alphabet& a, uint32_t length);
 BinarySieve build_binary_sieve(const BinarySpace& space, const LineFilters& settings, const BinaryItems* items = nullptr);

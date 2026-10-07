@@ -132,7 +132,7 @@ thirty-two-column shelf is half of it; never larger than one.
 | `client/door_portal.cpp`, `client/binary_edge.cpp`, `client/item_faces.cpp` | The doorway noise; the rain and the drop; every item's face (pages, pictures, covers, crates, files) and their render workers. |
 | `client/app_main.cpp` | Options, the menus, the screenshot and scripting paths, the event loop, `main`. |
 | `client/menu.cpp` | The setup menu, `find_limits()`, the budget model. |
-| `client/tailoring.cpp`, `tools/cli/tailor.cpp` | COST's K and Return, and the search behind them and `sieve tailor`: a line's filters and settings tailored to one item. |
+| `client/tailoring.cpp`, `tools/cli/tailor.cpp`, `tools/cli/weigh.cpp` | COST's K and Return, the search behind them and `sieve tailor` (a line's filters tailored to items, by their shortest routes), and files weighed against their own addresses (`sieve locate --weigh`, the File Locator). |
 | `client/mesh.cpp` | The software rasteriser behind Real Graphics. |
 | `tools/sieve_cli.cpp` | The `sieve` command. |
 | `reference/sieve_ref.py` | The independent oracle and the vector generator. |
@@ -1845,3 +1845,32 @@ Edward's design (the bar) and the first part of 1e.
 - **Checked:** the audio line full with the tailored melody filters (survivor 4851 with its title
   and cover, a 68-digit address, the shelves titled) and the image line full under
   palette-size-v1.
+
+### The cleanest digits, and files weighed (7 October 2026)
+
+- **The search's target** (`cli/tailor.*`): each anchor's shortest route among the survivors
+  (`route_bits`: `corridor.hpp shortest_path`, 20 places; past 2^16 bits, hex digits), not the
+  count. Step 1 keeps each filter's best setting by route and its best by count; step 2 grows
+  stacks from every kept setting both ways (accept where the count falls; accept where the routes
+  shorten), each in its own order, and keeps the best score. Several anchors (`std::vector` of
+  units; `--unit all`); `TailorOptions::count_description` adds `description_bits` (mask: one bit a
+  countable filter offered; each setting at log2 of its values; dictionaries over the registry;
+  free text 8 bits a character). `TailorResult` gains `route_bits`, `description_bits`,
+  `count_bits`; `line_bits` is now the anchors' routes unfiltered.
+- **`item_of(line, file)`** (`filter_config.*`): the unit whose file is exactly `file`, or nothing;
+  binary_items' judges use it (one test of "exactly an item").
+- **Weighing** (`cli/weigh.*`, in sieve_lines): `weigh_files(root, files, WeighLines, tailor)`.
+  Ways per file in groups (base; "binary, compact"; "<line>"; "<line>, compact"; "<line>,
+  tailored"), each group's stack cost and each line's shape (symbols/L<n>, 8 bits a character)
+  paid once; groups switched off greedily while the total falls. `weighing_table()`.
+- **`sieve locate --weigh [--tailored [--out-filters PATH]] [--page-length N]`**: the lines from the
+  line options (`--page-length` for pages, since `--length` is audio's), filters from `--filters`.
+- **The File Locator** weighs every analysis with the hallway's unit lines and `filters_` (binary
+  length its BINARY setting), shows the table (12 rows), a **Tailor the filters to these files**
+  button (re-analyses with tailoring), then **Use the tailored filters** (`Request::Tailored`
+  without a unit; `tailored_unit()` is now optional in app_main). `--locate PATH --tailored` for
+  screenshots. `handle()` ends the frame loop when a request is Tailored.
+- **COST's K section:** "tailored, shortest route", and the stack's description in bits.
+- **Checked:** CI (filters step) tailors the melody (survivor 46327 of 204994, route b4f7, compact
+  0b4f7, read back) and weighs a folder of two melodies, a picture and a note (530 bits against
+  2488); the whole step run here. In the hallway: the locator plain and tailored (screenshots).

@@ -45,6 +45,7 @@
 #include "cli/image_io.hpp"
 #include "cli/lines.hpp"
 #include "cli/tailor.hpp"
+#include "cli/weigh.hpp"
 
 #include "sieve/audio.hpp"
 #include "sieve/notes3.hpp"
@@ -1104,7 +1105,7 @@ private:
     // ---- the File Locator (file_locator.cpp): the pause menu's, `sieve locate` in a window
 public:
     void open_locator();
-    void locate_now(const std::string& path); // scripted: open on it, measured at once
+    void locate_now(const std::string& path, bool tailor = false); // scripted: open on it, measured at once (and tailored)
     void install_now(const std::string& from, const std::string& to) { open_locator(); locator_install(from, to, true); }
     // From the system dialogs' callbacks (any thread): what was chosen, handed to the next frame.
     void locator_picked(const std::string& path);
@@ -1119,9 +1120,15 @@ private:
         std::string path, sha256, hex, table, error;
         std::vector<uint8_t> bytes; // a file
         cli::Manifest manifest;     // a folder
+        // Its files weighed against their own addresses, under this hallway's lines and filters
+        // (cli/weigh.hpp), as a table; with tailoring, the filters found for the lines with items.
+        std::string weighing;
+        bool tailored = false;
+        std::optional<FilterConfig> tailored_filters;
     };
     void close_locator();
-    void locator_analyse(const std::string& path, bool sync = false);
+    // `tailor`: the weighing tailors each line's filters to the files that are its items.
+    void locator_analyse(const std::string& path, bool sync = false, bool tailor = false);
     void locator_save(const std::string& to);
     void locator_go();
     void locator_event(const SDL_Event& e);
@@ -1288,8 +1295,8 @@ public:
     // GoToMelody: a melody of the music to walk to, on an audio line (or with tracks of a number
     // of units) other than this one's, so the application builds a hallway that has it and hands
     // it the melody (melody_to_go()).
-    // Tailored: COST's tailored filters applied (tailored_filters()), and the item to hold again
-    // (tailored_unit()) on this line.
+    // Tailored: tailored filters applied (tailored_filters(): COST's Return, or the File Locator's
+    // "use"), and from COST the item to hold again (tailored_unit()) on this line.
     enum class Request { None, Settings, MainMenu, GoToMelody, Tailored };
     Request request() const { return request_; }
     void clear_request() { request_ = Request::None; }

@@ -133,7 +133,7 @@ void Hallway::locator_install(const std::string& from, const std::string& to, bo
 }
 
 // Reads and measures a file or folder on the worker. `sync`: here and now (scripted runs).
-void Hallway::locator_analyse(const std::string& path, bool sync)
+void Hallway::locator_analyse(const std::string& path, bool sync, bool tailor)
 {
     if (loc_busy_) return;
     loc_go_armed_ = false;
@@ -141,9 +141,9 @@ void Hallway::locator_analyse(const std::string& path, bool sync)
     loc_busy_ = true;
     {
         std::lock_guard<std::mutex> lock(loc_mx_);
-        loc_status_ = trf("loc.reading", {path});
+        loc_status_ = trf(tailor ? "loc.tailoring" : "loc.reading", {path});
     }
-    auto job = [this, path] {
+    auto job = [this, path, tailor] {
         LocatorResult r;
         r.path = path;
         try
@@ -204,6 +204,44 @@ void Hallway::locator_analyse(const std::string& path, bool sync)
             }
             else throw std::runtime_error(tr("loc.neither"));
             r.table = cli::comparison_table(c);
+            // Every file weighed against its own address, under this hallway's lines and filters
+            // (the pages, image, audio and video lines' units, and the binary line's filters).
+            {
+                cli::WeighLines wl;
+                wl.pages = &unit_line(LineKind::Text);
+                wl.image = &unit_line(LineKind::Image);
+                wl.audio = &unit_line(LineKind::Audio);
+                wl.video = &unit_line(LineKind::Video);
+                wl.filters = filters_;
+                wl.binary_bytes = binary_space_->max_bytes();
+                std::vector<std::string> files;
+                fs::path root;
+                if (r.kind == LocatorResult::File) files.push_back(path);
+                else
+                {
+                    root = p;
+                    for (const auto& e : r.manifest.entries)
+                        if (!e.dir) files.push_back(e.path);
+                }
+                const cli::Weighing w = cli::weigh_files(root, files, wl, tailor);
+                r.weighing = cli::weighing_table(w, 12);
+                r.tailored = tailor;
+                if (tailor)
+                {
+                    FilterConfig next = filters_;
+                    bool any = false;
+                    for (const cli::LineWeight& l : w.lines)
+                        if (l.tailored && l.files > 0)
+                        {
+                            const LineKind k = l.name == "pages" ? LineKind::Text : cli::line_from_string(l.name);
+                            const bool full = next.of(k).mode == FilterMode::Full; // a line kept full stays full
+                            next.of(k) = l.tailored->filters;
+                            if (full) next.of(k).mode = FilterMode::Full;
+                            any = true;
+                        }
+                    if (any) r.tailored_filters = std::move(next);
+                }
+            }
         }
         catch (const std::exception& e)
         {
@@ -361,6 +399,15 @@ void Hallway::locator_event(const SDL_Event& e)
     else if (pressed == "file") SDL_ShowOpenFileDialog(picked, this, window_, nullptr, 0, nullptr, false);
     else if (pressed == "folder") SDL_ShowOpenFolderDialog(picked, this, window_, nullptr, false);
     else if (pressed == "go") locator_go();
+    else if (pressed == "tailor") locator_analyse(loc_result_.path, false, true);
+    else if (pressed == "use_filters" && loc_result_.tailored_filters)
+    {
+        // As Return on COST does: the settings saved, and a hallway built with them (app_main).
+        tailored_ = loc_result_.tailored_filters;
+        tailored_unit_.reset();
+        close_locator();
+        request_ = Request::Tailored;
+    }
     else if (pressed == "install")
     {
         // First the installer, then (install_from, below in draw_locator) the folder to put it in.
@@ -488,6 +535,18 @@ void Hallway::draw_locator(float W, float H)
             if (nl == std::string::npos) break;
             at = nl + 1;
         }
+        // The weighing: each file's best way to be named against its own address, and the totals.
+        y += 6;
+        at = 0;
+        while (at < r.weighing.size() && y < H - 110)
+        {
+            const size_t nl = r.weighing.find('\n', at);
+            const std::string row = r.weighing.substr(at, nl == std::string::npos ? std::string::npos : nl - at);
+            text(20, y, fit(row, W - 40, 1), 1, row.rfind("weighing", 0) == 0 || row.rfind("  shared", 0) == 0 ? grey : ink);
+            y += 13;
+            if (nl == std::string::npos) break;
+            at = nl + 1;
+        }
         y += 14;
         bx = 20;
         // A file can be walked to. A file or a folder can be saved as Sieve instructions (the
@@ -498,16 +557,21 @@ void Hallway::draw_locator(float W, float H)
         if (r.kind == LocatorResult::File) button("go", tr("loc.go"), y);
         button("save_sieve", tr("loc.save_sieve"), y);
         button("save_program", tr("loc.save_program"), y);
+        // The filters tailored to these files, and then used: this hallway built again with them
+        // (on a row of their own, under the saves).
+        bx = 20;
+        if (!r.tailored) button("tailor", tr("loc.tailor"), y + 40);
+        else if (r.tailored_filters) button("use_filters", tr("loc.use_filters"), y + 40);
     }
     if (!status.empty()) text(20, H - 58, fit(status, W - 40, 1), 1, busy ? white : ink);
     text(20, H - 26, fit(tr("loc.keys"), W - 40, 1), 1, grey);
 }
 
 // For scripted runs (--locate PATH): open the locator on it, measured before the next frame.
-void Hallway::locate_now(const std::string& path)
+void Hallway::locate_now(const std::string& path, bool tailor)
 {
     open_locator();
-    locator_analyse(path, true);
+    locator_analyse(path, true, tailor);
 }
 
 void Hallway::stop_locator()

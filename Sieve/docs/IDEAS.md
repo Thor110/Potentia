@@ -660,10 +660,34 @@ are cheap and because they are the sort of thing that is lost otherwise.
   - *Built, 7 October 2026:* **the search, for one item** (`cli/tailor.*`; K on the COST tab,
     Return to apply; `sieve tailor`). Each filter's settings searched one at a time for the item
     (integers coarse to fine, texts over their choices and the registered dictionaries), then a
-    stack grown from each filter kept, the best of them chosen. Still open: several anchors at
-    once (a map's items, a folder), the line's own settings (alphabet, palette, length) as part of
-    the search, the books, models, binary, tracks and movies lines, and settings searched together
-    rather than one at a time.
+    stack grown from each filter kept, the best of them chosen.
+  - *Built, 7 October 2026:* **the cleanest digits, several anchors, and files weighed.**
+    - The search's target is each anchor's shortest route among the survivors (its number with
+      leading zeros dropped, or a bearing and a walk), not the count: Edward's "we shouldn't always
+      push to 0 in case the filters can't land there; we would be searching for the cleanest
+      digits". Ranks move as a stack changes, so a search on routes alone falls into corners;
+      stacks are grown both by shrinking the count (which bounds every number) and by shortening
+      the routes, and the shortest wins. On the melody: 16 bits (`b4f7`), as by the count.
+    - Several anchors under one stack (`--unit all`), and the description priced and, where the
+      stack travels, paid for (`--describe`).
+    - **Files weighed** (`cli/weigh.*`; `sieve locate --weigh [--tailored]`, the File Locator):
+      every file against its own address, by its number among the binary line's survivors, and,
+      where it is exactly an item of another line (`item_of`, the test not-an-item-v1 makes), its
+      place and number there; each line's shape and stack paid once, and dropped where they cost
+      more than they save; with tailoring, each line's filters tailored to its items. Sieve's own
+      files (two melodies, a picture, a note) come to 21.3% of their own addresses.
+  - **Still open in 1e:**
+    - **A listing that names files these ways** (a `sieve-manifest-v4`): per file, its way (own
+      bytes, or line, compact or not, and its number), with the shapes and stacks once at the top,
+      so an installer of Sieve's own files is as small as the weighing says. Today the installer
+      holds every file's bytes.
+    - **The line's own settings as part of the search** (alphabet, length, palette, picture size):
+      a text file is a page only if the page is its length and its alphabet holds its characters,
+      so most files are no line's item as the lines stand. Fitting a line to a file (a page of the
+      file's length in the smallest alphabet that holds it) would name far more files shorter,
+      the shape paid for as it is now.
+    - Sound (pcm) and models as items; the books, models, binary, tracks and movies lines in the
+      search; settings searched together rather than one at a time.
   - **The description travels too (Edward's example, 7 October 2026).** A stack tailored to one
     item is part of that item's name unless the reader has it already: which filters are ticked,
     and each setting, are bits like the address's. Priced at one bit for each filter the line

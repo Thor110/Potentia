@@ -476,37 +476,38 @@ std::optional<KindCounter::Pattern> page_pattern(const Alphabet& a, uint32_t len
     return p;
 }
 
-BinaryItems binary_items(const Line* pages, const Line* image, const Line* video, const Line* audio, const ModelSpace* models)
+std::optional<std::vector<uint32_t>> item_of(const Line& l, const std::vector<uint8_t>& b)
 {
-    BinaryItems items;
-    auto guard = [](auto f) {
-        return [f](const std::vector<uint8_t>& b) {
-            try { return f(b); } catch (const std::exception&) { return false; }
-        };
-    };
-    if (pages && pages->alphabet)
+    try
     {
-        const Line* l = pages;
-        items.pages = page_pattern(*l->alphabet, l->space.unit_length());
-        if (!items.pages)
-            items.judges.emplace_back("pages", guard([l](const std::vector<uint8_t>& b) {
-                const std::string t(b.begin(), b.end());
-                const std::u32string u = utf8_decode(t);
-                if (u.size() != l->space.unit_length() || utf8_encode(u) != t) return false;
-                for (char32_t c : u)
-                    if (!l->alphabet->digit_of(c)) return false;
-                return true;
-            }));
-    }
-    // A picture: its PNG at one pixel a pixel, frames side by side a pixel apart.
-    auto picture = [](const Line* l) {
-        return [l](const std::vector<uint8_t>& b) {
-            if (file_kind(b, b.size()) != "PNG") return false;
+        switch (l.kind)
+        {
+        case LineKind::Text:
+        {
+            if (!l.alphabet) return std::nullopt;
+            const std::string t(b.begin(), b.end());
+            const std::u32string u = utf8_decode(t);
+            if (u.size() != l.space.unit_length() || utf8_encode(u) != t) return std::nullopt;
+            std::vector<uint32_t> unit;
+            unit.reserve(u.size());
+            for (char32_t c : u)
+            {
+                const auto d = l.alphabet->digit_of(c);
+                if (!d) return std::nullopt;
+                unit.push_back(*d);
+            }
+            return unit;
+        }
+        case LineKind::Image:
+        case LineKind::Video:
+        {
+            // A picture: its PNG at one pixel a pixel, frames side by side a pixel apart.
+            if (file_kind(b, b.size()) != "PNG") return std::nullopt;
             const auto frames = decode_image_frames(b.data(), b.size(), "the file");
-            if (frames.size() != 1) return false;
+            if (frames.size() != 1) return std::nullopt;
             const RgbaImage& sheet = frames[0];
-            const uint32_t W = l->image.width, H = l->image.height, F = l->image.frames;
-            if (sheet.height != H || sheet.width != F * W + (F - 1)) return false;
+            const uint32_t W = l.image.width, H = l.image.height, F = l.image.frames;
+            if (sheet.height != H || sheet.width != F * W + (F - 1)) return std::nullopt;
             std::vector<RgbaImage> each;
             for (uint32_t f = 0; f < F; ++f)
             {
@@ -521,24 +522,49 @@ BinaryItems binary_items(const Line* pages, const Line* image, const Line* video
                     }
                 each.push_back(std::move(one));
             }
-            return unit_file(*l, canonicalise_image(each, l->image), 1) == b;
-        };
-    };
-    if (image || video)
-        items.judges.emplace_back("pictures", guard([image, video, picture](const std::vector<uint8_t>& b) {
-            return (image && picture(image)(b)) || (video && picture(video)(b));
-        }));
-    if (audio)
-        items.judges.emplace_back("melodies", guard([audio](const std::vector<uint8_t>& b) {
-            if (file_kind(b, b.size()) != "MID") return false;
-            const NoteSet set = note_set_of(audio->space.symbols_id());
-            const uint32_t L = audio->space.unit_length();
+            std::vector<uint32_t> unit = canonicalise_image(each, l.image);
+            if (unit_file(l, unit, 1) != b) return std::nullopt;
+            return unit;
+        }
+        case LineKind::Audio:
+        {
+            if (file_kind(b, b.size()) != "MID") return std::nullopt;
+            const NoteSet set = note_set_of(l.space.symbols_id());
+            const uint32_t L = l.space.unit_length();
             const std::string n = midi_to_notation(b, set);
             const NotesCanonResult c = set.legacy ? canonicalise_notes(n, L) : canonicalise_notes2(n, set, L / set.voices);
-            if (c.units.size() != 1) return false;
+            if (c.units.size() != 1) return std::nullopt;
             const std::string m = notes_to_midi(set, c.units[0]);
-            return std::vector<uint8_t>(m.begin(), m.end()) == b;
+            if (std::vector<uint8_t>(m.begin(), m.end()) != b) return std::nullopt;
+            return c.units[0];
+        }
+        }
+    }
+    catch (const std::exception&)
+    {
+    }
+    return std::nullopt;
+}
+
+BinaryItems binary_items(const Line* pages, const Line* image, const Line* video, const Line* audio, const ModelSpace* models)
+{
+    BinaryItems items;
+    auto guard = [](auto f) {
+        return [f](const std::vector<uint8_t>& b) {
+            try { return f(b); } catch (const std::exception&) { return false; }
+        };
+    };
+    if (pages && pages->alphabet)
+    {
+        const Line* l = pages;
+        items.pages = page_pattern(*l->alphabet, l->space.unit_length());
+        if (!items.pages) items.judges.emplace_back("pages", guard([l](const std::vector<uint8_t>& b) { return item_of(*l, b).has_value(); }));
+    }
+    if (image || video)
+        items.judges.emplace_back("pictures", guard([image, video](const std::vector<uint8_t>& b) {
+            return (image && item_of(*image, b)) || (video && item_of(*video, b));
         }));
+    if (audio) items.judges.emplace_back("melodies", guard([audio](const std::vector<uint8_t>& b) { return item_of(*audio, b).has_value(); }));
     if (models)
         items.judges.emplace_back("models", guard([models](const std::vector<uint8_t>& b) {
             const std::string t(b.begin(), b.end());

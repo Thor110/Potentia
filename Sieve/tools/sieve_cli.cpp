@@ -33,6 +33,7 @@
 #include "cli/vault_decode.hpp"
 #include "cli/plugins.hpp"
 #include "cli/tailor.hpp"
+#include "cli/weigh.hpp"
 #include "cli/timings.hpp"
 #include "sieve/dfa.hpp"
 #include "sieve/plugin.hpp"
@@ -1896,15 +1897,25 @@ int cmd_tailor(const Args& a)
     LineFilters& lf = cfg.of(line.kind);
     const WarpInput w = read_warp_input(line, a);
     if (w.units.empty()) throw std::invalid_argument("no input to tailor the filters to");
-    const uint32_t which = a.get_positive("unit", 1);
-    if (which > w.units.size())
-        throw std::invalid_argument("--unit " + std::to_string(which) + ": the input makes " + std::to_string(w.units.size()) + " unit(s)");
-    const auto& u = w.units[which - 1];
+    // The anchors: one unit of the input (--unit N), or every one (--unit all), kept by one stack.
+    std::vector<std::vector<uint32_t>> anchors;
+    if (a.get("unit", "1") == "all") anchors = w.units;
+    else
+    {
+        const uint32_t which = a.get_positive("unit", 1);
+        if (which > w.units.size())
+            throw std::invalid_argument("--unit " + std::to_string(which) + ": the input makes " + std::to_string(w.units.size()) + " unit(s)");
+        anchors.push_back(w.units[which - 1]);
+    }
     print_header(line);
-    std::cout << "canon        " << w.report.front() << "\n"
-              << "unit         " << which << "/" << w.units.size() << "  " << preview(line, u) << "\n\n";
+    std::cout << "canon        " << w.report.front() << "\n";
+    if (anchors.size() == 1) std::cout << "unit         " << (a.get("unit", "1") == "all" ? "1" : a.get("unit", "1")) << "/" << w.units.size() << "  " << preview(line, anchors[0]) << "\n";
+    else std::cout << "units        all " << anchors.size() << ", kept by one stack\n";
+    std::cout << "\n";
     const FilterLine fl = filter_line(line);
-    const TailorResult r = tailor_filters(fl, u, lf);
+    TailorOptions options;
+    options.count_description = a.has("describe");
+    const TailorResult r = tailor_filters(fl, anchors, lf, nullptr, options);
     auto bits = [](double b) {
         std::ostringstream o;
         o << std::fixed << std::setprecision(1) << b << " bits";
@@ -1918,16 +1929,23 @@ int cmd_tailor(const Args& a)
         std::cout << "\n";
         if (!c.used) std::cout << "      " << c.why_not << "\n";
     }
-    std::cout << "\naddress      " << bits(r.line_bits) << " (the line, unfiltered)\n";
-    if (r.filters.enabled.empty()) std::cout << "tailored     nothing found that keeps this unit and sets anything aside\n";
+    std::cout << "\naddress      " << bits(r.line_bits) << " (the shortest route" << (anchors.size() == 1 ? "" : "s") << " on the line, unfiltered)\n";
+    if (r.filters.enabled.empty()) std::cout << "tailored     nothing found that keeps " << (anchors.size() == 1 ? "this unit" : "these units") << " and shortens " << (anchors.size() == 1 ? "its route" : "their routes") << "\n";
     else
     {
         const FilterStack st = build_stack(fl, r.filters);
-        std::cout << "tailored     " << bits(r.bits) << " (compact), " << std::fixed << std::setprecision(1) << (r.line_bits > 0 ? r.bits / r.line_bits * 100 : 0)
-                  << "% of the address\n"
+        std::cout << "tailored     " << bits(r.route_bits) << " of route" << (anchors.size() == 1 ? "" : "s") << ", " << std::fixed << std::setprecision(1)
+                  << (r.line_bits > 0 ? r.route_bits / r.line_bits * 100 : 0) << "% of the address\n"
+                  << "description  " << bits(r.description_bits) << " to write the stack down" << (options.count_description ? " (counted: the search paid for it)" : " (not counted; --describe)") << "\n"
+                  << "total        " << bits(r.route_bits + r.description_bits) << " with the description, against " << bits(r.line_bits) << "\n"
+                  << "compact      " << bits(r.count_bits) << " wide (every survivor's fixed-width address)\n"
                   << "stack        " << st.provenance() << "\n";
         if (const Ranker* rk = st.ranker())
-            std::cout << "survivor     " << rk->rank(u).to_decimal() << " of " << rk->count().to_decimal() << "\n";
+            for (const auto& u : anchors)
+            {
+                const BigUint k = rk->rank(u);
+                std::cout << "survivor     " << k.to_decimal() << " of " << rk->count().to_decimal() << ", route " << shortest_path(k, rk->count(), 20).written << "\n";
+            }
     }
     if (a.has("out"))
     {
@@ -2147,6 +2165,43 @@ int cmd_check_book(const Args& a)
 // The program as it was run, for finding what lies beside it (sieve-install, for --program).
 const char* g_argv0 = nullptr;
 
+// --weigh (sieve locate): every file weighed against its own address, under the pages, image,
+// audio and video lines (their options as given, as every line command takes them, but a page is
+// --page-length characters long, 32 unless given, as --length is the audio line's) and the
+// settings file's filters; with
+// --tailored, each line's filters tailored to the files that are its items (cli/weigh.hpp).
+void print_weighing(const Args& a, const std::filesystem::path& root, const std::vector<std::string>& files, std::ostream& out)
+{
+    auto line_of_kind = [&](const char* kind) {
+        Args b = a;
+        b.opts["line"] = kind;
+        if (std::string(kind) == "text") b.opts["length"] = a.get("page-length", "32");
+        b.opts["model"] = "none";
+        return make_line(b);
+    };
+    const Line pages = line_of_kind("text"), image = line_of_kind("image"), audio = line_of_kind("audio"), video = line_of_kind("video");
+    WeighLines lines;
+    lines.pages = &pages;
+    lines.image = &image;
+    lines.audio = &audio;
+    lines.video = &video;
+    lines.filters = load_filter_config(a);
+    const Weighing w = weigh_files(root, files, lines, a.has("tailored"));
+    out << "\n" << weighing_table(w);
+    if (a.has("tailored") && a.has("out-filters"))
+    {
+        FilterConfig cfg = lines.filters;
+        for (const LineWeight& l : w.lines)
+            if (l.tailored)
+            {
+                const LineKind k = l.name == "pages" ? LineKind::Text : line_from_string(l.name);
+                cfg.of(k) = l.tailored->filters;
+            }
+        cfg.save(std::filesystem::path(a.get("out-filters")));
+        out << "  filters tailored to these files written to " << a.get("out-filters") << "\n";
+    }
+}
+
 int cmd_locate(const Args& a)
 {
     namespace fs = std::filesystem;
@@ -2221,6 +2276,7 @@ int cmd_locate(const Args& a)
             }
         }
         if (a.has("compare")) std::cout << "\n" << comparison_table(cmp);
+        if (a.has("weigh")) print_weighing(a, fs::path(), {u8(target)}, std::cout);
         return 0;
     }
     if (!fs::is_directory(target)) throw std::invalid_argument(arg + " is neither a file nor a folder");
@@ -2335,6 +2391,13 @@ int cmd_locate(const Args& a)
             cmp.installer_raw = address_bytes(iaddr);
         }
         *info << "\n" << comparison_table(cmp);
+    }
+    if (a.has("weigh"))
+    {
+        std::vector<std::string> files;
+        for (const auto& e : m.entries)
+            if (!e.dir) files.push_back(e.path);
+        print_weighing(a, root, files, *info);
     }
     return 0;
 }

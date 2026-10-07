@@ -1342,6 +1342,7 @@ void Hallway::handle(const SDL_Event& e, bool& quit)
     try
     {
         handle_event(e, quit);
+        if (request_ == Request::Tailored) quit = true; // tailored filters to use (COST, the File Locator)
     }
     catch (const std::exception& ex)
     {

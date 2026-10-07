@@ -87,7 +87,8 @@ add_library(sieve_lines STATIC
     tools/cli/media_decode.cpp
     tools/cli/models.cpp
     tools/cli/plugins.cpp
-    tools/cli/tailor.cpp)
+    tools/cli/tailor.cpp
+    tools/cli/weigh.cpp)
 target_include_directories(sieve_lines PUBLIC tools)
 target_link_libraries(sieve_lines PUBLIC sieve_core sieve_image_io)
 # (sieve_locate, defined below, is linked into sieve_lines after it: the lines check the vault.)

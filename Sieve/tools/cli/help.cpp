@@ -506,25 +506,32 @@ const std::vector<Page>& pages()
           {"sieve check --book tests/example_book_v1.book", "a whole book: cover, title and pages"},
           {"sieve check --line binary --file picture.png", "a file's kind, and where it stands among the kept files"}}},
 
-        {"tailor", "Tailor a line's filters to one item: the stack that keeps it and names it shortest.",
-         "sieve tailor [--line LINE] [line options] [--filters PATH] [--unit N] [--out PATH] (TEXT... | --file PATH)",
-         "Fits the input to the line as warp does and takes one of its units (the first, or --unit N)\n"
-         "as the anchor: whatever is chosen, it survives. Then, for every filter the line offers that\n"
-         "can be counted, its settings are searched one at a time (an integer over its range, coarsely\n"
-         "and then closer in; a text over its choices, or every registered dictionary) for those that\n"
-         "keep the unit and leave the fewest survivors. The filters found are then taken strongest\n"
-         "first, each added where it can be counted with the others and removes more. Printed: each\n"
-         "filter, its settings and its survivors alone in bits, ticked [x] where it was used and\n"
-         "otherwise why not; the line's address in bits; and the unit's compact address under the\n"
-         "stack found, with its survivor number. It is a search, not a proof (values are sampled, the\n"
-         "set chosen greedily), but every count is exact. Starts from the settings file's values.\n"
+        {"tailor", "Tailor a line's filters to items: the stack under which their addresses are written shortest.",
+         "sieve tailor [--line LINE] [line options] [--filters PATH] [--unit N|all] [--describe] [--out PATH] (TEXT... | --file PATH)",
+         "Fits the input to the line as warp does and takes one of its units (the first, or --unit N),\n"
+         "or every one (--unit all), as the anchors: whatever is chosen, they survive. The score of a\n"
+         "stack is each anchor's shortest route under it: its survivor number written with the\n"
+         "cleanest digits there are (leading zeros dropped, or a bearing and a walk), so the search\n"
+         "pushes each anchor's number towards 0 and takes what it can land on, rather than only\n"
+         "shrinking the count. For every filter the line offers that can be counted, its settings are\n"
+         "searched one at a time (an integer over its range, coarsely and then closer in; a text over\n"
+         "its choices, or every registered dictionary); then a stack is grown from each filter kept,\n"
+         "each other added where it can be counted with those there and shortens the routes, and the\n"
+         "best is kept. Printed: each filter with its settings and its score alone, ticked [x] where\n"
+         "used and otherwise why not; the routes unfiltered; the routes under the stack found, what\n"
+         "writing the stack down costs (one bit a filter offered, and each setting at log2 of the\n"
+         "values it allows), the width of a compact address, and each anchor's survivor number and\n"
+         "route. With --describe the search pays for the description too, as a stack that travels\n"
+         "with its addresses must. It is a search, not a proof, but every count is exact.\n"
          "Text, image, audio and video lines.",
          {kLine, kLineOptions,
           {"--filters PATH", "The settings file to start from. Default: sieve-filters.ini next to the executable."},
           {"--file PATH", "Read the input from a file instead of the command line."},
-          {"--unit N", "Which unit of the input to tailor to (1 is the first). Default 1."},
+          {"--unit N|all", "Which unit of the input to tailor to (1 is the first), or all of them under one stack. Default 1."},
+          {"--describe", "Count the stack's description in the score."},
           {"--out PATH", "Write the settings file with this line's filters replaced by those found, in compact mode."}},
-         {{"sieve tailor --length 32 \"the cat sat on the mat\"", "the text filters that keep this page"},
+         {{"sieve tailor --length 32 \"the cat sat on the mat\"", "the text filters that write this page shortest"},
+          {"sieve tailor --length 32 --unit all --describe --file chapter.txt", "one stack for every page of a chapter, its description paid for"},
           {"sieve tailor --line image --file sprite.png --out tailored.ini", "a picture's filters, saved as a settings file"}}},
 
         {"bind", "Bind a title, a cover and pages into a book record.",
@@ -558,8 +565,9 @@ const std::vector<Page>& pages()
           {"sieve bind --line tracks --length 8 --file tune.mid --title \"a small tune\" --out tune.track", "a track's record"}}},
 
         {"locate", "A file's place on the binary line, or a folder's manifest.",
-         "sieve locate FILE [--out ADDRESS.hex] [--compare]\n"
-         "  sieve locate FOLDER [--manifest OUT] [--addresses DIR] [--with-addresses] [--installer OUT.sieve [--hex]] [--program OUT.exe] [--compare]",
+         "sieve locate FILE [--out ADDRESS.hex] [--compare] [--weigh [--tailored [--out-filters PATH]]]\n"
+         "  sieve locate FOLDER [--manifest OUT] [--addresses DIR] [--with-addresses] [--installer OUT.sieve [--hex]] [--program OUT.exe] [--compare]\n"
+         "  [--weigh [--tailored [--out-filters PATH]]] [--filters PATH] [line options]",
          "A file is one unit of the binary line (every file up to N bytes, binary-v1): its\n"
          "positional address is its own hex dump plus 0101...01, one 01 for each of its bytes.\n"
          "The address depends only on the file, not on the line's length, so it is the file's\n"
@@ -574,7 +582,23 @@ const std::vector<Page>& pages()
          "the file: addressing is not compression. An installer's manifest (sieve-manifest-v3)\n"
          "is the listing followed by every file's raw bytes, so the whole tree is in it at its own\n"
          "size; its address, one number, is the installer, which sieve install puts back into a\n"
-         "folder. (sieve-manifest-v2, --with-addresses, lists every file's address in hex instead.)",
+         "folder. (sieve-manifest-v2, --with-addresses, lists every file's address in hex instead.)\n"
+         "\n"
+         "--weigh weighs every file against its own address: its number among the binary line's\n"
+         "survivors, where the settings file's [binary] filters rank and it passes them; and, where\n"
+         "it is exactly an item of the pages, image, audio or video line (a page, a picture or film\n"
+         "as its PNG, a melody as its MIDI file, byte for byte), its place there and its number\n"
+         "among that line's survivors. Each is its shortest route (its cleanest digits). A way\n"
+         "other than its own address needs the reader to know the line's shape and filters: each\n"
+         "is paid once, and a line or a stack that costs more to write down than it saves is not\n"
+         "used. The lines take the line options given, but a page is --page-length characters\n"
+         "(32 unless given), --length being the audio line's. Printed: each file's own address and\n"
+         "best way in bits, what the ways\n"
+         "share, and the total against the own addresses. --tailored also tailors each line's\n"
+         "filters to the files that are its items (sieve help tailor, the description paid for),\n"
+         "and weighs again; --out-filters writes the settings file with those filters. The\n"
+         "installer still holds every file's bytes: weighing says what a listing of these ways\n"
+         "would come to.",
          {{"--out FILE", "A file: write its whole address, in hex, here."},
           {"--manifest FILE", "A folder: write the manifest here (else to standard output)."},
           {"--addresses DIR", "A folder: write every file's address as DIR/<its path>.hex."},
@@ -587,8 +611,13 @@ const std::vector<Page>& pages()
                                 "sieve-install (it must be beside sieve) with the installer attached to\n"
                                 "its end. Run, it installs the folder."},
           {"--hex", "Write the installer in hex rather than raw bytes."},
-          {"--compare", "Compare the sizes: original, zip, 7z, and the address."}},
+          {"--compare", "Compare the sizes: original, zip, 7z, and the address."},
+          {"--weigh", "Weigh every file: its best way to be named against its own address."},
+          {"--tailored", "With --weigh: tailor each line's filters to the files that are its items."},
+          {"--out-filters PATH", "With --tailored: write the settings file with the filters found."},
+          {"--page-length N", "With --weigh: the pages line's length (32)."}},
          {{"sieve locate sieve.exe --compare", "where the executable is, and what zip and 7z make of it"},
+          {"sieve locate saved-items --weigh --tailored --length 8", "a folder of Sieve's own files (melodies of 8 notes), weighed and tailored"},
           {"sieve locate release --manifest release.manifest --compare", "the manifest of a release folder"},
           {"sieve locate release --installer release.sieve --compare", "an installer for it, and its sizes"},
           {"sieve locate release --program release-setup.exe", "an installer program for it"}}},

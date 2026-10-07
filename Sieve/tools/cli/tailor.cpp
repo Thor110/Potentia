@@ -1,7 +1,8 @@
-// Sieve CLI -- a line's filters tailored to one item (tailor.hpp).
+// Sieve CLI -- a line's filters tailored to the items that must keep their places (tailor.hpp).
 #include "cli/tailor.hpp"
 
 #include "cli/dictionaries.hpp"
+#include "sieve/corridor.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -18,25 +19,37 @@ constexpr double kBitsPerDigit = 3.321928094887362; // log2(10)
 // over the stretch between the best one's neighbours, until the values are next to each other.
 constexpr int64_t kGrid = 7;
 
-// A stack judged against the item: whether the item passes it, and if so log2 of its survivors
-// (-1 where it cannot be counted, with why).
+// The places a number's shortest route is worked out exactly; past them, its digits are taken.
+constexpr uint64_t kRouteBits = 1u << 16;
+
+// A stack judged against the anchors: whether every one passes it, and if so its score (see
+// tailor.hpp; -1 where it cannot be counted, with why) and the parts of it.
 struct Verdict
 {
     bool passes = false;
-    double bits = -1;
+    double score = -1, route = 0, count = 0, description = 0;
     std::string blocker;
 };
 
-Verdict judge(const FilterLine& line, const LineFilters& lf, std::span<const uint32_t> unit)
+Verdict judge(const FilterLine& line, const LineFilters& lf, const std::vector<std::vector<uint32_t>>& anchors, const TailorOptions& options)
 {
     Verdict v;
     try
     {
         const FilterStack st = build_stack(line, lf);
-        if (!st.passes(unit)) return v;
+        for (const auto& a : anchors)
+            if (!st.passes(a)) return v;
         v.passes = true;
-        if (const Ranker* r = st.ranker()) v.bits = r->count().log10_approx() * kBitsPerDigit;
-        else v.blocker = st.compact_blocker();
+        const Ranker* r = st.ranker();
+        if (!r)
+        {
+            v.blocker = st.compact_blocker();
+            return v;
+        }
+        v.count = r->count().log10_approx() * kBitsPerDigit;
+        for (const auto& a : anchors) v.route += route_bits(r->rank(a), r->count());
+        v.description = description_bits(line, lf);
+        v.score = v.route + (options.count_description ? v.description : 0.0);
     }
     catch (const std::exception& e)
     {
@@ -58,10 +71,18 @@ LineFilters alone(const std::string& name, const FilterValues& values, const Lin
     return one;
 }
 
-// Better: the item passes, it can be counted, and it leaves fewer survivors.
+// Better: every anchor passes, it can be counted, and it scores less.
 bool better(const Verdict& v, const std::optional<Verdict>& best)
 {
-    return v.passes && v.bits >= 0 && (!best || v.bits < best->bits);
+    return v.passes && v.score >= 0 && (!best || v.score < best->score);
+}
+
+// Whether a filter can count anywhere on the line (the ones the search tries, and the mask prices).
+bool can_count_on(const FilterSpec& f, const FilterLine& line)
+{
+    if (f.retired) return false;
+    const std::string how = f.counts_as_on ? f.counts_as_on(line, nullptr) : f.counts_as;
+    return !(how.empty() && f.counts_as.empty());
 }
 
 // Values of an integer setting from `lo` to `hi` that `step` reaches from `origin`: all of them
@@ -102,26 +123,65 @@ const std::vector<std::string>& dictionary_ids()
 
 } // namespace
 
-TailorResult tailor_filters(const FilterLine& line, std::span<const uint32_t> unit, const LineFilters& current, TailorProgress* progress)
+double route_bits(const BigUint& number, const BigUint& count)
+{
+    if (count.bit_length() > kRouteBits) return number.is_zero() ? 0.0 : 4.0 * double(number.to_hex().size());
+    return shortest_path(number, count, 20).bits;
+}
+
+double description_bits(const FilterLine& line, const LineFilters& stack)
+{
+    if (stack.enabled.empty()) return 0;
+    double bits = 0;
+    for (const FilterSpec* f : filters_for(line))
+        if (can_count_on(*f, line)) bits += 1; // the mask
+    for (const std::string& name : stack.enabled)
+    {
+        const FilterSpec* f = find_filter(name);
+        if (!f) continue;
+        for (const FilterParam& p : f->params)
+        {
+            if (p.kind == FilterParam::Kind::Integer) bits += std::log2(double((p.max - p.min) / std::max<int64_t>(1, p.step) + 1));
+            else if (!p.choices.empty()) bits += std::log2(double(p.choices.size()));
+            else if (p.registry == "dictionary" || p.key == "dictionary") bits += std::log2(double(std::max<size_t>(1, dictionary_ids().size())));
+            else bits += 8.0 * double(param_value(*f, stack.values_of(name), p.key).size());
+        }
+    }
+    return bits;
+}
+
+TailorResult tailor_filters(const FilterLine& line, std::span<const uint32_t> unit, const LineFilters& current, TailorProgress* progress,
+                            const TailorOptions& options)
+{
+    return tailor_filters(line, std::vector<std::vector<uint32_t>>{std::vector<uint32_t>(unit.begin(), unit.end())}, current, progress, options);
+}
+
+TailorResult tailor_filters(const FilterLine& line, const std::vector<std::vector<uint32_t>>& anchors, const LineFilters& current,
+                            TailorProgress* progress, const TailorOptions& options)
 {
     TailorResult result;
-    result.line_bits = double(line.length) * std::log2(double(line.base));
-    result.bits = result.line_bits;
+    // The base: each anchor's shortest route on the line as it is, its positional index among them all.
+    const BigUint size = BigUint::pow(line.base, line.length);
+    for (const auto& a : anchors) result.line_bits += route_bits(BigUint::from_digits(a, line.base), size);
+    result.bits = result.route_bits = result.line_bits;
+    result.count_bits = size.log10_approx() * kBitsPerDigit;
     result.filters.mode = FilterMode::Compact;
     auto cancelled = [&] { return progress && progress->cancel.load(); };
 
     // The filters that could count: not retired, and not one that judges only wherever it is used.
     std::vector<const FilterSpec*> specs;
     for (const FilterSpec* f : filters_for(line))
-    {
-        if (f->retired) continue;
-        const std::string how = f->counts_as_on ? f->counts_as_on(line, nullptr) : f->counts_as;
-        if (how.empty() && f->counts_as.empty()) continue;
-        specs.push_back(f);
-    }
+        if (can_count_on(*f, line)) specs.push_back(f);
     if (progress) progress->total = int(specs.size());
 
     // 1. Each filter on its own, its settings searched one at a time.
+    struct Variant
+    {
+        size_t choice;
+        FilterValues values;
+        Verdict alone;
+    };
+    std::vector<Variant> variants;
     for (const FilterSpec* f : specs)
     {
         if (cancelled()) break;
@@ -133,11 +193,12 @@ TailorResult tailor_filters(const FilterLine& line, std::span<const uint32_t> un
         TailorChoice c;
         c.name = f->name();
         c.values = current.values_of(c.name);
-        std::optional<Verdict> best;
+        std::optional<Verdict> best, fewest; // the shortest routes, and the fewest survivors
+        FilterValues fewest_values;
         std::map<FilterValues, Verdict> seen;
         auto trial = [&](const FilterValues& values) -> const Verdict& {
             auto it = seen.find(values);
-            if (it == seen.end()) it = seen.emplace(values, judge(line, alone(c.name, values, current), unit)).first;
+            if (it == seen.end()) it = seen.emplace(values, judge(line, alone(c.name, values, current), anchors, options)).first;
             return it->second;
         };
         auto consider = [&](const FilterValues& values) {
@@ -146,6 +207,11 @@ TailorResult tailor_filters(const FilterLine& line, std::span<const uint32_t> un
             {
                 best = v;
                 c.values = values;
+            }
+            if (v.passes && v.score >= 0 && (!fewest || v.count < fewest->count))
+            {
+                fewest = v;
+                fewest_values = values;
             }
         };
         consider(c.values);
@@ -200,11 +266,19 @@ TailorResult tailor_filters(const FilterLine& line, std::span<const uint32_t> un
                 }
             }
         }
-        if (best) c.bits = best->bits;
+        if (best)
+        {
+            c.bits = best->score;
+            // Both settings go on to the set: the one with the shortest routes, and the one that
+            // leaves the fewest survivors (which bounds every route, a number being below the count).
+            variants.push_back({result.choices.size(), c.values, *best});
+            if (fewest_values != c.values) variants.push_back({result.choices.size(), fewest_values, *fewest});
+        }
         else
         {
             const Verdict& at = trial(c.values);
-            c.why_not = !at.passes ? "the item fails it at every setting tried" : "cannot be counted: " + at.blocker;
+            c.why_not = !at.passes ? (anchors.size() == 1 ? "the item fails it at every setting tried" : "an item fails it at every setting tried")
+                                   : "cannot be counted: " + at.blocker;
         }
         result.choices.push_back(std::move(c));
         if (progress) ++progress->done;
@@ -215,24 +289,26 @@ TailorResult tailor_filters(const FilterLine& line, std::span<const uint32_t> un
         return result;
     }
 
-    // 2. The set. From each filter kept, strongest first, a stack is grown greedily: every other
-    // filter, strongest first, is added where it can be counted with those there and removes more.
-    // A filter that counts its own way clashes with the rest, so it makes a stack of one, and the
-    // automata, which merge, make another: the best of the stacks grown is kept. A filter already in
-    // a stack grown earlier starts none of its own (it would grow the same stack again).
-    std::vector<size_t> order;
-    for (size_t i = 0; i < result.choices.size(); ++i)
-        if (result.choices[i].why_not.empty()) order.push_back(i);
-    std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) { return result.choices[a].bits < result.choices[b].bits; });
+    // 2. The set. Stacks are grown from each setting kept, two ways: adding every other where it
+    // leaves fewer survivors, and adding every other where it shortens the routes. Ranks move as the
+    // stack changes, so a search by routes alone falls into corners that shrinking the count avoids;
+    // shrinking the count alone misses an anchor that lands near 0 under a wider stack. Each way
+    // takes the settings in its own order (fewest survivors, or shortest routes, alone), each filter
+    // at most once in a stack, only where it can be counted with those there (filter_conflict). The
+    // stack with the best score of all those grown is kept; a setting already in a stack grown the
+    // same way seeds none of its own (it would grow that stack again).
     struct Grown
     {
         LineFilters stack;
-        double bits;
-        std::vector<size_t> used;
-        std::map<size_t, std::string> why_not; // why each other filter was left out of it
+        Verdict verdict;
+        std::vector<size_t> used; // variants
     };
-    auto grow = [&](size_t seed) {
-        Grown g{LineFilters{}, result.line_bits, {}, {}};
+    Verdict none;
+    none.passes = true;
+    none.score = none.route = result.line_bits;
+    none.count = result.count_bits;
+    auto grow = [&](size_t seed, bool by_count, const std::vector<size_t>& order) {
+        Grown g{LineFilters{}, none, {}};
         g.stack.mode = FilterMode::Compact;
         g.stack.values = current.values;
         std::vector<size_t> sequence{seed};
@@ -241,56 +317,69 @@ TailorResult tailor_filters(const FilterLine& line, std::span<const uint32_t> un
         for (const size_t i : sequence)
         {
             if (cancelled()) break;
-            const TailorChoice& c = result.choices[i];
-            const FilterSpec* spec = find_filter(c.name);
-            std::string why;
+            const Variant& v = variants[i];
+            const std::string& name = result.choices[v.choice].name;
+            if (g.stack.is_enabled(name)) continue;
+            const FilterSpec* spec = find_filter(name);
+            bool clash = false;
             for (const std::string& e : g.stack.enabled)
             {
                 const FilterSpec* other = find_filter(e);
                 const FilterValues& ov = g.stack.values_of(e);
-                if (spec && other && !filter_conflict(*spec, *other, &line, &c.values, &ov).empty())
+                if (spec && other && !filter_conflict(*spec, *other, &line, &v.values, &ov).empty())
                 {
-                    why = "cannot be counted with " + e;
+                    clash = true;
                     break;
                 }
             }
-            if (why.empty())
-            {
-                LineFilters with = g.stack;
-                with.values[c.name] = c.values;
-                (void)tick_filter(with, c.name, true);
-                const Verdict v = judge(line, with, unit);
-                if (!v.passes) why = "the item fails it with the others";
-                else if (v.bits < 0) why = "cannot be counted with the others: " + v.blocker;
-                else if (v.bits >= g.bits - 1e-9) why = "removes nothing the others do not";
-                else
-                {
-                    g.stack = std::move(with);
-                    g.bits = v.bits;
-                    g.used.push_back(i);
-                }
-            }
-            if (!why.empty()) g.why_not[i] = why;
+            if (clash) continue;
+            LineFilters with = g.stack;
+            with.values[name] = v.values;
+            (void)tick_filter(with, name, true);
+            const Verdict j = judge(line, with, anchors, options);
+            if (!j.passes || j.score < 0) continue;
+            if (by_count ? j.count >= g.verdict.count - 1e-9 : j.score >= g.verdict.score - 1e-9) continue;
+            g.stack = std::move(with);
+            g.verdict = j;
+            g.used.push_back(i);
         }
         return g;
     };
     std::optional<Grown> best;
-    std::vector<bool> grown(result.choices.size(), false);
-    for (const size_t seed : order)
+    for (const bool by_count : {true, false})
     {
-        if (cancelled()) break;
-        if (grown[seed]) continue;
-        Grown g = grow(seed);
-        for (const size_t i : g.used) grown[i] = true;
-        if (!best || g.bits < best->bits) best = std::move(g);
+        std::vector<size_t> order(variants.size());
+        for (size_t i = 0; i < order.size(); ++i) order[i] = i;
+        std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+            return by_count ? variants[a].alone.count < variants[b].alone.count : variants[a].alone.score < variants[b].alone.score;
+        });
+        std::vector<bool> grown(variants.size(), false);
+        for (const size_t seed : order)
+        {
+            if (cancelled()) break;
+            if (grown[seed]) continue;
+            Grown g = grow(seed, by_count, order);
+            for (const size_t i : g.used) grown[i] = true;
+            if (!g.used.empty() && (!best || g.verdict.score < best->verdict.score)) best = std::move(g);
+        }
     }
-    if (best)
+    if (best && best->verdict.score < none.score - 1e-9)
     {
         result.filters = std::move(best->stack);
-        result.bits = best->bits;
-        for (const size_t i : best->used) result.choices[i].used = true;
-        for (const auto& [i, why] : best->why_not) result.choices[i].why_not = why;
+        result.bits = best->verdict.score;
+        result.route_bits = best->verdict.route;
+        result.description_bits = best->verdict.description;
+        result.count_bits = best->verdict.count;
+        for (const size_t i : best->used)
+        {
+            TailorChoice& c = result.choices[variants[i].choice];
+            c.used = true;
+            c.values = variants[i].values;
+            c.bits = variants[i].alone.score;
+        }
     }
+    for (TailorChoice& c : result.choices)
+        if (!c.used && c.why_not.empty()) c.why_not = "not in the stack with the shortest routes";
     LineFilters& stack = result.filters;
     // Only the settings of what is ticked are kept.
     for (auto it = stack.values.begin(); it != stack.values.end();)
