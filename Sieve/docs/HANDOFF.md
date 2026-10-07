@@ -1764,3 +1764,24 @@ IDEAS §13's last open step.
 - **Checked:** CI binds a two-voice notes2 track (v2), reads the same record back by its address,
   unbinds it to MIDI; and in the hallway a track and a movie saved as records, opened with J and
   saved again, are byte for byte the same.
+
+### COST's balance (7 October 2026)
+
+Edward's design (the bar) and the first part of 1e.
+- **What it shows:** the cheapest address found for the item in hand against the item as a file,
+  as a share of the file: `Neutral : 0%`, `Positive : X%` (longer than the file) or `Negative : X%`
+  (shorter). The cheapest of: the address it is held by (`bits` positional or scrambled, the
+  compact address `log2(line_units())` for a survivor, `bk.bits` guided), its guided code, and its
+  variable length route. So it moves when the route arrives from its worker.
+- **The bar** (`hud.cpp draw_balance`): grows outward from the centre line, red for Positive,
+  green for Negative, a white border, full width at 100% and held there.
+- **The file** (`Book::file_bytes`, kept with the item like `guided_code`): `item_file()`'s size (what
+  F saves and J opens), or `file_size` on the binary line; 0 if it cannot be made (no balance then).
+- **New rows:** "as a file", and "compact" for a survivor of a compact shelf. Notes are fitted to
+  the panel (the route's note ran off it).
+- **Strings:** `cost.compact*`, `cost.file*`, `cost.balance.*`.
+- **Checked:** Linux build, screenshots of each case: text (Negative, by guided), image and
+  binary near a bearing (Negative, by the route), a random binary address (Positive 57.8%, by the
+  route, the title making the address longer than the file), a compact image shelf.
+- **Still open in 1e:** searching the filters and their values for the cheapest address that keeps
+  the item in hand (the anchor), and showing that beside what the filters as they are give.

@@ -453,6 +453,9 @@ public:
         // the tab shows it (6.5 ms for a page of 3,000 characters, every frame before).
         mutable std::optional<sieve::GuidedLine::Code> guided_code;
         mutable const sieve::GuidedLine* guided_by = nullptr;
+        // COST's file row and balance: the size of the item as the file F saves it, worked out the
+        // first time the tab shows it (a picture is encoded as a PNG to find it); 0 if it cannot be.
+        mutable std::optional<uint64_t> file_bytes;
         // A file's verdict once worked out (-1 not yet, 0 shown, 1 withheld), kept with the item so
         // looking back at a file costs nothing, and its slot when it stands in your room (-1
         // otherwise), where the vault worker (vault_ahead) may have worked it out already.
@@ -927,6 +930,7 @@ public:
     void draw_in_hand(float W, float H);
 
     void draw_cost(const Book& bk, float x, float cy, float pw, float bottom);
+    float draw_balance(double best, double file_bits, const std::string& by, float x, float cy, float pw);
     // Variable length addressing (COST): the shortest route found to a unit (corridor.hpp
     // shortest_path), worked out on a worker, since on a line of long files it takes seconds. The
     // worker is never waited for: it finishes the unit it was given, and the next one asked for is

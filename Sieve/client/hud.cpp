@@ -665,34 +665,22 @@ void Hallway::draw_in_hand(float W, float H)
 // is that the first three are the same length: an address in a bijection is the content, not
 // a handle on it. Only the guided ordering is shorter, and only when the content is likely
 // under the model, which is why its percentage doubles as a measure of how text-like the
-// thing in your hand is.
+// thing in your hand is. A compact address is shorter too, by what the filters set aside.
+//
+// Above the rows, the balance: the cheapest of those addresses against the item as a file.
 void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float bottom)
 {
     const Theme& th = theme();
     const SDL_Color ink = th.edge, dim = mix(th.edge, th.bg, 0.45f);
     const BigUint& n = on_books() ? books_->size() : on_composition() ? comp().space->size() : titled_here() ? titled_here()->size() : line().space.size();
-    const double bits = n.log10_approx() * 3.321928094887362;
-    auto row = [&](const std::string& what, double b, const std::string& written, const std::string& note) {
-        text(x + 14, cy, what, 1, ink);
-        text(x + 260, cy, trf("cost.bits", {fixed(b, 0)}), 1, ink);
-        text(x + 380, cy, written, 1, ink);
-        if (bits > 0) text(x + 500, cy, trf("cost.percent", {fixed(b / bits * 100.0, 1)}), 1, b < bits * 0.995 ? ink : dim);
-        if (!note.empty()) text(x + 580, cy, note, 1, dim);
-        cy += 14;
-    };
+    constexpr double kBitsPerDigit = 3.321928094887362; // log2(10)
+    const double bits = n.log10_approx() * kBitsPerDigit;
     auto digits_in = [](double b, double per) { return std::to_string(int(std::ceil(b / per))); };
 
-    text(x + 14, cy, tr("cost.head"), 1, dim);
-    cy += 18;
-    row(tr("cost.unit"), bits, trf("cost.chars", {digits_in(bits, 4)}), tr("cost.unit.note"));
-    cy += 6;
-    row(tr("ordering.positional"), bits, trf("cost.chars", {digits_in(bits, 4)}), tr("cost.same"));
-    row(tr("ordering.scrambled"), bits, trf("cost.chars", {digits_in(bits, 4)}), tr("cost.shuffled"));
-    // The same number stored as raw bytes, eight bits to a byte: half the hex, and what an
-    // installer file holds (SPECIFICATIONS §12.2).
-    row(tr("cost.raw"), bits, trf("cost.bytes", {digits_in(bits, 8)}), tr("cost.raw.note"));
-    // The guided length for this unit, whatever ordering you are walking in. It exists only
-    // on a text line with a model behind it.
+    // What the rows and the balance need, worked out first.
+    // The guided length for this unit, whatever ordering you are walking in. It exists only on a
+    // text line with a model behind it.
+    const sieve::GuidedLine::Code* guided = nullptr;
     if (!on_books() && !on_models() && !on_binary() && line().guided)
     {
         try
@@ -703,42 +691,94 @@ void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float botto
                 bk.guided_code = g->code(bk.unit);
                 bk.guided_by = g;
             }
-            const auto& code = *bk.guided_code;
-            row(tr("ordering.guided"), double(code.bits), trf("cost.chars", {std::to_string(code.hex.size())}),
-                double(code.bits) < bits * 0.9 ? tr("cost.likely") : tr("cost.unlikely"));
+            guided = &*bk.guided_code;
         }
         catch (const std::exception&)
         {
         }
     }
+    // A survivor's compact address: its number among the survivors.
+    const BigUint& units = line_units();
+    const bool compact = bk.survivor && !bk.guided;
+    const double compact_bits = compact ? units.log10_approx() * kBitsPerDigit : 0;
     // Variable length addressing: the shortest route found to this unit, by the ways there are to
     // get there (its position without leading zeros, or a bearing typed into the navigator and a
     // walk from where it lands). Usually no shorter than the address: a bearing carries only the
     // leading part of the position, and the walk the rest. A unit that sits on a short bearing,
     // or near the start or the end of the loop, is the exception, and this finds it.
+    const bool on_loop = bk.index < units;
+    const sieve::ShortestPath* route = on_loop ? shortest_path_of(bk.index, units) : nullptr;
+    // The item as the file F saves it.
+    if (!bk.file_bytes)
     {
-        const BigUint& units = line_units();
-        if (bk.index < units)
+        try
         {
-            if (const sieve::ShortestPath* p = shortest_path_of(bk.index, units))
-            {
-                const std::string how = !p->by_bearing ? tr("cost.vla.address")
-                                        : p->walk.is_zero() ? trf("cost.vla.exact", {p->bearing})
-                                                            : trf("cost.vla.walk", {p->bearing, tr(p->back ? "cost.vla.back" : "cost.vla.forward")});
-                row(tr("cost.vla"), p->bits, trf("cost.chars", {std::to_string(p->chars)}), how);
-                const size_t room = size_t(std::max(20.0f, (pw - 300) / 8));
-                std::string w = p->written.size() > room ? p->written.substr(0, room - 3) + "..." : p->written;
-                text(x + 28, cy, trf("cost.vla.route", {w}), 1, dim);
-                if (p->by_bearing && p->decimals > angle_decimals_)
-                    text(x + 28 + 8 * float(w.size() + 8), cy, trf("cost.vla.places", {std::to_string(p->decimals)}), 1, dim);
-                cy += 14;
-            }
-            else
-            {
-                text(x + 14, cy, tr("cost.vla"), 1, ink);
-                text(x + 260, cy, tr("cost.vla.working"), 1, dim);
-                cy += 14;
-            }
+            std::string name;
+            bk.file_bytes = bk.is_file ? bk.file_size : uint64_t(item_file(bk, name).size());
+        }
+        catch (const std::exception&)
+        {
+            bk.file_bytes = 0;
+        }
+    }
+    const double file_bits = double(*bk.file_bytes) * 8;
+
+    // The balance: the cheapest way found to name the item, under the filters and the line as they
+    // are: the address you hold it by, its guided address, and its shortest route.
+    {
+        double best = bk.guided ? double(bk.bits) : compact ? compact_bits : bits;
+        std::string by = bk.guided ? tr("ordering.guided") : compact ? tr("cost.compact") : tr(std::string("ordering.") + to_string(mode_));
+        if (guided && double(guided->bits) < best) best = double(guided->bits), by = tr("ordering.guided");
+        if (route && route->bits < best) best = route->bits, by = tr("cost.vla");
+        cy = draw_balance(best, file_bits, by, x, cy, pw);
+    }
+
+    auto row = [&](const std::string& what, double b, const std::string& written, const std::string& note) {
+        text(x + 14, cy, what, 1, ink);
+        text(x + 260, cy, trf("cost.bits", {fixed(b, 0)}), 1, ink);
+        text(x + 380, cy, written, 1, ink);
+        if (bits > 0) text(x + 500, cy, trf("cost.percent", {fixed(b / bits * 100.0, 1)}), 1, b < bits * 0.995 ? ink : dim);
+        if (!note.empty()) text(x + 580, cy, fit(note, pw - 594, 1), 1, dim);
+        cy += 14;
+    };
+    text(x + 14, cy, tr("cost.head"), 1, dim);
+    cy += 18;
+    row(tr("cost.unit"), bits, trf("cost.chars", {digits_in(bits, 4)}), tr("cost.unit.note"));
+    // The same item as a file: what the balance weighs the addresses against. A titled item's file
+    // holds its units only (a book's, its title and pages), so the address names more than it.
+    if (*bk.file_bytes > 0)
+        row(tr("cost.file"), file_bits, trf("cost.bytes", {std::to_string(*bk.file_bytes)}),
+            tr(bk.parts || on_composition() || titled_here() ? "cost.file.parts" : "cost.file.note"));
+    cy += 6;
+    row(tr("ordering.positional"), bits, trf("cost.chars", {digits_in(bits, 4)}), tr("cost.same"));
+    row(tr("ordering.scrambled"), bits, trf("cost.chars", {digits_in(bits, 4)}), tr("cost.shuffled"));
+    // The same number stored as raw bytes, eight bits to a byte: half the hex, and what an
+    // installer file holds (SPECIFICATIONS §12.2).
+    row(tr("cost.raw"), bits, trf("cost.bytes", {digits_in(bits, 8)}), tr("cost.raw.note"));
+    if (compact) row(tr("cost.compact"), compact_bits, trf("cost.chars", {digits_in(compact_bits, 4)}), tr("cost.compact.note"));
+    if (guided)
+        row(tr("ordering.guided"), double(guided->bits), trf("cost.chars", {std::to_string(guided->hex.size())}),
+            double(guided->bits) < bits * 0.9 ? tr("cost.likely") : tr("cost.unlikely"));
+    if (on_loop)
+    {
+        if (const sieve::ShortestPath* p = route)
+        {
+            const std::string how = !p->by_bearing ? tr("cost.vla.address")
+                                    : p->walk.is_zero() ? trf("cost.vla.exact", {p->bearing})
+                                                        : trf("cost.vla.walk", {p->bearing, tr(p->back ? "cost.vla.back" : "cost.vla.forward")});
+            row(tr("cost.vla"), p->bits, trf("cost.chars", {std::to_string(p->chars)}), how);
+            const size_t room = size_t(std::max(20.0f, (pw - 300) / 8));
+            std::string w = p->written.size() > room ? p->written.substr(0, room - 3) + "..." : p->written;
+            text(x + 28, cy, trf("cost.vla.route", {w}), 1, dim);
+            if (p->by_bearing && p->decimals > angle_decimals_)
+                text(x + 28 + 8 * float(w.size() + 8), cy, trf("cost.vla.places", {std::to_string(p->decimals)}), 1, dim);
+            cy += 14;
+        }
+        else
+        {
+            text(x + 14, cy, tr("cost.vla"), 1, ink);
+            text(x + 260, cy, tr("cost.vla.working"), 1, dim);
+            cy += 14;
         }
     }
     cy += 10;
@@ -765,6 +805,45 @@ void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float botto
         cy += 12;
     }
     text(x + 14, bottom - 16, tr("hand.keys.cost"), 1, ink);
+}
+
+// COST's balance: the cheapest address found for the item in hand (`best` bits, by way of `by`)
+// against the item as a file (`file_bits`), as a share of the file. Neutral is a line at the centre;
+// an address longer than the file grows outward from it in red, one shorter in green, both bordered
+// in white, at full width at a change of 100% (twice the file, or nothing to say) and held there
+// beyond it, so that it stays on the page. The figure above says the change whatever its size.
+// Returns the y below it.
+float Hallway::draw_balance(double best, double file_bits, const std::string& by, float x, float cy, float pw)
+{
+    const SDL_Color ink = theme().edge, dim = mix(theme().edge, theme().bg, 0.45f);
+    const SDL_Color red{255, 80, 80, 255}, green{80, 200, 120, 255}, white{255, 255, 255, 255};
+    if (file_bits <= 0)
+    {
+        text(x + 14, cy, tr("cost.balance.no_file"), 1, dim);
+        return cy + 24;
+    }
+    const double change = (best / file_bits - 1.0) * 100.0;
+    const std::string figure = fixed(std::fabs(change), 1);
+    const bool neutral = figure == fixed(0.0, 1);
+    const std::string label = neutral ? tr("cost.balance.neutral") : trf(change > 0 ? "cost.balance.positive" : "cost.balance.negative", {figure});
+    text(x + 14, cy, label, 1, neutral ? ink : change > 0 ? red : green);
+    cy += 14;
+    const float cx = x + pw / 2, half = (pw - 28) / 2, h = 10;
+    const float w = neutral ? 0.0f : half * float(std::min(1.0, std::fabs(change) / 100.0));
+    if (w >= 1)
+    {
+        const SDL_FRect bar{cx - w, cy, 2 * w, h};
+        const SDL_Color c = change > 0 ? red : green;
+        SDL_SetRenderDrawColor(r_, c.r, c.g, c.b, 255);
+        SDL_RenderFillRect(r_, &bar);
+        SDL_SetRenderDrawColor(r_, white.r, white.g, white.b, 255);
+        SDL_RenderRect(r_, &bar);
+    }
+    SDL_SetRenderDrawColor(r_, white.r, white.g, white.b, 255);
+    SDL_RenderLine(r_, cx, cy - 3, cx, cy + h + 3); // the centre: all there is at neutral
+    cy += h + 8;
+    text(x + 14, cy, trf("cost.balance.by", {by, fixed(best, 0), fixed(file_bits, 0)}), 1, dim);
+    return cy + 20;
 }
 
 // A book open in hand: the cover beside the title, then the current page. Returns the height used.

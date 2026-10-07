@@ -653,6 +653,11 @@ are cheap and because they are the sort of thing that is lost otherwise.
   - **Lines that judge only** (utf8-valid past its table, not-an-item asking for melodies) can be
     scored by estimate (`~` in the tally) but not by compact address, so COST shows them as
     unavailable rather than wrong.
+  - *Built, 7 October 2026:* **COST's balance** (Edward's design). The anchor is the item in hand.
+    The tab weighs the cheapest address found for it, under the filters as they stand, against it
+    as a file (`Neutral : 0%`, `Positive : X%`, `Negative : X%`), with a bar from the centre, red
+    for longer and green for shorter. What is left is the search: the filters and values that make
+    that address cheapest while keeping the item.
 
 ## 13. Composition dimensions (discussed 5–6 October 2026; built 6 October, but for what is still open below)
 
