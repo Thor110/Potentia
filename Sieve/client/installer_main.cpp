@@ -2,9 +2,11 @@
 // behind it.
 //
 // An installer made with `sieve locate FOLDER --installer NAME.sieve` is the address of the
-// folder's installer manifest (sieve-manifest-v3), stored as raw bytes: one number, which read
-// back is the manifest, which holds the folder structure and then every file's bytes, one after
-// another. This program does only that. It opens the .sieve file (given on the command
+// folder's installer manifest (sieve-manifest-v4), stored as raw bytes: one number, which read
+// back is the manifest, which holds the folder structure and then every file packed (programs
+// through the x86 filter, texts made from other texts' lines as masks, all of it LZMA2), unpacked
+// by the LZMA SDK's decoder in the locator's code (cli/locate.hpp). Older installers (v3: every
+// file's bytes as they are) install the same way. This program does only that. It opens the .sieve file (given on the command
 // line, attached to this program's own end (an installer program: sieve locate --program), dropped
 // on the window, or the one lying beside the program), says what it will install
 // and where, and on Install reads every file back and checks each against its SHA-256 before it
@@ -12,7 +14,7 @@
 // written. It carries the core's addressing and the manifest code and nothing else: no
 // dictionaries, models, fonts or pictures, which is what makes it the trimmed build of the tool.
 //
-// When what it carries is one 7z archive (a release is compressed first, so it carries sieve.7z),
+// When what it carries is one 7z archive (as releases did before v4 packed their files itself),
 // it unpacks the archive instead of writing it: into a folder named after the file (sieve.7z ->
 // sieve), with the archive's one top folder, if it has one, left out (client/unpack_7z.hpp). The
 // archive is checked against its SHA-256 first, and 7z checks each file's CRC as it unpacks. Only
@@ -133,7 +135,7 @@ struct Installer
         error.clear();
         try
         {
-            manifest = installable_manifest(file, false); // an installer, a program, or a v3 manifest
+            manifest = installable_manifest(file, false); // an installer, a program, or a v3 or v4 manifest
             screen = Screen::Ready;
             // A 7z archive on its own is unpacked; checked against its SHA-256 first, so a damaged
             // one is refused here, before its listing is trusted.

@@ -1,7 +1,7 @@
 @echo off
 rem Makes Sieve's release (tools\make_release.py) with everything by default: the version from
 rem CMakeLists.txt, the Release build in out\build\x64-Release, the files in Sieve\release. Double-
-rem click it, or run it with the script's options (make_release.bat --uncompressed, say). The window
+rem click it, or run it with the script's options (make_release.bat --seven-zip, say). The window
 rem stays open at the end so the result can be read.
 rem
 rem Python is found through the py launcher first: python.org's installers put it in place, and on

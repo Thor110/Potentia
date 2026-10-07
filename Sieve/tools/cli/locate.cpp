@@ -5,9 +5,15 @@
 
 #include "sieve/sha256.hpp"
 
+#include "Bra.h"
+#include "Lzma2Dec.h"
+
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <span>
 #include <stdexcept>
 
 #ifdef _WIN32
@@ -20,6 +26,125 @@
 namespace sieve::cli {
 
 namespace fs = std::filesystem;
+
+namespace {
+
+// ---- v4: the two streams unpacked, and each file's way followed
+
+void* lzma_alloc(ISzAllocPtr, size_t size) { return size ? std::malloc(size) : nullptr; }
+void lzma_free(ISzAllocPtr, void* address) { std::free(address); }
+const ISzAlloc kLzmaAlloc = {lzma_alloc, lzma_free};
+
+// An LZMA2 dictionary size as its property byte: the smallest p whose size, (2 | (p & 1)) <<
+// (p / 2 + 11), holds it (40: 4 GiB less one byte).
+uint8_t lzma2_property(uint32_t dictionary)
+{
+    for (uint8_t p = 0; p < 40; ++p)
+        if (uint64_t(dictionary) <= (uint64_t(2 | (p & 1)) << (p / 2 + 11))) return p;
+    return 40;
+}
+
+// One stream: raw LZMA2 of `bytes` bytes, then (x86) the x86 branch filter undone, as 7-Zip's BCJ
+// and xz's x86 filter both define it, from position 0.
+std::vector<uint8_t> unpack_stream(std::span<const uint8_t> packed, const PackedStream& s, bool x86)
+{
+    std::vector<uint8_t> out(size_t(s.bytes));
+    if (s.bytes == 0)
+    {
+        if (!packed.empty() && !(packed.size() == 1 && packed[0] == 0)) throw std::runtime_error("the installer's packed files are damaged");
+        return out;
+    }
+    SizeT out_len = out.size(), in_len = packed.size();
+    ELzmaStatus status;
+    const SRes r = Lzma2Decode(out.data(), &out_len, packed.data(), &in_len, lzma2_property(s.dictionary), LZMA_FINISH_END, &status, &kLzmaAlloc);
+    if (r != SZ_OK || out_len != out.size() || in_len != packed.size()) throw std::runtime_error("the installer's packed files are damaged");
+    if (x86)
+    {
+        UInt32 state = Z7_BRANCH_CONV_ST_X86_STATE_INIT_VAL;
+        z7_BranchConvSt_X86_Dec(out.data(), out.size(), 0, &state);
+    }
+    return out;
+}
+
+// A text's lines: its bytes split at each line feed (n line feeds make n + 1 lines).
+std::vector<std::span<const uint8_t>> lines_of(const std::vector<uint8_t>& t)
+{
+    std::vector<std::span<const uint8_t>> out;
+    size_t at = 0;
+    for (size_t i = 0; i < t.size(); ++i)
+        if (t[i] == '\n')
+        {
+            out.emplace_back(t.data() + at, i - at);
+            at = i + 1;
+        }
+    out.emplace_back(t.data() + at, t.size() - at);
+    return out;
+}
+
+// Every file's bytes from a v4 manifest's streams, in manifest order.
+std::vector<uint8_t> unpack_v4(const Manifest& m)
+{
+    if (m.streams.size() != m.x86.packed + m.lzma2.packed) throw std::runtime_error("manifest: its streams are not the size its lines say");
+    const std::span<const uint8_t> all(m.streams);
+    const std::vector<uint8_t> x86 = unpack_stream(all.subspan(0, size_t(m.x86.packed)), m.x86, true);
+    const std::vector<uint8_t> plain = unpack_stream(all.subspan(size_t(m.x86.packed)), m.lzma2, false);
+    std::vector<const ManifestEntry*> files;
+    for (const ManifestEntry& e : m.entries)
+        if (!e.dir) files.push_back(&e);
+    std::vector<std::vector<uint8_t>> bytes(files.size());
+    std::vector<std::pair<size_t, std::vector<uint8_t>>> masks(files.size()); // derived: its base, its mask
+    size_t xa = 0, pa = 0;
+    auto take = [](const std::vector<uint8_t>& from, size_t& at, uint64_t n, const std::string& path) {
+        if (from.size() - at < n) throw std::runtime_error("the installer ends before " + path);
+        std::vector<uint8_t> out(from.begin() + std::ptrdiff_t(at), from.begin() + std::ptrdiff_t(at + n));
+        at += size_t(n);
+        return out;
+    };
+    // First what is carried as it is, and each mask; then each derived file, from its base.
+    std::vector<size_t> base_lines(files.size(), 0);
+    for (size_t i = 0; i < files.size(); ++i)
+    {
+        const ManifestEntry& e = *files[i];
+        if (e.way == "x86") bytes[i] = take(x86, xa, e.size, e.path);
+        else if (e.way == "raw") bytes[i] = take(plain, pa, e.size, e.path);
+        else if (e.way.rfind("lines ", 0) != 0) throw std::runtime_error("manifest: " + e.path + " has no way to be carried");
+    }
+    for (size_t i = 0; i < files.size(); ++i)
+    {
+        const ManifestEntry& e = *files[i];
+        if (e.way.rfind("lines ", 0) != 0) continue;
+        const size_t k = size_t(std::stoull(e.way.substr(6)));
+        if (k >= files.size() || (files[k]->way != "x86" && files[k]->way != "raw"))
+            throw std::runtime_error("manifest: " + e.path + " is derived from a file that is not carried");
+        const auto lines = lines_of(bytes[k]);
+        masks[i] = {k, take(plain, pa, (lines.size() + 7) / 8, e.path)};
+    }
+    if (xa != x86.size() || pa != plain.size()) throw std::runtime_error("manifest: its streams hold more than its files");
+    for (size_t i = 0; i < files.size(); ++i)
+    {
+        if (files[i]->way.rfind("lines ", 0) != 0) continue;
+        const auto lines = lines_of(bytes[masks[i].first]);
+        const std::vector<uint8_t>& mask = masks[i].second;
+        bool first = true;
+        for (size_t l = 0; l < lines.size(); ++l)
+            if (mask[l / 8] >> (l % 8) & 1)
+            {
+                if (!first) bytes[i].push_back('\n');
+                bytes[i].insert(bytes[i].end(), lines[l].begin(), lines[l].end());
+                first = false;
+            }
+    }
+    std::vector<uint8_t> contents;
+    contents.reserve(size_t(m.bytes));
+    for (size_t i = 0; i < files.size(); ++i)
+    {
+        if (bytes[i].size() != files[i]->size) throw std::runtime_error("the installer does not give " + files[i]->path + " (its size is wrong)");
+        contents.insert(contents.end(), bytes[i].begin(), bytes[i].end());
+    }
+    return contents;
+}
+
+} // namespace
 
 std::vector<uint8_t> read_file_bytes(const fs::path& file)
 {
@@ -101,16 +226,19 @@ std::string manifest_path(const fs::path& p, const fs::path& root)
 
 std::string Manifest::text() const
 {
-    std::string t = std::string(with_contents ? kInstallManifestVersion : with_addresses ? kAddressManifestVersion : kManifestVersion) + "\n";
+    std::string t = std::string(packed ? kPackedManifestVersion : with_contents ? kInstallManifestVersion : with_addresses ? kAddressManifestVersion : kManifestVersion) + "\n";
     t += "root " + root + "\n";
     t += "files " + std::to_string(files) + "\n";
     t += "bytes " + std::to_string(bytes) + "\n";
+    if (packed)
+        for (const auto& [name, s] : {std::pair<const char*, const PackedStream*>{"x86", &x86}, {"lzma2", &lzma2}})
+            t += std::string("stream ") + name + " " + std::to_string(s->packed) + " " + std::to_string(s->bytes) + " " + std::to_string(s->dictionary) + "\n";
     for (const ManifestEntry& e : entries)
     {
         if (e.dir) t += "d\t" + e.path + "\n";
         else
-            t += "f\t" + std::to_string(e.size) + "\t" + e.sha256 + "\t" + (with_addresses ? e.address + "\t" : std::string()) + e.path +
-                 "\n";
+            t += "f\t" + std::to_string(e.size) + "\t" + e.sha256 + "\t" + (packed ? e.way + "\t" : with_addresses ? e.address + "\t" : std::string()) +
+                 e.path + "\n";
     }
     t += "end\n";
     return t;
@@ -120,9 +248,10 @@ std::vector<uint8_t> Manifest::file() const
 {
     const std::string t = text();
     std::vector<uint8_t> out;
-    out.reserve(t.size() + contents.size());
+    out.reserve(t.size() + (packed ? streams.size() : contents.size()));
     out.insert(out.end(), t.begin(), t.end());
-    if (with_contents) out.insert(out.end(), contents.begin(), contents.end());
+    if (packed) out.insert(out.end(), streams.begin(), streams.end());
+    else if (with_contents) out.insert(out.end(), contents.begin(), contents.end());
     return out;
 }
 
@@ -225,8 +354,8 @@ void add_contents(Manifest& m, const std::filesystem::path& root_in)
 Manifest Manifest::parse(std::string_view whole)
 {
     // Line by line, exactly as text() writes it, up to and including "end"; anything else is
-    // refused rather than guessed at. After "end" a v3 manifest has its files' bytes, and the
-    // others nothing.
+    // refused rather than guessed at. After "end" a v3 manifest has its files' bytes, a v4 its two
+    // streams, and the others nothing.
     std::vector<std::string> lines;
     size_t after = std::string_view::npos;
     for (size_t at = 0; at < whole.size();)
@@ -251,13 +380,29 @@ Manifest Manifest::parse(std::string_view whole)
     if (lines.size() < 5) throw std::runtime_error("manifest: too short");
     if (lines[0] == kAddressManifestVersion) m.with_addresses = true;
     else if (lines[0] == kInstallManifestVersion) m.with_contents = true;
+    else if (lines[0] == kPackedManifestVersion) m.packed = m.with_contents = true;
     else if (lines[0] != kManifestVersion) throw std::runtime_error("not a sieve manifest (" + lines[0].substr(0, 40) + ")");
-    if (m.with_contents) m.contents.assign(whole.begin() + std::ptrdiff_t(after), whole.end());
+    if (m.packed) m.streams.assign(whole.begin() + std::ptrdiff_t(after), whole.end());
+    else if (m.with_contents) m.contents.assign(whole.begin() + std::ptrdiff_t(after), whole.end());
     else if (after != whole.size()) throw std::runtime_error("manifest: something after 'end'");
     m.root = field(lines[1], "root");
     m.files = std::stoull(field(lines[2], "files"));
     m.bytes = std::stoull(field(lines[3], "bytes"));
-    for (size_t i = 4; i + 1 < lines.size(); ++i)
+    size_t first = 4;
+    if (m.packed)
+    {
+        if (lines.size() < 7) throw std::runtime_error("manifest: too short");
+        for (const auto& [name, s] : {std::pair<const char*, PackedStream*>{"x86", &m.x86}, {"lzma2", &m.lzma2}})
+        {
+            const std::string v = field(lines[first++], (std::string("stream ") + name).c_str());
+            unsigned long long packed = 0, bytes = 0, dictionary = 0;
+            char extra = 0;
+            if (std::sscanf(v.c_str(), "%llu %llu %llu%c", &packed, &bytes, &dictionary, &extra) != 3 || dictionary > 0xFFFFFFFFull)
+                throw std::runtime_error(std::string("manifest: its ") + name + " stream's line is not three numbers");
+            *s = PackedStream{packed, bytes, uint32_t(dictionary)};
+        }
+    }
+    for (size_t i = first; i + 1 < lines.size(); ++i)
     {
         std::vector<std::string> f;
         for (size_t at = 0;;)
@@ -273,11 +418,12 @@ Manifest Manifest::parse(std::string_view whole)
             e.dir = true;
             e.path = f[1];
         }
-        else if (f[0] == "f" && f.size() == (m.with_addresses ? 5u : 4u))
+        else if (f[0] == "f" && f.size() == (m.with_addresses || m.packed ? 5u : 4u))
         {
             e.size = std::stoull(f[1]);
             e.sha256 = f[2];
             if (m.with_addresses) e.address = f[3];
+            if (m.packed) e.way = f[3];
             e.path = f.back();
         }
         else throw std::runtime_error("manifest: line " + std::to_string(i + 1) + " is not an entry");
@@ -295,6 +441,7 @@ Manifest Manifest::parse(std::string_view whole)
         if (bad) throw std::runtime_error("manifest: refused path " + e.path);
         m.entries.push_back(std::move(e));
     }
+    if (m.packed) m.contents = unpack_v4(m); // every file's bytes, each by its way
     if (m.with_contents)
     {
         uint64_t sum = 0;

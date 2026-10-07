@@ -32,6 +32,29 @@
 // a listing for reading, twice the tree's size and more (two hex digits a byte). Installers were
 // once made from it, which made them twice as large as they need be; they are not any more.
 //
+// A packed installer's manifest, "sieve-manifest-v4" (the installers made now), is the same listing
+// with each file's way of being carried between its SHA-256 and its path, and two lines naming the
+// two streams its files are carried in:
+//
+//     stream x86 <packed bytes> <bytes> <dictionary>     programs (EXE, ELF), x86 filter then LZMA2
+//     stream lzma2 <packed bytes> <bytes> <dictionary>   everything else, LZMA2
+//     f	<size>	<sha256>	<way>	<path>
+//
+// and after "end" the two streams, the x86 first, each raw LZMA2 (its dictionary size gives its
+// property byte as the LZMA2 format defines it). A file's way is one of:
+//
+//     x86       its bytes, next in the x86 stream
+//     raw       its bytes, next in the lzma2 stream
+//     lines K   derived from file K (counting the "f" lines from 0, a file carried x86 or raw): its
+//               lines (split at each line feed; a file ending in one has an empty last line) are
+//               some of file K's, in its order, and a mask of them, one bit for each of file K's
+//               lines (the first in the low bit of the first byte), is next in the lzma2 stream
+//
+// so each file is carried as compactly as the packer found (pack.hpp), the whole of it as small as
+// the strongest general compression, and smaller where one file is made from another (the
+// dictionaries: each SCOWL list but the largest is a mask over the largest). Unpacking gives back
+// every file exactly, each checked against its size and SHA-256 before anything is written.
+//
 // An installer's manifest, "sieve-manifest-v3", is the v1 text under its own first line, and then,
 // straight after "end" and its line feed, the raw bytes of every file one after another, in the
 // manifest's order: file k is the `size` bytes after the files before it. Nothing separates them
@@ -59,6 +82,7 @@ namespace sieve::cli {
 inline constexpr const char* kManifestVersion = "sieve-manifest-v1";
 inline constexpr const char* kAddressManifestVersion = "sieve-manifest-v2";
 inline constexpr const char* kInstallManifestVersion = "sieve-manifest-v3";
+inline constexpr const char* kPackedManifestVersion = "sieve-manifest-v4";
 
 std::vector<uint8_t> read_file_bytes(const std::filesystem::path& file);
 
@@ -76,6 +100,14 @@ struct ManifestEntry
     uint64_t size = 0;   // files
     std::string sha256;  // files
     std::string address; // files, in a v2 manifest: the file's positional address in hex
+    std::string way;     // files, in a v4 manifest: "x86", "raw" or "lines K"
+};
+
+// One of a v4 manifest's two streams.
+struct PackedStream
+{
+    uint64_t packed = 0, bytes = 0; // its size as carried, and unpacked
+    uint32_t dictionary = 0;        // the LZMA2 dictionary it was packed with
 };
 
 struct Manifest
@@ -85,11 +117,16 @@ struct Manifest
     uint64_t files = 0, bytes = 0;
     uint64_t skipped = 0;                // symbolic links and other entries that are not files
     bool with_addresses = false;         // v2: every file's address in its line
-    bool with_contents = false;          // v3: an installer's manifest, every file's bytes after the text
-    std::vector<uint8_t> contents;       // v3: those bytes, in manifest order
-    std::string text() const;            // the canonical text above (for v3, its text part)
-    std::vector<uint8_t> file() const;   // the whole manifest as a file: the text, and for v3 the contents
-    static Manifest parse(std::string_view whole); // v1, v2 or v3; throws if it is none of them
+    bool with_contents = false;          // v3 and v4: an installer's manifest; contents holds every file
+    std::vector<uint8_t> contents;       // v3 and v4: every file's bytes, in manifest order (v4: unpacked)
+    bool packed = false;                 // v4: carried in the two streams below
+    PackedStream x86, lzma2;             // v4: the streams
+    std::vector<uint8_t> streams;        // v4: the two streams as carried, the x86 first
+    std::string text() const;            // the canonical text above (for v3 and v4, its text part)
+    std::vector<uint8_t> file() const;   // the whole manifest as a file: the text, and for v3 the contents, for v4 the streams
+    // v1 to v4; throws if it is none of them. A v4 manifest's streams are unpacked into contents and
+    // every file's way followed, so what is installed from it is checked as a v3's is.
+    static Manifest parse(std::string_view whole);
 };
 
 // Every file's address put into the manifest, making it v2. Reads every file again.

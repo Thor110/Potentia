@@ -677,10 +677,16 @@ are cheap and because they are the sort of thing that is lost otherwise.
       more than they save; with tailoring, each line's filters tailored to its items. Sieve's own
       files (two melodies, a picture, a note) come to 21.3% of their own addresses.
   - **Still open in 1e:**
-    - **A listing that names files these ways** (a `sieve-manifest-v4`): per file, its way (own
-      bytes, or line, compact or not, and its number), with the shapes and stacks once at the top,
-      so an installer of Sieve's own files is as small as the weighing says. Today the installer
-      holds every file's bytes.
+    - *Built, 7 October 2026:* **`sieve-manifest-v4`, the installer packed** (Edward: "a new
+      manifest and update to the installer is a given"; compression built in, as he chose). Each
+      file's way: `x86` (programs, the x86 filter, then LZMA2), `raw`, or `lines K` (a text made
+      of some of file K's lines, as a mask: each SCOWL list but the largest); two LZMA2 streams;
+      unpacked by the LZMA SDK in every program that installs, and independently by the oracle.
+      A release-shaped folder: 20.00% of its size, against 21.17% for one LZMA2 stream. A release's
+      files are no line's items, so the weighing's item ways are not among v4's yet: they need the
+      lines in `sieve-install` (pages and melodies are core; pictures need the PNG writer). Still
+      open for v4: item ways, and "made from another file" ways beyond lines (a few bytes changed:
+      a delta).
     - **The line's own settings as part of the search** (alphabet, length, palette, picture size):
       a text file is a page only if the page is its length and its alphabet holds its characters,
       so most files are no line's item as the lines stand. Fitting a line to a file (a page of the

@@ -12,9 +12,9 @@ order matters and is easy to get wrong by hand:
      they are, so nobody starts the wrong program first. (A build folder keeps them together; the
      programs look in both places.) No map is
      shipped inside it: the published map names the release's files, so it cannot be one of them.
-  4. The folder compressed first (the proper procedure: an installer is never smaller than what it
-     carries), as a solid 7z at 7-Zip's strongest.
-  5. From the archive: Sieve instructions (sieve.sieve, for anyone with Sieve) and an installer
+  4. (Nothing: the installer packs the folder itself now, sieve-manifest-v4. --seven-zip compresses
+     it to a solid 7z first and carries that instead, as releases did before, for comparing.)
+  5. From the folder: Sieve instructions (sieve.sieve, for anyone with Sieve) and an installer
      program (sieve.exe on Windows, sieve-setup elsewhere, for anyone), made by the release's own
      sieve.
   6. The source: sieve-source.7z, the Sieve folder alone as the last Git commit has it (git
@@ -23,8 +23,9 @@ order matters and is easy to get wrong by hand:
   7. The published map: sealed, naming the installer and the instructions (found beside it) and
      holding the source (its bytes inside the map), with its own SHA-256 printed, since a map
      cannot name itself.
-  8. Checks: each installer installed into a scratch folder and compared with the archive, byte
-     for byte; the map read back and every node verified beside it.
+  8. Checks: each installer installed into a scratch folder and compared with the release folder
+     (or, with --seven-zip, the archive), byte for byte; the map read back and every node verified
+     beside it.
   9. SHA256SUMS.txt and a release-notes draft.
 
 Published (three files, Edward's naming): sieve.exe, sieve.sieve and sieve.map, the map naming the
@@ -38,17 +39,20 @@ Usage (from the repository root, on the machine the release is for):
   python tools/make_release.py                      # the version from CMakeLists.txt, into release/
   python tools/make_release.py --version 0.13.1 --build-dir out/build/x64-Release --out release
   python tools/make_release.py --version 0.13.1 --skip-build      # the build is already made
-  python tools/make_release.py --version 0.13.1 --uncompressed    # install the folder itself
+  python tools/make_release.py --version 0.13.1 --seven-zip       # 7z first, as before v4, to compare
 
 After publishing, make the map again to name GitHub's source zip as well (GitHub makes it only
 once the release is out, so its hash cannot be known before):
 
   tools\make_release.bat --map-with "C:\Users\...\Downloads\Potentia-0.13.1.zip"
 
---uncompressed makes the instructions and the program from the release folder rather than the 7z:
-larger to download, but it installs straight to a runnable folder, with no 7-Zip needed to unpack.
+The instructions and the program carry the release folder packed (sieve-manifest-v4: the programs
+through the x86 filter, each SCOWL list but the largest as a mask over it, everything LZMA2 at its
+strongest), so they install straight to a runnable folder and are smaller than the 7z was.
+--seven-zip makes them from a solid 7z of the folder instead, as releases were made before v4, so
+the two can be weighed against each other on the same build.
 
-It needs Python 3.8+, CMake, and 7-Zip (7z on the PATH, or in Program Files). It changes nothing
+It needs Python 3.8+, CMake, and 7-Zip (7z on the PATH, or in Program Files) for the source archive. It changes nothing
 in the repository. (--with-source, which rewrote a shipped data/maps/sieve.map to name a source
 archive, was dropped on 27 September 2026: the published map holds the source instead.)
 """
@@ -243,7 +247,7 @@ def main():
     ap.add_argument("--out", type=Path, default=ROOT / "release", help="where the release files go (default: release/)")
     ap.add_argument("--name", default="sieve", help="the published files' base name (default: sieve)")
     ap.add_argument("--skip-build", action="store_true", help="use the build as it is")
-    ap.add_argument("--uncompressed", action="store_true", help="make the installers from the folder, not the 7z")
+    ap.add_argument("--seven-zip", action="store_true", help="carry a solid 7z of the folder (as before v4), not the folder packed")
     ap.add_argument("--map-with", type=Path, default=None, metavar="FILE",
                     help="after publishing: make sieve.map again, naming the release's files and FILE too (GitHub's source zip)")
     a = ap.parse_args()
@@ -273,7 +277,7 @@ def main():
             print(f"WARNING: the build in {build} is older than the source ({', '.join(stale)} changed since).")
             print("         Build Release in Visual Studio first, or the release carries the old programs.")
     name = a.name
-    folder = f"Sieve-{a.version}"  # the release folder: what the 7z unpacks to, or what installs
+    folder = f"Sieve-{a.version}"  # the release folder: what installs (or what the 7z unpacks to)
     out = a.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
     sz = find_7z()
@@ -309,11 +313,12 @@ def main():
             fail(f"{f} is not in {build}")
         shutil.copy2(build / f, stage)
 
-    # 4. Compressed first.
-    step("compressed first: the 7z")
+    # 4. With --seven-zip only: compressed first, as before v4.
     archive = out / f"{name}.7z"
-    seven_zip(sz, archive, [folder], cwd=out)
-    carried = stage if a.uncompressed else archive
+    if a.seven_zip:
+        step("compressed first: the 7z")
+        seven_zip(sz, archive, [folder], cwd=out)
+    carried = archive if a.seven_zip else stage
 
     # 5. The instructions and the program, made by the release's own sieve.
     step("Sieve instructions and the installer program")
@@ -340,7 +345,7 @@ def main():
         for i, f in enumerate((instructions, program)):
             dest = Path(tmp) / f"install{i}"
             run([sieve, "install", f, "--to", dest])
-            if a.uncompressed:
+            if not a.seven_zip:
                 if not same_tree(stage, dest):
                     fail(f"{f.name} did not install the release folder as it is")
             else:
@@ -373,8 +378,9 @@ def main():
     sums = "".join(f"{sha256(f)}  {f.name}\n" for f in published)
     (out / "SHA256SUMS.txt").write_text(sums, encoding="utf-8")
     sizes = "\n".join(f"| `{f.name}` | {f.stat().st_size:,} bytes | `{sha256(f)}` |" for f in published)
-    if a.uncompressed:
-        where_note = f"The installers put the `{folder}` folder in place."
+    if not a.seven_zip:
+        where_note = (f"The installer (`{program.name}`, or `sieve-install` with `{instructions.name}`) puts the `{folder}` "
+                      f"folder in place, every file checked against its SHA-256.")
     else:
         where_note = (f"The installer (`{program.name}`, or `sieve-install` with `{instructions.name}`) unpacks the release "
                       f"into a folder of its own: choose `C:\\Games` and you get `C:\\Games\\{name}\\`. (`sieve install` "

@@ -142,8 +142,8 @@ else()
     set(SIEVE_LZMA LibLZMA::LibLZMA)
 endif()
 
-# The locator and the installer's code (no compressors: sieve-install links this alone), and the
-# comparison, which is the only part that needs them.
+# The locator and the installer's code (decoders only, the LZMA SDK's: sieve-install links this
+# alone), and the comparison and the packer, which alone need the compressors.
 # Sieve's icon as a Windows resource (data/icons, made by tools/make_icon.py), for every program.
 if(WIN32)
     set(SIEVE_ICON_FILE ${CMAKE_CURRENT_SOURCE_DIR}/data/icons/sieve.ico)
@@ -171,14 +171,31 @@ if(MSVC)
     target_compile_definitions(sieve_pdq PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
 
+# The LZMA SDK's decoders (third_party/lzma, public domain): LZMA2 and the x86 branch filter, with
+# which the locator's install code unpacks a packed installer (sieve-manifest-v4, tools/cli/
+# locate.*), and the 7z decoder sieve-install unpacks an installer that carries one 7z archive with
+# (client/unpack_7z.hpp). One decoder for every program that installs, the smallest included. C,
+# so its own language; its warnings are the SDK's, at each compiler's usual level.
+enable_language(C)
+add_library(sieve_lzma STATIC
+    third_party/lzma/7zAlloc.c third_party/lzma/7zArcIn.c third_party/lzma/7zBuf.c third_party/lzma/7zBuf2.c
+    third_party/lzma/7zCrc.c third_party/lzma/7zCrcOpt.c third_party/lzma/7zDec.c third_party/lzma/7zStream.c
+    third_party/lzma/Bcj2.c third_party/lzma/Bra.c third_party/lzma/Bra86.c third_party/lzma/BraIA64.c
+    third_party/lzma/CpuArch.c third_party/lzma/Delta.c third_party/lzma/Lzma2Dec.c third_party/lzma/LzmaDec.c
+    third_party/lzma/Ppmd7.c third_party/lzma/Ppmd7Dec.c)
+target_include_directories(sieve_lzma PUBLIC third_party/lzma)
+if(MSVC)
+    target_compile_options(sieve_lzma PRIVATE /W3)
+endif()
+
 add_library(sieve_locate STATIC tools/cli/locate.cpp tools/cli/map.cpp tools/cli/vault.cpp tools/cli/vault_decode.cpp tools/cli/timings.cpp)
 target_include_directories(sieve_locate PUBLIC tools)
 # The vault checks pictures (PDQ), including files that are pictures, so it reads them (stb).
-target_link_libraries(sieve_locate PUBLIC sieve_core PRIVATE sieve_pdq sieve_image_io)
+target_link_libraries(sieve_locate PUBLIC sieve_core PRIVATE sieve_pdq sieve_image_io sieve_lzma)
 target_link_libraries(sieve_lines PUBLIC sieve_locate) # the lines check units against the vault
-add_library(sieve_compare STATIC tools/cli/compare.cpp)
+add_library(sieve_compare STATIC tools/cli/compare.cpp tools/cli/pack.cpp)
 target_include_directories(sieve_compare PUBLIC tools)
-target_link_libraries(sieve_compare PUBLIC sieve_core PRIVATE ${SIEVE_ZLIB} ${SIEVE_LZMA})
+target_link_libraries(sieve_compare PUBLIC sieve_core sieve_locate PRIVATE ${SIEVE_ZLIB} ${SIEVE_LZMA})
 if(SIEVE_LZMA_INCLUDE)
     target_include_directories(sieve_compare SYSTEM PRIVATE ${SIEVE_LZMA_INCLUDE})
 endif()
@@ -323,20 +340,6 @@ if(SIEVE_BUILD_CLIENT)
     # the installer attached. SDL is linked statically where a static SDL is to be had, so that
     # program is one file; with only a shared SDL it also needs SDL3.dll beside it (sieve locate
     # --program says so). On Windows it is a windowed program, without a console.
-    # The LZMA SDK's 7z decoder (third_party/lzma, public domain), for sieve-install alone: it
-    # unpacks an installer that carries one 7z archive (client/unpack_7z.hpp). C, so its own
-    # language; its warnings are the SDK's, at each compiler's usual level.
-    enable_language(C)
-    add_library(sieve_lzma STATIC
-        third_party/lzma/7zAlloc.c third_party/lzma/7zArcIn.c third_party/lzma/7zBuf.c third_party/lzma/7zBuf2.c
-        third_party/lzma/7zCrc.c third_party/lzma/7zCrcOpt.c third_party/lzma/7zDec.c third_party/lzma/7zStream.c
-        third_party/lzma/Bcj2.c third_party/lzma/Bra.c third_party/lzma/Bra86.c third_party/lzma/BraIA64.c
-        third_party/lzma/CpuArch.c third_party/lzma/Delta.c third_party/lzma/Lzma2Dec.c third_party/lzma/LzmaDec.c
-        third_party/lzma/Ppmd7.c third_party/lzma/Ppmd7Dec.c)
-    target_include_directories(sieve_lzma PUBLIC third_party/lzma)
-    if(MSVC)
-        target_compile_options(sieve_lzma PRIVATE /W3)
-    endif()
     add_executable(sieve-install WIN32 client/installer_main.cpp client/unpack_7z.cpp ${SIEVE_ICON_RC})
     target_link_libraries(sieve-install PRIVATE sieve_lzma)
     if(SIEVE_SMALL_INSTALLER)

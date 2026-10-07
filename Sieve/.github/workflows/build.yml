@@ -561,8 +561,9 @@ jobs:
           $H --warp "$W" --press "M,M,-" --screenshot keys.png | tail -2 | sed -n 1p | q "PAGES line, guided zoom 57"
           # The address navigator: X opens the whole address, Home chooses its first digit, Up turns
           # it (carrying and wrapping), and ENTER goes there, far from where the walk started.
-          # sieve-install, unattended: the fixture put back from its installer, identical; a second
-          # time over it is refused (exit 1), as is a damaged installer.
+          # sieve-install, unattended: the fixture put back from its installer (v4, packed),
+          # identical; a second time over it is refused (exit 1), as is a damaged installer. Then
+          # the fixture with a program and a list made from another's lines in it, packed, too.
           build/sieve locate tests/manifest_fixture --installer fx.sieve > /dev/null
           rm -rf fx_installed
           build/sieve-install fx.sieve --to fx_installed --yes --screenshot installer.bmp
@@ -572,6 +573,11 @@ jobs:
           head -c 100 fx.sieve > broken.sieve
           if build/sieve-install broken.sieve --to fx_broken --yes; then exit 1; fi
           test ! -e fx_broken
+          rm -rf fx4 fx4_installed && cp -r tests/manifest_fixture fx4 && cp build/sieve fx4/program
+          seq 1 20000 > fx4/all.txt && awk 'NR % 3 == 0' fx4/all.txt > fx4/third.txt
+          build/sieve locate fx4 --installer fx4.sieve 2>&1 | grep -c "1 derived from another's lines" > /dev/null
+          build/sieve-install fx4.sieve --to fx4_installed --yes
+          diff -r fx4 fx4_installed
           # An installer carrying one 7z: sieve-install unpacks it into a folder named after the file,
           # its one top folder left out, so the fixture comes back as it was; the locator's own
           # install gives back the archive itself, byte for byte.
@@ -1220,9 +1226,10 @@ jobs:
           # A v2 manifest (every file's address listed) is the oracle's to the byte.
           $S locate ../tests/manifest_fixture --manifest fixture2.manifest --with-addresses > /dev/null
           python sieve_ref.py manifest ../tests/manifest_fixture --with-addresses | cmp - fixture2.manifest
-          # The installer: a v3 manifest (the listing, then every file's bytes; the oracle's, to the
-          # byte), its address, and the folder put back from that one address, identical.
-          $S locate ../tests/manifest_fixture --manifest fixture3.manifest --installer fixture.sieve > /dev/null
+          # The older installer, --v3: a v3 manifest (the listing, then every file's bytes; the
+          # oracle's, to the byte), its address, and the folder put back from that one address,
+          # identical.
+          $S locate ../tests/manifest_fixture --manifest fixture3.manifest --installer fixture.sieve --v3 > /dev/null
           python sieve_ref.py manifest ../tests/manifest_fixture --with-contents | cmp - fixture3.manifest
           # The installer is the manifest's address as raw bytes: exactly the manifest's size here,
           # which is the files' bytes and the listing, no more.
@@ -1233,7 +1240,7 @@ jobs:
           diff -r ../tests/manifest_fixture installed
           # A single file's Sieve instructions: as a folder holding just it, the oracle's v3 manifest
           # to the byte (seen through its address), installed back as the file under its name.
-          $S locate ../tests/manifest_fixture/a.txt --installer a.sieve > /dev/null
+          $S locate ../tests/manifest_fixture/a.txt --installer a.sieve --v3 > /dev/null
           python sieve_ref.py manifest ../tests/manifest_fixture/a.txt --with-contents > a3.manifest
           python -c "
           import sys
@@ -1259,6 +1266,28 @@ jobs:
           $S install fixture_v2.sieve --to installed2 > /dev/null
           diff -r ../tests/manifest_fixture installed2
           test "$($S locate ../tests/manifest_fixture/a.txt | awk '$1 == "sha256" {print $2}')" = "$(python -c "import hashlib;print(hashlib.sha256(open('../tests/manifest_fixture/a.txt','rb').read()).hexdigest())")"
+          # The installer as made now, v4: the fixture with a program (the x86 stream) and a list
+          # made from another's lines (a mask), packed; the oracle unpacks it with Python's own
+          # lzma, nothing of Sieve's, and gives back the folder, as sieve install does.
+          rm -rf v4fx && cp -r ../tests/manifest_fixture v4fx && cp $S v4fx/program
+          python -c "open('v4fx/all.txt', 'w').write(''.join(f'{i}\n' for i in range(1, 20001)))"
+          python -c "open('v4fx/third.txt', 'w').write(''.join(f'{i}\n' for i in range(3, 20001, 3)))"
+          out=$($S locate v4fx --manifest fixture4.manifest --installer fixture4.sieve | tr -d '\r')
+          echo "$out" | grep -v "^[df]	"
+          echo "$out" | grep -c "1 program(s) in the x86 stream" > /dev/null
+          echo "$out" | grep -c "third.txt: lines of all.txt" > /dev/null
+          head -1 fixture4.manifest | grep -c "^sieve-manifest-v4" > /dev/null
+          rm -rf unpacked4 installed4
+          python sieve_ref.py unpack fixture4.manifest --to unpacked4 > /dev/null
+          diff -r v4fx unpacked4
+          $S install fixture4.sieve --to installed4 > /dev/null
+          diff -r v4fx installed4
+          # A damaged stream is refused, and nothing is written.
+          python -c "
+          d = bytearray(open('fixture4.manifest', 'rb').read()); d[-40] ^= 0xFF
+          open('broken4.manifest', 'wb').write(bytes(d))"
+          if $S install broken4.manifest --to broken4 2> /dev/null; then exit 1; fi
+          test ! -e broken4
 
       - name: The pinned model rebuilds byte for byte from its corpus (Linux)
         if: runner.os == 'Linux'

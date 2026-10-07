@@ -31,6 +31,7 @@
 #include "cli/media_decode.hpp"
 #include "cli/vault.hpp"
 #include "cli/vault_decode.hpp"
+#include "cli/pack.hpp"
 #include "cli/plugins.hpp"
 #include "cli/tailor.hpp"
 #include "cli/weigh.hpp"
@@ -2244,19 +2245,23 @@ int cmd_locate(const Args& a)
             cmp.address_hex = addr.is_zero() ? 0 : hex.size();
         }
         // Sieve instructions for the one file, exactly as for a folder holding just it: its name,
-        // size and SHA-256, then its bytes, as one number. And as an installer program.
+        // size and SHA-256, then its bytes, packed (v4; --v3: as they are), as one number. And as
+        // an installer program.
         if (a.has("installer") || a.has("program") || a.has("compare"))
         {
             Manifest m = manifest_of_file(target);
-            add_contents(m, fs::absolute(target).parent_path());
+            PackReport rep;
+            if (a.has("v3")) add_contents(m, fs::absolute(target).parent_path());
+            else add_packed(m, fs::absolute(target).parent_path(), &rep);
+            if ((a.has("installer") || a.has("program")) && m.packed) std::cout << pack_report_text(rep, m.bytes);
             const std::vector<uint8_t> ibytes = m.file();
             const BigUint iaddr = binary_address(ibytes);
             if (a.has("installer"))
             {
                 const std::string o = a.get("installer");
                 write_address_file(fs::path(std::u8string(o.begin(), o.end())), iaddr, a.has("hex"));
-                std::cout << "installer " << o << ": Sieve instructions for the file (its name, size and SHA-256, then its bytes), as "
-                          << (a.has("hex") ? "hex" : "raw bytes") << "\n";
+                std::cout << "installer " << o << ": Sieve instructions for the file (its name, size and SHA-256, then its bytes"
+                          << (m.packed ? ", packed: sieve-manifest-v4" : ", as they are: sieve-manifest-v3") << "), as " << (a.has("hex") ? "hex" : "raw bytes") << "\n";
             }
             if (a.has("program"))
             {
@@ -2273,6 +2278,7 @@ int cmd_locate(const Args& a)
                 cmp.manifest_lzma2 = lzma2_size(ibytes);
                 cmp.installer_hex = iaddr.is_zero() ? 1 : iaddr.to_hex().size();
                 cmp.installer_raw = address_bytes(iaddr);
+                cmp.packed = m.packed;
             }
         }
         if (a.has("compare")) std::cout << "\n" << comparison_table(cmp);
@@ -2281,19 +2287,25 @@ int cmd_locate(const Args& a)
     }
     if (!fs::is_directory(target)) throw std::invalid_argument(arg + " is neither a file nor a folder");
     Manifest m = walk_folder(target);
-    // Which manifest: v2 lists every file's address (--with-addresses); an installer's (v3) has
-    // every file's bytes after its text, and the installer is its address; otherwise v1.
+    // Which manifest: v2 lists every file's address (--with-addresses); an installer's has every
+    // file's bytes after its text, packed (v4; --v3: as they are), and the installer is its
+    // address; otherwise v1.
     const bool installer = a.has("installer") || a.has("program");
+    PackReport rep;
+    auto add_files = [&](Manifest& x) {
+        if (a.has("v3")) add_contents(x, target);
+        else add_packed(x, target, &rep);
+    };
     if (a.has("with-addresses")) add_addresses(m, target);
-    else if (installer) add_contents(m, target);
+    else if (installer) add_files(m);
     const std::string text = m.text();
     const std::vector<uint8_t> mbytes = m.file();
-    // An installer is always made from v3, whichever manifest is written out.
+    // An installer is always made with its files, whichever manifest is written out.
     Manifest inst;
     if (installer && !m.with_contents)
     {
         inst = m;
-        add_contents(inst, target);
+        add_files(inst);
     }
     const std::vector<uint8_t> ibytes = !installer ? std::vector<uint8_t>{} : m.with_contents ? mbytes : inst.file();
     const BigUint maddr = binary_address(mbytes);
@@ -2355,6 +2367,7 @@ int cmd_locate(const Args& a)
         if (a.has("addresses")) *info << "addresses " << m.files << " files' addresses written under " << d << "\n";
     }
     const BigUint iaddr = installer ? (m.with_contents ? maddr : binary_address(ibytes)) : BigUint();
+    if (installer && !a.has("v3")) *info << pack_report_text(rep, m.bytes);
     if (a.has("program"))
     {
         // The installer attached to a copy of sieve-install: one program to hand to someone.
@@ -2373,7 +2386,7 @@ int cmd_locate(const Args& a)
     {
         const std::string o = a.get("installer");
         write_address_file(fs::path(std::u8string(o.begin(), o.end())), iaddr, a.has("hex"));
-        *info << "installer " << o << ": the address of the installer's manifest (v3: the listing, then every file's bytes), as "
+        *info << "installer " << o << ": the address of the installer's manifest (" << (!(m.with_contents ? m.packed : inst.packed) ? "v3: the listing, then every file's bytes" : "v4: the listing, then every file packed") << "), as "
               << (a.has("hex") ? "hex" : "raw bytes") << "; install it with\n"
               << "          sieve-install " << o << "   (or: sieve install " << o << (a.has("hex") ? " --hex" : "") << " --to FOLDER)\n";
     }
@@ -2389,6 +2402,7 @@ int cmd_locate(const Args& a)
             cmp.manifest_lzma2 = lzma2_size(ibytes);
             cmp.installer_hex = iaddr.is_zero() ? 1 : iaddr.to_hex().size();
             cmp.installer_raw = address_bytes(iaddr);
+            cmp.packed = m.with_contents ? m.packed : inst.packed;
         }
         *info << "\n" << comparison_table(cmp);
     }

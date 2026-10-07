@@ -38,6 +38,7 @@ struct Comparison
     uint64_t manifest_deflate = 0, manifest_lzma2 = 0; // an installer's manifest, compressed
     uint64_t installer_hex = 0;  // the installer: the manifest's address, in hex
     uint64_t installer_raw = 0;  // and as raw bytes, as sieve-install reads it
+    bool packed = false;         // the installer's manifest is v4, its files packed
 };
 
 // The table, one row a measure: its size, and as a share of the original.

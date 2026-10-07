@@ -1,86 +1,86 @@
-# The cleanest digits, files weighed, and full mode
+# Installers packed: sieve-manifest-v4
 
-Against `cf291d1` (tailor search). This includes the last round (full mode, and IDEAS §15), which
-isn't committed yet: its own notes follow at the end.
+Against `f32d3ee` (weigh and full).
 
-## The search's target: the cleanest digits
-- **What changed:** the search no longer pushes for the fewest survivors. It scores a stack by
-  each anchor's **shortest route** among the survivors: its number with leading zeros dropped, or
-  a bearing and a walk. So it pushes the item's own number towards 0 and takes whatever it can
-  land on.
-- **How:** ranks jump about as a stack changes, so searching on routes alone gets stuck. Stacks
-  are grown two ways from every setting kept: by shrinking the count (which bounds every number)
-  and by shortening the route. The shortest route wins.
-- **Results:**
-  - the melody: 16 bits (`b4f7`, survivor 46327 of 204994), as short as by the count;
-  - "welcome to the sieve": 84 bits, with a stack that costs 41.5 bits to write down (it was
-    58.4).
-- **Several anchors under one stack:** `sieve tailor --unit all`.
-- **The description:** a stack is priced at one bit for each filter offered, plus each setting at
-  log2 of its values. `--describe` makes the search pay for it, as it must wherever the stack
-  travels with the addresses.
-- **COST's K section** now says "tailored, shortest route" and gives the stack's description in
-  bits.
+## Why compression is built in
+A release's files (programs, word lists, filters, models) are not Sieve items, so the weighing's
+ways alone would not have changed the release installer at all. I measured that, asked, and you
+chose compression built into the installer. So the installer now packs the folder itself, and the
+release no longer goes through 7-Zip first.
 
-## Files weighed: the locator, the manifest maker and the File Locator
-- **The base:** each file's own address on the binary line, as long as the file.
-- **Its other ways:**
-  - its number among the binary line's survivors, where `[binary]` filters rank and it passes
-    them;
-  - where it is exactly an item of the pages, image, audio or video line (byte for byte what F
-    saves), its place there and its number among that line's survivors.
+## The format: sieve-manifest-v4
+- **The listing:** v3's, with two `stream` lines (x86 and lzma2: size packed, size unpacked,
+  dictionary) and each file's way before its path.
+- **The ways:**
+  - `x86`: programs (EXE and ELF, by their first bytes), through the x86 branch filter, then
+    LZMA2;
+  - `raw`: everything else, LZMA2;
+  - `lines K`: a text made of some of file K's lines, in order, carried as a mask of K's lines,
+    one bit each. Each SCOWL list but the largest is a mask over the largest.
+- **After `end`:** the two streams, raw LZMA2, at preset 9 extreme.
+- **Safety:** what's packed is unpacked and compared before it's used. Where v4 would be no
+  smaller (a tiny folder, files already compressed), the installer is v3, with the files as they
+  are.
 
-  Each number is weighed as its shortest route.
-- **What's shared:** each line's shape (symbols and length) and each stack is paid once for all
-  the files that use it. A line or stack that costs more than it saves is dropped.
-- **`--tailored`:** each line's filters are tailored to the files that are its items, with the
-  description paid for. `--out-filters` saves the result.
-- **`sieve locate FILE|FOLDER --weigh [--tailored [--out-filters PATH]] [--page-length N]`.**
-- **The File Locator** weighs everything it reads with the hallway's lines and filters. It has a
-  **Tailor the filters to these files** button, and then **Use the tailored filters**, which saves
-  them and builds the hallway again, as Return on COST does.
-- **One test for "exactly an item":** `item_of()` returns the unit, and not-an-item-v1's judges
-  now use it too.
+## One decoder everywhere
+The LZMA SDK decoder that `sieve-install` already carried for 7z now sits in the shared install
+code. `sieve`, the hallway and `sieve-install` all unpack with it. `sieve-install` stays exactly
+the same size: 2,038,584 bytes on Linux.
 
-## Measured
-| Folder | Own addresses | Weighed |
+## Where it applies
+- **`sieve locate --installer` and `--program`** make v4. `--v3` makes the old kind.
+- **The File Locator** saves and measures v4.
+- **`make_release.py`** packs the staged release folder, with no 7z step; 7-Zip is still used for
+  the source archive. `--seven-zip` makes the old 7z-carrying installers from the same build, for
+  your comparison.
+- **`sieve-install` and `sieve install`** install v4, every file checked against its SHA-256.
+  Older installers (v3, v2, a carried 7z) install as before.
+
+## Measured (Linux, a release-shaped folder, 32,887,678 bytes)
+| Made as | Bytes | Share |
 | :--- | :--- | :--- |
-| Sieve's own files: 3 pages, 3 pictures, 2 melodies | 4,216 bits | 699 bits (16.6%), tailored |
-| CI: 2 melodies, a picture, a note | 2,488 bits | 530 bits (21.3%) |
+| zip, each file on its own | 11,597,734 | 35.26% |
+| one LZMA2 stream, preset 9e (7z without its container) | 6,961,919 | 21.17% |
+| **v4 installer** | **6,577,790** | **20.00%** |
 
-A file that isn't one of Sieve's own items keeps its own address: weighing doesn't compress, it
-finds the files a line already names shorter.
+The x86 filter takes 258 KB off the programs, and the five smaller SCOWL lists shrink to 180 KB of
+masks. Running `make_release.py` here gave a `sieve.sieve` of 6,613,564 bytes for the full release
+folder, and both installers install back to it byte for byte.
 
-## Not done yet: the installer
-The installer still holds every file's bytes. I've proposed a `sieve-manifest-v4` in IDEAS §12
-that would name files by these ways, with the shapes and stacks once at the top. It's a format
-change, so it waits for your go-ahead. So does fitting a line to each file (a page of the file's
-own length and alphabet), which would let far more ordinary files be named shorter.
+**For your test on Windows:** 7-Zip's Ultra uses BCJ2 on programs, which does a little better
+than the x86 filter, so I can't promise the margin over your real 7z. Run
+`make_release.py --seven-zip` beside the default run on the same build and weigh the two
+installers directly.
 
 ## Checked
 - **Build:** no warnings (Linux, GCC 13), tools and client.
 - **Unit tests:** 47,426 checks, 0 failures.
-- **CI's filters step**, run here in full, passes. It now:
-  - tailors the melody (survivor 46327 of 204994, route `b4f7`, compact `0b4f7`) and reads it
-    back;
-  - weighs the folder above.
-- **Screenshots:**
-  - `locator.png`: the File Locator weighing a folder;
-  - `locator-tailored.png`: the same, tailored, with **Use the tailored filters**.
+- **Oracle step:**
+  - v3 is still the oracle's to the byte (with `--v3`);
+  - a v4 fixture with a program and a derived list is unpacked by the oracle's own Python `lzma`
+    unpacker (`sieve_ref.py unpack`, nothing of Sieve's) and by `sieve install`, both identical;
+  - a damaged stream is refused, with nothing written.
+- **Hallway step, run here in full:** `sieve-install --yes` installs a v4 with a program and a
+  derived list, identically.
+- **Release-shaped folder:** installed by `sieve install` and by `sieve-install`, both identical to
+  the original.
+
+## Found and fixed on the way
+A file located without a folder in its name (`--locate big.bin`) gave the packer an empty root, so
+the File Locator failed on it. The packer now uses the current folder, and needs no folder at all
+when it already has the bytes. The hallway step caught it.
 
 ## Docs
-- **README:** weighing, `--weigh`, the new target for K and `sieve tailor`.
-- **SPECIFICATIONS §12.2:** weighing.
-- **`sieve help tailor` and `sieve help locate`.**
+- **SPECIFICATIONS §12.2:** v4.
+- **SIEVE-INSTALL-USAGE.md:** rewritten around packing, with the measurement; its old "Not yet"
+  item, compression inside the installer, is done.
+- **README.**
+- **`sieve help locate`.**
 - **HANDOFF:** an entry, and the file map.
-- **IDEAS §12:** what was built, and what's open.
+- **IDEAS §12.**
+- **`make_release.py`'s docstring, and `.bat`.**
 
----
-
-# From the last round: full mode, and the rotation transform set aside
-- **Full mode:** compact with the titles and covers kept, on the pages, image, audio and video
-  lines (cover × title × survivors). It's `mode = full` in the settings file, and the menu cycles
-  off, mark, hide, compact, full, excluded. Return keeps a line that's full in full mode.
-  Screenshots: `full-shelf.png`, `menu.png`.
-- **IDEAS §15, Deprecated ideas:** the rotation transform and the decimals-only format.
-- **IDEAS §12:** the bitmask entry.
+## Still open
+- **Ways for Sieve items** (a page or melody as its place on its line, which is what the weighing
+  measures). These need the lines in `sieve-install`.
+- **"Made from another file" ways beyond lines**, such as a delta.

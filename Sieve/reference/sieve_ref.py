@@ -3704,6 +3704,76 @@ def cmd_manifest(args):
                 sys.stdout.buffer.write(data)
 
 
+def cmd_unpack(args):
+    """A packed installer's manifest (sieve-manifest-v4, SPECIFICATIONS §12.2) unpacked from its
+    definition, with nothing of Sieve's own: its two streams decoded by Python's lzma (raw LZMA2 at
+    the dictionary each names; the x86 filter on the first), each file's way followed (x86 and raw:
+    its bytes, next in its stream; lines K: the lines of file K its mask picks, the mask next in the
+    lzma2 stream after every file carried as it is), and each file checked against its size and
+    SHA-256. With --to DIR, the folders and files are written there. Prints the listing it unpacked."""
+    import lzma
+    data = open(args.manifest, "rb").read()
+    end = data.index(b"\nend\n") + len(b"\nend\n")
+    lines = data[:end].decode("utf-8").split("\n")[:-1]
+    if lines[0] != "sieve-manifest-v4":
+        sys.exit("not a v4 manifest: " + lines[0][:40])
+    streams = []
+    for i, name in ((4, "x86"), (5, "lzma2")):
+        word, got, packed, size, dictionary = lines[i].split(" ")
+        if word != "stream" or got != name:
+            sys.exit(f"line {i + 1} is not the {name} stream")
+        streams.append((int(packed), int(size), int(dictionary)))
+    payload = data[end:]
+    if len(payload) != streams[0][0] + streams[1][0]:
+        sys.exit("the streams are not the size their lines say")
+
+    def decode(blob, size, dictionary, x86):
+        if size == 0:
+            return b""
+        filters = ([{"id": lzma.FILTER_X86}] if x86 else []) + [{"id": lzma.FILTER_LZMA2, "dict_size": dictionary}]
+        out = lzma.decompress(blob, format=lzma.FORMAT_RAW, filters=filters)
+        if len(out) != size:
+            sys.exit("a stream unpacks to the wrong size")
+        return out
+
+    x86 = decode(payload[:streams[0][0]], *streams[0][1:], True)
+    plain = decode(payload[streams[0][0]:], *streams[1][1:], False)
+    entries = []  # (path, size, sha, way) for files; (path,) for folders
+    for line in lines[6:-1]:
+        f = line.split("\t")
+        entries.append((f[1],) if f[0] == "d" else (f[4], int(f[1]), f[2], f[3]))
+    files = [e for e in entries if len(e) == 4]
+    got, xa, pa = [None] * len(files), 0, 0
+    for i, (path, size, sha, way) in enumerate(files):
+        if way == "x86":
+            got[i], xa = x86[xa:xa + size], xa + size
+        elif way == "raw":
+            got[i], pa = plain[pa:pa + size], pa + size
+    for i, (path, size, sha, way) in enumerate(files):
+        if way.startswith("lines "):
+            k = int(way[6:])
+            base = got[k].split(b"\n")
+            n = (len(base) + 7) // 8
+            mask, pa = plain[pa:pa + n], pa + n
+            got[i] = b"\n".join(l for j, l in enumerate(base) if mask[j // 8] >> (j % 8) & 1)
+    if xa != len(x86) or pa != len(plain):
+        sys.exit("the streams hold more than the files")
+    for (path, size, sha, way), b in zip(files, got):
+        if len(b) != size or hashlib.sha256(b).hexdigest() != sha:
+            sys.exit(f"{path} does not unpack to its size and SHA-256")
+    if args.to:
+        for e in entries:
+            target = os.path.join(args.to, e[0])
+            if len(e) == 1:
+                os.makedirs(target, exist_ok=True)
+        for (path, size, sha, way), b in zip(files, got):
+            target = os.path.join(args.to, path)
+            os.makedirs(os.path.dirname(target) or ".", exist_ok=True)
+            open(target, "wb").write(b)
+    for path, size, sha, way in files:
+        print(f"{way}\t{size}\t{path}")
+
+
 def map_text(name, root, nodes, edges, sealed, held, meta=()):
     """A map's canonical text: v1 unless it holds a file, has metadata or is sealed. `meta` is
     (node, key, value) triples, sorted by node then key."""
@@ -5825,6 +5895,9 @@ def main():
     s.add_argument("--addresses")
     s.add_argument("--with-addresses", action="store_true")
     s.add_argument("--with-contents", action="store_true")
+    s = sub.add_parser("unpack")
+    s.add_argument("manifest")
+    s.add_argument("--to")
     s = sub.add_parser("map")
     s.add_argument("folder", nargs="+")
     s.add_argument("--name")
@@ -5898,6 +5971,8 @@ def main():
         cmd_plugin(args)
     elif args.cmd == "manifest":
         cmd_manifest(args)
+    elif args.cmd == "unpack":
+        cmd_unpack(args)
     elif args.cmd == "map":
         cmd_map(args)
     elif args.cmd == "book-vectors":

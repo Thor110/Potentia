@@ -132,6 +132,7 @@ thirty-two-column shelf is half of it; never larger than one.
 | `client/door_portal.cpp`, `client/binary_edge.cpp`, `client/item_faces.cpp` | The doorway noise; the rain and the drop; every item's face (pages, pictures, covers, crates, files) and their render workers. |
 | `client/app_main.cpp` | Options, the menus, the screenshot and scripting paths, the event loop, `main`. |
 | `client/menu.cpp` | The setup menu, `find_limits()`, the budget model. |
+| `tools/cli/pack.cpp`, `tools/cli/locate.cpp` | Installers: the manifest versions, packing (v4) and unpacking (the LZMA SDK), installing. |
 | `client/tailoring.cpp`, `tools/cli/tailor.cpp`, `tools/cli/weigh.cpp` | COST's K and Return, the search behind them and `sieve tailor` (a line's filters tailored to items, by their shortest routes), and files weighed against their own addresses (`sieve locate --weigh`, the File Locator). |
 | `client/mesh.cpp` | The software rasteriser behind Real Graphics. |
 | `tools/sieve_cli.cpp` | The `sieve` command. |
@@ -1874,3 +1875,38 @@ Edward's design (the bar) and the first part of 1e.
 - **Checked:** CI (filters step) tailors the melody (survivor 46327 of 204994, route b4f7, compact
   0b4f7, read back) and weighs a folder of two melodies, a picture and a note (530 bits against
   2488); the whole step run here. In the hallway: the locator plain and tailored (screenshots).
+
+### Installers packed: `sieve-manifest-v4` (7 October 2026)
+
+Edward chose compression built into the installer (the release's files are no Sieve items, so
+the weighing's ways alone would not have changed its size).
+- **The format** (`locate.hpp`, SPECIFICATIONS §12.2): v3's listing, two `stream` lines (x86,
+  lzma2: packed size, size, dictionary), each file's way (`x86`, `raw`, `lines K`), and after `end`
+  the two raw LZMA2 streams. `Manifest` gains `packed`, `x86`, `lzma2`, `streams` and
+  `ManifestEntry::way`; `parse()` unpacks a v4 into `contents` (`unpack_v4`: `Lzma2Decode`, then
+  `z7_BranchConvSt_X86_Dec`; masks after every raw file in the lzma2 stream), so `install_tree`
+  and everything after it is v3's.
+- **One decoder:** `sieve_lzma` (the LZMA SDK, public domain) moved out of the client block and is
+  linked into `sieve_locate`, so `sieve`, the hallway and `sieve-install` unpack with the same code.
+  `sieve-install` is no larger (it carried the decoder for 7z already).
+- **The packer** (`tools/cli/pack.*`, in `sieve_compare` with liblzma): ways chosen (EXE/ELF by
+  file kind; a text derived from the larger file carried as it is whose lines hold its lines in
+  order, smallest mask, only where the mask packs smaller at preset 6; a file derived from is never
+  derived), streams at preset 9e with the smallest dictionary that holds them; the result parsed
+  back and compared; v3 kept where v4 is no smaller. `PackReport`, `pack_report_text()`.
+- **Where:** `sieve locate --installer/--program` (and `--compare`'s rows) make v4, `--v3` the old;
+  the File Locator saves and measures v4; `make_release.py` packs the staged folder (no 7z step;
+  `--seven-zip` makes the old 7z-carrying installers for comparing); `sieve-install` and
+  `sieve install` install v4 through the same path.
+- **The oracle:** `sieve_ref.py unpack MANIFEST [--to DIR]`, with Python's lzma (raw, x86 + LZMA2),
+  nothing of Sieve's.
+- **Measured:** a release-shaped folder (Linux), 32,887,678 bytes: zip 35.26%, one LZMA2 stream
+  21.17%, v4 20.00% (6,577,790 bytes; 258 KB from the x86 filter, the SCOWL masks 180 KB of masks).
+  `make_release.py` on Linux (a stand-in 7z for the source archive): `sieve.sieve` 6,613,564 bytes,
+  both installers installing back to the release folder byte for byte.
+- **Checked:** CI (oracle step: v3 still the oracle's to the byte with `--v3`; a v4 fixture with a
+  program and a derived list unpacked by the oracle and by `sieve install`, identical; a damaged
+  stream refused with nothing written; hallway step: `sieve-install --yes` on a v4 with a program
+  and a derived list), all run here; unit tests.
+- **Found on the way:** a file named without a folder (`--locate big.bin`) gave the packer an empty
+  root; it now reads from the current folder, and needs none when it has the bytes.

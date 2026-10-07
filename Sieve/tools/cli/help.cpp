@@ -579,10 +579,15 @@ const std::vector<Page>& pages()
          "--compare sets the sizes side by side: the original, zip's deflate and 7z's LZMA2 (the\n"
          "compressors at their strongest, without their archives' headers), and the addresses as\n"
          "numbers and as hex, each as a share of the original. An address is never smaller than\n"
-         "the file: addressing is not compression. An installer's manifest (sieve-manifest-v3)\n"
-         "is the listing followed by every file's raw bytes, so the whole tree is in it at its own\n"
-         "size; its address, one number, is the installer, which sieve install puts back into a\n"
-         "folder. (sieve-manifest-v2, --with-addresses, lists every file's address in hex instead.)\n"
+         "the file: addressing is not compression. An installer's manifest (sieve-manifest-v4) is\n"
+         "the listing followed by every file packed: programs (EXE, ELF) through the x86 filter, a\n"
+         "text made of some of another's lines as a mask of them (each SCOWL list but the largest),\n"
+         "and all of it LZMA2 at its strongest, in two streams; its address, one number, is the\n"
+         "installer, which sieve install and sieve-install put back into a folder, every file\n"
+         "checked against its SHA-256. What is packed is unpacked and compared before it is\n"
+         "written. --v3 makes the older installer, every file's bytes as they are\n"
+         "(sieve-manifest-v3). (sieve-manifest-v2, --with-addresses, lists every file's address in\n"
+         "hex instead.)\n"
          "\n"
          "--weigh weighs every file against its own address: its number among the binary line's\n"
          "survivors, where the settings file's [binary] filters rank and it passes them; and, where\n"
@@ -611,6 +616,7 @@ const std::vector<Page>& pages()
                                 "sieve-install (it must be beside sieve) with the installer attached to\n"
                                 "its end. Run, it installs the folder."},
           {"--hex", "Write the installer in hex rather than raw bytes."},
+          {"--v3", "Make the older installer: every file's bytes as they are, not packed (sieve-manifest-v3)."},
           {"--compare", "Compare the sizes: original, zip, 7z, and the address."},
           {"--weigh", "Weigh every file: its best way to be named against its own address."},
           {"--tailored", "With --weigh: tailor each line's filters to the files that are its items."},

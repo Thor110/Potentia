@@ -59,7 +59,8 @@ std::string comparison_table(const Comparison& c)
         t += row("manifest", c.manifest, "the tree's structure, sizes and SHA-256s, which the addresses do not carry");
     if (c.installer_hex)
     {
-        t += row("listing and files", c.manifest, "the folder's listing, then every file's bytes (sieve-manifest-v3)");
+        t += c.packed ? row("listing and files", c.manifest, "the folder's listing, then every file packed (sieve-manifest-v4)")
+                      : row("listing and files", c.manifest, "the folder's listing, then every file's bytes (sieve-manifest-v3)");
         t += row("  zip of it (deflate)", c.manifest_deflate, "that compressed");
         t += row("  7z of it (LZMA2)", c.manifest_lzma2, "");
         t += row("Sieve instructions", c.installer_raw, "the .sieve: all of that as one number, its address, in raw bytes");

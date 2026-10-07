@@ -12,6 +12,7 @@
 
 #include "cli/compare.hpp"
 #include "cli/locate.hpp"
+#include "cli/pack.hpp"
 #include "cli/timings.hpp"
 #include "cli/vault.hpp"
 
@@ -29,12 +30,14 @@ std::string u8(const fs::path& p)
     return std::string(s.begin(), s.end());
 }
 
-// A single file's Sieve instructions, from the bytes already read: as a folder holding just it.
+// A single file's Sieve instructions, from the bytes already read: as a folder holding just it,
+// packed (v4) where that makes it smaller.
 cli::Manifest file_instructions(const fs::path& p, const std::vector<uint8_t>& bytes)
 {
     cli::Manifest m = cli::manifest_of_file(p);
     m.contents = bytes;
     m.with_contents = true;
+    cli::add_packed(m, p.parent_path());
     return m;
 }
 
@@ -164,7 +167,9 @@ void Hallway::locator_analyse(const std::string& path, bool sync, bool tailor)
                 c.address_hex = a.is_zero() ? 0 : r.hex.size();
                 // Its Sieve instructions, as a folder's: its name, size and SHA-256, then its bytes.
                 r.manifest = cli::manifest_of_file(p);
-                const std::vector<uint8_t> mb = file_instructions(p, r.bytes).file();
+                const cli::Manifest fi = file_instructions(p, r.bytes);
+                const std::vector<uint8_t> mb = fi.file();
+                c.packed = fi.packed;
                 const BigUint ma = cli::binary_address(mb);
                 c.manifest = mb.size();
                 c.manifest_deflate = cli::deflate_size(mb);
@@ -189,9 +194,10 @@ void Hallway::locator_analyse(const std::string& path, bool sync, bool tailor)
                     all.insert(all.end(), bytes.begin(), bytes.end());
                 }
                 c.lzma2 = cli::lzma2_size(all);
-                // The installer's manifest (v3: every file's bytes after it), compressed, and the installer.
+                // The installer's manifest (v4: every file packed after it), compressed, and the installer.
                 cli::Manifest with = r.manifest;
-                cli::add_contents(with, p);
+                cli::add_packed(with, p);
+                c.packed = with.packed;
                 const std::vector<uint8_t> mb = with.file();
                 const BigUint ma = cli::binary_address(mb);
                 c.manifest = mb.size();
@@ -274,7 +280,7 @@ void Hallway::locator_save(const std::string& to)
             {
                 // A file's instructions are a folder's holding just it (file_instructions).
                 cli::Manifest with = r.kind == LocatorResult::File ? file_instructions(from_u8(r.path), r.bytes) : r.manifest;
-                if (r.kind != LocatorResult::File) cli::add_contents(with, from_u8(r.path));
+                if (r.kind != LocatorResult::File) cli::add_packed(with, from_u8(r.path));
                 const BigUint address = cli::binary_address(with.file());
                 // The installer on its own (for anyone with Sieve: sieve install, or sieve-install),
                 // or an installer program, sieve-install with it attached, one file for anyone.
