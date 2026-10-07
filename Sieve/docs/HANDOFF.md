@@ -1451,7 +1451,7 @@ Filters, section 1 of the list (4 October 2026).
 - **What:** `tools/cli/media_decode.*` (in sieve_lines).
   - `read_media_frames` hands every frame to a callback.
   - **stb_image first**, as before, for the PNG/JPG/GIF/BMP signatures and anything `image_info` reads, so those addresses never change.
-  - **ffmpeg otherwise:** an ffmpeg program run with popen (`_wpopen` on Windows), never linked.
+  - **ffmpeg otherwise:** an ffmpeg program run as a separate program, never linked (since 7 October with no shell between: `posix_spawnp`, or `CreateProcessW` on Windows).
 - **The ffmpeg call:** `-map 0:v:0 -frames:v N+1 -fps_mode passthrough -sws_flags +accurate_rnd+full_chroma_int+bitexact -flags +bitexact -pix_fmt rgba -c:v pam -f image2pipe -`, with stderr to a temporary file (reported as "ffmpeg reported: ..." when a file is damaged).
 - **Streaming:** a reader thread hands frames over, at most two at a time, to `ImageCanoniser` (sieve/image.hpp). That's a frame-at-a-time `canonicalise_image`, which is now built on it.
 - **Which ffmpeg:** `--ffmpeg PATH` (CLI, global), the hallway's `ffmpeg` setting, `SIEVE_FFMPEG`, beside the executable, then the `PATH`. The environment is read wide on Windows.
@@ -1714,3 +1714,53 @@ IDEAS §13's open steps, and one fix:
   (compact, no shelf) now does.
 - **The NOW PLAYING box** is 21 px lower and 6 px further right (`y = 73`, right edge at `W - 6`):
   below the FPS counter, flush with its right edge, and clear of the setup menu's budget rows.
+
+### The review's four notes, fixed (7 October 2026)
+
+The four left as notes at the end of the review (above):
+- **silence-run "judged" in the menu.** `FilterSpec::counts_as_on` now takes the filter's settings
+  (`const FilterValues*`, null for "at the largest the line allows"), and `filter_conflict()` passes
+  each filter's (`LineFilters::values_of()`), in the menu, X and `tick_filter_by_hand`. silence-run
+  is an automaton wherever its chosen run is small enough, whatever the line's length.
+- **No shell for ffmpeg.** `Pipe` (`cli/media_decode.cpp`) runs ffmpeg with its arguments:
+  `posix_spawnp`, or `CreateProcessW` with pipes on Windows (stdin NUL, stderr to the temporary
+  file, only those handles inherited), so `cmd.exe` never sees a path: no `%NAME%` expansion, and
+  a path with a double quote works (it was refused). Checked: Linux, a round trip through MP4 with
+  `%PATH%`, quotes, an apostrophe, brackets and a semicolon in the name; Windows compiled with
+  MinGW here, not run.
+- **WAV files read a block at a time** (`own_wav_file`): what `read_wav()` does, chunk by chunk, the
+  same blocks handed on; checked byte for byte against the committed tool.
+- **Rankers no longer grow with the square of the length:**
+  - **The generic `Ranker::rank` / `unrank`** (every automaton's) took one big addition or
+    subtraction for every smaller symbol at every place: on a 16-bit sound (65,536 symbols) a
+    second's compact address took hours. Symbols are now taken as runs that lead to the same
+    state: rank counts them as plain numbers and makes one product a state; unrank finds its run
+    and divides. The same numbers: 8 seconds of 16-bit stereo, compact under sound-peak, in 12 s
+    (the committed tool had not finished in 9 minutes), round trips exact.
+  - **sound-peak's own ranker** (past what an automaton holds) is one number in base |set|:
+    `from_digits` / `to_digits`, which divide and conquer.
+  - **Composition ranks** join and split the units' ranks by halves.
+  - Checked: unit tests (a five-unit composition against one unit at a time), the committed tool's
+    output on tracks and WAV files, and every CI step.
+
+### Records for tracks and movies (7 October 2026)
+
+IDEAS §13's last open step.
+- **The record** (`tools/cli/book.*`): `sieve-book-v1`'s sections, `cover`, `title` and `units`;
+  `record_composition()` reads one as a composition's parts (missing parts blank), `record_line()`
+  says which line a record belongs on from its sections, `composition_record()` writes one (blank
+  cover and title left out, so one item has one id) and `line_shape()` gives any line's options
+  back as a section's shape.
+- **`sieve-book-v2`:** one field more, `notes <symbols id>`, after an audio section's line, for any
+  set but `notes104` (its `length` is then per voice or channel); written only when needed, so a
+  record without it is still v1. That also answers IDEAS §12's "books of notes2 melodies".
+- **The tool:** `bind --line tracks|movies --file ... [--title] [--cover] --out`, `read --line
+  tracks|movies ... --record FILE`, `unbind --units FILE` (the units joined). bind and read give
+  byte-identical records of the same item.
+- **The hallway:** F offers "Sieve record" (`.track`, `.movie`) on a track or movie
+  (`composition_record_of()`); J on a record routes by `record_line()` and opens it with
+  `go_to_composition()` (go_to_unit now calls it on a composition line), or says which shape it
+  needs (`msg.record_shape`).
+- **Checked:** CI binds a two-voice notes2 track (v2), reads the same record back by its address,
+  unbinds it to MIDI; and in the hallway a track and a movie saved as records, opened with J and
+  saved again, are byte for byte the same.

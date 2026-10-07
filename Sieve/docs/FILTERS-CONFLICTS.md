@@ -46,8 +46,8 @@ On a line of every byte (`bytes256`) only `not-written-v1`, `not-a-file-v1` and
 **Image and video.**
 - *Filters need merging:* `neighbour-agreement-v1` with `not-packed-v1`, `palette-size-v1` and
   `row-runs-v1`. On a small palette `palette-size-v1` and `row-runs-v1` are automata (FilterSpec
-  `counts_as_on`: built where states times symbols stay under 2^24, judged at the largest settings
-  the line allows), so they merge with each other and with `not-packed-v1`; on a large one (rgb24)
+  `counts_as_on`: built where states times symbols stay under 2^24, judged at the filter's own
+  settings where they are known and at the largest the line allows where not), so they merge with each other and with `not-packed-v1`; on a large one (rgb24)
   they count their own ways and need merging with each other and with `not-packed-v1` too.
 - *Conflicting filters:* `not-a-file-v1` and `not-a-pattern-v1` with each other, with
   `neighbour-agreement-v1` and with `not-packed-v1`.

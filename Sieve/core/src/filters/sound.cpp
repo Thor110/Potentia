@@ -74,31 +74,27 @@ public:
         return BigUint::pow(k_, remaining);
     }
     bool alive(State s, uint32_t) const override { return s != kDead; }
-    std::vector<uint32_t> unrank(const BigUint& k0) const override
+    // A survivor's rank is its samples' places in the set read as one number in base |set| (at
+    // most 2^31), so both ways are BigUint's own digit conversions, which divide and conquer:
+    // nothing grows a sample at a time.
+    std::vector<uint32_t> unrank(const BigUint& k) const override
     {
-        if (k0 >= count()) throw std::out_of_range("rank beyond the survivors");
-        std::vector<uint32_t> out(l_);
-        BigUint k = k0;
-        for (uint32_t i = l_; i-- > 0;)
-        {
-            BigUint q, r;
-            BigUint::divmod(k, k_, q, r);
-            out[i] = s_.digit(r.limbs().empty() ? 0 : r.limbs()[0]); // r < k_ <= 2^31
-            k = q;
-        }
+        if (k >= count()) throw std::out_of_range("rank beyond the survivors");
+        if (s_.size() == 1) return std::vector<uint32_t>(l_, s_.digit(0)); // one survivor: silence
+        std::vector<uint32_t> out = k.to_digits(uint32_t(s_.size()), l_);
+        for (uint32_t& d : out) d = s_.digit(d);
         return out;
     }
     BigUint rank(std::span<const uint32_t> unit) const override
     {
         if (unit.size() != l_) throw std::invalid_argument("unit has the wrong length");
-        BigUint k;
-        for (uint32_t d : unit)
+        std::vector<uint32_t> places(unit.size());
+        for (size_t i = 0; i < unit.size(); ++i)
         {
-            if (!s_.has(d)) throw std::invalid_argument("not a survivor");
-            k = BigUint::mul(k, k_);
-            k += BigUint(s_.index(d));
+            if (!s_.has(unit[i])) throw std::invalid_argument("not a survivor");
+            places[i] = uint32_t(s_.index(unit[i]));
         }
-        return k;
+        return s_.size() == 1 ? BigUint() : BigUint::from_digits(places, uint32_t(s_.size()));
     }
 
 private:
@@ -240,7 +236,7 @@ void add_sound_filters(std::vector<FilterSpec>& out)
         if (cells_fit(1, f.base())) return make_dfa_filter(peak_dfa(s), l.length, prov);
         return std::make_unique<PeakFilter>(s, l.length, prov);
     };
-    p.counts_as_on = [](const FilterLine& l) -> std::string { return cells_fit(1, l.base) ? "automaton" : "own"; };
+    p.counts_as_on = [](const FilterLine& l, const FilterValues*) -> std::string { return cells_fit(1, l.base) ? "automaton" : "own"; };
     out.push_back(p);
 
     FilterSpec s;
@@ -261,7 +257,7 @@ void add_sound_filters(std::vector<FilterSpec>& out)
         if (auto dfa = step_dfa(f, limit)) return make_dfa_filter(std::move(*dfa), l.length, prov);
         return std::make_unique<StepFilter>(f, limit, prov);
     };
-    s.counts_as_on = [](const FilterLine& l) -> std::string { return cells_fit(uint64_t(l.base) + 1, l.base) ? "automaton" : ""; };
+    s.counts_as_on = [](const FilterLine& l, const FilterValues*) -> std::string { return cells_fit(uint64_t(l.base) + 1, l.base) ? "automaton" : ""; };
     out.push_back(s);
 
     FilterSpec r;
@@ -279,8 +275,14 @@ void add_sound_filters(std::vector<FilterSpec>& out)
         if (auto dfa = silence_dfa(l.base, l.length, uint64_t(n))) return make_dfa_filter(std::move(*dfa), l.length, prov);
         return std::make_unique<SilenceFilter>(uint64_t(n), prov);
     };
-    r.counts_as_on = [](const FilterLine& l) -> std::string {
-        return cells_fit(uint64_t(l.length) + 1, l.base) ? "automaton" : ""; // at the longest run the line allows
+    // An automaton while the run's states (the run allowed, and no more than the line) times the
+    // symbols fit; without its settings, at the longest run the line allows.
+    r.counts_as_on = [](const FilterLine& l, const FilterValues* v) -> std::string {
+        uint64_t run = l.length;
+        if (v)
+            try { run = std::min<uint64_t>(run, uint64_t(param_int(*find_filter("silence-run-v1"), *v, "samples"))); }
+            catch (const std::exception&) {} // a malformed setting: as without one
+        return cells_fit(run + 1, l.base) ? "automaton" : "";
     };
     out.push_back(r);
 }

@@ -48,6 +48,7 @@ struct LineFilters
     std::map<std::string, FilterValues> values; // per filter name: parameter values
     bool is_enabled(const std::string& name) const;
     void set_enabled(const std::string& name, bool on);
+    const FilterValues& values_of(const std::string& name) const; // its settings (none set: its defaults)
 };
 
 // The books line: one mode, and a stack for each part. The parts' own modes are unused.

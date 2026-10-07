@@ -12,6 +12,7 @@
 #include <deque>
 #include <exception>
 #include <cstdio>
+#include <cerrno>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -21,9 +22,21 @@
 #include <span>
 #include <stdexcept>
 #include <thread>
+#include <vector>
 
 #ifdef _WIN32
-#include <stdio.h> // _wpopen, _pclose
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <fcntl.h>
+#include <io.h> // _open_osfhandle
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <spawn.h>
+#include <sys/wait.h>
+#include <unistd.h>
+extern char** environ;
 #endif
 
 namespace sieve::cli {
@@ -77,38 +90,108 @@ const char* const kNames[] = {"ffmpeg"};
 const char kPathSep = ':';
 #endif
 
-// One argument, quoted for the system's shell.
-std::string quoted(const std::string& s)
-{
 #ifdef _WIN32
-    std::string out = "\"";
-    for (char c : s)
+// One argument as the C runtime reads a command line back into arguments (CommandLineToArgvW's
+// rules): in double quotes, a quote written \", and the backslashes before a quote, or before the
+// closing one, doubled. No shell sees it, so % and the like are only characters.
+std::wstring quoted(const std::wstring& s)
+{
+    std::wstring out = L"\"";
+    size_t slashes = 0;
+    for (wchar_t c : s)
     {
-        if (c == '"') throw std::invalid_argument("a path with a double quote cannot be given to ffmpeg");
+        if (c == L'\\')
+        {
+            ++slashes;
+            continue;
+        }
+        out.append(c == L'"' ? slashes * 2 + 1 : slashes, L'\\');
+        slashes = 0;
         out += c;
     }
-    return out + "\"";
-#else
-    std::string out = "'";
-    for (char c : s) out += c == '\'' ? std::string("'\\''") : std::string(1, c);
-    return out + "'";
-#endif
+    out.append(slashes * 2, L'\\');
+    return out + L"\"";
 }
+#endif
 
-// A command line run with its standard output read as it comes.
+// A program run with its arguments, no shell between (so nothing in a path is ever read as the
+// shell's), its standard output read as it comes and its standard error written to a file, or
+// left where the caller's goes (on Windows, nowhere) when none is given.
 class Pipe
 {
 public:
-    explicit Pipe(const std::string& command)
+    Pipe(const std::vector<std::string>& args, const fs::path* err)
     {
 #ifdef _WIN32
-        // cmd /c takes the whole line in one more pair of quotes.
-        const fs::path wide = from_u8("\"" + command + "\"");
-        p_ = _wpopen(wide.c_str(), L"rb");
+        SECURITY_ATTRIBUTES sa{sizeof(sa), nullptr, TRUE};
+        HANDLE rd = nullptr, wr = nullptr;
+        if (!CreatePipe(&rd, &wr, &sa, 0)) throw std::runtime_error("cannot run ffmpeg");
+        SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0); // ours alone
+        const HANDLE in = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_EXISTING, 0, nullptr);
+        const HANDLE errh = CreateFileW(err ? err->c_str() : L"NUL", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa,
+                                        err ? CREATE_ALWAYS : OPEN_EXISTING, 0, nullptr);
+        std::wstring line;
+        for (const std::string& a : args) line += (line.empty() ? L"" : L" ") + quoted(from_u8(a).wstring());
+        // Only these three handles go to the child, so another thread's pipes are never held open by it.
+        HANDLE pass[3] = {in, wr, errh};
+        SIZE_T size = 0;
+        InitializeProcThreadAttributeList(nullptr, 1, 0, &size);
+        std::vector<char> attrs(size);
+        auto* list = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attrs.data());
+        bool ok = in != INVALID_HANDLE_VALUE && errh != INVALID_HANDLE_VALUE && InitializeProcThreadAttributeList(list, 1, 0, &size) &&
+                  UpdateProcThreadAttribute(list, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, pass, sizeof(pass), nullptr, nullptr);
+        STARTUPINFOEXW si{};
+        si.StartupInfo.cb = sizeof(si);
+        si.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+        si.StartupInfo.hStdInput = in;
+        si.StartupInfo.hStdOutput = wr;
+        si.StartupInfo.hStdError = errh;
+        si.lpAttributeList = list;
+        PROCESS_INFORMATION pi{};
+        ok = ok && CreateProcessW(nullptr, line.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT, nullptr,
+                                  nullptr, &si.StartupInfo, &pi);
+        if (size) DeleteProcThreadAttributeList(list);
+        CloseHandle(wr); // the child's now: the pipe ends when it does
+        if (in != INVALID_HANDLE_VALUE) CloseHandle(in);
+        if (errh != INVALID_HANDLE_VALUE) CloseHandle(errh);
+        if (!ok)
+        {
+            CloseHandle(rd);
+            throw std::runtime_error("cannot run ffmpeg");
+        }
+        CloseHandle(pi.hThread);
+        process_ = pi.hProcess;
+        const int fd = _open_osfhandle(intptr_t(rd), _O_RDONLY | _O_BINARY);
+        p_ = fd >= 0 ? _fdopen(fd, "rb") : nullptr;
 #else
-        p_ = popen(command.c_str(), "r");
+        int fds[2];
+        if (pipe(fds) != 0) throw std::runtime_error("cannot run ffmpeg");
+        posix_spawn_file_actions_t fa;
+        posix_spawn_file_actions_init(&fa);
+        posix_spawn_file_actions_adddup2(&fa, fds[1], STDOUT_FILENO);
+        posix_spawn_file_actions_addclose(&fa, fds[0]);
+        posix_spawn_file_actions_addclose(&fa, fds[1]);
+        posix_spawn_file_actions_addopen(&fa, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
+        const std::string err_path = err ? u8(*err) : std::string();
+        if (err) posix_spawn_file_actions_addopen(&fa, STDERR_FILENO, err_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        std::vector<char*> argv;
+        for (const std::string& a : args) argv.push_back(const_cast<char*>(a.c_str()));
+        argv.push_back(nullptr);
+        const int rc = posix_spawnp(&pid_, argv[0], &fa, nullptr, argv.data(), environ);
+        posix_spawn_file_actions_destroy(&fa);
+        ::close(fds[1]);
+        if (rc != 0)
+        {
+            ::close(fds[0]);
+            throw std::runtime_error("cannot run ffmpeg");
+        }
+        p_ = fdopen(fds[0], "rb");
 #endif
-        if (!p_) throw std::runtime_error("cannot run ffmpeg");
+        if (!p_)
+        {
+            close();
+            throw std::runtime_error("cannot run ffmpeg");
+        }
     }
     ~Pipe() { close(); }
     Pipe(const Pipe&) = delete;
@@ -137,26 +220,45 @@ public:
     // Its exit status (the program is waited for).
     int close()
     {
-        if (!p_) return status_;
         // Closing our end first: a program still writing gets a broken pipe and stops.
-#ifdef _WIN32
-        status_ = _pclose(p_);
-#else
-        status_ = pclose(p_);
-#endif
+        if (p_) fclose(p_);
         p_ = nullptr;
+#ifdef _WIN32
+        if (process_)
+        {
+            WaitForSingleObject(process_, INFINITE);
+            DWORD code = 0;
+            GetExitCodeProcess(process_, &code);
+            status_ = int(code);
+            CloseHandle(process_);
+            process_ = nullptr;
+        }
+#else
+        if (pid_ > 0)
+        {
+            int st = 0;
+            while (waitpid(pid_, &st, 0) < 0 && errno == EINTR) {}
+            status_ = WIFEXITED(st) ? WEXITSTATUS(st) : -1;
+            pid_ = -1;
+        }
+#endif
         return status_;
     }
 
 private:
     FILE* p_ = nullptr;
     int status_ = 0;
+#ifdef _WIN32
+    HANDLE process_ = nullptr;
+#else
+    pid_t pid_ = -1;
+#endif
 };
 
-// Runs a command line and reads all it writes to its standard output.
-std::string run(const std::string& command)
+// Runs a program and reads all it writes to its standard output.
+std::string run(const std::vector<std::string>& args, const fs::path* err = nullptr)
 {
-    Pipe p(command);
+    Pipe p(args, err);
     std::string out, l;
     while (p.line(l)) out += l + "\n";
     return out;
@@ -251,17 +353,16 @@ MediaRead ffmpeg_frames(const fs::path& file, const std::string& what, uint32_t 
     const TempFile err(".txt");
     // One frame more than wanted, to know whether there are more; each stored frame once, in
     // order; colours converted exactly the same way on every machine.
-    std::string cmd = quoted(*exe) + " -hide_banner -nostdin -v error -i " + quoted(u8(file)) + " -map 0:v:0";
-    if (max_frames < UINT32_MAX) cmd += " -frames:v " + std::to_string(uint64_t(max_frames) + 1);
-    cmd += " -fps_mode passthrough -sws_flags +accurate_rnd+full_chroma_int+bitexact -flags +bitexact"
-           " -pix_fmt rgba -c:v pam -f image2pipe - 2> " +
-           quoted(u8(err.path));
+    std::vector<std::string> cmd = {*exe, "-hide_banner", "-nostdin", "-v", "error", "-i", u8(file), "-map", "0:v:0"};
+    if (max_frames < UINT32_MAX) cmd.insert(cmd.end(), {"-frames:v", std::to_string(uint64_t(max_frames) + 1)});
+    cmd.insert(cmd.end(), {"-fps_mode", "passthrough", "-sws_flags", "+accurate_rnd+full_chroma_int+bitexact", "-flags", "+bitexact", "-pix_fmt",
+                           "rgba", "-c:v", "pam", "-f", "image2pipe", "-"});
     MediaRead r;
     uint64_t n = 0;
     {
         // A reader thread takes frames from the pipe while this one fits the last: ffmpeg decodes
         // the next frame meanwhile, rather than waiting on a full pipe. Two frames are held at most.
-        Pipe p(cmd);
+        Pipe p(cmd, &err.path);
         std::mutex mx;
         std::condition_variable cv;
         std::deque<RgbaImage> ready;
@@ -347,12 +448,13 @@ AudioRead ffmpeg_audio(const fs::path& file, const std::string& what, const Audi
     const TempFile err(".txt");
     // The first audio stream, as it is stored: 32-bit samples, at its own rate and channels, as a
     // WAV stream (its sizes unknown, so its data runs to the end).
-    const std::string cmd = quoted(exe) + " -hide_banner -nostdin -v error -i " + quoted(u8(file)) +
-                            " -vn -map 0:a:0? -flags +bitexact -fflags +bitexact -c:a pcm_s32le -f wav - 2> " + quoted(u8(err.path));
+    const std::vector<std::string> cmd = {exe,         "-hide_banner", "-nostdin", "-v",        "error", "-i",   u8(file), "-vn",
+                                          "-map",      "0:a:0?",      "-flags",   "+bitexact", "-fflags", "+bitexact", "-c:a",  "pcm_s32le",
+                                          "-f",        "wav",         "-"};
     AudioRead r;
     uint64_t frames = 0;
     {
-        Pipe p(cmd);
+        Pipe p(cmd, &err.path);
         std::vector<uint8_t> head(12);
         if (p.read(reinterpret_cast<char*>(head.data()), 12) == 12 && is_wav(head))
         {
@@ -409,6 +511,61 @@ AudioRead own_wav(std::span<const uint8_t> bytes, const AudioStart& start, const
     return {"sieve-wav", {}, a.rate, a.channels};
 }
 
+// The same from a file, read a block at a time rather than whole: what read_wav() does, chunk by
+// chunk (sieve/sound.hpp), and the same blocks handed on. Throws std::invalid_argument, as
+// read_wav() does, on anything it does not read, before anything is handed on.
+AudioRead own_wav_file(std::istream& in, uint64_t file_size, const AudioStart& start, const AudioBlock& block)
+{
+    auto le = [](const uint8_t* p, int n) {
+        uint32_t v = 0;
+        for (int i = n - 1; i >= 0; --i) v = v << 8 | p[i];
+        return v;
+    };
+    uint8_t head[12];
+    if (!in.read(reinterpret_cast<char*>(head), 12) || !is_wav(std::span<const uint8_t>(head, 12))) throw std::invalid_argument("not a WAV file");
+    uint64_t at = 12;
+    std::optional<WavFormat> f;
+    while (at + 8 <= file_size)
+    {
+        uint8_t ch[8];
+        in.seekg(std::streamoff(at));
+        if (!in.read(reinterpret_cast<char*>(ch), 8)) break;
+        const std::string id(reinterpret_cast<const char*>(ch), 4);
+        const uint32_t size = le(ch + 4, 4);
+        const uint64_t body = at + 8;
+        if (id == "fmt ")
+        {
+            std::vector<uint8_t> fmt(size_t(std::min<uint64_t>(size, file_size - body)));
+            in.read(reinterpret_cast<char*>(fmt.data()), std::streamsize(fmt.size()));
+            f = wav_format(fmt);
+        }
+        else if (id == "data")
+        {
+            if (!f) throw std::invalid_argument("a WAV file's data comes before its fmt chunk");
+            const uint64_t end = (size == 0 || size == 0xFFFFFFFFu) ? file_size : std::min(file_size, body + uint64_t(size));
+            const uint64_t samples = (end - body) / f->align * f->channels;
+            const size_t bytes = f->bits / 8;
+            start(f->rate, f->channels);
+            std::vector<uint8_t> raw;
+            std::vector<int32_t> out;
+            for (uint64_t done = 0; done < samples;)
+            {
+                const size_t n = size_t(std::min<uint64_t>(samples - done, uint64_t(kAudioBlockFrames) * f->channels));
+                raw.resize(n * bytes);
+                in.read(reinterpret_cast<char*>(raw.data()), std::streamsize(raw.size()));
+                out.resize(n);
+                for (size_t i = 0; i < n; ++i) out[i] = wav_sample(*f, raw.data() + i * bytes);
+                block(out);
+                done += n;
+            }
+            return {"sieve-wav", {}, f->rate, f->channels};
+        }
+        if (size == 0xFFFFFFFFu) break;
+        at = body + size + (size & 1);
+    }
+    throw std::invalid_argument("a WAV file with no data chunk");
+}
+
 // Whether stb_image reads a file: the four signed kinds it reads by their signatures alone (a
 // JPEG's header can lie past any head), the rest (TGA, PSD, PNM, ...) by its own test of the head.
 bool stb_reads(const std::string& kind, const uint8_t* head, size_t size)
@@ -462,7 +619,7 @@ std::string ffmpeg_version()
     std::string out;
     try
     {
-        out = run(quoted(*exe) + " -hide_banner -version");
+        out = run({*exe, "-hide_banner", "-version"});
     }
     catch (const std::exception&)
     {
@@ -570,11 +727,14 @@ AudioRead read_media_audio(const std::string& path, const AudioStart& start, con
     head.resize(size_t(in.gcount()));
     if (is_wav(head))
     {
+        // Read a block at a time: a long recording is never held whole.
+        in.clear();
+        in.seekg(0, std::ios::end);
+        const uint64_t size = uint64_t(in.tellg());
         in.seekg(0);
-        const std::vector<uint8_t> all((std::istreambuf_iterator<char>(in)), {});
         try
         {
-            return own_wav(all, start, block);
+            return own_wav_file(in, size, start, block);
         }
         catch (const std::invalid_argument&)
         {
@@ -598,7 +758,7 @@ bool ffmpeg_has_encoder(const std::string& name)
         try
         {
             // Lines like " V....D libx264  H.264 ...": the flags, then the name.
-            const std::string out = run(quoted(*exe) + " -hide_banner -encoders");
+            const std::string out = run({*exe, "-hide_banner", "-encoders"});
             size_t at = 0;
             while (at < out.size())
             {
@@ -629,13 +789,13 @@ void ffmpeg_convert(const std::vector<std::string>& input_options, const std::st
         std::error_code ec;
         fs::remove(from_u8(output), ec);
     }
-    // Every argument quoted on its own: a filter graph's ; and [ ] are the shell's otherwise.
-    std::string cmd = quoted(exe) + " -hide_banner -nostdin -v error -y";
-    for (const std::string& o : input_options) cmd += " " + quoted(o);
-    cmd += " -i " + quoted(input);
-    for (const std::string& o : output_options) cmd += " " + quoted(o);
-    cmd += " " + quoted(output) + " 2> " + quoted(u8(err.path));
-    run(cmd);
+    // Each argument as it is (no shell: a filter graph's ; and [ ] are only characters).
+    std::vector<std::string> cmd = {exe, "-hide_banner", "-nostdin", "-v", "error", "-y"};
+    cmd.insert(cmd.end(), input_options.begin(), input_options.end());
+    cmd.insert(cmd.end(), {"-i", input});
+    cmd.insert(cmd.end(), output_options.begin(), output_options.end());
+    cmd.push_back(output);
+    run(cmd, &err.path);
     std::error_code ec;
     if (!fs::exists(from_u8(output), ec) || fs::file_size(from_u8(output), ec) == 0)
     {

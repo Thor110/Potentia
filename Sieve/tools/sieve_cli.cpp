@@ -233,6 +233,7 @@ struct Composed
     std::optional<Space> title;
     uint32_t strands = 1;
     std::unique_ptr<CompositionSpace> space;
+    Args unit_shape, cover_shape, title_shape; // each part's line options, as a record writes them
 };
 
 bool is_composed_line(const Args& a)
@@ -259,7 +260,26 @@ Composed make_composed(const Args& a)
     if (const uint32_t length = a.get_u32("title-length", 32); length > 0) title = Space(alphabet_of(a.get("alphabet", "lower27")), length, key);
     auto space = std::make_unique<CompositionSpace>(kind, cover.space, title, unit.space, n);
     const uint32_t strands = strands_of(unit);
-    return Composed{kind, std::move(unit), std::move(joined), std::move(cover), std::move(title), strands, std::move(space)};
+    Args ts;
+    ts.opts = {{"line", "text"}, {"alphabet", a.get("alphabet", "lower27")}, {"length", std::to_string(title ? title->unit_length() : 1)},
+               {"canon", a.get("canon", "v2")}, {"key", key}, {"model", "none"}};
+    u.opts["model"] = "none";
+    cv.opts["model"] = "none";
+    return Composed{kind, std::move(unit), std::move(joined), std::move(cover), std::move(title), strands, std::move(space), u, cv, ts};
+}
+
+// A track or movie as a record (cli/book.hpp: composition_record).
+Book composed_record(const Composed& c, const CompositionSpace::Parts& p, const std::string& mode)
+{
+    const std::optional<Line> title = c.title ? std::optional<Line>(make_line(c.title_shape)) : std::nullopt;
+    return composition_record(c.cover, title ? &*title : nullptr, c.unit, p, mode);
+}
+
+void write_record(const Book& b, const std::string& path)
+{
+    std::ofstream out(std::filesystem::path(std::u8string(path.begin(), path.end())), std::ios::binary);
+    out << serialise_book(b);
+    if (!out) throw std::runtime_error("cannot write " + path);
 }
 
 // Its filters ([tracks] or [movies] in the settings), and the sieve over them.
@@ -392,6 +412,62 @@ int cmd_read_composed(const Args& a)
         save_unit(c.cover, p.cover, a.get("cover-out"), scale, fps);
         std::cerr << "saved " << a.get("cover-out") << "\n";
     }
+    if (a.has("record"))
+    {
+        // The item as a record, every part written in this ordering (--mode).
+        const Book b = composed_record(c, p, to_string(m));
+        write_record(b, a.get("record"));
+        std::cerr << "saved " << a.get("record") << " (" << c.kind << " record " << b.id.substr(0, 16) << "...)\n";
+    }
+    return 0;
+}
+
+// bind --line tracks|movies: a record of a track or movie from what it is made of: --file (the
+// units, read as the line reads them, as many as it fills up to N), --title TEXT and --cover
+// PICTURE, each optional but the units; what is not given is blank.
+int cmd_bind_composed(const Args& a)
+{
+    if (!a.has("out")) throw std::invalid_argument("missing --out FILE");
+    if (!a.has("file")) throw std::invalid_argument("give --file with the " + std::string(a.get("line") == "tracks" ? "melody or sound" : "video") + " the units are made from");
+    const Composed c = make_composed(a);
+    const std::string mode = a.get("mode", "scrambled");
+    if (mode != "positional" && mode != "scrambled") throw std::invalid_argument("--mode is positional or scrambled for " + c.kind);
+    CompositionSpace::Parts p;
+    p.cover.assign(c.cover.space.unit_length(), 0);
+    if (c.title) p.title.assign(c.title->unit_length(), 0);
+    {
+        Args in;
+        in.opts["file"] = a.get("file");
+        const WarpInput w = read_warp_input(c.unit, in);
+        std::cerr << "units\n  " << w.report.front() << "\n";
+        if (w.units.size() > c.space->units())
+            throw std::invalid_argument("that makes " + std::to_string(w.units.size()) + " units, more than a " + c.kind.substr(0, c.kind.size() - 1) +
+                                        " holds (" + std::to_string(c.space->units()) + ")");
+        p.units = w.units;
+        p.units.resize(c.space->units(), Space::Digits(c.unit.space.unit_length(), 0));
+    }
+    if (a.has("title"))
+    {
+        if (!c.title) throw std::invalid_argument("--title with --title-length 0: this line has no titles");
+        Args in;
+        in.positional = {a.get("title")};
+        const WarpInput w = read_warp_input(make_line(c.title_shape), in);
+        std::cerr << "title\n  " << w.report.front() << "\n";
+        p.title = w.units.front();
+    }
+    if (a.has("cover"))
+    {
+        Args in;
+        in.opts["file"] = a.get("cover");
+        const WarpInput w = read_warp_input(c.cover, in);
+        std::cerr << "cover\n  " << w.report.front() << "\n";
+        p.cover = w.units.front();
+    }
+    const Book b = composed_record(c, p, mode);
+    write_record(b, a.get("out"));
+    std::cout << c.kind.substr(0, c.kind.size() - 1) << std::string(13 - c.kind.size() + 1, ' ') << b.id << "\n"
+              << "address      " << c.space->hex_of(c.space->index_of(p, address_mode_from_string(mode))) << "  (" << mode << ")\n"
+              << "record       " << serialise_book(b).size() << " bytes -> " << a.get("out") << "\n";
     return 0;
 }
 
@@ -2361,6 +2437,14 @@ int cmd_unbind(const Args& a)
                 save_unit(d.line, d.units.front(), a.get("cover"), a.get_positive("scale", 16));
                 std::cerr << "  saved " << a.get("cover") << "\n";
             }
+            else if (role == "units" && a.has("units") && !d.units.empty())
+            {
+                // A track's or movie's units joined, as one unit of its line N long: one melody,
+                // one sound or one video.
+                save_unit(joined_line(d.line, uint32_t(d.units.size())), join_units(d.units, strands_of(d.line)), a.get("units"),
+                          a.get_positive("scale", 16), a.get_positive("fps", kDefaultExportFps));
+                std::cerr << "  saved " << a.get("units") << "\n";
+            }
             else
                 for (const auto& u : d.units) print_indented(preview(d.line, u), "");
         }
@@ -2534,7 +2618,8 @@ int main(int argc, char** argv)
             if (a.command == "warp") return cmd_warp_composed(a);
             if (a.command == "read") return cmd_read_composed(a);
             if (a.command == "filters") return cmd_filters_composed(a);
-            throw std::invalid_argument("'sieve " + a.command + "' does not take --line " + a.get("line") + " (info, warp, read and filters do)");
+            if (a.command == "bind") return cmd_bind_composed(a);
+            throw std::invalid_argument("'sieve " + a.command + "' does not take --line " + a.get("line") + " (info, warp, read, filters and bind do)");
         }
         if (a.command == "info") return cmd_info(a);
         if (a.command == "warp") return cmd_warp(a);

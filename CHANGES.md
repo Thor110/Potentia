@@ -1,61 +1,56 @@
-# The music plays melodies, and can draw them from the tracks line
+# Records for tracks and movies
 
-Against `83093ba` (joined filters). This includes the earlier `hand.zip` (the model comes back
-upright, and the NOW PLAYING box moved down 21 px), so apply this one instead of that one.
+Against `d0d0e03` with `fixes.zip` applied first: apply `fixes.patch`, then `records.patch`. The
+files in `files/` are the final versions, with both applied.
 
 ## What changed
 
-### NOW PLAYING box
-It is 21 px lower and 6 px further right (`y = 73`, right edge at `W - 6`). It now sits just below
-the FPS counter, flush with its right edge, and clear of the setup menu's memory rows.
+### The record
+Tracks and movies keep records of the same kind books do (`sieve-book-v1`):
+- **Three sections:** `cover`, `title` and `units`. A missing part is blank, and a blank cover or
+  title is left out, so one item has one record and one id however it was made.
+- **Which line:** the sections say where a record belongs. `pages` means books; `units` of audio
+  means tracks; `units` of video means movies.
 
-### "Melody", not "track", for what the music plays
-The NOW PLAYING message already said "a melody", but the Media Player's own labels said "track".
-They now say melody: RECENT MELODIES, "A new melody now", "Quiet between melodies", "Play the
-highlighted melody", and so on. The same change was made in the README and the code
-(`MusicMelody`, `go_to_melody()`, `Request::GoToMelody`), so "track" now means only the TRACKS
-line. `sieve-music.ini` writes recent entries as `melody =` and still reads the old `track =`.
+### `sieve-book-v2`, for other note sets
+Until now a record's audio section could only describe `notes104`. Version 2 adds one field after
+an audio section's line, `notes <symbols id>`, which names a `notes2`, `notes3` or `pcm` set
+whole. Its `length` is then per voice or channel.
+- **Written only when needed:** a record without the field is still v1, readable by every earlier
+  Sieve.
+- **The id is unchanged:** it is computed as before.
+- **Also closes** the IDEAS item "books of notes2 melodies".
 
-### Draws from: the audio line or the tracks line
-- **Two new rows per mode (MENUS, WORLD) in the Media Player:**
-  - **Draws from:** *the audio line* (as before) or *the tracks line*.
-  - **units a track:** 1–64, used only for the tracks line.
-- **What a melody from the tracks line is:** a real track. It is N units of the mode's length,
-  with a blank cover and title, as T gives a track warped in.
-- **Filters:** the mode's filters judge the whole track with its units joined, as a track's JOINED
-  stack does, so they judge across the seams. The filters heading says so.
-- **Its address** is its tracks-line address. I checked one against `sieve warp --line tracks`:
-  they match. Long addresses are shown as their first and last digits around "..", since a
-  track's begins with the zeros of its blank cover and title.
-- **G** walks to it on TRACKS. If the hallway's audio length, note set or units a track differ,
-  the hallway is rebuilt with the track's values.
-- **Saved:** a track keeps its unit count in the recent list and in the favourites, and saves as
-  `sieve-tracks-<last 12 digits>.mid`.
+### In the hallway
+- **F** on a track or movie offers **Sieve record** (`.track`, `.movie`).
+- **J** on a record standing on the binary line opens it onto its own shelf (books, tracks or
+  movies, from its sections).
+- **A record that doesn't fit** the hallway's settings is refused with what it needs, e.g. "its
+  units are notes2/C3-C6/seEqQhHw/V2 (8 symbols a unit), not notes104 (16 symbols a unit) (set
+  IMAGE, the title length and TRACKS in the menu to the record's shape)".
 
-### A bug found on the way: "Go to its location" went to BOOKS
-It set the line to door 2, which was audio before the doors were reordered and is books now. It
-now goes by name: audio, or tracks for a track.
-
-### From `hand.zip`, included here
-- **The model in hand turns back to its resting angle whenever it is put down,** so it comes back
-  upright.
-- **One more path now puts the previous item down first:** going to an address that compact mode
-  has no shelf for put the new item in hand without putting the last one down.
+### In the `sieve` tool
+- **`sieve bind --line tracks|movies --file F [--title T] [--cover P] --out R`** makes a record
+  from a melody, sound or video. It also prints the item's address.
+- **`sieve read --line tracks|movies ... ADDRESS --record R`** writes the item at an address as a
+  record. It is byte for byte the record `bind` makes for the same item.
+- **`sieve unbind R --units F`** saves the units joined, as one melody, sound or video.
 
 ## Checked
-- **Build:** the client builds with no warnings (Linux, GCC 13).
-- **CI steps:** the models step and the whole hallway step pass, including the Media Player
-  screenshot.
-- **Media Player:** switching WORLD to the tracks line, with 5 units, is saved to
-  `sieve-music.ini` (`source = tracks`, `units = 5`).
-- **Old and new entries:** an old-format recent entry (`track =`) and a new tracks entry
-  (`tracks:2`) both load and are listed (`media-player.png`).
-- **The address:** the listed track address ends `2de953`, as `sieve warp --line tracks
-  --track-units 2` gives for the same notes.
-- **Not checked:** a melody actually being drawn from the tracks line and played. Scripted runs
-  have no audio device, so the player never draws. Please listen to one in-game.
+- **In the hallway:** a track and a movie saved as records, then opened with J from the binary line
+  and saved again, give byte-identical files. The same holds for a two-voice notes2 track (a v2
+  record).
+- **In the tool:** a v2 track bound from a melody, read back by its address, and unbound to MIDI.
+- **CI:** these checks are now in the books and hallway steps, and every step was run here.
+
+## Not done
+The `sieve` tool reads MIDI files only on notes3 lines, so `bind --file tune.mid` on a notes2
+track is refused. This was already the case before this change. The hallway's J reads MIDI on
+every note set. It is noted in IDEAS §13.
 
 ## Docs
-- **README:** the music and Media Player paragraphs.
+- **SPECIFICATIONS §11:** v2 records, and records for tracks and movies.
+- **README:** a Records bullet under Tracks and movies.
+- **`sieve help`:** `bind`, `read` and `unbind`.
+- **IDEAS:** §13's records step done, and §12's notes2 books done.
 - **HANDOFF:** a new entry.
-- **`client/music.hpp` and `client/media_player.cpp`:** their file comments are rewritten.

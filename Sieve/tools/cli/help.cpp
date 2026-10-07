@@ -145,6 +145,8 @@ const std::vector<Page>& pages()
                                   "line has one of 40,000 digits -- and a command line will not hold it."},
           {"--cover-out PATH", "Tracks and movies: also save the cover, as --out saves a picture. (--out saves\n"
                                "the units joined: one unit of the audio or video line N units long.)"},
+          {"--record PATH", "Tracks and movies: also save the item as a record (sieve help bind), which J in\n"
+                            "the hallway opens onto its shelf."},
           {"--scale S", "Enlarge each pixel to SxS in the saved picture or video. Default 16."},
           {"--fps N", "A video saved as a video (.gif .mp4 .webm): frames a second. Default 8."},
           {"--around N", "Also show the N units on either side, in the chosen ordering: what the hallway\n"
@@ -522,9 +524,17 @@ const std::vector<Page>& pages()
           {"--length N", "Characters per page. Default 3200 (one page of the libraryofbabel.info library)."},
           {"--mode MODE", "positional, scrambled (default) or guided: how the addresses are written."},
           {"--key K", "The key for scrambled addresses. Default: sieve."},
-          {"--alphabet A", "The pages' alphabet (default lower27); --canon v2|v1; --model ID for guided."}},
+          {"--alphabet A", "The pages' alphabet (default lower27); --canon v2|v1; --model ID for guided."},
+          {"--line tracks|movies", "A track's or movie's record instead: --file, the melody, sound or video its units are\n"
+                                   "read from (up to --track-units or --movie-units of them; the rest blank), with an\n"
+                                   "optional --title TEXT (of --title-length) and --cover PICTURE (of --image-width x\n"
+                                   "--image-height in --image-palette), as the hallway's shape options say (sieve help\n"
+                                   "lines). Blank parts are left out. An audio section on a set other than notes104 names\n"
+                                   "its set, which makes the record sieve-book-v2. It prints the item's address too."},
+          {"--file PATH", "Tracks and movies: the melody, sound or video the units are read from."}},
          {{"sieve bind --title \"A Tale of Two Cities\" --pages tale.txt --mode guided --out tale.book", "a guided book"},
-          {"sieve bind --pages notes.txt --length 1000 --out notes.book", "pages of 1000 characters, scrambled"}}},
+          {"sieve bind --pages notes.txt --length 1000 --out notes.book", "pages of 1000 characters, scrambled"},
+          {"sieve bind --line tracks --length 8 --file tune.mid --title \"a small tune\" --out tune.track", "a track's record"}}},
 
         {"locate", "A file's place on the binary line, or a folder's manifest.",
          "sieve locate FILE [--out ADDRESS.hex] [--compare]\n"
@@ -644,14 +654,17 @@ const std::vector<Page>& pages()
           {"sieve vault --chunks listed.bin --common ordinary/ > listed.vault", "a vault file listing a file by its chunks"}}},
 
         {"unbind", "Read a book record back: check its id, print or save its sections.",
-         "sieve unbind BOOK [--pages OUT.txt] [--cover OUT.png] [--scale S]",
+         "sieve unbind BOOK [--pages OUT.txt] [--cover OUT.png] [--units OUT] [--scale S] [--fps N]",
          "Recomputes every unit from its address (guided addresses must be the units' own), checks\n"
          "the content against the book's id, then prints each text section (the title, the pages)\n"
          "and draws other sections in ASCII. The text comes back canonical: lower case, the\n"
          "punctuation and line breaks of the original gone, exactly as the book holds it.",
          {{"--pages OUT.txt", "Save the pages to a file instead of printing them."},
-          {"--cover OUT.png", "Save the cover as a PNG (enlarged --scale times, default 16)."}},
+          {"--cover OUT.png", "Save the cover as a PNG (enlarged --scale times, default 16)."},
+          {"--units OUT", "A track's or movie's record: save its units joined, as one melody, sound or video\n"
+                          "(.mid, .wav, .png, or any format ffmpeg writes; --fps N for a video, default 8)."}},
          {{"sieve unbind tale.book", "print the title and the text"},
+          {"sieve unbind tune.track --units tune.mid", "a track's units as one MIDI file"},
           {"sieve unbind tale.book --pages tale.txt --cover cover.png", "save them"}}},
 
         {"version", "Show the tool version and every pinned rule version.",

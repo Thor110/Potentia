@@ -782,27 +782,22 @@ CompositionSpace::Parts Hallway::composition_of(const Space::Digits& joined) con
 
 void Hallway::go_to_unit(const Space::Digits& unit, bool open)
 {
+    if (on_composition())
+    {
+        go_to_composition(composition_of(unit), open);
+        return;
+    }
     if (effective_mode() == FilterMode::Compact)
     {
         std::string failed_by;
-        if (on_composition()) failed_by = comp().sieve->first_failure(composition_of(unit));
-        else if (const int fail = stack().first_failure(unit); fail >= 0) failed_by = stack().filter_name(size_t(fail));
+        if (const int fail = stack().first_failure(unit); fail >= 0) failed_by = stack().filter_name(size_t(fail));
         if (!failed_by.empty())
         {
             Book b;
             b.unit = unit;
-            if (on_composition())
-            {
-                const BigUint index = comp().space->index_of(composition_of(unit), AddressMode::Positional);
-                b.hex = comp().space->hex_of(index);
-                b.fraction = index.is_zero() ? 0.0 : std::pow(10.0, index.log10_approx() - comp().space->size().log10_approx());
-            }
-            else
-            {
-                const auto address = line().space.address_digits(unit, AddressMode::Positional);
-                b.hex = line().space.hex_of(address);
-                b.fraction = line().space.fraction_of(address);
-            }
+            const auto address = line().space.address_digits(unit, AddressMode::Positional);
+            b.hex = line().space.hex_of(address);
+            b.fraction = line().space.fraction_of(address);
             b.passes = false;
             b.failed_by = failed_by;
             b.withheld = vault_withholds(b);
@@ -815,6 +810,40 @@ void Hallway::go_to_unit(const Space::Digits& unit, bool open)
         }
     }
     place(index_of(unit), open);
+}
+
+// A track or movie: go to it, face it, and optionally open it. In compact mode one the filters set
+// aside has no shelf, and is shown in hand with its full address, as a unit is.
+void Hallway::go_to_composition(const CompositionSpace::Parts& p, bool open)
+{
+    const Composition& c = comp();
+    if (effective_mode() == FilterMode::Compact)
+    {
+        const std::string fail = c.sieve->first_failure(p);
+        if (fail.empty())
+        {
+            place(c.sieve->index_of(p, mode_), open);
+            return;
+        }
+        Book b;
+        b.cover = p.cover;
+        b.title = p.title;
+        b.unit = join_units(p.units, c.strands);
+        const BigUint index = c.space->index_of(p, AddressMode::Positional);
+        b.index = index;
+        b.hex = c.space->hex_of(index);
+        b.fraction = index.is_zero() ? 0.0 : std::pow(10.0, index.log10_approx() - c.space->size().log10_approx());
+        b.passes = false;
+        b.failed_by = fail;
+        b.withheld = vault_withholds(b);
+        drop_in_hand();
+        in_hand_ = b;
+        hand_tab_ = 0;
+        in_hand_where_ = trf("hand.not_shelved", {fail});
+        refuse_if_withheld();
+        return;
+    }
+    place(c.space->index_of(p, mode_), open);
 }
 
 // The books line: go to a book, face it, and optionally open it.

@@ -221,6 +221,37 @@ std::vector<uint32_t> CompositionSieve::Part::unrank(const BigUint& k) const
     return stack->ranker()->unrank(k);
 }
 
+namespace {
+
+// Numbers r[a..b), each below `base`, read as one number in that base, most significant first:
+// split in half and joined with one product, so the work is shared between products of balanced
+// size (Karatsuba's own) rather than one number grown a unit at a time.
+BigUint join_ranks(const std::vector<BigUint>& r, size_t a, size_t b, const BigUint& base)
+{
+    if (b - a == 1) return r[a];
+    const size_t mid = a + (b - a) / 2;
+    BigUint hi = BigUint::mul(join_ranks(r, a, mid, base), BigUint::pow(base, b - mid));
+    hi += join_ranks(r, mid, b, base);
+    return hi;
+}
+
+// Its inverse: k (below base^(b - a)) into r[a..b).
+void split_ranks(const BigUint& k, std::vector<BigUint>& r, size_t a, size_t b, const BigUint& base)
+{
+    if (b - a == 1)
+    {
+        r[a] = k;
+        return;
+    }
+    const size_t mid = a + (b - a) / 2;
+    BigUint q, rest;
+    BigUint::divmod(k, BigUint::pow(base, b - mid), q, rest);
+    split_ranks(q, r, a, mid, base);
+    split_ranks(rest, r, mid, b, base);
+}
+
+} // namespace
+
 BigUint CompositionSieve::rank(const CompositionSpace::Parts& p) const
 {
     if (!ranks_) throw std::logic_error("these filters cannot rank: " + blocker_);
@@ -237,11 +268,11 @@ BigUint CompositionSieve::rank(const CompositionSpace::Parts& p) const
         k += parts_[2].rank(join_units(p.units, strands_));
         return k;
     }
-    for (const auto& u : p.units)
-    {
-        k = BigUint::mul(k, parts_[2].count);
-        k += parts_[2].rank(u);
-    }
+    std::vector<BigUint> ranks;
+    ranks.reserve(p.units.size());
+    for (const auto& u : p.units) ranks.push_back(parts_[2].rank(u));
+    k = BigUint::mul(k, units_count_);
+    k += join_ranks(ranks, 0, ranks.size(), parts_[2].count);
     return k;
 }
 
@@ -259,11 +290,13 @@ CompositionSpace::Parts CompositionSieve::unrank(const BigUint& k) const
         p.units = split_units(parts_[2].unrank(r), strands_, space_->units());
         rest = std::move(q);
     }
-    else for (size_t i = p.units.size(); i-- > 0;)
+    else
     {
         BigUint q, r;
-        BigUint::divmod(rest, parts_[2].count, q, r);
-        p.units[i] = parts_[2].unrank(r);
+        BigUint::divmod(rest, units_count_, q, r);
+        std::vector<BigUint> ranks(p.units.size());
+        split_ranks(r, ranks, 0, ranks.size(), parts_[2].count);
+        for (size_t i = 0; i < ranks.size(); ++i) p.units[i] = parts_[2].unrank(ranks[i]);
         rest = std::move(q);
     }
     if (space_->title_space())

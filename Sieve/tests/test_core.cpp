@@ -3145,6 +3145,28 @@ void test_composition_sieve()
         const CompositionSieve plain(cs, none, none, ust), with_empty(cs, none, none, ust, &none, 1);
         CHECK(plain.domain() == with_empty.domain() && !with_empty.has_joined());
     }
+    {
+        // Five units, ranked by halves (2 + 3, then 1 + 2): every survivor's rank is its place in
+        // positional order, and unrank inverts it, as one unit at a time would give.
+        const CompositionSpace five("movies", cover, std::nullopt, unit, 5);
+        const CompositionSieve sv(five, none, none, ust);
+        const BigUint per = ust.ranker()->count();
+        CHECK(sv.count() == BigUint::mul(BigUint(16), BigUint::pow(per, 5)));
+        for (uint64_t step : {1ull, 7ull, 1234567ull})
+            for (uint64_t k = 0; BigUint(k) < sv.count() && k < 200 * step; k += step)
+            {
+                const CompositionSpace::Parts p = sv.unrank(BigUint(k));
+                // The units' ranks, read one unit at a time, cover first: what the halves must make.
+                BigUint want = BigUint::from_digits(p.cover, 2);
+                for (const auto& u : p.units)
+                {
+                    want = BigUint::mul(want, per);
+                    want += ust.ranker()->rank(u);
+                }
+                CHECK(want == BigUint(k));
+                CHECK(sv.rank(p) == BigUint(k));
+            }
+    }
     // Joining: two units of two voices (a1 a2 | b1 b2, each voice two events) join voice by voice.
     const std::vector<std::vector<uint32_t>> two = {{1, 2, 3, 4}, {5, 6, 7, 8}};
     CHECK((join_units(two, 2) == std::vector<uint32_t>{1, 2, 5, 6, 3, 4, 7, 8}));
@@ -4019,6 +4041,19 @@ void test_sound_vectors(const std::string& dir)
     }
     std::cout << "sound filter vectors checked: " << n << "\n";
     CHECK(n >= 60);
+    // How silence-run counts depends on the run it is set to, not only on the line: on a second of
+    // 16-bit sound the longest run the line allows is too many states for an automaton, but a run
+    // of ten is not, and there it is one, and says so (counts_as_on with its settings), so it is
+    // weighed beside the other automata rather than as judging only.
+    {
+        const FilterSpec* silence = find_filter("silence-run-v1");
+        const PcmFormat fmt = make_pcm_format(8000, 16, 1);
+        const FilterLine line{"audio", fmt.id(), fmt.base(), 8000, nullptr, 0, 0, 0};
+        const FilterValues ten{{"samples", "10"}}, bad{{"samples", "x"}};
+        CHECK(silence->counts_as_on(line, nullptr).empty());
+        CHECK(silence->counts_as_on(line, &ten) == "automaton");
+        CHECK(silence->counts_as_on(line, &bad).empty()); // a malformed setting: as without one
+    }
 }
 
 void test_picture_vectors(const std::string& dir)

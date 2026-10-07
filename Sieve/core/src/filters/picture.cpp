@@ -523,7 +523,7 @@ void add_picture_filters(std::vector<FilterSpec>& out)
     };
     // An automaton where every setting's would be small enough on this line: all its colours, and on
     // a video counted per frame.
-    p.counts_as_on = [](const FilterLine& l) -> std::string {
+    p.counts_as_on = [](const FilterLine& l, const FilterValues*) -> std::string {
         const bool per_frame = l.frames > 1;
         const uint64_t scope = per_frame ? uint64_t(l.width) * l.height : l.length;
         return cells_fit(palette_states(l.base, std::min<uint64_t>(l.base, scope), scope, per_frame), l.base) ? "automaton" : "own";
@@ -545,7 +545,7 @@ void add_picture_filters(std::vector<FilterSpec>& out)
         return std::make_unique<RowRuns>(l, uint32_t(c), "changes=" + std::to_string(c));
     };
     // An automaton where every setting's would be small enough on this line (a row's worth of changes).
-    r.counts_as_on = [](const FilterLine& l) -> std::string {
+    r.counts_as_on = [](const FilterLine& l, const FilterValues*) -> std::string {
         return cells_fit(row_runs_states(l.base, l.width, l.width > 0 ? l.width - 1 : 0), l.base) ? "automaton" : "own";
     };
     out.push_back(r);

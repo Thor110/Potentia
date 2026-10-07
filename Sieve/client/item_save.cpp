@@ -29,6 +29,15 @@ namespace fs = std::filesystem;
 
 fs::path from_u8(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
 
+// A path's extension in lower case (".TRACK" is a track's record too).
+std::string lower_ext(const fs::path& p)
+{
+    const std::u8string e = p.extension().u8string();
+    std::string out(e.begin(), e.end());
+    for (char& c : out) c = char(std::tolower(static_cast<unsigned char>(c)));
+    return out;
+}
+
 // A name as every system takes one: no separators, no characters Windows refuses.
 std::string safe_name(std::string s)
 {
@@ -133,7 +142,39 @@ std::string Hallway::prepare_save()
     // An item of the image, video or audio line can be saved in other formats through ffmpeg.
     save_formats_.clear();
     if (!bk.is_file && !bk.model && !bk.parts && line().kind != LineKind::Text) save_formats_ = cli::export_formats(line());
+    // A track or movie can also be saved whole, as a record that J opens onto its shelf.
+    if (on_composition() && !bk.unit.empty()) save_formats_.push_back({record_ext(), tr("save.record"), ""});
     return name;
+}
+
+// A track's or movie's record: ".track" or ".movie".
+std::string Hallway::record_ext() const
+{
+    std::string id = kDimensions[li_].id;
+    if (!id.empty() && id.back() == 's') id.pop_back();
+    return "." + id;
+}
+
+// The item in hand as a record (cli/book.hpp: composition_record), in the ordering in use (guided
+// has none here): its cover and title when not blank, and its units.
+std::string Hallway::composition_record_of(const Book& bk) const
+{
+    const Composition& c = comp();
+    CompositionSpace::Parts p;
+    p.cover = bk.cover;
+    p.title = bk.title;
+    p.units = split_units(bk.unit, c.strands, c.space->units());
+    std::optional<Line> title;
+    if (c.space->title_space())
+    {
+        title = unit_line(LineKind::Text); // the titles are written in the pages line's alphabet
+        title->space = *c.space->title_space();
+        title->guided.reset();
+    }
+    const sieve::cli::Book record = sieve::cli::composition_record(unit_line(LineKind::Image), title ? &*title : nullptr,
+                                                                   unit_line(*kDimensions[li_].composes), p,
+                                                                   mode_ == AddressMode::Positional ? "positional" : "scrambled");
+    return sieve::cli::serialise_book(record);
 }
 
 // The viewer's F: what the view shows, saved. The thing itself is saved as F on the item page saves
@@ -260,6 +301,11 @@ void Hallway::item_save_poll()
             for (size_t i = 0; i < bk.parts->pages.size(); ++i)
                 text += utf8_encode(line().space.text_of(bk.parts->pages[i])) + "\n\n";
             write_all(path, text.data(), text.size());
+        }
+        else if (on_composition() && lower_ext(path) == record_ext())
+        {
+            const std::string record = composition_record_of(bk);
+            write_all(path, record.data(), record.size());
         }
         else
         {
@@ -395,16 +441,37 @@ void Hallway::open_as_kind(const std::vector<uint8_t>& bytes)
     }
     if (to == kBooksLine)
     {
+        // A record (sieve bind, or a track's or movie's saved from here): its sections say which
+        // line it belongs on, books, tracks or movies.
         const std::string text(bytes.begin(), bytes.end());
         const sieve::cli::Book record = parse_book(text);
         const auto decoded = decode_book(record);
         if (book_id(decoded) != record.id) throw std::runtime_error("the book's content does not match its id");
-        const BookSpace::Parts parts = record_parts(decoded, *books_);
-        drop_in_hand();
-        set_line(kBooksLine);
-        go_to_book(parts, true);
+        const std::string where = sieve::cli::record_line(decoded);
+        const int li = where.empty() ? kBooksLine : line_named(where);
+        try
+        {
+            if (li == kBooksLine)
+            {
+                const BookSpace::Parts parts = record_parts(decoded, *books_);
+                drop_in_hand();
+                set_line(kBooksLine);
+                go_to_book(parts, true);
+            }
+            else
+            {
+                const CompositionSpace::Parts parts = sieve::cli::record_composition(decoded, *comps_[size_t(li)].space);
+                drop_in_hand();
+                set_line(li);
+                go_to_composition(parts, true);
+            }
+        }
+        catch (const std::invalid_argument& e)
+        {
+            throw std::runtime_error(li == kBooksLine ? trf("msg.book_shape", {e.what()}) : trf("msg.record_shape", {e.what(), tr(theme_of(li).key)}));
+        }
         trail_.clear();
-        message(trf("msg.jump.opened", {kind, tr(theme().key), "book record"}));
+        message(trf("msg.jump.opened", {kind, tr(theme().key), li == kBooksLine ? "book record" : "record"}));
         return;
     }
     std::vector<std::vector<uint32_t>> units;

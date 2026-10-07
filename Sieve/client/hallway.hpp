@@ -594,6 +594,9 @@ public:
     void go_to_unit(const Space::Digits& unit, bool open);
 
     void go_to_book(const BookSpace::Parts& p, bool open);
+    void go_to_composition(const CompositionSpace::Parts& p, bool open); // a track or movie, on its line
+    std::string record_ext() const;                           // ".track" or ".movie"
+    std::string composition_record_of(const Book& bk) const; // a track or movie in hand, as a record
     void go_to_file(const BinarySpace::Bytes& f, bool open, const Space::Digits* title = nullptr, const Space::Digits* cover = nullptr);
 
     BookSpace::Parts parts_of_record(const std::string& path);

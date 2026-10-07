@@ -99,7 +99,9 @@ namespace {
 class StepCounts
 {
 public:
-    explicit StepCounts(uint32_t base) { seen_.reserve(base); } // references stay valid: no regrowth
+    // At most `states` different states asked for: room for them all at once, so the references
+    // handed out stay valid.
+    explicit StepCounts(size_t states) { seen_.reserve(states); }
     const BigUint& get(const Ranker& r, Ranker::State t, uint32_t remaining)
     {
         for (const auto& [st, n] : seen_)
@@ -112,6 +114,26 @@ private:
     std::vector<std::pair<Ranker::State, BigUint>> seen_;
 };
 
+// The symbols below `below` at one place, as runs of neighbours that lead to the same state (dead
+// runs left out), into `out`: a large alphabet usually has few, so the big counts are touched once
+// a run, not once a symbol.
+struct Run
+{
+    uint32_t from = 0, n = 0;
+    Ranker::State to = Ranker::kDead;
+};
+void runs_below(const Ranker& r, Ranker::State s, uint32_t below, std::vector<Run>& out)
+{
+    out.clear();
+    for (uint32_t c = 0; c < below; ++c)
+    {
+        const Ranker::State t = r.next(s, c);
+        if (t == Ranker::kDead) continue;
+        if (!out.empty() && out.back().to == t && out.back().from + out.back().n == c) ++out.back().n;
+        else out.push_back({c, 1, t});
+    }
+}
+
 } // namespace
 
 std::vector<uint32_t> Ranker::unrank(const BigUint& k0) const
@@ -120,23 +142,41 @@ std::vector<uint32_t> Ranker::unrank(const BigUint& k0) const
     BigUint k = k0;
     const uint32_t L = length(), B = base();
     std::vector<uint32_t> u(L);
+    std::vector<Run> runs;
     State s = start();
     for (uint32_t i = 0; i < L; ++i)
     {
-        StepCounts counts(B);
+        // Run by run: k falls in the run whose symbols' completions, n each, take it past k.
+        runs_below(*this, s, B, runs);
+        StepCounts counts(runs.size());
         bool placed = false;
-        for (uint32_t c = 0; c < B && !placed; ++c)
+        for (const Run& run : runs)
         {
-            const State t = next(s, c);
-            if (t == kDead) continue;
-            const BigUint& n = counts.get(*this, t, L - i - 1);
-            if (k < n)
+            const BigUint& n = counts.get(*this, run.to, L - i - 1);
+            if (run.n == 1)
             {
-                u[i] = c;
-                s = t;
-                placed = true;
+                if (k < n)
+                {
+                    u[i] = run.from;
+                    s = run.to;
+                    placed = true;
+                    break;
+                }
+                k -= n;
+                continue;
             }
-            else k -= n;
+            const BigUint all = BigUint::mul(n, BigUint(run.n));
+            if (k < all)
+            {
+                BigUint q, r;
+                BigUint::divmod(k, n, q, r);
+                u[i] = run.from + uint32_t(q.limbs().empty() ? 0 : q.limbs()[0]); // q < run.n
+                s = run.to;
+                k = std::move(r);
+                placed = true;
+                break;
+            }
+            k -= all;
         }
         if (!placed) throw std::logic_error("ranker counts are inconsistent");
     }
@@ -148,13 +188,29 @@ BigUint Ranker::rank(std::span<const uint32_t> unit) const
     const uint32_t L = length();
     if (unit.size() != L) throw std::invalid_argument("unit has the wrong length");
     BigUint k;
+    std::vector<Run> runs;
+    std::vector<std::pair<State, uint64_t>> below;
     State s = start();
     for (uint32_t i = 0; i < L; ++i)
     {
         if (unit[i] >= base()) throw std::invalid_argument("unit is not a survivor");
-        StepCounts counts(base());
-        for (uint32_t c = 0; c < unit[i]; ++c)
-            if (const State t = next(s, c); t != kDead) k += counts.get(*this, t, L - i - 1);
+        // How many smaller symbols lead to each state, counted as plain numbers, then one product
+        // each, rather than a big addition for every smaller symbol.
+        runs_below(*this, s, unit[i], runs);
+        below.clear();
+        for (const Run& run : runs)
+        {
+            auto it = std::find_if(below.begin(), below.end(), [&](const auto& b) { return b.first == run.to; });
+            if (it == below.end()) below.emplace_back(run.to, run.n);
+            else it->second += run.n;
+        }
+        StepCounts counts(below.size());
+        for (const auto& [t, n] : below)
+        {
+            const BigUint& c = counts.get(*this, t, L - i - 1);
+            if (n == 1) k += c;
+            else k += BigUint::mul(c, BigUint(n));
+        }
         s = next(s, unit[i]);
         if (s == kDead) throw std::invalid_argument("unit is not a survivor");
     }
@@ -592,16 +648,16 @@ int FilterStack::first_failure(std::span<const uint32_t> unit) const
     return -1;
 }
 
-std::string filter_conflict(const FilterSpec& a, const FilterSpec& b, const FilterLine* line)
+std::string filter_conflict(const FilterSpec& a, const FilterSpec& b, const FilterLine* line, const FilterValues* va, const FilterValues* vb)
 {
     if (a.name() == b.name() || a.counts_as.empty() || b.counts_as.empty()) return {};
     auto implies = [](const FilterSpec& x, const FilterSpec& y) {
         return std::find(x.implies.begin(), x.implies.end(), y.name()) != x.implies.end();
     };
     if (implies(a, b) || implies(b, a)) return {};
-    auto how = [line](const FilterSpec& f) { return line && f.counts_as_on ? f.counts_as_on(*line) : f.counts_as; };
-    const std::string x = how(a);
-    const std::string y = how(b);
+    auto how = [line](const FilterSpec& f, const FilterValues* v) { return line && f.counts_as_on ? f.counts_as_on(*line, v) : f.counts_as; };
+    const std::string x = how(a, va);
+    const std::string y = how(b, vb);
     auto pair = [&](const char* p, const char* q) { return (x == p && y == q) || (x == q && y == p); };
     if (pair("automaton", "automaton") || pair("automaton", "written") || pair("model-rule", "model-rule")) return {};
     if (x == "arithmetic" || y == "arithmetic") return "conflict";

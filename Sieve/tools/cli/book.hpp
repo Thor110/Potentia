@@ -10,7 +10,7 @@
 //     alphabet lower27                   text:  alphabet, length, canon
 //     length 3200                        image: width, height, palette
 //     canon canon-text-v2                video: width, height, frames, palette
-//     key sieve                          audio: length
+//     key sieve                          audio: length (and notes, below)
 //     mode guided                      positional | scrambled | guided
 //     model gutenberg-lower27-o5 <sha256>   guided only: the pinned model it was coded with
 //     units 1
@@ -26,6 +26,20 @@
 // how the addresses are written, so the same book written any of those ways has the same id.
 // Reading a book recomputes every unit from its address and refuses it unless the id matches.
 //
+// "sieve-book-v2" is the same with one field more, written only where it is needed (a record
+// that does not need it is still written, and only read, as v1): an audio section on any note
+// set but notes104 names its set by its symbols id, after its line,
+//     line audio
+//     notes notes2/C3-C6/seEqQhHw/V2     notes2, notes3 or pcm: the set, whole
+//     length 16                          events (or samples) per voice (or channel)
+// so a record holds melodies and sounds of every set. The id is computed as before.
+//
+// Tracks and movies are records of the same kind (SPECIFICATIONS §11.4): a "cover" section of the
+// image line, a "title" section of the titled lines' title, and a "units" section of the audio
+// or video line with up to the line's N units (fewer are followed by blank ones, as a book's
+// missing pages are). Which line a record belongs on follows from its sections: "pages" books,
+// "units" of audio tracks, "units" of video movies (record_line).
+//
 // Composition does not shrink the space of possible books: a book's content is exactly its
 // units. Written in guided order, though, a book of real text takes far fewer digits than its
 // characters, because each page's address is as long as its information (about 2 bits per
@@ -36,6 +50,7 @@
 #include "lines.hpp"
 
 #include "sieve/bookspace.hpp"
+#include "sieve/composition.hpp"
 
 #include <string>
 #include <string_view>
@@ -44,6 +59,7 @@
 namespace sieve::cli {
 
 inline constexpr const char* kBookFormat = "sieve-book-v1";
+inline constexpr const char* kBookFormat2 = "sieve-book-v2"; // with the notes field (above)
 inline constexpr const char* kBookIdVersion = "sieve-book-id-v1";
 
 struct BookSection
@@ -87,6 +103,24 @@ std::string book_id(const std::vector<DecodedSection>& sections);
 // of pages. A missing cover or title is blank (all zero digits); missing pages are blank pages.
 // Throws std::invalid_argument naming the part that does not fit.
 BookSpace::Parts record_parts(const std::vector<DecodedSection>& sections, const BookSpace& space);
+
+// A decoded record as a track or movie of a composition line (sieve/composition.hpp): its cover on
+// the cover's symbols, its title on the title's (or none, when the line has none), its units on the
+// unit line's, at most N of them. A missing cover, title or unit is blank. Throws
+// std::invalid_argument naming the part that does not fit.
+CompositionSpace::Parts record_composition(const std::vector<DecodedSection>& sections, const CompositionSpace& space);
+// A line's options, as a record's section writes them (its shape and key): what makes the line
+// again with make_line.
+Args line_shape(const Line& line);
+// A track or movie as a record, its parts written in `mode` (positional or scrambled): its cover
+// and its title, each left out when blank (a missing part is blank, so one item has one record
+// and one id however it was made), and its units. `title` is null when the line has no titles.
+// The record is read back before it is returned.
+Book composition_record(const Line& cover, const Line* title, const Line& unit, const CompositionSpace::Parts& p, const std::string& mode);
+
+// Which line a decoded record belongs on: "books" (a "pages" section), "tracks" or "movies" (a
+// "units" section of audio or of video), or "" for none of them.
+std::string record_line(const std::vector<DecodedSection>& sections);
 
 std::string serialise_book(const Book& b); // computes nothing: writes b.id as given
 Book parse_book(std::string_view text);    // strict; does not decode

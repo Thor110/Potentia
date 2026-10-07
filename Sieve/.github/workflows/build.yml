@@ -480,6 +480,24 @@ jobs:
           echo "$out" | q "^book: passes, survivor number 18219131502697305122077923717432538631140150329658"
           echo "$out" | q "scrambled  19d1fa4fa0d76f9f2d6b01ef5aa4bfc9959be451"
           $exe filters --line books --length 400 --book-pages 3 --filters books.ini | tr -d '\r' | q "^survivors    2186621054492622425964839597190822589524897221183860035461407467124"
+          # Tracks and movies keep records too (sieve-book-v2 where an audio section names a note set
+          # other than notes104): bind makes one from a melody, read --record makes the same one
+          # from the item's address, and unbind gives the units back joined, as one MIDI file.
+          T="--note-set notes2 --voices 2 --length 4 --track-units 3"
+          printf 'C4q E4q G4q C5q D5q E5q F5q G5q // C3w G3w C3w\n' > tune.txt
+          out=$($exe bind --line tracks $T --file tune.txt --title "a small tune" --out tune.track 2>/dev/null | tr -d '\r')
+          echo "$out"
+          head -1 tune.track | q "^sieve-book-v2$"
+          q "^notes notes2/C3-C6/seEqQhHw/V2$" tune.track
+          a=$(echo "$out" | awk '$1 == "address" {print $2}')
+          $exe read --line tracks $T --mode scrambled "$a" --record back.track > /dev/null 2>&1
+          cmp tune.track back.track
+          $exe unbind tune.track --units tune.mid 2> /dev/null | tr -d '\r' | q "^a small tune"
+          head -c 4 tune.mid | q MThd
+          # A record of notes104 stays sieve-book-v1, readable by every earlier Sieve.
+          printf 'C4q E4q G4q C5q D5q E5q\n' > tune1.txt
+          $exe bind --line tracks --length 4 --track-units 2 --file tune1.txt --out plain.track > /dev/null 2>&1
+          head -1 plain.track | q "^sieve-book-v1$"
 
       - name: Hallway renders, and its doors keep the corridor position (Linux, no display)
         if: runner.os == 'Linux'
@@ -782,6 +800,15 @@ jobs:
           $H --no-menu --line tracks --warp "C4q E4q G4h Re B4e C5w" --walk "0,0" --screenshot trackwarp.png | sed -n 1p | q "warped: canon-notes-v1: 6 event(s), 1 unit(s)"
           $H --no-menu --line tracks --settle 30 --walk "0,0" --take --save-item track.mid --screenshot tracksave.png > /dev/null
           head -c 4 track.mid | q MThd
+          # A track or movie saved as a record (F, .track or .movie) and opened again with J from the
+          # binary line comes back the same item: saved again, the same record.
+          $H --no-menu --line tracks --settle 30 --walk "0,0" --take --save-item h.track --screenshot rec1.png > /dev/null
+          head -1 h.track | q "^sieve-book-v1$"
+          $H --no-menu --binary-length 1024 --locate h.track --press "Return,J" --save-item h2.track --screenshot rec2.png | q "opened on the TRACKS line"
+          cmp h.track h2.track
+          $H --no-menu --line movies --settle 30 --walk "0,0" --take --save-item m.movie --screenshot rec3.png > /dev/null
+          $H --no-menu --binary-length 4096 --locate m.movie --press "Return,J" --save-item m2.movie --screenshot rec4.png | q "opened on the MOVIES line"
+          cmp m.movie m2.movie
           $H --no-menu --line movies --settle 30 --walk "0,0" --take --save-item movie.png --screenshot moviesave.png > /dev/null
           test -s movie.png
           printf '[movies]\nmode = compact\n\n[movies.units]\nfilters = neighbour-agreement-v1\n' > mv.ini

@@ -6,6 +6,8 @@ is a defect, a feature, an open question, or framing.
 
 Nothing here is a commitment. Within each section the order is roughly by how much it is worth.
 
+**First, when work turns to the game (GAME.md; Edward, 6 October 2026): the colour-blindness pass (2.4).**
+
 ---
 
 ## 0. One correction first, because a lot depends on it
@@ -100,7 +102,9 @@ also folds SCOWL's abbreviations and chemical symbols, so "zn" and "tb" now pass
 that keeps proper names and drops short all-caps tokens.
 
 **2.4 No colour-blindness pass.** Nine lines, filter verdicts and the map all encode meaning in
-hue, with no non-colour fallback and no simulation check.
+hue, with no non-colour fallback and no simulation check. First when work turns to the game (above). The pair most
+at risk: audio's dark green and video's dark red (and so tracks and movies, which share them),
+which differ mostly in hue, the difference red–green colour blindness loses.
 
 **2.5 Layouts are built for 8-pixel text.** Unifont draws at half size, so CJK and much of Cyrillic
 are unreadable in the menus. Supporting them means reworking the layouts first, not adding fonts.
@@ -612,10 +616,17 @@ are cheap and because they are the sort of thing that is lost otherwise.
   Written up in TRANSFORM-FILTERS.md: keyless and small-keyed transforms can count exactly,
   compression can only judge, and every key at once excludes everything.
 - **The game**, *State Space: Near Zero*: GAME.md.
+- **A nine-tone note system** (Edward, 6 October 2026: "perhaps in the future we can implement the
+  Klingon music space, which has a 9 tone scale or something"). An entirely different note system:
+  a scale of nine steps rather than seven, with nine modes, which would give each of the nine lines
+  a mode of its own. Now there are seven modes for nine lines, so tracks and movies share audio's
+  and video's by default and their doors are silent unless a mode is set in the Media Player. A
+  drone under the lines made of another's was tried to mark those doors and set aside (not nice to
+  listen to); books keeps Aeolian.
 - **Loudness per note** (Edward: worth having, in a later version). Each note event quiet, medium
   or loud, which triples the note symbols; for the `notes2` family, after its first version.
-- **Books of `notes2` melodies.** `sieve-book-v1` gives an audio section only a length, so a book
-  can hold `notes104` melodies alone. A book format v2 would carry the note family's shape.
+- ~~**Books of `notes2` melodies.**~~ Done as `sieve-book-v2` (7 October 2026): an audio section
+  on another set names it (`notes <symbols id>`), for `notes2`, `notes3` and `pcm` alike.
 - **`notes2` versions of `melody-lengths` and `melody-ending`,** whose duration choices name
   `notes104`'s e q h w: on `notes2` they step aside, so a `notes2` track need not end on the tonic.
 - **Rules between voices** of a `notes2` unit (whether notes sounding together agree): harder than
@@ -734,5 +745,10 @@ is a setting, as a book holds pages of any length.
 - **Filters made for seams:** the joined stack uses the line's own filters over the whole joined
   unit. Filters that look only at the joins (a note held across the boundary, a cut between frames)
   would judge less and count more easily.
-- **A record format for them** (a book record holds sections of any line, so `sieve-book-v1` may
-  already serve, with a label for the units) and J opening one onto its shelf.
+- ~~**A record format for them** and J opening one onto its shelf.~~ Done (7 October): records of
+  the books' kind (`cover`, `title`, `units` sections), `sieve-book-v2` where an audio section names
+  a set other than `notes104`; F saves one (`.track`, `.movie`), J opens one onto its shelf, and
+  `sieve bind --line tracks|movies`, `read --record` and `unbind --units` make and read them.
+- **The `sieve` tool reads MIDI files** only on `notes3` lines; on `notes104` and `notes2` a `.mid`
+  given to `warp --file` (or `bind --file`) is read as notation and refused. The hallway's J reads
+  MIDI on every note set (`midi_to_notation`); the tool should too.

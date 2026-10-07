@@ -5,6 +5,9 @@ from Edward's notes and a conversation with Gemini (September 2026). It is a dir
 schedule: Edward's rule is that the tool comes first, and the story is looked at again once the tool
 is built, "bit by bit, as the tool did". Where a question is still open, it is marked as open.
 
+**First, when work turns to the game** (Edward, 6 October 2026): the colour-blindness pass (IDEAS
+2.4). Nine lines, filter verdicts and the map all mean things by hue alone.
+
 ---
 
 ## 1. What it is for

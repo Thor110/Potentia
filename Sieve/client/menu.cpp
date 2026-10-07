@@ -2346,7 +2346,9 @@ std::vector<Menu::Reach> Menu::reach_of(ToggleScope scope, int overlay, int tab)
         const sieve::FilterLine line = r.part >= 0 ? part_line(r.li, r.part) : filter_line_of(r.li);
         for (const Reach& o : in_reach)
             if (o.lf == r.lf && o.name != r.name)
-                if (const sieve::FilterSpec* b = sieve::find_filter(o.name); a && b && !sieve::filter_conflict(*a, *b, &line).empty()) r.clashes = true;
+                if (const sieve::FilterSpec* b = sieve::find_filter(o.name);
+                    a && b && !sieve::filter_conflict(*a, *b, &line, &r.lf->values_of(r.name), &o.lf->values_of(o.name)).empty())
+                    r.clashes = true;
     }
     return in_reach;
 }
@@ -2425,7 +2427,9 @@ void Menu::poll_toggle()
         const sieve::FilterLine line = r.part >= 0 ? part_line(r.li, r.part) : filter_line_of(r.li);
         bool clash = false;
         for (const std::string& other : r.lf->enabled)
-            if (const sieve::FilterSpec* b = sieve::find_filter(other); a && b && !sieve::filter_conflict(*a, *b, &line).empty()) clash = true;
+            if (const sieve::FilterSpec* b = sieve::find_filter(other);
+                a && b && !sieve::filter_conflict(*a, *b, &line, &r.lf->values_of(r.name), &r.lf->values_of(other)).empty())
+                clash = true;
         if (!clash) (void)sieve::cli::tick_filter(*r.lf, r.name, true);
     }
     save_filters();
@@ -2840,7 +2844,7 @@ void Menu::render_overlay(float W, float H)
                 std::string merge, hard;
                 for (const sieve::FilterSpec* g : sieve::filters_for(line))
                 {
-                    const std::string why = sieve::filter_conflict(*f, *g, &line);
+                    const std::string why = sieve::filter_conflict(*f, *g, &line, &lf.values_of(f->name()), &lf.values_of(g->name()));
                     if (why.empty()) continue;
                     std::string& list = why == "conflict" ? hard : merge;
                     list += (list.empty() ? "" : ", ") + g->name() + (lf.is_enabled(g->name()) ? " " + tr("filters.conflict.ticked") : "");

@@ -134,6 +134,13 @@ FilterMode filter_mode_from_string(const std::string& s)
     throw std::invalid_argument("filter mode must be off, mark, hide, compact or excluded, not '" + s + "'");
 }
 
+const FilterValues& LineFilters::values_of(const std::string& name) const
+{
+    static const FilterValues none;
+    const auto it = values.find(name);
+    return it == values.end() ? none : it->second;
+}
+
 bool LineFilters::is_enabled(const std::string& name) const
 {
     return std::find(enabled.begin(), enabled.end(), name) != enabled.end();
@@ -381,7 +388,7 @@ std::vector<std::string> tick_filter_by_hand(LineFilters& settings, const std::s
         const FilterSpec* b = find_filter(other);
         if (!b) continue;
         for (const std::string& n : fresh)
-            if (const FilterSpec* a = find_filter(n); a && !filter_conflict(*a, *b, line).empty())
+            if (const FilterSpec* a = find_filter(n); a && !filter_conflict(*a, *b, line, &settings.values_of(n), &settings.values_of(other)).empty())
             {
                 settings.set_enabled(other, false);
                 unticked.push_back(other);
