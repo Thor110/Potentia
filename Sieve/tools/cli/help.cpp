@@ -347,8 +347,9 @@ const std::vector<Page>& pages()
           {"sieve world --world-models 2 --compose \"0:0.0.0.0|1:7.7.7.5\"", "two models in opposite corners, one turned"},
           {"sieve world --read ADDR --out world.obj", "save the world at an address"}}},
         {"tensors", "A model file (safetensors) taken apart into its start and its weights, and weighed.",
-         "sieve tensors FILE.safetensors [--config config.json] [--stats | --tsv] [--start-out FILE]\n"
-         "  sieve tensors --config config.json [--start-out FILE]",
+         "sieve tensors FILE.safetensors [--config config.json] [--stats | --tsv] [--start-out FILE] [--pack OUT.sieve-weights]\n"
+         "  sieve tensors --config config.json [--start-out FILE]\n"
+         "  sieve tensors --unpack FILE.sieve-weights --out FILE.safetensors",
          "The first step towards the AI dimension (IDEAS §15). A safetensors file is its start (an 8-byte\n"
          "length and a JSON table of the tensors: each one's name, type, shape and place) and its weights\n"
          "(the tensors' bytes, end to end). This prints the file's size and SHA-256, the two parts, and\n"
@@ -366,10 +367,18 @@ const std::vector<Page>& pages()
                     "entropies (bits a value), the mean and the standard deviation. reference/sieve_ref.py\n"
                     "tensors --tsv prints the same, computed apart."},
           {"--start-out FILE", "Write the start as rebuilt (from --config when given, else from the file's own\n"
-                               "tensors), to compare with the file's first bytes."}},
+                               "tensors), to compare with the file's first bytes."},
+          {"--pack OUT", "Code the file under a prior over its weights (sieve-weights-v1): each kind of\n"
+                         "tensor's values under one table of how often each occurs, losslessly. The packed\n"
+                         "file is read back and checked to rebuild the model file, SHA-256 and all."},
+          {"--unpack FILE", "Rebuild the model file from a sieve-weights-v1 file, to --out; refused if what it\n"
+                            "rebuilds is not the file it was made from."},
+          {"--out FILE", "With --unpack: where the model file goes."}},
          {{"sieve tensors model.safetensors --config config.json", "the file's two parts, and whether config.json rebuilds its start"},
           {"sieve tensors model.safetensors --stats", "how much the weights carry, by kind of tensor"},
-          {"sieve tensors --config config.json --start-out start.bin", "the start a model of that shape has, from its config alone"}}},
+          {"sieve tensors --config config.json --start-out start.bin", "the start a model of that shape has, from its config alone"},
+          {"sieve tensors model.safetensors --pack model.sieve-weights", "the model coded under the prior, checked"},
+          {"sieve tensors --unpack model.sieve-weights --out model.safetensors", "and rebuilt"}}},
 
         {"dicts", "List the registered dictionaries, or hash a new one for registration.",
          "sieve dicts [--hash FILE]",

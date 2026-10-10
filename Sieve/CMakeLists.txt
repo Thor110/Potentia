@@ -43,6 +43,7 @@ add_library(sieve_core STATIC
     core/src/worldspace.cpp
     core/src/json.cpp
     core/src/safetensors.cpp
+    core/src/weights.cpp
     core/src/filters/models.cpp
     core/src/filters/pattern.cpp
     core/src/written.cpp

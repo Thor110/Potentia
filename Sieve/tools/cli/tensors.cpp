@@ -4,6 +4,7 @@
 #include "sieve/json.hpp"
 #include "sieve/safetensors.hpp"
 #include "sieve/sha256.hpp"
+#include "sieve/weights.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -93,6 +94,19 @@ std::string difference(std::vector<st::Tensor> a, std::vector<st::Tensor> b)
 int cmd_tensors(const Args& a)
 {
     if (a.positional.size() > 1) throw std::invalid_argument("give one model file: sieve tensors FILE.safetensors");
+    // A file of sieve-weights-v1 back into the model file it was made from.
+    if (a.has("unpack"))
+    {
+        if (!a.positional.empty() || !a.has("out")) throw std::invalid_argument("sieve tensors --unpack FILE.sieve-weights --out FILE.safetensors");
+        std::ifstream in(path_of(a.get("unpack")), std::ios::binary);
+        if (!in) throw std::invalid_argument("cannot open " + a.get("unpack"));
+        std::ofstream out(path_of(a.get("out")), std::ios::binary);
+        if (!out) throw std::invalid_argument("cannot write " + a.get("out"));
+        const weights::UnpackReport r = weights::unpack(in, out);
+        std::cout << "rebuilt      " << a.get("out") << ": " << r.bytes << " bytes\n";
+        std::cout << "sha256       " << Sha256::hex(r.sha256) << " (the file it was made from)\n";
+        return 0;
+    }
     std::optional<json::Value> config;
     if (a.has("config")) config = json::parse(read_text(a.get("config")));
 
@@ -218,6 +232,32 @@ int cmd_tensors(const Args& a)
         const std::string start = config ? st::layout_start(h.metadata, st::llama_tensors(*config)) : st::layout_start(h.metadata, h.tensors);
         write_bytes(a.get("start-out"), start);
         std::cout << "wrote        " << a.get("start-out") << " (the start, rebuilt from " << (config ? "config.json" : "the tensors") << ")\n";
+    }
+    if (a.has("pack"))
+    {
+        // The file coded under the prior (sieve-weights-v1): written, then read back and checked.
+        std::ofstream out(path_of(a.get("pack")), std::ios::binary);
+        if (!out) throw std::invalid_argument("cannot write " + a.get("pack"));
+        in.clear();
+        const weights::PackReport r = weights::pack(in, out);
+        out.close();
+        {
+            std::ifstream back(path_of(a.get("pack")), std::ios::binary);
+            struct Null : std::streambuf
+            {
+                int overflow(int c) override { return c; }
+                std::streamsize xsputn(const char*, std::streamsize n) override { return n; }
+            } null;
+            std::ostream discard(&null);
+            const weights::UnpackReport u = weights::unpack(back, discard);
+            if (u.sha256 != r.sha256) throw std::invalid_argument("the packed file does not rebuild the model file");
+        }
+        std::cout << "packed       " << a.get("pack") << " (" << weights::kVersion << "): " << r.out_bytes << " bytes, " << mb(r.out_bytes) << ", "
+                  << fixed(100.0 * double(r.out_bytes) / double(r.in_bytes), 1) << "% of the file\n";
+        std::cout << "             the start " << r.start_bytes << ", " << r.kinds << " tables " << r.table_bytes << ", " << r.coded_tensors << " tensors coded "
+                  << r.coded_bytes << (r.raw_tensors ? ", " + std::to_string(r.raw_tensors) + " kept as they are " + std::to_string(r.raw_bytes) : std::string())
+                  << ", the SHA-256 32\n";
+        std::cout << "             read back: it rebuilds the file, SHA-256 and all\n";
     }
     if (!stats) return 0;
 

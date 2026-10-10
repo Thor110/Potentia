@@ -891,6 +891,8 @@ In guided order the pages cost about **1.8 bits per character**: the three pages
 ```
 sieve tensors FILE.safetensors [--config config.json] [--stats | --tsv] [--start-out FILE]
 sieve tensors --config config.json [--start-out FILE]
+sieve tensors FILE.safetensors --pack OUT.sieve-weights
+sieve tensors --unpack FILE.sieve-weights --out FILE.safetensors
 ```
 
 The first step towards the AI dimension (IDEAS §15). A model file in the safetensors format is its **start** (an 8-byte length and a JSON table naming each tensor, its type, shape and place) and its **weights** (the tensors' bytes, end to end); the tokenizer and `config.json` are files of their own. This prints the file's size and SHA-256 and the two parts, and says whether the start is the one `safetensors-layout-v1` writes (SPECIFICATIONS §12.0a): if it is, the start need not be kept, because it is rebuilt from the tensors' names, types and shapes. With a Llama model's `config.json` it checks that the config names exactly the file's tensors, so the start is rebuilt from the config alone.
@@ -901,13 +903,15 @@ The first step towards the AI dimension (IDEAS §15). A model file in the safete
 | `--stats` | Weigh the weights (BF16 and F16 tensors) by kind of tensor: bits a value when each tensor's values are coded by how often they occur, and of their high and low bytes; and the whole so coded. |
 | `--tsv` | The statistics a tensor a line (the oracle's `tensors --tsv` prints the same). |
 | `--start-out FILE` | Write the rebuilt start, to compare with the file's first bytes. |
+| `--pack OUT` | Code the file under a prior over its weights (`sieve-weights-v1`, SPECIFICATIONS §12.0b): each kind of tensor's values under one table of how often each occurs, losslessly; the packed file is read back and checked. |
+| `--unpack FILE --out OUT` | Rebuild the model file from a packed one, refused unless its SHA-256 is the original's. |
 
 ```sh
 sieve tensors model.safetensors --config config.json   # the parts, and whether config.json rebuilds the start
 sieve tensors model.safetensors --stats                # how much the weights carry, by kind of tensor
 ```
 
-For SmolLM2-360M-Instruct (Hugging Face, `HuggingFaceTB/SmolLM2-360M-Instruct`, commit `a10cc15`, 723,674,912 bytes) the start (32,672 bytes) is rebuilt from `config.json`, and the weights, coded by frequency, come to 475.9 MB of 723.6 MB (65.8%); the whole run takes a few seconds. The model is not part of Sieve: download it yourself to try this.
+For SmolLM2-360M-Instruct (Hugging Face, `HuggingFaceTB/SmolLM2-360M-Instruct`, commit `a10cc15`, 723,674,912 bytes) the start (32,672 bytes) is rebuilt from `config.json`, and the weights, coded by frequency, come to 475.9 MB of 723.6 MB (65.8%); the whole run takes a few seconds. `--pack` writes the whole file in 476.7 MB (65.9%, against 512.9 MB for xz), and `--unpack` rebuilds it byte for byte. The model is not part of Sieve: download it yourself to try this.
 
 ### `version`: what produced a result
 

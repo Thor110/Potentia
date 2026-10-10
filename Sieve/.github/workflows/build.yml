@@ -239,6 +239,15 @@ jobs:
           $exe tensors tiny.safetensors --tsv | tr -d '\r' > tens-cpp.tsv
           python reference/sieve_ref.py tensors tiny.safetensors --tsv | tr -d '\r' | diff tens-cpp.tsv -
           $exe tensors tiny.safetensors --stats | tr -d '\r' | q "^coded by frequency  "
+          # The same model coded under the prior (sieve-weights-v1): the tool's file and the oracle's are
+          # one file, and each rebuilds the model, byte for byte.
+          $exe tensors tiny.safetensors --pack tiny.sieve-weights | tr -d '\r' | q "read back: it rebuilds the file"
+          python reference/sieve_ref.py weights-pack tiny.safetensors --out tiny-ref.sieve-weights
+          cmp tiny.sieve-weights tiny-ref.sieve-weights
+          python reference/sieve_ref.py weights-unpack tiny.sieve-weights --out tiny-ref.safetensors
+          cmp tiny.safetensors tiny-ref.safetensors
+          $exe tensors --unpack tiny-ref.sieve-weights --out tiny-back.safetensors > /dev/null
+          cmp tiny.safetensors tiny-back.safetensors
           # And the same line in the hallway: a sixth door, the cube in hand, green on clay.
           H=build/hallway
           [ -f build/Release/hallway.exe ] && H=build/Release/hallway.exe

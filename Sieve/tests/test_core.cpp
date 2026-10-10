@@ -17,6 +17,7 @@
 #include "sieve/worldspace.hpp"
 #include "sieve/json.hpp"
 #include "sieve/safetensors.hpp"
+#include "sieve/weights.hpp"
 #include "sieve/written.hpp"
 #include "sieve/packed.hpp"
 #include "sieve/plugin.hpp"
@@ -37,6 +38,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -3240,6 +3242,99 @@ void test_safetensors()
     CHECK(st::half_to_double(0x3F80, true) == 1.0);
 }
 
+void test_weights()
+{
+    namespace sw = sieve::weights;
+    // The table: every value present at least 1, the rest of 2^24 to the most frequent (the lowest on a tie).
+    {
+        std::vector<uint64_t> c(65536, 0);
+        c[7] = 5;
+        c[9] = 5;
+        c[300] = 1;
+        const auto f = sw::quantise(c);
+        uint64_t sum = 0;
+        for (const uint32_t v : f) sum += v;
+        CHECK(sum == (uint64_t(1) << 24));
+        CHECK(f[300] >= 1 && f[7] > f[9] && f[0] == 0);
+        CHECK(f[9] == 1 + 5 * ((uint64_t(1) << 24) - 3) / 11);
+        CHECK(throws([] { (void)sw::quantise(std::vector<uint64_t>(65536, 0)); }));
+    }
+    // Coding and back: skewed values, one value alone, and none.
+    {
+        std::mt19937 rng(5);
+        std::vector<uint16_t> v(20000);
+        std::vector<uint64_t> c(65536, 0);
+        for (auto& x : v)
+        {
+            const double g = std::normal_distribution<double>(0, 40)(rng);
+            x = uint16_t(int(std::lround(g)) & 0xFFFF);
+            ++c[x];
+        }
+        const auto f = sw::quantise(c);
+        const auto words = sw::encode(v, f);
+        CHECK(sw::decode(words, f, v.size()) == v);
+        auto broken = words;
+        broken[words.size() / 2] ^= 1;
+        CHECK(throws([&] { (void)sw::decode(broken, f, v.size()); }) || sw::decode(broken, f, v.size()) != v);
+        std::vector<uint64_t> one(65536, 0);
+        one[42] = 9;
+        const std::vector<uint16_t> same(9, 42);
+        CHECK(sw::decode(sw::encode(same, sw::quantise(one)), sw::quantise(one), 9) == same);
+        CHECK(sw::encode(std::vector<uint16_t>{}, sw::quantise(one)).size() == 2);
+        CHECK(throws([&] { (void)sw::encode(std::vector<uint16_t>{43}, sw::quantise(one)); })); // a value the table lacks
+    }
+    CHECK(sw::kind_of("model.layers.12.mlp.up_proj.weight") == "model.layers.*.mlp.up_proj.weight");
+    CHECK(sw::kind_of("model.norm.weight") == "model.norm.weight");
+    // A whole file: a small Llama model with an F32 tensor kept as it is, packed and rebuilt.
+    {
+        namespace st = sieve::safetensors;
+        auto tensors = st::llama_tensors(sieve::json::parse(R"({"model_type":"llama","hidden_size":16,"intermediate_size":32,"num_attention_heads":2,
+            "num_hidden_layers":2,"num_key_value_heads":1,"tie_word_embeddings":false,"torch_dtype":"bfloat16","vocab_size":40})"));
+        st::Tensor extra;
+        extra.name = "extra.scale";
+        extra.dtype = "F32";
+        extra.shape = {3};
+        tensors.push_back(extra);
+        std::vector<st::Tensor> laid;
+        std::string file = st::layout_start(std::vector<std::pair<std::string, std::string>>{{"format", "pt"}}, tensors, &laid);
+        std::mt19937 rng(11);
+        for (const st::Tensor& t : laid)
+            for (uint64_t i = 0; i < t.bytes(); i += 2)
+            {
+                const float x = float(std::normal_distribution<double>(0, 0.1)(rng));
+                uint32_t u;
+                std::memcpy(&u, &x, 4);
+                file.push_back(char((u >> 16) & 0xFF));
+                file.push_back(char(u >> 24));
+            }
+        std::istringstream in(file);
+        std::ostringstream packed;
+        const sw::PackReport r = sw::pack(in, packed);
+        CHECK(r.in_bytes == file.size() && r.out_bytes == packed.str().size());
+        CHECK(r.kinds == 12 && r.raw_tensors == 1 && r.coded_tensors == tensors.size() - 1); // untied: lm_head is a kind of its own
+        CHECK(Sha256::hex(r.sha256) == Sha256::hex(Sha256::hash(file)));
+        std::istringstream back(packed.str());
+        std::ostringstream rebuilt;
+        const sw::UnpackReport u = sw::unpack(back, rebuilt);
+        CHECK(rebuilt.str() == file && u.bytes == file.size());
+        // A changed byte in the coded part, a missing tail or a byte too many are all refused.
+        std::string bad = packed.str();
+        bad[bad.size() - 40] ^= 0x10;
+        std::istringstream b1(bad);
+        std::ostringstream o1;
+        CHECK(throws([&] { (void)sw::unpack(b1, o1); }));
+        std::istringstream b2(packed.str().substr(0, packed.str().size() - 1));
+        std::ostringstream o2;
+        CHECK(throws([&] { (void)sw::unpack(b2, o2); }));
+        std::istringstream b3(packed.str() + "x");
+        std::ostringstream o3;
+        CHECK(throws([&] { (void)sw::unpack(b3, o3); }));
+        std::istringstream b4(std::string("not weights"));
+        std::ostringstream o4;
+        CHECK(throws([&] { (void)sw::unpack(b4, o4); }));
+    }
+}
+
 void test_world_sieve()
 {
     const Space cover("image/mono/1x1", 2, 1, "sieve");
@@ -4821,6 +4916,7 @@ void run_all(int argc, char** argv)
         test_world_sieve();
         test_json();
         test_safetensors();
+        test_weights();
         test_titled_vectors(dir + "vectors_titled_v1.tsv");
         test_binary_vectors(dir + "vectors_binary_v1.tsv");
         test_chunk_vectors(dir + "vectors_chunks_v1.tsv");

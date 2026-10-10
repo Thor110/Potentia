@@ -1162,7 +1162,13 @@ weigh text by (on COST, as an estimate), never to address it.
   weights are not evenly spread (they are near zero, roughly normal, low rank, repeated), and an
   ordering that predicts that names real models in fewer bits, as quantisation and low-rank
   factoring do in practice. Verdict: a guided ordering for the model line, with that prior. *Measured
-  (10 October 2026)* on SmolLM2-360M-Instruct: §15, "The first model, taken apart".
+  (10 October 2026)* on SmolLM2-360M-Instruct: §15, "The first model, taken apart". *Built
+  (10 October 2026), first version:* `sieve-weights-v1` (SPECIFICATIONS §12.0b), one table of value
+  frequencies for each kind of tensor and an exact integer coder (rANS). SmolLM2-360M-Instruct:
+  476.7 MB for 724 MB (65.9%; xz 512.9 MB), rebuilt byte for byte. Measured on the way: a table for
+  each tensor costs 4.6 MB to store and saves 0.7 MB, so the tables are by kind; the exponent given
+  its row's typical scale saves only 0.3 MB, so v1 leaves rows and columns out. Later versions are
+  measured against this one.
 - **(c) The noise gradient as the filter for every dimension, boiled down to one byte that shifts
   everything forward by one;** content aware (shifting floating-point values rather than bytes for
   weights); searched over its range with the best value and shortest path so far kept, and a time

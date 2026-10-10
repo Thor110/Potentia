@@ -29,6 +29,8 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
     python3 sieve_ref.py read --length 32 --mode scrambled <hex>
     python3 sieve_ref.py tensors model.safetensors --tsv          # what `sieve tensors --tsv` prints
     python3 sieve_ref.py tensors-fixture --config cfg.json --out m.safetensors   # a small stand-in model
+    python3 sieve_ref.py weights-pack m.safetensors --out m.sieve-weights      # sieve-weights-v1, as `sieve tensors --pack`
+    python3 sieve_ref.py weights-unpack m.sieve-weights --out m.safetensors    # and back
     python3 sieve_ref.py sieve --dict words.txt --max 4
     python3 sieve_ref.py plugin ../data/filters/max-run-data-v1.sfilter --length 12 --params max=2
     python3 sieve_ref.py plugin ../data/filters/moby-grammar-v1.sfilter --length 6 --lazy \
@@ -1998,6 +2000,195 @@ def cmd_tensors_fixture(args):
             if sys.byteorder != "little":
                 vals.byteswap()
             out.write(vals.tobytes())
+
+
+# ---------------------------------------------------------------- sieve-weights-v1 (IDEAS §16.8b)
+# A model file coded under a prior over its weights, and rebuilt, as `sieve tensors --pack` and
+# `--unpack` do (core/weights.*), written apart from them.
+
+SW_MAGIC = b"sieve-weights-v1\n"
+SW_M = 1 << 24
+SW_L = 1 << 31
+
+
+def sw_kind(name):
+    m = re.match(r"model\.layers\.[0-9]+\.(.+)$", name)
+    return "model.layers.*." + m.group(1) if m else name
+
+
+def sw_varint(v):
+    out = bytearray()
+    while True:
+        b = v & 0x7F
+        v >>= 7
+        out.append(b | (0x80 if v else 0))
+        if not v:
+            return bytes(out)
+
+
+def sw_quantise(counts):
+    """{symbol: count} -> {symbol: frequency}, summing to 2^24."""
+    n = sum(counts.values())
+    k = len(counts)
+    f = {s: 1 + c * (SW_M - k) // n for s, c in counts.items()}
+    top = min(counts, key=lambda s: (-counts[s], s))
+    f[top] += SW_M - sum(f.values())
+    return f
+
+
+def sw_cum(freq):
+    cum, at = {}, 0
+    for s in sorted(freq):
+        cum[s] = at
+        at += freq[s]
+    return cum
+
+
+def sw_encode(values, freq):
+    cum = sw_cum(freq)
+    x, out = SW_L, []
+    for v in reversed(values):
+        f = freq[v]
+        if x >= ((SW_L >> 24) << 32) * f:
+            out.append(x & 0xFFFFFFFF)
+            x >>= 32
+        x = ((x // f) << 24) + (x % f) + cum[v]
+    return [x & 0xFFFFFFFF, x >> 32] + out[::-1]
+
+
+def sw_decode(words, freq, n):
+    import bisect
+    cum = sw_cum(freq)
+    syms = sorted(freq)
+    starts = [cum[s] for s in syms]
+    x = words[0] | (words[1] << 32)
+    at, out = 2, []
+    for _ in range(n):
+        slot = x & (SW_M - 1)
+        s = syms[bisect.bisect_right(starts, slot) - 1]
+        x = freq[s] * (x >> 24) + slot - cum[s]
+        while x < SW_L:
+            x = (x << 32) | words[at]
+            at += 1
+        out.append(s)
+    if x != SW_L or at != len(words):
+        raise SystemExit("a stream that does not end where its values do")
+    return out
+
+
+def sw_tensors(raw_start):
+    """The tensors of a start, in the order of their bytes: (name, dtype, n, begin, end)."""
+    import json
+    items = json.loads(raw_start[8:], object_pairs_hook=lambda kv: kv)
+    out = []
+    for name, v in items:
+        if name == "__metadata__":
+            continue
+        d = dict(v)
+        n = 1
+        for e in d["shape"]:
+            n *= e
+        out.append((name, d["dtype"], n, d["data_offsets"][0], d["data_offsets"][1]))
+    return sorted(out, key=lambda t: t[3])
+
+
+def cmd_weights_pack(args):
+    with open(args.file, "rb") as f:
+        data = f.read()
+    n = struct.unpack("<Q", data[:8])[0]
+    start = data[:8 + n]
+    tensors = sw_tensors(start)
+    coded = lambda t: t[1] in ("BF16", "F16") and t[2] > 0
+    groups, counts, vals = [], {}, {}
+    for t in tensors:
+        if not coded(t):
+            continue
+        g = sw_kind(t[0]) + "|" + t[1]
+        a = array("H")
+        a.frombytes(data[8 + n + t[3]:8 + n + t[4]])
+        if sys.byteorder != "little":
+            a.byteswap()
+        vals[t[0]] = a
+        if g not in counts:
+            groups.append(g)
+            counts[g] = collections.Counter()
+        counts[g].update(a)
+    tables = {g: sw_quantise(counts[g]) for g in groups}
+    out = bytearray(SW_MAGIC) + sw_varint(len(start)) + start + sw_varint(len(groups))
+    for g in groups:
+        f = tables[g]
+        out += sw_varint(len(f))
+        prev = None
+        for s in sorted(f):
+            out += sw_varint(s if prev is None else s - prev) + sw_varint(f[s])
+            prev = s
+    for t in tensors:
+        if coded(t):
+            w = sw_encode(vals[t[0]], tables[sw_kind(t[0]) + "|" + t[1]])
+            out += sw_varint(len(w)) + struct.pack("<%dI" % len(w), *w)
+        else:
+            out += data[8 + n + t[3]:8 + n + t[4]]
+    out += hashlib.sha256(data).digest()
+    with open(args.out, "wb") as f:
+        f.write(out)
+
+
+def cmd_weights_unpack(args):
+    with open(args.file, "rb") as f:
+        b = f.read()
+    at = [0]
+
+    def take(k):
+        if at[0] + k > len(b):
+            raise SystemExit("the stream ends early")
+        r = b[at[0]:at[0] + k]
+        at[0] += k
+        return r
+
+    def varint():
+        v, shift = 0, 0
+        while True:
+            c = take(1)[0]
+            v |= (c & 0x7F) << shift
+            shift += 7
+            if not c & 0x80:
+                return v
+    if take(len(SW_MAGIC)) != SW_MAGIC:
+        raise SystemExit("not a sieve-weights-v1 stream")
+    start = take(varint())
+    tensors = sw_tensors(start)
+    coded = lambda t: t[1] in ("BF16", "F16") and t[2] > 0
+    groups = []
+    for t in tensors:
+        g = sw_kind(t[0]) + "|" + t[1]
+        if coded(t) and g not in groups:
+            groups.append(g)
+    if varint() != len(groups):
+        raise SystemExit("the tables are not one for each kind of tensor")
+    tables = {}
+    for g in groups:
+        f, s = {}, 0
+        for i in range(varint()):
+            s = varint() if i == 0 else s + varint()
+            f[s] = varint()
+        if sum(f.values()) != SW_M:
+            raise SystemExit("a table that does not sum to 2^24")
+        tables[g] = f
+    out = bytearray(start)
+    for t in tensors:
+        if coded(t):
+            w = varint()
+            words = list(struct.unpack("<%dI" % w, take(4 * w)))
+            a = array("H", sw_decode(words, tables[sw_kind(t[0]) + "|" + t[1]], t[2]))
+            if sys.byteorder != "little":
+                a.byteswap()
+            out += a.tobytes()
+        else:
+            out += take(t[4] - t[3])
+    if take(32) != hashlib.sha256(out).digest() or at[0] != len(b):
+        raise SystemExit("what it rebuilds is not the file it was made from")
+    with open(args.out, "wb") as f:
+        f.write(out)
 
 
 def cmd_world_obj(args):
@@ -6174,6 +6365,12 @@ def main():
     s.add_argument("--config")
     s.add_argument("--tsv", action="store_true")
     s.add_argument("--start-out")
+    s = sub.add_parser("weights-pack")
+    s.add_argument("file")
+    s.add_argument("--out", required=True)
+    s = sub.add_parser("weights-unpack")
+    s.add_argument("file")
+    s.add_argument("--out", required=True)
     s = sub.add_parser("tensors-fixture")
     s.add_argument("--config", required=True)
     s.add_argument("--seed", type=int, default=1)
@@ -6282,6 +6479,10 @@ def main():
         cmd_tensors(args)
     elif args.cmd == "tensors-fixture":
         cmd_tensors_fixture(args)
+    elif args.cmd == "weights-pack":
+        cmd_weights_pack(args)
+    elif args.cmd == "weights-unpack":
+        cmd_weights_unpack(args)
     elif args.cmd == "kind-vectors":
         cmd_kind_vectors(args)
     elif args.cmd == "written-vectors":

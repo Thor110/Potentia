@@ -2092,3 +2092,28 @@ cover and a title.
   - **CI:** the stand-in model, its start rebuilt from its config, and the oracle's table.
 - **Next:** the weight prior (IDEAS §16.8b), measured against these figures; then the AI
   dimension (§15).
+
+### `sieve-weights-v1`: the weights coded under a prior (10 October 2026)
+- **Core:** `sieve/weights.hpp`:
+  - `quantise`, a kind's table: `1 + floor(c (2^24 - k) / N)`, the rest to the most frequent value;
+  - `encode` and `decode`, rANS with a 64-bit state, 32-bit words and 24-bit frequencies. Decoding
+    finds a slot's value from a 65,536-entry index of where each block of 256 slots begins;
+  - `pack` and `unpack`, the stream (SPECIFICATIONS §12.0b), ending with the file's SHA-256, which
+    `unpack` checks.
+- **Why tables by kind:** measured on SmolLM2, a table for each tensor costs 4.6 MB to store and
+  saves 0.7 MB. Row and column scales were measured too, and save 0.3 MB, so v1 leaves them out.
+- **The tool:** `sieve tensors FILE --pack OUT` (read back and checked before it reports) and
+  `--unpack FILE --out OUT`.
+- **The oracle:** `weights-pack` and `weights-unpack`, written apart. Their streams equal the
+  tool's byte for byte (on the stand-in model in CI), and the oracle's unpack rebuilds SmolLM2
+  from the tool's pack (3 min 42 s in Python).
+- **SmolLM2-360M-Instruct:** 476,729,540 bytes (65.9%): the start 32,675, the 11 tables 117,878,
+  the coded tensors 476,578,938. Pack (with its check) 39 s, unpack 12 s, byte for byte.
+- **Tests:**
+  - **Unit tests:** the table rule, coding and back (skewed values, one value, none, a value its
+    table lacks), and a whole small model with an F32 tensor kept as it is, packed and rebuilt;
+    damaged, short and over-long streams are refused. 149,840 checks, 0 failures.
+  - **CI:** the stand-in model packed by both, the files compared, and each unpacked by the
+    other.
+- **Next:** the AI dimension (IDEAS §15). Better priors are later versions, measured against this
+  one.
