@@ -948,11 +948,123 @@ balance and the tailoring search (§12) would weigh it like any other way.
 model of one shape) would name a model by its weights: the binary line's files again, as long as
 the files. It is the predictive reading above that shortens anything.
 
-## 16. Deprecated ideas
+## 16. Edward's list of 10 October 2026, evaluated
+
+Nine ideas, each in Edward's terms and then weighed. Two of them (16.1, and the noise gradient
+in 16.8c) meet the counting argument head on, so it is set out once here. Any scheme that picks, for
+a file, the best of `k` options (rotations, shuffles, keys, filters made for it) can bring the file
+`log2 k` bits nearer the front, at best: the best of `k` evenly spread places is about `k` times
+nearer 0. Naming which of the `k` was chosen costs the same `log2 k` bits. On average the two
+cancel exactly; for a lucky file the search wins a few bits, for an unlucky one it loses them. That
+is §3.6, §12's two-part code and §17.1's rotation transform again. A scheme gains only
+where the options are agreed in advance and the files are not evenly spread among them: where a
+prediction (a model, a use case's filters) puts likely files first.
+
+**16.1 Files as their own filters, counted from both ends (a button on COST).** Edward's words: a
+counting system with sliding windows that uses files themselves as filters, counting from the first
+and last bytes towards the middle and watching the bearing (degrees) the file lands at as the count
+goes; a custom filter for one file. In the idealised example, a gigabyte at each end would find a
+terabyte file by pushing it to an exact interval. It could take a long time for large files, and it
+may be the best path to the shortest route.
+*Evaluation.* A filter made from a file is a description of that file, and it must travel with the
+address; however it is counted, the address and the filter together are at least as long as the
+file's information. In the example: the two ends are 2 GB, and the terabyte files that share those
+ends differ in the 998 GB between them, so naming one of them still takes 998 GB unless something
+already known predicts the middle. Counting inwards from both ends reads the same bytes in another
+order, and the bearing a file lands on is its leading digits, so neither shortens it. What does
+stand: (a) a **longer shortest-route search** on COST, run on a worker with a time limit and the
+best route so far kept: variable length addressing (§3.6) already finds the shortest route by
+bearings of up to 20 places, and a button could search further (more places, longer walks) for as
+long as allowed. Built today, it would find routes for the lucky units, as now, never for most;
+(b) **other files as filters**: a file known beforehand helps name a new one (an anchor's fragment,
+near-anchor-v1 and contains-fragment-v1; v4's `lines K`, which names a word list by another). That is
+real, and it is what the idea becomes when the filter is not the file itself. Verdict: (a) worth a
+button; the self-filter, no.
+
+**16.2 The File Locator from the main menu.** Show "Go to it" only when the locator is open in
+the world, and add "File Locator" to the main menu, under Settings and above the Filter Designer.
+*Evaluation.* Straightforward. From the main menu there is no hallway to walk in, so Go to it is
+hidden there and everything else (choose, weigh, tailor, save, install) works as it does now. One
+point to decide: "Use the tailored filters" from the main menu would save the filters for the next
+hallway built rather than build one at once. Verdict: build.
+
+**16.3 Maps as the installers are.** Update the `.map` system to work the same way as the `.sieve`
+and installer system.
+*Evaluation.* A map that holds files (`sieve-map-v2`) carries their bytes as they are, after its
+text, as v3 installers did. Packing those bytes as v4 does (the x86 stream, `lines K`, LZMA2,
+unpacked and compared before use, kept as they are where packing is no smaller) is the same code
+(`pack.*`, `locate.cpp`'s unpacking), so a `sieve-map-v3` follows directly. A map that holds a file
+already compressed (the release map holds `sieve-source.7z`) gains nothing; a map holding many
+anchors of its own (texts, programs) gains what an installer does. Verdict: build, small.
+
+**16.4 A file type filter on the binary line.** Filter the binary dimension by file types, read
+from their headers.
+*Evaluation.* Built: `binary-kind-v1` keeps (or excludes) the files of chosen kinds, read from their
+own first bytes by the `file-kinds-v1` table (PNG, ZIP, MID, EXE, ...), counted and ranked exactly,
+so the line compacts under it. Its `kinds` setting takes one kind or a group (signed, text,
+signed-or-text, unknown, empty, any). What it lacks is a **set** of kinds (PNG and JPG together,
+say). Verdict: extend the setting to a list.
+
+**16.5 "Calculating Dimensions" where it is seen.** Move it to the top middle of the setup menu, in
+red, and grey out ENTER THE HALLWAY while it is calculating.
+*Evaluation.* Straightforward: the status line under the budget bars moves and turns red, and ENTER
+is shown greyed (and refuses) while any line is being counted, as Go to it is greyed in the
+locator when it cannot go. Verdict: build.
+
+**16.6 A slide-in window for a line's settings,** to free the background for new dimensions.
+*Evaluation.* The setup menu shows every setting at once (the budget model needs to see them
+change together). A slide-in panel, one dimension's settings at a time, frees the screen for more
+dimensions and suits a growing list. Verdict: build when the dimensions outgrow the screen, which
+worlds and an AI dimension would bring about.
+
+**16.7 The worlds dimension, made of models.** *Evaluation.* Already the plan (§13, §14): a
+composition of models, as tracks are of melodies, but a world also places each model (a position
+and a turn) and textures it, so it needs a placement in each slot and UVs (§14's generated
+description). The models line is not a unit line (its index is mixed radix), so composition-v1 does
+not take it as it is. Verdict: build, after the models line can be composed.
+
+**16.8 An AI dimension through Ollama, with a chat window.** Ollama does the heavy lifting; the
+dimension's item is a chat with the model rather than a view of its file or its weights.
+*Evaluation.* As an interface it fits: a room whose viewer is a conversation, sending requests to a
+local Ollama and showing the replies. It is not a state space Ollama can address, though: Ollama
+runs in floating point, so what it predicts can differ from one machine or version to another, and
+an address must decode the same everywhere (§15's hard part). So the chat is a viewer, and §15's
+pinned model line is what would name text under a model. Ollama could still supply probabilities to
+weigh text by (on COST, as an estimate), never to address it.
+- **(a) Filters from RLHF constants:** the preferences a model was tuned to; not available to us,
+  so an idea for later, as Edward says.
+- **(b) A noise gradient as the primary filter for model weights:** weights made procedurally follow
+  smooth, noise-like gradients, so ordering the weight space so that such weights come first would put
+  coherent models nearer the front. The useful core of this is a **prior over weights**: trained
+  weights are not evenly spread (they are near zero, roughly normal, low rank, repeated), and an
+  ordering that predicts that names real models in fewer bits, as quantisation and low-rank
+  factoring do in practice. Verdict: a guided ordering for the model line, with that prior.
+- **(c) The noise gradient as the filter for every dimension, boiled down to one byte that shifts
+  everything forward by one;** content aware (shifting floating-point values rather than bytes for
+  weights); searched over its range with the best value and shortest path so far kept, and a time
+  limit per file. *Evaluation:* a shift by one, or by any agreed amount, is a rotation of the loop:
+  every unit moves the same way, so it is §17.1's rotation transform. One byte chooses one of 256
+  orderings, so the search can bring a file at most about 8 bits nearer the front, and the byte that
+  says which costs those 8 bits (the counting argument above): on average nothing, for every
+  dimension alike. Kept: the search harness (best so far, a time limit per file) serves 16.1(a) and
+  the tailoring search. Verdict: the one-byte universal filter, no; the prior of (b), yes.
+
+**16.9 A demonstration: the first item at every degree of every dimension, as one `.sieve`.** For
+each dimension and each whole degree from 0 to 359, the item a bearing of that many degrees lands on
+(the unit at `floor(N * d / 360)` of the line's `N`), saved as the file F saves, all in one folder
+and made into Sieve instructions (v4). Even if the files are noise, it proves the system end to end:
+the installer installs them, each checked against its SHA-256, and each one, opened with J or reached
+by its bearing (X), is that item again.
+*Evaluation.* Straightforward with what exists (bearings, F's files, `--installer`), and a good CI
+check besides: the bearings and the files agree on every machine. The files are about the size of the
+lines' units (a page 32 characters, a picture a small PNG, a file on the binary line up to its
+length), so the instructions are small. Verdict: build, as `sieve sample --degrees` or a script.
+
+## 17. Deprecated ideas
 
 Ideas evaluated and set aside, kept with their reasons so the questions keep their answers.
 
-**16.1 A rotation transform, and numbers that hold only their decimal places (Edward, 7 October
+**17.1 A rotation transform, and numbers that hold only their decimal places (Edward, 7 October
 2026; deprecated).** The proposal: a file at 31.55591717178 degrees is named as "the rules, the line turned by -0.55591717178
 degrees, and 31": a global setting that turns the circle so that the file lands on a whole number.
 The turn has to travel with the address, and it is the same digits: 0.55591717178 is what the
