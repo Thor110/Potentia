@@ -439,6 +439,11 @@ private:
     Uint64 calc_since_ = 0;      // when the calculating began (ns); 0: not calculating
     bool calc_acted_ = false;    // this calculating has slid it out once already (Tab may bring it back)
     SDL_FRect panel_tab_ = {};   // the SETTINGS tab, while the panel is out
+    // The settings above the three actions scroll when they are taller than the room for them:
+    // the wheel over the panel moves them, and choosing a row (Up, Down) brings it into view.
+    float list_scroll_ = 0;      // px of the list above the top of its room
+    float list_scroll_max_ = 0;  // as far as it can go, from the last frame drawn
+    int list_row_shown_ = -1;    // the row last brought into view
     void step_panel();           // each frame: the calculating's part, and the slide
     void toggle_panel();         // Tab, or the tab clicked: by hand
 };

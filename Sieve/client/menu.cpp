@@ -85,6 +85,13 @@ constexpr float kMapX = 620;
 constexpr float kPanelSlideMs = 180;
 constexpr Uint64 kPanelCalcNs = 200'000'000;
 constexpr float kPanelTabW = 20;
+// The map's columns are never narrower than this (a line's name and its glass, and its figures).
+constexpr float kMapPitchMin = 80;
+// The panel's list: a row is 16 px (its 8 px of text in the middle of its highlight), a section's
+// heading 22 more; the list starts at kListTop. The three actions stand kActionsGap below the
+// list, kActionsUp above the foot at least, and kActionsLow at most (their last row clear of the
+// line of status at 54 above the foot); past that the list scrolls.
+constexpr float kRowH = 16, kHeadH = 22, kListTop = 80, kActionsGap = 8, kActionsUp = 118, kActionsLow = 3 * kRowH + 56;
 // The unit line at door li, as its kind's index into the filter settings (cfg_.lines), or -1.
 int unit_at(int li) { return li >= 0 && li < kLines && kDimensions[li].unit ? int(*kDimensions[li].unit) : -1; }
 const std::vector<std::string> kModes = {"positional", "scrambled", "guided"};
@@ -1188,6 +1195,13 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
             if (inside(magnifier_[c], mx, my)) open_filters(overlay_of_column(c));
         return;
     }
+    // The wheel over the settings panel scrolls its list (three rows a notch).
+    if (e.type == SDL_EVENT_MOUSE_WHEEL)
+    {
+        if (panel_ > 0 && e.wheel.mouse_x < panel_ * kMapX)
+            list_scroll_ = std::clamp(list_scroll_ - e.wheel.y * 3 * kRowH, 0.0f, list_scroll_max_);
+        return;
+    }
     if (alpha_open_)
     {
         if (e.type == SDL_EVENT_KEY_DOWN) alpha_key(e.key.key);
@@ -1442,19 +1456,17 @@ void Menu::toggle_panel()
 
 void Menu::render()
 {
-    // The menu needs to be as wide as the title's subtitle and the budget beside it (and at least
-    // 1240, for the settings on the left and the map on the right), and as tall as its rows: 16 px
-    // each, 22 more for each section heading (GLOBAL and a line's), and the footer. Every setting
-    // is on screen at once, so that turning one shows at once what it does to the bars; 1920 x
-    // 1080 holds them all. In a smaller window it is drawn at that size and scaled down to fit,
-    // instead of running off the edge or the actions at the foot running into the footer; worked
-    // out from the rows and the text, so a row added later cannot bring that back.
-    // (and wide enough for "Calculating Dimensions..." between the title and the budget, at its
-    // smallest)
-    const int kMinW = std::max({1240, int(std::ceil(20 + text_width(tr("setup.subtitle"), 1) + 20 + kBudgetW + 20)),
+    // The menu needs to be as wide as the title's subtitle and the budget beside it, as the
+    // settings and the map's columns beside them at their narrowest, and wide enough for
+    // "Calculating Dimensions..." between the title and the budget, at its smallest. Its settings
+    // scroll, so it need only be tall enough for GLOBAL's heading and rows above the three actions
+    // and the footer. In a smaller window it is drawn at that size and scaled down to fit, instead
+    // of running off the edge; worked out from the rows and the text, so a row added later cannot
+    // bring that back.
+    const int kMinW = std::max({int(std::ceil(kMapX + kMapPitchMin * float(kLines + 1) + 20)), int(std::ceil(20 + text_width(tr("setup.subtitle"), 1) + 20 + kBudgetW + 20)),
                                 int(std::ceil(20 + text_width(tr("setup.title"), 3) + 20 + text_width(tr("setup.calculating.banner"), 1) + 20 +
                                               kBudgetW + 20))});
-    const int kMinH = 80 + row_count() * 16 + (kLines + 1) * 22 + 12 + 60;
+    const int kMinH = int(std::ceil(kListTop + kHeadH + float(kFirstLineRow) * kRowH + kActionsGap + kActionsLow));
     int w = 0, h = 0;
     SDL_GetRenderOutputSize(r_, &w, &h);
     if (w < kMinW || h < kMinH)
@@ -1617,35 +1629,75 @@ void Menu::render()
     // The panel's slide: the rows drawn this far to the left of their place (all of the panel's
     // width when it is out).
     const float ox = -(1 - panel_) * kMapX;
-    float y = 80;
-    for (int i = 0; i < int(rows.size()); ++i)
+    // Each setting's place in the list (its text's top, from the list's top), its section's heading
+    // above it where it starts one. The three actions stand below the list, as low as the line of
+    // status lets them; a list taller than the room above them scrolls.
+    std::vector<float> at(rows.size());
+    float content = 0;
+    for (int i = 0; i < kLimitsRow; ++i)
+    {
+        if (rows[size_t(i)].section >= 0 || rows[size_t(i)].section == kGlobal) content += kHeadH;
+        at[size_t(i)] = content;
+        content += kRowH;
+    }
+    const float actions_y = std::min(std::max(kListTop + content + kActionsGap, H - kActionsUp), H - kActionsLow);
+    const float room = std::max(kRowH, actions_y - kActionsGap - kListTop);
+    list_scroll_max_ = std::max(0.0f, content - room);
+    // A row newly chosen is brought into view (with its heading, when it starts a section).
+    if (row_ != list_row_shown_ && row_ < kLimitsRow)
+    {
+        const bool heads = rows[size_t(row_)].section >= 0 || rows[size_t(row_)].section == kGlobal;
+        const float top = at[size_t(row_)] - (kRowH - 8) / 2 - (heads ? kHeadH : 0), bottom = at[size_t(row_)] + kRowH;
+        if (top < list_scroll_) list_scroll_ = top;
+        if (bottom > list_scroll_ + room) list_scroll_ = bottom - room;
+    }
+    list_row_shown_ = row_;
+    list_scroll_ = std::clamp(list_scroll_, 0.0f, list_scroll_max_);
+    auto draw_row = [&](int i, float y)
     {
         const Row& r = rows[size_t(i)];
-        // The three actions at the foot of the list, clear of the settings above and the footer
-        // below, so the list can grow without them ever running into either.
-        if (r.section == -2) y = std::max(y + 8, H - 118);
         if (r.section >= 0 || r.section == kGlobal)
         {
-            y += 4;
             const Theme* th = r.section >= 0 ? &theme_of(r.section) : nullptr;
             const std::string head = th ? tr(th->key) : tr("setup.start");
-            text(r_, 20 + ox, y, head, 2, th ? menu_ink(*th) : white);
-            y += 18;
+            text(r_, 20 + ox, y - kHeadH + 4, head, 2, th ? menu_ink(*th) : white);
         }
         if (i == row_)
         {
             SDL_SetRenderDrawColor(r_, 255, 255, 255, 40);
-            const SDL_FRect sel{14 + ox, y - 3, kMapX - 20, 16};
+            const SDL_FRect sel{14 + ox, y - (kRowH - 8) / 2, kMapX - 22, kRowH};
             SDL_RenderFillRect(r_, &sel);
         }
         // ENTER THE HALLWAY is greyed while the dimensions are being calculated (it waits for them).
         text(r_, 24 + ox, y, std::string(i == row_ ? "> " : "  ") + r.label, 1, i == kEnterRow && calc ? grey : white);
-        // The rows are tight enough that the whole list fits above the three actions at the foot
-        // of it. A value too long for its column stops short of the map rather than running into it.
+        // A value too long for its column stops short of the map rather than running into it.
         const std::string value = text_cells(r.value) <= value_cells ? r.value : fit_cells(r.value, value_cells - 2) + "..";
         text(r_, value_x + ox, y, value, 1, i == row_ ? white : grey);
-        y += 16;
+    };
+    {
+        // Rows partly out of the room are cut at its edges.
+        const SDL_Rect clip{0, int(kListTop), int(std::ceil(kMapX)), int(room)};
+        SDL_SetRenderClipRect(r_, &clip);
+        for (int i = 0; i < kLimitsRow; ++i)
+        {
+            const float y = kListTop + at[size_t(i)] - list_scroll_;
+            if (y + kRowH > kListTop && y - kHeadH < kListTop + room) draw_row(i, y);
+        }
+        SDL_SetRenderClipRect(r_, nullptr);
     }
+    // Where the list is, when there is more of it than the room: a thin bar at the panel's right edge.
+    if (list_scroll_max_ > 0)
+    {
+        const float track_x = ox + kMapX - 6;
+        SDL_SetRenderDrawColor(r_, 255, 255, 255, 30);
+        const SDL_FRect track{track_x, kListTop, 3, room};
+        SDL_RenderFillRect(r_, &track);
+        const float thumb_h = std::max(kRowH, room * room / content);
+        SDL_SetRenderDrawColor(r_, 150, 150, 150, 255);
+        const SDL_FRect thumb{track_x, kListTop + (room - thumb_h) * list_scroll_ / list_scroll_max_, 3, thumb_h};
+        SDL_RenderFillRect(r_, &thumb);
+    }
+    for (int i = kLimitsRow; i < int(rows.size()); ++i) draw_row(i, actions_y + float(i - kLimitsRow) * kRowH);
     // The SETTINGS tab at the left edge, while the panel is (mostly) out: a click, or Tab, brings it in.
     panel_tab_ = {};
     if (panel_ < 0.5f)
@@ -1697,7 +1749,7 @@ void Menu::render()
     // drawn like any other line, with its own two colours and a bar of the same width, and its
     // size is every file up to the BINARY length (SPECIFICATIONS §12.1).
     // Beside the settings panel, or across the room it leaves (past the SETTINGS tab) while it is out.
-    const float x0 = kPanelTabW + 8 + panel_ * (kMapX - kPanelTabW - 8), pitch = std::max(80.0f, (W - x0 - 20) / float(kLines + 1));
+    const float x0 = kPanelTabW + 8 + panel_ * (kMapX - kPanelTabW - 8), pitch = std::max(kMapPitchMin, (W - x0 - 20) / float(kLines + 1));
     // The map starts below the budget, top right; at 1920 wide it is beside the subtitle instead.
     const float map_y = std::max(80.0f, budget_bottom + 6);
     const float label = map_y + 38, top = map_y + 136, bottom = H - 60, span = bottom - top, min_bar = 12;

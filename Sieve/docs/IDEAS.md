@@ -1046,7 +1046,8 @@ worlds and an AI dimension would bring about. *Built (10 October 2026), ahead of
 asked:* the whole list, GLOBAL down to ENTER THE HALLWAY, slides in from the left over where it
 stood (Tab, or the SETTINGS tab at the left edge); while it is out the map takes the width; and
 while the dimensions are being calculated it slides out by itself so the bars can be watched,
-coming back when that is done.
+coming back when that is done. *Then (10 October 2026):* the settings above the three actions
+scroll, so more of them, and more dimensions, fit.
 
 **16.7 The worlds dimension, made of models.** *Evaluation.* Already the plan (§13, §14): a
 composition of models, as tracks are of melodies, but a world also places each model (a position

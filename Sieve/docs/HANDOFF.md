@@ -2021,3 +2021,21 @@ cover and a title.
   `distinct-indices-v1` count the same in the hallway and the tool.
 - **Not yet:** textures and UVs (IDEAS §14), warping a world in (from an `.obj` with groups, or a
   record), filters on a model's place (for example, no two models in one cell).
+
+### The settings panel scrolls (10 October 2026)
+- **Why:** more settings and dimensions are coming, and the menu was being scaled down to show
+  every row at once (at 1920 x 1080 it was already drawn at 95%).
+- **The list:** the settings (every row before FIND MY LIMITS) are laid out first (`at`, from
+  `kListTop`, `kRowH` a row and `kHeadH` more for a section's heading) and drawn in the room above
+  the three actions, clipped to it, `list_scroll_` px down. The actions stand `kActionsGap` below
+  the list, at least `kActionsUp` above the foot and at most `kActionsLow` (clear of the line of
+  status); a longer list scrolls (`list_scroll_max_`).
+- **Moving it:** the wheel over the panel scrolls three rows a notch; a row newly chosen with the
+  keys is brought into view with its heading (`list_row_shown_`). A thin bar at the panel's right
+  edge shows where the room is in the list.
+- **The highlight:** centred on its row (4 px above and below the text); it was 3 above and 5 below,
+  so the chosen row crowded the one after it.
+- **Size:** `kMinH` is now GLOBAL's heading and rows, the gap and the actions, so 1280 x 720 draws
+  at full size. `kMinW` now takes the map's columns at their narrowest (`kMapPitchMin`, 80 px,
+  which was a bare number); at 1280 wide the last BINARY column had run off the edge.
+- **Checked:** screenshots at 1920 x 1080 and 1280 x 720, at the top of the list and at BINARY.
