@@ -43,11 +43,11 @@ These are not preferences. Work that breaks one of them is wrong.
 - **Purely functional.** Nothing is stored. The engine sieves the state space; it does not keep a
   database of what it found.
 
-## The nine lines
+## The eleven lines
 
-    binary | image  pages  books  audio  tracks  video  movies  models | binary
+    binary | image  pages  books  audio  tracks  video  movies  models  worlds  ai | binary
 
-Defined once, in door order, in `client/dimensions.hpp` (`kDimensions`): `kLines = 9`, with
+Defined once, in door order, in `client/dimensions.hpp` (`kDimensions`): `kLines = 11`, with
 `binary` last (a static_assert holds it there). Each part stands before what is composed of it,
 and image, a part of nearly all of them, first. The middle lines used to loop into each other
 through the doors; they no longer do. They start and finish at the binary line, which is why it is
@@ -2162,3 +2162,50 @@ cover and a title.
   - **CI:** the stand-in tokenizer regenerated and compared, the tokens of the oracle's corpus,
     the logits within 1e-3 of the oracle's, and a reply.
 - **Next:** the AI dimension in the hallway: the room, the items, and the chat viewer on this engine.
+
+### The AI line (10 October 2026)
+- **Edward's choices:** an item is a model (every model of one shape, numbered by its weights),
+  and the default shape is Micro. SPECIFICATIONS §12.0d sets it out; IDEAS §15 ("Another reading")
+  and §16.8 say where it stands.
+- **Core:**
+  - `sieve/aispace.hpp`: `AiShape` (layers, width, heads, bits; `check()`) and `AiSpace`: the
+    weights' digits as the address (positional), shuffle-sha256-v1 over the line (scrambled), the
+    digits' values, the model's `config.json`, tensors, F32 `model.safetensors` and byte
+    `tokenizer.json`, and a file back to its digits (exactly, or not at all).
+  - `sieve/llm.hpp`: a `Model` built from tensors in memory (no file), `continue_text` (no chat
+    format, an optional stop token) and `Chat::last_reply_tokens()`.
+- **The tool:**
+  - `sieve ai`: the line's size; `--read`, `--bearing` or `--browse` run each model and print what
+    it says; `--out` writes its files; `--warp` takes a file back to its address.
+  - `sieve chat --raw`: continue a text with no chat format. The reply's statistics now read "read
+    N tokens in X s; wrote M in Y s, Z a second".
+- **The oracle:** `AiSpaceRef`, `ai-vectors` (`tests/vectors_ai_v1.tsv`, 30 rows: three shapes,
+  both orders, the bearings 0, 13, 137, 246 and 359) and `ai-read` (a model's files);
+  `llm-logits` now reads F32 too. The files are the tool's byte for byte; the logits agree to 1.5e-6.
+- **The hallway:**
+  - `Media::Ai`, appended; its door after WORLDS; deep violet with lilac edges. The AI line has
+    no filters and no guided order (`effective_mode` is off); `Book::ai` holds the digits.
+  - **Shelves:** a crate (`book-ai.obj`) whose face is what the model says from a newline, the
+    bytes that are not printable drawn as `·` (`ai_says`, `printable`, cached in `ai_said_`).
+  - **In hand:** `draw_ai`: the shape, what it says, and the conversation. Enter opens `SAY > `
+    (`Input::Talk`); `talk()` runs the model on what was said and a newline, and it answers until
+    it writes a newline (at most 80 bytes), seeded from the SHA-256 of the conversation. When its
+    512 positions are full it starts again.
+  - F saves `sieve-ai-<12 hex digits>.safetensors`; J finds it on the binary line; the viewer has a
+    WEIGHTS tab. T refuses (`msg.warp.ai`), pointing to `sieve ai --warp`.
+  - **The setup menu:** AI rows for layers, width (in steps of twice the heads), heads (divisors
+    that keep the head size even) and bits; FIND MY LIMITS grows the layers. The map ignores a bar
+    more than 8 times the median when it sets its scale and draws that one broken
+    (`kMapOutlier`, `map.scale.broken`), as the AI line's 32,768 bits otherwise flattened the rest.
+  - `--talk TEXT` (after `--take`) prints the conversation, for scripts and CI.
+- **The degrees sample** has eleven dimensions: 3,960 items, 13,321,756 bytes, a 482,495-byte
+  `.sieve`.
+- **Checked:** unit tests (the vectors, round trips, addresses off the line refused, bad shapes, the
+  values, a model talking): 150,848 checks, 0 failures. CI's new steps, all run here: `sieve ai` at
+  246 degrees against the oracle's files in both orders, warp, the logits against the oracle,
+  `chat --raw`, the vectors regenerated; in the hallway, the model at 137 degrees saved with F is the
+  tool's file, a conversation, the setup menu, the doors (WORLDS to AI to BINARY), the sample and
+  the corridor walk (nine doors from pages to binary, and back). Screenshots of the shelves, a model
+  in hand, the WEIGHTS viewer, the setup menu's AI rows and the broken bar.
+- **Not yet:** filters and a guided order for the line; warping in from the hallway; addresses of
+  text under a model (the pinned arithmetic, IDEAS §15).

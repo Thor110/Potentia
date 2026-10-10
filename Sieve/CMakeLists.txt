@@ -47,6 +47,7 @@ add_library(sieve_core STATIC
     core/src/unicode_classes.cpp
     core/src/llm_tokenizer.cpp
     core/src/llm.cpp
+    core/src/aispace.cpp
     core/src/filters/models.cpp
     core/src/filters/pattern.cpp
     core/src/written.cpp
@@ -212,6 +213,7 @@ add_executable(sieve
     tools/cli/help.cpp
     tools/cli/tensors.cpp
     tools/cli/chat.cpp
+    tools/cli/ai.cpp
     ${SIEVE_ICON_RC})
 target_link_libraries(sieve PRIVATE sieve_lines sieve_locate sieve_compare)
 if(WIN32)

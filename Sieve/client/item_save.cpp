@@ -122,7 +122,8 @@ std::string Hallway::prepare_save()
     if (on_binary() && bk.is_file) name = binary_file_name(bk, cli::sha256_hex(file_of(bk)));
     else
     {
-        if (bk.model || bk.world) ext = ".obj";
+        if (bk.ai) ext = ".safetensors";
+        else if (bk.model || bk.world) ext = ".obj";
         else if (bk.parts) ext = ".txt";
         else
             switch (line().kind)
@@ -143,7 +144,7 @@ std::string Hallway::prepare_save()
     save_ext_ = ext;
     // An item of the image, video or audio line can be saved in other formats through ffmpeg.
     save_formats_.clear();
-    if (!bk.is_file && !bk.model && !bk.world && !bk.parts && line().kind != LineKind::Text) save_formats_ = cli::export_formats(line());
+    if (!bk.is_file && !bk.model && !bk.world && !bk.ai && !bk.parts && line().kind != LineKind::Text) save_formats_ = cli::export_formats(line());
     // A track or movie can also be saved whole, as a record that J opens onto its shelf.
     if (on_composition() && !bk.unit.empty()) save_formats_.push_back({record_ext(), tr("save.record"), ""});
     return name;
@@ -299,6 +300,11 @@ void Hallway::item_save_poll()
             const std::string obj = world_space_->to_obj(*bk.world);
             write_all(path, obj.data(), obj.size());
         }
+        else if (bk.ai && ai_space_)
+        {
+            const std::string file = ai_space_->safetensors_of(*bk.ai);
+            write_all(path, file.data(), file.size());
+        }
         else if (bk.parts)
         {
             // Its title, then each page, a blank line between.
@@ -351,6 +357,14 @@ std::vector<uint8_t> Hallway::item_file(const Book& bk, std::string& name)
         named(".obj");
         const std::string obj = world_space_->to_obj(*bk.world);
         return std::vector<uint8_t>(obj.begin(), obj.end());
+    }
+    if (bk.ai && ai_space_)
+    {
+        // The model's weights as a file (sieve chat --raw talks to it, with its config), named by the
+        // start of its address, as a model has no title.
+        name = "sieve-ai-" + bk.hex.substr(0, 12) + ".safetensors";
+        const std::string file = ai_space_->safetensors_of(*bk.ai);
+        return std::vector<uint8_t>(file.begin(), file.end());
     }
     if (bk.parts)
     {

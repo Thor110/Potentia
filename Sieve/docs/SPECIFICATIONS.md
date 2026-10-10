@@ -41,7 +41,7 @@ Text estimates assume ~1 bit/char of real information in meaningful English (Sha
 
 ## 3. Lines (State Spaces)
 
-The Gallery is built on **four unit lines**, one per modality. Each line is a one-dimensional address space defined by a parameter set, so every line can be dialled from trivially small to full scale. The hallway has nine lines in all: these four, the books, tracks and movies composed of them (§11), the models line (§12) and the binary line (§12.1).
+The Gallery is built on **four unit lines**, one per modality. Each line is a one-dimensional address space defined by a parameter set, so every line can be dialled from trivially small to full scale. The hallway has eleven lines in all: these four, the books, tracks and movies composed of them (§11), the models line (§12), the worlds composed of models (§12.0), the AI line (§12.0d) and the binary line (§12.1).
 
 | Parameter | Description |
 | :--- | :--- |
@@ -590,6 +590,20 @@ Not a line yet: the engine the AI dimension's viewer will run (IDEAS §15). A mo
 **The chat** is ChatML, as SmolLM2's template writes it: `<|im_start|>system\n{system}<|im_end|>\n` once, then for each turn `<|im_start|>user\n{message}<|im_end|>\n<|im_start|>assistant\n`, the reply up to `<|im_end|>`, and `\n`. The system line defaults to the template's.
 
 **Checked:** on SmolLM2-360M-Instruct, the tokens are those of Hugging Face's `tokenizers` on 5,736 texts (prose, code, numbers, spaces of every kind, contractions, many scripts, emoji, control characters, random strings), and so are the oracle's (`llm-encode-lines`); the logits after a 42-token chat prompt are within 5.4·10⁻⁵ of the official ONNX export's (KL divergence 2·10⁻¹¹). In CI, on a stand-in model (`tensors-fixture`) with the oracle's stand-in tokenizer (`llm-tokenizer-fixture`, `tests/llama_tiny_tokenizer.json`), the tokens are the oracle's and the logits within 10⁻³ of the oracle's 64-bit ones (`llm-logits`).
+
+### 12.0d The AI line (`aispace-v1`, as built)
+
+A line of language models: every model of one **shape**, numbered by its weights (IDEAS §15). The shape is a Llama model (§12.0c) of `L` layers, width `H` and `A` attention heads (the head size `H / A` even; as many key and value heads), a feed-forward of `4H`, and a vocabulary of the 256 bytes (token `b` is byte `b`), its output tied to its embedding and its norms all 1. Its weights are the embedding `[256, H]` and, in each layer, `q`, `k`, `v` and `o` `[H, H]`, `gate` and `up` `[4H, H]` and `down` `[H, 4H]`: `W = 256H + 16·L·H²` of them, each a **digit** of `B` bits (1 to 8). `L` (1 to 64), `H` (2 to 4096), `A` and `B` are settings; the defaults, **Micro**, are 1 layer, width 16, 2 heads and 4 bits: 8,192 weights, 2^32768 models.
+
+**Values.** Digit `d` of a tensor of `c` columns stands for `(2d - m) / m · scale`, `m = 2^B - 1`: `2^B` values evenly spaced over `[-scale, scale]`, `scale` 1 for the embedding and `sqrt(3 / c)` for the rest (so that a layer keeps its activations' size), computed in 64-bit floating point and rounded once to a 32-bit float.
+
+**Addresses.** The line holds `2^(B·W)` models. **Positional** order reads the digits as one number in base `2^B`, the first most significant: the tensors by name in byte order (the norms, which have no digits, left out), each row-major. So an address is the weights' digits written out, and positional neighbours differ in the last weight of the last tensor by name (at one layer, `model.layers.0.self_attn.v_proj.weight`). **Scrambled** order passes that index through `shuffle-sha256-v1` over the whole line, keyed with the line's key, with the space's id as the domain: `ai/L<L>/H<H>/A<A>/F<4H>/B<B>/V256/key=<key>/aispace-v1`. Addresses are hex, zero-padded to the width `2^(B·W) - 1` needs (8,192 digits at the defaults). The line has no filters yet: every model is on the shelves.
+
+**A model's files**: `config.json` (`LlamaForCausalLM`, the shape above, 512 positions, `rms_norm_eps` 1e-5, `rope_theta` 10000, silu, tied, no biases, `torch_dtype` `float32`); `model.safetensors`, every tensor of the shape (the norms' ones included) as F32, laid out by `safetensors-layout-v1` (§12.0a) with the metadata `{"format":"pt"}`; and `tokenizer.json`, byte-level BPE whose vocabulary is the 256 byte characters, token `b` for byte `b`, with no merges and no added tokens. `sieve chat --raw` talks to them. **Warping** a file back: it must be a model of this shape (F32, BF16 or F16), its norms all 1, and every weight exactly one of its tensor's `2^B` values; its digits are then its address, and anything else has none on this line.
+
+**Speaking.** A model continues a text byte by byte (`continue_text`, §12.0c's engine with no chat format): the text's bytes are the tokens, and each byte it writes is drawn by the `Sampler` (temperature 0.8 unless given). It is floating point, as §12.0c's is: what a model says may differ in its last bits between machines; its address does not.
+
+**Checked.** The oracle's `ai-vectors` (`tests/vectors_ai_v1.tsv`: 30 rows over three shapes, both orders, the bearings 0, 13, 137, 246 and 359; the SHA-256 of each address, of its digits and of its `model.safetensors`) are written apart from the C++ and reproduced by the tool and the unit tests; `ai-read` writes a model's files, which are the tool's byte for byte, and `llm-logits` runs them, within 1.5·10⁻⁶ of the tool.
 
 ### 12.1a The bytes256 alphabet
 

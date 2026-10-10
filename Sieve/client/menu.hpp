@@ -75,6 +75,9 @@ struct Settings
     // Worlds (sieve/worldspace.hpp): a cover, a title and this many models, each in a cell of a
     // grid this many cells along each axis, with one of 24 turns.
     uint32_t world_models = 4, world_grid = 8;
+    // AI (sieve/aispace.hpp): every language model of this shape, numbered by its weights: layers,
+    // width, heads (dividing the width into heads of an even size) and bits a weight.
+    uint32_t ai_layers = 1, ai_width = 16, ai_heads = 2, ai_bits = 4;
     // How big the picture on the front of a crate is drawn, pixels square (a power of two).
     uint32_t model_tile = 64;
     // Global, because the corridor is shared: how many units stand on one tile's two walls.
@@ -182,6 +185,7 @@ constexpr int setup_rows_of(Media m)
     case Media::Movies: return 1; // units per movie
     case Media::Models: return 3; // vertices, triangles, grid
     case Media::Worlds: return 2; // models per world, grid
+    case Media::Ai: return 4;     // layers, width, heads, bits a weight
     case Media::Binary: return 1; // length
     }
     return 0;
@@ -216,7 +220,14 @@ public:
     void render();
     const Settings& settings() const { return s_; }
     const sieve::cli::FilterConfig& filters() const { return cfg_; }
-    void open_filters(int line) { overlay_ = line; orow_ = 0; oscroll_ = 0; otab_ = 0; }
+    void open_filters(int line)
+    {
+        if (line == kAiLine) return; // no filters on the AI line yet
+        overlay_ = line;
+        orow_ = 0;
+        oscroll_ = 0;
+        otab_ = 0;
+    }
 
 private:
     // One event (a key, the mouse, the window); sets `done` and `result` when the menu is left.
@@ -262,9 +273,12 @@ private:
                          kAudioRow = setup_row_of(Media::Audio), kVideoRows = setup_row_of(Media::Video),
                          kBooksRow = setup_row_of(Media::Books), kTracksRow = setup_row_of(Media::Tracks),
                          kMoviesRow = setup_row_of(Media::Movies), kModelsRows = setup_row_of(Media::Models),
-                         kWorldsRows = setup_row_of(Media::Worlds), kBinaryRow = setup_row_of(Media::Binary);
+                         kWorldsRows = setup_row_of(Media::Worlds),
+                         kAiRows = setup_row_of(Media::Ai), kBinaryRow = setup_row_of(Media::Binary);
     static constexpr int kLimitsRow = setup_row_of(std::nullopt), kResetRow = kLimitsRow + 1, kEnterRow = kLimitsRow + 2;
     int row_count() const;
+    // The AI line's weights: the embedding (256 by the width) and, in each layer, 16 times the width squared.
+    uint64_t ai_weights() const { return 256ull * s_.ai_width + 16ull * s_.ai_layers * s_.ai_width * s_.ai_width; }
 
     // The filter overlay.
     struct ORow

@@ -19,6 +19,7 @@
 #include "sieve/safetensors.hpp"
 #include "sieve/weights.hpp"
 #include "sieve/llm.hpp"
+#include "sieve/aispace.hpp"
 #include "sieve/llm_tokenizer.hpp"
 #include "sieve/unicode_classes.hpp"
 #include "sieve/written.hpp"
@@ -3439,6 +3440,67 @@ void test_llm(const std::string& dir)
     std::filesystem::remove(path);
 }
 
+void test_ai_vectors(const std::string& dir)
+{
+    std::ifstream in(dir + "vectors_ai_v1.tsv");
+    CHECK(bool(in));
+    std::string line;
+    int n = 0;
+    while (std::getline(in, line))
+    {
+        if (line.empty() || line[0] == '#') continue;
+        std::vector<std::string> f;
+        std::stringstream ss(line);
+        std::string x;
+        while (std::getline(ss, x, '\t')) f.push_back(x);
+        CHECK(f.size() == 6);
+        if (f.size() != 6) continue;
+        AiShape shape;
+        CHECK(std::sscanf(f[0].c_str(), "L%u/H%u/A%u/B%u", &shape.layers, &shape.width, &shape.heads, &shape.bits) == 4);
+        const AiSpace space(shape, "sieve");
+        const AddressMode m = address_mode_from_string(f[1]);
+        const BigUint index = unit_at_bearing(BigUint(uint64_t(std::stoul(f[2]))), space.size(), 0);
+        CHECK(Sha256::hex(Sha256::hash(space.hex_of(index))) == f[3]);
+        const AiSpace::Digits d = space.digits_at(index, m);
+        CHECK(Sha256::hex(Sha256::hash(std::string(d.begin(), d.end()))) == f[4]);
+        const std::string file = space.safetensors_of(d);
+        CHECK(Sha256::hex(Sha256::hash(file)) == f[5]);
+        CHECK(space.index_of(d, m) == index);
+        const auto back = space.digits_of_safetensors(file);
+        CHECK(back && *back == d);
+        ++n;
+    }
+    CHECK(n == 30);
+    // A model off the grid, or of another shape, has no address; a bad shape is refused.
+    {
+        const AiSpace space(AiShape{}, "sieve");
+        CHECK(space.weights() == 8192 && space.bits() == 32768 && space.hex_width() == 8192);
+        AiSpace::Digits d(static_cast<size_t>(space.weights()), 3);
+        std::string file = space.safetensors_of(d);
+        CHECK(space.digits_of_safetensors(file) == d);
+        file[file.size() - 1] ^= 0x01; // a weight nudged off its value
+        CHECK(!space.digits_of_safetensors(file));
+        const AiSpace other(AiShape{1, 8, 2, 4}, "sieve");
+        CHECK(!other.digits_of_safetensors(space.safetensors_of(d)));
+        CHECK(throws([] { AiShape{1, 16, 3, 4}.check(); }));
+        CHECK(throws([] { AiShape{1, 16, 2, 9}.check(); }));
+        CHECK(throws([&] { (void)space.index_of(AiSpace::Digits(5, 0), AddressMode::Positional); }));
+        d[0] = 16;
+        CHECK(throws([&] { (void)space.index_of(d, AddressMode::Positional); }));
+        // The values: evenly spaced, the embedding over [-1, 1].
+        const AiSpace::Tensor& e = space.tensors().front();
+        CHECK(e.name == "model.embed_tokens.weight" && space.value(e, 0) == -1.0f && space.value(e, 15) == 1.0f);
+        // A model off the shelf talks: the engine runs it from memory.
+        sieve::llm::Model model(space.config(), space.tensors_of(space.digits_at(BigUint(12345), AddressMode::Scrambled)), 1);
+        const sieve::llm::Tokenizer tok(sieve::json::parse(AiSpace::tokenizer_json()));
+        CHECK(tok.size() == 256 && tok.encode("ab", false) == (std::vector<uint32_t>{97, 98}));
+        sieve::llm::Sampling greedy;
+        greedy.temperature = 0;
+        sieve::llm::Sampler sampler(greedy);
+        CHECK(sieve::llm::continue_text(model, tok, "hello", sampler, 10).size() >= 1);
+    }
+}
+
 void test_world_sieve()
 {
     const Space cover("image/mono/1x1", 2, 1, "sieve");
@@ -5022,6 +5084,7 @@ void run_all(int argc, char** argv)
         test_safetensors();
         test_weights();
         test_llm(dir);
+        test_ai_vectors(dir);
         test_titled_vectors(dir + "vectors_titled_v1.tsv");
         test_binary_vectors(dir + "vectors_binary_v1.tsv");
         test_chunk_vectors(dir + "vectors_chunks_v1.tsv");

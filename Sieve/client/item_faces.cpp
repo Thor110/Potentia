@@ -237,6 +237,23 @@ Hallway::Painter Hallway::face_painter(const Book& b) const
                               px.begin() + std::ptrdiff_t(size_t(y + oy) * size_t(w)));
         };
     }
+    if (on_ai())
+    {
+        if (!b.ai) return {};
+        // A model's front: what it says by itself (Hallway::ai_says), in its line's lilac on its violet,
+        // every byte the font cannot draw a middle dot. Worked out here, off the drawing thread.
+        const AiSpace* space = ai_space_.get();
+        const sieve::llm::Tokenizer* tok = ai_tokenizer_.get();
+        const AiSpace::Digits digits = *b.ai;
+        const Theme& th = theme_of(kAiLine);
+        const uint32_t ground = argb(th.bg), ink = argb(th.edge);
+        return [space, tok, digits, ground, ink, lp](std::vector<uint32_t>& px, int w, int h) {
+            px.assign(size_t(w) * size_t(h), ground);
+            const std::u32string said = utf8_decode(printable(ai_says(*space, *tok, digits, 48)));
+            const int m = std::max(1, w / 16);
+            paint_text(px, w, h, said, m, m, w - m, h - m, ink, lp);
+        };
+    }
     if (on_books())
     {
         if (!b.parts) return {};

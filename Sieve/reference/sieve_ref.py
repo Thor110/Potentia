@@ -32,6 +32,8 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
     python3 sieve_ref.py weights-pack m.safetensors --out m.sieve-weights      # sieve-weights-v1, as `sieve tensors --pack`
     python3 sieve_ref.py weights-unpack m.sieve-weights --out m.safetensors    # and back
     python3 sieve_ref.py llm-tokenizer-fixture --out ../tests/llama_tiny_tokenizer.json   # a small BPE tokenizer
+    python3 sieve_ref.py ai-vectors > ../tests/vectors_ai_v1.tsv                      # aispace-v1
+    python3 sieve_ref.py ai-read --bearing 137 --out m.safetensors                     # what `sieve ai --out` writes
     python3 sieve_ref.py llm-encode-lines texts.jsonl --model DIR                     # what `sieve chat --encode-lines` prints
     python3 sieve_ref.py llm-logits "text" --model DIR [--compare logits.f32]         # what `sieve chat --logits` prints
     python3 sieve_ref.py sieve --dict words.txt --max 4
@@ -2354,11 +2356,11 @@ def llm_forward(model_dir, ids):
     with open(model_dir + "/model.safetensors", "rb") as f:
         for name, dtype, shape, b, e in tensors:
             f.seek(base + b)
-            a = array("H")
+            a = array("f" if dtype == "F32" else "H")
             a.frombytes(f.read(e - b))
             if sys.byteorder != "little":
                 a.byteswap()
-            vals = [st_half(v, dtype == "BF16") for v in a]
+            vals = list(a) if dtype == "F32" else [st_half(v, dtype == "BF16") for v in a]
             cols = shape[-1]
             W[name] = [vals[r * cols:(r + 1) * cols] for r in range(len(vals) // cols)] if len(shape) == 2 else vals
     H, L, nh = c["hidden_size"], c["num_hidden_layers"], c["num_attention_heads"]
@@ -2508,6 +2510,88 @@ def cmd_llm_corpus(args):
     with open(args.out, "w", encoding="utf-8") as f:
         for s in fixed + ["".join(r.choice(alphabet) for _ in range(r.randint(1, 50))) for _ in range(args.count)]:
             f.write(json.dumps(s) + "\n")
+
+
+# ---------------------------------------------------------------- aispace-v1 (SPECIFICATIONS §12.0d)
+# The AI line: every model of one shape, numbered by its weights, as `sieve ai` numbers them
+# (core/aispace.*), written apart from it.
+
+class AiSpaceRef:
+    def __init__(self, layers, width, heads, bits, key="sieve"):
+        self.L, self.H, self.A, self.B, self.key = layers, width, heads, bits, key
+        self.F = 4 * width
+        cfg = {"model_type": "llama", "hidden_size": width, "intermediate_size": self.F, "num_attention_heads": heads,
+               "num_key_value_heads": heads, "num_hidden_layers": layers, "vocab_size": 256, "tie_word_embeddings": True,
+               "torch_dtype": "float32"}
+        self.all = st_llama(cfg)
+        self.tensors, at = [], 0
+        for name, dtype, shape in sorted(self.all, key=lambda t: t[0].encode("utf-8")):
+            if "norm.weight" in name:
+                continue
+            rows, cols = shape
+            scale = 1.0 if name == "model.embed_tokens.weight" else math.sqrt(3.0 / cols)
+            self.tensors.append((name, rows, cols, scale, at))
+            at += rows * cols
+        self.W = at
+        self.N = 1 << (bits * self.W)
+        self.width_hex = max(1, len("%x" % (self.N - 1)))
+
+    def id(self):
+        return "ai/L%d/H%d/A%d/F%d/B%d/V256/key=%s/aispace-v1" % (self.L, self.H, self.A, self.F, self.B, self.key)
+
+    def digits(self, index, mode):
+        place = shuffle(self.key, self.id(), self.N, index, inverse=True) if mode == "scrambled" else index
+        mask = (1 << self.B) - 1
+        return [(place >> (self.B * (self.W - 1 - i))) & mask for i in range(self.W)]
+
+    def index(self, digits, mode):
+        place = 0
+        for d in digits:
+            place = (place << self.B) | d
+        return shuffle(self.key, self.id(), self.N, place) if mode == "scrambled" else place
+
+    def safetensors(self, digits):
+        m = (1 << self.B) - 1
+        vals = {}
+        for name, rows, cols, scale, first in self.tensors:
+            vals[name] = [(2 * d - m) / m * scale for d in digits[first:first + rows * cols]]
+        for name, dtype, shape in self.all:
+            if "norm.weight" in name:
+                vals[name] = [1.0] * shape[0]
+        start = st_layout([("format", "pt")], self.all)
+        order = sorted(self.all, key=lambda t: t[0].encode("utf-8"))
+        return start + b"".join(struct.pack("<%df" % len(vals[n]), *vals[n]) for n, _, _ in order)
+
+
+def ai_bearing(deg, n):
+    """The first unit at or past a bearing of `deg` whole degrees (the navigator's rule)."""
+    q = -(-deg * n // 360)
+    return 0 if q >= n else q
+
+
+def cmd_ai_vectors(args):
+    print("# sieve AI-line vectors v1 (aispace-v1 over shuffle-sha256-v1): shape, ordering, bearing,")
+    print("# SHA-256 of the address in hex, of the digits (a byte each), and of the model's .safetensors")
+    for shape in ((1, 16, 2, 4), (1, 8, 2, 1), (2, 8, 1, 3)):
+        sp = AiSpaceRef(*shape)
+        for mode in ("positional", "scrambled"):
+            for deg in (0, 13, 137, 246, 359):
+                i = ai_bearing(deg, sp.N)
+                d = sp.digits(i, mode)
+                assert sp.index(d, mode) == i
+                hexa = "%0*x" % (sp.width_hex, i)
+                print("\t".join(["L%d/H%d/A%d/B%d" % shape, mode, str(deg), hashlib.sha256(hexa.encode()).hexdigest(),
+                                 hashlib.sha256(bytes(d)).hexdigest(), hashlib.sha256(sp.safetensors(d)).hexdigest()]))
+
+
+def cmd_ai_read(args):
+    """The model at a bearing (or an address), its .safetensors written as `sieve ai --out` writes it."""
+    sp = AiSpaceRef(args.ai_layers, args.ai_width, args.ai_heads, args.ai_bits)
+    i = int(args.read, 16) if args.read else ai_bearing(args.bearing, sp.N)
+    d = sp.digits(i, args.mode)
+    with open(args.out, "wb") as f:
+        f.write(sp.safetensors(d))
+    print("%0*x" % (sp.width_hex, i))
 
 
 def cmd_world_obj(args):
@@ -6705,6 +6789,16 @@ def main():
     s.add_argument("--seed", type=int, default=1)
     s.add_argument("--count", type=int, default=500)
     s.add_argument("--out", required=True)
+    sub.add_parser("ai-vectors")
+    s = sub.add_parser("ai-read")
+    s.add_argument("--ai-layers", type=int, default=1)
+    s.add_argument("--ai-width", type=int, default=16)
+    s.add_argument("--ai-heads", type=int, default=2)
+    s.add_argument("--ai-bits", type=int, default=4)
+    s.add_argument("--bearing", type=int, default=0)
+    s.add_argument("--read")
+    s.add_argument("--mode", default="positional")
+    s.add_argument("--out", required=True)
     s = sub.add_parser("tensors-fixture")
     s.add_argument("--config", required=True)
     s.add_argument("--seed", type=int, default=1)
@@ -6813,6 +6907,10 @@ def main():
         cmd_tensors(args)
     elif args.cmd == "tensors-fixture":
         cmd_tensors_fixture(args)
+    elif args.cmd == "ai-vectors":
+        cmd_ai_vectors(args)
+    elif args.cmd == "ai-read":
+        cmd_ai_read(args)
     elif args.cmd == "llm-encode-lines":
         cmd_llm_encode_lines(args)
     elif args.cmd == "llm-logits":

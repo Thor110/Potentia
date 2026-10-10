@@ -383,6 +383,11 @@ Settings Settings::from_args(const sieve::cli::Args& a)
     s.model_coords = parse_u32(a, "coords", s.model_coords);
     s.world_models = parse_u32(a, "world-models", s.world_models);
     s.world_grid = std::min(parse_u32(a, "world-grid", s.world_grid), 1024u);
+    s.ai_layers = std::clamp(parse_u32(a, "ai-layers", s.ai_layers), 1u, 64u);
+    s.ai_width = std::clamp(parse_u32(a, "ai-width", s.ai_width), 2u, 4096u);
+    s.ai_heads = std::max(parse_u32(a, "ai-heads", s.ai_heads), 1u);
+    s.ai_bits = std::clamp(parse_u32(a, "ai-bits", s.ai_bits), 1u, 8u);
+    if (s.ai_width % s.ai_heads || (s.ai_width / s.ai_heads) % 2) s.ai_heads = 1, s.ai_width += s.ai_width % 2; // a shape aispace-v1 can have
     s.model_tile = parse_u32(a, "model-tile", s.model_tile);
     s.items_per_wall = parse_u32(a, "items-per-wall", s.items_per_wall);
     if (a.has("title-length")) s.title_length = a.get_u32("title-length", s.title_length); // 0 is allowed: no titles
@@ -439,6 +444,10 @@ void Settings::apply(sieve::cli::Args& a) const
     a.opts["coords"] = std::to_string(model_coords);
     a.opts["world-models"] = std::to_string(world_models);
     a.opts["world-grid"] = std::to_string(world_grid);
+    a.opts["ai-layers"] = std::to_string(ai_layers);
+    a.opts["ai-width"] = std::to_string(ai_width);
+    a.opts["ai-heads"] = std::to_string(ai_heads);
+    a.opts["ai-bits"] = std::to_string(ai_bits);
     a.opts["model-tile"] = std::to_string(model_tile);
     a.opts["items-per-wall"] = std::to_string(items_per_wall);
     a.opts["title-length"] = std::to_string(title_length);
@@ -568,7 +577,16 @@ std::array<LineSize, kLines> Menu::line_sizes() const
         worlds.units = "cov*title*(model*" + std::to_string(places) + ")^" + std::to_string(s_.world_models) + " = ~10^" +
                        fixed(worlds.bits * std::log10(2.0), 1);
     }
+    // AI (aispace-v1): every model of the shape, its W weights each one of 2^B values: 2^(B W) models.
+    LineSize ai;
+    {
+        const uint64_t per = sieve::books_per_tile(), w = ai_weights();
+        ai.bits = double(s_.ai_bits) * double(w);
+        ai.padding = uint32_t((per - tile_pow(2, uint64_t(s_.ai_bits) * w)) % per);
+        ai.units = "2^" + std::to_string(uint64_t(s_.ai_bits) * w) + " = ~10^" + fixed(ai.bits * std::log10(2.0), 1);
+    }
     std::array<LineSize, kLines> out;
+    out[size_t(kAiLine)] = ai;
     out[size_t(line_of(Media::Pages))] = titled(page, false);
     out[size_t(line_of(Media::Image))] = titled(image, false);
     out[size_t(line_of(Media::Audio))] = titled(audio, true);
@@ -626,6 +644,7 @@ double Menu::line_cache_bytes(int i) const
     case Media::Books: pos = uint64_t(s_.book_pages + 1) * s_.length + cover; break;
     case Media::Models: pos = 3ull * s_.model_vertices + 3ull * s_.model_faces + t; break;
     case Media::Worlds: pos = uint64_t(s_.world_models) * (3ull * s_.model_vertices + 3ull * s_.model_faces + 4) + t + cover; break;
+    case Media::Ai: pos = (ai_weights() + 3) / 4; break; // a byte a weight
     case Media::Binary: pos = (uint64_t(s_.binary_bytes) + 3) / 4 + t; break;
     case Media::Tracks: pos = audio_shape(s_).second * uint64_t(s_.track_units) + t + cover; break;
     case Media::Movies: pos = positions(s_.video_w, s_.video_h, s_.frames) * uint64_t(s_.movie_units) + t + cover; break;
@@ -840,6 +859,7 @@ void Menu::find_limits()
     // Worlds are made of models, as tracks of audio: as many models a world as what is left allows.
     if (on("models") || on("worlds")) s_.world_models = 1;
     if (on("worlds")) grow(s_.world_models, kWorldsLine);
+    if (on("ai")) grow(s_.ai_layers, kAiLine); // deeper, at its width and heads
     if (on("binary")) grow(s_.binary_bytes, kBinaryLine);
     // And the model image cache: the rooms with pictures of their own (yours and the picture
     // distance either side) at the chosen size, or as many as the graphics memory has room for
@@ -1089,6 +1109,34 @@ void Menu::adjust(int dir, int step)
     case kWorldsRows + 1:
         num(s_.world_grid);
         s_.world_grid = std::min(s_.world_grid, 1024u); // worldspace-v1's widest grid
+        break;
+    case kAiRows:
+        num(s_.ai_layers);
+        s_.ai_layers = std::clamp(s_.ai_layers, 1u, 64u);
+        break;
+    case kAiRows + 1:
+    {
+        // The width moves in steps of twice the heads, so each head keeps an even size.
+        const int64_t unit = 2 * int64_t(s_.ai_heads);
+        int64_t w = s_.ai_width;
+        if (step == 0) w = dir > 0 ? w * 2 : w / 2; // PgUp/PgDn: double or halve
+        else w += int64_t(dir) * step * unit;
+        w -= w % unit;
+        s_.ai_width = uint32_t(std::clamp<int64_t>(w, unit, 4096 - 4096 % unit));
+        break;
+    }
+    case kAiRows + 2:
+    {
+        // The next count of heads, up or down, that divides the width into heads of an even size.
+        uint32_t h = s_.ai_heads;
+        do h = dir > 0 ? h + 1 : h - 1;
+        while (h >= 1 && h <= s_.ai_width / 2 && (s_.ai_width % h || (s_.ai_width / h) % 2));
+        if (h >= 1 && h <= s_.ai_width / 2) s_.ai_heads = h;
+        break;
+    }
+    case kAiRows + 3:
+        num(s_.ai_bits);
+        s_.ai_bits = std::clamp(s_.ai_bits, 1u, 8u);
         break;
     // The coordinate grid must be a power of two, so it doubles and halves.
     case kBinaryRow: num(s_.binary_bytes); break;
@@ -1603,6 +1651,12 @@ void Menu::render()
             {kWorldsLine, tr("setup.world_models"), trf("setup.world_models.value", {n(s_.world_models)})},
             {-1, tr("setup.world_grid"), trf("setup.world_grid.value", {n(s_.world_grid), std::to_string(uint64_t(s_.world_grid) * s_.world_grid * s_.world_grid * 24)})},
         };
+        case Media::Ai: return {
+            {kAiLine, tr("setup.ai_layers"), n(s_.ai_layers)},
+            {-1, tr("setup.ai_width"), trf("setup.ai_width.value", {n(s_.ai_width), n(4 * s_.ai_width)})},
+            {-1, tr("setup.ai_heads"), trf("setup.ai_heads.value", {n(s_.ai_heads), n(s_.ai_width / std::max(1u, s_.ai_heads))})},
+            {-1, tr("setup.ai_bits"), trf("setup.ai_bits.value", {n(s_.ai_bits), std::to_string(uint64_t(1) << s_.ai_bits), std::to_string(ai_weights())})},
+        };
         case Media::Binary: return {
             {kBinaryLine, tr("setup.binary_length"), trf("setup.binary_length.value", {n(s_.binary_bytes)})},
         };
@@ -1737,9 +1791,22 @@ void Menu::render()
     // The map: one bar per line, length proportional to its size in bits.
     const auto sizes = line_sizes();
     // The longest line spans the full height: nothing can leave the screen, however large.
-    double scale_bits = 1;
+    // The longest line fills the height, unless it is far longer than the rest (the AI line, whose
+    // models are thousands of weights): a line over kMapOutlier times the median sets no scale, and
+    // its bar is drawn the full height, broken, its size in its label as every line's is.
+    constexpr double kMapOutlier = 8;
+    std::vector<double> finite;
     for (const auto& z : sizes)
-        if (std::isfinite(z.bits)) scale_bits = std::max(scale_bits, z.bits);
+        if (std::isfinite(z.bits)) finite.push_back(z.bits);
+    std::sort(finite.begin(), finite.end());
+    const double median = finite.empty() ? 1 : finite[finite.size() / 2];
+    double scale_bits = 1;
+    bool broken_any = false;
+    for (const double b : finite)
+    {
+        if (b <= kMapOutlier * median) scale_bits = std::max(scale_bits, b);
+        else broken_any = true;
+    }
     // The binary line takes a column at each end, because that is where it is:
     //
     //     binary | pages image audio video books models | binary   (the doors' order: dimensions.hpp)
@@ -1756,7 +1823,7 @@ void Menu::render()
     // Line names are drawn at double size where a column is wide enough to hold one.
     const float name_scale = pitch >= 110 ? 2.0f : 1.0f;
     text(r_, x0, map_y, tr("map.title"), 1, white);
-    text(r_, x0, map_y + 12, trf("map.scale", {fixed(scale_bits, 0)}), 1, grey);
+    text(r_, x0, map_y + 12, trf(broken_any ? "map.scale.broken" : "map.scale", {fixed(scale_bits, 0)}), 1, grey);
     for (int c = 0; c < kLines + 1; ++c)
     {
         const bool binary = c == 0 || c == kLines;
@@ -1770,8 +1837,10 @@ void Menu::render()
         auto clip = [&](const std::string& t) { return text_cells(t) <= cols ? t : fit_cells(t, cols - 2) + ".."; };
         const SDL_Color edge = th.edge;
         th.edge = ink; // labels in a readable colour; the bar keeps the line's own edges
-        // Magnifying glass: opens this line's filters, on every line; both binary columns open the
-        // one binary line's filters (by its files' kinds).
+        // Magnifying glass: opens this line's filters, on every line that has them (not AI yet);
+        // both binary columns open the one binary line's filters (by its files' kinds).
+        magnifier_[c] = {};
+        if (i != kAiLine)
         {
             magnifier_[c] = {x - 2, label - 2, 20, 20};
             SDL_SetRenderDrawColor(r_, th.edge.r, th.edge.g, th.edge.b, 255);
@@ -1810,6 +1879,17 @@ void Menu::render()
         SDL_RenderRect(r_, &bar);
         const SDL_FRect inner{x + 9, top + 1, 38, len - 2};
         SDL_RenderRect(r_, &inner);
+        // Past the scale: a break across the bar, a third of the way down.
+        if (std::isfinite(z.bits) && z.bits > scale_bits)
+        {
+            const float by = top + span / 3;
+            const SDL_FRect gap{x + 6, by - 4, 44, 8};
+            SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
+            SDL_RenderFillRect(r_, &gap);
+            SDL_SetRenderDrawColor(r_, frame.r, frame.g, frame.b, 255);
+            SDL_RenderLine(r_, x + 4, by - 2, x + 52, by - 6);
+            SDL_RenderLine(r_, x + 4, by + 6, x + 52, by + 2);
+        }
         // What survives the ticked filters, where it can be counted exactly: a filled bar inside.
         const StackInfo& info = stack_info(i);
         if (info.survivor_bits >= 0)
@@ -2135,6 +2215,11 @@ std::pair<std::string, std::function<Menu::StackInfo()>> Menu::stack_job(int i, 
 
 const Menu::StackInfo& Menu::stack_info(int i)
 {
+    if (i == kAiLine)
+    {
+        info_[i] = StackInfo{"none", "", -1, ""}; // no filters on the AI line yet
+        return info_[i];
+    }
     if (i == kWorldsLine) return worlds_stack_info();
     if (has_parts(i)) return parts_stack_info(i);
     if (unit_at(i) >= 0 && line_sizes()[size_t(i)].bits > too_large_bits())

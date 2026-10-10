@@ -380,7 +380,7 @@ const std::vector<Page>& pages()
           {"sieve tensors model.safetensors --pack model.sieve-weights", "the model coded under the prior, checked"},
           {"sieve tensors --unpack model.sieve-weights --out model.safetensors", "and rebuilt"}}},
         {"chat", "Talk to a language model, run by Sieve itself (no other runtime).",
-         "sieve chat --model FOLDER [--prompt TEXT] [--system TEXT] [--max-tokens N] [--temperature T] [--top-p P]\n"
+         "sieve chat --model FOLDER [--prompt TEXT] [--system TEXT | --raw] [--max-tokens N] [--temperature T] [--top-p P]\n"
          "  [--top-k K] [--repeat-penalty R] [--seed S] [--threads N]\n"
          "  sieve chat --model FOLDER --encode TEXT | --encode-lines FILE | --logits TEXT [--logits-out FILE]",
          "The AI dimension's engine (IDEAS §15). FOLDER holds a Llama model as it is published: config.json,\n"
@@ -392,6 +392,8 @@ const std::vector<Page>& pages()
          {{"--model FOLDER", "The model's folder: config.json, model.safetensors, tokenizer.json."},
           {"--prompt TEXT", "One message; print the reply and stop."},
           {"--system TEXT", "The system line (default: the one the model's own template writes)."},
+          {"--raw", "No chat around it: the model continues --prompt (a newline unless given), for a model\n"
+                    "with no chat format, such as one off the AI line's shelves (sieve ai --out)."},
           {"--max-tokens N", "The longest reply, in tokens (512)."},
           {"--temperature T", "How freely it chooses (0.2, as SmolLM2's makers suggest; 0: always the likeliest token)."},
           {"--top-p P", "Choose among the fewest likeliest tokens whose probabilities reach P (0.9)."},
@@ -407,6 +409,36 @@ const std::vector<Page>& pages()
          {{"sieve chat --model SmolLM2-360M-Instruct", "a conversation"},
           {"sieve chat --model SmolLM2-360M-Instruct --prompt \"Write a haiku about libraries\"", "one answer"},
           {"sieve chat --model SmolLM2-360M-Instruct --encode \"Hello, world\"", "how it reads a text"}}},
+        {"ai", "The AI line: every language model of one shape, numbered by its weights; read one and hear it.",
+         "sieve ai [--ai-layers L] [--ai-width H] [--ai-heads A] [--ai-bits B] [--key K] [--mode MODE]\n"
+         "  [--read ADDR | --bearing DEG | --browse N [--seed S]] [--prompt TEXT] [--max-tokens N] [--temperature T] [--out FOLDER]\n"
+         "  sieve ai --warp FOLDER|FILE.safetensors [--address-out FILE]",
+         "An item on this line is a model (aispace-v1, SPECIFICATIONS §12.0d): a Llama model of L layers, width\n"
+         "H and A heads, a feed-forward of 4H and a vocabulary of the 256 bytes, its weights each one of 2^B\n"
+         "evenly spaced values. Its weights, written out as digits, are its address, so no model has to be\n"
+         "downloaded to walk the line; almost every one of them babbles. With no address, how big the line is.\n"
+         "Each model is run by Sieve's own engine (as sieve chat runs one) and continues --prompt (a newline\n"
+         "unless given); --out writes its files, which sieve chat --raw talks to.",
+         {{"--ai-layers L", "Layers (1)."},
+          {"--ai-width H", "Width (16); the feed-forward is four times it."},
+          {"--ai-heads A", "Attention heads (2); they divide the width into heads of an even size."},
+          {"--ai-bits B", "Bits a weight (4): each weight is one of 2^B values."},
+          {"--read ADDR", "The model at an address (in --mode's ordering)."},
+          {"--bearing DEG", "The model at a bearing of DEG whole degrees: the first at or past it, as the navigator goes."},
+          {"--browse N", "N models picked at random (--seed S to repeat a run)."},
+          {"--prompt TEXT", "What the model is asked to continue (a newline)."},
+          {"--max-tokens N", "How many bytes it writes (64)."},
+          {"--temperature T", "How freely it chooses (0.8; 0: always the likeliest byte)."},
+          {"--seed S", "The seed of its choices, and of --browse."},
+          {"--out FOLDER", "Write the model's files there: config.json, model.safetensors, tokenizer.json."},
+          {"--warp PATH", "A model's file (or its folder) back to its address, if it is of the line's shape and\n"
+                          "every weight is one of the line's values."},
+          {"--address-out FILE", "With --warp: write its address (in --mode's ordering) there."},
+          {"--mode MODE", "positional or scrambled (positional)."}},
+         {{"sieve ai", "how big the AI line is"},
+          {"sieve ai --bearing 246", "the model at 246 degrees, and what it says"},
+          {"sieve ai --bearing 137 --mode scrambled --out m137", "another, its files kept"},
+          {"sieve chat --model m137 --raw --prompt \"Hello\"", "and talked to"}}},
 
         {"dicts", "List the registered dictionaries, or hash a new one for registration.",
          "sieve dicts [--hash FILE]",

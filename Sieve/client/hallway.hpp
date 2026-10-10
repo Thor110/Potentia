@@ -63,6 +63,9 @@
 #include "sieve/binaryspace.hpp"
 #include "sieve/titledspace.hpp"
 #include "sieve/worldspace.hpp"
+#include "sieve/aispace.hpp"
+#include "sieve/llm.hpp"
+#include "sieve/llm_tokenizer.hpp"
 #include "sieve/utf8.hpp"
 
 #include <algorithm>
@@ -289,7 +292,7 @@ inline std::string exact_degrees(const BigUint& v, const BigUint& units, int dec
 
 // ---------------------------------------------------------------- the hallway
 
-enum class Input { None, Warp, Goto };
+enum class Input { None, Warp, Goto, Talk };
 
 // Short form of a (possibly enormous) tile number for the readout.
 inline std::string short_number(const std::string& dec)
@@ -344,6 +347,7 @@ public:
         uint64_t binary_bytes = 32; // the binary line holds every file up to this many bytes
         uint32_t track_units = 4, movie_units = 4; // units of audio a track, of video a movie
         uint32_t world_models = 4, world_grid = 8;  // models a world, and cells along each of its axes
+        uint32_t ai_layers = 1, ai_width = 16, ai_heads = 2, ai_bits = 4; // the AI line's shape (sieve/aispace.hpp)
     };
 
     Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> lines, const FilterConfig& filters, uint32_t book_pages,
@@ -374,6 +378,8 @@ public:
     bool on_models() const { return li_ == kModelsLine; }
     // Worlds: models placed in a world (sieve/worldspace.hpp).
     bool on_worlds() const { return li_ == kWorldsLine; }
+    // AI: every language model of one shape, numbered by its weights (sieve/aispace.hpp).
+    bool on_ai() const { return li_ == kAiLine; }
     // The binary line. It has no state space of its own yet -- its shelves stand empty, and how
     // they are addressed is still to be worked out (SPECIFICATIONS §12.1) -- so like the books
     // and models lines it borrows the pages line's Line for the few things that ask about one.
@@ -389,7 +395,7 @@ public:
     bool sizes_vary() const { return media_sizes_vary(media()); }
     const Theme& theme() const { return theme_of(li_); }
     Camera& camera() { return cam_; }
-    bool guided_on() const { return !on_books() && !on_models() && !on_worlds() && !on_binary() && guided_ && line().guided != nullptr; }
+    bool guided_on() const { return !on_books() && !on_models() && !on_worlds() && !on_ai() && !on_binary() && guided_ && line().guided != nullptr; }
     const GuidedLine& guided() const;
     const CompactLine& compact() const { return *compact_[li_]; }
     std::string ordering_name() const { return tr(std::string("ordering.") + (guided_on() ? "guided" : to_string(mode_))); }
@@ -437,6 +443,7 @@ public:
         std::optional<BookSpace::Parts> parts;       // the books line: cover, title and pages
         std::optional<ModelSpace::Parts> model;      // the models line: vertices and faces
         std::optional<WorldSpace::Parts> world;      // the worlds line: cover, title and placed models
+        std::optional<AiSpace::Digits> ai;           // the AI line: the model's weights, as digits
         // The binary line: a file. Only its place, title and cover are kept on the shelf; its bytes
         // and its address in hex (each as large as the file) are worked out when something asks,
         // for the one item looked at or held (file_of, hex_of below).
@@ -630,6 +637,15 @@ public:
     bool warp(const std::string& input);
 
     bool go_to(std::string input);
+    // The AI line: say something to the model in hand, which writes back (Enter opens the box; and
+    // --talk in a scripted run). The conversation is kept while the model is held.
+    void talk(const std::string& said);
+    // What a model of the AI line says by itself: `bytes` bytes after a newline, chosen at temperature
+    // 0.8 with seed 1, so the same model always says the same (for its face, the readout, the hand).
+    // And bytes as the hallway's font draws them: printable ASCII as it is, anything else a middle dot.
+    static std::string ai_says(const AiSpace& space, const sieve::llm::Tokenizer& tok, const AiSpace::Digits& d, size_t bytes);
+    static std::string printable(const std::string& bytes);
+    const std::string& conversation() const { return talk_; }
 
     void step_trail(int dir);
 
@@ -930,6 +946,9 @@ public:
 
     float draw_model(const ModelSpace::Parts& p, float x, float y, float pw, float bottom);
     float draw_world(const WorldSpace::Parts& p, float x, float y, float pw, float bottom);
+    float draw_ai(const Book& bk, float x, float y, float pw, float bottom);
+    const std::string& ai_said(const Book& b) const;
+    mutable std::unordered_map<std::string, std::string> ai_said_; // a model's address -> what it says by itself
     // A mesh in hand, turned by the mouse or A and D, with its .obj text beside it (the first
     // `vertex_lines` lines, its vertices, in the edge colour).
     float draw_mesh(const std::vector<ModelSpace::Vertex>& verts, const std::vector<ModelSpace::Face>& faces, const std::string& obj,
@@ -1558,6 +1577,11 @@ private:
     std::unique_ptr<WorldSpace> world_space_;
     WorldStacks world_stacks_;
     std::unique_ptr<WorldSieve> world_sieve_;
+    // The AI line (no filters yet), its byte tokenizer, and the model in hand while it is talked to.
+    std::unique_ptr<AiSpace> ai_space_;
+    std::unique_ptr<sieve::llm::Tokenizer> ai_tokenizer_;
+    std::unique_ptr<sieve::llm::Model> talk_model_;
+    std::string talk_, talk_hex_; // the conversation, and the address of the model it is with
     BigUint loop_pos(const BigUint& unit) const;   // unit index -> loop position
     BigUint unit_of_pos(const BigUint& pos) const; // loop position (left-wall slot) -> unit index
     // How many units the current line holds: its loop's count, except on binary (see above). A

@@ -202,6 +202,7 @@ std::string Hallway::view_label(ViewKind k) const
     // What the thing itself is, on this line.
     const Book& bk = *in_hand_;
     if (bk.model || bk.world) return tr("view.tab.obj");
+    if (bk.ai) return tr("view.tab.weights");
     if (bk.parts) return tr("view.tab.page");
     if (bk.is_file) return tr("view.tab.hex");
     switch (line().kind)
@@ -241,6 +242,32 @@ void Hallway::view_raw()
     {
         view_.rows = utf32_rows(split_lines(world_space_->to_obj(*bk.world)));
         view_.heading = named + tr("view.world");
+    }
+    else if (bk.ai)
+    {
+        // A model: each of its tensors by name and shape, then its weights as digits (hex, 64 a row),
+        // in the order its address reads them.
+        std::vector<std::string> lines;
+        static const char* hex = "0123456789abcdef";
+        for (const AiSpace::Tensor& t : ai_space_->tensors())
+        {
+            lines.push_back(t.name + "  [" + std::to_string(t.rows) + " x " + std::to_string(t.cols) + "]");
+            std::string row;
+            for (uint64_t i = 0; i < uint64_t(t.rows) * t.cols; ++i)
+            {
+                const uint8_t d = (*bk.ai)[size_t(t.first + i)];
+                if (ai_space_->shape().bits > 4) row.push_back(hex[d >> 4]);
+                row.push_back(hex[d & 15]);
+                if (row.size() >= 64)
+                {
+                    lines.push_back(row);
+                    row.clear();
+                }
+            }
+            if (!row.empty()) lines.push_back(row);
+        }
+        view_.rows = utf32_rows(lines);
+        view_.heading = named + tr("view.ai");
     }
     else if (bk.parts) view_book_page();
     else if (bk.is_file)

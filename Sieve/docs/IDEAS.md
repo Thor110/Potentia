@@ -1042,7 +1042,16 @@ repository.
 
 **Another reading, for the record.** A dimension whose units are the weights themselves (every
 model of one shape) would name a model by its weights: the binary line's files again, as long as
-the files. It is the predictive reading above that shortens anything.
+the files. It is the predictive reading above that shortens anything. *Built (10 October 2026),
+as the hallway's AI line* (`aispace-v1`, SPECIFICATIONS §12.0d), Edward's choices: an item is a
+model, and the default shape is a micro model (1 layer, width 16, 2 heads, a vocabulary of the 256
+bytes, 4 bits a weight: 8,192 weights, 2^32768 models). Each model is run by the engine above, so it
+can be talked to; almost every one babbles, and positional neighbours say nearly the same thing.
+It names nothing more cheaply than its file does, as this paragraph says; what it gives is the
+space made walkable, and a place for priors over weights (§16.8b) to become a guided ordering.
+- **Next on this line:** filters on the weights themselves (what a model says is floating point,
+  so it cannot decide which models survive until the arithmetic is pinned), a guided ordering by a prior over weights, warping a model in from
+  the hallway, and larger shapes as the engine gets faster.
 
 ## 16. Edward's list of 10 October 2026, evaluated
 
@@ -1166,7 +1175,9 @@ pinned model line is what would name text under a model. Ollama could still supp
 weigh text by (on COST, as an estimate), never to address it. *Then (10 October 2026), Edward's choice:* no
 Ollama; Sieve runs the model itself (`sieve chat`, SPECIFICATIONS §12.0c): its own tokenizer, read
 from the model's tokenizer.json, and its own forward pass, on the processor. The chat viewer and,
-later, the pinned arithmetic grow from that one engine.
+later, the pinned arithmetic grow from that one engine. *Built (10 October 2026):* the AI line
+(SPECIFICATIONS §12.0d, §15 "Another reading"): every model of a small shape on the shelves, each
+one talked to in hand on that engine (Enter), and `sieve ai` on the command line.
 - **(a) Filters from RLHF constants:** the preferences a model was tuned to; not available to us,
   so an idea for later, as Edward says.
 - **(b) A noise gradient as the primary filter for model weights:** weights made procedurally follow

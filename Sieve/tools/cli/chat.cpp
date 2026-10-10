@@ -117,6 +117,18 @@ int cmd_chat(const Args& a)
     if (a.has("seed")) sampling.seed = a.get_u32("seed", 1);
     llm::Sampler sampler(sampling);
     const size_t max_tokens = a.has("max-tokens") ? a.get_positive("max-tokens", 512) : 512;
+    if (a.has("raw"))
+    {
+        // No chat around it: the model continues the text it is given (a model with no chat format,
+        // such as one off the AI line's shelves).
+        const std::string text = a.has("prompt") ? a.get("prompt") : std::string("\n");
+        llm::continue_text(model, tok, text, sampler, max_tokens, [&](const std::string& piece) {
+            std::cout << piece << std::flush;
+            return true;
+        });
+        std::cout << "\n";
+        return 0;
+    }
     llm::Chat chat(model, tok, a.has("system") ? a.get("system") : std::string(llm::Chat::kDefaultSystem));
     std::cerr << "model        " << a.get("model") << ": " << model.config().layers << " layers, " << (model.weight_bytes() >> 20) << " MB of weights, loaded in "
               << std::lround(load_s * 10) / 10.0 << " s\n";

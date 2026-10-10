@@ -32,11 +32,15 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <map>
+#include <optional>
 #include <memory>
 #include <string>
 #include <vector>
 
 namespace sieve::llm {
+
+struct Matrix;
 
 struct Config
 {
@@ -52,6 +56,8 @@ class Model
 public:
     // From config.json and the safetensors file of its weights. `threads` 0: as many as the machine has.
     Model(const json::Value& config, const std::filesystem::path& safetensors, unsigned threads = 0);
+    // From config.json and the tensors themselves, by name, in 32-bit floats, row-major.
+    Model(const json::Value& config, const std::map<std::string, std::vector<float>>& tensors, unsigned threads = 0);
     ~Model();
     Model(const Model&) = delete;
     Model& operator=(const Model&) = delete;
@@ -68,7 +74,9 @@ private:
     std::unique_ptr<Impl> impl_;
     Config cfg_;
     size_t pos_ = 0;
+    void build(const std::function<bool(const std::string&)>& has, const std::function<Matrix(const std::string&, size_t, size_t)>& get);
 };
+
 
 // Choosing the next token from the logits.
 struct Sampling
@@ -91,6 +99,12 @@ private:
     uint64_t state_;
     double uniform(); // [0, 1), the same on every machine for a seed
 };
+
+// A text continued by a model, with no chat around it: the text's tokens are fed (without added
+// tokens), then the model's choices, until `max_tokens` or `stop` (if given) is chosen. `on_text`
+// as Chat::reply's. Returns what the model wrote.
+std::string continue_text(Model& model, const Tokenizer& tok, const std::string& text, Sampler& sampler, size_t max_tokens,
+                          const std::function<bool(const std::string&)>& on_text = {}, std::optional<uint32_t> stop = std::nullopt);
 
 // A conversation with a model in ChatML.
 class Chat

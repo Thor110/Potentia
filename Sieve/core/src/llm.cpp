@@ -45,6 +45,8 @@ inline float widen(uint16_t b)
     return f;
 }
 
+} // namespace
+
 // A weight matrix (rows x cols, row-major) as stored: BF16 kept as it is, anything else widened.
 struct Matrix
 {
@@ -75,6 +77,8 @@ struct Matrix
     }
     float at(size_t r, size_t c) const { return bf16.empty() ? f32[r * cols + c] : widen(bf16[r * cols + c]); }
 };
+
+namespace {
 
 // A small pool of threads that share out the rows of a product.
 class Pool
@@ -256,16 +260,37 @@ Model::Model(const json::Value& config, const std::filesystem::path& file, unsig
     const safetensors::Header h = safetensors::read_header(in);
     std::map<std::string, const safetensors::Tensor*> by;
     for (const safetensors::Tensor& t : h.tensors) by[t.name] = &t;
-    auto get = [&](const std::string& name, size_t rows, size_t cols) {
-        const auto it = by.find(name);
-        if (it == by.end()) bad("the file has no tensor " + name);
-        return load(in, h.start_bytes(), *it->second, rows, cols);
-    };
+    build([&](const std::string& name) { return by.count(name) != 0; },
+          [&](const std::string& name, size_t rows, size_t cols) {
+              const auto it = by.find(name);
+              if (it == by.end()) bad("the file has no tensor " + name);
+              return load(in, h.start_bytes(), *it->second, rows, cols);
+          });
+}
+
+Model::Model(const json::Value& config, const std::map<std::string, std::vector<float>>& tensors, unsigned threads)
+    : impl_(std::make_unique<Impl>(threads ? threads : std::max(1u, std::thread::hardware_concurrency()))), cfg_(Config::from_json(config))
+{
+    build([&](const std::string& name) { return tensors.count(name) != 0; },
+          [&](const std::string& name, size_t rows, size_t cols) {
+              const auto it = tensors.find(name);
+              if (it == tensors.end()) bad("no tensor " + name);
+              if (it->second.size() != rows * cols) bad("tensor " + name + " is not the shape the configuration gives");
+              Matrix m;
+              m.rows = rows;
+              m.cols = cols;
+              m.f32 = it->second;
+              return m;
+          });
+}
+
+void Model::build(const std::function<bool(const std::string&)>& has, const std::function<Matrix(const std::string&, size_t, size_t)>& get)
+{
     const Config& c = cfg_;
     const size_t qd = size_t(c.heads) * c.head_dim, kvd = size_t(c.kv_heads) * c.head_dim;
     impl_->embed = get("model.embed_tokens.weight", c.vocab, c.hidden);
     impl_->norm = get("model.norm.weight", 1, c.hidden);
-    impl_->tied = c.tied || !by.count("lm_head.weight");
+    impl_->tied = c.tied || !has("lm_head.weight");
     if (!impl_->tied) impl_->out = get("lm_head.weight", c.vocab, c.hidden);
     impl_->layers.resize(c.layers);
     for (uint32_t l = 0; l < c.layers; ++l)
@@ -510,6 +535,35 @@ std::string Chat::reply(const std::string& message, Sampler& sampler, size_t max
     if (!closed) feed({im_end_});
     feed(tok_.encode("\n", false));
     return text;
+}
+
+std::string continue_text(Model& model, const Tokenizer& tok, const std::string& text, Sampler& sampler, size_t max_tokens,
+                          const std::function<bool(const std::string&)>& on_text, std::optional<uint32_t> stop)
+{
+    std::vector<float> logits;
+    for (const uint32_t id : tok.encode(text, false)) logits = model.step(id);
+    if (logits.empty()) throw std::invalid_argument("a text to continue must have at least one token");
+    std::vector<uint32_t> said;
+    std::string out, pending;
+    while (said.size() < max_tokens && model.position() < model.config().max_positions)
+    {
+        const uint32_t t = sampler.pick(logits, said);
+        if (stop && t == *stop) break;
+        said.push_back(t);
+        pending += tok.bytes_of(t);
+        const size_t n = whole(pending);
+        if (n)
+        {
+            const std::string piece = pending.substr(0, n);
+            pending.erase(0, n);
+            out += piece;
+            if (on_text && !on_text(piece)) break;
+        }
+        if (said.size() < max_tokens && model.position() < model.config().max_positions) logits = model.step(t);
+    }
+    out += pending;
+    if (on_text && !pending.empty()) on_text(pending);
+    return out;
 }
 
 } // namespace sieve::llm

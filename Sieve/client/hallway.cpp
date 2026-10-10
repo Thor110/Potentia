@@ -102,6 +102,11 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
             world_sieve_.reset();
             modes_[kWorldsLine] = FilterMode::Off;
         }
+        // AI: every language model of one shape (aispace-v1), with no filters yet; its byte tokenizer
+        // is the same for every shape.
+        ai_space_ = std::make_unique<AiSpace>(AiShape{shape.ai_layers, shape.ai_width, shape.ai_heads, shape.ai_bits}, key);
+        ai_tokenizer_ = std::make_unique<sieve::llm::Tokenizer>(sieve::json::parse(AiSpace::tokenizer_json()));
+        modes_[kAiLine] = FilterMode::Off;
         // The music's tracks are this hallway's: their addresses take its cover and title shapes.
         set_track_shape(image.space, title);
         // The binary line: every file up to binary_bytes, titled, with a cover as audio and video have.
@@ -270,6 +275,7 @@ void Hallway::move_tiles(int64_t d)
 // survivors; otherwise the line hides instead.
 FilterMode Hallway::effective_mode(int i) const
 {
+    if (i == kAiLine) return FilterMode::Off; // no filters on the AI line yet
     if (i == kBinaryLine)
     {
         if (!binary_sieve_ || binary_sieve_->empty()) return FilterMode::Off;
@@ -316,11 +322,13 @@ bool Hallway::has_filters() const
     if (on_binary()) return binary_sieve_ && !binary_sieve_->empty();
     if (on_composition()) return comp().sieve && !comp().sieve->empty();
     if (on_worlds()) return world_sieve_ && !world_sieve_->empty();
+    if (on_ai()) return false;
     return on_books() ? book_sieve_ && !book_sieve_->empty() : !stack().empty();
 }
 
 std::string Hallway::compute_filter_status() const
 {
+    if (on_ai()) return tr("hud.filters.none"); // no filters on the AI line yet
     if (on_books())
     {
         if (!has_filters()) return tr("hud.filters.none");
@@ -420,6 +428,7 @@ BigUint Hallway::units_of(int i) const
     if (is_composition(i))
         return effective_mode(i) == FilterMode::Compact ? comps_[size_t(i)].sieve->count() : comps_[size_t(i)].space->size();
     if (i == kWorldsLine) return effective_mode(i) == FilterMode::Compact ? world_sieve_->count() : world_space_->size();
+    if (i == kAiLine) return ai_space_->size();
     if (guided_ && line_at(i).guided) return BigUint::pow(2, zoom_);
     if (effective_mode(i) == FilterMode::Compact) return full_here(i) ? full_[size_t(i)]->size() : compact_[i]->count();
     return titled_[size_t(i)] ? titled_[size_t(i)]->size() : line_at(i).space.size();
@@ -630,6 +639,13 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
             b.title = p.title;
             b.world = std::move(p);
         }
+        else if (on_ai())
+        {
+            // A model: its weights are its address (aispace-v1).
+            b.ai = ai_space_->digits_at(b.index, mode_);
+            b.hex = ai_space_->hex_of(b.index);
+            b.fraction = b.index.is_zero() ? 0.0 : std::pow(10.0, b.index.log10_approx() - ai_space_->size().log10_approx());
+        }
         else if (on_binary())
         {
             // A file: its title, its cover, and the file itself by its own positional index. Only
@@ -790,7 +806,7 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
             b.hex = sp.hex_of(address);
             b.fraction = sp.fraction_of(address);
         }
-        if (!on_books() && !on_models() && !on_worlds() && !on_composition() && !b.survivor && !stack().empty())
+        if (!on_books() && !on_models() && !on_worlds() && !on_ai() && !on_composition() && !b.survivor && !stack().empty())
         {
             sieve::cli::timings::Scope timed_filters("hallway.item.filters");
             const int fail = stack().first_failure(b.unit);
@@ -1118,6 +1134,17 @@ void Hallway::cycle_ordering()
         message(trf(mode_ == AddressMode::Positional ? "msg.ordering.books_positional" : "msg.ordering.books_scrambled", {ordering_name()}));
         return;
     }
+    if (on_ai())
+    {
+        // A model keeps its weights across the change: the same model, at its other address.
+        const Book* ref = reference_book();
+        const std::optional<AiSpace::Digits> digits = ref && !ref->empty ? ref->ai : std::nullopt;
+        mode_ = mode_ == AddressMode::Positional ? AddressMode::Scrambled : AddressMode::Positional;
+        rebase();
+        if (digits) place(ai_space_->index_of(*digits, mode_), false);
+        message(trf(mode_ == AddressMode::Positional ? "msg.ordering.positional" : "msg.ordering.scrambled", {ordering_name()}));
+        return;
+    }
     if (on_worlds())
     {
         // A world keeps its cover, title and models across the change, as a book does.
@@ -1192,6 +1219,7 @@ bool Hallway::warp(const std::string& input)
     {
         // A world has no form to warp in from yet: its address (G), or sieve world --compose.
         if (on_worlds()) throw std::invalid_argument(tr("msg.warp.worlds"));
+        if (on_ai()) throw std::invalid_argument(tr("msg.warp.ai"));
         if (on_books())
         {
             // A book record, bound with sieve bind.
@@ -1297,6 +1325,7 @@ bool Hallway::go_to(std::string input)
         else if (on_books()) index = effective_mode() == FilterMode::Compact ? book_sieve_->parse(input) : books_->parse(input);
         else if (on_composition()) index = effective_mode() == FilterMode::Compact ? comp().sieve->parse(input) : comp().space->parse(input);
         else if (on_worlds()) index = effective_mode() == FilterMode::Compact ? world_sieve_->parse(input) : world_space_->parse(input);
+        else if (on_ai()) index = ai_space_->parse(input);
         else if (effective_mode() == FilterMode::Compact) // a compact address, as the books show (full: with its title and cover)
             index = full_here(li_) ? full_[size_t(li_)]->parse(input) : compact().parse(input);
         else if (const TitledSpace* ts = titled_here()) index = ts->parse(input);
@@ -1500,7 +1529,8 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
                 const Input which = input_;
                 const std::string t = text_;
                 close_input();
-                if (!t.empty()) which == Input::Warp ? warp(t) : go_to(t);
+                if (which == Input::Talk) talk(t); // an empty line too: the model goes on by itself
+                else if (!t.empty()) which == Input::Warp ? warp(t) : go_to(t);
             }
         }
         return;
@@ -1661,7 +1691,8 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
         break;
     case SDLK_RETURN:
     case SDLK_KP_ENTER:
-        if (in_hand_) apply_tailored(quit);
+        if (in_hand_ && in_hand_->ai) open_input(Input::Talk); // the AI line: say something to it
+        else if (in_hand_) apply_tailored(quit);
         break;
     case SDLK_Z:
         if (in_hand_) open_viewer();
@@ -1730,6 +1761,61 @@ void Hallway::close_input()
     SDL_StopTextInput(window_);
 }
 
+std::string Hallway::ai_says(const AiSpace& space, const sieve::llm::Tokenizer& tok, const AiSpace::Digits& d, size_t bytes)
+{
+    sieve::llm::Model model(space.config(), space.tensors_of(d), 1);
+    sieve::llm::Sampling s;
+    s.temperature = 0.8f;
+    s.top_p = 1.0f;
+    s.seed = 1;
+    sieve::llm::Sampler sampler(s);
+    return sieve::llm::continue_text(model, tok, "\n", sampler, bytes);
+}
+
+std::string Hallway::printable(const std::string& bytes)
+{
+    std::string out;
+    for (const char ch : bytes)
+    {
+        const uint8_t c = uint8_t(ch);
+        if (c >= 0x20 && c < 0x7F) out.push_back(ch);
+        else out += "\xc2\xb7"; // a middle dot
+    }
+    return out;
+}
+
+// The AI line: what you say is fed to the model in hand as bytes, a newline after it, and the model
+// writes back until it writes a newline itself (at most kTalkReply bytes). It is a model like any
+// other on the line, mostly noise: what comes back is what its weights make of what it was given.
+void Hallway::talk(const std::string& said)
+{
+    if (!in_hand_ || !in_hand_->ai) return;
+    constexpr size_t kTalkReply = 80;
+    if (!talk_model_ || talk_hex_ != in_hand_->hex)
+    {
+        talk_model_ = std::make_unique<sieve::llm::Model>(ai_space_->config(), ai_space_->tensors_of(*in_hand_->ai), 1);
+        talk_.clear();
+        talk_hex_ = in_hand_->hex;
+    }
+    const std::string text = said + "\n";
+    if (talk_model_->position() + text.size() + kTalkReply >= talk_model_->config().max_positions)
+    {
+        talk_model_->reset();
+        talk_ += tr("talk.full") + "\n";
+    }
+    sieve::llm::Sampling s;
+    s.temperature = 0.8f;
+    s.top_p = 1.0f;
+    // Its choices seeded by the conversation so far (the first eight bytes of its SHA-256), so the same
+    // words to the same model at the same point get the same answer on every machine.
+    const auto digest = sieve::Sha256::hash(talk_ + said);
+    s.seed = 0;
+    for (int i = 0; i < 8; ++i) s.seed = (s.seed << 8) | digest[size_t(i)];
+    sieve::llm::Sampler sampler(s);
+    const std::string reply = sieve::llm::continue_text(*talk_model_, *ai_tokenizer_, text, sampler, kTalkReply, {}, uint32_t('\n'));
+    talk_ += trf("talk.you", {said}) + "\n" + trf("talk.it", {reply}) + "\n";
+}
+
 // One-line summary of where you are (for scripted walks and testing).
 std::string Hallway::status()
 {
@@ -1758,6 +1844,7 @@ std::string Hallway::status()
                      std::to_string(degenerate) + " degenerate faces";
         }
         else if (first.world) where += " " + world_line_summary(*first.world) + " (" + std::to_string(first.world->slots.size()) + " models placed)";
+        else if (first.ai) where += " a model that says \"" + printable(ai_says(*ai_space_, *ai_tokenizer_, *first.ai, 24)) + "\"";
         else if (first.is_file) where += " " + file_type(first.head, first.file_size) + " " + binary_preview(first.head, 16, first.file_size);
         else if (line().kind == LineKind::Text) where += " \"" + ascii(utf8_encode(line().space.text_of(first.unit))) + "\"";
         if (first.guided) where += " (" + std::to_string(first.bits) + " bits)";
@@ -2488,6 +2575,7 @@ Hallway::VaultCheck Hallway::vault_check(const Book& b) const
     VaultCheck c;
     if (b.empty) return c;
     c.line = &line();
+    if (b.ai) return c; // a model's weights are numbers, not a picture or a text: nothing to judge (what it says is made, not shelved)
     c.covers = &unit_line(LineKind::Image).image;
     if (b.parts) c.parts = *b.parts;
     c.cover = b.cover;

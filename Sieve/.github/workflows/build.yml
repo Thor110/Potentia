@@ -263,6 +263,19 @@ jobs:
           $exe chat --model tinymodel --logits "The library holds every book. It's 2026." --logits-out tiny-logits.f32 > /dev/null
           python reference/sieve_ref.py llm-logits "The library holds every book. It's 2026." --model tinymodel --compare tiny-logits.f32
           $exe chat --model tinymodel --prompt "hello" --temperature 0 --max-tokens 8 > /dev/null
+          # The AI line (sieve ai): every model of one shape, its weights its address. The model at a
+          # bearing is the oracle's, file for file, in both orderings; its logits are the oracle's; its
+          # file warps back to its address; and saved, sieve chat --raw talks to it.
+          $exe ai | tr -d '\r' | q "^models       2^32768 "
+          for m in positional scrambled; do
+            $exe ai --bearing 246 --mode $m --out ai246-$m > /dev/null
+            python reference/sieve_ref.py ai-read --bearing 246 --mode $m --out ai246-$m-ref.safetensors > /dev/null
+            cmp ai246-$m/model.safetensors ai246-$m-ref.safetensors
+          done
+          $exe ai --warp ai246-positional | tr -d '\r' | q "^positional   aeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\.\.\."
+          $exe chat --model ai246-scrambled --logits "Hello, shelf." --logits-out ai-logits.f32 > /dev/null
+          python reference/sieve_ref.py llm-logits "Hello, shelf." --model ai246-scrambled --compare ai-logits.f32
+          $exe chat --model ai246-positional --raw --prompt "Hello" --max-tokens 16 > /dev/null
           # And the same line in the hallway: a sixth door, the cube in hand, green on clay.
           H=build/hallway
           [ -f build/Release/hallway.exe ] && H=build/Release/hallway.exe
@@ -333,9 +346,9 @@ jobs:
           # line's list. Each row here ticks a mode and the saved file says which line it was.
           # Closing the overlay is what writes it, which also covers that path.
           # The lines' rows follow the doors (image, pages, books, audio, tracks, video, movies,
-          # models, worlds, binary); the audio rows are six: its notes, its note set, and notes2's
-          # range, durations and voices.
-          for pair in "16 image" "19 text" "23 books" "24 audio" "27 audio" "30 tracks" "31 video" "35 movies" "36 models" "39 worlds" "41 binary"; do
+          # models, worlds, AI, binary); the audio rows are six: its notes, its note set, and notes2's
+          # range, durations and voices. (AI has no filters yet, so F on its rows opens none.)
+          for pair in "16 image" "19 text" "23 books" "24 audio" "27 audio" "30 tracks" "31 video" "35 movies" "36 models" "39 worlds" "45 binary"; do
             set -- $pair
             rm -f row$1.ini
             downs=$(python -c "print(','.join(['Down']*$1))")
@@ -386,18 +399,19 @@ jobs:
           # by the files' kinds, are checked with the other filters below).
           $H --no-menu --line binary --walk "0,0" --screenshot bin.png | sed -n 1p | q "^BINARY line"
           # The lines no longer loop into one another: they start and finish at binary.
-          # Left out of models is worlds, and left out of worlds is binary, where you are turned
-          # round to come out of its one door (in its left wall); back out through that door is
-          # worlds again. Right out of image is binary too, and there the door leads back to image.
+          # Left out of models is worlds, left out of worlds is AI, and left out of AI is binary, where
+          # you are turned round to come out of its one door (in its left wall); back out through that
+          # door is AI again. Right out of image is binary too, and there the door leads back to image.
           $H --no-menu --line models --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door7m.png | sed -n 1p | q "^WORLDS line"
-          $H --no-menu --line worlds --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door7.png | sed -n 1p | q "^BINARY line"
+          $H --no-menu --line worlds --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door7w.png | sed -n 1p | q "^AI line"
+          $H --no-menu --line ai --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door7.png | sed -n 1p | q "^BINARY line"
           # (A walk is in the walker's frame, so after being turned round, 4.2 is back the way you came.)
-          $H --no-menu --line worlds --pose "-1.7,7.0,0,0" --walk "-1,0;4.2,0" --screenshot door8.png | sed -n 2p | q "^WORLDS line"
+          $H --no-menu --line ai --pose "-1.7,7.0,0,0" --walk "-1,0;4.2,0" --screenshot door8.png | sed -n 2p | q "^AI line"
           $H --no-menu --line image --pose "1.7,7.0,0,0" --walk "1,0" --screenshot door9.png | sed -n 1p | q "^BINARY line"
           $H --no-menu --line image --pose "1.7,7.0,0,0" --walk "1,0;-1,0" --screenshot door10.png | sed -n 2p | q "^IMAGE line"
           # Binary's other side is the drop, always on its right: the short wall stops you at the
           # edge of the floor. No door, no crossing, whatever the doorway is doing at that z.
-          $H --no-menu --line worlds --pose "-1.7,7.0,0,0" --walk "-1,0;-9,0" --screenshot walk.png | sed -n 2p | q "^BINARY line.*x 1.650000"
+          $H --no-menu --line ai --pose "-1.7,7.0,0,0" --walk "-1,0;-9,0" --screenshot walk.png | sed -n 2p | q "^BINARY line.*x 1.650000"
           # There is no setting for it: not in Settings > Graphics, not in a settings file that
           # Graphics has just written, and not on the command line.
           rm -f be.ini
@@ -677,12 +691,23 @@ jobs:
           build/sieve world --read "$wa" --out hw-ref.obj > /dev/null
           cmp hw.obj hw-ref.obj
           $H --no-menu --line worlds --walk "0,0" --screenshot worlds.png | sed -n 1p | q "^WORLDS line, positional"
+          # The AI line in the hallway: the model at a bearing, saved with F, is the tool's file of it,
+          # byte for byte; talked to, it answers; the setup menu draws the AI rows and its broken bar.
+          build/sieve ai --bearing 137 --mode scrambled --out ai137 > /dev/null
+          aa=$(build/sieve ai --warp ai137 --address-out ai137.hex --mode scrambled > /dev/null; tr -d '\r\n' < ai137.hex)
+          $H --no-menu --line ai --mode scrambled --goto "$aa" --save-item hai.safetensors --screenshot hai.png > /dev/null
+          cmp hai.safetensors ai137/model.safetensors
+          $H --no-menu --line ai --walk "0,0" --take --talk "Hello there" --screenshot ai-talk.png | tr -d '\r' | tee ai-talk.txt | sed -n 1p | q "^AI line, positional"
+          q "^you: Hello there" ai-talk.txt
+          q "^it: " ai-talk.txt
+          downs=$(python -c "print(','.join(['Down']*41))")
+          $H --menu --press "$downs" --screenshot menu-ai.png | q "saved menu-ai.png"
                     # From the main menu: the same locator, with no world to walk to, so Enter does not go.
           $H --main-menu --locate tests/manifest_fixture/a.txt --press "Return" --screenshot locate-menu.png | q "file locator (main menu): open, no Go to it"
           # The demonstration (IDEAS 16.9): every dimension's item at each whole degree, as one
           # .sieve, the same on every machine; installing it gives every file back, and a bearing
           # typed in the navigator (X, Tab) is the same item again.
-          $H --no-menu --sample-degrees degrees --screenshot deg.png | tee deg.txt | q "^sample: 3600 items"
+          $H --no-menu --sample-degrees degrees --screenshot deg.png | tee deg.txt | q "^sample: 3960 items"
           $H --no-menu --sample-degrees degrees2 --sample-out degrees2.sieve --screenshot deg2.png > /dev/null
           diff -r degrees degrees2
           build/sieve install degrees.sieve --to deg_inst > /dev/null
@@ -864,10 +889,10 @@ jobs:
           $H --warp "$W" --press "X,Tab,1,8,0,Return" --screenshot navangle.png | tail -2 | sed -n 1p | q "50.0000000000% along"
           if $H --warp "$W" --press "X,Tab,3,6,0,Return" --screenshot navangle2.png | tail -2 | sed -n 1p | grep -q "went to"; then exit 1; fi
           start=$($H --mode guided --warp "$W" --zoom 20 --walk "0,0" --screenshot start.png | book)
-          # The corridor end to end and back: eight doors left from pages reach binary (books,
-          # audio, tracks, video, movies, models, worlds), which is where the run finishes, and
-          # eight right brings you back to the same book on pages.
-          out=$($H --mode guided --warp "$W" --zoom 20 --pose 0,7,-90,0 --walk "-2.3,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0" --screenshot guided.png)
+          # The corridor end to end and back: nine doors left from pages reach binary (books,
+          # audio, tracks, video, movies, models, worlds, AI), which is where the run finishes, and
+          # nine right brings you back to the same book on pages.
+          out=$($H --mode guided --warp "$W" --zoom 20 --pose 0,7,-90,0 --walk "-2.3,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0" --screenshot guided.png)
           echo "$out"
           echo "$out" | q "BOOKS line"
           echo "$out" | q "TRACKS line"
@@ -875,8 +900,9 @@ jobs:
           echo "$out" | q "MOVIES line"
           echo "$out" | q "MODELS line"
           echo "$out" | q "WORLDS line, positional"
+          echo "$out" | q "AI line, positional"
           echo "$out" | q "BINARY line"
-          echo "$out" | sed -n 8p | q "^BINARY line"
+          echo "$out" | sed -n 9p | q "^BINARY line"
           echo "$out" | tail -2 | sed -n 1p | q "^PAGES line"
           test "$(echo "$out" | tail -2 | book)" = "$start"
           # Loops: a 2-character line is 729 units = 6 tiles, so tile 6 starts the second copy,
@@ -1110,6 +1136,7 @@ jobs:
           python sieve_ref.py book-vectors | diff - ../tests/vectors_books_v1.tsv
           python sieve_ref.py composition-vectors | diff - ../tests/vectors_compositions_v1.tsv
           python sieve_ref.py world-vectors | diff - ../tests/vectors_worlds_v1.tsv
+          python sieve_ref.py ai-vectors | diff - ../tests/vectors_ai_v1.tsv
           python sieve_ref.py titled-vectors | diff - ../tests/vectors_titled_v1.tsv
           python sieve_ref.py binary-vectors | diff - ../tests/vectors_binary_v1.tsv
           python sieve_ref.py chunk-vectors | diff - ../tests/vectors_chunks_v1.tsv

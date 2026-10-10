@@ -70,6 +70,9 @@ const char* kUsage =
     "  --world-models N    worlds: models per world (default 4); a world is a cover, a title and N\n"
     "                      models of the models line, each in a cell of the grid with one of 24 turns\n"
     "  --world-grid G      worlds: cells along each axis of a world (default 8; worldspace-v1)\n"
+    "  --ai-layers L  --ai-width H  --ai-heads A  --ai-bits B\n"
+    "                      AI: every language model of this shape (default 1 layer, width 16, 2 heads, 4 bits a\n"
+    "                      weight; aispace-v1), numbered by its weights: take one and talk to it (Enter)\n"
     "  --ffmpeg PATH       the ffmpeg that reads and writes picture, video and sound formats beyond\n"
     "                      PNG, JPEG, BMP, GIF, TGA, WAV and MIDI (default: SIEVE_FFMPEG, then beside\n"
     "                      the hallway, then the PATH); kept in the settings\n"
@@ -111,7 +114,7 @@ const char* kUsage =
     "  --size WxH          window size (default 1280x720)\n"
     "  --pose X,Z,YAW,PITCH  camera position and angles in degrees\n"
     "  --tile N            then move N tiles along the corridor\n"
-    "  --take              take the book you are looking at off the shelf\n"
+    "  --take              take the book you are looking at off the shelf\n"    "  --talk TEXT         with --take on the AI line: say TEXT to the model in hand; the conversation is printed\n"
     "  --tailor PATH       with --screenshot, the item in hand on COST: K, waited for, and what Return\n"
     "                      would apply saved to PATH as a settings file\n"
     "  --save-item PATH    then save it as a file (F on the item page), to PATH\n"
@@ -403,7 +406,12 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
                                     a.has("track-units") ? a.get_positive("track-units", 4) : 4u,
                                     a.has("movie-units") ? a.get_positive("movie-units", 4) : 4u,
                                     a.has("world-models") ? a.get_positive("world-models", 4) : 4u,
-                                    a.has("world-grid") ? a.get_positive("world-grid", 8) : 8u};
+                                    a.has("world-grid") ? a.get_positive("world-grid", 8) : 8u,
+                                    a.has("ai-layers") ? a.get_positive("ai-layers", 1) : 1u,
+                                    a.has("ai-width") ? a.get_positive("ai-width", 16) : 16u,
+                                    a.has("ai-heads") ? a.get_positive("ai-heads", 2) : 2u,
+                                    a.has("ai-bits") ? a.get_positive("ai-bits", 4) : 4u};
+    sieve::AiShape{shape.ai_layers, shape.ai_width, shape.ai_heads, shape.ai_bits}.check(); // a shape the AI line can have, or say why not
     auto hall = std::make_unique<Hallway>(window, renderer, std::move(lines), filters,
                                           a.has("book-pages") ? a.get_u32("book-pages", 4) : 4, shape);
     hall->set_line(start_line);
@@ -730,6 +738,19 @@ int run(const Args& a)
         hall->render(); // computes what you are looking at
         hall->settle_vault(); // the vault's verdicts on the pictures in view, so the picture shows them
         if (a.has("take")) hall->take_hovered();
+        // The AI line: say something to the model in hand, and print the conversation.
+        if (a.has("talk"))
+        {
+            hall->talk(a.get("talk"));
+            std::string line;
+            for (const char c : hall->conversation() + "\n")
+                if (c == '\n')
+                {
+                    if (!line.empty()) std::cout << Hallway::printable(line) << "\n";
+                    line.clear();
+                }
+                else line.push_back(c);
+        }
         // K on the item in hand, waited for, and what Return would apply saved as a settings file.
         if (a.has("tailor") && !hall->tailor_now(a.get("tailor")))
             std::cerr << "--tailor: nothing tailored (no item in hand on the pages, image, audio or video line)\n";

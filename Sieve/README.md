@@ -4,7 +4,7 @@
 
 Sieve grew out of the Gallery of Babel in **Potentia**. Potentia itself, the alignment thesis and the preservation of AI models, lives in the parent repository. Sieve is the search-space engine and its hallway.
 
-Implementation of [SPECIFICATIONS.md](docs/SPECIFICATIONS.md) (v2.0). This covers **M1** (the exhaustive sieve), **M2** (raw addressing and warp), **M3** for text (entropy-ordered "guided" addresses from a pinned model), and the first version of all nine lines: **pages, image, audio and video**, **books**, **tracks** and **movies** composed from them, **models** (3D meshes) and **binary** (every file), with maps of verified anchors across them.
+Implementation of [SPECIFICATIONS.md](docs/SPECIFICATIONS.md) (v2.0). This covers **M1** (the exhaustive sieve), **M2** (raw addressing and warp), **M3** for text (entropy-ordered "guided" addresses from a pinned model), and the first version of all eleven lines: **pages, image, audio and video**, **books**, **tracks** and **movies** composed from them, **models** (3D meshes), **worlds** composed of models, **AI** (language models) and **binary** (every file), with maps of verified anchors across them.
 
 **Concept and architecture by Edward James Gordon.**
 
@@ -209,6 +209,8 @@ Every choice is applied at once and saved to `sieve-hallway.ini` next to the exe
 In the hallway the models line is green wireframe on clay. **Pre-rendered display size** in the setup menu's GLOBAL section sets how wide the picture on every item is drawn, from 16 pixels to the renderer's widest texture (64 by default): sharper pictures and more readable pages, and four times the memory each time it doubles, so it trades directly against how many the **display cache** holds. Changing it throws the cache away rather than stretching what is in it.
 
 **Worlds.** The WORLDS line (after MODELS) holds models placed in a world: a cover, a title and N models of the models line (**models per world**, 4), each in a cell of a grid of G cells along each axis (**grid**, 8) and turned by one of the 24 rotations that take a cube onto itself, all one number (`worldspace-v1`, SPECIFICATIONS §12.0). A cell is a model wide, so every coordinate stays exact and a world's `.obj` reads the same everywhere. On the shelf a world is a crate with the whole world drawn on its front under its title; in hand it turns like a model (A, D, the mouse, R to set it upright), with its `.obj` beside it. F saves the `.obj`, and J finds that file on the binary line. Its filters judge the cover, the title and each model (by the models line's own filters); a model's place has none. Worlds have no textures yet: they wait for UVs (IDEAS §14). There is nothing to warp in from yet (T): go to an address (G), or find one with `sieve world --compose "MODEL:x.y.z.turn|..."`, which prints its addresses, and `sieve world --read ADDR --out world.obj` gives its `.obj`.
+
+**AI.** The AI line (after WORLDS) holds every language model of one shape (`aispace-v1`, SPECIFICATIONS §12.0d): a Llama model of a few **layers** (1), a **width** (16) and its attention **heads** (2), whose vocabulary is the 256 bytes, each weight one of 2^B values (**bits a weight**, 4). Its weights, written out as digits, are its address, so walking the line downloads nothing: at the defaults a model is 8,192 weights and its address 8,192 hex digits, and there are 2^32768 of them. On the shelf a model is a crate showing what it says when started from a newline; almost every one babbles. Take one in hand and press Enter to say something to it (`SAY > `): it is run by Sieve's own engine (the one `sieve chat` uses), continues your line byte by byte until it writes a newline of its own (at most 80 bytes), and remembers the conversation until its 512 positions are full, when it starts again. The setup menu's AI rows set the shape (the width steps so that the heads still divide it), and the map draws the line's bar broken when it is far longer than the others. F saves the model as a `.safetensors` file, named by the start of its address, and J finds that file on the binary line; the viewer's WEIGHTS tab lists the tensors and the digits. The line has no filters yet, and a model cannot be warped in from the hallway (T): `sieve ai --warp FOLDER` gives the address of a model of the line's shape, and `sieve ai --out` writes a model's files, which `sieve chat --raw` talks to.
 
  Every slot holds the same **crate**, because a mesh cannot be read at a hundred and twenty-eight to a tile — so each crate in your room and the rooms either side has its model rendered to a small flat image and printed on its front, nearest you first, for a few milliseconds a frame; rooms further off wear the face of the same slot in your room until you reach them. The pictures are kept in a cache whose size is **display cache** in the setup menu's GLOBAL section (8 MB steps, as far as **Graphics Memory** in Settings > Graphics allows; the row says how much the rooms with pictures need). FIND MY LIMITS sizes it for those rooms: yours and **Picture Distance** either side (Settings > Graphics, 1 at first, so three rooms). **View Distance**, beside it, is how many rooms are drawn and kept either side of you (7 at first). If it is set smaller, the hallway says so and gives the faces to the crates nearest you. Walking keeps the ones still nearby and drops the rest. Take a crate off the shelf (**E**) and the model itself is in your hands: turn it with the mouse, or **A** and **D**, **R** to set it upright, with its `.obj` text beside it — the same text that is a page on the `ascii96` line. The pictures on the crates are always drawn from the same angle, so turning the one in your hands draws nothing again, and a model put back comes to hand upright the next time.
 
@@ -855,7 +857,7 @@ The full guide, with what the installer's packing does and what it measures to, 
 
 To hand someone **one file**, make an installer program: `sieve locate FOLDER --program "NAME installer.exe"`, or the File Locator's "Make an installer..." (it makes a program unless you name the file `.sieve`). That is a copy of `sieve-install` with the installer attached to its end; run it and it installs, and `sieve install` reads it too. It is the program plus the installer plus 24 bytes. `sieve-install` is built on a trimmed SDL of its own (static, optimised for size, with no sound, controllers or GPU), which the first build compiles once, so every installer program carries as little as it can: about 1.5 MB on Linux. (`-DSIEVE_SMALL_INSTALLER=OFF` links the hallway's SDL instead; if that is a shared SDL, the program then needs `SDL3.dll` beside it.)
 
-**A demonstration: every dimension at every degree.** `hallway --no-menu --sample-degrees DIR --screenshot x.png` saves, for every dimension and every whole degree from 0 to 359, the item that bearing names (the first unit at or past it, as the navigator's bearing field goes), into `DIR/<dimension>/` as its file named by its title (pictures one pixel a pixel, as J reads them; a binary file as its bytes; a cover is not saved), says which file each degree gave, and makes the folder into Sieve instructions (`DIR.sieve`, or `--sample-out FILE`). At the default shapes, ten dimensions, that is 3,600 items, 1,055,836 bytes, in a `.sieve` of 436,788 bytes. Installing it gives every file back, each checked against its SHA-256, and typing the same bearing in the navigator (X, Tab) lands on the same item again.
+**A demonstration: every dimension at every degree.** `hallway --no-menu --sample-degrees DIR --screenshot x.png` saves, for every dimension and every whole degree from 0 to 359, the item that bearing names (the first unit at or past it, as the navigator's bearing field goes), into `DIR/<dimension>/` as its file named by its title (pictures one pixel a pixel, as J reads them; a binary file as its bytes; a cover is not saved), says which file each degree gave, and makes the folder into Sieve instructions (`DIR.sieve`, or `--sample-out FILE`). At the default shapes, eleven dimensions, that is 3,960 items, 13,321,756 bytes (most of them the AI line's models, 131,072 bytes of weights each), in a `.sieve` of 482,495 bytes. Installing it gives every file back, each checked against its SHA-256, and typing the same bearing in the navigator (X, Tab) lands on the same item again.
 
 ### `bind`, `unbind`: books
 
@@ -916,7 +918,7 @@ For SmolLM2-360M-Instruct (Hugging Face, `HuggingFaceTB/SmolLM2-360M-Instruct`, 
 ### `chat`: talk to a language model, run by Sieve itself
 
 ```
-sieve chat --model FOLDER [--prompt TEXT] [--system TEXT] [--max-tokens N] [--temperature T] [--top-p P] [--seed S]
+sieve chat --model FOLDER [--prompt TEXT] [--raw] [--system TEXT] [--max-tokens N] [--temperature T] [--top-p P] [--seed S]
 sieve chat --model FOLDER --encode TEXT | --logits TEXT
 ```
 
@@ -929,12 +931,40 @@ The engine of the coming AI dimension (IDEAS §15). FOLDER is a Llama model as i
 | `--max-tokens N` | The longest reply (512). |
 | `--temperature T`, `--top-p P`, `--top-k K`, `--repeat-penalty R` | How it chooses each token (0.2 and 0.9 by default, as SmolLM2's makers suggest; temperature 0: always the likeliest). |
 | `--seed S` | The same seed gives the same reply. |
+| `--raw` | No chat format: the model continues the text as it is (for the AI line's models, which know no chat). |
 | `--threads N` | Threads for the model; the result does not change. |
 | `--encode TEXT` | How the tokenizer reads a text: its tokens. |
 | `--logits TEXT` | The five likeliest next tokens after a text (`--logits-out FILE` writes them all). |
 
 ```sh
 sieve chat --model SmolLM2-360M-Instruct --prompt "Write a haiku about libraries"
+```
+
+### `ai`: the AI line, every language model of one shape
+
+```
+sieve ai [--ai-layers L] [--ai-width H] [--ai-heads A] [--ai-bits B] [--key K] [--mode MODE]
+         [--read ADDR | --bearing DEG | --browse N [--seed S]] [--prompt TEXT] [--max-tokens N] [--temperature T] [--out FOLDER]
+sieve ai --warp FOLDER|FILE.safetensors [--address-out FILE]
+```
+
+The AI line from the command line (SPECIFICATIONS §12.0d). With no address it says how big the line is. With an address, a bearing or `--browse`, it runs each model on Sieve's own engine and prints what it says after `--prompt` (a newline unless given; 64 bytes at temperature 0.8 by default); `--out` writes the model's `config.json`, `model.safetensors` and `tokenizer.json`. `--warp` takes such a file back to its address, if it is a model of the line's shape whose every weight is one of the line's values. The shape options are the hallway's.
+
+| Option | Meaning |
+| :--- | :--- |
+| `--ai-layers L`, `--ai-width H`, `--ai-heads A`, `--ai-bits B` | The shape: layers (1), width (16, the feed-forward four times it), heads (2, of an even size), bits a weight (4). |
+| `--read ADDR` | The model at an address, in `--mode`'s ordering. |
+| `--bearing DEG` | The model at a bearing of whole degrees, as the navigator goes. |
+| `--browse N` | N models at random (`--seed S` to repeat a run). |
+| `--prompt TEXT`, `--max-tokens N`, `--temperature T`, `--seed S` | What it continues, and how. |
+| `--out FOLDER` | Write the model's files. |
+| `--warp PATH` | A model's file or folder back to its address (`--address-out FILE` writes it). |
+
+```sh
+sieve ai --bearing 246                                  # the model at 246 degrees, and what it says
+sieve ai --bearing 137 --mode scrambled --out m137      # another, its files kept
+sieve chat --model m137 --raw --prompt "Hello"          # and talked to
+sieve ai --warp m137 --mode scrambled                   # back to its address
 ```
 
 ### `version`: what produced a result

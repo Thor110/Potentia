@@ -192,7 +192,7 @@ std::string Hallway::binary_preview(const BinarySpace::Bytes& f, size_t most, ui
 std::string Hallway::one_line_preview(const Space::Digits& u)
 {
     if (on_binary()) return ""; // a file is written out by binary_preview
-    if (on_models() || on_worlds()) return ""; // a model (a world) is drawn, not written out: see draw_model
+    if (on_models() || on_worlds() || on_ai()) return ""; // a model (a world) is drawn, not written out: see draw_model
     if (line().kind == LineKind::Text) return "\"" + ascii(utf8_encode(line().space.text_of(u))) + "\"";
     if (line().kind == LineKind::Audio)
     {
@@ -320,7 +320,7 @@ void Hallway::draw_hud(int w, int h)
     const std::string loop = trf("hud.loop", {loop_label_}) + (loop_.fills_whole_tiles()
                                                                                  ? std::string()
                                                                                  : " " + trf("hud.loop.padding", {std::to_string(loop_.padding())}));
-    text(10, 28, fit((on_books() ? books_->id() : on_composition() ? comp().space->id() : on_worlds() ? world_space_->id() : titled_here() ? titled_here()->id() : line().space.id()) + (guided_on() ? "   " + trf("hud.model", {line().model_id}) : std::string()) + "   " +
+    text(10, 28, fit((on_books() ? books_->id() : on_composition() ? comp().space->id() : on_worlds() ? world_space_->id() : on_ai() ? ai_space_->id() : titled_here() ? titled_here()->id() : line().space.id()) + (guided_on() ? "   " + trf("hud.model", {line().model_id}) : std::string()) + "   " +
                      loop + per_tile + "   " + filter_status() + "   " +
                      (on_binary() ? trf("hud.door_one", {tr(theme_of(binary_from_).key)})
                                   : trf("hud.doors", {tr(theme_of((li_ + 1) % kLines).key), tr(theme_of((li_ + kLines - 1) % kLines).key)})),
@@ -387,12 +387,14 @@ void Hallway::draw_hud(int w, int h)
                     text(tx, below, fit(file_type(bk.head, bk.file_size) + "  " + binary_preview(bk.head, 16, bk.file_size), room, 1), 1, ink);
                 else if (bk.model) text(tx, below, fit(model_line_summary(*bk.model), room, 2), 2, ink);
                 else if (bk.world) text(tx, below, fit(world_line_summary(*bk.world), room, 2), 2, ink);
+                else if (bk.ai) text(tx, below, fit("\"" + printable(ai_said(bk)) + "\"", room, 2), 2, ink);
                 else if (covered) text(tx, below, fit(one_line_preview(u), room, 1), 1, ink); // a video's cover stands for it
                 else if (line().kind == LineKind::Image || line().kind == LineKind::Video) draw_pixels(u, 20, below, 60, 0);
                 else text(20, below, wrap(one_line_preview(u), size_t(std::max(20.0f, (panel_w - 40) / 16)))[0], 2, ink);
             }
             else if (bk.model) text(20, y, model_line_summary(*bk.model), 2, ink);
             else if (bk.world) text(20, y, world_line_summary(*bk.world), 2, ink);
+            else if (bk.ai) text(20, y, fit("\"" + printable(ai_said(bk)) + "\"", std::min(W - 20, 900.0f) - 40, 2), 2, ink);
             else if (line().kind == LineKind::Image || line().kind == LineKind::Video) draw_pixels(u, 20, y, 60, 0);
             else text(20, y, wrap(one_line_preview(u), size_t(std::max(20.0f, (std::min(W - 20, 900.0f) - 40) / 16)))[0], 2, ink);
         }
@@ -410,7 +412,8 @@ void Hallway::draw_hud(int w, int h)
                                             : on_sound()                                                       ? "prompt.warp.sound"
                                             : line().kind == LineKind::Audio                                   ? "prompt.warp.notes"
                                                                                                                : "prompt.warp.text")
-                                       : tr("prompt.goto");
+                                       : input_ == Input::Talk ? tr("prompt.talk")
+                                                               : tr("prompt.goto");
         panel(10, H / 2 + 40, W - 20, 34);
         text(20, H / 2 + 49, prompt + text_ + ((SDL_GetTicks() / 400) % 2 ? "_" : " "), 2, ink);
     }
@@ -500,6 +503,59 @@ float Hallway::draw_mesh(const std::vector<ModelSpace::Vertex>& verts, const std
         ty += 11;
     }
     return std::max(y + box, ty) + 6;
+}
+
+// What a model of the AI line says by itself (Hallway::ai_says, 48 bytes), worked out once a model.
+const std::string& Hallway::ai_said(const Book& b) const
+{
+    if (!b.ai) return ai_said_.emplace(std::string(), std::string()).first->second;
+    auto it = ai_said_.find(b.hex);
+    if (it == ai_said_.end())
+    {
+        if (ai_said_.size() > 4096) ai_said_.clear();
+        it = ai_said_.emplace(b.hex, ai_says(*ai_space_, *ai_tokenizer_, *b.ai, 48)).first;
+    }
+    return it->second;
+}
+
+// A model in hand: its shape, what it says by itself, and the conversation with it so far (Enter
+// says something to it: Hallway::talk), the last lines that fit.
+float Hallway::draw_ai(const Book& bk, float x, float y, float pw, float bottom)
+{
+    const SDL_Color ink = theme().edge, dim = mix(theme().edge, theme().bg, 0.45f);
+    const AiShape& sh = ai_space_->shape();
+    text(x + 14, y, trf(sh.layers == 1 ? "ai.summary.one" : "ai.summary", {std::to_string(sh.layers), std::to_string(sh.width), std::to_string(sh.heads),
+                                                                         std::to_string(ai_space_->weights()), std::to_string(sh.bits)}), 1, dim);
+    y += 18;
+    text(x + 14, y, tr("ai.says"), 1, dim);
+    y += 14;
+    const size_t cols = size_t(std::max(8.0f, (pw - 28) / 16));
+    for (const std::string& line : wrap(printable(ai_said(bk)), cols))
+    {
+        text(x + 14, y, line, 2, ink);
+        y += 20;
+    }
+    y += 8;
+    if (talk_hex_ == bk.hex && !talk_.empty())
+    {
+        // The conversation, newest at the foot: as many of its last lines as fit.
+        std::vector<std::string> lines;
+        size_t at = 0;
+        while (at < talk_.size())
+        {
+            const size_t nl = talk_.find('\n', at);
+            const std::string one = talk_.substr(at, nl == std::string::npos ? std::string::npos : nl - at);
+            for (const std::string& w : wrap(printable(one), size_t(std::max(8.0f, (pw - 28) / 8)))) lines.push_back(w);
+            at = nl == std::string::npos ? talk_.size() : nl + 1;
+        }
+        const size_t fit_n = size_t(std::max(1.0f, (bottom - y) / 14));
+        for (size_t i = lines.size() > fit_n ? lines.size() - fit_n : 0; i < lines.size(); ++i)
+        {
+            text(x + 14, y, lines[i], 1, ink);
+            y += 14;
+        }
+    }
+    return y;
 }
 
 // One line about a world, for the shelf row and the readout.
@@ -609,6 +665,7 @@ void Hallway::draw_in_hand(float W, float H)
     const float thing_top = cy; // the thing itself starts here: a click on it opens the viewer
     if (bk.model) cy = draw_model(*bk.model, x, cy, pw, y + ph - 110);
     else if (bk.world) cy = draw_world(*bk.world, x, cy, pw, y + ph - 110);
+    else if (bk.ai) cy = draw_ai(bk, x, cy, pw, y + ph - 110);
     else if (bk.parts) cy = draw_book(*bk.parts, x, cy, pw, y + ph - 110);
     else if (bk.is_file)
     {
@@ -674,7 +731,7 @@ void Hallway::draw_in_hand(float W, float H)
         text(x + 14, cy, l, 1, ink);
         cy += 10;
     }
-    text(x + 14, y + ph - 16, tr(bk.parts ? "hand.keys.book" : bk.model ? "hand.keys.model" : bk.world ? "hand.keys.world" : bk.is_file ? "hand.keys.file" : "hand.keys"), 1, ink);
+    text(x + 14, y + ph - 16, tr(bk.parts ? "hand.keys.book" : bk.model ? "hand.keys.model" : bk.world ? "hand.keys.world" : bk.ai ? "hand.keys.ai" : bk.is_file ? "hand.keys.file" : "hand.keys"), 1, ink);
 }
 
 // COST: what it costs to name the thing in your hand.
@@ -694,6 +751,7 @@ void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float botto
     const BigUint& n = on_books()         ? books_->size()
                        : on_composition() ? comp().space->size()
                        : on_worlds()      ? world_space_->size()
+                       : on_ai()          ? ai_space_->size()
                        : titled_here()    ? titled_here()->size()
                                           : line().space.size();
     constexpr double kBitsPerDigit = 3.321928094887362; // log2(10)
@@ -704,7 +762,7 @@ void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float botto
     // The guided length for this unit, whatever ordering you are walking in. It exists only on a
     // text line with a model behind it.
     const sieve::GuidedLine::Code* guided = nullptr;
-    if (!on_books() && !on_models() && !on_worlds() && !on_binary() && line().guided)
+    if (!on_books() && !on_models() && !on_worlds() && !on_ai() && !on_binary() && line().guided)
     {
         try
         {
@@ -816,6 +874,7 @@ void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float botto
     const std::string spec = on_books()         ? books_->id()
                              : on_composition() ? comp().space->id()
                              : on_worlds()      ? world_space_->id()
+                             : on_ai()          ? ai_space_->id()
                              : titled_here()    ? titled_here()->id()
                                                 : line().space.id();
     text(x + 14, cy, tr("cost.spec"), 1, dim);

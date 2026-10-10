@@ -1,77 +1,115 @@
-# `sieve chat`: the language model run by Sieve itself
+# The AI line: every language model of one shape
 
-Against `92c7a23` (sieve weights). As you chose: no Ollama. Sieve reads the model's own files and
-runs it, the engine the AI dimension's room and chat viewer will use.
+Against `2f2c21d` (sieve chat). As you chose: an item is a **model**, every model of one shape
+numbered by its weights, and the default shape is **Micro**.
 
-## What it does
-- **`sieve chat --model FOLDER`:** a conversation, a message a line, until an empty line.
-  - `--prompt TEXT`: one answer.
-  - FOLDER is the model as published: `config.json`, `model.safetensors`, `tokenizer.json`.
-- **Sampling:** temperature, top-p, top-k, repeat penalty and a seed. The defaults are 0.2 and 0.9,
-  as SmolLM2's makers suggest.
-- **The chat format:** ChatML, the format the model was trained on, with its default system line.
-- **Looking inside:**
-  - `--encode TEXT`: the tokens of a text;
-  - `--logits TEXT`: the five likeliest next tokens, and `--logits-out FILE` writes them all.
-- **Speed on SmolLM2-360M:** about 9 tokens a second on the 4 cores here; it loads in 1 to 3 s.
+## What it is (SPECIFICATIONS §12.0d, `aispace-v1`)
+- **The shape:** a Llama model with these settings:
+  - layers: 1;
+  - width: 16;
+  - heads: 2;
+  - bits a weight: 4.
+  Its feed-forward is four times the width, its vocabulary is the 256 bytes, its output is tied to
+  its embedding, and its norms are all 1.
+- **Micro:** 8,192 weights of 4 bits, so 2^32768 models, each with an address of 8,192 hex digits.
+- **The address is the weights:** their digits are written out, the first most significant, the
+  tensors in name order. Scrambled order is shuffle-sha256-v1 over the whole line. Walking the line
+  downloads nothing.
+- **Each model runs on Sieve's own engine** (the one `sieve chat` uses), so it can be talked to.
+  Almost every one babbles, and positional neighbours say nearly the same thing.
 
-## How it is built (SPECIFICATIONS §12.0c)
-- **The tokenizer** (`sieve/llm_tokenizer.hpp`): byte-level BPE read from `tokenizer.json`.
-  - the added tokens;
-  - every digit on its own;
-  - the GPT-2 splitting pattern, with Unicode letters and numbers from a table generated for
-    Unicode 14.0 (`tools/gen_unicode_classes.py`);
-  - merges by rank.
-- **The model** (`sieve/llm.hpp`): the Llama forward pass.
-  - BF16 weights kept as stored (690 MB in memory), the arithmetic in 32-bit floats;
-  - a key and value cache;
-  - threads that share out rows, each summed in one fixed order, so the answer is the same
-    whatever the number of threads.
+## In the hallway
+- **The door:** AI stands after WORLDS and before BINARY, in deep violet with lilac edges.
+- **On the shelf:** a crate showing what the model says, started from a newline. Bytes that are not
+  printable are drawn as `·`.
+- **In hand:** the shape, what it says, and the conversation. Enter opens `SAY > `:
+  - it continues your line until it writes a newline of its own, at most 80 bytes;
+  - when its 512 positions are full, it starts again.
+- **F, J and the viewer:**
+  - F saves `sieve-ai-<the address's first 12 hex digits>.safetensors`;
+  - J finds that file on the binary line;
+  - the viewer has a WEIGHTS tab: the tensors, then the digits.
+- **T:** refuses with a message pointing to `sieve ai --warp`.
+- **The setup menu:**
+  - AI rows for layers, width (in steps of twice the heads), heads (only those that keep the head
+    size even) and bits;
+  - FIND MY LIMITS grows the layers.
+- **The map:** a bar more than 8 times the median no longer sets the scale; it is drawn broken.
+  Without this, the AI line's 32,768 bits flattened every other bar.
+- **`--talk TEXT`** (after `--take`) prints a conversation, for scripts.
+- **The degrees sample** now has eleven dimensions: 3,960 items and 13,321,756 bytes (mostly the
+  models, 131,072 bytes of weights each). Its `.sieve` is 482,495 bytes.
+- **No filters yet.** What a model says is floating point, so it cannot decide which models
+  survive until the arithmetic is pinned (IDEAS §15).
 
-## Checked against the real thing
-- **The tokenizer:** our tokens equal Hugging Face's own tokenizer's on 5,736 texts: prose, code,
-  numbers, every kind of space, contractions, many scripts, emoji, control characters and random
-  strings.
-- **The forward pass:**
-  - on a 42-token chat prompt, every one of the 49,152 logits is within 0.000054 of the model's
-    official ONNX export, run by ONNX Runtime;
-  - the top 50 tokens come in the same order;
-  - the KL divergence is 2e-11.
-  - (PyTorch could not be installed here, as its download host is blocked; the ONNX export is from
-    the same commit, in float32.)
-- **In use:** " Paris" follows "The capital of France is", and it answers follow-up questions in a
-  conversation.
-
-## Not yet
-- **Floating point:** this is the viewer's engine. Addresses under a model need the pinned
-  arithmetic in IDEAS §15.
-- **Next:** the AI dimension in the hallway, with its room, its items and the chat viewer.
+## The tool
+- **`sieve ai`:**
+  - with no address, the line's size;
+  - `--read ADDR`, `--bearing DEG` or `--browse N` run each model and print what it says after
+    `--prompt`;
+  - `--out FOLDER` writes `config.json`, `model.safetensors` (F32) and `tokenizer.json`;
+  - `--warp PATH` takes a model's file back to its address, if it has the line's shape and every
+    weight is exactly one of the line's values.
+- **`sieve chat --raw`:** continues a text with no chat format, for the line's models. The reply's
+  statistics now read "read N tokens in X s; wrote M in Y s, Z a second".
+- **Core:**
+  - `sieve/aispace.hpp`;
+  - in `sieve/llm.hpp`: a `Model` built from tensors in memory, `continue_text` and
+    `Chat::last_reply_tokens()`.
 
 ## The oracle (`reference/sieve_ref.py`)
-- **`llm-encode-lines`:** a tokenizer written apart. It also equals Hugging Face's on the 5,736
-  texts.
-- **`llm-logits`:** the forward pass in 64-bit floats, with `--compare`.
-- **`llm-tokenizer-fixture`:** a small 300-token tokenizer learnt from a fixed text. It is saved
-  as `tests/llama_tiny_tokenizer.json`.
-- **`llm-corpus`:** texts to tokenize.
+- **`ai-vectors`:** `tests/vectors_ai_v1.tsv`, 30 rows. They cover three shapes, both orders, and
+  the bearings 0, 13, 137, 246 and 359: yours, Gemini's and mine.
+- **`ai-read`:** a model's files, which are the tool's byte for byte.
+- **`llm-logits`:** now reads F32 too. Its logits agree with the tool's to 1.5e-6.
 
 ## Checked here (Linux)
-- **Unit tests:** 150,402 checks, 0 failures. The new ones cover:
-  - the Unicode classes and the byte characters;
-  - the stand-in tokenizer;
-  - a small model giving the same logits with one thread and four, and after a reset;
-  - seeded and greedy sampling;
-  - a streamed chat.
-- **CI's new step, run here:**
-  - the stand-in tokenizer regenerated and compared;
-  - the oracle's tokens on its corpus;
-  - the logits within 1e-3 of the oracle's (they differ by 1e-6);
-  - a reply.
+- **Unit tests:** 150,848 checks, 0 failures. The new ones cover:
+  - the vectors;
+  - round trips;
+  - addresses off the line and bad shapes, refused;
+  - the values;
+  - a model talking.
+- **CI's new steps, all run here:**
+  - `sieve ai` at 246 degrees in both orders, against the oracle's files;
+  - warp;
+  - the logits against the oracle;
+  - `chat --raw`;
+  - the vectors regenerated and compared;
+  - in the hallway:
+    - the model at 137 degrees, saved with F, is the tool's file;
+    - a conversation;
+    - the setup menu;
+    - the doors WORLDS → AI → BINARY;
+    - the sample;
+    - the corridor walk of nine doors and back.
+- **Screenshots:**
+  - the shelves;
+  - a model in hand;
+  - the WEIGHTS viewer;
+  - the AI rows in the setup menu;
+  - the broken bar.
 - **Builds:** the tool, the tests and the hallway, with no warnings.
 - **Not checked:** I have not built on Windows.
 
 ## Docs
-- **SPECIFICATIONS:** §12.0c.
-- **README:** a `chat` section.
-- **IDEAS:** §15, the engine and what it was checked against; §16.8, your choice.
-- **HANDOFF:** a new entry.
+- **SPECIFICATIONS:**
+  - §12.0d;
+  - §3 now counts eleven lines.
+- **README:**
+  - the AI line's paragraph;
+  - a `sieve ai` section;
+  - `--raw` in `chat`;
+  - the eleven lines;
+  - the sample's numbers.
+- **IDEAS:**
+  - §15 "Another reading", marked built, with what comes next;
+  - §16.8.
+- **HANDOFF:**
+  - the line overview (eleven lines);
+  - a new entry.
+
+## Next on this line
+- Filters on the weights, and a guided order from a prior over weights (§16.8b).
+- Warping a model in from the hallway.
+- Larger shapes, as the engine gets faster.
