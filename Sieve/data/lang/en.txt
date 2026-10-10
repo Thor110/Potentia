@@ -17,9 +17,11 @@ main.subtitle = Every possible text, picture, melody, film, book and mesh, on on
 item.start = Start Sieve
 item.settings = Settings
 item.exit = Exit Sieve
+item.locator = File Locator
 item.designer = Filter Designer
 help.start = Set up the lines, then walk into the hallway.
 help.settings = Graphics, controls and language.
+help.locator = A file's or a folder's place, weighed and set beside zip and 7z; Sieve instructions and installers.
 help.designer = Make a filter plugin as nodes, test it as you go, and save it as a version.
 help.exit = Close Sieve.
 
@@ -207,6 +209,7 @@ setup.budget.filters.value = {0} of {1}
 setup.memory_changed = Memory Limit Change Detected : Press X to re-optimise all dimensions.
 setup.time_changed = Time Budget Change Detected : Press X to re-optimise all dimensions.
 setup.calculating = Calculating Dimension... ({0})
+setup.calculating.banner = Calculating Dimensions...
 setup.calculating.weighing = weighing the filters that clash
 setup.over_graphics = The model image cache and the world need more graphics memory than is set in Settings > Graphics.
 setup.over_time = The {0} line would take too long to open on this machine. Reduce it, or press FIND MY LIMITS.
@@ -470,6 +473,9 @@ loc.go_anyway = Go to it again to go anyway: the binary line is made {0} bytes l
 loc.went_past = went to a file of {0} bytes: the binary line is that long now, positional, only this room kept
 loc.too_long = the file is {0} bytes: set the BINARY length to at least that in the setup menu (it is {1})
 loc.keys = "F choose a file   D choose a folder   I install from Sieve instructions   Enter go to the file   Esc back"
+loc.keys.menu = "F choose a file   D choose a folder   I install from Sieve instructions   Esc back"
+loc.filters_kept = the tailored filters are saved: the next hallway built uses them
+loc.filters_not_saved = the tailored filters could not be saved ({0}): they are kept for this session
 
 # The address navigator (X): the whole address, a hex digit at a time.
 nav.title = ADDRESS NAVIGATOR

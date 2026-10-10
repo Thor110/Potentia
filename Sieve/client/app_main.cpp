@@ -80,7 +80,8 @@ const char* kUsage =
     "  --goto ADDR|P%|@T   go to an address, a percentage, or corridor tile T on start\n\n"
     "Menu:\n"
     "  The main menu opens first: Start Sieve, Settings (graphics, controls, language; saved to\n"
-    "  sieve-hallway.ini), the Filter Designer (make filter plugins as nodes) and Exit Sieve. Start Sieve opens the setup menu (Esc: back to the\n"
+    "  sieve-hallway.ini), the File Locator (as in the pause menu, without Go to it), the Filter Designer\n"
+    "  (make filter plugins as nodes) and Exit Sieve. Start Sieve opens the setup menu (Esc: back to the\n"
     "  main menu): adjust every line's state space and see the five lines as a map.\n"
     "  The magnifying glass beside a line's title (or F) opens its filters: tick filters, set\n"
     "  their parameters, and choose the mode: off, mark (failures faint), hide (failures left\n"
@@ -91,6 +92,7 @@ const char* kUsage =
     "  --settings PATH     application settings (default: sieve-hallway.ini next to the executable)\n"
     "  --language CODE     menu language for this run (a file in the lang folder, e.g. en)\n"
     "  --menu              with --screenshot: a picture of the setup menu (--press keys go to it)\n"
+    "                      (--busy: while the dimensions are still being calculated, if that is caught)\n"
     "  --main-menu         with --screenshot: a picture of the main menu (--press keys go to it)\n"
     "  --designer          with --screenshot: a picture of the filter designer; --design FILE opens a\n"
     "                      plugin, --script \"Down,Right,=text,Return\" runs keys and typed text, and\n"
@@ -130,7 +132,11 @@ const char* kUsage =
     "  --fps-counter       show the FPS counter\n"
     "  --bench N           before the screenshot, time N frames and print the frame rate\n"
     "  --settle N          before the screenshot, draw N frames standing still, so the item pictures arrive\n"
-    "  --locate PATH       open the File Locator on a file or folder (--tailored: and tailor the filters to its files)\n"
+    "  --sample-degrees DIR   every dimension's item at each whole degree 0-359, saved into DIR as its\n"
+    "                      file (pictures one pixel a pixel, as J reads them), and DIR made into Sieve\n"
+    "                      instructions (--sample-out FILE, else DIR.sieve)\n"
+    "  --locate PATH       open the File Locator on a file or folder (--tailored: and tailor the filters to its files;\n"
+    "                      with --main-menu: the main menu's, with no world to walk to)\n"
     "  --install FILE --install-to DIR   the File Locator's install, at once\n"
     "  --map PATH          choose a map for the node graph: a .map file, or a folder to map\n"
     "  --graph             open the node graph (on --map, or on this installation)\n"
@@ -255,6 +261,100 @@ std::vector<Line> make_lines(const Args& a)
     return lines;
 }
 
+// The BINARY length (bytes): the binary line's, as the setup menu sets it.
+uint32_t binary_length(const Args& a) { return a.has("binary-length") ? a.get_positive("binary-length", 32) : 32u; }
+
+// The File Locator from the main menu: files weighed under the lines the setup menu's settings
+// would build (made when the first weighing starts), and nowhere to walk to, so no Go to it.
+// Tailored filters, when used, are saved for the next hallway built. Esc comes back to the main
+// menu; `path` (scripted runs, --main-menu --locate PATH) opens it on a file or folder at once.
+// Returns false if the window was closed.
+std::vector<std::pair<SDL_Keycode, SDL_Keymod>> parse_presses(const std::string& spec); // below
+
+struct MenuLocator
+{
+    Args la;
+    std::vector<Line> lines;
+    std::once_flag made;
+    FilterConfig filters;
+};
+
+bool run_locator(SDL_Window* window, SDL_Renderer* renderer, const Settings& settings, FilterConfig& filters, const std::string& filters_path,
+                 const std::string& path = "", bool tailor = false, const std::string& screenshot = "", const std::string& presses = "")
+{
+    MenuLocator m;
+    settings.apply(m.la);
+    m.filters = filters;
+    FileLocator::Host host;
+    host.lines = [&m] {
+        std::call_once(m.made, [&m] { m.lines = make_lines(m.la); });
+        sieve::cli::WeighLines wl;
+        wl.pages = &m.lines[size_t(LineKind::Text)];
+        wl.image = &m.lines[size_t(LineKind::Image)];
+        wl.audio = &m.lines[size_t(LineKind::Audio)];
+        wl.video = &m.lines[size_t(LineKind::Video)];
+        wl.filters = m.filters;
+        wl.binary_bytes = binary_length(m.la);
+        return wl;
+    };
+    FileLocator* self = nullptr;
+    host.use_filters = [&](const FilterConfig& f) {
+        filters = m.filters = f;
+        try
+        {
+            f.save(filters_path);
+            self->say(tr("loc.filters_kept"));
+        }
+        catch (const std::exception& e)
+        {
+            self->say(trf("loc.filters_not_saved", {e.what()}));
+        }
+    };
+    FileLocator loc(window, renderer, host);
+    self = &loc;
+    if (!path.empty()) loc.locate_now(path, tailor);
+    else loc.open();
+    auto frame = [&] {
+        int ww = 0, wh = 0;
+        SDL_GetCurrentRenderOutputSize(renderer, &ww, &wh);
+        SDL_SetRenderLogicalPresentation(renderer, 0, 0, SDL_LOGICAL_PRESENTATION_DISABLED);
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        loc.draw(float(ww), float(wh));
+    };
+    if (!screenshot.empty())
+    {
+        for (const auto& [key, mod] : parse_presses(presses))
+        {
+            SDL_Event e{};
+            e.type = SDL_EVENT_KEY_DOWN;
+            e.key.key = key;
+            e.key.mod = mod;
+            loc.event(e);
+        }
+        std::cout << "file locator (main menu): " << (loc.is_open() ? "open" : "closed") << ", "
+                  << (loc.offers_go() ? "Go to it offered" : "no Go to it") << "\n";
+        frame();
+        if (!save_render(renderer, screenshot)) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
+        loc.stop();
+        return true;
+    }
+    bool quit = false;
+    while (loc.is_open() && !quit)
+    {
+        SDL_Event e;
+        while (SDL_PollEvent(&e))
+        {
+            if (e.type == SDL_EVENT_QUIT) quit = true;
+            else loc.event(e);
+        }
+        music_mode(MusicMode::Menus);
+        frame();
+        present(renderer);
+    }
+    loc.stop();
+    return !quit;
+}
+
 // "M,M,-,Shift+=" -> key presses.
 // "Click" in --press: a left click in the middle of the window, where the crosshair is (the hallway
 // only; a menu takes it as a key it does not know).
@@ -296,7 +396,7 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
 
     const Hallway::ModelShape shape{a.get_positive("vertices", 8), a.get_positive("faces", 12), a.get_positive("coords", 16),
                                     a.has("title-length") ? a.get_u32("title-length", 32) : 32u,
-                                    a.has("binary-length") ? a.get_positive("binary-length", 32) : 32u,
+                                    binary_length(a),
                                     a.has("track-units") ? a.get_positive("track-units", 4) : 4u,
                                     a.has("movie-units") ? a.get_positive("movie-units", 4) : 4u};
     auto hall = std::make_unique<Hallway>(window, renderer, std::move(lines), filters,
@@ -528,6 +628,14 @@ int run(const Args& a)
         std::cout << "saved " << a.get("screenshot") << "\n";
         return finish();
     }
+    if (shot && a.has("main-menu") && a.has("locate"))
+    {
+        // A picture of the File Locator opened from the main menu, on a file or folder (--tailored:
+        // and its filters tailored): no world, so no Go to it.
+        run_locator(window, renderer, settings, filters, filters_path, a.get("locate"), a.has("tailored"), a.get("screenshot"), a.get("press", ""));
+        std::cout << "saved " << a.get("screenshot") << "\n";
+        return finish();
+    }
     if (shot && a.has("main-menu"))
     {
         // A picture of the main menu; --press keys go to it (e.g. Down,Enter for Settings).
@@ -547,9 +655,15 @@ int run(const Args& a)
         if (a.has("press"))
             for (const auto& [key, mod] : parse_presses(a.get("press"))) menu.press(key, mod);
         menu.render();              // starts the counting workers
-        finish_filter_warmup();     // a picture shows the counts, not "counting..."
-        menu.render();
+        // A picture shows the counts, not "counting..." (--busy: while they are still being
+        // counted, if they take long enough to be caught).
+        if (!a.has("busy"))
+        {
+            finish_filter_warmup();
+            menu.render();
+        }
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
+        if (a.has("busy")) finish_filter_warmup(); // never leave the workers counting as the program ends
         std::cout << "saved " << a.get("screenshot") << "\n";
         return finish();
     }
@@ -616,6 +730,8 @@ int run(const Args& a)
             std::cerr << "--tailor: nothing tailored (no item in hand on the pages, image, audio or video line)\n";
         if (a.has("save-item")) hall->save_in_hand_to(a.get("save-item")); // F, without the dialog
         if (a.has("save-view")) hall->save_view_to(a.get("save-view"));   // F in the viewer, without the dialog
+        if (a.has("sample-degrees"))
+            std::cout << hall->sample_degrees(a.get("sample-degrees"), a.get("sample-out", a.get("sample-degrees") + ".sieve"));
         hall->render();
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         std::cout << "saved " << a.get("screenshot") << "\n";
@@ -640,6 +756,12 @@ int run(const Args& a)
             MainMenu mm(window, renderer, app, app_path, display);
             const MainMenu::Result r = mm.run();
             if (r == MainMenu::Result::Quit) break;
+            if (r == MainMenu::Result::Locator)
+            {
+                // The File Locator, and back to the main menu from it.
+                if (!run_locator(window, renderer, settings, filters, filters_path)) break;
+                continue;
+            }
             if (r == MainMenu::Result::Designer)
             {
                 // The filter designer, and back to the main menu from it.

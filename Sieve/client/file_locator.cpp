@@ -1,22 +1,22 @@
-// The File Locator, in the hallway (pause menu): `sieve locate` with a window round it.
-//
-// Choose a file or a folder (the system's picker, or drop one on the window). A file is named by
-// its place on the binary line and its SHA-256, set beside what zip and 7z make of it, and can be
-// walked to: the locator puts you on the binary line in front of it, if the line is long enough to
-// hold it. A folder is walked and listed as a manifest, compared the same way (with its installer's
-// manifest compressed too), and can be saved as a manifest or made into an installer that
-// sieve-install opens. The reading, hashing and compressing run on a worker thread, so the hallway
-// goes on drawing; the code is the tool's own (tools/cli/locate.*, compare.*), so the two agree.
+// Sieve hallway -- the File Locator (file_locator.hpp): `sieve locate` with a window round it, from
+// the main menu or the hallway's pause menu.
 
-#include "hallway.hpp"
+#include "file_locator.hpp"
+
+#include "font.hpp"
+#include "strings.hpp"
 
 #include "cli/compare.hpp"
 #include "cli/locate.hpp"
 #include "cli/pack.hpp"
 #include "cli/timings.hpp"
-#include "cli/vault.hpp"
 
-namespace hallway::hall {
+#include <stdexcept>
+
+namespace hallway {
+
+using namespace sieve;
+using namespace sieve::cli;
 
 namespace {
 
@@ -46,80 +46,88 @@ std::string head_tail(const std::string& h, size_t each)
     return h.size() <= 2 * each + 3 ? h : h.substr(0, each) + "..." + h.substr(h.size() - each);
 }
 
-void SDLCALL picked(void* user, const char* const* files, int)
+void SDLCALL on_picked(void* user, const char* const* files, int)
 {
     if (!files || !files[0]) return; // cancelled, or the dialog failed
-    static_cast<Hallway*>(user)->locator_picked(files[0]);
+    static_cast<FileLocator*>(user)->picked(files[0]);
 }
 
-void SDLCALL save_to(void* user, const char* const* files, int)
+void SDLCALL on_save_to(void* user, const char* const* files, int)
 {
     if (!files || !files[0]) return;
-    static_cast<Hallway*>(user)->locator_save_to(files[0]);
+    static_cast<FileLocator*>(user)->save_to(files[0]);
 }
 
-void SDLCALL install_from(void* user, const char* const* files, int)
+void SDLCALL on_install_from(void* user, const char* const* files, int)
 {
     if (!files || !files[0]) return;
-    static_cast<Hallway*>(user)->locator_install_picked(0, files[0]);
+    static_cast<FileLocator*>(user)->install_picked(0, files[0]);
 }
 
-void SDLCALL install_to(void* user, const char* const* files, int)
+void SDLCALL on_install_to(void* user, const char* const* files, int)
 {
     if (!files || !files[0]) return;
-    static_cast<Hallway*>(user)->locator_install_picked(1, files[0]);
+    static_cast<FileLocator*>(user)->install_picked(1, files[0]);
 }
 
 } // namespace
 
-void Hallway::open_locator()
+FileLocator::FileLocator(SDL_Window* window, SDL_Renderer* renderer, Host host) : window_(window), r_(renderer), host_(std::move(host)) {}
+
+void FileLocator::open()
 {
-    loc_open_ = true;
+    open_ = true;
     SDL_SetWindowRelativeMouseMode(window_, false);
 }
 
-void Hallway::close_locator()
+void FileLocator::close()
 {
-    loc_open_ = false;
-    if (!pause_open_) SDL_SetWindowRelativeMouseMode(window_, true);
+    open_ = false;
+    if (host_.closed) host_.closed();
+}
+
+void FileLocator::say(const std::string& status)
+{
+    std::lock_guard<std::mutex> lock(mx_);
+    status_ = status;
 }
 
 // From the dialogs' callbacks, which may run on another thread: handed to the frame.
-void Hallway::locator_picked(const std::string& path)
+void FileLocator::picked(const std::string& path)
 {
-    std::lock_guard<std::mutex> lock(loc_mx_);
-    loc_pending_pick_ = path;
+    std::lock_guard<std::mutex> lock(mx_);
+    pending_pick_ = path;
 }
 
-void Hallway::locator_save_to(const std::string& path)
+void FileLocator::save_to(const std::string& path)
 {
-    std::lock_guard<std::mutex> lock(loc_mx_);
-    loc_pending_save_ = path;
+    std::lock_guard<std::mutex> lock(mx_);
+    pending_save_ = path;
 }
 
-void Hallway::locator_install_picked(int step, const std::string& path)
+void FileLocator::install_picked(int step, const std::string& path)
 {
-    std::lock_guard<std::mutex> lock(loc_mx_);
-    loc_pending_install_ = std::make_pair(step, path);
+    std::lock_guard<std::mutex> lock(mx_);
+    pending_install_ = std::make_pair(step, path);
 }
 
 // Install from an installer (a .sieve, an installer program, or an installer's manifest) into a
 // folder, on the worker, as sieve install does: every file checked before any is written, and
 // nothing replaced that is already there.
-void Hallway::locator_install(const std::string& from, const std::string& to, bool sync)
+void FileLocator::install(const std::string& from, const std::string& to, bool sync)
 {
-    if (loc_busy_) return;
-    if (loc_worker_.joinable()) loc_worker_.join();
-    loc_busy_ = true;
-    loc_status_ = trf("loc.installing", {to});
+    if (busy_) return;
+    if (worker_.joinable()) worker_.join();
+    busy_ = true;
+    status_ = trf("loc.installing", {to});
     auto job = [this, from, to] {
         std::string done;
         try
         {
             const cli::Manifest m = cli::installable_manifest(from_u8(from), false);
             cli::install_tree(m, from_u8(to), false, [this](int phase, size_t d, size_t t, const std::string& path) {
-                std::lock_guard<std::mutex> lock(loc_mx_);
-                loc_status_ = trf(phase == 0 ? "loc.install.checking" : "loc.install.writing", {std::to_string(d), std::to_string(t), path});
+                std::lock_guard<std::mutex> lock(mx_);
+                status_ = trf(phase == 0 ? "loc.install.checking" : "loc.install.writing", {std::to_string(d), std::to_string(t), path});
             });
             done = m.files == 1 ? trf("loc.installed.one", {to}) : trf("loc.installed", {std::to_string(m.files), to});
         }
@@ -127,27 +135,27 @@ void Hallway::locator_install(const std::string& from, const std::string& to, bo
         {
             done = trf("loc.install_failed", {e.what()});
         }
-        std::lock_guard<std::mutex> lock(loc_mx_);
-        loc_status_ = done;
-        loc_busy_ = false;
+        std::lock_guard<std::mutex> lock(mx_);
+        status_ = done;
+        busy_ = false;
     };
     if (sync) job();
-    else loc_worker_ = std::thread(job);
+    else worker_ = std::thread(job);
 }
 
 // Reads and measures a file or folder on the worker. `sync`: here and now (scripted runs).
-void Hallway::locator_analyse(const std::string& path, bool sync, bool tailor)
+void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
 {
-    if (loc_busy_) return;
-    loc_go_armed_ = false;
-    if (loc_worker_.joinable()) loc_worker_.join();
-    loc_busy_ = true;
+    if (busy_) return;
+    go_armed_ = false;
+    if (worker_.joinable()) worker_.join();
+    busy_ = true;
     {
-        std::lock_guard<std::mutex> lock(loc_mx_);
-        loc_status_ = trf(tailor ? "loc.tailoring" : "loc.reading", {path});
+        std::lock_guard<std::mutex> lock(mx_);
+        status_ = trf(tailor ? "loc.tailoring" : "loc.reading", {path});
     }
     auto job = [this, path, tailor] {
-        LocatorResult r;
+        Result r;
         r.path = path;
         try
         {
@@ -155,7 +163,7 @@ void Hallway::locator_analyse(const std::string& path, bool sync, bool tailor)
             cli::Comparison c;
             if (fs::is_regular_file(p))
             {
-                r.kind = LocatorResult::File;
+                r.kind = Result::File;
                 r.bytes = cli::read_file_bytes(p);
                 const BigUint a = cli::binary_address(r.bytes);
                 r.hex = a.is_zero() ? "0" : a.to_hex();
@@ -179,7 +187,7 @@ void Hallway::locator_analyse(const std::string& path, bool sync, bool tailor)
             }
             else if (fs::is_directory(p))
             {
-                r.kind = LocatorResult::Folder;
+                r.kind = Result::Folder;
                 r.manifest = cli::walk_folder(p);
                 std::vector<uint8_t> all;
                 for (const auto& e : r.manifest.entries)
@@ -213,16 +221,10 @@ void Hallway::locator_analyse(const std::string& path, bool sync, bool tailor)
             // Every file weighed against its own address, under this hallway's lines and filters
             // (the pages, image, audio and video lines' units, and the binary line's filters).
             {
-                cli::WeighLines wl;
-                wl.pages = &unit_line(LineKind::Text);
-                wl.image = &unit_line(LineKind::Image);
-                wl.audio = &unit_line(LineKind::Audio);
-                wl.video = &unit_line(LineKind::Video);
-                wl.filters = filters_;
-                wl.binary_bytes = binary_space_->max_bytes();
+                const cli::WeighLines wl = host_.lines();
                 std::vector<std::string> files;
                 fs::path root;
-                if (r.kind == LocatorResult::File) files.push_back(path);
+                if (r.kind == Result::File) files.push_back(path);
                 else
                 {
                     root = p;
@@ -234,7 +236,7 @@ void Hallway::locator_analyse(const std::string& path, bool sync, bool tailor)
                 r.tailored = tailor;
                 if (tailor)
                 {
-                    FilterConfig next = filters_;
+                    FilterConfig next = wl.filters;
                     bool any = false;
                     for (const cli::LineWeight& l : w.lines)
                         if (l.tailored && l.files > 0)
@@ -251,36 +253,36 @@ void Hallway::locator_analyse(const std::string& path, bool sync, bool tailor)
         }
         catch (const std::exception& e)
         {
-            r.kind = LocatorResult::None;
+            r.kind = Result::None;
             r.error = e.what();
         }
-        std::lock_guard<std::mutex> lock(loc_mx_);
-        loc_result_ = std::move(r);
-        loc_status_.clear();
-        loc_busy_ = false;
+        std::lock_guard<std::mutex> lock(mx_);
+        result_ = std::move(r);
+        status_.clear();
+        busy_ = false;
     };
     if (sync) job();
-    else loc_worker_ = std::thread(job);
+    else worker_ = std::thread(job);
 }
 
 // What a save dialog chose, done on the worker: a file's address, a folder's manifest, or its
 // installer (which reads every file again for its address).
-void Hallway::locator_save(const std::string& to)
+void FileLocator::save(const std::string& to)
 {
-    if (loc_busy_ || loc_result_.kind == LocatorResult::None) return;
-    if (loc_worker_.joinable()) loc_worker_.join();
-    loc_busy_ = true;
-    const int what = loc_save_what_;
-    const LocatorResult r = loc_result_;
-    loc_worker_ = std::thread([this, what, r, to] {
+    if (busy_ || result_.kind == Result::None) return;
+    if (worker_.joinable()) worker_.join();
+    busy_ = true;
+    const int what = save_what_;
+    const Result r = result_;
+    worker_ = std::thread([this, what, r, to] {
         std::string done;
         try
         {
             const fs::path out = from_u8(to);
             {
                 // A file's instructions are a folder's holding just it (file_instructions).
-                cli::Manifest with = r.kind == LocatorResult::File ? file_instructions(from_u8(r.path), r.bytes) : r.manifest;
-                if (r.kind != LocatorResult::File) cli::add_packed(with, from_u8(r.path));
+                cli::Manifest with = r.kind == Result::File ? file_instructions(from_u8(r.path), r.bytes) : r.manifest;
+                if (r.kind != Result::File) cli::add_packed(with, from_u8(r.path));
                 const BigUint address = cli::binary_address(with.file());
                 // The installer on its own (for anyone with Sieve: sieve install, or sieve-install),
                 // or an installer program, sieve-install with it attached, one file for anyone.
@@ -303,9 +305,9 @@ void Hallway::locator_save(const std::string& to)
         {
             done = trf("loc.save_failed", {e.what()});
         }
-        std::lock_guard<std::mutex> lock(loc_mx_);
-        loc_status_ = done;
-        loc_busy_ = false;
+        std::lock_guard<std::mutex> lock(mx_);
+        status_ = done;
+        busy_ = false;
     });
 }
 
@@ -313,77 +315,38 @@ void Hallway::locator_save(const std::string& to)
 // still reached, after a second press: the line is made exactly long enough for it, the hallway
 // goes thin (only your room kept), and the ordering positional, the one in which the address is
 // the file's own hex dump plus 0101...01 and costs no shuffle to find.
-void Hallway::locator_go()
+void FileLocator::go()
 {
-    if (loc_result_.kind != LocatorResult::File) return;
-    const bool past = loc_result_.bytes.size() > binary_space_->max_bytes();
-    if (past && !loc_go_armed_)
+    if (result_.kind != Result::File) return;
+    if (!in_world()) return;
+    const bool past = host_.binary_bytes && result_.bytes.size() > host_.binary_bytes();
+    if (past && !go_armed_)
     {
-        loc_go_armed_ = true;
+        go_armed_ = true;
         return;
     }
-    loc_go_armed_ = false;
-    const auto bytes = loc_result_.bytes;
-    close_locator();
-    if (pause_open_) close_pause();
-    walk_to_file(bytes, u8(from_u8(loc_result_.path).filename()), past);
+    go_armed_ = false;
+    const auto bytes = result_.bytes;
+    const std::string name = u8(from_u8(result_.path).filename());
+    close();
+    host_.go(bytes, name, past);
 }
 
-void Hallway::walk_to_file(const std::vector<uint8_t>& bytes, const std::string& name, bool past)
+void FileLocator::event(const SDL_Event& e)
 {
-    sieve::cli::timings::Scope timed("hallway.walk"); // to a file: the line made long enough, and the place
-    if (cli::vault::withheld_bytes(bytes)) // the vault: nowhere to walk to
-    {
-        message(tr("vault.withheld"));
-        return;
-    }
-    // What touches the renderer (the pictures let go, the line's colours), here; then the rest,
-    // which for a file of megabytes takes seconds, on a worker while the window says LOCATING.
-    if (past)
-    {
-        set_thin(true, kBinaryLine);
-        mode_ = AddressMode::Positional;
-    }
-    clear_faces();
-    if (!on_binary())
-    {
-        binary_from_ = 0; // its door leads to pages, as when you start on binary
-        drop_in_hand();
-        set_line(kBinaryLine);
-    }
-    busy(tr("locating"), [&] {
-        if (past)
-        {
-            sieve::cli::timings::Scope t1("hallway.walk.length"); // the line made long enough
-            set_binary_length(bytes.size());
-        }
-        const Space::Digits title = title_for_name(name); // its name is its title
-        walked_names_[cli::sha256_hex(bytes)] = name;
-        {
-            sieve::cli::timings::Scope t2("hallway.walk.place"); // the file's place, and you there
-            go_to_file(bytes, true, &title);
-        }
-        sieve::cli::timings::Scope t3("hallway.walk.room"); // the room's items, ahead of drawing them
-        warm_room();
-    });
-    message(trf(past ? "loc.went_past" : "msg.warped.file", {std::to_string(bytes.size())}));
-}
-
-void Hallway::locator_event(const SDL_Event& e)
-{
-    if (e.type == SDL_EVENT_DROP_FILE && e.drop.data) locator_analyse(e.drop.data);
+    if (e.type == SDL_EVENT_DROP_FILE && e.drop.data) analyse(e.drop.data);
     if (e.type == SDL_EVENT_MOUSE_MOTION)
     {
-        loc_mx_pos_ = e.motion.x;
-        loc_my_pos_ = e.motion.y;
-        SDL_RenderCoordinatesFromWindow(r_, e.motion.x, e.motion.y, &loc_mx_pos_, &loc_my_pos_);
+        mouse_x_ = e.motion.x;
+        mouse_y_ = e.motion.y;
+        SDL_RenderCoordinatesFromWindow(r_, e.motion.x, e.motion.y, &mouse_x_, &mouse_y_);
     }
     std::string pressed;
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT)
     {
         float x = e.button.x, y = e.button.y;
         SDL_RenderCoordinatesFromWindow(r_, e.button.x, e.button.y, &x, &y);
-        for (const auto& [rect, id] : loc_buttons_)
+        for (const auto& [rect, id] : buttons_)
             if (x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h) pressed = id;
     }
     if (e.type == SDL_EVENT_KEY_DOWN)
@@ -395,128 +358,128 @@ void Hallway::locator_event(const SDL_Event& e)
         case SDLK_D: pressed = "folder"; break;
         case SDLK_I: pressed = "install"; break;
         case SDLK_RETURN:
-        case SDLK_KP_ENTER: pressed = loc_result_.kind == LocatorResult::File ? "go" : ""; break;
+        case SDLK_KP_ENTER: pressed = result_.kind == Result::File && in_world() ? "go" : ""; break;
         default: break;
         }
     }
-    if (pressed.empty() || (loc_busy_ && pressed != "close")) return;
-    if (pressed != "go") loc_go_armed_ = false; // "again" means the very next press
-    if (pressed == "close") close_locator();
-    else if (pressed == "file") SDL_ShowOpenFileDialog(picked, this, window_, nullptr, 0, nullptr, false);
-    else if (pressed == "folder") SDL_ShowOpenFolderDialog(picked, this, window_, nullptr, false);
-    else if (pressed == "go") locator_go();
-    else if (pressed == "tailor") locator_analyse(loc_result_.path, false, true);
-    else if (pressed == "use_filters" && loc_result_.tailored_filters)
+    if (pressed.empty() || (busy_ && pressed != "close")) return;
+    if (pressed != "go") go_armed_ = false; // "again" means the very next press
+    if (pressed == "close") close();
+    else if (pressed == "file") SDL_ShowOpenFileDialog(on_picked, this, window_, nullptr, 0, nullptr, false);
+    else if (pressed == "folder") SDL_ShowOpenFolderDialog(on_picked, this, window_, nullptr, false);
+    else if (pressed == "go") go();
+    else if (pressed == "tailor") analyse(result_.path, false, true);
+    else if (pressed == "use_filters" && result_.tailored_filters)
     {
-        // As Return on COST does: the settings saved, and a hallway built with them (app_main).
-        tailored_ = loc_result_.tailored_filters;
-        tailored_unit_.reset();
-        close_locator();
-        request_ = Request::Tailored;
+        // As Return on COST does: the settings saved, and a hallway built with them (in the world)
+        // or kept for the next one built (from the main menu).
+        if (host_.use_filters) host_.use_filters(*result_.tailored_filters);
     }
     else if (pressed == "install")
     {
-        // First the installer, then (install_from, below in draw_locator) the folder to put it in.
+        // First the installer, then (on_install_from, below in draw) the folder to put it in.
         static const SDL_DialogFileFilter kFrom[] = {{"Sieve instructions", "sieve"}, {"Installer program", "exe"}};
-        SDL_ShowOpenFileDialog(install_from, this, window_, kFrom, 2, nullptr, false);
+        SDL_ShowOpenFileDialog(on_install_from, this, window_, kFrom, 2, nullptr, false);
     }
     else
     {
         // A save, for a file as for a folder: 3 an installer program (sieve-install with the
         // instructions attached), 4 the Sieve instructions on their own (.sieve: for anyone who
         // has Sieve).
-        loc_save_what_ = pressed == "save_program" ? 3 : 4;
-        const fs::path from = from_u8(loc_result_.path);
+        save_what_ = pressed == "save_program" ? 3 : 4;
+        const fs::path from = from_u8(result_.path);
 #ifdef _WIN32
         const char* program = " installer.exe";
 #else
         const char* program = "-installer";
 #endif
-        const std::string name = u8(from.filename()) + (loc_save_what_ == 3 ? program : ".sieve");
+        const std::string name = u8(from.filename()) + (save_what_ == 3 ? program : ".sieve");
         const std::string start = u8(from.parent_path() / from_u8(name));
         static const SDL_DialogFileFilter kProgram[] = {{"Installer program", "exe"}};
         static const SDL_DialogFileFilter kSieve[] = {{"Sieve instructions", "sieve"}};
-        const SDL_DialogFileFilter* filter = loc_save_what_ == 3 ? kProgram : loc_save_what_ == 4 ? kSieve : nullptr;
-        SDL_ShowSaveFileDialog(save_to, this, window_, filter, filter ? 1 : 0, start.c_str());
+        const SDL_DialogFileFilter* filter = save_what_ == 3 ? kProgram : save_what_ == 4 ? kSieve : nullptr;
+        SDL_ShowSaveFileDialog(on_save_to, this, window_, filter, filter ? 1 : 0, start.c_str());
     }
 }
 
-void Hallway::draw_locator(float W, float H)
+void FileLocator::draw(float W, float H)
 {
     // Hand over whatever the dialogs chose since the last frame.
     {
-        std::optional<std::string> pick, save;
+        std::optional<std::string> pick, to;
         {
-            std::lock_guard<std::mutex> lock(loc_mx_);
-            pick.swap(loc_pending_pick_);
-            save.swap(loc_pending_save_);
+            std::lock_guard<std::mutex> lock(mx_);
+            pick.swap(pending_pick_);
+            to.swap(pending_save_);
         }
-        if (pick) locator_analyse(*pick);
-        if (save) locator_save(*save);
+        if (pick) analyse(*pick);
+        if (to) save(*to);
         std::optional<std::pair<int, std::string>> inst;
         {
-            std::lock_guard<std::mutex> lock(loc_mx_);
-            inst.swap(loc_pending_install_);
+            std::lock_guard<std::mutex> lock(mx_);
+            inst.swap(pending_install_);
         }
         if (inst && inst->first == 0)
         {
-            loc_install_src_ = inst->second;
-            loc_status_ = trf("loc.install.where", {inst->second});
-            SDL_ShowOpenFolderDialog(install_to, this, window_, nullptr, false);
+            install_src_ = inst->second;
+            status_ = trf("loc.install.where", {inst->second});
+            SDL_ShowOpenFolderDialog(on_install_to, this, window_, nullptr, false);
         }
-        else if (inst && inst->first == 1 && !loc_install_src_.empty()) locator_install(loc_install_src_, inst->second);
+        else if (inst && inst->first == 1 && !install_src_.empty()) install(install_src_, inst->second);
     }
-    const SDL_Color ink = theme().edge, grey{150, 150, 150, 255}, white{255, 255, 255, 255}, red{255, 80, 80, 255};
+    const SDL_Color ink = host_.ink ? host_.ink() : SDL_Color{0, 255, 255, 255}, grey{150, 150, 150, 255}, white{255, 255, 255, 255}, red{255, 80, 80, 255};
     SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
     const SDL_FRect all{0, 0, W, H};
     SDL_RenderFillRect(r_, &all);
-    text(20, 16, tr("loc.title"), 3, ink);
-    text(20, 48, fit(tr("loc.subtitle"), W - 40, 1), 1, grey);
-    loc_buttons_.clear();
+    draw_text(r_, 20, 16, tr("loc.title"), 3, ink);
+    draw_text(r_, 20, 48, fit_text(tr("loc.subtitle"), W - 40, 1), 1, grey);
+    buttons_.clear();
     float bx = 20;
     auto button = [&](const std::string& id, const std::string& label, float y, bool enabled = true) {
         const float w = text_width(label, 2) + 24;
         const SDL_FRect r{bx, y, w, 30};
-        const bool hot = loc_mx_pos_ >= r.x && loc_mx_pos_ < r.x + r.w && loc_my_pos_ >= r.y && loc_my_pos_ < r.y + r.h;
+        const bool hot = mouse_x_ >= r.x && mouse_x_ < r.x + r.w && mouse_y_ >= r.y && mouse_y_ < r.y + r.h;
         SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, hot && enabled ? 60 : 20);
         SDL_RenderFillRect(r_, &r);
         SDL_SetRenderDrawColor(r_, enabled ? ink.r : 90, enabled ? ink.g : 90, enabled ? ink.b : 90, 255);
         SDL_RenderRect(r_, &r);
-        text(r.x + 12, r.y + 7, label, 2, enabled ? white : grey);
-        if (enabled) loc_buttons_.emplace_back(r, id);
+        draw_text(r_, r.x + 12, r.y + 7, label, 2, enabled ? white : grey);
+        if (enabled) buttons_.emplace_back(r, id);
         bx += w + 12;
     };
-    const bool busy = loc_busy_;
+    const bool busy = busy_;
     button("file", tr("loc.choose_file"), 76, !busy);
     button("folder", tr("loc.choose_folder"), 76, !busy);
     button("install", tr("loc.install"), 76, !busy);
     float y = 126;
     std::string status;
     {
-        std::lock_guard<std::mutex> lock(loc_mx_);
-        status = loc_status_;
+        std::lock_guard<std::mutex> lock(mx_);
+        status = status_;
     }
-    const LocatorResult& r = loc_result_;
-    if (!busy && r.kind == LocatorResult::None && r.error.empty())
-        text(20, y, tr("loc.empty"), 2, grey);
-    else if (!r.error.empty() && !busy) text(20, y, fit(trf("loc.failed", {r.error}), W - 40, 1), 1, red);
-    else if (r.kind != LocatorResult::None && !busy)
+    const Result& r = result_;
+    if (!busy && r.kind == Result::None && r.error.empty())
+        draw_text(r_, 20, y, tr("loc.empty"), 2, grey);
+    else if (!r.error.empty() && !busy) draw_text(r_, 20, y, fit_text(trf("loc.failed", {r.error}), W - 40, 1), 1, red);
+    else if (r.kind != Result::None && !busy)
     {
         auto line = [&](const std::string& label, const std::string& value) {
-            text(20, y, label, 1, grey);
-            text(150, y, fit(value, W - 170, 1), 1, white);
+            draw_text(r_, 20, y, label, 1, grey);
+            draw_text(r_, 150, y, fit_text(value, W - 170, 1), 1, white);
             y += 16;
         };
-        if (r.kind == LocatorResult::File)
+        if (r.kind == Result::File)
         {
             line(tr("loc.file"), r.path);
             line(tr("loc.bytes"), std::to_string(r.bytes.size()));
             line(tr("loc.sha256"), r.sha256);
             line(tr("loc.address"), trf("loc.address.value", {std::to_string(r.hex.size()), head_tail(r.hex, 24)}));
-            line(tr("loc.line"), trf("loc.line.value", {std::to_string(r.bytes.size()), std::to_string(binary_space_->max_bytes())}));
-            if (loc_go_armed_)
+            // Where it can be walked to: the length it needs against the BINARY length now.
+            if (in_world() && host_.binary_bytes)
+                line(tr("loc.line"), trf("loc.line.value", {std::to_string(r.bytes.size()), std::to_string(host_.binary_bytes())}));
+            if (go_armed_)
             {
-                text(20, y, fit(trf("loc.go_anyway", {std::to_string(r.bytes.size())}), W - 40, 1), 1, SDL_Color{255, 200, 80, 255});
+                draw_text(r_, 20, y, fit_text(trf("loc.go_anyway", {std::to_string(r.bytes.size())}), W - 40, 1), 1, SDL_Color{255, 200, 80, 255});
                 y += 16;
             }
         }
@@ -536,7 +499,7 @@ void Hallway::draw_locator(float W, float H)
         {
             const size_t nl = r.table.find('\n', at);
             const std::string row = r.table.substr(at, nl == std::string::npos ? std::string::npos : nl - at);
-            text(20, y, fit(row, W - 40, 1), 1, row.rfind("comparison", 0) == 0 ? grey : ink);
+            draw_text(r_, 20, y, fit_text(row, W - 40, 1), 1, row.rfind("comparison", 0) == 0 ? grey : ink);
             y += 13;
             if (nl == std::string::npos) break;
             at = nl + 1;
@@ -548,41 +511,47 @@ void Hallway::draw_locator(float W, float H)
         {
             const size_t nl = r.weighing.find('\n', at);
             const std::string row = r.weighing.substr(at, nl == std::string::npos ? std::string::npos : nl - at);
-            text(20, y, fit(row, W - 40, 1), 1, row.rfind("weighing", 0) == 0 || row.rfind("  shared", 0) == 0 ? grey : ink);
+            draw_text(r_, 20, y, fit_text(row, W - 40, 1), 1, row.rfind("weighing", 0) == 0 || row.rfind("  shared", 0) == 0 ? grey : ink);
             y += 13;
             if (nl == std::string::npos) break;
             at = nl + 1;
         }
         y += 14;
         bx = 20;
-        // A file can be walked to. A file or a folder can be saved as Sieve instructions (the
+        // A file can be walked to, in the world. A file or a folder can be saved as Sieve instructions (the
         // .sieve: its listing and its files, as one number) for anyone who has Sieve, or as an
         // installer program for anyone; a file exactly as a folder holding just it. The listing on
         // its own (the manifest) is for the tools and the command line (sieve locate --manifest),
         // and a file's bare address for the command line (sieve locate FILE --out).
-        if (r.kind == LocatorResult::File) button("go", tr("loc.go"), y);
+        if (r.kind == Result::File && in_world()) button("go", tr("loc.go"), y);
         button("save_sieve", tr("loc.save_sieve"), y);
         button("save_program", tr("loc.save_program"), y);
-        // The filters tailored to these files, and then used: this hallway built again with them
-        // (on a row of their own, under the saves).
+        // The filters tailored to these files, and then used: the hallway built again with them,
+        // or kept for the next one from the main menu (on a row of their own, under the saves).
         bx = 20;
         if (!r.tailored) button("tailor", tr("loc.tailor"), y + 40);
         else if (r.tailored_filters) button("use_filters", tr("loc.use_filters"), y + 40);
     }
-    if (!status.empty()) text(20, H - 58, fit(status, W - 40, 1), 1, busy ? white : ink);
-    text(20, H - 26, fit(tr("loc.keys"), W - 40, 1), 1, grey);
+    if (!status.empty()) draw_text(r_, 20, H - 58, fit_text(status, W - 40, 1), 1, busy ? white : ink);
+    draw_text(r_, 20, H - 26, fit_text(tr(in_world() ? "loc.keys" : "loc.keys.menu"), W - 40, 1), 1, grey);
 }
 
 // For scripted runs (--locate PATH): open the locator on it, measured before the next frame.
-void Hallway::locate_now(const std::string& path, bool tailor)
+void FileLocator::locate_now(const std::string& path, bool tailor)
 {
-    open_locator();
-    locator_analyse(path, true, tailor);
+    open();
+    analyse(path, true, tailor);
 }
 
-void Hallway::stop_locator()
+void FileLocator::install_now(const std::string& from, const std::string& to)
 {
-    if (loc_worker_.joinable()) loc_worker_.join();
+    open();
+    install(from, to, true);
 }
 
-} // namespace hallway::hall
+void FileLocator::stop()
+{
+    if (worker_.joinable()) worker_.join();
+}
+
+} // namespace hallway

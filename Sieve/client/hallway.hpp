@@ -27,6 +27,7 @@
 #include "display.hpp"
 #include "app_settings.hpp"
 #include "camera.hpp"
+#include "file_locator.hpp"
 #include "font.hpp"
 #include "main_menu.hpp"
 #include "menu.hpp"
@@ -1102,51 +1103,16 @@ private:
     Input input_ = Input::None;
     std::vector<Point2> grid_; // draw_face_image's cell corners, kept between calls
 
-    // ---- the File Locator (file_locator.cpp): the pause menu's, `sieve locate` in a window
+    // ---- the File Locator (file_locator.hpp): the pause menu's, `sieve locate` in a window, where
+    // a file can be walked to (Go to it)
 public:
-    void open_locator();
-    void locate_now(const std::string& path, bool tailor = false); // scripted: open on it, measured at once (and tailored)
-    void install_now(const std::string& from, const std::string& to) { open_locator(); locator_install(from, to, true); }
-    // From the system dialogs' callbacks (any thread): what was chosen, handed to the next frame.
-    void locator_picked(const std::string& path);
-    void locator_save_to(const std::string& path);
-    void locator_install_picked(int step, const std::string& path); // 0 the installer, 1 where
-    void locator_install(const std::string& from, const std::string& to, bool sync = false);
+    void open_locator() { locator_.open(); }
+    void locate_now(const std::string& path, bool tailor = false) { locator_.locate_now(path, tailor); } // scripted: measured at once
+    void install_now(const std::string& from, const std::string& to) { locator_.install_now(from, to); }
 
 private:
-    struct LocatorResult
-    {
-        enum Kind { None, File, Folder } kind = None;
-        std::string path, sha256, hex, table, error;
-        std::vector<uint8_t> bytes; // a file
-        cli::Manifest manifest;     // a folder
-        // Its files weighed against their own addresses, under this hallway's lines and filters
-        // (cli/weigh.hpp), as a table; with tailoring, the filters found for the lines with items.
-        std::string weighing;
-        bool tailored = false;
-        std::optional<FilterConfig> tailored_filters;
-    };
-    void close_locator();
-    // `tailor`: the weighing tailors each line's filters to the files that are its items.
-    void locator_analyse(const std::string& path, bool sync = false, bool tailor = false);
-    void locator_save(const std::string& to);
-    void locator_go();
-    void locator_event(const SDL_Event& e);
-    void draw_locator(float W, float H);
-    void stop_locator();
-    bool loc_open_ = false;
-    std::atomic<bool> loc_busy_{false};
-    std::thread loc_worker_;
-    std::mutex loc_mx_;
-    LocatorResult loc_result_;
-    std::string loc_status_;
-    std::optional<std::string> loc_pending_pick_, loc_pending_save_;
-    std::optional<std::pair<int, std::string>> loc_pending_install_;
-    std::string loc_install_src_; // the installer chosen, while its folder is being chosen
-    int loc_save_what_ = 0;
-    bool loc_go_armed_ = false; // Go to it pressed once for a file past the BINARY length
-    float loc_mx_pos_ = -1, loc_my_pos_ = -1;
-    std::vector<std::pair<SDL_FRect, std::string>> loc_buttons_;
+    FileLocator::Host locator_host(); // its lines, filters and BINARY length, and walking to a file
+    FileLocator locator_;
     // Onto the binary line, in front of a file you have (the locator's Go to it, a map node's):
     // its name as its title. `past`: longer than the BINARY length, so the line is made to fit.
     void walk_to_file(const std::vector<uint8_t>& bytes, const std::string& name, bool past);
@@ -1237,6 +1203,12 @@ public:
     void item_save_chosen(const std::string& path, int filter = -1);
     void save_in_hand_to(const std::string& path);
     void save_view_to(const std::string& path); // F in the viewer, to PATH (--save-view)
+    // A demonstration (IDEAS §16.9, --sample-degrees DIR): for every dimension and every whole
+    // degree 0 to 359, the item that bearing names (the first unit at or past it, as the
+    // navigator's bearing goes, in the ordering in use), saved into DIR/<dimension>/<ddd>.<ext> as
+    // the file F saves (a picture at one pixel a pixel, as J reads it; a binary file as its bytes),
+    // and the folder made into Sieve instructions at `sieve_out` (v4, as the File Locator saves them). Returns what it did, a line for each dimension and one for the whole.
+    std::string sample_degrees(const std::string& dir, const std::string& sieve_out);
 private:
     void save_in_hand();
     // J: between an item and its file. On any other line, the item in hand as the file F saves
@@ -1319,7 +1291,7 @@ private:
 public:
     // Whether a menu is over the world (the pause menu or a tool opened from it): the music
     // player's MENUS mode, else WORLD.
-    bool in_menu() const { return pause_open_ || nav_open_ || loc_open_ || graph_open_ || media_open_; }
+    bool in_menu() const { return pause_open_ || nav_open_ || locator_.is_open() || graph_open_ || media_open_; }
     // Tells the music where you are: the line's colours for the NOW PLAYING box, and the line for
     // WORLD's character. At every change of line, and when the hallway is back from a menu.
     void music_line();

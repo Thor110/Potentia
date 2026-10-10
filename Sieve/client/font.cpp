@@ -259,6 +259,12 @@ std::string fit_cells(const std::string& s, size_t cells)
     return s.substr(0, i);
 }
 
+std::string fit_text(const std::string& s, float width, float scale)
+{
+    const size_t cols = size_t(std::max(4.0f, width / (8 * scale)));
+    return text_cells(s) <= cols ? s : fit_cells(s, cols - 2) + "..";
+}
+
 void draw_text(SDL_Renderer* r, float x, float y, const std::string& s, float scale, SDL_Color c)
 {
     if (!g_font)

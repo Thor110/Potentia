@@ -986,7 +986,9 @@ the world, and add "File Locator" to the main menu, under Settings and above the
 *Evaluation.* Straightforward. From the main menu there is no hallway to walk in, so Go to it is
 hidden there and everything else (choose, weigh, tailor, save, install) works as it does now. One
 point to decide: "Use the tailored filters" from the main menu would save the filters for the next
-hallway built rather than build one at once. Verdict: build.
+hallway built rather than build one at once. Verdict: build. *Built (10 October 2026):* the
+locator is its own class, opened from either place; from the main menu, Use the tailored filters
+saves them for the next hallway.
 
 **16.3 Maps as the installers are.** Update the `.map` system to work the same way as the `.sieve`
 and installer system.
@@ -1009,7 +1011,9 @@ say). Verdict: extend the setting to a list.
 red, and grey out ENTER THE HALLWAY while it is calculating.
 *Evaluation.* Straightforward: the status line under the budget bars moves and turns red, and ENTER
 is shown greyed (and refuses) while any line is being counted, as Go to it is greyed in the
-locator when it cannot go. Verdict: build.
+locator when it cannot go. Verdict: build. *Built (10 October 2026):* "Calculating
+Dimensions..." in red, top middle, always the same words, size and place; which lines are still being
+counted stays under the bars.
 
 **16.6 A slide-in window for a line's settings,** to free the background for new dimensions.
 *Evaluation.* The setup menu shows every setting at once (the budget model needs to see them
@@ -1059,6 +1063,11 @@ by its bearing (X), is that item again.
 check besides: the bearings and the files agree on every machine. The files are about the size of the
 lines' units (a page 32 characters, a picture a small PNG, a file on the binary line up to its
 length), so the instructions are small. Verdict: build, as `sieve sample --degrees` or a script.
+*Built (10 October 2026)* in the hallway, so every dimension's file is the hallway's own:
+`hallway --sample-degrees DIR`. The bearing names the first unit at or past it (the navigator's
+rule), and pictures are saved one pixel a pixel, as J reads them. At the default shapes: 3,240
+items, 566,236 bytes, as a `.sieve` of 303,829 bytes. CI makes it twice and installs it, and
+checks a bearing typed in the navigator against it.
 
 ## 17. Deprecated ideas
 

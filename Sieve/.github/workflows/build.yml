@@ -618,6 +618,20 @@ jobs:
           $H --no-menu --binary-length 64 --locate tests/manifest_fixture/a.txt --press "Return" --screenshot locate2.png | tail -2 | sed -n 1p | tee l2.txt | q "^BINARY line"
           # Its kind, read from its first bytes.
           grep -q " TXT " l2.txt
+          # From the main menu: the same locator, with no world to walk to, so Enter does not go.
+          $H --main-menu --locate tests/manifest_fixture/a.txt --press "Return" --screenshot locate-menu.png | q "file locator (main menu): open, no Go to it"
+          # The demonstration (IDEAS 16.9): every dimension's item at each whole degree, as one
+          # .sieve, the same on every machine; installing it gives every file back, and a bearing
+          # typed in the navigator (X, Tab) is the same item again.
+          $H --no-menu --sample-degrees degrees --screenshot deg.png | tee deg.txt | q "^sample: 3240 items"
+          $H --no-menu --sample-degrees degrees2 --sample-out degrees2.sieve --screenshot deg2.png > /dev/null
+          diff -r degrees degrees2
+          build/sieve install degrees.sieve --to deg_inst > /dev/null
+          diff -r degrees deg_inst
+          $H --no-menu --press "X,Tab,9,0,Return" --take --save-item p90.txt --screenshot degp.png > /dev/null
+          cmp p90.txt degrees/pages/090.txt
+          $H --no-menu --line models --press "X,Tab,1,3,Return" --take --save-item m13.obj --screenshot degm.png > /dev/null
+          cmp m13.obj degrees/models/013.obj
           # The excluded mode: read back from the settings, and the excluded count is exactly the
           # line less the survivors (27^32 less clean-v2's survivors at length 32).
           printf "[text]\nmode = excluded\nfilters = clean-v2\n" > excluded.ini

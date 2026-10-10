@@ -1075,6 +1075,13 @@ void Menu::press(SDL_Keycode key, SDL_Keymod mod)
     e.key.mod = mod;
     bool done = false;
     Result r = Result::Enter;
+    // A scripted Return on ENTER THE HALLWAY waits, as a person would, for the dimensions to be
+    // calculated (it is refused until they are).
+    if ((key == SDLK_RETURN || key == SDLK_KP_ENTER) && row_ == kEnterRow && calculating())
+    {
+        finish_filter_warmup();
+        poll_toggle();
+    }
     handle(e, done, r);
     // A scripted key waits, as a person would, for what it started (X weighing filters that clash).
     if (toggling_)
@@ -1207,6 +1214,7 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         if (row_ == kLimitsRow) { find_limits(); break; }
         if (row_ == kResetRow) { reset_settings(); break; }
         if (row_ != kEnterRow) break;
+        if (calculating()) break; // greyed until the dimensions are calculated
         if (s_.key.empty()) s_.key = "sieve";
         // Over the budget, the foot of the list says which limit and which line, and the first
         // Enter only says what going in anyway means: slower than this machine's budget, with only
@@ -1268,8 +1276,8 @@ Menu::Result Menu::run()
 // crate faces and the world take against the graphics memory, how long the slowest line's unit
 // takes to open against the time allowed, and what the largest count of the filters needs against
 // the filter memory. A bar that is over is red, and so is its figure. Under them, one status line
-// (a changed filter memory waiting for X, or the dimensions still being worked out). Drawn at the
-// menu's top right, out of the settings' way; returns the y below it.
+// (a changed filter memory or time budget waiting for X, or which lines are still being counted).
+// Drawn at the menu's top right, out of the settings' way; returns the y below it.
 float Menu::draw_budget(float x, float y)
 {
     const Budget b = machine_budget();
@@ -1315,14 +1323,15 @@ float Menu::draw_budget(float x, float y)
         text(r_, bx + bw + 10, y, known ? bar.figure : tr("value.none"), 1, over ? red : grey);
         y += 14;
     }
-    // Under the bars, one line, always kept free so nothing moves: the filter memory changed and
-    // not yet counted with (until X), or which lines are still being counted.
+    // Under the bars, one line, always kept free so nothing moves: the filter memory or time budget
+    // changed and not yet counted with (until X), or which lines are still being counted (the top of
+    // the menu says, in red, that the dimensions are being calculated: render()).
     const std::string counting = counting_lines();
     const size_t cells = size_t(kBudgetW / 8);
     auto fit = [cells](const std::string& t) { return text_cells(t) <= cells ? t : fit_cells(t, cells - 2) + ".."; };
     if (memory_pending()) text(r_, x, y, fit(tr("setup.memory_changed")), 1, red);
     else if (time_pending()) text(r_, x, y, fit(tr("setup.time_changed")), 1, red);
-    else if (toggling_ || !counting.empty()) text(r_, x, y, fit(trf("setup.calculating", {counting.empty() ? tr("setup.calculating.weighing") : counting})), 1, grey);
+    else if (calculating()) text(r_, x, y, fit(trf("setup.calculating", {counting.empty() ? tr("setup.calculating.weighing") : counting})), 1, grey);
     y += 14;
     return y;
 }
@@ -1344,7 +1353,11 @@ void Menu::render()
     // 1080 holds them all. In a smaller window it is drawn at that size and scaled down to fit,
     // instead of running off the edge or the actions at the foot running into the footer; worked
     // out from the rows and the text, so a row added later cannot bring that back.
-    const int kMinW = std::max(1240, int(std::ceil(20 + text_width(tr("setup.subtitle"), 1) + 20 + kBudgetW + 20)));
+    // (and wide enough for "Calculating Dimensions..." between the title and the budget, at its
+    // smallest)
+    const int kMinW = std::max({1240, int(std::ceil(20 + text_width(tr("setup.subtitle"), 1) + 20 + kBudgetW + 20)),
+                                int(std::ceil(20 + text_width(tr("setup.title"), 3) + 20 + text_width(tr("setup.calculating.banner"), 1) + 20 +
+                                              kBudgetW + 20))});
     const int kMinH = 80 + row_count() * 16 + (kLines + 1) * 22 + 12 + 60;
     int w = 0, h = 0;
     SDL_GetRenderOutputSize(r_, &w, &h);
@@ -1364,6 +1377,19 @@ void Menu::render()
     text(r_, 20, 16, tr("setup.title"), 3, white);
     text(r_, 20, 48, tr("setup.subtitle"), 1, grey);
     const float budget_bottom = draw_budget(W - kBudgetW - 20, 16);
+    // The dimensions being calculated: said in red at the top, in the middle of the space between
+    // the title and the budget, so it is seen (ENTER waits for it); which lines, under the bars.
+    // The words never change, so it keeps its size and its place while the lines finish.
+    const bool calc = calculating();
+    if (calc)
+    {
+        const std::string said = tr("setup.calculating.banner");
+        const float left = 20 + text_width(tr("setup.title"), 3) + 20, room = std::max(0.0f, W - kBudgetW - 40 - left);
+        float scale = 2;
+        while (scale > 1 && text_width(said, scale) > room) scale -= 0.5f;
+        text(r_, left + std::max(0.0f, (room - text_width(said, scale)) / 2), 16 + (24 - 8 * scale) / 2, fit_text(said, room, scale), scale,
+             SDL_Color{255, 80, 80, 255});
+    }
 
     // Settings.
     struct Row
@@ -1508,7 +1534,8 @@ void Menu::render()
             const SDL_FRect sel{14, y - 3, kMapX - 20, 16};
             SDL_RenderFillRect(r_, &sel);
         }
-        text(r_, 24, y, std::string(i == row_ ? "> " : "  ") + r.label, 1, white);
+        // ENTER THE HALLWAY is greyed while the dimensions are being calculated (it waits for them).
+        text(r_, 24, y, std::string(i == row_ ? "> " : "  ") + r.label, 1, i == kEnterRow && calc ? grey : white);
         // The rows are tight enough that the whole list fits above the three actions at the foot
         // of it. A value too long for its column stops short of the map rather than running into it.
         const std::string value = text_cells(r.value) <= value_cells ? r.value : fit_cells(r.value, value_cells - 2) + "..";

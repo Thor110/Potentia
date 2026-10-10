@@ -8,11 +8,7 @@
 namespace hallway::hall {
 
 // Text cut to fit `width` pixels at `scale` (8 pixels per character at scale 1).
-std::string Hallway::fit(const std::string& s, float width, float scale)
-{
-    const size_t cols = size_t(std::max(4.0f, width / (8 * scale)));
-    return text_cells(s) <= cols ? s : fit_cells(s, cols - 2) + "..";
-}
+std::string Hallway::fit(const std::string& s, float width, float scale) { return fit_text(s, width, scale); }
 
 // The compass. Every line is a loop, so the corridor is a set of concentric circles: binary
 // outermost, then the six it bounds, then binary again innermost, because binary wraps around
@@ -424,7 +420,7 @@ void Hallway::draw_hud(int w, int h)
     draw_compass(float(W), float(H));
     if (pause_open_) draw_pause(W, H);
     if (nav_open_) draw_navigator(W, H); // over everything, the pause menu too: a screen of its own
-    if (loc_open_) draw_locator(W, H);
+    if (locator_.is_open()) locator_.draw(W, H);
     if (media_open_) draw_media_player(W, H);
     if (graph_open_) draw_graph_view(W, H);
 }

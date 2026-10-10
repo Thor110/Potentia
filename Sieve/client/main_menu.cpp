@@ -54,7 +54,7 @@ std::vector<MainMenu::Item> MainMenu::items() const
 {
     switch (screen_)
     {
-    case Screen::Main: return {{Kind::Action, "start"}, {Kind::Action, "settings"}, {Kind::Action, "designer"}, {Kind::Action, "exit"}};
+    case Screen::Main: return {{Kind::Action, "start"}, {Kind::Action, "settings"}, {Kind::Action, "locator"}, {Kind::Action, "designer"}, {Kind::Action, "exit"}};
     case Screen::Settings:
         return {{Kind::Action, "graphics"}, {Kind::Action, "controls"}, {Kind::Action, "language"}, {Kind::Action, "back"}};
     case Screen::Graphics:
@@ -146,7 +146,7 @@ void MainMenu::back()
     if (!list_.empty()) { list_.clear(); return; }
     switch (screen_)
     {
-    case Screen::Main: row_ = 3; return; // Esc on the main screen points at Exit rather than quitting
+    case Screen::Main: row_ = int(items().size()) - 1; return; // Esc on the main screen points at Exit (the last) rather than quitting
     case Screen::Settings:
         if (settings_only_) { result_ = Result::Start; done_ = true; return; } // back to the hallway
         screen_ = Screen::Main;
@@ -168,6 +168,7 @@ void MainMenu::change(int dir)
     case Kind::Action:
         if (dir < 0) return;
         if (it.id == "start") { result_ = Result::Start; done_ = true; }
+        else if (it.id == "locator") { result_ = Result::Locator; done_ = true; }
         else if (it.id == "designer") { result_ = Result::Designer; done_ = true; }
         else if (it.id == "exit") { result_ = Result::Quit; done_ = true; }
         else if (it.id == "settings") { screen_ = Screen::Settings; row_ = 0; }

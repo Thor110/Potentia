@@ -16,6 +16,7 @@
 #include "cli/lines.hpp"
 #include "cli/locate.hpp"
 #include "cli/media_decode.hpp"
+#include "cli/pack.hpp"
 #include "cli/vault.hpp"
 #include "sieve/filekind.hpp"
 
@@ -355,6 +356,58 @@ std::vector<uint8_t> Hallway::item_file(const Book& bk, std::string& name)
     default: named(".png"); break;
     }
     return cli::unit_file(line(), bk.unit, 1);
+}
+
+// IDEAS §16.9: the first item at every whole degree of every dimension, saved as its file (item_file,
+// what J reads: a picture at one pixel a pixel; a binary file as its own bytes), and the folder as
+// one set of Sieve instructions. Even where the
+// items are noise, installing the instructions gives every one of them back, each checked against
+// its SHA-256, and each is the item its bearing (X) names again.
+std::string Hallway::sample_degrees(const std::string& dir, const std::string& sieve_out)
+{
+    constexpr uint32_t kDegrees = 360;
+    const fs::path root = from_u8(dir);
+    std::string report;
+    size_t total = 0;
+    for (int li = 0; li < kLines; ++li)
+    {
+        drop_in_hand();
+        set_line(li);
+        const fs::path folder = root / from_u8(kDimensions[li].id);
+        fs::create_directories(folder);
+        const BigUint units = line_units();
+        size_t saved = 0, skipped = 0;
+        for (uint32_t d = 0; d < kDegrees; ++d)
+        {
+            // The first unit at or past d degrees: ceil(d * units / 360).
+            BigUint index = units;
+            index.mul_small(d);
+            if (index.divmod_small(kDegrees) != 0) index += BigUint(1);
+            if (index >= units) { ++skipped; continue; } // a line of fewer units than degrees
+            place(index, true);
+            if (!in_hand_) { ++skipped; continue; } // the vault's
+            const Book bk = *in_hand_;
+            std::string name;
+            const std::vector<uint8_t> bytes = bk.is_file ? file_of(bk) : item_file(bk, name);
+            const std::u8string e = from_u8(name).extension().u8string();
+            const std::string ext = bk.is_file ? ".bin" : std::string(e.begin(), e.end());
+            char stem[8];
+            std::snprintf(stem, sizeof stem, "%03u", d);
+            write_all(folder / from_u8(stem + ext), bytes.data(), bytes.size());
+            ++saved;
+        }
+        drop_in_hand();
+        report += std::string(kDimensions[li].id) + ": " + std::to_string(saved) + " items" +
+                  (skipped ? " (" + std::to_string(skipped) + " degrees name no item of their own)" : "") + "\n";
+        total += saved;
+    }
+    cli::Manifest m = cli::walk_folder(root);
+    cli::add_packed(m, root);
+    const std::vector<uint8_t> file = m.file();
+    cli::write_address_file(from_u8(sieve_out), cli::binary_address(file), false);
+    report += "sample: " + std::to_string(total) + " items, " + std::to_string(m.bytes) + " bytes, as Sieve instructions of " +
+              std::to_string(file.size()) + " bytes (" + (m.packed ? "sieve-manifest-v4" : "sieve-manifest-v3") + ") in " + sieve_out + "\n";
+    return report;
 }
 
 void Hallway::jump_kind()

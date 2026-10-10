@@ -1,86 +1,65 @@
-# Installers packed: sieve-manifest-v4
+# The File Locator from the main menu, the calculating banner, the degrees sample
 
-Against `f32d3ee` (weigh and full).
+Against `87bd260` (idea update). Items 2, 5 and 9 of your list of 10 October (IDEAS §16.2, §16.5,
+§16.9).
 
-## Why compression is built in
-A release's files (programs, word lists, filters, models) are not Sieve items, so the weighing's
-ways alone would not have changed the release installer at all. I measured that, asked, and you
-chose compression built into the installer. So the installer now packs the folder itself, and the
-release no longer goes through 7-Zip first.
+## 16.2 The File Locator from the main menu
+- **Main menu:** File Locator now sits under Settings and above the Filter Designer. It is the same
+  locator as the pause menu's: choose, weigh, tailor, save and install.
+- **Go to it:** offered only in the world. From the main menu there is no hallway to walk in, so
+  the Go to it button, its Enter key and the "binary line" row are not shown.
+- **Weighing:** files are weighed under the lines the setup menu's current settings would build.
+  These are made when the first weighing starts.
+- **Use the tailored filters:** from the main menu, saves them for the next hallway built. In the
+  world it builds the hallway again with them, as before.
+- **Code:** the locator is now its own class (`client/file_locator.hpp`). It no longer belongs to
+  the hallway, which supplies only its lines, filters, BINARY length and the walk to a file.
 
-## The format: sieve-manifest-v4
-- **The listing:** v3's, with two `stream` lines (x86 and lzma2: size packed, size unpacked,
-  dictionary) and each file's way before its path.
-- **The ways:**
-  - `x86`: programs (EXE and ELF, by their first bytes), through the x86 branch filter, then
-    LZMA2;
-  - `raw`: everything else, LZMA2;
-  - `lines K`: a text made of some of file K's lines, in order, carried as a mask of K's lines,
-    one bit each. Each SCOWL list but the largest is a mask over the largest.
-- **After `end`:** the two streams, raw LZMA2, at preset 9 extreme.
-- **Safety:** what's packed is unpacked and compared before it's used. Where v4 would be no
-  smaller (a tiny folder, files already compressed), the installer is v3, with the files as they
-  are.
+## 16.5 "Calculating Dimension..." where it is seen
+- **The banner:** while any line is being counted, or X is weighing clashes, the setup menu says
+  "Calculating Dimensions..." in red at the top, centred between the title and the budget bars.
+  The words never change, so it keeps its size and place. The menu's narrowest width now leaves
+  room for it.
+- **Which lines:** still under the bars, in grey, as before.
+- **Fixed since the first version you tested:** the banner was sized and centred on what it said,
+  and what it said shrank as each line finished. So it grew and moved, and in a narrow window it
+  jumped to a line under the subtitle.
+- **ENTER THE HALLWAY:** greyed and refused until the counting is done. A scripted Return waits
+  for the counts, as a person would.
 
-## One decoder everywhere
-The LZMA SDK decoder that `sieve-install` already carried for 7z now sits in the shared install
-code. `sieve`, the hallway and `sieve-install` all unpack with it. `sieve-install` stays exactly
-the same size: 2,038,584 bytes on Linux.
+## 16.9 A demonstration: every dimension at every degree
+- **The command:** `hallway --no-menu --sample-degrees DIR --screenshot x.png` saves the item at
+  every whole degree (0 to 359) of every dimension into `DIR/<dimension>/<ddd>.<ext>`. Each
+  degree names the first unit at or past that bearing, the navigator's rule. The folder is then
+  made into Sieve instructions: `DIR.sieve`, or `--sample-out FILE`.
+- **The files:** pictures are saved one pixel a pixel, the file J reads; F saves them at 16 pixels
+  a pixel, with the same picture. Binary files are saved as their own bytes.
+- **The size:** at the default shapes, 3,240 items and 566,236 bytes, packed into a `.sieve` of
+  303,829 bytes (v4). It takes about 3.5 seconds in a Release build here.
+- **Checked:** it is the same on every run. `sieve install` gives every file back. A bearing typed
+  in the navigator (X, Tab, 90, Enter on pages; 13 on models) lands on the same item, byte for
+  byte.
+- **Only 225 distinct files:** the 3,240 items are all different, but only 225 of the files are.
+  The address includes each item's title (and a cover, where there is one); the file saved holds
+  only the unit (the page, picture or melody). At whole degrees the unit part repeats: every 40
+  degrees on pages, image, models, binary and books, every 72 degrees on audio, tracks, video and
+  movies. The navigator gives the same units at those bearings. That is why the `.sieve` is so
+  small.
+- **A curiosity:** the pages unit at 90 degrees is `ftftft...fu`. A quarter of the line, written in
+  base 27, repeats.
 
-## Where it applies
-- **`sieve locate --installer` and `--program`** make v4. `--v3` makes the old kind.
-- **The File Locator** saves and measures v4.
-- **`make_release.py`** packs the staged release folder, with no 7z step; 7-Zip is still used for
-  the source archive. `--seven-zip` makes the old 7z-carrying installers from the same build, for
-  your comparison.
-- **`sieve-install` and `sieve install`** install v4, every file checked against its SHA-256.
-  Older installers (v3, v2, a carried 7z) install as before.
+## Checked here (Linux)
+- **Unit tests:** 94,850 checks, 0 failures.
+- **CI:** the whole Linux hallway step, with the new checks, passes when run here.
+- **Screenshots:** the main menu, the locator from both places, and the setup menu while counting
+  at 1920 and 1240 wide.
+- **Not checked:** I have not built on Windows.
 
-## Measured (Linux, a release-shaped folder, 32,887,678 bytes)
-| Made as | Bytes | Share |
-| :--- | :--- | :--- |
-| zip, each file on its own | 11,597,734 | 35.26% |
-| one LZMA2 stream, preset 9e (7z without its container) | 6,961,919 | 21.17% |
-| **v4 installer** | **6,577,790** | **20.00%** |
-
-The x86 filter takes 258 KB off the programs, and the five smaller SCOWL lists shrink to 180 KB of
-masks. Running `make_release.py` here gave a `sieve.sieve` of 6,613,564 bytes for the full release
-folder, and both installers install back to it byte for byte.
-
-**For your test on Windows:** 7-Zip's Ultra uses BCJ2 on programs, which does a little better
-than the x86 filter, so I can't promise the margin over your real 7z. Run
-`make_release.py --seven-zip` beside the default run on the same build and weigh the two
-installers directly.
-
-## Checked
-- **Build:** no warnings (Linux, GCC 13), tools and client.
-- **Unit tests:** 47,426 checks, 0 failures.
-- **Oracle step:**
-  - v3 is still the oracle's to the byte (with `--v3`);
-  - a v4 fixture with a program and a derived list is unpacked by the oracle's own Python `lzma`
-    unpacker (`sieve_ref.py unpack`, nothing of Sieve's) and by `sieve install`, both identical;
-  - a damaged stream is refused, with nothing written.
-- **Hallway step, run here in full:** `sieve-install --yes` installs a v4 with a program and a
-  derived list, identically.
-- **Release-shaped folder:** installed by `sieve install` and by `sieve-install`, both identical to
-  the original.
-
-## Found and fixed on the way
-A file located without a folder in its name (`--locate big.bin`) gave the packer an empty root, so
-the File Locator failed on it. The packer now uses the current folder, and needs no folder at all
-when it already has the bytes. The hallway step caught it.
-
-## Docs
-- **SPECIFICATIONS §12.2:** v4.
-- **SIEVE-INSTALL-USAGE.md:** rewritten around packing, with the measurement; its old "Not yet"
-  item, compression inside the installer, is done.
-- **README.**
-- **`sieve help locate`.**
-- **HANDOFF:** an entry, and the file map.
-- **IDEAS §12.**
-- **`make_release.py`'s docstring, and `.bat`.**
-
-## Still open
-- **Ways for Sieve items** (a page or melody as its place on its line, which is what the weighing
-  measures). These need the lines in `sieve-install`.
-- **"Made from another file" ways beyond lines**, such as a delta.
+## Files
+- **New:** `client/file_locator.hpp`.
+- **Changed:**
+  - `client/file_locator.cpp`, `hallway.{hpp,cpp}`, `hud.cpp`, `font.{hpp,cpp}`, `app_main.cpp`,
+    `main_menu.{hpp,cpp}`, `menu.{hpp,cpp}`, `item_save.cpp`;
+  - `data/lang/en.txt`;
+  - `.github/workflows/build.yml`;
+  - `README.md`, `docs/HANDOFF.md`, `docs/IDEAS.md`.

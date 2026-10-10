@@ -357,8 +357,13 @@ needs `SDL3.dll`, and `--program` says so). Edward's TEST folder: a 3.69 MB siev
 from the internet), or checking the attached installer against a checksum before reading it
 (install_tree checks every file anyway).
 
-**The File Locator in the hallway** (pause menu, `client/file_locator.cpp`): the tool's own locator
-and comparison in a window. Choose a file or folder with the system's pickers (F, D) or drop one
+**The File Locator** (`client/file_locator.{hpp,cpp}`, class FileLocator): the tool's own locator
+and comparison in a window, opened from the hallway's pause menu or the main menu. What it needs
+from where it is opened is a FileLocator::Host: the lines and filters to weigh under (called on the
+worker), the ink, and, in the world only, the BINARY length and a walk to a file (Hallway::
+locator_host(), hallway.cpp). With no walk given (the main menu, app_main.cpp run_locator, which
+makes the lines from the setup menu's settings when the first weighing starts), Go to it and Enter
+are not offered, and Use the tailored filters saves them for the next hallway (IDEAS §16.2). Choose a file or folder with the system's pickers (F, D) or drop one
 on the window. A file shows its size, SHA-256, address and comparison, and "Go to it" puts you on
 the binary line with the file in hand (the BINARY length must hold it; it says so if not), or its
 address can be saved. A folder shows its manifest's identity and the comparison (its installer's
@@ -1198,9 +1203,12 @@ setting stuttered, and X is what asks for a count). The row now only saves the s
 their cache keys carry), changes only on X (toggle_all_filters with EveryLine: it applies the setting,
 unticks everything in reach and ticks it all again with the clashes weighed) or on going into the
 hallway (app_main sets it before building). memory_pending() is the two differing: a red line under
-the four budget bars says "Memory Limit Change Detected : Press X to re-optimise all dimensions."; else,
-while any line's tally is on a worker (counting_lines, from pending_) or X is weighing, it says
-"Calculating Dimension... (PAGES, BOOKS)". The line is always kept, so nothing below it moves; the
+the four budget bars says "Memory Limit Change Detected : Press X to re-optimise all dimensions.".
+Else, while any line's tally is on a worker (counting_lines, from pending_) or X is weighing
+(calculating()), it says "Calculating Dimension... (PAGES, BOOKS)"; and "Calculating Dimensions..."
+is said in red at the top, centred between the title and the budget, and ENTER THE HALLWAY is greyed
+and refused until it is done (IDEAS §16.5; a scripted Return there waits for the counts, as a person
+would). The line under the bars is always kept, so nothing below it moves; the
 budget's spacing is tighter so ENTER THE HALLWAY stays clear of the footer. X now works on the setup
 screen too (not on the key's row, where it is a letter). The row and the filter-memory bar show the
 setting, which is what X will count with.
@@ -1910,3 +1918,36 @@ the weighing's ways alone would not have changed its size).
   and a derived list), all run here; unit tests.
 - **Found on the way:** a file named without a folder (`--locate big.bin`) gave the packer an empty
   root; it now reads from the current folder, and needs none when it has the bytes.
+
+### The File Locator from the main menu, the calculating banner, the degrees sample (10 October 2026)
+Items 16.2, 16.5 and 16.9 of Edward's list of 10 October (IDEAS §16).
+- **The File Locator, standalone** (`client/file_locator.{hpp,cpp}`, class FileLocator): moved out
+  of Hallway. What it needs from where it is opened is a `FileLocator::Host`: `lines` (the lines
+  and filters to weigh under, called on the worker), `ink`, and, in the world only, `binary_bytes`
+  (the BINARY length now) and `go` (a walk to a file); `use_filters` and `closed`. The hallway's
+  host is `Hallway::locator_host()` (hallway.cpp, with `walk_to_file`, moved there); its pause menu
+  and `--locate`/`--install` work as before. `fit_text` (font.hpp) is the hallway's `fit`, shared.
+- **From the main menu:** File Locator, under Settings and above the Filter Designer
+  (MainMenu::Result::Locator; Esc on the main screen now points at the last row, Exit, by count).
+  app_main's `run_locator` makes the lines from the setup menu's settings (`make_lines`) when the
+  first weighing starts, offers no Go to it (nor Enter, nor the BINARY length row), and saves
+  tailored filters for the next hallway (`loc.filters_kept`). `--main-menu --locate PATH
+  [--tailored] [--press KEYS] --screenshot` draws it and prints whether it is open and offers Go.
+- **Calculating, where it is seen:** `Menu::calculating()` (a tally on a worker, or X weighing).
+  The setup menu says "Calculating Dimensions..." in red at the top, centred between the title and
+  the budget: words that never change, at the largest size the window has room for (2, 1.5 or 1),
+  so it keeps its size and place while the lines finish; the menu's narrowest width allows for it.
+  Which lines, as before, under the bars. ENTER THE HALLWAY is greyed and refused until it is done;
+  a scripted Return there (`Menu::press`) waits for the counts first, as a person would.
+  `--menu --busy` draws the menu before the counts are in.
+- **The degrees sample** (`Hallway::sample_degrees`, item_save.cpp; `--sample-degrees DIR
+  [--sample-out FILE]`): for every dimension and every whole degree, the first unit at or past the
+  bearing (ceil(d * units / 360), the navigator's rule, in the ordering in use), saved as
+  `DIR/<id>/<ddd>.<ext>` by `item_file` (what J reads: a picture at one pixel a pixel; F saves
+  pictures at 16), a binary file as its bytes; then DIR as Sieve instructions (`add_packed`, v4).
+  Defaults: 3,240 items, 566,236 bytes, a 303,829-byte `.sieve`, in about 3.5 s (Release). The
+  pages item at 90 degrees is `ftft...fu`: a quarter of 27^32 in base 27 repeats.
+- **Checked:** CI (hallway step: the main-menu locator offers no Go and Enter does not close it;
+  the sample twice, identical; installed by `sieve install`, identical; X, Tab, a bearing and Enter
+  on pages and models, then the item taken and saved, equal to the sample's file), all run here;
+  screenshots of the main menu, both locators and the setup menu while counting (1920 and 1240 wide).

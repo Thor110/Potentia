@@ -37,6 +37,8 @@ float text_width(const std::string& utf8, float scale);
 size_t text_cells(const std::string& utf8);
 // The longest prefix of `utf8` that fits in `cells` cells (never splits a character).
 std::string fit_cells(const std::string& utf8, size_t cells);
+// Text cut to fit `width` pixels at `scale`, ".." marking a cut.
+std::string fit_text(const std::string& utf8, float width, float scale);
 
 // Draws one character into an ARGB pixel buffer `w` pixels wide and `h` tall, stretched to fill the
 // cell at (x, y) of size cw x ch with nearest-neighbour sampling: text for pictures drawn off the

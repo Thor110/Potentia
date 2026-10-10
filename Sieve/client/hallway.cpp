@@ -19,7 +19,7 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
 : window_(window), r_(renderer), lines_(std::move(lines)), tile_geometry_(build_tile()), hall_geometry_(build_tile(true, false)), case_geometry_(build_tile(false, true)),
       bin_tile_{build_tile(true, true, -1), build_tile(true, true, 1)}, bin_hall_{build_tile(true, false, -1), build_tile(true, false, 1)},
       bin_case_{build_tile(false, true, -1), build_tile(false, true, 1)}, edge_geometry_{build_edge(1), build_edge(-1)},
-      book_geometry_{build_books(false), build_books(true)}
+      book_geometry_{build_books(false), build_books(true)}, locator_(window, renderer, locator_host())
 {
     texture_px_ = gpu::max_texture_px(r_);
     filters_ = filters; // what COST's tailoring starts from, and changes
@@ -1230,7 +1230,7 @@ void Hallway::step_trail(int dir)
 void Hallway::update(float dt, const bool* keys)
 {
     // Holding a book, you stand still: walking or turning under an open book is disorienting.
-    if (input_ != Input::None || in_hand_ || nav_open_ || pause_open_ || loc_open_) return;
+    if (input_ != Input::None || in_hand_ || nav_open_ || pause_open_ || locator_.is_open()) return;
     const float speed = (keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT]) ? 9.0f : 3.0f;
     const Vec3 fwd = {std::sin(cam_.yaw), 0, std::cos(cam_.yaw)};
     const Vec3 right = {std::cos(cam_.yaw), 0, -std::sin(cam_.yaw)};
@@ -1363,9 +1363,9 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
         graph_event(e);
         return;
     }
-    if (loc_open_)
+    if (locator_.is_open())
     {
-        locator_event(e);
+        locator_.event(e);
         return;
     }
     if (media_open_) // over the pause menu, like the other tools
@@ -2086,7 +2086,7 @@ Hallway::~Hallway()
     if (vla_thread_.joinable()) vla_thread_.join(); // a unit's shortest route: seconds at most
     stop_vault_ahead();
     stop_vault_pictures(); // before the lines they read from go
-    stop_locator();
+    locator_.stop();
     stop_graph();
     stop_face_workers(); // before the model space they read from goes
     release_textures();
@@ -2736,6 +2736,85 @@ std::vector<std::array<Segment, 4>> Hallway::build_books(bool varied)
         out[k] = {Segment{f[0], f[1]}, Segment{f[1], f[2]}, Segment{f[2], f[3]}, Segment{f[3], f[0]}};
     }
     return out;
+}
+
+// The File Locator in the world: weighed under this hallway's lines and filters (the pages, image,
+// audio and video lines' units, and the binary line's filters and length), and Go to it walks to
+// the file. A file longer than the BINARY length is still reached, after a second press: the line
+// is made exactly long enough for it, the hallway goes thin (only your room kept), and the ordering
+// positional, the one in which the address is the file's own hex dump plus 0101...01 and costs no
+// shuffle to find.
+FileLocator::Host Hallway::locator_host()
+{
+    FileLocator::Host h;
+    h.lines = [this] {
+        cli::WeighLines wl;
+        wl.pages = &unit_line(LineKind::Text);
+        wl.image = &unit_line(LineKind::Image);
+        wl.audio = &unit_line(LineKind::Audio);
+        wl.video = &unit_line(LineKind::Video);
+        wl.filters = filters_;
+        wl.binary_bytes = binary_space_->max_bytes();
+        return wl;
+    };
+    h.ink = [this] { return theme().edge; };
+    h.binary_bytes = [this] { return binary_space_->max_bytes(); };
+    h.go = [this](const std::vector<uint8_t>& bytes, const std::string& name, bool past) {
+        if (pause_open_) close_pause();
+        walk_to_file(bytes, name, past);
+    };
+    h.use_filters = [this](const FilterConfig& f) {
+        // As Return on COST does: the settings saved, and a hallway built with them (app_main).
+        tailored_ = f;
+        tailored_unit_.reset();
+        locator_.close();
+        request_ = Request::Tailored;
+    };
+    h.closed = [this] {
+        if (!pause_open_) SDL_SetWindowRelativeMouseMode(window_, true);
+    };
+    return h;
+}
+
+
+void Hallway::walk_to_file(const std::vector<uint8_t>& bytes, const std::string& name, bool past)
+{
+    sieve::cli::timings::Scope timed("hallway.walk"); // to a file: the line made long enough, and the place
+    if (cli::vault::withheld_bytes(bytes)) // the vault: nowhere to walk to
+    {
+        message(tr("vault.withheld"));
+        return;
+    }
+    // What touches the renderer (the pictures let go, the line's colours), here; then the rest,
+    // which for a file of megabytes takes seconds, on a worker while the window says LOCATING.
+    if (past)
+    {
+        set_thin(true, kBinaryLine);
+        mode_ = AddressMode::Positional;
+    }
+    clear_faces();
+    if (!on_binary())
+    {
+        binary_from_ = 0; // its door leads to pages, as when you start on binary
+        drop_in_hand();
+        set_line(kBinaryLine);
+    }
+    busy(tr("locating"), [&] {
+        if (past)
+        {
+            sieve::cli::timings::Scope t1("hallway.walk.length"); // the line made long enough
+            set_binary_length(bytes.size());
+        }
+        const Space::Digits title = title_for_name(name); // its name is its title
+        walked_names_[cli::sha256_hex(bytes)] = name;
+        {
+            sieve::cli::timings::Scope t2("hallway.walk.place"); // the file's place, and you there
+            go_to_file(bytes, true, &title);
+        }
+        sieve::cli::timings::Scope t3("hallway.walk.room"); // the room's items, ahead of drawing them
+        warm_room();
+    });
+    message(trf(past ? "loc.went_past" : "msg.warped.file", {std::to_string(bytes.size())}));
 }
 
 } // namespace hallway::hall

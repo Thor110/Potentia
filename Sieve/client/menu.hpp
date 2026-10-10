@@ -294,6 +294,9 @@ private:
     double filter_memory_setting() const; // the setting, in bytes
     // The lines whose tally is still being counted (on the workers), by name; "" when none is.
     std::string counting_lines() const;
+    // Still calculating the dimensions: a tally being counted, or X weighing the filters that
+    // clash. ENTER THE HALLWAY waits for it, greyed, and the menu says so at its top.
+    bool calculating() const { return toggling_ || !counting_lines().empty(); }
     // A filter a toggle reaches: its stack, line and part, and, where it clashes with another in
     // reach, its share kept alone (log10) once weighed.
     struct Reach
