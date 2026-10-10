@@ -903,6 +903,42 @@ predicts, and the address pays only for what it did not predict.
   delta, and models from generators plus a delta, are the same idea; UVs are the cleanest first case,
   because unwrapping is so often left as the algorithm made it.
 
+**Entering a world, and a games dimension (Edward, 10 October 2026).** In Edward's words, as near
+as written down:
+- **ENTER:** eventually the worlds dimension should have an ENTER button, which takes you into the
+  world in hand, to fly around it in "ghost" mode.
+- **A video game dimension, in the far future:** games reconstructed from the library. A game
+  would pull its worlds from the worlds dimension, its models from the models dimension, and its
+  UVs as this section's spec has them (the unwrap algorithm and its delta).
+- **Code:** each would carry an attached manifest of code that compiles itself, or is already
+  compiled. The first test: Sieve itself.
+- **Translation layers, in the far future:** layers that reduce every game to its smallest
+  footprint and store it in the library.
+
+*Evaluation:*
+- **Ghost mode** is near: a world's mesh is built already (`WorldSpace::mesh_of`). Entering it
+  means a camera inside that mesh, flying with no collision and no gravity, at a scale where a cell
+  is a room, with Esc back to the hallway. Its parts are this section's (textures, once worlds have
+  UVs) and §16.7's (the placement).
+- **What a game needs from worlds** is more than `worldspace-v1` gives: placement off the grid, a
+  scale per model, textures, and many more models than four. Each of those is a later version of
+  the world space, numbered as this one is, and each makes a world's address longer. So
+  reconstructing a real game's level wants an ordering that puts likely worlds first (a world
+  built by a generator, plus a delta), as §14's UVs are.
+- **The code is the part that does not reduce.** Code is stored as files (the binary line, or
+  manifest entries, §4 and §16.3); the library names it, but it costs about its compressed size.
+- **"Compiles itself"** needs a reproducible build: a pinned compiler and flags, so the same source
+  gives the same bytes and its SHA-256 checks out. "Already compiled" is per platform. Sieve's own
+  release (its source as a `sieve-manifest-v4`, built by CI from that source) is the natural first
+  test, as Edward says.
+- **Translation layers** are §7.1's game-format parsers carried through: assets read out of a
+  game's formats into Sieve's forms (models, worlds, textures, UVs as algorithm plus delta). The
+  footprint falls where the assets are generated or near it. Hand-made assets and code stay about
+  their size, as the counting argument says (§16).
+- **Verdict:** ENTER and ghost mode, build when worlds have textures (or before, untextured). The
+  games dimension and the translation layers are the long arc this section and §7.1 describe;
+  keep them here until worlds can carry a real level.
+
 ## 15. An AI model's state space (Edward, 7 October 2026)
 
 **The idea.** A dimension made from a model file: given a language model's file, its tokens are the

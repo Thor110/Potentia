@@ -2039,3 +2039,11 @@ cover and a title.
   at full size. `kMinW` now takes the map's columns at their narrowest (`kMapPitchMin`, 80 px,
   which was a bare number); at 1280 wide the last BINARY column had run off the edge.
 - **Checked:** screenshots at 1920 x 1080 and 1280 x 720, at the top of the list and at BINARY.
+
+### Item models for worlds and AI; entering a world, noted (10 October 2026)
+- **Meshes:** `book-ai.obj` and `book-ai.mtl`, copies of the models line's crate (as
+  `book-worlds.*` already were), and an `[ai]` section in `faces.ini`, ready for the AI dimension.
+  The line's id is assumed to be `ai`; if the AI dimension takes another id, rename the two files,
+  their `mtllib` line and the section. `templates/README.md` now lists worlds and AI.
+- **IDEAS §14:** Edward's idea of an ENTER button on worlds (ghost mode), a games dimension built
+  from worlds, models, UVs and code manifests, and translation layers, written down and weighed.
