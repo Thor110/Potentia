@@ -2061,3 +2061,34 @@ cover and a title.
   - **The tokenizer:** 2.1 MB (436 KB under xz).
 - **Next:** the dissection in `sieve` (safetensors reader, header rebuild, per-tensor statistics),
   then the weight prior (§16.8b), then the AI dimension.
+
+### `sieve tensors`: a model file taken apart (10 October 2026)
+- **Core:**
+  - `sieve/json.hpp`: a small strict JSON reader and compact writer, keeping members in order and
+    escaping as serde_json does;
+  - `sieve/safetensors.hpp`:
+    - `read_header` and `parse_header`, which check that the offsets hold the shapes, with no
+      gaps and no overlaps;
+    - `layout_start` and `is_canonical`, which are `safetensors-layout-v1`;
+    - `llama_tensors` from a `config.json`;
+    - `StatsBuilder` for BF16 and F16.
+  - SPECIFICATIONS §12.0a.
+- **The tool:** `sieve tensors` (`tools/cli/tensors.*`): the size, the SHA-256 and the two parts in
+  one pass, whether the start is the layout's, `--config` (does the config name the file's
+  tensors; alone, the start a model of that shape has), `--stats` by kind of tensor, `--tsv`
+  per tensor, and `--start-out`. `--stats` and `--tsv` are new switches (`args.hpp`).
+- **The oracle:** `tensors` (the start rebuilt and the `--tsv` table, written apart) and
+  `tensors-fixture` (a small Llama model of a config's shape, seeded values, laid out by the
+  oracle's own layout code). `tests/llama_tiny_config.json` is that shape for tests.
+- **Checked:**
+  - **On SmolLM2-360M-Instruct:**
+    - the hash is right;
+    - the start rebuilt from the tensors and from `config.json` is byte for byte the file's;
+    - `--tsv` is identical to the oracle's on all 290 tensors;
+    - coded by frequency, 475,928,934 bytes;
+    - 4.4 s for the file (the oracle takes 49 s).
+  - **Unit tests:** JSON, the layout (including the pinned SHA-256 of SmolLM2's start built
+    from its config alone), bad headers, and the statistics; 149,802 checks, 0 failures.
+  - **CI:** the stand-in model, its start rebuilt from its config, and the oracle's table.
+- **Next:** the weight prior (IDEAS §16.8b), measured against these figures; then the AI
+  dimension (§15).

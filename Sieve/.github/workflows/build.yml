@@ -226,6 +226,19 @@ jobs:
           ws=$(awk '$1 == "scrambled" {print $2}' wc.txt)
           $exe world --world-models 2 --read "$ws" --mode scrambled --out world2.obj > /dev/null
           cmp world.obj world2.obj
+          # A model file taken apart (sieve tensors; IDEAS §15): a small stand-in Llama model made by the
+          # oracle, its start rebuilt by the tool from the config alone, and its statistics the oracle's.
+          python reference/sieve_ref.py tensors-fixture --config tests/llama_tiny_config.json --seed 7 --out tiny.safetensors
+          $exe tensors tiny.safetensors --config tests/llama_tiny_config.json | tr -d '\r' > tens.txt
+          cat tens.txt
+          q "^layout       safetensors-layout-v1: the start is rebuilt" tens.txt
+          q "the start is rebuilt from config.json$" tens.txt
+          q "^weights      211072 bytes: 105536 values (BF16 20)$" tens.txt
+          $exe tensors --config tests/llama_tiny_config.json --start-out tiny-start.bin > /dev/null
+          head -c "$(wc -c < tiny-start.bin)" tiny.safetensors | cmp - tiny-start.bin
+          $exe tensors tiny.safetensors --tsv | tr -d '\r' > tens-cpp.tsv
+          python reference/sieve_ref.py tensors tiny.safetensors --tsv | tr -d '\r' | diff tens-cpp.tsv -
+          $exe tensors tiny.safetensors --stats | tr -d '\r' | q "^coded by frequency  "
           # And the same line in the hallway: a sixth door, the cube in hand, green on clay.
           H=build/hallway
           [ -f build/Release/hallway.exe ] && H=build/Release/hallway.exe

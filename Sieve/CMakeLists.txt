@@ -41,6 +41,8 @@ add_library(sieve_core STATIC
     core/src/filekind.cpp
     core/src/modelsieve.cpp
     core/src/worldspace.cpp
+    core/src/json.cpp
+    core/src/safetensors.cpp
     core/src/filters/models.cpp
     core/src/filters/pattern.cpp
     core/src/written.cpp
@@ -204,6 +206,7 @@ endif()
 add_executable(sieve
     tools/sieve_cli.cpp
     tools/cli/help.cpp
+    tools/cli/tensors.cpp
     ${SIEVE_ICON_RC})
 target_link_libraries(sieve PRIVATE sieve_lines sieve_locate sieve_compare)
 if(WIN32)

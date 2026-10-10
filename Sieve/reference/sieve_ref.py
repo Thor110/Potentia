@@ -27,6 +27,8 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
     python3 sieve_ref.py model-build --out /tmp/check.model   # rebuilds the pinned model
     python3 sieve_ref.py warp --length 32 "Some text"
     python3 sieve_ref.py read --length 32 --mode scrambled <hex>
+    python3 sieve_ref.py tensors model.safetensors --tsv          # what `sieve tensors --tsv` prints
+    python3 sieve_ref.py tensors-fixture --config cfg.json --out m.safetensors   # a small stand-in model
     python3 sieve_ref.py sieve --dict words.txt --max 4
     python3 sieve_ref.py plugin ../data/filters/max-run-data-v1.sfilter --length 12 --params max=2
     python3 sieve_ref.py plugin ../data/filters/moby-grammar-v1.sfilter --length 6 --lazy \
@@ -1837,6 +1839,165 @@ class WorldSpace:
             for i in range(self.m.f):
                 flines.append("f " + " ".join(f"{n * self.m.v + faces[3 * i + k] + 1:0{width}d}" for k in range(3)))
         return "\n".join(vlines + flines) + "\n"
+
+
+# ---------------------------------------------------------------- safetensors (IDEAS §15)
+# A model file taken apart, as `sieve tensors` does (core/safetensors.*), written apart from it.
+
+ST_TYPES = ["BOOL", "U8", "I8", "F8_E5M2", "F8_E4M3", "I16", "U16", "F16", "BF16", "I32", "U32", "F32", "F64", "I64", "U64"]
+ST_BYTES = {"BOOL": 1, "U8": 1, "I8": 1, "F8_E5M2": 1, "F8_E4M3": 1, "I16": 2, "U16": 2, "F16": 2, "BF16": 2,
+            "I32": 4, "U32": 4, "F32": 4, "F64": 8, "I64": 8, "U64": 8}
+
+
+def st_read(path):
+    """(header bytes, metadata dict or None in order, [(name, dtype, shape, begin, end)] in order)."""
+    import json
+    with open(path, "rb") as f:
+        n = struct.unpack("<Q", f.read(8))[0]
+        raw = f.read(n)
+    items = json.loads(raw, object_pairs_hook=lambda kv: kv)
+    meta, tensors = None, []
+    for name, v in items:
+        if name == "__metadata__":
+            meta = list(v)
+            continue
+        d = dict(v)
+        tensors.append((name, d["dtype"], list(d["shape"]), d["data_offsets"][0], d["data_offsets"][1]))
+    return raw, meta, tensors
+
+
+def st_layout(meta, tensors):
+    """safetensors-layout-v1: the start for these (name, dtype, shape) and this metadata."""
+    import json
+    order = sorted(tensors, key=lambda t: (-ST_TYPES.index(t[1]), t[0].encode("utf-8")))
+    parts = []
+    if meta is not None:
+        parts.append(json.dumps("__metadata__") + ":{" + ",".join(json.dumps(k, ensure_ascii=False) + ":" + json.dumps(v, ensure_ascii=False) for k, v in meta) + "}")
+    at = 0
+    for name, dtype, shape in ((t[0], t[1], t[2]) for t in order):
+        size = ST_BYTES[dtype]
+        for d in shape:
+            size *= d
+        parts.append(json.dumps(name, ensure_ascii=False) + ':{"dtype":' + json.dumps(dtype) + ',"shape":[' + ",".join(str(d) for d in shape)
+                     + '],"data_offsets":[' + str(at) + "," + str(at + size) + "]}")
+        at += size
+    body = ("{" + ",".join(parts) + "}").encode("utf-8")
+    body += b" " * ((8 - len(body) % 8) % 8)
+    return struct.pack("<Q", len(body)) + body
+
+
+def st_llama(config):
+    """A Llama config's tensors, as transformers names them: [(name, dtype, shape)]."""
+    if config.get("model_type") != "llama":
+        raise SystemExit("not a llama config")
+    if config.get("attention_bias") or config.get("mlp_bias"):
+        raise SystemExit("a llama model with biases is not covered")
+    h, L, i, V = config["hidden_size"], config["num_hidden_layers"], config["intermediate_size"], config["vocab_size"]
+    nh = config["num_attention_heads"]
+    nkv = config.get("num_key_value_heads") or nh
+    hd = config.get("head_dim") or h // nh
+    dtype = {"bfloat16": "BF16", "float16": "F16", "float32": "F32"}[config.get("torch_dtype", "float32")]
+    out = [("model.embed_tokens.weight", dtype, [V, h])]
+    for l in range(L):
+        p = "model.layers.%d." % l
+        out += [(p + "input_layernorm.weight", dtype, [h]), (p + "post_attention_layernorm.weight", dtype, [h]),
+                (p + "self_attn.q_proj.weight", dtype, [nh * hd, h]), (p + "self_attn.k_proj.weight", dtype, [nkv * hd, h]),
+                (p + "self_attn.v_proj.weight", dtype, [nkv * hd, h]), (p + "self_attn.o_proj.weight", dtype, [h, nh * hd]),
+                (p + "mlp.gate_proj.weight", dtype, [i, h]), (p + "mlp.up_proj.weight", dtype, [i, h]),
+                (p + "mlp.down_proj.weight", dtype, [h, i])]
+    out.append(("model.norm.weight", dtype, [h]))
+    if not config.get("tie_word_embeddings", False):
+        out.append(("lm_head.weight", dtype, [V, h]))
+    return out
+
+
+def st_half(v, bf16):
+    if bf16:
+        return struct.unpack("<f", struct.pack("<I", v << 16))[0]
+    return struct.unpack("<e", struct.pack("<H", v))[0]
+
+
+def cmd_tensors(args):
+    """`sieve tensors FILE --tsv`, and the start rebuilt (--start-out), computed apart."""
+    import json
+    raw, meta, tensors = st_read(args.file)
+    start = st_layout(meta, [(t[0], t[1], t[2]) for t in tensors])
+    if args.config:
+        with open(args.config, encoding="utf-8") as f:
+            start = st_layout(meta, st_llama(json.load(f)))
+    if args.start_out:
+        with open(args.start_out, "wb") as f:
+            f.write(start)
+    if not args.tsv:
+        print("canonical" if start[8:] == raw else "not canonical")
+        return
+    print("tensor\tdtype\tshape\tvalues\tdistinct\th_value\th_high\th_low\tmean\tsd")
+    base = 8 + len(raw)
+    with open(args.file, "rb") as f:
+        for name, dtype, shape, begin, end in sorted(tensors, key=lambda t: t[3]):
+            n = 1
+            for d in shape:
+                n *= d
+            row = [name, dtype, "x".join(str(d) for d in shape) or "scalar", str(n)]
+            if dtype not in ("BF16", "F16"):
+                print("\t".join(row + ["-"] * 6))
+                continue
+            f.seek(base + begin)
+            vals = array("H")
+            vals.frombytes(f.read(end - begin))
+            if sys.byteorder != "little":
+                vals.byteswap()
+            counts = collections.Counter(vals)
+            hi, lo = collections.Counter(), collections.Counter()
+            for v, c in counts.items():
+                hi[v >> 8] += c
+                lo[v & 255] += c
+
+            def entropy(c):
+                h = 0.0
+                for k in sorted(c):
+                    p = c[k] / n
+                    h -= p * math.log2(p)
+                return h
+            bf16 = dtype == "BF16"
+            table = [st_half(v, bf16) for v in range(65536)]
+            s = s2 = 0.0
+            for v in vals:
+                x = table[v]
+                s += x
+                s2 += x * x
+            mean = s / n
+            sd = math.sqrt(max(0.0, s2 / n - mean * mean))
+            row += [str(len(counts)), "%.6f" % entropy(counts), "%.6f" % entropy(hi), "%.6f" % entropy(lo), "%.9e" % mean, "%.9e" % sd]
+            print("\t".join(row))
+
+
+def cmd_tensors_fixture(args):
+    """A small Llama model of the shape in --config, its values pseudo-random (seeded), as a
+    safetensors file laid out by safetensors-layout-v1: a stand-in for a real model in tests."""
+    import json
+    import random
+    with open(args.config, encoding="utf-8") as f:
+        config = json.load(f)
+    tensors = st_llama(config)
+    start = st_layout([("format", "pt")], tensors)
+    rng = random.Random(args.seed)
+    order = sorted(tensors, key=lambda t: (-ST_TYPES.index(t[1]), t[0].encode("utf-8")))
+    with open(args.out, "wb") as out:
+        out.write(start)
+        for name, dtype, shape in order:
+            n = 1
+            for d in shape:
+                n *= d
+            norm = name.endswith("norm.weight")
+            vals = array("H")
+            for _ in range(n):
+                x = 1.0 + rng.gauss(0.0, 0.05) if norm else rng.gauss(0.0, 0.1)
+                bits = struct.unpack("<I", struct.pack("<f", x))[0]
+                vals.append(bits >> 16 if dtype == "BF16" else struct.unpack("<H", struct.pack("<e", x))[0])
+            if sys.byteorder != "little":
+                vals.byteswap()
+            out.write(vals.tobytes())
 
 
 def cmd_world_obj(args):
@@ -6008,6 +6169,15 @@ def main():
     sub.add_parser("notes3-vectors")
     sub.add_parser("composition-vectors")
     sub.add_parser("world-vectors")
+    s = sub.add_parser("tensors")
+    s.add_argument("file")
+    s.add_argument("--config")
+    s.add_argument("--tsv", action="store_true")
+    s.add_argument("--start-out")
+    s = sub.add_parser("tensors-fixture")
+    s.add_argument("--config", required=True)
+    s.add_argument("--seed", type=int, default=1)
+    s.add_argument("--out", required=True)
     s = sub.add_parser("world-obj")
     s.add_argument("--slots", required=True)
     s.add_argument("--world-models", type=int, default=4)
@@ -6108,6 +6278,10 @@ def main():
         cmd_world_vectors(args)
     elif args.cmd == "world-obj":
         cmd_world_obj(args)
+    elif args.cmd == "tensors":
+        cmd_tensors(args)
+    elif args.cmd == "tensors-fixture":
+        cmd_tensors_fixture(args)
     elif args.cmd == "kind-vectors":
         cmd_kind_vectors(args)
     elif args.cmd == "written-vectors":

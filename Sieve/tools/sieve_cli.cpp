@@ -34,6 +34,7 @@
 #include "cli/pack.hpp"
 #include "cli/plugins.hpp"
 #include "cli/tailor.hpp"
+#include "cli/tensors.hpp"
 #include "cli/weigh.hpp"
 #include "cli/timings.hpp"
 #include "sieve/dfa.hpp"
@@ -2837,7 +2838,7 @@ int cmd_vault(const Args& a)
 
 bool is_command(const std::string& name)
 {
-    return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" || name == "world" ||
+    return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" || name == "world" || name == "tensors" ||
            name == "version" || name == "models" || name == "train" || name == "measure" ||
            name == "filters" || name == "check" || name == "tailor" || name == "bind" || name == "unbind";
 }
@@ -2913,6 +2914,7 @@ int main(int argc, char** argv)
         if (a.command == "alphabets") return cmd_alphabets(a);
         if (a.command == "mesh") return cmd_mesh(a);
         if (a.command == "world") return cmd_world(a);
+        if (a.command == "tensors") return cmd_tensors(a);
         if (a.command == "version") return cmd_version();
         if (a.command == "models") return cmd_models();
         if (a.command == "train") return cmd_train(a);

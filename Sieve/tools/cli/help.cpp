@@ -346,6 +346,30 @@ const std::vector<Page>& pages()
          {{"sieve world", "how big the default worlds line is"},
           {"sieve world --world-models 2 --compose \"0:0.0.0.0|1:7.7.7.5\"", "two models in opposite corners, one turned"},
           {"sieve world --read ADDR --out world.obj", "save the world at an address"}}},
+        {"tensors", "A model file (safetensors) taken apart into its start and its weights, and weighed.",
+         "sieve tensors FILE.safetensors [--config config.json] [--stats | --tsv] [--start-out FILE]\n"
+         "  sieve tensors --config config.json [--start-out FILE]",
+         "The first step towards the AI dimension (IDEAS §15). A safetensors file is its start (an 8-byte\n"
+         "length and a JSON table of the tensors: each one's name, type, shape and place) and its weights\n"
+         "(the tensors' bytes, end to end). This prints the file's size and SHA-256, the two parts, and\n"
+         "whether the start is the one safetensors-layout-v1 writes for those tensors: if it is, the\n"
+         "start need not be kept, as it is rebuilt from the names, types and shapes. With a Llama model's\n"
+         "config.json, it checks that the config names exactly the file's tensors, so that the start is\n"
+         "rebuilt from the config alone. The tokenizer and the config are files of their own.",
+         {{"--config FILE", "A Llama model's config.json: its tensors are checked against the file's. Without a\n"
+                            "model file, the start a model of that shape has is built from it (metadata\n"
+                            "format=pt, as PyTorch saves)."},
+          {"--stats", "Weigh the weights (BF16 and F16 tensors): by kind of tensor (each layer's tensor of one\n"
+                      "name together), the bits a value of each tensor's values coded by how often they occur,\n"
+                      "and of their high and low bytes; and the whole so coded, beside the file's size."},
+          {"--tsv", "The statistics a tensor a line, in the file's order: values, distinct values, the\n"
+                    "entropies (bits a value), the mean and the standard deviation. reference/sieve_ref.py\n"
+                    "tensors --tsv prints the same, computed apart."},
+          {"--start-out FILE", "Write the start as rebuilt (from --config when given, else from the file's own\n"
+                               "tensors), to compare with the file's first bytes."}},
+         {{"sieve tensors model.safetensors --config config.json", "the file's two parts, and whether config.json rebuilds its start"},
+          {"sieve tensors model.safetensors --stats", "how much the weights carry, by kind of tensor"},
+          {"sieve tensors --config config.json --start-out start.bin", "the start a model of that shape has, from its config alone"}}},
 
         {"dicts", "List the registered dictionaries, or hash a new one for registration.",
          "sieve dicts [--hash FILE]",

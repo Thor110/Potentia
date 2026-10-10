@@ -15,6 +15,8 @@
 #include "sieve/filekind.hpp"
 #include "sieve/modelsieve.hpp"
 #include "sieve/worldspace.hpp"
+#include "sieve/json.hpp"
+#include "sieve/safetensors.hpp"
 #include "sieve/written.hpp"
 #include "sieve/packed.hpp"
 #include "sieve/plugin.hpp"
@@ -3153,6 +3155,91 @@ void test_world_vectors(const std::string& dir)
 // The world filters against brute force: a 1x1 two-colour cover, no title, one slot of the smallest
 // models line (3 vertices, 1 face, 2 coordinates) on a grid of 1, under canonical-mesh-v1 and with
 // none. Survivors walk in positional order, rank inverts unrank, and compact addresses round-trip.
+void test_json()
+{
+    using sieve::json::parse;
+    const auto v = parse(" {\"a\": [1, 2.5, -3e2, true, false, null], \"s\": \"x\\u00e9\\ud83d\\ude00\\n\\\"\", \"big\": 18446744073709551615} ");
+    CHECK(v.is_object() && v.object().size() == 3);
+    CHECK(v.at("a").array().size() == 6);
+    CHECK(v.at("a").array()[0].u64() == 1);
+    CHECK(v.at("a").array()[1].number() == 2.5);
+    CHECK(v.at("a").array()[2].number() == -300);
+    CHECK(throws([&] { (void)v.at("a").array()[1].u64(); })); // not a whole number
+    CHECK(v.at("a").array()[3].boolean() && !v.at("a").array()[4].boolean() && v.at("a").array()[5].is_null());
+    CHECK(v.at("s").string() == "x\xc3\xa9\xf0\x9f\x98\x80\n\"");
+    CHECK(v.at("big").u64() == UINT64_MAX);
+    CHECK(throws([&] { (void)parse("18446744073709551616").u64(); }));
+    CHECK(v.find("missing") == nullptr);
+    // Written compactly, in the order read, escaped as serde_json does.
+    CHECK(sieve::json::write(v) == "{\"a\":[1,2.5,-3e2,true,false,null],\"s\":\"x\xc3\xa9\xf0\x9f\x98\x80\\n\\\"\",\"big\":18446744073709551615}");
+    for (const char* badtext : {"", "{", "[1,]", "{\"a\":1,}", "01", "1 2", "\"\\x\"", "\"\x01\"", "\"\\ud800\"", "tru", "{1:2}"})
+        CHECK(throws([&] { (void)parse(badtext); }));
+}
+
+void test_safetensors()
+{
+    namespace st = sieve::safetensors;
+    const auto tiny = sieve::json::parse(R"({"model_type":"llama","hidden_size":64,"intermediate_size":160,"num_attention_heads":4,
+        "num_hidden_layers":2,"num_key_value_heads":2,"tie_word_embeddings":true,"torch_dtype":"bfloat16","vocab_size":300})");
+    const auto t = st::llama_tensors(tiny);
+    CHECK(t.size() == 20); // the embedding, 9 a layer, the final norm; tied, so no output layer
+    CHECK(t[0].name == "model.embed_tokens.weight" && t[0].shape == (std::vector<uint64_t>{300, 64}) && t[0].dtype == "BF16");
+    // An untied model has an output layer of its own; biases are not covered.
+    {
+        std::string untied = sieve::json::write(tiny);
+        untied.replace(untied.find("true"), 4, "false");
+        CHECK(st::llama_tensors(sieve::json::parse(untied)).size() == 21);
+        CHECK(throws([] { (void)st::llama_tensors(sieve::json::parse(R"({"model_type":"llama","attention_bias":true})")); }));
+        CHECK(throws([] { (void)st::llama_tensors(sieve::json::parse(R"({"model_type":"gpt2"})")); }));
+    }
+    // The layout: sorted by name, offsets end to end, padded to 8; read back, canonical.
+    std::vector<st::Tensor> laid;
+    const std::string start = st::layout_start(std::vector<std::pair<std::string, std::string>>{{"format", "pt"}}, t, &laid);
+    CHECK(start.size() % 8 == 0);
+    CHECK(laid.front().name == "model.embed_tokens.weight" && laid.front().begin == 0 && laid.back().name == "model.norm.weight");
+    const std::span<const uint8_t> bytes(reinterpret_cast<const uint8_t*>(start.data()), start.size());
+    const st::Header h = st::parse_header(bytes);
+    CHECK(h.start_bytes() == start.size() && h.tensors.size() == 20 && st::is_canonical(h));
+    CHECK(h.data_bytes() == 211072); // as the oracle's stand-in model has it
+    CHECK(h.metadata && h.metadata->size() == 1 && (*h.metadata)[0].second == "pt");
+    // A valid header written in another order is not canonical; bad offsets are refused.
+    auto header = [](const std::string& j) {
+        std::string s(8, '\0');
+        uint64_t n = j.size();
+        for (int i = 0; i < 8; ++i, n >>= 8) s[size_t(i)] = char(n & 0xFF);
+        return s + j;
+    };
+    auto parse_text = [](const std::string& s) { return st::parse_header(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(s.data()), s.size())); };
+    const std::string two = header(R"({"b":{"dtype":"F16","shape":[2],"data_offsets":[0,4]},"a":{"dtype":"F16","shape":[1],"data_offsets":[4,6]}})");
+    CHECK(parse_text(two).tensors.size() == 2 && !st::is_canonical(parse_text(two)));
+    CHECK(throws([&] { (void)parse_text(header(R"({"a":{"dtype":"F16","shape":[2],"data_offsets":[0,6]}})")); }));          // offsets not its shape
+    CHECK(throws([&] { (void)parse_text(header(R"({"a":{"dtype":"F16","shape":[1],"data_offsets":[2,4]}})")); }));          // a gap
+    CHECK(throws([&] { (void)parse_text(header(R"({"a":{"dtype":"F16","shape":[2],"data_offsets":[0,4]},"b":{"dtype":"F16","shape":[1],"data_offsets":[2,4]}})")); })); // overlap
+    CHECK(throws([&] { (void)parse_text(header(R"({"a":{"dtype":"Q4","shape":[1],"data_offsets":[0,1]}})")); }));            // unknown type
+    // The real model's start, from its config alone: the first 32,672 bytes of SmolLM2-360M-Instruct's
+    // model.safetensors (commit a10cc15), whose SHA-256 is pinned here.
+    const auto smol = sieve::json::parse(R"({"hidden_size":960,"intermediate_size":2560,"model_type":"llama","num_attention_heads":15,
+        "num_hidden_layers":32,"num_key_value_heads":5,"tie_word_embeddings":true,"torch_dtype":"bfloat16","vocab_size":49152,
+        "attention_bias":false,"mlp_bias":false})");
+    const std::string smol_start = st::layout_start(std::vector<std::pair<std::string, std::string>>{{"format", "pt"}}, st::llama_tensors(smol));
+    CHECK(smol_start.size() == 32672);
+    CHECK(Sha256::hex(Sha256::hash(smol_start)) == "3f17a5d8f1cc3c6a2d2a7b4ca43d526608b2d7c8c772c70939d4753883a9bf35");
+    // Statistics: 1, 1, -1, 0 in BF16.
+    {
+        st::StatsBuilder b("BF16");
+        const uint8_t v[] = {0x80, 0x3F, 0x80, 0x3F, 0x80, 0xBF, 0x00, 0x00};
+        b.add(v);
+        const st::TensorStats s = b.finish();
+        CHECK(s.values == 4 && s.distinct == 3);
+        CHECK(std::fabs(s.h_value - 1.5) < 1e-12 && std::fabs(s.h_high - 1.5) < 1e-12);
+        CHECK(std::fabs(s.h_low - (-(0.75 * std::log2(0.75) + 0.25 * std::log2(0.25)))) < 1e-12);
+        CHECK(s.mean == 0.25 && std::fabs(s.sd - std::sqrt(0.6875)) < 1e-12);
+        CHECK(throws([] { st::StatsBuilder bad("F32"); }));
+    }
+    CHECK(st::half_to_double(0x3C00, false) == 1.0 && st::half_to_double(0x0001, false) == std::ldexp(1.0, -24) && st::half_to_double(0xC000, false) == -2.0);
+    CHECK(st::half_to_double(0x3F80, true) == 1.0);
+}
+
 void test_world_sieve()
 {
     const Space cover("image/mono/1x1", 2, 1, "sieve");
@@ -4732,6 +4819,8 @@ void run_all(int argc, char** argv)
         test_composition_sieve();
         test_world_vectors(dir);
         test_world_sieve();
+        test_json();
+        test_safetensors();
         test_titled_vectors(dir + "vectors_titled_v1.tsv");
         test_binary_vectors(dir + "vectors_binary_v1.tsv");
         test_chunk_vectors(dir + "vectors_chunks_v1.tsv");

@@ -1026,8 +1026,9 @@ repository.
 - **Edward's view:** the gains will grow as the system is built out. The measurements fit that in two
   places: the exponent bits, where better priors can win more, and the text named under ever better
   models. The mantissa noise is the part that stays, unless a model is quantised.
-- **The measuring tools** (a safetensors reader, and per-tensor entropy in C) are scratch work for
-  now. Their place is `sieve`, so the figures can be checked against the pinned hash.
+- **The measuring tools** are now `sieve tensors` (SPECIFICATIONS §12.0a): the parts, the hash, the
+  start rebuilt from `config.json` (`--config`, `--start-out`) and the statistics (`--stats`,
+  `--tsv`), checked against the oracle's `tensors`, which agrees on every one of the 290 tensors.
 
 **Another reading, for the record.** A dimension whose units are the weights themselves (every
 model of one shape) would name a model by its weights: the binary line's files again, as long as

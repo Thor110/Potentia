@@ -886,6 +886,29 @@ In guided order the pages cost about **1.8 bits per character**: the three pages
 
 `tests/example_book_v1.book` is a committed example. CI unbinds it, rebinds its source to the identical record, and has the Python oracle read it independently to the same id and text.
 
+### `tensors`: a model file taken apart
+
+```
+sieve tensors FILE.safetensors [--config config.json] [--stats | --tsv] [--start-out FILE]
+sieve tensors --config config.json [--start-out FILE]
+```
+
+The first step towards the AI dimension (IDEAS §15). A model file in the safetensors format is its **start** (an 8-byte length and a JSON table naming each tensor, its type, shape and place) and its **weights** (the tensors' bytes, end to end); the tokenizer and `config.json` are files of their own. This prints the file's size and SHA-256 and the two parts, and says whether the start is the one `safetensors-layout-v1` writes (SPECIFICATIONS §12.0a): if it is, the start need not be kept, because it is rebuilt from the tensors' names, types and shapes. With a Llama model's `config.json` it checks that the config names exactly the file's tensors, so the start is rebuilt from the config alone.
+
+| Option | Meaning |
+| :--- | :--- |
+| `--config FILE` | A Llama model's `config.json`. With a model file: check its tensors against the file's. Alone: build the start a model of that shape has. |
+| `--stats` | Weigh the weights (BF16 and F16 tensors) by kind of tensor: bits a value when each tensor's values are coded by how often they occur, and of their high and low bytes; and the whole so coded. |
+| `--tsv` | The statistics a tensor a line (the oracle's `tensors --tsv` prints the same). |
+| `--start-out FILE` | Write the rebuilt start, to compare with the file's first bytes. |
+
+```sh
+sieve tensors model.safetensors --config config.json   # the parts, and whether config.json rebuilds the start
+sieve tensors model.safetensors --stats                # how much the weights carry, by kind of tensor
+```
+
+For SmolLM2-360M-Instruct (Hugging Face, `HuggingFaceTB/SmolLM2-360M-Instruct`, commit `a10cc15`, 723,674,912 bytes) the start (32,672 bytes) is rebuilt from `config.json`, and the weights, coded by frequency, come to 475.9 MB of 723.6 MB (65.8%); the whole run takes a few seconds. The model is not part of Sieve: download it yourself to try this.
+
 ### `version`: what produced a result
 
 ```

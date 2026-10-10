@@ -26,7 +26,7 @@ inline uint64_t parse_whole(const std::string& v, const std::string& what, uint6
 // Options that are switches (take no value).
 inline bool is_flag(const std::string& key)
 {
-    return key == "short" || key == "help" || key == "take" || key == "menu" || key == "main-menu" || key == "edge-glow" || key == "real-graphics" || key == "door-portals" || key == "fps-counter" || key == "no-menu" || key == "compact" || key == "compare" || key == "with-addresses" || key == "force" || key == "hex" || key == "thin" || key == "graph" || key == "seal" || key == "parse" || key == "written" || key == "timings" || key == "pdq" || key == "chunks" || key == "plugins" || key == "relations" || key == "designer" || key == "busy" || key == "media-player" || key == "no-music" || key == "canonical" || key == "describe" || key == "weigh" || key == "tailored" || key == "v3";
+    return key == "short" || key == "help" || key == "take" || key == "menu" || key == "main-menu" || key == "edge-glow" || key == "real-graphics" || key == "door-portals" || key == "fps-counter" || key == "no-menu" || key == "compact" || key == "compare" || key == "with-addresses" || key == "force" || key == "hex" || key == "thin" || key == "graph" || key == "seal" || key == "parse" || key == "written" || key == "timings" || key == "pdq" || key == "chunks" || key == "plugins" || key == "relations" || key == "designer" || key == "busy" || key == "media-player" || key == "no-music" || key == "canonical" || key == "describe" || key == "weigh" || key == "tailored" || key == "v3" || key == "stats" || key == "tsv";
 }
 
 struct Args
