@@ -913,6 +913,30 @@ sieve tensors model.safetensors --stats                # how much the weights ca
 
 For SmolLM2-360M-Instruct (Hugging Face, `HuggingFaceTB/SmolLM2-360M-Instruct`, commit `a10cc15`, 723,674,912 bytes) the start (32,672 bytes) is rebuilt from `config.json`, and the weights, coded by frequency, come to 475.9 MB of 723.6 MB (65.8%); the whole run takes a few seconds. `--pack` writes the whole file in 476.7 MB (65.9%, against 512.9 MB for xz), and `--unpack` rebuilds it byte for byte. The model is not part of Sieve: download it yourself to try this.
 
+### `chat`: talk to a language model, run by Sieve itself
+
+```
+sieve chat --model FOLDER [--prompt TEXT] [--system TEXT] [--max-tokens N] [--temperature T] [--top-p P] [--seed S]
+sieve chat --model FOLDER --encode TEXT | --logits TEXT
+```
+
+The engine of the coming AI dimension (IDEAS §15). FOLDER is a Llama model as it is published (`config.json`, `model.safetensors`, `tokenizer.json`), such as SmolLM2-360M-Instruct from Hugging Face (`HuggingFaceTB/SmolLM2-360M-Instruct`). Sieve reads the tokenizer and runs the model itself, on the processor, with no other runtime: its tokens are those of Hugging Face's own tokenizer, and its predictions agree with the model's official ONNX export to within a few hundred-thousandths (SPECIFICATIONS §12.0c). With `--prompt` it answers once; without, it is a conversation, a message a line, until an empty line. On four cores SmolLM2-360M writes about 9 tokens a second. The model is not part of Sieve: download it to use it.
+
+| Option | Meaning |
+| :--- | :--- |
+| `--prompt TEXT` | One message: print the reply and stop. |
+| `--system TEXT` | The system line (default: the model's own). |
+| `--max-tokens N` | The longest reply (512). |
+| `--temperature T`, `--top-p P`, `--top-k K`, `--repeat-penalty R` | How it chooses each token (0.2 and 0.9 by default, as SmolLM2's makers suggest; temperature 0: always the likeliest). |
+| `--seed S` | The same seed gives the same reply. |
+| `--threads N` | Threads for the model; the result does not change. |
+| `--encode TEXT` | How the tokenizer reads a text: its tokens. |
+| `--logits TEXT` | The five likeliest next tokens after a text (`--logits-out FILE` writes them all). |
+
+```sh
+sieve chat --model SmolLM2-360M-Instruct --prompt "Write a haiku about libraries"
+```
+
 ### `version`: what produced a result
 
 ```

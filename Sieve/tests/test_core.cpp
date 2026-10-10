@@ -18,6 +18,9 @@
 #include "sieve/json.hpp"
 #include "sieve/safetensors.hpp"
 #include "sieve/weights.hpp"
+#include "sieve/llm.hpp"
+#include "sieve/llm_tokenizer.hpp"
+#include "sieve/unicode_classes.hpp"
 #include "sieve/written.hpp"
 #include "sieve/packed.hpp"
 #include "sieve/plugin.hpp"
@@ -3335,6 +3338,107 @@ void test_weights()
     }
 }
 
+void test_llm(const std::string& dir)
+{
+    namespace L = sieve::llm;
+    // Unicode classes.
+    CHECK(sieve::unicode::is_letter(U'a') && sieve::unicode::is_letter(U'é') && sieve::unicode::is_letter(U'日') && !sieve::unicode::is_letter(U'1'));
+    CHECK(sieve::unicode::is_number(U'7') && sieve::unicode::is_number(U'½') && sieve::unicode::is_number(U'٣') && !sieve::unicode::is_number(U'x'));
+    CHECK(sieve::unicode::is_white_space(U'　') && !sieve::unicode::is_white_space(U'​'));
+    // GPT-2's byte characters.
+    CHECK(L::byte_char(' ') == U'Ġ' && L::byte_char('A') == U'A' && L::byte_char(0) == U'Ā');
+    for (int b = 0; b < 256; ++b) CHECK(L::char_byte(L::byte_char(uint8_t(b))) == uint8_t(b));
+    // The stand-in tokenizer (the oracle's llm-tokenizer-fixture).
+    std::ifstream f(dir + "llama_tiny_tokenizer.json", std::ios::binary);
+    std::stringstream ss;
+    ss << f.rdbuf();
+    const L::Tokenizer tok(sieve::json::parse(ss.str()));
+    CHECK(tok.size() == 300);
+    CHECK(tok.find("<|im_end|>") == 2u && tok.is_added(2) && !tok.is_added(3));
+    const std::vector<std::string> pieces = tok.pieces("it's 2026,  the  end\n\nok");
+    // The last of a run of spaces goes with what follows; a newline cannot, so it stands alone.
+    CHECK((pieces == std::vector<std::string>{"it", "'s", " ", "2", "0", "2", "6", ",", " ", " the", " ", " end", "\n", "\n", "ok"}));
+    for (const char* text : {"The library holds every book.", "  spaces\tand\nlines  ", "caf\xc3\xa9 \xe6\x97\xa5\xe6\x9c\xac \xf0\x9f\x98\x80", "1,000.5", ""})
+        CHECK(tok.decode(tok.encode(text, true)) == text);
+    const auto ids = tok.encode("<|im_start|>user\nhi<|im_end|>", true);
+    CHECK(ids.front() == 1u && ids.back() == 2u);
+    CHECK(tok.encode("<|im_end|>", false).size() > 1); // as text, not the token
+    CHECK(tok.encode(" the", true).size() == 1);         // learnt merges: " the" is one token
+    CHECK(throws([] { (void)L::Tokenizer(sieve::json::parse(R"({"normalizer":{"type":"NFC"},"pre_tokenizer":{"type":"ByteLevel"},"model":{"type":"BPE","vocab":{},"merges":[]}})")); }));
+
+    // The stand-in model: one written to a file, run with one thread and with four.
+    namespace st = sieve::safetensors;
+    const auto config = sieve::json::parse(R"({"model_type":"llama","hidden_size":32,"intermediate_size":48,"num_attention_heads":4,
+        "num_hidden_layers":2,"num_key_value_heads":2,"tie_word_embeddings":true,"torch_dtype":"bfloat16","vocab_size":300,"max_position_embeddings":64})");
+    std::vector<st::Tensor> laid;
+    std::string file = st::layout_start(std::vector<std::pair<std::string, std::string>>{{"format", "pt"}}, st::llama_tensors(config), &laid);
+    std::mt19937 rng(3);
+    for (const st::Tensor& t : laid)
+        for (uint64_t i = 0; i < t.bytes(); i += 2)
+        {
+            const bool norm = t.name.find("norm") != std::string::npos;
+            const float x = float((norm ? 1.0 : 0.0) + std::normal_distribution<double>(0, norm ? 0.05 : 0.1)(rng));
+            uint32_t u;
+            std::memcpy(&u, &x, 4);
+            file.push_back(char((u >> 16) & 0xFF));
+            file.push_back(char(u >> 24));
+        }
+    const std::filesystem::path path = std::filesystem::temp_directory_path() / "sieve_test_llm.safetensors";
+    {
+        std::ofstream out(path, std::ios::binary);
+        out.write(file.data(), std::streamsize(file.size()));
+    }
+    {
+        L::Model one(config, path, 1), four(config, path, 4);
+        CHECK(one.config().head_dim == 8 && one.config().kv_heads == 2);
+        std::vector<float> a, b;
+        for (const uint32_t t : tok.encode("The library holds every book.", true))
+        {
+            a = one.step(t);
+            b = four.step(t);
+        }
+        CHECK(a.size() == 300 && a == b); // the same to the bit, whatever the threads
+        one.reset();
+        std::vector<float> again;
+        for (const uint32_t t : tok.encode("The library holds every book.", true)) again = one.step(t);
+        CHECK(again == a);
+        CHECK(throws([&] { (void)one.step(300); }));
+        // Sampling: greedy is the likeliest; a seed gives the same choices.
+        L::Sampling greedy;
+        greedy.temperature = 0;
+        L::Sampler g(greedy);
+        CHECK(g.pick(a, {}) == uint32_t(std::max_element(a.begin(), a.end()) - a.begin()));
+        L::Sampling warm;
+        warm.temperature = 1.0f;
+        warm.top_p = 1.0f;
+        warm.seed = 9;
+        L::Sampler s1(warm), s2(warm);
+        std::vector<uint32_t> p1, p2;
+        for (int i = 0; i < 20; ++i)
+        {
+            p1.push_back(s1.pick(a, {}));
+            p2.push_back(s2.pick(a, {}));
+        }
+        CHECK(p1 == p2);
+        L::Sampling k1 = warm;
+        k1.top_k = 1;
+        L::Sampler s3(k1);
+        CHECK(s3.pick(a, {}) == g.pick(a, {}));
+        // A chat: the reply stops within its budget, and the turn is closed.
+        L::Model m(config, path, 2);
+        L::Chat chat(m, tok, "test");
+        L::Sampler sg(greedy);
+        std::string streamed;
+        const std::string r = chat.reply("hi", sg, 6, [&](const std::string& piece) {
+            streamed += piece;
+            return true;
+        });
+        CHECK(streamed == r && chat.last_reply_tokens() <= 6);
+        CHECK(throws([&] { (void)L::Model(sieve::json::parse(R"({"model_type":"gpt2"})"), path, 1); }));
+    }
+    std::filesystem::remove(path);
+}
+
 void test_world_sieve()
 {
     const Space cover("image/mono/1x1", 2, 1, "sieve");
@@ -4917,6 +5021,7 @@ void run_all(int argc, char** argv)
         test_json();
         test_safetensors();
         test_weights();
+        test_llm(dir);
         test_titled_vectors(dir + "vectors_titled_v1.tsv");
         test_binary_vectors(dir + "vectors_binary_v1.tsv");
         test_chunk_vectors(dir + "vectors_chunks_v1.tsv");

@@ -2117,3 +2117,48 @@ cover and a title.
     other.
 - **Next:** the AI dimension (IDEAS §15). Better priors are later versions, measured against this
   one.
+
+### `sieve chat`: the language model run by Sieve itself (10 October 2026)
+- **Edward's choice:** no Ollama; the engine is Sieve's own (IDEAS §16.8). SPECIFICATIONS §12.0c
+  sets it out.
+- **Core:**
+  - `sieve/unicode_classes.hpp`: letters, numbers and white space; the table is generated for
+    Unicode 14.0 by `tools/gen_unicode_classes.py`.
+  - `sieve/llm_tokenizer.hpp`: byte-level BPE from tokenizer.json, with added tokens, Digits,
+    the GPT-2 pattern written as a scanner, merges by rank, and decoding.
+  - `sieve/llm.hpp`:
+    - `Model`, the Llama forward pass, with BF16 weights kept as stored and 32-bit arithmetic;
+    - a key and value cache per layer;
+    - a small thread pool that shares out rows, each row summed in one fixed order, so the result
+      is the same for any thread count;
+    - `Sampler` (temperature, top-p, top-k, repeat penalty, splitmix64);
+    - `Chat` (ChatML, whole UTF-8 characters streamed).
+- **The tool:** `sieve chat`:
+  - `--prompt`, or a conversation from standard input;
+  - `--encode` and `--encode-lines`;
+  - `--logits` and `--logits-out`.
+  - How long it read and wrote goes to standard error.
+- **The oracle:**
+  - `llm-encode-lines`: a tokenizer written apart, using Python's unicodedata and GPT-2's
+    merge-all loop;
+  - `llm-logits`: the forward pass in 64-bit floats, the whole sequence at once, with
+    `--compare` against the tool's logits;
+  - `llm-tokenizer-fixture`: a 300-token BPE learnt from a fixed text, as
+    `tests/llama_tiny_tokenizer.json`;
+  - `llm-corpus`: texts to tokenize.
+- **Checked against the real thing:**
+  - **Tokenizer:** the tool's and the oracle's tokens equal Hugging Face's `tokenizers` on 5,736
+    texts.
+  - **Forward pass:** its logits are within 5.4e-5 of the official ONNX export run by ONNX
+    Runtime (`onnx/model.onnx`, float32, same commit), on a 42-token chat prompt; KL 2e-11.
+    PyTorch could not be installed here (its download host is blocked); ONNX Runtime came from PyPI.
+  - **SmolLM2:** finds " Paris" after "The capital of France is", and holds a conversation at
+    about 9 tokens a second on four cores; loading takes 1 to 3 s.
+- **Tests:**
+  - **Unit tests:** the Unicode classes, the byte characters, the stand-in tokenizer (pieces,
+    round trips, added tokens), and a small model written to a file (the same logits with one
+    thread and with four, after a reset, sampling seeded and greedy, a chat that streams);
+    150,402 checks, 0 failures.
+  - **CI:** the stand-in tokenizer regenerated and compared, the tokens of the oracle's corpus,
+    the logits within 1e-3 of the oracle's, and a reply.
+- **Next:** the AI dimension in the hallway: the room, the items, and the chat viewer on this engine.

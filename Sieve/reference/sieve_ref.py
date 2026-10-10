@@ -31,6 +31,9 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
     python3 sieve_ref.py tensors-fixture --config cfg.json --out m.safetensors   # a small stand-in model
     python3 sieve_ref.py weights-pack m.safetensors --out m.sieve-weights      # sieve-weights-v1, as `sieve tensors --pack`
     python3 sieve_ref.py weights-unpack m.sieve-weights --out m.safetensors    # and back
+    python3 sieve_ref.py llm-tokenizer-fixture --out ../tests/llama_tiny_tokenizer.json   # a small BPE tokenizer
+    python3 sieve_ref.py llm-encode-lines texts.jsonl --model DIR                     # what `sieve chat --encode-lines` prints
+    python3 sieve_ref.py llm-logits "text" --model DIR [--compare logits.f32]         # what `sieve chat --logits` prints
     python3 sieve_ref.py sieve --dict words.txt --max 4
     python3 sieve_ref.py plugin ../data/filters/max-run-data-v1.sfilter --length 12 --params max=2
     python3 sieve_ref.py plugin ../data/filters/moby-grammar-v1.sfilter --length 6 --lazy \
@@ -2189,6 +2192,322 @@ def cmd_weights_unpack(args):
         raise SystemExit("what it rebuilds is not the file it was made from")
     with open(args.out, "wb") as f:
         f.write(out)
+
+
+# ---------------------------------------------------------------- a language model (IDEAS §15)
+# The tokenizer and the forward pass `sieve chat` runs (core/llm_tokenizer.*, core/llm.*), written
+# apart from them: Python's own Unicode categories, GPT-2's merge loop, and the model in 64-bit floats.
+
+def llm_byte_chars():
+    bs = list(range(ord("!"), ord("~") + 1)) + list(range(0xA1, 0xAD)) + list(range(0xAE, 0x100))
+    cs = bs[:]
+    n = 0
+    for b in range(256):
+        if b not in bs:
+            bs.append(b)
+            cs.append(256 + n)
+            n += 1
+    return {b: chr(c) for b, c in zip(bs, cs)}
+
+
+LLM_WS = set(map(chr, list(range(0x09, 0x0E)) + [0x20, 0x85, 0xA0, 0x1680] + list(range(0x2000, 0x200B)) + [0x2028, 0x2029, 0x202F, 0x205F, 0x3000]))
+
+
+def llm_kind(c):
+    if c in LLM_WS:
+        return "s"
+    cat = unicodedata.category(c)[0]
+    return "L" if cat == "L" else "N" if cat == "N" else "o"
+
+
+def llm_gpt2(text):
+    """The GPT-2 pattern, as a regular expression engine tries it, alternative by alternative."""
+    out, i, n = [], 0, len(text)
+    while i < n:
+        for c in ("'s", "'t", "'re", "'ve", "'m", "'ll", "'d"):
+            if text.startswith(c, i):
+                out.append(c)
+                i += len(c)
+                break
+        else:
+            matched = False
+            for cls in ("L", "N", "o"):
+                j = i + 1 if text[i] == " " else i
+                if j < n and llm_kind(text[j]) == cls:
+                    k = j
+                    while k < n and llm_kind(text[k]) == cls:
+                        k += 1
+                    out.append(text[i:k])
+                    i = k
+                    matched = True
+                    break
+            if matched:
+                continue
+            k = i
+            while k < n and llm_kind(text[k]) == "s":
+                k += 1
+            if k < n and k - i >= 2:  # \s+(?!\S): leave the last space to what follows
+                k -= 1
+            out.append(text[i:k])
+            i = k
+    return out
+
+
+class LlmTokenizer:
+    def __init__(self, path):
+        import json
+        with open(path, encoding="utf-8") as f:
+            j = json.load(f)
+        pre = j["pre_tokenizer"]
+        self.digits = pre["type"] == "Sequence"
+        m = j["model"]
+        self.vocab = dict(m["vocab"])
+        self.added = {}
+        for a in j.get("added_tokens", []):
+            self.vocab[a["content"]] = a["id"]
+            self.added[a["content"]] = a["id"]
+        self.rank = {}
+        for r, mg in enumerate(m["merges"]):
+            a, b = mg.split(" ") if isinstance(mg, str) else mg
+            self.rank[(a, b)] = r
+        self.chars = llm_byte_chars()
+        self.back = {c: b for b, c in self.chars.items()}
+        self.by_id = {i: t for t, i in self.vocab.items()}
+
+    def pieces(self, text):
+        if not self.digits:
+            return llm_gpt2(text)
+        out, run = [], ""
+        for c in text:
+            if unicodedata.category(c)[0] == "N":
+                if run:
+                    out += llm_gpt2(run)
+                    run = ""
+                out.append(c)
+            else:
+                run += c
+        if run:
+            out += llm_gpt2(run)
+        return out
+
+    def bpe(self, piece):
+        word = [self.chars[b] for b in piece.encode("utf-8") if self.chars[b] in self.vocab]
+        while len(word) > 1:
+            pairs = [(self.rank.get((word[i], word[i + 1]), None), i) for i in range(len(word) - 1)]
+            pairs = [p for p in pairs if p[0] is not None]
+            if not pairs:
+                break
+            best = min(pairs)[0]
+            a, b = next((word[i], word[i + 1]) for r, i in pairs if r == best)
+            merged, i = [], 0
+            while i < len(word):  # every occurrence, left to right (GPT-2's loop)
+                if i + 1 < len(word) and word[i] == a and word[i + 1] == b:
+                    merged.append(a + b)
+                    i += 2
+                else:
+                    merged.append(word[i])
+                    i += 1
+            word = merged
+        return [self.vocab[w] for w in word]
+
+    def encode(self, text, special=True):
+        ids, at = [], 0
+        while at < len(text):
+            hit = None
+            if special:
+                for t in self.added:
+                    w = text.find(t, at)
+                    if w >= 0 and (hit is None or w < hit[0] or (w == hit[0] and len(t) > len(hit[1]))):
+                        hit = (w, t)
+            end = hit[0] if hit else len(text)
+            for p in self.pieces(text[at:end]):
+                ids += self.bpe(p)
+            if not hit:
+                break
+            ids.append(self.added[hit[1]])
+            at = hit[0] + len(hit[1])
+        return ids
+
+    def bytes_of(self, i):
+        t = self.by_id[i]
+        if t in self.added:
+            return t.encode("utf-8")
+        return bytes(self.back[c] for c in t)
+
+
+def cmd_llm_encode_lines(args):
+    import json
+    tok = LlmTokenizer(args.model + "/tokenizer.json")
+    with open(args.file, encoding="utf-8") as f:
+        for line in f:
+            print(" ".join(map(str, tok.encode(json.loads(line)))))
+
+
+def llm_forward(model_dir, ids):
+    """The logits after the last of `ids`, in 64-bit floats, the whole sequence at once."""
+    import json
+    with open(model_dir + "/config.json", encoding="utf-8") as f:
+        c = json.load(f)
+    raw, meta, tensors = st_read(model_dir + "/model.safetensors")
+    base = 8 + len(raw)
+    W = {}
+    with open(model_dir + "/model.safetensors", "rb") as f:
+        for name, dtype, shape, b, e in tensors:
+            f.seek(base + b)
+            a = array("H")
+            a.frombytes(f.read(e - b))
+            if sys.byteorder != "little":
+                a.byteswap()
+            vals = [st_half(v, dtype == "BF16") for v in a]
+            cols = shape[-1]
+            W[name] = [vals[r * cols:(r + 1) * cols] for r in range(len(vals) // cols)] if len(shape) == 2 else vals
+    H, L, nh = c["hidden_size"], c["num_hidden_layers"], c["num_attention_heads"]
+    nkv = c.get("num_key_value_heads") or nh
+    hd = c.get("head_dim") or H // nh
+    eps = c.get("rms_norm_eps", 1e-5)
+    theta = c.get("rope_theta", 10000.0)
+    tied = c.get("tie_word_embeddings", False)
+
+    def mv(m, x):
+        return [sum(w * v for w, v in zip(row, x)) for row in m]
+
+    def norm(x, w):
+        s = 1.0 / math.sqrt(sum(v * v for v in x) / len(x) + eps)
+        return [v * s * g for v, g in zip(x, w)]
+
+    def rope(v, pos):
+        half = hd // 2
+        out = list(v)
+        for i in range(half):
+            ang = pos / theta ** (2 * i / hd)
+            co, si = math.cos(ang), math.sin(ang)
+            out[i] = v[i] * co - v[i + half] * si
+            out[i + half] = v[i + half] * co + v[i] * si
+        return out
+    xs = [list(W["model.embed_tokens.weight"][t]) for t in ids]
+    for l in range(L):
+        p = "model.layers.%d." % l
+        hs = [norm(x, W[p + "input_layernorm.weight"]) for x in xs]
+        qs = [mv(W[p + "self_attn.q_proj.weight"], h) for h in hs]
+        ks = [mv(W[p + "self_attn.k_proj.weight"], h) for h in hs]
+        vs = [mv(W[p + "self_attn.v_proj.weight"], h) for h in hs]
+        qs = [sum((rope(q[a * hd:(a + 1) * hd], t) for a in range(nh)), []) for t, q in enumerate(qs)]
+        ks = [sum((rope(k[a * hd:(a + 1) * hd], t) for a in range(nkv)), []) for t, k in enumerate(ks)]
+        for t in range(len(xs)):
+            att = []
+            for a in range(nh):
+                g = a // (nh // nkv)
+                q = qs[t][a * hd:(a + 1) * hd]
+                sc = [sum(qi * ki for qi, ki in zip(q, ks[u][g * hd:(g + 1) * hd])) / math.sqrt(hd) for u in range(t + 1)]
+                m = max(sc)
+                ex = [math.exp(v - m) for v in sc]
+                z = sum(ex)
+                att += [sum(ex[u] / z * vs[u][g * hd + i] for u in range(t + 1)) for i in range(hd)]
+            o = mv(W[p + "self_attn.o_proj.weight"], att)
+            xs[t] = [a + b for a, b in zip(xs[t], o)]
+            h = norm(xs[t], W[p + "post_attention_layernorm.weight"])
+            gt = mv(W[p + "mlp.gate_proj.weight"], h)
+            up = mv(W[p + "mlp.up_proj.weight"], h)
+            act = [g / (1 + math.exp(-g)) * u for g, u in zip(gt, up)]
+            d = mv(W[p + "mlp.down_proj.weight"], act)
+            xs[t] = [a + b for a, b in zip(xs[t], d)]
+    h = norm(xs[-1], W["model.norm.weight"])
+    return mv(W["model.embed_tokens.weight"] if tied else W["lm_head.weight"], h)
+
+
+def cmd_llm_logits(args):
+    """The logits after a text, as `sieve chat --logits` prints them; with --compare, the largest
+    difference from the tool's (its --logits-out), refused past --tolerance."""
+    tok = LlmTokenizer(args.model + "/tokenizer.json")
+    ids = tok.encode(args.text)
+    logits = llm_forward(args.model, ids)
+    import json
+    order = sorted(range(len(logits)), key=lambda i: -logits[i])[:5]
+    print("tokens       %d" % len(ids))
+    for i in order:
+        print("next         %d\t%.4f\t%s" % (i, logits[i], json.dumps(tok.bytes_of(i).decode("utf-8", "replace"))))
+    if args.compare:
+        with open(args.compare, "rb") as f:
+            theirs = array("f")
+            theirs.frombytes(f.read())
+        if sys.byteorder != "little":
+            theirs.byteswap()
+        if len(theirs) != len(logits):
+            raise SystemExit("the tool's logits are not one a token of the vocabulary")
+        worst = max(abs(a - b) for a, b in zip(logits, theirs))
+        print("largest difference %.3e" % worst)
+        if worst > args.tolerance:
+            raise SystemExit("the tool's logits differ by more than %g" % args.tolerance)
+
+
+def cmd_llm_tokenizer_fixture(args):
+    """A small byte-level BPE tokenizer.json (three added tokens, the 256 byte characters, and merges
+    learnt from a fixed text up to --vocab tokens), as a stand-in for a real model's in tests."""
+    import json
+    text = ("The library holds every book that could be written, and every page of every book. "
+            "Readers walk its halls looking for the one that tells them who they are. It's 2026; "
+            "they've counted 1,000,000 shelves, and they'll count more. The the the and and of of.") * 3
+    chars = llm_byte_chars()
+    specials = ["<|endoftext|>", "<|im_start|>", "<|im_end|>"]
+    vocab = {t: i for i, t in enumerate(specials)}
+    for b in range(256):
+        vocab[chars[b]] = len(vocab)
+    pre = LlmTokenizer.__new__(LlmTokenizer)
+    pre.digits = True
+    words = collections.Counter(tuple(chars[b] for b in p.encode("utf-8")) for p in pre.pieces(text))
+    merges = []
+    while len(vocab) < args.vocab:
+        pairs = collections.Counter()
+        for w, n in words.items():
+            for i in range(len(w) - 1):
+                pairs[(w[i], w[i + 1])] += n
+        if not pairs:
+            break
+        best = min(pairs, key=lambda p: (-pairs[p], p))
+        merges.append(best[0] + " " + best[1])
+        vocab[best[0] + best[1]] = len(vocab)
+        new = collections.Counter()
+        for w, n in words.items():
+            out, i = [], 0
+            while i < len(w):
+                if i + 1 < len(w) and (w[i], w[i + 1]) == best:
+                    out.append(w[i] + w[i + 1])
+                    i += 2
+                else:
+                    out.append(w[i])
+                    i += 1
+            new[tuple(out)] += n
+        words = new
+    j = {"version": "1.0", "truncation": None, "padding": None,
+         "added_tokens": [{"id": i, "content": t, "single_word": False, "lstrip": False, "rstrip": False, "normalized": False, "special": True}
+                          for i, t in enumerate(specials)],
+         "normalizer": None,
+         "pre_tokenizer": {"type": "Sequence", "pretokenizers": [{"type": "Digits", "individual_digits": True},
+                                                                 {"type": "ByteLevel", "add_prefix_space": False, "trim_offsets": True, "use_regex": True}]},
+         "post_processor": None,
+         "decoder": {"type": "ByteLevel", "add_prefix_space": True, "trim_offsets": True, "use_regex": True},
+         "model": {"type": "BPE", "dropout": None, "unk_token": None, "continuing_subword_prefix": None, "end_of_word_suffix": None,
+                   "fuse_unk": False, "byte_fallback": False, "ignore_merges": False, "vocab": vocab, "merges": merges}}
+    with open(args.out, "w", encoding="utf-8") as f:
+        json.dump(j, f, ensure_ascii=False, indent=1)
+        f.write("\n")
+
+
+def cmd_llm_corpus(args):
+    """Texts to tokenize, one a line as a JSON string: words, numbers, spaces of every kind,
+    contractions, scripts and symbols, and random strings (seeded), for comparing tokenizers."""
+    import json
+    import random
+    r = random.Random(args.seed)
+    fixed = ["it's", "IT'S", "we'll", "they've", "I'd", "''s", "'", "  hello", "\n\nworld", "\t\tx", "a  b   c", "   ", "\n", " \n ", "x \t\n y",
+             "123456", "½ ⅓ ²", "٣٤٥", "1,000.5", "3.14e-10", "日本語のテキスト", "Привет, мир!", "emoji 😀👍🏽 done", "café naïve",
+             "<|im_start|>user\nHi<|im_end|>\n", "<|im_end|><|im_end|>", "<|endoftext|>", "a<|im_start|>b", "\x04\x06 control \x1d",
+             " nbsp　wide", "def f(x):\n    return x**2  # square\n", "x y z", "", " ", "The library holds every book."]
+    alphabet = [chr(c) for c in list(range(32, 127)) * 4 + list(range(0xA0, 0x250)) + list(range(0x370, 0x3FF)) + list(range(0x4E00, 0x4E20))
+                + [0x1F600, 0x2003, 0x3000, 0x0A, 0x09, 0x0D, 0x85, 0x200B, 0x0660, 0x2160, 0x00BD]]
+    with open(args.out, "w", encoding="utf-8") as f:
+        for s in fixed + ["".join(r.choice(alphabet) for _ in range(r.randint(1, 50))) for _ in range(args.count)]:
+            f.write(json.dumps(s) + "\n")
 
 
 def cmd_world_obj(args):
@@ -6371,6 +6690,21 @@ def main():
     s = sub.add_parser("weights-unpack")
     s.add_argument("file")
     s.add_argument("--out", required=True)
+    s = sub.add_parser("llm-encode-lines")
+    s.add_argument("file")
+    s.add_argument("--model", required=True)
+    s = sub.add_parser("llm-logits")
+    s.add_argument("text")
+    s.add_argument("--model", required=True)
+    s.add_argument("--compare")
+    s.add_argument("--tolerance", type=float, default=1e-3)
+    s = sub.add_parser("llm-tokenizer-fixture")
+    s.add_argument("--vocab", type=int, default=300)
+    s.add_argument("--out", required=True)
+    s = sub.add_parser("llm-corpus")
+    s.add_argument("--seed", type=int, default=1)
+    s.add_argument("--count", type=int, default=500)
+    s.add_argument("--out", required=True)
     s = sub.add_parser("tensors-fixture")
     s.add_argument("--config", required=True)
     s.add_argument("--seed", type=int, default=1)
@@ -6479,6 +6813,14 @@ def main():
         cmd_tensors(args)
     elif args.cmd == "tensors-fixture":
         cmd_tensors_fixture(args)
+    elif args.cmd == "llm-encode-lines":
+        cmd_llm_encode_lines(args)
+    elif args.cmd == "llm-logits":
+        cmd_llm_logits(args)
+    elif args.cmd == "llm-tokenizer-fixture":
+        cmd_llm_tokenizer_fixture(args)
+    elif args.cmd == "llm-corpus":
+        cmd_llm_corpus(args)
     elif args.cmd == "weights-pack":
         cmd_weights_pack(args)
     elif args.cmd == "weights-unpack":

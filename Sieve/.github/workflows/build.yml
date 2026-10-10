@@ -248,6 +248,21 @@ jobs:
           cmp tiny.safetensors tiny-ref.safetensors
           $exe tensors --unpack tiny-ref.sieve-weights --out tiny-back.safetensors > /dev/null
           cmp tiny.safetensors tiny-back.safetensors
+          # The same model run by Sieve itself (sieve chat): with the oracle's stand-in tokenizer, its tokens
+          # are the oracle's on texts of every kind, its logits the oracle's (computed in 64-bit floats)
+          # to within a thousandth, and a reply comes back.
+          mkdir -p tinymodel
+          cp tests/llama_tiny_config.json tinymodel/config.json
+          cp tests/llama_tiny_tokenizer.json tinymodel/tokenizer.json
+          cp tiny.safetensors tinymodel/model.safetensors
+          python reference/sieve_ref.py llm-tokenizer-fixture --out tok-again.json
+          python -c "import json,sys; sys.exit(json.load(open('tok-again.json',encoding='utf-8')) != json.load(open('tests/llama_tiny_tokenizer.json',encoding='utf-8')))"
+          python reference/sieve_ref.py llm-corpus --out corpus.jsonl
+          $exe chat --model tinymodel --encode-lines corpus.jsonl | tr -d '\r' > tok-cpp.txt
+          python reference/sieve_ref.py llm-encode-lines corpus.jsonl --model tinymodel | tr -d '\r' | diff tok-cpp.txt -
+          $exe chat --model tinymodel --logits "The library holds every book. It's 2026." --logits-out tiny-logits.f32 > /dev/null
+          python reference/sieve_ref.py llm-logits "The library holds every book. It's 2026." --model tinymodel --compare tiny-logits.f32
+          $exe chat --model tinymodel --prompt "hello" --temperature 0 --max-tokens 8 > /dev/null
           # And the same line in the hallway: a sixth door, the cube in hand, green on clay.
           H=build/hallway
           [ -f build/Release/hallway.exe ] && H=build/Release/hallway.exe

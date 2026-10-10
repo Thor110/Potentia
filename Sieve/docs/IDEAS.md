@@ -1026,6 +1026,16 @@ repository.
 - **Edward's view:** the gains will grow as the system is built out. The measurements fit that in two
   places: the exponent bits, where better priors can win more, and the text named under ever better
   models. The mantissa noise is the part that stays, unless a model is quantised.
+- **The engine (10 October 2026):** Sieve runs the model itself, with no outside runtime
+  (`sieve chat`, SPECIFICATIONS §12.0c).
+  - **The tokenizer** is read from tokenizer.json. It gives Hugging Face's own tokenizer's tokens
+    on 5,736 texts of every kind.
+  - **The forward pass** is in 32-bit floats. Its logits are within 5.4e-5 of the model's official
+    ONNX export (run by ONNX Runtime) on a 42-token chat prompt: the same top 50 tokens in the
+    same order, and a KL divergence of 2e-11.
+  - **Speed:** about 9 tokens a second on four cores.
+  - **What it is not yet:** this is the viewer's engine, in floating point. Addresses under the
+    model still need the pinned arithmetic above.
 - **The measuring tools** are now `sieve tensors` (SPECIFICATIONS §12.0a): the parts, the hash, the
   start rebuilt from `config.json` (`--config`, `--start-out`) and the statistics (`--stats`,
   `--tsv`), checked against the oracle's `tensors`, which agrees on every one of the 290 tensors.
@@ -1153,7 +1163,10 @@ local Ollama and showing the replies. It is not a state space Ollama can address
 runs in floating point, so what it predicts can differ from one machine or version to another, and
 an address must decode the same everywhere (§15's hard part). So the chat is a viewer, and §15's
 pinned model line is what would name text under a model. Ollama could still supply probabilities to
-weigh text by (on COST, as an estimate), never to address it.
+weigh text by (on COST, as an estimate), never to address it. *Then (10 October 2026), Edward's choice:* no
+Ollama; Sieve runs the model itself (`sieve chat`, SPECIFICATIONS §12.0c): its own tokenizer, read
+from the model's tokenizer.json, and its own forward pass, on the processor. The chat viewer and,
+later, the pinned arithmetic grow from that one engine.
 - **(a) Filters from RLHF constants:** the preferences a model was tuned to; not available to us,
   so an idea for later, as Edward says.
 - **(b) A noise gradient as the primary filter for model weights:** weights made procedurally follow

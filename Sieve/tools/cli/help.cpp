@@ -379,6 +379,34 @@ const std::vector<Page>& pages()
           {"sieve tensors --config config.json --start-out start.bin", "the start a model of that shape has, from its config alone"},
           {"sieve tensors model.safetensors --pack model.sieve-weights", "the model coded under the prior, checked"},
           {"sieve tensors --unpack model.sieve-weights --out model.safetensors", "and rebuilt"}}},
+        {"chat", "Talk to a language model, run by Sieve itself (no other runtime).",
+         "sieve chat --model FOLDER [--prompt TEXT] [--system TEXT] [--max-tokens N] [--temperature T] [--top-p P]\n"
+         "  [--top-k K] [--repeat-penalty R] [--seed S] [--threads N]\n"
+         "  sieve chat --model FOLDER --encode TEXT | --encode-lines FILE | --logits TEXT [--logits-out FILE]",
+         "The AI dimension's engine (IDEAS §15). FOLDER holds a Llama model as it is published: config.json,\n"
+         "model.safetensors and tokenizer.json (SmolLM2-360M-Instruct, for one). Sieve reads the tokenizer from\n"
+         "tokenizer.json (byte-level BPE) and runs the model on the processor in 32-bit floats, in the chat\n"
+         "format the model was trained on (ChatML). With --prompt it answers once; without, each line you type\n"
+         "is a message, and an empty line ends the conversation. How long it read and wrote is said on\n"
+         "standard error.",
+         {{"--model FOLDER", "The model's folder: config.json, model.safetensors, tokenizer.json."},
+          {"--prompt TEXT", "One message; print the reply and stop."},
+          {"--system TEXT", "The system line (default: the one the model's own template writes)."},
+          {"--max-tokens N", "The longest reply, in tokens (512)."},
+          {"--temperature T", "How freely it chooses (0.2, as SmolLM2's makers suggest; 0: always the likeliest token)."},
+          {"--top-p P", "Choose among the fewest likeliest tokens whose probabilities reach P (0.9)."},
+          {"--top-k K", "Choose among the K likeliest tokens only (0: no limit)."},
+          {"--repeat-penalty R", "Above 1, makes tokens already in the reply less likely (1: off)."},
+          {"--seed S", "The seed of its choices: the same seed, the same reply (on the same machine) (1)."},
+          {"--threads N", "Threads for the model (default: as many as the machine has); the result is the same."},
+          {"--encode TEXT", "The tokens of a text, one a line: its id and its bytes."},
+          {"--encode-lines FILE", "The tokens of each line of FILE (each line a JSON string), one line each:\n"
+                                 "what the oracle's llm-encode-lines prints."},
+          {"--logits TEXT", "The five likeliest tokens after a text, and the sums of all the logits."},
+          {"--logits-out FILE", "With --logits: all of them, as 32-bit floats (to compare with the oracle's)."}},
+         {{"sieve chat --model SmolLM2-360M-Instruct", "a conversation"},
+          {"sieve chat --model SmolLM2-360M-Instruct --prompt \"Write a haiku about libraries\"", "one answer"},
+          {"sieve chat --model SmolLM2-360M-Instruct --encode \"Hello, world\"", "how it reads a text"}}},
 
         {"dicts", "List the registered dictionaries, or hash a new one for registration.",
          "sieve dicts [--hash FILE]",
