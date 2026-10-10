@@ -1,38 +1,34 @@
-# Item models for worlds and AI; entering a world, noted
+# SmolLM2-360M-Instruct taken apart: IDEAS and HANDOFF
 
-Against `feea76d` (panel scroll).
+Against `d5d3013` (meshes update). Docs only.
 
-## Item models
-- **Worlds:** already had its own copy of the models line's crate (`book-worlds.obj` and
-  `book-worlds.mtl`) and a `[worlds]` section in `faces.ini`, from the worlds batch.
-- **AI:** `book-ai.obj` and `book-ai.mtl`, copies of the crate, and an `[ai]` section in
-  `faces.ini`. Nothing loads them until the AI dimension exists.
-- **The line's id:** I assumed `ai`. If the AI dimension takes another id, the two files, their
-  `mtllib` line and the section are renamed with it.
-- **The models line has no other models of its own:** its hallway, shelves and markers use the
-  templates, so the crate is the only thing to copy.
-- **`templates/README.md`:** worlds and AI added to the table of per-line copies, and to the list
-  of item models already there.
+## IDEAS §15: "The first model, taken apart"
+- **The pin:** the repository and commit, the licence, and the file's size and SHA-256.
+- **The shape:** from `config.json`.
+- **The file in three parts:**
+  - **The start:** 32,672 bytes, rebuilt byte for byte from `config.json`, so it needs no address of
+    its own.
+  - **The weights:** by kind of tensor.
+  - **The tokenizer:** a file of its own.
+- **What the weights are made of:**
+  - the high byte carries 2.72 bits and the low byte 7.85 of 8;
+  - neighbours tell almost nothing;
+  - 6,486 distinct values.
+- **Lossless sizes:** coded by frequency 476 MB (66%), xz 512.9 MB (71%); quantised sizes for
+  comparison.
+- **Where the AI dimension shortens things:** in the text named under the model.
+- **Your view:** the gains grow as the system is built out, and where the measurements say they
+  can (the exponent bits, and the text).
 
-## IDEAS §14: entering a world, and a games dimension
-- **Your idea:**
-  - an ENTER button on worlds, to fly around a world in ghost mode;
-  - a far-future games dimension built from worlds, models, UVs (algorithm plus delta) and code
-    manifests that compile themselves or are already compiled, tested first with Sieve itself;
-  - translation layers that reduce games to their smallest footprint.
-- **Weighed:**
-  - Ghost mode is near, since a world's mesh is built already.
-  - A real game's level needs later world-space versions: placement off the grid, scale, textures
-    and more models.
-  - Code costs about its compressed size, and "compiles itself" needs a reproducible build.
-  - The footprint falls where assets are generated or close to it.
-- **Already there:** UVs and the game engine (§14), the game-format parsers (§7.1), and manifests
-  (§4, §16.3). The section points to them.
+## IDEAS §16.8(b)
+- **A pointer** to the measurements.
 
-## Docs
-- **HANDOFF:** a short entry.
+## HANDOFF
+- **A new entry:**
+  - the model, pinned, and the allowed domains it came through;
+  - the findings;
+  - next: the dissection in `sieve`, the weight prior, then the AI dimension.
 
-## Checked here
-- **The copies:** the crate's geometry is identical to `book-models.obj`, line for line, apart from
-  the header.
-- **Not checked in the hallway:** there is no AI line to load `book-ai.obj` yet.
+## Not in the repository
+- **The model files and the measuring programs:** they are in my scratch space. The figures come
+  from them, run here.

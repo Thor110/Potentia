@@ -980,6 +980,55 @@ balance and the tailoring search (§12) would weigh it like any other way.
 - **Filters as before:** token-level filters and compact mode over the token line, ranked under the
   model as the guided ordering's survivors are now.
 
+**The first model, taken apart (10 October 2026).** Edward chose SmolLM2-360M-Instruct for the
+first test. It is pinned as `HuggingFaceTB/SmolLM2-360M-Instruct` at commit
+`a10cc1512eabd3dde888204e902eca88bddb4951`, under the Apache 2.0 licence, from Hugging Face.
+Its `model.safetensors` is 723,674,912 bytes, SHA-256
+`e6bffe7435d7ddc10fd3b9a9efd429dafbacb1cb17015fb5562664e7532bf86e`. The model files are not in the
+repository.
+- **The shape:** a Llama design (`config.json`, 846 bytes).
+  - **Sizes:** 32 layers, hidden size 960, feed-forward size 2,560, 15 attention heads sharing 5
+    key/value heads of 64.
+  - **The vocabulary:** 49,152 tokens, with the embedding shared by the output layer.
+  - **The total:** 361,821,120 values, all bf16.
+- **The file in three parts:**
+  - **The start:** 32,672 bytes, an 8-byte length and a JSON table of 290 tensors (2,424 bytes under
+    xz). It is rebuilt byte for byte from `config.json` alone: the tensor names in alphabetical
+    order, their shapes from the config, offsets end to end, `{"format":"pt"}`, padded with
+    spaces to a multiple of 8. So the start needs no address of its own.
+  - **The weights:** 723,642,240 bytes. By kind:
+    - the feed-forward layers, 472 MB (gate, up and down, 157 MB each);
+    - attention, 157 MB (q and o, 59 MB each; k and v, 20 MB each);
+    - the embedding, 94 MB;
+    - the norms, 0.1 MB.
+  - **The tokenizer:** a file of its own, `tokenizer.json`, 2,104,556 bytes (436,260 under xz):
+    49,152 tokens, 48,900 merges and 17 special tokens. The chat template is in
+    `tokenizer_config.json`.
+- **What the weights are made of:**
+  - **The high byte** of a bf16 value (the sign and the exponent's top seven bits) carries 2.72 bits. The values cluster near
+    zero, with a spread of 0.12 to 0.18 by tensor (the norms' scales sit near 1).
+  - **The low byte** (the exponent's lowest bit and the mantissa's seven) carries 7.85 bits of 8.
+  - **Neighbours:** the previous value in a row tells almost nothing (2.716 bits against 2.714).
+  - **Distinct values:** 6,486 of the 65,536 a bf16 can take.
+- **What that comes to, lossless:**
+  - **Coded by frequency:** each tensor's values coded by how often they occur come to 10.52 bits a
+    value, 476 MB, 66% of the file.
+  - **xz:** xz -6 on the whole file gives 512.9 MB, 71%.
+  - **So** a prior over weights (§16.8b, the noise gradient as a prior) starts from about 476 MB on
+    this file. What it can still win is in the 2.7 exponent bits, by modelling more of the
+    structure (each tensor's own scale, rows and columns, layers alike, low rank). The 7.85 bits a
+    value of mantissa noise are not predicted by anything measured so far.
+  - **Smaller still is lossy:** 8-bit is about 362 MB and 4-bit about 181 MB of weights. A
+    quantised model is a different model, with an address of its own.
+- **Where the AI dimension shortens things:** the model is a shared agreement, paid for once (the
+  config, the tokenizer and the weights under the prior). The shortening comes in the text named
+  under it, at about half the bits of the guided ordering (above).
+- **Edward's view:** the gains will grow as the system is built out. The measurements fit that in two
+  places: the exponent bits, where better priors can win more, and the text named under ever better
+  models. The mantissa noise is the part that stays, unless a model is quantised.
+- **The measuring tools** (a safetensors reader, and per-tensor entropy in C) are scratch work for
+  now. Their place is `sieve`, so the figures can be checked against the pinned hash.
+
 **Another reading, for the record.** A dimension whose units are the weights themselves (every
 model of one shape) would name a model by its weights: the binary line's files again, as long as
 the files. It is the predictive reading above that shortens anything.
@@ -1111,7 +1160,8 @@ weigh text by (on COST, as an estimate), never to address it.
   coherent models nearer the front. The useful core of this is a **prior over weights**: trained
   weights are not evenly spread (they are near zero, roughly normal, low rank, repeated), and an
   ordering that predicts that names real models in fewer bits, as quantisation and low-rank
-  factoring do in practice. Verdict: a guided ordering for the model line, with that prior.
+  factoring do in practice. Verdict: a guided ordering for the model line, with that prior. *Measured
+  (10 October 2026)* on SmolLM2-360M-Instruct: §15, "The first model, taken apart".
 - **(c) The noise gradient as the filter for every dimension, boiled down to one byte that shifts
   everything forward by one;** content aware (shifting floating-point values rather than bytes for
   weights); searched over its range with the best value and shortest path so far kept, and a time

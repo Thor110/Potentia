@@ -2047,3 +2047,17 @@ cover and a title.
   their `mtllib` line and the section. `templates/README.md` now lists worlds and AI.
 - **IDEAS §14:** Edward's idea of an ENTER button on worlds (ghost mode), a games dimension built
   from worlds, models, UVs and code manifests, and translation layers, written down and weighed.
+
+### SmolLM2-360M-Instruct taken apart (10 October 2026)
+- **The model:** `HuggingFaceTB/SmolLM2-360M-Instruct`, commit `a10cc15...` (Apache 2.0), downloaded
+  through the session's allowed domains (`huggingface.co`, `hf.co`, and `us.aws.cdn.hf.co`, where
+  the large file is redirected). `model.safetensors`: 723,674,912 bytes, SHA-256 `e6bffe74...f86e`,
+  as Hugging Face gives it. Not in the repository.
+- **Findings** (IDEAS §15, "The first model, taken apart"):
+  - **The start** (32,672 bytes) is rebuilt byte for byte from `config.json`.
+  - **The weights:** 361,821,120 bf16 values. The high byte carries 2.72 bits, the low byte 7.85 bits,
+    and neighbours tell almost nothing.
+  - **Lossless:** coded by frequency, 476 MB (66%); xz -6, 512.9 MB (71%).
+  - **The tokenizer:** 2.1 MB (436 KB under xz).
+- **Next:** the dissection in `sieve` (safetensors reader, header rebuild, per-tensor statistics),
+  then the weight prior (§16.8b), then the AI dimension.
