@@ -314,6 +314,39 @@ const std::vector<Page>& pages()
           {"sieve mesh --read ADDR --out model.obj", "save the model at an address"},
           {"sieve mesh --browse 3 --seed 1", "three models off the shelf"}}},
 
+        {"world", "The worlds line: models of the models line placed in a world, and the .obj of each.",
+         "sieve world [--world-models N] [--world-grid G] [model, cover and title options] [--compose SLOTS [--title TEXT] [--cover PICTURE] | --read ADDR]",
+         "A world is a cover (a picture of the image line), a title, and N models of the models line,\n"
+         "each placed in a cell of a grid of G cells along each axis and turned by one of the 24\n"
+         "rotations that take a cube onto itself (worldspace-v1, turns-24-v1). So the line holds\n"
+         "\n"
+         "    |covers| * |titles| * (|models| * G^3 * 24)^N\n"
+         "\n"
+         "worlds, numbered as one mixed-radix number, cover first, then each slot: its model's place on\n"
+         "the models line, its cell and its turn. A cell is a model wide, so a model fills its cell, and\n"
+         "every coordinate stays exact: a world's .obj text reads the same on every machine.\n"
+         "\n"
+         "A slot is written MODEL:x.y.z.turn, the model's address on the models line in hex, its cell\n"
+         "(each from 0 to G - 1) and its turn (0 to 23; 0 is unturned), and slots are joined by '|'.\n"
+         "The [worlds] section of the settings judges the cover, the title and each slot's model (by\n"
+         "the models line's filters); a slot's place has none.",
+         {{"--world-models N", "Models per world (4)."},
+          {"--world-grid G", "Cells along each axis of a world (8)."},
+          {"--vertices V, --faces F, --coords C", "The models line's shape, as for sieve mesh (8, 12, 16)."},
+          {"--image-width W, --image-height H, --image-palette P", "The cover's shape, as for the image line (10, 10, mono)."},
+          {"--title-length L, --alphabet A", "The title's length and alphabet (32, lower27); 0: no title."},
+          {"--key K", "Seeds the scrambled ordering, as on the other lines."},
+          {"--compose SLOTS", "Where a world of these models, so placed, lives (missing slots: model 0 in cell\n"
+                              "0, unturned), with its survivor number and compact addresses under [worlds]."},
+          {"--title TEXT", "With --compose: the world's title."},
+          {"--cover PICTURE", "With --compose: the world's cover, fitted to the image line."},
+          {"--read ADDR", "The world at an address, as one .obj (--out FILE to save it; --compact for a\n"
+                          "compact address under [worlds])."},
+          {"--mode MODE", "positional or scrambled, for --read (positional)."}},
+         {{"sieve world", "how big the default worlds line is"},
+          {"sieve world --world-models 2 --compose \"0:0.0.0.0|1:7.7.7.5\"", "two models in opposite corners, one turned"},
+          {"sieve world --read ADDR --out world.obj", "save the world at an address"}}},
+
         {"dicts", "List the registered dictionaries, or hash a new one for registration.",
          "sieve dicts [--hash FILE]",
          "Dictionaries are listed in data/dictionaries/dictionaries.tsv (the build copies the folder\n"

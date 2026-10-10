@@ -73,11 +73,23 @@ struct CompositionFilters
     static int part_index(const std::string& name); // -1 if unknown
 };
 
+// The worlds dimension's (sieve/worldspace.hpp): one mode, and a stack for its cover, its title and
+// each slot's model (judged by the models line's filters). A slot's place has none.
+struct WorldFilters
+{
+    static constexpr int kParts = 3;
+    FilterMode mode = FilterMode::Off;
+    LineFilters parts[kParts]; // cover, title, models
+    static const char* part_name(int i);
+    static int part_index(const std::string& name); // -1 if unknown
+};
+
 struct FilterConfig
 {
     LineFilters lines[4]; // text, image, audio, video
     BookFilters books;
     CompositionFilters tracks, movies;
+    WorldFilters worlds;
     // The models and binary lines: a mode and a stack each. The models line has no filters yet;
     // the binary line has binary-kind-v1 (sieve/filekind.hpp). The binary line is one line, met at
     // both ends of the corridor, so it has one section.
@@ -153,6 +165,14 @@ struct CompositionStacks
 };
 CompositionStacks build_composition_stacks(const Line& cover, const std::optional<FilterLine>& title, const Line& unit, uint32_t units,
                                            const CompositionFilters& settings);
+// A world's stacks: its cover on the image line, its title (or none), and each slot's model by the
+// models line's filters.
+struct WorldStacks
+{
+    FilterStack cover, title;
+    ModelSieve models;
+};
+WorldStacks build_world_stacks(const Line& cover, const std::optional<FilterLine>& title, const ModelSpace& models, const WorldFilters& settings);
 // A unit line `n` units long, as the joined stack sees it: n times the positions (a video's
 // frames n times as many). Throws if that is beyond what a unit can hold.
 FilterLine joined_filter_line(const FilterLine& unit, uint32_t n);

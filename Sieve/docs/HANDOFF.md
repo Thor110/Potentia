@@ -1951,7 +1951,9 @@ Items 16.2, 16.5 and 16.9 of Edward's list of 10 October (IDEAS §16).
   its name the title; a cover is not kept (Edward, 10 October: the pictures are for looks). At
   whole degrees the units repeat (every 40 degrees on pages, image, models, binary and books, every
   72 on audio, tracks, video and movies; the leading part of d/360 is the title), so only 225
-  contents differ, and the titles tell the items apart. The pages item at 90 degrees is titled
+  contents differ. On the lines without a cover the titles tell the items apart; on those with one
+  the cover leads the address, so the titles repeat too (45 pairs a line, found with worlds added;
+  the " (2)" names them apart). The pages item at 90 degrees is titled
   `ftft...ft` and reads `ftft...fu`: a quarter of the line in base 27 repeats.
 - **Checked:** CI (hallway step: the main-menu locator offers no Go and Enter does not close it;
   the sample twice, identical; installed by `sieve install`, identical; X, Tab, a bearing and Enter
@@ -1972,3 +1974,50 @@ either way. The footers, the over-budget line and the calculating banner are not
 scripted key snaps it to where it is going (`Menu::press`), so `--menu --press Tab` draws it out.
 The first counts when the menu opens slide it out too, if they take longer than 200 ms (a Debug
 build, a large stack).
+
+### Worlds (10 October 2026)
+Item 16.7 of Edward's list, first version. Edward chose: each slot a model and its placement (no
+texture yet), placement as a grid cell and one of 24 turns, 4 models a world by default, with a
+cover and a title.
+- **Core** (`core/include/sieve/worldspace.hpp`, `core/src/worldspace.cpp`, SPECIFICATIONS §12.0):
+  `WorldSpace` numbers cover, title, then each slot (its model's positional index on the models
+  line, its cell x, y, z, its turn) as one mixed-radix number; scrambled through shuffle-sha256-v1
+  keyed with the models line's key, domain its id. `turns()` is `turns-24-v1` (permutation, then
+  signs, determinant +1). `mesh_of` and `to_obj` place every model exactly (multiples of 1/C).
+  `WorldSieve`: cover and title stacks and the models line's `ModelSieve` for each slot, counted
+  and ranked exactly (`world-compact-v1`). A world space is about `N * (bits of a model + log2(G^3 * 24))`
+  bits: 1,122 at the defaults.
+- **Oracle and tests:** `sieve_ref.py world-vectors` (48 vectors and the turns table) and
+  `world-obj` (a world's `.obj` from its slots), written apart from the C++; `test_world_vectors`
+  checks addresses both ways, the turns and the `.obj` hashes; `test_world_sieve` checks the
+  sieve against brute force (every 101st world of a small space, with and without
+  canonical-mesh-v1).
+- **The tool:** `sieve world` (shape and size; `--compose SLOTS [--title] [--cover]` for
+  addresses, survivor number and compact addresses under `[worlds]`; `--read ADDR [--compact]
+  [--mode] [--out]` for the `.obj`), with the hallway's option names (`--world-models`,
+  `--world-grid`, the models' and cover's and title's).
+- **Filters config:** `WorldFilters` (`[worlds]`, `[worlds.cover]`, `[worlds.title]`,
+  `[worlds.models]`), `build_world_stacks`.
+- **The hallway:** `Media::Worlds` (appended to the enum, so saved per-medium lists only grow),
+  door after MODELS, models' clay with black edges. `world_space_`, `world_stacks_`,
+  `world_sieve_`; `Book::world`. Shelves: a crate whose face is the whole world drawn as a model
+  is (`world_mesh`: the world scaled by 1/G; `render_mesh_face`, which `render_model_face` now
+  calls). In hand: `draw_world` (through `draw_mesh`, which `draw_model` now calls), turned as a
+  model is. F and J: the `.obj` (`item_file`); the viewer shows it; the vault judges it as a
+  model's `.obj`. The ordering toggle keeps the world in front of you. T (warp) refuses with a
+  message: there is no form to warp in from yet. Real Graphics: `book-worlds.obj` (a copy of
+  `book-models.obj`) and a `[worlds]` section in `faces.ini`.
+- **The setup menu:** WORLDS rows (models per world, grid), its map column, FIND MY LIMITS (models
+  per world grows, as units per track does), and its filters window with COVER, TITLE and MODELS
+  parts (`has_parts` and `parts_cfg` now cover worlds; the models part counts through
+  `ModelSieve`, `worlds_stack_info`).
+- **The degrees sample** now has ten dimensions: 3,600 items, 1,055,836 bytes, a 436,788-byte
+  `.sieve`; worlds repeat every 72 degrees, as the other compositions do.
+- **Checked:** unit tests (world vectors and sieve); the oracle's vectors regenerated and
+  identical; CI's model step (`sieve world` compose, read, the oracle's `.obj`, the scrambled
+  address giving the same world) and hallway step (the world at a composed address saved with F is
+  the tool's `.obj`; the WORLDS line draws), all run here; screenshots of the shelves, a world in
+  hand, the setup menu and the worlds filters window; compact worlds under
+  `distinct-indices-v1` count the same in the hallway and the tool.
+- **Not yet:** textures and UVs (IDEAS §14), warping a world in (from an `.obj` with groups, or a
+  record), filters on a model's place (for example, no two models in one cell).

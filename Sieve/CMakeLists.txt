@@ -40,6 +40,7 @@ add_library(sieve_core STATIC
     core/src/filters/written.cpp
     core/src/filekind.cpp
     core/src/modelsieve.cpp
+    core/src/worldspace.cpp
     core/src/filters/models.cpp
     core/src/filters/pattern.cpp
     core/src/written.cpp

@@ -14,7 +14,7 @@ namespace hallway::hall {
 // The lines whose units the search can take: those with one stack of their own.
 bool Hallway::can_tailor() const
 {
-    return !on_books() && !on_models() && !on_binary() && !on_composition() && !guided_on();
+    return !on_books() && !on_models() && !on_worlds() && !on_binary() && !on_composition() && !guided_on();
 }
 
 const Hallway::TailorJob* Hallway::tailor_of(const Book& bk) const

@@ -215,6 +215,17 @@ jobs:
           test "$a" = "$b"
           # Browsing the line, and a shape it cannot have.
           $exe mesh --browse 2 --seed 4 > /dev/null
+          # Worlds: models of the models line placed in a world. Composed, read back, and its .obj
+          # the oracle's, byte for byte.
+          $exe world | tr -d '\r' | q "^line         worlds  (worlds/image/mono/10x10/L100+lower27/L32+V8/F12/C16x4/G8/key=sieve/worldspace-v1)"
+          $exe world --world-models 2 --compose "0:0.0.0.0|1:7.7.7.5" --title "two models" | tr -d '\r' > wc.txt
+          w=$(awk '$1 == "positional" {print $2}' wc.txt)
+          $exe world --world-models 2 --read "$w" --out world.obj | tr -d '\r' | q "^slots        0*:0.0.0.0|0*1:7.7.7.5$"
+          python reference/sieve_ref.py world-obj --world-models 2 --slots "0:0.0.0.0|1:7.7.7.5" > world-ref.obj
+          cmp world.obj world-ref.obj
+          ws=$(awk '$1 == "scrambled" {print $2}' wc.txt)
+          $exe world --world-models 2 --read "$ws" --mode scrambled --out world2.obj > /dev/null
+          cmp world.obj world2.obj
           # And the same line in the hallway: a sixth door, the cube in hand, green on clay.
           H=build/hallway
           [ -f build/Release/hallway.exe ] && H=build/Release/hallway.exe
@@ -285,9 +296,9 @@ jobs:
           # line's list. Each row here ticks a mode and the saved file says which line it was.
           # Closing the overlay is what writes it, which also covers that path.
           # The lines' rows follow the doors (image, pages, books, audio, tracks, video, movies,
-          # models, binary); the audio rows are six: its notes, its note set, and notes2's range,
-          # durations and voices.
-          for pair in "16 image" "19 text" "23 books" "24 audio" "27 audio" "30 tracks" "31 video" "35 movies" "36 models" "39 binary"; do
+          # models, worlds, binary); the audio rows are six: its notes, its note set, and notes2's
+          # range, durations and voices.
+          for pair in "16 image" "19 text" "23 books" "24 audio" "27 audio" "30 tracks" "31 video" "35 movies" "36 models" "39 worlds" "41 binary"; do
             set -- $pair
             rm -f row$1.ini
             downs=$(python -c "print(','.join(['Down']*$1))")
@@ -337,18 +348,19 @@ jobs:
           # It is a line like the others now: every file up to its length, one loop (its filters,
           # by the files' kinds, are checked with the other filters below).
           $H --no-menu --line binary --walk "0,0" --screenshot bin.png | sed -n 1p | q "^BINARY line"
-          # The six lines no longer loop into one another: they start and finish at binary.
-          # Left out of models is binary, where you are turned round to come out of its one door
-          # (in its left wall); back out through that door is models again. Right out of pages is
-          # binary too, and there the door leads back to pages.
-          $H --no-menu --line models --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door7.png | sed -n 1p | q "^BINARY line"
+          # The lines no longer loop into one another: they start and finish at binary.
+          # Left out of models is worlds, and left out of worlds is binary, where you are turned
+          # round to come out of its one door (in its left wall); back out through that door is
+          # worlds again. Right out of image is binary too, and there the door leads back to image.
+          $H --no-menu --line models --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door7m.png | sed -n 1p | q "^WORLDS line"
+          $H --no-menu --line worlds --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door7.png | sed -n 1p | q "^BINARY line"
           # (A walk is in the walker's frame, so after being turned round, 4.2 is back the way you came.)
-          $H --no-menu --line models --pose "-1.7,7.0,0,0" --walk "-1,0;4.2,0" --screenshot door8.png | sed -n 2p | q "^MODELS line"
+          $H --no-menu --line worlds --pose "-1.7,7.0,0,0" --walk "-1,0;4.2,0" --screenshot door8.png | sed -n 2p | q "^WORLDS line"
           $H --no-menu --line image --pose "1.7,7.0,0,0" --walk "1,0" --screenshot door9.png | sed -n 1p | q "^BINARY line"
           $H --no-menu --line image --pose "1.7,7.0,0,0" --walk "1,0;-1,0" --screenshot door10.png | sed -n 2p | q "^IMAGE line"
           # Binary's other side is the drop, always on its right: the short wall stops you at the
           # edge of the floor. No door, no crossing, whatever the doorway is doing at that z.
-          $H --no-menu --line models --pose "-1.7,7.0,0,0" --walk "-1,0;-9,0" --screenshot walk.png | sed -n 2p | q "^BINARY line.*x 1.650000"
+          $H --no-menu --line worlds --pose "-1.7,7.0,0,0" --walk "-1,0;-9,0" --screenshot walk.png | sed -n 2p | q "^BINARY line.*x 1.650000"
           # There is no setting for it: not in Settings > Graphics, not in a settings file that
           # Graphics has just written, and not on the command line.
           rm -f be.ini
@@ -621,12 +633,19 @@ jobs:
           $H --no-menu --binary-length 64 --locate tests/manifest_fixture/a.txt --press "Return" --screenshot locate2.png | tail -2 | sed -n 1p | tee l2.txt | q "^BINARY line"
           # Its kind, read from its first bytes.
           grep -q " TXT " l2.txt
-          # From the main menu: the same locator, with no world to walk to, so Enter does not go.
+          # Worlds in the hallway: the world at an address the tool composed, saved with F, is the
+          # tool's .obj of it, byte for byte; the setup menu draws the WORLDS rows and column.
+          wa=$(build/sieve world --compose "1:1.2.3.4|2:7.0.7.23" --title "a small world" | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          $H --no-menu --line worlds --goto "$wa" --save-item hw.obj --screenshot hw.png > /dev/null
+          build/sieve world --read "$wa" --out hw-ref.obj > /dev/null
+          cmp hw.obj hw-ref.obj
+          $H --no-menu --line worlds --walk "0,0" --screenshot worlds.png | sed -n 1p | q "^WORLDS line, positional"
+                    # From the main menu: the same locator, with no world to walk to, so Enter does not go.
           $H --main-menu --locate tests/manifest_fixture/a.txt --press "Return" --screenshot locate-menu.png | q "file locator (main menu): open, no Go to it"
           # The demonstration (IDEAS 16.9): every dimension's item at each whole degree, as one
           # .sieve, the same on every machine; installing it gives every file back, and a bearing
           # typed in the navigator (X, Tab) is the same item again.
-          $H --no-menu --sample-degrees degrees --screenshot deg.png | tee deg.txt | q "^sample: 3240 items"
+          $H --no-menu --sample-degrees degrees --screenshot deg.png | tee deg.txt | q "^sample: 3600 items"
           $H --no-menu --sample-degrees degrees2 --sample-out degrees2.sieve --screenshot deg2.png > /dev/null
           diff -r degrees degrees2
           build/sieve install degrees.sieve --to deg_inst > /dev/null
@@ -808,18 +827,19 @@ jobs:
           $H --warp "$W" --press "X,Tab,1,8,0,Return" --screenshot navangle.png | tail -2 | sed -n 1p | q "50.0000000000% along"
           if $H --warp "$W" --press "X,Tab,3,6,0,Return" --screenshot navangle2.png | tail -2 | sed -n 1p | grep -q "went to"; then exit 1; fi
           start=$($H --mode guided --warp "$W" --zoom 20 --walk "0,0" --screenshot start.png | book)
-          # The corridor end to end and back: seven doors left from pages reach binary (books,
-          # audio, tracks, video, movies, models), which is where the run finishes, and seven
-          # right brings you back to the same book on pages.
-          out=$($H --mode guided --warp "$W" --zoom 20 --pose 0,7,-90,0 --walk "-2.3,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0" --screenshot guided.png)
+          # The corridor end to end and back: eight doors left from pages reach binary (books,
+          # audio, tracks, video, movies, models, worlds), which is where the run finishes, and
+          # eight right brings you back to the same book on pages.
+          out=$($H --mode guided --warp "$W" --zoom 20 --pose 0,7,-90,0 --walk "-2.3,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0" --screenshot guided.png)
           echo "$out"
           echo "$out" | q "BOOKS line"
           echo "$out" | q "TRACKS line"
           echo "$out" | q "VIDEO line"
           echo "$out" | q "MOVIES line"
           echo "$out" | q "MODELS line"
+          echo "$out" | q "WORLDS line, positional"
           echo "$out" | q "BINARY line"
-          echo "$out" | sed -n 7p | q "^BINARY line"
+          echo "$out" | sed -n 8p | q "^BINARY line"
           echo "$out" | tail -2 | sed -n 1p | q "^PAGES line"
           test "$(echo "$out" | tail -2 | book)" = "$start"
           # Loops: a 2-character line is 729 units = 6 tiles, so tile 6 starts the second copy,
@@ -1052,6 +1072,7 @@ jobs:
           python sieve_ref.py compact-vectors | diff - ../tests/vectors_compact_v1.tsv
           python sieve_ref.py book-vectors | diff - ../tests/vectors_books_v1.tsv
           python sieve_ref.py composition-vectors | diff - ../tests/vectors_compositions_v1.tsv
+          python sieve_ref.py world-vectors | diff - ../tests/vectors_worlds_v1.tsv
           python sieve_ref.py titled-vectors | diff - ../tests/vectors_titled_v1.tsv
           python sieve_ref.py binary-vectors | diff - ../tests/vectors_binary_v1.tsv
           python sieve_ref.py chunk-vectors | diff - ../tests/vectors_chunks_v1.tsv

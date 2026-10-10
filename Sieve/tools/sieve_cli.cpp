@@ -51,6 +51,7 @@
 #include "sieve/guided.hpp"
 #include "sieve/image.hpp"
 #include "sieve/modelspace.hpp"
+#include "sieve/worldspace.hpp"
 #include "sieve/sha256.hpp"
 #include "sieve/sieve.hpp"
 #include "sieve/utf8.hpp"
@@ -1203,6 +1204,154 @@ int cmd_mesh(const Args& a)
                   << (loop.tiles().log10_approx() < 30 ? loop.tiles().to_decimal()
                                                        : "~10^" + std::to_string(int(loop.tiles().log10_approx())))
                   << " tiles of " << sieve::books_per_tile() << " models\n";
+    }
+    return 0;
+}
+
+// ---------------------------------------------------------------- worlds
+
+// A world (worldspace-v1, sieve/worldspace.hpp): a cover of the image line, a title in the text
+// alphabet, and N models of the models line, each placed in a cell of the grid with one of 24
+// turns, from the hallway's own option names, so the same options give the same addresses in both.
+struct World
+{
+    Line cover;
+    std::optional<Space> title;
+    Args title_shape;
+    std::unique_ptr<WorldSpace> space;
+};
+
+World make_world(const Args& a)
+{
+    const std::string key = a.get("key", "sieve");
+    Args cv;
+    cv.opts = {{"line", "image"}, {"key", key}, {"width", a.get("image-width", "10")}, {"height", a.get("image-height", "10")},
+               {"palette", a.get("image-palette", "mono")}, {"model", "none"}};
+    World w{make_line(cv), std::nullopt, {}, nullptr};
+    if (const uint32_t length = a.get_u32("title-length", 32); length > 0) w.title = Space(alphabet_of(a.get("alphabet", "lower27")), length, key);
+    w.title_shape.opts = {{"line", "text"}, {"alphabet", a.get("alphabet", "lower27")}, {"length", std::to_string(w.title ? w.title->unit_length() : 1)},
+                          {"canon", a.get("canon", "v2")}, {"key", key}, {"model", "none"}};
+    w.space = std::make_unique<WorldSpace>(w.cover.space, w.title, make_model_space(a), a.get_positive("world-models", 4), a.get_positive("world-grid", 8));
+    return w;
+}
+
+// "MODEL:x.y.z.turn|..." (each model its positional index on the models line, in hex), as the
+// vectors and `--read` write a world's slots.
+std::string slots_text(const WorldSpace& ws, const WorldSpace::Parts& p)
+{
+    std::string out;
+    for (const WorldSpace::Slot& s : p.slots)
+        out += (out.empty() ? "" : "|") + ws.model_space().hex_of(s.model) + ":" + std::to_string(s.x) + "." + std::to_string(s.y) + "." +
+               std::to_string(s.z) + "." + std::to_string(s.turn);
+    return out;
+}
+
+int cmd_world(const Args& a)
+{
+    World w = make_world(a);
+    const WorldSpace& ws = *w.space;
+    std::cout << "line         worlds  (" << ws.id() << ")\n"
+              << "cover        " << w.cover.describe_symbols() << "\n"
+              << "title        " << (w.title ? std::to_string(w.title->unit_length()) + " characters of " + w.title->symbols_id() : std::string("none")) << "\n"
+              << "models       " << ws.slots() << " x " << ws.model_space().id() << ", each in a cell of " << ws.grid() << "^3 with one of "
+              << kTurns << " turns (" << ws.places() << " places)\n"
+              << "worlds       ~2^" << ws.size().bit_length() - 1 << " (" << ws.size().bit_length() << " bits an address)\n";
+    const FilterConfig cfg = load_filter_config(a);
+    std::optional<FilterLine> title_line;
+    if (w.title) title_line = FilterLine{"text", w.title->symbols_id(), w.title->base(), w.title->unit_length(), &alphabet_of(a.get("alphabet", "lower27")), 0, 0, 0};
+    const WorldStacks stacks = build_world_stacks(w.cover, title_line, ws.model_space(), cfg.worlds);
+    const WorldSieve sieve(ws, stacks.cover, stacks.title, stacks.models);
+    // --read ADDRESS: the world at an address, as one .obj (--compact: a compact address under the
+    // [worlds] filters).
+    if (a.has("read"))
+    {
+        const AddressMode m = address_mode_from_string(a.get("mode", "positional"));
+        WorldSpace::Parts p;
+        if (a.has("compact"))
+        {
+            if (sieve.empty()) throw std::invalid_argument("--compact needs ticked filters (in [worlds] of the settings)");
+            if (!sieve.can_rank()) throw std::invalid_argument("these filters cannot rank their survivors: " + sieve.blocker());
+            p = sieve.parts_at(sieve.parse(a.get("read")), m);
+        }
+        else p = ws.parts_at(ws.parse(a.get("read")), m);
+        const std::string obj = ws.to_obj(p);
+        vault::check_bytes(std::vector<uint8_t>(obj.begin(), obj.end()), "the world"); // the vault
+        std::cout << "slots        " << slots_text(ws, p) << "\n";
+        if (w.title) std::cout << "title        \"" << utf8_encode(w.title->text_of(p.title)) << "\"\n";
+        if (a.has("out"))
+        {
+            std::ofstream out(std::filesystem::path(std::u8string(a.get("out").begin(), a.get("out").end())), std::ios::binary);
+            out << obj;
+            if (!out) throw std::invalid_argument("cannot write " + a.get("out"));
+            std::cout << "wrote        " << a.get("out") << " (" << obj.size() << " bytes, " << ws.slots() * ws.model_space().vertices() << " vertices, "
+                      << ws.slots() * ws.model_space().face_count() << " triangles)\n";
+        }
+        else std::cout << obj;
+        return 0;
+    }
+    // --compose "MODEL:x.y.z.turn|...": where a world of those models, so placed, lives (--title
+    // TEXT, --cover PICTURE: its own; missing slots are model 0 in cell 0 unturned).
+    if (a.has("compose"))
+    {
+        WorldSpace::Parts p;
+        p.cover.assign(w.cover.space.unit_length(), 0);
+        if (w.title) p.title.assign(w.title->unit_length(), 0);
+        std::stringstream ss(a.get("compose"));
+        std::string slot;
+        while (std::getline(ss, slot, '|'))
+        {
+            const size_t colon = slot.find(':');
+            if (colon == std::string::npos) throw std::invalid_argument("a slot is MODEL:x.y.z.turn (the model's address on the models line, in hex)");
+            WorldSpace::Slot s;
+            s.model = ws.model_space().parse(slot.substr(0, colon));
+            std::stringstream ps(slot.substr(colon + 1));
+            std::string v;
+            std::vector<uint32_t> place;
+            while (std::getline(ps, v, '.')) place.push_back(uint32_t(std::stoul(v)));
+            if (place.size() != 4) throw std::invalid_argument("a slot's place is x.y.z.turn");
+            s.x = place[0];
+            s.y = place[1];
+            s.z = place[2];
+            s.turn = place[3];
+            p.slots.push_back(std::move(s));
+        }
+        if (p.slots.size() > ws.slots())
+            throw std::invalid_argument("that is " + std::to_string(p.slots.size()) + " models, more than a world holds (" + std::to_string(ws.slots()) + ")");
+        p.slots.resize(ws.slots());
+        if (a.has("title"))
+        {
+            if (!w.title) throw std::invalid_argument("--title with --title-length 0: this line has no titles");
+            Args in;
+            in.positional = {a.get("title")};
+            p.title = read_warp_input(make_line(w.title_shape), in).units.front();
+        }
+        if (a.has("cover"))
+        {
+            Args in;
+            in.opts["file"] = a.get("cover");
+            p.cover = read_warp_input(w.cover, in).units.front();
+        }
+        ws.check(p); // a cell or turn out of range
+        for (const char* m : {"positional", "scrambled"})
+            std::cout << "  " << std::setw(11) << std::left << m << show_address(ws.hex_of(ws.index_of(p, address_mode_from_string(m))), a.has("short")) << "\n";
+        if (!sieve.empty())
+        {
+            const std::string fail = sieve.first_failure(p);
+            if (!fail.empty()) std::cout << "stack: fails at " << fail << "\n";
+            else if (!sieve.can_rank()) std::cout << "stack: passes (compact unavailable: " << sieve.blocker() << ")\n";
+            else
+            {
+                std::cout << "stack: passes, survivor number " << sieve.rank(p).to_decimal() << "\n";
+                for (const auto m : {AddressMode::Positional, AddressMode::Scrambled})
+                    std::cout << "  compact " << std::setw(11) << std::left << to_string(m) << show_address(sieve.hex_of(sieve.index_of(p, m)), a.has("short")) << "\n";
+            }
+        }
+        return 0;
+    }
+    if (!sieve.empty())
+    {
+        if (sieve.can_rank()) std::cout << "survivors    " << sieve.count().to_decimal() << " under the [worlds] filters\n";
+        else std::cout << "survivors    not counted: " << sieve.blocker() << "\n";
     }
     return 0;
 }
@@ -2688,7 +2837,7 @@ int cmd_vault(const Args& a)
 
 bool is_command(const std::string& name)
 {
-    return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" ||
+    return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" || name == "world" ||
            name == "version" || name == "models" || name == "train" || name == "measure" ||
            name == "filters" || name == "check" || name == "tailor" || name == "bind" || name == "unbind";
 }
@@ -2763,6 +2912,7 @@ int main(int argc, char** argv)
         if (a.command == "dicts") return cmd_dicts(a);
         if (a.command == "alphabets") return cmd_alphabets(a);
         if (a.command == "mesh") return cmd_mesh(a);
+        if (a.command == "world") return cmd_world(a);
         if (a.command == "version") return cmd_version();
         if (a.command == "models") return cmd_models();
         if (a.command == "train") return cmd_train(a);

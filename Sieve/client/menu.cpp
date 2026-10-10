@@ -374,6 +374,8 @@ Settings Settings::from_args(const sieve::cli::Args& a)
     s.model_vertices = parse_u32(a, "vertices", s.model_vertices);
     s.model_faces = parse_u32(a, "faces", s.model_faces);
     s.model_coords = parse_u32(a, "coords", s.model_coords);
+    s.world_models = parse_u32(a, "world-models", s.world_models);
+    s.world_grid = std::min(parse_u32(a, "world-grid", s.world_grid), 1024u);
     s.model_tile = parse_u32(a, "model-tile", s.model_tile);
     s.items_per_wall = parse_u32(a, "items-per-wall", s.items_per_wall);
     if (a.has("title-length")) s.title_length = a.get_u32("title-length", s.title_length); // 0 is allowed: no titles
@@ -428,6 +430,8 @@ void Settings::apply(sieve::cli::Args& a) const
     a.opts["vertices"] = std::to_string(model_vertices);
     a.opts["faces"] = std::to_string(model_faces);
     a.opts["coords"] = std::to_string(model_coords);
+    a.opts["world-models"] = std::to_string(world_models);
+    a.opts["world-grid"] = std::to_string(world_grid);
     a.opts["model-tile"] = std::to_string(model_tile);
     a.opts["items-per-wall"] = std::to_string(items_per_wall);
     a.opts["title-length"] = std::to_string(title_length);
@@ -542,6 +546,21 @@ std::array<LineSize, kLines> Menu::line_sizes() const
         z.units = std::string("cov*title*") + name + "^" + std::to_string(n) + " = ~10^" + fixed(z.bits * std::log10(2.0), 1);
         return z;
     };
+    // Worlds (worldspace-v1): a cover, a title and n slots, each a model and one of G^3 * 24
+    // places, |cover| * |title| * (|models| * G^3 * 24)^n, so the bits add and the empty slots follow
+    // from the product mod the tile.
+    LineSize worlds;
+    {
+        const uint64_t per = sieve::books_per_tile();
+        const auto rem = [per](const LineSize& x) { return (per - x.padding) % per; };
+        const uint64_t g = s_.world_grid, places = g * g * g * 24;
+        const uint64_t slot = rem(models) * (places % per) % per;
+        const uint64_t m = rem(image) * rem(title) % per * tile_pow(slot, s_.world_models) % per;
+        worlds.bits = image.bits + title.bits + double(s_.world_models) * (models.bits + std::log2(double(places)));
+        worlds.padding = uint32_t((per - m) % per);
+        worlds.units = "cov*title*(model*" + std::to_string(places) + ")^" + std::to_string(s_.world_models) + " = ~10^" +
+                       fixed(worlds.bits * std::log10(2.0), 1);
+    }
     std::array<LineSize, kLines> out;
     out[size_t(line_of(Media::Pages))] = titled(page, false);
     out[size_t(line_of(Media::Image))] = titled(image, false);
@@ -551,6 +570,7 @@ std::array<LineSize, kLines> Menu::line_sizes() const
     out[size_t(line_of(Media::Movies))] = composed(video, s_.movie_units, "vid");
     out[size_t(kBooksLine)] = books;
     out[size_t(kModelsLine)] = titled(models, false);
+    out[size_t(kWorldsLine)] = worlds;
     out[size_t(kBinaryLine)] = binary;
     // A unit has at most 2^32 - 1 positions: a larger picture cannot be opened at all.
     const uint64_t kMaxPositions = 0xFFFFFFFFull;
@@ -598,6 +618,7 @@ double Menu::line_cache_bytes(int i) const
     case Media::Video: pos = positions(s_.video_w, s_.video_h, s_.frames) + t + cover; break;
     case Media::Books: pos = uint64_t(s_.book_pages + 1) * s_.length + cover; break;
     case Media::Models: pos = 3ull * s_.model_vertices + 3ull * s_.model_faces + t; break;
+    case Media::Worlds: pos = uint64_t(s_.world_models) * (3ull * s_.model_vertices + 3ull * s_.model_faces + 4) + t + cover; break;
     case Media::Binary: pos = (uint64_t(s_.binary_bytes) + 3) / 4 + t; break;
     case Media::Tracks: pos = audio_shape(s_).second * uint64_t(s_.track_units) + t + cover; break;
     case Media::Movies: pos = positions(s_.video_w, s_.video_h, s_.frames) * uint64_t(s_.movie_units) + t + cover; break;
@@ -809,6 +830,9 @@ void Menu::find_limits()
     if (on("movies")) grow(s_.movie_units, movies);
     // Vertices and faces grow together, so a mesh gets both rather than all of one.
     if (on("models")) grow_pair(s_.model_vertices, s_.model_faces, [&] { return fits(kModelsLine); }, [&] { return fits(kModelsLine); }, false);
+    // Worlds are made of models, as tracks of audio: as many models a world as what is left allows.
+    if (on("models") || on("worlds")) s_.world_models = 1;
+    if (on("worlds")) grow(s_.world_models, kWorldsLine);
     if (on("binary")) grow(s_.binary_bytes, kBinaryLine);
     // And the model image cache: the rooms with pictures of their own (yours and the picture
     // distance either side) at the chosen size, or as many as the graphics memory has room for
@@ -1054,6 +1078,11 @@ void Menu::adjust(int dir, int step)
     case kMoviesRow: num(s_.movie_units); break;
     case kModelsRows: num(s_.model_vertices); break;
     case kModelsRows + 1: num(s_.model_faces); break;
+    case kWorldsRows: num(s_.world_models); break;
+    case kWorldsRows + 1:
+        num(s_.world_grid);
+        s_.world_grid = std::min(s_.world_grid, 1024u); // worldspace-v1's widest grid
+        break;
     // The coordinate grid must be a power of two, so it doubles and halves.
     case kBinaryRow: num(s_.binary_bytes); break;
     case kModelsRows + 2: s_.model_coords = std::clamp(dir > 0 ? s_.model_coords * 2 : s_.model_coords / 2, 2u, 4096u); break;
@@ -1558,6 +1587,10 @@ void Menu::render()
             {-1, tr("setup.model_faces"), n(s_.model_faces)},
             {-1, tr("setup.model_coords"), trf("setup.model_coords.value", {n(s_.model_coords)})},
         };
+        case Media::Worlds: return {
+            {kWorldsLine, tr("setup.world_models"), trf("setup.world_models.value", {n(s_.world_models)})},
+            {-1, tr("setup.world_grid"), trf("setup.world_grid.value", {n(s_.world_grid), std::to_string(uint64_t(s_.world_grid) * s_.world_grid * s_.world_grid * 24)})},
+        };
         case Media::Binary: return {
             {kBinaryLine, tr("setup.binary_length"), trf("setup.binary_length.value", {n(s_.binary_bytes)})},
         };
@@ -1742,6 +1775,8 @@ void Menu::render()
                 for (const auto& part : cfg_.books.parts) ticked += part.enabled.size();
             else if (is_composition(i))
                 for (const auto& part : comp_cfg(i).parts) ticked += part.enabled.size();
+            else if (i == kWorldsLine)
+                for (const auto& part : cfg_.worlds.parts) ticked += part.enabled.size();
             else if (i == kBinaryLine) ticked = cfg_.binary.enabled.size();
             else if (i == kModelsLine) ticked = cfg_.models.enabled.size();
             else if (unit_at(i) >= 0) ticked = cfg_.lines[unit_at(i)].enabled.size();
@@ -1776,7 +1811,8 @@ sieve::FilterLine Menu::filter_line_of(int i) const
         f = {"audio", set.id(), set.base(), s_.notes * set.voices, nullptr, 0, 0, 0};
         break;
     }
-    case Media::Models: f = sieve::cli::models_filter_line(s_.model_vertices, s_.model_faces, s_.model_coords); break;
+    case Media::Models:
+    case Media::Worlds: f = sieve::cli::models_filter_line(s_.model_vertices, s_.model_faces, s_.model_coords); break; // (a world's: its models' part)
     case Media::Binary: f = sieve::cli::binary_filter_line(s_.binary_bytes); break;
     case Media::Tracks:
     case Media::Movies: f = filter_line_of(line_of(*kDimensions[i].composes)); break; // a unit (their parts: part_line)
@@ -1799,7 +1835,8 @@ sieve::FilterLine Menu::book_part_line(int part) const
 sieve::FilterLine Menu::part_line(int line, int part) const
 {
     if (line == kBooksLine) return book_part_line(part);
-    // Tracks and movies: the cover a picture, the title one of the titled lines' titles, each
+    if (line == kWorldsLine && part == kWorldModelsPart) return filter_line_of(kModelsLine); // each slot's model
+    // Tracks, movies and worlds: the cover a picture, the title one of the titled lines' titles, each
     // unit a unit of its line, and the units joined that line's unit N long (joined_filter_line).
     if (part == 0) return filter_line_of(line_of(Media::Image));
     if (part == 1)
@@ -1821,16 +1858,16 @@ sieve::cli::LineFilters& Menu::filters_of(const ORow& row)
 {
     if (overlay_ == kModelsLine) return cfg_.models;
     if (overlay_ == kBinaryLine) return cfg_.binary;
-    if (is_composition(overlay_)) return comp_cfg(overlay_).parts[std::max(0, row.part)];
-    return overlay_ == kBooksLine ? cfg_.books.parts[std::max(0, row.part)] : cfg_.lines[unit_at(overlay_)];
+    if (has_parts(overlay_)) return parts_cfg(overlay_)[std::max(0, row.part)];
+    return cfg_.lines[unit_at(overlay_)];
 }
 
 const sieve::cli::LineFilters& Menu::filters_of(const ORow& row) const
 {
     if (overlay_ == kModelsLine) return cfg_.models;
     if (overlay_ == kBinaryLine) return cfg_.binary;
-    if (is_composition(overlay_)) return comp_cfg(overlay_).parts[std::max(0, row.part)];
-    return overlay_ == kBooksLine ? cfg_.books.parts[std::max(0, row.part)] : cfg_.lines[unit_at(overlay_)];
+    if (has_parts(overlay_)) return parts_cfg(overlay_)[std::max(0, row.part)];
+    return cfg_.lines[unit_at(overlay_)];
 }
 
 sieve::cli::FilterMode& Menu::mode_of(int line)
@@ -1838,6 +1875,7 @@ sieve::cli::FilterMode& Menu::mode_of(int line)
     if (line == kModelsLine) return cfg_.models.mode;
     if (line == kBinaryLine) return cfg_.binary.mode;
     if (is_composition(line)) return comp_cfg(line).mode;
+    if (line == kWorldsLine) return cfg_.worlds.mode;
     return line == kBooksLine ? cfg_.books.mode : cfg_.lines[unit_at(line)].mode;
 }
 
@@ -1975,8 +2013,9 @@ static std::string settings_key(const sieve::cli::LineFilters& lf)
 // filter alone (filter_share).
 std::pair<std::string, std::function<Menu::StackInfo()>> Menu::stack_job(int i, const sieve::cli::LineFilters& lf, int part) const
 {
-    // The models line: its own stack on a model's number (sieve/modelsieve.hpp).
-    if (i == kModelsLine)
+    // The models line: its own stack on a model's number (sieve/modelsieve.hpp). A world's models
+    // are judged by the same (part 2 of its filters).
+    if (i == kModelsLine || (i == kWorldsLine && part == kWorldModelsPart))
     {
         const uint32_t v = s_.model_vertices, f = s_.model_faces, c = s_.model_coords;
         const std::string key = "models/" + std::to_string(v) + "/" + std::to_string(f) + "/" + std::to_string(c) + "/" + settings_key(lf);
@@ -2044,6 +2083,7 @@ std::pair<std::string, std::function<Menu::StackInfo()>> Menu::stack_job(int i, 
 
 const Menu::StackInfo& Menu::stack_info(int i)
 {
+    if (i == kWorldsLine) return worlds_stack_info();
     if (has_parts(i)) return parts_stack_info(i);
     if (unit_at(i) >= 0 && line_sizes()[size_t(i)].bits > too_large_bits())
     {
@@ -2067,6 +2107,83 @@ sieve::cli::LineFilters Menu::alone(const sieve::cli::LineFilters& lf, const std
     return one;
 }
 
+
+// A world's parts: its cover and title, each counted on its own as a composition's are, and its
+// models by the models line's own stack; the whole exact when every part with filters can count
+// (a part with none keeps all its units), the models' survivors and their places to the power of
+// the models a world holds (WorldSieve).
+const Menu::StackInfo& Menu::worlds_stack_info()
+{
+    const int line = kWorldsLine;
+    if (line_sizes()[size_t(line)].bits > too_large_bits())
+    {
+        info_[line] = StackInfo{"too large", tr("status.too_large"), -1, ""};
+        return info_[line];
+    }
+    const sieve::cli::LineFilters* settings = cfg_.worlds.parts;
+    const sieve::FilterLine cover = part_line(line, 0), title = part_line(line, 1);
+    const bool has_title = s_.title_length > 0;
+    const uint32_t v = s_.model_vertices, f = s_.model_faces, c = s_.model_coords, n = s_.world_models, g = s_.world_grid;
+    std::string key = std::string(kDimensions[line].id) + "/" + std::to_string(v) + "/" + std::to_string(f) + "/" + std::to_string(c) + "x" +
+                      std::to_string(n) + "/G" + std::to_string(g) + "/" + cover.symbols_id + "/" + std::to_string(title.length) +
+                      (has_title ? "" : "/notitle") + "|";
+    for (int part = 0; part < sieve::cli::WorldFilters::kParts; ++part) key += settings_key(settings[part]) + "|";
+    const std::array<sieve::cli::LineFilters, 3> lfs{settings[0], settings[1], settings[2]};
+    return resolve(line, key, [lfs, cover, title, has_title, v, f, c, n, g]() {
+        StackInfo out;
+        sieve::cli::timings::Scope timed("menu.survivors.worlds");
+        const sieve::ModelSpace models(v, f, c, "sieve");
+        const sieve::BigUint places(uint64_t(g) * g * g * 24);
+        sieve::BigUint kept(1), total(1);
+        bool exact = true, any = false;
+        std::string blocker;
+        // The cover and the title: as a composition's.
+        const sieve::FilterLine part_lines[2] = {cover, title};
+        static const char* const names[2] = {"cover", "title"};
+        for (int part = 0; part < 2; ++part)
+        {
+            if (part == 1 && !has_title) continue;
+            const sieve::FilterLine& fl = part_lines[part];
+            const sieve::BigUint whole = sieve::BigUint::pow(fl.base, fl.length);
+            total = sieve::BigUint::mul(total, whole);
+            if (lfs[size_t(part)].enabled.empty())
+            {
+                kept = sieve::BigUint::mul(kept, whole);
+                continue;
+            }
+            any = true;
+            const sieve::FilterStack st = sieve::cli::build_stack(fl, lfs[size_t(part)]);
+            out.table_bytes = std::max(out.table_bytes, st.table_bytes());
+            if (!st.ranker())
+            {
+                exact = false;
+                if (blocker.empty()) blocker = std::string(names[part]) + ": " + st.compact_blocker();
+                continue;
+            }
+            kept = sieve::BigUint::mul(kept, st.ranker()->count());
+        }
+        // The models: the models line's own stack, each slot's model and its place, n times.
+        const sieve::BigUint slot_total = sieve::BigUint::mul(models.size(), places);
+        total = sieve::BigUint::mul(total, sieve::BigUint::pow(slot_total, n));
+        if (lfs[2].enabled.empty()) kept = sieve::BigUint::mul(kept, sieve::BigUint::pow(slot_total, n));
+        else
+        {
+            any = true;
+            const sieve::ModelSieve ms = sieve::cli::build_model_sieve(models, lfs[2]);
+            out.table_bytes = std::max(out.table_bytes, ms.table_bytes());
+            if (!ms.can_rank())
+            {
+                exact = false;
+                if (blocker.empty()) blocker = "models: " + ms.blocker();
+            }
+            else kept = sieve::BigUint::mul(kept, sieve::BigUint::pow(sieve::BigUint::mul(ms.count(), places), n));
+        }
+        if (!any) none_of(out);
+        else if (!exact) out.status = trf("status.not_countable", {blocker});
+        else survivors_of(out, kept, total);
+        return out;
+    });
+}
 
 // The books', tracks' or movies' parts, each counted on its own, on a worker like the other lines;
 // the whole exact when every part with filters can rank (a part with none keeps all its units). A
@@ -2212,7 +2329,7 @@ std::vector<Menu::ORow> Menu::overlay_rows() const
         {
             if (!has_part(overlay_, part)) continue; // no titles
             rows.push_back({ORow::Kind::Header, "", "", part});
-            add_filter_rows(rows, part_line(overlay_, part), overlay_ == kBooksLine ? cfg_.books.parts[part] : comp_cfg(overlay_).parts[part], part);
+            add_filter_rows(rows, part_line(overlay_, part), parts_cfg(overlay_)[part], part);
         }
     }
     else if (unit_at(overlay_) >= 0) add_filter_rows(rows, filter_line_of(overlay_), cfg_.lines[unit_at(overlay_)], -1);
@@ -2436,6 +2553,8 @@ std::vector<Menu::Reach> Menu::reach_of(ToggleScope scope, int overlay, int tab)
                 for (int part = 0; part < parts_of(li); ++part)
                     if (has_part(li, part) && part != kJoinedPart) stacks.push_back({&comp_cfg(li).parts[part], part_line(li, part), li, part});
         stacks.push_back({&cfg_.models, filter_line_of(kModelsLine), kModelsLine, -1});
+        for (int part = 0; part < parts_of(kWorldsLine); ++part)
+            if (has_part(kWorldsLine, part)) stacks.push_back({&cfg_.worlds.parts[part], part_line(kWorldsLine, part), kWorldsLine, part});
         stacks.push_back({&cfg_.binary, filter_line_of(kBinaryLine), kBinaryLine, -1});
     }
     else if (overlay == kBooksLine)
@@ -2444,6 +2563,11 @@ std::vector<Menu::Reach> Menu::reach_of(ToggleScope scope, int overlay, int tab)
     {
         for (int part = 0; part < parts_of(overlay); ++part)
             if (has_part(overlay, part) && part != kJoinedPart) stacks.push_back({&comp_cfg(overlay).parts[part], part_line(overlay, part), overlay, part});
+    }
+    else if (overlay == kWorldsLine)
+    {
+        for (int part = 0; part < parts_of(overlay); ++part)
+            if (has_part(overlay, part)) stacks.push_back({&cfg_.worlds.parts[part], part_line(overlay, part), overlay, part});
     }
     else if (unit_at(overlay) >= 0) stacks.push_back({&cfg_.lines[unit_at(overlay)], filter_line_of(overlay), overlay, -1});
     else if (overlay == kModelsLine) stacks.push_back({&cfg_.models, filter_line_of(kModelsLine), kModelsLine, -1});
@@ -2865,7 +2989,7 @@ void Menu::render_overlay(float W, float H)
              trf("filters.filtered", {tally.filtered.empty() ? tr("filters.filtered.unknown") : tally.filtered}), 1, white);
     }
     text(r_, x, box_.y + 32, (is_composition(overlay_) ? trf("filters.intro.composition", {tr(theme_of(overlay_).key)})
-                                    : tr(overlay_ == kBooksLine ? "filters.intro.books" : overlay_ == kBinaryLine ? "filters.intro.binary" : overlay_ == kModelsLine ? "filters.intro.models" : "filters.intro")), 1, grey);
+                                    : tr(overlay_ == kBooksLine ? "filters.intro.books" : overlay_ == kWorldsLine ? "filters.intro.worlds" : overlay_ == kBinaryLine ? "filters.intro.binary" : overlay_ == kModelsLine ? "filters.intro.models" : "filters.intro")), 1, grey);
 
     const sieve::cli::FilterMode mode = mode_of(overlay_);
     const auto rows = overlay_rows();
@@ -2887,11 +3011,12 @@ void Menu::render_overlay(float W, float H)
                         "    " + tr("filters.mode.help2"), "    " + tr("filters.mode.help4"), "    " + tr("filters.mode.help3")};
         else if (row.kind == ORow::Kind::Header)
         {
-            const bool comp = is_composition(overlay_);
+            const bool comp = is_composition(overlay_), world = overlay_ == kWorldsLine;
             static const char* const heads[4] = {"filters.part.cover", "filters.part.title", "filters.part.pages", "filters.part.joined"};
-            const std::string head = comp && row.part == 2 ? "filters.part.units" : heads[row.part];
+            const std::string head = world && row.part == kWorldModelsPart ? "filters.part.models" : comp && row.part == 2 ? "filters.part.units" : heads[row.part];
             const std::string base_name = comp ? tr(theme_of(line_of(*kDimensions[overlay_].composes)).key) : std::string();
-            std::string sub = comp && row.part == 1   ? trf("filters.part.title.composition.help", {std::to_string(s_.title_length)})
+            std::string sub = (comp || world) && row.part == 1 ? trf("filters.part.title.composition.help", {std::to_string(s_.title_length)})
+                              : world && row.part == kWorldModelsPart ? trf(head + ".help", {std::to_string(s_.world_models)})
                               : comp && row.part >= 2 ? trf(head + ".help", {std::to_string(comp_units(overlay_)), base_name})
                               : row.part == 2         ? trf(head + ".help", {std::to_string(uint64_t(s_.book_pages) * s_.length)})
                                                       : tr(head + ".help");

@@ -1744,6 +1744,146 @@ def cmd_composition_vectors(_args):
                       f"{mode}\t{format(k, 'x').zfill(width)}\t{dots(cover_d)}\t{dots(title_d)}\t{'|'.join(dots(u) for u in units)}")
 
 
+# -- worlds (worldspace-v1): a cover, a title (or none) and N slots, each a model of the models line
+#    placed in a cell of a G x G x G grid with one of the 24 turns of a cube (turns-24-v1), as one
+#    mixed-radix number, cover first; scrambled through shuffle-sha256-v1 over the whole count, keyed
+#    with the models line's key. Written independently of the C++.
+def world_turns():
+    """turns-24-v1: row i of a turn takes old coordinate perm[i] times sign[i]; by permutation
+    (lexicographic), then signs (rows 0, 1, 2 as bits 4, 2, 1 counting up, set = minus), keeping
+    determinant +1."""
+    import itertools
+    out = []
+    for perm in itertools.permutations(range(3)):
+        for bits in range(8):
+            sign = [-1 if bits & (4 >> i) else 1 for i in range(3)]
+            m = [[sign[i] if j == perm[i] else 0 for j in range(3)] for i in range(3)]
+            det = (m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+                   + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]))
+            if det == 1:
+                out.append((perm, sign))
+    assert len(out) == 24 and out[0] == ((0, 1, 2), [1, 1, 1])
+    return out
+
+
+class WorldSpace:
+    def __init__(self, cover, title, models, slots, grid):
+        """cover, title: (symbols id, base, length) or title None; models: a ModelSpace."""
+        assert slots >= 1 and 1 <= grid <= 1024
+        self.cover, self.title, self.m, self.n, self.g = cover, title, models, slots, grid
+        self.places = grid ** 3 * 24
+        self.slot_size = models.size * self.places
+        self.size = cover[1] ** cover[2] * (title[1] ** title[2] if title else 1) * self.slot_size ** slots
+        self.hex_width = max(1, ((self.size - 1).bit_length() + 3) // 4)
+        part = lambda sp: f"{sp[0]}/L{sp[2]}"
+        self.id = (f"worlds/{part(cover)}+{part(title) if title else '-'}+V{models.v}/F{models.f}/C{models.c}x{slots}"
+                   f"/G{grid}/key={models.key}/worldspace-v1")
+
+    def index_of(self, cover_d, title_d, slots, mode="positional"):
+        v = 0
+        for d in cover_d:
+            v = v * self.cover[1] + d
+        if self.title:
+            for d in title_d:
+                v = v * self.title[1] + d
+        for model, x, y, z, t in slots:
+            v = v * self.slot_size + model * self.places + ((x * self.g + y) * self.g + z) * 24 + t
+        return shuffle(self.m.key, self.id, self.size, v) if mode == "scrambled" else v
+
+    def parts_at(self, index, mode="positional"):
+        v = shuffle(self.m.key, self.id, self.size, index, inverse=True) if mode == "scrambled" else index
+        slots = []
+        for _ in range(self.n):
+            v, slot = divmod(v, self.slot_size)
+            model, place = divmod(slot, self.places)
+            place, t = divmod(place, 24)
+            place, z = divmod(place, self.g)
+            x, y = divmod(place, self.g)
+            slots.append((model, x, y, z, t))
+        slots.reverse()
+
+        def take(length, base):
+            nonlocal v
+            out = []
+            for _ in range(length):
+                v, r = divmod(v, base)
+                out.append(r)
+            return out[::-1]
+        title_d = take(self.title[2], self.title[1]) if self.title else []
+        cover_d = take(self.cover[2], self.cover[1])
+        assert v == 0
+        return cover_d, title_d, slots
+
+    def to_obj(self, slots):
+        turns = world_turns()
+        dec = self.m.decimals
+        whole = len(str(self.g))
+        width = len(str(self.m.v * self.n))
+
+        def text(x):
+            units = x * 10 ** dec
+            assert units.denominator == 1
+            units = int(units)
+            w, f = divmod(abs(units), 10 ** dec)
+            return f"{'-' if units < 0 else '+'}{w:0{whole}d}.{f:0{dec}d}"
+        vlines, flines = [], []
+        for n, (model, x, y, z, t) in enumerate(slots):
+            verts, faces = self.m.parts_at(model)
+            perm, sign = turns[t]
+            centre = (2 * x + 1 - self.g, 2 * y + 1 - self.g, 2 * z + 1 - self.g)
+            for i in range(self.m.v):
+                p = [self.m.coord(verts[3 * i + k]) for k in range(3)]
+                vlines.append("v " + " ".join(text(sign[k] * p[perm[k]] + centre[k]) for k in range(3)))
+            for i in range(self.m.f):
+                flines.append("f " + " ".join(f"{n * self.m.v + faces[3 * i + k] + 1:0{width}d}" for k in range(3)))
+        return "\n".join(vlines + flines) + "\n"
+
+
+def cmd_world_obj(args):
+    """A world's .obj text, from its slots (MODEL:x.y.z.turn|..., each model's address on the models
+    line in hex), as `sieve world --read` writes it. The cover and title do not enter the .obj."""
+    ms = ModelSpace(args.vertices, args.faces, args.coords, args.key)
+    ws = WorldSpace(("image/mono/1x1", 2, 1), None, ms, args.world_models, args.world_grid)
+    slots = []
+    for slot in args.slots.split("|"):
+        model, place = slot.split(":")
+        x, y, z, t = (int(v) for v in place.split("."))
+        slots.append((int(model, 16), x, y, z, t))
+    slots += [(0, 0, 0, 0, 0)] * (args.world_models - len(slots))
+    sys.stdout.buffer.write(ws.to_obj(slots).encode())
+
+
+def cmd_world_vectors(_args):
+    """World addresses (worldspace-v1): positional and scrambled, each slot's model and place, and the
+    world's .obj text by its SHA-256."""
+    print("# sieve world vectors v1 (worldspace-v1, turns-24-v1, over shuffle-sha256-v1)")
+    print("# turns <24 turns, each its permutation and signs, e.g. 012+++>")
+    print("# world <cover symbols> <base> <length> <title symbols or -> <base> <length> <vertices> <faces> <coords> <slots> <grid> <key> "
+          "<mode> <address> <cover digits> <title digits> <slots: model index hex:x.y.z.turn, | between> <obj sha256> (digits . separated)")
+    print("turns\t" + " ".join("".join(map(str, p)) + "".join("+" if x > 0 else "-" for x in sg) for p, sg in world_turns()))
+    g = stream("worlds")
+    cases = (
+        (("image/mono/2x1", 2, 2), ("lower27", 27, 1), (3, 1, 2, "sieve"), 2, 2),
+        (("image/mono/2x2", 2, 4), None, (4, 2, 4, "sieve"), 3, 3),
+        (("image/mono/10x10", 2, 100), ("lower27", 27, 32), (8, 12, 16, "sieve"), 4, 8),
+        (("image/ega16/4x4", 16, 16), ("lower27", 27, 4), (8, 12, 16, "other"), 2, 16),
+    )
+    for cover, title, (v, f, c, key), n, grid in cases:
+        ws = WorldSpace(cover, title, ModelSpace(v, f, c, key), n, grid)
+        for mode in ("positional", "scrambled"):
+            for k in [0, ws.size - 1, ws.size // 3] + [int.from_bytes(bytes(next(g) for _ in range(ws.hex_width)), "little") % ws.size
+                                                      for _ in range(3)]:
+                cover_d, title_d, slots = ws.parts_at(k, mode)
+                assert ws.index_of(cover_d, title_d, slots, mode) == k
+                obj = ws.to_obj(slots)
+                dots = lambda d: ".".join(map(str, d))
+                t = title or ("-", 1, 0)
+                sl = "|".join(f"{m:0{ws.m.hex_width}x}:{x}.{y}.{z}.{tt}" for m, x, y, z, tt in slots)
+                print(f"world\t{cover[0]}\t{cover[1]}\t{cover[2]}\t{t[0]}\t{t[1]}\t{t[2]}\t{v}\t{f}\t{c}\t{n}\t{grid}\t{key}\t"
+                      f"{mode}\t{format(k, 'x').zfill(ws.hex_width)}\t{dots(cover_d)}\t{dots(title_d)}\t{sl}\t"
+                      f"{hashlib.sha256(obj.encode()).hexdigest()}")
+
+
 # -- titled lines (titled-v1): a cover (some lines), a title and a content index as one
 #    mixed-radix number, cover first; scrambled through shuffle-sha256-v1 over the whole count.
 def titled_space_id(content_shape, title_sym, title_len, cover, key):
@@ -5867,6 +6007,15 @@ def main():
     sub.add_parser("sound-vectors")
     sub.add_parser("notes3-vectors")
     sub.add_parser("composition-vectors")
+    sub.add_parser("world-vectors")
+    s = sub.add_parser("world-obj")
+    s.add_argument("--slots", required=True)
+    s.add_argument("--world-models", type=int, default=4)
+    s.add_argument("--world-grid", type=int, default=8)
+    s.add_argument("--vertices", type=int, default=8)
+    s.add_argument("--faces", type=int, default=12)
+    s.add_argument("--coords", type=int, default=16)
+    s.add_argument("--key", default="sieve")
     sub.add_parser("kind-vectors")
     sub.add_parser("written-vectors")
     sub.add_parser("cross-vectors")
@@ -5955,6 +6104,10 @@ def main():
         cmd_notes3_vectors(args)
     elif args.cmd == "composition-vectors":
         cmd_composition_vectors(args)
+    elif args.cmd == "world-vectors":
+        cmd_world_vectors(args)
+    elif args.cmd == "world-obj":
+        cmd_world_obj(args)
     elif args.cmd == "kind-vectors":
         cmd_kind_vectors(args)
     elif args.cmd == "written-vectors":

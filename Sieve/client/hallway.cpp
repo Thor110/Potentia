@@ -80,6 +80,28 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
                 modes_[li] = FilterMode::Off;
             }
         }
+        // Worlds: a cover, the same title as the titled lines and N models, each placed in a cell of
+        // the grid with one of 24 turns (worldspace-v1), filtered part by part.
+        world_space_ = std::make_unique<WorldSpace>(image.space, title, *model_space_, std::max<uint32_t>(1, shape.world_models),
+                                                    std::clamp<uint32_t>(shape.world_grid, 1, 1024));
+        modes_[kWorldsLine] = filters.worlds.mode == FilterMode::Full ? FilterMode::Compact : filters.worlds.mode; // (their titles are kept in compact)
+        try
+        {
+            std::optional<sieve::FilterLine> title_line;
+            if (title)
+            {
+                title_line = filter_line(text);
+                title_line->length = title->unit_length();
+            }
+            world_stacks_ = build_world_stacks(image, title_line, *model_space_, filters.worlds);
+            world_sieve_ = std::make_unique<WorldSieve>(*world_space_, world_stacks_.cover, world_stacks_.title, world_stacks_.models);
+        }
+        catch (const std::exception& e)
+        {
+            std::cerr << "filters for the worlds line: " << e.what() << "\n";
+            world_sieve_.reset();
+            modes_[kWorldsLine] = FilterMode::Off;
+        }
         // The music's tracks are this hallway's: their addresses take its cover and title shapes.
         set_track_shape(image.space, title);
         // The binary line: every file up to binary_bytes, titled, with a cover as audio and video have.
@@ -266,6 +288,13 @@ FilterMode Hallway::effective_mode(int i) const
         if (modes_[i] != FilterMode::Compact) return modes_[i];
         return books_compact() ? FilterMode::Compact : FilterMode::Hide;
     }
+    if (i == kWorldsLine)
+    {
+        const WorldSieve* ws = world_sieve_.get();
+        if (!ws || ws->empty()) return FilterMode::Off;
+        if (modes_[i] != FilterMode::Compact) return modes_[i];
+        return ws->can_rank() && !ws->count().is_zero() ? FilterMode::Compact : FilterMode::Hide;
+    }
     if (is_composition(i))
     {
         const CompositionSieve* cs = comps_[size_t(i)].sieve.get();
@@ -286,6 +315,7 @@ bool Hallway::has_filters() const
     if (on_models()) return model_sieve_ && !model_sieve_->empty();
     if (on_binary()) return binary_sieve_ && !binary_sieve_->empty();
     if (on_composition()) return comp().sieve && !comp().sieve->empty();
+    if (on_worlds()) return world_sieve_ && !world_sieve_->empty();
     return on_books() ? book_sieve_ && !book_sieve_->empty() : !stack().empty();
 }
 
@@ -319,6 +349,21 @@ std::string Hallway::compute_filter_status() const
             s += trf("hud.filters.excluded", {short_big(BigUint(comp().space->size()) -= cs.count())});
         else if (modes_[li_] == FilterMode::Compact)
             s += cs.can_rank() ? tr("hud.filters.no_unit") : trf("hud.filters.blocked", {cs.blocker()});
+        return s;
+    }
+    if (on_worlds())
+    {
+        if (!has_filters()) return tr("hud.filters.none");
+        const FilterMode m = effective_mode();
+        const WorldSieve& ws = *world_sieve_;
+        const auto parts = std::to_string(world_stacks_.cover.size()) + "+" + std::to_string(world_stacks_.title.size()) + "+" +
+                           std::to_string(world_stacks_.models.size());
+        std::string s = trf("hud.filters", {parts, tr(std::string("mode.") + to_string(m))});
+        if (m == FilterMode::Compact) s += trf("hud.filters.units", {short_big(ws.count())});
+        else if (m == FilterMode::Excluded && ws.can_rank())
+            s += trf("hud.filters.excluded", {short_big(BigUint(world_space_->size()) -= ws.count())});
+        else if (modes_[li_] == FilterMode::Compact)
+            s += ws.can_rank() ? tr("hud.filters.no_unit") : trf("hud.filters.blocked", {ws.blocker()});
         return s;
     }
     if (on_models())
@@ -374,6 +419,7 @@ BigUint Hallway::units_of(int i) const
     if (i == kBooksLine) return effective_mode(i) == FilterMode::Compact ? book_sieve_->count() : books_->size();
     if (is_composition(i))
         return effective_mode(i) == FilterMode::Compact ? comps_[size_t(i)].sieve->count() : comps_[size_t(i)].space->size();
+    if (i == kWorldsLine) return effective_mode(i) == FilterMode::Compact ? world_sieve_->count() : world_space_->size();
     if (guided_ && line_at(i).guided) return BigUint::pow(2, zoom_);
     if (effective_mode(i) == FilterMode::Compact) return full_here(i) ? full_[size_t(i)]->size() : compact_[i]->count();
     return titled_[size_t(i)] ? titled_[size_t(i)]->size() : line_at(i).space.size();
@@ -556,6 +602,34 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
             b.title = std::move(p.title);
             b.unit = join_units(p.units, c.strands);
         }
+        else if (on_worlds())
+        {
+            // A world: its cover, its title and its models, each placed in its cell with its turn.
+            WorldSpace::Parts p;
+            if (compact_here)
+            {
+                // Only survivors stand here, closed up, like a compact line.
+                p = world_sieve_->parts_at(b.index, mode_);
+                b.hex = world_sieve_->hex_of(b.index);
+                b.survivor = true;
+                b.survivor_number = mode_ == AddressMode::Positional ? b.index : world_sieve_->rank(p);
+                b.fraction = b.index.is_zero() ? 0.0 : std::pow(10.0, b.index.log10_approx() - world_sieve_->count().log10_approx());
+            }
+            else
+            {
+                p = world_space_->parts_at(b.index, mode_);
+                b.hex = world_space_->hex_of(b.index);
+                b.fraction = b.index.is_zero() ? 0.0 : std::pow(10.0, b.index.log10_approx() - world_space_->size().log10_approx());
+                if (world_sieve_ && !world_sieve_->empty())
+                {
+                    b.failed_by = world_sieve_->first_failure(p);
+                    b.passes = b.failed_by.empty();
+                }
+            }
+            b.cover = p.cover;
+            b.title = p.title;
+            b.world = std::move(p);
+        }
         else if (on_binary())
         {
             // A file: its title, its cover, and the file itself by its own positional index. Only
@@ -716,7 +790,7 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
             b.hex = sp.hex_of(address);
             b.fraction = sp.fraction_of(address);
         }
-        if (!on_books() && !on_models() && !on_composition() && !b.survivor && !stack().empty())
+        if (!on_books() && !on_models() && !on_worlds() && !on_composition() && !b.survivor && !stack().empty())
         {
             sieve::cli::timings::Scope timed_filters("hallway.item.filters");
             const int fail = stack().first_failure(b.unit);
@@ -761,7 +835,10 @@ const TitledSpace* Hallway::titled_here() const { return titled_of(li_); }
 std::string Hallway::title_text(const Book& b) const
 {
     const TitledSpace* ts = titled_of(li_);
-    const std::optional<Space>* title = on_composition() ? &comp().space->title_space() : ts ? &ts->title_space() : nullptr;
+    const std::optional<Space>* title = on_composition() ? &comp().space->title_space()
+                                        : on_worlds()    ? &world_space_->title_space()
+                                        : ts             ? &ts->title_space()
+                                                         : nullptr;
     if (!title || b.title.empty() || !*title) return {};
     std::u32string t = (*title)->text_of(b.title);
     while (!t.empty() && (t.back() == U' ' || t.back() == 0)) t.pop_back();
@@ -1041,6 +1118,22 @@ void Hallway::cycle_ordering()
         message(trf(mode_ == AddressMode::Positional ? "msg.ordering.books_positional" : "msg.ordering.books_scrambled", {ordering_name()}));
         return;
     }
+    if (on_worlds())
+    {
+        // A world keeps its cover, title and models across the change, as a book does.
+        const Book* ref = reference_book();
+        const std::optional<WorldSpace::Parts> parts = ref && !ref->empty ? ref->world : std::nullopt;
+        mode_ = mode_ == AddressMode::Positional ? AddressMode::Scrambled : AddressMode::Positional;
+        rebase();
+        if (parts)
+        {
+            const bool compact = effective_mode() == FilterMode::Compact;
+            if (!compact || world_sieve_->first_failure(*parts).empty())
+                place(compact ? world_sieve_->index_of(*parts, mode_) : world_space_->index_of(*parts, mode_), false);
+        }
+        message(trf(mode_ == AddressMode::Positional ? "msg.ordering.positional" : "msg.ordering.scrambled", {ordering_name()}));
+        return;
+    }
     if (on_composition())
     {
         // A track or movie keeps its cover and title across the change, as a book does.
@@ -1097,6 +1190,8 @@ bool Hallway::warp(const std::string& input)
 {
     try
     {
+        // A world has no form to warp in from yet: its address (G), or sieve world --compose.
+        if (on_worlds()) throw std::invalid_argument(tr("msg.warp.worlds"));
         if (on_books())
         {
             // A book record, bound with sieve bind.
@@ -1201,6 +1296,7 @@ bool Hallway::go_to(std::string input)
         else if (on_binary()) index = effective_mode() == FilterMode::Compact ? binary_sieve_->parse(input) : titled_[kBinaryLine]->parse(input);
         else if (on_books()) index = effective_mode() == FilterMode::Compact ? book_sieve_->parse(input) : books_->parse(input);
         else if (on_composition()) index = effective_mode() == FilterMode::Compact ? comp().sieve->parse(input) : comp().space->parse(input);
+        else if (on_worlds()) index = effective_mode() == FilterMode::Compact ? world_sieve_->parse(input) : world_space_->parse(input);
         else if (effective_mode() == FilterMode::Compact) // a compact address, as the books show (full: with its title and cover)
             index = full_here(li_) ? full_[size_t(li_)]->parse(input) : compact().parse(input);
         else if (const TitledSpace* ts = titled_here()) index = ts->parse(input);
@@ -1418,7 +1514,7 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
             sort_yaw_ += e.motion.xrel * 0.008f;
             sort_pitch_ = std::clamp(sort_pitch_ + e.motion.yrel * 0.008f * (invert_y_ ? -1.0f : 1.0f), -1.5f, 1.5f);
         }
-        else if (in_hand_ && in_hand_->model)
+        else if (in_hand_ && (in_hand_->model || in_hand_->world))
         {
             model_spin_ += e.motion.xrel * 0.008f;
             model_tilt_ = std::clamp(model_tilt_ + e.motion.yrel * 0.008f * (invert_y_ ? -1.0f : 1.0f), -1.5f, 1.5f);
@@ -1493,11 +1589,11 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
         break;
     case SDLK_A:
         if (in_hand_ && hand_tab_ == 2) sort_yaw_ -= 0.15f;
-        else if (in_hand_ && in_hand_->model) model_spin_ -= 0.15f;
+        else if (in_hand_ && (in_hand_->model || in_hand_->world)) model_spin_ -= 0.15f;
         break;
     case SDLK_D:
         if (in_hand_ && hand_tab_ == 2) sort_yaw_ += 0.15f;
-        else if (in_hand_ && in_hand_->model) model_spin_ += 0.15f;
+        else if (in_hand_ && (in_hand_->model || in_hand_->world)) model_spin_ += 0.15f;
         break;
     case SDLK_C:
         // The item page's tabs: the thing itself, what it costs to name it, and where it stands
@@ -1514,7 +1610,7 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
         }
         break;
     case SDLK_R:
-        if (in_hand_ && in_hand_->model) { model_spin_ = kModelSpin; model_tilt_ = kModelTilt; }
+        if (in_hand_ && (in_hand_->model || in_hand_->world)) { model_spin_ = kModelSpin; model_tilt_ = kModelTilt; }
         break;
     case SDLK_P:
         if (in_hand_ && !on_books() && line().kind == LineKind::Audio)
@@ -1661,6 +1757,7 @@ std::string Hallway::status()
             where += " " + std::to_string(used) + "/" + std::to_string(model_space_->vertices()) + " vertices used, " +
                      std::to_string(degenerate) + " degenerate faces";
         }
+        else if (first.world) where += " " + world_line_summary(*first.world) + " (" + std::to_string(first.world->slots.size()) + " models placed)";
         else if (first.is_file) where += " " + file_type(first.head, first.file_size) + " " + binary_preview(first.head, 16, first.file_size);
         else if (line().kind == LineKind::Text) where += " \"" + ascii(utf8_encode(line().space.text_of(first.unit))) + "\"";
         if (first.guided) where += " (" + std::to_string(first.bits) + " bits)";
@@ -2396,7 +2493,8 @@ Hallway::VaultCheck Hallway::vault_check(const Book& b) const
     c.cover = b.cover;
     if (!b.parts && !b.title.empty()) c.title = title_text(b);
     if (b.model && model_space_) c.obj = model_space_->to_obj(*b.model);
-    c.model = b.model && model_space_;
+    else if (b.world && world_space_) c.obj = world_space_->to_obj(*b.world); // a world as its .obj, as a model is
+    c.model = (b.model && model_space_) || (b.world && world_space_);
     c.file = b.is_file; // worked out with its bytes: file_withheld
     if (!c.parts && !c.model && !c.file) c.unit = b.unit;
     return c;

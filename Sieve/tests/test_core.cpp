@@ -14,6 +14,7 @@
 #include "sieve/dfa.hpp"
 #include "sieve/filekind.hpp"
 #include "sieve/modelsieve.hpp"
+#include "sieve/worldspace.hpp"
 #include "sieve/written.hpp"
 #include "sieve/packed.hpp"
 #include "sieve/plugin.hpp"
@@ -3071,6 +3072,124 @@ void test_composition_vectors(const std::string& dir)
     CHECK(n == 48); // a truncated or emptied vector file must fail, not pass quietly
 }
 
+// Worlds (worldspace-v1): the oracle's addresses, each slot's model and place, the turns table and
+// the world's .obj text, against reference/sieve_ref.py world-vectors.
+void test_world_vectors(const std::string& dir)
+{
+    std::ifstream in(dir + "vectors_worlds_v1.tsv");
+    CHECK(bool(in));
+    auto digits = [](const std::string& t) {
+        std::vector<uint32_t> d;
+        std::stringstream ss(t);
+        std::string x;
+        while (std::getline(ss, x, '.'))
+            if (!x.empty()) d.push_back(uint32_t(std::stoul(x)));
+        return d;
+    };
+    std::string line;
+    int n = 0;
+    bool turns_seen = false;
+    while (std::getline(in, line))
+    {
+        if (line.empty() || line[0] == '#') continue;
+        std::vector<std::string> f;
+        std::stringstream ss(line);
+        std::string x;
+        while (std::getline(ss, x, '\t')) f.push_back(x);
+        if (f[0] == "turns")
+        {
+            std::string want;
+            for (const Turn& t : turns())
+            {
+                if (!want.empty()) want += ' ';
+                for (int i = 0; i < 3; ++i) want += char('0' + t.perm[size_t(i)]);
+                for (int i = 0; i < 3; ++i) want += t.sign[size_t(i)] > 0 ? '+' : '-';
+            }
+            CHECK(f[1] == want);
+            turns_seen = true;
+            continue;
+        }
+        while (f.size() < 20) f.push_back("");
+        auto u32 = [&](size_t i) { return uint32_t(std::stoul(f[i])); };
+        const std::string& key = f[12];
+        std::optional<Space> title;
+        if (f[4] != "-") title = Space(f[4], u32(5), u32(6), key);
+        const ModelSpace models(u32(7), u32(8), u32(9), key);
+        const WorldSpace ws(Space(f[1], u32(2), u32(3), key), title, models, u32(10), u32(11));
+        const AddressMode m = address_mode_from_string(f[13]);
+        WorldSpace::Parts p;
+        p.cover = digits(f[15]);
+        p.title = digits(f[16]);
+        std::stringstream us(f[17]);
+        std::string u;
+        while (std::getline(us, u, '|'))
+        {
+            const size_t colon = u.find(':');
+            const std::vector<uint32_t> place = digits(u.substr(colon + 1));
+            p.slots.push_back({BigUint::from_hex(u.substr(0, colon)), place[0], place[1], place[2], place[3]});
+        }
+        const BigUint k = BigUint::from_hex(f[14]);
+        CHECK(ws.parts_at(k, m) == p);
+        CHECK(ws.hex_of(ws.index_of(p, m)) == f[14]);
+        CHECK(ws.hex_of(k) == f[14]); // the width is the space's
+        const std::string obj = ws.to_obj(p);
+        CHECK(Sha256::hex(Sha256::hash(obj)) == f[18]);
+        // The mesh is the .obj's: as many vertices and faces, and each slot's vertices inside its cell.
+        const WorldSpace::Mesh mesh = ws.mesh_of(p);
+        CHECK(mesh.vertices.size() == size_t(models.vertices()) * ws.slots() && mesh.faces.size() == size_t(models.face_count()) * ws.slots());
+        for (size_t s = 0; s < p.slots.size(); ++s)
+        {
+            const float cx = float(2 * int(p.slots[s].x) + 1 - int(ws.grid()));
+            for (uint32_t i = 0; i < models.vertices(); ++i)
+                CHECK(std::abs(mesh.vertices[s * models.vertices() + i].x - cx) < 1.0f);
+        }
+        ++n;
+    }
+    std::cout << "world vectors checked: " << n << "\n";
+    CHECK(turns_seen);
+    CHECK(n == 48); // a truncated or emptied vector file must fail, not pass quietly
+}
+
+// The world filters against brute force: a 1x1 two-colour cover, no title, one slot of the smallest
+// models line (3 vertices, 1 face, 2 coordinates) on a grid of 1, under canonical-mesh-v1 and with
+// none. Survivors walk in positional order, rank inverts unrank, and compact addresses round-trip.
+void test_world_sieve()
+{
+    const Space cover("image/mono/1x1", 2, 1, "sieve");
+    const ModelSpace models(3, 1, 2, "sieve");
+    const WorldSpace ws(cover, std::nullopt, models, 1, 1);
+    const FilterStack none;
+    const ModelSieve canon(models, {{find_filter("canonical-mesh-v1"), {}}});
+    const ModelSieve plain(models, {});
+    for (const ModelSieve* ms : {&canon, &plain})
+    {
+        const WorldSieve sv(ws, none, none, *ms);
+        CHECK(sv.can_rank());
+        uint64_t k = 0;
+        const uint64_t total = std::stoull(ws.size().to_decimal()); // 2 x 13824 x 24
+        for (uint64_t v = 0; v < total; v += 101) // every 101st (prime to 24 and to the models): every place, many models
+        {
+            const WorldSpace::Parts p = ws.parts_at(BigUint(v), AddressMode::Positional);
+            if (!sv.first_failure(p).empty())
+            {
+                CHECK(ms == &canon && sv.first_failure(p).rfind("model 1: ", 0) == 0);
+                continue;
+            }
+            const BigUint r = sv.rank(p);
+            CHECK(sv.unrank(r) == p);
+            for (AddressMode m : {AddressMode::Positional, AddressMode::Scrambled}) CHECK(sv.parts_at(sv.index_of(p, m), m) == p);
+            ++k;
+        }
+        CHECK(k > 0);
+        const BigUint want = BigUint::mul(BigUint::mul(BigUint(2), ms == &canon ? canon.count() : models.size()), BigUint(24));
+        CHECK(sv.count() == want);
+        // Survivors in positional order: rank k and k + 1 are increasing worlds.
+        const BigUint a = ws.index_of(sv.unrank(BigUint(5)), AddressMode::Positional), b = ws.index_of(sv.unrank(BigUint(6)), AddressMode::Positional);
+        CHECK(a < b);
+    }
+    CHECK(WorldSieve(ws, none, none, plain).domain() == "world-compact-v1/" + ws.id() + "/-/-/-");
+}
+
 // The composition filters against brute force: a 2x2 two-colour cover and units of 2x1 two-colour
 // video of 2 frames, two units a movie, no title, neighbour-agreement-v1 on cover and units. The
 // count is the cover's survivors times the unit's squared; unrank walks the survivors in
@@ -4611,6 +4730,8 @@ void run_all(int argc, char** argv)
         test_book_vectors(dir);
         test_composition_vectors(dir);
         test_composition_sieve();
+        test_world_vectors(dir);
+        test_world_sieve();
         test_titled_vectors(dir + "vectors_titled_v1.tsv");
         test_binary_vectors(dir + "vectors_binary_v1.tsv");
         test_chunk_vectors(dir + "vectors_chunks_v1.tsv");

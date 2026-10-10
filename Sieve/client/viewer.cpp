@@ -201,7 +201,7 @@ std::string Hallway::view_label(ViewKind k) const
     }
     // What the thing itself is, on this line.
     const Book& bk = *in_hand_;
-    if (bk.model) return tr("view.tab.obj");
+    if (bk.model || bk.world) return tr("view.tab.obj");
     if (bk.parts) return tr("view.tab.page");
     if (bk.is_file) return tr("view.tab.hex");
     switch (line().kind)
@@ -236,6 +236,11 @@ void Hallway::view_raw()
     {
         view_.rows = utf32_rows(split_lines(model_space_->to_obj(*bk.model)));
         view_.heading = named + tr("view.model");
+    }
+    else if (bk.world)
+    {
+        view_.rows = utf32_rows(split_lines(world_space_->to_obj(*bk.world)));
+        view_.heading = named + tr("view.world");
     }
     else if (bk.parts) view_book_page();
     else if (bk.is_file)

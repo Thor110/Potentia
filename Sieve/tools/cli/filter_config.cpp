@@ -34,6 +34,7 @@ std::string trim(std::string s)
 
 const char* kBookParts[3] = {"cover", "title", "pages"};
 const char* kCompositionParts[CompositionFilters::kParts] = {"cover", "title", "units", "joined"};
+const char* kWorldParts[WorldFilters::kParts] = {"cover", "title", "models"};
 
 void read_filters(LineFilters& lf, const std::string& value)
 {
@@ -101,6 +102,14 @@ int CompositionFilters::part_index(const std::string& name)
 {
     for (int i = 0; i < kParts; ++i)
         if (name == kCompositionParts[i]) return i;
+    return -1;
+}
+
+const char* WorldFilters::part_name(int i) { return kWorldParts[i]; }
+int WorldFilters::part_index(const std::string& name)
+{
+    for (int i = 0; i < kParts; ++i)
+        if (name == kWorldParts[i]) return i;
     return -1;
 }
 
@@ -212,6 +221,25 @@ FilterConfig FilterConfig::load(const fs::path& path)
             else throw std::runtime_error(where);
             continue;
         }
+        if (line_name == "worlds")
+        {
+            const std::string where = path.string() + ": unknown key '" + key + "' in [" + section + "]";
+            if (dot == std::string::npos)
+            {
+                if (key != "mode") throw std::runtime_error(where);
+                c.worlds.mode = mode_at(value, path, line_no);
+                continue;
+            }
+            const std::string rest = section.substr(dot + 1);
+            const size_t dot2 = rest.find('.');
+            const int pi = WorldFilters::part_index(rest.substr(0, dot2));
+            if (pi < 0) throw std::runtime_error(path.string() + ": unknown section [" + section + "] (worlds have cover, title and models)");
+            LineFilters& lf = c.worlds.parts[pi];
+            if (dot2 != std::string::npos) lf.values[rest.substr(dot2 + 1)][key] = value;
+            else if (key == "filters") read_filters(lf, value);
+            else throw std::runtime_error(where);
+            continue;
+        }
         if (line_name == "books")
         {
             const std::string where = path.string() + ": unknown key '" + key + "' in [" + section + "]";
@@ -247,6 +275,7 @@ FilterConfig FilterConfig::load(const fs::path& path)
     for (auto& lf : c.books.parts) canonicalise(lf);
     for (auto& lf : c.tracks.parts) canonicalise(lf);
     for (auto& lf : c.movies.parts) canonicalise(lf);
+    for (auto& lf : c.worlds.parts) canonicalise(lf);
     canonicalise(c.models);
     canonicalise(c.binary);
     return c;
@@ -290,6 +319,15 @@ void FilterConfig::save(const fs::path& path) const
             write_values(o, std::string(name) + "." + kCompositionParts[i], cf->parts[i]);
         }
         o << "\n";
+    }
+    o << "; Worlds: one mode; the cover is judged as a picture, the title as a title, and each slot's model\n"
+      << "; by the models line's filters (a slot's place has none).\n"
+      << "[worlds]\nmode = " << to_string(worlds.mode) << "\n";
+    for (int i = 0; i < WorldFilters::kParts; ++i)
+    {
+        o << "\n[worlds." << kWorldParts[i] << "]\n";
+        write_filters(o, worlds.parts[i]);
+        write_values(o, std::string("worlds.") + kWorldParts[i], worlds.parts[i]);
     }
     o << "\n; The models line: no filters are registered for it yet; its mode is kept for then. The binary\n"
       << "; line (one line, met at both ends) has its files' kinds: binary-kind-v1.\n";
@@ -642,6 +680,15 @@ FilterLine joined_filter_line(const FilterLine& unit, uint32_t n)
     f.length = uint32_t(length);
     f.frames *= n;
     return f;
+}
+
+WorldStacks build_world_stacks(const Line& cover, const std::optional<FilterLine>& title, const ModelSpace& models, const WorldFilters& settings)
+{
+    WorldStacks w;
+    w.cover = build_stack(cover, settings.parts[0]);
+    if (title) w.title = build_stack(*title, settings.parts[1]);
+    w.models = build_model_sieve(models, settings.parts[2]);
+    return w;
 }
 
 CompositionStacks build_composition_stacks(const Line& cover, const std::optional<FilterLine>& title, const Line& unit, uint32_t units,

@@ -72,6 +72,9 @@ struct Settings
     uint32_t track_units = 4, movie_units = 4;
     // models: V vertices and F triangles, each coordinate one of C steps across [-1, 1]
     uint32_t model_vertices = 8, model_faces = 12, model_coords = 16;
+    // Worlds (sieve/worldspace.hpp): a cover, a title and this many models, each in a cell of a
+    // grid this many cells along each axis, with one of 24 turns.
+    uint32_t world_models = 4, world_grid = 8;
     // How big the picture on the front of a crate is drawn, pixels square (a power of two).
     uint32_t model_tile = 64;
     // Global, because the corridor is shared: how many units stand on one tile's two walls.
@@ -178,6 +181,7 @@ constexpr int setup_rows_of(Media m)
     case Media::Tracks: return 1; // units per track
     case Media::Movies: return 1; // units per movie
     case Media::Models: return 3; // vertices, triangles, grid
+    case Media::Worlds: return 2; // models per world, grid
     case Media::Binary: return 1; // length
     }
     return 0;
@@ -258,7 +262,7 @@ private:
                          kAudioRow = setup_row_of(Media::Audio), kVideoRows = setup_row_of(Media::Video),
                          kBooksRow = setup_row_of(Media::Books), kTracksRow = setup_row_of(Media::Tracks),
                          kMoviesRow = setup_row_of(Media::Movies), kModelsRows = setup_row_of(Media::Models),
-                         kBinaryRow = setup_row_of(Media::Binary);
+                         kWorldsRows = setup_row_of(Media::Worlds), kBinaryRow = setup_row_of(Media::Binary);
     static constexpr int kLimitsRow = setup_row_of(std::nullopt), kResetRow = kLimitsRow + 1, kEnterRow = kLimitsRow + 2;
     int row_count() const;
 
@@ -320,13 +324,28 @@ private:
     void render_overlay(float W, float H);
     sieve::FilterLine filter_line_of(int line) const;
     sieve::FilterLine book_part_line(int part) const; // books: the line a part's filters see
-    // Lines whose items have parts, each with its own filters (cover, title, and pages or units):
-    // books, tracks and movies. part_line: the line a part's filters see.
-    static bool has_parts(int line) { return line == kBooksLine || is_composition(line); }
+    // Lines whose items have parts, each with its own filters (cover, title, and pages, units or
+    // models): books, tracks, movies and worlds. part_line: the line a part's filters see.
+    static bool has_parts(int line) { return line == kBooksLine || is_composition(line) || line == kWorldsLine; }
     // How many parts it has (books: cover, title, pages; tracks and movies: cover, title, units,
-    // joined), and whether a part is there to filter (a composition's title is not when titles are off).
-    static int parts_of(int line) { return line == kBooksLine ? 3 : sieve::cli::CompositionFilters::kParts; }
-    bool has_part(int line, int part) const { return !(part == 1 && is_composition(line) && s_.title_length == 0); }
+    // joined; worlds: cover, title, models), and whether a part is there to filter (a composition's
+    // or a world's title is not when titles are off).
+    static int parts_of(int line)
+    {
+        return line == kBooksLine ? 3 : line == kWorldsLine ? sieve::cli::WorldFilters::kParts : sieve::cli::CompositionFilters::kParts;
+    }
+    bool has_part(int line, int part) const { return !(part == 1 && (is_composition(line) || line == kWorldsLine) && s_.title_length == 0); }
+    // A line with parts: each part's filters, and the one mode.
+    sieve::cli::LineFilters* parts_cfg(int line)
+    {
+        return line == kBooksLine ? cfg_.books.parts : line == kWorldsLine ? cfg_.worlds.parts : comp_cfg(line).parts;
+    }
+    const sieve::cli::LineFilters* parts_cfg(int line) const
+    {
+        return line == kBooksLine ? cfg_.books.parts : line == kWorldsLine ? cfg_.worlds.parts : comp_cfg(line).parts;
+    }
+    // A world's models, part 2: judged by the models line's own stack (ModelSieve), not a FilterStack.
+    static constexpr int kWorldModelsPart = 2;
     // A composition's joined part. Z, C and X leave it alone: with the units' filters ticked too,
     // nothing would count, so it is ticked by hand.
     static constexpr int kJoinedPart = 3;
@@ -355,6 +374,7 @@ private:
     static void none_of(StackInfo& out);
     const StackInfo& stack_info(int line);
     const StackInfo& parts_stack_info(int line); // books, tracks, movies: every part counted, the whole exact
+    const StackInfo& worlds_stack_info();         // worlds: the cover, the title and the models counted, the whole exact
     const StackInfo& book_stack_info() { return parts_stack_info(kBooksLine); }
     // The key and the work for a stack's tally (menu.cpp); `part` is the books' part for line 4.
     std::pair<std::string, std::function<StackInfo()>> stack_job(int line, const sieve::cli::LineFilters& lf, int part = -1) const;

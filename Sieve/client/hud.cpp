@@ -192,7 +192,7 @@ std::string Hallway::binary_preview(const BinarySpace::Bytes& f, size_t most, ui
 std::string Hallway::one_line_preview(const Space::Digits& u)
 {
     if (on_binary()) return ""; // a file is written out by binary_preview
-    if (on_models()) return ""; // a model is drawn, not written out: see draw_model
+    if (on_models() || on_worlds()) return ""; // a model (a world) is drawn, not written out: see draw_model
     if (line().kind == LineKind::Text) return "\"" + ascii(utf8_encode(line().space.text_of(u))) + "\"";
     if (line().kind == LineKind::Audio)
     {
@@ -320,7 +320,7 @@ void Hallway::draw_hud(int w, int h)
     const std::string loop = trf("hud.loop", {loop_label_}) + (loop_.fills_whole_tiles()
                                                                                  ? std::string()
                                                                                  : " " + trf("hud.loop.padding", {std::to_string(loop_.padding())}));
-    text(10, 28, fit((on_books() ? books_->id() : on_composition() ? comp().space->id() : titled_here() ? titled_here()->id() : line().space.id()) + (guided_on() ? "   " + trf("hud.model", {line().model_id}) : std::string()) + "   " +
+    text(10, 28, fit((on_books() ? books_->id() : on_composition() ? comp().space->id() : on_worlds() ? world_space_->id() : titled_here() ? titled_here()->id() : line().space.id()) + (guided_on() ? "   " + trf("hud.model", {line().model_id}) : std::string()) + "   " +
                      loop + per_tile + "   " + filter_status() + "   " +
                      (on_binary() ? trf("hud.door_one", {tr(theme_of(binary_from_).key)})
                                   : trf("hud.doors", {tr(theme_of((li_ + 1) % kLines).key), tr(theme_of((li_ + kLines - 1) % kLines).key)})),
@@ -386,11 +386,13 @@ void Hallway::draw_hud(int w, int h)
                 if (bk.is_file) // its kind and first bytes, known without working out the rest of it
                     text(tx, below, fit(file_type(bk.head, bk.file_size) + "  " + binary_preview(bk.head, 16, bk.file_size), room, 1), 1, ink);
                 else if (bk.model) text(tx, below, fit(model_line_summary(*bk.model), room, 2), 2, ink);
+                else if (bk.world) text(tx, below, fit(world_line_summary(*bk.world), room, 2), 2, ink);
                 else if (covered) text(tx, below, fit(one_line_preview(u), room, 1), 1, ink); // a video's cover stands for it
                 else if (line().kind == LineKind::Image || line().kind == LineKind::Video) draw_pixels(u, 20, below, 60, 0);
                 else text(20, below, wrap(one_line_preview(u), size_t(std::max(20.0f, (panel_w - 40) / 16)))[0], 2, ink);
             }
             else if (bk.model) text(20, y, model_line_summary(*bk.model), 2, ink);
+            else if (bk.world) text(20, y, world_line_summary(*bk.world), 2, ink);
             else if (line().kind == LineKind::Image || line().kind == LineKind::Video) draw_pixels(u, 20, y, 60, 0);
             else text(20, y, wrap(one_line_preview(u), size_t(std::max(20.0f, (std::min(W - 20, 900.0f) - 40) / 16)))[0], 2, ink);
         }
@@ -430,9 +432,21 @@ void Hallway::draw_hud(int w, int h)
 // algorithm; the shelf copy is a crate, which is what the render cache fills in.
 float Hallway::draw_model(const ModelSpace::Parts& p, float x, float y, float pw, float bottom)
 {
+    return draw_mesh(model_space_->mesh_of(p), model_space_->faces_of(p), model_space_->to_obj(p), model_space_->vertices(), x, y, pw, bottom);
+}
+
+// A world in hand: every model placed, drawn as a model is, scaled to fit, with the world's .obj
+// text beside it.
+float Hallway::draw_world(const WorldSpace::Parts& p, float x, float y, float pw, float bottom)
+{
+    const WorldSpace::Mesh m = world_mesh(*world_space_, p);
+    return draw_mesh(m.vertices, m.faces, world_space_->to_obj(p), m.vertices.size(), x, y, pw, bottom);
+}
+
+float Hallway::draw_mesh(const std::vector<ModelSpace::Vertex>& verts, const std::vector<ModelSpace::Face>& faces, const std::string& obj,
+                         size_t vertex_lines, float x, float y, float pw, float bottom)
+{
     const Theme& th = theme();
-    const auto verts = model_space_->mesh_of(p);
-    const auto faces = model_space_->faces_of(p);
     const float box = std::min(pw * 0.5f, bottom - y - 20);
     if (box < 40) return y;
     const float cx = x + 14 + box * 0.5f, cy = y + box * 0.5f, r = box * 0.34f;
@@ -479,13 +493,21 @@ float Hallway::draw_model(const ModelSpace::Parts& p, float x, float y, float pw
     const size_t cols = size_t(std::max(12.0f, (pw - 48 - box) / 8));
     float ty = y;
     uint32_t shown = 0;
-    for (const std::string& l : split_lines(model_space_->to_obj(p)))
+    for (const std::string& l : split_lines(obj))
     {
         if (ty > bottom - 14) { text(tx, ty, "...", 1, th.edge); break; }
-        text(tx, ty, fit(l, float(cols) * 8, 1), 1, ++shown <= model_space_->vertices() ? th.edge : mix(th.edge, th.bg, 0.35f));
+        text(tx, ty, fit(l, float(cols) * 8, 1), 1, ++shown <= vertex_lines ? th.edge : mix(th.edge, th.bg, 0.35f));
         ty += 11;
     }
     return std::max(y + box, ty) + 6;
+}
+
+// One line about a world, for the shelf row and the readout.
+std::string Hallway::world_line_summary(const WorldSpace::Parts& p) const
+{
+    return trf("world.summary", {std::to_string(p.slots.size()), std::to_string(world_space_->grid()),
+                                 std::to_string(p.slots.size() * world_space_->model_space().vertices()),
+                                 std::to_string(p.slots.size() * world_space_->model_space().face_count())});
 }
 
 // One line about a model, for the shelf row and the readout.
@@ -586,6 +608,7 @@ void Hallway::draw_in_hand(float W, float H)
     const size_t cols2 = size_t((pw - 28) / 16), cols1 = size_t((pw - 28) / 8);
     const float thing_top = cy; // the thing itself starts here: a click on it opens the viewer
     if (bk.model) cy = draw_model(*bk.model, x, cy, pw, y + ph - 110);
+    else if (bk.world) cy = draw_world(*bk.world, x, cy, pw, y + ph - 110);
     else if (bk.parts) cy = draw_book(*bk.parts, x, cy, pw, y + ph - 110);
     else if (bk.is_file)
     {
@@ -651,7 +674,7 @@ void Hallway::draw_in_hand(float W, float H)
         text(x + 14, cy, l, 1, ink);
         cy += 10;
     }
-    text(x + 14, y + ph - 16, tr(bk.parts ? "hand.keys.book" : bk.model ? "hand.keys.model" : bk.is_file ? "hand.keys.file" : "hand.keys"), 1, ink);
+    text(x + 14, y + ph - 16, tr(bk.parts ? "hand.keys.book" : bk.model ? "hand.keys.model" : bk.world ? "hand.keys.world" : bk.is_file ? "hand.keys.file" : "hand.keys"), 1, ink);
 }
 
 // COST: what it costs to name the thing in your hand.
@@ -668,7 +691,11 @@ void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float botto
 {
     const Theme& th = theme();
     const SDL_Color ink = th.edge, dim = mix(th.edge, th.bg, 0.45f);
-    const BigUint& n = on_books() ? books_->size() : on_composition() ? comp().space->size() : titled_here() ? titled_here()->size() : line().space.size();
+    const BigUint& n = on_books()         ? books_->size()
+                       : on_composition() ? comp().space->size()
+                       : on_worlds()      ? world_space_->size()
+                       : titled_here()    ? titled_here()->size()
+                                          : line().space.size();
     constexpr double kBitsPerDigit = 3.321928094887362; // log2(10)
     const double bits = n.log10_approx() * kBitsPerDigit;
     auto digits_in = [](double b, double per) { return std::to_string(int(std::ceil(b / per))); };
@@ -677,7 +704,7 @@ void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float botto
     // The guided length for this unit, whatever ordering you are walking in. It exists only on a
     // text line with a model behind it.
     const sieve::GuidedLine::Code* guided = nullptr;
-    if (!on_books() && !on_models() && !on_binary() && line().guided)
+    if (!on_books() && !on_models() && !on_worlds() && !on_binary() && line().guided)
     {
         try
         {
@@ -746,7 +773,7 @@ void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float botto
     // holds its units only (a book's, its title and pages), so the address names more than it.
     if (*bk.file_bytes > 0)
         row(tr("cost.file"), file_bits, trf("cost.bytes", {std::to_string(*bk.file_bytes)}),
-            tr(bk.parts || on_composition() || titled_here() ? "cost.file.parts" : "cost.file.note"));
+            tr(bk.parts || on_composition() || on_worlds() || titled_here() ? "cost.file.parts" : "cost.file.note"));
     cy += 6;
     row(tr("ordering.positional"), bits, trf("cost.chars", {digits_in(bits, 4)}), tr("cost.same"));
     row(tr("ordering.scrambled"), bits, trf("cost.chars", {digits_in(bits, 4)}), tr("cost.shuffled"));
@@ -786,7 +813,11 @@ void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float botto
     // The filters tailored to it (tailoring.cpp).
     cy = draw_tailor(bk, held, x, cy, pw, bottom);
     // The other half of a written-down key: the shape that gives the address its meaning.
-    const std::string spec = (on_books() ? books_->id() : on_composition() ? comp().space->id() : titled_here() ? titled_here()->id() : line().space.id());
+    const std::string spec = on_books()         ? books_->id()
+                             : on_composition() ? comp().space->id()
+                             : on_worlds()      ? world_space_->id()
+                             : titled_here()    ? titled_here()->id()
+                                                : line().space.id();
     text(x + 14, cy, tr("cost.spec"), 1, dim);
     cy += 14;
     for (const auto& l : wrap(spec, size_t((pw - 28) / 8)))

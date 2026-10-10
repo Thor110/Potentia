@@ -45,7 +45,7 @@ const char* kUsage =
     "Usage: hallway [options]\n\n"
     "Lines (the same meaning as in the sieve tool):\n"
     "  --line LINE         the line to start in: image, pages (default), books, audio, tracks,\n"
-    "                      video, movies, models or binary\n"
+    "                      video, movies, models, worlds or binary\n"
     "  --length L          text: characters per book (default 32)\n"
     "  --alphabet ID       text: lower27 (default), babel29, ascii95\n"
     "  --canon v2|v1       text: warp rules (default v2)\n"
@@ -67,6 +67,9 @@ const char* kUsage =
     "  --track-units N     tracks: units of audio per track (default 4); a track is a cover, a title\n"
     "                      and N units of the audio line (composition-v1)\n"
     "  --movie-units N     movies: units of video per movie (default 4), as tracks are of audio\n"
+    "  --world-models N    worlds: models per world (default 4); a world is a cover, a title and N\n"
+    "                      models of the models line, each in a cell of the grid with one of 24 turns\n"
+    "  --world-grid G      worlds: cells along each axis of a world (default 8; worldspace-v1)\n"
     "  --ffmpeg PATH       the ffmpeg that reads and writes picture, video and sound formats beyond\n"
     "                      PNG, JPEG, BMP, GIF, TGA, WAV and MIDI (default: SIEVE_FFMPEG, then beside\n"
     "                      the hallway, then the PATH); kept in the settings\n"
@@ -398,7 +401,9 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
                                     a.has("title-length") ? a.get_u32("title-length", 32) : 32u,
                                     binary_length(a),
                                     a.has("track-units") ? a.get_positive("track-units", 4) : 4u,
-                                    a.has("movie-units") ? a.get_positive("movie-units", 4) : 4u};
+                                    a.has("movie-units") ? a.get_positive("movie-units", 4) : 4u,
+                                    a.has("world-models") ? a.get_positive("world-models", 4) : 4u,
+                                    a.has("world-grid") ? a.get_positive("world-grid", 8) : 8u};
     auto hall = std::make_unique<Hallway>(window, renderer, std::move(lines), filters,
                                           a.has("book-pages") ? a.get_u32("book-pages", 4) : 4, shape);
     hall->set_line(start_line);

@@ -215,6 +215,28 @@ Hallway::Painter Hallway::face_painter(const Book& b) const
                               px.begin() + std::ptrdiff_t(size_t(y + oy) * size_t(w)));
         };
     }
+    if (on_worlds())
+    {
+        if (!b.world) return {};
+        const WorldSpace* space = world_space_.get();
+        const WorldSpace::Parts parts = *b.world;
+        const SDL_Color edge = theme_of(kModelsLine).edge; // the models' green: a world is made of them
+        const std::u32string title = utf8_decode(title_text(b));
+        const bool titled = has_titles();
+        // The title, then the whole world, drawn as a model is, square, centred in what is left.
+        return [space, parts, edge, title, titled, nw, lp](std::vector<uint32_t>& px, int w, int h) {
+            std::vector<uint32_t> sq;
+            const WorldSpace::Mesh m = world_mesh(*space, parts);
+            render_mesh_face(m.vertices, m.faces, w, kModelSpin, kModelTilt, edge, sq);
+            px.assign(size_t(w) * size_t(h), 0u);
+            const int top = paint_title_band(px, w, h, title, titled, 0xFF1C1C1Cu, argb(edge), nw, lp);
+            const int oy = top + (h - top - w) / 2;
+            for (int y = 0; y < w; ++y)
+                if (y + oy >= top && y + oy < h)
+                    std::copy(sq.begin() + std::ptrdiff_t(size_t(y) * size_t(w)), sq.begin() + std::ptrdiff_t(size_t(y + 1) * size_t(w)),
+                              px.begin() + std::ptrdiff_t(size_t(y + oy) * size_t(w)));
+        };
+    }
     if (on_books())
     {
         if (!b.parts) return {};
@@ -309,9 +331,21 @@ Hallway::Painter Hallway::face_painter(const Book& b) const
 void Hallway::render_model_face(const ModelSpace& space, const ModelSpace::Parts& p, int n, float spin, float tilt,
                               SDL_Color edge, std::vector<uint32_t>& px)
 {
+    render_mesh_face(space.mesh_of(p), space.faces_of(p), n, spin, tilt, edge, px);
+}
+
+WorldSpace::Mesh Hallway::world_mesh(const WorldSpace& ws, const WorldSpace::Parts& p)
+{
+    WorldSpace::Mesh m = ws.mesh_of(p);
+    const float k = 1.0f / float(ws.grid());
+    for (ModelSpace::Vertex& v : m.vertices) v = {v.x * k, v.y * k, v.z * k};
+    return m;
+}
+
+void Hallway::render_mesh_face(const std::vector<ModelSpace::Vertex>& verts, const std::vector<ModelSpace::Face>& faces, int n, float spin,
+                               float tilt, SDL_Color edge, std::vector<uint32_t>& px)
+{
     px.assign(size_t(n) * size_t(n), 0u);
-    const auto verts = space.mesh_of(p);
-    const auto faces = space.faces_of(p);
     const float ca = std::cos(spin), sa = std::sin(spin);
     const float ct = std::cos(tilt), st = std::sin(tilt);
     const float half = float(n) * 0.5f, r = float(n) * 0.30f;
@@ -759,10 +793,13 @@ void Hallway::drop_stale_sharp()
 DisplayText Hallway::display_text_here() const
 {
     const TitledSpace* ts = titled_here();
-    const std::optional<Space>* ttl = on_composition() ? &comp().space->title_space() : ts ? &ts->title_space() : nullptr;
+    const std::optional<Space>* ttl = on_composition() ? &comp().space->title_space()
+                                      : on_worlds()    ? &world_space_->title_space()
+                                      : ts             ? &ts->title_space()
+                                                       : nullptr;
     const double title = ttl && *ttl ? double((*ttl)->unit_length()) : 0.0;
     if (on_books()) return display_text_books(double(unit_line(LineKind::Text).space.unit_length()));
-    if (!on_models() && !on_binary() && line().kind == LineKind::Text) return display_text_pages(double(line().space.unit_length()), title);
+    if (!on_models() && !on_worlds() && !on_binary() && line().kind == LineKind::Text) return display_text_pages(double(line().space.unit_length()), title);
     return display_text_titled(title);
 }
 

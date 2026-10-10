@@ -1007,7 +1007,7 @@ carrying items rather than their bytes, and as little as reproduces them.*
   size is implied by the number (a fixed shape, or a binary file's length in its number).
 - **Ranges:** many items in a regular pattern are one entry ("bearings 0 to 359, step 1"), so a
   sample such as §16.9's is a few hundred bytes, almost all of it the lines' settings, against the
-  391,724 bytes v4 makes of it.
+  436,788 bytes v4 makes of it.
 - **Files that are not items** are carried as v4 carries them, or by a shorter way where weighing
   finds one (a survivor number under a stack, `lines K`).
 - **Hashes:** one SHA-256 over the whole tree, always; one per line, as a pointer to where a fault
@@ -1052,7 +1052,12 @@ coming back when that is done.
 composition of models, as tracks are of melodies, but a world also places each model (a position
 and a turn) and textures it, so it needs a placement in each slot and UVs (§14's generated
 description). The models line is not a unit line (its index is mixed radix), so composition-v1 does
-not take it as it is. Verdict: build, after the models line can be composed.
+not take it as it is. Verdict: build, after the models line can be composed. *Built (10 October
+2026), first version:* `worldspace-v1` (SPECIFICATIONS §12.0) numbers the models itself, as
+composition-v1 numbers units: a cover, a title and N slots, each a model of the models line in a
+cell of a G x G x G grid with one of the 24 turns of a cube (Edward's choices: model and placement,
+grid and 24 turns, 4 models and a cover and title). Untextured: textures wait for UVs (§14), as a
+version of their own. In the hallway, WORLDS stands after MODELS; in the tool, `sieve world`.
 
 **16.8 An AI dimension through Ollama, with a chat window.** Ollama does the heavy lifting; the
 dimension's item is a chat with the model rather than a view of its file or its weights.
@@ -1094,9 +1099,12 @@ length), so the instructions are small. Verdict: build, as `sieve sample --degre
 `hallway --sample-degrees DIR`. The bearing names the first unit at or past it (the navigator's
 rule). Each item is a file named by its title (Edward: the reconstructed item is a file with its
 title as its name; the pictures are for looks), pictures one pixel a pixel, as J reads them. At the
-default shapes: 3,240 items, 566,236 bytes, as a `.sieve` of 391,724 bytes. CI makes it twice and
+default shapes: 3,600 items of ten dimensions (worlds included), 1,055,836 bytes, as a `.sieve` of
+436,788 bytes. CI makes it twice and
 installs it, and checks a bearing typed in the navigator against it. What it showed: at whole
-degrees the units repeat (every 40 or 72 degrees), and the titles tell the items apart. Each file
+degrees the units repeat (every 40 or 72 degrees); on the lines without a cover the titles tell the
+items apart, and on those with one (books, audio, tracks, video, movies, worlds) the cover leads
+the address, so the titles repeat as well (45 pairs a line) and " (2)" tells the files apart. Each file
 is named, under its line, by three values (the line with its stack, its ordering, its number),
 which is what the next manifest and map schema should carry instead of its bytes (§16.3).
 

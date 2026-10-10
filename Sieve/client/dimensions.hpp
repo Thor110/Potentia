@@ -23,8 +23,8 @@ namespace hallway {
 
 // The kinds of media on the shelves: a dimension's identity. This order is the order of anything
 // saved as a list per dimension (the music settings' modes), so it only ever grows at the end.
-enum class Media { Pages, Image, Audio, Video, Books, Models, Binary, Tracks, Movies };
-inline constexpr int kMedia = 9;
+enum class Media { Pages, Image, Audio, Video, Books, Models, Binary, Tracks, Movies, Worlds };
+inline constexpr int kMedia = 10;
 
 struct Dimension
 {
@@ -48,7 +48,7 @@ struct Dimension
 using sieve::cli::LineKind;
 
 // In door order. Walking left goes to the next and right to the previous, and binary, last, wraps
-// round the outside of the rest: the corridor runs binary | image ... models | binary.
+// round the outside of the rest: the corridor runs binary | image ... models worlds | binary.
 inline constexpr Dimension kDimensions[] = {
     // Each part stands before what it composes, and image, a part of nearly all of them (covers,
     // frames), first.
@@ -67,6 +67,9 @@ inline constexpr Dimension kDimensions[] = {
     // Models (SPECIFICATIONS §12): clay behind green wireframe, because a mesh is drawn as lines and
     // a mesh is modelled in clay.
     {Media::Models, "models", "models", std::nullopt, std::nullopt, {{140, 120, 0, 255}, {0, 255, 0, 255}, "MODELS", "MODELS", "line.models"}, 5, false},
+    // Worlds (sieve/worldspace.hpp): a cover, a title and N models, each placed in a cell of a grid
+    // with one of 24 turns. Models' clay with black edges, as a composition's are.
+    {Media::Worlds, "worlds", "worlds", std::nullopt, std::nullopt, {{140, 120, 0, 255}, {0, 0, 0, 255}, "WORLDS", "WORLDS", "line.worlds"}, 5, false},
     // Binary (SPECIFICATIONS §12.1): black, with green edges and green text. What is unusual about it
     // is its shape, not its palette: one wall of shelves, and on the other side the edge and the drop.
     {Media::Binary, "binary", "binary", std::nullopt, std::nullopt, {{0, 0, 0, 255}, {32, 220, 80, 255}, "BINARY", "BINARY", "line.binary"}, 6, false},
@@ -94,7 +97,8 @@ constexpr int line_named(std::string_view name)
     return -1;
 }
 
-inline constexpr int kBooksLine = line_of(Media::Books), kModelsLine = line_of(Media::Models), kBinaryLine = line_of(Media::Binary);
+inline constexpr int kBooksLine = line_of(Media::Books), kModelsLine = line_of(Media::Models), kWorldsLine = line_of(Media::Worlds),
+                     kBinaryLine = line_of(Media::Binary);
 // Whether the line at door li is a composition of another's units (tracks, movies).
 constexpr bool is_composition(int li) { return li >= 0 && li < kLines && kDimensions[li].composes.has_value(); }
 static_assert(kBinaryLine == kLines - 1, "binary is last: the corridor starts and ends at it");

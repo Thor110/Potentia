@@ -62,6 +62,7 @@
 #include "cli/locate.hpp"
 #include "sieve/binaryspace.hpp"
 #include "sieve/titledspace.hpp"
+#include "sieve/worldspace.hpp"
 #include "sieve/utf8.hpp"
 
 #include <algorithm>
@@ -342,6 +343,7 @@ public:
         uint32_t title_length = 32;
         uint64_t binary_bytes = 32; // the binary line holds every file up to this many bytes
         uint32_t track_units = 4, movie_units = 4; // units of audio a track, of video a movie
+        uint32_t world_models = 4, world_grid = 8;  // models a world, and cells along each of its axes
     };
 
     Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> lines, const FilterConfig& filters, uint32_t book_pages,
@@ -370,6 +372,8 @@ public:
     // Tracks or movies: a composition of another line's units (sieve/composition.hpp).
     bool on_composition() const { return is_composition(li_); }
     bool on_models() const { return li_ == kModelsLine; }
+    // Worlds: models placed in a world (sieve/worldspace.hpp).
+    bool on_worlds() const { return li_ == kWorldsLine; }
     // The binary line. It has no state space of its own yet -- its shelves stand empty, and how
     // they are addressed is still to be worked out (SPECIFICATIONS §12.1) -- so like the books
     // and models lines it borrows the pages line's Line for the few things that ask about one.
@@ -385,7 +389,7 @@ public:
     bool sizes_vary() const { return media_sizes_vary(media()); }
     const Theme& theme() const { return theme_of(li_); }
     Camera& camera() { return cam_; }
-    bool guided_on() const { return !on_books() && !on_models() && !on_binary() && guided_ && line().guided != nullptr; }
+    bool guided_on() const { return !on_books() && !on_models() && !on_worlds() && !on_binary() && guided_ && line().guided != nullptr; }
     const GuidedLine& guided() const;
     const CompactLine& compact() const { return *compact_[li_]; }
     std::string ordering_name() const { return tr(std::string("ordering.") + (guided_on() ? "guided" : to_string(mode_))); }
@@ -432,6 +436,7 @@ public:
         std::string survivor_label;
         std::optional<BookSpace::Parts> parts;       // the books line: cover, title and pages
         std::optional<ModelSpace::Parts> model;      // the models line: vertices and faces
+        std::optional<WorldSpace::Parts> world;      // the worlds line: cover, title and placed models
         // The binary line: a file. Only its place, title and cover are kept on the shelf; its bytes
         // and its address in hex (each as large as the file) are worked out when something asks,
         // for the one item looked at or held (file_of, hex_of below).
@@ -591,6 +596,7 @@ public:
     // Whether this line's items have titles at all (title length above 0, and not guided or compact).
     bool has_titles() const
     {
+        if (on_worlds()) return world_space_->title_space().has_value(); // a world keeps its title in compact too
         const auto* ts = titled_here();
         return ts && ts->title_space().has_value();
     }
@@ -860,6 +866,12 @@ public:
 
     static void render_model_face(const ModelSpace& space, const ModelSpace::Parts& p, int n, float spin, float tilt,
                                   SDL_Color edge, std::vector<uint32_t>& px);
+    // Any mesh in [-1, 1] the same way: a model's, or a world's scaled down to fit (world_mesh).
+    static void render_mesh_face(const std::vector<ModelSpace::Vertex>& verts, const std::vector<ModelSpace::Face>& faces, int n, float spin,
+                                 float tilt, SDL_Color edge, std::vector<uint32_t>& px);
+    // A world as one mesh, every model turned and placed, scaled by 1/G so it fits [-1, 1] as a
+    // model does (for drawing; its .obj keeps the world's own coordinates).
+    static WorldSpace::Mesh world_mesh(const WorldSpace& ws, const WorldSpace::Parts& p);
 
     static void fill_triangle(std::vector<uint32_t>& px, int n, const std::array<float, 3>& a, const std::array<float, 3>& b,
                               const std::array<float, 3>& c, uint32_t argb);
@@ -917,8 +929,14 @@ public:
                          float uu1 = 1);
 
     float draw_model(const ModelSpace::Parts& p, float x, float y, float pw, float bottom);
+    float draw_world(const WorldSpace::Parts& p, float x, float y, float pw, float bottom);
+    // A mesh in hand, turned by the mouse or A and D, with its .obj text beside it (the first
+    // `vertex_lines` lines, its vertices, in the edge colour).
+    float draw_mesh(const std::vector<ModelSpace::Vertex>& verts, const std::vector<ModelSpace::Face>& faces, const std::string& obj,
+                    size_t vertex_lines, float x, float y, float pw, float bottom);
 
     std::string model_line_summary(const ModelSpace::Parts& p) const;
+    std::string world_line_summary(const WorldSpace::Parts& p) const;
 
     static std::vector<std::string> split_lines(const std::string& s);
     // An audio unit as text: a note set's notation, or a pcm unit's waveform, each channel a row of
@@ -1535,6 +1553,11 @@ private:
     LineFilters model_filters_;
     std::unique_ptr<ModelSieve> model_sieve_;
     void rebuild_model_sieve();
+    // The worlds line: a cover, a title and N models placed in a world, and its filters ([worlds]:
+    // the cover, the title, each slot's model); the sieve null if they failed to build.
+    std::unique_ptr<WorldSpace> world_space_;
+    WorldStacks world_stacks_;
+    std::unique_ptr<WorldSieve> world_sieve_;
     BigUint loop_pos(const BigUint& unit) const;   // unit index -> loop position
     BigUint unit_of_pos(const BigUint& pos) const; // loop position (left-wall slot) -> unit index
     // How many units the current line holds: its loop's count, except on binary (see above). A
