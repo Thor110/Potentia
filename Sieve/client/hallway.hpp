@@ -1205,9 +1205,11 @@ public:
     void save_view_to(const std::string& path); // F in the viewer, to PATH (--save-view)
     // A demonstration (IDEAS §16.9, --sample-degrees DIR): for every dimension and every whole
     // degree 0 to 359, the item that bearing names (the first unit at or past it, as the
-    // navigator's bearing goes, in the ordering in use), saved into DIR/<dimension>/<ddd>.<ext> as
-    // the file F saves (a picture at one pixel a pixel, as J reads it; a binary file as its bytes),
-    // and the folder made into Sieve instructions at `sieve_out` (v4, as the File Locator saves them). Returns what it did, a line for each dimension and one for the whole.
+    // navigator's bearing goes, in the ordering in use), saved into DIR/<dimension>/ as its file (a
+    // picture at one pixel a pixel, as J reads it; a binary file as its bytes) named by its title,
+    // as F names it, and the folder made into Sieve instructions at `sieve_out` (v4, as the File
+    // Locator saves them). Returns what it did: "<dimension> <ddd> <file>" for each item, a line for
+    // each dimension, and one for the whole.
     std::string sample_degrees(const std::string& dir, const std::string& sieve_out);
 private:
     void save_in_hand();

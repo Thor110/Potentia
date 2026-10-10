@@ -79,6 +79,12 @@ std::vector<std::string> focuses()
 const std::vector<std::string> kFocuses = focuses();
 // Where the map starts: the settings' labels and values take the screen's left to here.
 constexpr float kMapX = 620;
+// The settings panel (Menu::panel_): how long it takes to slide in or out, how long the dimensions
+// must be calculating before it slides out (a fifth of a second, as CALCULATING waits before it
+// shows, so a quick count does not flick it), and the SETTINGS tab at the left edge while it is out.
+constexpr float kPanelSlideMs = 180;
+constexpr Uint64 kPanelCalcNs = 200'000'000;
+constexpr float kPanelTabW = 20;
 // The unit line at door li, as its kind's index into the filter settings (cfg_.lines), or -1.
 int unit_at(int li) { return li >= 0 && li < kLines && kDimensions[li].unit ? int(*kDimensions[li].unit) : -1; }
 const std::vector<std::string> kModes = {"positional", "scrambled", "guided"};
@@ -1083,6 +1089,7 @@ void Menu::press(SDL_Keycode key, SDL_Keymod mod)
         poll_toggle();
     }
     handle(e, done, r);
+    panel_ = panel_open_ ? 1.0f : 0.0f; // a picture after a scripted Tab shows where the panel went
     // A scripted key waits, as a person would, for what it started (X weighing filters that clash).
     if (toggling_)
     {
@@ -1143,6 +1150,11 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
                 }
             return;
         }
+        if (panel_ < 1 && inside(panel_tab_, mx, my))
+        {
+            toggle_panel();
+            return;
+        }
         for (int c = 0; c < kLines + 1; ++c)
             if (inside(magnifier_[c], mx, my)) open_filters(overlay_of_column(c));
         return;
@@ -1168,8 +1180,24 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
     const int step = ctrl ? 100 : shift ? 10 : 1;
     // "Enter again to go in anyway" holds only for the Enter straight after it.
     if (e.key.key != SDLK_RETURN && e.key.key != SDLK_KP_ENTER) go_anyway_armed_ = false;
+    // Moving through the settings, or changing one, with the panel closed by hand brings it back.
     switch (e.key.key)
     {
+    case SDLK_UP:
+    case SDLK_DOWN:
+    case SDLK_LEFT:
+    case SDLK_RIGHT:
+    case SDLK_PAGEUP:
+    case SDLK_PAGEDOWN:
+    case SDLK_RETURN:
+    case SDLK_KP_ENTER:
+        if (!panel_open_ && !panel_auto_) toggle_panel();
+        break;
+    default: break;
+    }
+    switch (e.key.key)
+    {
+    case SDLK_TAB: toggle_panel(); break;
     case SDLK_UP: row_ = (row_ + row_count() - 1) % row_count(); break;
     case SDLK_DOWN: row_ = (row_ + 1) % row_count(); break;
     case SDLK_LEFT: adjust(-1, step); break;
@@ -1344,6 +1372,45 @@ std::string Menu::counting_lines() const
     return out;
 }
 
+void Menu::step_panel()
+{
+    const Uint64 now = SDL_GetTicksNS();
+    // The calculating: once it has gone on long enough to be seen, the panel slides out (once, so
+    // Tab can bring it back meanwhile); when it is done, back in, if that is what slid it out.
+    if (calculating())
+    {
+        if (!calc_since_) calc_since_ = now;
+        if (!calc_acted_ && now - calc_since_ >= kPanelCalcNs)
+        {
+            calc_acted_ = true;
+            if (panel_open_)
+            {
+                panel_open_ = false;
+                panel_auto_ = true;
+            }
+        }
+    }
+    else
+    {
+        calc_since_ = 0;
+        calc_acted_ = false;
+        if (panel_auto_)
+        {
+            panel_open_ = true;
+            panel_auto_ = false;
+        }
+    }
+    const float step = panel_tick_ ? float(double(now - panel_tick_) / 1e6) / kPanelSlideMs : 0.0f;
+    panel_tick_ = now;
+    panel_ = panel_open_ ? std::min(1.0f, panel_ + step) : std::max(0.0f, panel_ - step);
+}
+
+void Menu::toggle_panel()
+{
+    panel_open_ = !panel_open_;
+    panel_auto_ = false;
+}
+
 void Menu::render()
 {
     // The menu needs to be as wide as the title's subtitle and the budget beside it (and at least
@@ -1380,6 +1447,7 @@ void Menu::render()
     // The dimensions being calculated: said in red at the top, in the middle of the space between
     // the title and the budget, so it is seen (ENTER waits for it); which lines, under the bars.
     // The words never change, so it keeps its size and its place while the lines finish.
+    step_panel();
     const bool calc = calculating();
     if (calc)
     {
@@ -1513,6 +1581,9 @@ void Menu::render()
     for (const Row& r : rows) widest = std::max(widest, text_cells(r.label));
     const float value_x = 24 + float(2 + widest + 2) * 8;
     const size_t value_cells = size_t(std::max(8.0f, kMapX - value_x - 8) / 8);
+    // The panel's slide: the rows drawn this far to the left of their place (all of the panel's
+    // width when it is out).
+    const float ox = -(1 - panel_) * kMapX;
     float y = 80;
     for (int i = 0; i < int(rows.size()); ++i)
     {
@@ -1525,22 +1596,42 @@ void Menu::render()
             y += 4;
             const Theme* th = r.section >= 0 ? &theme_of(r.section) : nullptr;
             const std::string head = th ? tr(th->key) : tr("setup.start");
-            text(r_, 20, y, head, 2, th ? menu_ink(*th) : white);
+            text(r_, 20 + ox, y, head, 2, th ? menu_ink(*th) : white);
             y += 18;
         }
         if (i == row_)
         {
             SDL_SetRenderDrawColor(r_, 255, 255, 255, 40);
-            const SDL_FRect sel{14, y - 3, kMapX - 20, 16};
+            const SDL_FRect sel{14 + ox, y - 3, kMapX - 20, 16};
             SDL_RenderFillRect(r_, &sel);
         }
         // ENTER THE HALLWAY is greyed while the dimensions are being calculated (it waits for them).
-        text(r_, 24, y, std::string(i == row_ ? "> " : "  ") + r.label, 1, i == kEnterRow && calc ? grey : white);
+        text(r_, 24 + ox, y, std::string(i == row_ ? "> " : "  ") + r.label, 1, i == kEnterRow && calc ? grey : white);
         // The rows are tight enough that the whole list fits above the three actions at the foot
         // of it. A value too long for its column stops short of the map rather than running into it.
         const std::string value = text_cells(r.value) <= value_cells ? r.value : fit_cells(r.value, value_cells - 2) + "..";
-        text(r_, value_x, y, value, 1, i == row_ ? white : grey);
+        text(r_, value_x + ox, y, value, 1, i == row_ ? white : grey);
         y += 16;
+    }
+    // The SETTINGS tab at the left edge, while the panel is (mostly) out: a click, or Tab, brings it in.
+    panel_tab_ = {};
+    if (panel_ < 0.5f)
+    {
+        const std::string word = tr("setup.panel_tab");
+        std::vector<std::string> letters;
+        for (size_t i = 0; i < word.size();)
+        {
+            size_t j = i + 1;
+            while (j < word.size() && (uint8_t(word[j]) & 0xC0) == 0x80) ++j; // one UTF-8 character
+            letters.push_back(word.substr(i, j - i));
+            i = j;
+        }
+        panel_tab_ = {2, 80, kPanelTabW - 4, float(letters.size()) * 12 + 8};
+        SDL_SetRenderDrawColor(r_, 255, 255, 255, 30);
+        SDL_RenderFillRect(r_, &panel_tab_);
+        SDL_SetRenderDrawColor(r_, 150, 150, 150, 255);
+        SDL_RenderRect(r_, &panel_tab_);
+        for (size_t k = 0; k < letters.size(); ++k) text(r_, panel_tab_.x + (panel_tab_.w - 8) / 2, panel_tab_.y + 4 + float(k) * 12, letters[k], 1, grey);
     }
     text(r_, 20, H - 40, tr("setup.footer1"), 1, grey);
     text(r_, 20, H - 26, tr(in_game_ ? "setup.footer2.in_game" : "setup.footer2"), 1, grey);
@@ -1572,7 +1663,8 @@ void Menu::render()
     // which end of the corridor you meet it at decides which side of it the edge is on. It is
     // drawn like any other line, with its own two colours and a bar of the same width, and its
     // size is every file up to the BINARY length (SPECIFICATIONS §12.1).
-    const float x0 = kMapX, pitch = std::max(80.0f, (W - x0 - 20) / float(kLines + 1));
+    // Beside the settings panel, or across the room it leaves (past the SETTINGS tab) while it is out.
+    const float x0 = kPanelTabW + 8 + panel_ * (kMapX - kPanelTabW - 8), pitch = std::max(80.0f, (W - x0 - 20) / float(kLines + 1));
     // The map starts below the budget, top right; at 1920 wide it is beside the subtitle instead.
     const float map_y = std::max(80.0f, budget_bottom + 6);
     const float label = map_y + 38, top = map_y + 136, bottom = H - 60, span = bottom - top, min_bar = 12;

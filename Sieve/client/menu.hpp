@@ -407,6 +407,20 @@ private:
     std::vector<std::pair<SDL_FRect, int>> row_rects_; // overlay rows on screen
     bool in_game_ = false;
     bool go_anyway_armed_ = false, went_in_thin_ = false;
+    // The settings, GLOBAL down to ENTER THE HALLWAY, are a panel that slides in from the left over
+    // the place they stand; while it is out, the map takes the room. Tab (or the SETTINGS tab at the
+    // left edge) opens and closes it. It slides out by itself while the dimensions are being
+    // calculated, so the map's bars can be watched changing, and back in when they are done, unless
+    // it was closed by hand. The keys work on the settings either way.
+    float panel_ = 1;            // as drawn: 0 out of sight, 1 in its place
+    bool panel_open_ = true;     // where it is sliding to
+    bool panel_auto_ = false;    // slid out by the calculating, to come back after it
+    Uint64 panel_tick_ = 0;      // the last frame's time (ns), for the slide
+    Uint64 calc_since_ = 0;      // when the calculating began (ns); 0: not calculating
+    bool calc_acted_ = false;    // this calculating has slid it out once already (Tab may bring it back)
+    SDL_FRect panel_tab_ = {};   // the SETTINGS tab, while the panel is out
+    void step_panel();           // each frame: the calculating's part, and the slide
+    void toggle_panel();         // Tab, or the tab clicked: by hand
 };
 
 } // namespace hallway

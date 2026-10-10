@@ -21,6 +21,7 @@
 #include "sieve/filekind.hpp"
 
 #include <fstream>
+#include <set>
 
 namespace hallway::hall {
 
@@ -359,8 +360,9 @@ std::vector<uint8_t> Hallway::item_file(const Book& bk, std::string& name)
 }
 
 // IDEAS §16.9: the first item at every whole degree of every dimension, saved as its file (item_file,
-// what J reads: a picture at one pixel a pixel; a binary file as its own bytes), and the folder as
-// one set of Sieve instructions. Even where the
+// what J reads: a picture at one pixel a pixel; a binary file as its own bytes) under its title, as
+// F names it, and the folder as one set of Sieve instructions. Which file each degree gave is said
+// in the report, not written into the folder. Even where the
 // items are noise, installing the instructions gives every one of them back, each checked against
 // its SHA-256, and each is the item its bearing (X) names again.
 std::string Hallway::sample_degrees(const std::string& dir, const std::string& sieve_out)
@@ -377,6 +379,7 @@ std::string Hallway::sample_degrees(const std::string& dir, const std::string& s
         fs::create_directories(folder);
         const BigUint units = line_units();
         size_t saved = 0, skipped = 0;
+        std::set<std::string> taken; // two items of one title (a blank one, say) are told apart
         for (uint32_t d = 0; d < kDegrees; ++d)
         {
             // The first unit at or past d degrees: ceil(d * units / 360).
@@ -389,11 +392,25 @@ std::string Hallway::sample_degrees(const std::string& dir, const std::string& s
             const Book bk = *in_hand_;
             std::string name;
             const std::vector<uint8_t> bytes = bk.is_file ? file_of(bk) : item_file(bk, name);
-            const std::u8string e = from_u8(name).extension().u8string();
-            const std::string ext = bk.is_file ? ".bin" : std::string(e.begin(), e.end());
-            char stem[8];
-            std::snprintf(stem, sizeof stem, "%03u", d);
-            write_all(folder / from_u8(stem + ext), bytes.data(), bytes.size());
+            if (bk.is_file) name = binary_file_name(bk, cli::sha256_hex(bytes));
+            if (!taken.insert(name).second)
+            {
+                const fs::path n = from_u8(name);
+                const std::u8string stem = n.stem().u8string(), ext = n.extension().u8string();
+                for (int k = 2;; ++k)
+                {
+                    const std::string again = std::string(stem.begin(), stem.end()) + " (" + std::to_string(k) + ")" + std::string(ext.begin(), ext.end());
+                    if (taken.insert(again).second)
+                    {
+                        name = again;
+                        break;
+                    }
+                }
+            }
+            write_all(folder / from_u8(name), bytes.data(), bytes.size());
+            char deg[8];
+            std::snprintf(deg, sizeof deg, "%03u", d);
+            report += std::string(kDimensions[li].id) + " " + deg + " " + kDimensions[li].id + "/" + name + "\n";
             ++saved;
         }
         drop_in_hand();

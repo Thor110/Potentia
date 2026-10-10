@@ -1942,12 +1942,33 @@ Items 16.2, 16.5 and 16.9 of Edward's list of 10 October (IDEAS §16).
   `--menu --busy` draws the menu before the counts are in.
 - **The degrees sample** (`Hallway::sample_degrees`, item_save.cpp; `--sample-degrees DIR
   [--sample-out FILE]`): for every dimension and every whole degree, the first unit at or past the
-  bearing (ceil(d * units / 360), the navigator's rule, in the ordering in use), saved as
-  `DIR/<id>/<ddd>.<ext>` by `item_file` (what J reads: a picture at one pixel a pixel; F saves
-  pictures at 16), a binary file as its bytes; then DIR as Sieve instructions (`add_packed`, v4).
-  Defaults: 3,240 items, 566,236 bytes, a 303,829-byte `.sieve`, in about 3.5 s (Release). The
-  pages item at 90 degrees is `ftft...fu`: a quarter of 27^32 in base 27 repeats.
+  bearing (ceil(d * units / 360), the navigator's rule, in the ordering in use), saved in
+  `DIR/<id>/` by `item_file` (what J reads: a picture at one pixel a pixel; F saves pictures at
+  16), a binary file as its bytes, named by its title as F names it (`item_file`'s name,
+  `binary_file_name`; " (2)" where two share one), the report saying which file each degree gave
+  ("<id> <ddd> <file>"); then DIR as Sieve instructions (`add_packed`, v4). Defaults: 3,240 items,
+  566,236 bytes, a 391,724-byte `.sieve`, in about 3.5 s (Release). A file is the item's unit and
+  its name the title; a cover is not kept (Edward, 10 October: the pictures are for looks). At
+  whole degrees the units repeat (every 40 degrees on pages, image, models, binary and books, every
+  72 on audio, tracks, video and movies; the leading part of d/360 is the title), so only 225
+  contents differ, and the titles tell the items apart. The pages item at 90 degrees is titled
+  `ftft...ft` and reads `ftft...fu`: a quarter of the line in base 27 repeats.
 - **Checked:** CI (hallway step: the main-menu locator offers no Go and Enter does not close it;
   the sample twice, identical; installed by `sieve install`, identical; X, Tab, a bearing and Enter
   on pages and models, then the item taken and saved, equal to the sample's file), all run here;
   screenshots of the main menu, both locators and the setup menu while counting (1920 and 1240 wide).
+
+### The settings as a slide-in panel (10 October 2026)
+Item 16.6 of Edward's list. The setup menu's settings, GLOBAL down to ENTER THE HALLWAY, are a
+panel (menu.hpp `panel_`, `step_panel()`, `toggle_panel()`): drawn `-(1 - panel_) * kMapX` to the
+left of their place, sliding over 180 ms (`kPanelSlideMs`), while the map's left edge goes from
+`kMapX` to just past the SETTINGS tab (`kPanelTabW`), so with the panel out the map takes the
+width. Tab, or a click on the SETTINGS tab (drawn while the panel is mostly out), toggles it by
+hand. While `calculating()` has lasted 200 ms (`kPanelCalcNs`, as CALCULATING waits), it slides out
+by itself, once a calculating (`calc_acted_`, so Tab can bring it back meanwhile), and back in when
+the counting ends if that is what slid it out (`panel_auto_`). Moving through the settings (the
+arrows, PgUp/PgDn, Enter) with it closed by hand brings it back; the keys act on the settings
+either way. The footers, the over-budget line and the calculating banner are not part of it. A
+scripted key snaps it to where it is going (`Menu::press`), so `--menu --press Tab` draws it out.
+The first counts when the menu opens slide it out too, if they take longer than 200 ms (a Debug
+build, a large stack).

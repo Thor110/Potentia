@@ -232,6 +232,9 @@ jobs:
           downs=$(python -c "print(','.join(['Down']*8))")
           $H --menu --settings mc.ini --press "$downs,Right,Right" --screenshot mc.png > /dev/null
           grep -q "^model_cache_mb = 80" mc.ini
+          # The settings panel slides out with Tab (the map takes the width), and back with a move.
+          $H --menu --press "Tab" --screenshot panel-out.png | q "saved panel-out.png"
+          $H --menu --press "Tab,Down" --screenshot panel-back.png | q "saved panel-back.png"
           # The filter memory (GLOBAL row 11): what one count's tables may take, in steps of 256 MB
           # from 512, saved with the application's settings.
           rm -f fm.ini
@@ -628,10 +631,11 @@ jobs:
           diff -r degrees degrees2
           build/sieve install degrees.sieve --to deg_inst > /dev/null
           diff -r degrees deg_inst
+          # (each file is named by its item's title; the report says which file each degree gave)
           $H --no-menu --press "X,Tab,9,0,Return" --take --save-item p90.txt --screenshot degp.png > /dev/null
-          cmp p90.txt degrees/pages/090.txt
+          cmp p90.txt "degrees/$(sed -n 's/^pages 090 //p' deg.txt)"
           $H --no-menu --line models --press "X,Tab,1,3,Return" --take --save-item m13.obj --screenshot degm.png > /dev/null
-          cmp m13.obj degrees/models/013.obj
+          cmp m13.obj "degrees/$(sed -n 's/^models 013 //p' deg.txt)"
           # The excluded mode: read back from the settings, and the excluded count is exactly the
           # line less the survivors (27^32 less clean-v2's survivors at length 32).
           printf "[text]\nmode = excluded\nfilters = clean-v2\n" > excluded.ini

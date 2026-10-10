@@ -998,6 +998,29 @@ unpacked and compared before use, kept as they are where packing is no smaller) 
 (`pack.*`, `locate.cpp`'s unpacking), so a `sieve-map-v3` follows directly. A map that holds a file
 already compressed (the release map holds `sieve-source.7z`) gains nothing; a map holding many
 anchors of its own (texts, programs) gains what an installer does. Verdict: build, small.
+*Agreed since (10 October 2026): the next manifest and map schema together (v5 and its map),
+carrying items rather than their bytes, and as little as reproduces them.*
+- **An item entry:** a file that is an item of a line is named by that line (its shape, filter
+  stack, ordering and key, written once in the header for all its items) and its number on it, or
+  its bearing where a bearing names it exactly (the first unit at or past it). Its name (its title),
+  its folder (its dimension) and its bytes all follow from those; nothing of them is stored. Its
+  size is implied by the number (a fixed shape, or a binary file's length in its number).
+- **Ranges:** many items in a regular pattern are one entry ("bearings 0 to 359, step 1"), so a
+  sample such as §16.9's is a few hundred bytes, almost all of it the lines' settings, against the
+  391,724 bytes v4 makes of it.
+- **Files that are not items** are carried as v4 carries them, or by a shorter way where weighing
+  finds one (a survivor number under a stack, `lines K`).
+- **Hashes:** one SHA-256 over the whole tree, always; one per line, as a pointer to where a fault
+  is (32 bytes each); per-file hashes off by default for items (they would be 32 bytes a file,
+  104 KB of §16.9's sample, more than everything else) and kept for files carried as bytes. While
+  the program that regenerates the items is unchanged, the arithmetic fixes every byte and so
+  every hash; the hashes guard against a changed program (another ordering, a fixed encoder, a
+  compiler). Where the tree hash fails, a command regenerates the items and lists each file's
+  SHA-256, on the machine that made the instructions and on the one installing them, so the two
+  lists show which file differs and how.
+- **The cost moves to the installer:** it must carry the code that makes every line's items
+  (text, PNG, MIDI, OBJ, books, tracks, movies), which `sieve` and the hallway already have; the
+  instructions shrink, the program grows once.
 
 **16.4 A file type filter on the binary line.** Filter the binary dimension by file types, read
 from their headers.
@@ -1019,7 +1042,11 @@ counted stays under the bars.
 *Evaluation.* The setup menu shows every setting at once (the budget model needs to see them
 change together). A slide-in panel, one dimension's settings at a time, frees the screen for more
 dimensions and suits a growing list. Verdict: build when the dimensions outgrow the screen, which
-worlds and an AI dimension would bring about.
+worlds and an AI dimension would bring about. *Built (10 October 2026), ahead of those dimensions, as Edward
+asked:* the whole list, GLOBAL down to ENTER THE HALLWAY, slides in from the left over where it
+stood (Tab, or the SETTINGS tab at the left edge); while it is out the map takes the width; and
+while the dimensions are being calculated it slides out by itself so the bars can be watched,
+coming back when that is done.
 
 **16.7 The worlds dimension, made of models.** *Evaluation.* Already the plan (§13, §14): a
 composition of models, as tracks are of melodies, but a world also places each model (a position
@@ -1065,9 +1092,13 @@ lines' units (a page 32 characters, a picture a small PNG, a file on the binary 
 length), so the instructions are small. Verdict: build, as `sieve sample --degrees` or a script.
 *Built (10 October 2026)* in the hallway, so every dimension's file is the hallway's own:
 `hallway --sample-degrees DIR`. The bearing names the first unit at or past it (the navigator's
-rule), and pictures are saved one pixel a pixel, as J reads them. At the default shapes: 3,240
-items, 566,236 bytes, as a `.sieve` of 303,829 bytes. CI makes it twice and installs it, and
-checks a bearing typed in the navigator against it.
+rule). Each item is a file named by its title (Edward: the reconstructed item is a file with its
+title as its name; the pictures are for looks), pictures one pixel a pixel, as J reads them. At the
+default shapes: 3,240 items, 566,236 bytes, as a `.sieve` of 391,724 bytes. CI makes it twice and
+installs it, and checks a bearing typed in the navigator against it. What it showed: at whole
+degrees the units repeat (every 40 or 72 degrees), and the titles tell the items apart. Each file
+is named, under its line, by three values (the line with its stack, its ordering, its number),
+which is what the next manifest and map schema should carry instead of its bytes (§16.3).
 
 ## 17. Deprecated ideas
 
