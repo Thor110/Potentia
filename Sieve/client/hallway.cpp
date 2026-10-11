@@ -1275,6 +1275,14 @@ bool Hallway::warp(const std::string& input)
 }
 
 // An address (hex), a percentage (P%), or a corridor tile (@T).
+void Hallway::go_to_ai(const sieve::AiSpace::Digits& d)
+{
+    if (!on_ai() || d.size() != ai_space_->weights()) return;
+    trail_.clear();
+    place(ai_space_->index_of(d, mode_), true);
+    message(tr("msg.harness.go"));
+}
+
 bool Hallway::go_to(std::string input)
 {
     try

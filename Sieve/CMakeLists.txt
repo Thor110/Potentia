@@ -48,6 +48,7 @@ add_library(sieve_core STATIC
     core/src/llm_tokenizer.cpp
     core/src/llm.cpp
     core/src/aispace.cpp
+    core/src/training.cpp
     core/src/filters/models.cpp
     core/src/filters/pattern.cpp
     core/src/written.cpp
@@ -201,7 +202,7 @@ target_include_directories(sieve_locate PUBLIC tools)
 # The vault checks pictures (PDQ), including files that are pictures, so it reads them (stb).
 target_link_libraries(sieve_locate PUBLIC sieve_core PRIVATE sieve_pdq sieve_image_io sieve_lzma)
 target_link_libraries(sieve_lines PUBLIC sieve_locate) # the lines check units against the vault
-add_library(sieve_compare STATIC tools/cli/compare.cpp tools/cli/pack.cpp)
+add_library(sieve_compare STATIC tools/cli/compare.cpp tools/cli/pack.cpp tools/cli/train.cpp)
 target_include_directories(sieve_compare PUBLIC tools)
 target_link_libraries(sieve_compare PUBLIC sieve_core sieve_locate PRIVATE ${SIEVE_ZLIB} ${SIEVE_LZMA})
 if(SIEVE_LZMA_INCLUDE)
@@ -214,6 +215,7 @@ add_executable(sieve
     tools/cli/tensors.cpp
     tools/cli/chat.cpp
     tools/cli/ai.cpp
+    tools/cli/train_cmd.cpp
     ${SIEVE_ICON_RC})
 target_link_libraries(sieve PRIVATE sieve_lines sieve_locate sieve_compare)
 if(WIN32)
@@ -250,6 +252,11 @@ add_custom_target(sieve_data ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/data/filters
             $<TARGET_FILE_DIR:sieve>/filters
+    # The AI Training Harness's runs (SPECIFICATIONS §12.0e): a recorded run to train again and
+    # check, bit for bit; runs recorded in the hallway are kept beside it.
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/data/training
+            $<TARGET_FILE_DIR:sieve>/training
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/data/dictionaries
             $<TARGET_FILE_DIR:sieve>/dictionaries
@@ -262,7 +269,7 @@ add_custom_target(sieve_data ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/third_party_licenses
             $<TARGET_FILE_DIR:sieve>/third_party_licenses
-    COMMENT "Copying the licences, maps, dictionaries, models and languages next to sieve")
+    COMMENT "Copying the licences, maps, dictionaries, models, training runs and languages next to sieve")
 add_dependencies(sieve_data sieve)
 
 # ---------------------------------------------------------------- tests
@@ -299,6 +306,7 @@ if(SIEVE_BUILD_CLIENT)
         client/app_settings.cpp
         client/binary_edge.cpp
         client/designer.cpp
+        client/harness.cpp
         client/designer_model.cpp
         client/item_faces.cpp
         client/door_portal.cpp

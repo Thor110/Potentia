@@ -637,6 +637,8 @@ public:
     bool warp(const std::string& input);
 
     bool go_to(std::string input);
+    // On the AI line: the model with these digits (the AI Training Harness's GO TO IT), taken in hand.
+    void go_to_ai(const sieve::AiSpace::Digits& d);
     // The AI line: say something to the model in hand, which writes back (Enter opens the box; and
     // --talk in a scripted run). The conversation is kept while the model is held.
     void talk(const std::string& said);

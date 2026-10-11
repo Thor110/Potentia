@@ -5,6 +5,7 @@
 #include "cli/media_decode.hpp"
 #include "cli/plugins.hpp"
 #include "designer.hpp"
+#include "harness.hpp"
 #include "cli/timings.hpp"
 #include "hallway.hpp"
 #include "sieve/plugin.hpp"
@@ -87,8 +88,9 @@ const char* kUsage =
     "Menu:\n"
     "  The main menu opens first: Start Sieve, Settings (graphics, controls, language; saved to\n"
     "  sieve-hallway.ini), the File Locator (as in the pause menu, without Go to it), the Filter Designer\n"
-    "  (make filter plugins as nodes) and Exit Sieve. Start Sieve opens the setup menu (Esc: back to the\n"
-    "  main menu): adjust every line's state space and see the five lines as a map.\n"
+    "  (make filter plugins as nodes), the AI Training Harness (train a model of the AI line from a\n"
+    "  recorded run, and check it comes out the same) and Exit Sieve. Start Sieve opens the setup menu\n"
+    "  (Esc: back to the main menu): adjust every line's state space and see the lines as a map.\n"
     "  The magnifying glass beside a line's title (or F) opens its filters: tick filters, set\n"
     "  their parameters, and choose the mode: off, mark (failures faint), hide (failures left\n"
     "  out), compact (only survivors, packed together, in every ordering) or excluded (only\n"
@@ -144,6 +146,8 @@ const char* kUsage =
     "  --locate PATH       open the File Locator on a file or folder (--tailored: and tailor the filters to its files;\n"
     "                      with --main-menu: the main menu's, with no world to walk to)\n"
     "  --install FILE --install-to DIR   the File Locator's install, at once\n"
+    "  --harness           a picture of the AI Training Harness (--training-dir DIR: its runs; --script KEYS:\n"
+    "                      keys and =typed text, each step waiting for a training to finish)\n"
     "  --map PATH          choose a map for the node graph: a .map file, or a folder to map\n"
     "  --graph             open the node graph (on --map, or on this installation)\n"
     "  --new-map PATH      the node graph's New map..., at once\n"
@@ -269,6 +273,14 @@ std::vector<Line> make_lines(const Args& a)
 
 // The BINARY length (bytes): the binary line's, as the setup menu sets it.
 uint32_t binary_length(const Args& a) { return a.has("binary-length") ? a.get_positive("binary-length", 32) : 32u; }
+
+// The AI Training Harness's runs: the training folder beside the programs.
+std::filesystem::path training_dir()
+{
+    const char* base = SDL_GetBasePath();
+    const std::string b = base ? base : "";
+    return (b.empty() ? std::filesystem::current_path() : std::filesystem::path(std::u8string(b.begin(), b.end()))) / "training";
+}
 
 // The File Locator from the main menu: files weighed under the lines the setup menu's settings
 // would build (made when the first weighing starts), and nowhere to walk to, so no Go to it.
@@ -641,6 +653,53 @@ int run(const Args& a)
         std::cout << "saved " << a.get("screenshot") << "\n";
         return finish();
     }
+    if (shot && a.has("harness"))
+    {
+        // A picture of the AI Training Harness (for documentation and testing): --training-dir DIR
+        // for its runs (else the training folder beside the programs); --script runs keys and typed
+        // text as the designer's does, each step waiting for a training to finish.
+        Harness h(window, renderer, a.has("training-dir") ? std::filesystem::path(a.get("training-dir")) : training_dir());
+        if (a.has("script"))
+        {
+            std::string script = a.get("script");
+            size_t at = 0;
+            while (at <= script.size())
+            {
+                const size_t comma = script.find(',', at);
+                const std::string item = script.substr(at, comma == std::string::npos ? std::string::npos : comma - at);
+                if (!item.empty() && item[0] == '=') h.type(item.substr(1));
+                else if (!item.empty())
+                    for (const auto& [key, mod] : parse_presses(item)) h.press(key, mod);
+                h.settle();
+                if (comma == std::string::npos) break;
+                at = comma + 1;
+            }
+        }
+        if (h.going())
+        {
+            // GO TO IT: the hallway on the AI line, in the run's shape, the model in hand.
+            Args ga = a;
+            for (const char* k : {"harness", "script", "training-dir"}) ga.opts.erase(k);
+            ga.opts["line"] = "ai";
+            ga.opts["ai-layers"] = std::to_string(h.go_shape.layers);
+            ga.opts["ai-width"] = std::to_string(h.go_shape.width);
+            ga.opts["ai-heads"] = std::to_string(h.go_shape.heads);
+            ga.opts["ai-bits"] = std::to_string(h.go_shape.bits);
+            auto hall = make_hallway(window, renderer, ga, true, filters, app.angle_decimals);
+            hall->go_to_ai(h.go_digits);
+            hall->render();
+            if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
+            std::cout << "went to the model on the AI line: " << hall->status() << "\n";
+            std::cout << "saved " << a.get("screenshot") << "\n";
+            return finish();
+        }
+        h.render();
+        if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
+        std::cout << "harness: " << (h.verdict().empty() ? "-" : h.verdict()) << "\n";
+        if (!h.status().empty()) std::cout << "status: " << h.status() << "\n";
+        std::cout << "saved " << a.get("screenshot") << "\n";
+        return finish();
+    }
     if (shot && a.has("main-menu") && a.has("locate"))
     {
         // A picture of the File Locator opened from the main menu, on a file or folder (--tailored:
@@ -775,6 +834,8 @@ int run(const Args& a)
     bool first = true;
     std::optional<MusicMelody> pending_melody; // a melody of the music to go to in the next hallway built
     std::optional<Space::Digits> pending_unit; // an item to hold on its COST tab there (COST's tailoring)
+    std::optional<sieve::AiSpace::Digits> pending_ai; // a model to go to on the AI line there (the harness's GO TO IT)
+    bool skip_setup = false;                         // straight into the hallway, once
     while (true)
     {
         if (show_main)
@@ -788,6 +849,23 @@ int run(const Args& a)
                 if (!run_locator(window, renderer, settings, filters, filters_path)) break;
                 continue;
             }
+            if (r == MainMenu::Result::Harness)
+            {
+                // The AI Training Harness; GO TO IT goes into the hallway on the AI line, at the
+                // model, in the run's shape (and without the setup menu: the shape is the run's).
+                Harness h(window, renderer, training_dir());
+                const Harness::Result hr = h.run();
+                if (hr == Harness::Result::Quit) break;
+                if (hr == Harness::Result::Back) continue;
+                settings.ai_layers = h.go_shape.layers;
+                settings.ai_width = h.go_shape.width;
+                settings.ai_heads = h.go_shape.heads;
+                settings.ai_bits = h.go_shape.bits;
+                settings.start_line = "ai";
+                settings_chosen = true;
+                skip_setup = true;
+                pending_ai = h.go_digits;
+            }
             if (r == MainMenu::Result::Designer)
             {
                 // The filter designer, and back to the main menu from it.
@@ -797,7 +875,7 @@ int run(const Args& a)
             }
             show_main = false;
         }
-        if (show_menu)
+        if (show_menu && !skip_setup)
         {
             Menu menu(window, renderer, settings, filters, filters_path, &app, app_path);
             const Menu::Result r = menu.run();
@@ -874,6 +952,12 @@ int run(const Args& a)
             hall->hold_on_cost(*pending_unit);
             pending_unit.reset();
         }
+        if (pending_ai)
+        {
+            hall->go_to_ai(*pending_ai);
+            pending_ai.reset();
+        }
+        skip_setup = false;
         SDL_SetWindowRelativeMouseMode(window, true);
         Menu::Result in_game_menu = Menu::Result::Back;
         for (;;)

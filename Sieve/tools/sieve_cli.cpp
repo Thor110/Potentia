@@ -37,6 +37,7 @@
 #include "cli/tensors.hpp"
 #include "cli/chat.hpp"
 #include "cli/ai.hpp"
+#include "cli/train.hpp"
 #include "cli/weigh.hpp"
 #include "cli/timings.hpp"
 #include "sieve/dfa.hpp"
@@ -2840,7 +2841,7 @@ int cmd_vault(const Args& a)
 
 bool is_command(const std::string& name)
 {
-    return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" || name == "world" || name == "tensors" || name == "chat" || name == "ai" ||
+    return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" || name == "world" || name == "tensors" || name == "chat" || name == "ai" || name == "ai-train" ||
            name == "version" || name == "models" || name == "train" || name == "measure" ||
            name == "filters" || name == "check" || name == "tailor" || name == "bind" || name == "unbind";
 }
@@ -2919,6 +2920,7 @@ int main(int argc, char** argv)
         if (a.command == "tensors") return cmd_tensors(a);
         if (a.command == "chat") return cmd_chat(a);
         if (a.command == "ai") return cmd_ai(a);
+        if (a.command == "ai-train") return cmd_ai_train(a);
         if (a.command == "version") return cmd_version();
         if (a.command == "models") return cmd_models();
         if (a.command == "train") return cmd_train(a);

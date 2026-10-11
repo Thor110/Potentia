@@ -2594,6 +2594,378 @@ def cmd_ai_read(args):
     print("%0*x" % (sp.width_hex, i))
 
 
+# ---- training-v1 (SPECIFICATIONS §12.0e): a model of the AI line trained in integer arithmetic,
+# written from the specification. Python's >> and // round down, as the section asks.
+
+TR_LIMIT = 1 << 23
+TR_POW2 = (1073741824, 744261118, 257941248, 59597083, 10327387, 1431680, 165394, 16377)
+TR_SIN = (268435456, -44739243, 2236962, -53261, 740, -7)
+TR_COS = (268435456, -134217728, 11184811, -372827, 6658, -74, 1)
+TR_TWO_PI, TR_HALF_PI = 26986075409, 6746518852
+TR_LOG2E, TR_LOG2_THETA, TR_EPS = 1549082005, 57070290109, 42950
+
+
+def tr_hold(x):
+    return -TR_LIMIT if x < -TR_LIMIT else TR_LIMIT if x > TR_LIMIT else x
+
+
+def tr_horner(coeffs, t, s):
+    acc = coeffs[-1]
+    for c in reversed(coeffs[:-1]):
+        acc = ((acc * t) >> s) + c
+    return acc
+
+
+def tr_exp(z):
+    y = (z * TR_LOG2E) >> 16
+    i = y >> 30
+    sh = 14 - i
+    return 0 if sh >= 62 else tr_horner(TR_POW2, y - (i << 30), 30) >> sh
+
+
+def tr_sigmoid(x):
+    if x >= 0:
+        return (1 << 32) // ((1 << 16) + tr_exp(-x))
+    e = tr_exp(x)
+    return (e << 16) // ((1 << 16) + e)
+
+
+def tr_softmax(zs):
+    m = max(zs)
+    es = [tr_exp(z - m) for z in zs]
+    total = sum(es)
+    return [(e << 16) // total for e in es]
+
+
+def tr_pow2_q32(y):
+    i = y >> 32
+    return 0 if -i >= 62 else (tr_horner(TR_POW2, (y - (i << 32)) >> 2, 30) << 2) >> (-i)
+
+
+def tr_sincos(a):
+    a %= TR_TWO_PI
+    k = a // TR_HALF_PI
+    t = (a - k * TR_HALF_PI) >> 4
+    u = (t * t) >> 28
+    s0 = (t * tr_horner(TR_SIN, u, 28)) >> 28
+    c0 = tr_horner(TR_COS, u, 28)
+    s, c = ((s0, c0), (c0, -s0), (-s0, -c0), (-c0, s0))[k % 4]
+    return s >> 12, c >> 12
+
+
+def tr_decimal(text):
+    whole, _, frac = text.partition(".")
+    num, den = int(whole + frac or "0"), 10 ** len(frac)
+    return (num * 2 * 65536 + den) // (2 * den)
+
+
+class TrainerRef:
+    def __init__(self, sp, digits, learning_rate, momentum):
+        self.sp, self.digits = sp, list(digits)
+        self.eta, self.mu = tr_decimal(learning_rate), tr_decimal(momentum)
+        self.m = (1 << sp.B) - 1
+        self.H, self.A = sp.H, sp.A
+        self.D, self.F = sp.H // sp.A, sp.F
+        self.isd = (1 << 32) // math.isqrt(self.D << 32)
+        self.scale = {}
+        for name, rows, cols, _, first in sp.tensors:
+            self.scale[name] = (1 << 32) if name == "model.embed_tokens.weight" else 4 * math.isqrt((3 << 60) // cols)
+        self.master = [0] * sp.W
+        for name, rows, cols, _, first in sp.tensors:
+            S = self.scale[name]
+            for i in range(first, first + rows * cols):
+                self.master[i] = ((2 * self.digits[i] - self.m) * S) // self.m
+        self.velocity = [0] * sp.W
+        half = self.D // 2
+        self.rope = []
+        for i in range(half):
+            f = tr_pow2_q32(-((2 * i * TR_LOG2_THETA) // self.D))
+            self.rope.append([tr_sincos(p * f) for p in range(512)])
+
+    def mat(self, name):
+        """A tensor's values (Q16) as rows."""
+        for n, rows, cols, _, first in self.sp.tensors:
+            if n == name:
+                S = self.scale[n]
+                d = self.digits[first:first + rows * cols]
+                vals = [((2 * x - self.m) * S) // (self.m << 16) for x in d]
+                return [vals[r * cols:(r + 1) * cols] for r in range(rows)], first, cols
+        raise KeyError(name)
+
+    @staticmethod
+    def apply(W, x):
+        return [tr_hold(sum(w * xi for w, xi in zip(row, x)) >> 16) for row in W]
+
+    def norm(self, x):
+        ms = sum(v * v for v in x) // len(x)
+        r = (1 << 40) // math.isqrt((ms + TR_EPS) << 16)
+        return [tr_hold((v * r) >> 16) for v in x], r
+
+    def norm_back(self, dy, y, r):
+        c = sum(a * b for a, b in zip(dy, y)) // (len(y) << 16)
+        return [tr_hold((r * tr_hold(d - ((v * c) >> 16))) >> 16) for d, v in zip(dy, y)]
+
+    def turn(self, vec, p, sign):
+        out = list(vec)
+        half = self.D // 2
+        for a in range(self.A):
+            for i in range(half):
+                s, c = self.rope[i][p]
+                s *= sign
+                x, y = vec[a * self.D + i], vec[a * self.D + i + half]
+                out[a * self.D + i] = tr_hold(((x * c) >> 16) - ((y * s) >> 16))
+                out[a * self.D + i + half] = tr_hold(((y * c) >> 16) + ((x * s) >> 16))
+        return out
+
+    def window(self, tok, grads):
+        """Forward and back over one window; adds its gradient (Q32, by weight) to grads."""
+        H, A, D, F, T = self.H, self.A, self.D, self.F, len(tok) - 1
+        E, e_first, _ = self.mat("model.embed_tokens.weight")
+        xs = [list(E[b]) for b in tok[:T]]
+        saved = []
+        for l in range(self.sp.L):
+            pre = "model.layers.%d." % l
+            W = {k: self.mat(pre + n) for k, n in (("q", "self_attn.q_proj.weight"), ("k", "self_attn.k_proj.weight"),
+                                                   ("v", "self_attn.v_proj.weight"), ("o", "self_attn.o_proj.weight"),
+                                                   ("g", "mlp.gate_proj.weight"), ("u", "mlp.up_proj.weight"),
+                                                   ("d", "mlp.down_proj.weight"))}
+            st = {"W": W, "x": xs}
+            n1 = [self.norm(x) for x in xs]
+            st["h1"] = [h for h, _ in n1]
+            st["r1"] = [r for _, r in n1]
+            st["q"] = [self.turn(self.apply(W["q"][0], h), p, 1) for p, h in enumerate(st["h1"])]
+            st["k"] = [self.turn(self.apply(W["k"][0], h), p, 1) for p, h in enumerate(st["h1"])]
+            st["v"] = [self.apply(W["v"][0], h) for h in st["h1"]]
+            P = {}
+            o = [[0] * H for _ in range(T)]
+            for a in range(A):
+                for p in range(T):
+                    sc = [tr_hold((tr_hold(sum(st["q"][p][a * D + d] * st["k"][u][a * D + d] for d in range(D)) >> 16) * self.isd) >> 16)
+                          for u in range(p + 1)]
+                    P[a, p] = tr_softmax(sc)
+                    for d in range(D):
+                        o[p][a * D + d] = tr_hold(sum(P[a, p][u] * st["v"][u][a * D + d] for u in range(p + 1)) >> 16)
+            st["P"], st["o"] = P, o
+            st["x1"] = [[tr_hold(a + b) for a, b in zip(x, self.apply(W["o"][0], oo))] for x, oo in zip(xs, o)]
+            n2 = [self.norm(x) for x in st["x1"]]
+            st["h2"] = [h for h, _ in n2]
+            st["r2"] = [r for _, r in n2]
+            st["g"] = [self.apply(W["g"][0], h) for h in st["h2"]]
+            st["u"] = [self.apply(W["u"][0], h) for h in st["h2"]]
+            st["s"] = [[tr_sigmoid(g) for g in gs] for gs in st["g"]]
+            st["l"] = [[tr_hold((g * s) >> 16) for g, s in zip(gs, ss)] for gs, ss in zip(st["g"], st["s"])]
+            st["a"] = [[tr_hold((l * u) >> 16) for l, u in zip(ls, us)] for ls, us in zip(st["l"], st["u"])]
+            xs = [[tr_hold(a + b) for a, b in zip(x1, self.apply(W["d"][0], aa))] for x1, aa in zip(st["x1"], st["a"])]
+            saved.append(st)
+        score, count = 0, 0
+        dx = []
+        for p in range(T):
+            hf, rf = self.norm(xs[p])
+            logits = [tr_hold(sum(e * h for e, h in zip(row, hf)) >> 16) for row in E]
+            prob = tr_softmax(logits)
+            nxt = tok[p + 1]
+            score += prob[nxt]
+            count += 1
+            dl = [pr - ((1 << 16) if t == nxt else 0) for t, pr in enumerate(prob)]
+            if grads is None:
+                continue
+            for t in range(256):
+                for i in range(H):
+                    grads[e_first + t * H + i] += dl[t] * hf[i]
+            dhf = [tr_hold(sum(E[t][i] * dl[t] for t in range(256)) >> 16) for i in range(H)]
+            dx.append(self.norm_back(dhf, hf, rf))
+        if grads is None:
+            return score, count
+
+        def outer(Wt, dys, xs_):
+            _, first, cols = Wt
+            for dy, x in zip(dys, xs_):
+                for r, d in enumerate(dy):
+                    if d:
+                        base = first + r * cols
+                        for c, xv in enumerate(x):
+                            grads[base + c] += d * xv
+
+        def back(mats, dys):
+            """The gradient into an input read by each of `mats`, its products summed before the shift."""
+            n = len(mats[0][0][0])
+            return [tr_hold(sum(W[0][r][c] * dy[r] for W, dy in zip(mats, dys) for r in range(len(dy))) >> 16) for c in range(n)]
+
+        for l in reversed(range(self.sp.L)):
+            st = saved[l]
+            W = st["W"]
+            dx1 = [list(v) for v in dx]
+            outer(W["d"], dx, st["a"])
+            dgs, dus = [], []
+            for p in range(T):
+                da = back([W["d"]], [dx[p]])
+                dl_ = [tr_hold((d * u) >> 16) for d, u in zip(da, st["u"][p])]
+                du = [tr_hold((d * l_) >> 16) for d, l_ in zip(da, st["l"][p])]
+                dg = [tr_hold((d * tr_hold(s + ((((g * s) >> 16) * ((1 << 16) - s)) >> 16))) >> 16)
+                      for d, g, s in zip(dl_, st["g"][p], st["s"][p])]
+                dgs.append(dg)
+                dus.append(du)
+                dh2 = back([W["g"], W["u"]], [dg, du])
+                nb = self.norm_back(dh2, st["h2"][p], st["r2"][p])
+                dx1[p] = [tr_hold(a + b) for a, b in zip(dx1[p], nb)]
+            outer(W["g"], dgs, st["h2"])
+            outer(W["u"], dus, st["h2"])
+            outer(W["o"], dx1, st["o"])
+            dO = [back([W["o"]], [d]) for d in dx1]
+            dq = [[0] * H for _ in range(T)]
+            sk = [[0] * H for _ in range(T)]
+            sv = [[0] * H for _ in range(T)]
+            for a in range(A):
+                for p in range(T):
+                    Pp = st["P"][a, p]
+                    dP = [tr_hold(sum(dO[p][a * D + d] * st["v"][u][a * D + d] for d in range(D)) >> 16) for u in range(p + 1)]
+                    cp = sum(x * y for x, y in zip(Pp, dP)) >> 16
+                    dd = [tr_hold((tr_hold((Pp[u] * tr_hold(dP[u] - cp)) >> 16) * self.isd) >> 16) for u in range(p + 1)]
+                    for d in range(D):
+                        j = a * D + d
+                        dq[p][j] = tr_hold(sum(dd[u] * st["k"][u][j] for u in range(p + 1)) >> 16)
+                        for u in range(p + 1):
+                            sk[u][j] += dd[u] * st["q"][p][j]
+                            sv[u][j] += Pp[u] * dO[p][j]
+            dq = [self.turn(v, p, -1) for p, v in enumerate(dq)]
+            dk = [self.turn([tr_hold(x >> 16) for x in v], p, -1) for p, v in enumerate(sk)]
+            dv = [[tr_hold(x >> 16) for x in v] for v in sv]
+            outer(W["q"], dq, st["h1"])
+            outer(W["k"], dk, st["h1"])
+            outer(W["v"], dv, st["h1"])
+            new_dx = []
+            for p in range(T):
+                dh1 = back([W["q"], W["k"], W["v"]], [dq[p], dk[p], dv[p]])
+                nb = self.norm_back(dh1, st["h1"][p], st["r1"][p])
+                new_dx.append([tr_hold(a + b) for a, b in zip(dx1[p], nb)])
+            dx = new_dx
+        for p in range(T):
+            for i in range(H):
+                grads[e_first + tok[p] * H + i] += dx[p][i] << 16
+        return score, count
+
+    def step(self, windows):
+        grads = [0] * self.sp.W
+        score = count = 0
+        for w in windows:
+            s, c = self.window(w, grads)
+            score += s
+            count += c
+        lim_g, lim_v = 1 << 43, 1 << 46
+        for name, rows, cols, _, first in self.sp.tensors:
+            S = self.scale[name]
+            for i in range(first, first + rows * cols):
+                g = max(-lim_g, min(lim_g, grads[i]))
+                self.velocity[i] = max(-lim_v, min(lim_v, ((self.velocity[i] * self.mu) >> 16) + g))
+                self.master[i] = max(-S, min(S, self.master[i] - ((self.velocity[i] * self.eta) >> 16)))
+                self.digits[i] = max(0, min(self.m, ((self.master[i] + S) * self.m + S) // (2 * S)))
+        return score, count
+
+
+def tr_make_order(files, length, epochs, seed):
+    windows = []
+    for path, size in files:
+        off = 0
+        while off + 1 < size:
+            windows.append((path, off, min(length, size - off)))
+            off += length - 1
+    out = []
+    mask = (1 << 64) - 1
+    for e in range(epochs):
+        w = list(windows)
+        state = (seed + e) & mask
+
+        def nxt():
+            nonlocal state
+            state = (state + 0x9E3779B97F4A7C15) & mask
+            z = state
+            z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & mask
+            z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & mask
+            return z ^ (z >> 31)
+        for i in range(len(w), 1, -1):
+            j = nxt() % i
+            w[i - 1], w[j] = w[j], w[i - 1]
+        out += w
+    return out
+
+
+def tr_read_ini(text):
+    r = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line[0] in "#;" or line == "[training]":
+            continue
+        k, _, v = line.partition("=")
+        r[k.strip()] = v.strip()
+    assert r.get("version") == "training-v1", "a training-v1 run"
+    return r
+
+
+def tr_replay(folder):
+    """A run folder trained again from training.ini, order.txt and its corpus: the result.txt text."""
+    ini = tr_read_ini(open(os.path.join(folder, "training.ini"), encoding="utf-8").read())
+    sp = AiSpaceRef(int(ini["layers"]), int(ini["width"]), int(ini["heads"]), int(ini["bits"]), ini["key"])
+    mode, _, start = ini["start"].partition(" ")
+    tr = TrainerRef(sp, sp.digits(int(start, 16), mode), ini["learning-rate"], ini["momentum"])
+    lines = open(os.path.join(folder, "order.txt"), encoding="utf-8").read().splitlines()
+    assert lines[0] == "sieve-order-v1"
+    files, order = {}, []
+    for line in lines[1:]:
+        if not line:
+            continue
+        path, off, n = line.split("\t")
+        if path not in files:
+            files[path] = open(os.path.join(folder, path), "rb").read()
+        order.append(files[path][int(off):int(off) + int(n)])
+    batch, every = int(ini["batch"]), int(ini["checkpoint-every"])
+    addr = lambda: "%0*x" % (sp.width_hex, sp.index(tr.digits, "positional"))
+    steps = (len(order) + batch - 1) // batch
+    out = ["sieve-training-result-v1", "version training-v1", "steps %d" % steps, "checkpoint 0 0 0 " + addr()]
+    score = count = 0
+    for k in range(steps):
+        s, c = tr.step(order[k * batch:(k + 1) * batch])
+        score, count = score + s, count + c
+        if (k + 1) % every == 0 or k + 1 == steps:
+            out.append("checkpoint %d %d %d %s" % (k + 1, score, count, addr()))
+            score = count = 0
+    out.append("final " + addr())
+    out.append("model-sha256 " + hashlib.sha256(sp.safetensors(tr.digits)).hexdigest())
+    return "\n".join(out) + "\n"
+
+
+TR_CASES = (  # shape, window, batch, steps, learning rate, momentum
+    ((1, 8, 2, 3), 9, 2, 4, "0.01", "0.9"),
+    ((2, 8, 1, 4), 17, 1, 3, "0.002", "0.5"),
+    ((1, 16, 2, 4), 33, 2, 2, "0.0005", "0.9"),
+)
+
+
+def cmd_train_vectors(args):
+    """Steps of training-v1 on small shapes: after each, the score and the SHA-256 of the digits."""
+    corpus = open(args.corpus, "rb").read()
+    print("# sieve training vectors v1 (training-v1 over aispace-v1): shape, window, batch, learning rate, momentum,")
+    print("# step, score (Q16 sum), predictions, SHA-256 of the digits (a byte each); start scrambled 0, order")
+    print("# from the corpus (tests/training_corpus.txt) as sieve train --record cuts it, seed 1, one epoch")
+    for shape, length, batch, steps, eta, mu in TR_CASES:
+        sp = AiSpaceRef(*shape)
+        tr = TrainerRef(sp, sp.digits(0, "scrambled"), eta, mu)
+        order = tr_make_order([("c", len(corpus))], length, 1, 1)
+        for k in range(steps):
+            ws = [corpus[o:o + n] for _, o, n in order[k * batch:(k + 1) * batch]]
+            s, c = tr.step(ws)
+            print("\t".join(["L%d/H%d/A%d/B%d" % shape, str(length), str(batch), eta, mu, str(k + 1), str(s), str(c),
+                             hashlib.sha256(bytes(tr.digits)).hexdigest()]))
+    # The functions, at a few points each.
+    print("exp\t" + " ".join(str(tr_exp(z)) for z in (0, -1, -65536, -300000, -5000000)))
+    print("sigmoid\t" + " ".join(str(tr_sigmoid(x)) for x in (0, 70000, -70000, 8000000, -8000000)))
+    print("sincos\t" + " ".join("%d,%d" % tr_sincos(a) for a in (0, 1 << 32, 7 << 32, 511 << 32, 6746518852)))
+    print("pow2q32\t" + " ".join(str(tr_pow2_q32(y)) for y in (0, -1, -(1 << 31), -57070290109)))
+
+
+def cmd_train_replay(args):
+    sys.stdout.write(tr_replay(args.run))
+
+
 def cmd_world_obj(args):
     """A world's .obj text, from its slots (MODEL:x.y.z.turn|..., each model's address on the models
     line in hex), as `sieve world --read` writes it. The cover and title do not enter the .obj."""
@@ -6799,6 +7171,10 @@ def main():
     s.add_argument("--read")
     s.add_argument("--mode", default="positional")
     s.add_argument("--out", required=True)
+    s = sub.add_parser("train-vectors")
+    s.add_argument("--corpus", required=True)
+    s = sub.add_parser("train-replay")
+    s.add_argument("--run", required=True)
     s = sub.add_parser("tensors-fixture")
     s.add_argument("--config", required=True)
     s.add_argument("--seed", type=int, default=1)
@@ -6909,6 +7285,10 @@ def main():
         cmd_tensors_fixture(args)
     elif args.cmd == "ai-vectors":
         cmd_ai_vectors(args)
+    elif args.cmd == "train-vectors":
+        cmd_train_vectors(args)
+    elif args.cmd == "train-replay":
+        cmd_train_replay(args)
     elif args.cmd == "ai-read":
         cmd_ai_read(args)
     elif args.cmd == "llm-encode-lines":

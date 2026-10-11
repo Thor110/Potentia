@@ -1,115 +1,124 @@
-# The AI line: every language model of one shape
+# The AI Training Harness: models trained on the record
 
-Against `2f2c21d` (sieve chat). As you chose: an item is a **model**, every model of one shape
-numbered by its weights, and the default shape is **Micro**.
+Against the AI line (the previous batch, which you have committed). As you described it: a
+training harness that records exactly what a model learnt from and in what order, so that anyone
+can train it again from that record and get the same model; an **AI Training Harness** on the
+main menu; and the `.sieve` doing a map's work rather than a new map format.
 
-## What it is (SPECIFICATIONS §12.0d, `aispace-v1`)
-- **The shape:** a Llama model with these settings:
-  - layers: 1;
-  - width: 16;
-  - heads: 2;
-  - bits a weight: 4.
-  Its feed-forward is four times the width, its vocabulary is the 256 bytes, its output is tied to
-  its embedding, and its norms are all 1.
-- **Micro:** 8,192 weights of 4 bits, so 2^32768 models, each with an address of 8,192 hex digits.
-- **The address is the weights:** their digits are written out, the first most significant, the
-  tensors in name order. Scrambled order is shuffle-sha256-v1 over the whole line. Walking the line
-  downloads nothing.
-- **Each model runs on Sieve's own engine** (the one `sieve chat` uses), so it can be talked to.
-  Almost every one babbles, and positional neighbours say nearly the same thing.
+## Training on the record (SPECIFICATIONS §12.0e, `training-v1`)
+- **Pinned integer arithmetic:** every number is a 64-bit integer, and every rounding is pinned.
+  - The functions it needs (2^x, sine and cosine, the square root) are fixed polynomials and
+    integer steps. Their constants are written in the specification.
+  - Floating point can't promise the same result from one machine to the next. This does, with
+    any number of threads, because integer sums don't depend on their order.
+- **Every checkpoint is a model of the AI line:**
+  - the forward pass uses the line's own weight values;
+  - the master weights, kept to 32 fractional bits, take the gradients.
+  So a training run is a path of addresses on the line, and the trained model is on the line too.
+- **A run is a folder** (no map needed):
+  - `training.ini`: the model's shape, where it starts, how it learns;
+  - `order.txt`: every window of bytes it learns from, in order, written out;
+  - `corpus/`: the material itself;
+  - `result.txt`, once trained: its address at every checkpoint, and the final model's SHA-256.
 
-## In the hallway
-- **The door:** AI stands after WORLDS and before BINARY, in deep violet with lilac edges.
-- **On the shelf:** a crate showing what the model says, started from a newline. Bytes that are not
-  printable are drawn as `·`.
-- **In hand:** the shape, what it says, and the conversation. Enter opens `SAY > `:
-  - it continues your line until it writes a newline of its own, at most 80 bytes;
-  - when its 512 positions are full, it starts again.
-- **F, J and the viewer:**
-  - F saves `sieve-ai-<the address's first 12 hex digits>.safetensors`;
-  - J finds that file on the binary line;
-  - the viewer has a WEIGHTS tab: the tensors, then the digits.
-- **T:** refuses with a message pointing to `sieve ai --warp`.
-- **The setup menu:**
-  - AI rows for layers, width (in steps of twice the heads), heads (only those that keep the head
-    size even) and bits;
-  - FIND MY LIMITS grows the layers.
-- **The map:** a bar more than 8 times the median no longer sets the scale; it is drawn broken.
-  Without this, the AI line's 32,768 bits flattened every other bar.
-- **`--talk TEXT`** (after `--take`) prints a conversation, for scripts.
-- **The degrees sample** now has eleven dimensions: 3,960 items and 13,321,756 bytes (mostly the
-  models, 131,072 bytes of weights each). Its `.sieve` is 482,495 bytes.
-- **No filters yet.** What a model says is floating point, so it cannot decide which models
-  survive until the arithmetic is pinned (IDEAS §15).
+  Packed, it's an ordinary v4 `.sieve`. Training it again must give `result.txt` byte for byte;
+  that's the check.
+- **It learns:**
+  - A Micro model reads Kurd Laßwitz's *Die Universalbibliothek* (1904, the Library of Babel's
+    forerunner, 21 KB) thirty times over in about five seconds.
+  - It goes from 11.9 bits a byte (guessing) to 2.9.
+  - It writes German-looking words: "eine", "der", "meine Zeichen keiner eine Biblions".
+  - A wider model (width 32, 8 bits) writes "der Bibliothek".
+
+## In the hallway: the main menu's AI Training Harness
+- **The runs:** it lists the runs in the `training` folder beside the programs, both folders and
+  `.sieve` files.
+- **Enter trains the selected run.** Training runs on a worker and shows:
+  - its progress;
+  - a curve of bits a byte;
+  - what the model now says;
+  - for a run trained before, **REPRODUCED EXACTLY**, or where it differs.
+- **N** records a new run from a file or folder you type, then trains it.
+- **P** packs a run folder as a `.sieve`.
+- **G** goes to the trained model on the AI line, in the run's shape, and puts it in your hand to
+  talk to.
+- **Sieve ships one run,** `universalbibliothek.sieve` (79 KB). **Training it again on your
+  Windows build is the first real test across machines:** if it says REPRODUCED EXACTLY, MSVC's
+  arithmetic is the same as GCC's here, bit for bit.
 
 ## The tool
-- **`sieve ai`:**
-  - with no address, the line's size;
-  - `--read ADDR`, `--bearing DEG` or `--browse N` run each model and print what it says after
-    `--prompt`;
-  - `--out FOLDER` writes `config.json`, `model.safetensors` (F32) and `tokenizer.json`;
-  - `--warp PATH` takes a model's file back to its address, if it has the line's shape and every
-    weight is exactly one of the line's values.
-- **`sieve chat --raw`:** continues a text with no chat format, for the line's models. The reply's
-  statistics now read "read N tokens in X s; wrote M in Y s, Z a second".
-- **Core:**
-  - `sieve/aispace.hpp`;
-  - in `sieve/llm.hpp`: a `Model` built from tensors in memory, `continue_text` and
-    `Chat::last_reply_tokens()`.
+- **`sieve ai-train`:**
+  - `--record CORPUS --out FOLDER` records a run and trains it;
+  - `--sieve FILE` also packs it;
+  - `--model-out` writes the trained model's files, for `sieve chat --raw`;
+  - naming a run (a folder or a `.sieve`) trains it again and checks the result (exit 1 if it
+    isn't reproduced).
+- **The name:** `sieve train` already exists (it builds the guided ordering's models), so this is
+  `ai-train`.
 
 ## The oracle (`reference/sieve_ref.py`)
-- **`ai-vectors`:** `tests/vectors_ai_v1.tsv`, 30 rows. They cover three shapes, both orders, and
-  the bearings 0, 13, 137, 246 and 359: yours, Gemini's and mine.
-- **`ai-read`:** a model's files, which are the tool's byte for byte.
-- **`llm-logits`:** now reads F32 too. Its logits agree with the tool's to 1.5e-6.
+- **`TrainerRef`:** the training, written from §12.0e alone, in Python's integers.
+  - It matched the C++ the first time it ran, on every step.
+  - On two recorded runs it matched byte for byte, every checkpoint address and the model's hash
+    included.
+- **`train-vectors`:** `tests/vectors_training_v1.tsv`, nine steps on three shapes, plus the
+  functions at a few points.
+- **`train-replay`:** trains a run folder again and writes its `result.txt`.
+
+## On maps (your question)
+- **I agree, and have written it up:** IDEAS §16.3, and a note in SPECIFICATIONS §12.3.
+- **What a map adds that a manifest lacks:**
+  - files named but not held (a size and a hash);
+  - edges;
+  - metadata;
+  - a seal.
+- **All four fit in manifest v5:** a fourth way, "named", plus edge, metadata and seal lines.
+  `.map` then stops being written but can still be read.
+- **Training runs already show it working:** they're folders packed as `.sieve` files.
 
 ## Checked here (Linux)
-- **Unit tests:** 150,848 checks, 0 failures. The new ones cover:
-  - the vectors;
-  - round trips;
-  - addresses off the line and bad shapes, refused;
-  - the values;
-  - a model talking.
+- **Unit tests:** 150,974 checks, 0 failures. The new ones cover:
+  - the oracle's vectors;
+  - one thread and three giving the same model;
+  - the run's files read back.
 - **CI's new steps, all run here:**
-  - `sieve ai` at 246 degrees in both orders, against the oracle's files;
-  - warp;
-  - the logits against the oracle;
-  - `chat --raw`;
-  - the vectors regenerated and compared;
-  - in the hallway:
-    - the model at 137 degrees, saved with F, is the tool's file;
-    - a conversation;
-    - the setup menu;
-    - the doors WORLDS → AI → BINARY;
-    - the sample;
-    - the corridor walk of nine doors and back.
-- **Screenshots:**
-  - the shelves;
-  - a model in hand;
-  - the WEIGHTS viewer;
-  - the AI rows in the setup menu;
-  - the broken bar.
+  - a run recorded, then trained again:
+    - by the oracle, giving the same `result.txt`;
+    - from its `.sieve` with one thread: reproduced;
+    - with windows of two steps swapped: not reproduced.
+
+    (Swapping two windows within one step changes nothing, rightly: a step's gradients are summed.
+    That is now in the spec.)
+  - the shipped run, reproduced;
+  - in the harness:
+    - the shipped run, reproduced;
+    - a run recorded and trained;
+    - its model gone to, in hand on the AI line.
+  - the vectors, regenerated.
+- **Screenshots:** the main menu, the harness after training, and the model in hand.
 - **Builds:** the tool, the tests and the hallway, with no warnings.
-- **Not checked:** I have not built on Windows.
+- **Not checked:** I have not built on Windows. Please run the shipped run in the harness; that's
+  the test.
 
 ## Docs
-- **SPECIFICATIONS:**
-  - §12.0d;
-  - §3 now counts eleven lines.
+- **SPECIFICATIONS:** §12.0e, and a note in §12.3.
 - **README:**
-  - the AI line's paragraph;
-  - a `sieve ai` section;
-  - `--raw` in `chat`;
-  - the eleven lines;
-  - the sample's numbers.
+  - the harness;
+  - a `sieve ai-train` section;
+  - six main-menu choices.
 - **IDEAS:**
-  - §15 "Another reading", marked built, with what comes next;
+  - §15, training on the line;
+  - §16.3, maps folded into v5;
   - §16.8.
 - **HANDOFF:**
-  - the line overview (eleven lines);
+  - two rows in the file map;
   - a new entry.
 
-## Next on this line
-- Filters on the weights, and a guided order from a prior over weights (§16.8b).
-- Warping a model in from the hallway.
-- Larger shapes, as the engine gets faster.
+## New files
+- `core/include/sieve/training.hpp`, `core/src/training.cpp`
+- `tools/cli/train.hpp`, `tools/cli/train.cpp`, `tools/cli/train_cmd.cpp`
+- `client/harness.hpp`, `client/harness.cpp`
+- `data/training/universalbibliothek.sieve`
+- `tests/training_corpus.txt`, `tests/vectors_training_v1.tsv`
+
+Reconfigure CMake before building: there are new source files.

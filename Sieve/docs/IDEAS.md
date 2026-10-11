@@ -1049,6 +1049,20 @@ bytes, 4 bits a weight: 8,192 weights, 2^32768 models). Each model is run by the
 can be talked to; almost every one babbles, and positional neighbours say nearly the same thing.
 It names nothing more cheaply than its file does, as this paragraph says; what it gives is the
 space made walkable, and a place for priors over weights (§16.8b) to become a guided ordering.
+- **Trained on the line (11 October 2026):** `training-v1` (SPECIFICATIONS §12.0e) trains a model
+  of the line in integer arithmetic, every rounding pinned, so a recorded run (its recipe, the exact
+  order of the windows of text it learnt from, and that text) trains again to the same model, bit
+  for bit, on any machine and with any number of threads: the thesis's recorded, replayable
+  training trajectory, made literal. Every checkpoint is a model of the line, so a run is a path of
+  addresses. The quantisation is in the loop (master weights to 32 fractional bits, the forward
+  pass on the line's values), so the trained model is on the line by construction. A Micro model
+  learns Laßwitz's *Die Universalbibliothek* (21 KB, thirty times over) in about five seconds, from
+  11.9 to 2.9 bits a byte, and writes German-looking words ("eine", "der", "meine Zeichen"); a
+  wider one (width 32, 8 bits) writes "der Bibliothek". That run ships with Sieve
+  (`data/training/universalbibliothek.sieve`), so training it again anywhere checks the arithmetic
+  is the same there. Edward's view on filters for this line, agreed: seek the noise rather than
+  filter it out; what to reject is structure (runs, repeats, stepping), which trained weights do
+  not have.
 - **Next on this line:** filters on the weights themselves (what a model says is floating point,
   so it cannot decide which models survive until the arithmetic is pinned), a guided ordering by a prior over weights, warping a model in from
   the hallway, and larger shapes as the engine gets faster.
@@ -1127,6 +1141,21 @@ carrying items rather than their bytes, and as little as reproduces them.*
   (text, PNG, MIDI, OBJ, books, tracks, movies), which `sieve` and the hallway already have; the
   instructions shrink, the program grows once.
 
+*Then (11 October 2026), Edward's idea: no `.map` at all, the `.sieve` doing its work, from v5.*
+A map does four things an installer's manifest does not: it names files without holding them (a
+node is a claim, a size and a SHA-256, and a verified anchor is a local file that meets it); it
+links nodes (`contains`, `anchor`, and relations any tool or person adds, such as `trained-into`);
+it carries facts about them (metadata); and it can be sealed, and edited in place (add and remove
+nodes, as the node graph does). All four fit in a manifest: a fourth way for a file, **named**
+(size and hash, no bytes, so `sieve install` makes no file of it and reports it missing unless it
+is found), edge lines, metadata lines and a seal line. A map is then Sieve instructions whose
+manifest has edges, read by the node graph like any other, and one format is learnt, packed and
+checked instead of two. Old maps (`sieve-map-v1`, `-v2`) are still read: formats are versioned,
+never edited, so `.map` stops being written, not being read. Verdict: build, with v5.
+- **The training runs show it already works without a map** (§15, SPECIFICATIONS §12.0e): a run
+  is a folder (recipe, order, corpus, result), packed as an ordinary v4 `.sieve`; v5 will pack the
+  same folder more tightly, and nothing a run records changes.
+
 **16.4 A file type filter on the binary line.** Filter the binary dimension by file types, read
 from their headers.
 *Evaluation.* Built: `binary-kind-v1` keeps (or excludes) the files of chosen kinds, read from their
@@ -1177,7 +1206,9 @@ Ollama; Sieve runs the model itself (`sieve chat`, SPECIFICATIONS §12.0c): its 
 from the model's tokenizer.json, and its own forward pass, on the processor. The chat viewer and,
 later, the pinned arithmetic grow from that one engine. *Built (10 October 2026):* the AI line
 (SPECIFICATIONS §12.0d, §15 "Another reading"): every model of a small shape on the shelves, each
-one talked to in hand on that engine (Enter), and `sieve ai` on the command line.
+one talked to in hand on that engine (Enter), and `sieve ai` on the command line. *And (11 October
+2026):* the main menu's **AI Training Harness** and `sieve ai-train` (SPECIFICATIONS §12.0e): runs
+recorded, trained, trained again and checked bit for bit, and the trained model gone to on the line.
 - **(a) Filters from RLHF constants:** the preferences a model was tuned to; not available to us,
   so an idea for later, as Edward says.
 - **(b) A noise gradient as the primary filter for model weights:** weights made procedurally follow

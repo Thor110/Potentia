@@ -20,6 +20,7 @@
 #include "sieve/weights.hpp"
 #include "sieve/llm.hpp"
 #include "sieve/aispace.hpp"
+#include "sieve/training.hpp"
 #include "sieve/llm_tokenizer.hpp"
 #include "sieve/unicode_classes.hpp"
 #include "sieve/written.hpp"
@@ -3440,6 +3441,125 @@ void test_llm(const std::string& dir)
     std::filesystem::remove(path);
 }
 
+// training-v1 (SPECIFICATIONS §12.0e): the oracle's steps on small shapes, the functions, the same
+// result for any number of threads, and the files of a run read back.
+void test_training(const std::string& dir)
+{
+    using namespace sieve::training;
+    std::ifstream cin(dir + "training_corpus.txt", std::ios::binary);
+    CHECK(bool(cin));
+    const std::string corpus((std::istreambuf_iterator<char>(cin)), std::istreambuf_iterator<char>());
+    std::ifstream in(dir + "vectors_training_v1.tsv");
+    CHECK(bool(in));
+    struct Case
+    {
+        std::string shape;
+        std::unique_ptr<AiSpace> space;
+        std::unique_ptr<Trainer> one, many;
+        std::vector<Window> order;
+        uint32_t batch = 0, at = 0;
+    };
+    std::vector<Case> cases;
+    auto split = [](const std::string& line, char sep) {
+        std::vector<std::string> f;
+        std::stringstream ss(line);
+        std::string x;
+        while (std::getline(ss, x, sep)) f.push_back(x);
+        return f;
+    };
+    std::string line;
+    int steps = 0, functions = 0;
+    while (std::getline(in, line))
+    {
+        if (line.empty() || line[0] == '#') continue;
+        const std::vector<std::string> f = split(line, '\t');
+        if (f[0] == "exp" || f[0] == "sigmoid" || f[0] == "sincos" || f[0] == "pow2q32")
+        {
+            std::vector<std::string> got;
+            if (f[0] == "exp")
+                for (int64_t z : {int64_t(0), int64_t(-1), int64_t(-65536), int64_t(-300000), int64_t(-5000000)})
+                    got.push_back(std::to_string(fx::exp_q16(z)));
+            if (f[0] == "sigmoid")
+                for (int64_t x : {int64_t(0), int64_t(70000), int64_t(-70000), int64_t(8000000), int64_t(-8000000)})
+                    got.push_back(std::to_string(fx::sigmoid_q16(x)));
+            if (f[0] == "sincos")
+                for (int64_t a : {int64_t(0), int64_t(1) << 32, int64_t(7) << 32, int64_t(511) << 32, int64_t(6746518852)})
+                {
+                    int64_t s, c;
+                    fx::sincos_q16(a, s, c);
+                    got.push_back(std::to_string(s) + "," + std::to_string(c));
+                }
+            if (f[0] == "pow2q32")
+                for (int64_t y : {int64_t(0), int64_t(-1), -(int64_t(1) << 31), int64_t(-57070290109)})
+                    got.push_back(std::to_string(fx::pow2_q32(y)));
+            CHECK(split(f[1], ' ') == got);
+            ++functions;
+            continue;
+        }
+        CHECK(f.size() == 9);
+        if (f.size() != 9) continue;
+        if (cases.empty() || cases.back().shape != f[0] + f[1])
+        {
+            Case c;
+            c.shape = f[0] + f[1];
+            AiShape shape;
+            CHECK(std::sscanf(f[0].c_str(), "L%u/H%u/A%u/B%u", &shape.layers, &shape.width, &shape.heads, &shape.bits) == 4);
+            c.space = std::make_unique<AiSpace>(shape, "sieve");
+            Recipe r;
+            r.shape = shape;
+            r.batch = c.batch = uint32_t(std::stoul(f[2]));
+            r.learning_rate = f[3];
+            r.momentum = f[4];
+            const AiSpace::Digits start = c.space->digits_at(BigUint(0), AddressMode::Scrambled);
+            c.one = std::make_unique<Trainer>(*c.space, start, r, 1);
+            c.many = std::make_unique<Trainer>(*c.space, start, r, 3);
+            c.order = make_order({{"c", corpus.size()}}, uint32_t(std::stoul(f[1])), 1, 1);
+            cases.push_back(std::move(c));
+        }
+        Case& c = cases.back();
+        std::vector<std::span<const uint8_t>> batch;
+        for (uint32_t i = c.at; i < std::min<size_t>(c.order.size(), c.at + c.batch); ++i)
+            batch.push_back({reinterpret_cast<const uint8_t*>(corpus.data()) + c.order[i].offset, c.order[i].length});
+        c.at += c.batch;
+        const Score s1 = c.one->step(batch), s2 = c.many->step(batch);
+        CHECK(std::to_string(s1.prob_sum) == f[6] && std::to_string(s1.predictions) == f[7]);
+        CHECK(s2.prob_sum == s1.prob_sum && s2.predictions == s1.predictions);
+        const AiSpace::Digits& d = c.one->digits();
+        CHECK(Sha256::hex(Sha256::hash(std::string(d.begin(), d.end()))) == f[8]);
+        CHECK(c.many->digits() == d);
+        ++steps;
+    }
+    CHECK(steps == 9 && functions == 4);
+    std::cout << "training vectors checked: " << steps << " steps, " << functions << " functions" << std::endl;
+
+    // A run's files, read back as written.
+    Recipe r;
+    r.start = "1f";
+    r.start_mode = AddressMode::Positional;
+    r.learning_rate = "0.0005";
+    CHECK(Recipe::parse(r.text()).text() == r.text());
+    CHECK(Recipe::parse(r.text()).learning_rate_q16() == 33); // round(0.0005 * 65536) = 32.768
+    bool refused = false;
+    try { Recipe::parse("[training]\nversion = training-v2\n"); }
+    catch (const std::invalid_argument&) { refused = true; }
+    CHECK(refused);
+    refused = false;
+    r.batch = 33;
+    try { r.check(); }
+    catch (const std::invalid_argument&) { refused = true; }
+    CHECK(refused);
+    const std::vector<Window> order = make_order({{"corpus/a.txt", 100}, {"corpus/b.txt", 3}}, 33, 2, 7);
+    CHECK(order.size() == 2 * (4 + 1)); // 100 bytes: 0, 32, 64, 96 (4 bytes); 3 bytes: 0
+    CHECK(parse_order(order_text(order)).size() == order.size());
+    CHECK(order_text(parse_order(order_text(order))) == order_text(order));
+    Result res;
+    res.steps = 3;
+    res.checkpoints = {{0, {}, "00ff"}, {3, {12345, 64}, "0100"}};
+    res.final_address = "0100";
+    res.model_sha256 = std::string(64, 'a');
+    CHECK(Result::parse(res.text()).text() == res.text());
+}
+
 void test_ai_vectors(const std::string& dir)
 {
     std::ifstream in(dir + "vectors_ai_v1.tsv");
@@ -5085,6 +5205,7 @@ void run_all(int argc, char** argv)
         test_weights();
         test_llm(dir);
         test_ai_vectors(dir);
+        test_training(dir);
         test_titled_vectors(dir + "vectors_titled_v1.tsv");
         test_binary_vectors(dir + "vectors_binary_v1.tsv");
         test_chunk_vectors(dir + "vectors_chunks_v1.tsv");

@@ -135,6 +135,8 @@ thirty-two-column shelf is half of it; never larger than one.
 | `tools/cli/pack.cpp`, `tools/cli/locate.cpp` | Installers: the manifest versions, packing (v4) and unpacking (the LZMA SDK), installing. |
 | `client/tailoring.cpp`, `tools/cli/tailor.cpp`, `tools/cli/weigh.cpp` | COST's K and Return, the search behind them and `sieve tailor` (a line's filters tailored to items, by their shortest routes), and files weighed against their own addresses (`sieve locate --weigh`, the File Locator). |
 | `client/mesh.cpp` | The software rasteriser behind Real Graphics. |
+| `core/src/aispace.cpp`, `core/src/llm.cpp`, `core/src/training.cpp` | The AI line (`aispace-v1`), the engine that runs its models, and `training-v1`, training them in pinned integer arithmetic. |
+| `client/harness.cpp`, `tools/cli/train.cpp`, `tools/cli/train_cmd.cpp` | The AI Training Harness (main menu), training runs (load, train, record, pack) and `sieve ai-train`. |
 | `tools/sieve_cli.cpp` | The `sieve` command. |
 | `reference/sieve_ref.py` | The independent oracle and the vector generator. |
 | `tests/` | Core tests and the committed conformance vectors. |
@@ -2209,3 +2211,51 @@ cover and a title.
   in hand, the WEIGHTS viewer, the setup menu's AI rows and the broken bar.
 - **Not yet:** filters and a guided order for the line; warping in from the hallway; addresses of
   text under a model (the pinned arithmetic, IDEAS §15).
+
+### The AI Training Harness, and training on the record (11 October 2026)
+- **Edward's ideas:** a training harness that records exactly what a model learnt from and in what
+  order, so that anyone can train it again and get the same model (the thesis's recorded training
+  trajectories); an "AI Training Harness" on the main menu; and, later, no `.map` at all, the
+  `.sieve` doing its work from manifest v5 (IDEAS §16.3). A run is therefore a folder packed as an
+  ordinary v4 `.sieve`, not a map, and needs no new format.
+- **Core, `training-v1`** (`sieve/training.hpp`, SPECIFICATIONS §12.0e):
+  - every number a 64-bit integer, Q16 activations and gradients, Q32 master weights; every
+    rounding down, every stored value held to ±2^23; 2^x, sine and cosine as fixed polynomials,
+    the square root exact, all constants in the specification;
+  - the Llama forward pass and its backward pass, written out in that arithmetic; the
+    quantisation in the loop (the forward pass on the line's values, the master weights taking the
+    gradient), so every checkpoint is a model of the AI line;
+  - SGD with momentum; integer sums, so the batch's windows go to threads and the result does not
+    change (checked: one thread and three agree);
+  - `Recipe` (training.ini), `order.txt` (`sieve-order-v1`, every window written out) with
+    `make_order`, `Result` (result.txt: checkpoints with their addresses, the final model's
+    SHA-256).
+  - Tuned: learning rate 0.0005, momentum 0.9, 4 windows of 65 bytes a step. A Micro model goes
+    from 11.9 to 2.9 bits a byte on *Die Universalbibliothek* in about five seconds.
+- **The oracle:** `TrainerRef`, written from §12.0e alone; `train-vectors`
+  (`tests/vectors_training_v1.tsv`: nine steps on three shapes, and the functions at a few
+  points) and `train-replay` (a run folder trained again, its result.txt written). It matched the
+  C++ on the first run, step for step, and on two recorded runs byte for byte, every checkpoint
+  address and the model's hash included.
+- **The tool:** `sieve ai-train` (the name `sieve train` was taken by the guided models):
+  `--record CORPUS --out FOLDER` (and `--sieve`, `--model-out`, `--address-out`), or a run named to
+  train again and check (exit 1 if not reproduced). `tools/cli/train.*` (in `sieve_compare`, which
+  the hallway links) holds the runs; `train_cmd.cpp` the command.
+- **The hallway:** the main menu's sixth item, `Harness` (`client/harness.*`): the runs in
+  `training/` beside the programs; Enter trains on a worker (progress, the bits-a-byte curve, the
+  verdict, what the model says); N records from a typed path and trains; P packs; G goes into the
+  hallway on the AI line in the run's shape with the model in hand (`Hallway::go_to_ai`, skipping
+  the setup menu once). Scripting: `--harness [--training-dir DIR] [--script KEYS,=text]`.
+- **Shipped:** `data/training/universalbibliothek.sieve` (79 KB: the run, trained, its result
+  included), copied to `training/` by the build and the release. Training it again on Windows is
+  the first check that MSVC's integers give what GCC's did.
+- **Checked:** unit tests (the vectors, threads, the files read back): 150,974 checks, 0 failures.
+  CI's new steps, all run here: a tiny run recorded, trained again by the oracle to the same
+  result.txt, again from its `.sieve` with one thread (reproduced), with windows of two steps
+  swapped (not reproduced; within a step the order cannot matter, the gradients being summed), the
+  shipped run reproduced; the harness reproducing the shipped run, recording and training a run,
+  and going to its model; the vectors regenerated. Screenshots of the main menu, the harness after
+  training, and the model in hand.
+- **Not yet:** learning-rate schedules and other optimisers (each a new version); training wider
+  models faster (the arithmetic is plain loops); runs with several models (a curriculum); maps
+  folded into manifest v5.

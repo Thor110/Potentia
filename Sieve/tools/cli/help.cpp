@@ -439,6 +439,40 @@ const std::vector<Page>& pages()
           {"sieve ai --bearing 246", "the model at 246 degrees, and what it says"},
           {"sieve ai --bearing 137 --mode scrambled --out m137", "another, its files kept"},
           {"sieve chat --model m137 --raw --prompt \"Hello\"", "and talked to"}}},
+        {"ai-train", "Train a model of the AI line, recording what it learnt from and in what order, so it can be trained again exactly.",
+         "sieve ai-train --record CORPUS --out FOLDER [--ai-layers L] [--ai-width H] [--ai-heads A] [--ai-bits B]\n"
+         "  [--start ADDR] [--mode MODE] [--learning-rate X] [--momentum X] [--batch N] [--window N] [--epochs N] [--seed S]\n"
+         "  [--checkpoint-every N] [--sieve FILE.sieve] [--model-out FOLDER] [--address-out FILE] [--threads N] [--quiet]\n"
+         "  sieve ai-train RUN [--threads N] [--model-out FOLDER] [--address-out FILE] [--result-out FILE] [--quiet]",
+         "A run (training-v1, SPECIFICATIONS §12.0e) is a folder, or Sieve instructions (.sieve) made of\n"
+         "one: training.ini (the model's shape, where it starts on the AI line, and how it learns),\n"
+         "order.txt (every window of bytes it learns from, in order), those files (corpus/), and once\n"
+         "trained, result.txt (its address at each checkpoint, and the final model's SHA-256). Training is\n"
+         "integer arithmetic, every rounding pinned, so a run trained again gives result.txt byte for byte\n"
+         "on any machine, with any number of threads; that is the check. Every checkpoint is a model on the\n"
+         "AI line (sieve ai --read). --record makes a run from a file or a folder of files and trains it;\n"
+         "naming a run trains it again and says whether it reproduced its result (exit 1 if not), or, for\n"
+         "a folder never trained, writes its result.txt. Training stays on the processor: a Micro model\n"
+         "learns a 21 KB text thirty times over in about five seconds.",
+         {{"--record CORPUS", "A new run from a file, or every file under a folder, copied into it."},
+          {"--out FOLDER", "With --record: the new run's folder (new, or empty)."},
+          {"--ai-layers L, --ai-width H, --ai-heads A, --ai-bits B", "The model's shape, as the AI line's (1, 16, 2, 4)."},
+          {"--start ADDR, --mode MODE", "Where it starts on the AI line (scrambled 0: weights spread evenly)."},
+          {"--learning-rate X, --momentum X", "How far each step moves the weights (0.0005, 0.9)."},
+          {"--batch N", "Windows a step (4; at most 32)."},
+          {"--window N", "Bytes a window (65: it predicts 64 of them; at most 513)."},
+          {"--epochs N, --seed S", "How many times it reads the corpus (30), and the shuffle's seed (1)."},
+          {"--checkpoint-every N", "Steps between the addresses result.txt lists (100)."},
+          {"--sieve FILE", "Pack the run folder, result and all, as Sieve instructions."},
+          {"--model-out FOLDER", "Write the final model's files (for sieve chat --model FOLDER --raw)."},
+          {"--address-out FILE", "Write the final model's address (positional, hex)."},
+          {"--result-out FILE", "Write the result there as well."},
+          {"--prompt TEXT", "What the trained model is asked to continue, to show what it learnt (a newline)."},
+          {"--threads N", "Threads (all the processor's); the result does not change."},
+          {"--quiet", "Only the summary, not every checkpoint."}},
+         {{"sieve ai-train --record universalbibliothek.txt --out ub --sieve ub.sieve", "record a run, train it, pack it"},
+          {"sieve ai-train ub.sieve", "train it again from the .sieve, and check"},
+          {"sieve ai-train ub --model-out ub-model && sieve chat --model ub-model --raw", "and talk to what it became"}}},
 
         {"dicts", "List the registered dictionaries, or hash a new one for registration.",
          "sieve dicts [--hash FILE]",

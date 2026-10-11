@@ -276,6 +276,17 @@ jobs:
           $exe chat --model ai246-scrambled --logits "Hello, shelf." --logits-out ai-logits.f32 > /dev/null
           python reference/sieve_ref.py llm-logits "Hello, shelf." --model ai246-scrambled --compare ai-logits.f32
           $exe chat --model ai246-positional --raw --prompt "Hello" --max-tokens 16 > /dev/null
+          # Training (sieve ai-train, training-v1): a run recorded and trained; the oracle, written apart,
+          # trains it again from its folder and writes the same result.txt; trained again from its
+          # .sieve with one thread, it is reproduced; with windows of two steps swapped, it is not (within
+          # a step the order cannot matter: its windows' gradients are summed);
+          # and the run shipped with Sieve trains again to its own result, as it did where it was made.
+          $exe ai-train --record tests/training_corpus.txt --out tiny-run --ai-width 8 --ai-heads 2 --ai-bits 3 --window 17 --epochs 2 --checkpoint-every 3 --learning-rate 0.01 --sieve tiny-run.sieve --quiet > /dev/null
+          python reference/sieve_ref.py train-replay --run tiny-run | tr -d '\r' | cmp - tiny-run/result.txt
+          $exe ai-train tiny-run.sieve --threads 1 --quiet | tr -d '\r' | q "^reproduced exactly"
+          python -c "import sys; p='tiny-run/order.txt'; l=open(p).read().split('\n'); l[1],l[5]=l[5],l[1]; open(p,'w').write('\n'.join(l))"
+          $exe ai-train tiny-run --quiet | tr -d '\r' | q "^NOT reproduced"
+          $exe ai-train data/training/universalbibliothek.sieve --quiet | tr -d '\r' | q "^reproduced exactly"
           # And the same line in the hallway: a sixth door, the cube in hand, green on clay.
           H=build/hallway
           [ -f build/Release/hallway.exe ] && H=build/Release/hallway.exe
@@ -702,6 +713,14 @@ jobs:
           q "^it: " ai-talk.txt
           downs=$(python -c "print(','.join(['Down']*41))")
           $H --menu --press "$downs" --screenshot menu-ai.png | q "saved menu-ai.png"
+          # The AI Training Harness (main menu): the run shipped with Sieve, trained again, comes out the
+          # same; a run recorded there from a text is trained and its result written; and GO TO IT
+          # stands on the AI line with the model it trained in hand.
+          $H --harness --training-dir data/training --script "Return" --screenshot harness.png | tr -d '\r' | q "^harness: REPRODUCED EXACTLY"
+          mkdir -p hruns
+          $H --harness --training-dir hruns --script "N,=tests/training_corpus.txt,Return" --screenshot harness-new.png | tr -d '\r' | q "^harness: TRAINED"
+          [ -f hruns/training_corpus/result.txt ]
+          $H --harness --training-dir hruns --script "g" --screenshot harness-go.png | tr -d '\r' | q "the model the run trained, in hand"
                     # From the main menu: the same locator, with no world to walk to, so Enter does not go.
           $H --main-menu --locate tests/manifest_fixture/a.txt --press "Return" --screenshot locate-menu.png | q "file locator (main menu): open, no Go to it"
           # The demonstration (IDEAS 16.9): every dimension's item at each whole degree, as one
@@ -1137,6 +1156,7 @@ jobs:
           python sieve_ref.py composition-vectors | diff - ../tests/vectors_compositions_v1.tsv
           python sieve_ref.py world-vectors | diff - ../tests/vectors_worlds_v1.tsv
           python sieve_ref.py ai-vectors | diff - ../tests/vectors_ai_v1.tsv
+          python sieve_ref.py train-vectors --corpus ../tests/training_corpus.txt | diff - ../tests/vectors_training_v1.tsv
           python sieve_ref.py titled-vectors | diff - ../tests/vectors_titled_v1.tsv
           python sieve_ref.py binary-vectors | diff - ../tests/vectors_binary_v1.tsv
           python sieve_ref.py chunk-vectors | diff - ../tests/vectors_chunks_v1.tsv
