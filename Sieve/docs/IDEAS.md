@@ -1299,3 +1299,55 @@ few places as land near the unit (up to 20) and the walk carries the rest, leadi
 (IEEE 754's "hidden bit", the leading 1 of a normalised number left unstored, saves exactly one
 bit, because it is always 1.) Edward had hoped for a byte at least; it is one bit at most, and on
 an address nothing, so it is not worth a format of its own.
+
+## 18. Edward's ideas of 11 October 2026
+
+**18.1 Random maze generators as distortion filters.** Edward's words: random maze generators used
+as distortion filters, as an aid to shifting a file towards a whole number; either a pure binary
+flip or a byte juggler of some kind, probably both, as a setting of the filter (Binary or Byte).
+If the full rotation (the item number) is the whole file, any simple shuffle has only a 1 in
+(state space size) chance of landing it at the far end, so a reduction is all but guaranteed,
+and simply proved. Does the state space still contain everything? In theory yes, but applied with
+other filters it might lose data. And the maze can be undone if the seed of its PRNG is recorded.
+
+*Evaluation.*
+- **Everything is still there, if the maze is a permutation.** A seeded maze defines a bijection
+  in two ways: the order in which a maze's path visits every cell once (a permutation of bit or
+  byte positions), or a mask laid over the file (a binary flip: XOR with bits drawn from the maze).
+  Either is undone with the seed, and maps the line onto itself, every file to exactly one file. A
+  generator whose path can visit a cell twice, or skip one, is not a bijection and does lose
+  files; so the maze has to be specified as a permutation (or a mask) and versioned like any
+  ordering.
+- **The far end, and the average.** Edward is right about the far end: the file at the last place
+  goes, under a random permutation, to a place spread evenly over the line, half-way on average
+  and in the first `2^-k` of it with chance `2^-k`. But the same permutation moves another file
+  from near the front out to where that one was: a permutation only re-deals the places, so over
+  every file the total is unchanged, and the average file gains nothing. Choosing the seed for
+  the file (the best of `k` mazes) brings it about `log2 k` bits nearer the front, and the seed
+  costs the same `log2 k` bits to name: §16's counting argument, and §17.1's rotation, again. The
+  reduction for the far-end file is real; it is paid for by the files it displaces, or by its seed.
+- **What each kind can do.**
+  - *Moving bits* keeps how many ones the file has, so the smallest it can reach is those ones
+    packed at the low end; naming the permutation that does it costs `log2 C(n, ones)` bits, which
+    is what the arrangement was worth.
+  - *Moving bytes* keeps the multiset of bytes: sorted, a file is smallest, and naming the order
+    back costs `log2` of the number of distinct orders of its bytes, again exactly what was saved.
+  - *Flipping bits* (a mask) can reach any file, 0 included, but only with a mask as long as the
+    file, chosen for it.
+- **With other filters.** A bijection applied as an ordering (in place of the scrambled order's
+  shuffle) changes where files stand, not which survive: nothing is lost. Applied as a filter's
+  view (a stack judging the file after the maze), it is a different filter: it keeps other files,
+  and those it drops are dropped from the compact line exactly as any filter drops them, still on
+  the full line. The loss Edward suspects happens only if a reader has a file's address but not the
+  maze it was filtered through: so the maze's version and seed belong to the stack's id, as every
+  filter's settings do.
+- **Where it can help.** Not as a reducer chosen per file, but agreed in advance and paired with a
+  prediction: a byte juggler that knows a file type (moving a header's fixed fields, or runs of
+  zeros, to where a guided ordering expects them) makes the file more predictable, and the guided
+  ordering is what turns predictability into shorter addresses. As a keyed ordering, a maze is as
+  good as shuffle-sha256-v1 (every file once, undone with the key), and it can be drawn: the
+  maze that orders a line could be walked in the hallway.
+- **Verdict:** worth building as a transform with a setting for bits or bytes, specified as a
+  permutation (or mask) and versioned: as an alternative keyed ordering, and as an agreed
+  format-aware transform under a guided ordering. Not as a per-file reducer: there it meets the
+  counting argument, as every scheme that chooses among options for one file does.
