@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <thread>
 
 namespace hallway {
 
@@ -68,9 +69,44 @@ std::string printable(const std::string& bytes)
     return out;
 }
 
+void SDLCALL on_folder(void* user, const char* const* files, int)
+{
+    if (!files || !files[0]) return; // cancelled, or the dialog failed
+    static_cast<Harness*>(user)->picked(files[0]);
+}
+
+std::string duration(double secs)
+{
+    char b[48];
+    if (secs < 90) std::snprintf(b, sizeof b, "%.0f s", std::max(1.0, secs));
+    else if (secs < 90 * 60) std::snprintf(b, sizeof b, "%.0f min", secs / 60);
+    else if (secs < 48 * 3600) std::snprintf(b, sizeof b, "%.1f h", secs / 3600);
+    else std::snprintf(b, sizeof b, "%.1f days", secs / 86400);
+    return b;
+}
+
+std::string megabytes(uint64_t bytes)
+{
+    char b[48];
+    if (bytes < (uint64_t(1) << 30)) std::snprintf(b, sizeof b, "%llu MB", (unsigned long long)((bytes + (1 << 20) - 1) >> 20));
+    else std::snprintf(b, sizeof b, "%.1f GB", double(bytes) / double(uint64_t(1) << 30));
+    return b;
+}
+
+std::string kilobytes(uint64_t bytes)
+{
+    if (bytes >= (uint64_t(1) << 20)) return megabytes(bytes);
+    return grouped((bytes + 1023) / 1024) + " KB";
+}
+
+const char* const kRates[] = {"0.00002", "0.00005", "0.0001", "0.0002", "0.0005", "0.001", "0.002", "0.005", "0.01", "0.02", "0.05", "0.1"};
+const uint32_t kWindows[] = {9, 17, 33, 65, 129, 257, 513};
+constexpr int kSettingRows = 9; // layers, width, heads, bits, learning rate, batch, window, epochs, reading
+
 } // namespace
 
-Harness::Harness(SDL_Window* window, SDL_Renderer* renderer, fs::path runs_dir) : window_(window), r_(renderer), dir_(std::move(runs_dir))
+Harness::Harness(SDL_Window* window, SDL_Renderer* renderer, fs::path runs_dir, sieve::AiShape shape)
+    : window_(window), r_(renderer), dir_(std::move(runs_dir)), line_shape_(shape)
 {
     std::error_code ec;
     fs::create_directories(dir_, ec);
@@ -147,9 +183,12 @@ void Harness::act(Action a)
     {
     case Action::Train: start_training(); break;
     case Action::Record:
+        // The corpus: a folder, chosen in the system's folder dialog (or, the dialog aside, its path
+        // typed, as scripts do).
         prompting_ = true;
         prompt_.clear();
         SDL_StartTextInput(window_);
+        if (!scripted_) SDL_ShowOpenFolderDialog(on_folder, this, window_, nullptr, false);
         break;
     case Action::MoveUp:
     case Action::MoveDown:
@@ -264,8 +303,36 @@ void Harness::start_training()
     });
 }
 
+void Harness::picked(const std::string& folder)
+{
+    std::lock_guard<std::mutex> lock(mu_);
+    picked_ = folder;
+}
+
 void Harness::poll()
 {
+    std::optional<std::string> folder;
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        folder.swap(picked_);
+    }
+    if (folder && prompting_)
+    {
+        prompting_ = false;
+        SDL_StopTextInput(window_);
+        open_curriculum(*folder);
+    }
+    if (trial_)
+    {
+        std::lock_guard<std::mutex> lock(trial_->m);
+        if (trial_->done)
+        {
+            step_secs_ = trial_->secs;
+            measured_for_ = trial_for_;
+        }
+    }
+    if (trial_ && measured_for_ == trial_for_) trial_.reset();
+    if (curriculum_) start_trial();
     if (!job_.valid() || job_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
     took_ = std::chrono::duration<double>(std::chrono::steady_clock::now() - started_).count();
     try
@@ -335,8 +402,16 @@ void Harness::poll()
 
 void Harness::settle()
 {
-    if (job_.valid()) job_.wait();
-    poll();
+    for (int i = 0; i < 4; ++i) // a training, and the trials a change of settings starts
+    {
+        if (job_.valid()) job_.wait();
+        while (trial_)
+        {
+            poll();
+            if (trial_) SDL_Delay(5);
+        }
+        poll();
+    }
 }
 
 Harness::Result Harness::run()
@@ -399,6 +474,16 @@ void Harness::handle(const SDL_Event& event)
             if (inside(rect, e.button.x, e.button.y))
             {
                 cur_row_ = i;
+                focus_settings_ = false;
+                return;
+            }
+        for (const auto& [rect, i] : set_rects_)
+            if (inside(rect, e.button.x, e.button.y))
+            {
+                // A setting: chosen, and stepped by clicking its right half up, its left half down.
+                if (focus_settings_ && set_row_ == i) change_setting(i, e.button.x > rect.x + rect.w / 2 ? 1 : -1, false);
+                focus_settings_ = true;
+                set_row_ = i;
                 return;
             }
         for (const auto& [rect, i] : row_rects_)
@@ -415,6 +500,124 @@ void Harness::handle(const SDL_Event& event)
                 return;
             }
     }
+}
+
+void Harness::open_curriculum(const std::string& folder)
+{
+    // The corpus's files, to put in the order they are to be read (the curriculum), and the new
+    // run's settings, starting from the AI line's shape with the learning rate suggested for it.
+    const fs::path corpus = from_u8(folder);
+    try
+    {
+        curriculum_ = sieve::cli::corpus_files(corpus);
+        cur_row_ = 0;
+        focus_settings_ = false;
+        set_row_ = 0;
+        recipe_ = {};
+        recipe_.shape = line_shape_;
+        recipe_.learning_rate = sieve::cli::suggested_learning_rate(recipe_);
+        lr_suggested_ = true;
+        new_name_ = u8(fs::absolute(corpus).lexically_normal().filename());
+        if (new_name_.empty()) new_name_ = u8(fs::absolute(corpus).lexically_normal().parent_path().filename());
+        if (new_name_.empty()) new_name_ = "run";
+        say(tr("harness.curriculum.status"));
+    }
+    catch (const std::exception& ex)
+    {
+        say(trf("harness.failed", {ex.what()}), true);
+    }
+}
+
+void Harness::change_setting(int row, int dir, bool big)
+{
+    sieve::training::Recipe& rc = recipe_;
+    sieve::AiShape& sh = rc.shape;
+    auto even_heads = [&](uint32_t h) { return h >= 1 && sh.width % h == 0 && (sh.width / h) % 2 == 0; };
+    switch (row)
+    {
+    case 0: sh.layers = uint32_t(std::clamp(int(sh.layers) + dir * (big ? 4 : 1), 1, 64)); break;
+    case 1:
+    {
+        // The width in steps of two heads' worth, so the heads still divide it into even halves
+        // (Shift: doubled or halved).
+        const uint32_t step = 2 * sh.heads;
+        uint32_t w = big ? (dir > 0 ? sh.width * 2 : sh.width / 2) : uint32_t(int(sh.width) + dir * int(step));
+        w = std::max(step, w / step * step);
+        sh.width = std::min(w, 4096 / step * step);
+        break;
+    }
+    case 2:
+    {
+        // The heads: the next number either way that divides the width into heads of an even size.
+        for (int h = int(sh.heads) + dir; h >= 1 && h <= int(sh.width); h += dir)
+            if (even_heads(uint32_t(h)))
+            {
+                sh.heads = uint32_t(h);
+                break;
+            }
+        break;
+    }
+    case 3: sh.bits = uint32_t(std::clamp(int(sh.bits) + dir, 1, 8)); break;
+    case 4:
+    {
+        int i = 0;
+        for (int k = 0; k < int(std::size(kRates)); ++k)
+            if (std::stod(kRates[k]) <= std::stod(rc.learning_rate) * (1 + 1e-9)) i = k;
+        i = std::clamp(i + dir, 0, int(std::size(kRates)) - 1);
+        rc.learning_rate = kRates[i];
+        lr_suggested_ = rc.learning_rate == sieve::cli::suggested_learning_rate(rc);
+        return;
+    }
+    case 5: rc.batch = uint32_t(std::clamp(int(rc.batch) + dir * (big ? 4 : 1), 1, 32)); break;
+    case 6:
+    {
+        int i = 0;
+        for (int k = 0; k < int(std::size(kWindows)); ++k)
+            if (kWindows[k] <= rc.window) i = k;
+        rc.window = kWindows[std::clamp(i + dir, 0, int(std::size(kWindows)) - 1)];
+        break;
+    }
+    case 7: rc.epochs = uint32_t(std::clamp(int(rc.epochs) + dir * (big ? 10 : 1), 1, 10000)); break;
+    case 8: act(Action::Reading); return;
+    default: return;
+    }
+    // A change of shape, batch or window moves the suggested rate, and the rate with it while it
+    // is still the one suggested.
+    if (lr_suggested_) rc.learning_rate = sieve::cli::suggested_learning_rate(rc);
+}
+
+void Harness::start_trial()
+{
+    if (!curriculum_ || trial_) return;
+    const sieve::training::Recipe& rc = recipe_;
+    const std::string key = std::to_string(rc.shape.layers) + "/" + std::to_string(rc.shape.width) + "/" + std::to_string(rc.shape.heads) + "/" +
+                            std::to_string(rc.shape.bits) + "/" + std::to_string(rc.batch) + "/" + std::to_string(rc.window);
+    if (key == measured_for_) return;
+    // Nothing is measured that would not fit: a shape past half this computer's memory says so instead.
+    const sieve::cli::TrainingEstimate est = sieve::cli::estimate_training(rc, *curriculum_);
+    if (est.bytes > uint64_t(SDL_GetSystemRAM()) * (uint64_t(1) << 20) / 2)
+    {
+        measured_for_ = key;
+        step_secs_ = -1;
+        return;
+    }
+    trial_for_ = key;
+    const sieve::training::Recipe copy = rc;
+    const std::vector<sieve::cli::TrainingFile> files = *curriculum_;
+    trial_ = std::make_shared<Trial>();
+    std::thread([t = trial_, copy, files] {
+        double secs = -1;
+        try
+        {
+            secs = sieve::cli::measure_training_step(copy, files);
+        }
+        catch (const std::exception&)
+        {
+        }
+        std::lock_guard<std::mutex> lock(t->m);
+        t->secs = secs;
+        t->done = true;
+    }).detach();
 }
 
 void Harness::key(SDL_Keycode k, SDL_Keymod mod)
@@ -435,25 +638,9 @@ void Harness::key(SDL_Keycode k, SDL_Keymod mod)
         {
             prompting_ = false;
             SDL_StopTextInput(window_);
-            // The corpus's files, to put in the order they are to be read (the curriculum), named
-            // after what it learns from.
             std::string path = prompt_;
             if (path.size() >= 2 && path.front() == '"' && path.back() == '"') path = path.substr(1, path.size() - 2);
-            const fs::path corpus = from_u8(path);
-            try
-            {
-                curriculum_ = sieve::cli::corpus_files(corpus);
-                cur_row_ = 0;
-                recipe_ = {};
-                new_name_ = u8(corpus.stem());
-                if (new_name_.empty()) new_name_ = u8(fs::absolute(corpus).parent_path().filename());
-                if (new_name_.empty()) new_name_ = "run";
-                say(tr("harness.curriculum.status"));
-            }
-            catch (const std::exception& ex)
-            {
-                say(trf("harness.failed", {ex.what()}), true);
-            }
+            open_curriculum(path);
         }
         return;
     }
@@ -469,11 +656,22 @@ void Harness::key(SDL_Keycode k, SDL_Keymod mod)
         switch (k)
         {
         case SDLK_ESCAPE: act(Action::Cancel); break;
-        case SDLK_UP: shift ? act(Action::MoveUp) : void(cur_row_ = std::max(0, cur_row_ - 1)); break;
-        case SDLK_DOWN: shift ? act(Action::MoveDown) : void(cur_row_ = std::min(n - 1, cur_row_ + 1)); break;
+        case SDLK_TAB: focus_settings_ = !focus_settings_; break;
+        case SDLK_UP:
+            if (focus_settings_) set_row_ = std::max(0, set_row_ - 1);
+            else if (shift) act(Action::MoveUp);
+            else cur_row_ = std::max(0, cur_row_ - 1);
+            break;
+        case SDLK_DOWN:
+            if (focus_settings_) set_row_ = std::min(kSettingRows - 1, set_row_ + 1);
+            else if (shift) act(Action::MoveDown);
+            else cur_row_ = std::min(n - 1, cur_row_ + 1);
+            break;
+        case SDLK_LEFT:
+        case SDLK_RIGHT:
+            if (focus_settings_) change_setting(set_row_, k == SDLK_LEFT ? -1 : 1, shift);
+            break;
         case SDLK_M: act(Action::Reading); break;
-        case SDLK_LEFT: recipe_.epochs = uint32_t(std::max(1, int(recipe_.epochs) - (shift ? 10 : 1))); break;
-        case SDLK_RIGHT: recipe_.epochs = std::min(10000u, recipe_.epochs + (shift ? 10 : 1)); break;
         case SDLK_RETURN:
         case SDLK_KP_ENTER: act(Action::Start); break;
         default: break;
@@ -563,9 +761,68 @@ void Harness::render()
     else if (curriculum_)
     {
         txt(r_, x, ry, trf("harness.curriculum.title", {new_name_}), kWhite, 1.5f);
-        ry += 28;
-        line(tr("harness.reading"), tr(std::string("harness.reading.") + sieve::training::to_string(recipe_.reading)));
-        line(tr("harness.epochs"), trf("harness.epochs.value", {std::to_string(recipe_.epochs), std::to_string(recipe_.window)}));
+        ry += 26;
+        // The settings, a row each; the one chosen highlighted while the settings have the keys.
+        const sieve::training::Recipe& rc = recipe_;
+        const sieve::AiShape& sh = rc.shape;
+        const std::string suggested = sieve::cli::suggested_learning_rate(rc);
+        const std::string values[kSettingRows] = {
+            std::to_string(sh.layers),
+            trf("harness.set.width.value", {std::to_string(sh.width), std::to_string(sh.ffn())}),
+            trf("harness.set.heads.value", {std::to_string(sh.heads), std::to_string(sh.width / sh.heads)}),
+            trf("harness.set.bits.value", {std::to_string(sh.bits), std::to_string(1u << sh.bits)}),
+            rc.learning_rate + "  " + (rc.learning_rate == suggested ? tr("harness.set.suggested") : trf("harness.set.suggest", {suggested})),
+            std::to_string(rc.batch),
+            trf("harness.set.window.value", {std::to_string(rc.window), std::to_string(rc.window - 1)}),
+            std::to_string(rc.epochs),
+            tr(std::string("harness.reading.") + sieve::training::to_string(rc.reading))};
+        static const char* const kLabels[kSettingRows] = {"harness.set.layers", "harness.set.width", "harness.set.heads", "harness.set.bits",
+                                                         "harness.set.rate", "harness.set.batch", "harness.set.window", "harness.set.epochs",
+                                                         "harness.reading"};
+        set_rects_.clear();
+        for (int i = 0; i < kSettingRows; ++i)
+        {
+            const SDL_FRect rr{x - 4, ry - 3, std::min(colW, 620.0f), 16};
+            if (focus_settings_ && i == set_row_)
+            {
+                SDL_SetRenderDrawColor(r_, 48, 0, 80, 255);
+                SDL_RenderFillRect(r_, &rr);
+            }
+            set_rects_.push_back({rr, i});
+            txt(r_, x, ry, tr(kLabels[i]), kGrey);
+            const bool chosen = focus_settings_ && i == set_row_;
+            if (chosen) txt(r_, x + 136, ry, "<", kAccent);
+            txt(r_, x + 150, ry, values[i], chosen ? kWhite : kGrey);
+            if (chosen) txt(r_, x + 158 + text_width(values[i], 1), ry, ">", kAccent);
+            ry += 16;
+        }
+        // What it will take: worked out from the settings, and a step measured on this computer.
+        const sieve::cli::TrainingEstimate est = sieve::cli::estimate_training(rc, *curriculum_);
+        const uint64_t ram = uint64_t(SDL_GetSystemRAM()) * (uint64_t(1) << 20);
+        const std::string key = std::to_string(sh.layers) + "/" + std::to_string(sh.width) + "/" + std::to_string(sh.heads) + "/" +
+                                std::to_string(sh.bits) + "/" + std::to_string(rc.batch) + "/" + std::to_string(rc.window);
+        ry += 6;
+        line(tr("harness.est.size"), trf("harness.est.size.value", {grouped(est.weights), grouped(est.steps), std::to_string(est.threads)}));
+        const bool too_big = est.bytes > ram / 2;
+        line(tr("harness.est.memory"), too_big ? trf("harness.est.memory.over", {megabytes(est.bytes), megabytes(ram)}) : trf("harness.est.memory.value", {megabytes(est.bytes)}),
+             too_big ? kBad : kWhite);
+        std::string time;
+        if (too_big) time = tr("harness.est.time.none");
+        else if (measured_for_ != key) time = tr("harness.est.time.measuring");
+        else if (step_secs_ < 0) time = tr("harness.est.time.none");
+        else
+        {
+            char ms[32];
+            std::snprintf(ms, sizeof ms, step_secs_ < 1 ? "%.1f ms" : "%.2f s", step_secs_ < 1 ? step_secs_ * 1000 : step_secs_);
+            time = trf("harness.est.time.value", {duration(step_secs_ * double(est.steps)), ms});
+        }
+        line(tr("harness.est.time"), time);
+        line(tr("harness.est.result"), trf("harness.est.result.value", {kilobytes(est.result_bytes)}));
+        if (est.learning_rate_at_floor)
+        {
+            txt(r_, x, ry, tr("harness.est.floor"), kAccent);
+            ry += 16;
+        }
         ry += 6;
         txt(r_, x, ry, tr("harness.curriculum.list"), kGrey);
         ry += 18;
@@ -576,14 +833,14 @@ void Harness::render()
         {
             const auto& f = (*curriculum_)[size_t(i)];
             const SDL_FRect rr{x - 4, ry - 3, colW, 16};
-            if (i == cur_row_)
+            if (i == cur_row_ && !focus_settings_)
             {
                 SDL_SetRenderDrawColor(r_, 48, 0, 80, 255);
                 SDL_RenderFillRect(r_, &rr);
             }
             cur_rects_.push_back({rr, i});
             txt(r_, x, ry, std::to_string(i + 1) + ".", kGrey);
-            txt(r_, x + 40, ry, f.path.substr(7, size_t(std::max(0.0f, (colW - 200) / 8))), i == cur_row_ ? kWhite : kGrey);
+            txt(r_, x + 40, ry, f.path.substr(7, size_t(std::max(0.0f, (colW - 200) / 8))), i == cur_row_ && !focus_settings_ ? kWhite : kGrey);
             txt(r_, x + colW - 120, ry, grouped(f.size) + " B", kDim);
             ry += 16;
         }

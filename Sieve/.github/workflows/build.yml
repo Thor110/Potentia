@@ -291,7 +291,10 @@ jobs:
             python reference/sieve_ref.py train-replay --run run-$rd | tr -d '\r' | cmp - run-$rd/result.txt
           done
           q "^file = corpus/b.txt" run-in-order/training.ini
-          $exe ai-train --record tests/training_corpus.txt --out tiny-run --ai-width 8 --ai-heads 2 --ai-bits 3 --window 17 --epochs 2 --checkpoint-every 3 --learning-rate 0.01 --write-order --checkpoint-addresses --sieve tiny-run.sieve --quiet > /dev/null
+          # A corpus is a folder: a single file is refused.
+          if $exe ai-train --record tests/training_corpus.txt --out not-a-run > /dev/null 2>&1; then exit 1; fi
+          mkdir -p tiny-corp && cp tests/training_corpus.txt tiny-corp/
+          $exe ai-train --record tiny-corp --out tiny-run --ai-width 8 --ai-heads 2 --ai-bits 3 --window 17 --epochs 2 --checkpoint-every 3 --learning-rate 0.01 --write-order --checkpoint-addresses --sieve tiny-run.sieve --quiet > /dev/null
           python reference/sieve_ref.py train-replay --run tiny-run | tr -d '\r' | cmp - tiny-run/result.txt
           $exe ai-train tiny-run.sieve --threads 1 --quiet | tr -d '\r' | q "^reproduced exactly"
           python -c "import sys; p='tiny-run/order.txt'; l=open(p).read().split('\n'); l[1],l[5]=l[5],l[1]; open(p,'w').write('\n'.join(l))"
@@ -734,6 +737,12 @@ jobs:
           [ -f hruns/corp/result.txt ]
           q "^reading = in-order" hruns/corp/training.ini
           [ "$(grep '^file = ' hruns/corp/training.ini | head -1)" = "file = corpus/b.txt" ]
+          # Its settings: the width one step up (two heads' worth, 16 to 20), the learning rate
+          # following it, as suggested (0.008 / 20, rounded down: 0.0002).
+          mkdir -p hruns2
+          $H --harness --training-dir hruns2 --script "N,=corp,Return,Tab,Down,Right,Return" --screenshot harness-set.png | tr -d '\r' | q "^harness: TRAINED"
+          q "^width = 20" hruns2/corp/training.ini
+          q "^learning-rate = 0.0002" hruns2/corp/training.ini
           $H --harness --training-dir hruns --script "g" --screenshot harness-go.png | tr -d '\r' | q "the model the run trained, in hand"
                     # From the main menu: the same locator, with no world to walk to, so Enter does not go.
           $H --main-menu --locate tests/manifest_fixture/a.txt --press "Return" --screenshot locate-menu.png | q "file locator (main menu): open, no Go to it"

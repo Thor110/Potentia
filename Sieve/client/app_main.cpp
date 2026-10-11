@@ -274,6 +274,14 @@ std::vector<Line> make_lines(const Args& a)
 // The BINARY length (bytes): the binary line's, as the setup menu sets it.
 uint32_t binary_length(const Args& a) { return a.has("binary-length") ? a.get_positive("binary-length", 32) : 32u; }
 
+// The AI line's shape as the setup menu has it: a new training run starts from it.
+sieve::AiShape ai_shape_of(const Settings& s)
+{
+    sieve::AiShape shape;
+    shape.layers = s.ai_layers, shape.width = s.ai_width, shape.heads = s.ai_heads, shape.bits = s.ai_bits;
+    return shape;
+}
+
 // The AI Training Harness's runs: the training folder beside the programs.
 std::filesystem::path training_dir()
 {
@@ -658,7 +666,8 @@ int run(const Args& a)
         // A picture of the AI Training Harness (for documentation and testing): --training-dir DIR
         // for its runs (else the training folder beside the programs); --script runs keys and typed
         // text as the designer's does, each step waiting for a training to finish.
-        Harness h(window, renderer, a.has("training-dir") ? std::filesystem::path(a.get("training-dir")) : training_dir());
+        Harness h(window, renderer, a.has("training-dir") ? std::filesystem::path(a.get("training-dir")) : training_dir(), ai_shape_of(settings));
+        h.set_scripted(true);
         if (a.has("script"))
         {
             std::string script = a.get("script");
@@ -853,7 +862,7 @@ int run(const Args& a)
             {
                 // The AI Training Harness; GO TO IT goes into the hallway on the AI line, at the
                 // model, in the run's shape (and without the setup menu: the shape is the run's).
-                Harness h(window, renderer, training_dir());
+                Harness h(window, renderer, training_dir(), ai_shape_of(settings));
                 const Harness::Result hr = h.run();
                 if (hr == Harness::Result::Quit) break;
                 if (hr == Harness::Result::Back) continue;

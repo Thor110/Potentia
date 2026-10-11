@@ -61,13 +61,33 @@ struct TrainingFile
     std::string path;
     uint64_t size = 0;
 };
-// A file, or every file under a folder, in path order (the order a new run reads them in, unless
-// it is changed: the harness's curriculum list).
+// Every file under a folder, in path order (the order a new run reads them in, unless it is
+// changed: the harness's curriculum list). A corpus is a folder; a single file is refused.
 std::vector<TrainingFile> corpus_files(const std::filesystem::path& corpus);
 // A new run in `out` (made, or empty): the files copied into it, read in the order given, and
 // training.ini (and, with write_order, order.txt). Returns the run, untrained.
 TrainingRun record_training_run(const std::vector<TrainingFile>& files, const std::filesystem::path& out, const RecordOptions& o);
 TrainingRun record_training_run(const std::filesystem::path& corpus, const std::filesystem::path& out, const RecordOptions& o);
+// The learning rate to suggest for a shape and its windows: halved each time the width doubles
+// (measured: 0.0005 at width 16, 0.0002 at 32, 0.0001 at 64, 0.00005 at 128, on the shipped text,
+// layers mattering little), and scaled down as a step sums more predictions (batch times window
+// less one, 256 at the defaults): 0.008 / width * 256 / predictions, rounded down to 1, 2 or 5 of a
+// power of ten, and no lower than 0.00002 (training-v1's Q16 holds no smaller step than 1 / 65536).
+std::string suggested_learning_rate(const training::Recipe& rc);
+
+// What a run of this recipe over these files will take, worked out before it starts.
+struct TrainingEstimate
+{
+    uint64_t weights = 0, windows = 0, steps = 0;
+    unsigned threads = 1;                       // as many as the batch can use
+    uint64_t bytes_per_thread = 0, bytes = 0;   // memory: each thread's working set, and all of it
+    uint64_t result_bytes = 0;                  // result.txt, about
+    bool learning_rate_at_floor = false;        // the rate is within a few steps of 1 / 65536
+};
+TrainingEstimate estimate_training(const training::Recipe& rc, const std::vector<TrainingFile>& files, unsigned threads = 0);
+// Seconds one step takes, measured: a step trained on the first windows of the files.
+double measure_training_step(const training::Recipe& rc, const std::vector<TrainingFile>& files, unsigned threads = 0);
+
 // A run folder as Sieve instructions (.sieve, packed as sieve-manifest-v4 when that is smaller).
 void pack_training_run(const std::filesystem::path& folder, const std::filesystem::path& sieve_file);
 

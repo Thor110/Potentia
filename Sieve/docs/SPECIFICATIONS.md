@@ -641,7 +641,7 @@ Step `k` is windows `k·batch` onwards (the last step takes what is left; within
 
 **The first runs' format** (10 October 2026): no `order` line, the order always in `order.txt`, and `sieve-training-result-v1`, whose checkpoint lines carry the address in place of the digest. Such runs train and are checked as they were.
 
-Training again from the recipe and the corpus must give `result.txt` byte for byte; that is the check. Recording a run (the harness's New run, or `sieve ai-train --record`) lists its files by path, to be put in the order they are read, and writes `order-v1` unless asked to write the order out. The oracle's `train-vectors` (`tests/vectors_training_v1.tsv`) are steps on small shapes, by the SHA-256 of the digits after each, and its `train-replay` trains a run folder again, of either format, writing its `result.txt`, all from this section apart from the C++.
+Training again from the recipe and the corpus must give `result.txt` byte for byte; that is the check. Recording a run (the harness's New run, or `sieve ai-train --record`) takes a folder, lists its files by path, to be put in the order they are read, and writes `order-v1` unless asked to write the order out. The learning rate it suggests (`0.008 / width × 256 / (batch × (window − 1))`, rounded down to 1, 2 or 5 of a power of ten, at least 0.00002) is only a default: what a run uses is what its `training.ini` says. The oracle's `train-vectors` (`tests/vectors_training_v1.tsv`) are steps on small shapes, by the SHA-256 of the digits after each, and its `train-replay` trains a run folder again, of either format, writing its `result.txt`, all from this section apart from the C++.
 
 ### 12.1a The bytes256 alphabet
 

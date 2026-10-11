@@ -2297,3 +2297,32 @@ cover and a title.
   first-format fixture by the tool and the oracle; the shipped run; in the harness, a run recorded
   from a folder with its second file moved first and read in order. Screenshots of the curriculum
   list and of the run it made.
+
+### The harness's folder dialog and model settings (11 October 2026)
+- **Edward's asks:** a folder chosen rather than a path typed, no single-file corpora, and models
+  as adjustable as the state spaces are.
+- **A corpus is a folder:** `corpus_files()` refuses a file (the CLI's `--record` too); the
+  harness's N opens the system's folder dialog (`SDL_ShowOpenFolderDialog`, as the File Locator
+  does), a path still typed in its place for scripts (`set_scripted`).
+- **The new run's page** (Tab between its two parts): the settings (layers, width in steps of two
+  heads, heads that keep the head size even, bits, learning rate on 1-2-5 steps, windows a step,
+  window size, epochs, reading), starting from the AI line's shape as the setup menu has it
+  (`ai_shape_of(Settings)` in `app_main.cpp`); and the files in reading order.
+- **What it will take, shown as the settings change:** `estimate_training()` (weights, windows,
+  steps, threads, memory per thread and in all, the result's size) and `measure_training_step()`
+  (a step trained on the first windows, timed, on a detached thread so a large shape's minute never
+  holds the window); memory past half the computer's (`SDL_GetSystemRAM`) in red and not measured.
+- **The learning rate suggested:** `suggested_learning_rate()`, 0.008 / width × 256 / (batch ×
+  (window − 1)) rounded down to 1-2-5, no lower than 0.00002, from a sweep on the shipped text
+  (best: 0.0005 at width 16, 0.0002 at 32, 0.0001 at 64, 0.00005 at 128; layers mattering little;
+  width 128 at 0.0005 went from 4.1 to 9.2 bits a byte, worse than guessing). The harness and
+  `sieve ai-train` use it unless a rate is given; Micro's is still 0.0005, so the shipped run is
+  unchanged. Near 1/65536 the page and the tool say training-v1's floor is near (IDEAS §15, larger
+  models).
+- **Measured:** 8 layers of width 1024: 134,479,872 weights, a step 41.8 s here, about 29 h for
+  2,475 steps, 7.7 GB, a result of 129 MB.
+- **Checked:** CI's training steps (a file refused as a corpus; the folder runs as before) and
+  the harness's (a setting changed by keys, the width 16 to 20 and the rate following to 0.0002),
+  all run here; screenshots of the settings at width 28 and at 8 layers of width 1024.
+- **Next (agreed order):** threads within a window and faster loops; resuming; training-v2 for
+  the precision wide and deep models need.

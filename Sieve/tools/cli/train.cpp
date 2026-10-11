@@ -6,9 +6,11 @@
 #include "sieve/sha256.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+#include <thread>
 
 namespace fs = std::filesystem;
 
@@ -157,17 +159,10 @@ std::optional<std::string> result_difference(const std::string& expected, const 
 std::vector<TrainingFile> corpus_files(const fs::path& corpus)
 {
     if (!fs::exists(corpus)) throw std::invalid_argument("no corpus at " + corpus.string());
+    if (!fs::is_directory(corpus)) throw std::invalid_argument("a corpus is a folder: " + corpus.string() + " is a file");
     std::vector<TrainingFile> out;
-    if (fs::is_directory(corpus))
-    {
-        for (const fs::directory_entry& e : fs::recursive_directory_iterator(corpus))
-            if (e.is_regular_file()) out.push_back({e.path(), "corpus/" + manifest_path(e.path(), corpus), e.file_size()});
-    }
-    else
-    {
-        const std::u8string n = corpus.filename().u8string();
-        out.push_back({corpus, "corpus/" + std::string(n.begin(), n.end()), fs::file_size(corpus)});
-    }
+    for (const fs::directory_entry& e : fs::recursive_directory_iterator(corpus))
+        if (e.is_regular_file()) out.push_back({e.path(), "corpus/" + manifest_path(e.path(), corpus), e.file_size()});
     std::sort(out.begin(), out.end(), [](const TrainingFile& a, const TrainingFile& b) { return a.path < b.path; });
     if (out.empty()) throw std::invalid_argument("the corpus has no files");
     return out;
@@ -212,6 +207,70 @@ TrainingRun record_training_run(const std::vector<TrainingFile>& sources, const 
 TrainingRun record_training_run(const fs::path& corpus, const fs::path& out, const RecordOptions& o)
 {
     return record_training_run(corpus_files(corpus), out, o);
+}
+
+std::string suggested_learning_rate(const training::Recipe& rc)
+{
+    const double predictions = double(rc.batch) * double(std::max(1u, rc.window - 1));
+    const double x = 0.008 / double(std::max(1u, rc.shape.width)) * 256.0 / predictions;
+    // The 1-2-5 steps from 0.00002 up, as decimals written exactly.
+    static const char* kSteps[] = {"0.00002", "0.00005", "0.0001", "0.0002", "0.0005", "0.001", "0.002", "0.005", "0.01", "0.02", "0.05", "0.1"};
+    std::string best = kSteps[0];
+    for (const char* step : kSteps)
+        if (std::stod(step) <= x * (1 + 1e-9)) best = step;
+    return best;
+}
+
+TrainingEstimate estimate_training(const training::Recipe& rc, const std::vector<TrainingFile>& files, unsigned threads)
+{
+    TrainingEstimate e;
+    const AiShape& s = rc.shape;
+    e.weights = 256ull * s.width + 16ull * s.layers * s.width * s.width;
+    const uint64_t step = std::max(1u, rc.window - 1);
+    for (const TrainingFile& f : files)
+        if (f.size >= 2) e.windows += (f.size - 2) / step + 1;
+    e.windows *= rc.epochs;
+    e.steps = (e.windows + rc.batch - 1) / rc.batch;
+    const unsigned hw = threads ? threads : std::max(1u, std::thread::hardware_concurrency());
+    e.threads = std::max(1u, std::min(hw, rc.batch));
+    // What a window keeps for its way back (training.cpp's run_window): in each layer some 37 values
+    // a position a unit of width, and each head's attention, position by position; and each thread's
+    // gradient, a value a weight. The trainer itself keeps three values a weight, and the digits.
+    const uint64_t T = step, H = s.width, A = s.heads;
+    e.bytes_per_thread = 8 * (uint64_t(s.layers) * (37 * T * H + A * T * T) + 4 * T * H + 1024) + 8 * e.weights;
+    e.bytes = uint64_t(e.threads) * e.bytes_per_thread + 25 * e.weights;
+    // result.txt: the final address in hex, and a line of about 100 bytes a checkpoint (with the
+    // address, when they are kept).
+    const uint64_t address = (e.weights * s.bits + 3) / 4;
+    const uint64_t checkpoints = e.steps / std::max(1u, rc.checkpoint_every) + 2;
+    e.result_bytes = address + 200 + checkpoints * (100 + (rc.checkpoint_addresses ? address : 0));
+    e.learning_rate_at_floor = rc.learning_rate_q16() <= 4;
+    return e;
+}
+
+double measure_training_step(const training::Recipe& rc, const std::vector<TrainingFile>& files, unsigned threads)
+{
+    // The first windows of the files, end to end: a step as the run's steps are, give or take
+    // which windows.
+    std::vector<uint8_t> bytes;
+    const size_t want = size_t(rc.batch) * rc.window;
+    for (const TrainingFile& f : files)
+    {
+        if (bytes.size() >= want) break;
+        std::ifstream in(f.source, std::ios::binary);
+        std::vector<char> buf(std::min<size_t>(want - bytes.size(), size_t(f.size)));
+        in.read(buf.data(), std::streamsize(buf.size()));
+        bytes.insert(bytes.end(), buf.begin(), buf.begin() + in.gcount());
+    }
+    if (bytes.size() < 2) return 0;
+    std::vector<std::span<const uint8_t>> batch;
+    for (size_t at = 0; at + 1 < bytes.size() && batch.size() < rc.batch; at += rc.window - 1)
+        batch.push_back(std::span<const uint8_t>(bytes.data() + at, std::min<size_t>(rc.window, bytes.size() - at)));
+    const AiSpace space(rc.shape, rc.key);
+    training::Trainer trainer(space, space.digits_at(space.parse(rc.start), rc.start_mode), rc, threads);
+    const auto t0 = std::chrono::steady_clock::now();
+    trainer.step(batch);
+    return std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
 }
 
 void pack_training_run(const fs::path& folder, const fs::path& sieve_file)

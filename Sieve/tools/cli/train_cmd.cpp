@@ -66,7 +66,7 @@ int cmd_ai_train(const Args& a)
         if (a.has("key")) o.recipe.key = a.get("key");
         if (a.has("start")) o.recipe.start = a.get("start");
         if (a.has("mode")) o.recipe.start_mode = address_mode_from_string(a.get("mode"));
-        if (a.has("learning-rate")) o.recipe.learning_rate = a.get("learning-rate");
+
         if (a.has("momentum")) o.recipe.momentum = a.get("momentum");
         if (a.has("batch")) o.recipe.batch = a.get_positive("batch", 4);
         if (a.has("checkpoint-every")) o.recipe.checkpoint_every = a.get_positive("checkpoint-every", 100);
@@ -98,9 +98,18 @@ int cmd_ai_train(const Args& a)
             named.insert(named.end(), files.begin(), files.end());
             files = std::move(named);
         }
+        // The learning rate: as given, or the one suggested for the shape and its windows.
+        o.recipe.learning_rate = a.has("learning-rate") ? a.get("learning-rate") : suggested_learning_rate(o.recipe);
+        const TrainingEstimate est = estimate_training(o.recipe, files, threads);
+        std::cout << "estimate: " << est.weights << " weights, " << est.steps << " steps, about " << (est.bytes + (1 << 20) - 1) / (1 << 20)
+                  << " MB of memory on " << est.threads << (est.threads == 1 ? " thread" : " threads") << ", a result of about "
+                  << (est.result_bytes + 1023) / 1024 << " KB\n";
+        if (est.learning_rate_at_floor)
+            std::cout << "note: the learning rate is within a few steps of the smallest training-v1 can hold (1/65536)\n";
         run = record_training_run(files, folder, o);
-        std::cout << "recorded " << run.name << ": " << run.files.size() - 2 << " corpus file" << (run.files.size() == 3 ? "" : "s") << ", "
-                  << run.order.size() << " windows, " << run.steps() << " steps\n";
+        const size_t n = size_t(std::count_if(run.files.begin(), run.files.end(), [](const auto& f) { return f.first.rfind("corpus/", 0) == 0; }));
+        std::cout << "recorded " << run.name << ": " << n << " corpus file" << (n == 1 ? "" : "s") << ", " << run.order.size() << " windows, "
+                  << run.steps() << " steps\n";
     }
     else
     {

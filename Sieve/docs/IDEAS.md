@@ -1063,6 +1063,28 @@ space made walkable, and a place for priors over weights (§16.8b) to become a g
   is the same there. Edward's view on filters for this line, agreed: seek the noise rather than
   filter it out; what to reject is structure (runs, repeats, stepping), which trained weights do
   not have.
+- **Larger models (11 October 2026, Edward's question: can training grow as the state spaces do?)**
+  The shape is already a setting of a run; the harness now sets it, with what it will take shown
+  as it changes (weights, memory, a step measured, the result's size) and the learning rate
+  suggested for it. Measured on the shipped text, one pass, 1 layer, 4 bits: width 16, 0.2 s; 32,
+  0.5 s; 64, 1.4 s; 128, 4.9 s; and at 8 layers of width 1024 (134 million weights) a step takes
+  42 s, about 29 hours for the shipped run's 2,475 steps, in 7.7 GB. What larger models still need:
+  - **speed:** threads share out only a step's windows (4 by default); sharing out each matrix's
+    rows as well is safe, because integer sums come out the same in any order, and vectorised
+    integer loops would gain several times more;
+  - **resuming:** a run of hours must survive the window closing: the master weights and momentum
+    (16 bytes a weight) saved at checkpoints, beside the run and not part of it, and training
+    resumed from them exactly;
+  - **precision (training-v2):** the learning rate halves as the width doubles, and past a width
+    of a few hundred it nears training-v1's smallest step (1/65536); deep models' gradients shrink
+    layer by layer towards Q16's floor too. More fractional bits for the master weights' updates
+    (or the loss scaled up) is a new version; v1 runs stay as they are;
+  - **the result's size:** the final address is the whole model (129 MB at that shape), so large
+    runs may keep only its hash, the model a file of its own;
+  - **the AI line's own limits:** 256 byte tokens, 512 positions, at most 8 bits a weight; larger
+    models gain most from real tokens, which is an aispace-v2;
+  - **the shelves:** every crate on the AI line runs its model for its face, so large shapes need
+    a budget there, as pictures have.
 - **Next on this line:** filters on the weights themselves (what a model says is floating point,
   so it cannot decide which models survive until the arithmetic is pinned), a guided ordering by a prior over weights, warping a model in from
   the hallway, and larger shapes as the engine gets faster.
