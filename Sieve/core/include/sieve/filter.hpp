@@ -33,6 +33,8 @@
 
 namespace sieve {
 
+class AiSpace;
+
 // The shape of the line a filter is asked to judge.
 struct FilterLine
 {
@@ -42,6 +44,7 @@ struct FilterLine
     uint32_t length = 0;       // positions per unit
     const Alphabet* alphabet = nullptr; // text only
     uint32_t width = 0, height = 0, frames = 0; // image and video
+    const AiSpace* ai = nullptr; // the AI line (kind "ai"): its shape, its tensors' rows
 };
 
 // Pinned data a filter may need, provided by the application (registries, hash checks).
@@ -123,6 +126,9 @@ public:
     // (plugin.hpp): what counting it needs. 0 where that is small or there is no table.
     double table_bytes() const { return table_bytes_; }
     void set_table_bytes(double bytes) { table_bytes_ = bytes; }
+    // A filter that counts its survivors exactly but does not rank them (canonical-model-v1): how
+    // many pass, at the line's length, worked out when asked. Null where it does not count, or ranks.
+    virtual const BigUint* survivors() const { return nullptr; }
 
 protected:
     std::string provenance_;

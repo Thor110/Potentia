@@ -1,17 +1,30 @@
-# An idea transcribed: random maze generators as distortion filters
+# Ideas: any model, language, and the anchors walk
 
-Against the folder-dialog and model-settings batch (which you have committed).
+Docs only, on top of the AI line's filters batch. IDEAS.md here includes that batch's changes too.
 
-## IDEAS §18.1 (new section 18, your ideas of 11 October 2026)
-- **Your idea, in your words:** the Binary and Byte settings, the far-end argument, the worry
-  about data loss with other filters, and recording the seed so the maze can be undone.
-- **Evaluated:**
-  - Everything is still there, provided the maze is specified as a permutation (or a mask).
-  - The far-end file does gain, but only by displacing other files, or by the cost of its seed.
-  - Each kind (moving bits, moving bytes, flipping bits) has a limit, which follows from what it
-    preserves.
-  - With other filters nothing is lost, as long as the maze's version and seed are part of the
-    stack's id.
-  - It helps when agreed in advance under a guided ordering, or as a drawable keyed ordering.
+## GAME.md, §3 Story: the verified anchors, visited
+- The game walks the player through the verified anchors. The public-domain ones are the
+  Vitruvian Man, the Hurrian Hymn No. 6, the Roundhay Garden Scene, Die Universalbibliothek and the
+  Utah teapot. The AI line's anchor is the shipped run's model, trained again on the player's
+  machine. Edward's own anchors can sit among them.
+- How it could work:
+  - the input stream asks for each anchor, and each one teaches one of the tool's moves (G, O, J);
+  - an anchor counts as found only when the item in hand is its bytes;
+  - after the first few, the player chooses the order, and that order goes into the credits'
+    journey;
+  - each anchor's neighbours on the shelves are noise, which shows the thesis.
+- Open questions are marked.
 
-No code changes.
+## IDEAS.md
+- **§18.3 Any AI model, plugged in.** A model is a size plus an architecture, a vocabulary and a
+  number format. Running a Llama model works now; placing any model on a line is an aispace-v2.
+  With digits that are bf16 values, every published model of that shape has an exact address.
+- **§18.4 Language: a dimension, or a name on the AI line?** A name on the purple AI line, not a
+  new dimension. It would be chosen as the language filter's setting, and shown in the top bar and
+  on each crate with the model's bits a byte.
+- **§18.5 How language and perception scale, and images given to a model** (notes to ponder).
+  - The line grows far faster than what it can say: speakers are a shrinking share of it, reached
+    by training, not by sampling. The best of them still get better with size.
+  - Much of the growth is symmetric redundancy.
+  - A byte model can read a picture's bytes now (the harness trains on any file).
+  - Published vision models need a vision encoder in the engine.

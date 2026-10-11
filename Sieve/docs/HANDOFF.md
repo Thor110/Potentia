@@ -2326,3 +2326,84 @@ cover and a title.
   all run here; screenshots of the settings at width 28 and at 8 layers of width 1024.
 - **Next (agreed order):** threads within a window and faster loops; resuming; training-v2 for
   the precision wide and deep models need.
+
+### Training: faster, resumable, and training-v2 (11 October 2026)
+- **Edward's agreed order:** faster training, then resuming long runs, then training-v2.
+- **Faster** (`core/src/training.cpp`; results bit for bit as before):
+  - activations and weights' values kept as 32-bit integers (every stored value is held to ±2^23),
+    products summed in 64 bits;
+  - each layer's matrices taken whole (`forward`, `backward`, `gradient`), a row of weights read
+    once against every position;
+  - a persistent `Pool`: a small model gives each window a thread (each its own gradient, summed
+    after), a large one (2^20 weights or more) gives each window every thread, its rows (forward,
+    gradient) or positions (backward) shared out so no two threads add to one place; attention in
+    two passes (queries, then keys and values) for the same reason;
+  - AVX2 integer kernels (`dot`, `axpy`: `_mm256_mul_epi32`, 64-bit lanes), chosen at start-up as
+    SHA-256's SHA-NI path is (CPUID and XGETBV); `use_vector_kernels()` switches them off for the
+    tests, which run the vectors both ways.
+  - One bug on the way, caught by the reproduced runs before anything else: a product of two
+    32-bit values taken in 32 bits in attention's backward pass (`P[u] * hold(...)`), which
+    overflowed; every other product was audited to have a 64-bit operand.
+  - Measured (4 cores): 8 layers of width 1024, a step 41.8 s to 12.2 s; width 128, a pass 4.9 s
+    to 2.2 s; width 64, 1.4 s to 0.8 s; Micro unchanged (its time is in the softmax, not the
+    matrices).
+- **Resuming:** `Trainer::masters()`, `velocities()`, `restore()`; `sieve-training-state-v1`
+  (`tools/cli/train.cpp`: text lines with the recipe's and order's SHA-256, the step, the score
+  since the last checkpoint and the result so far; then the masters and momenta, 8 bytes each)
+  saved at every checkpoint and when stopped, as `RUN.resume` beside the run (`state_file_of`),
+  never in it, written whole and then renamed. `sieve ai-train --resume`, `--stop-after N`; the
+  harness keeps it always: Esc stops and keeps it, the page says where, Enter carries on, S starts
+  over. A run's result parser now accepts the empty `final` of a result so far.
+- **training-v2** (SPECIFICATIONS §12.0e): `loss-scale-bits = k` (0 to 7); the output gradient
+  times 2^k; the rate held to 16 + k bits; the update `(v · η) >> (16 + 2k)` with `fx::mul_shift`,
+  an exact product of 128 bits from 32-bit halves (no `__int128`, which MSVC lacks); limits 2^(43+k)
+  and 2^(46+k). k = 0 is v1 exactly. New runs are v2 (`--training-v1` for the first version); the
+  loss scale is suggested (`suggested_loss_scale`: 6 for a width of 64 or more or 4 layers or
+  more) and the learning rate's floor follows it (8 parts in 2^(16+k)). The oracle: `TrainerRef`'s
+  `shift`, `train-vectors --v2` (`tests/vectors_training_v2.tsv`, ten steps, one rate below v1's
+  floor), `train-replay` of either version. The measurements and the slip (16 + k at first) are in
+  IDEAS §15, larger models.
+- **The harness:** a loss scale row (suggested, as the rate is); the stopped state, Carry on and
+  Start over.
+- **Checked:** unit tests (both kernel paths, threads, the v2 vectors, `mul_shift` past 64 bits);
+  CI's training steps, all run here (a v2 run replayed by the oracle; a run stopped twice and
+  carried on, equal to the oracle's replay; the earlier steps); the shipped run and the first
+  format's fixture reproduced after every change.
+
+### The AI line's filters (11 October 2026)
+- **Edward's direction:** seek the noise; set aside structure (runs, repeats, stepping), which
+  trained weights do not have. Then the symmetries, one model of each class. SPECIFICATIONS §12.0f.
+- **Measured first:** models trained from the shipped text at seven shapes (1 to 8 bits, 1 to 4
+  layers, width 16 to 64): the longest run in a row 12 (1 bit), 9 (2), 5 (4), 3 (8); no row a
+  ramp; at 1 bit two rows repeated a block of 6 or 7 digits (chance, in rows of 16 binary digits).
+  The defaults (`max_run = 16`, `period = 4`, ramps on) pass them all.
+- **Core:**
+  - `FilterLine::ai` (the space; `cli::ai_filter_line`), and `Filter::survivors()` for a filter that
+    counts without ranking.
+  - `core/src/filters/weights.cpp`: `RowRule` (one row's survivors from a prefix: runs by a table,
+    periods by Möbius and runs round a circle, ramps), `RowsRanker` (the product over rows,
+    mixed radix in address order; state walk for the guided coder), `weight-rows-v1` (soft),
+    `canonical-model-v1` (hard).
+  - `AiSpace::canonical_of`, `is_canonical`, `canonical_count` (exact, product trees, worked out
+    once), `canonical_log2_count`. Members keyed by SHA-256 ("canonical-model-v1" and the digits),
+    not by their digits: by digits, the first row of every sorted group came out in order and the
+    trained models' canonical forms failed `weight-rows-v1`.
+  - `not-a-file-v1`, `not-a-pattern-v1` and `symbol-entropy-v1`, which apply to any line, are not
+    offered on the AI line: the first two keep tables that grow as the square of the length
+    (not-a-file ran out of memory at width 256), and the row filter does their work per row.
+- **CLI:** `sieve filters --line ai` (each filter's share, exact; the stack's survivors);
+  `sieve ai` prints each model's verdicts and, under a stack that ranks, its compact addresses;
+  `--canonical`, `--address-file`, `--address-out` for every reading, `--filters`.
+- **Hallway:** the `[ai]` section; modes, compact (survivors closed up, compact addresses, survivor
+  numbers), mark, hide, excluded; the status line; the setup menu's magnifying glass on the AI
+  column, the overlay with live counts (to a line of 2^26 bits; canonical alone from its log past
+  2^20). The harness's G: where the filters set the trained model aside and its canonical form
+  passes, it goes there ("as its class's canonical form").
+- **Oracle:** `WeightRowRef` counts by enumerating every structured row (not Möbius), `ai_canonical`,
+  `ai_canonical_count`; `ai-filter-vectors` (`tests/vectors_ai_filters_v1.tsv`), `ai-canonical`.
+- **Checked:** unit tests (brute force over every row of 8 digits of 4 values at five settings;
+  the ranker's own rank and unrank against the generic walk; the logits of a model and its
+  canonical form agree; the oracle's vectors); the CI lines, all run here; the hallway in compact,
+  mark and hide, the overlay, and G, by screenshot.
+- **Open:** ranking canonical-model-v1 (a walk that keeps which members are still tied); the
+  language filter and the layers around anchors (IDEAS §18.2).

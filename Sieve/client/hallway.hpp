@@ -1579,8 +1579,14 @@ private:
     std::unique_ptr<WorldSpace> world_space_;
     WorldStacks world_stacks_;
     std::unique_ptr<WorldSieve> world_sieve_;
-    // The AI line (no filters yet), its byte tokenizer, and the model in hand while it is talked to.
+    // The AI line, its filters ([ai]: weight-rows-v1, canonical-model-v1, on a model's weights) and,
+    // where they rank, its survivors in every ordering; its byte tokenizer, and the model in hand
+    // while it is talked to.
     std::unique_ptr<AiSpace> ai_space_;
+    LineFilters ai_filters_;
+    std::unique_ptr<FilterStack> ai_stack_;
+    std::unique_ptr<CompactLine> ai_compact_;
+    void rebuild_ai_sieve();
     std::unique_ptr<sieve::llm::Tokenizer> ai_tokenizer_;
     std::unique_ptr<sieve::llm::Model> talk_model_;
     std::string talk_, talk_hex_; // the conversation, and the address of the model it is with

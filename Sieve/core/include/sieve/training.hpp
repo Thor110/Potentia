@@ -20,6 +20,7 @@
 #include "sieve/aispace.hpp"
 
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <string>
 #include <string_view>
@@ -28,6 +29,10 @@
 namespace sieve::training {
 
 inline constexpr const char* kTrainingVersion = "training-v1";
+// training-v2: v1 with the loss scaled by 2^k (the gradients carried k bits larger, so that fewer
+// of them fall below Q16 on their way back through deep and wide models) and the learning rate held
+// to 16 + k fractional bits; with k = 0 it trains exactly as v1 does.
+inline constexpr const char* kTrainingVersion2 = "training-v2";
 
 // The fixed-point functions, exposed for the tests and the specification.
 namespace fx {
@@ -41,7 +46,14 @@ int64_t sigmoid_q16(int64_t x);                     // 1 / (1 + e^-x) in Q16
 int64_t pow2_q32(int64_t y);                        // 2^y in Q32, for y <= 0 in Q32
 void sincos_q16(int64_t angle_q32, int64_t& s, int64_t& c); // of an angle >= 0 in Q32
 int64_t scale_q32(uint32_t cols, bool embedding);   // a tensor's scale (aispace-v1) in Q32
+int64_t mul_shift(int64_t a, int64_t b, unsigned s); // floor(a b / 2^s), the product exact (it may pass 64 bits)
 } // namespace fx
+
+// The inner loops' vector path (AVX2, where the processor has it, chosen at start-up): the same
+// integer sums either way, so the switch is only for the tests, which run both.
+bool vector_kernels_available();
+bool use_vector_kernels(bool enable); // returns whether it is now in use
+bool using_vector_kernels();
 
 // How a run reads its corpus, when its order is made by order-v1 rather than written out.
 enum class Reading { InOrder, ShuffledWithinFiles, Shuffled };
@@ -51,6 +63,8 @@ Reading reading_from_string(std::string_view s);
 // How a run trains: its training.ini.
 struct Recipe
 {
+    int version = 2;                   // training-v1 or training-v2 (the default for new runs)
+    uint32_t loss_scale_bits = 0;      // v2: k, the loss scaled by 2^k (0 to 7)
     AiShape shape;
     std::string key = "sieve";
     AddressMode start_mode = AddressMode::Scrambled; // where it starts on the line
@@ -70,6 +84,7 @@ struct Recipe
     bool checkpoint_addresses = false;               // the result lists each checkpoint's address, not only its hash
     int result_version() const { return order.empty() ? 1 : 2; }
     int64_t learning_rate_q16() const;
+    int64_t learning_rate_q() const; // round(x * 2^(16 + k)): what the update uses (v1: k = 0)
     int64_t momentum_q16() const;
     void check() const;                              // throws std::invalid_argument
     std::string text() const;                        // training.ini, canonical
@@ -111,6 +126,9 @@ class Trainer
 {
 public:
     Trainer(const AiSpace& space, const AiSpace::Digits& start, const Recipe& recipe, unsigned threads = 0);
+    ~Trainer();
+    Trainer(const Trainer&) = delete;
+    Trainer& operator=(const Trainer&) = delete;
 
     // One step: every window of the batch forward and back, the gradients summed, the weights moved.
     Score step(const std::vector<std::span<const uint8_t>>& batch);
@@ -118,6 +136,13 @@ public:
     Score evaluate(const std::vector<std::span<const uint8_t>>& windows) const;
 
     const AiSpace::Digits& digits() const { return digits_; }
+
+    // The whole state a step leaves (each weight's master value and momentum, Q32): saved, it lets
+    // training stop and carry on later exactly as if it had not stopped. Restoring sets the digits
+    // and values from the masters, as a step does.
+    const std::vector<int64_t>& masters() const { return master_; }
+    const std::vector<int64_t>& velocities() const { return velocity_; }
+    void restore(const std::vector<int64_t>& masters, const std::vector<int64_t>& velocities);
     const AiSpace& space() const { return space_; }
 
     struct Net; // the tensors' places and values, private to training.cpp
@@ -127,9 +152,11 @@ private:
     AiSpace::Digits digits_;
     std::vector<int64_t> master_, velocity_; // Q32, one a weight
     std::vector<int64_t> scale_;             // Q32, one a tensor
-    std::vector<int64_t> values_;            // Q16, each weight's digit's value
+    std::vector<int32_t> values_;            // Q16, each weight's digit's value
     int64_t lr_ = 0, momentum_ = 0;
+    unsigned shift_ = 0; // training-v2's loss scale, in bits
     unsigned threads_ = 1;
+    std::unique_ptr<class Pool> pool_;       // the trainer's threads, kept for its life
     void refresh_values();
 };
 
@@ -150,6 +177,7 @@ struct Checkpoint
 };
 struct Result
 {
+    std::string trainer = kTrainingVersion; // the result's "version" line: the training version of its run
     int version = 2;
     uint64_t steps = 0;
     std::vector<Checkpoint> checkpoints;

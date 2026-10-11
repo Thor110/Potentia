@@ -411,19 +411,27 @@ const std::vector<Page>& pages()
           {"sieve chat --model SmolLM2-360M-Instruct --encode \"Hello, world\"", "how it reads a text"}}},
         {"ai", "The AI line: every language model of one shape, numbered by its weights; read one and hear it.",
          "sieve ai [--ai-layers L] [--ai-width H] [--ai-heads A] [--ai-bits B] [--key K] [--mode MODE]\n"
-         "  [--read ADDR | --bearing DEG | --browse N [--seed S]] [--prompt TEXT] [--max-tokens N] [--temperature T] [--out FOLDER]\n"
-         "  sieve ai --warp FOLDER|FILE.safetensors [--address-out FILE]",
+         "  [--read ADDR | --address-file FILE | --bearing DEG | --browse N [--seed S]] [--prompt TEXT] [--max-tokens N] [--temperature T] [--out FOLDER]\n"
+         "  sieve ai --warp FOLDER|FILE.safetensors [--address-out FILE] [--out FOLDER]\n"
+         "  (any of these with [--canonical] [--filters PATH])",
          "An item on this line is a model (aispace-v1, SPECIFICATIONS §12.0d): a Llama model of L layers, width\n"
          "H and A heads, a feed-forward of 4H and a vocabulary of the 256 bytes, its weights each one of 2^B\n"
          "evenly spaced values. Its weights, written out as digits, are its address, so no model has to be\n"
          "downloaded to walk the line; almost every one of them babbles. With no address, how big the line is.\n"
          "Each model is run by Sieve's own engine (as sieve chat runs one) and continues --prompt (a newline\n"
-         "unless given); --out writes its files, which sieve chat --raw talks to.",
+         "unless given); --out writes its files, which sieve chat --raw talks to.\n"
+         "Each model shown is judged by the line's filters ([ai] in sieve-filters.ini; sieve filters --line\n"
+         "ai lists them): weight-rows-v1 sets aside rows of a tensor with structure (a long run, a short\n"
+         "repeated block, a ramp), and canonical-model-v1 keeps one model of each class of the line's\n"
+         "symmetries (SPECIFICATIONS §12.0f). With a stack that ranks, a model that passes is shown with\n"
+         "its compact addresses too.",
          {{"--ai-layers L", "Layers (1)."},
           {"--ai-width H", "Width (16); the feed-forward is four times it."},
           {"--ai-heads A", "Attention heads (2); they divide the width into heads of an even size."},
           {"--ai-bits B", "Bits a weight (4): each weight is one of 2^B values."},
           {"--read ADDR", "The model at an address (in --mode's ordering)."},
+          {"--address-file FILE", "The same, its address read from a file (as --address-out and sieve ai-train write\n"
+                                  "them): a wide model's address is longer than a command line takes."},
           {"--bearing DEG", "The model at a bearing of DEG whole degrees: the first at or past it, as the navigator goes."},
           {"--browse N", "N models picked at random (--seed S to repeat a run)."},
           {"--prompt TEXT", "What the model is asked to continue (a newline)."},
@@ -433,18 +441,24 @@ const std::vector<Page>& pages()
           {"--out FOLDER", "Write the model's files there: config.json, model.safetensors, tokenizer.json."},
           {"--warp PATH", "A model's file (or its folder) back to its address, if it is of the line's shape and\n"
                           "every weight is one of the line's values."},
-          {"--address-out FILE", "With --warp: write its address (in --mode's ordering) there."},
-          {"--mode MODE", "positional or scrambled (positional)."}},
+          {"--address-out FILE", "Write the model's address (in --mode's ordering) there: with --warp, the file's; with\n"
+                                 "--canonical, its canonical form's."},
+          {"--mode MODE", "positional or scrambled (positional)."},
+          {"--canonical", "Put the model's class's canonical form (canonical-model-v1) in its place: the same\n"
+                          "model, its weights reordered, negated and turned, so it passes that filter."},
+          {"--filters PATH", "The filter settings file whose [ai] section judges each model (sieve-filters.ini\n"
+                             "next to the executable)."}},
          {{"sieve ai", "how big the AI line is"},
           {"sieve ai --bearing 246", "the model at 246 degrees, and what it says"},
           {"sieve ai --bearing 137 --mode scrambled --out m137", "another, its files kept"},
-          {"sieve chat --model m137 --raw --prompt \"Hello\"", "and talked to"}}},
+          {"sieve chat --model m137 --raw --prompt \"Hello\"", "and talked to"},
+          {"sieve ai --warp m137 --canonical --out m137c", "its canonical form, which says the same"}}},
         {"ai-train", "Train a model of the AI line, recording what it learnt from and in what order, so it can be trained again exactly.",
          "sieve ai-train --record FOLDER --out FOLDER [--ai-layers L] [--ai-width H] [--ai-heads A] [--ai-bits B]\n"
-         "  [--start ADDR] [--mode MODE] [--learning-rate X] [--momentum X] [--batch N] [--window N] [--epochs N] [--seed S]\n"
+         "  [--start ADDR] [--mode MODE] [--learning-rate X] [--momentum X] [--loss-scale-bits K] [--batch N] [--window N] [--epochs N] [--seed S]\n"
          "  [--reading MODE] [--file-order FILE] [--checkpoint-every N] [--checkpoint-addresses] [--write-order]\n"
          "  [--sieve FILE.sieve] [--model-out FOLDER] [--address-out FILE] [--threads N] [--quiet]\n"
-         "  sieve ai-train RUN [--threads N] [--model-out FOLDER] [--address-out FILE] [--result-out FILE] [--quiet]",
+         "  sieve ai-train RUN [--resume] [--stop-after N] [--threads N] [--model-out FOLDER] [--address-out FILE] [--result-out FILE] [--quiet]",
          "A run (training-v1, SPECIFICATIONS §12.0e) is a folder, or Sieve instructions (.sieve) made of\n"
          "one: training.ini (the model's shape, where it starts on the AI line, how it learns, and how it\n"
          "reads its files: the order of every window of bytes it learns from is made from these lines by\n"
@@ -464,6 +478,10 @@ const std::vector<Page>& pages()
           {"--learning-rate X, --momentum X", "How far each step moves the weights (by default the rate suggested for the\n"
                                               "shape and windows, 0.008 / width scaled to the predictions a step, 0.0005 for\n"
                                               "Micro; momentum 0.9)."},
+          {"--loss-scale-bits K", "training-v2's loss scale, 2^K (0 to 7; by default 6 for a width of 64 or more or 4\n"
+                                  "layers or more, else 0): deeper and wider models' gradients carried K bits\n"
+                                  "larger, so fewer fall below what the arithmetic holds."},
+          {"--training-v1", "Record the run as training-v1 (no loss scale), as the first runs were."},
           {"--batch N", "Windows a step (4; at most 32)."},
           {"--window N", "Bytes a window (65: it predicts 64 of them; at most 513)."},
           {"--epochs N, --seed S", "How many times it reads the corpus (30), and the shuffle's seed (1)."},
@@ -482,6 +500,10 @@ const std::vector<Page>& pages()
           {"--result-out FILE", "Write the result there as well."},
           {"--prompt TEXT", "What the trained model is asked to continue, to show what it learnt (a newline)."},
           {"--threads N", "Threads (all the processor's); the result does not change."},
+          {"--resume", "Keep the run's state beside it (RUN.resume) at every checkpoint, and carry on from it\n"
+                       "if it is there: a long run stopped (closed, or cut off) goes on from where it was,\n"
+                       "exactly as if it had not stopped. The file goes once the run is done."},
+          {"--stop-after N", "Stop after N steps, keeping the state (as --resume does): for scripts and tests."},
           {"--quiet", "Only the summary, not every checkpoint."}},
          {{"sieve ai-train --record texts --out ub --sieve ub.sieve", "record a run from a folder, train it, pack it"},
           {"sieve ai-train ub.sieve", "train it again from the .sieve, and check"},
@@ -627,7 +649,11 @@ const std::vector<Page>& pages()
          "The models line (--line models, with --vertices, --faces and --coords as sieve mesh takes\n"
          "them) has its own stack, [models]: not-a-file-v1 on a model's own number, and the line's\n"
          "own rules distinct-vertices-v1, distinct-indices-v1 (no degenerate faces) and\n"
-         "every-vertex-used-v1, each exact, with compact orderings (not-a-file with the rules judges only).",
+         "every-vertex-used-v1, each exact, with compact orderings (not-a-file with the rules judges only).\n"
+         "The AI line (--line ai, its shape as sieve ai takes it) has its own stack, [ai], on a model's\n"
+         "weights: weight-rows-v1 (no row of a tensor with a long run, a short repeated block or a\n"
+         "ramp; exact, with compact orderings) and canonical-model-v1 (one model of each class of the\n"
+         "line's symmetries; counted exactly, and judged).",
          {kLine, kLineOptions,
           {"--filters PATH", "The settings file. Default: sieve-filters.ini next to the executable. A missing\n"
                              "file means nothing is ticked."},
@@ -638,7 +664,9 @@ const std::vector<Page>& pages()
           {"--params NAME=V,...", "With --plugin: parameter values (the rest take their defaults)."},
           {"--relations", "With --plugin: how its rule compares with every other custom filter for the line (same,\n"
                           "stricter or looser, exactly, over every length): duplicates show up here."},
-          {"--exact", "With --line binary: every kind's count in full, beside its share of the line."},
+          {"--exact", "With --line binary: every kind's count in full, beside its share of the line. With\n"
+                      "--line ai: the stack's survivors in full."},
+          {"--ai-layers L, --ai-width H, --ai-heads A, --ai-bits B", "With --line ai: the line's shape (1, 16, 2, 4)."},
           {"--page-length N", "With --line binary: the pages line not-an-item-v1 compares with (its --alphabet and\n"
                               "this length; default lower27, 32). A page's file is exactly its text."},
           {"--judge FILE", "With --plugin: judge each line of a UTF-8 text file as one unit of its own length, and\n"

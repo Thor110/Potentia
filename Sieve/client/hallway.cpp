@@ -102,11 +102,13 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
             world_sieve_.reset();
             modes_[kWorldsLine] = FilterMode::Off;
         }
-        // AI: every language model of one shape (aispace-v1), with no filters yet; its byte tokenizer
-        // is the same for every shape.
+        // AI: every language model of one shape (aispace-v1), judged by its weights ([ai]); its byte
+        // tokenizer is the same for every shape.
         ai_space_ = std::make_unique<AiSpace>(AiShape{shape.ai_layers, shape.ai_width, shape.ai_heads, shape.ai_bits}, key);
         ai_tokenizer_ = std::make_unique<sieve::llm::Tokenizer>(sieve::json::parse(AiSpace::tokenizer_json()));
-        modes_[kAiLine] = FilterMode::Off;
+        ai_filters_ = filters.ai;
+        modes_[kAiLine] = filters.ai.mode == FilterMode::Full ? FilterMode::Compact : filters.ai.mode; // (full: no titles to keep)
+        rebuild_ai_sieve();
         // The music's tracks are this hallway's: their addresses take its cover and title shapes.
         set_track_shape(image.space, title);
         // The binary line: every file up to binary_bytes, titled, with a cover as audio and video have.
@@ -275,7 +277,12 @@ void Hallway::move_tiles(int64_t d)
 // survivors; otherwise the line hides instead.
 FilterMode Hallway::effective_mode(int i) const
 {
-    if (i == kAiLine) return FilterMode::Off; // no filters on the AI line yet
+    if (i == kAiLine)
+    {
+        if (!ai_stack_ || ai_stack_->empty()) return FilterMode::Off;
+        if (modes_[i] != FilterMode::Compact) return modes_[i];
+        return ai_compact_ && !ai_compact_->count().is_zero() ? FilterMode::Compact : FilterMode::Hide;
+    }
     if (i == kBinaryLine)
     {
         if (!binary_sieve_ || binary_sieve_->empty()) return FilterMode::Off;
@@ -322,13 +329,24 @@ bool Hallway::has_filters() const
     if (on_binary()) return binary_sieve_ && !binary_sieve_->empty();
     if (on_composition()) return comp().sieve && !comp().sieve->empty();
     if (on_worlds()) return world_sieve_ && !world_sieve_->empty();
-    if (on_ai()) return false;
+    if (on_ai()) return ai_stack_ && !ai_stack_->empty();
     return on_books() ? book_sieve_ && !book_sieve_->empty() : !stack().empty();
 }
 
 std::string Hallway::compute_filter_status() const
 {
-    if (on_ai()) return tr("hud.filters.none"); // no filters on the AI line yet
+    if (on_ai())
+    {
+        if (!has_filters()) return tr("hud.filters.none");
+        const FilterMode m = effective_mode();
+        std::string st = trf("hud.filters", {std::to_string(ai_stack_->size()), tr(std::string("mode.") + to_string(m))});
+        if (m == FilterMode::Compact) st += trf("hud.filters.units", {short_big(ai_compact_->count())});
+        else if (m == FilterMode::Excluded && ai_compact_)
+            st += trf("hud.filters.excluded", {short_big(BigUint(ai_space_->size()) -= ai_compact_->count())});
+        else if (modes_[li_] == FilterMode::Compact)
+            st += ai_compact_ ? tr("hud.filters.no_unit") : trf("hud.filters.blocked", {ai_stack_->compact_blocker()});
+        return st;
+    }
     if (on_books())
     {
         if (!has_filters()) return tr("hud.filters.none");
@@ -428,7 +446,7 @@ BigUint Hallway::units_of(int i) const
     if (is_composition(i))
         return effective_mode(i) == FilterMode::Compact ? comps_[size_t(i)].sieve->count() : comps_[size_t(i)].space->size();
     if (i == kWorldsLine) return effective_mode(i) == FilterMode::Compact ? world_sieve_->count() : world_space_->size();
-    if (i == kAiLine) return ai_space_->size();
+    if (i == kAiLine) return effective_mode(i) == FilterMode::Compact ? ai_compact_->count() : ai_space_->size();
     if (guided_ && line_at(i).guided) return BigUint::pow(2, zoom_);
     if (effective_mode(i) == FilterMode::Compact) return full_here(i) ? full_[size_t(i)]->size() : compact_[i]->count();
     return titled_[size_t(i)] ? titled_[size_t(i)]->size() : line_at(i).space.size();
@@ -642,9 +660,29 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
         else if (on_ai())
         {
             // A model: its weights are its address (aispace-v1).
-            b.ai = ai_space_->digits_at(b.index, mode_);
-            b.hex = ai_space_->hex_of(b.index);
-            b.fraction = b.index.is_zero() ? 0.0 : std::pow(10.0, b.index.log10_approx() - ai_space_->size().log10_approx());
+            if (compact_here)
+            {
+                // Only the surviving models stand here, closed up: slot i holds the survivor whose
+                // compact address is i.
+                const std::vector<uint32_t> u = ai_compact_->unit_at(b.index, mode_);
+                b.ai = AiSpace::Digits(u.begin(), u.end());
+                b.hex = ai_compact_->hex_of(b.index);
+                b.survivor = true;
+                b.survivor_number = mode_ == AddressMode::Positional ? b.index : ai_compact_->index_of(u, AddressMode::Positional);
+                b.fraction = b.index.is_zero() ? 0.0 : std::pow(10.0, b.index.log10_approx() - ai_compact_->count().log10_approx());
+            }
+            else
+            {
+                b.ai = ai_space_->digits_at(b.index, mode_);
+                b.hex = ai_space_->hex_of(b.index);
+                b.fraction = b.index.is_zero() ? 0.0 : std::pow(10.0, b.index.log10_approx() - ai_space_->size().log10_approx());
+                if (ai_stack_ && !ai_stack_->empty())
+                {
+                    const int fail = ai_stack_->first_failure(std::vector<uint32_t>(b.ai->begin(), b.ai->end()));
+                    b.passes = fail < 0;
+                    if (!b.passes) b.failed_by = ai_stack_->filter_name(size_t(fail));
+                }
+            }
         }
         else if (on_binary())
         {
@@ -1275,12 +1313,32 @@ bool Hallway::warp(const std::string& input)
 }
 
 // An address (hex), a percentage (P%), or a corridor tile (@T).
-void Hallway::go_to_ai(const sieve::AiSpace::Digits& d)
+void Hallway::go_to_ai(const sieve::AiSpace::Digits& given)
 {
-    if (!on_ai() || d.size() != ai_space_->weights()) return;
+    if (!on_ai() || given.size() != ai_space_->weights()) return;
+    AiSpace::Digits d = given;
+    std::string said = tr("msg.harness.go");
+    if (ai_stack_ && !ai_stack_->empty() && effective_mode() != FilterMode::Off)
+    {
+        // A trained model is seldom its class's canonical form: where the filters set it aside and its
+        // canonical form (which says the same) passes, that is the one shelved.
+        auto fails = [&](const AiSpace::Digits& x) { return ai_stack_->first_failure(std::vector<uint32_t>(x.begin(), x.end())); };
+        int fail = fails(d);
+        if (fail >= 0)
+        {
+            const AiSpace::Digits c = ai_space_->canonical_of(d);
+            if (fails(c) < 0) d = c, fail = -1, said = tr("msg.harness.go.canonical");
+        }
+        if (fail >= 0 && effective_mode() == FilterMode::Compact)
+        {
+            message(trf("msg.harness.go.filtered", {ai_stack_->filter_name(size_t(fail))}));
+            return;
+        }
+    }
     trail_.clear();
-    place(ai_space_->index_of(d, mode_), true);
-    message(tr("msg.harness.go"));
+    const std::vector<uint32_t> u(d.begin(), d.end());
+    place(effective_mode() == FilterMode::Compact ? ai_compact_->index_of(u, mode_) : ai_space_->index_of(d, mode_), true);
+    message(said);
 }
 
 bool Hallway::go_to(std::string input)
@@ -1333,7 +1391,7 @@ bool Hallway::go_to(std::string input)
         else if (on_books()) index = effective_mode() == FilterMode::Compact ? book_sieve_->parse(input) : books_->parse(input);
         else if (on_composition()) index = effective_mode() == FilterMode::Compact ? comp().sieve->parse(input) : comp().space->parse(input);
         else if (on_worlds()) index = effective_mode() == FilterMode::Compact ? world_sieve_->parse(input) : world_space_->parse(input);
-        else if (on_ai()) index = ai_space_->parse(input);
+        else if (on_ai()) index = effective_mode() == FilterMode::Compact ? ai_compact_->parse(input) : ai_space_->parse(input);
         else if (effective_mode() == FilterMode::Compact) // a compact address, as the books show (full: with its title and cover)
             index = full_here(li_) ? full_[size_t(li_)]->parse(input) : compact().parse(input);
         else if (const TitledSpace* ts = titled_here()) index = ts->parse(input);
@@ -2880,6 +2938,24 @@ void Hallway::set_binary_length(uint64_t bytes)
     memo_hex_ok_ = memo_file_ok_ = false;
     rebuild_binary_sieve();
     rebase();
+}
+
+void Hallway::rebuild_ai_sieve()
+{
+    ai_compact_.reset();
+    ai_stack_.reset();
+    try
+    {
+        ai_stack_ = std::make_unique<FilterStack>(sieve::cli::build_stack(sieve::cli::ai_filter_line(*ai_space_), ai_filters_));
+        if (!ai_stack_->empty() && ai_stack_->ranker())
+            ai_compact_ = std::make_unique<CompactLine>(*ai_stack_->ranker(), unit_line(LineKind::Text).space.key(), ai_stack_->id());
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "filters for the AI line: " << e.what() << "\n";
+        ai_stack_.reset();
+        modes_[kAiLine] = FilterMode::Off;
+    }
 }
 
 void Hallway::rebuild_model_sieve()

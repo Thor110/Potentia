@@ -57,7 +57,8 @@ int cmd_ai_train(const Args& a)
 {
     const unsigned threads = a.has("threads") ? a.get_positive("threads", 1) : 0;
     TrainingRun run;
-    fs::path folder; // where result.txt goes, when the run is a folder
+    fs::path folder;   // where result.txt goes, when the run is a folder
+    fs::path state_of; // the run, beside which its state is kept (with --resume)
     if (a.has("record"))
     {
         if (!a.has("out")) throw std::invalid_argument("--record needs --out FOLDER, the new run's folder");
@@ -77,6 +78,7 @@ int cmd_ai_train(const Args& a)
         o.recipe.checkpoint_addresses = a.has("checkpoint-addresses");
         o.write_order = a.has("write-order");
         folder = path_of(a.get("out"));
+        state_of = folder;
         std::vector<TrainingFile> files = corpus_files(path_of(a.get("record")));
         if (a.has("file-order"))
         {
@@ -99,13 +101,16 @@ int cmd_ai_train(const Args& a)
             files = std::move(named);
         }
         // The learning rate: as given, or the one suggested for the shape and its windows.
+        // training-v2, its loss scale as given or suggested for the shape; then the learning rate.
+        o.recipe.version = a.has("training-v1") ? 1 : 2;
+        o.recipe.loss_scale_bits = o.recipe.version == 1 ? 0 : a.has("loss-scale-bits") ? a.get_u32("loss-scale-bits", 0) : suggested_loss_scale(o.recipe);
         o.recipe.learning_rate = a.has("learning-rate") ? a.get("learning-rate") : suggested_learning_rate(o.recipe);
         const TrainingEstimate est = estimate_training(o.recipe, files, threads);
         std::cout << "estimate: " << est.weights << " weights, " << est.steps << " steps, about " << (est.bytes + (1 << 20) - 1) / (1 << 20)
                   << " MB of memory on " << est.threads << (est.threads == 1 ? " thread" : " threads") << ", a result of about "
                   << (est.result_bytes + 1023) / 1024 << " KB\n";
         if (est.learning_rate_at_floor)
-            std::cout << "note: the learning rate is within a few steps of the smallest training-v1 can hold (1/65536)\n";
+            std::cout << "note: the learning rate is within a few steps of the smallest the recipe's arithmetic holds; a larger loss scale (--loss-scale-bits, up to 7) holds smaller ones\n";
         run = record_training_run(files, folder, o);
         const size_t n = size_t(std::count_if(run.files.begin(), run.files.end(), [](const auto& f) { return f.first.rfind("corpus/", 0) == 0; }));
         std::cout << "recorded " << run.name << ": " << n << " corpus file" << (n == 1 ? "" : "s") << ", " << run.order.size() << " windows, "
@@ -117,16 +122,23 @@ int cmd_ai_train(const Args& a)
         const fs::path p = path_of(a.positional[0]);
         run = load_training_run(p);
         if (fs::is_directory(p)) folder = p;
+        state_of = p;
         std::cout << "run " << run.name << ": " << run.order.size() << " windows, " << run.steps() << " steps"
                   << (run.result ? ", trained before: training it again to check" : ", not trained yet") << "\n";
     }
     const AiShape& s = run.recipe.shape;
     std::cout << "model: " << s.layers << (s.layers == 1 ? " layer" : " layers") << ", width " << s.width << ", " << s.heads << " heads, "
-              << s.bits << " bits a weight; learning rate " << run.recipe.learning_rate << ", momentum " << run.recipe.momentum << ", "
+              << s.bits << " bits a weight; " << (run.recipe.version == 1 ? "training-v1" : "training-v2, loss scale 2^" + std::to_string(run.recipe.loss_scale_bits))
+              << "; learning rate " << run.recipe.learning_rate << ", momentum " << run.recipe.momentum << ", "
               << run.recipe.batch << " windows a step\n";
 
     const auto t0 = std::chrono::steady_clock::now();
     const bool quiet = a.has("quiet");
+    // --resume: the state is kept beside the run at every checkpoint, and training carries on from it.
+    const fs::path state = a.has("resume") || a.has("stop-after") ? state_file_of(state_of) : fs::path();
+    const uint64_t stop_after = a.has("stop-after") ? a.get_positive("stop-after", 1) : 0;
+    if (!state.empty())
+        if (const auto step = saved_step(run, state)) std::cout << "carrying on from step " << *step << ", saved in " << state.string() << "\n";
     const TrainingOutcome out = train_run(run, threads, [&](uint64_t k, uint64_t n, const training::Score& recent) {
         if (!quiet && (k % run.recipe.checkpoint_every == 0 || k == n))
         {
@@ -135,7 +147,13 @@ int cmd_ai_train(const Args& a)
                           (unsigned long long)n, recent.bits_per_byte(), 100.0 * recent.mean_probability());
             std::cout << line << std::flush;
         }
-    });
+    }, nullptr, state, stop_after);
+    if (out.cancelled)
+    {
+        std::cout << "stopped at step " << out.stopped_at << " of " << run.steps() << "; its state is in " << state.string()
+                  << ": train it again with --resume to carry on\n";
+        return 0;
+    }
     const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     char took[64];
     std::snprintf(took, sizeof took, "%.1f s", secs);

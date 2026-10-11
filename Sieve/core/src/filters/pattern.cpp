@@ -394,7 +394,7 @@ void add_pattern_filters(std::vector<FilterSpec>& out)
                 {"width", "digits a value: 1, 2, 4 or 8 (bytes: 16-, 32- or 64-bit values)", FilterParam::Kind::Text, "1", 0, 0, 1,
                  {"1", "2", "4", "8"}},
                 {"order", "byte order of a value wider than one digit", FilterParam::Kind::Text, "big", 0, 0, 1, {"big", "little"}}};
-    p.applies = [](const FilterLine& l) { return l.kind != "binary" && l.kind != "models" && l.base >= 2 && l.length >= 2; };
+    p.applies = [](const FilterLine& l) { return l.kind != "binary" && l.kind != "models" && l.kind != "ai" && l.base >= 2 && l.length >= 2; };
     p.counts_as = "arithmetic";
     p.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
         const FilterSpec& spec = *find_filter("not-a-pattern-v1");

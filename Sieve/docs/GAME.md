@@ -89,6 +89,38 @@ they point the player in useful directions through the space. They are also a re
 they walk the same hallway through the same interfaces, so they check that an actual AI can
 navigate the environment. That is useful to the tool whether or not the story is on.
 
+**The verified anchors, visited** (Edward, 11 October 2026). The game walks the player through
+the verified anchors: real things, each checked by its SHA-256, standing at their exact places in
+an otherwise endless space of noise. They are the landmarks of the story and its tutorial. The
+public-domain ones Sieve ships (`data/anchors/public-domain`), one or more a line:
+- **Image:** Leonardo da Vinci's *Vitruvian Man*.
+- **Audio:** the *Hurrian Hymn No. 6*, the oldest known notated melody.
+- **Video:** the *Roundhay Garden Scene* (1888), the oldest surviving motion picture.
+- **Books:** Kurd Laßwitz's *Die Universalbibliothek* (1904), the Library of Babel's forerunner.
+- **Models:** the Utah teapot.
+- **AI:** the model the shipped training run makes from that same text, trained again on the
+  player's own machine (the AI Training Harness), so the anchor is checked as it is found.
+
+Edward's own anchors (`data/anchors/edward-james-gordon-thor110`) can sit among them: the Sieve
+installer on the binary line, the README with the thesis on the pages line, the first video of
+Sieve, *Rope Around The Clock*, the unfinished Spitfire. Lines that have no anchor yet (pages and
+tracks among the public domain ones, for instance) are listed in `anchors-notes.txt` as still to
+find.
+
+How the walk could work, for when the story is written:
+- **The input stream asks for them.** A message names an anchor ("a drawing of a man in a circle
+  and a square, five hundred years old") and the player finds it: by going to its address (G), by
+  walking a map's node graph (O), or by J from its file on the binary line to its item. Each anchor
+  teaches one of the tool's moves, so the walk is the tutorial.
+- **Found means verified.** The game marks an anchor found only when the item in hand is its bytes,
+  the same check a map makes (SPECIFICATIONS §12.3), so it cannot be faked by typing a hash.
+- **The order is the player's.** After the first few, the player chooses which to visit next, and
+  that order goes into the journey the credits replay (§8): the trajectory, made of real things.
+- **The anchors sit in the noise.** Next to each, the shelves hold its neighbours, which are nearly
+  it and are noise. That is the thesis's point about what is recoverable, shown rather than told.
+- **Open:** whether the walk is required or a trail the player may ignore; how many anchors there
+  are at release; whether players' own maps (V) can add anchors to the walk.
+
 **Length.** It should be short and focused, about two hours, so the space's infinity stays
 atmospheric rather than exhausting.
 

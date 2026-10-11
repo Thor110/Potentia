@@ -60,7 +60,7 @@ private:
         std::string name;
         bool folder = false;
     };
-    enum class Action { Train, GoTo, Pack, Record, MoveUp, MoveDown, Reading, Start, Cancel };
+    enum class Action { Train, GoTo, Pack, Record, MoveUp, MoveDown, Reading, Start, Cancel, StartOver };
     void say(std::string text, bool bad = false); // the status line
     void open_curriculum(const std::string& folder);
     void change_setting(int row, int dir, bool big); // a new run's setting, a step either way
@@ -91,6 +91,10 @@ private:
     std::chrono::steady_clock::time_point started_;
     double took_ = 0;
     std::optional<sieve::cli::TrainingOutcome> outcome_;
+    // A run stopped before its end keeps its state beside it (RUN.resume): the step it stopped at,
+    // which Enter carries on from (S starts it over).
+    std::optional<uint64_t> saved_step_;
+    std::filesystem::path state_path() const;
     std::string verdict_, says_, status_;
     bool status_bad_ = false;
     SDL_Color verdict_colour_{255, 255, 255, 255};
@@ -110,7 +114,7 @@ private:
     // learning rate is still the one suggested, and a step measured for the shape and windows.
     bool focus_settings_ = false;
     int set_row_ = 0;
-    bool lr_suggested_ = true;
+    bool lr_suggested_ = true, scale_suggested_ = true;
     // A trial runs on a thread of its own, never waited for (a large shape's step can take a minute),
     // and leaves its answer here.
     struct Trial

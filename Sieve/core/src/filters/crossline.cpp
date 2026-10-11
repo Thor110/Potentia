@@ -2,7 +2,7 @@
 // digits read positionally), and every number is a place on the binary line (binary-v1), holding a
 // file. This filter fails a unit whose own number holds, on the binary line, a file whose first
 // bytes carry a signature (file-kinds-v1): the same number, read as a file, says it is a PNG, a ZIP,
-// a MIDI file. It applies to every line but binary (pages, image, audio, video, the books' parts,
+// a MIDI file. It applies to every line but binary and AI (pages, image, audio, video, the books' parts,
 // and the models line, whose number is its mixed-radix positional index: sieve/modelsieve.hpp),
 // whatever its shape.
 //
@@ -155,7 +155,9 @@ void add_crossline_filters(std::vector<FilterSpec>& out)
                     "Fails a unit whose own number holds, there, a file whose first bytes carry a signature (file-kinds-v1: "
                     "PNG, ZIP, MID, ...): the same number read as a file says it is one. Any line, any shape. Exact.";
     f.counts_as = "arithmetic";
-    f.applies = [](const FilterLine& l) { return l.kind == "models" || (l.kind != "binary" && l.base >= 2 && l.length >= 1); };
+    // Not the AI line: its numbers run to millions of digits, past the powers this ranker keeps (a
+    // table that grows as the square of the length), and its own filters judge the weights.
+    f.applies = [](const FilterLine& l) { return l.kind == "models" || (l.kind != "binary" && l.kind != "ai" && l.base >= 2 && l.length >= 1); };
     f.make = [](const FilterLine& l, const FilterValues&, const FilterResources&) -> std::unique_ptr<Filter> {
         if (l.kind == "models") throw std::invalid_argument("the models line is sieved by its own stack (sieve/modelsieve.hpp)");
         return std::make_unique<NotAFile>(l.base, l.length);

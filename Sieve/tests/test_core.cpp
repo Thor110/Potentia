@@ -3449,88 +3449,156 @@ void test_training(const std::string& dir)
     std::ifstream cin(dir + "training_corpus.txt", std::ios::binary);
     CHECK(bool(cin));
     const std::string corpus((std::istreambuf_iterator<char>(cin)), std::istreambuf_iterator<char>());
-    std::ifstream in(dir + "vectors_training_v1.tsv");
-    CHECK(bool(in));
-    struct Case
+    // Both inner-loop paths, plain and (where the processor has it) vectorised: the same steps.
+    for (const bool vector : {false, true})
     {
-        std::string shape;
+        if (vector && !vector_kernels_available()) continue;
+        use_vector_kernels(vector);
+        std::ifstream in(dir + "vectors_training_v1.tsv");
+        CHECK(bool(in));
+        struct Case
+        {
+            std::string shape;
+            std::unique_ptr<AiSpace> space;
+            std::unique_ptr<Trainer> one, many;
+            std::vector<Window> order;
+            uint32_t batch = 0, at = 0;
+        };
+        std::vector<Case> cases;
+        auto split = [](const std::string& line, char sep) {
+            std::vector<std::string> f;
+            std::stringstream ss(line);
+            std::string x;
+            while (std::getline(ss, x, sep)) f.push_back(x);
+            return f;
+        };
+        std::string line;
+        int steps = 0, functions = 0;
+        while (std::getline(in, line))
+        {
+            if (line.empty() || line[0] == '#') continue;
+            const std::vector<std::string> f = split(line, '\t');
+            if (f[0] == "exp" || f[0] == "sigmoid" || f[0] == "sincos" || f[0] == "pow2q32")
+            {
+                std::vector<std::string> got;
+                if (f[0] == "exp")
+                    for (int64_t z : {int64_t(0), int64_t(-1), int64_t(-65536), int64_t(-300000), int64_t(-5000000)})
+                        got.push_back(std::to_string(fx::exp_q16(z)));
+                if (f[0] == "sigmoid")
+                    for (int64_t x : {int64_t(0), int64_t(70000), int64_t(-70000), int64_t(8000000), int64_t(-8000000)})
+                        got.push_back(std::to_string(fx::sigmoid_q16(x)));
+                if (f[0] == "sincos")
+                    for (int64_t a : {int64_t(0), int64_t(1) << 32, int64_t(7) << 32, int64_t(511) << 32, int64_t(6746518852)})
+                    {
+                        int64_t s, c;
+                        fx::sincos_q16(a, s, c);
+                        got.push_back(std::to_string(s) + "," + std::to_string(c));
+                    }
+                if (f[0] == "pow2q32")
+                    for (int64_t y : {int64_t(0), int64_t(-1), -(int64_t(1) << 31), int64_t(-57070290109)})
+                        got.push_back(std::to_string(fx::pow2_q32(y)));
+                CHECK(split(f[1], ' ') == got);
+                ++functions;
+                continue;
+            }
+            CHECK(f.size() == 9);
+            if (f.size() != 9) continue;
+            if (cases.empty() || cases.back().shape != f[0] + f[1])
+            {
+                Case c;
+                c.shape = f[0] + f[1];
+                AiShape shape;
+                CHECK(std::sscanf(f[0].c_str(), "L%u/H%u/A%u/B%u", &shape.layers, &shape.width, &shape.heads, &shape.bits) == 4);
+                c.space = std::make_unique<AiSpace>(shape, "sieve");
+                Recipe r;
+                r.shape = shape;
+                r.batch = c.batch = uint32_t(std::stoul(f[2]));
+                r.learning_rate = f[3];
+                r.momentum = f[4];
+                const AiSpace::Digits start = c.space->digits_at(BigUint(0), AddressMode::Scrambled);
+                c.one = std::make_unique<Trainer>(*c.space, start, r, 1);
+                c.many = std::make_unique<Trainer>(*c.space, start, r, 3);
+                c.order = make_order({{"c", corpus.size()}}, uint32_t(std::stoul(f[1])), 1, 1);
+                cases.push_back(std::move(c));
+            }
+            Case& c = cases.back();
+            std::vector<std::span<const uint8_t>> batch;
+            for (uint32_t i = c.at; i < std::min<size_t>(c.order.size(), c.at + c.batch); ++i)
+                batch.push_back({reinterpret_cast<const uint8_t*>(corpus.data()) + c.order[i].offset, c.order[i].length});
+            c.at += c.batch;
+            const Score s1 = c.one->step(batch), s2 = c.many->step(batch);
+            CHECK(std::to_string(s1.prob_sum) == f[6] && std::to_string(s1.predictions) == f[7]);
+            CHECK(s2.prob_sum == s1.prob_sum && s2.predictions == s1.predictions);
+            const AiSpace::Digits& d = c.one->digits();
+            CHECK(Sha256::hex(Sha256::hash(std::string(d.begin(), d.end()))) == f[8]);
+            CHECK(c.many->digits() == d);
+            ++steps;
+        }
+        CHECK(steps == 9 && functions == 4);
+        std::cout << "training vectors checked: " << steps << " steps, " << functions << " functions, inner loops "
+                  << (using_vector_kernels() ? "vectorised (AVX2)" : "plain") << std::endl;
+    }
+    use_vector_kernels(true);
+
+    // training-v2: the loss scaled by 2^k and the rate held to 16 + k bits (one rate below v1's floor).
+    {
+        std::ifstream in2(dir + "vectors_training_v2.tsv");
+        CHECK(bool(in2));
+        std::string key;
         std::unique_ptr<AiSpace> space;
         std::unique_ptr<Trainer> one, many;
-        std::vector<Window> order;
+        std::vector<Window> order2;
         uint32_t batch = 0, at = 0;
-    };
-    std::vector<Case> cases;
-    auto split = [](const std::string& line, char sep) {
-        std::vector<std::string> f;
-        std::stringstream ss(line);
-        std::string x;
-        while (std::getline(ss, x, sep)) f.push_back(x);
-        return f;
-    };
-    std::string line;
-    int steps = 0, functions = 0;
-    while (std::getline(in, line))
-    {
-        if (line.empty() || line[0] == '#') continue;
-        const std::vector<std::string> f = split(line, '\t');
-        if (f[0] == "exp" || f[0] == "sigmoid" || f[0] == "sincos" || f[0] == "pow2q32")
+        int rows = 0;
+        std::string row;
+        while (std::getline(in2, row))
         {
-            std::vector<std::string> got;
-            if (f[0] == "exp")
-                for (int64_t z : {int64_t(0), int64_t(-1), int64_t(-65536), int64_t(-300000), int64_t(-5000000)})
-                    got.push_back(std::to_string(fx::exp_q16(z)));
-            if (f[0] == "sigmoid")
-                for (int64_t x : {int64_t(0), int64_t(70000), int64_t(-70000), int64_t(8000000), int64_t(-8000000)})
-                    got.push_back(std::to_string(fx::sigmoid_q16(x)));
-            if (f[0] == "sincos")
-                for (int64_t a : {int64_t(0), int64_t(1) << 32, int64_t(7) << 32, int64_t(511) << 32, int64_t(6746518852)})
-                {
-                    int64_t s, c;
-                    fx::sincos_q16(a, s, c);
-                    got.push_back(std::to_string(s) + "," + std::to_string(c));
-                }
-            if (f[0] == "pow2q32")
-                for (int64_t y : {int64_t(0), int64_t(-1), -(int64_t(1) << 31), int64_t(-57070290109)})
-                    got.push_back(std::to_string(fx::pow2_q32(y)));
-            CHECK(split(f[1], ' ') == got);
-            ++functions;
-            continue;
+            if (row.empty() || row[0] == '#') continue;
+            std::vector<std::string> f;
+            {
+                std::stringstream ss(row);
+                std::string x;
+                while (std::getline(ss, x, '\t')) f.push_back(x);
+            }
+            CHECK(f.size() == 10);
+            if (f.size() != 10) continue;
+            if (key != f[0] + f[1])
+            {
+                key = f[0] + f[1];
+                AiShape shape;
+                CHECK(std::sscanf(f[0].c_str(), "L%u/H%u/A%u/B%u", &shape.layers, &shape.width, &shape.heads, &shape.bits) == 4);
+                space = std::make_unique<AiSpace>(shape, "sieve");
+                Recipe r;
+                r.version = 2;
+                r.shape = shape;
+                r.batch = batch = uint32_t(std::stoul(f[2]));
+                r.learning_rate = f[3];
+                r.momentum = f[4];
+                r.loss_scale_bits = uint32_t(std::stoul(f[5]));
+                const AiSpace::Digits start = space->digits_at(BigUint(0), AddressMode::Scrambled);
+                one = std::make_unique<Trainer>(*space, start, r, 1);
+                many = std::make_unique<Trainer>(*space, start, r, 3);
+                order2 = make_order({{"c", corpus.size()}}, uint32_t(std::stoul(f[1])), 1, 1);
+                at = 0;
+            }
+            std::vector<std::span<const uint8_t>> b;
+            for (uint32_t i = at; i < std::min<size_t>(order2.size(), at + batch); ++i)
+                b.push_back({reinterpret_cast<const uint8_t*>(corpus.data()) + order2[i].offset, order2[i].length});
+            at += batch;
+            const Score s1 = one->step(b), s2 = many->step(b);
+            CHECK(std::to_string(s1.prob_sum) == f[7] && std::to_string(s1.predictions) == f[8] && s2.prob_sum == s1.prob_sum);
+            const AiSpace::Digits& d = one->digits();
+            CHECK(Sha256::hex(Sha256::hash(std::string(d.begin(), d.end()))) == f[9] && many->digits() == d);
+            ++rows;
         }
-        CHECK(f.size() == 9);
-        if (f.size() != 9) continue;
-        if (cases.empty() || cases.back().shape != f[0] + f[1])
-        {
-            Case c;
-            c.shape = f[0] + f[1];
-            AiShape shape;
-            CHECK(std::sscanf(f[0].c_str(), "L%u/H%u/A%u/B%u", &shape.layers, &shape.width, &shape.heads, &shape.bits) == 4);
-            c.space = std::make_unique<AiSpace>(shape, "sieve");
-            Recipe r;
-            r.shape = shape;
-            r.batch = c.batch = uint32_t(std::stoul(f[2]));
-            r.learning_rate = f[3];
-            r.momentum = f[4];
-            const AiSpace::Digits start = c.space->digits_at(BigUint(0), AddressMode::Scrambled);
-            c.one = std::make_unique<Trainer>(*c.space, start, r, 1);
-            c.many = std::make_unique<Trainer>(*c.space, start, r, 3);
-            c.order = make_order({{"c", corpus.size()}}, uint32_t(std::stoul(f[1])), 1, 1);
-            cases.push_back(std::move(c));
-        }
-        Case& c = cases.back();
-        std::vector<std::span<const uint8_t>> batch;
-        for (uint32_t i = c.at; i < std::min<size_t>(c.order.size(), c.at + c.batch); ++i)
-            batch.push_back({reinterpret_cast<const uint8_t*>(corpus.data()) + c.order[i].offset, c.order[i].length});
-        c.at += c.batch;
-        const Score s1 = c.one->step(batch), s2 = c.many->step(batch);
-        CHECK(std::to_string(s1.prob_sum) == f[6] && std::to_string(s1.predictions) == f[7]);
-        CHECK(s2.prob_sum == s1.prob_sum && s2.predictions == s1.predictions);
-        const AiSpace::Digits& d = c.one->digits();
-        CHECK(Sha256::hex(Sha256::hash(std::string(d.begin(), d.end()))) == f[8]);
-        CHECK(c.many->digits() == d);
-        ++steps;
+        CHECK(rows == 10);
+        std::cout << "training-v2 vectors checked: " << rows << " steps" << std::endl;
     }
-    CHECK(steps == 9 && functions == 4);
-    std::cout << "training vectors checked: " << steps << " steps, " << functions << " functions" << std::endl;
+    // The update's product, exact past 64 bits.
+    CHECK(fx::mul_shift(int64_t(1) << 53, int64_t(1) << 23, 23) == int64_t(1) << 53);
+    // -(2^53 + 1)(2^23 + 5) / 2^23 = -(2^53 + 5 * 2^30 + 1 + 5 / 2^23), so its floor is -(2^53 + 5 * 2^30 + 2).
+    CHECK(fx::mul_shift(-(int64_t(1) << 53) - 1, (int64_t(1) << 23) + 5, 23) == -9007204623450114LL);
+    CHECK(fx::mul_shift(-7, 3, 1) == -11 && fx::mul_shift(7, 3, 1) == 10 && fx::mul_shift(-6, 1, 1) == -3);
 
     // A run's files, read back as written.
     Recipe r;
@@ -3541,7 +3609,7 @@ void test_training(const std::string& dir)
     CHECK(Recipe::parse(r.text()).text() == r.text());
     CHECK(Recipe::parse(r.text()).learning_rate_q16() == 33); // round(0.0005 * 65536) = 32.768
     bool refused = false;
-    try { Recipe::parse("[training]\nversion = training-v2\n"); }
+    try { Recipe::parse("[training]\nversion = training-v3\n"); }
     catch (const std::invalid_argument&) { refused = true; }
     CHECK(refused);
     refused = false;
@@ -3646,6 +3714,226 @@ void test_ai_vectors(const std::string& dir)
         sieve::llm::Sampler sampler(greedy);
         CHECK(sieve::llm::continue_text(model, tok, "hello", sampler, 10).size() >= 1);
     }
+}
+
+// The AI line's filters (SPECIFICATIONS §12.0f). weight-rows-v1 against brute force: a shape whose
+// rows are 2 and 8 digits of 4 (every row of 8 enumerated), at several settings; its ranker's own
+// rank and unrank against the generic walk over next and completions. canonical-model-v1: the
+// canonical form is canonical, every symmetry leaves the logits as they were (to a float's last
+// bits), and the count agrees with its log.
+void test_ai_filters()
+{
+    const AiSpace space(AiShape{1, 2, 1, 2}, "sieve"); // rows of 2 (embedding, attention, gate, up) and 8 (down)
+    sieve::FilterLine line;
+    line.kind = "ai";
+    line.symbols_id = space.id();
+    line.base = 4;
+    line.length = uint32_t(space.weights());
+    line.ai = &space;
+    struct Rule
+    {
+        uint32_t run, period;
+        bool ramps;
+    };
+    for (const Rule rule : {Rule{2, 3, true}, Rule{0, 4, true}, Rule{3, 0, false}, Rule{16, 4, true}, Rule{1, 1, true}})
+    {
+        auto passes_row = [&](const std::vector<uint32_t>& r) {
+            uint32_t run = 0;
+            for (size_t i = 0; i < r.size(); ++i)
+            {
+                run = i > 0 && r[i] == r[i - 1] ? run + 1 : 1;
+                if (rule.run && run > rule.run) return false;
+            }
+            for (uint32_t p = 1; p <= rule.period && 2 * p <= r.size(); ++p)
+            {
+                bool rep = true;
+                for (size_t i = p; i < r.size(); ++i) rep = rep && r[i] == r[i - p];
+                if (rep) return false;
+            }
+            if (rule.ramps && r.size() >= 3)
+            {
+                const int d = int(r[1]) - int(r[0]);
+                bool ramp = d != 0;
+                for (size_t i = 2; i < r.size(); ++i) ramp = ramp && int(r[i]) - int(r[i - 1]) == d;
+                if (ramp) return false;
+            }
+            return true;
+        };
+        auto brute = [&](uint32_t c) {
+            uint64_t n = 0;
+            std::vector<uint32_t> r(c);
+            for (uint64_t v = 0; v < (uint64_t(1) << (2 * c)); ++v)
+            {
+                for (uint32_t i = 0; i < c; ++i) r[i] = uint32_t(v >> (2 * (c - 1 - i))) & 3;
+                n += passes_row(r) ? 1 : 0;
+            }
+            return n;
+        };
+        uint64_t rows2 = 0, rows8 = 0;
+        for (const AiSpace::Tensor& t : space.tensors()) (t.cols == 2 ? rows2 : rows8) += t.rows;
+        CHECK(rows2 == 280 && rows8 == 2);
+        const sieve::FilterValues v{{"max_run", std::to_string(rule.run)}, {"period", std::to_string(rule.period)}, {"ramps", rule.ramps ? "on" : "off"}};
+        const sieve::FilterStack st(line, {{find_filter("weight-rows-v1"), v}}, TestResources(nullptr, nullptr));
+        const sieve::Ranker* r = st.ranker();
+        CHECK(r != nullptr);
+        if (!r) continue;
+        CHECK(r->count() == BigUint::mul(BigUint::pow(BigUint(brute(2)), rows2), BigUint::pow(BigUint(brute(8)), rows8)));
+        std::mt19937_64 rng(rule.run * 31 + rule.period);
+        BigUint last;
+        for (int i = 0; i < 12; ++i)
+        {
+            BigUint k = BigUint::from_hex(std::to_string(rng() % 1000003));
+            k = BigUint::mod(BigUint::mul(k, BigUint::pow(BigUint(7), 300)), r->count());
+            const std::vector<uint32_t> u = r->unrank(k);
+            CHECK(st.passes(u) && r->accepts(u));
+            CHECK(r->rank(u) == k && r->Ranker::rank(u) == k && r->Ranker::unrank(k) == u);
+        }
+        // Survivors in address order: unrank of k and k + 1 increase.
+        const std::vector<uint32_t> a = r->unrank(BigUint(41)), b = r->unrank(BigUint(42));
+        CHECK(std::lexicographical_compare(a.begin(), a.end(), b.begin(), b.end()));
+    }
+    // A trained-looking row passes at the defaults; a ramp, a repeat and a long run do not.
+    {
+        const AiSpace micro(AiShape{}, "sieve");
+        sieve::FilterLine ml = line;
+        ml.symbols_id = micro.id();
+        ml.base = 16;
+        ml.length = uint32_t(micro.weights());
+        ml.ai = &micro;
+        const sieve::FilterStack st(ml, {{find_filter("weight-rows-v1"), {}}}, TestResources(nullptr, nullptr));
+        std::mt19937_64 rng(5);
+        std::vector<uint32_t> u(ml.length);
+        for (uint32_t& x : u) x = uint32_t(rng() % 16);
+        for (size_t i = 0; i + 1 < u.size(); ++i)
+            if (u[i] == u[i + 1]) u[i + 1] = (u[i + 1] + 1) % 16; // no runs at all
+        CHECK(st.passes(u));
+        CHECK(st.ranker() && st.ranker()->unrank(st.ranker()->rank(u)) == u);
+        auto with = [&](std::vector<uint32_t> row) {
+            std::vector<uint32_t> w = u;
+            std::copy(row.begin(), row.end(), w.begin() + 16 * 7); // the eighth row of the embedding
+            return st.passes(w);
+        };
+        std::vector<uint32_t> ramp(16), rep(16);
+        for (uint32_t i = 0; i < 16; ++i) ramp[i] = i, rep[i] = (i % 3) * 5;
+        CHECK(!with(ramp) && !with(rep) && !with(std::vector<uint32_t>(16, 9)));
+        std::reverse(ramp.begin(), ramp.end());
+        CHECK(!with(ramp));
+        rep[15] = 1;
+        CHECK(with(rep));
+    }
+    // canonical-model-v1.
+    for (const AiShape shape : {AiShape{1, 4, 1, 2}, AiShape{2, 8, 2, 3}, AiShape{1, 16, 2, 4}})
+    {
+        const AiSpace sp(shape, "sieve");
+        std::mt19937_64 rng(shape.width);
+        for (int i = 0; i < 4; ++i)
+        {
+            AiSpace::Digits d(static_cast<size_t>(sp.weights()));
+            for (uint8_t& x : d) x = uint8_t(rng() & ((1u << shape.bits) - 1));
+            const AiSpace::Digits c = sp.canonical_of(d);
+            CHECK(sp.is_canonical(c) && sp.canonical_of(c) == c && (c == d) == sp.is_canonical(d));
+            CHECK(!sp.is_canonical(d)); // a random model is all but never canonical
+            sieve::llm::Model m1(sp.config(), sp.tensors_of(d), 1), m2(sp.config(), sp.tensors_of(c), 1);
+            for (uint32_t tok : {72u, 105u, 33u, 10u})
+            {
+                const std::vector<float> l1 = m1.step(tok), l2 = m2.step(tok);
+                float worst = 0, size = 0;
+                for (size_t j = 0; j < l1.size(); ++j) worst = std::max(worst, std::fabs(l1[j] - l2[j])), size = std::max(size, std::fabs(l1[j]));
+                CHECK(worst <= 1e-4f * std::max(1.0f, size));
+            }
+        }
+        const double exact = double(sp.canonical_count().bit_length());
+        CHECK(std::fabs(exact - sp.canonical_log2_count()) < 1.5);
+        std::vector<uint32_t> u(size_t(sp.weights()));
+        sieve::FilterLine cl = line;
+        cl.ai = &sp;
+        cl.base = 1u << shape.bits;
+        cl.length = uint32_t(sp.weights());
+        const sieve::FilterStack st(cl, {{find_filter("canonical-model-v1"), {}}}, TestResources(nullptr, nullptr));
+        AiSpace::Digits d(static_cast<size_t>(sp.weights()));
+        for (uint8_t& x : d) x = uint8_t(rng() & ((1u << shape.bits) - 1));
+        const AiSpace::Digits c = sp.canonical_of(d);
+        for (size_t j = 0; j < u.size(); ++j) u[j] = c[j];
+        CHECK(st.passes(u));
+        for (size_t j = 0; j < u.size(); ++j) u[j] = d[j];
+        CHECK(!st.passes(u));
+    }
+}
+
+// The AI line's filters against the oracle's vectors (sieve_ref.py ai-filter-vectors), which counts
+// another way: weight-rows-v1's survivors at several shapes and settings, survivors unranked and
+// ranked again, and canonical-model-v1's count and the canonical forms of models off the line.
+void test_ai_filter_vectors(const std::string& dir)
+{
+    std::ifstream in(dir + "vectors_ai_filters_v1.tsv");
+    CHECK(bool(in));
+    auto shape_of = [](const std::string& t) {
+        AiShape sh;
+        CHECK(std::sscanf(t.c_str(), "L%u/H%u/A%u/B%u", &sh.layers, &sh.width, &sh.heads, &sh.bits) == 4);
+        return sh;
+    };
+    auto line_of = [](const AiSpace& sp) {
+        sieve::FilterLine l;
+        l.kind = "ai";
+        l.symbols_id = sp.id();
+        l.base = 1u << sp.shape().bits;
+        l.length = uint32_t(sp.weights());
+        l.ai = &sp;
+        return l;
+    };
+    auto rows_values = [](const std::string& t) {
+        unsigned run = 0, period = 0;
+        char ramps[8] = {};
+        CHECK(std::sscanf(t.c_str(), "%u/%u/%7s", &run, &period, ramps) == 3);
+        return sieve::FilterValues{{"max_run", std::to_string(run)}, {"period", std::to_string(period)}, {"ramps", ramps}};
+    };
+    auto sha_hex = [](const BigUint& n) { return Sha256::hex(Sha256::hash(n.to_hex())); };
+    std::string line;
+    int rows = 0, ranks = 0, counts = 0, models = 0;
+    while (std::getline(in, line))
+    {
+        if (line.empty() || line[0] == '#') continue;
+        std::vector<std::string> f;
+        std::stringstream ss(line);
+        std::string x;
+        while (std::getline(ss, x, '\t')) f.push_back(x);
+        const AiSpace sp(shape_of(f.at(1)), "sieve");
+        const sieve::FilterLine fl = line_of(sp);
+        if (f[0] == "rows" || f[0] == "rank")
+        {
+            const sieve::FilterStack st(fl, {{find_filter("weight-rows-v1"), rows_values(f.at(2))}}, TestResources(nullptr, nullptr));
+            CHECK(st.ranker() != nullptr);
+            if (!st.ranker()) continue;
+            if (f[0] == "rows")
+            {
+                CHECK(std::to_string(st.ranker()->count().bit_length()) == f.at(3) && sha_hex(st.ranker()->count()) == f.at(4));
+                ++rows;
+            }
+            else
+            {
+                const BigUint k = BigUint::from_hex(f.at(3));
+                const std::vector<uint32_t> u = st.ranker()->unrank(k);
+                CHECK(Sha256::hex(Sha256::hash(std::string(u.begin(), u.end()))) == f.at(4));
+                CHECK(st.passes(u) && st.ranker()->rank(u) == k);
+                ++ranks;
+            }
+        }
+        else if (f[0] == "canonical")
+        {
+            CHECK(std::to_string(sp.canonical_count().bit_length()) == f.at(2) && sha_hex(sp.canonical_count()) == f.at(3));
+            ++counts;
+        }
+        else if (f[0] == "model")
+        {
+            const BigUint index = unit_at_bearing(BigUint(uint64_t(std::stoul(f.at(3)))), sp.size(), 0);
+            const AiSpace::Digits c = sp.canonical_of(sp.digits_at(index, address_mode_from_string(f.at(2))));
+            CHECK(Sha256::hex(Sha256::hash(std::string(c.begin(), c.end()))) == f.at(4));
+            const sieve::FilterStack st(fl, {{find_filter("canonical-model-v1"), {}}}, TestResources(nullptr, nullptr));
+            CHECK(st.passes(std::vector<uint32_t>(c.begin(), c.end())));
+            ++models;
+        }
+    }
+    CHECK(rows == 6 && ranks == 5 && counts == 4 && models == 12);
 }
 
 void test_world_sieve()
@@ -5232,6 +5520,8 @@ void run_all(int argc, char** argv)
         test_weights();
         test_llm(dir);
         test_ai_vectors(dir);
+        test_ai_filters();
+        test_ai_filter_vectors(dir);
         test_training(dir);
         test_titled_vectors(dir + "vectors_titled_v1.tsv");
         test_binary_vectors(dir + "vectors_binary_v1.tsv");

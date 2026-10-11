@@ -101,7 +101,7 @@ std::string kilobytes(uint64_t bytes)
 
 const char* const kRates[] = {"0.00002", "0.00005", "0.0001", "0.0002", "0.0005", "0.001", "0.002", "0.005", "0.01", "0.02", "0.05", "0.1"};
 const uint32_t kWindows[] = {9, 17, 33, 65, 129, 257, 513};
-constexpr int kSettingRows = 9; // layers, width, heads, bits, learning rate, batch, window, epochs, reading
+constexpr int kSettingRows = 10; // layers, width, heads, bits, learning rate, loss scale, batch, window, epochs, reading
 
 } // namespace
 
@@ -154,6 +154,7 @@ void Harness::select(int row)
     {
         run_ = sieve::cli::load_training_run(entries_[size_t(row_)].path);
         steps_ = run_->steps();
+        saved_step_ = sieve::cli::saved_step(*run_, state_path());
     }
     catch (const std::exception& e)
     {
@@ -169,6 +170,9 @@ std::vector<std::pair<Harness::Action, bool>> Harness::buttons() const
     if (curriculum_)
         return {{Action::MoveUp, cur_row_ > 0}, {Action::MoveDown, cur_row_ + 1 < int(curriculum_->size())}, {Action::Reading, true},
                 {Action::Start, true}, {Action::Cancel, true}};
+    if (saved_step_)
+        return {{Action::Train, !busy && run_.has_value()}, {Action::StartOver, !busy}, {Action::GoTo, !busy && trained},
+                {Action::Record, !busy}};
     return {{Action::Train, !busy && run_.has_value()},
             {Action::GoTo, !busy && trained},
             {Action::Pack, !busy && folder && trained},
@@ -182,6 +186,14 @@ void Harness::act(Action a)
     switch (a)
     {
     case Action::Train: start_training(); break;
+    case Action::StartOver:
+    {
+        std::error_code ec;
+        std::filesystem::remove(state_path(), ec);
+        saved_step_.reset();
+        start_training();
+        break;
+    }
     case Action::Record:
         // The corpus: a folder, chosen in the system's folder dialog (or, the dialog aside, its path
         // typed, as scripts do).
@@ -268,6 +280,11 @@ void Harness::act(Action a)
     }
 }
 
+std::filesystem::path Harness::state_path() const
+{
+    return row_ < int(entries_.size()) ? sieve::cli::state_file_of(entries_[size_t(row_)].path) : std::filesystem::path();
+}
+
 void Harness::start_training()
 {
     if (!run_ || training()) return;
@@ -281,7 +298,9 @@ void Harness::start_training()
     started_ = std::chrono::steady_clock::now();
     say(tr("harness.training"));
     const sieve::cli::TrainingRun run = *run_;
-    job_ = std::async(std::launch::async, [this, run] {
+    const std::filesystem::path state = state_path();
+    if (saved_step_) say(trf("harness.carrying_on", {grouped(*saved_step_)}));
+    job_ = std::async(std::launch::async, [this, run, state] {
         // The curve: about 200 points over the run, each the bits a byte since the point before
         // (`recent` counts from the last checkpoint, so what it had at the last point is taken off).
         double bits_then = 0;
@@ -299,7 +318,7 @@ void Harness::start_training()
                 bits_then = recent.bits, predictions_then = recent.predictions;
             }
             if (k % run.recipe.checkpoint_every == 0) bits_then = 0, predictions_then = 0; // `recent` starts again after this
-        }, &cancel_);
+        }, &cancel_, state);
     });
 }
 
@@ -340,9 +359,11 @@ void Harness::poll()
         sieve::cli::TrainingOutcome out = job_.get();
         if (out.cancelled)
         {
-            say(tr("harness.stopped"));
+            saved_step_ = out.stopped_at;
+            say(trf("harness.stopped", {grouped(out.stopped_at)}));
             return;
         }
+        saved_step_.reset();
         const Entry& e = entries_[size_t(row_)];
         if (run_->result)
         {
@@ -515,8 +536,9 @@ void Harness::open_curriculum(const std::string& folder)
         set_row_ = 0;
         recipe_ = {};
         recipe_.shape = line_shape_;
+        recipe_.loss_scale_bits = sieve::cli::suggested_loss_scale(recipe_);
         recipe_.learning_rate = sieve::cli::suggested_learning_rate(recipe_);
-        lr_suggested_ = true;
+        lr_suggested_ = scale_suggested_ = true;
         new_name_ = u8(fs::absolute(corpus).lexically_normal().filename());
         if (new_name_.empty()) new_name_ = u8(fs::absolute(corpus).lexically_normal().parent_path().filename());
         if (new_name_.empty()) new_name_ = "run";
@@ -568,8 +590,12 @@ void Harness::change_setting(int row, int dir, bool big)
         lr_suggested_ = rc.learning_rate == sieve::cli::suggested_learning_rate(rc);
         return;
     }
-    case 5: rc.batch = uint32_t(std::clamp(int(rc.batch) + dir * (big ? 4 : 1), 1, 32)); break;
-    case 6:
+    case 5:
+        rc.loss_scale_bits = uint32_t(std::clamp(int(rc.loss_scale_bits) + dir, 0, 7));
+        scale_suggested_ = rc.loss_scale_bits == sieve::cli::suggested_loss_scale(rc);
+        break;
+    case 6: rc.batch = uint32_t(std::clamp(int(rc.batch) + dir * (big ? 4 : 1), 1, 32)); break;
+    case 7:
     {
         int i = 0;
         for (int k = 0; k < int(std::size(kWindows)); ++k)
@@ -577,12 +603,13 @@ void Harness::change_setting(int row, int dir, bool big)
         rc.window = kWindows[std::clamp(i + dir, 0, int(std::size(kWindows)) - 1)];
         break;
     }
-    case 7: rc.epochs = uint32_t(std::clamp(int(rc.epochs) + dir * (big ? 10 : 1), 1, 10000)); break;
-    case 8: act(Action::Reading); return;
+    case 8: rc.epochs = uint32_t(std::clamp(int(rc.epochs) + dir * (big ? 10 : 1), 1, 10000)); break;
+    case 9: act(Action::Reading); return;
     default: return;
     }
-    // A change of shape, batch or window moves the suggested rate, and the rate with it while it
-    // is still the one suggested.
+    // A change of shape, batch or window moves the suggested loss scale and rate, and each with it
+    // while it is still the one suggested.
+    if (scale_suggested_) rc.loss_scale_bits = sieve::cli::suggested_loss_scale(rc);
     if (lr_suggested_) rc.learning_rate = sieve::cli::suggested_learning_rate(rc);
 }
 
@@ -691,6 +718,7 @@ void Harness::key(SDL_Keycode k, SDL_Keymod mod)
     case SDLK_G: act(Action::GoTo); break;
     case SDLK_P: act(Action::Pack); break;
     case SDLK_N: act(Action::Record); break;
+    case SDLK_S: act(Action::StartOver); break;
     default: break;
     }
 }
@@ -772,17 +800,20 @@ void Harness::render()
             trf("harness.set.heads.value", {std::to_string(sh.heads), std::to_string(sh.width / sh.heads)}),
             trf("harness.set.bits.value", {std::to_string(sh.bits), std::to_string(1u << sh.bits)}),
             rc.learning_rate + "  " + (rc.learning_rate == suggested ? tr("harness.set.suggested") : trf("harness.set.suggest", {suggested})),
+            trf("harness.set.scale.value", {std::to_string(rc.loss_scale_bits), std::to_string(1u << rc.loss_scale_bits)}) + "  " +
+                (rc.loss_scale_bits == sieve::cli::suggested_loss_scale(rc) ? tr("harness.set.suggested")
+                                                                           : trf("harness.set.suggest", {std::to_string(sieve::cli::suggested_loss_scale(rc))})),
             std::to_string(rc.batch),
             trf("harness.set.window.value", {std::to_string(rc.window), std::to_string(rc.window - 1)}),
             std::to_string(rc.epochs),
             tr(std::string("harness.reading.") + sieve::training::to_string(rc.reading))};
         static const char* const kLabels[kSettingRows] = {"harness.set.layers", "harness.set.width", "harness.set.heads", "harness.set.bits",
-                                                         "harness.set.rate", "harness.set.batch", "harness.set.window", "harness.set.epochs",
+                                                         "harness.set.rate", "harness.set.scale", "harness.set.batch", "harness.set.window", "harness.set.epochs",
                                                          "harness.reading"};
         set_rects_.clear();
         for (int i = 0; i < kSettingRows; ++i)
         {
-            const SDL_FRect rr{x - 4, ry - 3, std::min(colW, 620.0f), 16};
+            const SDL_FRect rr{x - 4, ry - 3, colW, 16};
             if (focus_settings_ && i == set_row_)
             {
                 SDL_SetRenderDrawColor(r_, 48, 0, 80, 255);
@@ -880,6 +911,7 @@ void Harness::render()
         else line(tr("harness.reading"), tr("harness.reads.written"));
         line(tr("harness.files"), files_line);
         line(tr("harness.result"), run_->result ? tr("harness.result.yes") : tr("harness.result.no"), run_->result ? kWhite : kGrey);
+        if (saved_step_ && !training()) line(tr("harness.saved"), trf("harness.saved.value", {grouped(*saved_step_), grouped(run_->steps())}), kAccent);
         ry += 10;
 
         // Progress, and how much it has learnt: bits a byte at each checkpoint.
@@ -945,7 +977,8 @@ void Harness::render()
     const float by = H - 88;
     for (const auto& [a, ok] : buttons())
     {
-        const char* id = a == Action::Train    ? (run_ && run_->result ? "harness.button.check" : "harness.button.train")
+        const char* id = a == Action::Train    ? (saved_step_ ? "harness.button.resume" : run_ && run_->result ? "harness.button.check" : "harness.button.train")
+                         : a == Action::StartOver ? "harness.button.over"
                          : a == Action::GoTo   ? "harness.button.goto"
                          : a == Action::Pack   ? "harness.button.pack"
                          : a == Action::MoveUp ? "harness.button.up"
@@ -954,7 +987,7 @@ void Harness::render()
                          : a == Action::Start    ? "harness.button.start"
                          : a == Action::Cancel   ? "harness.button.cancel"
                                                  : "harness.button.record";
-        const std::string label = tr(id);
+        const std::string label = a == Action::Train && saved_step_ ? trf(id, {grouped(*saved_step_)}) : tr(id);
         const float bw = text_width(label, 1) + 20;
         const SDL_FRect br{bx, by, bw, 22};
         frame(r_, br, ok ? kAccent : kDim);

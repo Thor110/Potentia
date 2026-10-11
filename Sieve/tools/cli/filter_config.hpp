@@ -21,6 +21,7 @@
 
 #include "lines.hpp"
 
+#include "sieve/aispace.hpp"
 #include "sieve/filekind.hpp"
 #include "sieve/modelsieve.hpp"
 #include "sieve/modelspace.hpp"
@@ -90,10 +91,11 @@ struct FilterConfig
     BookFilters books;
     CompositionFilters tracks, movies;
     WorldFilters worlds;
-    // The models and binary lines: a mode and a stack each. The models line has no filters yet;
-    // the binary line has binary-kind-v1 (sieve/filekind.hpp). The binary line is one line, met at
-    // both ends of the corridor, so it has one section.
-    LineFilters models, binary;
+    // The models, binary and AI lines: a mode and a stack each. The models line has its own rules
+    // (sieve/modelsieve.hpp); the binary line has binary-kind-v1 (sieve/filekind.hpp), and is one
+    // line, met at both ends of the corridor, so it has one section; the AI line judges a model's
+    // weights (weight-rows-v1, canonical-model-v1; sieve/aispace.hpp).
+    LineFilters models, binary, ai;
     LineFilters& of(LineKind k) { return lines[int(k)]; }
     const LineFilters& of(LineKind k) const { return lines[int(k)]; }
 
@@ -144,6 +146,8 @@ std::optional<std::vector<uint32_t>> item_of(const Line& line, const std::vector
 // Pages of `length` symbols of an alphabet as files: a pattern when every symbol is one byte.
 std::optional<KindCounter::Pattern> page_pattern(const Alphabet& a, uint32_t length);
 BinarySieve build_binary_sieve(const BinarySpace& space, const LineFilters& settings, const BinaryItems* items = nullptr);
+// The AI line's shape as filters see it (kind "ai", the weights its digits): the space must outlive it.
+FilterLine ai_filter_line(const AiSpace& space);
 // The models line: its FilterLine (kind "models", for listing the filters it offers) and its stack.
 FilterLine models_filter_line(uint32_t vertices, uint32_t faces, uint32_t coords);
 ModelSieve build_model_sieve(const ModelSpace& space, const LineFilters& settings);

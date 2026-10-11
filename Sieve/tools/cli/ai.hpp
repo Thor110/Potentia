@@ -10,5 +10,7 @@ namespace sieve::cli {
 // The line's shape from --ai-layers, --ai-width, --ai-heads and --ai-bits (the hallway's options).
 AiShape ai_shape_of(const Args& a);
 int cmd_ai(const Args& a);
+// `sieve filters --line ai`: the AI line's filters, which are ticked, and what each keeps.
+int cmd_filters_ai(const Args& a);
 
 } // namespace sieve::cli

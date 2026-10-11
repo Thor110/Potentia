@@ -34,6 +34,8 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
     python3 sieve_ref.py llm-tokenizer-fixture --out ../tests/llama_tiny_tokenizer.json   # a small BPE tokenizer
     python3 sieve_ref.py ai-vectors > ../tests/vectors_ai_v1.tsv                      # aispace-v1
     python3 sieve_ref.py ai-read --bearing 137 --out m.safetensors                     # what `sieve ai --out` writes
+    python3 sieve_ref.py ai-filter-vectors > ../tests/vectors_ai_filters_v1.tsv        # weight-rows-v1, canonical-model-v1
+    python3 sieve_ref.py ai-canonical --address-file a.txt                             # what `sieve ai --canonical` gives
     python3 sieve_ref.py llm-encode-lines texts.jsonl --model DIR                     # what `sieve chat --encode-lines` prints
     python3 sieve_ref.py llm-logits "text" --model DIR [--compare logits.f32]         # what `sieve chat --logits` prints
     python3 sieve_ref.py sieve --dict words.txt --max 4
@@ -44,6 +46,7 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
 import argparse
 import collections
 import hashlib
+import itertools
 import re
 import math
 import os
@@ -2594,6 +2597,334 @@ def cmd_ai_read(args):
     print("%0*x" % (sp.width_hex, i))
 
 
+# ---- the AI line's filters (SPECIFICATIONS §12.0f), written from the specification and counted a
+# different way: a row's structured rows are enumerated (every block of at most `period` digits
+# repeated, every ramp) rather than counted by Mobius and runs round a circle.
+
+def ai_rows(sp):
+    """Each row's length, in address order."""
+    out = []
+    for name, rows, cols, scale, first in sp.tensors:
+        out += [cols] * rows
+    return out
+
+
+class WeightRowRef:
+    def __init__(self, K, c, max_run, period, ramps):
+        self.K, self.c = K, c
+        self.R = c if max_run == 0 or max_run >= c else max_run
+        self.Q = min(period, c // 2)
+        self.ramps = ramps and c >= 3 and K >= 2
+        self.memo = {}
+        self.count = self.completions(())
+
+    def runs_ok_row(self, row):
+        run = 0
+        for i, x in enumerate(row):
+            run = run + 1 if i and x == row[i - 1] else 1
+            if run > self.R:
+                return False
+        return True
+
+    def passes(self, row):
+        if not self.runs_ok_row(row):
+            return False
+        for p in range(1, self.Q + 1):
+            if all(row[i] == row[i - p] for i in range(p, len(row))):
+                return False
+        if self.ramps:
+            d = row[1] - row[0]
+            if d != 0 and all(row[i] - row[i - 1] == d for i in range(2, len(row))):
+                return False
+        return True
+
+    def runs_ok(self, prefix):
+        """Rows with no run past R that begin with the prefix."""
+        if not self.runs_ok_row(prefix):
+            return 0
+        rest = self.c - len(prefix)
+        if not prefix:
+            return self.K * self.runs_after(rest - 1, 1)
+        run = 1
+        while run < len(prefix) and prefix[-1 - run] == prefix[-1]:
+            run += 1
+        return self.runs_after(rest, run)
+
+    def runs_after(self, rest, r):
+        key = (rest, r)
+        if key not in self.memo:
+            if rest == 0:
+                v = 1
+            else:
+                v = (self.K - 1) * self.runs_after(rest - 1, 1) + (self.runs_after(rest - 1, r + 1) if r < self.R else 0)
+            self.memo[key] = v
+        return self.memo[key]
+
+    def structured(self, prefix):
+        """Every row that repeats a block of at most Q digits, or is a ramp, and begins with the prefix."""
+        t, out = len(prefix), set()
+        for p in range(1, self.Q + 1):
+            fixed = list(prefix[:min(t, p)])
+            for tail in itertools.product(range(self.K), repeat=p - len(fixed)):
+                block = fixed + list(tail)
+                row = tuple(block[i % p] for i in range(self.c))
+                if row[:t] == tuple(prefix):
+                    out.add(row)
+        if self.ramps:
+            for a in range(self.K):
+                for d in range(-(self.K - 1), self.K):
+                    if d == 0 or not 0 <= a + (self.c - 1) * d < self.K:
+                        continue
+                    row = tuple(a + i * d for i in range(self.c))
+                    if row[:t] == tuple(prefix):
+                        out.add(row)
+        return out
+
+    def completions(self, prefix):
+        return self.runs_ok(prefix) - sum(1 for r in self.structured(prefix) if self.runs_ok_row(r))
+
+    def rank(self, row):
+        r = 0
+        for t in range(len(row)):
+            for s in range(row[t]):
+                r += self.completions(tuple(row[:t]) + (s,))
+        return r
+
+    def unrank(self, k):
+        p = ()
+        for t in range(self.c):
+            s = 0
+            while True:
+                n = self.completions(p + (s,))
+                if k < n:
+                    break
+                k -= n
+                s += 1
+            p += (s,)
+        return list(p)
+
+
+class WeightRowsRef:
+    def __init__(self, sp, max_run=16, period=4, ramps=True):
+        self.rows = ai_rows(sp)
+        self.rules = {c: WeightRowRef(1 << sp.B, c, max_run, period, ramps) for c in set(self.rows)}
+        self.count = 1
+        for c in self.rows:
+            self.count *= self.rules[c].count
+
+    def passes(self, d):
+        at = 0
+        for c in self.rows:
+            if not self.rules[c].passes(d[at:at + c]):
+                return False
+            at += c
+        return True
+
+    def rank(self, d):
+        r, at = 0, 0
+        for c in self.rows:
+            r = r * self.rules[c].count + self.rules[c].rank(d[at:at + c])
+            at += c
+        return r
+
+    def unrank(self, k):
+        out = []
+        for c in reversed(self.rows):
+            k, r = divmod(k, self.rules[c].count)
+            out = self.rules[c].unrank(r) + out
+        return out
+
+
+def ai_canonical(sp, d0):
+    """canonical-model-v1: the model of d0's class whose every choice has the smallest key."""
+    d = list(d0)
+    m = (1 << sp.B) - 1
+    H, F, A = sp.H, sp.F, sp.A
+    hd, hh = H // A, H // A // 2
+    T = {name: (first, rows, cols) for name, rows, cols, scale, first in sp.tensors}
+
+    def at(t, r, c):
+        first, rows, cols = T[t]
+        return first + r * cols + c
+
+    def row(t, r):
+        first, rows, cols = T[t]
+        return d[first + r * cols:first + (r + 1) * cols]
+
+    def col(t, c):
+        first, rows, cols = T[t]
+        return [d[first + r * cols + c] for r in range(rows)]
+
+    def key(g):
+        return hashlib.sha256(b"canonical-model-v1" + bytes(g)).digest() + bytes(g)
+
+    def neg_cols(t, c):
+        for r in range(T[t][1]):
+            d[at(t, r, c)] = m - d[at(t, r, c)]
+
+    def neg_rows(t, r):
+        for c in range(T[t][2]):
+            d[at(t, r, c)] = m - d[at(t, r, c)]
+
+    def perm_cols(t, first_col, order, block):
+        was = list(d)
+        for r in range(T[t][1]):
+            for j, o in enumerate(order):
+                for b in range(block):
+                    d[at(t, r, first_col + j * block + b)] = was[at(t, r, first_col + o * block + b)]
+
+    def perm_rows(t, first_row, order, block):
+        was = list(d)
+        for j, o in enumerate(order):
+            for b in range(block):
+                for c in range(T[t][2]):
+                    d[at(t, first_row + j * block + b, c)] = was[at(t, first_row + o * block + b, c)]
+
+    def order_of(keys):
+        return sorted(range(len(keys)), key=lambda j: (keys[j], j))
+
+    E = "model.embed_tokens.weight"
+    L = ["model.layers.%d." % l for l in range(sp.L)]
+    ins = [p + n for p in L for n in ("self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight",
+                                      "mlp.gate_proj.weight", "mlp.up_proj.weight")]
+    outs = [p + n for p in L for n in ("self_attn.o_proj.weight", "mlp.down_proj.weight")]
+    keys = []
+    for i in range(H):
+        g = col(E, i)
+        k, other = key(g), key([m - x for x in g])
+        if other < k:
+            neg_cols(E, i)
+            for t in ins:
+                neg_cols(t, i)
+            for t in outs:
+                neg_rows(t, i)
+            k = other
+        keys.append(k)
+    order = order_of(keys)
+    perm_cols(E, 0, order, 1)
+    for t in ins:
+        perm_cols(t, 0, order, 1)
+    for t in outs:
+        perm_rows(t, 0, order, 1)
+    for p in L:
+        dn, ga, up = p + "mlp.down_proj.weight", p + "mlp.gate_proj.weight", p + "mlp.up_proj.weight"
+        keys = []
+        for u in range(F):
+            g = col(dn, u) + row(ga, u) + row(up, u)
+            n = [m - x for x in col(dn, u)] + row(ga, u) + [m - x for x in row(up, u)]
+            k, other = key(g), key(n)
+            if other < k:
+                neg_cols(dn, u)
+                neg_rows(up, u)
+                k = other
+            keys.append(k)
+        order = order_of(keys)
+        perm_cols(dn, 0, order, 1)
+        perm_rows(ga, 0, order, 1)
+        perm_rows(up, 0, order, 1)
+        kk, oo, qq, vv = (p + "self_attn.%s_proj.weight" % x for x in "koqv")
+
+        def turn(a, b):
+            for t in (qq, kk):
+                for c in range(H):
+                    x, y = d[at(t, a, c)], d[at(t, b, c)]
+                    d[at(t, a, c)], d[at(t, b, c)] = m - y, x
+
+        for h in range(A):
+            for i in range(hh):
+                a, b = h * hd + i, h * hd + i + hh
+                best, n_best = None, 0
+                for n in range(4):
+                    k = key(row(kk, a) + row(kk, b) + row(qq, a) + row(qq, b))
+                    if best is None or k < best:
+                        best, n_best = k, n
+                    turn(a, b)
+                for n in range(n_best):
+                    turn(a, b)
+            keys = []
+            for j in range(hd):
+                c = h * hd + j
+                g = col(oo, c) + row(vv, c)
+                k, other = key(g), key([m - x for x in g])
+                if other < k:
+                    neg_cols(oo, c)
+                    neg_rows(vv, c)
+                    k = other
+                keys.append(k)
+            order = order_of(keys)
+            perm_cols(oo, h * hd, order, 1)
+            perm_rows(vv, h * hd, order, 1)
+        keys = []
+        for h in range(A):
+            g = []
+            for r in range(h * hd, (h + 1) * hd):
+                g += row(kk, r)
+            for r in range(H):
+                g += row(oo, r)[h * hd:(h + 1) * hd]
+            for t in (qq, vv):
+                for r in range(h * hd, (h + 1) * hd):
+                    g += row(t, r)
+            keys.append(key(g))
+        order = order_of(keys)
+        for t in (kk, qq, vv):
+            perm_rows(t, 0, order, hd)
+        perm_cols(oo, 0, order, hd)
+    return d
+
+
+def ai_canonical_count(sp):
+    def mset(N, n):
+        return math.comb(N + n - 1, n)
+    K, H, F, A = 1 << sp.B, sp.H, sp.F, sp.A
+    hd = H // A
+    head = (K ** (4 * H) // 4) ** (hd // 2) * mset(K ** (2 * H) // 2, hd)
+    layer = mset(K ** (3 * H) // 2, F) * mset(head, A)
+    return mset(K ** 256 // 2, H) * layer ** sp.L
+
+
+def cmd_ai_filter_vectors(args):
+    print("# sieve AI-line filter vectors v1 (SPECIFICATIONS §12.0f)")
+    print("# rows\tshape\tmax_run/period/ramps\tbit length and SHA-256 of the survivors in hex (weight-rows-v1)")
+    for shape, params in (((1, 16, 2, 4), (16, 4, 1)), ((1, 16, 2, 1), (16, 4, 1)), ((1, 4, 1, 2), (2, 3, 1)), ((1, 4, 1, 2), (0, 4, 1)),
+                          ((1, 4, 1, 2), (3, 0, 0)), ((2, 8, 2, 3), (5, 2, 1))):
+        sp = AiSpaceRef(*shape)
+        wr = WeightRowsRef(sp, params[0], params[1], bool(params[2]))
+        n = wr.count
+        print("\t".join(["rows", "L%d/H%d/A%d/B%d" % shape, "%d/%d/%s" % (params[0], params[1], "on" if params[2] else "off"),
+                         str(n.bit_length()), hashlib.sha256(("%x" % n).encode()).hexdigest()]))
+    print("# rank\tshape\tmax_run/period/ramps\tsurvivor number (hex)\tSHA-256 of its digits (a byte each)")
+    sp = AiSpaceRef(1, 4, 1, 2)
+    wr = WeightRowsRef(sp, 2, 3, True)
+    for j in range(5):
+        k = wr.count * (2 * j + 1) // 11
+        d = wr.unrank(k)
+        assert wr.passes(d) and wr.rank(d) == k
+        print("\t".join(["rank", "L1/H4/A1/B2", "2/3/on", "%x" % k, hashlib.sha256(bytes(d)).hexdigest()]))
+    print("# canonical\tshape\tbit length and SHA-256 of the canonical models in hex")
+    print("# model\tshape\tordering\tbearing\tSHA-256 of the canonical form's digits")
+    for shape in ((1, 16, 2, 4), (1, 4, 1, 2), (2, 8, 2, 3), (1, 8, 2, 1)):
+        sp = AiSpaceRef(*shape)
+        n = ai_canonical_count(sp)
+        print("\t".join(["canonical", "L%d/H%d/A%d/B%d" % shape, str(n.bit_length()), hashlib.sha256(("%x" % n).encode()).hexdigest()]))
+        for deg in (13, 137, 246):
+            d = sp.digits(ai_bearing(deg, sp.N), "scrambled")
+            c = ai_canonical(sp, d)
+            assert ai_canonical(sp, c) == c
+            print("\t".join(["model", "L%d/H%d/A%d/B%d" % shape, "scrambled", str(deg), hashlib.sha256(bytes(c)).hexdigest()]))
+
+
+def cmd_ai_canonical(args):
+    """A model's canonical form, as `sieve ai --canonical --address-out` writes its address (positional)."""
+    sp = AiSpaceRef(args.ai_layers, args.ai_width, args.ai_heads, args.ai_bits)
+    with open(args.address_file) as f:
+        i = int(f.read().strip(), 16)
+    c = ai_canonical(sp, sp.digits(i, "positional"))
+    print("%0*x" % (sp.width_hex, sp.index(c, "positional")))
+    if args.rows:
+        wr = WeightRowsRef(sp)
+        print("weight-rows-v1 " + ("pass" if wr.passes(c) else "FAIL"))
+
+
 # ---- training-v1 (SPECIFICATIONS §12.0e): a model of the AI line trained in integer arithmetic,
 # written from the specification. Python's >> and // round down, as the section asks.
 
@@ -2653,16 +2984,18 @@ def tr_sincos(a):
     return s >> 12, c >> 12
 
 
-def tr_decimal(text):
+def tr_decimal(text, bits=16):
     whole, _, frac = text.partition(".")
     num, den = int(whole + frac or "0"), 10 ** len(frac)
-    return (num * 2 * 65536 + den) // (2 * den)
+    return (num * 2 * (1 << bits) + den) // (2 * den)
 
 
 class TrainerRef:
-    def __init__(self, sp, digits, learning_rate, momentum):
+    def __init__(self, sp, digits, learning_rate, momentum, shift=0):
+        """shift: training-v2's loss scale in bits (0: training-v1)."""
         self.sp, self.digits = sp, list(digits)
-        self.eta, self.mu = tr_decimal(learning_rate), tr_decimal(momentum)
+        self.shift = shift
+        self.eta, self.mu = tr_decimal(learning_rate, 16 + shift), tr_decimal(momentum)
         self.m = (1 << sp.B) - 1
         self.H, self.A = sp.H, sp.A
         self.D, self.F = sp.H // sp.A, sp.F
@@ -2766,7 +3099,7 @@ class TrainerRef:
             nxt = tok[p + 1]
             score += prob[nxt]
             count += 1
-            dl = [pr - ((1 << 16) if t == nxt else 0) for t, pr in enumerate(prob)]
+            dl = [tr_hold((pr - ((1 << 16) if t == nxt else 0)) << self.shift) for t, pr in enumerate(prob)]
             if grads is None:
                 continue
             for t in range(256):
@@ -2851,13 +3184,13 @@ class TrainerRef:
             s, c = self.window(w, grads)
             score += s
             count += c
-        lim_g, lim_v = 1 << 43, 1 << 46
+        lim_g, lim_v = 1 << (43 + self.shift), 1 << (46 + self.shift)
         for name, rows, cols, _, first in self.sp.tensors:
             S = self.scale[name]
             for i in range(first, first + rows * cols):
                 g = max(-lim_g, min(lim_g, grads[i]))
                 self.velocity[i] = max(-lim_v, min(lim_v, ((self.velocity[i] * self.mu) >> 16) + g))
-                self.master[i] = max(-S, min(S, self.master[i] - ((self.velocity[i] * self.eta) >> 16)))
+                self.master[i] = max(-S, min(S, self.master[i] - ((self.velocity[i] * self.eta) >> (16 + 2 * self.shift))))
                 self.digits[i] = max(0, min(self.m, ((self.master[i] + S) * self.m + S) // (2 * S)))
         return score, count
 
@@ -2910,7 +3243,7 @@ def tr_read_ini(text):
             r["file"].append(v.strip())
         else:
             r[k.strip()] = v.strip()
-    assert r.get("version") == "training-v1", "a training-v1 run"
+    assert r.get("version") in ("training-v1", "training-v2"), "a training-v1 or training-v2 run"
     return r
 
 
@@ -2919,7 +3252,8 @@ def tr_replay(folder):
     ini = tr_read_ini(open(os.path.join(folder, "training.ini"), encoding="utf-8").read())
     sp = AiSpaceRef(int(ini["layers"]), int(ini["width"]), int(ini["heads"]), int(ini["bits"]), ini["key"])
     mode, _, start = ini["start"].partition(" ")
-    tr = TrainerRef(sp, sp.digits(int(start, 16), mode), ini["learning-rate"], ini["momentum"])
+    shift = int(ini.get("loss-scale-bits", "0")) if ini["version"] == "training-v2" else 0
+    tr = TrainerRef(sp, sp.digits(int(start, 16), mode), ini["learning-rate"], ini["momentum"], shift)
     files, order = {}, []
 
     def read(path):
@@ -2948,7 +3282,7 @@ def tr_replay(folder):
         if fmt == 1 or keep:
             fields.append(addr())
         return "checkpoint " + " ".join(fields)
-    out = ["sieve-training-result-v%d" % fmt, "version training-v1", "steps %d" % steps, point(0, 0, 0)]
+    out = ["sieve-training-result-v%d" % fmt, "version " + ini["version"], "steps %d" % steps, point(0, 0, 0)]
     score = count = 0
     for k in range(steps):
         s, c = tr.step(order[k * batch:(k + 1) * batch])
@@ -2988,6 +3322,30 @@ def cmd_train_vectors(args):
     print("sigmoid\t" + " ".join(str(tr_sigmoid(x)) for x in (0, 70000, -70000, 8000000, -8000000)))
     print("sincos\t" + " ".join("%d,%d" % tr_sincos(a) for a in (0, 1 << 32, 7 << 32, 511 << 32, 6746518852)))
     print("pow2q32\t" + " ".join(str(tr_pow2_q32(y)) for y in (0, -1, -(1 << 31), -57070290109)))
+
+
+TR2_CASES = (  # shape, window, batch, steps, learning rate, momentum, loss scale bits
+    ((1, 8, 2, 3), 9, 2, 4, "0.01", "0.9", 7),
+    ((2, 8, 1, 4), 17, 1, 3, "0.0005", "0.5", 5),
+    ((1, 16, 2, 4), 33, 2, 3, "0.00001", "0.9", 7),  # a rate below training-v1's floor (1/65536)
+)
+
+
+def cmd_train_vectors_v2(args):
+    """Steps of training-v2 (the loss scaled by 2^k, the rate held to 16 + k bits)."""
+    corpus = open(args.corpus, "rb").read()
+    print("# sieve training vectors v2 (training-v2 over aispace-v1): shape, window, batch, learning rate, momentum,")
+    print("# loss scale bits, step, score (Q16 sum), predictions, SHA-256 of the digits; start scrambled 0, order")
+    print("# from the corpus (tests/training_corpus.txt) as sieve ai-train --record cuts it, seed 1, one epoch")
+    for shape, length, batch, steps, eta, mu, shift in TR2_CASES:
+        sp = AiSpaceRef(*shape)
+        tr = TrainerRef(sp, sp.digits(0, "scrambled"), eta, mu, shift)
+        order = tr_make_order([("c", len(corpus))], length, 1, 1)
+        for k in range(steps):
+            ws = [corpus[o:o + n] for _, o, n in order[k * batch:(k + 1) * batch]]
+            s, c = tr.step(ws)
+            print("\t".join(["L%d/H%d/A%d/B%d" % shape, str(length), str(batch), eta, mu, str(shift), str(k + 1), str(s), str(c),
+                             hashlib.sha256(bytes(tr.digits)).hexdigest()]))
 
 
 def cmd_train_replay(args):
@@ -7190,6 +7548,14 @@ def main():
     s.add_argument("--count", type=int, default=500)
     s.add_argument("--out", required=True)
     sub.add_parser("ai-vectors")
+    sub.add_parser("ai-filter-vectors")
+    s = sub.add_parser("ai-canonical")
+    s.add_argument("--ai-layers", type=int, default=1)
+    s.add_argument("--ai-width", type=int, default=16)
+    s.add_argument("--ai-heads", type=int, default=2)
+    s.add_argument("--ai-bits", type=int, default=4)
+    s.add_argument("--address-file", required=True)
+    s.add_argument("--rows", action="store_true", help="also judge it by weight-rows-v1 at its defaults")
     s = sub.add_parser("ai-read")
     s.add_argument("--ai-layers", type=int, default=1)
     s.add_argument("--ai-width", type=int, default=16)
@@ -7201,6 +7567,7 @@ def main():
     s.add_argument("--out", required=True)
     s = sub.add_parser("train-vectors")
     s.add_argument("--corpus", required=True)
+    s.add_argument("--v2", action="store_true", help="training-v2's vectors")
     s = sub.add_parser("train-replay")
     s.add_argument("--run", required=True)
     s = sub.add_parser("tensors-fixture")
@@ -7313,8 +7680,12 @@ def main():
         cmd_tensors_fixture(args)
     elif args.cmd == "ai-vectors":
         cmd_ai_vectors(args)
+    elif args.cmd == "ai-filter-vectors":
+        cmd_ai_filter_vectors(args)
+    elif args.cmd == "ai-canonical":
+        cmd_ai_canonical(args)
     elif args.cmd == "train-vectors":
-        cmd_train_vectors(args)
+        cmd_train_vectors_v2(args) if args.v2 else cmd_train_vectors(args)
     elif args.cmd == "train-replay":
         cmd_train_replay(args)
     elif args.cmd == "ai-read":

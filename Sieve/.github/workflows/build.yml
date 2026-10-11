@@ -302,6 +302,31 @@ jobs:
           $exe ai-train tests/training_run_v1 --quiet | tr -d '\r' | q "^reproduced exactly"
           python reference/sieve_ref.py train-replay --run tests/training_run_v1 | tr -d '\r' | cmp - tests/training_run_v1/result.txt
           $exe ai-train data/training/universalbibliothek.sieve --quiet | tr -d '\r' | q "^reproduced exactly"
+          # training-v2: a loss scale of 2^5, the oracle training it again to the same result.
+          $exe ai-train --record tiny-corp --out run-v2 --ai-width 8 --ai-heads 2 --ai-bits 3 --window 17 --epochs 2 --checkpoint-every 3 --loss-scale-bits 5 --learning-rate 0.0005 --quiet > /dev/null
+          q "^version = training-v2" run-v2/training.ini
+          python reference/sieve_ref.py train-replay --run run-v2 | tr -d '\r' | cmp - run-v2/result.txt
+          # Stopped part-way twice and carried on (--resume), a run ends exactly as one never stopped.
+          $exe ai-train --record tiny-corp --out run-stop --ai-width 8 --ai-heads 2 --ai-bits 3 --window 17 --epochs 3 --checkpoint-every 4 --stop-after 7 --quiet | tr -d '\r' | q "^stopped at step 7"
+          [ -f run-stop.resume ]
+          $exe ai-train run-stop --resume --stop-after 13 --quiet | tr -d '\r' | q "^stopped at step 13"
+          $exe ai-train run-stop --resume --quiet | tr -d '\r' | q "^result written"
+          [ ! -f run-stop.resume ]
+          python reference/sieve_ref.py train-replay --run run-stop | tr -d '\r' | cmp - run-stop/result.txt
+          # The AI line's filters (SPECIFICATIONS §12.0f): weight-rows-v1 counts and ranks; the model the
+          # shipped run trains passes it, and so does its canonical form (canonical-model-v1), which the
+          # oracle works out the same and which says what the model says.
+          printf '[ai]\nmode = compact\nfilters = weight-rows-v1\n' > ai-rows.ini
+          $exe filters --line ai --filters ai-rows.ini | tr -d '\r' | q "^survivors    2\^32768.00 (exact; compact mode available)"
+          $exe filters --line ai --filters ai-rows.ini | tr -d '\r' | q "keeps 10\^-145.65 of the line (exact; it judges)"
+          $exe ai-train data/training/universalbibliothek.sieve --address-out ub.hex --quiet > /dev/null
+          $exe ai --address-file ub.hex --filters ai-rows.ini --temperature 0 | tr -d '\r' | tee ub-ai.txt | q "weight-rows-v1 \[x\] pass, canonical-model-v1 \[ \] FAIL"
+          q "^compact      positional " ub-ai.txt
+          $exe ai --address-file ub.hex --filters ai-rows.ini --temperature 0 --canonical --address-out ubc.hex | tr -d '\r' | tee ubc-ai.txt | q "weight-rows-v1 \[x\] pass, canonical-model-v1 \[ \] pass"
+          [ "$(grep '^says' ub-ai.txt)" = "$(grep '^says' ubc-ai.txt)" ]
+          python reference/sieve_ref.py ai-canonical --address-file ub.hex --rows | tr -d '\r' > ubc-ref.txt
+          head -1 ubc-ref.txt | cmp - ubc.hex
+          q "^weight-rows-v1 pass" ubc-ref.txt
           # And the same line in the hallway: a sixth door, the cube in hand, green on clay.
           H=build/hallway
           [ -f build/Release/hallway.exe ] && H=build/Release/hallway.exe
@@ -744,6 +769,13 @@ jobs:
           q "^width = 20" hruns2/corp/training.ini
           q "^learning-rate = 0.0002" hruns2/corp/training.ini
           $H --harness --training-dir hruns --script "g" --screenshot harness-go.png | tr -d '\r' | q "the model the run trained, in hand"
+          # The AI line's filters in the hallway: compact (weight-rows-v1), its survivors closed up; and
+          # with canonical-model-v1 hiding the rest, GO TO IT stands on the model's canonical form.
+          printf '[ai]\nmode = compact\nfilters = weight-rows-v1\n' > ai-rows.ini
+          printf '[ai]\nmode = hide\nfilters = canonical-model-v1\n' > ai-canon.ini
+          $H --no-menu --line ai --filters ai-rows.ini --walk "0,0" --screenshot ai-compact.png | tr -d '\r' | sed -n 1p | q "^AI line, positional, filters: 1 compact"
+          $H --harness --training-dir data/training --filters ai-canon.ini --script "g" --screenshot harness-go-canon.png | tr -d '\r' | q "as its class's canonical form"
+          $H --menu --line ai --filters ai-rows.ini --settle 200 --press "F" --screenshot menu-ai-filters.png | q "saved menu-ai-filters.png"
                     # From the main menu: the same locator, with no world to walk to, so Enter does not go.
           $H --main-menu --locate tests/manifest_fixture/a.txt --press "Return" --screenshot locate-menu.png | q "file locator (main menu): open, no Go to it"
           # The demonstration (IDEAS 16.9): every dimension's item at each whole degree, as one
@@ -1179,7 +1211,9 @@ jobs:
           python sieve_ref.py composition-vectors | diff - ../tests/vectors_compositions_v1.tsv
           python sieve_ref.py world-vectors | diff - ../tests/vectors_worlds_v1.tsv
           python sieve_ref.py ai-vectors | diff - ../tests/vectors_ai_v1.tsv
+          python sieve_ref.py ai-filter-vectors | diff - ../tests/vectors_ai_filters_v1.tsv
           python sieve_ref.py train-vectors --corpus ../tests/training_corpus.txt | diff - ../tests/vectors_training_v1.tsv
+          python sieve_ref.py train-vectors --corpus ../tests/training_corpus.txt --v2 | diff - ../tests/vectors_training_v2.tsv
           python sieve_ref.py titled-vectors | diff - ../tests/vectors_titled_v1.tsv
           python sieve_ref.py binary-vectors | diff - ../tests/vectors_binary_v1.tsv
           python sieve_ref.py chunk-vectors | diff - ../tests/vectors_chunks_v1.tsv

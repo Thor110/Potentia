@@ -1837,10 +1837,9 @@ void Menu::render()
         auto clip = [&](const std::string& t) { return text_cells(t) <= cols ? t : fit_cells(t, cols - 2) + ".."; };
         const SDL_Color edge = th.edge;
         th.edge = ink; // labels in a readable colour; the bar keeps the line's own edges
-        // Magnifying glass: opens this line's filters, on every line that has them (not AI yet);
-        // both binary columns open the one binary line's filters (by its files' kinds).
+        // Magnifying glass: opens this line's filters; both binary columns open the one binary
+        // line's filters (by its files' kinds).
         magnifier_[c] = {};
-        if (i != kAiLine)
         {
             magnifier_[c] = {x - 2, label - 2, 20, 20};
             SDL_SetRenderDrawColor(r_, th.edge.r, th.edge.g, th.edge.b, 255);
@@ -1911,6 +1910,7 @@ void Menu::render()
                 for (const auto& part : cfg_.worlds.parts) ticked += part.enabled.size();
             else if (i == kBinaryLine) ticked = cfg_.binary.enabled.size();
             else if (i == kModelsLine) ticked = cfg_.models.enabled.size();
+            else if (i == kAiLine) ticked = cfg_.ai.enabled.size();
             else if (unit_at(i) >= 0) ticked = cfg_.lines[unit_at(i)].enabled.size();
             if (ticked) text(r_, x, label + 82, clip(trf("map.ticked", {std::to_string(ticked)})), 1, th.edge);
         }
@@ -1946,6 +1946,7 @@ sieve::FilterLine Menu::filter_line_of(int i) const
     case Media::Models:
     case Media::Worlds: f = sieve::cli::models_filter_line(s_.model_vertices, s_.model_faces, s_.model_coords); break; // (a world's: its models' part)
     case Media::Binary: f = sieve::cli::binary_filter_line(s_.binary_bytes); break;
+    case Media::Ai: f = sieve::cli::ai_filter_line(ai_space()); break;
     case Media::Tracks:
     case Media::Movies: f = filter_line_of(line_of(*kDimensions[i].composes)); break; // a unit (their parts: part_line)
     default: // video (and books, whose parts are book_part_line's)
@@ -1954,6 +1955,15 @@ sieve::FilterLine Menu::filter_line_of(int i) const
         break;
     }
     return f;
+}
+
+const sieve::AiSpace& Menu::ai_space() const
+{
+    const sieve::AiShape shape{s_.ai_layers, s_.ai_width, s_.ai_heads, s_.ai_bits};
+    const sieve::AiShape* had = ai_space_ ? &ai_space_->shape() : nullptr;
+    if (!had || had->layers != shape.layers || had->width != shape.width || had->heads != shape.heads || had->bits != shape.bits)
+        ai_space_ = std::make_shared<const sieve::AiSpace>(shape, "sieve");
+    return *ai_space_;
 }
 
 sieve::FilterLine Menu::book_part_line(int part) const
@@ -1988,6 +1998,7 @@ sieve::FilterLine Menu::part_line(int line, int part) const
 
 sieve::cli::LineFilters& Menu::filters_of(const ORow& row)
 {
+    if (overlay_ == kAiLine) return cfg_.ai;
     if (overlay_ == kModelsLine) return cfg_.models;
     if (overlay_ == kBinaryLine) return cfg_.binary;
     if (has_parts(overlay_)) return parts_cfg(overlay_)[std::max(0, row.part)];
@@ -1996,6 +2007,7 @@ sieve::cli::LineFilters& Menu::filters_of(const ORow& row)
 
 const sieve::cli::LineFilters& Menu::filters_of(const ORow& row) const
 {
+    if (overlay_ == kAiLine) return cfg_.ai;
     if (overlay_ == kModelsLine) return cfg_.models;
     if (overlay_ == kBinaryLine) return cfg_.binary;
     if (has_parts(overlay_)) return parts_cfg(overlay_)[std::max(0, row.part)];
@@ -2005,6 +2017,7 @@ const sieve::cli::LineFilters& Menu::filters_of(const ORow& row) const
 sieve::cli::FilterMode& Menu::mode_of(int line)
 {
     if (line == kModelsLine) return cfg_.models.mode;
+    if (line == kAiLine) return cfg_.ai.mode;
     if (line == kBinaryLine) return cfg_.binary.mode;
     if (is_composition(line)) return comp_cfg(line).mode;
     if (line == kWorldsLine) return cfg_.worlds.mode;
@@ -2162,6 +2175,43 @@ std::pair<std::string, std::function<Menu::StackInfo()>> Menu::stack_job(int i, 
                     return out;
                 }};
     }
+    // The AI line: its own stack on a model's weights (weight-rows-v1 ranks; canonical-model-v1 counts
+    // and judges). Counted on the worker at the settings' shape, to a line of 2^26 bits; past that, a
+    // count would take minutes, so canonical-model-v1 alone is given from its log, and the rest are not.
+    if (i == kAiLine)
+    {
+        const sieve::AiShape shape{s_.ai_layers, s_.ai_width, s_.ai_heads, s_.ai_bits};
+        const std::string key = ai_space().id() + "/" + settings_key(lf);
+        return {key, [lf, shape]() {
+                    StackInfo out;
+                    const sieve::AiSpace space(shape, "sieve");
+                    const sieve::FilterStack st = sieve::cli::build_stack(sieve::cli::ai_filter_line(space), lf);
+                    const bool small = space.bits() <= (uint64_t(1) << 26);
+                    const bool canonical_alone = st.size() == 1 && st.filter_name(0) == std::string(sieve::kCanonicalModelVersion);
+                    if (st.empty()) none_of(out);
+                    else if (canonical_alone)
+                    {
+                        // Counted exactly to a line of 2^20 bits, and from its log past that.
+                        const double l = space.canonical_log2_count() * std::log10(2.0);
+                        if (space.bits() <= (uint64_t(1) << 20)) survivors_of(out, space.canonical_count(), space.size());
+                        else
+                        {
+                            out.filtered = filtered_estimate(l, space.size());
+                            out.survivor_bits = l / std::log10(2.0);
+                            out.kept_log10 = l - space.size().log10_approx();
+                        }
+                        out.status = trf("status.survivors_ai_judged", {fixed(l, 1)});
+                    }
+                    else if (!small) out.status = tr("status.too_large");
+                    else if (st.ranker())
+                    {
+                        out.table_bytes = st.table_bytes();
+                        survivors_of(out, st.ranker()->count(), space.size());
+                    }
+                    else out.status = trf("status.not_countable", {st.compact_blocker()});
+                    return out;
+                }};
+    }
     // The binary line: its files' kinds, counted exactly at any length (sieve/filekind.hpp), and
     // the pages as its items (counted exactly; the other forms need the lines built).
     if (i == kBinaryLine)
@@ -2217,8 +2267,8 @@ const Menu::StackInfo& Menu::stack_info(int i)
 {
     if (i == kAiLine)
     {
-        info_[i] = StackInfo{"none", "", -1, ""}; // no filters on the AI line yet
-        return info_[i];
+        auto [key, work] = stack_job(i, cfg_.ai);
+        return resolve(i, key, std::move(work));
     }
     if (i == kWorldsLine) return worlds_stack_info();
     if (has_parts(i)) return parts_stack_info(i);
@@ -2472,6 +2522,7 @@ std::vector<Menu::ORow> Menu::overlay_rows() const
     else if (unit_at(overlay_) >= 0) add_filter_rows(rows, filter_line_of(overlay_), cfg_.lines[unit_at(overlay_)], -1);
     else if (overlay_ == kModelsLine) add_filter_rows(rows, filter_line_of(kModelsLine), cfg_.models, -1);
     else if (overlay_ == kBinaryLine) add_filter_rows(rows, filter_line_of(kBinaryLine), cfg_.binary, -1);
+    else if (overlay_ == kAiLine) add_filter_rows(rows, filter_line_of(kAiLine), cfg_.ai, -1);
     else return {{ORow::Kind::Mode, "", ""}}; // closed, or a line with no filters yet
     // Custom filter files that did not load, with why: never skipped without a word.
     if (otab_ == 1)
@@ -2693,6 +2744,7 @@ std::vector<Menu::Reach> Menu::reach_of(ToggleScope scope, int overlay, int tab)
         for (int part = 0; part < parts_of(kWorldsLine); ++part)
             if (has_part(kWorldsLine, part)) stacks.push_back({&cfg_.worlds.parts[part], part_line(kWorldsLine, part), kWorldsLine, part});
         stacks.push_back({&cfg_.binary, filter_line_of(kBinaryLine), kBinaryLine, -1});
+        stacks.push_back({&cfg_.ai, filter_line_of(kAiLine), kAiLine, -1});
     }
     else if (overlay == kBooksLine)
         for (int part = 0; part < 3; ++part) stacks.push_back({&cfg_.books.parts[part], book_part_line(part), kBooksLine, part});
@@ -2709,6 +2761,7 @@ std::vector<Menu::Reach> Menu::reach_of(ToggleScope scope, int overlay, int tab)
     else if (unit_at(overlay) >= 0) stacks.push_back({&cfg_.lines[unit_at(overlay)], filter_line_of(overlay), overlay, -1});
     else if (overlay == kModelsLine) stacks.push_back({&cfg_.models, filter_line_of(kModelsLine), kModelsLine, -1});
     else if (overlay == kBinaryLine) stacks.push_back({&cfg_.binary, filter_line_of(kBinaryLine), kBinaryLine, -1});
+    else if (overlay == kAiLine) stacks.push_back({&cfg_.ai, filter_line_of(kAiLine), kAiLine, -1});
     std::vector<Reach> in_reach;
     for (const Stack& st : stacks)
         for (const sieve::FilterSpec* f : sieve::filters_for(st.line))
@@ -3126,7 +3179,7 @@ void Menu::render_overlay(float W, float H)
              trf("filters.filtered", {tally.filtered.empty() ? tr("filters.filtered.unknown") : tally.filtered}), 1, white);
     }
     text(r_, x, box_.y + 32, (is_composition(overlay_) ? trf("filters.intro.composition", {tr(theme_of(overlay_).key)})
-                                    : tr(overlay_ == kBooksLine ? "filters.intro.books" : overlay_ == kWorldsLine ? "filters.intro.worlds" : overlay_ == kBinaryLine ? "filters.intro.binary" : overlay_ == kModelsLine ? "filters.intro.models" : "filters.intro")), 1, grey);
+                                    : tr(overlay_ == kBooksLine ? "filters.intro.books" : overlay_ == kWorldsLine ? "filters.intro.worlds" : overlay_ == kBinaryLine ? "filters.intro.binary" : overlay_ == kModelsLine ? "filters.intro.models" : overlay_ == kAiLine ? "filters.intro.ai" : "filters.intro")), 1, grey);
 
     const sieve::cli::FilterMode mode = mode_of(overlay_);
     const auto rows = overlay_rows();

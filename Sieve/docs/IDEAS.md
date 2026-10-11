@@ -1069,25 +1069,53 @@ space made walkable, and a place for priors over weights (§16.8b) to become a g
   suggested for it. Measured on the shipped text, one pass, 1 layer, 4 bits: width 16, 0.2 s; 32,
   0.5 s; 64, 1.4 s; 128, 4.9 s; and at 8 layers of width 1024 (134 million weights) a step takes
   42 s, about 29 hours for the shipped run's 2,475 steps, in 7.7 GB. What larger models still need:
-  - **speed:** threads share out only a step's windows (4 by default); sharing out each matrix's
-    rows as well is safe, because integer sums come out the same in any order, and vectorised
-    integer loops would gain several times more;
-  - **resuming:** a run of hours must survive the window closing: the master weights and momentum
-    (16 bytes a weight) saved at checkpoints, beside the run and not part of it, and training
-    resumed from them exactly;
-  - **precision (training-v2):** the learning rate halves as the width doubles, and past a width
-    of a few hundred it nears training-v1's smallest step (1/65536); deep models' gradients shrink
-    layer by layer towards Q16's floor too. More fractional bits for the master weights' updates
-    (or the loss scaled up) is a new version; v1 runs stay as they are;
+  - **speed** *(built, 11 October 2026)*: values kept in 32 bits, the matrices taken whole, each
+    row of weights read once against every position, threads within a window for large models,
+    and AVX2 integer kernels chosen at start-up: 8 layers of width 1024 went from 42 s a step to
+    12 s, width 128 from 4.9 s a pass to 2.2 s; every result bit for bit as before (the tests run
+    the plain and the vector paths, and one thread and three). More is possible: blocking several
+    rows at once, AVX-512, and the per-position softmax for small models;
+  - **resuming** *(built)*: `sieve-training-state-v1` beside the run (`RUN.resume`), at every
+    checkpoint and when stopped, stamped with the recipe's and order's hashes; carrying on gives
+    the very result of a run never stopped (CI stops one twice);
+  - **precision** *(built: training-v2)*: the loss scaled by 2^k and the rate held to 16 + k
+    bits. Measured on the shipped text, five passes: width 128 with 2 layers, 3.49 bits a byte to
+    3.33 at k = 7; 4 layers of width 32, 3.24 to 3.14 at k = 6; 8 layers, 3.34 to 3.26; but Micro
+    3.21 to 3.29 (a scaled gradient there is clipped more often), so k is suggested from the shape
+    (6 for a width of 64 or more or 4 layers or more, else 0). A first version of v2 shifted the
+    update down by 16 + k instead of 16 + 2k, every step 2^k too large: width 128 then went to 14
+    bits a byte, worse than guessing; the oracle had the same slip, which is why the experiment
+    that measured it, not only the oracle, is part of the check. Depth still gains little past 2
+    layers on a 21 KB text; that is the text's size as much as the arithmetic;
   - **the result's size:** the final address is the whole model (129 MB at that shape), so large
     runs may keep only its hash, the model a file of its own;
   - **the AI line's own limits:** 256 byte tokens, 512 positions, at most 8 bits a weight; larger
     models gain most from real tokens, which is an aispace-v2;
   - **the shelves:** every crate on the AI line runs its model for its face, so large shapes need
     a budget there, as pictures have.
-- **Next on this line:** filters on the weights themselves (what a model says is floating point,
-  so it cannot decide which models survive until the arithmetic is pinned), a guided ordering by a prior over weights, warping a model in from
-  the hallway, and larger shapes as the engine gets faster.
+- **Filters on the weights (built, 11 October 2026; SPECIFICATIONS §12.0f).** They judge the
+  digits, never what a model says (which is floating point), so they are exact:
+  - `weight-rows-v1` sets aside structure in any row of a tensor: a long run of one digit, a short
+    block repeated all the way along, a ramp. Measured first on models trained from the shipped
+    text at 1, 2, 4 and 8 bits and 1 to 4 layers: every one passes at the defaults (the longest run
+    12, at 1 bit). Rows are judged one at a time, so it counts and ranks exactly and the line can go
+    compact. It sets aside little at 4 bits (10^-11.8 of Micro), and up to 40% of a 1-bit line,
+    where long runs happen by chance: a soft filter there.
+  - `canonical-model-v1` keeps one model of each class of the line's symmetries (permuting and
+    negating the stream's dimensions, the feed-forward's units, a head's value dimensions;
+    permuting the heads; turning rotary pairs a quarter turn): at Micro all but 1 in 2^484 of the
+    line are another model's twins, and at width 1024 and 8 layers about 2^92,000 of each class
+    (of 2^537 million). The canonical form says what the model says (the tests check the logits).
+    One lesson on the way: ordered by their first digits, the members left that row of digits in
+    order, which is the structure the other filter sets aside, so the canonical models of trained
+    runs failed `weight-rows-v1`. Ordered by a SHA-256 of each member instead, the canonical form
+    looks like noise, and they pass: two filters for one line have to be designed together.
+  - Counted exactly but not yet ranked: the canonical form's groups are read across rows,
+    interleaved in address order. Ranking it is a walk that keeps which members are still tied, as
+    canonical-mesh-v1's does; that would let the line go compact under it too, and save every
+    address those 484 bits at Micro.
+- **Next on this line:** ranking canonical-model-v1, a guided ordering by a prior over weights,
+  warping a model in from the hallway, and larger shapes as the engine gets faster.
 
 ## 16. Edward's list of 10 October 2026, evaluated
 
@@ -1100,6 +1128,19 @@ cancel exactly; for a lucky file the search wins a few bits, for an unlucky one 
 is §3.6, §12's two-part code and §17.1's rotation transform again. A scheme gains only
 where the options are agreed in advance and the files are not evenly spread among them: where a
 prediction (a model, a use case's filters) puts likely files first.
+
+**Agreed search vectors (Edward, 11 October 2026).** His framing, after the maze (§18.1): every
+filter falls back on the same intractability, but the more search vectors there are, the more
+chance one of them names a given file short. That is right, and it is the same argument from the
+other side. Every ordering, filter or transform agreed in advance is a search vector: a direction
+in which some files are near the front. None of them beats the counting argument on average, and
+saying which vector a file uses costs log2 of how many there are. But a file is not an average
+file: real files are clustered (text is mostly words, pictures mostly smooth, weights mostly
+noise without structure), and a vector that points at a cluster names its files shorter than the
+log2 it costs to choose it. So more vectors help exactly as far as each points at real content
+that the others miss. That is why the filters are versioned and agreed (each is a vector anyone
+can reproduce), why COST weighs the cost of naming the stack, and why the tailoring search picks
+among vectors per file: the search is free to try many; the address pays only for the one it uses.
 
 **16.1 Files as their own filters, counted from both ends (a button on COST).** Edward's words: a
 counting system with sliding windows that uses files themselves as filters, counting from the first
@@ -1351,3 +1392,122 @@ other filters it might lose data. And the maze can be undone if the seed of its 
   permutation (or mask) and versioned: as an alternative keyed ordering, and as an agreed
   format-aware transform under a guided ordering. Not as a per-file reducer: there it meets the
   counting argument, as every scheme that chooses among options for one file does.
+
+**18.2 A language filter, or layers, ordering models outwards (Edward, 11 October 2026).** His
+words: we will need a language filter or a layering system, to order models outwards into the
+infinite expanse, since the program could in theory be cranked up high enough to match real data.
+
+*Evaluation.* The AI line grows as fast as its shape does (Micro is 2^32768 models; 8 layers of
+width 1024, 2^537 million), and almost every model babbles, so something has to say which come
+first. Three ways, the first two buildable now:
+- **A language filter, exactly.** What a model says is floating point, but `training-v1`'s forward
+  pass is integer arithmetic, every rounding pinned (SPECIFICATIONS §12.0e). So a model's score on
+  a pinned text (bits a byte, as the harness measures) is exact on every machine, and a filter can
+  keep the models that predict that text better than a threshold: a soft filter, versioned with
+  its text's SHA-256. It judges only: counting the models below a score is as hard as the line is
+  large. On the shelves it would mark or hide the babblers, and it gives the layers below a
+  measure.
+- **Layers as shells around anchors.** A trained model is an anchor: a model that means
+  something, on the record (its run says how it came to be). Not a shorter name: the shipped run
+  is 14.5 KB, its model's address 4 KB of digits; its worth is that it marks where language is on
+  the line. The models a few digits away from it are its neighbours, and they mostly say nearly what it says (positional neighbours already do). Layer
+  `k` is every model `k` digit changes from the anchor: `C(W, k) (2^B - 1)^k` of them, counted and
+  ranked exactly, so "the anchor, then layer 1, then layer 2" is an ordering outwards with
+  addresses, as near-anchor filters were planned for the other lines. Several anchors (several
+  runs) give several centres, and a model is named by its nearest anchor and its layer: the more
+  anchors, the more of the expanse lies near one, which is the agreed-search-vectors argument
+  (§16) on this line.
+- **Matching real data, cranked up.** At real sizes the anchors are what matter: a model the size
+  of a published one stands on the line at its weights' address, and its run (its recipe, its
+  data's manifest and its order) is how anyone checks it came from that data. Getting there needs the line to
+  grow (aispace-v2, real tokens, §15), training to keep its speed, and the result to keep only the
+  model's hash past a size (§15's "the result's size").
+- **Verdict:** build the language filter on `training-v1`'s forward pass (exact, judged), and the
+  layers as shells around anchors (exact, counted and ranked), the harness's runs being the
+  anchors; the second is the one that orders the expanse outwards.
+
+**18.3 Any AI model, plugged in (Edward, 11 October 2026).** His question: we need to be able to
+plug in any AI model; or is a model just a size?
+
+*Evaluation.* A model is a size and more. To stand on a line it needs four things to be agreed:
+- **its architecture:** the family (Llama, which Sieve's engine runs, §12.0c; Qwen and others
+  differ in small ways, such as biases on the attention's projections, which the engine would have
+  to learn one by one);
+- **its shape:** layers, width, heads, feed-forward, positions (read from its `config.json`);
+- **its vocabulary:** the AI line today uses the 256 bytes; a published model has its own
+  tokenizer, so the tokenizer's SHA-256 would be part of the line's id;
+- **its numbers:** the AI line's weights are digits on an even grid (1 to 8 bits). A published
+  model's weights are 16-bit floats (bf16), which are on no such grid. But a digit can be the
+  16-bit pattern itself: a line whose digits are bf16 values holds every bf16 model of that shape
+  exactly, its address the weights written out.
+
+So "plugging in" a model is two things. **Running it** works now for Llama models (`sieve chat`).
+**Placing it on a line** is an `aispace-v2`: the shape, the architecture, the tokenizer and the
+number format read from the model's own files, and a line made for them; the model's address is
+then its file's weights, as long as the file (724 MB for SmolLM2-360M), and `sieve-weights-v1`
+(§16.8b) is the prior that would order such a line. Training on that line is another matter: at
+that size it needs far more time, and integer training (§12.0e) would have to grow to it.
+- **Verdict:** aispace-v2 with the shape, tokenizer and number format (grid or bf16) taken from a
+  model's files, so that any Llama model warps in at an exact address; other architectures as the
+  engine learns them.
+
+**18.4 Language: a dimension, or a name on the AI line? (Edward, 11 October 2026).**
+
+*Evaluation.* Which language a model speaks is not in its address: it is something measured, by
+which text it predicts best. The pages line is different: there, a language's letters are its
+alphabet, a setting of the line, and the line's id names it. So:
+- **Not a new dimension.** A dimension is a state space of its own; language is a way of looking
+  at the AI line (and at the pages and books lines), not more units.
+- **A setting and a filter on the AI line.** The language filter of §18.2, given a pinned text in
+  the language chosen (German for the shipped run, English, and so on), keeps the models that speak
+  it best and orders the shells around anchors by it. The language is named on screen: in the top
+  bar beside the line's id, as the guided model is on the pages line, and on each crate, with how
+  many bits a byte the model needs for that language.
+- **With real tokenizers** (§18.3), a tokenizer is made for some languages, so the line's
+  vocabulary already leans one way, and the language setting would be named by it.
+- **Verdict:** the purple AI line, with the language named on screen and chosen as a setting of its
+  filter; no separate dimension.
+
+**18.5 How language and perception scale in the AI state space, and images given to a model
+(Edward, 11 October 2026).** To note and ponder, not yet to build.
+
+*Language, as the line grows.* What is known, and what could be measured here:
+- **The line grows far faster than what it can say.** Its size is 2^(B·W): every weight added
+  doubles it B times. The share of it that speaks a language well is not measured, but every sign
+  is that it shrinks as the line grows. No random Micro model has been seen to write a word; only
+  training (a path from a start) has reached one. The models that speak sit in a tiny region,
+  found by following gradients, not by sampling.
+- **But what the best of them can say grows too.** Published measurements (scaling laws) find that
+  a model's loss falls as a power of its size and its data. So a larger line holds better speakers,
+  in an ever smaller share of it: more to find, harder to stumble on.
+- **Much of the growth is redundancy.** The symmetries (canonical-model-v1, §15) grow with the
+  factorial of the width: 4H! orderings of each layer's units alone. So the number of different
+  models grows more slowly than the address does. At Micro the twins take 484 bits of 32,768; at
+  width 1024 and 8 layers, about 92,000.
+- **Measurable here, exactly:** the training curve of one recipe at growing widths (the harness
+  does this), and how far from an anchor a model can stray before it stops speaking (the shells of
+  §18.2: walk out one layer at a time, scoring each model with the exact integer forward pass). That
+  second one would show how wide the region of speakers is around a trained model, and how that
+  width changes with the shape.
+
+*Perception: images given to a model.* Two meanings, both possible:
+- **A byte model reading a picture's bytes: possible now.** The AI line's vocabulary is the 256
+  bytes, so an image line's item (its pixels, one byte each up to 256 colours) is already a
+  sequence the model can read. And the harness trains on any file in a folder, so a run can learn
+  from pictures today, as bytes. Limits: 512 positions, so about a 22 by 22 picture at a byte a
+  pixel, and pixels read row after row, with no sense of the row above. That would be a fair first
+  experiment: a run on small pictures, then a model continuing the top half of a picture into its
+  bottom half, on the image line. It would be perception at the smallest scale, exact and on the
+  record.
+- **Published vision models (images uploaded to a model): a new architecture.** Models that see
+  (LLaVA, Qwen-VL and the like) put a vision encoder in front of the language model: the picture is
+  cut into patches, each patch turned into a vector, and those vectors join the text. Sieve's
+  engine would need that encoder (a vision transformer) and the model's way of joining the two; one
+  family at a time, as §18.3 says of architectures. Uploading one or several images is then the
+  chat's input, beside the text.
+- **On the line,** a model that sees is still weights, so it still has an address; its line's id
+  would name its encoder's shape and its image size, as the tokenizer names its text.
+- **In the hallway,** "if and when applicable": with an image item in hand and a model chosen, the
+  model is given the picture (as bytes for the AI line's models, as patches for a vision model)
+  and says what follows. The same gesture as J between an item and its file.
+

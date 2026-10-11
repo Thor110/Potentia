@@ -222,7 +222,6 @@ public:
     const sieve::cli::FilterConfig& filters() const { return cfg_; }
     void open_filters(int line)
     {
-        if (line == kAiLine) return; // no filters on the AI line yet
         overlay_ = line;
         orow_ = 0;
         oscroll_ = 0;
@@ -337,6 +336,9 @@ private:
 
     void render_overlay(float W, float H);
     sieve::FilterLine filter_line_of(int line) const;
+    // The AI line at the settings' shape, kept while the shape stands (its filter line points at it).
+    const sieve::AiSpace& ai_space() const;
+    mutable std::shared_ptr<const sieve::AiSpace> ai_space_;
     sieve::FilterLine book_part_line(int part) const; // books: the line a part's filters see
     // Lines whose items have parts, each with its own filters (cover, title, and pages, units or
     // models): books, tracks, movies and worlds. part_line: the line a part's filters see.

@@ -1929,6 +1929,7 @@ int cmd_filters(const Args& a)
     if (a.get("line", "text") == "books") return cmd_filters_books(a);
     if (a.get("line", "text") == "binary") return cmd_filters_binary(a);
     if (a.get("line", "text") == "models") return cmd_filters_models(a);
+    if (a.get("line", "text") == "ai") return cmd_filters_ai(a);
     const Line line = make_line(a.has("length") || line_from_string(a.get("line", "text")) != LineKind::Text ? a : [&] {
         Args b = a;
         b.opts["length"] = "32";

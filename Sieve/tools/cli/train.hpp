@@ -38,13 +38,22 @@ struct TrainingOutcome
     training::Result result;
     std::string text;       // result.txt
     AiSpace::Digits digits; // the final model's
-    bool cancelled = false;
+    bool cancelled = false; // stopped before the end (cancelled, or at stop_after); its state saved, if a state file was given
+    uint64_t resumed_from = 0, stopped_at = 0;
 };
 // Told after every step: the step (from 1), how many there are, and the score since the last
 // checkpoint (reset after each).
 using TrainingCallback = std::function<void(uint64_t step, uint64_t steps, const training::Score& recent)>;
+// With `state`: training carries on from that file if it holds this run's state (and refuses one
+// of another run), saves its state there at every checkpoint and when it stops before the end, and
+// deletes it once the run is done. The file is beside the run, never part of it. `stop_after`:
+// stop (as if cancelled) after that many steps, for scripts and tests.
 TrainingOutcome train_run(const TrainingRun& run, unsigned threads, const TrainingCallback& progress = {},
-                          const std::atomic<bool>* cancel = nullptr);
+                          const std::atomic<bool>* cancel = nullptr, const std::filesystem::path& state = {}, uint64_t stop_after = 0);
+// Where a run's state is kept when it stops: beside it, its name and ".resume".
+std::filesystem::path state_file_of(const std::filesystem::path& run);
+// The step a saved state carries on from, if `state` holds one of this run.
+std::optional<uint64_t> saved_step(const TrainingRun& run, const std::filesystem::path& state);
 
 // The first line where a result differs from the one expected ("line N: ..."), or nothing.
 std::optional<std::string> result_difference(const std::string& expected, const std::string& got);
@@ -74,6 +83,11 @@ TrainingRun record_training_run(const std::filesystem::path& corpus, const std::
 // less one, 256 at the defaults): 0.008 / width * 256 / predictions, rounded down to 1, 2 or 5 of a
 // power of ten, and no lower than 0.00002 (training-v1's Q16 holds no smaller step than 1 / 65536).
 std::string suggested_learning_rate(const training::Recipe& rc);
+// The loss scale to suggest (training-v2's k): 6 for a width of 64 or more, or 4 layers or more,
+// where the gradients of deeper layers fell below Q16 (measured: width 128 with 2 layers, 3.49
+// bits a byte to 3.33; 4 layers of width 32, 3.24 to 3.14); 0 below, where scaling clipped
+// gradients and cost (Micro: 3.21 to 3.29).
+uint32_t suggested_loss_scale(const training::Recipe& rc);
 
 // What a run of this recipe over these files will take, worked out before it starts.
 struct TrainingEstimate

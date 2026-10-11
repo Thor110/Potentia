@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -88,7 +89,138 @@ TrainingRun load_training_run(const fs::path& p)
     return run_of_files(m.root, std::move(files));
 }
 
-TrainingOutcome train_run(const TrainingRun& run, unsigned threads, const TrainingCallback& progress, const std::atomic<bool>* cancel)
+namespace {
+
+// A run's saved state (sieve-training-state-v1): text lines, then the masters and the momenta,
+// each 8 bytes little-endian, a weight at a time.
+//     sieve-training-state-v1
+//     recipe <SHA-256 of training.ini>
+//     order <SHA-256 of the order, as order.txt would write it>
+//     step <steps done>
+//     recent <score sum> <predictions> <bits>      (since the last checkpoint)
+//     weights <W>
+//     result <bytes>                               then the result so far, as result.txt writes it
+//     end
+struct SavedState
+{
+    uint64_t step = 0;
+    training::Score recent;
+    training::Result result;
+    std::vector<int64_t> masters, velocities;
+};
+
+std::string run_identity(const TrainingRun& run, const char* what)
+{
+    if (std::string(what) == "recipe") return Sha256::hex(Sha256::hash(run.recipe.text()));
+    return Sha256::hex(Sha256::hash(training::order_text(run.order)));
+}
+
+void put_i64s(std::string& out, const std::vector<int64_t>& v)
+{
+    for (const int64_t x : v)
+    {
+        const uint64_t u = uint64_t(x);
+        for (int k = 0; k < 8; ++k) out.push_back(char((u >> (8 * k)) & 0xFF));
+    }
+}
+
+void save_state(const fs::path& file, const TrainingRun& run, const SavedState& st)
+{
+    std::string head = "sieve-training-state-v1\nrecipe " + run_identity(run, "recipe") + "\norder " + run_identity(run, "order") + "\nstep " +
+                       std::to_string(st.step) + "\n";
+    char recent[96];
+    std::snprintf(recent, sizeof recent, "recent %llu %llu %.17g\n", (unsigned long long)st.recent.prob_sum,
+                  (unsigned long long)st.recent.predictions, st.recent.bits);
+    const std::string result = st.result.text();
+    head += recent;
+    head += "weights " + std::to_string(st.masters.size()) + "\nresult " + std::to_string(result.size()) + "\n" + result + "end\n";
+    std::string body = head;
+    body.reserve(head.size() + 16 * st.masters.size());
+    put_i64s(body, st.masters);
+    put_i64s(body, st.velocities);
+    // Written whole, then put in place, so a state is never half written.
+    const fs::path tmp = fs::path(file).concat(".tmp");
+    write_text(tmp, body);
+    std::error_code ec;
+    fs::rename(tmp, file, ec);
+    if (ec)
+    {
+        fs::remove(file, ec);
+        fs::rename(tmp, file);
+    }
+}
+
+std::optional<SavedState> load_state(const fs::path& file, const TrainingRun& run, uint64_t weights)
+{
+    if (!fs::exists(file)) return std::nullopt;
+    const std::vector<uint8_t> bytes = read_file_bytes(file);
+    const std::string all(bytes.begin(), bytes.end());
+    size_t at = 0;
+    auto line = [&]() {
+        const size_t nl = all.find('\n', at);
+        if (nl == std::string::npos) throw std::invalid_argument(file.string() + " is not a training state");
+        std::string l = all.substr(at, nl - at);
+        at = nl + 1;
+        return l;
+    };
+    auto field = [&](const std::string& key) {
+        const std::string l = line();
+        if (l.rfind(key + " ", 0) != 0) throw std::invalid_argument(file.string() + " is not a training state");
+        return l.substr(key.size() + 1);
+    };
+    if (line() != "sieve-training-state-v1") throw std::invalid_argument(file.string() + " is not a training state");
+    if (field("recipe") != run_identity(run, "recipe") || field("order") != run_identity(run, "order"))
+        throw std::invalid_argument(file.string() + " holds another run's state: move it away to train this run from its start");
+    SavedState st;
+    st.step = std::stoull(field("step"));
+    {
+        std::istringstream r(field("recent"));
+        r >> st.recent.prob_sum >> st.recent.predictions >> st.recent.bits;
+    }
+    if (std::stoull(field("weights")) != weights) throw std::invalid_argument(file.string() + " holds a state of another shape");
+    const size_t rn = size_t(std::stoull(field("result")));
+    st.result = training::Result::parse(all.substr(at, rn));
+    at += rn;
+    if (line() != "end" || all.size() - at != 16 * weights) throw std::invalid_argument(file.string() + " is cut short");
+    auto get = [&](std::vector<int64_t>& v) {
+        v.resize(size_t(weights));
+        for (int64_t& x : v)
+        {
+            uint64_t u = 0;
+            for (int k = 0; k < 8; ++k) u |= uint64_t(uint8_t(all[at + size_t(k)])) << (8 * k);
+            x = int64_t(u);
+            at += 8;
+        }
+    };
+    get(st.masters);
+    get(st.velocities);
+    return st;
+}
+
+} // namespace
+
+fs::path state_file_of(const fs::path& run)
+{
+    fs::path p = fs::absolute(run).lexically_normal();
+    if (!p.has_filename()) p = p.parent_path();
+    return p.concat(".resume");
+}
+
+std::optional<uint64_t> saved_step(const TrainingRun& run, const fs::path& state)
+{
+    try
+    {
+        const AiShape& s = run.recipe.shape;
+        if (auto st = load_state(state, run, 256ull * s.width + 16ull * s.layers * s.width * s.width)) return st->step;
+    }
+    catch (const std::exception&)
+    {
+    }
+    return std::nullopt;
+}
+
+TrainingOutcome train_run(const TrainingRun& run, unsigned threads, const TrainingCallback& progress, const std::atomic<bool>* cancel,
+                          const fs::path& state, uint64_t stop_after)
 {
     const training::Recipe& rc = run.recipe;
     const AiSpace space(rc.shape, rc.key);
@@ -98,6 +230,7 @@ TrainingOutcome train_run(const TrainingRun& run, unsigned threads, const Traini
     auto address = [&]() { return space.hex_of(space.index_of(trainer.digits(), AddressMode::Positional)); };
     const uint64_t steps = run.steps();
     out.result.version = rc.result_version();
+    out.result.trainer = rc.version == 1 ? training::kTrainingVersion : training::kTrainingVersion2;
     out.result.steps = steps;
     // A checkpoint: its hash (v2), and its address where the result keeps them.
     auto checkpoint = [&](uint64_t step, const training::Score& score) {
@@ -107,13 +240,39 @@ TrainingOutcome train_run(const TrainingRun& run, unsigned threads, const Traini
         if (out.result.version == 1 || rc.checkpoint_addresses) c.address = address();
         out.result.checkpoints.push_back(std::move(c));
     };
-    checkpoint(0, {});
     training::Score recent;
-    for (uint64_t k = 0; k < steps; ++k)
+    uint64_t first = 0;
+    std::optional<SavedState> saved;
+    if (!state.empty()) saved = load_state(state, run, space.weights());
+    if (saved)
     {
-        if (cancel && cancel->load())
+        // Carry on from the saved state, as if training had not stopped.
+        if (saved->result.version != out.result.version || saved->step > steps) throw std::invalid_argument("the saved state does not fit this run");
+        trainer.restore(saved->masters, saved->velocities);
+        out.result.checkpoints = std::move(saved->result.checkpoints);
+        recent = saved->recent;
+        first = out.resumed_from = saved->step;
+    }
+    else checkpoint(0, {});
+    auto keep_state = [&](uint64_t done) {
+        if (state.empty()) return;
+        SavedState st;
+        st.step = done;
+        st.recent = recent;
+        st.result.version = out.result.version;
+        st.result.steps = steps;
+        st.result.checkpoints = out.result.checkpoints;
+        st.masters = trainer.masters();
+        st.velocities = trainer.velocities();
+        save_state(state, run, st);
+    };
+    for (uint64_t k = first; k < steps; ++k)
+    {
+        if ((cancel && cancel->load()) || (stop_after && k >= stop_after))
         {
+            keep_state(k);
             out.cancelled = true;
+            out.stopped_at = k;
             return out;
         }
         std::vector<std::span<const uint8_t>> batch;
@@ -129,7 +288,13 @@ TrainingOutcome train_run(const TrainingRun& run, unsigned threads, const Traini
         {
             checkpoint(k + 1, recent);
             recent = {};
+            if (k + 1 < steps) keep_state(k + 1);
         }
+    }
+    if (!state.empty())
+    {
+        std::error_code ec;
+        fs::remove(state, ec); // done: nothing to carry on from
     }
     out.digits = trainer.digits();
     out.result.final_address = address();
@@ -213,12 +378,20 @@ std::string suggested_learning_rate(const training::Recipe& rc)
 {
     const double predictions = double(rc.batch) * double(std::max(1u, rc.window - 1));
     const double x = 0.008 / double(std::max(1u, rc.shape.width)) * 256.0 / predictions;
-    // The 1-2-5 steps from 0.00002 up, as decimals written exactly.
-    static const char* kSteps[] = {"0.00002", "0.00005", "0.0001", "0.0002", "0.0005", "0.001", "0.002", "0.005", "0.01", "0.02", "0.05", "0.1"};
-    std::string best = kSteps[0];
+    // The 1-2-5 steps, as decimals written exactly, down to the smallest the recipe's arithmetic
+    // holds to 8 parts or more (2^-13 under training-v1's Q16; 2^-20 with a loss scale of 7 bits).
+    static const char* kSteps[] = {"0.0000005", "0.000001", "0.000002", "0.000005", "0.00001", "0.00002", "0.00005", "0.0001",
+                                   "0.0002",    "0.0005",   "0.001",    "0.002",    "0.005",   "0.01",    "0.02",    "0.05", "0.1"};
+    const double floor = 8.0 / double(uint64_t(1) << (16 + (rc.version >= 2 ? rc.loss_scale_bits : 0)));
+    std::string best;
     for (const char* step : kSteps)
-        if (std::stod(step) <= x * (1 + 1e-9)) best = step;
+        if (std::stod(step) >= floor * (1 - 1e-9) && (best.empty() || std::stod(step) <= x * (1 + 1e-9))) best = step;
     return best;
+}
+
+uint32_t suggested_loss_scale(const training::Recipe& rc)
+{
+    return rc.version >= 2 && (rc.shape.width >= 64 || rc.shape.layers >= 4) ? 6 : 0;
 }
 
 TrainingEstimate estimate_training(const training::Recipe& rc, const std::vector<TrainingFile>& files, unsigned threads)
@@ -244,7 +417,7 @@ TrainingEstimate estimate_training(const training::Recipe& rc, const std::vector
     const uint64_t address = (e.weights * s.bits + 3) / 4;
     const uint64_t checkpoints = e.steps / std::max(1u, rc.checkpoint_every) + 2;
     e.result_bytes = address + 200 + checkpoints * (100 + (rc.checkpoint_addresses ? address : 0));
-    e.learning_rate_at_floor = rc.learning_rate_q16() <= 4;
+    e.learning_rate_at_floor = rc.learning_rate_q() <= 8;
     return e;
 }
 
