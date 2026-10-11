@@ -6,8 +6,11 @@
 // the AI line to talk to it.
 //
 // Keyboard: Up/Down choose a run, Enter trains it (or, on the last row, records a new one), G goes
-// to its model, P packs a run folder as a .sieve, Esc stops a training or goes back. Mouse: click a
-// run or a button. Training runs on a worker, so the window stays alive and can stop it.
+// to its model, P packs a run folder as a .sieve, Esc stops a training or goes back. Recording a
+// run: a path typed, then its files listed in the order they will be read, Shift+Up/Down moving
+// the one chosen, M changing how they are read, Left/Right the times through, Enter to record and
+// train. Mouse: click a run, a file or a button. Training runs on a worker, so the window stays
+// alive and can stop it.
 #pragma once
 
 #include "cli/train.hpp"
@@ -51,7 +54,7 @@ private:
         std::string name;
         bool folder = false;
     };
-    enum class Action { Train, GoTo, Pack, Record };
+    enum class Action { Train, GoTo, Pack, Record, MoveUp, MoveDown, Reading, Start, Cancel };
     void say(std::string text, bool bad = false); // the status line
     void scan();
     void select(int row);
@@ -85,7 +88,13 @@ private:
     // The corpus prompt (record a new run).
     bool prompting_ = false;
     std::string prompt_;
-    std::vector<std::pair<SDL_FRect, int>> row_rects_;
+    // A new run's curriculum: its files in the order they will be read, moved up and down, and how
+    // they are read; Start records the run and trains it.
+    std::optional<std::vector<sieve::cli::TrainingFile>> curriculum_;
+    int cur_row_ = 0;
+    sieve::training::Recipe recipe_;
+    std::string new_name_;
+    std::vector<std::pair<SDL_FRect, int>> row_rects_, cur_rects_;
     std::vector<std::pair<SDL_FRect, Action>> button_rects_;
     bool done_ = false;
     Result result_ = Result::Back;

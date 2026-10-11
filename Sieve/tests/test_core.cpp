@@ -3537,6 +3537,7 @@ void test_training(const std::string& dir)
     r.start = "1f";
     r.start_mode = AddressMode::Positional;
     r.learning_rate = "0.0005";
+    r.files = {"corpus/a.txt"};
     CHECK(Recipe::parse(r.text()).text() == r.text());
     CHECK(Recipe::parse(r.text()).learning_rate_q16() == 33); // round(0.0005 * 65536) = 32.768
     bool refused = false;
@@ -3552,12 +3553,38 @@ void test_training(const std::string& dir)
     CHECK(order.size() == 2 * (4 + 1)); // 100 bytes: 0, 32, 64, 96 (4 bytes); 3 bytes: 0
     CHECK(parse_order(order_text(order)).size() == order.size());
     CHECK(order_text(parse_order(order_text(order))) == order_text(order));
+    // The three readings: every window once an epoch, the files in the order given.
+    const std::vector<std::pair<std::string, uint64_t>> two = {{"corpus/b.txt", 100}, {"corpus/a.txt", 40}};
+    const std::vector<Window> in_order = make_order(two, 33, 2, 7, Reading::InOrder);
+    const std::vector<Window> within = make_order(two, 33, 2, 7, Reading::ShuffledWithinFiles);
+    const std::vector<Window> mixed = make_order(two, 33, 2, 7, Reading::Shuffled);
+    CHECK(in_order.size() == 2 * (4 + 2) && within.size() == in_order.size() && mixed.size() == in_order.size());
+    CHECK(in_order[0].path == "corpus/b.txt" && in_order[0].offset == 0 && in_order[3].offset == 96 && in_order[4].path == "corpus/a.txt");
+    bool blocks = true; // shuffled within files: b's four windows, then a's two, each epoch
+    for (size_t i = 0; i < within.size(); ++i) blocks = blocks && within[i].path == (i % 6 < 4 ? "corpus/b.txt" : "corpus/a.txt");
+    CHECK(blocks);
+    CHECK(order_text(make_order(two, 33, 2, 7)) == order_text(mixed)); // shuffled is the default, as the first runs had it
+    // A recipe of run format 2, read back; one of the first runs' format keeps its form.
+    Recipe r2;
+    r2.reading = Reading::ShuffledWithinFiles;
+    r2.files = {"corpus/b.txt", "corpus/a.txt"};
+    r2.checkpoint_addresses = true;
+    CHECK(Recipe::parse(r2.text()).text() == r2.text());
+    CHECK(Recipe::parse(r2.text()).files == r2.files && Recipe::parse(r2.text()).result_version() == 2);
+    Recipe r1 = r2;
+    r1.order.clear();
+    CHECK(Recipe::parse(r1.text()).result_version() == 1 && Recipe::parse(r1.text()).text() == r1.text());
     Result res;
+    res.version = 1;
     res.steps = 3;
-    res.checkpoints = {{0, {}, "00ff"}, {3, {12345, 64}, "0100"}};
+    res.checkpoints = {{0, {}, {}, "00ff"}, {3, {12345, 64}, {}, "0100"}};
     res.final_address = "0100";
     res.model_sha256 = std::string(64, 'a');
     CHECK(Result::parse(res.text()).text() == res.text());
+    res.version = 2;
+    res.checkpoints = {{0, {}, std::string(64, 'b'), {}}, {3, {12345, 64}, std::string(64, 'c'), "0100"}};
+    CHECK(Result::parse(res.text()).text() == res.text());
+    CHECK(Result::parse(res.text()).checkpoints[0].address.empty() && Result::parse(res.text()).checkpoints[1].address == "0100");
 }
 
 void test_ai_vectors(const std::string& dir)

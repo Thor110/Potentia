@@ -1141,20 +1141,18 @@ carrying items rather than their bytes, and as little as reproduces them.*
   (text, PNG, MIDI, OBJ, books, tracks, movies), which `sieve` and the hallway already have; the
   instructions shrink, the program grows once.
 
-*Then (11 October 2026), Edward's idea: no `.map` at all, the `.sieve` doing its work, from v5.*
-A map does four things an installer's manifest does not: it names files without holding them (a
-node is a claim, a size and a SHA-256, and a verified anchor is a local file that meets it); it
-links nodes (`contains`, `anchor`, and relations any tool or person adds, such as `trained-into`);
-it carries facts about them (metadata); and it can be sealed, and edited in place (add and remove
-nodes, as the node graph does). All four fit in a manifest: a fourth way for a file, **named**
-(size and hash, no bytes, so `sieve install` makes no file of it and reports it missing unless it
-is found), edge lines, metadata lines and a seal line. A map is then Sieve instructions whose
-manifest has edges, read by the node graph like any other, and one format is learnt, packed and
-checked instead of two. Old maps (`sieve-map-v1`, `-v2`) are still read: formats are versioned,
-never edited, so `.map` stops being written, not being read. Verdict: build, with v5.
-- **The training runs show it already works without a map** (§15, SPECIFICATIONS §12.0e): a run
-  is a folder (recipe, order, corpus, result), packed as an ordinary v4 `.sieve`; v5 will pack the
-  same folder more tightly, and nothing a run records changes.
+*Weighed and set aside (11 October 2026): folding maps into the manifest.* A map adds what a
+manifest lacks (files named but not held, edges, metadata, a seal), and all of it would fit in a
+manifest; but every `.sieve` would then have to allow for entries only some files need, and,
+Edward's rule, a file carries only what it needs. So maps stay maps, for the node graph and its
+anchors; the manifest gains nothing for them; and v5 is about carrying items more tightly.
+Training runs need neither: a run is a folder of ordinary files (the recipe, the corpus, the
+result), packed as ordinary Sieve instructions by the harness (SPECIFICATIONS §12.0e), so other
+`.sieve` files carry nothing of training's.
+- **For a far later manifest, Edward's idea:** a run's file order recorded as item numbers in the
+  instructions' own list of files rather than as paths (a few bytes each instead of a path's
+  length; the list is sorted by path, so the numbers would shift if a file were added or renamed,
+  which a later version would have to settle).
 
 **16.4 A file type filter on the binary line.** Filter the binary dimension by file types, read
 from their headers.

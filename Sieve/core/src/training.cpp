@@ -169,7 +169,36 @@ std::string Recipe::text() const
     t += "momentum = " + momentum + "\n";
     t += "batch = " + std::to_string(batch) + "\n";
     t += "checkpoint-every = " + std::to_string(checkpoint_every) + "\n";
+    if (order.empty()) return t; // the first runs' format
+    t += "checkpoint-addresses = " + std::string(checkpoint_addresses ? "yes" : "no") + "\n";
+    t += "order = " + order + "\n";
+    if (order == "order-v1")
+    {
+        t += "reading = " + std::string(training::to_string(reading)) + "\n";
+        t += "window = " + std::to_string(window) + "\n";
+        t += "epochs = " + std::to_string(epochs) + "\n";
+        t += "seed = " + std::to_string(seed) + "\n";
+        for (const std::string& f : files) t += "file = " + f + "\n";
+    }
     return t;
+}
+
+const char* to_string(Reading r)
+{
+    switch (r)
+    {
+    case Reading::InOrder: return "in-order";
+    case Reading::ShuffledWithinFiles: return "shuffled-within-files";
+    default: return "shuffled";
+    }
+}
+
+Reading reading_from_string(std::string_view s)
+{
+    if (s == "in-order") return Reading::InOrder;
+    if (s == "shuffled-within-files") return Reading::ShuffledWithinFiles;
+    if (s == "shuffled") return Reading::Shuffled;
+    bad("a reading is in-order, shuffled-within-files or shuffled, not \"" + std::string(s) + "\"");
 }
 
 namespace {
@@ -221,6 +250,7 @@ std::vector<std::string> split(std::string_view line, char sep)
 Recipe Recipe::parse(std::string_view text)
 {
     Recipe r;
+    r.order.clear(); // no order line: the first runs' format
     bool version = false;
     for (std::string_view raw : lines_of(text))
     {
@@ -250,9 +280,30 @@ Recipe Recipe::parse(std::string_view text)
         else if (k == "momentum") r.momentum = v;
         else if (k == "batch") r.batch = uint32_t(number(v, "batch"));
         else if (k == "checkpoint-every") r.checkpoint_every = uint32_t(number(v, "checkpoint-every"));
+        else if (k == "checkpoint-addresses")
+        {
+            if (v != "yes" && v != "no") bad("checkpoint-addresses is yes or no");
+            r.checkpoint_addresses = v == "yes";
+        }
+        else if (k == "order")
+        {
+            if (v != "order-v1" && v != "order.txt") bad("an order is order-v1 or order.txt, not \"" + v + "\"");
+            r.order = v;
+        }
+        else if (k == "reading") r.reading = reading_from_string(v);
+        else if (k == "window") r.window = uint32_t(number(v, "window"));
+        else if (k == "epochs") r.epochs = uint32_t(number(v, "epochs"));
+        else if (k == "seed") r.seed = number(v, "seed");
+        else if (k == "file") r.files.push_back(v);
         else bad("training.ini has no key \"" + k + "\"");
     }
     if (!version) bad("training.ini names no version");
+    if (r.order == "order-v1")
+    {
+        if (r.window < 2 || r.window > 513) bad("a window of 2 to 513 bytes");
+        if (r.epochs < 1) bad("an epoch or more");
+        if (r.files.empty()) bad("order-v1 names the files it reads (file = ...)");
+    }
     r.check();
     return r;
 }
@@ -283,17 +334,19 @@ std::vector<Window> parse_order(std::string_view text)
 }
 
 std::vector<Window> make_order(const std::vector<std::pair<std::string, uint64_t>>& files, uint32_t length, uint32_t epochs,
-                               uint64_t seed)
+                               uint64_t seed, Reading reading)
 {
     if (length < 2 || length > 513) bad("a window of 2 to 513 bytes");
-    std::vector<Window> windows;
+    std::vector<std::vector<Window>> per_file;
     for (const auto& [path, size] : files)
+    {
+        per_file.emplace_back();
         for (uint64_t off = 0; off + 1 < size; off += length - 1)
-            windows.push_back({path, off, uint32_t(std::min<uint64_t>(length, size - off))});
+            per_file.back().push_back({path, off, uint32_t(std::min<uint64_t>(length, size - off))});
+    }
     std::vector<Window> out;
     for (uint32_t e = 0; e < epochs; ++e)
     {
-        std::vector<Window> w = windows;
         uint64_t state = seed + e;
         auto next = [&]() {
             uint64_t z = (state += 0x9E3779B97F4A7C15ull);
@@ -301,8 +354,23 @@ std::vector<Window> make_order(const std::vector<std::pair<std::string, uint64_t
             z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
             return z ^ (z >> 31);
         };
-        for (size_t i = w.size(); i > 1; --i) std::swap(w[i - 1], w[size_t(next() % i)]);
-        out.insert(out.end(), w.begin(), w.end());
+        auto shuffle = [&](std::vector<Window>& w) {
+            for (size_t i = w.size(); i > 1; --i) std::swap(w[i - 1], w[size_t(next() % i)]);
+        };
+        if (reading == Reading::Shuffled)
+        {
+            std::vector<Window> w;
+            for (const auto& f : per_file) w.insert(w.end(), f.begin(), f.end());
+            shuffle(w);
+            out.insert(out.end(), w.begin(), w.end());
+            continue;
+        }
+        for (const auto& f : per_file)
+        {
+            std::vector<Window> w = f;
+            if (reading == Reading::ShuffledWithinFiles) shuffle(w);
+            out.insert(out.end(), w.begin(), w.end());
+        }
     }
     return out;
 }
@@ -311,10 +379,15 @@ double Score::bits_per_byte() const { return predictions ? bits / double(predict
 
 std::string Result::text() const
 {
-    std::string t = "sieve-training-result-v1\nversion " + std::string(kTrainingVersion) + "\nsteps " + std::to_string(steps) + "\n";
+    std::string t = "sieve-training-result-v" + std::to_string(version) + "\nversion " + std::string(kTrainingVersion) + "\nsteps " +
+                    std::to_string(steps) + "\n";
     for (const Checkpoint& c : checkpoints)
-        t += "checkpoint " + std::to_string(c.step) + " " + std::to_string(c.score.prob_sum) + " " + std::to_string(c.score.predictions) + " " +
-             c.address + "\n";
+    {
+        t += "checkpoint " + std::to_string(c.step) + " " + std::to_string(c.score.prob_sum) + " " + std::to_string(c.score.predictions);
+        if (version >= 2) t += " " + c.digest;
+        if (version == 1 || !c.address.empty()) t += " " + c.address;
+        t += "\n";
+    }
     t += "final " + final_address + "\nmodel-sha256 " + model_sha256 + "\n";
     return t;
 }
@@ -322,8 +395,10 @@ std::string Result::text() const
 Result Result::parse(std::string_view text)
 {
     const std::vector<std::string_view> lines = lines_of(text);
-    if (lines.empty() || trim(lines[0]) != "sieve-training-result-v1") bad("a result begins \"sieve-training-result-v1\"");
     Result r;
+    if (!lines.empty() && trim(lines[0]) == "sieve-training-result-v1") r.version = 1;
+    else if (!lines.empty() && trim(lines[0]) == "sieve-training-result-v2") r.version = 2;
+    else bad("a result begins \"sieve-training-result-v2\" (or -v1)");
     for (size_t i = 1; i < lines.size(); ++i)
     {
         const std::string line = trim(lines[i]);
@@ -334,13 +409,18 @@ Result Result::parse(std::string_view text)
             if (f[1] != kTrainingVersion) bad("this result is of " + f[1]);
         }
         else if (f[0] == "steps" && f.size() == 2) r.steps = number(f[1], "steps");
-        else if (f[0] == "checkpoint" && f.size() == 5)
+        else if (f[0] == "checkpoint" && (r.version == 1 ? f.size() == 5 : (f.size() == 5 || f.size() == 6)))
         {
             Checkpoint c;
             c.step = number(f[1], "a step");
             c.score.prob_sum = number(f[2], "a score");
             c.score.predictions = number(f[3], "a count");
-            c.address = f[4];
+            if (r.version == 1) c.address = f[4];
+            else
+            {
+                c.digest = f[4];
+                if (f.size() == 6) c.address = f[5];
+            }
             r.checkpoints.push_back(std::move(c));
         }
         else if (f[0] == "final" && f.size() == 2) r.final_address = f[1];

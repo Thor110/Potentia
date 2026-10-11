@@ -276,16 +276,28 @@ jobs:
           $exe chat --model ai246-scrambled --logits "Hello, shelf." --logits-out ai-logits.f32 > /dev/null
           python reference/sieve_ref.py llm-logits "Hello, shelf." --model ai246-scrambled --compare ai-logits.f32
           $exe chat --model ai246-positional --raw --prompt "Hello" --max-tokens 16 > /dev/null
-          # Training (sieve ai-train, training-v1): a run recorded and trained; the oracle, written apart,
-          # trains it again from its folder and writes the same result.txt; trained again from its
-          # .sieve with one thread, it is reproduced; with windows of two steps swapped, it is not (within
-          # a step the order cannot matter: its windows' gradients are summed);
-          # and the run shipped with Sieve trains again to its own result, as it did where it was made.
-          $exe ai-train --record tests/training_corpus.txt --out tiny-run --ai-width 8 --ai-heads 2 --ai-bits 3 --window 17 --epochs 2 --checkpoint-every 3 --learning-rate 0.01 --sieve tiny-run.sieve --quiet > /dev/null
+          # Training (sieve ai-train, training-v1): runs recorded and trained, the order made from
+          # training.ini (order-v1) in each of its three readings, the files in a chosen order; the
+          # oracle, written apart, trains each again and writes the same result.txt. Trained again
+          # from its .sieve with one thread, a run is reproduced. A run whose order is written out
+          # (order.txt), with windows of two steps swapped, is not (within a step the order cannot
+          # matter: its windows' gradients are summed). A run in the first runs' format still trains
+          # to its result, by the tool and the oracle; and the run shipped with Sieve trains again to
+          # its own result, as it did where it was made.
+          mkdir -p corp && cp tests/training_corpus.txt corp/a.txt && head -c 150 tests/training_corpus.txt | tr 'a-z' 'b-za' > corp/b.txt
+          printf 'b.txt\n' > file-order.txt
+          for rd in in-order shuffled-within-files shuffled; do
+            $exe ai-train --record corp --out run-$rd --reading $rd --file-order file-order.txt --ai-width 8 --ai-heads 2 --ai-bits 3 --window 17 --epochs 2 --checkpoint-every 3 --learning-rate 0.01 --quiet > /dev/null
+            python reference/sieve_ref.py train-replay --run run-$rd | tr -d '\r' | cmp - run-$rd/result.txt
+          done
+          q "^file = corpus/b.txt" run-in-order/training.ini
+          $exe ai-train --record tests/training_corpus.txt --out tiny-run --ai-width 8 --ai-heads 2 --ai-bits 3 --window 17 --epochs 2 --checkpoint-every 3 --learning-rate 0.01 --write-order --checkpoint-addresses --sieve tiny-run.sieve --quiet > /dev/null
           python reference/sieve_ref.py train-replay --run tiny-run | tr -d '\r' | cmp - tiny-run/result.txt
           $exe ai-train tiny-run.sieve --threads 1 --quiet | tr -d '\r' | q "^reproduced exactly"
           python -c "import sys; p='tiny-run/order.txt'; l=open(p).read().split('\n'); l[1],l[5]=l[5],l[1]; open(p,'w').write('\n'.join(l))"
           $exe ai-train tiny-run --quiet | tr -d '\r' | q "^NOT reproduced"
+          $exe ai-train tests/training_run_v1 --quiet | tr -d '\r' | q "^reproduced exactly"
+          python reference/sieve_ref.py train-replay --run tests/training_run_v1 | tr -d '\r' | cmp - tests/training_run_v1/result.txt
           $exe ai-train data/training/universalbibliothek.sieve --quiet | tr -d '\r' | q "^reproduced exactly"
           # And the same line in the hallway: a sixth door, the cube in hand, green on clay.
           H=build/hallway
@@ -714,12 +726,14 @@ jobs:
           downs=$(python -c "print(','.join(['Down']*41))")
           $H --menu --press "$downs" --screenshot menu-ai.png | q "saved menu-ai.png"
           # The AI Training Harness (main menu): the run shipped with Sieve, trained again, comes out the
-          # same; a run recorded there from a text is trained and its result written; and GO TO IT
-          # stands on the AI line with the model it trained in hand.
+          # same; a run recorded there from a folder, its second file moved first and read in order, is
+          # trained and its result written; and GO TO IT stands on the AI line with the model in hand.
           $H --harness --training-dir data/training --script "Return" --screenshot harness.png | tr -d '\r' | q "^harness: REPRODUCED EXACTLY"
-          mkdir -p hruns
-          $H --harness --training-dir hruns --script "N,=tests/training_corpus.txt,Return" --screenshot harness-new.png | tr -d '\r' | q "^harness: TRAINED"
-          [ -f hruns/training_corpus/result.txt ]
+          mkdir -p hruns corp && cp tests/training_corpus.txt corp/a.txt && head -c 150 tests/training_corpus.txt | tr 'a-z' 'b-za' > corp/b.txt
+          $H --harness --training-dir hruns --script "N,=corp,Return,Down,Shift+Up,M,Return" --screenshot harness-new.png | tr -d '\r' | q "^harness: TRAINED"
+          [ -f hruns/corp/result.txt ]
+          q "^reading = in-order" hruns/corp/training.ini
+          [ "$(grep '^file = ' hruns/corp/training.ini | head -1)" = "file = corpus/b.txt" ]
           $H --harness --training-dir hruns --script "g" --screenshot harness-go.png | tr -d '\r' | q "the model the run trained, in hand"
                     # From the main menu: the same locator, with no world to walk to, so Enter does not go.
           $H --main-menu --locate tests/manifest_fixture/a.txt --press "Return" --screenshot locate-menu.png | q "file locator (main menu): open, no Go to it"

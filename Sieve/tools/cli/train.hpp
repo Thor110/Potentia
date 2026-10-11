@@ -51,12 +51,22 @@ std::optional<std::string> result_difference(const std::string& expected, const 
 
 struct RecordOptions
 {
-    training::Recipe recipe;
-    uint32_t window = 65, epochs = 30;
-    uint64_t seed = 1;
+    training::Recipe recipe;  // the shape, how it learns, and how it reads (window, epochs, seed, reading)
+    bool write_order = false; // write order.txt out, rather than have order-v1 make it from the recipe
 };
-// A new run in `out` (made, or empty): the corpus (a file, or every file under a folder) copied
-// into corpus/, training.ini and order.txt. Returns the run, untrained.
+// A file of a corpus: where it is, its path in the run (corpus/...), and its size.
+struct TrainingFile
+{
+    std::filesystem::path source;
+    std::string path;
+    uint64_t size = 0;
+};
+// A file, or every file under a folder, in path order (the order a new run reads them in, unless
+// it is changed: the harness's curriculum list).
+std::vector<TrainingFile> corpus_files(const std::filesystem::path& corpus);
+// A new run in `out` (made, or empty): the files copied into it, read in the order given, and
+// training.ini (and, with write_order, order.txt). Returns the run, untrained.
+TrainingRun record_training_run(const std::vector<TrainingFile>& files, const std::filesystem::path& out, const RecordOptions& o);
 TrainingRun record_training_run(const std::filesystem::path& corpus, const std::filesystem::path& out, const RecordOptions& o);
 // A run folder as Sieve instructions (.sieve, packed as sieve-manifest-v4 when that is smaller).
 void pack_training_run(const std::filesystem::path& folder, const std::filesystem::path& sieve_file);

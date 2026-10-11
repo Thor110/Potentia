@@ -5,6 +5,8 @@ out/
 vcpkg_installed/
 __pycache__/
 corpus/
+# (but not the corpus of the training-run fixture, which the tests read)
+!/tests/training_run_v1/corpus/
 
 # GNU Unifont, fetched by tools/fetch_unifont.py (GPLv2+ with the font embedding exception).
 # Not part of Sieve: run the script to get it.

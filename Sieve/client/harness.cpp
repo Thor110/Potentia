@@ -130,6 +130,9 @@ std::vector<std::pair<Harness::Action, bool>> Harness::buttons() const
     const bool busy = training();
     const bool trained = outcome_ || (run_ && run_->result);
     const bool folder = row_ < int(entries_.size()) && entries_[size_t(row_)].folder;
+    if (curriculum_)
+        return {{Action::MoveUp, cur_row_ > 0}, {Action::MoveDown, cur_row_ + 1 < int(curriculum_->size())}, {Action::Reading, true},
+                {Action::Start, true}, {Action::Cancel, true}};
     return {{Action::Train, !busy && run_.has_value()},
             {Action::GoTo, !busy && trained},
             {Action::Pack, !busy && folder && trained},
@@ -148,6 +151,43 @@ void Harness::act(Action a)
         prompt_.clear();
         SDL_StartTextInput(window_);
         break;
+    case Action::MoveUp:
+    case Action::MoveDown:
+    {
+        const int to = cur_row_ + (a == Action::MoveUp ? -1 : 1);
+        std::swap((*curriculum_)[size_t(cur_row_)], (*curriculum_)[size_t(to)]);
+        cur_row_ = to;
+        break;
+    }
+    case Action::Reading:
+        recipe_.reading = recipe_.reading == sieve::training::Reading::Shuffled           ? sieve::training::Reading::InOrder
+                          : recipe_.reading == sieve::training::Reading::InOrder          ? sieve::training::Reading::ShuffledWithinFiles
+                                                                                          : sieve::training::Reading::Shuffled;
+        break;
+    case Action::Cancel: curriculum_.reset(); break;
+    case Action::Start:
+    {
+        // The new run, read in the order the list now has, in a new folder beside the others.
+        std::string name = new_name_;
+        for (int n = 2; fs::exists(dir_ / from_u8(name)) || fs::exists(dir_ / from_u8(name + ".sieve")); ++n) name = new_name_ + "-" + std::to_string(n);
+        try
+        {
+            sieve::cli::RecordOptions o;
+            o.recipe = recipe_;
+            sieve::cli::record_training_run(*curriculum_, dir_ / from_u8(name), o);
+            curriculum_.reset();
+            scan();
+            for (size_t i = 0; i < entries_.size(); ++i)
+                if (entries_[i].name == name) select(int(i));
+            say(trf("harness.recorded", {name}));
+            start_training();
+        }
+        catch (const std::exception& ex)
+        {
+            say(trf("harness.failed", {ex.what()}), true);
+        }
+        break;
+    }
     case Action::GoTo:
     {
         const sieve::AiSpace space(run_->recipe.shape, run_->recipe.key);
@@ -203,11 +243,23 @@ void Harness::start_training()
     say(tr("harness.training"));
     const sieve::cli::TrainingRun run = *run_;
     job_ = std::async(std::launch::async, [this, run] {
-        return sieve::cli::train_run(run, 0, [this, &run](uint64_t k, uint64_t n, const sieve::training::Score& recent) {
+        // The curve: about 200 points over the run, each the bits a byte since the point before
+        // (`recent` counts from the last checkpoint, so what it had at the last point is taken off).
+        double bits_then = 0;
+        uint64_t predictions_then = 0;
+        return sieve::cli::train_run(run, 0, [&, this](uint64_t k, uint64_t n, const sieve::training::Score& recent) {
             std::lock_guard<std::mutex> lock(mu_);
             step_ = k;
             steps_ = n;
-            if (k % run.recipe.checkpoint_every == 0 || k == n) curve_.push_back(float(recent.bits_per_byte()));
+            const uint64_t stride = std::max<uint64_t>(1, n / 200);
+            if (k % stride == 0 || k == n)
+            {
+                if (recent.predictions < predictions_then) bits_then = 0, predictions_then = 0; // a checkpoint came between
+                if (recent.predictions > predictions_then)
+                    curve_.push_back(float((recent.bits - bits_then) / double(recent.predictions - predictions_then)));
+                bits_then = recent.bits, predictions_then = recent.predictions;
+            }
+            if (k % run.recipe.checkpoint_every == 0) bits_then = 0, predictions_then = 0; // `recent` starts again after this
         }, &cancel_);
     });
 }
@@ -343,6 +395,12 @@ void Harness::handle(const SDL_Event& event)
     }
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT && !prompting_)
     {
+        for (const auto& [rect, i] : cur_rects_)
+            if (inside(rect, e.button.x, e.button.y))
+            {
+                cur_row_ = i;
+                return;
+            }
         for (const auto& [rect, i] : row_rects_)
             if (inside(rect, e.button.x, e.button.y) && !training())
             {
@@ -359,7 +417,7 @@ void Harness::handle(const SDL_Event& event)
     }
 }
 
-void Harness::key(SDL_Keycode k, SDL_Keymod)
+void Harness::key(SDL_Keycode k, SDL_Keymod mod)
 {
     if (prompting_)
     {
@@ -377,24 +435,20 @@ void Harness::key(SDL_Keycode k, SDL_Keymod)
         {
             prompting_ = false;
             SDL_StopTextInput(window_);
-            // A new run, named after what it learns from, in a new folder beside the others.
+            // The corpus's files, to put in the order they are to be read (the curriculum), named
+            // after what it learns from.
             std::string path = prompt_;
             if (path.size() >= 2 && path.front() == '"' && path.back() == '"') path = path.substr(1, path.size() - 2);
             const fs::path corpus = from_u8(path);
-            std::string base = u8(corpus.stem());
-            if (base.empty()) base = u8(fs::absolute(corpus).parent_path().filename());
-            if (base.empty()) base = "run";
-            std::string name = base;
-            for (int n = 2; fs::exists(dir_ / from_u8(name)) || fs::exists(dir_ / from_u8(name + ".sieve")); ++n) name = base + "-" + std::to_string(n);
             try
             {
-                sieve::cli::RecordOptions o;
-                sieve::cli::record_training_run(corpus, dir_ / from_u8(name), o);
-                scan();
-                for (size_t i = 0; i < entries_.size(); ++i)
-                    if (entries_[i].name == name) select(int(i));
-                say(trf("harness.recorded", {name}));
-                start_training();
+                curriculum_ = sieve::cli::corpus_files(corpus);
+                cur_row_ = 0;
+                recipe_ = {};
+                new_name_ = u8(corpus.stem());
+                if (new_name_.empty()) new_name_ = u8(fs::absolute(corpus).parent_path().filename());
+                if (new_name_.empty()) new_name_ = "run";
+                say(tr("harness.curriculum.status"));
             }
             catch (const std::exception& ex)
             {
@@ -406,6 +460,24 @@ void Harness::key(SDL_Keycode k, SDL_Keymod)
     if (training())
     {
         if (k == SDLK_ESCAPE) cancel_ = true;
+        return;
+    }
+    if (curriculum_)
+    {
+        const bool shift = (mod & SDL_KMOD_SHIFT) != 0;
+        const int n = int(curriculum_->size());
+        switch (k)
+        {
+        case SDLK_ESCAPE: act(Action::Cancel); break;
+        case SDLK_UP: shift ? act(Action::MoveUp) : void(cur_row_ = std::max(0, cur_row_ - 1)); break;
+        case SDLK_DOWN: shift ? act(Action::MoveDown) : void(cur_row_ = std::min(n - 1, cur_row_ + 1)); break;
+        case SDLK_M: act(Action::Reading); break;
+        case SDLK_LEFT: recipe_.epochs = uint32_t(std::max(1, int(recipe_.epochs) - (shift ? 10 : 1))); break;
+        case SDLK_RIGHT: recipe_.epochs = std::min(10000u, recipe_.epochs + (shift ? 10 : 1)); break;
+        case SDLK_RETURN:
+        case SDLK_KP_ENTER: act(Action::Start); break;
+        default: break;
+        }
         return;
     }
     switch (k)
@@ -488,6 +560,34 @@ void Harness::render()
         frame(r_, {x, ry - 4, colW, 20}, kAccent);
         txt(r_, x + 6, ry, prompt_ + "_", kWhite);
     }
+    else if (curriculum_)
+    {
+        txt(r_, x, ry, trf("harness.curriculum.title", {new_name_}), kWhite, 1.5f);
+        ry += 28;
+        line(tr("harness.reading"), tr(std::string("harness.reading.") + sieve::training::to_string(recipe_.reading)));
+        line(tr("harness.epochs"), trf("harness.epochs.value", {std::to_string(recipe_.epochs), std::to_string(recipe_.window)}));
+        ry += 6;
+        txt(r_, x, ry, tr("harness.curriculum.list"), kGrey);
+        ry += 18;
+        cur_rects_.clear();
+        const int fit = std::max(1, int((H - 120 - ry) / 16));
+        const int first = std::clamp(cur_row_ - fit / 2, 0, std::max(0, int(curriculum_->size()) - fit));
+        for (int i = first; i < std::min(int(curriculum_->size()), first + fit); ++i)
+        {
+            const auto& f = (*curriculum_)[size_t(i)];
+            const SDL_FRect rr{x - 4, ry - 3, colW, 16};
+            if (i == cur_row_)
+            {
+                SDL_SetRenderDrawColor(r_, 48, 0, 80, 255);
+                SDL_RenderFillRect(r_, &rr);
+            }
+            cur_rects_.push_back({rr, i});
+            txt(r_, x, ry, std::to_string(i + 1) + ".", kGrey);
+            txt(r_, x + 40, ry, f.path.substr(7, size_t(std::max(0.0f, (colW - 200) / 8))), i == cur_row_ ? kWhite : kGrey);
+            txt(r_, x + colW - 120, ry, grouped(f.size) + " B", kDim);
+            ry += 16;
+        }
+    }
     else if (row_ < int(entries_.size()) && !load_error_.empty())
     {
         txt(r_, x, ry, entries_[size_t(row_)].name, kWhite, 1.5f);
@@ -511,6 +611,17 @@ void Harness::render()
             if (p.rfind("corpus/", 0) == 0) bytes += b.size(), ++files;
         line(tr("harness.corpus"), trf(files == 1 ? "harness.corpus.value.one" : "harness.corpus.value", {grouped(files), grouped(bytes)}));
         line(tr("harness.order"), trf("harness.order.value", {grouped(run_->order.size()), grouped(run_->steps())}));
+        // How it reads, and its files in the order it first reads them.
+        std::vector<std::string> seen;
+        for (const sieve::training::Window& w : run_->order)
+            if (std::find(seen.begin(), seen.end(), w.path) == seen.end()) seen.push_back(w.path);
+        std::string files_line;
+        for (size_t i = 0; i < seen.size(); ++i) files_line += (i ? "  " : "") + std::to_string(i + 1) + ". " + seen[i].substr(seen[i].rfind("corpus/", 0) == 0 ? 7 : 0);
+        if (rc.order == "order-v1")
+            line(tr("harness.reading"), trf("harness.reads", {tr(std::string("harness.reading.") + sieve::training::to_string(rc.reading)),
+                                                               std::to_string(rc.epochs), std::to_string(rc.window)}));
+        else line(tr("harness.reading"), tr("harness.reads.written"));
+        line(tr("harness.files"), files_line);
         line(tr("harness.result"), run_->result ? tr("harness.result.yes") : tr("harness.result.no"), run_->result ? kWhite : kGrey);
         ry += 10;
 
@@ -577,10 +688,15 @@ void Harness::render()
     const float by = H - 88;
     for (const auto& [a, ok] : buttons())
     {
-        const char* id = a == Action::Train ? (run_ && run_->result ? "harness.button.check" : "harness.button.train")
-                         : a == Action::GoTo ? "harness.button.goto"
-                         : a == Action::Pack ? "harness.button.pack"
-                                             : "harness.button.record";
+        const char* id = a == Action::Train    ? (run_ && run_->result ? "harness.button.check" : "harness.button.train")
+                         : a == Action::GoTo   ? "harness.button.goto"
+                         : a == Action::Pack   ? "harness.button.pack"
+                         : a == Action::MoveUp ? "harness.button.up"
+                         : a == Action::MoveDown ? "harness.button.down"
+                         : a == Action::Reading  ? "harness.button.reading"
+                         : a == Action::Start    ? "harness.button.start"
+                         : a == Action::Cancel   ? "harness.button.cancel"
+                                                 : "harness.button.record";
         const std::string label = tr(id);
         const float bw = text_width(label, 1) + 20;
         const SDL_FRect br{bx, by, bw, 22};
@@ -590,7 +706,7 @@ void Harness::render()
         bx += bw + 10;
     }
     txt(r_, 16, H - 46, status_.substr(0, size_t((W - 32) / 8)), status_bad_ ? kBad : kWhite);
-    txt(r_, 16, H - 26, tr(training() ? "harness.footer.training" : prompting_ ? "harness.footer.prompt" : "harness.footer"), kGrey);
+    txt(r_, 16, H - 26, tr(training() ? "harness.footer.training" : prompting_ ? "harness.footer.prompt" : curriculum_ ? "harness.footer.curriculum" : "harness.footer"), kGrey);
 }
 
 } // namespace hallway

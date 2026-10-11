@@ -5,6 +5,7 @@
 #include "sieve/llm.hpp"
 #include "sieve/llm_tokenizer.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <fstream>
@@ -69,11 +70,35 @@ int cmd_ai_train(const Args& a)
         if (a.has("momentum")) o.recipe.momentum = a.get("momentum");
         if (a.has("batch")) o.recipe.batch = a.get_positive("batch", 4);
         if (a.has("checkpoint-every")) o.recipe.checkpoint_every = a.get_positive("checkpoint-every", 100);
-        o.window = a.has("window") ? a.get_positive("window", 65) : 65;
-        o.epochs = a.has("epochs") ? a.get_positive("epochs", 30) : 30;
-        o.seed = a.has("seed") ? a.get_u32("seed", 1) : 1;
+        if (a.has("window")) o.recipe.window = a.get_positive("window", 65);
+        if (a.has("epochs")) o.recipe.epochs = a.get_positive("epochs", 30);
+        if (a.has("seed")) o.recipe.seed = a.get_u32("seed", 1);
+        if (a.has("reading")) o.recipe.reading = training::reading_from_string(a.get("reading"));
+        o.recipe.checkpoint_addresses = a.has("checkpoint-addresses");
+        o.write_order = a.has("write-order");
         folder = path_of(a.get("out"));
-        run = record_training_run(path_of(a.get("record")), folder, o);
+        std::vector<TrainingFile> files = corpus_files(path_of(a.get("record")));
+        if (a.has("file-order"))
+        {
+            // The files named first, in the order named (a line each, as the run names them,
+            // without corpus/), then the rest in path order.
+            std::ifstream in(path_of(a.get("file-order")), std::ios::binary);
+            if (!in) throw std::invalid_argument("cannot open " + a.get("file-order"));
+            std::vector<TrainingFile> named;
+            std::string line;
+            while (std::getline(in, line))
+            {
+                while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
+                if (line.empty()) continue;
+                const auto it = std::find_if(files.begin(), files.end(), [&](const TrainingFile& f) { return f.path == "corpus/" + line; });
+                if (it == files.end()) throw std::invalid_argument("--file-order names " + line + ", which is not in the corpus");
+                named.push_back(*it);
+                files.erase(it);
+            }
+            named.insert(named.end(), files.begin(), files.end());
+            files = std::move(named);
+        }
+        run = record_training_run(files, folder, o);
         std::cout << "recorded " << run.name << ": " << run.files.size() - 2 << " corpus file" << (run.files.size() == 3 ? "" : "s") << ", "
                   << run.order.size() << " windows, " << run.steps() << " steps\n";
     }

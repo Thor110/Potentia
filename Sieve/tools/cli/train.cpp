@@ -31,9 +31,26 @@ TrainingRun run_of_files(std::string name, std::map<std::string, std::vector<uin
     TrainingRun r;
     r.name = std::move(name);
     const auto ini = files.find("training.ini"), order = files.find("order.txt");
-    if (ini == files.end() || order == files.end()) throw std::invalid_argument("a training run holds training.ini and order.txt");
+    if (ini == files.end()) throw std::invalid_argument("a training run holds training.ini");
     r.recipe = training::Recipe::parse(text_of(ini->second));
-    r.order = training::parse_order(text_of(order->second));
+    if (r.recipe.order == "order-v1")
+    {
+        // The order made from the recipe's lines, not written out.
+        if (order != files.end()) throw std::invalid_argument("the run's order is order-v1, so it holds no order.txt");
+        std::vector<std::pair<std::string, uint64_t>> sizes;
+        for (const std::string& f : r.recipe.files)
+        {
+            const auto it = files.find(f);
+            if (it == files.end()) throw std::invalid_argument("training.ini reads " + f + ", which the run does not hold");
+            sizes.push_back({f, it->second.size()});
+        }
+        r.order = training::make_order(sizes, r.recipe.window, r.recipe.epochs, r.recipe.seed, r.recipe.reading);
+    }
+    else
+    {
+        if (order == files.end()) throw std::invalid_argument("the run's order is written out, and it holds no order.txt");
+        r.order = training::parse_order(text_of(order->second));
+    }
     for (const training::Window& w : r.order)
     {
         const auto f = files.find(w.path);
@@ -78,8 +95,17 @@ TrainingOutcome train_run(const TrainingRun& run, unsigned threads, const Traini
     TrainingOutcome out;
     auto address = [&]() { return space.hex_of(space.index_of(trainer.digits(), AddressMode::Positional)); };
     const uint64_t steps = run.steps();
+    out.result.version = rc.result_version();
     out.result.steps = steps;
-    out.result.checkpoints.push_back({0, {}, address()});
+    // A checkpoint: its hash (v2), and its address where the result keeps them.
+    auto checkpoint = [&](uint64_t step, const training::Score& score) {
+        training::Checkpoint c{step, score, {}, {}};
+        const AiSpace::Digits& d = trainer.digits();
+        if (out.result.version >= 2) c.digest = Sha256::hex(Sha256::hash(std::string_view(reinterpret_cast<const char*>(d.data()), d.size())));
+        if (out.result.version == 1 || rc.checkpoint_addresses) c.address = address();
+        out.result.checkpoints.push_back(std::move(c));
+    };
+    checkpoint(0, {});
     training::Score recent;
     for (uint64_t k = 0; k < steps; ++k)
     {
@@ -99,7 +125,7 @@ TrainingOutcome train_run(const TrainingRun& run, unsigned threads, const Traini
         if (progress) progress(k + 1, steps, recent);
         if ((k + 1) % rc.checkpoint_every == 0 || k + 1 == steps)
         {
-            out.result.checkpoints.push_back({k + 1, recent, address()});
+            checkpoint(k + 1, recent);
             recent = {};
         }
     }
@@ -128,35 +154,51 @@ std::optional<std::string> result_difference(const std::string& expected, const 
     }
 }
 
-TrainingRun record_training_run(const fs::path& corpus, const fs::path& out, const RecordOptions& o)
+std::vector<TrainingFile> corpus_files(const fs::path& corpus)
 {
-    o.recipe.check();
     if (!fs::exists(corpus)) throw std::invalid_argument("no corpus at " + corpus.string());
-    if (fs::exists(out) && !fs::is_empty(out)) throw std::invalid_argument(out.string() + " is not empty: a run is recorded into a new folder");
-    std::vector<std::pair<fs::path, std::string>> sources; // the file, and its path in the run
+    std::vector<TrainingFile> out;
     if (fs::is_directory(corpus))
     {
         for (const fs::directory_entry& e : fs::recursive_directory_iterator(corpus))
-            if (e.is_regular_file()) sources.push_back({e.path(), "corpus/" + manifest_path(e.path(), corpus)});
+            if (e.is_regular_file()) out.push_back({e.path(), "corpus/" + manifest_path(e.path(), corpus), e.file_size()});
     }
     else
     {
         const std::u8string n = corpus.filename().u8string();
-        sources.push_back({corpus, "corpus/" + std::string(n.begin(), n.end())});
+        out.push_back({corpus, "corpus/" + std::string(n.begin(), n.end()), fs::file_size(corpus)});
     }
-    std::sort(sources.begin(), sources.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
-    if (sources.empty()) throw std::invalid_argument("the corpus has no files");
+    std::sort(out.begin(), out.end(), [](const TrainingFile& a, const TrainingFile& b) { return a.path < b.path; });
+    if (out.empty()) throw std::invalid_argument("the corpus has no files");
+    return out;
+}
+
+TrainingRun record_training_run(const std::vector<TrainingFile>& sources, const fs::path& out, const RecordOptions& o)
+{
+    training::Recipe rc = o.recipe;
+    rc.check();
+    if (fs::exists(out) && !fs::is_empty(out)) throw std::invalid_argument(out.string() + " is not empty: a run is recorded into a new folder");
     std::map<std::string, std::vector<uint8_t>> files;
     std::vector<std::pair<std::string, uint64_t>> sizes;
-    for (const auto& [from, to] : sources)
+    rc.files.clear();
+    for (const TrainingFile& f : sources)
     {
-        files[to] = read_file_bytes(from);
-        sizes.push_back({to, files[to].size()});
+        if (files.count(f.path)) throw std::invalid_argument(f.path + " is in the corpus twice");
+        files[f.path] = read_file_bytes(f.source);
+        sizes.push_back({f.path, files[f.path].size()});
+        rc.files.push_back(f.path);
     }
-    const std::vector<training::Window> order = training::make_order(sizes, o.window, o.epochs, o.seed);
+    const std::vector<training::Window> order = training::make_order(sizes, rc.window, rc.epochs, rc.seed, rc.reading);
     if (order.empty()) throw std::invalid_argument("the corpus has nothing to learn from: no file of two bytes or more");
-    files["training.ini"] = [&] { const std::string t = o.recipe.text(); return std::vector<uint8_t>(t.begin(), t.end()); }();
-    files["order.txt"] = [&] { const std::string t = training::order_text(order); return std::vector<uint8_t>(t.begin(), t.end()); }();
+    if (o.write_order)
+    {
+        // The order written out (order.txt) rather than made from the recipe: the files are then
+        // only listed by the order.
+        rc.order = "order.txt";
+        files["order.txt"] = [&] { const std::string t = training::order_text(order); return std::vector<uint8_t>(t.begin(), t.end()); }();
+    }
+    else rc.order = "order-v1";
+    files["training.ini"] = [&] { const std::string t = rc.text(); return std::vector<uint8_t>(t.begin(), t.end()); }();
     for (const auto& [path, bytes] : files)
     {
         const fs::path dest = out / path_of(path);
@@ -165,6 +207,11 @@ TrainingRun record_training_run(const fs::path& corpus, const fs::path& out, con
     }
     const std::u8string n = fs::absolute(out).lexically_normal().filename().u8string();
     return run_of_files(std::string(n.begin(), n.end()), std::move(files));
+}
+
+TrainingRun record_training_run(const fs::path& corpus, const fs::path& out, const RecordOptions& o)
+{
+    return record_training_run(corpus_files(corpus), out, o);
 }
 
 void pack_training_run(const fs::path& folder, const fs::path& sieve_file)

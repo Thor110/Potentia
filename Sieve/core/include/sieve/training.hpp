@@ -43,6 +43,11 @@ void sincos_q16(int64_t angle_q32, int64_t& s, int64_t& c); // of an angle >= 0 
 int64_t scale_q32(uint32_t cols, bool embedding);   // a tensor's scale (aispace-v1) in Q32
 } // namespace fx
 
+// How a run reads its corpus, when its order is made by order-v1 rather than written out.
+enum class Reading { InOrder, ShuffledWithinFiles, Shuffled };
+const char* to_string(Reading r);       // "in-order", "shuffled-within-files", "shuffled"
+Reading reading_from_string(std::string_view s);
+
 // How a run trains: its training.ini.
 struct Recipe
 {
@@ -54,6 +59,16 @@ struct Recipe
     std::string momentum = "0.9";
     uint32_t batch = 4;                              // windows a step
     uint32_t checkpoint_every = 100;                 // steps between the checkpoints the result lists
+    // The order (run format 2): "order-v1", made from the lines below; "order.txt", written out in
+    // that file; or empty, the first runs' format (order.txt, and a result listing every
+    // checkpoint's address).
+    std::string order = "order-v1";
+    Reading reading = Reading::Shuffled;
+    uint32_t window = 65, epochs = 30;
+    uint64_t seed = 1;
+    std::vector<std::string> files;                  // order-v1: the corpus files, in the order read
+    bool checkpoint_addresses = false;               // the result lists each checkpoint's address, not only its hash
+    int result_version() const { return order.empty() ? 1 : 2; }
     int64_t learning_rate_q16() const;
     int64_t momentum_q16() const;
     void check() const;                              // throws std::invalid_argument
@@ -73,13 +88,15 @@ struct Window
 // order.txt: "sieve-order-v1", then a window a line, path TAB offset TAB length.
 std::string order_text(const std::vector<Window>& order);
 std::vector<Window> parse_order(std::string_view text);
-// How `sieve ai-train --record` makes an order (the order itself is what is recorded, not this): each
-// file cut into windows of `length` bytes that overlap by one (so every byte after a file's first is
-// predicted once an epoch; a last window shorter than two bytes is dropped), files in the order
-// given; then, for each epoch, every window once, shuffled by Fisher-Yates driven by splitmix64
-// seeded with seed + epoch.
+// order-v1: each file cut into windows of `length` bytes that overlap by one (so every byte after a
+// file's first is predicted once an epoch; a last window shorter than two bytes is dropped), then,
+// for each epoch, every window once: in-order, file by file in the order given and each file from
+// its start; shuffled-within-files, file by file but each file's windows shuffled; shuffled, all of
+// them shuffled together (the files' windows listed in the order given first). Shuffling is
+// Fisher-Yates driven by splitmix64 seeded with seed + epoch, one generator an epoch, used file
+// after file.
 std::vector<Window> make_order(const std::vector<std::pair<std::string, uint64_t>>& files, uint32_t length, uint32_t epochs,
-                               uint64_t seed);
+                               uint64_t seed, Reading reading = Reading::Shuffled);
 
 // What a step saw: the sum of the probabilities (Q16) it gave the right next byte, and how many.
 struct Score
@@ -117,20 +134,23 @@ private:
 };
 
 // result.txt: what a run gave, so that a replay can be checked against it line for line:
-//     sieve-training-result-v1
+//     sieve-training-result-v2
 //     version training-v1
 //     steps <N>
-//     checkpoint <step> <prob sum> <predictions> <positional address>   (step 0 is the start)
+//     checkpoint <step> <prob sum> <predictions> <SHA-256 of its digits> [<positional address>]
 //     final <positional address>
 //     model-sha256 <the SHA-256 of the final model's model.safetensors>
+// (step 0 is the start). Version 1, the first runs', lists each checkpoint's address and no hash.
 struct Checkpoint
 {
     uint64_t step = 0;
     Score score; // over the steps since the checkpoint before
-    std::string address;
+    std::string digest;  // v2
+    std::string address; // v1, and v2 when the recipe keeps them
 };
 struct Result
 {
+    int version = 2;
     uint64_t steps = 0;
     std::vector<Checkpoint> checkpoints;
     std::string final_address, model_sha256;

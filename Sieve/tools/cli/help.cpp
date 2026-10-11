@@ -442,12 +442,14 @@ const std::vector<Page>& pages()
         {"ai-train", "Train a model of the AI line, recording what it learnt from and in what order, so it can be trained again exactly.",
          "sieve ai-train --record CORPUS --out FOLDER [--ai-layers L] [--ai-width H] [--ai-heads A] [--ai-bits B]\n"
          "  [--start ADDR] [--mode MODE] [--learning-rate X] [--momentum X] [--batch N] [--window N] [--epochs N] [--seed S]\n"
-         "  [--checkpoint-every N] [--sieve FILE.sieve] [--model-out FOLDER] [--address-out FILE] [--threads N] [--quiet]\n"
+         "  [--reading MODE] [--file-order FILE] [--checkpoint-every N] [--checkpoint-addresses] [--write-order]\n"
+         "  [--sieve FILE.sieve] [--model-out FOLDER] [--address-out FILE] [--threads N] [--quiet]\n"
          "  sieve ai-train RUN [--threads N] [--model-out FOLDER] [--address-out FILE] [--result-out FILE] [--quiet]",
          "A run (training-v1, SPECIFICATIONS §12.0e) is a folder, or Sieve instructions (.sieve) made of\n"
-         "one: training.ini (the model's shape, where it starts on the AI line, and how it learns),\n"
-         "order.txt (every window of bytes it learns from, in order), those files (corpus/), and once\n"
-         "trained, result.txt (its address at each checkpoint, and the final model's SHA-256). Training is\n"
+         "one: training.ini (the model's shape, where it starts on the AI line, how it learns, and how it\n"
+         "reads its files: the order of every window of bytes it learns from is made from these lines by\n"
+         "order-v1, or written out in order.txt), those files (corpus/), and once trained, result.txt (each\n"
+         "checkpoint's hash, the final model's address and SHA-256). Training is\n"
          "integer arithmetic, every rounding pinned, so a run trained again gives result.txt byte for byte\n"
          "on any machine, with any number of threads; that is the check. Every checkpoint is a model on the\n"
          "AI line (sieve ai --read). --record makes a run from a file or a folder of files and trains it;\n"
@@ -462,7 +464,15 @@ const std::vector<Page>& pages()
           {"--batch N", "Windows a step (4; at most 32)."},
           {"--window N", "Bytes a window (65: it predicts 64 of them; at most 513)."},
           {"--epochs N, --seed S", "How many times it reads the corpus (30), and the shuffle's seed (1)."},
-          {"--checkpoint-every N", "Steps between the addresses result.txt lists (100)."},
+          {"--reading MODE", "How it reads the files each time: in-order (file by file, each from its start),\n"
+                             "shuffled-within-files (file by file, each one's windows shuffled) or shuffled\n"
+                             "(all its windows shuffled together; the default)."},
+          {"--file-order FILE", "The files to read first, in this order, a line each as the corpus names them\n"
+                                "(the rest follow by path): the curriculum."},
+          {"--checkpoint-every N", "Steps between the checkpoints result.txt lists (100)."},
+          {"--checkpoint-addresses", "List each checkpoint's address as well as its hash (a path to walk on the\n"
+                                     "AI line without training again; 4 KB or more a checkpoint)."},
+          {"--write-order", "Write the order out in order.txt rather than make it from training.ini."},
           {"--sieve FILE", "Pack the run folder, result and all, as Sieve instructions."},
           {"--model-out FOLDER", "Write the final model's files (for sieve chat --model FOLDER --raw)."},
           {"--address-out FILE", "Write the final model's address (positional, hex)."},

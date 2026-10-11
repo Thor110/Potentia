@@ -2259,3 +2259,41 @@ cover and a title.
 - **Not yet:** learning-rate schedules and other optimisers (each a new version); training wider
   models faster (the arithmetic is plain loops); runs with several models (a curriculum); maps
   folded into manifest v5.
+
+### Curricula, and runs that carry only what they need (11 October 2026)
+- **Edward's decisions:** maps stay maps, and the manifest gains nothing for training (a file
+  carries only what it needs), so the plan to fold maps into manifest v5 is set aside (IDEAS
+  §16.3, corrected). Runs are made by the harness (or `sieve ai-train`), and other `.sieve` files
+  carry nothing of training's. Edward's idea of recording the file order as item numbers in the
+  instructions' list is noted there for a far later manifest. And the harness puts a new run's
+  files in order: a curriculum.
+- **Run format 2** (SPECIFICATIONS §12.0e):
+  - `training.ini` holds the order as a rule: `order = order-v1`, `reading` (`in-order`,
+    `shuffled-within-files`, `shuffled`), `window`, `epochs`, `seed`, and a `file =` line for
+    each corpus file in the order read. `order.txt` is written only with `order = order.txt`
+    (`--write-order`), for orders the rule cannot say.
+  - `result.txt` is `sieve-training-result-v2`: each checkpoint by the SHA-256 of its digits,
+    its address only with `checkpoint-addresses = yes`; the final model's address and SHA-256 as
+    before.
+  - The first runs' format (no `order` line, a v1 result) still trains and is checked
+    (`tests/training_run_v1`, by the tool and the oracle in CI).
+- **Core:** `Reading`, `make_order(..., reading)`, the recipe's new lines, `Result` v1 and v2.
+  `tools/cli/train.*`: the order made when a run is loaded; `corpus_files()` and
+  `record_training_run(files, ...)` take the files in the order to read them (`TrainingFile`; the
+  name `CorpusFile` was taken by the guided models' corpus). `sieve ai-train`: `--reading`,
+  `--file-order`, `--checkpoint-addresses`, `--write-order`.
+- **The harness:** N, then a path, lists the corpus's files: Up/Down choose, Shift+Up/Down move
+  (or the buttons), M the reading, Left/Right the epochs (Shift: by 10), Enter records and trains.
+  A run's page shows how it reads and its files in the order read. The curve is now about 200
+  points across the run, not one a checkpoint.
+- **The shipped run** was recorded again in format 2: the same order (the rule is the one the
+  first recorder used), so the very same final model (`b3e5b752...`), now 14.5 KB instead of 79 KB:
+  the order is 10 lines of the recipe instead of 391 KB of text (20 KB packed), and the result
+  lists hashes instead of addresses (50 KB packed before).
+- **Checked:** unit tests (the readings, the recipe's lines, both results read back): 150,992
+  checks, 0 failures. CI's training steps, all run here: each reading with a chosen file order,
+  trained again by the oracle to the same result; a written-out order with checkpoint addresses,
+  reproduced from its `.sieve` and not reproduced with windows of two steps swapped; the
+  first-format fixture by the tool and the oracle; the shipped run; in the harness, a run recorded
+  from a folder with its second file moved first and read in order. Screenshots of the curriculum
+  list and of the run it made.

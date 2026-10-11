@@ -2862,17 +2862,18 @@ class TrainerRef:
         return score, count
 
 
-def tr_make_order(files, length, epochs, seed):
-    windows = []
+def tr_make_order(files, length, epochs, seed, reading="shuffled"):
+    """order-v1: windows overlapping by one byte; each epoch in-order, shuffled-within-files or shuffled."""
+    per_file = []
     for path, size in files:
-        off = 0
+        ws, off = [], 0
         while off + 1 < size:
-            windows.append((path, off, min(length, size - off)))
+            ws.append((path, off, min(length, size - off)))
             off += length - 1
+        per_file.append(ws)
     out = []
     mask = (1 << 64) - 1
     for e in range(epochs):
-        w = list(windows)
         state = (seed + e) & mask
 
         def nxt():
@@ -2882,21 +2883,33 @@ def tr_make_order(files, length, epochs, seed):
             z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & mask
             z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & mask
             return z ^ (z >> 31)
-        for i in range(len(w), 1, -1):
-            j = nxt() % i
-            w[i - 1], w[j] = w[j], w[i - 1]
-        out += w
+
+        def shuffled(w):
+            w = list(w)
+            for i in range(len(w), 1, -1):
+                j = nxt() % i
+                w[i - 1], w[j] = w[j], w[i - 1]
+            return w
+        if reading == "shuffled":
+            out += shuffled([x for ws in per_file for x in ws])
+        else:
+            assert reading in ("in-order", "shuffled-within-files"), reading
+            for ws in per_file:
+                out += shuffled(ws) if reading == "shuffled-within-files" else ws
     return out
 
 
 def tr_read_ini(text):
-    r = {}
+    r = {"file": []}
     for line in text.splitlines():
         line = line.strip()
         if not line or line[0] in "#;" or line == "[training]":
             continue
         k, _, v = line.partition("=")
-        r[k.strip()] = v.strip()
+        if k.strip() == "file":
+            r["file"].append(v.strip())
+        else:
+            r[k.strip()] = v.strip()
     assert r.get("version") == "training-v1", "a training-v1 run"
     return r
 
@@ -2907,26 +2920,41 @@ def tr_replay(folder):
     sp = AiSpaceRef(int(ini["layers"]), int(ini["width"]), int(ini["heads"]), int(ini["bits"]), ini["key"])
     mode, _, start = ini["start"].partition(" ")
     tr = TrainerRef(sp, sp.digits(int(start, 16), mode), ini["learning-rate"], ini["momentum"])
-    lines = open(os.path.join(folder, "order.txt"), encoding="utf-8").read().splitlines()
-    assert lines[0] == "sieve-order-v1"
     files, order = {}, []
-    for line in lines[1:]:
-        if not line:
-            continue
-        path, off, n = line.split("\t")
+
+    def read(path):
         if path not in files:
             files[path] = open(os.path.join(folder, path), "rb").read()
-        order.append(files[path][int(off):int(off) + int(n)])
+        return files[path]
+    fmt = 2 if "order" in ini else 1  # no order line: the first runs' format
+    if ini.get("order") == "order-v1":
+        windows = tr_make_order([(f, len(read(f))) for f in ini["file"]], int(ini["window"]), int(ini["epochs"]),
+                                int(ini["seed"]), ini["reading"])
+    else:
+        lines = open(os.path.join(folder, "order.txt"), encoding="utf-8").read().splitlines()
+        assert lines[0] == "sieve-order-v1"
+        windows = [(p, int(o), int(n)) for p, o, n in (line.split("\t") for line in lines[1:] if line)]
+    for path, off, n in windows:
+        order.append(read(path)[off:off + n])
+    keep = ini.get("checkpoint-addresses") == "yes"
     batch, every = int(ini["batch"]), int(ini["checkpoint-every"])
     addr = lambda: "%0*x" % (sp.width_hex, sp.index(tr.digits, "positional"))
     steps = (len(order) + batch - 1) // batch
-    out = ["sieve-training-result-v1", "version training-v1", "steps %d" % steps, "checkpoint 0 0 0 " + addr()]
+
+    def point(k, score, count):
+        fields = [str(k), str(score), str(count)]
+        if fmt >= 2:
+            fields.append(hashlib.sha256(bytes(tr.digits)).hexdigest())
+        if fmt == 1 or keep:
+            fields.append(addr())
+        return "checkpoint " + " ".join(fields)
+    out = ["sieve-training-result-v%d" % fmt, "version training-v1", "steps %d" % steps, point(0, 0, 0)]
     score = count = 0
     for k in range(steps):
         s, c = tr.step(order[k * batch:(k + 1) * batch])
         score, count = score + s, count + c
         if (k + 1) % every == 0 or k + 1 == steps:
-            out.append("checkpoint %d %d %d %s" % (k + 1, score, count, addr()))
+            out.append(point(k + 1, score, count))
             score = count = 0
     out.append("final " + addr())
     out.append("model-sha256 " + hashlib.sha256(sp.safetensors(tr.digits)).hexdigest())
