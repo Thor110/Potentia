@@ -969,7 +969,7 @@ void Hallway::draw_graph_view(float W, float H)
 {
     graph_poll();
     GraphMap* g = graph_current();
-    const SDL_Color ink = theme().edge, grey{150, 150, 150, 255}, white{255, 255, 255, 255}, red{255, 80, 80, 255};
+    const SDL_Color ink = menu_ink(theme()), grey{150, 150, 150, 255}, white{255, 255, 255, 255}, red{255, 80, 80, 255};
     SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
     const SDL_FRect all{0, 0, W, H};
     SDL_RenderFillRect(r_, &all);

@@ -379,7 +379,7 @@ void Hallway::media_event(const SDL_Event& e, bool& quit)
 
 void Hallway::draw_media_player(float W, float H)
 {
-    const SDL_Color ink = theme().edge, grey{150, 150, 150, 255}, white{255, 255, 255, 255}, dim{90, 90, 90, 255};
+    const SDL_Color ink = menu_ink(theme()), grey{150, 150, 150, 255}, white{255, 255, 255, 255}, dim{90, 90, 90, 255};
     SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
     const SDL_FRect all{0, 0, W, H};
     SDL_RenderFillRect(r_, &all);
