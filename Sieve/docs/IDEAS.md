@@ -1740,3 +1740,68 @@ game line of GAME.md §4 (arcade cabinets) was meant to be woven through the sto
 dimension of discs (a copy of the CD model, as the tracks line has, for CDs and DVDs), and perhaps a
 place in each room for an arcade cabinet or a computer. Or it forms and evolves around the rest,
 from the lowest resolution to the highest (§19.6). Utility comes first; this stays open.
+
+**19.12 A metrics list, made with every release (Edward, 12 October 2026).** Edward wants an
+automated list, made each build and issued as a text file with the installer, of how much each
+line's filters remove, one line a dimension:
+
+    Binary  : 99.9954%                ( Kept : 10^-4.34    )
+    Images  : 99.5%                   ( Kept : 10^-2.32    )
+    Pages   : 99.999999999999...%     ( Kept : 10^-18.32   )
+    ...
+    AI      : 99.999999999999...%     ( Kept : 10^-9854.27 )
+
+*Design.*
+- **What exists:** the setup menu already works each line's figure out (`Menu::stack_job`,
+  `worlds_stack_info`, `parts_stack_info` and `filtered_text` in client/menu.cpp: the same
+  "99.5%  (kept 10^-2.32)" text), and `tools/survey` counts filters over a grid of settings. Neither
+  writes this list, and the release does not run either.
+- **One tally, shared:** the menu's per-line tally moves out of the client into the shared library
+  (tools/cli, beside build_stack), as `line_tally(line, settings, shapes)` giving the kept and
+  removed shares, the survivors' log, and whether it is exact, estimated or not countable. The
+  menu and the new command both call it, so the list and the menu can never disagree.
+- **`sieve metrics [--filters PATH] [line options] [--out FILE] [--tsv FILE]`:** every line, in
+  door order, at its shape (the defaults, or the options given), under the stack the settings file
+  ticks. It prints the list as above (the percentages as the menu writes them, estimates marked
+  `~`, lines whose stack cannot be counted saying why), and with `--tsv` the same as a table
+  (line, shape, stack id, kept log10, exact or estimated) for keeping a history.
+- **Which stack a release measures:** nothing is ticked by default, so a release needs a stack of
+  its own. Proposed: a reference settings file shipped and versioned in data/
+  (`data/metrics/reference-filters.ini`), its SHA-256 printed at the top of the list, so the
+  figures from one release to the next are comparable and anyone can reproduce them. Your own
+  settings give your own list (`sieve metrics --filters sieve-filters.ini`).
+- **In the release:** make_release.py runs the release's own `sieve metrics` on the reference file
+  and writes `metrics.txt` beside the installer, listed in SHA256SUMS.txt and in the notes draft.
+  Not a default build step: counting every line takes a while (the AI line and the books' parts
+  longest), so a build stays fast; a CMake target `metrics` runs it on demand.
+- **Checked:** a unit test that the list's figures for a small stack equal the menu's tally and
+  the counts the oracle gives.
+
+**19.13 A chat window for the AI line (Edward, 12 October 2026).** Today a model in hand is talked
+to through the prompt bar ("SAY >"), its conversation drawn in the hand panel. Edward wants a built-in
+window: the conversation, a box to type in, and a plus button to attach files; beside each file a
+"Go to it" and a "Save", so the chat is another path to files, from the library and from the chat;
+and, in time, the model finding files among the infinite through the filters and the noise.
+
+*Design.*
+- **The window:** opened with Enter on a model in hand (as now), over the hallway: the conversation
+  scrolling above, the box below (a line that grows, with the cursor, Enter to send, Shift+Enter a
+  new line), the plus button at its left, the model's address and shape in the title, Esc to close.
+- **Attaching (the plus):** the system's file window (as the harness's folder window), one or several
+  files. Each shows as a card in the conversation: its name, size and kind (binary-kind-v1), and
+  where it stands, worked out on a worker by the File Locator's own weighing: its address on the
+  binary line, and on its own line when it is an item (a page, a picture, a melody, a model).
+- **The card's buttons:** **Go to it** (to the file on the binary line, or the item on its line, as
+  the locator's Go does); **Save** (the file written back out, through the save dialog); and for an
+  item, **J** (between the item and its file).
+- **What the model is given:** a byte model of the AI line reads a file's bytes as its context, up to
+  its 512 positions (the first bytes, or the window chosen); a published model through `sieve chat`
+  reads text files as text. Pictures for models that see are §18.5's later step.
+- **Finding files (later):** a model naming an address or a filter stack in its reply, the window
+  turning that into a card with Go to it, so the model's answers are places on the lines. That needs
+  a model that can follow such a format (a published model, prompted for it); a Micro model only
+  babbles. The filters are what make the finding cheap: a stack narrows the line, and the model
+  chooses within it.
+- **Shared with the harness:** the same window shows a diffusion model's pictures as cards (each
+  with its address and Go to it), so talking to a text model and asking a picture model are one
+  interface.
