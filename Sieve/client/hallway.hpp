@@ -639,6 +639,14 @@ public:
     bool go_to(std::string input);
     // On the AI line: the model with these digits (the AI Training Harness's GO TO IT), taken in hand.
     void go_to_ai(const sieve::AiSpace::Digits& d);
+    // The File Locator's Go to it from the main menu: the file walked to once this hallway is built.
+    void go_to_located(const std::vector<uint8_t>& bytes, const std::string& name, bool past) { walk_to_file(bytes, name, past); }
+    // The Media Player, opened from the main menu: Esc there goes back to the main menu (Request::MainMenu).
+    void open_media_from_main()
+    {
+        open_media_player();
+        media_from_main_ = true;
+    }
     // The AI line: say something to the model in hand, which writes back (Enter opens the box; and
     // --talk in a scripted run). The conversation is kept while the model is held.
     void talk(const std::string& said);
@@ -1310,7 +1318,7 @@ public:
     // it the melody (melody_to_go()).
     // Tailored: tailored filters applied (tailored_filters(): COST's Return, or the File Locator's
     // "use"), and from COST the item to hold again (tailored_unit()) on this line.
-    enum class Request { None, Settings, MainMenu, GoToMelody, Tailored };
+    enum class Request { None, Settings, MainMenu, GoToMelody, Tailored, Designer, Harness };
     Request request() const { return request_; }
     void clear_request() { request_ = Request::None; }
     // After Settings, the new graphics and language: signs are lettered again, the rest is set.
@@ -1370,6 +1378,7 @@ private:
     void media_event(const SDL_Event& e, bool& quit);
     void draw_media_player(float W, float H);
     bool media_open_ = false, media_had_mouse_ = false;
+    bool media_from_main_ = false; // opened from the main menu: Esc goes back to it
 
     // ---- the item viewer (viewer.cpp): Z, or a click on the thing in hand, opens it over the
     // whole window, scrolled both ways and zoomed

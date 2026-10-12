@@ -396,7 +396,7 @@ jobs:
           # ...and Graphics Memory, which the setup menu's budget keeps it within, is a graphics
           # setting: Settings, Graphics, then the seventh row.
           rm -f gm.ini
-          $H --main-menu --settings gm.ini --press "Down,Return,Return,Down,Down,Down,Down,Down,Down,Right" --screenshot gm.png > /dev/null
+          $H --main-menu --settings gm.ini --press "Down,Down,Down,Down,Down,Return,Return,Down,Down,Down,Down,Down,Down,Right" --screenshot gm.png > /dev/null
           grep -q "^graphics_memory_gb = 5" gm.ini
           # A different shape is a different line, and the setup menu draws all six of them.
           $exe mesh --vertices 12 --faces 20 --coords 64 | tr -d '\r' | q "^space        models/V12/F20/C64/key=sieve/modelspace-v1"
@@ -487,7 +487,7 @@ jobs:
           # There is no setting for it: not in Settings > Graphics, not in a settings file that
           # Graphics has just written, and not on the command line.
           rm -f be.ini
-          $H --main-menu --settings be.ini --press "Down,Return,Return,Down,Down,Down,Return" --screenshot be.png > /dev/null
+          $H --main-menu --settings be.ini --press "Down,Down,Down,Down,Down,Return,Return,Down,Down,Down,Return" --screenshot be.png > /dev/null
           grep -q "^edge_glow = on" be.ini
           if grep -q "binary" be.ini; then exit 1; fi
           if $H --help 2>&1 | grep -q "binary-edge"; then exit 1; fi
@@ -809,8 +809,8 @@ jobs:
           $H --menu --line ai --press "F,Down,Left" --settle 100 --screenshot menu-ai-judge-only.png | q "saved menu-ai-judge-only.png"
           printf '[ai]\nmode = compact\nfilters = near-model-v1\n' > ai-near.ini
           $H --no-menu --line ai --filters ai-near.ini --walk "0,0" --screenshot ai-near.png | tr -d '\r' | sed -n 1p | q "within 2 digits of universalbibliothek's model (7548948481 survivors)"
-                    # From the main menu: the same locator, with no world to walk to, so Enter does not go.
-          $H --main-menu --locate tests/manifest_fixture/a.txt --press "Return" --screenshot locate-menu.png | q "file locator (main menu): open, no Go to it"
+          # From the main menu: the same locator; Go to it builds the hallway and walks to the file.
+          $H --main-menu --locate tests/manifest_fixture/a.txt --press "Return" --screenshot locate-menu.png | q "file locator (main menu): open, Go to it offered"
           # The demonstration (IDEAS 16.9): every dimension's item at each whole degree, as one
           # .sieve, the same on every machine; installing it gives every file back, and a bearing
           # typed in the navigator (X, Tab) is the same item again.
@@ -1109,19 +1109,19 @@ jobs:
           $H --line image --door-portals --walk "0,0" --screenshot portal.png 2>&1 | q "door portals on"
           $H --line image --edge-glow --walk "0,0" --screenshot noportal.png 2>&1 | q "door portals off"
           test -s portal.png && test -s noportal.png
-          $H --main-menu --press "Down,Return,Return,Return" --screenshot main-res.png | q "saved"
+          $H --main-menu --press "Down,Down,Down,Down,Down,Return,Return,Return" --screenshot main-res.png | q "saved"
           # Settings, Graphics, then VSync off, Geometry Edge Glow on, Real Graphics on — which
           # turns the glow back off, the two being mutually exclusive. From a settings file that
           # does not exist yet, so the toggles start from their defaults whatever ran before.
           rm -f app.ini
-          $H --main-menu --settings app.ini --press "Down,Return,Return,Down,Down,Return,Down,Return,Down,Return" --screenshot main-gfx.png > /dev/null
+          $H --main-menu --settings app.ini --press "Down,Down,Down,Down,Down,Return,Return,Down,Down,Return,Down,Return,Down,Return" --screenshot main-gfx.png > /dev/null
           grep -q "^vsync = off" app.ini
           grep -q "^edge_glow = off" app.ini
           grep -q "^real_graphics = on" app.ini
           grep -q "^door_portals = on" app.ini   # Real Graphics brings Door Portals with it
           # View Distance and Picture Distance, the two rows after the FPS counter, save.
           rm -f vr.ini
-          $H --main-menu --settings vr.ini --press "Down,Return,Return,Down,Down,Down,Down,Down,Down,Down,Down,Right,Down,Right,Right" --screenshot main-view.png > /dev/null
+          $H --main-menu --settings vr.ini --press "Down,Down,Down,Down,Down,Return,Return,Down,Down,Down,Down,Down,Down,Down,Down,Right,Down,Right,Right" --screenshot main-view.png > /dev/null
           grep -q "^view_rooms = 8" vr.ini
           grep -q "^picture_rooms = 3" vr.ini
           mkdir -p lt/data/lang && cp data/lang/en.txt lt/data/lang/ && printf 'language.name = Test\nitem.start = START TEST\n' > lt/data/lang/tt.txt

@@ -61,6 +61,7 @@ void Hallway::open_media_player()
 void Hallway::close_media_player()
 {
     media_open_ = false;
+    // (Going to a melody from it leaves it for the world: Esc is then the pause menu's again.)
     SDL_SetWindowRelativeMouseMode(window_, media_had_mouse_);
 }
 
@@ -146,6 +147,7 @@ void Hallway::go_to_melody(const MusicMelody& m)
         return;
     }
     if (media_open_) close_media_player();
+    media_from_main_ = false; // in the world now: Esc is the pause menu's again
     if (pause_open_) close_pause();
     drop_in_hand();
     trail_.clear();
@@ -353,7 +355,16 @@ void Hallway::media_event(const SDL_Event& e, bool& quit)
     using K = MediaRow::Kind;
     switch (e.key.key)
     {
-    case SDLK_ESCAPE: close_media_player(); break; // back to the pause menu
+    case SDLK_ESCAPE:
+        // Back to the pause menu, or, opened from the main menu, back to that.
+        close_media_player();
+        if (media_from_main_)
+        {
+            media_from_main_ = false;
+            request_ = Request::MainMenu;
+            quit = true;
+        }
+        break;
     case SDLK_TAB: focus((media_area_ + (shift ? 2 : 1)) % 3); break;
     case SDLK_UP:
     case SDLK_W: if (n > 0) row = (row + n - 1) % n; break;

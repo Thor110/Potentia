@@ -1647,6 +1647,9 @@ smallest AI diffusion image model, if it has not been done already.
   text uses, did not (a step scores 800 cells, against text's 256). Next: a larger model and longer
   runs; the hallway showing a model's picture on its shelf face, and J from the noise to the
   picture; a run shipped as an anchor.
+  *In the harness (12 October 2026):* picture models train beside text models, their settings on a
+  page of their own, their pictures drawn from the image line's filters, and six pictures they make
+  shown when trained.
 
 **19.3 How a published multimodal model sees a picture.** Edward asked how Claude perceives a
 picture sent to it. As far as is published for models of its kind (§18.5): the picture is cut into
@@ -1841,3 +1844,81 @@ harm), and the vault must never interfere with games and art: a delicate balance
   says. Games and art are never its business: it has no setting, no category of content, and no
   taste; only a list of known items. Keeping it that narrow is the balance: everything else exists
   and can be reached, by walking, by address, or by a short number.
+- **Servers that know only what they must** (Edward, the deeper conclusion). A server answering
+  requests needs only the libraries its requests point into, not the files: given (library,
+  number), the file is made again from the line, by whoever asks. So a server can hold an index and
+  nothing else, learn from a request only which entry of which library was asked for, and never hold
+  or see the content itself; the client makes it and checks it by its hash. What travels is the
+  least that names the file, and what is stored is the least that serves the request. It is the
+  same idea taken to its end: the library is the shared knowledge, the number the message, and the
+  content stays where it always was, on the lines.
+
+**19.15 Agreed flags for probes and long links (Edward, 12 October 2026).** His idea, for data
+transmission one day (space probes among them; this is its first note here): two sets of flags,
+one at each end, that say what the sensors are listening for, exchanged, changed or updated as
+needed, so that a short message means a large one ("all 0", "as expected", a reading in a known
+range) and large packets need not travel.
+
+*Notes.*
+- **In Sieve's terms,** the flags are a stack both ends hold: the same filters and settings, named
+  by its id. A message is a compact address under it: survivor 0 can mean "all zero", the next few
+  the readings expected, and anything unexpected falls further along, or outside the stack and is
+  sent in full. Changing what to listen for is sending a new stack (its settings, or a plugin file,
+  hashed), once; afterwards every message is short.
+- **The saving is the counting argument's:** a stack that keeps 10^-k of a line saves k digits for
+  every message it keeps, and costs nothing for the rest, which go in full, flagged.
+- **One caution:** a compact address has no redundancy. Every number is a valid message, so a
+  flipped bit gives another message, not an error. Over a noisy link the addresses need an
+  error-correcting code around them, as deep-space links already use; the stack shortens, the code
+  protects.
+- **Kept honest by hashes:** both ends name the stack by its SHA-256, so a message is never read
+  under the wrong flags.
+
+**19.16 Predict the data, and give it a short tag (Edward, 12 October 2026).** His words: almost
+like predicting the data you are going to get and putting a short tag on it; perhaps slightly
+different to the rest, but all of it alike in finding the shortest path to the information sought.
+
+*Notes.*
+- **It is a prior, made explicit.** A guided ordering already does this on the pages line: a model
+  predicts the next symbol, and likely texts get short addresses (the entropy-ordered line). A tag
+  is the same thing turned around: decide in advance what is expected, give each expectation a
+  short name, and send the name when it comes true (§19.15's "all 0" is one).
+- **Where it differs from a stack:** a stack says what is kept; a prediction says what is likely,
+  and orders by it, so nothing is set aside, only reordered. Both shorten addresses; a prediction
+  never loses anything, and a stack never needs a model.
+- **The common rule (§19.5):** every one of these (stacks, guided orderings, anchors, request
+  numbers, flags, tags) is a way to put what is sought nearer the front of a line, so that naming
+  it costs less. What they cost is agreed in advance, once.
+
+**19.17 A diffusion model of the Vitruvian Man (Edward, 12 October 2026).** Train a picture model on
+the Vitruvian Man in the anchors folder (`data/anchors/public-domain/Vitruvian.jpg`) at some point,
+and show it as the reference beside what the model makes, as the shipped universalbibliothek run is
+the reference text model in the harness; perhaps a separate, higher-resolution model.
+
+*Notes.*
+- **One picture is a set of many:** crops, shifts and scalings of it (or of its strokes) give the
+  training pictures, so the model learns the drawing's marks rather than memorising one image.
+  The picture canonicalised to the image line (`canonicalise_image`) is the anchor; its address
+  verifies it, as every anchor's does.
+- **Higher resolution** needs more cells than the 511 a model reads today: a 32 by 16 picture is
+  512 positions with the level's byte, so larger pictures would be made in tiles, or the model's
+  positions extended (a new aispace version).
+- **In the harness:** a shipped picture run beside universalbibliothek, its reference picture
+  drawn beside the six it makes, and "trained again, checked" like the text run.
+
+**19.18 Every menu reaches every system, in one order (Edward, 12 October 2026).** The main menu
+and the pause menu should always offer the same systems in the same order, unless one is unique
+to one of them (the navigator and the node graph need a hallway walked). The reason: a system
+reachable only from one place cuts off whoever entered the other way, and interchangeable menus
+make the systems easier to travel between, more versatile and more usable.
+- *Built (12 October 2026):* the main menu is Start, File Locator, Media Player, Filter Designer,
+  AI Training Harness, Settings, Exit; the pause menu is Resume, Restart, Node Graph Viewer,
+  Navigation System, then the same systems in the same order. The main menu's File Locator has
+  Go to it again (the hallway is built and walks to the file; a file longer than the binary line
+  still asks twice), and its Media Player builds the hallway with the player open over it.
+
+**19.19 A music filter designer inside the Media Player (Edward, 12 October 2026).** With the Media
+Player in the main menu, it could hold a sub-node system for designing audio and music filters:
+the Filter Designer's nodes, but on melodies, heard as they are tested (each change plays a melody
+the filter keeps). The Media Player already has its own stack of audio filters for each mode; a
+designer inside it would make new ones there, saved as plugins like any other.

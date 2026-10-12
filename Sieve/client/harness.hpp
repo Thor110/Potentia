@@ -15,6 +15,7 @@
 // worker, so the window stays alive and can stop it.
 #pragma once
 
+#include "cli/diffusion_run.hpp"
 #include "cli/train.hpp"
 #include "sieve/aispace.hpp"
 
@@ -32,11 +33,22 @@
 
 namespace hallway {
 
+// Where a new picture model (diffusion-v1) draws its training pictures from: the image line's shape
+// and palette, as the setup menu has them, and the settings file whose image stack keeps them.
+struct PictureSource
+{
+    uint32_t width = 10, height = 10;
+    std::string palette = "mono";
+    std::filesystem::path filters;
+};
+
 class Harness
 {
 public:
-    // `shape`: the AI line's, as the setup menu has it, which a new run starts from.
-    Harness(SDL_Window* window, SDL_Renderer* renderer, std::filesystem::path runs_dir, sieve::AiShape shape = {});
+    // `shape`: the AI line's, as the setup menu has it, which a new run starts from; `pictures`:
+    // where a new picture model's pictures come from.
+    Harness(SDL_Window* window, SDL_Renderer* renderer, std::filesystem::path runs_dir, sieve::AiShape shape = {},
+            PictureSource pictures = {});
     ~Harness();
     enum class Result { Back, Quit, GoTo };
     Result run();
@@ -59,8 +71,9 @@ private:
         std::filesystem::path path;
         std::string name;
         bool folder = false;
+        bool pictures = false; // a picture model (diffusion-v1), not a text model
     };
-    enum class Action { Train, GoTo, Pack, Record, MoveUp, MoveDown, Reading, Start, Cancel, StartOver };
+    enum class Action { Train, GoTo, Pack, Record, RecordPictures, MoveUp, MoveDown, Reading, Start, Cancel, StartOver };
     void say(std::string text, bool bad = false); // the status line
     void open_curriculum(const std::string& folder);
     void change_setting(int row, int dir, bool big); // a new run's setting, a step either way
@@ -72,7 +85,15 @@ private:
     void poll();
     void handle(const SDL_Event& e);
     void key(SDL_Keycode k, SDL_Keymod mod);
-    bool training() const { return job_.valid(); }
+    bool training() const { return job_.valid() || djob_.valid(); }
+    // Picture models (diffusion-v1): the settings page for a new one, training one, and what it makes.
+    void open_pictures();
+    void change_picture_setting(int row, int dir, bool big);
+    void start_picture_training();
+    void poll_pictures();
+    void make_pictures(const sieve::AiSpace::Digits& digits);
+    void render_pictures(float x, float& ry, float colW, float H);
+    void draw_picture(const std::vector<uint32_t>& p, float x, float y, float cell) const;
     std::vector<std::pair<Action, bool>> buttons() const; // each, and whether it can be pressed now
 
     SDL_Window* window_;
@@ -131,6 +152,19 @@ private:
     std::vector<std::pair<SDL_FRect, Action>> button_rects_;
     bool done_ = false;
     Result result_ = Result::Back;
+
+    PictureSource pic_source_;
+    std::optional<sieve::cli::DiffusionRun> drun_;            // the picture run chosen
+    std::future<sieve::cli::DiffusionOutcome> djob_;          // training it
+    std::optional<sieve::cli::DiffusionOutcome> doutcome_;
+    std::vector<std::vector<uint32_t>> made_;                 // pictures its model made from noise
+    // A new picture model's settings, and the stack its pictures are drawn from (worked out once,
+    // when the page opens): its id and survivors, or why it cannot give pictures.
+    std::optional<sieve::cli::DiffusionRecipe> pic_recipe_;
+    uint32_t pic_count_ = 4000;
+    std::string pic_stack_id_, pic_stack_note_;
+    std::shared_ptr<const sieve::FilterStack> pic_stack_;
+    int pic_row_ = 0;
 };
 
 } // namespace hallway

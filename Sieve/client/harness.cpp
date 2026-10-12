@@ -5,6 +5,8 @@
 #include "music.hpp"
 #include "strings.hpp"
 
+#include "cli/filter_config.hpp"
+#include "sieve/image.hpp"
 #include "sieve/llm.hpp"
 #include "sieve/llm_tokenizer.hpp"
 
@@ -102,11 +104,15 @@ std::string kilobytes(uint64_t bytes)
 const char* const kRates[] = {"0.00002", "0.00005", "0.0001", "0.0002", "0.0005", "0.001", "0.002", "0.005", "0.01", "0.02", "0.05", "0.1"};
 const uint32_t kWindows[] = {9, 17, 33, 65, 129, 257, 513};
 constexpr int kSettingRows = 10; // layers, width, heads, bits, learning rate, loss scale, batch, window, epochs, reading
+// A new picture model's settings: layers, width, heads, bits, levels, steps, pictures a step,
+// learning rate, loss scale, training pictures.
+constexpr int kPictureRows = 10;
+constexpr int kPicturesMade = 6; // the pictures a trained picture model shows, each from its own noise
 
 } // namespace
 
-Harness::Harness(SDL_Window* window, SDL_Renderer* renderer, fs::path runs_dir, sieve::AiShape shape)
-    : window_(window), r_(renderer), dir_(std::move(runs_dir)), line_shape_(shape)
+Harness::Harness(SDL_Window* window, SDL_Renderer* renderer, fs::path runs_dir, sieve::AiShape shape, PictureSource pictures)
+    : window_(window), r_(renderer), dir_(std::move(runs_dir)), line_shape_(shape), pic_source_(std::move(pictures))
 {
     std::error_code ec;
     fs::create_directories(dir_, ec);
@@ -118,6 +124,7 @@ Harness::~Harness()
 {
     cancel_ = true;
     if (job_.valid()) job_.wait();
+    if (djob_.valid()) djob_.wait();
 }
 
 void Harness::say(std::string text, bool bad)
@@ -134,6 +141,7 @@ void Harness::scan()
     {
         const fs::path p = e.path();
         if (e.is_directory() && fs::exists(p / "training.ini")) entries_.push_back({p, u8(p.filename()), true});
+        else if (e.is_directory() && sieve::cli::is_diffusion_run(p)) entries_.push_back({p, u8(p.filename()), true, true});
         else if (e.is_regular_file() && p.extension() == ".sieve") entries_.push_back({p, u8(p.filename()), false});
     }
     std::sort(entries_.begin(), entries_.end(), [](const Entry& a, const Entry& b) { return a.name < b.name; });
@@ -141,8 +149,12 @@ void Harness::scan()
 
 void Harness::select(int row)
 {
-    row_ = std::clamp(row, 0, int(entries_.size()));
+    // The runs, then two rows: record a new (text) run, and a new picture model.
+    row_ = std::clamp(row, 0, int(entries_.size()) + 1);
     run_.reset();
+    drun_.reset();
+    doutcome_.reset();
+    made_.clear();
     load_error_.clear();
     outcome_.reset();
     verdict_.clear();
@@ -150,6 +162,29 @@ void Harness::select(int row)
     curve_.clear();
     step_ = steps_ = 0;
     if (row_ >= int(entries_.size())) return;
+    if (entries_[size_t(row_)].pictures)
+    {
+        try
+        {
+            drun_ = sieve::cli::load_diffusion_run(entries_[size_t(row_)].path);
+            steps_ = drun_->recipe.steps;
+            saved_step_.reset();
+            // A trained picture model shows what it makes, small models at once (a large one's
+            // pictures wait for TRAIN AGAIN AND CHECK, which makes them on its way).
+            if (drun_->result)
+                if (const auto hex = sieve::cli::final_address_of(*drun_->result))
+                {
+                    const sieve::AiSpace space(drun_->recipe.train.shape, "sieve");
+                    if (space.weights() <= (uint64_t(1) << 18))
+                        make_pictures(space.digits_at(space.parse(*hex), sieve::AddressMode::Positional));
+                }
+        }
+        catch (const std::exception& e)
+        {
+            load_error_ = e.what();
+        }
+        return;
+    }
     try
     {
         run_ = sieve::cli::load_training_run(entries_[size_t(row_)].path);
@@ -170,13 +205,18 @@ std::vector<std::pair<Harness::Action, bool>> Harness::buttons() const
     if (curriculum_)
         return {{Action::MoveUp, cur_row_ > 0}, {Action::MoveDown, cur_row_ + 1 < int(curriculum_->size())}, {Action::Reading, true},
                 {Action::Start, true}, {Action::Cancel, true}};
+    if (pic_recipe_) return {{Action::Start, pic_stack_ != nullptr}, {Action::Cancel, true}};
+    if (drun_)
+        return {{Action::Train, !busy}, {Action::GoTo, !busy && (doutcome_ || drun_->result)}, {Action::Record, !busy},
+                {Action::RecordPictures, !busy}};
     if (saved_step_)
         return {{Action::Train, !busy && run_.has_value()}, {Action::StartOver, !busy}, {Action::GoTo, !busy && trained},
                 {Action::Record, !busy}};
     return {{Action::Train, !busy && run_.has_value()},
             {Action::GoTo, !busy && trained},
             {Action::Pack, !busy && folder && trained},
-            {Action::Record, !busy}};
+            {Action::Record, !busy},
+            {Action::RecordPictures, !busy}};
 }
 
 void Harness::act(Action a)
@@ -185,7 +225,11 @@ void Harness::act(Action a)
         if (b == a && !ok) return;
     switch (a)
     {
-    case Action::Train: start_training(); break;
+    case Action::Train:
+        if (drun_) start_picture_training();
+        else start_training();
+        break;
+    case Action::RecordPictures: open_pictures(); break;
     case Action::StartOver:
     {
         std::error_code ec;
@@ -215,9 +259,36 @@ void Harness::act(Action a)
                           : recipe_.reading == sieve::training::Reading::InOrder          ? sieve::training::Reading::ShuffledWithinFiles
                                                                                           : sieve::training::Reading::Shuffled;
         break;
-    case Action::Cancel: curriculum_.reset(); break;
+    case Action::Cancel:
+        curriculum_.reset();
+        pic_recipe_.reset();
+        break;
     case Action::Start:
     {
+        if (pic_recipe_)
+        {
+            // The new picture model: its pictures drawn from the stack, recorded, and trained.
+            const std::string base = "pictures-" + pic_stack_id_.substr(0, 8);
+            std::string name = base;
+            for (int n = 2; fs::exists(dir_ / from_u8(name)); ++n) name = base + "-" + std::to_string(n);
+            try
+            {
+                const auto pics = sieve::cli::draw_pictures(*pic_stack_->ranker(), pic_count_, 42);
+                sieve::cli::record_diffusion_run(dir_ / from_u8(name), *pic_recipe_, pics);
+                pic_recipe_.reset();
+                pic_stack_.reset();
+                scan();
+                for (size_t i = 0; i < entries_.size(); ++i)
+                    if (entries_[i].name == name) select(int(i));
+                say(trf("harness.recorded", {name}));
+                start_picture_training();
+            }
+            catch (const std::exception& ex)
+            {
+                say(trf("harness.failed", {ex.what()}), true);
+            }
+            break;
+        }
         // The new run, read in the order the list now has, in a new folder beside the others.
         std::string name = new_name_;
         for (int n = 2; fs::exists(dir_ / from_u8(name)) || fs::exists(dir_ / from_u8(name + ".sieve")); ++n) name = new_name_ + "-" + std::to_string(n);
@@ -241,6 +312,17 @@ void Harness::act(Action a)
     }
     case Action::GoTo:
     {
+        if (drun_)
+        {
+            // A picture model is a model of the AI line too, of its own shape.
+            const sieve::AiSpace space(drun_->recipe.train.shape, "sieve");
+            go_shape = drun_->recipe.train.shape;
+            if (doutcome_) go_digits = doutcome_->digits;
+            else go_digits = space.digits_at(space.parse(*sieve::cli::final_address_of(*drun_->result)), sieve::AddressMode::Positional);
+            result_ = Result::GoTo;
+            done_ = true;
+            break;
+        }
         const sieve::AiSpace space(run_->recipe.shape, run_->recipe.key);
         go_shape = run_->recipe.shape;
         if (outcome_) go_digits = outcome_->digits;
@@ -352,6 +434,7 @@ void Harness::poll()
     }
     if (trial_ && measured_for_ == trial_for_) trial_.reset();
     if (curriculum_) start_trial();
+    poll_pictures();
     if (!job_.valid() || job_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
     took_ = std::chrono::duration<double>(std::chrono::steady_clock::now() - started_).count();
     try
@@ -426,6 +509,7 @@ void Harness::settle()
     for (int i = 0; i < 4; ++i) // a training, and the trials a change of settings starts
     {
         if (job_.valid()) job_.wait();
+        if (djob_.valid()) djob_.wait();
         while (trial_)
         {
             poll();
@@ -499,7 +583,13 @@ void Harness::handle(const SDL_Event& event)
                 return;
             }
         for (const auto& [rect, i] : set_rects_)
-            if (inside(rect, e.button.x, e.button.y))
+            if (inside(rect, e.button.x, e.button.y) && pic_recipe_)
+            {
+                if (pic_row_ == i) change_picture_setting(i, e.button.x > rect.x + rect.w / 2 ? 1 : -1, false);
+                pic_row_ = i;
+                return;
+            }
+            else if (inside(rect, e.button.x, e.button.y))
             {
                 // A setting: chosen, and stepped by clicking its right half up, its left half down.
                 if (focus_settings_ && set_row_ == i) change_setting(i, e.button.x > rect.x + rect.w / 2 ? 1 : -1, false);
@@ -511,6 +601,7 @@ void Harness::handle(const SDL_Event& event)
             if (inside(rect, e.button.x, e.button.y) && !training())
             {
                 if (i == int(entries_.size())) act(Action::Record);
+                else if (i == int(entries_.size()) + 1) act(Action::RecordPictures);
                 else select(i);
                 return;
             }
@@ -676,6 +767,22 @@ void Harness::key(SDL_Keycode k, SDL_Keymod mod)
         if (k == SDLK_ESCAPE) cancel_ = true;
         return;
     }
+    if (pic_recipe_)
+    {
+        const bool shift = (mod & SDL_KMOD_SHIFT) != 0;
+        switch (k)
+        {
+        case SDLK_ESCAPE: act(Action::Cancel); break;
+        case SDLK_UP: pic_row_ = std::max(0, pic_row_ - 1); break;
+        case SDLK_DOWN: pic_row_ = std::min(kPictureRows - 1, pic_row_ + 1); break;
+        case SDLK_LEFT:
+        case SDLK_RIGHT: change_picture_setting(pic_row_, k == SDLK_LEFT ? -1 : 1, shift); break;
+        case SDLK_RETURN:
+        case SDLK_KP_ENTER: act(Action::Start); break;
+        default: break;
+        }
+        return;
+    }
     if (curriculum_)
     {
         const bool shift = (mod & SDL_KMOD_SHIFT) != 0;
@@ -714,12 +821,345 @@ void Harness::key(SDL_Keycode k, SDL_Keymod mod)
     case SDLK_UP: select(row_ - 1); break;
     case SDLK_DOWN: select(row_ + 1); break;
     case SDLK_RETURN:
-    case SDLK_KP_ENTER: act(row_ == int(entries_.size()) ? Action::Record : Action::Train); break;
+    case SDLK_KP_ENTER:
+        act(row_ == int(entries_.size()) ? Action::Record : row_ == int(entries_.size()) + 1 ? Action::RecordPictures : Action::Train);
+        break;
+    case SDLK_D: act(Action::RecordPictures); break;
     case SDLK_G: act(Action::GoTo); break;
     case SDLK_P: act(Action::Pack); break;
     case SDLK_N: act(Action::Record); break;
     case SDLK_S: act(Action::StartOver); break;
     default: break;
+    }
+}
+
+// ---------------------------------------------------------------- picture models (diffusion-v1)
+
+void Harness::open_pictures()
+{
+    // The new picture model's settings, starting from the AI line's shape and the rate and loss
+    // scale measured to learn (SPECIFICATIONS §12.0g), and its pictures' stack: the image line's,
+    // at the setup menu's shape, from the settings file.
+    sieve::cli::DiffusionRecipe r;
+    r.train.version = 2;
+    r.train.shape = line_shape_;
+    r.train.learning_rate = "0.0001";
+    r.train.loss_scale_bits = 4;
+    r.palette = pic_source_.palette;
+    r.setup.width = pic_source_.width;
+    r.setup.height = pic_source_.height;
+    pic_stack_.reset();
+    pic_stack_id_.clear();
+    try
+    {
+        r.setup.colours = sieve::palette_by_id(r.palette).size();
+        r.check();
+        const sieve::FilterLine line{"image", "image/" + r.palette + "/" + std::to_string(r.setup.width) + "x" + std::to_string(r.setup.height),
+                                     r.setup.colours, r.setup.cells(), nullptr, r.setup.width, r.setup.height, 1};
+        const sieve::cli::FilterConfig cfg = sieve::cli::FilterConfig::load(pic_source_.filters);
+        auto stack = std::make_shared<const sieve::FilterStack>(sieve::cli::build_stack(line, cfg.of(sieve::cli::LineKind::Image)));
+        if (stack->empty()) pic_stack_note_ = tr("harness.pictures.stack.none");
+        else if (!stack->ranker()) pic_stack_note_ = trf("harness.pictures.stack.uncountable", {stack->compact_blocker()});
+        else
+        {
+            pic_stack_ = stack;
+            pic_stack_id_ = stack->id();
+            const sieve::BigUint& n = stack->ranker()->count();
+            std::string names;
+            for (size_t i = 0; i < stack->size(); ++i) names += (i ? ", " : "") + stack->filter_name(i);
+            pic_stack_note_ = trf("harness.pictures.stack.value", {names,
+                                                                   n.log10_approx() < 15 ? grouped(std::stoull(n.to_decimal()))
+                                                                                         : "~10^" + std::to_string(int(n.log10_approx()))});
+        }
+    }
+    catch (const std::exception& ex)
+    {
+        pic_stack_note_ = trf("harness.failed", {ex.what()});
+    }
+    pic_recipe_ = r;
+    pic_row_ = 0;
+    say(tr("harness.pictures.status"));
+}
+
+void Harness::change_picture_setting(int row, int dir, bool big)
+{
+    if (!pic_recipe_) return;
+    sieve::cli::DiffusionRecipe& r = *pic_recipe_;
+    sieve::AiShape& sh = r.train.shape;
+    auto even_heads = [&](uint32_t h) { return h >= 1 && sh.width % h == 0 && (sh.width / h) % 2 == 0; };
+    switch (row)
+    {
+    case 0: sh.layers = uint32_t(std::clamp(int(sh.layers) + dir * (big ? 4 : 1), 1, 64)); break;
+    case 1:
+    {
+        const uint32_t step = 2 * sh.heads;
+        uint32_t w = big ? (dir > 0 ? sh.width * 2 : sh.width / 2) : uint32_t(int(sh.width) + dir * int(step));
+        w = std::max(step, w / step * step);
+        sh.width = std::min(w, 4096 / step * step);
+        break;
+    }
+    case 2:
+        for (int h = int(sh.heads) + dir; h >= 1 && h <= int(sh.width); h += dir)
+            if (even_heads(uint32_t(h)))
+            {
+                sh.heads = uint32_t(h);
+                break;
+            }
+        break;
+    case 3: sh.bits = uint32_t(std::clamp(int(sh.bits) + dir, 1, 8)); break;
+    case 4: r.setup.levels = uint32_t(std::clamp(int(r.setup.levels) + dir * (big ? 8 : 1), 1, int(256 - r.setup.colours))); break;
+    case 5:
+        r.steps = big ? (dir > 0 ? r.steps * 2 : std::max(100u, r.steps / 2)) : uint32_t(std::max(100, int(r.steps) + dir * 500));
+        r.checkpoint_every = std::max<uint32_t>(1, r.steps / 10);
+        break;
+    case 6: r.batch = uint32_t(std::clamp(int(r.batch) + dir * (big ? 4 : 1), 1, 32)); break;
+    case 7:
+    {
+        int i = 0;
+        for (int k = 0; k < int(std::size(kRates)); ++k)
+            if (std::stod(kRates[k]) <= std::stod(r.train.learning_rate) * (1 + 1e-9)) i = k;
+        r.train.learning_rate = kRates[std::clamp(i + dir, 0, int(std::size(kRates)) - 1)];
+        break;
+    }
+    case 8: r.train.loss_scale_bits = uint32_t(std::clamp(int(r.train.loss_scale_bits) + dir, 0, 7)); break;
+    case 9: pic_count_ = big ? (dir > 0 ? pic_count_ * 2 : std::max(100u, pic_count_ / 2)) : uint32_t(std::max(100, int(pic_count_) + dir * 500)); break;
+    default: break;
+    }
+}
+
+void Harness::start_picture_training()
+{
+    if (!drun_ || training()) return;
+    doutcome_.reset();
+    made_.clear();
+    verdict_.clear();
+    curve_.clear();
+    step_ = 0;
+    steps_ = drun_->recipe.steps;
+    cancel_ = false;
+    started_ = std::chrono::steady_clock::now();
+    say(tr("harness.training"));
+    const sieve::cli::DiffusionRun run = *drun_;
+    djob_ = std::async(std::launch::async, [this, run] {
+        // The curve: about 200 points, each the bits a cell over the steps since the one before.
+        double bits = 0;
+        uint64_t cells = 0;
+        return sieve::cli::train_diffusion_run(run, 0, [&, this](uint64_t k, uint64_t n, const sieve::training::Score& s) {
+            bits += s.bits, cells += s.predictions;
+            std::lock_guard<std::mutex> lock(mu_);
+            step_ = k;
+            steps_ = n;
+            if (k % std::max<uint64_t>(1, n / 200) == 0 || k == n)
+            {
+                if (cells) curve_.push_back(float(bits / double(cells)));
+                bits = 0, cells = 0;
+            }
+        }, &cancel_);
+    });
+}
+
+void Harness::poll_pictures()
+{
+    if (!djob_.valid() || djob_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+    took_ = std::chrono::duration<double>(std::chrono::steady_clock::now() - started_).count();
+    try
+    {
+        sieve::cli::DiffusionOutcome out = djob_.get();
+        if (out.cancelled)
+        {
+            say(trf("harness.pictures.stopped", {grouped(out.stopped_at)}));
+            return;
+        }
+        if (drun_->result)
+        {
+            const bool same = *drun_->result == out.text;
+            verdict_ = tr(same ? "harness.verdict.same" : "harness.pictures.differs");
+            verdict_colour_ = same ? kGood : kBad;
+        }
+        else
+        {
+            std::FILE* f = nullptr;
+#ifdef _WIN32
+            _wfopen_s(&f, (drun_->path / "result.txt").wstring().c_str(), L"wb");
+#else
+            f = std::fopen((drun_->path / "result.txt").string().c_str(), "wb");
+#endif
+            if (f)
+            {
+                std::fwrite(out.text.data(), 1, out.text.size(), f);
+                std::fclose(f);
+            }
+            drun_->result = out.text;
+            verdict_ = tr("harness.verdict.written");
+            verdict_colour_ = kGood;
+        }
+        make_pictures(out.digits);
+        char t[32];
+        std::snprintf(t, sizeof t, "%.1f", took_);
+        say(trf("harness.trained", {grouped(drun_->recipe.steps), t}));
+        doutcome_ = std::move(out);
+    }
+    catch (const std::exception& ex)
+    {
+        say(trf("harness.failed", {ex.what()}), true);
+    }
+}
+
+void Harness::make_pictures(const sieve::AiSpace::Digits& digits)
+{
+    // What it makes: a picture from each of a few noises (drawn from splitmix64 seeded 1, as
+    // `sieve diffuse --make` draws them), each with its own seed (1, 2, ...).
+    made_.clear();
+    const sieve::cli::DiffusionRecipe& r = drun_->recipe;
+    const sieve::AiSpace space(r.train.shape, "sieve");
+    sieve::diffusion::SplitMix g(1);
+    for (int i = 0; i < kPicturesMade; ++i)
+    {
+        std::vector<uint32_t> noise(r.setup.cells());
+        for (auto& c : noise) c = uint32_t(g.next() % r.setup.colours);
+        made_.push_back(sieve::diffusion::make_picture(space, digits, r.setup, noise, uint64_t(1 + i)));
+    }
+}
+
+void Harness::draw_picture(const std::vector<uint32_t>& p, float x, float y, float cell) const
+{
+    const sieve::cli::DiffusionRecipe& r = pic_recipe_ ? *pic_recipe_ : drun_->recipe;
+    const sieve::Palette& pal = sieve::palette_by_id(r.palette);
+    for (uint32_t i = 0; i < p.size(); ++i)
+    {
+        const sieve::Rgb c = pal.colour(p[i]);
+        SDL_SetRenderDrawColor(r_, c.r, c.g, c.b, 255);
+        const SDL_FRect px{x + float(i % r.setup.width) * cell, y + float(i / r.setup.width) * cell, cell, cell};
+        SDL_RenderFillRect(r_, &px);
+    }
+    SDL_SetRenderDrawColor(r_, kDim.r, kDim.g, kDim.b, 255);
+    const SDL_FRect border{x - 1, y - 1, float(r.setup.width) * cell + 2, float(r.setup.height) * cell + 2};
+    SDL_RenderRect(r_, &border);
+}
+
+void Harness::render_pictures(float x, float& ry, float colW, float H)
+{
+    auto line = [&](const std::string& label, const std::string& value, SDL_Color c = kWhite) {
+        txt(r_, x, ry, label, kGrey);
+        txt(r_, x + 150, ry, value.substr(0, size_t(std::max(0.0f, (colW - 150) / 8))), c);
+        ry += 16;
+    };
+    if (pic_recipe_)
+    {
+        // A new picture model's settings, a row each.
+        const sieve::cli::DiffusionRecipe& r = *pic_recipe_;
+        const sieve::AiShape& sh = r.train.shape;
+        txt(r_, x, ry, tr("harness.pictures.title"), kWhite, 1.5f);
+        ry += 26;
+        line(tr("harness.pictures.of"), trf("harness.pictures.of.value", {std::to_string(r.setup.width), std::to_string(r.setup.height), r.palette}));
+        line(tr("harness.pictures.from"), pic_stack_note_, pic_stack_ ? kWhite : kBad);
+        ry += 6;
+        const std::string values[kPictureRows] = {
+            std::to_string(sh.layers),
+            trf("harness.set.width.value", {std::to_string(sh.width), std::to_string(sh.ffn())}),
+            trf("harness.set.heads.value", {std::to_string(sh.heads), std::to_string(sh.width / sh.heads)}),
+            trf("harness.set.bits.value", {std::to_string(sh.bits), std::to_string(1u << sh.bits)}),
+            trf("harness.pictures.levels.value", {std::to_string(r.setup.levels)}),
+            grouped(r.steps),
+            std::to_string(r.batch),
+            r.train.learning_rate,
+            trf("harness.set.scale.value", {std::to_string(r.train.loss_scale_bits), std::to_string(1u << r.train.loss_scale_bits)}),
+            grouped(pic_count_)};
+        static const char* const kLabels[kPictureRows] = {"harness.set.layers", "harness.set.width", "harness.set.heads", "harness.set.bits",
+                                                         "harness.pictures.levels", "harness.pictures.steps", "harness.pictures.batch",
+                                                         "harness.set.rate", "harness.set.scale", "harness.pictures.count"};
+        set_rects_.clear();
+        for (int i = 0; i < kPictureRows; ++i)
+        {
+            const SDL_FRect rr{x - 4, ry - 3, colW, 16};
+            if (i == pic_row_)
+            {
+                SDL_SetRenderDrawColor(r_, 48, 0, 80, 255);
+                SDL_RenderFillRect(r_, &rr);
+            }
+            set_rects_.push_back({rr, i});
+            txt(r_, x, ry, tr(kLabels[i]), kGrey);
+            if (i == pic_row_) txt(r_, x + 136, ry, "<", kAccent);
+            txt(r_, x + 150, ry, values[i], i == pic_row_ ? kWhite : kGrey);
+            if (i == pic_row_) txt(r_, x + 158 + text_width(values[i], 1), ry, ">", kAccent);
+            ry += 16;
+        }
+        ry += 6;
+        const sieve::AiSpace space(sh, "sieve");
+        line(tr("harness.est.size"), trf("harness.pictures.size.value", {grouped(space.weights()), grouped(uint64_t(r.steps) * r.batch)}));
+        txt(r_, x, ry, tr("harness.pictures.measured"), kDim);
+        ry += 16;
+        return;
+    }
+    // A picture run: what it is, its training, and what its model makes.
+    const sieve::cli::DiffusionRecipe& r = drun_->recipe;
+    const sieve::AiShape& s = r.train.shape;
+    txt(r_, x, ry, drun_->name, kWhite, 1.5f);
+    ry += 28;
+    const sieve::AiSpace space(s, "sieve");
+    line(tr("harness.model"), trf(s.layers == 1 ? "harness.shape.one" : "harness.shape",
+                                  {std::to_string(s.layers), std::to_string(s.width), std::to_string(s.heads), std::to_string(s.bits), grouped(space.weights())}));
+    line(tr("harness.pictures.kind"), trf("harness.pictures.kind.value", {std::to_string(r.setup.levels)}));
+    line(tr("harness.pictures.of"), trf("harness.pictures.of.run", {std::to_string(r.setup.width), std::to_string(r.setup.height), r.palette}));
+    line(tr("harness.learns"), trf("harness.pictures.recipe", {r.train.learning_rate, std::to_string(r.train.loss_scale_bits), std::to_string(r.batch),
+                                                              grouped(r.steps)}));
+    line(tr("harness.corpus"), trf("harness.pictures.corpus", {grouped(drun_->pictures.size())}));
+    line(tr("harness.result"), drun_->result ? tr("harness.result.yes") : tr("harness.result.no"), drun_->result ? kWhite : kGrey);
+    ry += 10;
+    uint64_t step, steps;
+    std::vector<float> curve;
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        step = step_, steps = steps_, curve = curve_;
+    }
+    if (training() || !curve.empty())
+    {
+        frame(r_, {x, ry, colW, 14}, kDim);
+        const float f = steps ? float(double(step) / double(steps)) : 0.0f;
+        SDL_SetRenderDrawColor(r_, kAccent.r, kAccent.g, kAccent.b, 255);
+        const SDL_FRect bar{x + 1, ry + 1, (colW - 2) * f, 12};
+        SDL_RenderFillRect(r_, &bar);
+        ry += 20;
+        const double secs = training() ? std::chrono::duration<double>(std::chrono::steady_clock::now() - started_).count() : took_;
+        char t[32], b[32];
+        std::snprintf(t, sizeof t, "%.1f", secs);
+        std::snprintf(b, sizeof b, "%.3f", curve.empty() ? 0.0 : double(curve.back()));
+        txt(r_, x, ry, trf("harness.pictures.progress", {grouped(step), grouped(steps), t, curve.empty() ? std::string("-") : std::string(b)}), kWhite);
+        ry += 20;
+        // The curve, from the most bits a cell it has had down to none.
+        const SDL_FRect plot{x, ry, colW, std::min(120.0f, H - ry - 230)};
+        if (plot.h > 40 && curve.size() >= 2)
+        {
+            frame(r_, plot, kDim);
+            txt(r_, plot.x + 4, plot.y + 4, tr("harness.pictures.curve"), kDim);
+            const float top = std::max(1.0f, *std::max_element(curve.begin(), curve.end()));
+            SDL_SetRenderDrawColor(r_, kAccent.r, kAccent.g, kAccent.b, 255);
+            for (size_t i = 1; i < curve.size(); ++i)
+            {
+                auto px = [&](size_t j) { return plot.x + plot.w * float(j) / float(curve.size() - 1); };
+                auto py = [&](float v) { return plot.y + plot.h * (1.0f - std::clamp(v, 0.0f, top) / top); };
+                SDL_RenderLine(r_, px(i - 1), py(curve[i - 1]), px(i), py(curve[i]));
+            }
+            ry += plot.h + 10;
+        }
+    }
+    if (!verdict_.empty())
+    {
+        txt(r_, x, ry, verdict_.substr(0, size_t(colW / 8)), verdict_colour_);
+        ry += 18;
+    }
+    if (!made_.empty())
+    {
+        txt(r_, x, ry, tr("harness.pictures.makes"), kGrey);
+        ry += 16;
+        const float cell = std::clamp(std::floor(std::min(colW / float(kPicturesMade) - 12, 120.0f) / float(r.setup.width)), 1.0f, 12.0f);
+        float px = x;
+        for (const auto& p : made_)
+        {
+            draw_picture(p, px, ry, cell);
+            px += float(r.setup.width) * cell + 12;
+        }
+        ry += float(r.setup.height) * cell + 8;
     }
 }
 
@@ -767,6 +1207,20 @@ void Harness::render()
         else txt(r_, 20, y, tr("harness.record"), sel ? kAccent : kGrey);
         y += rowH;
     }
+    {
+        // A second new row: a picture model.
+        const int i = int(entries_.size()) + 1;
+        const bool sel = i == row_;
+        const SDL_FRect rr{12, y - 3, listW - 8, rowH};
+        if (sel)
+        {
+            SDL_SetRenderDrawColor(r_, 48, 0, 80, 255);
+            SDL_RenderFillRect(r_, &rr);
+        }
+        row_rects_.push_back({rr, i});
+        txt(r_, 20, y, tr("harness.record.pictures"), sel ? kAccent : kGrey);
+        y += rowH;
+    }
     if (entries_.empty()) txt(r_, 20, y + 8, tr("harness.none"), kDim);
 
     // The run, on the right.
@@ -786,6 +1240,7 @@ void Harness::render()
         frame(r_, {x, ry - 4, colW, 20}, kAccent);
         txt(r_, x + 6, ry, prompt_ + "_", kWhite);
     }
+    else if (pic_recipe_ || (drun_ && !curriculum_)) render_pictures(x, ry, colW, H);
     else if (curriculum_)
     {
         txt(r_, x, ry, trf("harness.curriculum.title", {new_name_}), kWhite, 1.5f);
@@ -969,7 +1424,7 @@ void Harness::render()
             ry += 18;
         }
     }
-    else txt(r_, x, ry, tr("harness.record.help"), kGrey);
+    else txt(r_, x, ry, tr(row_ == int(entries_.size()) + 1 ? "harness.record.pictures.help" : "harness.record.help"), kGrey);
 
     // The buttons, along the bottom of the right side.
     button_rects_.clear();
@@ -977,7 +1432,8 @@ void Harness::render()
     const float by = H - 88;
     for (const auto& [a, ok] : buttons())
     {
-        const char* id = a == Action::Train    ? (saved_step_ ? "harness.button.resume" : run_ && run_->result ? "harness.button.check" : "harness.button.train")
+        const bool has_result = (run_ && run_->result) || (drun_ && drun_->result);
+        const char* id = a == Action::Train    ? (saved_step_ ? "harness.button.resume" : has_result ? "harness.button.check" : "harness.button.train")
                          : a == Action::StartOver ? "harness.button.over"
                          : a == Action::GoTo   ? "harness.button.goto"
                          : a == Action::Pack   ? "harness.button.pack"
@@ -986,6 +1442,7 @@ void Harness::render()
                          : a == Action::Reading  ? "harness.button.reading"
                          : a == Action::Start    ? "harness.button.start"
                          : a == Action::Cancel   ? "harness.button.cancel"
+                         : a == Action::RecordPictures ? "harness.button.pictures"
                                                  : "harness.button.record";
         const std::string label = a == Action::Train && saved_step_ ? trf(id, {grouped(*saved_step_)}) : tr(id);
         const float bw = text_width(label, 1) + 20;
@@ -996,7 +1453,8 @@ void Harness::render()
         bx += bw + 10;
     }
     txt(r_, 16, H - 46, status_.substr(0, size_t((W - 32) / 8)), status_bad_ ? kBad : kWhite);
-    txt(r_, 16, H - 26, tr(training() ? "harness.footer.training" : prompting_ ? "harness.footer.prompt" : curriculum_ ? "harness.footer.curriculum" : "harness.footer"), kGrey);
+    txt(r_, 16, H - 26, tr(training() ? (djob_.valid() ? "harness.footer.training.pictures" : "harness.footer.training") : prompting_ ? "harness.footer.prompt"
+                           : curriculum_ ? "harness.footer.curriculum" : pic_recipe_ ? "harness.footer.pictures" : "harness.footer"), kGrey);
 }
 
 } // namespace hallway

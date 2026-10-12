@@ -24,7 +24,7 @@ class MainMenu
 public:
     MainMenu(SDL_Window* window, SDL_Renderer* renderer, AppSettings& settings, std::filesystem::path settings_path, DisplayInfo display);
 
-    enum class Result { Start, Locator, Designer, Harness, Quit };
+    enum class Result { Start, Locator, Media, Designer, Harness, Quit };
     Result run();
     // Settings alone, as the hallway's pause menu opens them: the menu starts on the Settings
     // screen, and backing out of it ends the menu instead of going to the main screen.

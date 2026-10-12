@@ -312,8 +312,17 @@ struct MenuLocator
     FilterConfig filters;
 };
 
+// A file the main menu's File Locator was asked to go to: the hallway is built, then walks to it.
+struct LocatedGo
+{
+    std::vector<uint8_t> bytes;
+    std::string name;
+    bool past = false; // longer than the binary line: the line is made long enough (asked twice)
+};
+
 bool run_locator(SDL_Window* window, SDL_Renderer* renderer, const Settings& settings, FilterConfig& filters, const std::string& filters_path,
-                 const std::string& path = "", bool tailor = false, const std::string& screenshot = "", const std::string& presses = "")
+                 const std::string& path = "", bool tailor = false, const std::string& screenshot = "", const std::string& presses = "",
+                 std::optional<LocatedGo>* go = nullptr)
 {
     MenuLocator m;
     settings.apply(m.la);
@@ -330,6 +339,13 @@ bool run_locator(SDL_Window* window, SDL_Renderer* renderer, const Settings& set
         wl.binary_bytes = binary_length(m.la);
         return wl;
     };
+    // Go to it, from the main menu: the locator closes, and the hallway is built and walks to the
+    // file (app_main), measured against the binary line as the setup menu has it.
+    if (go)
+    {
+        host.binary_bytes = [&settings] { return uint64_t(settings.binary_bytes); };
+        host.go = [go](const std::vector<uint8_t>& bytes, const std::string& name, bool past) { *go = LocatedGo{bytes, name, past}; };
+    }
     FileLocator* self = nullptr;
     host.use_filters = [&](const FilterConfig& f) {
         filters = m.filters = f;
@@ -704,7 +720,8 @@ int run(const Args& a)
         // A picture of the AI Training Harness (for documentation and testing): --training-dir DIR
         // for its runs (else the training folder beside the programs); --script runs keys and typed
         // text as the designer's does, each step waiting for a training to finish.
-        Harness h(window, renderer, a.has("training-dir") ? std::filesystem::path(a.get("training-dir")) : training_dir(), ai_shape_of(settings));
+        Harness h(window, renderer, a.has("training-dir") ? std::filesystem::path(a.get("training-dir")) : training_dir(), ai_shape_of(settings),
+                  PictureSource{settings.image_w, settings.image_h, settings.image_palette, filters_path});
         h.set_scripted(true);
         if (a.has("script"))
         {
@@ -751,7 +768,8 @@ int run(const Args& a)
     {
         // A picture of the File Locator opened from the main menu, on a file or folder (--tailored:
         // and its filters tailored): no world, so no Go to it.
-        run_locator(window, renderer, settings, filters, filters_path, a.get("locate"), a.has("tailored"), a.get("screenshot"), a.get("press", ""));
+        std::optional<LocatedGo> go; // offered as from the main menu (the screenshot does not go)
+        run_locator(window, renderer, settings, filters, filters_path, a.get("locate"), a.has("tailored"), a.get("screenshot"), a.get("press", ""), &go);
         std::cout << "saved " << a.get("screenshot") << "\n";
         return finish();
     }
@@ -882,6 +900,8 @@ int run(const Args& a)
     std::optional<MusicMelody> pending_melody; // a melody of the music to go to in the next hallway built
     std::optional<Space::Digits> pending_unit; // an item to hold on its COST tab there (COST's tailoring)
     std::optional<sieve::AiSpace::Digits> pending_ai; // a model to go to on the AI line there (the harness's GO TO IT)
+    std::optional<LocatedGo> pending_file;            // a file to walk to there (the File Locator's Go to it)
+    bool pending_media = false;                       // the Media Player opened there (from the main menu)
     bool skip_setup = false;                         // straight into the hallway, once
     while (true)
     {
@@ -893,14 +913,20 @@ int run(const Args& a)
             if (r == MainMenu::Result::Locator)
             {
                 // The File Locator, and back to the main menu from it.
-                if (!run_locator(window, renderer, settings, filters, filters_path)) break;
-                continue;
+                std::optional<LocatedGo> go;
+                if (!run_locator(window, renderer, settings, filters, filters_path, "", false, "", "", &go)) break;
+                if (!go) continue;
+                // Go to it: into the hallway as the settings stand, then to the file.
+                pending_file = std::move(go);
+                settings_chosen = true;
+                skip_setup = true;
             }
             if (r == MainMenu::Result::Harness)
             {
                 // The AI Training Harness; GO TO IT goes into the hallway on the AI line, at the
                 // model, in the run's shape (and without the setup menu: the shape is the run's).
-                Harness h(window, renderer, training_dir(), ai_shape_of(settings));
+                Harness h(window, renderer, training_dir(), ai_shape_of(settings),
+                          PictureSource{settings.image_w, settings.image_h, settings.image_palette, filters_path});
                 const Harness::Result hr = h.run();
                 if (hr == Harness::Result::Quit) break;
                 if (hr == Harness::Result::Back) continue;
@@ -912,6 +938,15 @@ int run(const Args& a)
                 settings_chosen = true;
                 skip_setup = true;
                 pending_ai = h.go_digits;
+            }
+            if (r == MainMenu::Result::Media)
+            {
+                // The Media Player is the hallway's (its Go to it walks to a melody): the hallway
+                // is built as the settings stand, with the player open over it; Esc there comes
+                // back here.
+                pending_media = true;
+                settings_chosen = true;
+                skip_setup = true;
             }
             if (r == MainMenu::Result::Designer)
             {
@@ -1004,9 +1039,20 @@ int run(const Args& a)
             hall->go_to_ai(*pending_ai);
             pending_ai.reset();
         }
+        if (pending_file)
+        {
+            hall->go_to_located(pending_file->bytes, pending_file->name, pending_file->past);
+            pending_file.reset();
+        }
+        if (pending_media)
+        {
+            hall->open_media_from_main();
+            pending_media = false;
+        }
         skip_setup = false;
         SDL_SetWindowRelativeMouseMode(window, true);
         Menu::Result in_game_menu = Menu::Result::Back;
+        bool harness_went = false; // the pause menu's harness went to its model: a hallway on the AI line
         for (;;)
         {
             hall->music_line(); // back from a menu (or in for the first time): the line's colours and character
@@ -1054,6 +1100,38 @@ int run(const Args& a)
                     filters = menu.filters();
                 }
                 break;
+            }
+            // The Filter Designer and the AI Training Harness from the pause menu, as from the main
+            // menu: over the hallway, and then the same hallway again, still paused. The harness's
+            // GO TO IT goes to its model instead, in a hallway on the AI line in the run's shape.
+            if (hall->request() == Hallway::Request::Designer)
+            {
+                hall->clear_request();
+                Designer designer(window, renderer);
+                if (designer.run() == Designer::Result::Quit) break;
+                SDL_SetWindowRelativeMouseMode(window, false);
+                continue;
+            }
+            if (hall->request() == Hallway::Request::Harness)
+            {
+                hall->clear_request();
+                Harness h(window, renderer, training_dir(), ai_shape_of(settings),
+                          PictureSource{settings.image_w, settings.image_h, settings.image_palette, filters_path});
+                const Harness::Result hr = h.run();
+                if (hr == Harness::Result::Quit) break;
+                if (hr == Harness::Result::GoTo)
+                {
+                    settings.ai_layers = h.go_shape.layers;
+                    settings.ai_width = h.go_shape.width;
+                    settings.ai_heads = h.go_shape.heads;
+                    settings.ai_bits = h.go_shape.bits;
+                    settings.start_line = "ai";
+                    pending_ai = h.go_digits;
+                    harness_went = true;
+                    break;
+                }
+                SDL_SetWindowRelativeMouseMode(window, false);
+                continue;
             }
             // Settings from the pause menu: the main menu's screens over the hallway, and then
             // the same hallway again, still paused, with what was changed applied to it.
@@ -1107,6 +1185,12 @@ int run(const Args& a)
             }
             settings.start_line = hall->line_name();
             pending_unit = hall->tailored_unit();
+            show_menu = false;
+            settings_chosen = true;
+            continue;
+        }
+        if (harness_went)
+        {
             show_menu = false;
             settings_chosen = true;
             continue;

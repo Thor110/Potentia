@@ -1,9 +1,12 @@
 // The pause menu: Esc in the hallway (with nothing in your hands) stops the world and offers the
 // ways out of it and the tools beside it. Resume; Restart, the setup menu over the hallway (F1); the Node Graph Viewer
 // (node_graph.cpp, also O); the Navigation System (the address navigator, also X); the
-// File Locator (file_locator.cpp); the Media Player (media_player.cpp, the background music); Settings, the same screens as the main menu's, opened over the
-// hallway and returning to it; and Exit Sieve, which asks whether you mean the main menu or
-// leaving altogether.
+// File Locator (file_locator.cpp); the Media Player (media_player.cpp, the background music); the
+// Filter Designer and the AI Training Harness, opened by the application over the hallway;
+// Settings, the same screens as the main menu's, opened over the hallway and returning to it; and
+// Exit Sieve, which asks whether you mean the main menu or leaving altogether. The main menu has
+// the same systems in the same order, less the node graph and the navigator, which need a hallway
+// walked (IDEAS §19.18).
 //
 // Every tool opened from here comes back to it when left (Esc): the node graph, the navigator (whose
 // ENTER goes to the address, and so out of the pause as well), the locator, Settings, and Restart's
@@ -26,7 +29,10 @@ struct PauseItem
 };
 
 constexpr PauseItem kPauseItems[] = {
-    {"resume", true}, {"restart", true}, {"graph", true}, {"navigator", true}, {"locator", true}, {"media", true}, {"settings", true}, {"exit", true},
+    // The main menu's systems in the same order (IDEAS §19.18), with what only a walked hallway has
+    // (the node graph, the navigator) after Restart.
+    {"resume", true}, {"restart", true}, {"graph", true}, {"navigator", true}, {"locator", true}, {"media", true},
+    {"designer", true}, {"harness", true}, {"settings", true}, {"exit", true},
 };
 constexpr int kPauseCount = int(sizeof kPauseItems / sizeof kPauseItems[0]);
 
@@ -71,9 +77,11 @@ void Hallway::pause_choose(int row, bool& quit)
     else if (id == "navigator") open_navigator(); // over the pause menu: Esc comes back to it, ENTER goes
     else if (id == "locator") open_locator(); // over the pause menu, which is there again after it
     else if (id == "media") open_media_player(); // likewise
-    else if (id == "settings")
+    else if (id == "settings" || id == "designer" || id == "harness")
     {
-        request_ = Request::Settings;
+        // Opened by the application over this hallway, which it comes back to, still paused
+        // (the harness's GO TO IT builds a hallway on the AI line instead).
+        request_ = id == "settings" ? Request::Settings : id == "designer" ? Request::Designer : Request::Harness;
         quit = true;
     }
     else if (id == "exit") pause_confirm_ = true;
@@ -131,7 +139,8 @@ void Hallway::draw_pause(float W, float H)
     SDL_SetRenderDrawColor(r_, 0, 0, 0, 200);
     const SDL_FRect all{0, 0, W, H};
     SDL_RenderFillRect(r_, &all);
-    const float bw = 460, bh = 406, bx = (W - bw) / 2, by = (H - bh) / 2;
+    // As tall as its rows: the title, a row each, and the line under the list.
+    const float bw = 460, bh = 70 + 36.0f * float(kPauseCount) + 36, bx = (W - bw) / 2, by = (H - bh) / 2;
     panel(bx, by, bw, bh, 240);
     SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 255);
     const SDL_FRect border{bx, by, bw, bh};

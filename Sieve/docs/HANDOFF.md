@@ -2496,3 +2496,30 @@ cover and a title.
   SHA-256 in the list's header. make_release.py step 8b, by the build's hallway (the staged folder
   is left as checked); `metrics.txt` is published and in the notes.
 - **Next:** the tally into tools/cli, for a `sieve metrics` (and a unit test of the list).
+
+### Picture models in the AI Training Harness (12 October 2026)
+- **What** (Edward): a small diffusion test beside the text runs in the harness.
+- **tools/cli/diffusion_run.{hpp,cpp}** (in sieve_compare, beside train.cpp): `DiffusionRecipe`,
+  `DiffusionRun`, `load_diffusion_run`, `record_diffusion_run`, `draw_pictures`,
+  `train_diffusion_run` (progress and cancel), `final_address_of`. `sieve diffuse` now uses them;
+  its runs reproduce as before (checked against an earlier run, and by the oracle).
+- **client/harness.{hpp,cpp}:** `PictureSource` (the setup menu's image shape and the filters file,
+  from app_main); picture runs listed (`Entry::pictures`); `open_pictures` and
+  `change_picture_setting` (the settings page, `kPictureRows`); `start_picture_training` and
+  `poll_pictures` (`djob_`); `make_pictures` (six from noise) and `render_pictures`. D opens it; a
+  second new row in the list. A stopped picture run starts again (no saved state yet).
+- **Not yet:** resuming a picture run; packing one as .sieve; the hallway showing a picture model's
+  pictures on its shelf face.
+
+### Menus in one order; Go to it from the main menu (12 October 2026)
+- **Main menu** (main_menu.cpp): Start, File Locator, Media Player (new: `Result::Media`), Filter
+  Designer, AI Training Harness, Settings, Exit. CI's "Down,Return" to Settings is now five Downs.
+- **Pause menu** (pause_menu.cpp): adds Filter Designer and AI Training Harness
+  (`Request::Designer`, `Request::Harness`, handled in app_main's in-game loop beside Settings;
+  the harness's GO TO IT builds a hallway on the AI line, `harness_went`). The panel is as tall as
+  its rows.
+- **File Locator from the main menu** offers Go to it again: `run_locator(..., &go)` sets
+  `Host::go` and `binary_bytes` (the setup menu's), app_main builds the hallway and calls
+  `Hallway::go_to_located`. CI: "open, Go to it offered".
+- **Media Player from the main menu:** the hallway is built with `open_media_from_main()`; Esc there
+  is `Request::MainMenu` (`media_from_main_`), cleared once a melody is gone to.
