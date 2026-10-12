@@ -2281,6 +2281,80 @@ const Menu::StackInfo& Menu::stack_info(int i)
     return resolve(i, key, std::move(work));
 }
 
+std::string Menu::metrics_text()
+{
+    // Each line's tally, waited for: the menu's workers count it, as they do on screen.
+    std::array<StackInfo, kLines> got;
+    for (int i = 0; i < kLines; ++i)
+        for (;;)
+        {
+            const StackInfo& s = stack_info(i);
+            if (&s != &waiting_[size_t(i)])
+            {
+                got[size_t(i)] = s;
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+    // The line's name as the hallway writes it, in title case ("IMAGE" -> "Image").
+    auto name_of = [](int i) {
+        // (A name of two letters or fewer is an abbreviation, and stays as it is: AI.)
+        std::string n = tr(kDimensions[i].theme.key);
+        if (n.size() <= 2) return n;
+        for (size_t k = 1; k < n.size(); ++k)
+            if (n[k] >= 'A' && n[k] <= 'Z' && n[k - 1] != ' ') n[k] = char(n[k] - 'A' + 'a');
+        return n;
+    };
+    std::vector<int> order{kBinaryLine};
+    for (int i = 0; i < kLines; ++i)
+        if (i != kBinaryLine) order.push_back(i);
+    size_t name_w = 0, pct_w = 0;
+    std::vector<std::string> pcts(kLines);
+    for (int i : order)
+    {
+        const StackInfo& s = got[size_t(i)];
+        name_w = std::max(name_w, name_of(i).size());
+        pcts[size_t(i)] = s.filtered.substr(0, s.filtered.find("  ("));
+        pct_w = std::max(pct_w, pcts[size_t(i)].size());
+    }
+    std::string out;
+    for (int i : order)
+    {
+        const StackInfo& s = got[size_t(i)];
+        std::string row = name_of(i);
+        row.resize(name_w, ' ');
+        row += " : ";
+        if (!s.filtered.empty() && std::isfinite(s.kept_log10))
+        {
+            std::string pct = pcts[size_t(i)];
+            pct.resize(pct_w, ' ');
+            // Two decimals, or two significant figures when that would read 0.00 (a stack that
+            // removes a sliver: 10^-0.00043).
+            std::string kept = fixed(s.kept_log10, 2);
+            if (s.kept_log10 > -0.005 && s.kept_log10 < 0)
+            {
+                // Fixed notation to two significant figures, as far as twelve decimals (as far as
+                // the percentage goes); past that, the dots the percentage uses.
+                const int places = int(std::ceil(-std::log10(-s.kept_log10))) + 1;
+                kept = places > 12 ? "-0.000000000000..." : fixed(s.kept_log10, places);
+            }
+            if (kept == "-0.00") kept = "0.00";
+            row += pct + "   ( Kept : 10^" + kept + " )";
+        }
+        else if (!s.filtered.empty()) row += pcts[size_t(i)] + "   ( Kept : none )";
+        else row += s.status; // nothing ticked, too large, or not countable, and why
+        out += row + "\n";
+    }
+    out += "\nShapes (the setup menu's settings):\n";
+    for (int i : order)
+    {
+        std::string row = name_of(i);
+        row.resize(name_w, ' ');
+        out += row + " : " + line_sizes()[size_t(i)].units + "\n";
+    }
+    return out;
+}
+
 // One filter alone on its line (with what ticking it ticks too, its prerequisites), with its
 // settings as they stand: the share of the line it removes, for comparing filters at a glance and
 // for X to keep the stronger of two that clash. Counted on a worker like a line's stack, and kept.
@@ -2460,7 +2534,11 @@ const Menu::StackInfo& Menu::parts_stack_info(int line)
             if (c.is_zero()) none_survive = true;
             else bits += power * c.log10_approx() / std::log10(2.0);
         }
-        if (exact) out.filtered = filtered_text(kept, total);
+        if (exact)
+        {
+            out.filtered = filtered_text(kept, total);
+            out.kept_log10 = kept.is_zero() ? -std::numeric_limits<double>::infinity() : kept.log10_approx() - total.log10_approx();
+        }
         if (!any) out.status = tr(books ? "status.none_books" : "status.none_units");
         else if (!exact) out.status = trf("status.not_countable", {blocker});
         else if (none_survive)

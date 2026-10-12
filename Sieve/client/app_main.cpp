@@ -1,6 +1,7 @@
 // Sieve hallway -- the program: its options, the menus, the screenshot and scripting paths used by
 // the checks, and the event loop. The hallway itself is in hallway.hpp and the files beside it.
 
+#include "sieve/sha256.hpp"
 #include "window_icon.hpp"
 #include "cli/media_decode.hpp"
 #include "cli/plugins.hpp"
@@ -16,6 +17,7 @@
 
 #include <cstdlib>
 #include <fstream>
+#include <sstream>
 
 using namespace hallway;
 using namespace hallway::hall;
@@ -111,7 +113,11 @@ const char* kUsage =
     "                      Player from the pause menu (Escape, then Down to it, Return)\n"
     "  --filters PATH      filter settings (default: sieve-filters.ini next to the executable)\n"
     "  --timings           time each phase (building, items, filters, vault, faces, frames, menus);\n"
-    "                      written at exit to sieve-timings.txt beside the settings, and to stderr\n\n"
+    "                      written at exit to sieve-timings.txt beside the settings, and to stderr\n"
+    "  --metrics PATH      write the metrics list and exit, with no window: how much of every line the\n"
+    "                      filters (--filters) remove, as the setup menu counts it, at the lines' settings\n"
+    "                      (the options above; their defaults without them). make_release writes one with\n"
+    "                      data/metrics/reference-filters.ini beside the installer\n\n"
     "Screenshots (for documentation and testing):\n"
     "  --screenshot PATH   render one frame to a PNG and exit\n"
     "  --size WxH          window size (default 1280x720)\n"
@@ -546,7 +552,9 @@ int run(const Args& a)
         throw std::invalid_argument("--size expects WxH, e.g. 1280x720");
     const bool shot = a.has("screenshot");
 
-    if (!SDL_Init(SDL_INIT_VIDEO)) throw std::runtime_error(std::string("SDL_Init failed: ") + SDL_GetError());
+    // --metrics FILE: the metrics list (IDEAS §19.12), counted without a window or a display.
+    const bool metrics = a.has("metrics");
+    if (!metrics && !SDL_Init(SDL_INIT_VIDEO)) throw std::runtime_error(std::string("SDL_Init failed: ") + SDL_GetError());
     // The application's settings (sieve-hallway.ini, or --settings PATH). On the first start the
     // resolution is chosen from the display. Screenshots keep --size (default 1280x720) and the
     // default settings, so they come out the same on every machine.
@@ -583,6 +591,29 @@ int run(const Args& a)
     if (a.has("view-rooms")) app.view_rooms = std::clamp(int(a.get_positive("view-rooms", 7)), 2, 64);
     if (a.has("picture-rooms")) app.picture_rooms = std::clamp(int(a.get_u32("picture-rooms", 1)), 0, 8);
     set_view(app.view_rooms, app.picture_rooms);
+    if (metrics)
+    {
+        // Every line at the settings the options give (the defaults without them), under the
+        // filter settings named (--filters), counted as the setup menu counts them.
+        set_language(a.has("language") ? a.get("language") : app.language);
+        Settings settings = Settings::from_args(a);
+        const std::string filters_path = a.has("filters") ? a.get("filters") : FilterConfig::default_path().string();
+        if (!std::filesystem::exists(filters_path)) throw std::invalid_argument("no filter settings file at " + filters_path);
+        Menu menu(nullptr, nullptr, settings, FilterConfig::load(filters_path), filters_path);
+        std::string text = menu.metrics_text();
+        std::ifstream fin(filters_path, std::ios::binary);
+        std::ostringstream body;
+        body << fin.rdbuf();
+        text = "Sieve " SIEVE_VERSION ": how much of each line its filters remove\nFilters: " +
+               std::filesystem::path(filters_path).filename().string() + " (SHA-256 " +
+               sieve::Sha256::hex(sieve::Sha256::hash(body.str())) + ")\nFilter memory: " +
+               std::to_string(app.filter_memory_mb) + " MB\n\n" + text;
+        const std::string out_path = a.get("metrics");
+        std::ofstream out(out_path, std::ios::binary);
+        if (!out || !out.write(text.data(), std::streamsize(text.size()))) throw std::runtime_error("cannot write " + out_path);
+        std::cout << text;
+        return 0;
+    }
     const DisplayInfo display = detect_display();
     if (!shot && app.resolution.w <= 0)
     {

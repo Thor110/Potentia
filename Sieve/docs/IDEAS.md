@@ -1776,6 +1776,14 @@ line's filters remove, one line a dimension:
   longest), so a build stays fast; a CMake target `metrics` runs it on demand.
 - **Checked:** a unit test that the list's figures for a small stack equal the menu's tally and
   the counts the oracle gives.
+- *Built (12 October 2026), as `hallway --metrics`:* rather than moving the menu's tally into the
+  tool, the hallway counts the list itself, with no window, through the setup menu's own tallies
+  (`Menu::metrics_text`), so the list and the menu are one code and cannot differ. Edward chose a
+  reference file; it ticks each line's hard filters that count together, so the release's figures
+  say what Sieve removes before any taste is applied (your own file gives your own list). The whole
+  list takes about two seconds. make_release writes `metrics.txt` (in SHA256SUMS.txt and the
+  notes); CI checks the binary and models lines' figures. A `sieve metrics` in the tool waits on the
+  tally moving into the shared library.
 
 **19.13 A chat window for the AI line (Edward, 12 October 2026).** Today a model in hand is talked
 to through the prompt bar ("SAY >"), its conversation drawn in the hand panel. Edward wants a built-in

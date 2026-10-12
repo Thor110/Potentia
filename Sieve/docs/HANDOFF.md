@@ -2483,3 +2483,16 @@ cover and a title.
   width 32 make a figure (figure-v1) one time in ten after 15,000 steps.
 - **Next:** larger and longer runs; the hallway (a model's picture on its face, J noise to
   picture); aispace-v2 naming the architecture; a shipped run.
+
+### The metrics list (12 October 2026)
+- **What** (Edward, IDEAS §19.12): every line's share removed, as the setup menu shows it, in a
+  text file with each release.
+- **Where:** `Menu::metrics_text` (menu.cpp) waits on each line's `stack_info` from the menu's
+  workers and writes the list (binary first, then door order; names in title case, two letters or
+  fewer kept as they are; tiny exponents to two significant figures), then each line's size.
+  `hallway --metrics FILE [--filters PATH]` (app_main.cpp) runs it before SDL starts: no display.
+  `parts_stack_info` now records `kept_log10` as the other tallies do.
+- **Reference:** `data/metrics/reference-filters.ini`, the hard filters that count together, its
+  SHA-256 in the list's header. make_release.py step 8b, by the build's hallway (the staged folder
+  is left as checked); `metrics.txt` is published and in the notes.
+- **Next:** the tally into tools/cli, for a `sieve metrics` (and a unit test of the list).

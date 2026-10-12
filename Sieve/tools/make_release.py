@@ -26,6 +26,8 @@ order matters and is easy to get wrong by hand:
   8. Checks: each installer installed into a scratch folder and compared with the release folder
      (or, with --seven-zip, the archive), byte for byte; the map read back and every node verified
      beside it.
+  8b. metrics.txt: how much of each line the reference filters remove (data/metrics/
+     reference-filters.ini), as the setup menu counts it, by the build's hallway (--metrics).
   9. SHA256SUMS.txt and a release-notes draft.
 
 Published (three files, Edward's naming): sieve.exe, sieve.sieve and sieve.map, the map naming the
@@ -372,9 +374,20 @@ def main():
         fail(f"{mapfile.name} does not hold {source.name}")
     print(f"   {mapfile.name}: sealed, names the installer and the instructions, holds the source, all by SHA-256")
 
+    # 8b. The metrics list (IDEAS §19.12): how much of each line the reference filters remove, as
+    # the setup menu counts it, written beside the installer. The build's hallway counts it (the
+    # release folder is packed and checked already, and is left as it is).
+    step("metrics.txt")
+    metrics = out / "metrics.txt"
+    reference = ROOT / "data" / "metrics" / "reference-filters.ini"
+    run([build / f"hallway{EXE}", "--metrics", metrics, "--filters", reference], cwd=build)
+    if not metrics.exists():
+        fail("the hallway wrote no metrics.txt")
+    metrics_text = metrics.read_text(encoding="utf-8")
+
     # 9. Sums and notes.
     step("SHA256SUMS.txt and the notes")
-    published = [program, instructions, mapfile]
+    published = [program, instructions, mapfile, metrics]
     sums = "".join(f"{sha256(f)}  {f.name}\n" for f in published)
     (out / "SHA256SUMS.txt").write_text(sums, encoding="utf-8")
     sizes = "\n".join(f"| `{f.name}` | {f.stat().st_size:,} bytes | `{sha256(f)}` |" for f in published)
@@ -408,6 +421,14 @@ file there can be, each with an address, walked through as a library.
 
 {where_note}
 
+## How much each line's filters remove
+
+`{metrics.name}`: every line under Sieve's reference filters (`data/metrics/reference-filters.ini`,
+the hard filters that count together), counted as the setup menu counts them.
+
+```
+{metrics_text}```
+
 ## Getting started
 
 Start `hallway{EXE}` in the installed folder. `tools\\` holds the command-line tool (`sieve{EXE}`: open a command prompt there and run `sieve help`) and the installer the hallway uses to make installer programs. Esc opens the pause menu (the File Locator, the node graph, the navigator); the full guide is the README in the repository.
@@ -420,7 +441,7 @@ Sieve is part of Potentia and licensed under the GNU Affero General Public Licen
 """
     (out / "RELEASE-NOTES.md").write_text(notes, encoding="utf-8")
     print(sums, end="")
-    print(f"\nDone. Publish these three from {out}:\n  {program.name}\n  {instructions.name}\n  {mapfile.name} (holding {source.name})")
+    print(f"\nDone. Publish these four from {out}:\n  {program.name}\n  {instructions.name}\n  {mapfile.name} (holding {source.name})\n  {metrics.name}")
     print("with RELEASE-NOTES.md as the release's description.")
 
 

@@ -163,8 +163,11 @@ release's own files) as the folder `Sieve-<version>`, with `hallway` the one pro
 program first; `sieve` there finds the data folders above it, checked). From the folder it makes
 `sieve.sieve` and `sieve.exe`, each the folder packed (`sieve-manifest-v4`), (`sieve-setup` on Linux and macOS, where a program has no
 extension), then a sealed `sieve.map` naming both. It then installs each into a scratch folder and compares
-the result byte for byte, and writes `SHA256SUMS.txt` and a `RELEASE-NOTES.md` draft. Publish the
-three files. GitHub adds the tagged commit's source zip by itself.
+the result byte for byte. It writes `metrics.txt`: how much of every line Sieve's reference filters
+(`data/metrics/reference-filters.ini`, the hard filters that count together) remove, counted by the
+build's hallway as its setup menu counts them (`hallway --metrics`), so one release can be compared
+with the next. Last, `SHA256SUMS.txt` and a `RELEASE-NOTES.md` draft, which carries the list too.
+Publish the four files. GitHub adds the tagged commit's source zip by itself.
 
 **The source, held in the map.** The script also makes `sieve-source.7z`: the Sieve folder's source
 as the last commit has it (`git archive` of the Sieve folder alone, run from the repository's top

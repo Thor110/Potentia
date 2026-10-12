@@ -682,6 +682,12 @@ jobs:
           book() { grep -o 'first book [0-9a-f.]*' | tail -1; }
           $H --screenshot hallway.png --size 640x360
           test -s hallway.png
+          # The metrics list (hallway --metrics, no window): every line under the reference filters,
+          # as the setup menu counts them; the binary line's binary-kind-v1 removes 99.9954%.
+          $H --metrics metrics.txt --filters data/metrics/reference-filters.ini > /dev/null
+          q "^Binary : 99.9954%" metrics.txt
+          q "^Models : 99.999999999999...% *( Kept : 10^-21.47 )" metrics.txt
+          [ "$(grep -c ' : .*Kept : ' metrics.txt)" = 11 ]
           here=$($H --warp "$W" --walk "0,0" --screenshot a.png | book)
           next=$($H --warp "$W" --tile 1 --walk "0,0" --screenshot b.png | book)
           # Through a door and straight back: exactly where you were.

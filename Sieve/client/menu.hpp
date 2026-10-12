@@ -223,6 +223,10 @@ public:
     void render();
     const Settings& settings() const { return s_; }
     const sieve::cli::FilterConfig& filters() const { return cfg_; }
+    // The metrics list (hallway --metrics; IDEAS §19.12): every line's tally as the setup menu
+    // counts it, waited for, one line a dimension (binary first, then in door order), then each
+    // line's shape. The same numbers the menu shows beside each line, so the two cannot differ.
+    std::string metrics_text();
     void open_filters(int line)
     {
         overlay_ = line;
