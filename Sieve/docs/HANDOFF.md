@@ -2453,3 +2453,33 @@ cover and a title.
 - **Next for v5:** ranges; items of the other lines (their file code is in the client:
   item_save.cpp, to move into a shared library first); the File Locator making v5.
 
+
+### figure-v1: shapes and figures (12 October 2026)
+- **What** (Edward, IDEAS §19.1): the ink (every colour but the background) makes exactly
+  `shapes` connected shapes, `connect` four or eight, `border` any, clear or standing.
+- **Where:** `core/src/filters/figure.cpp`. `step` is the frontier; `figure_dfa2` builds and
+  minimises the two-symbol automaton (cached for the process, as the menus ask often); `widen`
+  reads it over every colour; `InkRanker` counts it on rgb24; `figure_passes` judges by flood fill.
+- **Counts** at any height (no row counter); the width bounds it (the frontier grows with it).
+- **Oracle:** `figure-vectors` (`tests/vectors_figure_v1.tsv`, about 4 minutes): brute force on
+  small lines, a positional frontier walk at 10 by 10. `test_figure_vectors` in test_core.cpp.
+- **Next:** an area setting (how much of the picture the ink covers, which costs a counter in the
+  state), and a column-runs counterpart to row-runs for upright figures; then the diffusion model
+  (IDEAS §19.2), trained on figures found this way.
+
+### diffusion-v1: pictures made by undoing noise (12 October 2026)
+- **What** (Edward, IDEAS §19.2; SPECIFICATIONS §12.0g): a denoiser of the AI line's shape, trained
+  in training-v1's arithmetic; `sieve diffuse --record / RUN / --make`.
+- **training.cpp:** `run_window` takes an `Example` (inputs, a target a position or -1, causal or
+  not); windows of text are made into causal examples (`run_batch`), so the language model trains
+  exactly as before (both shipped runs reproduce). `Trainer::step` and `evaluate` on examples;
+  `Trainer::apply` is the update both use; `model_logits` for samplers.
+- **diffusion.{hpp,cpp}:** `Setup`, `SplitMix`, `draw`, `make_example`, `step`, `make_picture`.
+- **tools/cli/diffuse.cpp:** the run folder (diffusion.ini, pictures.txt, result.txt); pictures
+  drawn from the image line's stack (two splitmix64 draws as a 128-bit number, mod the count).
+- **Oracle:** `TrainerRef.example` (`window` calls it), `update`; `SplitMixRef`, `df_*`;
+  `diffusion-vectors` (`tests/vectors_diffusion_v1.tsv`), `diffuse-replay --run`.
+- **Measured** (IDEAS §19.2): settings that learn are rate 0.0001 and loss scale 2^4; 2 layers of
+  width 32 make a figure (figure-v1) one time in ten after 15,000 steps.
+- **Next:** larger and longer runs; the hallway (a model's picture on its face, J noise to
+  picture); aispace-v2 naming the architecture; a shipped run.

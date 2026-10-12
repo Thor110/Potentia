@@ -21,6 +21,7 @@
 #include "sieve/llm.hpp"
 #include "sieve/aispace.hpp"
 #include "sieve/training.hpp"
+#include "sieve/diffusion.hpp"
 #include "sieve/llm_tokenizer.hpp"
 #include "sieve/unicode_classes.hpp"
 #include "sieve/written.hpp"
@@ -2284,8 +2285,8 @@ void test_filters(const std::string& dir)
     CHECK(clash("not-a-file-v1", "distinct-vertices-v1") == "conflict");
     CHECK(filters_for(text_line(8)).size() == 14); // not-written-v1, not-a-file-v1, not-other-line-v1 and not-a-pattern-v1 joined the ten
     const FilterLine image{"image", "image/mono/10x10", 2, 100, nullptr, 10, 10, 1};
-    CHECK(filters_for(image).size() == 7); // symbol-entropy, neighbour-agreement, not-a-file, not-packed, not-a-pattern,
-                                           // palette-size, row-runs
+    CHECK(filters_for(image).size() == 8); // symbol-entropy, neighbour-agreement, not-a-file, not-packed, not-a-pattern,
+                                           // palette-size, row-runs, figure
     CHECK(clash("palette-size-v1", "row-runs-v1") == "merge");
     CHECK(clash("palette-size-v1", "not-a-pattern-v1") == "conflict");
 
@@ -5086,6 +5087,145 @@ void test_sound_vectors(const std::string& dir)
     }
 }
 
+// diffusion-v1 against the oracle's vectors (tests/vectors_diffusion_v1.tsv): training steps on
+// examples that attend everywhere and are scored on every clean cell, each step's score and digits
+// as the oracle's, and a picture made from noise, level by level.
+void test_diffusion_vectors(const std::string& dir)
+{
+    int n = 0;
+    std::string cur;
+    std::unique_ptr<AiSpace> space;
+    std::unique_ptr<training::Trainer> trainer;
+    std::unique_ptr<diffusion::SplitMix> draws;
+    std::vector<std::vector<uint32_t>> pictures;
+    diffusion::Setup setup;
+    uint32_t batch = 0;
+    for (const auto& f : read_rows(dir + "vectors_diffusion_v1.tsv"))
+    {
+        if (!((f[0] == "step" && f.size() == 14) || (f[0] == "picture" && f.size() == 12))) continue;
+        std::string key;
+        for (size_t i = 1; i <= 9; ++i) key += f[i] + "|";
+        if (key != cur)
+        {
+            cur = key;
+            uint32_t L = 0, H = 0, A = 0, B = 0;
+            CHECK(std::sscanf(f[1].c_str(), "L%u/H%u/A%u/B%u", &L, &H, &A, &B) == 4);
+            AiShape shape;
+            shape.layers = L, shape.width = H, shape.heads = A, shape.bits = B;
+            space = std::make_unique<AiSpace>(shape, "sieve");
+            setup.width = uint32_t(std::stoul(f[2])), setup.height = uint32_t(std::stoul(f[3]));
+            setup.colours = uint32_t(std::stoul(f[4])), setup.levels = uint32_t(std::stoul(f[5]));
+            batch = uint32_t(std::stoul(f[6]));
+            diffusion::SplitMix start_draws(std::stoull(f[9]));
+            AiSpace::Digits start(space->weights());
+            for (auto& d : start) d = uint8_t(start_draws.next() % (uint64_t(1) << B));
+            training::Recipe recipe;
+            recipe.version = 1;
+            recipe.shape = shape;
+            recipe.learning_rate = f[7];
+            recipe.momentum = f[8];
+            trainer = std::make_unique<training::Trainer>(*space, start, recipe, 2);
+            diffusion::SplitMix picture_draws(1);
+            pictures.assign(4, std::vector<uint32_t>(setup.cells()));
+            for (auto& p : pictures)
+                for (auto& c : p) c = uint32_t(picture_draws.next() % setup.colours);
+            draws = std::make_unique<diffusion::SplitMix>(3);
+        }
+        bool ok;
+        if (f[0] == "step")
+        {
+            const training::Score sc = diffusion::step(*trainer, setup, pictures, *draws, batch);
+            const std::string d(trainer->digits().begin(), trainer->digits().end());
+            ok = std::to_string(sc.prob_sum) == f[11] && std::to_string(sc.predictions) == f[12] && Sha256::hex(Sha256::hash(d)) == f[13];
+        }
+        else ok = diffusion::make_picture(*space, trainer->digits(), setup, split_u32(f[10]), 77) == split_u32(f[11]);
+        CHECK(ok);
+        if (!ok) std::cerr << "  diffusion vector mismatch: " << f[0] << " " << f[1] << " " << (f[0] == "step" ? f[10] : "") << "\n";
+        ++n;
+    }
+    std::cout << "diffusion vectors checked: " << n << "\n";
+    CHECK(n >= 7);
+    // A window of text is the causal example of its bytes: the same score either way.
+    {
+        AiShape shape;
+        shape.width = 8, shape.heads = 2, shape.bits = 3;
+        const AiSpace sp(shape, "sieve");
+        AiSpace::Digits d(sp.weights());
+        diffusion::SplitMix g(4);
+        for (auto& x : d) x = uint8_t(g.next() % 8);
+        const std::string text = "the sieve keeps what reads";
+        const std::span<const uint8_t> win(reinterpret_cast<const uint8_t*>(text.data()), text.size());
+        const training::Score a = training::evaluate_model(sp, d, {win});
+        training::Recipe recipe;
+        recipe.shape = shape;
+        const training::Trainer t(sp, d, recipe, 1);
+        const std::vector<int16_t> target(win.begin() + 1, win.end());
+        const training::Score b = t.evaluate(std::vector<training::Example>{{win.first(win.size() - 1), target, true}});
+        CHECK(a.prob_sum == b.prob_sum && a.predictions == b.predictions);
+        // Not causal, the same example scores otherwise: every position now sees the bytes after it.
+        const training::Score c = t.evaluate(std::vector<training::Example>{{win.first(win.size() - 1), target, false}});
+        CHECK(c.predictions == b.predictions && c.prob_sum != b.prob_sum);
+    }
+}
+
+// figure-v1 against the oracle's vectors (tests/vectors_figure_v1.tsv): counts, ranks both ways
+// and verdicts, on small lines checked there picture by picture with a flood fill, and at 10 by 10
+// on every palette (rgb24 with its own ranker), with a taller and a wider picture.
+void test_figure_vectors(const std::string& dir)
+{
+    const TestResources none(nullptr, nullptr);
+    const FilterSpec* figure = find_filter("figure-v1");
+    CHECK(figure != nullptr);
+    if (!figure) return;
+    int n = 0;
+    for (const auto& f : read_rows(dir + "vectors_figure_v1.tsv"))
+    {
+        if (!((f[0] == "count" && f.size() == 8) || (f[0] == "unit" && f.size() == 9))) continue;
+        const Palette& pal = palette_by_id(f[1]);
+        const uint32_t w = uint32_t(std::stoul(f[2])), h = uint32_t(std::stoul(f[3]));
+        const FilterLine line{"image", "image/" + f[1] + "/" + f[2] + "x" + f[3], pal.size(), w * h, nullptr, w, h, 0};
+        const FilterValues v{{"shapes", f[4]}, {"connect", f[5]}, {"border", f[6]}};
+        const FilterStack st(line, {{figure, v}}, none);
+        bool ok = st.ranker() != nullptr;
+        if (ok && f[0] == "count") ok = st.ranker()->count().to_decimal() == f[7];
+        else if (ok)
+        {
+            const BigUint k = BigUint::from_decimal(f[7]);
+            const std::vector<uint32_t> want = split_u32(f[8]);
+            ok = st.ranker()->unrank(k) == want && st.ranker()->rank(want) == k && st.passes(want) && st.ranker()->accepts(want);
+        }
+        CHECK(ok);
+        if (!ok)
+        {
+            std::cerr << "  figure vector mismatch:";
+            for (const auto& x : f) std::cerr << " " << x.substr(0, 60);
+            std::cerr << "\n";
+        }
+        ++n;
+    }
+    std::cout << "figure vectors checked: " << n << "\n";
+    CHECK(n >= 150);
+    // On mono it is an automaton, so it counts together with row-runs: every picture of a small
+    // line judged by both agrees with the stack's count. On rgb24 it counts with its own ranker.
+    {
+        const FilterSpec* runs = find_filter("row-runs-v1");
+        const FilterLine line{"image", "image/mono/4x4", 2, 16, nullptr, 4, 4, 0};
+        const FilterValues fv{{"border", "any"}, {"connect", "four"}}, rv{{"changes", "1"}};
+        const FilterStack both(line, {{figure, fv}, {runs, rv}}, none), one(line, {{figure, fv}}, none), other(line, {{runs, rv}}, none);
+        uint64_t kept = 0;
+        for (uint32_t bits = 0; bits < (1u << 16); ++bits)
+        {
+            std::vector<uint32_t> u(16);
+            for (uint32_t i = 0; i < 16; ++i) u[i] = (bits >> i) & 1;
+            kept += one.passes(u) && other.passes(u);
+        }
+        CHECK(both.ranker() && both.ranker()->count() == BigUint(kept));
+        CHECK(figure->counts_as_on(line, &fv) == "automaton");
+        const FilterLine big{"image", "image/rgb24/10x10", 1u << 24, 100, nullptr, 10, 10, 0};
+        CHECK(figure->counts_as_on(big, nullptr) == "own");
+    }
+}
+
 void test_picture_vectors(const std::string& dir)
 {
     const TestResources none(nullptr, nullptr);
@@ -5652,6 +5792,7 @@ void run_all(int argc, char** argv)
         test_ai_filter_vectors(dir);
         test_ai_run_filters(dir);
         test_training(dir);
+        test_diffusion_vectors(dir);
         test_titled_vectors(dir + "vectors_titled_v1.tsv");
         test_binary_vectors(dir + "vectors_binary_v1.tsv");
         test_chunk_vectors(dir + "vectors_chunks_v1.tsv");
@@ -5668,6 +5809,7 @@ void run_all(int argc, char** argv)
         test_written_vectors(dir);
         test_cross_vectors(dir);
         test_picture_vectors(dir);
+        test_figure_vectors(dir);
         test_utf8_vectors(dir);
         test_utf8_joint();
         test_shortest_path();

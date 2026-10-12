@@ -313,6 +313,13 @@ jobs:
           $exe ai-train run-stop --resume --quiet | tr -d '\r' | q "^result written"
           [ ! -f run-stop.resume ]
           python reference/sieve_ref.py train-replay --run run-stop | tr -d '\r' | cmp - run-stop/result.txt
+          # diffusion-v1 (sieve diffuse): a run whose pictures are drawn from the image line's stack, trained,
+          # checked again by the tool, and trained again by the oracle to the same result.txt; then pictures made.
+          printf '[image]\nmode = compact\nfilters = figure-v1\n[image.figure-v1]\nconnect = four\nborder = any\n' > figs.ini
+          $exe diffuse --record diff-run --filters figs.ini --width 4 --height 3 --figures 40 --ai-width 8 --ai-heads 2 --ai-bits 3 --steps 8 --checkpoint-every 3 --levels 5 --batch 3 --learning-rate 0.01 --quiet
+          $exe diffuse diff-run --quiet | tr -d '\r' | q "^reproduced exactly"
+          python reference/sieve_ref.py diffuse-replay --run diff-run | tr -d '\r' | cmp - diff-run/result.txt
+          $exe diffuse --make diff-run --count 2 | tr -d '\r' | q "^picture "
           # The AI line's filters (SPECIFICATIONS §12.0f): weight-rows-v1 counts and ranks; the model the
           # shipped run trains passes it, and so does its canonical form (canonical-model-v1), which the
           # oracle works out the same and which says what the model says.
@@ -1265,6 +1272,11 @@ jobs:
           # palette-size-v1 and row-runs-v1 (closed forms, brute force on small lines), and
           # utf8-valid-v1 on the binary line (code points by encoded length, Python's decoder).
           python sieve_ref.py picture-vectors | diff - ../tests/vectors_picture_v1.tsv
+          # figure-v1: shapes found by a flood fill on small lines, and at 10 by 10 counted by a
+          # frontier walk that knows each pixel's row (the engine's automaton does not).
+          python sieve_ref.py figure-vectors | diff - ../tests/vectors_figure_v1.tsv
+          # diffusion-v1: training steps that attend everywhere, scored on every clean cell, and a picture made.
+          python sieve_ref.py diffusion-vectors | diff - ../tests/vectors_diffusion_v1.tsv
           python sieve_ref.py utf8-vectors | diff - ../tests/vectors_utf8_v1.tsv
           # The generated text plugins are what tools/build_text_plugins.py makes from the pinned lists.
           python ../tools/build_text_plugins.py --check

@@ -365,6 +365,7 @@ The word filters above (`clean`, `window`, `words`, v1 and v2) and `title-v1` ar
 | `key-v1` | audio | every note is in one key (tonic C…B; major, minor, harmonic minor, major or minor pentatonic, blues); rests always pass | yes |
 | `palette-size-v1` | image, video | at most so many distinct colours (or in each frame) | yes, on every palette, rgb24 included; on small palettes an automaton that merges with the others |
 | `row-runs-v1` | image, video | at most so many colour changes along each row of pixels | yes, at any width; on small palettes an automaton that merges with the others |
+| `figure-v1` | image | the ink makes exactly so many connected shapes (1), clear of the edges or standing on the bottom row: a figure, a creature, a letter or an icon | yes, at any height; on small palettes an automaton that merges with the others |
 | `sound-peak-v1` | audio (`pcm`) | no sample louder than a share of full scale (90%) | yes, at every depth |
 | `sound-step-v1` | audio (`pcm`) | neighbouring samples within a share of the range (50%): noise jumps, sound mostly moves a little | an automaton to 11 bits a sample; judged past that |
 | `silence-run-v1` | audio (`pcm`) | no run of more than so many silent samples (4000) | an automaton while it fits |
@@ -1011,6 +1012,23 @@ The AI Training Harness from the command line (SPECIFICATIONS §12.0e). `--recor
 sieve ai-train --record texts --out ub --sieve ub.sieve           # record a run from a folder, train it, pack it
 sieve ai-train ub.sieve                                                     # train again from the .sieve: reproduced exactly
 sieve ai-train ub --model-out ub-model && sieve chat --model ub-model --raw  # and talk to what it became
+```
+
+### `diffuse`: a model that makes pictures
+
+```
+sieve diffuse --record FOLDER [image line options] [--filters PATH] [--figures N] [--pictures FILE] [--ai-layers L] [--ai-width H]
+              [--levels S] [--steps N] [--batch N] [--learning-rate X] [--loss-scale-bits K] [--seed S] [--quiet]
+sieve diffuse RUN [--quiet]
+sieve diffuse --make RUN [--count N] [--seed S] [--noise ADDR] [--show-levels]
+```
+
+A **diffusion model** of the AI line (`diffusion-v1`, SPECIFICATIONS §12.0g): it learns to undo noise on pictures of the image line, a level at a time, and then makes pictures from noise. `--record` draws its training pictures at random from the image line's stack in the filters file (`figure-v1` and `row-runs-v1` for figures) or reads them from a file, writes the run's recipe and pictures, and trains it in the integer arithmetic of `ai-train`, so naming the run trains it again and says **reproduced exactly**. `--make` makes pictures with its model, each with its address on the image line, and the noise's: a picture is a function of the model, the noise and the seed. A model of 40,960 weights trained for five minutes on figures makes one shape clear of the edges about one time in ten.
+
+```sh
+sieve diffuse --record figs --filters figures.ini --ai-layers 2 --ai-width 32 --steps 15000   # train a model of figures
+sieve diffuse figs                                                                     # train it again: reproduced exactly
+sieve diffuse --make figs --count 5 --show-levels                                      # and make pictures with it
 ```
 
 ### `version`: what produced a result

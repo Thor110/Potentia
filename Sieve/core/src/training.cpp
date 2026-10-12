@@ -840,12 +840,19 @@ const Rope& rope_for(uint32_t D)
     return cache.back().second;
 }
 
-// One window forward, and (with `grad`) back, adding its gradient (Q32) to grad. With a pool, its
-// matrices' work is shared out among the pool's threads.
-void run_window(const Trainer::Net& net, const I32* w, std::span<const uint8_t> tok, int64_t* grad, Score& score, Pool* pool)
+// One example forward, and (with `grad`) back, adding its gradient (Q32) to grad. With a pool, its
+// matrices' work is shared out among the pool's threads. A window of text is the example whose
+// inputs are its bytes but the last and whose targets are the bytes after them, attending
+// backwards. With `logits`, the head's logits (T x 256, Q16) are written there.
+void run_window(const Trainer::Net& net, const I32* w, const Example& ex, int64_t* grad, Score& score, Pool* pool,
+                std::vector<I32>* logits_out = nullptr)
 {
     const uint32_t H = net.H, A = net.A, D = net.D, F = net.F;
-    const size_t T = tok.size() - 1;
+    const std::span<const uint8_t> tok = ex.input;
+    const size_t T = tok.size();
+    const bool causal = ex.causal;
+    // How far each position looks: back to the start, or (not causal) at every position.
+    auto reach = [&](size_t p) { return causal ? p + 1 : T; };
     const Rope& rope = rope_for(D);
     struct LayerCache
     {
@@ -872,26 +879,27 @@ void run_window(const Trainer::Net& net, const I32* w, std::span<const uint8_t> 
             rope.turn(&c.q[p * H], A, D, uint32_t(p), 1);
             rope.turn(&c.k[p * H], A, D, uint32_t(p), 1);
         }
-        c.att.assign(size_t(A) * T * T, 0); // [head][p][u], u <= p
+        c.att.assign(size_t(A) * T * T, 0); // [head][p][u], u < reach(p)
         c.o.assign(T * H, 0);
         share(pool, size_t(A) * T, uint64_t(A) * T * T * D, [&](size_t from, size_t to) {
             std::vector<int64_t> sc(T), P(T);
             for (size_t i = from; i < to; ++i)
             {
                 const size_t a = i / T, p = i % T;
-                for (size_t u = 0; u <= p; ++u)
+                const size_t n = reach(p);
+                for (size_t u = 0; u < n; ++u)
                 {
                     int64_t s = 0;
                     for (uint32_t d = 0; d < D; ++d) s += int64_t(c.q[p * H + a * D + d]) * c.k[u * H + a * D + d];
                     sc[u] = hold((hold(s >> 16) * net.isd) >> 16);
                 }
-                softmax(sc.data(), p + 1, P.data());
+                softmax(sc.data(), n, P.data());
                 I32* Pi = &c.att[(a * T + p) * T];
-                for (size_t u = 0; u <= p; ++u) Pi[u] = I32(P[u]);
+                for (size_t u = 0; u < n; ++u) Pi[u] = I32(P[u]);
                 for (uint32_t d = 0; d < D; ++d)
                 {
                     int64_t s = 0;
-                    for (size_t u = 0; u <= p; ++u) s += int64_t(Pi[u]) * c.v[u * H + a * D + d];
+                    for (size_t u = 0; u < n; ++u) s += int64_t(Pi[u]) * c.v[u * H + a * D + d];
                     c.o[p * H + a * D + d] = hold(s >> 16);
                 }
             }
@@ -919,12 +927,19 @@ void run_window(const Trainer::Net& net, const I32* w, std::span<const uint8_t> 
     std::vector<int64_t> rf(T);
     for (size_t p = 0; p < T; ++p) rf[p] = rmsnorm(&x[p * H], H, &hf[p * H]);
     forward(pool, w, net.embed, hf.data(), T, logits.data());
+    if (logits_out) *logits_out = logits;
     std::vector<int64_t> z(256), probs(256);
     for (size_t p = 0; p < T; ++p)
     {
+        if (ex.target[p] < 0)
+        {
+            if (grad)
+                for (uint32_t t = 0; t < 256; ++t) dlog[p * 256 + t] = 0; // no prediction here
+            continue;
+        }
         for (uint32_t t = 0; t < 256; ++t) z[t] = logits[p * 256 + t];
         softmax(z.data(), 256, probs.data());
-        const uint8_t target = tok[p + 1];
+        const uint8_t target = uint8_t(ex.target[p]);
         score.prob_sum += uint64_t(probs[target]);
         score.predictions += 1;
         score.bits += -std::log2(double(std::max<int64_t>(probs[target], 1)) / 65536.0);
@@ -992,8 +1007,9 @@ void run_window(const Trainer::Net& net, const I32* w, std::span<const uint8_t> 
                 const size_t a = i / T, p = i % T;
                 const I32* P = &c.att[(a * T + p) * T];
                 I32* ddp = &dd[(a * T + p) * T];
+                const size_t n = reach(p);
                 int64_t cp = 0;
-                for (size_t u = 0; u <= p; ++u)
+                for (size_t u = 0; u < n; ++u)
                 {
                     int64_t s = 0;
                     for (uint32_t d = 0; d < D; ++d) s += int64_t(dO[p * H + a * D + d]) * c.v[u * H + a * D + d];
@@ -1001,7 +1017,7 @@ void run_window(const Trainer::Net& net, const I32* w, std::span<const uint8_t> 
                     cp += P[u] * dP[u];
                 }
                 cp >>= 16;
-                for (size_t u = 0; u <= p; ++u)
+                for (size_t u = 0; u < n; ++u)
                 {
                     const int64_t ds = hold((int64_t(P[u]) * hold(dP[u] - cp)) >> 16);
                     ddp[u] = hold((ds * net.isd) >> 16);
@@ -1009,7 +1025,7 @@ void run_window(const Trainer::Net& net, const I32* w, std::span<const uint8_t> 
                 for (uint32_t d = 0; d < D; ++d)
                 {
                     int64_t s = 0;
-                    for (size_t u = 0; u <= p; ++u) s += int64_t(ddp[u]) * c.k[u * H + a * D + d];
+                    for (size_t u = 0; u < n; ++u) s += int64_t(ddp[u]) * c.k[u * H + a * D + d];
                     dq[p * H + a * D + d] = hold(s >> 16);
                 }
             }
@@ -1021,7 +1037,7 @@ void run_window(const Trainer::Net& net, const I32* w, std::span<const uint8_t> 
                 for (uint32_t d = 0; d < D; ++d)
                 {
                     int64_t sk = 0, sv = 0;
-                    for (size_t p = u; p < T; ++p)
+                    for (size_t p = causal ? u : 0; p < T; ++p)
                     {
                         sk += int64_t(dd[(a * T + p) * T + u]) * c.q[p * H + a * D + d];
                         sv += int64_t(c.att[(a * T + p) * T + u]) * dO[p * H + a * D + d];
@@ -1106,16 +1122,25 @@ namespace {
 // every thread on its matrices, into the one gradient. Integer sums: either way, the same result.
 constexpr uint64_t kWindowAtATime = uint64_t(1) << 20; // weights at which a window gets every thread (and no gradient of its own)
 
-Score run_batch(const Trainer::Net& net, const int32_t* w, uint64_t weights, const std::vector<std::span<const uint8_t>>& batch,
-                std::vector<int64_t>* grad, Pool& pool)
+void check_examples(const std::vector<Example>& batch)
 {
-    for (const auto& win : batch)
-        if (win.size() < 2) bad("a window of at least two bytes");
+    for (const Example& ex : batch)
+    {
+        if (ex.input.empty() || ex.input.size() > 512) bad("an example of 1 to 512 positions");
+        if (ex.target.size() != ex.input.size()) bad("an example with a target for every position (-1: none)");
+        for (const int16_t t : ex.target)
+            if (t < -1 || t > 255) bad("a target that is a byte, or -1 for none");
+    }
+}
+
+Score run_examples(const Trainer::Net& net, const int32_t* w, uint64_t weights, const std::vector<Example>& batch,
+                   std::vector<int64_t>* grad, Pool& pool)
+{
     const size_t n = batch.size();
     Score total;
     if (pool.size() <= 1 || n < pool.size() || weights >= kWindowAtATime)
     {
-        for (const auto& win : batch) run_window(net, w, win, grad ? grad->data() : nullptr, total, &pool);
+        for (const auto& ex : batch) run_window(net, w, ex, grad ? grad->data() : nullptr, total, &pool);
         return total;
     }
     std::vector<std::vector<int64_t>> grads(grad ? n : 0);
@@ -1136,6 +1161,22 @@ Score run_batch(const Trainer::Net& net, const int32_t* w, uint64_t weights, con
     return total;
 }
 
+// Windows of text as examples: each byte but the last predicts the next, attending backwards.
+Score run_batch(const Trainer::Net& net, const int32_t* w, uint64_t weights, const std::vector<std::span<const uint8_t>>& batch,
+                std::vector<int64_t>* grad, Pool& pool)
+{
+    for (const auto& win : batch)
+        if (win.size() < 2) bad("a window of at least two bytes");
+    std::vector<std::vector<int16_t>> targets(batch.size());
+    std::vector<Example> ex(batch.size());
+    for (size_t i = 0; i < batch.size(); ++i)
+    {
+        targets[i].assign(batch[i].begin() + 1, batch[i].end());
+        ex[i] = Example{batch[i].first(batch[i].size() - 1), targets[i], true};
+    }
+    return run_examples(net, w, weights, ex, grad, pool);
+}
+
 } // namespace
 
 Score Trainer::step(const std::vector<std::span<const uint8_t>>& batch)
@@ -1144,6 +1185,23 @@ Score Trainer::step(const std::vector<std::span<const uint8_t>>& batch)
     net.shift = shift_;
     std::vector<int64_t> grad(values_.size(), 0);
     const Score s = run_batch(net, values_.data(), values_.size(), batch, &grad, *pool_);
+    apply(grad);
+    return s;
+}
+
+Score Trainer::step(const std::vector<Example>& batch)
+{
+    check_examples(batch);
+    Net net(space_);
+    net.shift = shift_;
+    std::vector<int64_t> grad(values_.size(), 0);
+    const Score s = run_examples(net, values_.data(), values_.size(), batch, &grad, *pool_);
+    apply(grad);
+    return s;
+}
+
+void Trainer::apply(const std::vector<int64_t>& grad)
+{
     const int64_t m = (int64_t(1) << space_.shape().bits) - 1;
     const std::vector<AiSpace::Tensor>& ts = space_.tensors();
     for (size_t ti = 0; ti < ts.size(); ++ti)
@@ -1162,7 +1220,6 @@ Score Trainer::step(const std::vector<std::span<const uint8_t>>& batch)
         }
     }
     refresh_values();
-    return s;
 }
 
 void Trainer::restore(const std::vector<int64_t>& masters, const std::vector<int64_t>& velocities)
@@ -1209,6 +1266,36 @@ Score Trainer::evaluate(const std::vector<std::span<const uint8_t>>& windows) co
     Net net(space_);
     net.shift = shift_;
     return run_batch(net, values_.data(), values_.size(), windows, nullptr, *pool_);
+}
+
+Score Trainer::evaluate(const std::vector<Example>& batch) const
+{
+    check_examples(batch);
+    Net net(space_);
+    net.shift = shift_;
+    return run_examples(net, values_.data(), values_.size(), batch, nullptr, *pool_);
+}
+
+std::vector<int32_t> model_logits(const AiSpace& space, const AiSpace::Digits& digits, const Example& ex)
+{
+    check_examples({ex});
+    if (digits.size() != space.weights()) bad("a model of " + std::to_string(space.weights()) + " digits");
+    const int64_t m = (int64_t(1) << space.shape().bits) - 1;
+    std::vector<int32_t> values(digits.size());
+    for (const AiSpace::Tensor& t : space.tensors())
+    {
+        const int64_t S = scale_q32(t.cols, t.name == "model.embed_tokens.weight");
+        for (uint64_t i = 0; i < uint64_t(t.rows) * t.cols; ++i)
+        {
+            const size_t at = size_t(t.first + i);
+            values[at] = int32_t(fdiv((2 * int64_t(digits[at]) - m) * S, m << 16));
+        }
+    }
+    Trainer::Net net(space);
+    Score score;
+    std::vector<int32_t> logits;
+    run_window(net, values.data(), ex, nullptr, score, nullptr, &logits);
+    return logits;
 }
 
 } // namespace sieve::training

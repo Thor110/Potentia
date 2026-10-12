@@ -114,5 +114,7 @@ ModelRun model_run_of(const std::string& id, const std::vector<std::filesystem::
 void use_training_runs(const std::vector<std::filesystem::path>& dirs);
 
 int cmd_ai_train(const Args& a);
+// sieve diffuse: train, check and use a diffusion-v1 model of pictures (tools/cli/diffuse.cpp).
+int cmd_diffuse(const Args& a);
 
 } // namespace sieve::cli

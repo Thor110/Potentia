@@ -1,0 +1,12 @@
+# diffusion-v1 (core/include/sieve/diffusion.hpp) on training-v1: shape, picture width, height, colours, levels,
+# batch, learning rate, momentum, start seed; then each step's score (Q16 sum), predictions and the SHA-256 of
+# the digits (a byte each), and a picture made from a noise picture with seed 77. The start: digits drawn from
+# splitmix64 (the start seed), each mod 2^bits; the four training pictures: from splitmix64 seeded 1, each cell
+# mod colours; training draws from splitmix64 seeded 3; the noise from splitmix64 seeded 11.
+step	L1/H8/A2/B3	3	3	2	4	2	0.01	0.9	5	1	14088	18	dcb35f14c0045a7ab8916521dca76da4c0704e9e29113c3ffeeba3306e567747
+step	L1/H8/A2/B3	3	3	2	4	2	0.01	0.9	5	2	69226	18	365f7d3273b7ea3581ccbc6fd68d9723b9609cd6095dae9536489e033efb835f
+step	L1/H8/A2/B3	3	3	2	4	2	0.01	0.9	5	3	126073	18	949b91f2a286234cdd2abb13403fcf1d4ca046b01da26d14ee48eb3b548b2f8f
+picture	L1/H8/A2/B3	3	3	2	4	2	0.01	0.9	5	1,1,1,0,0,0,0,0,0	1,1,1,0,0,0,0,0,0
+step	L2/H8/A2/B4	4	2	3	5	3	0.005	0.5	9	1	20190	24	5e546af2c4297408d16b9f4711686351cb1c3a867ffff76dd054661a31927209
+step	L2/H8/A2/B4	4	2	3	5	3	0.005	0.5	9	2	60280	24	fb16f9b7c0318a90ba370de992309a3ae3a1c01790ccde887129262c6a6c7533
+picture	L2/H8/A2/B4	4	2	3	5	3	0.005	0.5	9	0,1,0,2,2,1,0,2	0,1,0,1,1,1,0,1

@@ -1594,6 +1594,14 @@ would never have been seen.
   noise"), sprites for text adventures, and a training set for 19.2, found rather than drawn.
 - **Verdict:** build `figure-v1` on the image line as a counting filter, with the oracle and
   vectors; the soldier's address goes into the anchors as the first figure found.
+- *Built (12 October 2026), as `figure-v1`:* shapes, `connect` four or eight, `border` any, clear
+  or standing; an automaton on small palettes, its own ranker on rgb24, at any height. On mono
+  10×10, one eight-way shape clear of the edges keeps 10^-11.47 of the line; but eight-way shapes
+  connect so easily that the survivors still look like noise. Four-way joins with row-runs (2
+  changes a row) keep 325,263,852,704 pictures that look like glyphs and totems, counted together
+  because both are automata. Not built: the area setting and the thin parts reaching out (limbs),
+  which would cost more state. The soldier's address was not recorded in full (the screenshot shows
+  only its ends), so it is not yet an anchor.
 
 **19.2 The smallest diffusion model, on the line (Edward, 12 October 2026).** His idea: build the
 smallest AI diffusion image model, if it has not been done already.
@@ -1628,6 +1636,18 @@ smallest AI diffusion image model, if it has not been done already.
 - **Verdict:** a discrete (cell-flip) diffusion model for 10 by 10 mono pictures, trained with
   `training-v1`'s arithmetic, as an architecture on the AI line under aispace-v2. Build `figure-v1`
   first, since it supplies the data.
+- *Built, stage 1 (12 October 2026), as `diffusion-v1` and `sieve diffuse` (SPECIFICATIONS
+  §12.0g).* The noise replaces cells with a noise picture's colours rather than flipping them, so it
+  serves any palette. Training's window now takes a target at each position and attention that is
+  causal or not; the language model's arithmetic is unchanged (its runs reproduce). The model is
+  the AI line's own shape and tensors, so it has an address there already; the line does not yet
+  say which architecture a model is (aispace-v2). Measured: 40,960 weights, five minutes of
+  training on figures drawn from figure-v1 and row-runs-v1: about one picture in ten it makes is one
+  shape clear of the edges, against 4 in 10^14 of random pictures, but with stray cells, so none yet
+  pass row-runs. A learning rate of 0.0001 with a loss scale of 2^4 learnt; 0.0005 and above, as
+  text uses, did not (a step scores 800 cells, against text's 256). Next: a larger model and longer
+  runs; the hallway showing a model's picture on its shelf face, and J from the noise to the
+  picture; a run shipped as an anchor.
 
 **19.3 How a published multimodal model sees a picture.** Edward asked how Claude perceives the
 picture he sent. As far as is published for models of its kind (§18.5): the picture is cut into
@@ -1637,3 +1657,16 @@ by 10 cover, seen at an angle on a shelf) can be misread. A byte model on the AI
 opposite case: it reads every pixel exactly, as a byte, but with no sense of the row above. The
 figure in 19.1 was seen by both Edward and Claude; neither reading is exact, which is why
 `figure-v1` decides on the cells themselves.
+
+**19.4 Every system should scale (Edward, 12 October 2026).** His words: the point was to
+emphasise that all systems should be scalable. As a rule for what gets built:
+- **Nothing fixed to one size.** Shapes, widths, palettes, lengths and model sizes are settings;
+  a rule that only works at the size it was tried at is not finished. figure-v1 counts at any
+  height, the AI line at any shape, training at any width.
+- **Where a method stops, it says so and falls back.** An automaton too large for the filter
+  memory judges and says it judges; an rgb24 palette counts arithmetically instead of colour by
+  colour. The limit is the machine's memory, a setting, never a constant in the code.
+- **The same arithmetic everywhere.** Exact integers, so a result found small is the same result
+  found large, on every machine.
+- **Measured as it grows.** What a system costs at each size is written down (state counts, table
+  sizes, times), so where it stops scaling is known rather than found by surprise.

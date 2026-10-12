@@ -18,6 +18,8 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
     python3 sieve_ref.py written-vectors > ../tests/vectors_written_v1.tsv
     python3 sieve_ref.py cross-vectors  > ../tests/vectors_cross_v1.tsv
     python3 sieve_ref.py picture-vectors > ../tests/vectors_picture_v1.tsv
+    python3 sieve_ref.py figure-vectors  > ../tests/vectors_figure_v1.tsv
+    python3 sieve_ref.py diffusion-vectors > ../tests/vectors_diffusion_v1.tsv
     python3 sieve_ref.py utf8-vectors   > ../tests/vectors_utf8_v1.tsv
     python3 sieve_ref.py manifest ../tests/manifest_fixture [--addresses DIR] [--with-addresses | --with-contents]   # sieve-manifest-v1/v2/v3
     python3 sieve_ref.py map ../tests/manifest_fixture                # sieve-map-v1
@@ -3116,10 +3118,16 @@ class TrainerRef:
         return out
 
     def window(self, tok, grads):
-        """Forward and back over one window; adds its gradient (Q32, by weight) to grads."""
-        H, A, D, F, T = self.H, self.A, self.D, self.F, len(tok) - 1
+        """Forward and back over one window of text: its bytes but the last, each predicting the next."""
+        return self.example(tok[:-1], tok[1:], True, grads)
+
+    def example(self, tok, targets, causal, grads, logits_out=None):
+        """Forward and back over one example: `tok` read, each target (None: none) scored, attending
+        backwards (causal) or everywhere; adds its gradient (Q32, by weight) to grads."""
+        H, A, D, F, T = self.H, self.A, self.D, self.F, len(tok)
+        reach = (lambda p: p + 1) if causal else (lambda p: T)
         E, e_first, _ = self.mat("model.embed_tokens.weight")
-        xs = [list(E[b]) for b in tok[:T]]
+        xs = [list(E[b]) for b in tok]
         saved = []
         for l in range(self.sp.L):
             pre = "model.layers.%d." % l
@@ -3139,10 +3147,10 @@ class TrainerRef:
             for a in range(A):
                 for p in range(T):
                     sc = [tr_hold((tr_hold(sum(st["q"][p][a * D + d] * st["k"][u][a * D + d] for d in range(D)) >> 16) * self.isd) >> 16)
-                          for u in range(p + 1)]
+                          for u in range(reach(p))]
                     P[a, p] = tr_softmax(sc)
                     for d in range(D):
-                        o[p][a * D + d] = tr_hold(sum(P[a, p][u] * st["v"][u][a * D + d] for u in range(p + 1)) >> 16)
+                        o[p][a * D + d] = tr_hold(sum(P[a, p][u] * st["v"][u][a * D + d] for u in range(reach(p))) >> 16)
             st["P"], st["o"] = P, o
             st["x1"] = [[tr_hold(a + b) for a, b in zip(x, self.apply(W["o"][0], oo))] for x, oo in zip(xs, o)]
             n2 = [self.norm(x) for x in st["x1"]]
@@ -3160,8 +3168,13 @@ class TrainerRef:
         for p in range(T):
             hf, rf = self.norm(xs[p])
             logits = [tr_hold(sum(e * h for e, h in zip(row, hf)) >> 16) for row in E]
+            if logits_out is not None:
+                logits_out.append(logits)
+            nxt = targets[p]
+            if nxt is None:
+                dx.append([0] * H)
+                continue
             prob = tr_softmax(logits)
-            nxt = tok[p + 1]
             score += prob[nxt]
             count += 1
             dl = [tr_hold((pr - ((1 << 16) if t == nxt else 0)) << self.shift) for t, pr in enumerate(prob)]
@@ -3216,13 +3229,13 @@ class TrainerRef:
             for a in range(A):
                 for p in range(T):
                     Pp = st["P"][a, p]
-                    dP = [tr_hold(sum(dO[p][a * D + d] * st["v"][u][a * D + d] for d in range(D)) >> 16) for u in range(p + 1)]
+                    dP = [tr_hold(sum(dO[p][a * D + d] * st["v"][u][a * D + d] for d in range(D)) >> 16) for u in range(reach(p))]
                     cp = sum(x * y for x, y in zip(Pp, dP)) >> 16
-                    dd = [tr_hold((tr_hold((Pp[u] * tr_hold(dP[u] - cp)) >> 16) * self.isd) >> 16) for u in range(p + 1)]
+                    dd = [tr_hold((tr_hold((Pp[u] * tr_hold(dP[u] - cp)) >> 16) * self.isd) >> 16) for u in range(reach(p))]
                     for d in range(D):
                         j = a * D + d
-                        dq[p][j] = tr_hold(sum(dd[u] * st["k"][u][j] for u in range(p + 1)) >> 16)
-                        for u in range(p + 1):
+                        dq[p][j] = tr_hold(sum(dd[u] * st["k"][u][j] for u in range(reach(p))) >> 16)
+                        for u in range(reach(p)):
                             sk[u][j] += dd[u] * st["q"][p][j]
                             sv[u][j] += Pp[u] * dO[p][j]
             dq = [self.turn(v, p, -1) for p, v in enumerate(dq)]
@@ -3249,6 +3262,11 @@ class TrainerRef:
             s, c = self.window(w, grads)
             score += s
             count += c
+        self.update(grads)
+        return score, count
+
+    def update(self, grads):
+        """The update every step makes, from the summed gradient."""
         lim_g, lim_v = 1 << (43 + self.shift), 1 << (46 + self.shift)
         for name, rows, cols, _, first in self.sp.tensors:
             S = self.scale[name]
@@ -3257,7 +3275,132 @@ class TrainerRef:
                 self.velocity[i] = max(-lim_v, min(lim_v, ((self.velocity[i] * self.mu) >> 16) + g))
                 self.master[i] = max(-S, min(S, self.master[i] - ((self.velocity[i] * self.eta) >> (16 + 2 * self.shift))))
                 self.digits[i] = max(0, min(self.m, ((self.master[i] + S) * self.m + S) // (2 * S)))
-        return score, count
+
+
+# ---------------------------------------------------------------- diffusion-v1
+# A denoiser on training-v1's arithmetic (core/include/sieve/diffusion.hpp): the same transformer,
+# attending everywhere, scored on each clean cell. Written from the specification.
+
+class SplitMixRef:
+    def __init__(self, seed):
+        self.s = seed & ((1 << 64) - 1)
+
+    def next(self):
+        mask = (1 << 64) - 1
+        self.s = (self.s + 0x9E3779B97F4A7C15) & mask
+        z = self.s
+        z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & mask
+        z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & mask
+        return z ^ (z >> 31)
+
+
+def df_example(B, clean, level, marks, noise):
+    """The level's byte, then each cell as it shows at that level; targets the clean cells."""
+    inp = [B + level - 1] + [n if m < level else c for c, m, n in zip(clean, marks, noise)]
+    return inp, [None] + list(clean)
+
+
+def df_draw(S, B, cells, g, pictures):
+    pic = g.next() % pictures
+    level = 1 + g.next() % S
+    marks = [g.next() % S for _ in range(cells)]
+    noise = [g.next() % B for _ in range(cells)]
+    return pic, level, marks, noise
+
+
+def df_step(tr, S, B, pictures, g, batch):
+    """One step of diffusion-v1 training: `batch` examples drawn from g, as TrainerRef.step does windows."""
+    grads = [0] * tr.sp.W
+    score = count = 0
+    for _ in range(batch):
+        pic, level, marks, noise = df_draw(S, B, len(pictures[0]), g, len(pictures))
+        inp, tgt = df_example(B, pictures[pic], level, marks, noise)
+        s, c = tr.example(inp, tgt, False, grads)
+        score += s
+        count += c
+    tr.update(grads)
+    return score, count
+
+
+def df_make_picture(tr, S, B, noise, seed):
+    g = SplitMixRef(seed)
+    marks = [g.next() % S for _ in noise]
+    x = list(noise)
+    for t in range(S, 0, -1):
+        logits = []
+        tr.example([B + t - 1] + x, [None] * (len(x) + 1), False, None, logits)
+        for i in range(len(x)):
+            if marks[i] + 1 < t:
+                continue
+            z = logits[i + 1]
+            x[i] = max(range(B), key=lambda c: (z[c], -c))
+    return x
+
+
+DF_CASES = (  # shape, width, height, colours, levels, batch, steps, learning rate, momentum, start seed
+    ((1, 8, 2, 3), 3, 3, 2, 4, 2, 3, "0.01", "0.9", 5),
+    ((2, 8, 2, 4), 4, 2, 3, 5, 3, 2, "0.005", "0.5", 9),
+)
+
+
+def cmd_diffusion_vectors(_args):
+    print("# diffusion-v1 (core/include/sieve/diffusion.hpp) on training-v1: shape, picture width, height, colours, levels,")
+    print("# batch, learning rate, momentum, start seed; then each step's score (Q16 sum), predictions and the SHA-256 of")
+    print("# the digits (a byte each), and a picture made from a noise picture with seed 77. The start: digits drawn from")
+    print("# splitmix64 (the start seed), each mod 2^bits; the four training pictures: from splitmix64 seeded 1, each cell")
+    print("# mod colours; training draws from splitmix64 seeded 3; the noise from splitmix64 seeded 11.")
+    for shape, W, H, B, S, batch, steps, eta, mu, seed in DF_CASES:
+        sp = AiSpaceRef(*shape)
+        g0 = SplitMixRef(seed)
+        start = [g0.next() % (1 << shape[3]) for _ in range(sp.W)]
+        tr = TrainerRef(sp, start, eta, mu)
+        gp = SplitMixRef(1)
+        pictures = [[gp.next() % B for _ in range(W * H)] for _ in range(4)]
+        head = "\t".join(["L%d/H%d/A%d/B%d" % shape, str(W), str(H), str(B), str(S), str(batch), eta, mu, str(seed)])
+        g = SplitMixRef(3)
+        for k in range(steps):
+            sc, c = df_step(tr, S, B, pictures, g, batch)
+            print("step\t%s\t%d\t%d\t%d\t%s" % (head, k + 1, sc, c, hashlib.sha256(bytes(tr.digits)).hexdigest()))
+        gn = SplitMixRef(11)
+        noise = [gn.next() % B for _ in range(W * H)]
+        out = df_make_picture(tr, S, B, noise, 77)
+        print("picture\t%s\t%s\t%s" % (head, ",".join(map(str, noise)), ",".join(map(str, out))))
+
+def df_replay(run):
+    """A diffusion run trained again (sieve diffuse): its result.txt, from diffusion.ini and pictures.txt."""
+    ini = {}
+    for line in open(os.path.join(run, "diffusion.ini"), encoding="utf-8").read().splitlines():
+        line = line.strip()
+        if line and not line.startswith((";", "#")):
+            k, v = line.split("=", 1)
+            ini[k.strip()] = v.strip()
+    text = open(os.path.join(run, "pictures.txt"), "rb").read().decode("ascii")
+    assert hashlib.sha256(text.encode("ascii")).hexdigest() == ini["pictures_sha256"], "pictures.txt is not the recipe's"
+    W, H = (int(x) for x in ini["picture"].split("x"))
+    B = len(palette_colours(ini["palette"]))
+    S = int(ini["levels"])
+    pictures = [[int(c, 36) for c in line] for line in text.replace("\r", "").split("\n") if line]
+    shape = (int(ini["layers"]), int(ini["width"]), int(ini["heads"]), int(ini["bits"]))
+    sp = AiSpaceRef(*shape)
+    g0 = SplitMixRef(int(ini["start_seed"]))
+    start = [g0.next() % (1 << shape[3]) for _ in range(sp.W)]
+    version = int(ini["version"])
+    shift = int(ini["loss_scale_bits"]) if version == 2 else 0
+    tr = TrainerRef(sp, start, ini["learning_rate"], ini["momentum"], shift)
+    steps, batch, every = int(ini["steps"]), int(ini["batch"]), int(ini["checkpoint_every"])
+    g = SplitMixRef(int(ini["seed"]))
+    out = ["sieve-diffusion-result-v1", "version diffusion-v1 training-v%d" % version, "steps %d" % steps,
+           "checkpoint 0 0 0 " + hashlib.sha256(bytes(tr.digits)).hexdigest()]
+    score = count = 0
+    for k in range(1, steps + 1):
+        s_, c_ = df_step(tr, S, B, pictures, g, batch)
+        score += s_
+        count += c_
+        if k % every == 0 or k == steps:
+            out.append("checkpoint %d %d %d %s" % (k, score, count, hashlib.sha256(bytes(tr.digits)).hexdigest()))
+            score = count = 0
+    out.append("final %0*x" % (sp.width_hex, sp.index(tr.digits, "positional")))
+    return "\n".join(out) + "\n"
 
 
 def tr_make_order(files, length, epochs, seed, reading="shuffled"):
@@ -7372,6 +7515,182 @@ def cmd_picture_vectors(_args):
             print(f"runs-unit\t{B}\t{W}\t{H}\t{F}\t{c}\t{i}\t{','.join(map(str, u))}")
 
 
+# ---------------------------------------------------------------- figure-v1
+# Written from the rule, not the engine's automaton: a picture passes when its ink (every colour
+# but the background) makes exactly `shapes` connected shapes, found by a flood fill, and the
+# border allows where the ink stands. Counted by walking the pixels in order with each position's
+# row and column known (the engine's automaton knows neither the row nor the height), keeping for
+# each column the shape its latest pixel belongs to: the walks are grouped by that frontier, so
+# the count is exact at 10 by 10. The background weighs 1 and every ink colour 1, so a palette of
+# B colours multiplies each ink pixel's walks by B - 1.
+
+def figure_ok(u, W, H, bg, shapes, eight, border):
+    ink = [c != bg for c in u]
+    for i, x in enumerate(ink):
+        if not x:
+            continue
+        r, c = divmod(i, W)
+        if border in ("clear", "standing") and (r == 0 or c == 0 or c == W - 1):
+            return False
+        if border == "clear" and r == H - 1:
+            return False
+    if border == "standing" and not any(ink[(H - 1) * W:]):
+        return False
+    seen, k = set(), 0
+    for i in range(W * H):
+        if ink[i] and i not in seen:
+            k += 1
+            todo = [i]
+            seen.add(i)
+            while todo:
+                r, c = divmod(todo.pop(), W)
+                for dr in (-1, 0, 1):
+                    for dc in (-1, 0, 1):
+                        if (dr, dc) == (0, 0) or (not eight and dr and dc):
+                            continue
+                        rr, cc = r + dr, c + dc
+                        j = rr * W + cc
+                        if 0 <= rr < H and 0 <= cc < W and ink[j] and j not in seen:
+                            seen.add(j)
+                            todo.append(j)
+    return k == shapes
+
+
+def figure_walk(W, H, shapes, eight, border):
+    """The layers of the walk: layer i maps each frontier before pixel i to the frontiers after it,
+    as (frontier, ink, next) triples; next is None past the last pixel for a passing picture."""
+    def relabel(cols, diag):
+        names = {}
+        for x in cols + (diag,):
+            if x and x not in names:
+                names[x] = len(names) + 1
+        return tuple(names.get(x, 0) for x in cols), names.get(diag, 0)
+
+    def go(state, i, ink):
+        cols, diag, done, bottom = state
+        r, c = divmod(i, W)
+        if ink and border in ("clear", "standing") and (r == 0 or c == 0 or c == W - 1):
+            return False
+        if ink and border == "clear" and r == H - 1:
+            return False
+        before = set(cols) | {diag}
+        before.discard(0)
+        touching = {cols[c]} | ({cols[c - 1]} if c else set())
+        if eight:
+            touching |= ({diag} if c else set()) | ({cols[c + 1]} if c + 1 < W else set())
+        touching.discard(0)
+        if not ink:
+            touching = set()  # a background pixel joins nothing
+        low = min(touching) if touching else None
+        rename = (lambda x: low if x in touching else x) if touching else (lambda x: x)
+        cols2 = [rename(x) for x in cols]
+        diag2 = rename(cols[c]) if eight and c + 1 < W else 0
+        cols2[c] = (low or max(before | {0}) + 1) if ink else 0
+        after = set(cols2) | {diag2}
+        done += len({rename(x) for x in before} - after)
+        if done > shapes:
+            return False
+        bottom = bottom or (ink and r == H - 1)
+        if i + 1 == W * H:
+            left = len(after - {0})
+            return None if done + left == shapes and (border != "standing" or bottom) else False
+        a, b = relabel(tuple(cols2), diag2)
+        return (a, b, done, bottom)
+
+    start = (tuple([0] * W), 0, 0, False)
+    layers, frontier = [], {start}
+    for i in range(W * H):
+        moves, nxt = [], set()
+        for st in frontier:
+            for ink in (0, 1):
+                t = go(st, i, ink)
+                if t is not False:
+                    moves.append((st, ink, t))
+                    if t is not None:
+                        nxt.add(t)
+        layers.append(moves)
+        frontier = nxt
+    return layers
+
+
+def figure_tables(W, H, B, shapes, eight, border):
+    """ways[i][state]: the passing ways to finish from `state` before pixel i, ink weighing B - 1."""
+    layers = figure_walk(W, H, shapes, eight, border)
+    ways = [dict() for _ in range(W * H + 1)]
+    for i in range(W * H - 1, -1, -1):
+        w = ways[i]
+        for st, ink, t in layers[i]:
+            n = 1 if t is None else ways[i + 1].get(t, 0)
+            w[st] = w.get(st, 0) + n * (B - 1 if ink else 1)
+    return layers, ways
+
+
+def figure_unrank(W, H, B, bg, shapes, eight, border, tables, k):
+    layers, ways = tables
+    by = [dict() for _ in range(W * H)]
+    for i, moves in enumerate(layers):
+        for st, ink, t in moves:
+            by[i][(st, ink)] = t
+    st = (tuple([0] * W), 0, 0, False)
+    out = []
+    for i in range(W * H):
+        def worth(ink):
+            if (st, ink) not in by[i]:
+                return 0
+            t = by[i][(st, ink)]
+            return 1 if t is None else ways[i + 1].get(t, 0)
+        ink_w, bg_w = worth(1), worth(0)
+        # the colours in order: ink below the background, the background, ink above it
+        if k < bg * ink_w:
+            d, k = divmod(k, ink_w) if ink_w else (0, k)
+        elif k < bg * ink_w + bg_w:
+            d, k = bg, k - bg * ink_w
+        else:
+            k -= bg * ink_w + bg_w
+            d, k = divmod(k, ink_w)
+            d += bg + 1
+        out.append(d)
+        st = by[i][(st, 1 if d != bg else 0)]
+    return out
+
+
+def cmd_figure_vectors(_args):
+    from itertools import product
+    print("# figure-v1 (core/src/filters/figure.cpp): one image line each; the background is the lightest colour.")
+    print("# count  palette width height shapes connect border survivors")
+    print("# unit   palette width height shapes connect border rank pixels(comma)")
+    g = stream("figure")
+    settings = [(s, e, b) for s in (1, 2) for e in ("four", "eight") for b in ("any", "clear", "standing")]
+    # Small lines: every picture judged by the flood fill, against the count and the unranking.
+    for pid, W, H in (("mono", 3, 3), ("mono", 4, 3), ("mono", 3, 4), ("mono", 4, 4), ("ega16", 2, 2), ("ega16", 3, 1)):
+        B, bg = len(palette_colours(pid)), nearest(pid, (255, 255, 255))
+        for shapes, conn, border in settings:
+            eight = conn == "eight"
+            kept = [list(u) for u in product(range(B), repeat=W * H) if figure_ok(u, W, H, bg, shapes, eight, border)]
+            t = figure_tables(W, H, B, shapes, eight, border)
+            n = t[1][0].get((tuple([0] * W), 0, 0, False), 0)
+            assert n == len(kept), (pid, W, H, shapes, conn, border, n, len(kept))
+            assert all(figure_unrank(W, H, B, bg, shapes, eight, border, t, i) == u for i, u in enumerate(kept))
+            print(f"count\t{pid}\t{W}\t{H}\t{shapes}\t{conn}\t{border}\t{n}")
+            for i in sorted({0, n // 3, n - 1}) if n else ():
+                print(f"unit\t{pid}\t{W}\t{H}\t{shapes}\t{conn}\t{border}\t{i}\t{','.join(map(str, kept[i]))}")
+    # The image line's size, 10 by 10, on its palettes; a taller and a wider picture.
+    full = [("mono", 10, 10, s, c, b) for s, c, b in settings if (c, b) != ("four", "any") or s == 1]
+    full += [("ega16", 10, 10, 1, "eight", "clear"), ("rgb332", 10, 10, 1, "eight", "standing"),
+             ("rgb24", 10, 10, 1, "eight", "clear"), ("rgb24", 10, 10, 2, "four", "standing"),
+             ("mono", 6, 15, 1, "eight", "clear"), ("mono", 12, 4, 1, "four", "standing")]
+    for pid, W, H, shapes, conn, border in full:
+        B, bg = (1 << 24 if pid == "rgb24" else len(palette_colours(pid))), nearest(pid, (255, 255, 255))
+        eight = conn == "eight"
+        t = figure_tables(W, H, B, shapes, eight, border)
+        n = t[1][0].get((tuple([0] * W), 0, 0, False), 0)
+        print(f"count\t{pid}\t{W}\t{H}\t{shapes}\t{conn}\t{border}\t{n}")
+        for i in sorted({0, n // 7, n - 1, int.from_bytes(bytes(next(g) for _ in range(40)), "big") % n}):
+            u = figure_unrank(W, H, B, bg, shapes, eight, border, t, i)
+            assert figure_ok(u, W, H, bg, shapes, eight, border)
+            print(f"unit\t{pid}\t{W}\t{H}\t{shapes}\t{conn}\t{border}\t{i}\t{','.join(map(str, u))}")
+
+
 # ---------------------------------------------------------------- utf8-valid-v1
 # Written from the rule, not the engine's byte automaton: a file is valid when Python's strict
 # UTF-8 decoder takes it (RFC 3629) and, with controls = text, it holds no control character but
@@ -7698,6 +8017,10 @@ def main():
     sub.add_parser("written-vectors")
     sub.add_parser("cross-vectors")
     sub.add_parser("picture-vectors")
+    sub.add_parser("figure-vectors")
+    sub.add_parser("diffusion-vectors")
+    s = sub.add_parser("diffuse-replay")
+    s.add_argument("--run", required=True)
     sub.add_parser("utf8-vectors")
     s = sub.add_parser("plugin")
     s.add_argument("file")
@@ -7825,6 +8148,12 @@ def main():
         cmd_cross_vectors(args)
     elif args.cmd == "picture-vectors":
         cmd_picture_vectors(args)
+    elif args.cmd == "figure-vectors":
+        cmd_figure_vectors(args)
+    elif args.cmd == "diffusion-vectors":
+        cmd_diffusion_vectors(args)
+    elif args.cmd == "diffuse-replay":
+        sys.stdout.write(df_replay(args.run))
     elif args.cmd == "utf8-vectors":
         cmd_utf8_vectors(args)
     elif args.cmd == "chunks":

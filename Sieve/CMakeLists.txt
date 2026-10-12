@@ -49,12 +49,14 @@ add_library(sieve_core STATIC
     core/src/llm.cpp
     core/src/aispace.cpp
     core/src/training.cpp
+    core/src/diffusion.cpp
     core/src/filters/models.cpp
     core/src/filters/pattern.cpp
     core/src/written.cpp
     core/src/filters/builtin.cpp
     core/src/filters/media.cpp
     core/src/filters/picture.cpp
+    core/src/filters/figure.cpp
     core/src/filters/sound.cpp
     core/src/filters/weights.cpp
     core/src/filters/statistics.cpp
@@ -218,6 +220,7 @@ add_executable(sieve
     tools/cli/chat.cpp
     tools/cli/ai.cpp
     tools/cli/train_cmd.cpp
+    tools/cli/diffuse.cpp
     ${SIEVE_ICON_RC})
 target_link_libraries(sieve PRIVATE sieve_lines sieve_locate sieve_compare)
 if(WIN32)

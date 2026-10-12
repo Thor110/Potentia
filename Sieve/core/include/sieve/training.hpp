@@ -122,6 +122,18 @@ struct Score
     double bits_per_byte() const;
 };
 
+// One example: the model reads `input` and, at each position whose target is not -1, is scored on
+// (and trained towards) that byte. `causal`: each position attends to itself and those before it,
+// as a language model must; otherwise to every position (a denoiser, which sees the whole picture).
+// A window of text is the example of its bytes but the last, each targeting the byte after it,
+// causal (Trainer::step on windows makes exactly these).
+struct Example
+{
+    std::span<const uint8_t> input;
+    std::span<const int16_t> target;
+    bool causal = true;
+};
+
 class Trainer
 {
 public:
@@ -132,6 +144,9 @@ public:
 
     // One step: every window of the batch forward and back, the gradients summed, the weights moved.
     Score step(const std::vector<std::span<const uint8_t>>& batch);
+    // One step on examples (see Example): the same arithmetic, other inputs and targets.
+    Score step(const std::vector<Example>& batch);
+    Score evaluate(const std::vector<Example>& batch) const;
     // The model's score on windows, without training (no weights move).
     Score evaluate(const std::vector<std::span<const uint8_t>>& windows) const;
 
@@ -158,11 +173,16 @@ private:
     unsigned threads_ = 1;
     std::unique_ptr<class Pool> pool_;       // the trainer's threads, kept for its life
     void refresh_values();
+    void apply(const std::vector<int64_t>& grad); // the update every step makes
 };
 
 // A model's score on windows of text, the forward pass alone (as Trainer::evaluate, with no trainer
 // and on one thread): exact, the same on every machine.
 Score evaluate_model(const AiSpace& space, const AiSpace::Digits& digits, const std::vector<std::span<const uint8_t>>& windows);
+
+// The head's logits for one example (input.size() x 256, Q16), the forward pass alone: what a
+// sampler reads to choose.
+std::vector<int32_t> model_logits(const AiSpace& space, const AiSpace::Digits& digits, const Example& ex);
 
 // result.txt: what a run gave, so that a replay can be checked against it line for line:
 //     sieve-training-result-v2
