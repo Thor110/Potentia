@@ -1,6 +1,7 @@
 // Sieve CLI — diffusion runs (see diffusion_run.hpp).
 #include "cli/diffusion_run.hpp"
 
+#include "sieve/audio.hpp"
 #include "sieve/image.hpp"
 #include "sieve/sha256.hpp"
 
@@ -57,7 +58,9 @@ std::string DiffusionRecipe::text() const
       << "loss_scale_bits = " << train.loss_scale_bits << "\n"
       << "layers = " << train.shape.layers << "\nwidth = " << train.shape.width << "\nheads = " << train.shape.heads
       << "\nbits = " << train.shape.bits << "\n"
-      << "picture = " << setup.width << "x" << setup.height << "\npalette = " << palette << "\nlevels = " << setup.levels << "\n"
+      << (audio() ? "line = audio\nsymbols = " + symbols + "\nlength = " + std::to_string(setup.width) + "\n"
+                  : "picture = " + std::to_string(setup.width) + "x" + std::to_string(setup.height) + "\npalette = " + palette + "\n")
+      << "levels = " << setup.levels << "\n"
       << "learning_rate = " << train.learning_rate << "\nmomentum = " << train.momentum << "\n"
       << "batch = " << batch << "\nsteps = " << steps << "\ncheckpoint_every = " << checkpoint_every << "\n"
       << "seed = " << seed << "\nstart_seed = " << start_seed << "\n"
@@ -109,6 +112,13 @@ DiffusionRecipe DiffusionRecipe::parse(const std::string& text)
             r.setup.height = uint32_t(num(v.substr(x + 1), k));
         }
         else if (k == "palette") r.palette = v;
+        else if (k == "line")
+        {
+            if (v != "image" && v != "audio") bad("diffusion.ini: line is image or audio");
+            r.line = v;
+        }
+        else if (k == "symbols") r.symbols = v;
+        else if (k == "length") r.setup.width = uint32_t(num(v, k)), r.setup.height = 1;
         else if (k == "levels") r.setup.levels = uint32_t(num(v, k));
         else if (k == "learning_rate") r.train.learning_rate = v;
         else if (k == "momentum") r.train.momentum = v;
@@ -120,7 +130,7 @@ DiffusionRecipe DiffusionRecipe::parse(const std::string& text)
         else if (k == "pictures_sha256") r.pictures_sha256 = v;
         else bad("diffusion.ini: unknown key " + k);
     }
-    r.setup.colours = palette_by_id(r.palette).size();
+    r.setup.colours = r.audio() ? note_set_of(r.symbols).base() : palette_by_id(r.palette).size();
     r.check();
     return r;
 }
@@ -129,7 +139,12 @@ void DiffusionRecipe::check() const
 {
     train.shape.check();
     setup.check();
-    if (palette_by_id(palette).size() > 36) bad("a palette of at most 36 colours (pictures.txt writes a cell as one digit)");
+    if (audio())
+    {
+        if (!is_note_symbols(symbols)) bad("an audio run's symbols are a note set: notes104 or notes2 (" + symbols + ")");
+        if (setup.height != 1 || setup.colours != note_set_of(symbols).base()) bad("a melody is one row of its note set's symbols");
+    }
+    else if (setup.colours != palette_by_id(palette).size()) bad("a picture's colours are its palette's");
     if (batch < 1 || batch > 32) bad("from 1 to 32 examples a step");
     if (checkpoint_every < 1) bad("a checkpoint at least every step");
     training::Recipe t = train;
@@ -137,12 +152,16 @@ void DiffusionRecipe::check() const
     t.check();
 }
 
-std::string pictures_text(const std::vector<std::vector<uint32_t>>& pics)
+std::string pictures_text(const std::vector<std::vector<uint32_t>>& pics, const diffusion::Setup& s)
 {
     std::string t;
     for (const auto& p : pics)
     {
-        for (const uint32_t c : p) t.push_back(kDigits[c]);
+        for (size_t i = 0; i < p.size(); ++i)
+        {
+            if (s.colours <= 36) t.push_back(kDigits[p[i]]);
+            else t += (i ? " " : "") + std::to_string(p[i]);
+        }
         t.push_back('\n');
     }
     return t;
@@ -157,14 +176,26 @@ std::vector<std::vector<uint32_t>> parse_pictures(const std::string& text, const
     {
         if (!line.empty() && line.back() == '\r') line.pop_back();
         if (line.empty()) continue;
-        if (line.size() != s.cells()) bad("pictures.txt: a picture of " + std::to_string(s.cells()) + " cells");
         std::vector<uint32_t> p;
-        for (const char ch : line)
+        if (s.colours <= 36)
+            for (const char ch : line)
+            {
+                const char* at = std::char_traits<char>::find(kDigits, s.colours, ch);
+                if (!at) bad("pictures.txt: a cell beyond the palette");
+                p.push_back(uint32_t(at - kDigits));
+            }
+        else
         {
-            const char* at = std::char_traits<char>::find(kDigits, s.colours, ch);
-            if (!at) bad("pictures.txt: a cell beyond the palette");
-            p.push_back(uint32_t(at - kDigits));
+            std::istringstream cells(line);
+            std::string c;
+            while (std::getline(cells, c, ' '))
+            {
+                if (c.empty() || c.size() > 3 || c.find_first_not_of("0123456789") != std::string::npos || std::stoul(c) >= s.colours)
+                    bad("pictures.txt: a cell that is not a symbol of the line");
+                p.push_back(uint32_t(std::stoul(c)));
+            }
         }
+        if (p.size() != s.cells()) bad("pictures.txt: a unit of " + std::to_string(s.cells()) + " cells");
         out.push_back(std::move(p));
     }
     if (out.empty()) bad("pictures.txt: no pictures");
@@ -196,7 +227,7 @@ DiffusionRun load_diffusion_run(const fs::path& dir)
 
 DiffusionRun record_diffusion_run(const fs::path& dir, DiffusionRecipe recipe, std::vector<std::vector<uint32_t>> pictures)
 {
-    const std::string pt = pictures_text(pictures);
+    const std::string pt = pictures_text(pictures, recipe.setup);
     recipe.pictures_sha256 = Sha256::hex(Sha256::hash(pt));
     recipe.check();
     fs::create_directories(dir);
@@ -269,8 +300,9 @@ std::optional<std::string> final_address_of(const std::string& result_text)
     return hex;
 }
 
-Space image_line_of(const DiffusionRecipe& r)
+Space unit_space_of(const DiffusionRecipe& r)
 {
+    if (r.audio()) return Space(r.symbols, r.setup.colours, r.setup.width);
     ImageFormat fmt;
     fmt.width = r.setup.width, fmt.height = r.setup.height, fmt.palette = &palette_by_id(r.palette);
     return Space(fmt.symbols_id(), fmt.palette->size(), fmt.unit_length());

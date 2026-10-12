@@ -1493,9 +1493,14 @@ private:
         std::string model, palette, address; // It: `model` names the model file that wrote it, if one did
         uint64_t number = 0;
         bool with_next = false; // given to the model file: it reads it with the next message
+        // A melody (a melody model's, or the audio line's): its note set's id; empty for a picture.
+        // And a card's heading where it is not "figure K by MODEL" (a random unit's).
+        std::string symbols, title;
+        bool melody() const { return !symbols.empty(); }
+        std::string heading() const;
         uint32_t width = 0, height = 0;
     };
-    enum class ChatAct { Go, Item, Save };
+    enum class ChatAct { Go, Item, Save, Play };
     void close_chat();
     void chat_event(const SDL_Event& e);
     // The CHAT tab drawn in the hand panel's area from (x, top), `w` wide, down to `bottom`.
@@ -1506,6 +1511,11 @@ private:
     // The CHAT tab's index (the last tab, with a model of the AI line in hand), or -1.
     int chat_tab() { return in_hand_ && in_hand_->ai ? hand_tabs() - 1 : -1; }
     void chat_send();
+    // A picture or melody card made (by DRAW or a command): shown, given to the model, and noted
+    // in the transcript (the vault looking at a picture first).
+    void chat_show_unit(ChatEntry e);
+    // A line typed in CHAT that begins with '/': a command (/random picture, /random melody, /help).
+    void chat_command(const std::string& line);
     void chat_act(size_t entry, ChatAct act);
     // The model in hand made ready to talk (a new conversation for a new model).
     void talk_ready();

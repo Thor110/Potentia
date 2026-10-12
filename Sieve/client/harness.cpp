@@ -1,6 +1,8 @@
 // Sieve hallway — the AI Training Harness (see harness.hpp).
 #include "harness.hpp"
 
+#include "sieve/audio.hpp"
+
 #include "font.hpp"
 #include "music.hpp"
 #include "strings.hpp"
@@ -1093,11 +1095,14 @@ void Harness::render_pictures(float x, float& ry, float colW, float H)
     const sieve::AiSpace space(s, "sieve");
     line(tr("harness.model"), trf(s.layers == 1 ? "harness.shape.one" : "harness.shape",
                                   {std::to_string(s.layers), std::to_string(s.width), std::to_string(s.heads), std::to_string(s.bits), grouped(space.weights())}));
-    line(tr("harness.pictures.kind"), trf("harness.pictures.kind.value", {std::to_string(r.setup.levels)}));
-    line(tr("harness.pictures.of"), trf("harness.pictures.of.run", {std::to_string(r.setup.width), std::to_string(r.setup.height), r.palette}));
-    line(tr("harness.learns"), trf("harness.pictures.recipe", {r.train.learning_rate, std::to_string(r.train.loss_scale_bits), std::to_string(r.batch),
-                                                              grouped(r.steps)}));
-    line(tr("harness.corpus"), trf("harness.pictures.corpus", {grouped(drun_->pictures.size())}));
+    // A picture run, or a melody run (the audio line's notes): the same model and training.
+    const bool melodies = r.audio();
+    line(tr("harness.pictures.kind"), trf(melodies ? "harness.melodies.kind.value" : "harness.pictures.kind.value", {std::to_string(r.setup.levels)}));
+    if (melodies) line(tr("harness.melodies.of"), trf("harness.melodies.of.run", {std::to_string(r.setup.width), r.symbols}));
+    else line(tr("harness.pictures.of"), trf("harness.pictures.of.run", {std::to_string(r.setup.width), std::to_string(r.setup.height), r.palette}));
+    line(tr("harness.learns"), trf(melodies ? "harness.melodies.recipe" : "harness.pictures.recipe",
+                                   {r.train.learning_rate, std::to_string(r.train.loss_scale_bits), std::to_string(r.batch), grouped(r.steps)}));
+    line(tr("harness.corpus"), trf(melodies ? "harness.melodies.corpus" : "harness.pictures.corpus", {grouped(drun_->pictures.size())}));
     line(tr("harness.result"), drun_->result ? tr("harness.result.yes") : tr("harness.result.no"), drun_->result ? kWhite : kGrey);
     ry += 10;
     uint64_t step, steps;
@@ -1142,7 +1147,19 @@ void Harness::render_pictures(float x, float& ry, float colW, float H)
         txt(r_, x, ry, verdict_.substr(0, size_t(colW / 8)), verdict_colour_);
         ry += 18;
     }
-    if (!made_.empty())
+    if (!made_.empty() && melodies)
+    {
+        // Melodies, as their notation, one a line.
+        txt(r_, x, ry, tr("harness.pictures.makes"), kGrey);
+        ry += 16;
+        const sieve::NoteSet set = sieve::note_set_of(r.symbols);
+        for (const auto& m : made_)
+        {
+            txt(r_, x, ry, sieve::notes_to_notation(set, m).substr(0, size_t(std::max(0.0f, colW / 8))), kWhite);
+            ry += 16;
+        }
+    }
+    else if (!made_.empty())
     {
         txt(r_, x, ry, tr("harness.pictures.makes"), kGrey);
         ry += 16;

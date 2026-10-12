@@ -3376,10 +3376,25 @@ def df_replay(run):
             ini[k.strip()] = v.strip()
     text = open(os.path.join(run, "pictures.txt"), "rb").read().decode("ascii")
     assert hashlib.sha256(text.encode("ascii")).hexdigest() == ini["pictures_sha256"], "pictures.txt is not the recipe's"
-    W, H = (int(x) for x in ini["picture"].split("x"))
-    B = len(palette_colours(ini["palette"]))
+    if ini.get("line", "image") == "audio":
+        # Melodies: one row of a note set's symbols (notes104, or notes2/LOW-HIGH/DURATIONS/Vn).
+        sym = ini["symbols"]
+        if sym == "notes104":
+            B = 104
+        else:
+            fam, rng, durs, voices = sym.split("/")
+            assert fam == "notes2", "a melody run's symbols are notes104 or a notes2 set"
+            low, high = rng.split("-")
+            B = NoteSet2(note2_midi(low), note2_midi(high), durs, int(voices[1:])).base
+        W, H = int(ini["length"]), 1
+    else:
+        W, H = (int(x) for x in ini["picture"].split("x"))
+        B = len(palette_colours(ini["palette"]))
     S = int(ini["levels"])
-    pictures = [[int(c, 36) for c in line] for line in text.replace("\r", "").split("\n") if line]
+    # A cell a base-36 digit where there are at most 36 symbols, else numbers apart by spaces.
+    rows = [line for line in text.replace("\r", "").split("\n") if line]
+    pictures = [[int(c, 36) for c in line] for line in rows] if B <= 36 else [[int(c) for c in line.split(" ")] for line in rows]
+    assert all(len(p) == W * H for p in pictures), "pictures.txt: a unit of the wrong length"
     shape = (int(ini["layers"]), int(ini["width"]), int(ini["heads"]), int(ini["bits"]))
     sp = AiSpaceRef(*shape)
     g0 = SplitMixRef(int(ini["start_seed"]))

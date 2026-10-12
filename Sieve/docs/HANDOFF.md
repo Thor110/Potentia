@@ -2645,3 +2645,43 @@ cover and a title.
 - **IDEAS:** §19.27 files from known generators and their seeds; §19.28 a universe in a seed.
 - **Not yet:** quantised weights (a model of billions of weights in f32 needs its size in memory
   several times over); a picture model other than diffusion-v1's runs (ComfyUI, IDEAS §19.26).
+
+### A sound model: melodies (12 October 2026)
+- **What** (Edward): an audio, track or "sound" model beside the text and picture models, without
+  ComfyUI; commands such as a random track or picture, for the person first.
+- **diffusion-v1 on the audio line** (tools/cli/diffusion_run, SPECIFICATIONS §12.0g):
+  - `DiffusionRecipe` has `line`, `symbols` and `audio()`; a melody is a picture one cell high,
+    `length` cells of the note set's base (notes104: 104 colours).
+  - `pictures_text`/`parse_pictures` write a cell a base-36 digit, or numbers apart by spaces when
+    there are more than 36 colours. `unit_space_of(recipe)` gives the run's space.
+  - `sieve diffuse --line audio` (with the note set's options; `--levels` is the run's, not
+    notes3's) records a run from the `[audio]` stack. `--make` writes each melody's notation and
+    its address; `--judge FILTERS` counts what each filter keeps of the made units and of their
+    noises.
+  - The oracle's `df_replay` replays audio runs (notes104, or the notes2 set named in `symbols`).
+- **data/training/melodies-2x64:** 2 layers, width 64, on the default `[audio]` stack's
+  survivors. Measured (§12.0g): of 300 made, 300 in key, 300 end on the tonic, 3 to 5 pass the
+  whole stack (noise: none); the rests rule is the one it keeps less often than noise.
+- **The harness** (harness.cpp) lists melody runs and shows made melodies in notation.
+- **CHAT** (chat.cpp): `ChatEntry` has `symbols` and `title`; `melody()` when symbols are set,
+  `heading()` names it. A melody card draws a piano roll; `ChatAct::Play` plays it through
+  `music()`; GO TO IT is `go_to_melody` (`Request::GoToMelody`, on which `handle()` also leaves
+  CHAT); SAVE writes MIDI. `chat_show_unit` is shared by DRAW and the commands.
+- **Commands** (`chat_command`, caught at the top of `talk()`, so `--talk "/random melody"` works):
+  `/random picture|image|melody` draws `random_below(count)` and unranks it from the line's stack
+  where it counts, else uniform cells; `/help`; anything else says it is unknown.
+- **The shipped figures measurement** in §12.0g was 29 of 300; `--judge` gives 22, 24 and 27 for
+  three noise seeds, and the text now says so.
+- **CI:** a tiny melody run recorded, reproduced and replayed by the oracle; `--make` and
+  `--judge` on it; the shipped melody run's first three addresses; CHAT's melody card, `/random`,
+  and Ctrl+G onto the audio line.
+- **IDEAS:** §19.29 reconstruction and probes; §19.30 flavours and categories of categories;
+  §19.31 the sound model; §19.32 commands; §19.33 a voice from a model of the vocal tract.
+- **Found, not changed: line art fits to white.** CHAT's J on Vitruvian.jpg gives an all-white
+  picture on a 10x10 mono image line. That is `canon-image-v1` working as specified: each cell's
+  area average is light parchment with a few thin lines, nearest to white (the same at 32x32). A
+  rule that judges each cell against the picture's own light and dark (a threshold at a rank of
+  its cells) brings the figure back at 64x64. It would be `canon-image-v2`, an option, since it
+  changes every photo's address; waiting on Edward's choice of default.
+- **Not yet:** recording a melody run from the harness; a track model; a model of sound itself
+  (pcm); commands for the models to use.

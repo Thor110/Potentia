@@ -30,10 +30,12 @@
 #include "cli/train.hpp"
 #include "cli/vault.hpp"
 #include "sieve/filekind.hpp"
+#include "sieve/audio.hpp"
 #include "sieve/sha256.hpp"
 
 #include <algorithm>
 #include <fstream>
+#include <sstream>
 
 namespace hallway::hall {
 
@@ -176,6 +178,11 @@ void Hallway::talk(const std::string& said)
 {
     if (!in_hand_ || !in_hand_->ai) return;
     talk_ready();
+    if (!said.empty() && said[0] == '/') // a command, not something said to the model
+    {
+        chat_command(said);
+        return;
+    }
     if (talking_to_file())
     {
         talk_file(said);
@@ -387,6 +394,7 @@ void Hallway::chat_send()
 {
     const std::string said = chat_text_;
     chat_text_.clear();
+
     talk(said); // an empty line too: the model goes on by itself
 }
 
@@ -519,7 +527,8 @@ void Hallway::chat_draw()
             e.number = chat_drawn_[m.name] + 1;
             e.cells = m.picture(e.number);
             e.width = m.recipe.setup.width, e.height = m.recipe.setup.height, e.palette = m.recipe.palette;
-            e.address = cli::image_line_of(m.recipe).address_of(e.cells, AddressMode::Positional);
+            if (m.recipe.audio()) e.symbols = m.recipe.symbols; // a melody model's
+            e.address = cli::unit_space_of(m.recipe).address_of(e.cells, AddressMode::Positional);
         });
     }
     catch (const std::exception& ex)
@@ -528,42 +537,121 @@ void Hallway::chat_draw()
         return;
     }
     chat_drawn_[e.model] = e.number;
-    // The vault looks at pictures as at any other.
-    const sieve::Palette& pal = sieve::palette_by_id(e.palette);
-    std::vector<uint8_t> rgba;
-    for (const uint32_t c : e.cells)
+    chat_show_unit(std::move(e));
+}
+
+std::string Hallway::ChatEntry::heading() const
+{
+    if (!title.empty()) return title;
+    return trf(melody() ? "chat.melody" : "chat.figure", {std::to_string(number), model});
+}
+
+void Hallway::chat_show_unit(ChatEntry e)
+{
+    std::string rows; // what the model is given: a picture's rows, a melody's notation
+    if (e.melody()) rows = sieve::notes_to_notation(sieve::note_set_of(e.symbols), e.cells);
+    else
     {
-        const sieve::Rgb x = pal.colour(c);
-        rgba.insert(rgba.end(), {x.r, x.g, x.b, 255});
-    }
-    if (cli::vault::withheld_picture(rgba.data(), e.width, e.height))
-    {
-        chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf("chat.withheld", {trf("chat.figure", {std::to_string(e.number), e.model})})));
-        return;
-    }
-    // The model reads it as its rows: a character a cell (the background a dot), a newline a row.
-    const uint32_t background = pal.nearest(sieve::Rgb{255, 255, 255});
-    const char kDigits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
-    std::vector<uint8_t> rows;
-    for (uint32_t y = 0; y < e.height; ++y)
-    {
-        for (uint32_t x = 0; x < e.width; ++x)
+        // The vault looks at pictures as at any other.
+        const sieve::Palette& pal = sieve::palette_by_id(e.palette);
+        std::vector<uint8_t> rgba;
+        for (const uint32_t c : e.cells)
         {
-            const uint32_t c = e.cells[size_t(y) * e.width + x];
-            rows.push_back(uint8_t(c == background ? '.' : pal.size() <= 2 ? '#' : kDigits[c % 36]));
+            const sieve::Rgb x = pal.colour(c);
+            rgba.insert(rgba.end(), {x.r, x.g, x.b, 255});
         }
-        if (y + 1 < e.height) rows.push_back('\n');
+        if (cli::vault::withheld_picture(rgba.data(), e.width, e.height))
+        {
+            chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf("chat.withheld", {e.heading()})));
+            return;
+        }
+        // Its rows: a character a cell (the background a dot), a newline a row.
+        const uint32_t background = pal.nearest(sieve::Rgb{255, 255, 255});
+        const char kDigits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+        for (uint32_t y = 0; y < e.height; ++y)
+        {
+            for (uint32_t x = 0; x < e.width; ++x)
+            {
+                const uint32_t c = e.cells[size_t(y) * e.width + x];
+                rows.push_back(c == background ? '.' : pal.size() <= 2 ? '#' : kDigits[c % 36]);
+            }
+            if (y + 1 < e.height) rows.push_back('\n');
+        }
     }
     if (talking_to_file())
     {
         e.with_next = true;
-        e.given = give_file_model(trf("chat.figure.tag", {std::to_string(e.number), e.model, std::to_string(e.width), std::to_string(e.height)}),
-                                  std::string(rows.begin(), rows.end()));
+        e.given = give_file_model(e.melody() ? trf("chat.melody.tag", {e.heading()})
+                                             : trf("chat.figure.tag", {e.heading(), std::to_string(e.width), std::to_string(e.height)}),
+                                  rows);
     }
-    else e.given = talk_give(rows);
-    talk_ += trf("talk.figure", {std::to_string(e.number), e.model, e.address}) + "\n";
+    else e.given = talk_give(std::vector<uint8_t>(rows.begin(), rows.end()));
+    talk_ += e.heading() + ": " + e.address + "\n";
     chat_.push_back(std::move(e));
     chat_scroll_ = 0;
+}
+
+namespace {
+
+// A number below n, evenly (to within 2^-64): 64 bits more than n has, at random, taken mod n.
+BigUint random_below(const BigUint& n, sieve::diffusion::SplitMix& g)
+{
+    static const char kHex[] = "0123456789abcdef";
+    std::string hex;
+    for (size_t bits = 0; bits < n.bit_length() + 64; bits += 64)
+    {
+        uint64_t v = g.next();
+        for (int k = 0; k < 16; ++k, v >>= 4) hex.push_back(kHex[v & 15]);
+    }
+    BigUint q, r;
+    BigUint::divmod(BigUint::from_hex(hex), n, q, r);
+    return r;
+}
+
+} // namespace
+
+void Hallway::chat_command(const std::string& line)
+{
+    std::istringstream in(line.substr(1));
+    std::string verb, what;
+    in >> verb >> what;
+    chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::You, line));
+    talk_ += trf("talk.you", {line}) + "\n";
+    chat_scroll_ = 0;
+    if (verb == "random" && (what == "picture" || what == "image" || what == "melody"))
+    {
+        // A unit of the image or audio line at random: a survivor of its filters where they count,
+        // else any unit (each cell evenly).
+        const bool melody = what == "melody";
+        const LineKind kind = melody ? LineKind::Audio : LineKind::Image;
+        const Line& l = unit_line(kind);
+        if (melody && !sieve::is_note_symbols(l.space.symbols_id()))
+        {
+            chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf("chat.random.not_notes", {l.space.symbols_id()})));
+            return;
+        }
+        static sieve::diffusion::SplitMix g(uint64_t(SDL_GetPerformanceCounter()) ^ 0x5eed);
+        const FilterStack& st = stacks_[size_t(line_of(kind))];
+        ChatEntry e;
+        e.kind = ChatEntry::Kind::Picture;
+        if (!st.empty() && st.ranker() && !st.ranker()->count().is_zero())
+        {
+            e.cells = st.ranker()->unrank(random_below(st.ranker()->count(), g));
+            e.title = tr(melody ? "chat.random.melody.kept" : "chat.random.picture.kept");
+        }
+        else
+        {
+            e.cells.resize(l.space.unit_length());
+            for (auto& c : e.cells) c = uint32_t(g.next() % l.space.base());
+            e.title = tr(melody ? "chat.random.melody" : "chat.random.picture");
+        }
+        if (melody) e.symbols = l.space.symbols_id(), e.width = l.space.unit_length(), e.height = 1;
+        else e.width = l.image.width, e.height = l.image.height, e.palette = l.image.palette->id();
+        e.address = l.space.address_of(e.cells, AddressMode::Positional);
+        chat_show_unit(std::move(e));
+        return;
+    }
+    chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, tr(verb == "help" ? "chat.commands" : "chat.command.unknown")));
 }
 
 std::optional<size_t> Hallway::chat_last_card() const
@@ -584,7 +672,9 @@ void Hallway::chat_act(size_t i, ChatAct act)
             std::lock_guard<std::mutex> lock(chat_mx_);
             chat_saving_ = i;
         }
-        const std::string name = file ? e.name : "figure-" + e.model + "-" + std::to_string(e.number) + ".png";
+        const std::string name = file      ? e.name
+                                 : e.number ? (e.melody() ? "melody-" : "figure-") + e.model + "-" + std::to_string(e.number) + (e.melody() ? ".mid" : ".png")
+                                            : std::string(e.melody() ? "melody.mid" : "picture.png");
         const char* docs = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
         const std::string start = docs ? std::string(docs) + name : name;
         SDL_ShowSaveFileDialog(chat_save_chosen, this, window_, nullptr, 0, start.c_str());
@@ -607,6 +697,23 @@ void Hallway::chat_act(size_t i, ChatAct act)
         {
             message(trf("msg.jump.failed", {ex.what()}));
         }
+        return;
+    }
+    if (!file && e.melody() && (act == ChatAct::Go || act == ChatAct::Play))
+    {
+        // GO TO IT: on the audio line, in hand (a hallway built with the line it needs, where this
+        // one's is another length or note set: Request::GoToMelody); PLAY: the music player plays it.
+        MusicMelody m;
+        m.set = sieve::note_set_of(e.symbols);
+        m.notes = e.cells;
+        if (act == ChatAct::Play)
+        {
+            if (MusicPlayer* p = music()) p->play(m);
+            else chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, tr("media.no_player")));
+            return;
+        }
+        close_chat();
+        go_to_melody(m);
         return;
     }
     if (!file && act == ChatAct::Go)
@@ -779,12 +886,24 @@ float Hallway::chat_entry(size_t i, float x, float y, float w, bool draw)
     }
     else
     {
-        pic_w = pic_h = std::min(120.0f, std::max(40.0f, float(std::max(e.width, e.height)) * 8));
+        if (e.melody()) pic_w = 160, pic_h = 64; // a piano roll
+        else pic_w = pic_h = std::min(120.0f, std::max(40.0f, float(std::max(e.width, e.height)) * 8));
         const size_t cols = size_t(std::max(8.0f, (w - 3 * kPad - pic_w) / (8 * kSmall)));
-        lines.push_back({trf("chat.figure", {std::to_string(e.number), e.model}), kBig, white});
-        lines.push_back({trf("chat.figure.what", {std::to_string(e.width), std::to_string(e.height), e.palette}), kSmall, ink});
-        for (const std::string& l : wrap(trf("chat.figure.address", {e.address}), cols)) lines.push_back({l, kSmall, ink});
-        lines.push_back({trf(e.with_next ? "chat.given.next" : "chat.given.rows", {grouped(e.given)}), kSmall, ink});
+        lines.push_back({e.heading(), kBig, white});
+        if (e.melody())
+        {
+            lines.push_back({trf("chat.melody.what", {std::to_string(e.cells.size()), e.symbols}), kSmall, ink});
+            for (const std::string& l : wrap_words(notes_to_notation(sieve::note_set_of(e.symbols), e.cells), cols)) lines.push_back({l, kSmall, white});
+            for (const std::string& l : wrap(trf("chat.melody.address", {e.address}), cols)) lines.push_back({l, kSmall, ink});
+            lines.push_back({trf(e.with_next ? "chat.given.next" : "chat.given.notation", {grouped(e.given)}), kSmall, ink});
+            buttons.push_back({tr("chat.play"), ChatAct::Play});
+        }
+        else
+        {
+            lines.push_back({trf("chat.figure.what", {std::to_string(e.width), std::to_string(e.height), e.palette}), kSmall, ink});
+            for (const std::string& l : wrap(trf("chat.figure.address", {e.address}), cols)) lines.push_back({l, kSmall, ink});
+            lines.push_back({trf(e.with_next ? "chat.given.next" : "chat.given.rows", {grouped(e.given)}), kSmall, ink});
+        }
     }
     buttons.push_back({tr("chat.save"), ChatAct::Save});
     float text_h = 0;
@@ -797,7 +916,37 @@ float Hallway::chat_entry(size_t i, float x, float y, float w, bool draw)
     SDL_RenderRect(r_, &frame);
     float ty = y + kPad;
     const float tx = x + kPad + (pic_w > 0 ? pic_w + kPad : 0);
-    if (e.kind == K::Picture)
+    if (e.kind == K::Picture && e.melody())
+    {
+        // A piano roll: time along, pitch up, each note a bar as long as it lasts; rests are gaps.
+        const sieve::NoteSet set = sieve::note_set_of(e.symbols);
+        const SDL_FRect box{x + kPad, y + kPad, pic_w, pic_h};
+        SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
+        SDL_RenderFillRect(r_, &box);
+        SDL_SetRenderDrawColor(r_, grey.r, grey.g, grey.b, 255);
+        SDL_RenderRect(r_, &box);
+        const uint32_t per = std::max<uint32_t>(1, uint32_t(e.cells.size()) / std::max<uint32_t>(1, set.voices));
+        for (uint32_t v = 0; v < set.voices; ++v)
+        {
+            uint32_t total = 0;
+            for (uint32_t k = 0; k < per && v * per + k < e.cells.size(); ++k) total += set.sixteenths(e.cells[v * per + k]);
+            float at = 0;
+            for (uint32_t k = 0; k < per && v * per + k < e.cells.size(); ++k)
+            {
+                const uint32_t d = e.cells[v * per + k], len = set.sixteenths(d), midi = set.midi(d);
+                const float w16 = (pic_w - 4) / float(std::max<uint32_t>(1, total));
+                if (midi)
+                {
+                    const float fy = 1.0f - float(midi - set.low) / float(std::max<uint32_t>(1, set.high - set.low));
+                    const SDL_FRect bar{box.x + 2 + at * w16, box.y + 2 + fy * (pic_h - 8), std::max(1.0f, float(len) * w16 - 1), 4};
+                    SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 255);
+                    SDL_RenderFillRect(r_, &bar);
+                }
+                at += float(len);
+            }
+        }
+    }
+    else if (e.kind == K::Picture)
     {
         ImageFormat f;
         f.width = e.width, f.height = e.height, f.palette = &sieve::palette_by_id(e.palette);
@@ -876,6 +1025,14 @@ void Hallway::chat_poll()
         try
         {
             if (e.kind == ChatEntry::Kind::File) write_bytes(from_u8(*save_to), e.bytes);
+            else if (e.melody())
+            {
+                fs::path path = from_u8(*save_to);
+                if (path.extension().empty()) path += ".mid";
+                const sieve::NoteSet set = sieve::note_set_of(e.symbols);
+                const std::string midi = set.legacy ? sieve::notes_to_midi(e.cells) : sieve::notes_to_midi(set, e.cells);
+                write_bytes(path, std::vector<uint8_t>(midi.begin(), midi.end()));
+            }
             else
             {
                 fs::path path = from_u8(*save_to);

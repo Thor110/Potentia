@@ -320,9 +320,22 @@ jobs:
           $exe diffuse diff-run --quiet | tr -d '\r' | q "^reproduced exactly"
           python reference/sieve_ref.py diffuse-replay --run diff-run | tr -d '\r' | cmp - diff-run/result.txt
           $exe diffuse --make diff-run --count 2 | tr -d '\r' | q "^picture "
+          # The same on the audio line: a melody run (notes104, 6 events), its melodies drawn from the audio
+          # line's stack, trained, trained again, and trained by the oracle to the same result.txt. The
+          # cells are 104 symbols, so pictures.txt holds numbers apart by spaces.
+          printf '[audio]\nmode = compact\nfilters = key-data-v2, melody-ending-v2\n' > mels.ini
+          $exe diffuse --record mel-run --line audio --length 6 --filters mels.ini --figures 40 --ai-width 8 --ai-heads 2 --ai-bits 3 --steps 8 --checkpoint-every 3 --levels 5 --batch 3 --learning-rate 0.01 --quiet
+          q "^line = audio" mel-run/diffusion.ini
+          $exe diffuse mel-run --quiet | tr -d '\r' | q "^reproduced exactly"
+          python reference/sieve_ref.py diffuse-replay --run mel-run | tr -d '\r' | cmp - mel-run/result.txt
+          $exe diffuse --make mel-run --count 2 | tr -d '\r' | q "^melody "
+          # --judge counts what a model makes, and the noise it started from, against a stack.
+          $exe diffuse --make mel-run --count 20 --judge mels.ini | tr -d '\r' | q "^  the stack  *made [0-9]* of 20, noise [0-9]* of 20"
           # The shipped picture model (data/training/figures-2x32): its final model makes the six pictures
           # the harness shows, address for address (training it again takes minutes: run it by hand).
           $exe diffuse --make data/training/figures-2x32 --count 6 | tr -d '\r' | grep "^picture" | cut -c10-34 | tr '\n' ' ' | q "fff0fc2f0de8f01c3fdbe6fff fff29e4e04fbf01b3e05e9fff fff8ffee10bcf8f80f05c0fff fff83e1f15cef83a1f8de7fff fff93e3713a17f7e2fa3c9fff fff878af09e16a7e0f03c3fff"
+          # The shipped melody model (data/training/melodies-2x64): its first three melodies, by address.
+          $exe diffuse --make data/training/melodies-2x64 --count 3 | tr -d '\r' | grep "^melody" | cut -c10-36 | tr '\n' ' ' | q "8ac6f76023e45b65ccb9d8e98b4 02dd451f986f45126c630368e9c 5754e9fcddb9cedeba2ddd88f64"
           # Its training pictures are no hand-made list: drawn again from the image line's stack (figure-v1
           # connect four, row-runs-v1 changes 2, seed 42), they are pictures.txt byte for byte.
           printf '[image]\nmode = compact\nfilters = figure-v1, row-runs-v1\n[image.figure-v1]\nconnect = four\n[image.row-runs-v1]\nchanges = 2\n' > figures.ini
@@ -813,8 +826,18 @@ jobs:
           $H --no-menu --line ai --walk "0,0" --take --chat --picture-model data/training/figures-2x32 --chat-draw 1 --training-dir data/training --screenshot chat-pm.png | tr -d '\r' | q "^figure 1 by figures-2x32: fff0fc2f0de8f01c3fdbe6fff"
           printf '[models]\ntext_model =\npicture_model =\n' > models.ini
           downs=$(python -c "print(','.join(['Down']*46))")
+          # Empty means the first trained run (figures-2x32); Right steps to the next (melodies-2x64), Left back.
           $H --menu --settings models.ini --training-dir data/training --press "$downs,Right" --screenshot menu-models.png | q "saved menu-models.png"
+          q "^picture_model = .*melodies-2x64" models.ini
+          $H --menu --settings models.ini --training-dir data/training --press "$downs,Left" --screenshot menu-models.png | q "saved menu-models.png"
           q "^picture_model = .*figures-2x32" models.ini
+          # Melodies in CHAT: a melody model's (the same addresses as --make), a random melody and picture
+          # (/random), and GO TO IT on a melody holds it on AUDIO.
+          $H --no-menu --line ai --walk "0,0" --take --chat --picture-model data/training/melodies-2x64 --chat-draw 1 --talk "/random melody" --training-dir data/training --screenshot chat-mel.png | tr -d '\r' > chatmel.txt
+          q "^melody 1 by melodies-2x64: 8ac6f76023e45b65ccb9d8e98b4" chatmel.txt
+          q "^a random melody: " chatmel.txt
+          $H --no-menu --line ai --walk "0,0" --take --chat --talk "/random picture" --training-dir data/training --screenshot chat-rand.png | tr -d '\r' | q "^a random picture: "
+          $H --no-menu --line ai --walk "0,0" --take --chat --picture-model data/training/melodies-2x64 --chat-draw 1 --chat-press "Ctrl+G" --training-dir data/training --screenshot chat-mgo.png | tr -d '\r' | q "^AUDIO line, .*on the audio line, in hand"
           $H --no-menu --line ai --walk "0,0" --take --chat --chat-draw 1 --chat-press "Ctrl+G" --training-dir data/training --screenshot chat-go.png | tr -d '\r' | q "^IMAGE line, .*the figure, on the image line, in hand"
           $H --no-menu --line ai --walk "0,0" --take --chat --chat-attach tests/training_corpus.txt --chat-press "Ctrl+J" --training-dir data/training --screenshot chat-j.png | tr -d '\r' | q "^PAGES line, .*a TXT file, opened on the PAGES line"
           downs=$(python -c "print(','.join(['Down']*41))")

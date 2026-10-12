@@ -1540,9 +1540,9 @@ void Hallway::handle(const SDL_Event& e, bool& quit)
     try
     {
         handle_event(e, quit);
-        // Tailored filters to use (COST, the File Locator), or a picture of the chat window on an
-        // image line this hallway does not have: a new hallway, built by the application.
-        if (request_ == Request::Tailored || request_ == Request::GoToPicture) quit = true;
+        // Tailored filters to use (COST, the File Locator), or a picture or melody (CHAT, the Media
+        // Player) on a line this hallway does not have: a new hallway, built by the application.
+        if (request_ == Request::Tailored || request_ == Request::GoToPicture || request_ == Request::GoToMelody) quit = true;
     }
     catch (const std::exception& ex)
     {

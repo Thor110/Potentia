@@ -2182,3 +2182,153 @@ seeds are worked out backwards from screenshots. It is like predicting the data 
 
   It is the same rule that runs through all of these: the shared description is agreed once, and
   only the surprise travels.
+
+**19.29 Reconstruction, and probes that send the means to rebuild (Edward, 12 October 2026).** His
+words: it is all conceptually identical to how we reconstruct the universe from data, snapshots and
+imagery as it is. It may take a supercomputer or two to work out the right seed, but if we one day
+send many tiny capsules as probes, we could receive data in an endless variety of distorted forms.
+
+*Notes.*
+- **It is how cosmology already works.** The universe is reconstructed from snapshots: the
+  microwave background and galaxy surveys are observations, and astronomers search for the initial
+  conditions whose simulated evolution matches them ("constrained simulations"). It is a search
+  over a seed-like space of initial conditions, with the observations as filters, run on
+  supercomputers. §19.28's Minecraft seed is the same thing at toy scale.
+- **The trade is compute for bandwidth.** A gram-scale probe can send very little. If both ends
+  share a generator, the probe sends parameters and corrections, and the receiving end spends
+  supercomputer time rebuilding the scene. Sending is cheap and receiving is expensive, which is
+  the right way round for a tiny probe and a large planet.
+- **Distorted forms.** Data from many small senders arrives damaged, partial and in different
+  encodings. Recovering it is a search over the agreed ways it could have been written (the
+  decoders), each candidate judged by filters: does it decode, does it agree with the other
+  capsules, does it fit the shared model? That is a stack over candidate decodings. Error-correcting
+  codes (§19.15) bound how much damage can be undone, so redundancy across the capsules is part of
+  the design, not an afterthought.
+- **The limit stays the counting argument.** What was never sent cannot be rebuilt. The seed
+  carries what the shared model predicts; the corrections carry the rest; and the rest is always
+  at least what the observation held that the model did not know.
+
+**19.30 Every dimension in flavours, and categories of categories (Edward, 12 October 2026).** His
+words: every dimension can twist and change into flavours of dimensions (audio, tracks, sound,
+music, voices), categories upon categories and sub-ranges of categories, across every state space,
+with all the kinds of AI model that may be needed. Most of it can be used as filters and stranger
+things, though much sits in the noise category, encryption and the like.
+
+*Notes.*
+- **Flavours already exist as settings.** The audio line is notes104, notes2, notes3 or pcm (sound
+  itself), one line in four flavours, each with its own shape; the image line has its palettes;
+  pages have their alphabets. A flavour is a line's symbols and length; a sub-range is a setting
+  inside it (notes2's range of pitches, its durations).
+- **A category is a stack.** "Melodies in a key", "pictures of one figure" and "files that are
+  valid MIDI" are each the survivors of some filters, so a category costs exactly what its stack
+  costs to describe, and it counts. Categories of categories are stacks of stacks, which the maps
+  (the node graph) can already hold as a tree: a node is a category, and its children are
+  narrower ones.
+- **The noise category.** Encryption and good compression are designed to look like noise, so no
+  structure filter keeps them; they are what is left when every structure filter fails.
+  Recognising them takes a key, a header, or a generator run backwards (§19.27), not a filter.
+- **Kinds of model follow the units.** A model is named by the line whose units it models: a
+  picture model (the image line), a melody model (notes), a track model (the tracks line, units
+  joined), a sound model (pcm), a voice model (pcm of speech). One architecture, diffusion-v1 or
+  the AI line's transformer, serves them all at small sizes, as the melody model (§19.31) shows.
+
+**19.31 A sound model: melodies first (Edward, 12 October 2026).** His idea: beside the text and
+picture models, an audio, track or "sound" model. ComfyUI is better avoided where Sieve's own
+models can serve.
+
+*Notes.*
+- **Which units.**
+  - *Melodies* (the audio line's notes) are small: 16 events of notes104 are 16 cells of 104
+    symbols, which diffusion-v1 takes as it is (a picture one cell high).
+  - *Tracks* are melodies joined (the tracks line), so a melody model makes their parts.
+  - *Sound itself* (pcm) is thousands of samples a second, far beyond the 511 cells a small model
+    reads at once. It needs a model of a different shape (sound in chunks, or a model of notes
+    rendered by the synthesiser), so it comes later.
+- **Built (12 October 2026), melodies (SPECIFICATIONS §12.0g):**
+  - *Runs on the audio line.* A diffusion run's recipe can say `line = audio`, with the note set
+    (`symbols`) and the melody's `length`; `sieve diffuse --line audio` records one, and the
+    oracle replays it. A note set of more than 36 symbols writes its units as numbers apart by
+    spaces.
+  - *The first melody model,* `data/training/melodies-2x64` (2 layers, width 64), trained on
+    melodies of the default stack's survivors. Of 300 melodies it makes, all 300 are in key and
+    end on the tonic, and 3 to 5 pass the whole stack; of 300 noises, none do. It keeps the leaps
+    and the metre far more often than noise, and the rests less often (§12.0g has the numbers).
+  - *Measured against the filters:* `sieve diffuse --make N --judge FILTERS` counts how many of
+    the made units each filter keeps, beside the noises they started from.
+  - *Shown:* the harness lists melody runs as it lists picture runs, and a made melody is written
+    in notation. In CHAT, a melody comes as a card with a piano roll, PLAY, GO TO IT (to the
+    melody on the audio line) and SAVE (a MIDI file).
+  - *Not yet:* recording a melody run from the harness (it is `sieve diffuse` for now), a track
+    model, and a model of sound itself.
+- **Classification.** The kinds above are named by their line (§19.30), so "sound AI" is the
+  family; "melody model" and "track model" are its members.
+
+**19.32 Commands in CHAT (Edward, 12 October 2026).** His idea: commands such as fetching a random
+track or picture from the library, given to the person first, before any model is let use them.
+
+*Notes.*
+- **Commands for the person** *(built, 12 October 2026)*: a line in CHAT that starts with `/` is
+  a command, not something said, and goes to no model. `/random picture` and `/random melody` bring
+  a random unit of the image or audio line as a card (GO TO IT, SAVE; a melody also PLAY). Where
+  the line's ticked filters can be counted, it is a random survivor of them (drawn by its rank);
+  otherwise any unit at all. `/help` lists the commands, and an unknown one says so.
+- **Later, for the models.** A model that can follow a format could ask for the same commands,
+  and the window would run them and show the result, so a model's reply becomes places on the
+  lines (§19.13's finding). That waits for models that follow formats reliably, and for a clear
+  rule of what a model may do without asking.
+- **More commands** follow the lines: a random page, book, world or model; a random survivor of
+  the filters ticked; the unit at an address. Each is a card the window already knows how to show.
+
+**19.33 A voice made the way a voice is made (Edward, 12 October 2026).** His idea: a natural
+vocalisation system for AI models, built on the structure and form of the human mouth: the vocal
+folds, the mouth, and the shape of the upper body that sounds. He likens it to an engine sound
+simulator he saw (videos of one that models each physical part of an engine to make its sound as
+accurately as it can): the same, but for the voice.
+
+*Notes.*
+- **It has a name and a history: articulatory synthesis.** Speech is a source (the vocal folds
+  opening and closing, or turbulent air at a narrowing for s and f) shaped by a filter (the vocal
+  tract, a tube from the larynx to the lips whose cross-section the tongue, jaw, lips and velum
+  change).
+  - *The tube:* the Kelly–Lochbaum model (1962) cuts it into short sections, each with its own
+    area, and passes the sound wave through them, part reflected at each change of width. The
+    nasal cavity is a side branch, opened by the velum.
+  - *The folds:* the two-mass model (Ishizaka and Flanagan, 1972) is two small masses on springs,
+    pushed by the lungs' pressure and pulled together by the air flowing between them. It makes
+    its own pitch and its own breathiness, and creaks or breaks as real folds do.
+  - *Known examples:* Pink Trombone (a small browser toy with a mouth you drag), and VocalTractLab
+    (a full three-dimensional vocal tract, research software).
+  - *The engine simulator* works the same way: a physical model of each part, run sample by
+    sample, its sound an outcome rather than a recording.
+- **Why it suits Sieve.**
+  - *A far smaller line.* A voice's address would be its controls, not its samples: a dozen
+    numbers every 10 milliseconds (tongue body, tongue tip, jaw, lips, velum, lung pressure, fold
+    tension), against 44,100 samples a second for pcm. A second of speech is about 1,200 small
+    numbers, and every unit of the line sounds like something a mouth could do.
+  - *Exact, so it can be an address.* Run in integer or fixed-point arithmetic (as training-v1
+    is), the same controls give the same samples on every machine, so the controls name the sound
+    exactly, and the oracle can check the synthesiser.
+  - *Filters that are physical.* Articulators move at limited speeds and cannot pass through each
+    other. "Could a body have made this?" is a filter on the control line, as the melody filters
+    are on notes, and it keeps a tiny fraction of all control sequences.
+  - *A model of a different shape* (§19.31): a model that writes articulator tracks, as the melody
+    model writes notes, is far easier to train than one that writes samples. It is the shape
+    "sound itself" was waiting for, for voices at least.
+- **The reverse is J for speech.** Given a recording, finding the controls that make it
+  (acoustic-to-articulatory inversion) is a search over the control line with the recording as the
+  filter: the same search as a Minecraft seed (§19.28) or a probe's scene (§19.29). The result is
+  much shorter than the recording, and approximate, so it pairs with corrections, as in §19.28.
+- **The body beyond the mouth.** The chest and the sinuses colour the sound as resonators. A
+  first model can leave them as fixed filters and add them as sections of their own later. A whole
+  body's sounds (breath, laughter, a cough) are the same model with different control tracks.
+- **A way to build it, small first.**
+  1. A Kelly–Lochbaum tract of about 40 sections, with a simple fold source, in fixed point, with
+     a handful of controls. It makes vowels from tube shapes.
+  2. Consonants: narrowings with noise, closures and releases, and the nasal branch.
+  3. The two-mass folds, so pitch and voice quality come from the physics.
+  4. A voice line (`voice-v1`, controls at a frame rate) with its physical filters, a door in the
+     hallway, PLAY, and SAVE as WAV.
+  5. A model of control tracks, trained as the melody model was.
+- **How far it goes.** Articulatory synthesis is understandable rather than lifelike: it sounds
+  like a voice, often an odd one, and lifelike speech today comes from large neural models trained
+  on recordings. Here that is a fair trade: every sound is explained, exact, small and searchable.

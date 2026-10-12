@@ -509,12 +509,12 @@ const std::vector<Page>& pages()
          {{"sieve ai-train --record texts --out ub --sieve ub.sieve", "record a run from a folder, train it, pack it"},
           {"sieve ai-train ub.sieve", "train it again from the .sieve, and check"},
           {"sieve ai-train ub --model-out ub-model && sieve chat --model ub-model --raw", "and talk to what it became"}}},
-        {"diffuse", "Train a diffusion model that makes pictures of the image line, check a run again, or make pictures with it.",
-         "sieve diffuse --record FOLDER [image line options] [--filters PATH] [--figures N] [--figure-seed S] [--pictures FILE]\n"
+        {"diffuse", "Train a diffusion model that makes pictures of the image line or melodies of the audio line, check a run again, or make with it.",
+         "sieve diffuse --record FOLDER [--line image|audio] [line options] [--filters PATH] [--figures N] [--figure-seed S] [--pictures FILE]\n"
          "  [--ai-layers L] [--ai-width H] [--ai-heads A] [--ai-bits B] [--levels S] [--steps N] [--batch N]\n"
          "  [--learning-rate X] [--momentum X] [--loss-scale-bits K] [--seed S] [--start-seed S] [--checkpoint-every N] [--threads N] [--quiet]\n"
          "  sieve diffuse RUN [--threads N] [--quiet]\n"
-         "  sieve diffuse --make RUN [--count N] [--seed S] [--noise ADDR | --noise-seed S] [--show-levels]",
+         "  sieve diffuse --make RUN [--count N] [--seed S] [--noise ADDR | --noise-seed S] [--show-levels] [--judge PATH]",
          "diffusion-v1 (IDEAS §19.2): a model of the AI line that undoes noise a level at a time. Each cell of\n"
          "a picture has a level; at level t the cells below it show a noise picture's colours, and the model\n"
          "learns to give every cell's own colour back, seeing the whole picture at once. To make a picture it\n"
@@ -527,12 +527,18 @@ const std::vector<Page>& pages()
          "for figures), or takes them from a file. A picture made is a function of the model, the noise and\n"
          "the seed. Measured: 2 layers of width 32 (40,960 weights), 15,000 steps (5 minutes) on 4,000\n"
          "figures: about one picture in ten it makes is one shape clear of the edges (figure-v1, four-way),\n"
-         "against 4 in 10^14 of random pictures.",
+         "against 4 in 10^14 of random pictures. With --line audio the units are melodies (notes104, or a\n"
+         "notes2 set), one row of the note set's symbols: the same model, the same training.",
          {{"--record FOLDER", "A new run: draw or read its pictures, write its recipe, train it."},
-          {"--filters PATH", "The settings whose [image] stack the pictures are drawn from (sieve-filters.ini next to\n"
-                             "the executable)."},
+          {"--line image|audio", "Pictures of the image line (the default), or melodies of the audio line (notes104, or\n"
+                                 "--note-set notes2 with its options; --length is the events in a melody)."},
+          {"--judge PATH", "With --make: instead of each unit, how many of those made, and of the noises they were\n"
+                           "made from, each filter the file ticks on the run's line keeps, and the whole stack."},
+          {"--filters PATH", "The settings whose [image] (or [audio]) stack the units are drawn from (sieve-filters.ini\n"
+                             "next to the executable)."},
           {"--figures N, --figure-seed S", "How many pictures to draw from the stack (4000), and from which seed (42)."},
-          {"--pictures FILE", "Train on these pictures instead: a line each, a cell a digit (0-9, a-z), row after row."},
+          {"--pictures FILE", "Train on these units instead: a line each, a cell a digit (0-9, a-z), row after row; where\n"
+                              "the line has more than 36 symbols (melodies), each cell a number, apart by spaces."},
           {"--ai-layers L, --ai-width H, --ai-heads A, --ai-bits B", "The model's shape (1, 16, 2, 8)."},
           {"--levels S", "Levels of noise (16); colours and levels together at most 256."},
           {"--steps N, --batch N", "Steps (4000), and pictures a step (8)."},

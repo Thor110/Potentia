@@ -4,8 +4,9 @@
 //
 // A run is a folder:
 //   diffusion.ini   the recipe
-//   pictures.txt    the training pictures, one a line, each cell a digit in base 36 (a palette of
-//                   up to 36 colours), row after row
+//   pictures.txt    the training units, one a line: each cell a digit in base 36 where there are
+//                   at most 36 symbols (a picture, row after row), else each cell its number in
+//                   decimal, apart by single spaces (a melody of notes104's 104 symbols)
 //   result.txt      what training gave: a checkpoint a line, then the final model's address
 // so that anyone can train it again and get the same model, digit for digit.
 #pragma once
@@ -32,7 +33,13 @@ struct DiffusionRecipe
 {
     training::Recipe train; // shape, learning rate, momentum, version and loss scale
     diffusion::Setup setup;
+    // The line the run's units are of: "image" (pictures: `palette`, and the setup's width and
+    // height) or "audio" (melodies: `symbols`, a note set's id, notes104 or notes2, and the
+    // setup's width the unit's length in events, all voices, height 1).
+    std::string line = "image";
     std::string palette = "mono";
+    std::string symbols;
+    bool audio() const { return line == "audio"; }
     uint32_t batch = 8, steps = 4000, checkpoint_every = 500;
     uint64_t seed = 1, start_seed = 7;
     std::string pictures_sha256;
@@ -62,7 +69,7 @@ DiffusionRun record_diffusion_run(const std::filesystem::path& dir, DiffusionRec
 // read as one 128-bit number, taken modulo the survivors.
 std::vector<std::vector<uint32_t>> draw_pictures(const Ranker& stack, uint32_t n, uint64_t seed);
 
-std::string pictures_text(const std::vector<std::vector<uint32_t>>& pictures);
+std::string pictures_text(const std::vector<std::vector<uint32_t>>& pictures, const diffusion::Setup& s);
 std::vector<std::vector<uint32_t>> parse_pictures(const std::string& text, const diffusion::Setup& s);
 
 struct DiffusionOutcome
@@ -81,9 +88,9 @@ DiffusionOutcome train_diffusion_run(const DiffusionRun& run, unsigned threads,
 // The final model in a result.txt, or nothing if it has none.
 std::optional<std::string> final_address_of(const std::string& result_text);
 
-// The image line a run's pictures are units of (its width, height and palette), positional
-// addresses written as `sieve diffuse` writes them.
-Space image_line_of(const DiffusionRecipe& r);
+// The line a run's units are of: the image line of its width, height and palette, or the audio
+// line of its note set and length. Positional addresses written as `sieve diffuse` writes them.
+Space unit_space_of(const DiffusionRecipe& r);
 
 // The k-th picture a model makes (k = 1, 2, ...): from the k-th noise drawn from splitmix64 seeded
 // 1 (each cell next() mod B, cell after cell, picture after picture), with seed k. So the harness's

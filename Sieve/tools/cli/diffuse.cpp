@@ -6,11 +6,14 @@
 #include "cli/filter_config.hpp"
 #include "cli/lines.hpp"
 #include "cli/train.hpp"
+#include "sieve/audio.hpp"
 #include "sieve/diffusion.hpp"
 #include "sieve/image.hpp"
 #include "sieve/sha256.hpp"
 
 #include <algorithm>
+#include <array>
+#include <optional>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -77,6 +80,31 @@ void show_picture(const std::vector<uint32_t>& p, const diffusion::Setup& s, uin
     }
 }
 
+// The line a run's units are of, built as the tools build it (for its filters).
+Line line_of_recipe(const DiffusionRecipe& r)
+{
+    Args la;
+    if (r.audio())
+    {
+        const NoteSet set = note_set_of(r.symbols);
+        la.opts["line"] = "audio";
+        la.opts["length"] = std::to_string(r.setup.width / set.voices);
+        if (!set.legacy)
+        {
+            la.opts["note-set"] = "notes2";
+            la.opts["low"] = note_name(set.low), la.opts["high"] = note_name(set.high);
+            la.opts["durations"] = set.durations, la.opts["voices"] = std::to_string(set.voices);
+        }
+    }
+    else
+    {
+        la.opts["line"] = "image";
+        la.opts["image-width"] = std::to_string(r.setup.width), la.opts["image-height"] = std::to_string(r.setup.height);
+        la.opts["image-palette"] = r.palette;
+    }
+    return make_line(la);
+}
+
 } // namespace
 
 int cmd_diffuse(const Args& a)
@@ -98,10 +126,34 @@ int cmd_diffuse(const Args& a)
         }
         if (final_hex.empty()) bad("the run has not been trained (no final model in result.txt)");
         const AiSpace::Digits model = space.digits_at(BigUint::from_hex(final_hex), AddressMode::Positional);
-        const Space line = image_line_of(r);
+        const Space line = unit_space_of(r);
         const uint32_t count = a.get_positive("count", 1);
         const uint64_t seed = a.has("seed") ? std::stoull(a.get("seed")) : 1;
-        const uint32_t background = palette_by_id(r.palette).nearest(Rgb{255, 255, 255});
+        const uint32_t background = r.audio() ? 0 : palette_by_id(r.palette).nearest(Rgb{255, 255, 255});
+        // A melody is shown as its notation; a picture as its cells.
+        auto show = [&](const std::vector<uint32_t>& u) {
+            if (r.audio()) std::cout << "  " << notes_to_notation(note_set_of(r.symbols), u) << "\n";
+            else show_picture(u, r.setup, background);
+        };
+        // --judge FILTERS: how many of the units made, and of the noises they were made from, each
+        // filter the file ticks on the line keeps, and the whole stack (instead of each unit).
+        std::optional<Line> judge_line;
+        std::vector<std::pair<std::string, FilterStack>> judges;
+        std::vector<std::array<uint32_t, 2>> kept; // made, noise
+        if (a.has("judge"))
+        {
+            judge_line = line_of_recipe(r);
+            const LineFilters lf = FilterConfig::load(fs::path(a.get("judge"))).of(judge_line->kind);
+            if (lf.enabled.empty()) bad("--judge: the file ticks no filters on the " + std::string(r.audio() ? "audio" : "image") + " line");
+            for (const std::string& name : lf.enabled)
+            {
+                LineFilters one = lf;
+                one.enabled = {name};
+                judges.emplace_back(name, build_stack(*judge_line, one));
+            }
+            judges.emplace_back("the stack", build_stack(*judge_line, lf));
+            kept.assign(judges.size(), {0, 0});
+        }
         diffusion::SplitMix noise_g(a.has("noise-seed") ? std::stoull(a.get("noise-seed")) : 1);
         for (uint32_t i = 0; i < count; ++i)
         {
@@ -117,15 +169,31 @@ int cmd_diffuse(const Args& a)
             }
             std::vector<std::vector<uint32_t>> levels;
             const std::vector<uint32_t> pic = diffusion::make_picture(space, model, r.setup, noise, seed + i, a.has("show-levels") ? &levels : nullptr);
-            std::cout << "noise    " << line.address_of(noise, AddressMode::Positional) << "  (positional, the image line)\n";
+            if (judge_line)
+            {
+                for (size_t j = 0; j < judges.size(); ++j)
+                {
+                    kept[j][0] += judges[j].second.passes(pic) ? 1 : 0;
+                    kept[j][1] += judges[j].second.passes(noise) ? 1 : 0;
+                }
+                continue;
+            }
+            std::cout << "noise    " << line.address_of(noise, AddressMode::Positional) << (r.audio() ? "  (positional, the audio line)\n" : "  (positional, the image line)\n");
             for (size_t l = 0; l < levels.size(); ++l)
             {
                 std::cout << "level " << (r.setup.levels - l - 1) << "\n";
-                show_picture(levels[l], r.setup, background);
+                show(levels[l]);
             }
-            std::cout << "picture  " << line.address_of(pic, AddressMode::Positional) << "  (seed " << seed + i << ")\n";
-            show_picture(pic, r.setup, background);
+            std::cout << (r.audio() ? "melody   " : "picture  ") << line.address_of(pic, AddressMode::Positional) << "  (seed " << seed + i << ")\n";
+            show(pic);
             std::cout << "\n";
+        }
+        if (judge_line)
+        {
+            std::cout << "judged " << count << (r.audio() ? " melodies" : " pictures") << " made from noise, and the noises themselves:\n";
+            for (size_t j = 0; j < judges.size(); ++j)
+                std::cout << "  " << judges[j].first << std::string(std::max<size_t>(1, 22 - judges[j].first.size()), ' ') << "made " << kept[j][0] << " of " << count
+                          << ", noise " << kept[j][1] << " of " << count << "\n";
         }
         return 0;
     }
@@ -149,25 +217,40 @@ int cmd_diffuse(const Args& a)
         r.seed = a.has("seed") ? std::stoull(a.get("seed")) : 1;
         r.start_seed = a.has("start-seed") ? std::stoull(a.get("start-seed")) : 7;
         r.setup.levels = a.get_positive("levels", 16);
-        // The pictures: a file of them, or survivors of the image line's stack drawn at random.
+        // The units: pictures of the image line (the default), or melodies of the audio line
+        // (--line audio, with its note set's options); a file of them, or survivors of the line's
+        // stack drawn at random.
         Args la = a;
-        la.opts["line"] = "image";
+        la.opts["line"] = a.get("line", "image");
+        la.opts.erase("levels"); // diffusion's levels of noise, not notes3's levels of loudness
         const Line line = make_line(la);
-        r.palette = line.image.palette->id();
-        r.setup.width = line.image.width, r.setup.height = line.image.height, r.setup.colours = line.image.palette->size();
+        if (line.kind == LineKind::Audio)
+        {
+            if (!is_note_symbols(line.space.symbols_id())) bad("a melody model is of notes104 or notes2 (--note-set)");
+            r.line = "audio";
+            r.symbols = line.space.symbols_id();
+            r.setup.width = line.space.unit_length(), r.setup.height = 1, r.setup.colours = line.space.base();
+        }
+        else if (line.kind == LineKind::Image)
+        {
+            r.palette = line.image.palette->id();
+            r.setup.width = line.image.width, r.setup.height = line.image.height, r.setup.colours = line.image.palette->size();
+        }
+        else bad("a diffusion run is of the image line (pictures) or the audio line (melodies)");
         std::vector<std::vector<uint32_t>> pics;
         if (a.has("pictures")) pics = parse_pictures(read_text(fs::path(a.get("pictures"))), r.setup);
         else
         {
             const fs::path cfg_path = a.has("filters") ? fs::path(a.get("filters")) : FilterConfig::default_path();
             const FilterConfig cfg = FilterConfig::load(cfg_path);
-            const FilterStack stack = build_stack(line, cfg.of(LineKind::Image));
-            if (stack.empty()) bad("the image line's stack in " + cfg_path.string() + " is empty: tick its filters (figure-v1, say) or give --pictures FILE");
+            const FilterStack stack = build_stack(line, cfg.of(line.kind));
+            const std::string which = r.audio() ? "audio" : "image";
+            if (stack.empty()) bad("the " + which + " line's stack in " + cfg_path.string() + " is empty: tick its filters (figure-v1 or key-data-v2, say) or give --pictures FILE");
             const Ranker* rk = stack.ranker();
-            if (!rk) bad("the image line's stack cannot be counted, so its survivors cannot be drawn at random");
+            if (!rk) bad("the " + which + " line's stack cannot be counted, so its survivors cannot be drawn at random");
             const uint32_t n = a.get_positive("figures", 4000);
             pics = draw_pictures(*rk, n, a.has("figure-seed") ? std::stoull(a.get("figure-seed")) : 42);
-            if (!quiet) std::cout << n << " training pictures drawn from the stack " << stack.id() << "\n";
+            if (!quiet) std::cout << n << (r.audio() ? " training melodies" : " training pictures") << " drawn from the stack " << stack.id() << "\n";
         }
         const DiffusionRun run = record_diffusion_run(dir, r, std::move(pics));
         const std::string res = train_run(run, threads, quiet);
