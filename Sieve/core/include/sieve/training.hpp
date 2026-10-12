@@ -160,6 +160,10 @@ private:
     void refresh_values();
 };
 
+// A model's score on windows of text, the forward pass alone (as Trainer::evaluate, with no trainer
+// and on one thread): exact, the same on every machine.
+Score evaluate_model(const AiSpace& space, const AiSpace::Digits& digits, const std::vector<std::span<const uint8_t>>& windows);
+
 // result.txt: what a run gave, so that a replay can be checked against it line for line:
 //     sieve-training-result-v2
 //     version training-v1

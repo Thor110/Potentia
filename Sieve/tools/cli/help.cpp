@@ -424,7 +424,8 @@ const std::vector<Page>& pages()
          "ai lists them): weight-rows-v1 sets aside rows of a tensor with structure (a long run, a short\n"
          "repeated block, a ramp), and canonical-model-v1 keeps one model of each class of the line's\n"
          "symmetries (SPECIFICATIONS §12.0f). With a stack that ranks, a model that passes is shown with\n"
-         "its compact addresses too.",
+         "its compact addresses too. With language-v1 ticked it says how well the model speaks its run's\n"
+         "text, and with near-model-v1 ticked how many digits it is from its run's model (its layer).",
          {{"--ai-layers L", "Layers (1)."},
           {"--ai-width H", "Width (16); the feed-forward is four times it."},
           {"--ai-heads A", "Attention heads (2); they divide the width into heads of an even size."},
@@ -653,7 +654,11 @@ const std::vector<Page>& pages()
          "The AI line (--line ai, its shape as sieve ai takes it) has its own stack, [ai], on a model's\n"
          "weights: weight-rows-v1 (no row of a tensor with a long run, a short repeated block or a\n"
          "ramp; exact, with compact orderings) and canonical-model-v1 (one model of each class of the\n"
-         "line's symmetries; counted exactly, and judged).",
+         "line's symmetries; counted exactly, and judged). Two name a training run (in the training folder\n"
+         "beside the programs, or data/training): near-model-v1 keeps the models within `changes` digits\n"
+         "of the model the run trained (exact, with compact orderings), and language-v1 the models whose\n"
+         "mean probability of each next byte of the run's text is at least min_permille thousandths\n"
+         "(exact, on training-v1's integer forward pass; it judges).",
          {kLine, kLineOptions,
           {"--filters PATH", "The settings file. Default: sieve-filters.ini next to the executable. A missing\n"
                              "file means nothing is ticked."},

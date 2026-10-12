@@ -1185,6 +1185,25 @@ void Trainer::restore(const std::vector<int64_t>& masters, const std::vector<int
     refresh_values();
 }
 
+Score evaluate_model(const AiSpace& space, const AiSpace::Digits& digits, const std::vector<std::span<const uint8_t>>& windows)
+{
+    if (digits.size() != space.weights()) bad("a model of " + std::to_string(space.weights()) + " digits");
+    const int64_t m = (int64_t(1) << space.shape().bits) - 1;
+    std::vector<int32_t> values(digits.size());
+    for (const AiSpace::Tensor& t : space.tensors())
+    {
+        const int64_t S = scale_q32(t.cols, t.name == "model.embed_tokens.weight");
+        for (uint64_t i = 0; i < uint64_t(t.rows) * t.cols; ++i)
+        {
+            const size_t at = size_t(t.first + i);
+            values[at] = int32_t(fdiv((2 * int64_t(digits[at]) - m) * S, m << 16));
+        }
+    }
+    Trainer::Net net(space);
+    Pool pool(1);
+    return run_batch(net, values.data(), values.size(), windows, nullptr, pool);
+}
+
 Score Trainer::evaluate(const std::vector<std::span<const uint8_t>>& windows) const
 {
     Net net(space_);

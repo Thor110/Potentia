@@ -554,6 +554,10 @@ int run(const Args& a)
     // sieve-timings.txt beside the settings (tools/cli/timings.hpp).
     if (a.has("timings")) sieve::cli::timings::enable(app_path.parent_path() / "sieve-timings.txt");
     sieve::cli::load_plugins(); // the filter plugins in the filters folder, beside the built-in filters
+    // The training runs the AI line's filters can name (language-v1, near-model-v1): the harness's
+    // folder, then data/training (running from the repository).
+    sieve::cli::use_training_runs({a.has("training-dir") ? std::filesystem::path(a.get("training-dir")) : training_dir(),
+                                   std::filesystem::path("data") / "training"});
     AppSettings app = shot ? AppSettings{} : AppSettings::load(app_path);
     if (shot && a.has("settings")) app = AppSettings::load(app_path);
     // The filter memory (the setup menu's FILTER MEMORY): what one count's tables may take.

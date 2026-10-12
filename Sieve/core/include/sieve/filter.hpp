@@ -58,6 +58,23 @@ public:
     virtual std::shared_ptr<const CharModel> model(const std::string& id, const std::string& symbols) const = 0;
 };
 
+// A training run as the AI line's filters see it (SPECIFICATIONS §12.0e): its model's shape, the model
+// it trained (its positional address; empty if it has not been trained) and its text (the first file
+// it reads).
+struct ModelRun
+{
+    std::string id;
+    uint32_t layers = 0, width = 0, heads = 0, bits = 0;
+    std::string final_address;
+    std::string text_name;
+    std::vector<uint8_t> text;
+    std::string sha256; // of all the above, for provenance
+};
+// Where filters find runs by name: set by the programs (the training folder beside them, or
+// data/training); a run named with no loader set, or one it cannot find, throws. Kept once loaded.
+void set_model_run_loader(std::function<ModelRun(const std::string&)> loader);
+std::shared_ptr<const ModelRun> model_run(const std::string& id);
+
 // One adjustable parameter of a filter.
 struct FilterParam
 {

@@ -2889,6 +2889,9 @@ int main(int argc, char** argv)
         // --ffmpeg PATH: the ffmpeg that reads other picture and video formats (cli/media_decode.hpp).
         if (a.has("ffmpeg")) set_ffmpeg_path(a.get("ffmpeg"));
         load_plugins(); // the filter plugins, registered beside the built-in filters
+        // The training runs the AI line's filters can name (language-v1, near-model-v1): beside the
+        // programs, then data/training.
+        use_training_runs({install_dir() / "training", std::filesystem::path("data") / "training"});
         const std::string command_phase = "sieve " + a.command;
         timings::Scope timed(command_phase.c_str());
         // A mistyped option would otherwise be ignored without a word.

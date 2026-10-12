@@ -453,4 +453,42 @@ void pack_training_run(const fs::path& folder, const fs::path& sieve_file)
     write_address_file(sieve_file, binary_address(m.file()), false);
 }
 
+ModelRun model_run_of(const std::string& id, const std::vector<std::filesystem::path>& dirs)
+{
+    namespace fs = std::filesystem;
+    const fs::path given(std::u8string(id.begin(), id.end()));
+    fs::path where;
+    if (fs::exists(given)) where = given;
+    for (const fs::path& d : dirs)
+    {
+        if (!where.empty()) break;
+        for (const fs::path& p : {d / given, d / fs::path(given).concat(".sieve")})
+            if (fs::exists(p))
+            {
+                where = p;
+                break;
+            }
+    }
+    if (where.empty()) throw std::invalid_argument("no training run named '" + id + "' (looked beside the programs and in data/training)");
+    const TrainingRun run = load_training_run(where);
+    ModelRun m;
+    m.id = id;
+    m.layers = run.recipe.shape.layers, m.width = run.recipe.shape.width, m.heads = run.recipe.shape.heads, m.bits = run.recipe.shape.bits;
+    if (run.result) m.final_address = training::Result::parse(*run.result).final_address;
+    // Its text: the first file it reads (order-v1's first file; a written order's first window's file).
+    const std::string first = !run.recipe.files.empty() ? run.recipe.files.front() : !run.order.empty() ? run.order.front().path : std::string();
+    if (auto it = run.files.find(first); it != run.files.end()) m.text = it->second, m.text_name = first;
+    Sha256 h;
+    h.update(std::to_string(m.layers) + "/" + std::to_string(m.width) + "/" + std::to_string(m.heads) + "/" + std::to_string(m.bits) + "\n" +
+             m.final_address + "\n" + m.text_name + "\n");
+    h.update(std::span<const uint8_t>(m.text));
+    m.sha256 = Sha256::hex(h.finish());
+    return m;
+}
+
+void use_training_runs(const std::vector<std::filesystem::path>& dirs)
+{
+    set_model_run_loader([dirs](const std::string& id) { return model_run_of(id, dirs); });
+}
+
 } // namespace sieve::cli

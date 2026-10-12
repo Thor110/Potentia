@@ -36,6 +36,7 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
     python3 sieve_ref.py ai-read --bearing 137 --out m.safetensors                     # what `sieve ai --out` writes
     python3 sieve_ref.py ai-filter-vectors > ../tests/vectors_ai_filters_v1.tsv        # weight-rows-v1, canonical-model-v1
     python3 sieve_ref.py ai-canonical --address-file a.txt                             # what `sieve ai --canonical` gives
+    python3 sieve_ref.py ai-run-filter-vectors > ../tests/vectors_ai_run_filters_v1.tsv # near-model-v1, language-v1
     python3 sieve_ref.py llm-encode-lines texts.jsonl --model DIR                     # what `sieve chat --encode-lines` prints
     python3 sieve_ref.py llm-logits "text" --model DIR [--compare logits.f32]         # what `sieve chat --logits` prints
     python3 sieve_ref.py sieve --dict words.txt --max 4
@@ -2911,6 +2912,70 @@ def cmd_ai_filter_vectors(args):
             c = ai_canonical(sp, d)
             assert ai_canonical(sp, c) == c
             print("\t".join(["model", "L%d/H%d/A%d/B%d" % shape, "scrambled", str(deg), hashlib.sha256(bytes(c)).hexdigest()]))
+
+
+class NearModelRef:
+    """near-model-v1: at most k digits other than the anchor's, ranked in address order."""
+
+    def __init__(self, anchor, base, k):
+        self.a, self.K, self.k = list(anchor), base, k
+        self.count = self.ways(len(anchor), k)
+
+    def ways(self, r, b):
+        return sum(math.comb(r, i) * (self.K - 1) ** i for i in range(min(b, r) + 1))
+
+    def rank(self, u):
+        r, left = 0, self.k
+        for t, x in enumerate(u):
+            rest = len(u) - t - 1
+            for s in range(x):
+                need = left - (1 if s != self.a[t] else 0)
+                if need >= 0:
+                    r += self.ways(rest, need)
+            if x != self.a[t]:
+                left -= 1
+        assert left >= 0
+        return r
+
+    def unrank(self, idx):
+        out, left = [], self.k
+        for t in range(len(self.a)):
+            rest = len(self.a) - t - 1
+            for s in range(self.K):
+                need = left - (1 if s != self.a[t] else 0)
+                n = self.ways(rest, need) if need >= 0 else 0
+                if idx < n:
+                    break
+                idx -= n
+            out.append(s)
+            if s != self.a[t]:
+                left -= 1
+        return out
+
+
+def cmd_ai_run_filter_vectors(args):
+    print("# sieve AI-line run filter vectors v1 (SPECIFICATIONS §12.0f): near-model-v1 and language-v1")
+    print("# near\tshape\tchanges\tbit length and SHA-256 of the survivors in hex\tthree survivors' SHA-256 (digits, a byte each)")
+    sp = AiSpaceRef(1, 2, 1, 2)
+    anchor = sp.digits(987654321, "scrambled")
+    for k in (0, 1, 2, 3):
+        nm = NearModelRef(anchor, 4, k)
+        shas = []
+        for j in (1, 4, 9):
+            idx = nm.count * j // 10
+            u = nm.unrank(idx)
+            assert nm.rank(u) == idx and sum(1 for x, y in zip(u, anchor) if x != y) <= k
+            shas.append(hashlib.sha256(bytes(u)).hexdigest())
+        print("\t".join(["near", "L1/H2/A1/B2", str(k), str(nm.count.bit_length()), hashlib.sha256(("%x" % nm.count).encode()).hexdigest()] + shas))
+    print("# language\tshape\tordering\tbearing\tthe score's probability sum (Q16) and predictions, on tests/training_corpus.txt's first 65 bytes")
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests", "training_corpus.txt"), "rb") as f:
+        text = list(f.read()[:65])
+    shape = (1, 8, 2, 3)
+    sp = AiSpaceRef(*shape)
+    for deg in (13, 137, 246):
+        d = sp.digits(ai_bearing(deg, sp.N), "scrambled")
+        score, count = TrainerRef(sp, d, "0", "0").window(text, None)
+        print("\t".join(["language", "L%d/H%d/A%d/B%d" % shape, "scrambled", str(deg), str(score), str(count)]))
 
 
 def cmd_ai_canonical(args):
@@ -7549,6 +7614,7 @@ def main():
     s.add_argument("--out", required=True)
     sub.add_parser("ai-vectors")
     sub.add_parser("ai-filter-vectors")
+    sub.add_parser("ai-run-filter-vectors")
     s = sub.add_parser("ai-canonical")
     s.add_argument("--ai-layers", type=int, default=1)
     s.add_argument("--ai-width", type=int, default=16)
@@ -7682,6 +7748,8 @@ def main():
         cmd_ai_vectors(args)
     elif args.cmd == "ai-filter-vectors":
         cmd_ai_filter_vectors(args)
+    elif args.cmd == "ai-run-filter-vectors":
+        cmd_ai_run_filter_vectors(args)
     elif args.cmd == "ai-canonical":
         cmd_ai_canonical(args)
     elif args.cmd == "train-vectors":

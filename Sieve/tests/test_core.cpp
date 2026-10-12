@@ -3936,6 +3936,134 @@ void test_ai_filter_vectors(const std::string& dir)
     CHECK(rows == 6 && ranks == 5 && counts == 4 && models == 12);
 }
 
+// language-v1 and near-model-v1, on a run given by a loader of the test's own: the score is
+// Trainer::evaluate's; near-model-v1 counts sum C(W, i) (K - 1)^i, its own rank and unrank agree with
+// the generic walk, and survivors come in address order.
+void test_ai_run_filters(const std::string& dir)
+{
+    const AiSpace space(AiShape{1, 2, 1, 2}, "sieve");
+    const AiSpace::Digits anchor = space.digits_at(BigUint(987654321), AddressMode::Scrambled);
+    const std::string text = "the library holds every book that ever was and ever will be";
+    sieve::set_model_run_loader([&](const std::string& id) {
+        if (id != "test") throw std::invalid_argument("no run " + id);
+        sieve::ModelRun r;
+        r.id = id;
+        r.layers = 1, r.width = 2, r.heads = 1, r.bits = 2;
+        r.final_address = space.hex_of(space.index_of(anchor, AddressMode::Positional));
+        r.text_name = "corpus/t.txt";
+        r.text.assign(text.begin(), text.end());
+        r.sha256 = "x";
+        return r;
+    });
+    sieve::FilterLine line;
+    line.kind = "ai";
+    line.symbols_id = space.id();
+    line.base = 4;
+    line.length = uint32_t(space.weights());
+    line.ai = &space;
+    const TestResources res(nullptr, nullptr);
+    // The score is the trainer's, and the threshold is exact.
+    {
+        sieve::training::Recipe r;
+        r.shape = space.shape();
+        const sieve::training::Trainer tr(space, anchor, r, 1);
+        const std::vector<std::span<const uint8_t>> w{std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size())};
+        const sieve::training::Score a = tr.evaluate(w), b = sieve::training::evaluate_model(space, anchor, w);
+        CHECK(a.prob_sum == b.prob_sum && a.predictions == b.predictions && a.predictions == text.size() - 1);
+        const uint64_t permille = a.prob_sum * 1000 / (a.predictions * 65536); // floor of the mean, in thousandths
+        auto passes_at = [&](uint64_t min) {
+            const sieve::FilterStack st(line, {{find_filter("language-v1"), {{"run", "test"}, {"bytes", "513"}, {"min_permille", std::to_string(min)}}}}, res);
+            return st.passes(std::vector<uint32_t>(anchor.begin(), anchor.end()));
+        };
+        CHECK(passes_at(permille) && !passes_at(permille + 1));
+    }
+    for (const uint32_t k : {0u, 1u, 2u, 3u})
+    {
+        const sieve::FilterStack st(line, {{find_filter("near-model-v1"), {{"run", "test"}, {"changes", std::to_string(k)}}}}, res);
+        const sieve::Ranker* r = st.ranker();
+        CHECK(r != nullptr);
+        if (!r) continue;
+        BigUint want, term(1);
+        for (uint32_t i = 0; i <= k; ++i)
+        {
+            if (i) term = BigUint::mul(term, BigUint(uint64_t(space.weights() - i + 1) * 3)), term = [&] { BigUint q, m; BigUint::divmod(term, BigUint(i), q, m); return q; }();
+            want += term;
+        }
+        CHECK(r->count() == want);
+        const std::vector<uint32_t> a(anchor.begin(), anchor.end());
+        CHECK(st.passes(a) && r->accepts(a));
+        std::mt19937_64 rng(k + 3);
+        std::vector<uint32_t> prev;
+        for (int i = 0; i < 10; ++i)
+        {
+            const BigUint idx = BigUint::mod(BigUint(rng()), r->count());
+            const std::vector<uint32_t> u = r->unrank(idx);
+            uint32_t d = 0;
+            for (size_t j = 0; j < u.size(); ++j) d += u[j] != a[j] ? 1 : 0;
+            CHECK(d <= k && st.passes(u));
+            CHECK(r->rank(u) == idx && r->Ranker::rank(u) == idx && r->Ranker::unrank(idx) == u);
+        }
+        if (k > 0)
+        {
+            const std::vector<uint32_t> x = r->unrank(BigUint(5)), y = r->unrank(BigUint(6));
+            CHECK(std::lexicographical_compare(x.begin(), x.end(), y.begin(), y.end()));
+            std::vector<uint32_t> far = a;
+            for (uint32_t j = 0; j <= k; ++j) far[j * 7] = (far[j * 7] + 1) % 4;
+            CHECK(!st.passes(far));
+        }
+    }
+    // The oracle's vectors (sieve_ref.py ai-run-filter-vectors), written apart from the C++.
+    {
+        std::ifstream in(dir + "vectors_ai_run_filters_v1.tsv"), corpus(dir + "training_corpus.txt", std::ios::binary);
+        CHECK(bool(in) && bool(corpus));
+        std::vector<uint8_t> head(65);
+        corpus.read(reinterpret_cast<char*>(head.data()), 65);
+        std::string row;
+        int nears = 0, langs = 0;
+        while (std::getline(in, row))
+        {
+            if (row.empty() || row[0] == '#') continue;
+            std::vector<std::string> f;
+            std::stringstream ss(row);
+            for (std::string x; std::getline(ss, x, '\t');) f.push_back(x);
+            if (f[0] == "near")
+            {
+                const sieve::FilterStack st(line, {{find_filter("near-model-v1"), {{"run", "test"}, {"changes", f.at(2)}}}}, res);
+                const BigUint& n = st.ranker()->count();
+                CHECK(std::to_string(n.bit_length()) == f.at(3) && Sha256::hex(Sha256::hash(n.to_hex())) == f.at(4));
+                const int js[3] = {1, 4, 9};
+                for (int j = 0; j < 3; ++j)
+                {
+                    BigUint idx = n, q, m;
+                    idx.mul_small(uint32_t(js[j]));
+                    BigUint::divmod(idx, BigUint(10), q, m);
+                    const std::vector<uint32_t> u = st.ranker()->unrank(q);
+                    CHECK(Sha256::hex(Sha256::hash(std::string(u.begin(), u.end()))) == f.at(size_t(5 + j)));
+                }
+                ++nears;
+            }
+            else if (f[0] == "language")
+            {
+                AiShape sh;
+                CHECK(std::sscanf(f.at(1).c_str(), "L%u/H%u/A%u/B%u", &sh.layers, &sh.width, &sh.heads, &sh.bits) == 4);
+                const AiSpace sp(sh, "sieve");
+                const AiSpace::Digits d = sp.digits_at(unit_at_bearing(BigUint(uint64_t(std::stoul(f.at(3)))), sp.size(), 0), AddressMode::Scrambled);
+                const sieve::training::Score sc = sieve::training::evaluate_model(sp, d, {std::span<const uint8_t>(head)});
+                CHECK(std::to_string(sc.prob_sum) == f.at(4) && std::to_string(sc.predictions) == f.at(5));
+                ++langs;
+            }
+        }
+        CHECK(nears == 4 && langs == 3);
+    }
+    // A run of another shape, or one never named, is refused.
+    const AiSpace micro(AiShape{}, "sieve");
+    sieve::FilterLine ml = line;
+    ml.ai = &micro, ml.base = 16, ml.length = uint32_t(micro.weights()), ml.symbols_id = micro.id();
+    CHECK(throws([&] { sieve::FilterStack(ml, {{find_filter("near-model-v1"), {{"run", "test"}}}}, res); }));
+    CHECK(throws([&] { sieve::FilterStack(line, {{find_filter("near-model-v1"), {{"run", "nothing"}}}}, res); }));
+    sieve::set_model_run_loader({});
+}
+
 void test_world_sieve()
 {
     const Space cover("image/mono/1x1", 2, 1, "sieve");
@@ -5522,6 +5650,7 @@ void run_all(int argc, char** argv)
         test_ai_vectors(dir);
         test_ai_filters();
         test_ai_filter_vectors(dir);
+        test_ai_run_filters(dir);
         test_training(dir);
         test_titled_vectors(dir + "vectors_titled_v1.tsv");
         test_binary_vectors(dir + "vectors_binary_v1.tsv");

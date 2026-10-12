@@ -340,6 +340,13 @@ std::string Hallway::compute_filter_status() const
         if (!has_filters()) return tr("hud.filters.none");
         const FilterMode m = effective_mode();
         std::string st = trf("hud.filters", {std::to_string(ai_stack_->size()), tr(std::string("mode.") + to_string(m))});
+        // The language its models are judged to speak, and the model its layers are round.
+        for (const auto& [name, key] : {std::pair<const char*, const char*>{"language-v1", "hud.ai.speaks"}, {"near-model-v1", "hud.ai.near"}})
+            if (ai_filters_.is_enabled(name))
+            {
+                const FilterValues& v = ai_filters_.values_of(name);
+                st += trf(key, {param_value(*find_filter(name), v, "run"), name == std::string("near-model-v1") ? param_value(*find_filter(name), v, "changes") : ""});
+            }
         if (m == FilterMode::Compact) st += trf("hud.filters.units", {short_big(ai_compact_->count())});
         else if (m == FilterMode::Excluded && ai_compact_)
             st += trf("hud.filters.excluded", {short_big(BigUint(ai_space_->size()) -= ai_compact_->count())});

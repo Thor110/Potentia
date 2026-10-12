@@ -24,6 +24,7 @@
 #include "hallway.hpp"
 
 #include <algorithm>
+#include <random>
 
 namespace hallway::hall {
 
@@ -40,6 +41,14 @@ void Hallway::open_navigator()
 {
     const Book* ref = reference_book();
     nav_value_ = ref ? ref->index : BigUint();
+    nav_reset_layout();
+    nav_had_mouse_ = SDL_GetWindowRelativeMouseMode(window_);
+    SDL_SetWindowRelativeMouseMode(window_, false); // the digits are picked with the pointer
+    nav_open_ = true;
+}
+
+void Hallway::nav_reset_layout()
+{
     if (nav_value_ >= line_units()) nav_value_ = BigUint();
     BigUint top = line_units();
     top -= BigUint(1);
@@ -49,11 +58,45 @@ void Hallway::open_navigator()
     nav_hover_.reset();
     nav_scroll_ = -1; // scroll to the selection on the first draw
     nav_note_.clear();
+    nav_info_.clear();
     nav_angle_focus_ = false;
     nav_angle_ = nav_angle_of(nav_value_);
-    nav_had_mouse_ = SDL_GetWindowRelativeMouseMode(window_);
-    SDL_SetWindowRelativeMouseMode(window_, false); // the digits are picked with the pointer
-    nav_open_ = true;
+}
+
+// A random place: every place of the loop equally likely (a number below its length, drawn bit by
+// bit and drawn again when it falls past the end, which happens less than half the time). With
+// any_line, the line too, every line equally likely, gone to as a door takes you (anything in hand
+// put back, the trail left behind). Not a reproducible choice: the system's randomness.
+void Hallway::nav_random(bool any_line)
+{
+    static std::mt19937_64 rng(std::random_device{}() ^ uint64_t(SDL_GetTicksNS()));
+    if (any_line)
+    {
+        const int to = int(rng() % uint64_t(kLines));
+        if (to != li_)
+        {
+            drop_in_hand();
+            trail_.clear();
+            door_back_.clear();
+            tile_ = TileIndex{false, BigUint()};
+            set_line(to);
+        }
+    }
+    const BigUint& n = line_units();
+    BigUint top = n;
+    top -= BigUint(1);
+    const size_t bits = top.bit_length();
+    BigUint v;
+    do
+    {
+        std::vector<uint8_t> raw((bits + 7) / 8);
+        for (uint8_t& b : raw) b = uint8_t(rng());
+        if (!raw.empty() && bits % 8) raw[0] &= uint8_t((1u << (bits % 8)) - 1);
+        v = BigUint::from_bytes(raw);
+    } while (v >= n);
+    nav_value_ = std::move(v);
+    nav_reset_layout();
+    nav_info_ = trf(any_line ? "nav.random_any" : "nav.random", {tr(theme().key)});
 }
 
 void Hallway::close_navigator(bool go)
@@ -88,6 +131,7 @@ void Hallway::nav_step(size_t d, int dir)
     }
     nav_hex_ = nav_value_.to_hex(nav_width_);
     nav_note_.clear();
+    nav_info_.clear();
     nav_angle_ = nav_angle_of(nav_value_);
 }
 
@@ -105,6 +149,7 @@ void Hallway::nav_set(size_t d, uint32_t v)
     nav_value_ = to;
     nav_hex_ = std::move(hex);
     nav_note_.clear();
+    nav_info_.clear();
     nav_angle_ = nav_angle_of(nav_value_);
     if (nav_sel_ + 1 < nav_width_) ++nav_sel_;
 }
@@ -216,7 +261,9 @@ void Hallway::navigator_event(const SDL_Event& e)
         float x = e.button.x, y = e.button.y;
         SDL_RenderCoordinatesFromWindow(r_, e.button.x, e.button.y, &x, &y);
         const SDL_FPoint pt{x, y};
-        if (SDL_PointInRectFloat(&pt, &nav_angle_box_))
+        if (SDL_PointInRectFloat(&pt, &nav_random_box_[0]) || SDL_PointInRectFloat(&pt, &nav_random_box_[1]))
+            nav_random(SDL_PointInRectFloat(&pt, &nav_random_box_[1]));
+        else if (SDL_PointInRectFloat(&pt, &nav_angle_box_))
         {
             nav_angle_focus_ = true;
             nav_angle_fresh_ = true;
@@ -272,6 +319,7 @@ void Hallway::navigator_event(const SDL_Event& e)
     {
     case SDLK_ESCAPE:
     case SDLK_X: close_navigator(false); break;
+    case SDLK_R: nav_random(shift); break;
     case SDLK_RETURN:
     case SDLK_KP_ENTER: close_navigator(true); break;
     case SDLK_LEFT: nav_sel_ = shift ? (nav_sel_ >= nav_cols_ ? nav_sel_ - nav_cols_ : 0) : (nav_sel_ > 0 ? nav_sel_ - 1 : 0); break;
@@ -309,6 +357,23 @@ void Hallway::draw_navigator(float W, float H)
     SDL_RenderFillRect(r_, &all);
 
     text(20, 16, tr("nav.title"), 3, ink);
+    // The two random buttons, top right: this line (R), and a line at random too (Shift+R).
+    {
+        float bx = W - 20;
+        for (int i = 1; i >= 0; --i)
+        {
+            const std::string label = tr(i ? "nav.random_any_button" : "nav.random_button");
+            const float w = text_width(label, 1) + 16;
+            bx -= w;
+            nav_random_box_[i] = SDL_FRect{bx, 14, w, 22};
+            SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 40);
+            SDL_RenderFillRect(r_, &nav_random_box_[i]);
+            SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 255);
+            SDL_RenderRect(r_, &nav_random_box_[i]);
+            text(bx + 8, 21, label, 1, ink);
+            bx -= 10;
+        }
+    }
     text(20, 48, fit(trf("nav.where", {tr(theme().key), ordering_name(), std::to_string(nav_width_)}), W - 40, 1), 1, grey);
 
     // Layout: as many groups of four digits to a row as fit, every row the same length.
@@ -388,6 +453,7 @@ void Hallway::draw_navigator(float W, float H)
     text(20, y, fit(trf("nav.digit", {std::to_string(nav_sel_ + 1), std::to_string(nav_width_), std::to_string(p)}), W - 40, 1), 1, ink);
     text(20, y + 14, fit(trf("nav.along", {percent(frac)}), W - 40, 1), 1, ink);
     if (!nav_note_.empty()) text(20, y + 28, nav_note_, 1, SDL_Color{255, 80, 80, 255});
+    else if (!nav_info_.empty()) text(20, y + 28, fit(nav_info_, W - 40, 1), 1, white);
     // Which page of rows is in view, of how many: bottom right, where a reader looks for it.
     {
         const int per = std::max(1, nav_rows_shown_);

@@ -1437,6 +1437,11 @@ private:
     void close_navigator(bool go);
     void nav_step(size_t d, int dir);
     void nav_set(size_t d, uint32_t v);
+    // A place chosen evenly along this line's loop, or (any_line) on a line chosen evenly first: its
+    // digits filled in, for ENTER to go to.
+    void nav_random(bool any_line);
+    void nav_reset_layout();                // the digits' width and view, for the line now in use
+    SDL_FRect nav_random_box_[2]{};         // the two buttons: this line, all lines
     std::pair<size_t, float> nav_cell(size_t d) const;
     std::optional<std::pair<size_t, int>> nav_hit(float x, float y) const;
     void navigator_event(const SDL_Event& e);
@@ -1447,6 +1452,7 @@ private:
     size_t nav_width_ = 1, nav_sel_ = 0;
     std::optional<size_t> nav_hover_;
     std::string nav_note_;        // why the last typed digit was refused
+    std::string nav_info_;        // what the random buttons chose
     // The bearing field at the foot of the navigator: an angle typed at the Angle Precision of the
     // setup menu, which moves the digits to the first unit at or past that bearing.
     bool nav_angle_focus_ = false, nav_angle_fresh_ = false;

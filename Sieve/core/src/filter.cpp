@@ -687,4 +687,43 @@ const Ranker* FilterStack::ranker() const
     return compact_;
 }
 
+namespace {
+std::mutex& run_mutex()
+{
+    static std::mutex m;
+    return m;
+}
+std::function<ModelRun(const std::string&)>& run_loader()
+{
+    static std::function<ModelRun(const std::string&)> f;
+    return f;
+}
+std::map<std::string, std::shared_ptr<const ModelRun>>& run_cache()
+{
+    static std::map<std::string, std::shared_ptr<const ModelRun>> c;
+    return c;
+}
+} // namespace
+
+void set_model_run_loader(std::function<ModelRun(const std::string&)> loader)
+{
+    std::lock_guard<std::mutex> lock(run_mutex());
+    run_loader() = std::move(loader);
+    run_cache().clear();
+}
+
+std::shared_ptr<const ModelRun> model_run(const std::string& id)
+{
+    std::function<ModelRun(const std::string&)> load;
+    {
+        std::lock_guard<std::mutex> lock(run_mutex());
+        if (auto it = run_cache().find(id); it != run_cache().end()) return it->second;
+        load = run_loader();
+    }
+    if (!load) throw std::invalid_argument("no training runs can be named here (run '" + id + "')");
+    auto run = std::make_shared<const ModelRun>(load(id));
+    std::lock_guard<std::mutex> lock(run_mutex());
+    return run_cache().emplace(id, run).first->second;
+}
+
 } // namespace sieve

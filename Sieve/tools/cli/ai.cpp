@@ -3,6 +3,7 @@
 
 #include "cli/filter_config.hpp"
 #include "sieve/compact.hpp"
+#include "sieve/training.hpp"
 
 #include "sieve/corridor.hpp"
 #include "sieve/llm.hpp"
@@ -136,6 +137,33 @@ int cmd_ai(const Args& a)
             out += (out.empty() ? "" : ", ") + f->name() + (cfg.ai.is_enabled(f->name()) ? " [x] " : " [ ] ") + (one.passes(u) ? "pass" : "FAIL");
         }
         std::cout << "filters      " << out << "\n";
+        // What the AI line's own measures say of it: its language (language-v1's run and bytes, as
+        // ticked or at its defaults) and, with near-model-v1 ticked, its layer round the anchor.
+        if (cfg.ai.is_enabled("language-v1"))
+        {
+            const FilterSpec& ls = *find_filter("language-v1");
+            const FilterValues& lv = cfg.ai.values_of("language-v1");
+            const auto run = model_run(param_value(ls, lv, "run"));
+            const size_t n = std::min<size_t>(size_t(param_int(ls, lv, "bytes")), run->text.size());
+            const training::Score sc = training::evaluate_model(space, d, {std::span<const uint8_t>(run->text.data(), n)});
+            char b[160];
+            std::snprintf(b, sizeof b, "%.2f thousandths for the right next byte, on average (%.2f bits a byte), over %zu bytes",
+                          double(sc.prob_sum) * 1000.0 / 65536.0 / double(sc.predictions), sc.bits_per_byte(), n);
+            std::cout << "speaks       " << run->id << " (" << run->text_name << "): " << b << "\n";
+        }
+        if (cfg.ai.is_enabled("near-model-v1"))
+        {
+            const FilterSpec& ns = *find_filter("near-model-v1");
+            const auto run = model_run(param_value(ns, cfg.ai.values_of("near-model-v1"), "run"));
+            if (run->final_address.empty()) std::cout << "layer        " << run->id << " has not been trained\n";
+            else
+            {
+                const AiSpace::Digits a = space.digits_at(space.parse(run->final_address), AddressMode::Positional);
+                uint64_t k = 0;
+                for (size_t i = 0; i < d.size(); ++i) k += a[i] != d[i] ? 1 : 0;
+                std::cout << "layer        " << k << " (digits from the model " << run->id << " trained)\n";
+            }
+        }
         if (stack.empty()) return;
         if (!stack.passes(u)) std::cout << "stack        fails at " << stack.filter_name(size_t(stack.first_failure(u))) << "\n";
         else if (compact)

@@ -1114,6 +1114,22 @@ space made walkable, and a place for priors over weights (§16.8b) to become a g
     interleaved in address order. Ranking it is a walk that keeps which members are still tied, as
     canonical-mesh-v1's does; that would let the line go compact under it too, and save every
     address those 484 bits at Micro.
+  - *Found when starting on it (11 October 2026):* the hash keys that make the canonical form look
+    like noise also make it impossible to rank. Counting the canonical models that begin with
+    given digits would mean counting how SHA-256 orders members not yet written, which no formula
+    does. A rankable form needs keys read from the digits themselves (possibly relabelled), and
+    then one row of every sorted group comes out in order: the very conflict with weight-rows-v1
+    found before, worst at 1 and 2 bits, where that row is all but constant. So the choice is
+    between a canonical form that looks like noise and judges (v1, as built) and one that ranks and
+    carries structure in one row a group (a v2 beside it, covering the stream's dimensions, the
+    units and the value dimensions, 466 of the 484 bits at Micro; rotary pairs and heads, which
+    constrain the same digits jointly, would stay judged). Left for Edward to choose.
+  - *Edward (12 October 2026):* noted for now, undecided; the aim is to avoid filters that can
+    only judge. Judging-only filters on this line today: canonical-model-v1 (hash keys) and
+    language-v1 (counting the models that speak a text has no formula). near-model-v1 and
+    weight-rows-v1 count and rank. A way to bring language within counting: near-model-v1 round
+    an anchor already keeps mostly speakers (§18.5's table), so a layer round a run's model is a
+    countable stand-in for "speaks its language" out to about a quarter of the digits.
 - **Next on this line:** ranking canonical-model-v1, a guided ordering by a prior over weights,
   warping a model in from the hallway, and larger shapes as the engine gets faster.
 
@@ -1425,6 +1441,11 @@ first. Three ways, the first two buildable now:
 - **Verdict:** build the language filter on `training-v1`'s forward pass (exact, judged), and the
   layers as shells around anchors (exact, counted and ranked), the harness's runs being the
   anchors; the second is the one that orders the expanse outwards.
+- *Built (11 October 2026), SPECIFICATIONS §12.0f:* `language-v1` and `near-model-v1`, each naming
+  a training run; the top bar names the language. At Micro, two digits round the shipped run's
+  model is 7,548,948,481 models, each named in nine hex digits, and walking them the shelves are
+  full of models writing German-looking words. Ordering outwards is the `changes` setting: each
+  step up adds the next layer.
 
 **18.3 Any AI model, plugged in (Edward, 11 October 2026).** His question: we need to be able to
 plug in any AI model; or is a model just a size?
@@ -1489,6 +1510,24 @@ alphabet, a setting of the line, and the line's id names it. So:
   §18.2: walk out one layer at a time, scoring each model with the exact integer forward pass). That
   second one would show how wide the region of speakers is around a trained model, and how that
   width changes with the shape.
+  *Measured (11 October 2026) at Micro, round the shipped run's model, on 257 bytes of its text:*
+  the model gives the right next byte 275.7 thousandths on average (random models 2 to 7.5;
+  guessing, 3.9). Changing random digits, 24 models at each count:
+
+  | Digits changed (of 8,192) | Mean | Lowest | Still speaking (20 or more) |
+  | ---: | ---: | ---: | ---: |
+  | 16 | 270.9 | 250.9 | 24 of 24 |
+  | 256 | 194.5 | 165.5 | 24 of 24 |
+  | 1,024 | 86.0 | 47.0 | 24 of 24 |
+  | 2,048 | 29.8 | 16.4 | 20 of 24 |
+  | 4,096 | 10.6 | 3.0 | 1 of 24 |
+  | 8,192 | 4.2 | 1.4 | 0 of 24 |
+
+  So the region of speakers round one model is wide: a quarter of its digits can change at random
+  and most models still speak, half and almost none do. A quarter of the digits is about 2^14,641
+  models (C(8192, 2048) 15^2048) round this one anchor alone, and yet only 2^-18,127 of the line (of 2^32,768).
+  That is the shape of the answer to how language sits in the space: broad basins round trained
+  models, vanishingly few of them, found by training and not by sampling.
 
 *Perception: images given to a model.* Two meanings, both possible:
 - **A byte model reading a picture's bytes: possible now.** The AI line's vocabulary is the 256

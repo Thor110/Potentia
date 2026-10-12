@@ -2407,3 +2407,28 @@ cover and a title.
   mark and hide, the overlay, and G, by screenshot.
 - **Open:** ranking canonical-model-v1 (a walk that keeps which members are still tied); the
   language filter and the layers around anchors (IDEAS §18.2).
+
+### Language and layers on the AI line (11 October 2026)
+- **Edward's choice:** the language filter and the layers round anchors (IDEAS §18.2), after the
+  AI line's filters. SPECIFICATIONS §12.0f, "Filters that name a run".
+- **Core:**
+  - `training::evaluate_model`: a model's score on windows, the forward pass alone, one thread
+    (Trainer::evaluate without a trainer); the tests check the two agree.
+  - `ModelRun` and `set_model_run_loader` / `model_run` (filter.hpp): runs named by filters,
+    loaded by a function the programs set, kept once loaded.
+  - `language-v1` (judges: `1000 · prob_sum ≥ min_permille · n · 2^16`) and `near-model-v1`
+    (`NearRanker`: state = place · (k + 1) + changes used; `ways(r, b)` cached) in
+    `core/src/filters/weights.cpp`.
+- **CLI:** `model_run_of`, `use_training_runs` (tools/cli/train.cpp; the dirs are passed in, since
+  sieve_compare cannot call sieve_lines' `install_dir`); `sieve ai` prints `speaks` and `layer`;
+  `--exact` is now a flag.
+- **Hallway:** `use_training_runs` at start (the harness's folder, then data/training); the top
+  bar names the language and the anchor.
+- **Measured:** random Micro models 2 to 7.5 thousandths on the run's text, its model 275.7, hence
+  `min_permille = 20`; the speakers round the model reach out to about a quarter of its digits
+  changed (IDEAS §18.5, the table).
+- **Oracle:** `NearModelRef`, `ai-run-filter-vectors` (`tests/vectors_ai_run_filters_v1.tsv`),
+  the language rows from `TrainerRef.window`.
+- **Not done, and why:** ranking canonical-model-v1. Its SHA-256 keys cannot be counted under a
+  prefix; see IDEAS §15 for the choice this leaves.
+

@@ -31,6 +31,8 @@
 
 #include "sieve/aispace.hpp"
 #include "sieve/filter.hpp"
+#include "sieve/sha256.hpp"
+#include "sieve/training.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -518,6 +520,194 @@ private:
     AiSpace space_;
 };
 
+// language-v1: a model's mean probability of each next byte of a run's text, exact (training-v1's
+// integer forward pass), at least min_permille thousandths.
+class Language : public Filter
+{
+public:
+    Language(const AiSpace& space, std::shared_ptr<const ModelRun> run, uint32_t bytes, int64_t min_permille)
+        : space_(space), run_(std::move(run)), min_(min_permille)
+    {
+        const size_t n = std::min<size_t>(bytes, run_->text.size());
+        if (n < 2) throw std::invalid_argument("language-v1: run '" + run_->id + "' has under two bytes of text");
+        text_.assign(run_->text.begin(), run_->text.begin() + std::ptrdiff_t(n));
+        provenance_ = "run=" + run_->id + " text=" + Sha256::hex(Sha256::hash(std::string(text_.begin(), text_.end()))) + " bytes=" +
+                      std::to_string(n) + " min_permille=" + std::to_string(min_permille);
+    }
+    bool passes(std::span<const uint32_t> unit) const override
+    {
+        const training::Score s = score(unit);
+        // mean = prob_sum / (2^16 predictions) >= min / 1000, in integers.
+        return s.prob_sum * 1000 >= uint64_t(min_) * s.predictions * 65536;
+    }
+    training::Score score(std::span<const uint32_t> unit) const
+    {
+        AiSpace::Digits d(unit.size());
+        for (size_t i = 0; i < unit.size(); ++i) d[i] = uint8_t(unit[i]);
+        return training::evaluate_model(space_, d, {std::span<const uint8_t>(text_)});
+    }
+
+private:
+    AiSpace space_;
+    std::shared_ptr<const ModelRun> run_;
+    std::vector<uint8_t> text_;
+    int64_t min_;
+};
+
+// near-model-v1: at most `changes` digits other than a run's model's (its layers: the models k digits
+// from it). Counted and ranked in address order: from a place with b changes still allowed and r
+// digits to go, sum over i <= b of C(r, i) (K - 1)^i ways to finish.
+class NearRanker : public Ranker
+{
+public:
+    NearRanker(std::vector<uint32_t> anchor, uint32_t base, uint32_t changes)
+        : anchor_(std::move(anchor)), base_(base), k_(changes)
+    {
+        set_count();
+    }
+    uint32_t length() const override { return uint32_t(anchor_.size()); }
+    uint32_t base() const override { return base_; }
+    State start() const override { return 0; }
+    State next(State s, uint32_t symbol) const override
+    {
+        if (s == kDead || symbol >= base_) return kDead;
+        const uint64_t at = s / (k_ + 1), used = s % (k_ + 1);
+        if (at >= anchor_.size()) return kDead;
+        const uint64_t u = used + (symbol != anchor_[size_t(at)] ? 1 : 0);
+        if (u > k_) return kDead;
+        return (at + 1) * (k_ + 1) + u;
+    }
+    BigUint completions(State s, uint32_t remaining) const override
+    {
+        if (s == kDead) return {};
+        const uint64_t at = s / (k_ + 1), used = s % (k_ + 1);
+        if (at + remaining != anchor_.size()) return {};
+        return ways(remaining, uint32_t(k_ - used));
+    }
+    BigUint rank(std::span<const uint32_t> unit) const override
+    {
+        if (unit.size() != anchor_.size()) throw std::invalid_argument("near-model: a unit of another length");
+        BigUint r;
+        uint32_t left = k_;
+        for (size_t t = 0; t < unit.size(); ++t)
+        {
+            const uint32_t x = unit[t], a = anchor_[t], rest = uint32_t(unit.size() - t - 1);
+            if (x > 0)
+            {
+                // The symbols below x: the anchor's (if below) keeps the changes left, the others use one.
+                const uint32_t others = x - (a < x ? 1 : 0);
+                if (a < x) r += ways(rest, left);
+                if (others && left > 0)
+                {
+                    BigUint w = ways(rest, left - 1);
+                    w.mul_small(others);
+                    r += w;
+                }
+            }
+            if (x != a)
+            {
+                if (left == 0) throw std::invalid_argument("the unit is not a survivor");
+                --left;
+            }
+        }
+        return r;
+    }
+    std::vector<uint32_t> unrank(const BigUint& k) const override
+    {
+        if (!(k < count())) throw std::out_of_range("survivor number beyond the survivors");
+        std::vector<uint32_t> out(anchor_.size());
+        BigUint rest = k;
+        uint32_t left = k_;
+        for (size_t t = 0; t < anchor_.size(); ++t)
+        {
+            const uint32_t a = anchor_[t], r = uint32_t(anchor_.size() - t - 1);
+            if (left == 0)
+            {
+                std::copy(anchor_.begin() + std::ptrdiff_t(t), anchor_.end(), out.begin() + std::ptrdiff_t(t));
+                break;
+            }
+            const BigUint same = ways(r, left), other = ways(r, left - 1);
+            // Symbols below the anchor's each use a change; then the anchor's; then those above.
+            uint32_t s = 0;
+            for (;; ++s)
+            {
+                if (s >= base_) throw std::logic_error("near-model unrank ran past the digits");
+                const BigUint& n = s == a ? same : other;
+                if (rest < n) break;
+                rest -= n;
+            }
+            out[t] = s;
+            if (s != a) --left;
+        }
+        return out;
+    }
+
+private:
+    std::vector<uint32_t> anchor_;
+    uint32_t base_, k_;
+    mutable std::mutex mx_;
+    mutable std::map<std::pair<uint32_t, uint32_t>, BigUint> ways_;
+    BigUint ways(uint32_t r, uint32_t b) const // sum over i <= min(b, r) of C(r, i) (K - 1)^i
+    {
+        {
+            std::lock_guard<std::mutex> lock(mx_);
+            if (auto it = ways_.find({r, b}); it != ways_.end()) return it->second;
+        }
+        BigUint total, term(1); // term = C(r, i) (K - 1)^i
+        for (uint32_t i = 0; i <= std::min(b, r); ++i)
+        {
+            if (i > 0)
+            {
+                term.mul_small(r - i + 1);
+                term.mul_small(base_ - 1);
+                BigUint q, rem;
+                BigUint::divmod(term, BigUint(i), q, rem);
+                term = std::move(q);
+            }
+            total += term;
+        }
+        std::lock_guard<std::mutex> lock(mx_);
+        if (ways_.size() > 4096) ways_.clear();
+        return ways_.emplace(std::make_pair(r, b), std::move(total)).first->second;
+    }
+};
+
+class NearModel : public Filter
+{
+public:
+    NearModel(std::vector<uint32_t> anchor, uint32_t base, uint32_t changes, std::string prov) : anchor_(anchor), k_(changes)
+    {
+        provenance_ = std::move(prov);
+        ranker_ = std::make_unique<NearRanker>(std::move(anchor), base, changes);
+    }
+    bool passes(std::span<const uint32_t> unit) const override
+    {
+        if (unit.size() != anchor_.size()) return false;
+        uint32_t d = 0;
+        for (size_t i = 0; i < unit.size(); ++i)
+            if (unit[i] != anchor_[i] && ++d > k_) return false;
+        return true;
+    }
+    const Ranker* ranker() const override { return ranker_.get(); }
+
+private:
+    std::vector<uint32_t> anchor_;
+    uint32_t k_;
+    std::unique_ptr<NearRanker> ranker_;
+};
+
+// A run's model on this line: its shape must be the line's.
+std::vector<uint32_t> anchor_of(const AiSpace& space, const ModelRun& run, const char* filter)
+{
+    const AiShape& s = space.shape();
+    if (run.layers != s.layers || run.width != s.width || run.heads != s.heads || run.bits != s.bits)
+        throw std::invalid_argument(std::string(filter) + ": run '" + run.id + "' trains a model of another shape (L" + std::to_string(run.layers) +
+                                    "/H" + std::to_string(run.width) + "/A" + std::to_string(run.heads) + "/B" + std::to_string(run.bits) + ")");
+    if (run.final_address.empty()) throw std::invalid_argument(std::string(filter) + ": run '" + run.id + "' has not been trained");
+    const AiSpace::Digits d = space.digits_at(space.parse(run.final_address), AddressMode::Positional);
+    return std::vector<uint32_t>(d.begin(), d.end());
+}
+
 bool is_ai(const FilterLine& l) { return l.kind == "ai" && l.ai != nullptr; }
 
 } // namespace
@@ -558,6 +748,47 @@ void add_weight_filters(std::vector<FilterSpec>& out)
         return std::make_unique<CanonicalModel>(*l.ai);
     };
     out.push_back(canon);
+
+    FilterSpec lang;
+    lang.id = "language";
+    lang.title = "language";
+    lang.description = "Speaks a run's language: the model's mean probability of each next byte of the run's text (the first "
+                       "`bytes` of the first file it reads) is at least min_permille thousandths. Exact, on training-v1's "
+                       "integer forward pass, the same on every machine; it judges (counting the models that speak is as "
+                       "hard as the line is large).";
+    lang.params = {{"run", "the training run whose text is the language (in the training folder)", FilterParam::Kind::Text,
+                    "universalbibliothek", 0, 0, 1, {}},
+                   {"bytes", "how many bytes of its text are read", FilterParam::Kind::Integer, "257", 2, 513, 1, {}},
+                   {"min_permille", "the least mean probability of the right next byte, in thousandths", FilterParam::Kind::Integer,
+                    "20", 0, 1000, 1, {}}};
+    lang.applies = is_ai;
+    lang.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const FilterSpec& s = *find_filter("language-v1");
+        return std::make_unique<Language>(*l.ai, model_run(param_value(s, v, "run")), uint32_t(param_int(s, v, "bytes")),
+                                          param_int(s, v, "min_permille"));
+    };
+    out.push_back(lang);
+
+    FilterSpec near;
+    near.id = "near-model";
+    near.title = "near-model";
+    near.description = "A layer round a trained model: at most `changes` of its digits differ from the model a run trained (the "
+                       "anchor). Layer k holds C(W, k) (2^B - 1)^k models; the line kept is the anchor and its first layers, "
+                       "outwards. Exact: counts and ranks (compact).";
+    near.params = {{"run", "the training run whose model is the anchor (in the training folder)", FilterParam::Kind::Text,
+                    "universalbibliothek", 0, 0, 1, {}},
+                   {"changes", "how many digits may differ from the anchor's", FilterParam::Kind::Integer, "2", 0, 1000000, 1, {}}};
+    near.applies = is_ai;
+    near.counts_as = "own";
+    near.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const FilterSpec& s = *find_filter("near-model-v1");
+        const auto run = model_run(param_value(s, v, "run"));
+        const int64_t k = param_int(s, v, "changes");
+        std::vector<uint32_t> anchor = anchor_of(*l.ai, *run, "near-model-v1");
+        const std::string prov = "run=" + run->id + " anchor=" + run->sha256 + " changes=" + std::to_string(k);
+        return std::make_unique<NearModel>(std::move(anchor), l.base, uint32_t(k), prov);
+    };
+    out.push_back(near);
 }
 
 } // namespace sieve

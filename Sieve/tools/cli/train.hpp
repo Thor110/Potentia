@@ -105,6 +105,14 @@ double measure_training_step(const training::Recipe& rc, const std::vector<Train
 // A run folder as Sieve instructions (.sieve, packed as sieve-manifest-v4 when that is smaller).
 void pack_training_run(const std::filesystem::path& folder, const std::filesystem::path& sieve_file);
 
+// A run as the AI line's filters name it (language-v1, near-model-v1): its model's shape, its model
+// (the final address; empty if untrained) and its text (its first file). `id` is a run in `dirs` (a
+// folder of that name, or that name with .sieve) or a path to one.
+ModelRun model_run_of(const std::string& id, const std::vector<std::filesystem::path>& dirs);
+// set_model_run_loader with these folders, looked in in turn (the programs give the training folder
+// beside them, then data/training, for running from the repository).
+void use_training_runs(const std::vector<std::filesystem::path>& dirs);
+
 int cmd_ai_train(const Args& a);
 
 } // namespace sieve::cli

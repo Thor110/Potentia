@@ -327,6 +327,17 @@ jobs:
           python reference/sieve_ref.py ai-canonical --address-file ub.hex --rows | tr -d '\r' > ubc-ref.txt
           head -1 ubc-ref.txt | cmp - ubc.hex
           q "^weight-rows-v1 pass" ubc-ref.txt
+          # Runs named by the AI line's filters (the shipped run, from data/training): near-model-v1 keeps
+          # the models within two digits of its model, counted exactly and in compact order; language-v1
+          # scores a model on its text, exactly. Its model passes both, a model from the line's middle
+          # neither, and the oracle's vectors agree.
+          printf '[ai]\nmode = compact\nfilters = near-model-v1, language-v1\n' > ai-run.ini
+          printf '[ai]\nmode = compact\nfilters = near-model-v1\n' > ai-near.ini
+          $exe filters --line ai --filters ai-near.ini --exact | tr -d '\r' | q "^survivors    2\^32.81 (exact; compact mode available): 7548948481$"
+          $exe ai --address-file ub.hex --filters ai-run.ini --temperature 0 | tr -d '\r' | tee ub-run.txt | q "near-model-v1 \[x\] pass, language-v1 \[x\] pass"
+          q "^layer        0 (digits from the model universalbibliothek trained)" ub-run.txt
+          q "^speaks       universalbibliothek (corpus/universalbibliothek.txt): 275.71 thousandths" ub-run.txt
+          $exe ai --bearing 180 --filters ai-run.ini --temperature 0 | tr -d '\r' | q "near-model-v1 \[x\] FAIL, language-v1 \[x\] FAIL"
           # And the same line in the hallway: a sixth door, the cube in hand, green on clay.
           H=build/hallway
           [ -f build/Release/hallway.exe ] && H=build/Release/hallway.exe
@@ -678,6 +689,9 @@ jobs:
           $H --warp "$W" --press "M,M,-" --screenshot keys.png | tail -2 | sed -n 1p | q "PAGES line, guided zoom 57"
           # The address navigator: X opens the whole address, Home chooses its first digit, Up turns
           # it (carrying and wrapping), and ENTER goes there, far from where the walk started.
+          # Its random buttons: R draws a place on this line, Shift+R a line too; ENTER goes there.
+          $H --no-menu --press "X,R,Return" --screenshot nav-random.png | tr -d '\r' | tail -2 | sed -n 1p | q "^PAGES line, positional"
+          $H --no-menu --press "X,Shift+R" --screenshot nav-random-any.png | q "saved nav-random-any.png"
           # sieve-install, unattended: the fixture put back from its installer (v4, packed),
           # identical; a second time over it is refused (exit 1), as is a damaged installer. Then
           # the fixture with a program and a list made from another's lines in it, packed, too.
@@ -776,6 +790,8 @@ jobs:
           $H --no-menu --line ai --filters ai-rows.ini --walk "0,0" --screenshot ai-compact.png | tr -d '\r' | sed -n 1p | q "^AI line, positional, filters: 1 compact"
           $H --harness --training-dir data/training --filters ai-canon.ini --script "g" --screenshot harness-go-canon.png | tr -d '\r' | q "as its class's canonical form"
           $H --menu --line ai --filters ai-rows.ini --settle 200 --press "F" --screenshot menu-ai-filters.png | q "saved menu-ai-filters.png"
+          printf '[ai]\nmode = compact\nfilters = near-model-v1\n' > ai-near.ini
+          $H --no-menu --line ai --filters ai-near.ini --walk "0,0" --screenshot ai-near.png | tr -d '\r' | sed -n 1p | q "within 2 digits of universalbibliothek's model (7548948481 survivors)"
                     # From the main menu: the same locator, with no world to walk to, so Enter does not go.
           $H --main-menu --locate tests/manifest_fixture/a.txt --press "Return" --screenshot locate-menu.png | q "file locator (main menu): open, no Go to it"
           # The demonstration (IDEAS 16.9): every dimension's item at each whole degree, as one
@@ -1212,6 +1228,7 @@ jobs:
           python sieve_ref.py world-vectors | diff - ../tests/vectors_worlds_v1.tsv
           python sieve_ref.py ai-vectors | diff - ../tests/vectors_ai_v1.tsv
           python sieve_ref.py ai-filter-vectors | diff - ../tests/vectors_ai_filters_v1.tsv
+          python sieve_ref.py ai-run-filter-vectors | diff - ../tests/vectors_ai_run_filters_v1.tsv
           python sieve_ref.py train-vectors --corpus ../tests/training_corpus.txt | diff - ../tests/vectors_training_v1.tsv
           python sieve_ref.py train-vectors --corpus ../tests/training_corpus.txt --v2 | diff - ../tests/vectors_training_v2.tsv
           python sieve_ref.py titled-vectors | diff - ../tests/vectors_titled_v1.tsv
