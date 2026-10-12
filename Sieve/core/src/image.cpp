@@ -142,7 +142,7 @@ std::vector<uint32_t> canonicalise_frame(const RgbaImage& img, const ImageFormat
         }
     };
     const uint64_t den = sw * sh;
-    std::vector<uint32_t> digits(tw * th);
+    std::vector<Rgb> avg(tw * th);
     // Column overlaps are the same for every target row: work them out once.
     std::vector<std::vector<std::pair<uint64_t, uint64_t>>> columns(tw);
     for (uint64_t x = 0; x < tw; ++x) overlaps(sw, tw, x, columns[x]);
@@ -164,10 +164,30 @@ std::vector<uint32_t> canonicalise_frame(const RgbaImage& img, const ImageFormat
             c.r = static_cast<uint8_t>((2 * sum[0] + den) / (2 * den));
             c.g = static_cast<uint8_t>((2 * sum[1] + den) / (2 * den));
             c.b = static_cast<uint8_t>((2 * sum[2] + den) / (2 * den));
-            // Step 3.
-            digits[y * tw + x] = f.palette->nearest(c);
+            avg[y * tw + x] = c;
         }
     }
+    // Step 2a (canon-image-v2): levels, unless the picture is already in the palette's colours.
+    if (f.fit == ImageFormat::Fit::Levels &&
+        !std::all_of(avg.begin(), avg.end(), [&](const Rgb& c) { return f.palette->colour(f.palette->nearest(c)) == c; }))
+    {
+        std::vector<uint32_t> lum(avg.size());
+        for (size_t i = 0; i < avg.size(); ++i) lum[i] = (299u * avg[i].r + 587u * avg[i].g + 114u * avg[i].b + 500u) / 1000u;
+        std::sort(lum.begin(), lum.end());
+        const size_t k = lum.size() / kImageLevelsClip;
+        const uint32_t lo = lum[k], hi = lum[lum.size() - 1 - k];
+        if (hi > lo)
+        {
+            const auto level = [&](uint8_t v) {
+                const uint32_t c = std::clamp<uint32_t>(v, lo, hi);
+                return static_cast<uint8_t>(((c - lo) * 510u + (hi - lo)) / (2u * (hi - lo)));
+            };
+            for (Rgb& c : avg) c = Rgb{level(c.r), level(c.g), level(c.b)};
+        }
+    }
+    // Step 3.
+    std::vector<uint32_t> digits(avg.size());
+    for (size_t i = 0; i < avg.size(); ++i) digits[i] = f.palette->nearest(avg[i]);
     return digits;
 }
 

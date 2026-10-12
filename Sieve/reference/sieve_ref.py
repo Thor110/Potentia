@@ -24,6 +24,7 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
     python3 sieve_ref.py manifest ../tests/manifest_fixture [--addresses DIR] [--with-addresses | --with-contents]   # sieve-manifest-v1/v2/v3
     python3 sieve_ref.py map ../tests/manifest_fixture                # sieve-map-v1
     python3 sieve_ref.py image-vectors  > ../tests/vectors_image_v1.tsv
+    python3 sieve_ref.py image-v2-vectors > ../tests/vectors_image_v2.tsv
     python3 sieve_ref.py guided-vectors > ../tests/vectors_guided_v1.tsv
     python3 sieve_ref.py filter-vectors > ../tests/vectors_filters_v1.tsv
     python3 sieve_ref.py model-build --out /tmp/check.model   # rebuilds the pinned model
@@ -291,8 +292,30 @@ def nearest(pid, c):
     return min(range(len(cols)), key=lambda i: (sum((a - b) ** 2 for a, b in zip(cols[i], c)), i))
 
 
-def canon_image(sw, sh, rgba, pid, tw, th):
-    """Composite on black, exact area average (rounded half up), nearest palette colour."""
+def palette_has(pid, c):
+    """Is the colour c exactly one of the palette's colours?"""
+    return pid == "rgb24" or tuple(c) in set(palette_colours(pid))
+
+
+def levels_v2(cols, pid):
+    """canon-image-v2's step 2a: unless every colour is already the palette's, stretch the
+    luminance range between the twentieth darkest and the twentieth lightest to 0..255."""
+    if all(palette_has(pid, c) for c in cols):
+        return cols
+    ys = sorted((299 * r + 587 * g + 114 * b + 500) // 1000 for r, g, b in cols)
+    k = len(ys) // 20
+    lo, hi = ys[k], ys[len(ys) - 1 - k]
+    if hi <= lo:
+        return cols
+    def one(v):
+        v = min(max(v, lo), hi)
+        return ((v - lo) * 510 + (hi - lo)) // (2 * (hi - lo))
+    return [tuple(one(v) for v in c) for c in cols]
+
+
+def canon_image(sw, sh, rgba, pid, tw, th, version=1):
+    """Composite on black, exact area average (rounded half up), [v2: levels,] nearest palette
+    colour."""
     rgb = []
     for i in range(sw * sh):
         a = rgba[i * 4 + 3]
@@ -313,9 +336,10 @@ def canon_image(sw, sh, rgba, pid, tw, th):
                     for k in range(3):
                         acc[k] += rgb[sy * sw + sx][k] * ox * oy
             area = Fraction(1, tw * th)
-            c = tuple(int(v / area + Fraction(1, 2)) for v in acc)  # floor(avg + 1/2)
-            out.append(nearest(pid, c))
-    return out
+            out.append(tuple(int(v / area + Fraction(1, 2)) for v in acc))  # floor(avg + 1/2)
+    if version == 2:
+        out = levels_v2(out, pid)
+    return [nearest(pid, c) for c in out]
 
 
 # -- M1 sieve filters (direct definition, for brute-force checks at small L)
@@ -770,6 +794,43 @@ def cmd_alphabet_vectors(_args):
                     pos, scr = sp.address_of(u, "positional"), sp.address_of(u, "scrambled")
                     assert sp.unit_at(pos, "positional") == u and sp.unit_at(scr, "scrambled") == u
                     print(f"{spec}\t{sp.n}\t{L}\t{key}\t{cp}\t{pos}\t{scr}")
+
+
+def cmd_image_v2_vectors(_args):
+    """canon-image-v2 vectors, as image-vectors: random pictures (levelled), pictures already in
+    the palette's colours at a whole scale (left alone), and flat ones (nothing to stretch)."""
+    print("# sieve image canonicalisation vectors (canon-image-v2)")
+    print("# palette\tsrc_w\tsrc_h\tdst_w\tdst_h\trgba_hex\tdigits")
+    cases = [(13, 7, 10, 10), (40, 40, 10, 10), (64, 48, 16, 12), (10, 10, 3, 3), (5, 5, 16, 16), (100, 1, 20, 1)]
+    for pid in ("mono", "ega16", "rgb332", "rgb24"):
+        cols = palette_colours(pid) if pid != "rgb24" else [(i * 37 % 256, i * 91 % 256, i * 53 % 256) for i in range(64)]
+        for n, (sw, sh, tw, th) in enumerate(cases):
+            g = stream(f"image-v2/{pid}/{n}")
+            rgba = []
+            for _ in range(sw * sh):
+                r, gg, b, a = next(g), next(g), next(g), next(g)
+                # Paper with faint ink: most pixels light, a few darker, as a drawing is.
+                if n % 2 == 0:
+                    r, gg, b = 200 + r % 40, 190 + gg % 40, 160 + b % 40
+                    if a < 40:
+                        r, gg, b = r // 3, gg // 3, b // 3
+                a = 255 if a < 200 else (0 if a < 210 else a)
+                rgba += [r, gg, b, a]
+            digits = canon_image(sw, sh, rgba, pid, tw, th, version=2)
+            print(f"{pid}\t{sw}\t{sh}\t{tw}\t{th}\t{bytes(rgba).hex()}\t{','.join(map(str, digits))}")
+        # Already the palette's colours, drawn at three times the size: the same digits as v1.
+        g = stream(f"image-v2/{pid}/exact")
+        cells = [cols[next(g) % len(cols)] for _ in range(4 * 3)]
+        rgba = []
+        for y in range(9):
+            for x in range(12):
+                rgba += list(cells[(y // 3) * 4 + x // 3]) + [255]
+        digits = canon_image(12, 9, rgba, pid, 4, 3, version=2)
+        assert digits == canon_image(12, 9, rgba, pid, 4, 3)
+        print(f"{pid}\t12\t9\t4\t3\t{bytes(rgba).hex()}\t{','.join(map(str, digits))}")
+        # Flat grey: nothing to stretch.
+        rgba = [123, 123, 123, 255] * 36
+        print(f"{pid}\t6\t6\t3\t3\t{bytes(rgba).hex()}\t{','.join(map(str, canon_image(6, 6, rgba, pid, 3, 3, version=2)))}")
 
 
 def cmd_image_vectors(_args):
@@ -7947,6 +8008,7 @@ def main():
     sub.add_parser("alphabet-vectors")
     sub.add_parser("model-vectors")
     sub.add_parser("image-vectors")
+    sub.add_parser("image-v2-vectors")
     s = sub.add_parser("model-build")
     s.add_argument("--corpus", default="../data/models/corpus/gutenberg-nltk.tsv")
     s.add_argument("--texts", default="../corpus/gutenberg")
@@ -8095,6 +8157,8 @@ def main():
         cmd_model_vectors(args)
     elif args.cmd == "image-vectors":
         cmd_image_vectors(args)
+    elif args.cmd == "image-v2-vectors":
+        cmd_image_v2_vectors(args)
     elif args.cmd == "sieve":
         cmd_sieve(args)
     elif args.cmd == "model-build":

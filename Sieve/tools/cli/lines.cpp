@@ -131,6 +131,10 @@ Line make_line(const Args& a)
             throw std::invalid_argument("a picture of " + std::to_string(uint64_t(f.width) * f.height * f.frames) +
                                         " pixels is more than one unit can hold (2^32 - 1 positions)");
         f.palette = &palette_by_id(a.get("palette", "mono"));
+        // How pictures from outside are fitted: canon-image-v2's levels (the default) or v1's plain average.
+        const std::string fit = a.get("fit", "levels");
+        if (fit != "levels" && fit != "average") throw std::invalid_argument("unknown --fit '" + fit + "' (levels or average)");
+        f.fit = fit == "average" ? ImageFormat::Fit::Average : ImageFormat::Fit::Levels;
         return Line{kind, nullptr, kDefaultCanon, f, Space(f.symbols_id(), f.palette->size(), f.unit_length(), key), nullptr, {}};
     }
     case LineKind::Audio:
@@ -375,7 +379,7 @@ WarpInput read_warp_input(const Line& line, const Args& a)
         ImageCanonReport r;
         w.units.push_back(c.finish(&r));
         const size_t source_frames = r.source_frames;
-        w.report.push_back(std::string(kImageCanonVersion) + ": " + std::to_string(r.source_width) + "x" +
+        w.report.push_back(std::string(line.image.canon_version()) + ": " + std::to_string(r.source_width) + "x" +
                            std::to_string(r.source_height) + " source, " + std::to_string(source_frames) +
                            " frame(s) -> " + line.image.symbols_id());
         if (line.kind == LineKind::Image && source_frames > 1)

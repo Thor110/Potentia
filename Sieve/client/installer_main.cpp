@@ -23,6 +23,7 @@
 // For testing without a person: --to FOLDER sets where, --yes installs at once and exits (0 on
 // success), and --screenshot FILE.bmp writes the window as it stands just before exiting.
 
+#include "dialogs.hpp"
 #include "cli/locate.hpp"
 #include "unpack_7z.hpp"
 #include "window_icon.hpp"
@@ -383,7 +384,7 @@ int main(int argc, char** argv)
             else if (pressed == "Browse...")
             {
                 const std::string start = in.dest;
-                SDL_ShowOpenFolderDialog(folder_chosen, &in, window, start.empty() ? nullptr : start.c_str(), false);
+                hallway::open_folder_dialog(folder_chosen, &in, window, start.empty() ? nullptr : start.c_str(), false);
             }
             else if (pressed == "Cancel" && in.screen == Screen::Installing) in.cancel = true;
             else if (pressed == "Cancel" || pressed == "Close" || pressed == "Finish") quit = true;

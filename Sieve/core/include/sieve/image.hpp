@@ -12,6 +12,17 @@
 //   3. Quantise each pixel to the nearest palette colour by squared RGB distance; ties go to
 //      the lowest palette index.
 // Aspect ratio is not preserved: the image is stretched to fill the unit.
+//
+// "canon-image-v2" (the default) is v1 with one step between 2 and 3, so that a picture's own
+// light and dark survive the fitting (a line drawing on paper averages to plain paper under v1):
+//   2a. If every resampled pixel is already a palette colour, nothing changes (so a picture saved
+//       from the line, at any whole scale, comes back as the same unit). Otherwise, take each
+//       pixel's luminance Y = (299 R + 587 G + 114 B + 500) / 1000 (integer division), sort the
+//       N values, and let k = N / 20 (integer division), lo = the k-th smallest (from 0) and hi =
+//       the k-th largest. If hi > lo, each channel c becomes
+//       ((clamp(c, lo, hi) - lo) * 510 + (hi - lo)) / (2 * (hi - lo)), the range lo..hi stretched
+//       to 0..255 and rounded half up; the darkest and lightest twentieth are clipped. Each frame
+//       of a video is levelled on its own.
 #pragma once
 
 #include <cstdint>
@@ -22,6 +33,9 @@
 namespace sieve {
 
 inline constexpr const char* kImageCanonVersion = "canon-image-v1";
+inline constexpr const char* kImageCanonVersion2 = "canon-image-v2";
+// The share of pixels clipped at each end by canon-image-v2's levels: one in kImageLevelsClip.
+inline constexpr uint64_t kImageLevelsClip = 20;
 
 struct Rgb
 {
@@ -69,6 +83,10 @@ struct ImageFormat
     uint32_t width = 10, height = 10;
     uint32_t frames = 1; // 1 for the image line
     const Palette* palette = nullptr;
+    // How a picture from outside is fitted: canon-image-v2's levels (the default), or v1's plain
+    // average. It decides only where a file lands, not the line's units, so it is not in the id.
+    enum class Fit { Average, Levels } fit = Fit::Levels;
+    const char* canon_version() const { return fit == Fit::Levels ? kImageCanonVersion2 : kImageCanonVersion; }
 
     uint32_t pixels_per_frame() const { return width * height; }
     uint32_t unit_length() const { return width * height * frames; }

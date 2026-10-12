@@ -3,6 +3,7 @@
 
 #include "file_locator.hpp"
 
+#include "dialogs.hpp"
 #include "font.hpp"
 #include "strings.hpp"
 
@@ -365,8 +366,8 @@ void FileLocator::event(const SDL_Event& e)
     if (pressed.empty() || (busy_ && pressed != "close")) return;
     if (pressed != "go") go_armed_ = false; // "again" means the very next press
     if (pressed == "close") close();
-    else if (pressed == "file") SDL_ShowOpenFileDialog(on_picked, this, window_, nullptr, 0, nullptr, false);
-    else if (pressed == "folder") SDL_ShowOpenFolderDialog(on_picked, this, window_, nullptr, false);
+    else if (pressed == "file") open_file_dialog(on_picked, this, window_, nullptr, 0, nullptr, false);
+    else if (pressed == "folder") open_folder_dialog(on_picked, this, window_, nullptr, false);
     else if (pressed == "go") go();
     else if (pressed == "tailor") analyse(result_.path, false, true);
     else if (pressed == "use_filters" && result_.tailored_filters)
@@ -379,7 +380,7 @@ void FileLocator::event(const SDL_Event& e)
     {
         // First the installer, then (on_install_from, below in draw) the folder to put it in.
         static const SDL_DialogFileFilter kFrom[] = {{"Sieve instructions", "sieve"}, {"Installer program", "exe"}};
-        SDL_ShowOpenFileDialog(on_install_from, this, window_, kFrom, 2, nullptr, false);
+        open_file_dialog(on_install_from, this, window_, kFrom, 2, nullptr, false);
     }
     else
     {
@@ -398,7 +399,7 @@ void FileLocator::event(const SDL_Event& e)
         static const SDL_DialogFileFilter kProgram[] = {{"Installer program", "exe"}};
         static const SDL_DialogFileFilter kSieve[] = {{"Sieve instructions", "sieve"}};
         const SDL_DialogFileFilter* filter = save_what_ == 3 ? kProgram : save_what_ == 4 ? kSieve : nullptr;
-        SDL_ShowSaveFileDialog(on_save_to, this, window_, filter, filter ? 1 : 0, start.c_str());
+        save_file_dialog(on_save_to, this, window_, filter, filter ? 1 : 0, start.c_str());
     }
 }
 
@@ -423,7 +424,7 @@ void FileLocator::draw(float W, float H)
         {
             install_src_ = inst->second;
             status_ = trf("loc.install.where", {inst->second});
-            SDL_ShowOpenFolderDialog(on_install_to, this, window_, nullptr, false);
+            open_folder_dialog(on_install_to, this, window_, nullptr, false);
         }
         else if (inst && inst->first == 1 && !install_src_.empty()) install(install_src_, inst->second);
     }

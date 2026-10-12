@@ -12,6 +12,7 @@
 // Rows are numbered, and the numbers appear in the row table, the filter mapping and the tests
 // alike, so a row inserted in the middle moves everything after it.
 #include "menu.hpp"
+#include "dialogs.hpp"
 #include "cli/timings.hpp"
 #include "display.hpp"
 #include "music.hpp"
@@ -356,6 +357,7 @@ Settings Settings::from_args(const sieve::cli::Args& a)
     s.image_w = parse_u32(a, "image-width", s.image_w);
     s.image_h = parse_u32(a, "image-height", s.image_h);
     s.image_palette = a.get("image-palette", s.image_palette);
+    s.image_fit = a.get("image-fit", s.image_fit);
     s.notes = parse_u32(a, "notes", s.notes);
     s.note_set = a.get("note-set", s.note_set);
     s.note_low = a.get("note-low", s.note_low);
@@ -378,6 +380,7 @@ Settings Settings::from_args(const sieve::cli::Args& a)
     s.video_h = parse_u32(a, "video-height", s.video_h);
     s.frames = parse_u32(a, "video-frames", s.frames);
     s.video_palette = a.get("video-palette", s.video_palette);
+    s.video_fit = a.get("video-fit", s.video_fit);
     s.book_pages = parse_u32(a, "book-pages", s.book_pages);
     s.track_units = parse_u32(a, "track-units", s.track_units);
     s.movie_units = parse_u32(a, "movie-units", s.movie_units);
@@ -417,6 +420,7 @@ void Settings::apply(sieve::cli::Args& a) const
     a.opts["image-width"] = std::to_string(image_w);
     a.opts["image-height"] = std::to_string(image_h);
     a.opts["image-palette"] = image_palette;
+    a.opts["image-fit"] = image_fit;
     a.opts["notes"] = std::to_string(notes);
     a.opts["note-set"] = note_set;
     a.opts["note-low"] = note_low;
@@ -439,6 +443,7 @@ void Settings::apply(sieve::cli::Args& a) const
     a.opts["video-height"] = std::to_string(video_h);
     a.opts["video-frames"] = std::to_string(frames);
     a.opts["video-palette"] = video_palette;
+    a.opts["video-fit"] = video_fit;
     a.opts["book-pages"] = std::to_string(book_pages);
     a.opts["track-units"] = std::to_string(track_units);
     a.opts["movie-units"] = std::to_string(movie_units);
@@ -799,7 +804,7 @@ std::string Menu::picture_model_value() const
 void Menu::choose_model_folder(int which)
 {
     if (!app_) return;
-    SDL_ShowOpenFolderDialog(which == 0 ? text_model_chosen : picture_model_chosen, this, window_, nullptr, false);
+    open_folder_dialog(which == 0 ? text_model_chosen : picture_model_chosen, this, window_, nullptr, false);
 }
 
 void Menu::model_folder_picked(int which, const std::string& path)

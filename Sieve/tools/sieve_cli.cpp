@@ -953,7 +953,7 @@ int cmd_version()
               << "Pinned rules - results record these, and changing any of them means a new version:\n"
               << "  address scramble        " << kScrambleVersion << " (" << kScrambleRounds << " rounds)\n"
               << "  text canonicalisation   " << to_string(kDefaultCanon) << " (default), canon-text-v1\n"
-              << "  image canonicalisation  " << kImageCanonVersion << "\n"
+              << "  image canonicalisation  " << kImageCanonVersion2 << " (default, --fit levels), " << kImageCanonVersion << " (--fit average)\n"
               << "  note canonicalisation   " << kNotesCanonVersion << " (notes104), " << kNotes2CanonVersion << " (notes2)\n"
               << "  alphabets               ";
     for (const auto& id : alphabet_ids()) std::cout << id << " ";

@@ -1,6 +1,7 @@
 // Sieve hallway — the AI Training Harness (see harness.hpp).
 #include "harness.hpp"
 
+#include "dialogs.hpp"
 #include "sieve/audio.hpp"
 
 #include "font.hpp"
@@ -246,7 +247,7 @@ void Harness::act(Action a)
         prompting_ = true;
         prompt_.clear();
         SDL_StartTextInput(window_);
-        if (!scripted_) SDL_ShowOpenFolderDialog(on_folder, this, window_, nullptr, false);
+        if (!scripted_) open_folder_dialog(on_folder, this, window_, nullptr, false);
         break;
     case Action::MoveUp:
     case Action::MoveDown:

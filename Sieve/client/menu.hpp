@@ -51,6 +51,7 @@ struct Settings
     bool model = true; // use the alphabet's default model (guided ordering)
     uint32_t image_w = 10, image_h = 10;
     std::string image_palette = "mono";
+    std::string image_fit = "levels"; // how pictures from files are fitted: levels (canon-image-v2) or average (v1)
     uint32_t notes = 16; // events per book (per voice, on notes2)
     // The audio line's note set: notes104 (fixed: C4-C6, e q h w, one voice), or notes2 with its
     // range, durations (codes of s e E q Q h H w) and voices (sieve/audio.hpp).
@@ -64,6 +65,7 @@ struct Settings
     uint32_t samples = 8000, pcm_rate = 8000, pcm_bits = 8, pcm_channels = 1;
     uint32_t video_w = 5, video_h = 5, frames = 8;
     std::string video_palette = "mono";
+    std::string video_fit = "levels";
     // The ffmpeg that reads picture and video formats stb_image does not (cli/media_decode.hpp);
     // empty: SIEVE_FFMPEG, then one beside Sieve, then the PATH.
     std::string ffmpeg;

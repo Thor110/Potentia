@@ -2514,3 +2514,6 @@ GitHub Desktop, open the folder, build Release or run the release script, done.
 - **The front page:** "This game is free if you build it yourself!", then the video, then the
   three steps, then "or buy *State Space: Near Zero* on Steam to support it, and get it ready to
   play". The store page says the same, so nobody buys it without knowing.
+- **Its whole title** (Edward, 12 October 2026): it is one game with two names, and written out
+  in full it is *State Space : Near Zero : The Sieve of Potentia?.!!.?*. The store uses the
+  first name, and the repository and a self-built copy use the second.

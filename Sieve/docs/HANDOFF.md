@@ -2683,12 +2683,9 @@ cover and a title.
   and Ctrl+G onto the audio line.
 - **IDEAS:** §19.29 reconstruction and probes; §19.30 flavours and categories of categories;
   §19.31 the sound model; §19.32 commands; §19.33 a voice from a model of the vocal tract.
-- **Found, not changed: line art fits to white.** CHAT's J on Vitruvian.jpg gives an all-white
-  picture on a 10x10 mono image line. That is `canon-image-v1` working as specified: each cell's
-  area average is light parchment with a few thin lines, nearest to white (the same at 32x32). A
-  rule that judges each cell against the picture's own light and dark (a threshold at a rank of
-  its cells) brings the figure back at 64x64. It would be `canon-image-v2`, an option, since it
-  changes every photo's address; waiting on Edward's choice of default.
+- **Found: line art fits to white.** CHAT's J on Vitruvian.jpg gave an all-white picture on a
+  10x10 mono image line: `canon-image-v1` working as specified, each cell's area average light
+  parchment, nearest to white. Fixed by `canon-image-v2` (the entry below).
 - **Not yet:** recording a melody run from the harness; a track model; a model of sound itself
   (pcm); commands for the models to use.
 
@@ -2702,6 +2699,33 @@ cover and a title.
   - §19.39 the release: paid as *State Space: Near Zero*, free to build as *The Sieve of Potentia*.
 - **GAME.md** points to §19.39.
 - **Who runs what:** above, under "Build, test, package".
-- **Next, when chosen:**
-  - `canon-image-v2`, waiting on Edward's choice of default (the Vitruvian finding above);
-  - a `build_release.bat` that needs only Visual Studio (§19.39).
+- **Next, when chosen:** a `build_release.bat` that needs only Visual Studio (§19.39).
+
+### canon-image-v2, and the hallway as a Windows program (12 October 2026)
+- **What** (Edward): GO TO IT / J on Vitruvian.jpg still found a purely white picture; bring the
+  window back after finding a file; no console window behind the hallway.
+- **canon-image-v2** (core/image, SPECIFICATIONS §6.2), the default:
+  - *The rule:* v1 plus a levels step. Unless every resampled pixel is already a palette colour,
+    the luminance range between the twentieth darkest and twentieth lightest is stretched to
+    0..255.
+  - *Where it lives:* `ImageFormat::fit` (`Fit::Levels` by default, `Fit::Average` for v1) and
+    `canon_version()`, which the reports print. It is not in the line's id, since it decides only
+    where a file lands.
+  - *Chosen by:* `sieve --fit levels|average` on the image and video lines, and the hallway's
+    `--image-fit` and `--video-fit`.
+  - *Exact palette pictures are left alone,* so saved items come back as themselves, and rgb24 is
+    unchanged.
+  - *Checked by:* the oracle's `levels_v2` and `image-v2-vectors` (`tests/vectors_image_v2.tsv`,
+    32 cases, 17 different from v1); the unit tests (both vector files, and a direct ink-on-paper
+    case); and CI (Vitruvian under both rules, an ega16 picture at three times the size coming
+    back under both, the oracle's v2 vectors).
+  - *Measured:* Vitruvian.jpg at 10x10 mono is a silhouette (v1: all white); at 64x64 the head,
+    arms, legs and circle are there.
+- **Dialogs:** `client/dialogs.hpp` wraps SDL's three dialogs. When one closes, its callback runs,
+  then `SDL_RunOnMainThread` raises the window it belonged to. Every dialog in the client and the
+  installer goes through it.
+- **No console window:** `hallway` is built `WIN32`.
+  - `attach_parent_console()` (client/win_console) attaches to a command prompt's console when
+    started from one; it does nothing when the output is already redirected (CI, scripted runs).
+  - Not tried on Windows here (no Windows machine). On Linux both changes compile to the same
+    behaviour as before.

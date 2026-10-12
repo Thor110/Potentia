@@ -12,6 +12,7 @@
 
 #include "hallway.hpp"
 
+#include "dialogs.hpp"
 #include "cli/image_io.hpp"
 #include "cli/lines.hpp"
 #include "cli/locate.hpp"
@@ -102,7 +103,7 @@ void Hallway::save_in_hand()
     }
     for (size_t i = 0; i < save_formats_.size(); ++i)
         save_filters_.push_back({save_filter_text_[2 * i].c_str(), save_filter_text_[2 * i + 1].c_str()});
-    SDL_ShowSaveFileDialog(save_chosen, this, window_, save_filters_.empty() ? nullptr : save_filters_.data(), int(save_filters_.size()),
+    save_file_dialog(save_chosen, this, window_, save_filters_.empty() ? nullptr : save_filters_.data(), int(save_filters_.size()),
                            start.c_str());
 }
 
@@ -235,7 +236,7 @@ void Hallway::save_view()
     name += file->second;
     const char* docs = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
     const std::string start = docs ? std::string(docs) + name : name;
-    SDL_ShowSaveFileDialog(save_chosen, this, window_, nullptr, 0, start.c_str());
+    save_file_dialog(save_chosen, this, window_, nullptr, 0, start.c_str());
 }
 
 // For testing without a person (--save-view PATH): the same, to PATH, without the dialog.
@@ -602,7 +603,7 @@ void Hallway::open_as_kind(const std::vector<uint8_t>& bytes)
         }
         const Line& l = line_at(to);
         units.push_back(std::move(s));
-        report = std::string(kImageCanonVersion) + ": " + std::to_string(r.source_width) + "x" + std::to_string(r.source_height) + " -> " +
+        report = std::string(l.image.canon_version()) + ": " + std::to_string(r.source_width) + "x" + std::to_string(r.source_height) + " -> " +
                  l.image.symbols_id();
         if (m.decoder != "stb_image") report += "; decoded by " + m.decoder;
         if (!m.complaints.empty()) report += "; ffmpeg reported: " + m.complaints;

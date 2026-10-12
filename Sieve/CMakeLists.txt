@@ -305,7 +305,9 @@ if(SIEVE_BUILD_CLIENT)
         FetchContent_MakeAvailable(SDL3)
     endif()
 
-    add_executable(hallway
+    # WIN32: a Windows program, so no console window opens behind it (app_main.cpp attaches to
+    # the console of a command prompt it was started from).
+    add_executable(hallway WIN32
         ${SIEVE_ICON_RC}
         client/app_main.cpp
         client/app_settings.cpp
@@ -334,6 +336,7 @@ if(SIEVE_BUILD_CLIENT)
         client/music.cpp
         client/strings.cpp
         client/synth.cpp
+        client/win_console.cpp
         client/world.cpp)
     target_link_libraries(hallway PRIVATE sieve_lines sieve_locate sieve_compare SDL3::SDL3)
     if(WIN32)

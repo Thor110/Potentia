@@ -3,6 +3,7 @@
 
 #include "sieve/sha256.hpp"
 #include "window_icon.hpp"
+#include "win_console.hpp"
 #include "cli/media_decode.hpp"
 #include "cli/plugins.hpp"
 #include "designer.hpp"
@@ -54,6 +55,8 @@ const char* kUsage =
     "  --alphabet ID       text: lower27 (default), babel29, ascii95\n"
     "  --canon v2|v1       text: warp rules (default v2)\n"
     "  --image-width W  --image-height H  --image-palette ID    image line (10, 10, mono)\n"
+    "  --image-fit levels|average  --video-fit levels|average   how pictures from files are fitted:\n"
+    "                      canon-image-v2's levels (default) or v1's plain average\n"
     "  --notes N           audio: notes per book (default 16; per voice on notes2)\n"
     "  --note-set notes104|notes2|notes3|pcm  --note-low C3  --note-high C6  --note-durations seEqQhHw  --voices 1..4\n"
     "                      audio: the note set (default notes104; low to voices are notes2's)\n"
@@ -240,6 +243,7 @@ std::vector<Line> make_lines(const Args& a)
             la.opts["width"] = a.get("image-width", "10");
             la.opts["height"] = a.get("image-height", "10");
             la.opts["palette"] = a.get("image-palette", "mono");
+            la.opts["fit"] = a.get("image-fit", "levels"); // canon-image-v2; "average" for v1
             break;
         case LineKind::Audio:
             la.opts["length"] = a.get("notes", "16");
@@ -277,6 +281,7 @@ std::vector<Line> make_lines(const Args& a)
             la.opts["height"] = a.get("video-height", "5");
             la.opts["frames"] = a.get("video-frames", "8");
             la.opts["palette"] = a.get("video-palette", "mono");
+            la.opts["fit"] = a.get("video-fit", "levels"); // canon-image-v2; "average" for v1
             break;
         }
         lines.push_back(make_line(la));
@@ -1267,10 +1272,12 @@ int run(const Args& a)
     return finish();
 }
 
+
 } // namespace
 
 int main(int argc, char** argv)
 {
+    hallway::attach_parent_console();
     try
     {
         // Reuse the sieve argument parser: it expects a command first.

@@ -1079,7 +1079,7 @@ void test_canon_vectors(const std::string& path)
     CHECK(n > 50);
 }
 
-void test_image_vectors(const std::string& path)
+void test_image_vectors(const std::string& path, ImageFormat::Fit fit = ImageFormat::Fit::Average, int expected = 36)
 {
     int n = 0;
     for (const auto& f : read_tsv(path, 7))
@@ -1093,13 +1093,14 @@ void test_image_vectors(const std::string& path)
         fmt.width = static_cast<uint32_t>(std::stoul(f[3]));
         fmt.height = static_cast<uint32_t>(std::stoul(f[4]));
         fmt.palette = &palette_by_id(f[0]);
+        fmt.fit = fit;
         const bool ok = canonicalise_frame(img, fmt) == split_u32(f[6]);
         CHECK(ok);
         if (!ok) std::cerr << "  image mismatch: " << f[0] << " " << f[1] << "x" << f[2] << " -> " << f[3] << "x" << f[4] << "\n";
         ++n;
     }
-    std::cout << "image vectors checked: " << n << "\n";
-    CHECK(n == 36); // a truncated or emptied vector file must fail, not pass quietly
+    std::cout << "image vectors checked (" << (fit == ImageFormat::Fit::Levels ? kImageCanonVersion2 : kImageCanonVersion) << "): " << n << "\n";
+    CHECK(n == expected); // a truncated or emptied vector file must fail, not pass quietly
     CHECK(n > 30);
 }
 
@@ -1112,6 +1113,24 @@ void test_image()
     const Palette& p332 = palette_by_id("rgb332");
     for (uint32_t i = 0; i < 256; ++i) CHECK(p332.nearest(p332.colour(i)) == i);
     for (const auto& id : palette_ids()) CHECK(palette_by_id(id).colour(0) == (Rgb{0, 0, 0}));
+
+    // Faint ink on paper: v1 averages it to white, v2's levels keep the ink.
+    {
+        RgbaImage paper{40, 40, {}};
+        for (uint32_t y = 0; y < 40; ++y)
+            for (uint32_t x = 0; x < 40; ++x)
+            {
+                const bool ink = x % 10 < 2 && y < 20; // thin strokes in the top half
+                const uint8_t v = ink ? 60 : 230;
+                paper.rgba.insert(paper.rgba.end(), {v, v, uint8_t(v - 20), 255});
+            }
+        ImageFormat f4{4, 4, 1, &mono};
+        f4.fit = ImageFormat::Fit::Average;
+        CHECK(canonicalise_frame(paper, f4) == std::vector<uint32_t>(16, 1));
+        f4.fit = ImageFormat::Fit::Levels;
+        CHECK((canonicalise_frame(paper, f4) == std::vector<uint32_t>{0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1}));
+        CHECK(std::string(f4.canon_version()) == "canon-image-v2");
+    }
 
     // Video: frames padded with black, extras dropped, all reported.
     ImageFormat vf{2, 2, 3, &mono};
@@ -5769,6 +5788,7 @@ void run_all(int argc, char** argv)
         test_alphabet_vectors(dir + "vectors_alphabets_v1.tsv");
         test_model_vectors(dir + "vectors_models_v1.tsv");
         test_image_vectors(dir + "vectors_image_v1.tsv");
+        test_image_vectors(dir + "vectors_image_v2.tsv", ImageFormat::Fit::Levels, 32);
         test_guided_vectors(dir);
         test_filters(dir);
         test_filter_vectors(dir);

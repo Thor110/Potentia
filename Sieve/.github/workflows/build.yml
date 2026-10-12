@@ -120,6 +120,19 @@ jobs:
           printf '[image]\nmode = compact\nfilters = neighbour-agreement-v1\n' > agree.ini
           $exe filters --line image --filters agree.ini | tr -d '\r' | q "^survivors    6053792982126620565936264884 "
           $exe browse --line image --filters agree.ini --compact --count 2 --seed 4 > /dev/null
+          # Fitting a picture from a file: canon-image-v2 (the default) keeps a line drawing's ink, which
+          # v1's plain average (--fit average) turns into plain white paper; a picture already in the
+          # line's colours, saved at three times the size, comes back as the same unit under both.
+          v=data/anchors/public-domain/Vitruvian.jpg
+          $exe warp --line image --file $v | tr -d '\r' | q "^canon        canon-image-v2: 949x1300 source"
+          $exe warp --line image --fit average --mode positional --file $v | tr -d '\r' | q "^  positional  fffffffffffffffffffffffff$"
+          vit=$($exe warp --line image --mode positional --file $v | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          [ "$vit" != "fffffffffffffffffffffffff" ]
+          $exe read --line image --palette ega16 --mode positional 1234567890123456789 --scale 3 --out ega3.png > /dev/null 2>&1
+          for f in levels average; do
+            back=$($exe warp --line image --palette ega16 --fit $f --mode positional --file ega3.png | tr -d '\r' | awk '$1 == "positional" {print $2}')
+            [ "$(echo "$back" | sed 's/^0*//')" = "1234567890123456789" ]
+          done
           $exe browse --line audio --filters lines.ini --compact --count 2 --seed 4 > /dev/null
           # The notes2 family: two voices of a larger set, warped, and a stack of melody plugins
           # that judges each voice, counting one voice's survivors squared (218112^2).
@@ -1307,6 +1320,7 @@ jobs:
           python sieve_ref.py alphabet-vectors | diff - ../tests/vectors_alphabets_v1.tsv
           python sieve_ref.py model-vectors | diff - ../tests/vectors_models_v1.tsv
           python sieve_ref.py image-vectors | diff - ../tests/vectors_image_v1.tsv
+          python sieve_ref.py image-v2-vectors | diff - ../tests/vectors_image_v2.tsv
           python sieve_ref.py guided-vectors | diff - ../tests/vectors_guided_v1.tsv
           python sieve_ref.py filter-vectors | diff - ../tests/vectors_filters_v1.tsv
           python sieve_ref.py compact-vectors | diff - ../tests/vectors_compact_v1.tsv

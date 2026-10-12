@@ -82,6 +82,8 @@ Sieve\
     README.txt                what these two are
 ```
 
+**On Windows `hallway.exe` is a windowed program:** started from Explorer, it opens no console window behind it. Started from a command prompt, it writes to that prompt (which does not wait for it, so the output comes after the prompt returns); with its output redirected or piped, it writes there, as scripted runs need. After any file or folder dialog closes, the hallway's window is brought back to the front.
+
 `sieve` in `tools\` finds the dictionaries and models in the folder above; the hallway finds `sieve-install` in `tools\`. A build folder keeps all three programs together, and they work either way.
 
 **Continuous integration:** `.github/workflows/build.yml` builds and tests on Windows, Linux and macOS. It checks that every platform produces the same addresses, and that the Python oracle reproduces the committed vectors. GitHub only reads workflows from the repository root: if this folder is a subfolder of your repository (as in `Potentia/Sieve`), move `.github` up to the repository root. `PROJECT_DIR` in the file is already set to `Sieve`.
@@ -1062,11 +1064,13 @@ These rules are versioned, because they decide which unit a pasted input lands o
 2. Stretch to W×H by exact integer area-averaging, rounded half up.
 3. Set each pixel to the nearest palette colour by squared RGB distance; ties go to the lowest index.
 
+**`canon-image-v2`** (the default; `--fit average` gives v1, as addresses made before 12 October 2026 were) adds one step between 2 and 3: unless the picture is already in the palette's own colours, its range of light and dark is stretched to black..white, with the darkest and lightest twentieth clipped. Under v1 a line drawing on paper averages to plain paper: the Vitruvian Man, on a 10×10 black-and-white line, was all white. Under v2 it is a silhouette at 10×10, and at 64×64 his head, arms, legs and circle are there. A picture saved from the line comes back as the same unit under both. The hallway takes `--image-fit average` (and `--video-fit`) to use v1.
+
 A video takes up to `--frames` frames, adding black frames if the source is short.
 
 **Other formats through ffmpeg.** Sieve reads PNG, JPEG, BMP, GIF and TGA itself. Anything else, such as MP4, WebM, MKV, MOV, AVI, WebP or TIFF, is read by ffmpeg, if you have it:
 - **Where it looks:** `--ffmpeg PATH` (in the hallway, `ffmpeg=PATH` in its settings), then the `SIEVE_FFMPEG` environment variable, then `ffmpeg` beside Sieve's own program, then your `PATH`.
-- **How:** it runs ffmpeg as a separate program and links none of it. Each frame the file stores is read once, in order, and fitted by `canon-image-v1` as above.
+- **How:** it runs ffmpeg as a separate program and links none of it. Each frame the file stores is read once, in order, and fitted by the line's rule (`canon-image-v2`, or v1) as above.
 - **Exactly:** a lossless video lands where the same frames as PNGs do.
 - **Long videos:** frames are fitted one at a time and reading stops one frame past `--frames`. The whole of a 52 MB 1080p video (3,105 frames) went in at 308 MB peak memory.
 
