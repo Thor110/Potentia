@@ -28,6 +28,8 @@
 #include "window_icon.hpp"
 
 #include <SDL3/SDL.h>
+
+#include <cstdio>
 #include <SDL3/SDL_main.h>
 
 #include <algorithm>
@@ -509,6 +511,7 @@ int main(int argc, char** argv)
         in.worker.join();
     }
     const int code = in.screen == Screen::Done || (!yes && in.screen != Screen::Failed) ? 0 : 1;
+    if (yes && code != 0 && !in.error.empty()) std::fprintf(stderr, "sieve-install: %s\n", in.error.c_str()); // unattended: say why
     SDL_DestroyRenderer(r);
     SDL_DestroyWindow(window);
     SDL_Quit();

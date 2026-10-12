@@ -6,6 +6,7 @@
 #include "cli/plugins.hpp"
 #include "designer.hpp"
 #include "harness.hpp"
+#include "cli/items.hpp"
 #include "cli/timings.hpp"
 #include "hallway.hpp"
 #include "sieve/plugin.hpp"
@@ -558,6 +559,8 @@ int run(const Args& a)
     // folder, then data/training (running from the repository).
     sieve::cli::use_training_runs({a.has("training-dir") ? std::filesystem::path(a.get("training-dir")) : training_dir(),
                                    std::filesystem::path("data") / "training"});
+    // Sieve instructions that carry items of Sieve's lines (sieve-manifest-v5) are made again here.
+    sieve::cli::use_item_maker();
     AppSettings app = shot ? AppSettings{} : AppSettings::load(app_path);
     if (shot && a.has("settings")) app = AppSettings::load(app_path);
     // The filter memory (the setup menu's FILTER MEMORY): what one count's tables may take.

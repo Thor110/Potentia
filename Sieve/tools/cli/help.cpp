@@ -772,7 +772,8 @@ const std::vector<Page>& pages()
 
         {"locate", "A file's place on the binary line, or a folder's manifest.",
          "sieve locate FILE [--out ADDRESS.hex] [--compare] [--weigh [--tailored [--out-filters PATH]]]\n"
-         "  sieve locate FOLDER [--manifest OUT] [--addresses DIR] [--with-addresses] [--installer OUT.sieve [--hex]] [--program OUT.exe] [--compare]\n"
+         "  sieve locate FOLDER [--manifest OUT] [--addresses DIR] [--with-addresses] [--installer OUT.sieve [--hex] [--items [--item-hashes]]]\n"
+         "  [--program OUT.exe] [--compare]\n"
          "  [--weigh [--tailored [--out-filters PATH]]] [--filters PATH] [line options]",
          "A file is one unit of the binary line (every file up to N bytes, binary-v1): its\n"
          "positional address is its own hex dump plus 0101...01, one 01 for each of its bytes.\n"
@@ -794,6 +795,11 @@ const std::vector<Page>& pages()
          "written. --v3 makes the older installer, every file's bytes as they are\n"
          "(sieve-manifest-v3). (sieve-manifest-v2, --with-addresses, lists every file's address in\n"
          "hex instead.)\n"
+         "--items makes sieve-manifest-v5: a file that is exactly an item of the pages, image,\n"
+         "video or audio line (a page as its text, a picture or film as its PNG, a melody as its\n"
+         "MIDI file) is carried as its line and its place there, not its bytes, and made again on\n"
+         "installing; one SHA-256 over the whole tree checks them all. sieve install and the\n"
+         "hallway install it; the small sieve-install asks for Sieve to be used instead.\n"
          "\n"
          "--weigh weighs every file against its own address: its number among the binary line's\n"
          "survivors, where the settings file's [binary] filters rank and it passes them; and, where\n"
@@ -823,6 +829,10 @@ const std::vector<Page>& pages()
                                 "its end. Run, it installs the folder."},
           {"--hex", "Write the installer in hex rather than raw bytes."},
           {"--v3", "Make the older installer: every file's bytes as they are, not packed (sieve-manifest-v3)."},
+          {"--items", "Carry the files that are items of the pages, image, video and audio lines as their\n"
+                      "lines and places there (sieve-manifest-v5); the pages are --page-length characters\n"
+                      "of --alphabet."},
+          {"--item-hashes", "With --items: keep each item's own SHA-256 in the listing as well as the tree's."},
           {"--compare", "Compare the sizes: original, zip, 7z, and the address."},
           {"--weigh", "Weigh every file: its best way to be named against its own address."},
           {"--tailored", "With --weigh: tailor each line's filters to the files that are its items."},

@@ -5422,6 +5422,31 @@ def cmd_manifest(args):
                 sys.stdout.buffer.write(data)
 
 
+def v5_item(spec, address, path, items_from):
+    """A v5 item's bytes: a page made here from its line (its alphabet and length) and its positional
+    address (the digits of the address, most significant first, as the page's characters); an item of
+    another line taken from items_from (this oracle does not write PNG or MIDI), its place there not
+    checked."""
+    space_id, options = spec.split(" ", 1)
+    opts = dict(kv.split("=", 1) for kv in options.split(" "))
+    if opts.get("line") == "text":
+        length = int(opts["length"])
+        sp = Space(opts.get("alphabet", "lower27"), length)
+        if not space_id.startswith(f"{opts.get('alphabet', 'lower27')}/L{length}/"):
+            sys.exit(f"{path}: its line {space_id} is not the one its options make")
+        v = int(address, 16)
+        digits = []
+        for _ in range(length):
+            v, d = divmod(v, sp.n)
+            digits.append(d)
+        if v:
+            sys.exit(f"{path}: its address is past the end of its line")
+        return sp.text_of(digits[::-1]).encode("utf-8")
+    if not items_from:
+        sys.exit(f"{path} is an item of {space_id}: give --items-from FOLDER to take it from there")
+    return open(os.path.join(items_from, path), "rb").read()
+
+
 def cmd_unpack(args):
     """A packed installer's manifest (sieve-manifest-v4, SPECIFICATIONS §12.2) unpacked from its
     definition, with nothing of Sieve's own: its two streams decoded by Python's lzma (raw LZMA2 at
@@ -5433,14 +5458,27 @@ def cmd_unpack(args):
     data = open(args.manifest, "rb").read()
     end = data.index(b"\nend\n") + len(b"\nend\n")
     lines = data[:end].decode("utf-8").split("\n")[:-1]
-    if lines[0] != "sieve-manifest-v4":
-        sys.exit("not a v4 manifest: " + lines[0][:40])
+    if lines[0] not in ("sieve-manifest-v4", "sieve-manifest-v5"):
+        sys.exit("not a v4 or v5 manifest: " + lines[0][:40])
+    v5 = lines[0] == "sieve-manifest-v5"
     streams = []
     for i, name in ((4, "x86"), (5, "lzma2")):
         word, got, packed, size, dictionary = lines[i].split(" ")
         if word != "stream" or got != name:
             sys.exit(f"line {i + 1} is not the {name} stream")
         streams.append((int(packed), int(size), int(dictionary)))
+    # v5: its lines ("line K <space id> <options>"), then the tree's SHA-256.
+    item_lines, first, tree = [], 6, None
+    while v5 and lines[first].startswith("line "):
+        _, k, rest = lines[first].split(" ", 2)
+        if int(k) != len(item_lines):
+            sys.exit("its lines are not numbered from 0 in order")
+        item_lines.append(rest)
+        first += 1
+    if v5:
+        if not lines[first].startswith("tree "):
+            sys.exit("no tree line")
+        tree, first = lines[first][5:], first + 1
     payload = data[end:]
     if len(payload) != streams[0][0] + streams[1][0]:
         sys.exit("the streams are not the size their lines say")
@@ -5457,7 +5495,7 @@ def cmd_unpack(args):
     x86 = decode(payload[:streams[0][0]], *streams[0][1:], True)
     plain = decode(payload[streams[0][0]:], *streams[1][1:], False)
     entries = []  # (path, size, sha, way) for files; (path,) for folders
-    for line in lines[6:-1]:
+    for line in lines[first:-1]:
         f = line.split("\t")
         entries.append((f[1],) if f[0] == "d" else (f[4], int(f[1]), f[2], f[3]))
     files = [e for e in entries if len(e) == 4]
@@ -5467,6 +5505,8 @@ def cmd_unpack(args):
             got[i], xa = x86[xa:xa + size], xa + size
         elif way == "raw":
             got[i], pa = plain[pa:pa + size], pa + size
+        elif v5 and way.startswith("item "):
+            got[i] = v5_item(item_lines[int(way.split(" ")[1])], way.split(" ")[2], path, args.items_from)
     for i, (path, size, sha, way) in enumerate(files):
         if way.startswith("lines "):
             k = int(way[6:])
@@ -5477,8 +5517,14 @@ def cmd_unpack(args):
     if xa != len(x86) or pa != len(plain):
         sys.exit("the streams hold more than the files")
     for (path, size, sha, way), b in zip(files, got):
-        if len(b) != size or hashlib.sha256(b).hexdigest() != sha:
+        if len(b) != size or (hashlib.sha256(b).hexdigest() != sha and not (v5 and sha == "-" and way.startswith("item "))):
             sys.exit(f"{path} does not unpack to its size and SHA-256")
+    if v5:
+        h = hashlib.sha256()
+        for (path, size, sha, way), b in zip(files, got):
+            h.update((path + "\n" + hashlib.sha256(b).hexdigest() + "\n").encode("utf-8"))
+        if h.hexdigest() != tree:
+            sys.exit("the tree's SHA-256 differs")
     if args.to:
         for e in entries:
             target = os.path.join(args.to, e[0])
@@ -7679,6 +7725,7 @@ def main():
     s = sub.add_parser("unpack")
     s.add_argument("manifest")
     s.add_argument("--to")
+    s.add_argument("--items-from", help="v5: take the items of lines other than pages from this folder")
     s = sub.add_parser("map")
     s.add_argument("folder", nargs="+")
     s.add_argument("--name")

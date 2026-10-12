@@ -93,6 +93,7 @@ add_library(sieve_lines STATIC
     tools/cli/book.cpp
     tools/cli/dictionaries.cpp
     tools/cli/filter_config.cpp
+    tools/cli/items.cpp
     tools/cli/lines.cpp
     tools/cli/media_decode.cpp
     tools/cli/models.cpp

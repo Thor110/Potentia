@@ -82,6 +82,12 @@ std::vector<std::span<const uint8_t>> lines_of(const std::vector<uint8_t>& t)
 }
 
 // Every file's bytes from a v4 manifest's streams, in manifest order.
+ItemMaker& item_maker()
+{
+    static ItemMaker f;
+    return f;
+}
+
 std::vector<uint8_t> unpack_v4(const Manifest& m)
 {
     if (m.streams.size() != m.x86.packed + m.lzma2.packed) throw std::runtime_error("manifest: its streams are not the size its lines say");
@@ -107,6 +113,18 @@ std::vector<uint8_t> unpack_v4(const Manifest& m)
         const ManifestEntry& e = *files[i];
         if (e.way == "x86") bytes[i] = take(x86, xa, e.size, e.path);
         else if (e.way == "raw") bytes[i] = take(plain, pa, e.size, e.path);
+        else if (m.items && e.way.rfind("item ", 0) == 0)
+        {
+            // An item of one of Sieve's lines: made again from its line and its place there.
+            const std::string rest = e.way.substr(5);
+            const size_t sp = rest.find(' ');
+            const size_t k = sp == std::string::npos ? m.lines.size() : size_t(std::stoull(rest.substr(0, sp)));
+            if (k >= m.lines.size()) throw std::runtime_error("manifest: " + e.path + " names a line it does not list");
+            if (!item_maker())
+                throw std::runtime_error("these Sieve instructions carry items of Sieve's lines (" + e.path +
+                                         "): open them with Sieve (sieve install, or the hallway's File Locator), which makes them again");
+            bytes[i] = item_maker()(m.lines[k], rest.substr(sp + 1));
+        }
         else if (e.way.rfind("lines ", 0) != 0) throw std::runtime_error("manifest: " + e.path + " has no way to be carried");
     }
     for (size_t i = 0; i < files.size(); ++i)
@@ -114,7 +132,7 @@ std::vector<uint8_t> unpack_v4(const Manifest& m)
         const ManifestEntry& e = *files[i];
         if (e.way.rfind("lines ", 0) != 0) continue;
         const size_t k = size_t(std::stoull(e.way.substr(6)));
-        if (k >= files.size() || (files[k]->way != "x86" && files[k]->way != "raw"))
+        if (k >= files.size() || (files[k]->way != "x86" && files[k]->way != "raw" && files[k]->way.rfind("item ", 0) != 0))
             throw std::runtime_error("manifest: " + e.path + " is derived from a file that is not carried");
         const auto lines = lines_of(bytes[k]);
         masks[i] = {k, take(plain, pa, (lines.size() + 7) / 8, e.path)};
@@ -226,13 +244,18 @@ std::string manifest_path(const fs::path& p, const fs::path& root)
 
 std::string Manifest::text() const
 {
-    std::string t = std::string(packed ? kPackedManifestVersion : with_contents ? kInstallManifestVersion : with_addresses ? kAddressManifestVersion : kManifestVersion) + "\n";
+    std::string t = std::string(items ? kItemsManifestVersion : packed ? kPackedManifestVersion : with_contents ? kInstallManifestVersion : with_addresses ? kAddressManifestVersion : kManifestVersion) + "\n";
     t += "root " + root + "\n";
     t += "files " + std::to_string(files) + "\n";
     t += "bytes " + std::to_string(bytes) + "\n";
     if (packed)
         for (const auto& [name, s] : {std::pair<const char*, const PackedStream*>{"x86", &x86}, {"lzma2", &lzma2}})
             t += std::string("stream ") + name + " " + std::to_string(s->packed) + " " + std::to_string(s->bytes) + " " + std::to_string(s->dictionary) + "\n";
+    if (items)
+    {
+        for (size_t k = 0; k < lines.size(); ++k) t += "line " + std::to_string(k) + " " + lines[k] + "\n";
+        t += "tree " + tree + "\n";
+    }
     for (const ManifestEntry& e : entries)
     {
         if (e.dir) t += "d\t" + e.path + "\n";
@@ -381,6 +404,7 @@ Manifest Manifest::parse(std::string_view whole)
     if (lines[0] == kAddressManifestVersion) m.with_addresses = true;
     else if (lines[0] == kInstallManifestVersion) m.with_contents = true;
     else if (lines[0] == kPackedManifestVersion) m.packed = m.with_contents = true;
+    else if (lines[0] == kItemsManifestVersion) m.items = m.packed = m.with_contents = true;
     else if (lines[0] != kManifestVersion) throw std::runtime_error("not a sieve manifest (" + lines[0].substr(0, 40) + ")");
     if (m.packed) m.streams.assign(whole.begin() + std::ptrdiff_t(after), whole.end());
     else if (m.with_contents) m.contents.assign(whole.begin() + std::ptrdiff_t(after), whole.end());
@@ -401,6 +425,16 @@ Manifest Manifest::parse(std::string_view whole)
                 throw std::runtime_error(std::string("manifest: its ") + name + " stream's line is not three numbers");
             *s = PackedStream{packed, bytes, uint32_t(dictionary)};
         }
+        // v5: its lines, in order from 0, and the tree's SHA-256.
+        while (m.items && first < lines.size() && lines[first].rfind("line ", 0) == 0)
+        {
+            const std::string v = lines[first++].substr(5);
+            const size_t sp = v.find(' ');
+            if (sp == std::string::npos || v.substr(0, sp) != std::to_string(m.lines.size()))
+                throw std::runtime_error("manifest: its lines are not numbered from 0 in order");
+            m.lines.push_back(v.substr(sp + 1));
+        }
+        if (m.items) m.tree = field(lines[first++], "tree");
     }
     for (size_t i = first; i + 1 < lines.size(); ++i)
     {
@@ -442,6 +476,7 @@ Manifest Manifest::parse(std::string_view whole)
         m.entries.push_back(std::move(e));
     }
     if (m.packed) m.contents = unpack_v4(m); // every file's bytes, each by its way
+    if (m.items && tree_sha256(m) != m.tree) throw std::runtime_error("these Sieve instructions do not give the tree they were made from (its SHA-256 differs)");
     if (m.with_contents)
     {
         uint64_t sum = 0;
@@ -451,6 +486,24 @@ Manifest Manifest::parse(std::string_view whole)
     }
     return m;
 }
+
+std::string tree_sha256(const Manifest& m)
+{
+    Sha256 h;
+    size_t at = 0;
+    for (const ManifestEntry& e : m.entries)
+    {
+        if (e.dir) continue;
+        if (m.contents.size() - at < e.size) throw std::runtime_error("manifest: its files' bytes end before " + e.path);
+        const std::vector<uint8_t> bytes(m.contents.begin() + std::ptrdiff_t(at), m.contents.begin() + std::ptrdiff_t(at + e.size));
+        at += size_t(e.size);
+        h.update(e.path + "\n" + sha256_hex(bytes) + "\n");
+    }
+    return Sha256::hex(h.finish());
+}
+
+void set_item_maker(ItemMaker maker) { item_maker() = std::move(maker); }
+bool has_item_maker() { return bool(item_maker()); }
 
 BigUint read_address_file(const fs::path& file, bool hex)
 {
@@ -635,9 +688,11 @@ bool install_tree(const Manifest& m, const fs::path& dest, bool force, const Ins
             at += size_t(e.size);
         }
         else bytes = file_at(e.address == "0" ? BigUint() : BigUint::from_hex(e.address));
-        if (bytes.size() != e.size || sha256_hex(bytes) != e.sha256)
+        // (An item's own SHA-256 is "-": the tree's, checked when the manifest was read, covers it.)
+        const std::string sha = sha256_hex(bytes);
+        if (bytes.size() != e.size || (sha != e.sha256 && !(m.items && e.sha256 == "-")))
             throw std::runtime_error("the installer does not give " + e.path + " (its size or SHA-256 is wrong)");
-        vault::check_known(bytes, e.sha256, e.path); // the vault: nothing it withholds is ever written
+        vault::check_known(bytes, sha, e.path); // the vault: nothing it withholds is ever written
         if (fs::exists(path_of(e.path)) && !force) throw std::runtime_error(e.path + " is already there");
         files[i].second = std::move(bytes);
         if (progress) progress(0, i + 1, files.size(), e.path);

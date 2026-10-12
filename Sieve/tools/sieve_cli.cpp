@@ -37,6 +37,7 @@
 #include "cli/tensors.hpp"
 #include "cli/chat.hpp"
 #include "cli/ai.hpp"
+#include "cli/items.hpp"
 #include "cli/train.hpp"
 #include "cli/weigh.hpp"
 #include "cli/timings.hpp"
@@ -2357,6 +2358,21 @@ void print_weighing(const Args& a, const std::filesystem::path& root, const std:
     }
 }
 
+// Packs an installer's files (v4), and with --items carries those that are items of Sieve's lines as
+// their lines and places there (v5; cli/items.hpp).
+void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackReport& rep)
+{
+    if (!a.has("items"))
+    {
+        add_packed(m, root, &rep);
+        return;
+    }
+    const std::vector<ItemLine> lines = item_lines(a);
+    for (const ItemLine& l : lines) m.lines.push_back(l.spec);
+    const ItemFinder finder = item_finder(lines);
+    add_packed(m, root, &rep, &finder, a.has("item-hashes"));
+}
+
 int cmd_locate(const Args& a)
 {
     namespace fs = std::filesystem;
@@ -2406,7 +2422,7 @@ int cmd_locate(const Args& a)
             Manifest m = manifest_of_file(target);
             PackReport rep;
             if (a.has("v3")) add_contents(m, fs::absolute(target).parent_path());
-            else add_packed(m, fs::absolute(target).parent_path(), &rep);
+            else pack_with_items(a, m, fs::absolute(target).parent_path(), rep);
             if ((a.has("installer") || a.has("program")) && m.packed) std::cout << pack_report_text(rep, m.bytes);
             const std::vector<uint8_t> ibytes = m.file();
             const BigUint iaddr = binary_address(ibytes);
@@ -2415,7 +2431,7 @@ int cmd_locate(const Args& a)
                 const std::string o = a.get("installer");
                 write_address_file(fs::path(std::u8string(o.begin(), o.end())), iaddr, a.has("hex"));
                 std::cout << "installer " << o << ": Sieve instructions for the file (its name, size and SHA-256, then its bytes"
-                          << (m.packed ? ", packed: sieve-manifest-v4" : ", as they are: sieve-manifest-v3") << "), as " << (a.has("hex") ? "hex" : "raw bytes") << "\n";
+                          << (m.items ? ", as an item of a line: sieve-manifest-v5" : m.packed ? ", packed: sieve-manifest-v4" : ", as they are: sieve-manifest-v3") << "), as " << (a.has("hex") ? "hex" : "raw bytes") << "\n";
             }
             if (a.has("program"))
             {
@@ -2448,7 +2464,7 @@ int cmd_locate(const Args& a)
     PackReport rep;
     auto add_files = [&](Manifest& x) {
         if (a.has("v3")) add_contents(x, target);
-        else add_packed(x, target, &rep);
+        else pack_with_items(a, x, target, rep);
     };
     if (a.has("with-addresses")) add_addresses(m, target);
     else if (installer) add_files(m);
@@ -2540,7 +2556,9 @@ int cmd_locate(const Args& a)
     {
         const std::string o = a.get("installer");
         write_address_file(fs::path(std::u8string(o.begin(), o.end())), iaddr, a.has("hex"));
-        *info << "installer " << o << ": the address of the installer's manifest (" << (!(m.with_contents ? m.packed : inst.packed) ? "v3: the listing, then every file's bytes" : "v4: the listing, then every file packed") << "), as "
+        *info << "installer " << o << ": the address of the installer's manifest (" << (!(m.with_contents ? m.packed : inst.packed) ? "v3: the listing, then every file's bytes"
+                                    : (m.with_contents ? m.items : inst.items) ? "v5: the listing, the items of Sieve's lines by their places, then every other file packed"
+                                                                               : "v4: the listing, then every file packed") << "), as "
               << (a.has("hex") ? "hex" : "raw bytes") << "; install it with\n"
               << "          sieve-install " << o << "   (or: sieve install " << o << (a.has("hex") ? " --hex" : "") << " --to FOLDER)\n";
     }
@@ -2892,6 +2910,8 @@ int main(int argc, char** argv)
         // The training runs the AI line's filters can name (language-v1, near-model-v1): beside the
         // programs, then data/training.
         use_training_runs({install_dir() / "training", std::filesystem::path("data") / "training"});
+        // Sieve instructions that carry items of Sieve's lines (v5) are made again here.
+        use_item_maker();
         const std::string command_phase = "sieve " + a.command;
         timings::Scope timed(command_phase.c_str());
         // A mistyped option would otherwise be ignored without a word.

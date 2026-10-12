@@ -93,7 +93,7 @@ bool is_program(const std::vector<uint8_t>& b)
 
 } // namespace
 
-void add_packed(Manifest& m, const fs::path& root_in, PackReport* report)
+void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const ItemFinder* items, bool item_hashes)
 {
     // Every file's bytes, checked against the walk: from the contents where a v3 manifest has them,
     // else read from the folder (the current one, for a file named without one).
@@ -116,8 +116,23 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report)
         if (bytes[i].size() != e.size || sha256_hex(bytes[i]) != e.sha256) throw std::runtime_error(e.path + " changed while the folder was being read");
     }
 
-    // Each file's way: a program in the x86 stream; a text made from another's lines, a mask; the rest as it is.
-    for (size_t i = 0; i < files.size(); ++i) files[i]->way = is_program(bytes[i]) ? "x86" : "raw";
+    // Each file's way: an item of one of Sieve's lines, its place there (v5); a program in the x86
+    // stream; a text made from another's lines, a mask; the rest as it is.
+    std::vector<bool> item(files.size(), false);
+    std::vector<size_t> used_lines;
+    for (size_t i = 0; i < files.size(); ++i)
+    {
+        files[i]->way = is_program(bytes[i]) ? "x86" : "raw";
+        if (!items || bytes[i].empty()) continue;
+        if (const auto found = (*items)(bytes[i]))
+        {
+            // Lines are numbered in the order the files first use them.
+            auto at = std::find(used_lines.begin(), used_lines.end(), found->first);
+            if (at == used_lines.end()) at = used_lines.insert(used_lines.end(), found->first);
+            files[i]->way = "item " + std::to_string(at - used_lines.begin()) + " " + found->second;
+            item[i] = true;
+        }
+    }
     std::vector<std::vector<std::string_view>> lines(files.size());
     std::vector<bool> text(files.size(), false);
     for (size_t i = 0; i < files.size(); ++i)
@@ -206,8 +221,28 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report)
     m.packed = m.with_contents = true;
     m.with_addresses = false;
     r.packed = m.streams.size();
+    // v5: the lines the items use, renumbered, and the tree's SHA-256 over every file.
+    m.items = !used_lines.empty();
+    if (m.items)
+    {
+        std::vector<std::string> lines;
+        for (size_t k : used_lines) lines.push_back(m.lines.at(k));
+        m.lines = std::move(lines);
+        for (size_t i = 0; i < files.size(); ++i)
+            if (item[i])
+            {
+                if (!item_hashes) files[i]->sha256 = "-";
+                ++r.items;
+                r.item_bytes += bytes[i].size();
+                r.item_text += files[i]->way.size();
+            }
+        m.tree = tree_sha256(m);
+    }
+    else m.lines.clear();
 
-    // Where it is no smaller than the files as they are, they are carried so (v3).
+    // Where it is no smaller than the files as they are, they are carried so (v3). (Not with items:
+    // they are what makes v5 smaller.)
+    if (!m.items)
     {
         Manifest plain_m = m;
         plain_m.packed = false;
@@ -241,6 +276,9 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         std::snprintf(b, sizeof b, "%.2f%%", original ? 100.0 * double(v) / double(original) : 100.0);
         return std::string(b);
     };
+    if (r.items)
+        o << "items     " << r.items << " file(s) carried as items of Sieve's lines (" << r.item_bytes << " bytes, named in " << r.item_text
+          << " characters of the listing; sieve-manifest-v5, made again on installing)\n";
     o << "packed    " << r.packed << " bytes (" << pct(r.packed) << " of " << original << "): " << r.x86 << " program(s) in the x86 stream ("
       << r.x86_bytes << " bytes), " << r.raw << " file(s) as they are (" << r.raw_bytes << " bytes), " << r.derived
       << " derived from another's lines (" << r.derived_bytes << " bytes, as " << r.mask_bytes << " bytes of masks)\n";

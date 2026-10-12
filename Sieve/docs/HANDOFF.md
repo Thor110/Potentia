@@ -2432,3 +2432,24 @@ cover and a title.
 - **Not done, and why:** ranking canonical-model-v1. Its SHA-256 keys cannot be counted under a
   prefix; see IDEAS §15 for the choice this leaves.
 
+### Manifest v5, stage 1, and the judge-only tab (12 October 2026)
+- **JUDGE-ONLY FILTERS** (Edward): `FilterSpec::judge_only` (canonical-model-v1, language-v1),
+  `tab_of` gives it tab 3 (`kFilterTabs = 4`, menu.hpp), the tick-all keys leave it alone, and
+  `sieve filters` marks it.
+- **Navigator random buttons** (Edward): `nav_random(any_line)` and `nav_reset_layout` in
+  navigator.cpp; R and Shift+R, and two buttons top right.
+- **sieve-manifest-v5** (SPECIFICATIONS §12.2; Edward chose stage 1: `sieve install` and the
+  hallway install it, `sieve-install` refuses it with a word):
+  - `locate.*`: `Manifest::items`, `lines`, `tree`; `tree_sha256`; `set_item_maker` (the hook the
+    programs fill; without it a v5 with items is refused); `item K ADDR` ways in `unpack_v4`,
+    and a derived file's base may be an item; install_tree takes `-` for an item's SHA-256.
+  - `pack.*`: `add_packed(m, root, report, ItemFinder*, item_hashes)`; items marked first, left
+    out of the streams, lines renumbered by first use; no v3 fallback with items.
+  - `items.*` (sieve_lines): `item_lines` (pages of --alphabet and --page-length, image, video,
+    audio at their defaults), `line_of_options`, `item_finder` (item_of), `use_item_maker`
+    (made once per line, checked by its space id). `sieve` and the hallway call it at start.
+  - `sieve locate --items [--item-hashes]`; sieve-install prints its error with `--yes`.
+  - Oracle: `unpack` reads v5, makes pages itself, `--items-from` for the rest, checks the tree.
+- **Next for v5:** ranges; items of the other lines (their file code is in the client:
+  item_save.cpp, to move into a shared library first); the File Locator making v5.
+

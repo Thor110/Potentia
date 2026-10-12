@@ -83,6 +83,7 @@ inline constexpr const char* kManifestVersion = "sieve-manifest-v1";
 inline constexpr const char* kAddressManifestVersion = "sieve-manifest-v2";
 inline constexpr const char* kInstallManifestVersion = "sieve-manifest-v3";
 inline constexpr const char* kPackedManifestVersion = "sieve-manifest-v4";
+inline constexpr const char* kItemsManifestVersion = "sieve-manifest-v5";
 
 std::vector<uint8_t> read_file_bytes(const std::filesystem::path& file);
 
@@ -100,7 +101,7 @@ struct ManifestEntry
     uint64_t size = 0;   // files
     std::string sha256;  // files
     std::string address; // files, in a v2 manifest: the file's positional address in hex
-    std::string way;     // files, in a v4 manifest: "x86", "raw" or "lines K"
+    std::string way;     // files, in a v4 manifest: "x86", "raw" or "lines K"; in v5 also "item K <index>"
 };
 
 // One of a v4 manifest's two streams.
@@ -122,12 +123,26 @@ struct Manifest
     bool packed = false;                 // v4: carried in the two streams below
     PackedStream x86, lzma2;             // v4: the streams
     std::vector<uint8_t> streams;        // v4: the two streams as carried, the x86 first
+    bool items = false;                  // v5: v4 with files carried as items of Sieve's lines
+    std::vector<std::string> lines;      // v5: line K, "<its space id> <the options that make it>"
+    std::string tree;                    // v5: the SHA-256 of the whole tree (tree_sha256)
     std::string text() const;            // the canonical text above (for v3 and v4, its text part)
     std::vector<uint8_t> file() const;   // the whole manifest as a file: the text, and for v3 the contents, for v4 the streams
     // v1 to v4; throws if it is none of them. A v4 manifest's streams are unpacked into contents and
     // every file's way followed, so what is installed from it is checked as a v3's is.
     static Manifest parse(std::string_view whole);
 };
+
+// v5's check on the whole tree: the SHA-256 of, for every file in the listing's order, its path, a
+// line feed, its bytes' SHA-256 in hex and a line feed. An item's own SHA-256 is left out of the
+// listing ("-"), this covering it.
+std::string tree_sha256(const Manifest& m);
+// What makes an item's bytes from its line ("<space id> <options>") and its positional address
+// (hex): set by the programs that hold every line's code (sieve, the hallway). Without it a v5
+// manifest with items is refused with a word to open it with Sieve (the small installer has none).
+using ItemMaker = std::function<std::vector<uint8_t>(const std::string& line, const std::string& address)>;
+void set_item_maker(ItemMaker maker);
+bool has_item_maker();
 
 // Every file's address put into the manifest, making it v2. Reads every file again.
 void add_addresses(Manifest& m, const std::filesystem::path& root);

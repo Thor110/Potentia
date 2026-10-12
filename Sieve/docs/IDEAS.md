@@ -1223,6 +1223,15 @@ carrying items rather than their bytes, and as little as reproduces them.*
 - **The cost moves to the installer:** it must carry the code that makes every line's items
   (text, PNG, MIDI, OBJ, books, tracks, movies), which `sieve` and the hallway already have; the
   instructions shrink, the program grows once.
+- *Stage 1 built (12 October 2026), SPECIFICATIONS §12.2:* `sieve-manifest-v5` with item entries
+  for the pages, image, video and audio lines (`sieve locate --items`), each line written once
+  with its options and checked by its space id, items' own hashes off by default and the tree's
+  SHA-256 over every file. Edward's choice: `sieve install` and the hallway install it, and the
+  small `sieve-install` stays small, saying to use them. On §16.9's sample, 1,368 of 3,960 files are
+  items: 443,969 bytes against v4's 482,491. Not yet: ranges (most of what is left is the
+  listing: paths and the other files' hashes), the other lines' items (books, tracks, movies,
+  models, worlds, AI), the File Locator making v5, and the oracle making PNG and MIDI items
+  itself (it makes the pages, and takes the rest from a folder).
 
 *Weighed and set aside (11 October 2026): folding maps into the manifest.* A map adds what a
 manifest lacks (files named but not held, edges, metadata, a seal), and all of it would fit in a
