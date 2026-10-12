@@ -285,7 +285,7 @@ int cmd_filters_ai(const Args& a)
               << "mode         " << to_string(lf.mode) << "\n\n";
     for (const FilterSpec* f : filters_for(fl))
     {
-        std::cout << (lf.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << (f->category.empty() ? "" : "   (" + f->category + ")") << "\n";
+        std::cout << (lf.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << (f->category.empty() ? "" : "   (" + f->category + (f->judge_only ? ", judge-only" : "") + ")") << "\n";
         std::istringstream desc(f->description);
         for (std::string l; std::getline(desc, l);) std::cout << "      " << l << "\n";
         for (const auto& p : f->params) std::cout << "      " << p.key << " = " << param_value(*f, lf.values_of(f->name()), p.key) << "   " << p.description << "\n";

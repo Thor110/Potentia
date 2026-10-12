@@ -744,6 +744,7 @@ void add_weight_filters(std::vector<FilterSpec>& out)
                         "SHA-256 key, so it looks like any other. At Micro it keeps 1 in 2^484 of the line. Counted exactly; "
                         "judges (does not yet rank).";
     canon.applies = is_ai;
+    canon.judge_only = true; // counted, but not ranked: its SHA-256 keys cannot be counted under a prefix
     canon.make = [](const FilterLine& l, const FilterValues&, const FilterResources&) -> std::unique_ptr<Filter> {
         return std::make_unique<CanonicalModel>(*l.ai);
     };
@@ -762,6 +763,7 @@ void add_weight_filters(std::vector<FilterSpec>& out)
                    {"min_permille", "the least mean probability of the right next byte, in thousandths", FilterParam::Kind::Integer,
                     "20", 0, 1000, 1, {}}};
     lang.applies = is_ai;
+    lang.judge_only = true;
     lang.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
         const FilterSpec& s = *find_filter("language-v1");
         return std::make_unique<Language>(*l.ai, model_run(param_value(s, v, "run")), uint32_t(param_int(s, v, "bytes")),

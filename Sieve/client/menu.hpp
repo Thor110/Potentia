@@ -167,6 +167,9 @@ void set_time_budget(double ms);
 void set_item_memory_share(int percent);
 
 // Which tab of the filters window lists a filter: 0 built-in, 1 custom (plugins), 2 retired.
+// Which tab of the filters window lists a filter: 0 built-in, 1 custom (plugins), 2 retired, 3
+// judge-only (FilterSpec::judge_only).
+constexpr int kFilterTabs = 4;
 int tab_of(const sieve::FilterSpec& f);
 
 // How many rows each line has in the setup menu, and where they start: in door order after the

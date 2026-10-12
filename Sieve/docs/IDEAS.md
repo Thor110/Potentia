@@ -1130,6 +1130,10 @@ space made walkable, and a place for priors over weights (§16.8b) to become a g
     weight-rows-v1 count and rank. A way to bring language within counting: near-model-v1 round
     an anchor already keeps mostly speakers (§18.5's table), so a layer round a run's model is a
     countable stand-in for "speaks its language" out to about a quarter of the digits.
+  - *Edward (12 October 2026):* a JUDGE-ONLY FILTERS tab, to the right of the retired filters, so
+    the counting filters and the judge-only ones wrap round every other from both ends, as the
+    binary line does round the dimensions, and so filters can be sorted by it later. *Built*
+    (`FilterSpec::judge_only`; `sieve filters` marks them "judge-only").
 - **Next on this line:** ranking canonical-model-v1, a guided ordering by a prior over weights,
   warping a model in from the hallway, and larger shapes as the engine gets faster.
 

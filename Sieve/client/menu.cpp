@@ -2121,8 +2121,7 @@ static std::string filtered_estimate(double kept_log10, const sieve::BigUint& to
     return out;
 }
 
-// Which tab of the filters window lists a filter: 0 built-in, 1 custom (plugins), 2 retired.
-int tab_of(const sieve::FilterSpec& f) { return f.retired ? 2 : f.plugin_sha256.empty() ? 0 : 1; }
+int tab_of(const sieve::FilterSpec& f) { return f.retired ? 2 : f.judge_only ? 3 : f.plugin_sha256.empty() ? 0 : 1; }
 
 // A stack's tally from its survivors: the share removed, the survivors and the footer's line.
 void Menu::survivors_of(StackInfo& out, const sieve::BigUint& n, const sieve::BigUint& total)
@@ -2505,6 +2504,7 @@ void Menu::add_filter_rows(std::vector<ORow>& rows, const sieve::FilterLine& lin
     }
     if (otab_ == 1 && !any) rows.push_back({ORow::Kind::Info, "", "", part, tr("filters.custom.none")});
     if (otab_ == 2 && !any) rows.push_back({ORow::Kind::Info, "", "", part, tr("filters.retired.none")});
+    if (otab_ == 3 && !any) rows.push_back({ORow::Kind::Info, "", "", part, tr("filters.judge_only.none")});
 }
 
 std::vector<Menu::ORow> Menu::overlay_rows() const
@@ -2765,12 +2765,12 @@ std::vector<Menu::Reach> Menu::reach_of(ToggleScope scope, int overlay, int tab)
     std::vector<Reach> in_reach;
     for (const Stack& st : stacks)
         for (const sieve::FilterSpec* f : sieve::filters_for(st.line))
-            // This tab, or the two main tabs: retired filters are ticked only by hand, or by Z
-            // on their own tab.
+            // This tab, or the two main tabs: retired and judge-only filters are ticked only by
+            // hand, or by Z on their own tab.
             // The title filters (title-v1, title-data-v1) are for a book's title page (words, then
             // SPACEs): ticking all ticks them only there, never on pages, where they would leave
             // little but short lines.
-            if ((both_tabs ? tab_of(*f) != 2 : tab_of(*f) == tab) && (f->id.rfind("title", 0) != 0 || st.lf == &cfg_.books.parts[1]))
+            if ((both_tabs ? tab_of(*f) < 2 : tab_of(*f) == tab) && (f->id.rfind("title", 0) != 0 || st.lf == &cfg_.books.parts[1]))
                 in_reach.push_back({st.lf, st.li, st.part, f->name()});
     // Which of them clash with another in reach on the same stack: those are weighed.
     for (Reach& r : in_reach)
@@ -2879,7 +2879,7 @@ void Menu::overlay_change(int dir, bool big)
     {
     case ORow::Kind::Header:
     case ORow::Kind::Info: return;
-    case ORow::Kind::Tabs: otab_ = ((otab_ + (dir < 0 ? -1 : 1)) % 3 + 3) % 3; break;
+    case ORow::Kind::Tabs: otab_ = ((otab_ + (dir < 0 ? -1 : 1)) % kFilterTabs + kFilterTabs) % kFilterTabs; break;
     case ORow::Kind::Mode:
     {
         const FilterMode order[] = {FilterMode::Off, FilterMode::Mark, FilterMode::Hide, FilterMode::Compact, FilterMode::Full, FilterMode::Excluded};
@@ -3222,16 +3222,16 @@ void Menu::render_overlay(float W, float H)
         else if (row.kind == ORow::Kind::Tabs)
         {
             // How many of each the line offers, whichever tab is showing.
-            size_t n[3] = {0, 0, 0};
+            size_t n[kFilterTabs] = {};
             auto count = [&](const sieve::FilterLine& l) {
                 for (const sieve::FilterSpec* f : sieve::filters_for(l)) ++n[tab_of(*f)];
             };
             if (has_parts(overlay_))
                 for (int part = 0; part < parts_of(overlay_); ++part) count(part_line(overlay_, part));
             else count(filter_line_of(overlay_));
-            static const char* const keys[3] = {"filters.tab.builtin", "filters.tab.custom", "filters.tab.retired"};
+            static const char* const keys[kFilterTabs] = {"filters.tab.builtin", "filters.tab.custom", "filters.tab.retired", "filters.tab.judge_only"};
             std::string tabs;
-            for (int t = 0; t < 3; ++t)
+            for (int t = 0; t < kFilterTabs; ++t)
             {
                 const std::string label = trf(keys[t], {std::to_string(n[t])});
                 tabs += (t ? "  -  " : "") + (t == otab_ ? "[ " + label + " ]" : label);

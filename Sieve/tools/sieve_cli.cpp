@@ -1786,7 +1786,7 @@ int cmd_filters_models(const Args& a)
               << "mode         " << to_string(lf.mode) << "\n\n";
     for (const FilterSpec* f : filters_for(fl))
     {
-        std::cout << (lf.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << (f->category.empty() ? "" : "   (" + f->category + ")") << "\n";
+        std::cout << (lf.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << (f->category.empty() ? "" : "   (" + f->category + (f->judge_only ? ", judge-only" : "") + ")") << "\n";
         print_indented(f->description, "      ");
     }
     const ModelSieve ms = build_model_sieve(space, lf);
@@ -1828,7 +1828,7 @@ int cmd_filters_binary(const Args& a)
               << "mode         " << to_string(lf.mode) << "\n\n";
     for (const FilterSpec* f : filters_for(fl))
     {
-        std::cout << (lf.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << (f->category.empty() ? "" : "   (" + f->category + ")") << "\n";
+        std::cout << (lf.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << (f->category.empty() ? "" : "   (" + f->category + (f->judge_only ? ", judge-only" : "") + ")") << "\n";
         print_indented(f->description, "      ");
         const auto vit = lf.values.find(f->name());
         for (const auto& p : f->params)
@@ -1945,7 +1945,7 @@ int cmd_filters(const Args& a)
     if (list.empty()) std::cout << "No filters for this line yet.\n";
     for (const FilterSpec* f : list)
     {
-        std::cout << (lf.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << (f->category.empty() ? "" : "   (" + f->category + ")")
+        std::cout << (lf.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << (f->category.empty() ? "" : "   (" + f->category + (f->judge_only ? ", judge-only" : "") + ")")
                   << (f->plugin_sha256.empty() ? "" : "   (custom)") << (!f->retired ? "" : f->replaced_by.empty() ? "   (retired: judges only)" : "   (retired: replaced by " + f->replaced_by + ")") << "\n";
         print_indented(f->description, "      ");
         if (!f->plugin_sha256.empty())

@@ -183,7 +183,12 @@ struct FilterSpec
     // menus list retired filters on a tab of their own, tick them only by hand, and leave them out
     // of "tick all".
     bool retired = false;
-    std::string replaced_by; // the filter that does the same, when that is why it is retired
+    std::string replaced_by;
+    // Judge-only: it decides which units pass, but how many pass cannot be counted (no formula,
+    // no automaton), so it never ranks and a stack that ticks it never compacts. Listed on a tab of
+    // its own (the menus' JUDGE-ONLY FILTERS), to the right of the retired filters: the counting
+    // filters at one end of the list and these at the other. A retired filter is listed as retired.
+    bool judge_only = false; // the filter that does the same, when that is why it is retired
     // Hard or soft (docs/FILTER-PLUGINS.md §17): "hard" sets aside only noise, with no collateral
     // (structural and exclusion rules: content of another line, a re-encoding of the same mesh, a
     // pattern); "soft" may set aside things a person would keep (a dictionary, a model, a key, a

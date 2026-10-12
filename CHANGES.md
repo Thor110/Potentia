@@ -1,27 +1,19 @@
-# Random places in the address navigator
+# A JUDGE-ONLY FILTERS tab
 
-Apply after ai-language.zip. The shared files here (en.txt, README.md, build.yml, IDEAS.md) carry
-that batch's changes too.
+Apply after ai-language.zip and nav-random.zip. The shared files here carry their changes too.
 
-## The navigator (X): two random buttons, top right
-- **RANDOM (THIS LINE), or R:** fills the digits with a place on this line. Every place is
-  equally likely: a number below the loop's length, drawn bit by bit and redrawn when it falls
-  past the end. ENTER goes there; R again draws another.
-- **RANDOM (ALL LINES), or Shift+R:** first chooses a line at random, every line equally likely,
-  and goes to it as a door would (anything in hand put back, the trail left behind). Then it fills
-  in a random place on that line.
-- **The note under the digits** says what was drawn. The key help lists R.
-- **The randomness is the system's**, so a draw is not reproducible. It is a way of choosing where
-  to look, not an address.
-
-## Also
-- **IDEAS §15:** your note on item 1 (undecided; avoid filters that can only judge). It lists
-  which AI-line filters only judge today. near-model round a run's model counts, and is a
-  countable stand-in for "speaks its language" out to about a quarter of the digits (§18.5's
-  table).
-
-## Checked here
-- **Screenshots:** R, and Shift+R.
-- **Shift+R then ENTER,** four times: the books, image, video and worlds lines.
-- **R then ENTER** stays on the pages line.
-- **A CI line for each.**
+- **The filters window** has a fourth tab, JUDGE-ONLY FILTERS, to the right of the retired
+  filters. It holds the filters that decide which units pass but cannot count them, so a line
+  that ticks one cannot compact. Today these are the AI line's canonical-model-v1 and language-v1.
+  The counting filters stand at one end of the tabs and these at the other, as you put it, and
+  the filters can be sorted by it later.
+- **`FilterSpec::judge_only`** marks a filter explicitly. The existing "counts as" label couldn't
+  be trusted for this: binary-kind counts, but has no label. A retired filter stays on the
+  retired tab.
+- **The tick-all keys** (C, and X for every line) leave judge-only filters alone, as they do
+  retired ones. Z still ticks them on their own tab, and they can be ticked by hand.
+- **`sieve filters`** marks them: "(hard, judge-only)", "(soft, judge-only)".
+- **Docs:** README (the four tabs); IDEAS §15 (your reasoning, marked built).
+- **Checked here:**
+  - a screenshot of the tab on the AI line;
+  - two CI lines on `sieve filters --line ai`, and a screenshot line for the tab.

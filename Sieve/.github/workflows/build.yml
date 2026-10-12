@@ -318,6 +318,9 @@ jobs:
           # oracle works out the same and which says what the model says.
           printf '[ai]\nmode = compact\nfilters = weight-rows-v1\n' > ai-rows.ini
           $exe filters --line ai --filters ai-rows.ini | tr -d '\r' | q "^survivors    2\^32768.00 (exact; compact mode available)"
+          # The two that cannot be counted are marked judge-only (their own tab in the filters window).
+          $exe filters --line ai | tr -d '\r' | q "^\[ \] canonical-model-v1   (hard, judge-only)"
+          $exe filters --line ai | tr -d '\r' | q "^\[ \] language-v1   (soft, judge-only)"
           $exe filters --line ai --filters ai-rows.ini | tr -d '\r' | q "keeps 10\^-145.65 of the line (exact; it judges)"
           $exe ai-train data/training/universalbibliothek.sieve --address-out ub.hex --quiet > /dev/null
           $exe ai --address-file ub.hex --filters ai-rows.ini --temperature 0 | tr -d '\r' | tee ub-ai.txt | q "weight-rows-v1 \[x\] pass, canonical-model-v1 \[ \] FAIL"
@@ -790,6 +793,7 @@ jobs:
           $H --no-menu --line ai --filters ai-rows.ini --walk "0,0" --screenshot ai-compact.png | tr -d '\r' | sed -n 1p | q "^AI line, positional, filters: 1 compact"
           $H --harness --training-dir data/training --filters ai-canon.ini --script "g" --screenshot harness-go-canon.png | tr -d '\r' | q "as its class's canonical form"
           $H --menu --line ai --filters ai-rows.ini --settle 200 --press "F" --screenshot menu-ai-filters.png | q "saved menu-ai-filters.png"
+          $H --menu --line ai --press "F,Down,Left" --settle 100 --screenshot menu-ai-judge-only.png | q "saved menu-ai-judge-only.png"
           printf '[ai]\nmode = compact\nfilters = near-model-v1\n' > ai-near.ini
           $H --no-menu --line ai --filters ai-near.ini --walk "0,0" --screenshot ai-near.png | tr -d '\r' | sed -n 1p | q "within 2 digits of universalbibliothek's model (7548948481 survivors)"
                     # From the main menu: the same locator, with no world to walk to, so Enter does not go.
