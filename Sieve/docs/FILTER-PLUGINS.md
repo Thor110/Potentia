@@ -1013,6 +1013,7 @@ and the oracle at four lengths.
 | `sound-step-v1` (automaton to 11 bits; judged past that) | audio, `pcm` | neighbouring samples within `percent` of the range (50) | 8-bit, 800 samples: 10^-86.76 |
 | `silence-run-v1` (automaton while it fits) | audio, `pcm` | no run of more than `samples` silent samples (4000) | mostly-silent units only; nothing on lines shorter than the run |
 | `row-runs-v1` (own) | image, video | at most `changes` colour changes along each row (3) | mono 10×10: 10^-5.95; ega16: 10^-53.72; rgb24: 10^-414.24 |
+| `figure-v1` (automaton; own on rgb24) | image | the ink makes exactly `shapes` connected shapes (1), `connect` four or eight, `border` any, clear or standing (eight, clear) | mono 10×10: 10^-11.47 (four, anywhere: 10^-3.65); ega16: 10^-43.35; rgb24: 10^-260.09 |
 | `canonical-mesh-v1` (model rule) | models | one encoding of each mesh: vertices increasing as grid points, faces rotated to their smallest index (winding kept) and increasing | with every-vertex-used: 10^-21.48 (the three old rules: 10^-2.21) |
 | `utf8-valid-v1` (own) | binary | well-formed UTF-8 throughout; `controls = text` also refuses control characters but tab, LF and CR | 32 bytes: text 10^-10.75, any 10^-8.00 |
 
@@ -1024,6 +1025,19 @@ and the oracle at four lengths.
   seven voices, and a video has eight frames by default). Oracle: `picture-vectors`
   (`tests/vectors_picture_v1.tsv`), counted by inclusion and exclusion and by binomials, every unit
   of ten small lines by brute force.
+- **figure** reads the pixels along the rows keeping a frontier: the shape each of the last W
+  pixels belongs to, numbered by first appearance, the pixel up and to the left (eight-way), the
+  shapes finished, and for the border whether this is the first row and whether this row and the
+  last held ink. It never counts rows, so the bottom edge is judged at the end (the row just read),
+  and one automaton serves every height. Minimised at 10 wide: 3,012 states (eight, clear) to
+  60,494 (four, anywhere). On a small palette the two-symbol automaton is widened to every colour;
+  on rgb24 it counts with its own ranker (ink weighing B − 1, ranked arithmetically), within the
+  filter memory (four-way anywhere on rgb24 is not: it judges there). On many colours nearly every
+  pixel is ink, so `any` keeps nearly everything and the border settings do the work (a plain
+  border). With row-runs (2 changes) and four-way joins, mono 10×10 keeps 325,263,852,704
+  pictures, which look like glyphs. Oracle: `figure-vectors` (`tests/vectors_figure_v1.tsv`), a
+  flood fill on every picture of six small lines, and at full size a frontier walk that knows each
+  pixel's row.
 - **canonical-mesh** counts C(C^3, V) × C(V(V-1)(V-2)/3, F) and ranks as combinations by the
   hockey-stick identity; with every-vertex-used, inclusion and exclusion over the subsets of
   unused vertices against a table of the triples avoiding each (2^V rows), so it ranks while that

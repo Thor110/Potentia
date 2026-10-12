@@ -1,31 +1,13 @@
-# Notes, and the title screen
+# The missing figure-v1 files
 
-Apply after diffusion-v1.zip: IDEAS.md and GAME.md include every earlier change.
-`main-menu.png` is a screenshot for you, not for the repository.
+Your main has every later change, but five files from figure-v1.zip didn't make it. The
+CMakeLists.txt from diffusion-v1.zip names figure.cpp, hence the two CMake errors.
 
-## The title screen
-- **The subtitle names every line:** "Every possible page, picture, melody, sound, film, book,
-  track, movie, mesh, world, AI model and file, on one endless corridor of shelves."
-- **On narrow windows** (the menu's smallest is 1000 wide) it breaks onto two lines at the space
-  nearest its middle. At 1280 it fits on one, as the screenshot shows.
-- **The only change in code** is in main_menu.cpp; the client builds without warnings.
+- `Sieve/core/src/filters/figure.cpp` (new): the filter itself.
+- `Sieve/core/src/filters/builtin.cpp`: registers it (two lines).
+- `Sieve/tests/vectors_figure_v1.tsv` (new): the oracle's vectors, which `test_figure_vectors`
+  reads.
+- `Sieve/docs/FILTER-PLUGINS.md` and `Sieve/docs/FILTERS-CONFLICTS.md`: the filter's rows.
 
-## IDEAS §19, reworded and added to
-- **19.1 is now "Geometry filters: shapes and figures":** your idea, with the soldier as what
-  prompted it, and your own word that it was pareidolia. No diagnosing. Its "Evaluation" heading is
-  now "Notes", and so is 19.2's.
-- **19.3** no longer leans on the soldier.
-- **New sections:**
-  - 19.5 Computation in a straight line: the aim, the madness as noise, constraint as perspective
-    (Dewey decimal to all information), the engine of all engines;
-  - 19.6 A game that puts all games on a spectrum;
-  - 19.7 Geometry filters in 2D, 3D and text: the family figure-v1 starts;
-  - 19.8 The Sieve of Potentia and the Sieve of Eratosthenes;
-  - 19.9 Chat logs;
-  - 19.10 Testing in fewer, larger rounds;
-  - 19.11 A video game dimension (open).
-
-## GAME.md
-- **§3, "Figures found on the lines":** reworded to match.
-- **§4a, All games on a spectrum (new):** your idea, and the open question of how a video game
-  dimension comes into the hallway.
+Checked against origin/main file by file: with these five, every file matches what was tested here
+(152,668 checks, 0 failures).

@@ -19,6 +19,7 @@ void add_model_filters(std::vector<FilterSpec>& out);
 void add_pattern_filters(std::vector<FilterSpec>& out);
 void add_other_line_filters(std::vector<FilterSpec>& out);
 void add_picture_filters(std::vector<FilterSpec>& out);
+void add_figure_filters(std::vector<FilterSpec>& out);
 void add_sound_filters(std::vector<FilterSpec>& out);
 void add_weight_filters(std::vector<FilterSpec>& out);
 
@@ -36,6 +37,7 @@ std::vector<FilterSpec> builtin_filters()
     add_other_line_filters(out);
     add_binary_filters(out);
     add_picture_filters(out);
+    add_figure_filters(out);
     add_sound_filters(out);
     add_weight_filters(out);
     // Hard and soft, in one place (FilterSpec::category).
