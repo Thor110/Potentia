@@ -1,73 +1,57 @@
-# The chat window, with figures
+# CHAT as a tab, and five new notes
 
-Against your main ("diffusion"). Copy `Sieve/` over yours; there is one new file,
-`Sieve/client/chat.cpp`, which is already in CMakeLists.txt.
+Against your main ("chat window"). Copy `Sieve/` over yours. There are no new files.
 
-## The window (IDEAS §19.13)
-- **Opening it:** take a model of the AI line in hand and press Enter. It replaces the old `SAY > `
-  prompt bar.
-- **Layout:**
-  - the conversation scrolls above;
-  - the box to type in is below (Enter sends, Shift+Enter starts a new line);
-  - the title names the model in hand and its shape.
-- **Moving about:** Page Up, Page Down or the wheel scroll the conversation; Esc closes the window.
-- **The model is unchanged:** it answers as before, and its answers are seeded the same way. The
-  hand panel still shows the conversation.
+## CHAT is a tab of the hand panel
+- **Where it is:** with a model of the AI line in hand, the tabs are ITEM, COST, SORT (META where
+  a map has notes on it) and CHAT, last.
+- **Opening it:** Enter opens CHAT, and so does C when it comes round to it.
+- **While CHAT shows,** the keys type into its box. Esc goes back to ITEM, where C goes round the
+  other tabs as before.
+- **Unchanged:** everything in it works as before (files, figures, the cards' buttons, the keys).
+  It is drawn in the hand panel instead of over the whole screen.
+- **The compass** is no longer drawn over the tab: it covered the SEND button.
 
-## Files (the + button, or Ctrl+O)
-- **Choosing:** the system's file dialog, with several files at once.
-- **Each file's card shows:**
-  - its kind and size;
-  - the ways to name it, weighed as the File Locator weighs them: its address on the binary line,
-    and its place on another line where it is exactly an item of one, with the shortest way marked.
-- **What the model reads:** the file's first bytes, up to half its 512 positions. When there isn't
-  room, it starts again and says so.
-- **The card's buttons:**
-  - GO TO IT walks to the file on the binary line;
-  - J opens it on the line of its kind, as J does for a file in hand;
-  - SAVE writes it out.
-- **The vault** refuses as it does everywhere else.
+## IDEAS: new notes (each with *Notes.*)
+- **§19.21 Conversations among the pages and books:**
+  - filters for a conversation's surface rules, which are shapes on the page an automaton can
+    count: alternating turns, turn marks, a question followed by an answer, bounded turns;
+  - what those filters cannot see: meaning, which is a model's judgement;
+  - why it would matter: training material for the harness's chat models.
+- **§19.22 An unfoldable language network:**
+  - models as nodes and relations as edges, in the maps that already exist;
+  - unfolding as zoom: a node opens into a network of its own and closes back to one address;
+  - translation as two runs on the same texts, joined by an edge;
+  - the caution that relations multiply faster than anyone can look at them.
+- **§19.23 Limits of reduction, measured and kept:**
+  - the exact bounds: log2(N/K) bits saved on each survivor, paid for by the rest and by the
+    stack's description;
+  - the "surface" as a front of description bits against what a stack keeps;
+  - warping (the orderings) moves length between units and creates none; a guided line's floor is
+    its model's entropy;
+  - a ledger of arrangements kept with the releases, proposed as a round to build.
+- **§19.24 The other side of the library is addressing, not a trick:**
+  - a shared prediction is a library agreed in advance;
+  - its misses steer the choice of filters, as tailoring does;
+  - "usefulness" as a measured percentage: random survivors of a stack, judged, with the ones that
+    pass listed as demonstration addresses.
+- **§19.25 A model's probabilities over every line:**
+  - a guided ordering is already one model's probability laid over a line;
+  - a model at temperature 0, or with a fixed seed, is a function, which is what lets it take part
+    in an address;
+  - many models combined are again one nameable model;
+  - format conversion and decompilation as modelling, as good as the models that do not exist yet.
+- **§19.13:** now notes that the window is the CHAT tab.
 
-## Figures (DRAW, or Ctrl+D): the multimodal part
-- **Drawing:** DRAW makes a figure with a picture model: any trained diffusion run in the harness's
-  folders, with figures-2x32 first. Ctrl+P, or clicking the line under the title, chooses another
-  when there are several.
-- **The card shows:**
-  - the picture;
-  - its size and palette;
-  - its address on the image line.
-- **What the model reads:** the figure as its rows, a character a cell, so it reads a picture as it
-  reads a file.
-- **The card's buttons:**
-  - GO TO IT holds the figure on the image line. If your image line has another size or palette, a
-    hallway is built with one that fits, as the Media Player does for melodies.
-  - SAVE writes a PNG.
-- **Naming:** a figure is named by its model and its number ("figure 3 by figures-2x32"). That is
-  always the same picture: the one the harness shows third, and the one `sieve diffuse --make`
-  makes third. One function now makes them for all three (`nth_picture` in diffusion_run).
-- **Keys for the newest card:** Ctrl+G, Ctrl+J and Ctrl+S press its buttons.
-
-## Notes
-- **IDEAS §19.13:** marked as built, with what remains: the model naming places in its replies,
-  and published models in the window.
-- **IDEAS §19.20 (new):** your text game that makes itself and grows to 3D, as a record of
-  parameters with the spectrum as one of them. GAME.md §4a points to it.
-- **README:** the AI line's paragraph describes the window.
-- **HANDOFF:** a new entry for the window.
-
-## Scripted runs and CI
-- **New options:** `--chat`, `--chat-attach FILE`, `--chat-draw N` and `--chat-press KEYS`, listed
-  in `hallway --help`.
-- **New CI checks:**
-  - a file given, two figures drawn (pictures 1 and 2, by address) and a message sent;
-  - Ctrl+G on a figure holds it on IMAGE;
-  - Ctrl+J on a text file opens it on PAGES.
+## README and HANDOFF
+- **README:** the AI line's paragraph says CHAT is a tab.
+- **HANDOFF:** a new entry.
 
 ## Checked here
-- **Unit tests:** 76,335 checks, 0 failures. This machine has no hardware SHA-256, so the suite ran
-  once rather than twice. Your machine should show about twice that.
-- **CI lines run here:**
-  - the new chat lines;
-  - the AI line's `--talk`;
-  - the harness reproducing its shipped run;
-  - the six figures-2x32 addresses from `sieve diffuse --make`.
+- **Unit tests:** 76,335 checks, 0 failures (once, as this machine has no hardware SHA-256; about twice that on yours).
+- **The chat lines in CI,** run on the tab:
+  - a file given, two figures drawn and a message sent;
+  - Ctrl+G on a figure;
+  - Ctrl+J on a text file;
+  - Esc back to ITEM, then C round the tabs;
+  - the AI line's `--talk`.

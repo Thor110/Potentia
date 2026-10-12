@@ -1,5 +1,6 @@
-// The chat window (IDEAS §19.13): Enter on a model of the AI line in hand. The conversation with
-// it scrolls above, the box to type in below; files given to it and pictures a picture model makes
+// The CHAT tab (IDEAS §19.13): the last tab of the hand panel with a model of the AI line in hand,
+// beside ITEM, COST and SORT; Enter (or C round to it) opens it. The conversation with the model
+// scrolls above, the box to type in below; files given to it and pictures a picture model makes
 // are cards in the conversation, each with its place on the lines and buttons to go there.
 //
 // - What you say is fed to the model as bytes, a newline after it, and the model writes back until
@@ -17,7 +18,8 @@
 //
 // Keys: Enter sends, Shift+Enter starts a new line, Ctrl+O attaches, Ctrl+D draws, Ctrl+P changes
 // the picture model, Ctrl+G, Ctrl+J and Ctrl+S act on the newest card, Page Up and Page Down (or
-// the wheel) scroll, Esc closes. The conversation is kept while the model is held.
+// the wheel) scroll, Esc goes back to ITEM (where C reaches the other tabs). While it shows, the
+// keys are its box's. The conversation is kept while the model is held.
 
 #include "hallway.hpp"
 
@@ -169,6 +171,8 @@ void Hallway::open_chat()
 {
     if (!in_hand_ || !in_hand_->ai) return;
     talk_ready();
+    hand_tab_ = chat_tab();
+    if (chat_open_) return;
     chat_open_ = true;
     chat_text_.clear();
     chat_scroll_ = 0;
@@ -185,7 +189,9 @@ void Hallway::open_chat()
 
 void Hallway::close_chat()
 {
+    if (!chat_open_) return;
     chat_open_ = false;
+    if (in_hand_) hand_tab_ = 0; // back to ITEM, where C goes round the tabs again
     SDL_StopTextInput(window_);
     SDL_SetWindowRelativeMouseMode(window_, chat_had_mouse_);
 }
@@ -557,8 +563,15 @@ float Hallway::chat_entry(size_t i, float x, float y, float w, bool draw)
     return h + kPad;
 }
 
-void Hallway::draw_chat(float W, float H)
+void Hallway::chat_poll()
 {
+    // The CHAT tab keeps the keys only while it shows, with a model in hand.
+    if (chat_open_ && !(in_hand_ && in_hand_->ai && hand_tab_ == chat_tab()))
+    {
+        chat_open_ = false;
+        SDL_StopTextInput(window_);
+        SDL_SetWindowRelativeMouseMode(window_, chat_had_mouse_);
+    }
     // What the dialogs chose, here on the main thread: files to attach, and where to save a card.
     std::vector<std::string> pending;
     std::optional<std::string> save_to;
@@ -593,28 +606,18 @@ void Hallway::draw_chat(float W, float H)
             chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf("chat.save_failed", {ex.what()})));
         }
     }
-    if (!chat_open_) return; // a file attached may have closed it (nothing in hand)
+}
 
+void Hallway::draw_chat(float x, float top, float w, float bottom)
+{
     const SDL_Color ink = menu_ink(theme()), white{255, 255, 255, 255}, grey{150, 150, 150, 255};
-    const float px = std::max(16.0f, (W - 1100) / 2), pw = W - 2 * px, top = 16, bottom = H - 16;
-    // The hallway dimmed round it, and the window itself black.
-    SDL_SetRenderDrawBlendMode(r_, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(r_, 0, 0, 0, 160);
-    const SDL_FRect screen{0, 0, W, H};
-    SDL_RenderFillRect(r_, &screen);
-    SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
-    const SDL_FRect all{px, top, pw, bottom - top};
-    SDL_RenderFillRect(r_, &all);
-    SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 255);
-    SDL_RenderRect(r_, &all);
-    const float x = px + 16, w = pw - 32;
+    const float px = x, pw = w;
     chat_buttons_.clear();
     chat_bar_.clear();
 
-    // The title: the model in hand, and the picture model chosen.
-    text(x, top + 12, tr("chat.title"), 3, ink);
+    // At the top: the model in hand, and the picture model chosen.
     const AiShape& sh = ai_space_->shape();
-    text(x, top + 44,
+    text(x, top,
          fit(trf("chat.with", {short_address(talk_hex_),
                                trf(sh.layers == 1 ? "ai.summary.one" : "ai.summary", {std::to_string(sh.layers), std::to_string(sh.width), std::to_string(sh.heads),
                                                                                       std::to_string(ai_space_->weights()), std::to_string(sh.bits)})}),
@@ -623,8 +626,8 @@ void Hallway::draw_chat(float W, float H)
     const std::string figures = chat_models_.empty() ? tr("chat.figures.none")
                                                      : trf(chat_models_.size() > 1 ? "chat.figures.more" : "chat.figures",
                                                            {u8(chat_models_[size_t(std::clamp(chat_model_, 0, int(chat_models_.size()) - 1))].filename())});
-    text(x, top + 60, fit(figures, w, 1), 1, grey);
-    if (chat_models_.size() > 1) chat_bar_.push_back({SDL_FRect{x, top + 56, std::min(w, text_width(figures, 1)), 16}, 3});
+    text(x, top + 16, fit(figures, w, 1), 1, grey);
+    if (chat_models_.size() > 1) chat_bar_.push_back({SDL_FRect{x, top + 12, std::min(w, text_width(figures, 1)), 16}, 3});
 
     // The box to type in, its lines wrapped, the last few shown; the buttons round it.
     const std::vector<std::string> keys = wrap_words(tr("chat.keys"), size_t(std::max(8.0f, w / 8)));
@@ -658,7 +661,7 @@ void Hallway::draw_chat(float W, float H)
     for (size_t k = 0; k < keys.size(); ++k) text(x, keys_y + kSmallLine * float(k), keys[k], kSmall, grey);
 
     // The conversation, newest at the foot, scrolled up by chat_scroll_.
-    const float area_top = top + 92, area_bottom = box_y - 12;
+    const float area_top = top + 46, area_bottom = box_y - 12;
     std::vector<float> hs(chat_.size());
     float total = 0;
     for (size_t i = 0; i < chat_.size(); ++i) total += hs[i] = chat_entry(i, x, 0, w, false);

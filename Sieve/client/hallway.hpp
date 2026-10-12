@@ -652,7 +652,7 @@ public:
     // The AI line: say something to the model in hand, which writes back (in the chat window, which
     // Enter opens; and --talk in a scripted run). The conversation is kept while the model is held.
     void talk(const std::string& said);
-    // The chat window (chat.cpp): Enter on a model of the AI line in hand. Scripted runs open it,
+    // The CHAT tab (chat.cpp): Enter on a model of the AI line in hand. Scripted runs open it,
     // attach a file (read, weighed and given to the model) and draw figures with its picture model.
     void open_chat();
     void chat_attach(const std::string& path);
@@ -1299,7 +1299,7 @@ private:
     std::optional<Book> save_item_;
     std::optional<std::vector<uint8_t>> save_blob_; // or a file made already: a view's picture or text
     std::string save_ext_;
-    int hand_tabs();                       // 3, or 4 with META
+    int hand_tabs();                       // 3, or 4 with META; one more (CHAT) for a model of the AI line
     void draw_meta(const Book& bk, float x, float cy, float pw, float bottom);
     void graph_remove(int node);
     // The real names of files walked to (the locator, T with a path, a map's node), by SHA-256,
@@ -1488,7 +1488,13 @@ private:
     enum class ChatAct { Go, Item, Save };
     void close_chat();
     void chat_event(const SDL_Event& e);
-    void draw_chat(float W, float H);
+    // The CHAT tab drawn in the hand panel's area from (x, top), `w` wide, down to `bottom`.
+    void draw_chat(float x, float top, float w, float bottom);
+    // Every frame: what the dialogs chose (files to give, where to save a card), and the keys given
+    // back when the CHAT tab no longer shows.
+    void chat_poll();
+    // The CHAT tab's index (the last tab, with a model of the AI line in hand), or -1.
+    int chat_tab() { return in_hand_ && in_hand_->ai ? hand_tabs() - 1 : -1; }
     void chat_send();
     void chat_act(size_t entry, ChatAct act);
     // The model in hand made ready to talk (a new conversation for a new model).

@@ -421,13 +421,12 @@ void Hallway::draw_hud(int w, int h)
              tr(in_hand_ && in_hand_->parts ? "hud.keys.page" : "hud.keys.trail") + tr("hud.keys3"),
          1, ink);
     // Last, so nothing else in the readout is drawn over it.
-    draw_compass(float(W), float(H));
+    if (!chat_open_) draw_compass(float(W), float(H)); // not over the CHAT tab's buttons
     if (pause_open_) draw_pause(W, H);
     if (nav_open_) draw_navigator(W, H); // over everything, the pause menu too: a screen of its own
     if (locator_.is_open()) locator_.draw(W, H);
     if (media_open_) draw_media_player(W, H);
     if (graph_open_) draw_graph_view(W, H);
-    if (chat_open_) draw_chat(W, H);
 }
 
 // A model in hand: its wireframe, turned by the mouse or by A and D, and its .obj text beside
@@ -613,8 +612,8 @@ void Hallway::draw_in_hand(float W, float H)
     float cy = y + 12;
     text(x + 14, cy, fit(tr("hand.title") + "   " + in_hand_where_ + "   " + trf("hud.along", {percent(bk.fraction)}), pw - 28, 2), 2, ink);
     cy += 28;
-    // Three tabs: the thing itself, what it costs to name it, and where it stands in a map. C moves
-    // between them. On every tab, at the right, the chosen map and V to add the item to it.
+    // Three tabs: the thing itself, what it costs to name it, and where it stands in a map (and
+    // META, for an anchor with notes; and CHAT, for a model of the AI line). C moves between them. On every tab, at the right, the chosen map and V to add the item to it.
     {
         if (const GraphMap* g = graph_current())
         {
@@ -630,7 +629,11 @@ void Hallway::draw_in_hand(float W, float H)
         float tx = x + 14;
         for (int t = 0; t < tabs; ++t)
         {
-            const std::string label = tr(t == 0 ? "hand.tab.item" : t == 1 ? "hand.tab.cost" : t == 2 ? "hand.tab.sort" : "hand.tab.meta");
+            const std::string label = tr(t == chat_tab() ? "hand.tab.chat"
+                                         : t == 0       ? "hand.tab.item"
+                                         : t == 1       ? "hand.tab.cost"
+                                         : t == 2       ? "hand.tab.sort"
+                                                        : "hand.tab.meta");
             const float tw = text_width(label, 1) + 16;
             if (t == hand_tab_)
             {
@@ -644,6 +647,7 @@ void Hallway::draw_in_hand(float W, float H)
         cy += 22;
     }
     hand_view_rect_ = {};
+    if (hand_tab_ == chat_tab()) { draw_chat(x + 14, cy, pw - 28, y + ph - 8); return; }
     if (hand_tab_ == 1) { draw_cost(bk, x, cy, pw, y + ph); return; }
     if (hand_tab_ == 2) { draw_sort(bk, x, cy, pw, y + ph - 16); return; }
     if (hand_tab_ == 3) { draw_meta(bk, x, cy, pw, y + ph - 16); return; }

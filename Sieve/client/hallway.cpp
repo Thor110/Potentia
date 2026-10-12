@@ -1710,7 +1710,8 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
         if (in_hand_)
         {
             hand_tab_ = (hand_tab_ + 1) % hand_tabs();
-            if (hand_tab_ == 2)
+            if (hand_tab_ == chat_tab()) open_chat(); // the keys go to its box until Esc
+            else if (hand_tab_ == 2)
             {
                 const int node = sort_node(*in_hand_);
                 GraphMap* g = graph_current();
@@ -1770,7 +1771,7 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
         break;
     case SDLK_RETURN:
     case SDLK_KP_ENTER:
-        if (in_hand_ && in_hand_->ai) open_chat(); // the AI line: the chat window (chat.cpp)
+        if (in_hand_ && in_hand_->ai) open_chat(); // the AI line: the CHAT tab (chat.cpp)
         else if (in_hand_) apply_tailored(quit);
         break;
     case SDLK_Z:
@@ -1908,6 +1909,7 @@ void Hallway::render()
     cam_.update(w, h);
     ++portal_frame_;
     item_save_poll(); // an item F asked to save, once the dialog has said where
+    chat_poll();      // the CHAT tab's files to give and cards to save, from its dialogs
     vault_ahead();    // your room's files checked by the vault ahead of a look at them
     vault_collect();  // and the verdicts on pictures, from their workers
     const Theme& th = theme();

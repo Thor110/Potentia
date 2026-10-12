@@ -2565,3 +2565,16 @@ cover and a title.
 - **Not yet:** the model naming places in its replies, turned into cards (needs a model that follows
   a format: a published one through `sieve chat`); published models in the window; a picture model
   in hand on the AI line (its shape differs from the line's).
+
+### CHAT as a tab; notes 19.21 to 19.25 (12 October 2026)
+- **What** (Edward): the chat as its own tab, so the item's other tabs stay available.
+- **The tab:** `hand_tabs()` counts one more with a model of the AI line in hand, and CHAT is the
+  last (`chat_tab()`). Enter, or C round to it, opens it (`open_chat`); while it shows, the keys are
+  its box's (`chat_open_`); Esc goes back to ITEM (`close_chat`). `draw_chat(x, top, w, bottom)`
+  draws in the hand panel's area. `chat_poll()`, every frame from `render()`, takes the dialogs'
+  choices and gives the keys back if the tab is no longer showing. The compass is not drawn over
+  the tab (it covered SEND).
+- **IDEAS:** §19.21 conversations among the pages and books; §19.22 an unfoldable language
+  network; §19.23 limits of reduction, measured and kept (a ledger, proposed as a round); §19.24
+  the predictive side as addressing, and usefulness as a metric; §19.25 a model's probabilities
+  over every line, and models together.

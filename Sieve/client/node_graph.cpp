@@ -700,12 +700,13 @@ void Hallway::draw_sort(const Book& bk, float x, float cy, float pw, float botto
 int Hallway::hand_tabs()
 {
     if (!in_hand_) return 3;
+    const int chat = in_hand_->ai ? 1 : 0; // CHAT, last
     const int node = sort_node(*in_hand_);
     const GraphMap* g = graph_current();
-    if (node <= 0 || !g) return 3;
+    if (node <= 0 || !g) return 3 + chat;
     for (const cli::MapMeta& m : g->map.meta)
-        if (m.node == uint32_t(node)) return 4;
-    return 3;
+        if (m.node == uint32_t(node)) return 4 + chat;
+    return 3 + chat;
 }
 
 void Hallway::draw_meta(const Book& bk, float x, float cy, float pw, float bottom)

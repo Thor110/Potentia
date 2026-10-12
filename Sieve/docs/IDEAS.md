@@ -1818,8 +1818,9 @@ the noise.
   with its address and Go to it), so talking to a text model and asking a picture model are one
   interface.
 
-*Built (12 October 2026).* The window is in the hallway (client/chat.cpp; README, the AI line):
-Enter on a model in hand opens it. Files given with the plus button are cards with their kind, size
+*Built (12 October 2026).* The window is in the hallway (client/chat.cpp; README, the AI line). It
+is the CHAT tab of the hand panel, beside ITEM, COST and SORT, which stay a C away; Enter on a
+model in hand opens it. Files given with the plus button are cards with their kind, size
 and the ways to name them, weighed as the File Locator weighs them, with GO TO IT, J and SAVE, and
 the model reads their first bytes. It is multimodal in the plainest sense: DRAW makes a figure with
 a picture model (figures-2x32, or any trained diffusion run in the harness's folders), shown in the
@@ -1961,3 +1962,125 @@ fiction to science fiction and fantasy, a spectrum (§19.6, GAME.md §4a).
   that keeps its characters and follows what happened. A first step that needs neither: a scene as
   a record (characters as figures, each with a name and a voice model, and a place), kept and
   replayed in the chat window.
+
+**19.21 Conversations among the pages and books, and filters for their rules (Edward, 12 October
+2026).** His idea: there is an opportunity to find conversations among the pages and books, and
+perhaps to filter by the rules that govern conversations.
+
+*Notes.*
+- **What a filter can see.** The surface of a conversation is a shape on the page, as a poem's
+  is (§19.7's text geometry): turns that alternate, each opened by a mark (a dash, a quotation
+  mark, a speaker's name and a colon), questions followed by something that is not a question,
+  turns of bounded length. Each is a frontier carried along the text, so most can count and rank,
+  as sentence-shape does; together they would give a line of pages that are dialogues.
+- **What it cannot see.** Whether an answer answers the question, or whether the speakers keep to
+  the subject, is meaning, not shape; that is a model's judgement (a soft filter, judge-only), not
+  an automaton's.
+- **Books:** a book whose pages are each a dialogue, or a dialogue that runs across its pages (the
+  last turn of one page answered at the top of the next), is the books line's version.
+- **Why it would matter:** the conversations found are training material for the harness's chat
+  models, and the rules of a conversation are exactly what a model must learn to follow before the
+  chat window's finding (§19.13) can work.
+
+**19.22 An unfoldable language network (Edward, 12 October 2026).** His idea: out of this could
+come a network of language models that unfolds, an aid to translation. Think of a shape that
+unfolds out of itself: a fractal, or one of those physical constructions that expand and contract,
+or a node network. There are so many ways to view it, and so many ways to make relations and
+filters, that it becomes an endless network of ways to cross-analyse things.
+
+*Notes.*
+- **Its parts exist.** Every model is an address on the AI line; language-v1 names a model by the
+  language of a run's text; the maps (the node graph) already relate items by anchors and edges.
+  A language network would be a map whose nodes are models and whose edges are relations between
+  them: "translates A to B" (trained on texts in both), "speaks the language of run R", "within
+  two digits of model M" (near-model-v1).
+- **Unfolding** is zoom: a node opens into a network of its own (a language into its dialects, a
+  model into the models near it) and closes back to one address. The structure is the same at each
+  level, which is the fractal part, and the address of the whole is the address of its record.
+- **For translation,** a pair of runs trained on the same texts in two languages, joined by an
+  edge, is the smallest case. A text goes in through one model and out through the other, and both
+  ends can check the models by their hashes.
+- **The caution** is the abundance itself: relations multiply faster than anyone can look at
+  them, so the network needs a measure of which relations earn their keep. That is §19.23's
+  ledger, applied to edges.
+
+**19.23 Limits of reduction, measured and kept (Edward, 12 October 2026).** His words: serious
+metrics and statistics, beside the others, that point to the theoretical maximum and minimum data
+reduction (surfaces that depend on the topology and warping of the state spaces), within each
+space and across them, to start a record of metrics and of filter arrangements and compositions.
+
+*Notes.*
+- **The bounds are known exactly.**
+  - A stack that keeps K of a line's N units saves log2(N/K) bits on each survivor's address.
+    Every unit it sets aside must still be named on the full line, plus a flag, so the saving is
+    for the kept and the cost for the rest.
+  - The stack's own description (its filters and settings) is paid once.
+  - Averaged over every unit, no stack and no ordering gains: that is the counting argument (§0).
+    So the maximum is a property of what you want named, not of the line.
+- **The surface.** For each line, plot a stack's description bits against the log of what it
+  keeps; the best stacks found form a front, and that front is the "surface" to record. Across
+  lines, a file that is an item of several lines is named on the shortest (the File Locator's
+  weighing does this per file already).
+- **Warping.**
+  - An ordering (positional, scrambled, guided) changes nothing about how many units there are.
+    It changes which ones get short addresses.
+  - A guided ordering's expected address length is the entropy of its model's distribution: the
+    theoretical minimum for anything that model predicts. Its maximum is the line's full length.
+  - So warping moves length between units; it does not create it.
+- **The record.** A ledger kept with the releases:
+  - one row per arrangement (line, shape, stack id, its filters and settings);
+  - the kept log10, the description bits, and the measured saving on a reference corpus;
+  - the best and worst found.
+
+  `hallway --metrics` gives the first column today. A sweep over single filters and their pairs
+  (`tools/survey` counts over grids already) would fill the rest. This is a round to build, not
+  only a note.
+
+**19.24 The other side of the library is a way of addressing, not a trick (Edward, 12 October
+2026).** To be clear: the predictive side (§19.14's short numbers, §19.16's tags) is not meant as a
+trick for getting something from nothing. It is an alternative form of addressing, a way of
+unpacking information. It also helps with aiming: steering towards filters that better correct the
+course of the patterns in the information.
+
+*Notes.*
+- **Addressing, not compression magic.** A prediction shared by both ends is a library agreed in
+  advance. What it names is reached in fewer digits, and everything else is still reached in full;
+  nothing is lost and nothing is free (§19.23).
+- **Steering.** Where a prediction misses, the miss says what the data was like that the
+  prediction was not. Those misses are the evidence for choosing the next filter. This is
+  tailoring (COST's K), which already searches for the filters that keep given items and write
+  them shortest, used as a feedback loop.
+- **Useful addresses, as a metric** (his further idea: find useful addresses from the procedural
+  algorithms to go beside the metrics, adding up to another metric, a utility percentage).
+  - Draw survivors of a stack at random (unrank a random number, as the picture models' training
+    does) and ask the judges what each is: a valid file of its kind, readable text, a figure, a
+    maze that has a path.
+  - The share that pass is the stack's usefulness, a measured percentage beside its kept share.
+  - The ones that pass are its demonstration addresses: a few listed in the ledger, so a reader
+    can go and see what the stack keeps.
+
+**19.25 A model's probabilities over every line, and models working together (Edward, 12 October
+2026).** His idea: all of AI's probability laid over the state spaces as a filter (models
+themselves being filtered out, unless found on the binary line as files), and many models across
+many languages networked in one coherent system, working on things together and expanding or
+making filters. His first thought was the AI as an automaton, with a known temperature or no
+seed, to aid very fast decompilation and conversion of formats into this data engine.
+
+*Notes.*
+- **It exists in small.** A guided ordering is one model's probability laid over the pages line:
+  the line reordered by what the model expects. Any model of the AI line could guide any line of
+  bytes in the same way; the AI line's own filters (language-v1) already use a run's text to score
+  models. The reverse, a model scoring a line's units (keep the pages a model predicts in fewer
+  than k bits), would be a soft filter.
+- **Deterministic, so addressable.** At temperature 0, or with a fixed seed, a model is a function:
+  the same input gives the same output on every machine (training-v1's arithmetic and the samplers
+  are pinned for this reason). That is what lets a model take part in an address. A model sampled
+  with an unknown seed could not.
+- **Many models at once.** Models combined (each scoring, their scores added, or one chosen per
+  context) are again one model. It can be named by the addresses of its parts and a rule, so a
+  network of them is still a single, checkable thing.
+- **Formats and decompilation.** A model that predicts a format's bytes well makes that format's
+  files short on a guided line. That is compression by modelling (arithmetic coding), and its gain
+  is only as good as the model's predictions. Conversion between formats is a model mapping one to
+  the other. Both need trained models that do not exist yet; the harness is where they would be
+  made, and the ledger (§19.23) where their gains would be measured honestly.

@@ -344,6 +344,7 @@ hud.zero = 0
 hand.tab.item = ITEM
 hand.tab.cost = COST
 hand.tab.sort = SORT
+hand.tab.chat = CHAT
 hand.keys.cost = C: back to the item    K: tailor the filters to it    F: save as a file    E / click / Esc: put it back
 cost.head = every row below is the same number, written a different way
 cost.unit = the unit itself
@@ -552,7 +553,7 @@ hand.keys = Z / click it: view    C: the next tab    F: save as a file    J: its
 hand.keys.file = Z / click it: view    C: the next tab    F: save as a file    J: open it on its own line    E / Esc: put it back
 hand.keys.book = N / B: turn the page    Z / click it: view    C: the next tab    F: save    J: its file    E / Esc: put it back
 hand.keys.world = A / D / mouse: turn    R: upright    Z / click it: its .obj text    C: next tab    F: save    J: its file    E / Esc: put it back
-hand.keys.ai = Enter: talk to it (the chat window)    F: save it (.safetensors)    J: its file    E / Esc: put it back
+hand.keys.ai = Enter: talk to it (CHAT)    C: the next tab    F: save it (.safetensors)    J: its file    E / Esc: put it back
 hand.keys.model = A / D / mouse: turn    R: upright    Z / click it: its .obj text    C: next tab    F: save    J: its file    E / Esc: put it back
 hand.title_label = TITLE
 hand.no_pages = (no pages: set BOOKS pages in the menu)
@@ -959,8 +960,7 @@ talk.full = (its memory is full: it starts again)
 talk.file = file: {0} ({1} bytes)
 talk.figure = figure {0} by {1}: {2}
 
-# The chat window (Enter on a model in hand; client/chat.cpp).
-chat.title = CHAT
+# The CHAT tab (Enter on a model in hand; client/chat.cpp).
 chat.with = with the model in hand, {0}: {1}
 chat.figures = figures by {0} (DRAW, or Ctrl+D)
 chat.figures.more = figures by {0} (DRAW, or Ctrl+D; click here or Ctrl+P for another picture model)
@@ -993,7 +993,7 @@ chat.save_failed = not saved: {0}
 chat.went.picture = the figure, on the image line, in hand
 chat.more = more below (Page Down)
 chat.more.above = more above (Page Up)
-chat.keys = Enter: send    Shift+Enter: a new line    + or Ctrl+O: give it files    Ctrl+D: draw a figure    Ctrl+P: another picture model    Ctrl+G / Ctrl+J / Ctrl+S: the newest card's buttons    PgUp PgDn, wheel: scroll    Esc: close
+chat.keys = Enter: send    Shift+Enter: new line    + / Ctrl+O: give files    Ctrl+D: draw    Ctrl+P: picture model    Ctrl+G / J / S: the newest card    PgUp PgDn: scroll    Esc: back to ITEM
 ai.summary = {0} layers, width {1}, {2} heads: {3} weights of {4} bits
 ai.summary.one = 1 layer, width {1}, {2} heads: {3} weights of {4} bits
 ai.says = what it says, from a newline:
