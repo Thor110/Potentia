@@ -1813,3 +1813,31 @@ and, in time, the model finding files among the infinite through the filters and
 - **Shared with the harness:** the same window shows a diffusion model's pictures as cards (each
   with its address and Go to it), so talking to a text model and asking a picture model are one
   interface.
+
+**19.14 Short request numbers, and the balance with the vault (Edward, 12 October 2026).** His
+idea: a library shelf has only two sides, and on each side there can be a short number. A remote
+downloader could send a short request number, with the library (or a value) it belongs to, and
+receive a large file. But this should never detract from everything simply existing, on the lines,
+in every way, shape or form, apart from what the vault withholds by PDQ (gore and real-world
+harm), and the vault must never interfere with games and art: a delicate balance to aim for.
+
+*Notes.*
+- **Where the shortness comes from.** A short number can name a large file only when both ends
+  already share what the number points into: a library agreed in advance (a map's verified anchors,
+  a release's manifest, a stack and its compact line). The number is then an index into that
+  library, and the library carries the rest. For a file in no shared library the number is as long
+  as the file, as the counting argument says (§0, §16); the two sides of the shelf are then the
+  library's side and the file's side.
+- **What already does it.** Maps name anchors by SHA-256 and node; sieve-manifest-v5 names a file
+  as an item of a line (`item K <address>`) and makes it again; a compact address is a short number
+  in a stack's numbering. A request number would be (library id, number in it), with the library
+  named by its hash, so both ends can check they mean the same one.
+- **A remote downloader** asking for (library, number) gets the file made again from what both
+  hold, and checks it by its SHA-256. Nothing new travels but the number, and the library once.
+- **The balance.** The lines hold everything, and that does not change: no filter, library or
+  request scheme removes anything from them. The vault (docs/VAULT.md) is the one exception, and a
+  narrow one by design: it withholds only what its hashes list (PDQ for pictures, by hash for
+  files), so Sieve is not what hands over known harmful material, and it judges no text by what it
+  says. Games and art are never its business: it has no setting, no category of content, and no
+  taste; only a list of known items. Keeping it that narrow is the balance: everything else exists
+  and can be reached, by walking, by address, or by a short number.
