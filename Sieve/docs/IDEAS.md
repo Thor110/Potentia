@@ -2332,3 +2332,185 @@ accurately as it can): the same, but for the voice.
 - **How far it goes.** Articulatory synthesis is understandable rather than lifelike: it sounds
   like a voice, often an odd one, and lifelike speech today comes from large neural models trained
   on recordings. Here that is a fair trade: every sound is explained, exact, small and searchable.
+
+**19.34 The Encryption Engine (Edward, 12 October 2026).** His idea: an "Encryption Engine" on the
+main menu and the pause menu, which encrypts payloads in all the endless ways there are to encrypt
+a file, as his other program, File Cipher, does: enumerating ways of encryption, as a filter.
+Encryption is a kind of noise, so it is as easy to detect as it is hard to, 50/50. We know how to
+encrypt and decrypt, all the ways in and around it, and how it can be layered again and again, so
+there is a framework.
+
+*Notes.*
+- **A recipe is a unit, so the recipes are a line.** One way to encrypt a payload is a list of
+  layers, each a named, versioned step with its settings: compress, encode, a cipher and its mode,
+  how the key is made from a password, a container. Layering again and again is a longer list. A
+  list over a fixed set of layers is a word over an alphabet, so every recipe has an address on a
+  recipes line, and a short recipe has a short address. "All the endless ways" are that line,
+  which is unbounded, as every line here is.
+- **What can be told, and what cannot.**
+  - *A strong cipher's output can't be told from noise.* That is what being strong means: without
+    the key, no test does better than chance. On that output, no filter can say "encrypted"
+    rather than "random", and §19.30's noise category is where it falls.
+  - *Almost everything around it can be told:* containers and headers (OpenPGP, age, a 7-Zip or
+    ZIP archive with AES), sizes (whole blocks, nonce and tag lengths), and the contrast between
+    noise and the structured file around it.
+  - *Weak and historical ciphers can be told and undone:* Caesar, Vigenère, XOR with a short key,
+    and ECB mode, which shows the shape of a picture through the cipher. Their keys are few enough
+    to try them all, so each is a filter that names the recipe and a search that finds its key.
+  - So the "50/50" splits cleanly. The wrapping and the weak ciphers are detectable; a strong
+    cipher's body is not, by design.
+- **Enumerating the ways, as a filter.** Given a payload and an output, look for the recipe:
+  shortest recipes first, as with seeds (§19.27). It finishes wherever the key space is small, and
+  never where it is large. The counting argument is the wall: a 128-bit key is 2^128 tries. With
+  the key, decrypting is J: the output and the recipe give back the payload exactly.
+- **In the menus:** choose a payload (a file, or the item in hand), build a recipe from layers,
+  and see each layer's output as an item on the binary line. Then save it, or go the other way:
+  identify (each layer's detector, in turn) and decrypt with a key.
+- **Two cautions.**
+  - *Sieve's keyed orderings are not ciphers for secrets.* The scrambled order uses a published key
+    ("sieve"), so it hides nothing. To protect real data, the engine should use reviewed
+    implementations of standard ciphers, not ones written here; ciphers written here are for
+    study and for the game.
+  - *Selling software with encryption* can come under export rules. Published open-source code is
+    usually exempt, but it is worth checking before the paid release (§19.39).
+
+**19.35 Every rule as an automaton? (Edward, 12 October 2026).** His words: all the rules reveal all
+the information, and all the rules, if aligned right, can be automata. Consider whether all rules
+can be or not (probably not), but that would be the ideal to aim for.
+
+*Notes.*
+- **The first half is exact.** A stack that keeps one unit describes it completely, and the
+  information it carries is the logarithm of how many it keeps. A compact address is exactly the
+  part the rules did not say.
+- **In one sense every rule is an automaton.** A line's units have a fixed length, so any rule
+  keeps a finite set, and any finite set is recognised by some finite automaton. The real question
+  is size: whether the automaton is small enough to count with and walk.
+- **Which rules have small automata:**
+  - *Rules that read left to right with bounded memory* (letter pairs, runs, keys, metre): small,
+    and built.
+  - *Rules that count up to the length* (how many rests, how many distinct symbols): states that
+    grow with the length, not with the number of units. Still practical.
+  - *Rules in two dimensions* (a figure's connected shape): frontier automata, whose size grows
+    with the width (figure-v1). Fine at small widths.
+  - *Rules about the whole unit at once* ("the second half mirrors the first", nesting of
+    unbounded depth): states that grow exponentially with the length. Exact, but not practical.
+  - *Rules built on one-way functions* (a hash that starts with zeros, a model's score): an
+    automaton exists, but none much smaller than the list of survivors, and hashes are designed
+    so.
+  - *What a program does* (does it halt, does it compute X): undecidable for programs of any
+    length (Rice's theorem); decidable at a fixed length, but not tractably.
+- **So, the aim.** An automaton wherever a small one exists. Where none does, an automaton that
+  keeps a superset (every survivor and some extra, counted exactly), paired with a judge that
+  checks each unit. That is the judge-only tab's role, generalised: the automaton counts and walks,
+  and the judge confirms.
+
+**19.36 There are only so many ways to write code (Edward, 12 October 2026).** His point: code can
+vary only so much in how it performs a task. There is a right way and a wrong way, the fastest and
+the slowest, and everything in between.
+
+*Notes.*
+- **True, within a length.** The programs of at most N instructions are finite. The ones that do
+  a task are a subset, and among them there is a fastest and a shortest. Searching them is
+  *superoptimisation*: Massalin's superoptimizer (1987) tried every short instruction sequence to
+  find the fastest one equal to a given function, and STOKE (2013) searches the same space at
+  random.
+- **Where it stops.**
+  - *Equality can't be decided in general.* Whether two programs compute the same thing is
+    undecidable (Rice again), so candidates are checked by tests, and proved equal only for small
+    pieces.
+  - *The shortest program* that makes a given output is its Kolmogorov complexity, which can't be
+    computed in general.
+  - *"Right" depends on the measure:* speed, memory, size or clarity. There is a frontier of
+    trade-offs (a Pareto front), not one best.
+- **In Sieve:** a code line whose units are programs in a small instruction set. Its filters:
+  well-formed (a grammar, as an automaton or a superset of one, §19.35), passes the tests (a
+  judge), and cost (steps taken). Searched shortest first, it is a superoptimiser walked as a
+  corridor, and its survivors are the "right ways" at each length.
+
+**19.37 How powerful striking off rules can become, and one AI across every line (Edward, 12
+October 2026).** His thought: if everything is rules struck off the list as you walk, how powerful
+this becomes depends on whether everything really can be made into rules like this. He thinks
+there will be an AI that spans the shelves of all dimensions.
+
+*Notes.*
+- **The limit is the counting argument, and the lever is agreement.** No set of rules makes every
+  unit short: they shorten what they predict and lengthen the rest. The power comes from rules
+  that fit the world well, agreed once and used everywhere: the better the fit, the shorter
+  everything that fits, which is compression and understanding as one thing.
+- **One model across the lines.** A model that reads and writes the units of every line (text,
+  pictures, melodies, worlds, models) is a multimodal model whose vocabulary is the lines'
+  symbols.
+- **The filters can steer it exactly.** At each step, a symbol is allowed only if the line's
+  automaton can still reach a survivor after it. The model then writes only survivors, never
+  having to be told twice. This is constrained decoding: language models already use it to
+  follow grammars, and here every compact stack is such a grammar. It works today wherever a stack
+  has an automaton, on any line, with the models already built.
+
+**19.38 A map of trained models, and models strung together (Edward, 12 October 2026).** His idea:
+chart trained models on a state space map and string them together, like the file directory's
+3D node graph. Perhaps another window, but the same system.
+
+*Notes.*
+- **A model is already a point.** On the AI line each model has an address, and a model given as a
+  file has its SHA-256, so a map can hold models as it holds files (`sieve map`, the node graph).
+- **Edges worth drawing:**
+  - *lineage:* trained from, fine-tuned from, a run and its checkpoints;
+  - *nearness:* how many weights differ (near-model), or how alike their outputs are on a fixed
+    set of probes;
+  - *paths:* models trained from the same start are often joined by a straight line of weights
+    that all work about as well (linear mode connectivity). A path is a corridor between two
+    models, walkable;
+  - *merges:* a model made by averaging others, with an edge from each parent.
+- **Strung together is a pipeline:** one model's output is the next one's input (text to a
+  picture, a picture to a melody, a melody to a voice, §19.33). A graph of Sieve's own models
+  wired this way is what ComfyUI's node graph is for its models, built from parts we already have
+  (§19.31: avoid ComfyUI where our own serve).
+- **Where it goes:** the node graph's map format, with models as nodes, and a window of its own
+  (the model graph). Its first nodes would be the shipped runs (universalbibliothek, figures-2x32,
+  melodies-2x64) with their checkpoints as lineage.
+
+**19.39 One game, two names: paid, or free if you build it (Edward, 12 October 2026).** His plan:
+release the game as a paid version, *State Space: Near Zero*, and exactly the same game for free
+from GitHub, if you build it yourself, as *The Sieve of Potentia*. No changes whatsoever; only the
+marketing differs, as Stealth Bastard was free at first and is now also sold, and as Black Mesa
+was. The front page and all the marketing say "This game is free if you build it yourself!", with
+a video of the process and how easy it is: install Visual Studio 2022, clone the repository in
+GitHub Desktop, open the folder, build Release or run the release script, done.
+
+*Notes.*
+- **The licence allows it.** The repository is under the AGPL v3, which lets anyone sell copies
+  as long as the source comes with them or is offered. Selling the same build while the source is
+  free on GitHub is exactly what it permits.
+  - *What it also permits:* anyone else may sell builds too, so long as they offer the source.
+  - *What protects the names:* trademarks, not the licence. The names (*State Space: Near Zero*,
+    *The Sieve of Potentia*) and the store art can be kept as the project's own, so others' builds
+    would have to be called something else.
+  - *Third-party parts:* their licences (in `third_party_licenses`) all allow the same.
+- **The closest precedent is Mindustry:** GPL, free to build from GitHub, and sold on Steam, the
+  same game. Stealth Bastard (free, then *Deluxe* sold) and Black Mesa (a free mod, then a fuller
+  paid release) are the spirit of it, though in both the paid version added content. Edward's plan
+  is stricter: identical.
+- **"No changes whatsoever" has consequences.**
+  - *No Steamworks* (achievements, cloud saves, the overlay's APIs), or only as an optional part
+    that a self-built copy simply lacks. Otherwise the two would differ.
+  - *Steam asks about AI.* Its content survey asks whether a game uses AI-generated content and
+    whether any is generated live. The hallway's models, DRAW and CHAT are live generation, so the
+    answer is yes, with what keeps it in bounds.
+  - *Encryption* (§19.34): check the export rules before the paid release, if the Encryption
+    Engine ships.
+- **Making "how easy it is" true.**
+  - *The steps:*
+    1. Install Visual Studio 2022 with the "Desktop development with C++" workload, which
+       includes CMake.
+    2. Clone the repository in GitHub Desktop.
+    3. In Visual Studio, Open Folder, choose x64 Release, and Build All.
+  - *What can still trip a builder up:*
+    - The first build downloads SDL3 and builds it, so it needs the internet and a few minutes.
+    - The release script (`tools/make_release.bat`) needs Python. For "done" to be true, a
+      `build_release.bat` that needs only Visual Studio would help: it would find Visual Studio's
+      own CMake, configure, build and copy the result, with Python optional.
+  - *The video* is then those three steps, start to finish, uncut, with the time it took on
+    screen.
+- **The front page:** "This game is free if you build it yourself!", then the video, then the
+  three steps, then "or buy *State Space: Near Zero* on Steam to support it, and get it ready to
+  play". The store page says the same, so nobody buys it without knowing.

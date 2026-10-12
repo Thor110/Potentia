@@ -162,6 +162,12 @@ so that it can be skipped, timed, or run locally on Edward's machine (Windows 10
 cheapest check is a core-only build (`-DSIEVE_BUILD_CLIENT=OFF`) and one run of `sieve_tests`.
 Prefer changes that need less of it.
 
+**Who runs what** (Edward, 12 October 2026): Edward builds Debug and Release on Windows and runs
+the whole suite for every package (both SHA-256 paths, 152,668 checks), then tries the change in
+the program. In a conversation, run the unit suite once and the CI lines the change adds or
+touches; leave the whole hallway step to GitHub's CI and to Edward. Make a check stricter where a
+change needs it, not by running everything twice.
+
 The hallway can be driven headless for checks — `--take` a screenshot, `--press` a key sequence —
 and note that `--take` runs after `--press`, so anything that needs a frame first must render one.
 
@@ -2685,3 +2691,17 @@ cover and a title.
   changes every photo's address; waiting on Edward's choice of default.
 - **Not yet:** recording a melody run from the harness; a track model; a model of sound itself
   (pcm); commands for the models to use.
+
+### Notes 19.34 to 19.39 (12 October 2026)
+- **IDEAS only, no code:**
+  - §19.34 the Encryption Engine (recipes as a line; what can and can't be told from noise);
+  - §19.35 which rules have small automata, and a superset automaton with a judge where none does;
+  - §19.36 superoptimisation: only so many ways to write code;
+  - §19.37 the limit of rules, and constrained decoding across every line;
+  - §19.38 a map of trained models, and models strung into pipelines;
+  - §19.39 the release: paid as *State Space: Near Zero*, free to build as *The Sieve of Potentia*.
+- **GAME.md** points to §19.39.
+- **Who runs what:** above, under "Build, test, package".
+- **Next, when chosen:**
+  - `canon-image-v2`, waiting on Edward's choice of default (the Vitruvian finding above);
+  - a `build_release.bat` that needs only Visual Studio (§19.39).
