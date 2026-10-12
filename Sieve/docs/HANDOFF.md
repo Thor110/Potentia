@@ -2611,3 +2611,37 @@ cover and a title.
 - **A slip of mine, caught here:** the client build directory had been broken by a second build
   directory sharing its SDL download, and the chat-fixes round's hallway CI lines ran on the hallway
   built before it. Built again and run again on this round's hallway: they pass.
+
+### Models given as files (12 October 2026)
+- **What** (Edward): a text or picture model plugged in as a file, as an option beside the AI
+  line's shape in the setup menu.
+- **tools/cli/model_folder.{hpp,cpp}** (sieve_compare): `is_model_folder` and `load_model_folder`
+  (config.json, model.safetensors, tokenizer.json, as `sieve chat --model` reads them; `chatml`
+  when the tokenizer has ChatML's tokens).
+- **AppSettings `[models]`:** `text_model` and `picture_model` (paths), saved by the setup menu. An
+  empty value with only a comment after it now reads as empty.
+- **The setup menu** (menu.cpp): the AI section has six rows, `setup_rows_of(Media::Ai)` 6.
+  - Row 5, CHAT's model: Enter or Right opens the system's folder dialog (`choose_model_folder`,
+    handed over through `folder_picked_` and `poll_model_folder`); Left clears.
+  - Row 6, DRAW's picture model: Left and Right go through the trained runs of
+    `picture_models_in(training_run_dirs())`, stored as absolute paths; Enter chooses a folder.
+  - Each row's value says when the folder is not a model folder.
+- **The hallway:** `set_model_files` (app_main, after every build and after the in-game setup
+  menu; `--text-model DIR` and `--picture-model DIR` in scripted runs).
+  - **CHAT:** `talk()` goes to `talk_file()` while `talking_to_file()`. The model loads on first
+    use (`busy` LOADING) and answers on `busy` THINKING: a ChatML model through `llm::Chat` (system
+    "You are a helpful assistant."), any other by `continue_text` to a newline, at most 200 tokens,
+    seeded from the conversation's SHA-256 as before. When the conversation would not fit its
+    positions it starts again and says so.
+  - **What it reads:** files and figures given to it wait in `file_context_` for the next message
+    (`give_file_model`: a text's first 1,500 bytes, cut at a whole character; else a tag naming
+    the file's kind and size). The cards say so (`with_next`).
+  - **Ctrl+M** turns between the model file and the model in hand. Its replies are labelled
+    "IT (folder)" and drawn as UTF-8 text.
+  - **DRAW:** `chat_find_models` puts the setting's run first among the trained runs (or as the
+    first, when it lies elsewhere) and chooses it.
+- **CI:** the tiny model (from the oracle's step) answers through `--text-model`; DRAW with
+  `--picture-model`; the setup menu's picture row saved in `[models]`.
+- **IDEAS:** §19.27 files from known generators and their seeds; §19.28 a universe in a seed.
+- **Not yet:** quantised weights (a model of billions of weights in f32 needs its size in memory
+  several times over); a picture model other than diffusion-v1's runs (ComfyUI, IDEAS §19.26).

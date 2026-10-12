@@ -428,7 +428,7 @@ jobs:
           # The lines' rows follow the doors (image, pages, books, audio, tracks, video, movies,
           # models, worlds, AI, binary); the audio rows are six: its notes, its note set, and notes2's
           # range, durations and voices. (AI has no filters yet, so F on its rows opens none.)
-          for pair in "16 image" "19 text" "23 books" "24 audio" "27 audio" "30 tracks" "31 video" "35 movies" "36 models" "39 worlds" "45 binary"; do
+          for pair in "16 image" "19 text" "23 books" "24 audio" "27 audio" "30 tracks" "31 video" "35 movies" "36 models" "39 worlds" "47 binary"; do
             set -- $pair
             rm -f row$1.ini
             downs=$(python -c "print(','.join(['Down']*$1))")
@@ -804,6 +804,17 @@ jobs:
           q "^file: Vitruvian.jpg (207,500 bytes)" cards.txt
           q "^file: cut.txt (31 bytes)" cards.txt
           q "^file: hurrian-hymn-6.mid (1,377 bytes)" cards.txt
+          # CHAT with a model file (the setup menu's AI rows; here --text-model): the tiny model checked
+          # against the oracle above answers, given a file with the message; and DRAW with a chosen picture
+          # model. The setup menu's rows save them in sieve-hallway.ini's [models].
+          $H --no-menu --line ai --walk "0,0" --take --chat --text-model tinymodel --chat-attach tests/training_corpus.txt --talk "Hello there" --training-dir data/training --screenshot chat-file.png | tr -d '\r' > chatfile.txt
+          q "^you: Hello there" chatfile.txt
+          q "^it: " chatfile.txt
+          $H --no-menu --line ai --walk "0,0" --take --chat --picture-model data/training/figures-2x32 --chat-draw 1 --training-dir data/training --screenshot chat-pm.png | tr -d '\r' | q "^figure 1 by figures-2x32: fff0fc2f0de8f01c3fdbe6fff"
+          printf '[models]\ntext_model =\npicture_model =\n' > models.ini
+          downs=$(python -c "print(','.join(['Down']*46))")
+          $H --menu --settings models.ini --training-dir data/training --press "$downs,Right" --screenshot menu-models.png | q "saved menu-models.png"
+          q "^picture_model = .*figures-2x32" models.ini
           $H --no-menu --line ai --walk "0,0" --take --chat --chat-draw 1 --chat-press "Ctrl+G" --training-dir data/training --screenshot chat-go.png | tr -d '\r' | q "^IMAGE line, .*the figure, on the image line, in hand"
           $H --no-menu --line ai --walk "0,0" --take --chat --chat-attach tests/training_corpus.txt --chat-press "Ctrl+J" --training-dir data/training --screenshot chat-j.png | tr -d '\r' | q "^PAGES line, .*a TXT file, opened on the PAGES line"
           downs=$(python -c "print(','.join(['Down']*41))")

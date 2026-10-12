@@ -26,6 +26,9 @@
 #include "cli/dictionaries.hpp"
 #include "cli/plugins.hpp"
 #include "cli/models.hpp"
+#include "cli/diffusion_run.hpp"
+#include "cli/model_folder.hpp"
+#include "cli/train.hpp"
 
 #include "sieve/alphabet.hpp"
 #include "sieve/audio.hpp"
@@ -747,6 +750,76 @@ void Menu::save_app() const
     if (app_ && !app_path_.empty()) app_->save(app_path_); // a read-only folder keeps it for this session
 }
 
+// ---- the AI rows' model files
+
+namespace {
+
+std::string utf8_path(const std::filesystem::path& p)
+{
+    const std::u8string u = p.u8string();
+    return std::string(u.begin(), u.end());
+}
+
+std::filesystem::path path_utf8(const std::string& s) { return std::filesystem::path(std::u8string(s.begin(), s.end())); }
+
+void SDLCALL text_model_chosen(void* user, const char* const* files, int)
+{
+    if (files && files[0]) static_cast<Menu*>(user)->model_folder_picked(0, files[0]);
+}
+
+void SDLCALL picture_model_chosen(void* user, const char* const* files, int)
+{
+    if (files && files[0]) static_cast<Menu*>(user)->model_folder_picked(1, files[0]);
+}
+
+} // namespace
+
+std::string Menu::text_model_value() const
+{
+    if (!app_) return "-";
+    if (app_->text_model.empty()) return tr("setup.ai_text_model.hand");
+    const std::filesystem::path d = path_utf8(app_->text_model);
+    return trf(sieve::cli::is_model_folder(d) ? "setup.ai_text_model.value" : "setup.ai_model.bad", {utf8_path(d.filename())});
+}
+
+std::string Menu::picture_model_value() const
+{
+    if (!app_) return "-";
+    if (app_->picture_model.empty())
+    {
+        const auto runs = sieve::cli::picture_models_in(sieve::cli::training_run_dirs());
+        return runs.empty() ? tr("setup.ai_picture_model.none") : trf("setup.ai_picture_model.first", {utf8_path(runs.front().filename())});
+    }
+    const std::filesystem::path d = path_utf8(app_->picture_model);
+    std::error_code ec;
+    const bool trained = sieve::cli::is_diffusion_run(d) && std::filesystem::is_regular_file(d / "result.txt", ec);
+    return trf(trained ? "setup.ai_picture_model.value" : "setup.ai_model.bad", {utf8_path(d.filename())});
+}
+
+void Menu::choose_model_folder(int which)
+{
+    if (!app_) return;
+    SDL_ShowOpenFolderDialog(which == 0 ? text_model_chosen : picture_model_chosen, this, window_, nullptr, false);
+}
+
+void Menu::model_folder_picked(int which, const std::string& path)
+{
+    std::lock_guard<std::mutex> lock(folder_mx_);
+    folder_picked_ = std::make_pair(which, path);
+}
+
+void Menu::poll_model_folder()
+{
+    std::optional<std::pair<int, std::string>> picked;
+    {
+        std::lock_guard<std::mutex> lock(folder_mx_);
+        picked.swap(folder_picked_);
+    }
+    if (!picked || !app_) return;
+    (picked->first == 0 ? app_->text_model : app_->picture_model) = picked->second;
+    save_app();
+}
+
 // Find my limits: set every line to the largest shape this machine can open.
 //
 // It costs nothing to work out -- a line's size in bits and the length of one of its units are
@@ -1138,6 +1211,33 @@ void Menu::adjust(int dir, int step)
         num(s_.ai_bits);
         s_.ai_bits = std::clamp(s_.ai_bits, 1u, 8u);
         break;
+    case kAiRows + 4:
+        // The text model: Left goes back to the model in hand, Right chooses a folder (as Enter).
+        if (!app_) break;
+        if (dir < 0)
+        {
+            app_->text_model.clear();
+            save_app();
+        }
+        else choose_model_folder(0);
+        break;
+    case kAiRows + 5:
+    {
+        // The picture model: the trained runs in the training folders in turn (the one chosen
+        // among them even if it lies elsewhere); Enter chooses a folder.
+        if (!app_) break;
+        std::vector<std::string> runs;
+        // Kept as absolute paths, so the setting holds wherever Sieve is started from.
+        std::error_code ec;
+        for (const auto& p : sieve::cli::picture_models_in(sieve::cli::training_run_dirs())) runs.push_back(utf8_path(std::filesystem::absolute(p, ec)));
+        if (!app_->picture_model.empty() && std::find(runs.begin(), runs.end(), app_->picture_model) == runs.end()) runs.insert(runs.begin(), app_->picture_model);
+        if (runs.empty()) break;
+        const auto at = std::find(runs.begin(), runs.end(), app_->picture_model);
+        const int n = int(runs.size()), i = at == runs.end() ? 0 : int(at - runs.begin());
+        app_->picture_model = runs[size_t(((i + dir) % n + n) % n)];
+        save_app();
+        break;
+    }
     // The coordinate grid must be a power of two, so it doubles and halves.
     case kBinaryRow: num(s_.binary_bytes); break;
     case kModelsRows + 2: s_.model_coords = std::clamp(dir > 0 ? s_.model_coords * 2 : s_.model_coords / 2, 2u, 4096u); break;
@@ -1331,6 +1431,7 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         // so a stray Return while setting a line up never drops you into the hallway.
         // Find my limits and Reset act where they stand; only the last row is the way in.
         if (row_ == kLimitsRow) { find_limits(); break; }
+        if (row_ == kAiRows + 4 || row_ == kAiRows + 5) { choose_model_folder(row_ - kAiRows - 4); break; }
         if (row_ == kResetRow) { reset_settings(); break; }
         if (row_ != kEnterRow) break;
         if (calculating()) break; // greyed until the dimensions are calculated
@@ -1379,6 +1480,7 @@ Menu::Result Menu::run()
             while (SDL_PollEvent(&e)) handle(e, done, result);
         }
         poll_toggle(); // X: the ticks, once the filters that clash are weighed
+        poll_model_folder();
         {
             sieve::cli::timings::Scope timed("menu.setup.frame"); // its slowest: the first, which counts the lines
             render();
@@ -1656,6 +1758,8 @@ void Menu::render()
             {-1, tr("setup.ai_width"), trf("setup.ai_width.value", {n(s_.ai_width), n(4 * s_.ai_width)})},
             {-1, tr("setup.ai_heads"), trf("setup.ai_heads.value", {n(s_.ai_heads), n(s_.ai_width / std::max(1u, s_.ai_heads))})},
             {-1, tr("setup.ai_bits"), trf("setup.ai_bits.value", {n(s_.ai_bits), std::to_string(uint64_t(1) << s_.ai_bits), std::to_string(ai_weights())})},
+            {-1, tr("setup.ai_text_model"), text_model_value()},
+            {-1, tr("setup.ai_picture_model"), picture_model_value()},
         };
         case Media::Binary: return {
             {kBinaryLine, tr("setup.binary_length"), trf("setup.binary_length.value", {n(s_.binary_bytes)})},

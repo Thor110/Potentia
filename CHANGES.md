@@ -1,54 +1,70 @@
-# CHAT cards show what a file is (with the chat fixes)
+# Models given as files, and two notes
 
-Against your main ("chat tab"). This zip holds everything since then: last round's fixes, which
-are not on main yet, and this round. Copy `Sieve/` over yours. There are no new files.
+Against your main ("chat cards"). Copy `Sieve/` over yours. There are two new files,
+`Sieve/tools/cli/model_folder.hpp` and `.cpp`, which are already in CMakeLists.txt.
 
-## Thumbnails and previews on file cards (client/chat.cpp)
-- **Pictures:** a PNG, JPG, GIF or BMP shows its picture, small (at most 96 pixels on its longer
-  side).
-- **Videos:** an MP4, AVI or animated WEBP shows its first frame, read by ffmpeg when it is there.
-  Without ffmpeg it shows its first bytes instead.
-- **Texts:** a text shows its first four lines, in their own characters (»«, ß and ü come through).
-  A line that isn't UTF-8, or is cut in the middle of a character, is drawn byte by byte, as the
-  model's replies are.
-- **Anything else:** its first 24 bytes in hex (a MIDI file starts `4d 54 68 64`).
-- **How it is made:**
-  - It is worked out once, when the file is given, on the same worker as the weighing.
-  - The texture is made the first time the card is drawn and let go with the conversation.
-  - Pictures pass the vault, as every picture shown does.
-- **Scripted runs:** `--chat-attach` takes several files at once, apart by `;`.
+## Text and picture models as files, in the setup menu
+The AI section of the setup menu has two more rows, under the line's shape.
+- **CHAT's model:**
+  - It is a model folder: config.json, model.safetensors and tokenizer.json, as `sieve chat
+    --model` reads one. That covers a published model such as SmolLM2, or a model of the line
+    saved with `sieve ai --out`.
+  - Enter (or Right) opens the system's folder dialog; Left goes back to the model in hand.
+  - A folder without the three files says "not a model folder".
+- **DRAW's picture model:**
+  - Left and Right go through the trained picture models in the training folders.
+  - Enter chooses any other run folder.
+  - With none chosen, the first trained one is used, as before.
+- **Saved:** both are kept in `sieve-hallway.ini`, in a new `[models]` section, as full paths.
 
-## Last round's fixes (in this zip too)
-- **CHAT's clicks:** they land where you see them (`SDL_RenderCoordinatesFromWindow`).
-- **Shadowed names:** renamed in music.cpp and the other 9 files.
-- **The figures run's pictures:** CI checks that they are drawn again from the filters.
-- **A slip of mine:** last round's hallway CI lines ran on a hallway binary built before those
-  edits. A second build folder I made, sharing its SDL download, had broken the client build, and
-  my error filter hid the failure. I rebuilt it and ran them again on the current code: they
-  pass, so the fixes stand as delivered. I also re-read the music.cpp rename line by line, because
-  screenshot runs don't write the music settings file.
+## In CHAT
+- **Talking:** with a model file set, CHAT talks with it, run by Sieve's own engine.
+  - A ChatML model (SmolLM2 and most instruction models) is talked to as a chat. Any other model
+    continues your line until it writes a newline, as the line's models do.
+  - Replies are at most 200 tokens, and drawn as text.
+  - It loads the first time you speak to it (LOADING) and answers on THINKING.
+  - When the conversation fills its positions, it starts again and says so.
+- **Giving it files and figures:** they are read with your next message: a text's first 1,500
+  bytes, and of anything else, what it is (name, kind, size). The cards say so.
+- **Ctrl+M** turns between the model file and the model in hand. The title line says which, and
+  the model file's replies are labelled with its folder's name.
+- **If the folder cannot be loaded,** CHAT says why, and the model in hand answers instead.
+- **Scripted runs:** `--text-model DIR` and `--picture-model DIR`.
 
-## IDEAS §19.26: bigger models, and ComfyUI
-- **Two kinds of outside help, kept apart:**
-  - format tools such as ffmpeg (optional, as now);
-  - generators such as ComfyUI and big language models. Their output is a file, and a file is
-    already on the lines, so it is named and checked by its hash. Sieve needn't trust that the
-    generator is deterministic.
-- **A ComfyUI bridge** through its local API (`/prompt`, `/history`, `/view`):
-  - it would sit in CHAT as a picture model;
-  - the workflow, seed and SHA-256 are kept with each card;
-  - it needs a small localhost-only HTTP client of our own, off unless a setting names the server.
-- **The order proposed:**
-  1. published models in CHAT through Sieve's own engine (self-contained);
-  2. the ComfyUI bridge (optional, like ffmpeg);
-  3. quantised weights for bigger language models on the CPU.
+## IDEAS
+- **§19.27 Files from known generators and their seeds.**
+  - *As a name:* generator, seed and length name a generated file exactly, in a few bytes.
+  - *As a filter:* it removes almost nothing. There are 2^64 outputs among 2^(8L) files, so it
+    names a tiny set, where the noise gradient reorders everything a little.
+  - *Recognising them:* LCGs, xorshift, the Mersenne Twister and splitmix64 can be run backwards
+    from their output, so "made by generator G" is a quick check rather than a search.
+    Cryptographic generators can't, by design.
+  - *The general rule:* any description both ends can run is shorthand for exactly what it makes.
+- **§19.28 A universe in a seed.**
+  - *Minecraft seeds* are recovered from screenshots because each visible feature is a filter
+    over a 2^64 seed line.
+  - *A probe's readings* come from nature, so a seed can stand only for what a shared model
+    predicts. The message is the model's settings plus the corrections, which are exactly what was
+    news.
+  - *How it fits:* it joins up with the agreed flags (§19.15) and the predicted tags (§19.16).
+
+## README and HANDOFF
+- **README:** the AI line's paragraph describes the model files.
+- **HANDOFF:** a new entry.
 
 ## Checked here
-- **Unit tests:** 76,334 checks, 0 failures (run once here, as this machine has no hardware
-  SHA-256).
-- **CI lines,** run on the rebuilt hallway:
-  - the chat lines, including the new cards line;
-  - `--talk`;
-  - the harness reproducing its shipped run;
-  - the figures pictures.
-- **With ffmpeg:** the MP4 thumbnail was checked here with a static ffmpeg.
+- **Unit tests:** 76,334 checks, 0 failures (once, as this machine has no hardware SHA-256).
+- **New CI lines:**
+  - the tiny model (from the oracle's earlier step) answers through `--text-model`;
+  - DRAW uses `--picture-model`;
+  - the setup menu's picture row is saved in `[models]`.
+- **Also tried here:**
+  - a model of the line saved with `sieve ai --out` (the non-chat path);
+  - a missing folder (the fallback);
+  - Left clearing CHAT's model, saved as empty and read back as empty.
+- **One existing CI line changed:** the loop that opens each line's filters from its setup row
+  now finds BINARY at row 47 instead of 45, since the AI section has two more rows. I ran the
+  whole loop here.
+- **Run again on this build:** every other chat and harness line.
+- **Not tried:** a real published model, such as SmolLM2-135M. There is none on this machine.
+  It is the same engine `sieve chat` already runs it with.

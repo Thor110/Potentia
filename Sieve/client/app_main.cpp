@@ -127,6 +127,8 @@ const char* kUsage =
     "  --chat              with --take on the AI line: open the CHAT tab on the model in hand\n"
     "  --chat-attach FILES with --take on the AI line: give the files (apart by ';') to the model, as CHAT's + does\n"
     "  --chat-draw N       with --take on the AI line: draw N figures with CHAT's picture model\n"
+    "  --text-model DIR    CHAT talks with this model folder (config.json, model.safetensors, tokenizer.json)\n"
+    "  --picture-model DIR DRAW uses this picture model's run folder\n"
     "  --chat-press KEYS   keys pressed in CHAT after those (e.g. Ctrl+G: the newest card's GO TO IT)\n"
     "  --tailor PATH       with --screenshot, the item in hand on COST: K, waited for, and what Return\n"
     "                      would apply saved to PATH as a settings file\n"
@@ -821,6 +823,7 @@ int run(const Args& a)
             // Real Graphics on means exactly that, since nothing may turn them off but you.
             const bool portals = app.door_portals || a.has("real-graphics") || a.has("door-portals");
             hall->set_graphics(glow && !real, real, portals);
+            hall->set_model_files(a.get("text-model", app.text_model), a.get("picture-model", app.picture_model));
             hall->set_model_cache(a.has("model-cache") ? int(a.get_u32("model-cache", 64)) : app.model_cache_mb);
             hall->set_angle_decimals(app.angle_decimals);
             hall->set_face_px(a.get_u32("model-tile", 64));
@@ -1049,6 +1052,7 @@ int run(const Args& a)
         if (quit_while_building) break;
         hall->set_controls(app.mouse_sensitivity, app.invert_mouse_y);
         hall->set_graphics(app.edge_glow, app.real_graphics, app.door_portals);
+        hall->set_model_files(app.text_model, app.picture_model);
         hall->set_model_cache(app.model_cache_mb);
         hall->set_angle_decimals(app.angle_decimals);
         hall->set_face_px(ha.get_u32("model-tile", 64));
@@ -1128,6 +1132,7 @@ int run(const Args& a)
                 in_game_menu = menu.run();
                 if (in_game_menu == Menu::Result::Back)
                 {
+                    hall->set_model_files(app.text_model, app.picture_model); // the AI rows' model files
                     hall->set_model_cache(app.model_cache_mb);
                     hall->set_graphics_memory(app.graphics_memory_gb);
                     SDL_SetWindowRelativeMouseMode(window, !hall->back_from_menu());

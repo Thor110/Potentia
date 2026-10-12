@@ -48,6 +48,7 @@
 #include "cli/tailor.hpp"
 #include "cli/weigh.hpp"
 #include "cli/diffusion_run.hpp"
+#include "cli/model_folder.hpp"
 
 #include "sieve/audio.hpp"
 #include "sieve/notes3.hpp"
@@ -657,6 +658,10 @@ public:
     void open_chat();
     void chat_attach(const std::string& path);
     void chat_draw();
+    // The models given as files (the setup menu's AI rows; app_settings.hpp [models]): a language
+    // model's folder CHAT talks with, and a picture model's run folder DRAW uses. Empty: the model
+    // in hand, and the first trained picture model.
+    void set_model_files(const std::string& text_model, const std::string& picture_model);
     // A picture, as the chat window's Go to it gives it: an image line of this size and palette.
     struct PictureToGo
     {
@@ -1485,8 +1490,9 @@ private:
         // A picture: its cells, the picture model and its number there, its format and its address
         // on the image line.
         std::vector<uint32_t> cells;
-        std::string model, palette, address;
+        std::string model, palette, address; // It: `model` names the model file that wrote it, if one did
         uint64_t number = 0;
+        bool with_next = false; // given to the model file: it reads it with the next message
         uint32_t width = 0, height = 0;
     };
     enum class ChatAct { Go, Item, Save };
@@ -1508,6 +1514,7 @@ private:
     // The picture models (trained diffusion runs), found when the window opens; the one chosen
     // loaded the first time it draws.
     void chat_pick_model(int dir);
+    void chat_find_models();
     // Entry i laid out at (x, y), `w` wide: its height, and, with `draw`, drawn (its buttons kept
     // for the pointer). One function, so what is measured is what is drawn.
     float chat_entry(size_t i, float x, float y, float w, bool draw);
@@ -1527,6 +1534,19 @@ private:
     std::optional<size_t> chat_saving_;
     std::optional<std::string> chat_save_to_;
     std::vector<std::string> chat_pending_; // files chosen in the dialog, to attach
+    // The model file CHAT talks with (set_model_files), loaded the first time it is spoken to;
+    // Ctrl+M turns between it and the model in hand. A ChatML model keeps its conversation in
+    // file_chat_; what is given to it (files, figures) waits in file_context_ for the next message.
+    std::string text_model_path_, picture_model_path_;
+    std::optional<sieve::cli::ModelFolder> file_model_;
+    std::unique_ptr<sieve::llm::Chat> file_chat_;
+    bool talk_to_file_ = true;
+    std::string file_context_;
+    bool talking_to_file() const { return !text_model_path_.empty() && talk_to_file_; }
+    // What `said` gets back from the model file (with what was given since the last message).
+    void talk_file(const std::string& said);
+    // Something given to the model file: read with the next message. Returns the bytes kept.
+    size_t give_file_model(const std::string& what, const std::string& text);
     // The thumbnails' textures, by entry, made the first time each is drawn; let go with the
     // conversation (chat_clear_thumbs).
     std::unordered_map<size_t, SDL_Texture*> chat_thumbs_;

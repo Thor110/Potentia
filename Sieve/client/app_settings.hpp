@@ -15,6 +15,10 @@
 //   [controls]
 //   mouse_sensitivity = 100     ; percent
 //   invert_mouse_y = off
+//   [models]
+//   text_model =                ; a model folder CHAT talks with (config.json, model.safetensors,
+//                               ; tokenizer.json); empty: the model in hand
+//   picture_model =             ; a picture model's run folder DRAW uses; empty: the first trained one
 //   [language]
 //   language = en
 #pragma once
@@ -107,6 +111,10 @@ struct AppSettings
     bool fps_counter = false;    // show frames per second in the hallway
     int mouse_sensitivity = 100; // percent, 10..400
     bool invert_mouse_y = false;
+    // The models given as files (the setup menu's AI rows): a language model's folder for CHAT,
+    // and a picture model's run folder for DRAW. Empty: the model in hand, and the first trained
+    // picture model in the training folders.
+    std::string text_model, picture_model;
     std::string language = "en";
 
     // Geometry Edge Glow and Real Graphics exclude each other; both may be off. Turning Real

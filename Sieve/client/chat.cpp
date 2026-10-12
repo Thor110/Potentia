@@ -45,6 +45,10 @@ namespace fs = std::filesystem;
 constexpr size_t kTalkReply = 80;
 // Room kept for what you say next after a file or picture is given (the reply's room besides).
 constexpr size_t kTalkRoom = 64;
+// The model file: the most a reply may be, in tokens; the most of a file or figure given to it, in
+// bytes (it reads them with the next message); and what a ChatML model is told it is.
+constexpr size_t kFileReply = 200, kFileGive = 1500;
+constexpr const char* kFileSystem = "You are a helpful assistant.";
 // Text in the conversation: messages at scale 2, the rest at scale 1.
 constexpr float kBig = 2, kSmall = 1, kBigLine = 20, kSmallLine = 14, kPad = 10, kButtonH = 22;
 // A file card's thumbnail: its longer side, in pixels (and the most kept of its picture), and the
@@ -172,6 +176,11 @@ void Hallway::talk(const std::string& said)
 {
     if (!in_hand_ || !in_hand_->ai) return;
     talk_ready();
+    if (talking_to_file())
+    {
+        talk_file(said);
+        return;
+    }
     const std::string text = said + "\n";
     if (talk_model_->position() + text.size() + kTalkReply >= talk_model_->config().max_positions)
     {
@@ -193,6 +202,109 @@ void Hallway::talk(const std::string& said)
     chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::You, said));
     chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::It, reply));
     chat_scroll_ = 0;
+}
+
+// ---- the model file (the setup menu's AI rows)
+
+void Hallway::set_model_files(const std::string& text_model, const std::string& picture_model)
+{
+    if (text_model != text_model_path_)
+    {
+        // Another model: loaded afresh when next spoken to, with nothing waiting for it.
+        file_chat_.reset();
+        file_model_.reset();
+        file_context_.clear();
+        talk_to_file_ = true;
+    }
+    text_model_path_ = text_model;
+    picture_model_path_ = picture_model;
+}
+
+// What the model file says back. A ChatML model answers in a conversation (llm::Chat, with
+// kFileSystem); any other continues the text, as the line's models do, until a newline. Its choices
+// are seeded by the conversation, as talk()'s are. When the conversation and the reply would not
+// fit in its positions, it starts again and says so.
+void Hallway::talk_file(const std::string& said)
+{
+    if (!file_model_)
+    {
+        try
+        {
+            busy(tr("chat.loading"), [&] { file_model_ = cli::load_model_folder(from_u8(text_model_path_)); });
+        }
+        catch (const std::exception& ex)
+        {
+            // Not loaded: said so, and the model in hand answers instead (Ctrl+M tries the file again).
+            chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf("chat.model_failed", {ex.what()})));
+            talk_to_file_ = false;
+            talk(said);
+            return;
+        }
+    }
+    cli::ModelFolder& m = *file_model_;
+    const std::string message = file_context_ + said;
+    file_context_.clear();
+    sieve::llm::Sampling s;
+    s.temperature = 0.7f;
+    s.top_p = 0.9f;
+    const auto digest = sieve::Sha256::hash(talk_ + said);
+    s.seed = 0;
+    for (int i = 0; i < 8; ++i) s.seed = (s.seed << 8) | digest[size_t(i)];
+    sieve::llm::Sampler sampler(s);
+    const size_t max = m.model->config().max_positions, need = m.tokenizer->encode(message).size() + kFileReply + 16;
+    if (need >= max)
+    {
+        chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, tr("chat.too_long")));
+        return;
+    }
+    bool restarted = false;
+    std::string reply;
+    try
+    {
+        busy(tr("chat.thinking"), [&] {
+            if (m.model->position() + need >= max) // its memory is full: it starts again
+            {
+                restarted = m.model->position() > 0;
+                m.model->reset();
+                file_chat_.reset();
+            }
+            if (m.chatml)
+            {
+                if (!file_chat_) file_chat_ = std::make_unique<sieve::llm::Chat>(*m.model, *m.tokenizer, kFileSystem);
+                reply = file_chat_->reply(message, sampler, kFileReply);
+            }
+            else
+            {
+                const std::vector<uint32_t> nl = m.tokenizer->encode("\n", false);
+                reply = sieve::llm::continue_text(*m.model, *m.tokenizer, message + "\n", sampler, kFileReply, {},
+                                                  nl.size() == 1 ? std::optional<uint32_t>(nl[0]) : std::nullopt);
+            }
+        });
+    }
+    catch (const std::exception& ex)
+    {
+        chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf("chat.model_failed", {ex.what()})));
+        return;
+    }
+    if (restarted)
+    {
+        talk_ += tr("talk.full") + "\n";
+        chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, tr("talk.full")));
+    }
+    talk_ += trf("talk.you", {said}) + "\n" + trf("talk.it", {reply}) + "\n";
+    chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::You, said));
+    ChatEntry it = entry_of<ChatEntry>(ChatEntry::Kind::It, reply);
+    it.model = m.name;
+    chat_.push_back(std::move(it));
+    chat_scroll_ = 0;
+}
+
+size_t Hallway::give_file_model(const std::string& what, const std::string& text)
+{
+    size_t n = std::min(text.size(), kFileGive);
+    while (n > 0 && n < text.size() && (static_cast<unsigned char>(text[n]) & 0xC0) == 0x80) --n; // whole characters
+    file_context_ += what + "\n" + text.substr(0, n) + (n ? "\n" : "");
+    return n;
 }
 
 // Given to the model with no reply: its first bytes, up to half its positions, then a newline. When
@@ -225,15 +337,34 @@ void Hallway::open_chat()
     chat_open_ = true;
     chat_text_.clear();
     chat_scroll_ = 0;
-    // The picture models there are now (one trained since the last look is found).
-    const std::string was = chat_models_.empty() ? std::string() : u8(chat_models_[size_t(chat_model_)].filename());
-    chat_models_ = cli::picture_models_in(cli::training_run_dirs());
-    chat_model_ = 0;
+    // The picture models there are now (one trained since the last look is found); the one chosen
+    // here before, else the setup menu's.
+    const std::string was = chat_models_.empty() ? std::string() : u8(chat_models_[size_t(chat_model_)]);
+    chat_find_models();
     for (size_t i = 0; i < chat_models_.size(); ++i)
-        if (u8(chat_models_[i].filename()) == was) chat_model_ = int(i);
+        if (u8(chat_models_[i]) == was) chat_model_ = int(i);
     chat_had_mouse_ = SDL_GetWindowRelativeMouseMode(window_);
     SDL_SetWindowRelativeMouseMode(window_, false);
     SDL_StartTextInput(window_);
+}
+
+// The trained picture models in the training folders, with the setup menu's (which may lie
+// elsewhere) first among them and chosen.
+void Hallway::chat_find_models()
+{
+    chat_models_ = cli::picture_models_in(cli::training_run_dirs());
+    chat_model_ = 0;
+    if (picture_model_path_.empty()) return;
+    const fs::path chosen = from_u8(picture_model_path_);
+    std::error_code ec;
+    if (!cli::is_diffusion_run(chosen) || !fs::is_regular_file(chosen / "result.txt", ec)) return; // not a trained run: the first, as without one
+    for (size_t i = 0; i < chat_models_.size(); ++i)
+        if (fs::equivalent(chat_models_[i], chosen, ec))
+        {
+            chat_model_ = int(i);
+            return;
+        }
+    chat_models_.insert(chat_models_.begin(), chosen);
 }
 
 void Hallway::close_chat()
@@ -351,7 +482,14 @@ void Hallway::chat_attach(const std::string& path)
         chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf("chat.unread", {e.name, ex.what()})));
         return;
     }
-    e.given = talk_give(e.bytes);
+    if (talking_to_file())
+    {
+        // The model file reads a text's first bytes, and of anything else what it is.
+        e.with_next = true;
+        e.given = e.file_kind == "TXT" ? give_file_model(trf("chat.file.tag", {e.name}), std::string(e.bytes.begin(), e.bytes.end()))
+                                       : give_file_model(trf("chat.file.tag.kind", {e.name, e.file_kind, std::to_string(e.bytes.size())}), "");
+    }
+    else e.given = talk_give(e.bytes);
     talk_ += trf("talk.file", {e.name, grouped(e.bytes.size())}) + "\n";
     chat_.push_back(std::move(e));
     chat_scroll_ = 0;
@@ -362,7 +500,7 @@ void Hallway::chat_draw()
 {
     if (!in_hand_ || !in_hand_->ai) return;
     talk_ready();
-    if (chat_models_.empty()) chat_models_ = cli::picture_models_in(cli::training_run_dirs());
+    if (chat_models_.empty()) chat_find_models();
     if (chat_models_.empty())
     {
         chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, tr("chat.figures.none")));
@@ -416,7 +554,13 @@ void Hallway::chat_draw()
         }
         if (y + 1 < e.height) rows.push_back('\n');
     }
-    e.given = talk_give(rows);
+    if (talking_to_file())
+    {
+        e.with_next = true;
+        e.given = give_file_model(trf("chat.figure.tag", {std::to_string(e.number), e.model, std::to_string(e.width), std::to_string(e.height)}),
+                                  std::string(rows.begin(), rows.end()));
+    }
+    else e.given = talk_give(rows);
     talk_ += trf("talk.figure", {std::to_string(e.number), e.model, e.address}) + "\n";
     chat_.push_back(std::move(e));
     chat_scroll_ = 0;
@@ -558,6 +702,14 @@ void Hallway::chat_event(const SDL_Event& e)
         else if (e.key.key == SDLK_O) SDL_ShowOpenFileDialog(chat_files_chosen, this, window_, nullptr, 0, nullptr, true);
         else if (e.key.key == SDLK_D) chat_draw();
         else if (e.key.key == SDLK_P) chat_pick_model(shift ? -1 : 1);
+        else if (e.key.key == SDLK_M && !text_model_path_.empty())
+        {
+            // The model file, or the model in hand.
+            talk_to_file_ = !talk_to_file_;
+            chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, talk_to_file_ ? trf("chat.speaking.file", {u8(from_u8(text_model_path_).filename())})
+                                                                                      : tr("chat.speaking.hand")));
+            chat_scroll_ = 0;
+        }
         else if (const auto card = chat_last_card())
         {
             if (e.key.key == SDLK_G) chat_act(*card, ChatAct::Go);
@@ -579,12 +731,15 @@ float Hallway::chat_entry(size_t i, float x, float y, float w, bool draw)
         float h = 0;
         if (e.kind != K::Note)
         {
-            if (draw) text(x, y, tr(e.kind == K::You ? "chat.you" : "chat.it"), kSmall, e.kind == K::You ? grey : ink);
+            if (draw)
+                text(x, y, e.kind == K::You ? tr("chat.you") : e.model.empty() ? tr("chat.it") : trf("chat.it.file", {e.model}), kSmall,
+                     e.kind == K::You ? grey : ink);
             h += kSmallLine;
         }
         const bool big = e.kind != K::Note;
-        // What the model wrote is bytes: drawn as the font can (printable); what you wrote, as typed.
-        for (const std::string& para : paragraphs(e.kind == K::It ? printable(e.text) : e.text))
+        // What a line's model wrote is bytes, drawn as the font can (printable); a model file's words
+        // are text, and what you wrote is as typed.
+        for (const std::string& para : paragraphs(e.kind == K::It ? (e.model.empty() ? printable(e.text) : text_line(e.text)) : e.text))
             for (const std::string& l : wrap_words(para, big ? big_cols : small_cols))
             {
                 if (draw) text(x, y + h, l, big ? kBig : kSmall, e.kind == K::Note ? grey : white);
@@ -616,7 +771,9 @@ float Hallway::chat_entry(size_t i, float x, float y, float w, bool draw)
         lines.push_back({trf("chat.file.what", {e.file_kind, grouped(e.bytes.size())}), kSmall, ink});
         for (const std::string& para : paragraphs(e.weighing))
             for (const std::string& l : wrap_words(para, cols)) lines.push_back({l, kSmall, ink});
-        lines.push_back({trf("chat.given", {grouped(e.given)}), kSmall, ink});
+        lines.push_back({e.with_next ? (e.given ? trf("chat.given.next", {grouped(e.given)}) : tr("chat.given.next.what"))
+                                     : trf("chat.given", {grouped(e.given)}),
+                         kSmall, ink});
         for (const std::string& l : e.preview) lines.push_back({fit(l, tw, kSmall), kSmall, grey});
         if (e.item_line >= 0 || e.file_kind != "?") buttons.push_back({tr("chat.item"), ChatAct::Item});
     }
@@ -627,7 +784,7 @@ float Hallway::chat_entry(size_t i, float x, float y, float w, bool draw)
         lines.push_back({trf("chat.figure", {std::to_string(e.number), e.model}), kBig, white});
         lines.push_back({trf("chat.figure.what", {std::to_string(e.width), std::to_string(e.height), e.palette}), kSmall, ink});
         for (const std::string& l : wrap(trf("chat.figure.address", {e.address}), cols)) lines.push_back({l, kSmall, ink});
-        lines.push_back({trf("chat.given.rows", {grouped(e.given)}), kSmall, ink});
+        lines.push_back({trf(e.with_next ? "chat.given.next" : "chat.given.rows", {grouped(e.given)}), kSmall, ink});
     }
     buttons.push_back({tr("chat.save"), ChatAct::Save});
     float text_h = 0;
@@ -747,12 +904,15 @@ void Hallway::draw_chat(float x, float top, float w, float bottom)
 
     // At the top: the model in hand, and the picture model chosen.
     const AiShape& sh = ai_space_->shape();
-    text(x, top,
-         fit(trf("chat.with", {short_address(talk_hex_),
-                               trf(sh.layers == 1 ? "ai.summary.one" : "ai.summary", {std::to_string(sh.layers), std::to_string(sh.width), std::to_string(sh.heads),
-                                                                                      std::to_string(ai_space_->weights()), std::to_string(sh.bits)})}),
-             w, 1),
-         1, grey);
+    const std::string file_name = text_model_path_.empty() ? std::string() : u8(from_u8(text_model_path_).filename());
+    const std::string with = talking_to_file()
+                                 ? trf("chat.with.file", {file_name})
+                                 : trf("chat.with", {short_address(talk_hex_),
+                                                     trf(sh.layers == 1 ? "ai.summary.one" : "ai.summary",
+                                                         {std::to_string(sh.layers), std::to_string(sh.width), std::to_string(sh.heads),
+                                                          std::to_string(ai_space_->weights()), std::to_string(sh.bits)})}) +
+                                       (file_name.empty() ? std::string() : trf("chat.with.switch", {file_name}));
+    text(x, top, fit(with, w, 1), 1, grey);
     const std::string figures = chat_models_.empty() ? tr("chat.figures.none")
                                                      : trf(chat_models_.size() > 1 ? "chat.figures.more" : "chat.figures",
                                                            {u8(chat_models_[size_t(std::clamp(chat_model_, 0, int(chat_models_.size()) - 1))].filename())});

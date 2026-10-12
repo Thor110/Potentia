@@ -125,6 +125,7 @@ AppSettings AppSettings::load(const fs::path& path)
         const std::string key = trim(line.substr(0, eq));
         std::string value = trim(line.substr(eq + 1));
         if (const size_t c = value.find(" ;"); c != std::string::npos) value = trim(value.substr(0, c));
+        if (!value.empty() && value[0] == ';') value.clear(); // nothing set, only the comment
         // Unknown or malformed entries are ignored: this file only holds preferences.
         if (section == "graphics")
         {
@@ -192,6 +193,11 @@ AppSettings AppSettings::load(const fs::path& path)
             }
             else if (key == "invert_mouse_y") s.invert_mouse_y = on_off(value, false);
         }
+        else if (section == "models")
+        {
+            if (key == "text_model") s.text_model = value;
+            else if (key == "picture_model") s.picture_model = value;
+        }
         else if (section == "language" && key == "language" && !value.empty()) s.language = value;
     }
     if (s.edge_glow && s.real_graphics) s.real_graphics = false; // they exclude each other
@@ -225,6 +231,9 @@ bool AppSettings::save(const fs::path& path) const
       << "\n[controls]\n"
       << "mouse_sensitivity = " << mouse_sensitivity << "   ; percent\n"
       << "invert_mouse_y = " << on_off(invert_mouse_y) << "\n"
+      << "\n[models]\n"
+      << "text_model = " << text_model << "   ; a model folder CHAT talks with; empty: the model in hand\n"
+      << "picture_model = " << picture_model << "   ; a picture model's run folder DRAW uses; empty: the first trained one\n"
       << "\n[language]\n"
       << "language = " << language << "\n";
     std::ofstream out(path, std::ios::binary);

@@ -2129,3 +2129,56 @@ already is.
   1. published models in CHAT (self-contained);
   2. the localhost bridge, ComfyUI first (optional, as ffmpeg is);
   3. quantised weights.
+
+**19.27 Files from known generators and their seeds (Edward, 12 October 2026).** His idea: a file's
+length and a pseudo-random generator, run from every known seed, could be used to find files, or as
+a filter, since it is so unlikely that noise lands on an existing file. It is not far from the noise
+gradient (§16.8b and c), so where does it land? And any such strange feature could, in theory, be
+shorthand for a whole set of features, across the endless ways of storing things.
+
+*Notes.*
+- **As a name, it is exact.** A generator (splitmix64, xorshift, a Mersenne Twister, a game's world
+  generator), a seed and a length name one file. Where a file really is such an output, those few
+  bytes are its whole address: test data, procedural textures, noise for a door portal, a game
+  level. Sieve already names things this way: the figures are (picture model, number), and a
+  diffusion run's pictures are a stack, a seed and a count (§19.2).
+- **As a filter, it removes almost nothing.** With 64-bit seeds there are 2^64 outputs of each
+  length, against 2^(8L) files of L bytes. For anything longer than 8 bytes, the generated files
+  are a vanishing share, so setting them aside (or keeping only them) changes the count by a
+  negligible amount, and finding a given file among them is the same search as finding its seed.
+  That is where it lands beside the noise gradient: the gradient reorders everything a little; a
+  generator names a tiny set exactly.
+- **Recognising them can be cheap.** Several generators can be run backwards: an LCG's or a
+  xorshift's state follows from a few outputs, a Mersenne Twister's from 624 of them, and
+  splitmix64 is a bijection of its counter, so one output gives its state. A judge-only filter
+  "is the output of generator G from some seed" is then a short computation, not a search over
+  seeds. Generators built for secrecy (ChaCha, AES-CTR) cannot be run backwards like this, by design.
+- **The general rule** is the one in §19.16 and §19.24: any description both ends can run (a
+  generator, a model, a stack) is shorthand for exactly the things it produces. The shorthand is as
+  short as the description, and it names only what the description makes. Kept as a list of
+  generators, each with its id and its seed width, it would be another line's worth of names: a
+  "generated" line, one unit per (generator, seed, length).
+
+**19.28 A universe in a seed (Edward, 12 October 2026).** His idea: imagine storing a universe of
+data, as received from a probe, in a seed, the way a Minecraft world is one seed, and the way such
+seeds are worked out backwards from screenshots. It is like predicting the data (§19.16).
+
+*Notes.*
+- **Why it works for Minecraft.** The world is a function of its seed, and a screenshot pins down
+  features (where the terrain rises, where a structure stands) that only a few seeds produce. The
+  players who recover seeds search the seed space with each observed feature as a filter, and the
+  space is only 2^64, so a handful of features is enough. Recovering a seed is a stack of filters
+  over a seed line, which Sieve's machinery describes exactly.
+- **Where it stops for a probe.** A probe's readings come from nature, not from a seed. A seed can
+  only stand for what a generator both ends share would produce, so the message becomes the model's
+  parameters (its seed, its settings) plus the corrections: whatever the model did not predict.
+  The better the shared model of the world, the shorter the corrections. When the model is wrong,
+  the corrections carry the whole reading, and nothing is lost.
+- **So the two halves fit together:**
+  - §19.15's agreed flags are the shared model;
+  - §19.16's tags name what was predicted;
+  - this note's seed names a whole predicted scene;
+  - the corrections are the part of the data that was news.
+
+  It is the same rule that runs through all of these: the shared description is agreed once, and
+  only the surprise travels.

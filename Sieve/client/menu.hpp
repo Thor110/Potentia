@@ -30,6 +30,7 @@
 #include <functional>
 #include <limits>
 #include <map>
+#include <mutex>
 #include <optional>
 #include <atomic>
 #include <cstdint>
@@ -188,7 +189,7 @@ constexpr int setup_rows_of(Media m)
     case Media::Movies: return 1; // units per movie
     case Media::Models: return 3; // vertices, triangles, grid
     case Media::Worlds: return 2; // models per world, grid
-    case Media::Ai: return 4;     // layers, width, heads, bits a weight
+    case Media::Ai: return 6;     // layers, width, heads, bits a weight; the text and picture model files
     case Media::Binary: return 1; // length
     }
     return 0;
@@ -259,6 +260,20 @@ private:
     bool graphics_over() const;
     int model_cache_mb() const { return app_ ? app_->model_cache_mb : 64; }
     void save_app() const;
+    // The AI rows' model files (app_settings.hpp [models]): a folder chosen in the system's dialog
+    // (0 the text model, 1 the picture model), handed over from the dialog's thread and applied on
+    // the next frame (poll_model_folder).
+    void choose_model_folder(int which);
+    std::string text_model_value() const;    // the rows' values
+    std::string picture_model_value() const;
+    void poll_model_folder();
+    std::mutex folder_mx_;
+    std::optional<std::pair<int, std::string>> folder_picked_;
+
+public:
+    void model_folder_picked(int which, const std::string& path); // the dialog's choice (any thread)
+
+private:
     // The budget's four bars and status line, at the menu's top right, kBudgetW wide from x; returns the y below them.
     static constexpr float kBudgetW = 600;
     float draw_budget(float x, float y);
