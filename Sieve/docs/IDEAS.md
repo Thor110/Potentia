@@ -1563,3 +1563,77 @@ alphabet, a setting of the line, and the line's id names it. So:
   model is given the picture (as bytes for the AI line's models, as patches for a vision model)
   and says what follows. The same gesture as J between an item and its file.
 
+
+---
+
+## 19. Edward's ideas of 12 October 2026
+
+**19.1 A figure found in the noise, and a filter for shapes and figures.** Cycling with Random
+(any line), Edward chanced on a 10 by 10 mono cover on the video line that reads as a soldier
+with a spear: a head, a body, and a long upright stroke beside it. It is the kind of sprite a text
+adventure would show for a character. Its item fails `row-runs-v1`, so with that filter on it
+would never have been seen.
+
+*Evaluation.*
+- **What was seen is pareidolia,** as with faces in clouds, but it is what people look for on the
+  picture lines, and the filters so far either ignore it or, as `row-runs-v1` does here, set it
+  aside. Filters that favour long runs and smooth areas keep few figures, which are made of short,
+  thin strokes.
+- **A figure filter (`figure-v1`), for small mono pictures:** keep a picture whose dark cells form
+  one connected shape (or a set number of them), standing clear of the border, with a few thin
+  parts reaching out (limbs, a spear). Settings: how many shapes; the least and most of the
+  picture they cover; whether the shape must touch the bottom row (a figure standing); and
+  four-way or eight-way connection.
+- **It can count as well as judge,** which matters given Edward's wish (§15) to avoid judge-only
+  filters. Connectivity is decided by scanning the picture row by row and carrying, from one row
+  to the next, which of the current row's runs belong to the same shape (a frontier, as in the
+  counting of polyominoes). At 10 wide the number of frontier states is small enough to count
+  exactly, so the filter would rank and the line would go compact on it. Mirror symmetry (figures
+  facing forward) is a second setting that also counts.
+- **What it is for:** characters and creatures for the game (GAME.md, "Figures found in the
+  noise"), sprites for text adventures, and a training set for 19.2, found rather than drawn.
+- **Verdict:** build `figure-v1` on the image line as a counting filter, with the oracle and
+  vectors; the soldier's address goes into the anchors as the first figure found.
+
+**19.2 The smallest diffusion model, on the line (Edward, 12 October 2026).** His idea: build the
+smallest AI diffusion image model, if it has not been done already.
+
+*Evaluation.*
+- **Whether it would be a first is not known.** Small diffusion models trained on handwritten
+  digits, with tens of thousands of weights, are a common teaching exercise, and smaller ones
+  may well exist. "Smallest ever" is not something we can check, and neither is a claim that the
+  AI line's Micro text model is a first. What is new here is the rest: a diffusion model trained in
+  exact integer arithmetic, replayable on any machine from its run, standing at an address on a
+  line, with the pictures it makes standing at addresses on the image line.
+- **Discrete diffusion fits the mono pictures.** A diffusion model learns to undo noise one step at
+  a time. For pictures of black and white cells, the noise can be cells flipped at random, more at
+  each step, until the picture is a coin toss in every cell; the model learns to guess, at each
+  step, which cells to flip back. That needs no Gaussian noise, only a seeded choice of cells, so
+  it suits `training-v1`'s pinned integer arithmetic. 10 by 10 pictures are 100 cells, within the
+  512 positions the line's models already read.
+- **The noise is an address.** A diffusion model turns a starting picture of noise into an image by
+  a fixed procedure. With the steps' randomness seeded, the result is a function: (model address,
+  noise address, seed) to image address. The starting noise is itself an item on the image line,
+  so the model is a map from the image line to itself, which J could show as a jump from the noise
+  to what the model makes of it.
+- **Where it sits.** Not on a line of its own: a diffusion model is still a list of weights, and
+  the AI line holds weights. What differs is its architecture and what its output is, and §18.3
+  already gives the AI line's id an architecture (aispace-v2). So it is the AI line, with the
+  architecture "diffusion, 10 by 10 mono" named in the line's id, as the language is named by its
+  text. On the shelves its models would show the picture each makes from a fixed noise, as the text
+  models show their babble. An assistant that both talks and draws is a third architecture, made
+  of the two, and would sit on the same line.
+- **The figure filter feeds it.** The training set can be figures found with `figure-v1` (19.1):
+  pictures found on the image line train a model whose output lands back on the image line.
+- **Verdict:** a discrete (cell-flip) diffusion model for 10 by 10 mono pictures, trained with
+  `training-v1`'s arithmetic, as an architecture on the AI line under aispace-v2. Build `figure-v1`
+  first, since it supplies the data.
+
+**19.3 How a published multimodal model sees a picture.** Edward asked how Claude perceives the
+picture he sent. As far as is published for models of its kind (§18.5): the picture is cut into
+patches, a vision encoder turns each patch into a vector, and those vectors join the text the
+model reads. It is not given the exact pixels one by one, so small details (a single cell of a 10
+by 10 cover, seen at an angle on a shelf) can be misread. A byte model on the AI line is the
+opposite case: it reads every pixel exactly, as a byte, but with no sense of the row above. The
+figure in 19.1 was seen by both Edward and Claude; neither reading is exact, which is why
+`figure-v1` decides on the cells themselves.

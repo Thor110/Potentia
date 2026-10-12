@@ -121,6 +121,13 @@ How the walk could work, for when the story is written:
 - **Open:** whether the walk is required or a trail the player may ignore; how many anchors there
   are at release; whether players' own maps (V) can add anchors to the walk.
 
+**Figures found in the noise** (Edward, 12 October 2026). On the video line, Random turned up a
+10 by 10 cover that reads as a soldier with a spear (IDEAS §19.1). Figures like that, found on the
+picture lines rather than drawn, could be the game's characters: the guard at a door, an NPC's
+face in the "Now playing" box, a creature in a text adventure on the game line. Each stands at its
+address, so a character is also a place the player can visit. A figure filter would make them
+common enough to cast from; the first one found goes into the anchors.
+
 **Length.** It should be short and focused, about two hours, so the space's infinity stays
 atmospheric rather than exhausting.
 

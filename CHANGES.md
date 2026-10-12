@@ -1,24 +1,23 @@
-# Readable text on the black screens
+# Notes: figures, and the smallest diffusion model
 
-Against your main plus the earlier zips (navigator.cpp includes nav-random).
+Documentation only. Apply after the earlier zips: these two files include their changes.
 
-## The fix
-The address navigator wrote its title, buttons, chosen digits and readout in the line's edge
-colour. On lines with black or very dark edges (books, models, tracks, movies) that was black on
-black.
+## IDEAS §19 (new)
+- **19.1 The soldier, and a figure filter (`figure-v1`).**
+  - The find: a 10 by 10 cover on the video line that fails `row-runs-v1`.
+  - The filter: one connected shape clear of the border, with thin parts reaching out.
+  - It counts as well as judges: connectivity is carried row by row, as polyominoes are counted.
+- **19.2 The smallest diffusion model, on the line.**
+  - Whether it would be a first can't be checked: small diffusion models are a common exercise.
+  - What is new: exact integer training, a replayable run, and addresses for the model and its
+    pictures.
+  - Discrete (cell-flip) diffusion suits mono pictures.
+  - It sits on the AI line, as an architecture named in the line's id (aispace-v2), not on a
+    line of its own.
+  - `figure-v1` supplies its training pictures.
+- **19.3 How a multimodal model sees a picture:** as patches turned into vectors, not exact
+  pixels; a byte model is the opposite case.
 
-It now uses `menu_ink` (dimensions.hpp), the rule the setup menu already uses for line names on
-black:
-- the edge colour when it reads;
-- otherwise the background colour;
-- when both are too dark, the background colour lightened halfway to white.
-
-## The same fix on two more black screens
-- **The map view** (node_graph.cpp, `draw_graph_view`).
-- **The media player** (media_player.cpp).
-
-The pause menu and the item page's SORT and META tabs are left alone. They sit on the line's own
-background colour, where the edge colour already reads.
-
-## Checked here (Linux)
-- The client builds without warnings.
+## GAME.md §3
+- "Figures found in the noise": found figures as the game's characters, each one a place the
+  player can visit.
