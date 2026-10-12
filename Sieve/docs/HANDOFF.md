@@ -2523,3 +2523,11 @@ cover and a title.
   `Hallway::go_to_located`. CI: "open, Go to it offered".
 - **Media Player from the main menu:** the hallway is built with `open_media_from_main()`; Esc there
   is `Request::MainMenu` (`media_from_main_`), cleared once a melody is gone to.
+
+### The shipped picture model (12 October 2026)
+- `data/training/figures-2x32/` (diffusion.ini, pictures.txt 404 KB, result.txt): the run the
+  harness screenshots and IDEAS §19.2 measure. Made with `sieve diffuse --record figs --filters
+  figures.ini --ai-layers 2 --ai-width 32 --steps 15000 --checkpoint-every 1500` (figures.ini: the
+  image line's figure-v1 connect = four, row-runs-v1 changes = 2). Reproduced exactly by the
+  current build (7 minutes here). CI checks only that its final model makes the six pictures the
+  harness shows, by address; training it again is by hand.

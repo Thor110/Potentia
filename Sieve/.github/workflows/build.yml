@@ -320,6 +320,9 @@ jobs:
           $exe diffuse diff-run --quiet | tr -d '\r' | q "^reproduced exactly"
           python reference/sieve_ref.py diffuse-replay --run diff-run | tr -d '\r' | cmp - diff-run/result.txt
           $exe diffuse --make diff-run --count 2 | tr -d '\r' | q "^picture "
+          # The shipped picture model (data/training/figures-2x32): its final model makes the six pictures
+          # the harness shows, address for address (training it again takes minutes: run it by hand).
+          $exe diffuse --make data/training/figures-2x32 --count 6 | tr -d '\r' | grep "^picture" | cut -c10-34 | tr '\n' ' ' | q "fff0fc2f0de8f01c3fdbe6fff fff29e4e04fbf01b3e05e9fff fff8ffee10bcf8f80f05c0fff fff83e1f15cef83a1f8de7fff fff93e3713a17f7e2fa3c9fff fff878af09e16a7e0f03c3fff"
           # The AI line's filters (SPECIFICATIONS §12.0f): weight-rows-v1 counts and ranks; the model the
           # shipped run trains passes it, and so does its canonical form (canonical-model-v1), which the
           # oracle works out the same and which says what the model says.
