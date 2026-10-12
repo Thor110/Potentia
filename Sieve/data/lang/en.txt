@@ -13,7 +13,7 @@ language.name = English
 
 ; ---- main menu
 main.title = Potentia : Sieve : Gallery of Babel Dimensions
-main.subtitle = Every possible text, picture, melody, film, book and mesh, on one endless corridor of shelves.
+main.subtitle = Every possible page, picture, melody, sound, film, book, track, movie, mesh, world, AI model and file, on one endless corridor of shelves.
 item.start = Start Sieve
 item.settings = Settings
 item.exit = Exit Sieve

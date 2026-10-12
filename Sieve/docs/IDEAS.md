@@ -1568,17 +1568,16 @@ alphabet, a setting of the line, and the line's id names it. So:
 
 ## 19. Edward's ideas of 12 October 2026
 
-**19.1 A figure found in the noise, and a filter for shapes and figures.** Cycling with Random
-(any line), Edward chanced on a 10 by 10 mono cover on the video line that reads as a soldier
-with a spear: a head, a body, and a long upright stroke beside it. It is the kind of sprite a text
+**19.1 Geometry filters: shapes and figures (Edward, 12 October 2026).** Edward's idea: filters
+for shapes and geometry, in 2D and 3D, and perhaps for text later (§19.7). It came from a 10 by 10
+mono cover found with Random (any line) on the video line, which, as he put it, looks like a
+soldier with a spear: pareidolia, he noted, but a fun find, and the kind of sprite a text
 adventure would show for a character. Its item fails `row-runs-v1`, so with that filter on it
-would never have been seen.
+would not have been seen.
 
-*Evaluation.*
-- **What was seen is pareidolia,** as with faces in clouds, but it is what people look for on the
-  picture lines, and the filters so far either ignore it or, as `row-runs-v1` does here, set it
-  aside. Filters that favour long runs and smooth areas keep few figures, which are made of short,
-  thin strokes.
+*Notes.*
+- **What the picture lines lack:** a filter for shape. Those so far favour long runs and smooth
+  areas, and figures are made of short, thin strokes, so they keep few of them.
 - **A figure filter (`figure-v1`), for small mono pictures:** keep a picture whose dark cells form
   one connected shape (or a set number of them), standing clear of the border, with a few thin
   parts reaching out (limbs, a spear). Settings: how many shapes; the least and most of the
@@ -1590,23 +1589,23 @@ would never have been seen.
   counting of polyominoes). At 10 wide the number of frontier states is small enough to count
   exactly, so the filter would rank and the line would go compact on it. Mirror symmetry (figures
   facing forward) is a second setting that also counts.
-- **What it is for:** characters and creatures for the game (GAME.md, "Figures found in the
-  noise"), sprites for text adventures, and a training set for 19.2, found rather than drawn.
+- **What it is for:** characters and creatures for the game (GAME.md, "Figures found on the
+  lines"), sprites for text adventures, and a training set for 19.2, found rather than drawn.
 - **Verdict:** build `figure-v1` on the image line as a counting filter, with the oracle and
-  vectors; the soldier's address goes into the anchors as the first figure found.
+  vectors, as the first of the geometry filters (§19.7).
 - *Built (12 October 2026), as `figure-v1`:* shapes, `connect` four or eight, `border` any, clear
   or standing; an automaton on small palettes, its own ranker on rgb24, at any height. On mono
   10×10, one eight-way shape clear of the edges keeps 10^-11.47 of the line; but eight-way shapes
   connect so easily that the survivors still look like noise. Four-way joins with row-runs (2
   changes a row) keep 325,263,852,704 pictures that look like glyphs and totems, counted together
   because both are automata. Not built: the area setting and the thin parts reaching out (limbs),
-  which would cost more state. The soldier's address was not recorded in full (the screenshot shows
-  only its ends), so it is not yet an anchor.
+  which would cost more state. The soldier's cover was not recorded in full (the screenshot shows
+  only its address's ends).
 
 **19.2 The smallest diffusion model, on the line (Edward, 12 October 2026).** His idea: build the
 smallest AI diffusion image model, if it has not been done already.
 
-*Evaluation.*
+*Notes.*
 - **Whether it would be a first is not known.** Small diffusion models trained on handwritten
   digits, with tens of thousands of weights, are a common teaching exercise, and smaller ones
   may well exist. "Smallest ever" is not something we can check, and neither is a claim that the
@@ -1649,13 +1648,12 @@ smallest AI diffusion image model, if it has not been done already.
   runs; the hallway showing a model's picture on its shelf face, and J from the noise to the
   picture; a run shipped as an anchor.
 
-**19.3 How a published multimodal model sees a picture.** Edward asked how Claude perceives the
-picture he sent. As far as is published for models of its kind (§18.5): the picture is cut into
-patches, a vision encoder turns each patch into a vector, and those vectors join the text the
-model reads. It is not given the exact pixels one by one, so small details (a single cell of a 10
-by 10 cover, seen at an angle on a shelf) can be misread. A byte model on the AI line is the
-opposite case: it reads every pixel exactly, as a byte, but with no sense of the row above. The
-figure in 19.1 was seen by both Edward and Claude; neither reading is exact, which is why
+**19.3 How a published multimodal model sees a picture.** Edward asked how Claude perceives a
+picture sent to it. As far as is published for models of its kind (§18.5): the picture is cut into
+patches, a vision encoder turns each patch into a vector, and those vectors join the text the model
+reads. It is not given the exact pixels one by one, so small details (a single cell of a 10 by 10
+cover, seen at an angle on a shelf) can be misread. A byte model on the AI line is the opposite
+case: it reads every pixel exactly, as a byte, but with no sense of the row above. That is why
 `figure-v1` decides on the cells themselves.
 
 **19.4 Every system should scale (Edward, 12 October 2026).** His words: the point was to
@@ -1670,3 +1668,75 @@ emphasise that all systems should be scalable. As a rule for what gets built:
   found large, on every machine.
 - **Measured as it grows.** What a system costs at each size is written down (state counts, table
   sizes, times), so where it stops scaling is known rather than found by surprise.
+
+**19.5 Computation in a straight line (Edward, 12 October 2026).** His words: there is an element
+of pure insanity here to be avoided (the Library of Babel), but the real aim is to make computation
+a straight line, always: to the best route available for the information at hand, with what is
+available at the time. Whatever is recognised on the lines (a figure, a face, a word) is noted for
+fun, and the madness is noise: easy to ignore, in the real world and in digital form.
+- **As a rule for what gets built:** each feature should shorten the route to information, never
+  lengthen it. A filter earns its place by the bits it saves (the compact address) or the angle it
+  gives (a new way to sort the same units), not by what it suggests.
+- **Quirks worth keeping, for the fun of them and because they are cheap:** shapes and lines
+  addressable in simpler forms; variable-length addresses where a stack makes them short; whatever
+  structure the counting turns up on the way.
+- **Constraint as perspective.** Edward: the more degrees of freedom we constrain in the
+  information space, the more angles we have to look at all information from, from language models
+  to images, shapes and everything across all domains: from the Dewey decimal system to all
+  information, back, forth and all around. Each filter is a way to categorise and a shortcut to
+  what it keeps, from a local computation's point of view. In Sieve's terms: every stack is a
+  ruler laid along a line, and a compact address is the distance measured with it.
+- **The engine of all engines** (Edward's phrase): a full-length, context-aware array, simulation
+  and encryption engine. Each word is already a part: the lines are the arrays, the corridor and
+  worlds are the simulation, the keyed orderings are the encryption (shuffle-sha256-v1), and the
+  stacks and models are the context.
+
+**19.6 A game that puts all games on a spectrum (Edward, 12 October 2026).** His idea: a game
+whose graphics scale from low-pixel to No Man's Sky's, mathematically equal and fair in every way,
+with access to the voice, image and text system that could form from Sieve just by its existing.
+All games on a spectrum, from fantasy to science fiction and beyond, through every resolution, with
+access to every AI model. Notes (GAME.md §4a has the game's side):
+- **Every resolution is already a setting.** Each line's size is a setting (image width and
+  palette, worlds' grid and models, video frames), so one world can be drawn at every resolution,
+  and "fair" has an exact meaning: every player's view is a function of the same addresses.
+- **The spectrum is an ordering.** Fantasy to science fiction is an axis a filter or a model could
+  sort along, as language-v1 sorts models by the text they speak. A game's place on it would be a
+  bearing, as every unit has one.
+- **The AI models are on a line too:** a game of this kind would name its characters' models by
+  address, as it names its pictures.
+
+**19.7 Geometry filters, in 2D, 3D and text (Edward, 12 October 2026).** The family `figure-v1`
+starts (§19.1).
+- **2D (pictures):** connected shapes (built), areas, symmetry (mirror, rotation), convexity,
+  holes, straight lines and outlines, a shape's thickness (limbs and strokes). Each is a frontier
+  or a count carried along the rows, so most can count, as figure-v1 does.
+- **3D (models and worlds):** the models line's meshes already have rules (canonical-mesh,
+  distinct vertices); geometry filters would add connectedness of the faces (one solid), closed
+  surfaces (no open edges), symmetry, and bounds. Worlds: models that touch or rest on others.
+- **Text:** shape on a page: line lengths, indentation, the outline of a poem or a block of code,
+  columns. The pages line is a picture of its characters, so the 2D filters carry over.
+- **Mostly automata,** so they combine with each other and with the rest, which is the point:
+  each one is another angle (§19.5).
+
+**19.8 The Sieve of Potentia (Edward, 12 October 2026).** He likes that the name became the Sieve of
+Potentia, for the Sieve of Eratosthenes: that sieve strikes out the multiples of each prime in turn
+and keeps what is left; this one strikes out what each filter sets aside and keeps, and counts, what
+is left. Both are exact, and both are defined by what they remove.
+
+**19.9 Chat logs (Edward, 12 October 2026).** He would like the conversations that built Sieve to be
+downloadable, or at least recorded. Claude Code keeps each session's transcript as a file (JSON
+lines), so a session's log can be saved and handed over as a file when asked; the decisions in it
+are summarised here and in HANDOFF.md as they are made.
+
+**19.10 Testing in fewer, larger rounds (Edward, 12 October 2026).** Edward builds both
+configurations and runs the whole suite (`out\build\x64-Release\sieve_tests.exe tests`) for every
+package. To spend less of his time: packages grouped by category (a round of filters, a round of
+the AI line, a round of the hallway) and delivered less often; the full suite run here before each;
+and a way for the suite to run one area at a time (a test name or category on its command line), so
+a feature can be checked on its own while the full run is kept for the end of a round.
+
+**19.11 A video game dimension (Edward, 12 October 2026).** Not yet designed. Edward's thoughts: the
+game line of GAME.md §4 (arcade cabinets) was meant to be woven through the story. Possibly a new
+dimension of discs (a copy of the CD model, as the tracks line has, for CDs and DVDs), and perhaps a
+place in each room for an arcade cabinet or a computer. Or it forms and evolves around the rest,
+from the lowest resolution to the highest (§19.6). Utility comes first; this stays open.

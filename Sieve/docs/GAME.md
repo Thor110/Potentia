@@ -121,12 +121,12 @@ How the walk could work, for when the story is written:
 - **Open:** whether the walk is required or a trail the player may ignore; how many anchors there
   are at release; whether players' own maps (V) can add anchors to the walk.
 
-**Figures found in the noise** (Edward, 12 October 2026). On the video line, Random turned up a
-10 by 10 cover that reads as a soldier with a spear (IDEAS §19.1). Figures like that, found on the
-picture lines rather than drawn, could be the game's characters: the guard at a door, an NPC's
-face in the "Now playing" box, a creature in a text adventure on the game line. Each stands at its
-address, so a character is also a place the player can visit. A figure filter would make them
-common enough to cast from; the first one found goes into the anchors.
+**Figures found on the lines** (Edward, 12 October 2026). On the video line, Random turned up a
+10 by 10 cover that looks like a soldier with a spear (IDEAS §19.1). Figures like that, found on the
+picture lines rather than drawn, could be the game's characters: the guard at a door, an NPC's face
+in the "Now playing" box, a creature in a text adventure on the game line. Each stands at its
+address, so a character is also a place the player can visit. The geometry filters (figure-v1 and
+those to come) make them common enough to cast from.
 
 **Length.** It should be short and focused, about two hours, so the space's infinity stays
 atmospheric rather than exhausting.
@@ -165,6 +165,16 @@ launches the emulator or plays inside the cabinet. Sieve ships no emulators and 
   game line and the suit may allow real console names and logos. A better route he is considering:
   ask emulator developers for permission to use their logos, and pick one chosen emulator for each
   console, so each cabinet wears a mark its owner agreed to. He is in no hurry over this.
+
+### 4a. All games on a spectrum (Edward, 12 October 2026)
+
+An idea beside the game line, not yet a plan (IDEAS §19.6): a game whose graphics scale from low
+pixels to No Man's Sky's, every resolution a setting, mathematically equal and fair for every
+player, with every AI model on the AI line to call on for voices, pictures and text. All games on a
+spectrum, from fantasy to science fiction and beyond. In Sieve's terms a game is a stack and a
+bearing: the lines it draws from, the filters that shape them, and where it sits on the spectrum.
+How a video game dimension would come into the hallway is open (IDEAS §19.11): discs on shelves (a
+copy of the CD model), a cabinet or a computer in each room, or a line that forms from the others.
 
 ---
 

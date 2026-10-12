@@ -347,7 +347,21 @@ void MainMenu::render()
     float ts = 3;
     while (ts > 1 && text_width(title, ts) > W - 40) ts -= 0.5f;
     draw_centred(r_, cx, 50, title, ts, kWhite);
-    draw_centred(r_, cx, 50 + 8 * ts + 14, tr("main.subtitle"), 1, kGrey);
+    // The subtitle names every line, so on a narrow window it takes two lines, broken at the space
+    // nearest its middle (there is room for two above the rule below).
+    {
+        const std::string& sub = tr("main.subtitle");
+        const float sy = 50 + 8 * ts + 14;
+        const size_t mid = sub.size() / 2, before = sub.rfind(' ', mid), after = sub.find(' ', mid);
+        const size_t cut = before == std::string::npos ? after : after == std::string::npos ? before
+                                                                 : (mid - before <= after - mid ? before : after);
+        if (text_width(sub, 1) <= W - 40 || cut == std::string::npos) draw_centred(r_, cx, sy, sub, 1, kGrey);
+        else
+        {
+            draw_centred(r_, cx, sy - 4, sub.substr(0, cut), 1, kGrey);
+            draw_centred(r_, cx, sy + 8, sub.substr(cut + 1), 1, kGrey);
+        }
+    }
     // A thin rule under the title in the colours of the lines, as the corridor runs: binary at
     // both ends, the others in door order between.
     {
