@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <stdexcept>
 
@@ -266,6 +267,59 @@ std::optional<std::string> final_address_of(const std::string& result_text)
         if (w == "final") in >> hex;
     if (hex.empty()) return std::nullopt;
     return hex;
+}
+
+Space image_line_of(const DiffusionRecipe& r)
+{
+    ImageFormat fmt;
+    fmt.width = r.setup.width, fmt.height = r.setup.height, fmt.palette = &palette_by_id(r.palette);
+    return Space(fmt.symbols_id(), fmt.palette->size(), fmt.unit_length());
+}
+
+std::vector<uint32_t> nth_picture(const AiSpace& space, const AiSpace::Digits& digits, const diffusion::Setup& s, uint64_t k)
+{
+    if (k < 1) bad("pictures are numbered from 1");
+    diffusion::SplitMix g(1);
+    std::vector<uint32_t> noise(s.cells());
+    for (uint64_t i = 0; i < k; ++i)
+        for (auto& c : noise) c = uint32_t(g.next() % s.colours);
+    return diffusion::make_picture(space, digits, s, noise, k);
+}
+
+PictureModel load_picture_model(const fs::path& dir)
+{
+    if (!is_diffusion_run(dir)) bad(dir.string() + " is not a diffusion run (it has no diffusion.ini)");
+    PictureModel m;
+    m.path = dir;
+    const std::u8string n = dir.filename().u8string();
+    m.name = std::string(n.begin(), n.end());
+    m.recipe = DiffusionRecipe::parse(read_text(dir / "diffusion.ini"));
+    const std::optional<std::string> hex = fs::exists(dir / "result.txt") ? final_address_of(read_text(dir / "result.txt")) : std::nullopt;
+    if (!hex) bad(m.name + " has not been trained (no final model in result.txt)");
+    m.space = std::make_shared<const AiSpace>(m.recipe.train.shape, "sieve");
+    m.digits = m.space->digits_at(m.space->parse(*hex), AddressMode::Positional);
+    return m;
+}
+
+std::vector<fs::path> picture_models_in(const std::vector<fs::path>& dirs)
+{
+    std::map<std::string, fs::path> by_name;
+    for (const fs::path& d : dirs)
+    {
+        std::error_code ec;
+        if (!fs::is_directory(d, ec)) continue;
+        for (const auto& e : fs::directory_iterator(d, ec))
+        {
+            const fs::path p = e.path();
+            const std::u8string n = p.filename().u8string();
+            const std::string name(n.begin(), n.end());
+            if (by_name.count(name) || !is_diffusion_run(p) || !fs::exists(p / "result.txt")) continue;
+            by_name[name] = p;
+        }
+    }
+    std::vector<fs::path> out;
+    for (auto& [name, p] : by_name) out.push_back(p);
+    return out;
 }
 
 } // namespace sieve::cli

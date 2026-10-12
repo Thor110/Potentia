@@ -1540,7 +1540,9 @@ void Hallway::handle(const SDL_Event& e, bool& quit)
     try
     {
         handle_event(e, quit);
-        if (request_ == Request::Tailored) quit = true; // tailored filters to use (COST, the File Locator)
+        // Tailored filters to use (COST, the File Locator), or a picture of the chat window on an
+        // image line this hallway does not have: a new hallway, built by the application.
+        if (request_ == Request::Tailored || request_ == Request::GoToPicture) quit = true;
     }
     catch (const std::exception& ex)
     {
@@ -1554,6 +1556,11 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
     if (view_open_) // over everything: it is the thing in your hands, larger
     {
         viewer_event(e, quit);
+        return;
+    }
+    if (chat_open_) // the conversation with the model in hand
+    {
+        chat_event(e);
         return;
     }
     if (graph_open_)
@@ -1602,8 +1609,7 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
                 const Input which = input_;
                 const std::string t = text_;
                 close_input();
-                if (which == Input::Talk) talk(t); // an empty line too: the model goes on by itself
-                else if (!t.empty()) which == Input::Warp ? warp(t) : go_to(t);
+                if (!t.empty()) which == Input::Warp ? warp(t) : go_to(t);
             }
         }
         return;
@@ -1764,7 +1770,7 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
         break;
     case SDLK_RETURN:
     case SDLK_KP_ENTER:
-        if (in_hand_ && in_hand_->ai) open_input(Input::Talk); // the AI line: say something to it
+        if (in_hand_ && in_hand_->ai) open_chat(); // the AI line: the chat window (chat.cpp)
         else if (in_hand_) apply_tailored(quit);
         break;
     case SDLK_Z:
@@ -1855,38 +1861,6 @@ std::string Hallway::printable(const std::string& bytes)
         else out += "\xc2\xb7"; // a middle dot
     }
     return out;
-}
-
-// The AI line: what you say is fed to the model in hand as bytes, a newline after it, and the model
-// writes back until it writes a newline itself (at most kTalkReply bytes). It is a model like any
-// other on the line, mostly noise: what comes back is what its weights make of what it was given.
-void Hallway::talk(const std::string& said)
-{
-    if (!in_hand_ || !in_hand_->ai) return;
-    constexpr size_t kTalkReply = 80;
-    if (!talk_model_ || talk_hex_ != in_hand_->hex)
-    {
-        talk_model_ = std::make_unique<sieve::llm::Model>(ai_space_->config(), ai_space_->tensors_of(*in_hand_->ai), 1);
-        talk_.clear();
-        talk_hex_ = in_hand_->hex;
-    }
-    const std::string text = said + "\n";
-    if (talk_model_->position() + text.size() + kTalkReply >= talk_model_->config().max_positions)
-    {
-        talk_model_->reset();
-        talk_ += tr("talk.full") + "\n";
-    }
-    sieve::llm::Sampling s;
-    s.temperature = 0.8f;
-    s.top_p = 1.0f;
-    // Its choices seeded by the conversation so far (the first eight bytes of its SHA-256), so the same
-    // words to the same model at the same point get the same answer on every machine.
-    const auto digest = sieve::Sha256::hash(talk_ + said);
-    s.seed = 0;
-    for (int i = 0; i < 8; ++i) s.seed = (s.seed << 8) | digest[size_t(i)];
-    sieve::llm::Sampler sampler(s);
-    const std::string reply = sieve::llm::continue_text(*talk_model_, *ai_tokenizer_, text, sampler, kTalkReply, {}, uint32_t('\n'));
-    talk_ += trf("talk.you", {said}) + "\n" + trf("talk.it", {reply}) + "\n";
 }
 
 // One-line summary of where you are (for scripted walks and testing).

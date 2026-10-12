@@ -1788,11 +1788,12 @@ line's filters remove, one line a dimension:
   notes); CI checks the binary and models lines' figures. A `sieve metrics` in the tool waits on the
   tally moving into the shared library.
 
-**19.13 A chat window for the AI line (Edward, 12 October 2026).** Today a model in hand is talked
-to through the prompt bar ("SAY >"), its conversation drawn in the hand panel. Edward wants a built-in
-window: the conversation, a box to type in, and a plus button to attach files; beside each file a
-"Go to it" and a "Save", so the chat is another path to files, from the library and from the chat;
-and, in time, the model finding files among the infinite through the filters and the noise.
+**19.13 A chat window for the AI line (Edward, 12 October 2026).** Before this window, a model in
+hand was talked to through a prompt bar ("SAY >"), its conversation drawn in the hand panel. Edward
+wanted a built-in window: the conversation, a box to type in, and a plus button to attach files;
+beside each file a "Go to it" and a "Save", so the chat is another path to files, from the library
+and from the chat; and, in time, the model finding files among the infinite through the filters and
+the noise.
 
 *Design.*
 - **The window:** opened with Enter on a model in hand (as now), over the hallway: the conversation
@@ -1816,6 +1817,17 @@ and, in time, the model finding files among the infinite through the filters and
 - **Shared with the harness:** the same window shows a diffusion model's pictures as cards (each
   with its address and Go to it), so talking to a text model and asking a picture model are one
   interface.
+
+*Built (12 October 2026).* The window is in the hallway (client/chat.cpp; README, the AI line):
+Enter on a model in hand opens it. Files given with the plus button are cards with their kind, size
+and the ways to name them, weighed as the File Locator weighs them, with GO TO IT, J and SAVE, and
+the model reads their first bytes. It is multimodal in the plainest sense: DRAW makes a figure with
+a picture model (figures-2x32, or any trained diffusion run in the harness's folders), shown in the
+conversation with its address on the image line, GO TO IT and SAVE, and the model reads it as its
+rows, a character a cell. A figure is named by its picture model and its number (figure 3 by
+figures-2x32 is always the same picture), the same numbering the harness and `sieve diffuse --make`
+use. Still to come: the model's replies naming places (the finding above), and published models in
+the window.
 
 **19.14 Short request numbers, and the balance with the vault (Edward, 12 October 2026).** His
 idea: a library shelf has only two sides, and on each side there can be a short number. A remote
@@ -1922,3 +1934,30 @@ Player in the main menu, it could hold a sub-node system for designing audio and
 the Filter Designer's nodes, but on melodies, heard as they are tested (each change plays a melody
 the filter keeps). The Media Player already has its own stack of audio filters for each mode; a
 designer inside it would make new ones there, saved as plugins like any other.
+
+**19.20 A text game that makes itself, and grows to 3D (Edward, 12 October 2026).** His idea,
+with the chat window now able to show figures: a text-based game could create itself, then scale
+up to a 3D game of considerable depth, and be no more than a series of parameters, ranging from
+fiction to science fiction and fantasy, a spectrum (§19.6, GAME.md §4a).
+
+*Notes.*
+- **What is already a parameter.** Each piece of such a game is a place on a line: a character's
+  look is a figure (a picture model and a number, as in the chat window), its voice a model of the
+  AI line, its music a melody, a room a world of the worlds line, the story's pages units of the
+  pages line. A game would then be a short record of these names and its settings, and "making
+  itself" means the record unfolding into the game the same way on every machine, as a figure
+  unfolds from its model, its noise and its seed.
+- **Growing in resolution, not in kind.** The same record could be shown as text (the chat window:
+  narration and figures as characters), then in 2D (the figures placed on a picture), then in 3D
+  (the worlds line, models placed on a grid). Each step is a larger setting of the same lines, so
+  a player's view at any resolution is a function of the same addresses (§19.6's fairness).
+- **The spectrum as one more parameter.** Fiction, science fiction and fantasy would be an axis
+  that chooses among the parts: which language models narrate (sorted along it, as language-v1
+  sorts models by the text they speak), which picture models draw, which words a place is named
+  with. Training models at points along it (a run on fantasy texts, a run on science fiction) is
+  harness work.
+- **Where it stands.** The pieces exist and can be shown together (the chat window), but they do
+  not yet make a game: the language models the harness trains babble, and a story needs a model
+  that keeps its characters and follows what happened. A first step that needs neither: a scene as
+  a record (characters as figures, each with a name and a voice model, and a place), kept and
+  replayed in the chat window.

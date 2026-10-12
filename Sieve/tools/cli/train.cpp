@@ -486,8 +486,19 @@ ModelRun model_run_of(const std::string& id, const std::vector<std::filesystem::
     return m;
 }
 
+namespace {
+std::vector<std::filesystem::path>& run_dirs()
+{
+    static std::vector<std::filesystem::path> dirs;
+    return dirs;
+}
+} // namespace
+
+const std::vector<std::filesystem::path>& training_run_dirs() { return run_dirs(); }
+
 void use_training_runs(const std::vector<std::filesystem::path>& dirs)
 {
+    run_dirs() = dirs;
     set_model_run_loader([dirs](const std::string& id) { return model_run_of(id, dirs); });
 }
 

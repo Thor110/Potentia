@@ -1007,18 +1007,12 @@ void Harness::poll_pictures()
 
 void Harness::make_pictures(const sieve::AiSpace::Digits& digits)
 {
-    // What it makes: a picture from each of a few noises (drawn from splitmix64 seeded 1, as
-    // `sieve diffuse --make` draws them), each with its own seed (1, 2, ...).
+    // What it makes: its first few pictures (diffusion_run.hpp nth_picture), as `sieve diffuse
+    // --make` and the chat window make them.
     made_.clear();
     const sieve::cli::DiffusionRecipe& r = drun_->recipe;
     const sieve::AiSpace space(r.train.shape, "sieve");
-    sieve::diffusion::SplitMix g(1);
-    for (int i = 0; i < kPicturesMade; ++i)
-    {
-        std::vector<uint32_t> noise(r.setup.cells());
-        for (auto& c : noise) c = uint32_t(g.next() % r.setup.colours);
-        made_.push_back(sieve::diffusion::make_picture(space, digits, r.setup, noise, uint64_t(1 + i)));
-    }
+    for (int i = 1; i <= kPicturesMade; ++i) made_.push_back(sieve::cli::nth_picture(space, digits, r.setup, uint64_t(i)));
 }
 
 void Harness::draw_picture(const std::vector<uint32_t>& p, float x, float y, float cell) const

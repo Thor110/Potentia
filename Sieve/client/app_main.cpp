@@ -124,6 +124,10 @@ const char* kUsage =
     "  --pose X,Z,YAW,PITCH  camera position and angles in degrees\n"
     "  --tile N            then move N tiles along the corridor\n"
     "  --take              take the book you are looking at off the shelf\n"    "  --talk TEXT         with --take on the AI line: say TEXT to the model in hand; the conversation is printed\n"
+    "  --chat              with --take on the AI line: open the chat window on the model in hand\n"
+    "  --chat-attach FILE  with --take on the AI line: give FILE to the model, as the window's + does\n"
+    "  --chat-draw N       with --take on the AI line: draw N figures with the chat window's picture model\n"
+    "  --chat-press KEYS   keys pressed in the chat window after those (e.g. Ctrl+G: the newest card's GO TO IT)\n"
     "  --tailor PATH       with --screenshot, the item in hand on COST: K, waited for, and what Return\n"
     "                      would apply saved to PATH as a settings file\n"
     "  --save-item PATH    then save it as a file (F on the item page), to PATH\n"
@@ -862,10 +866,16 @@ int run(const Args& a)
         hall->render(); // computes what you are looking at
         hall->settle_vault(); // the vault's verdicts on the pictures in view, so the picture shows them
         if (a.has("take")) hall->take_hovered();
-        // The AI line: say something to the model in hand, and print the conversation.
-        if (a.has("talk"))
+        // The AI line: the chat window open on the model in hand (--chat), a file given to it
+        // (--chat-attach FILE), figures drawn with its picture model (--chat-draw N), something
+        // said to it (--talk TEXT), and the conversation printed.
+        if (a.has("chat")) hall->open_chat();
+        if (a.has("chat-attach")) hall->chat_attach(a.get("chat-attach"));
+        if (a.has("chat-draw"))
+            for (uint32_t i = a.get_positive("chat-draw", 1); i > 0; --i) hall->chat_draw();
+        if (a.has("talk")) hall->talk(a.get("talk"));
+        if (a.has("chat-attach") || a.has("chat-draw") || a.has("talk"))
         {
-            hall->talk(a.get("talk"));
             std::string line;
             for (const char c : hall->conversation() + "\n")
                 if (c == '\n')
@@ -875,6 +885,20 @@ int run(const Args& a)
                 }
                 else line.push_back(c);
         }
+        // Keys pressed in the chat window after that (Ctrl+G: the newest card's GO TO IT, ...),
+        // with where you are after each.
+        if (a.has("chat-press"))
+            for (const auto& [key, mod] : parse_presses(a.get("chat-press")))
+            {
+                SDL_Event e{};
+                e.type = SDL_EVENT_KEY_DOWN;
+                e.key.key = key;
+                e.key.mod = mod;
+                bool quit = false;
+                hall->handle(e, quit);
+                hall->render();
+                std::cout << hall->status() << "\n";
+            }
         // K on the item in hand, waited for, and what Return would apply saved as a settings file.
         if (a.has("tailor") && !hall->tailor_now(a.get("tailor")))
             std::cerr << "--tailor: nothing tailored (no item in hand on the pages, image, audio or video line)\n";
@@ -901,6 +925,7 @@ int run(const Args& a)
     std::optional<Space::Digits> pending_unit; // an item to hold on its COST tab there (COST's tailoring)
     std::optional<sieve::AiSpace::Digits> pending_ai; // a model to go to on the AI line there (the harness's GO TO IT)
     std::optional<LocatedGo> pending_file;            // a file to walk to there (the File Locator's Go to it)
+    std::optional<std::vector<uint32_t>> pending_picture; // a picture to go to there (the chat window's Go to it)
     bool pending_media = false;                       // the Media Player opened there (from the main menu)
     bool skip_setup = false;                         // straight into the hallway, once
     while (true)
@@ -1044,6 +1069,11 @@ int run(const Args& a)
             hall->go_to_located(pending_file->bytes, pending_file->name, pending_file->past);
             pending_file.reset();
         }
+        if (pending_picture)
+        {
+            hall->go_to_picture(*pending_picture);
+            pending_picture.reset();
+        }
         if (pending_media)
         {
             hall->open_media_from_main();
@@ -1165,6 +1195,18 @@ int run(const Args& a)
             }
             settings.start_line = melody.units ? "tracks" : "audio";
             pending_melody = melody;
+            show_menu = false;
+            settings_chosen = true;
+            continue;
+        }
+        if (hall->request() == Hallway::Request::GoToPicture && hall->picture_to_go())
+        {
+            // A figure of the chat window on an image line of another size or palette: the hallway
+            // again with that image line, on it, and there the figure.
+            const Hallway::PictureToGo p = *hall->picture_to_go();
+            settings.image_w = p.width, settings.image_h = p.height, settings.image_palette = p.palette;
+            settings.start_line = "image";
+            pending_picture = p.cells;
             show_menu = false;
             settings_chosen = true;
             continue;

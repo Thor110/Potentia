@@ -47,6 +47,7 @@
 #include "cli/lines.hpp"
 #include "cli/tailor.hpp"
 #include "cli/weigh.hpp"
+#include "cli/diffusion_run.hpp"
 
 #include "sieve/audio.hpp"
 #include "sieve/notes3.hpp"
@@ -82,6 +83,7 @@
 #include <future>
 #include <iostream>
 #include <iterator>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -292,7 +294,7 @@ inline std::string exact_degrees(const BigUint& v, const BigUint& units, int dec
 
 // ---------------------------------------------------------------- the hallway
 
-enum class Input { None, Warp, Goto, Talk };
+enum class Input { None, Warp, Goto };
 
 // Short form of a (possibly enormous) tile number for the readout.
 inline std::string short_number(const std::string& dec)
@@ -647,9 +649,24 @@ public:
         open_media_player();
         media_from_main_ = true;
     }
-    // The AI line: say something to the model in hand, which writes back (Enter opens the box; and
-    // --talk in a scripted run). The conversation is kept while the model is held.
+    // The AI line: say something to the model in hand, which writes back (in the chat window, which
+    // Enter opens; and --talk in a scripted run). The conversation is kept while the model is held.
     void talk(const std::string& said);
+    // The chat window (chat.cpp): Enter on a model of the AI line in hand. Scripted runs open it,
+    // attach a file (read, weighed and given to the model) and draw figures with its picture model.
+    void open_chat();
+    void chat_attach(const std::string& path);
+    void chat_draw();
+    // A picture, as the chat window's Go to it gives it: an image line of this size and palette.
+    struct PictureToGo
+    {
+        uint32_t width = 0, height = 0;
+        std::string palette;
+        std::vector<uint32_t> cells;
+    };
+    const std::optional<PictureToGo>& picture_to_go() const { return picture_to_go_; }
+    // On the image line, the picture in hand (one of this hallway's image line's size and palette).
+    void go_to_picture(const std::vector<uint32_t>& cells);
     // What a model of the AI line says by itself: `bytes` bytes after a newline, chosen at temperature
     // 0.8 with seed 1, so the same model always says the same (for its face, the readout, the hand).
     // And bytes as the hallway's font draws them: printable ASCII as it is, anything else a middle dot.
@@ -1318,7 +1335,9 @@ public:
     // it the melody (melody_to_go()).
     // Tailored: tailored filters applied (tailored_filters(): COST's Return, or the File Locator's
     // "use"), and from COST the item to hold again (tailored_unit()) on this line.
-    enum class Request { None, Settings, MainMenu, GoToMelody, Tailored, Designer, Harness };
+    // GoToPicture: a picture of the chat window on an image line of another size or palette than
+    // this one's (picture_to_go()), which a hallway built with that image line goes to.
+    enum class Request { None, Settings, MainMenu, GoToMelody, Tailored, Designer, Harness, GoToPicture };
     Request request() const { return request_; }
     void clear_request() { request_ = Request::None; }
     // After Settings, the new graphics and language: signs are lettered again, the rest is set.
@@ -1440,6 +1459,65 @@ private:
     std::vector<uint32_t> media_saving_;
     sieve::NoteSet media_saving_set_;
     std::optional<MusicMelody> melody_to_go_;
+
+    // ---- the chat window (chat.cpp): the conversation with the model in hand, as entries; files
+    // given to it and pictures a picture model makes are cards, each with its place on the lines
+    // (IDEAS §19.13)
+public:
+    void chat_saved(const std::string& path); // the save dialog's choice (any thread)
+    void chat_picked(const std::vector<std::string>& paths); // the file dialog's (any thread)
+
+private:
+    struct ChatEntry
+    {
+        enum class Kind { You, It, Note, File, Picture } kind = Kind::Note;
+        std::string text; // You, It, Note: what was said
+        // A file: its name, bytes and kind, where it stands (the File Locator's weighing), and how
+        // many of its bytes the model was given.
+        std::string name, file_kind, weighing;
+        std::vector<uint8_t> bytes;
+        size_t given = 0;
+        int item_line = -1; // the LineKind it is exactly an item of, or -1
+        // A picture: its cells, the picture model and its number there, its format and its address
+        // on the image line.
+        std::vector<uint32_t> cells;
+        std::string model, palette, address;
+        uint64_t number = 0;
+        uint32_t width = 0, height = 0;
+    };
+    enum class ChatAct { Go, Item, Save };
+    void close_chat();
+    void chat_event(const SDL_Event& e);
+    void draw_chat(float W, float H);
+    void chat_send();
+    void chat_act(size_t entry, ChatAct act);
+    // The model in hand made ready to talk (a new conversation for a new model).
+    void talk_ready();
+    // Bytes given to the model in hand, with no reply: what it reads next to it in the conversation.
+    size_t talk_give(const std::vector<uint8_t>& bytes);
+    // The picture models (trained diffusion runs), found when the window opens; the one chosen
+    // loaded the first time it draws.
+    void chat_pick_model(int dir);
+    // Entry i laid out at (x, y), `w` wide: its height, and, with `draw`, drawn (its buttons kept
+    // for the pointer). One function, so what is measured is what is drawn.
+    float chat_entry(size_t i, float x, float y, float w, bool draw);
+    // The newest file or picture card, for the keys that act on it (Ctrl+G, Ctrl+J, Ctrl+S).
+    std::optional<size_t> chat_last_card() const;
+    bool chat_open_ = false, chat_had_mouse_ = false;
+    std::vector<ChatEntry> chat_;
+    std::string chat_text_;
+    float chat_scroll_ = 0; // pixels up from the newest entry
+    std::vector<std::filesystem::path> chat_models_;
+    int chat_model_ = 0;
+    std::optional<sieve::cli::PictureModel> chat_pm_;
+    std::map<std::string, uint64_t> chat_drawn_; // a picture model's name -> the pictures drawn with it
+    std::vector<std::pair<SDL_FRect, std::pair<size_t, ChatAct>>> chat_buttons_;
+    std::vector<std::pair<SDL_FRect, int>> chat_bar_; // 0 attach, 1 draw, 2 send, 3 picture model
+    std::mutex chat_mx_;
+    std::optional<size_t> chat_saving_;
+    std::optional<std::string> chat_save_to_;
+    std::vector<std::string> chat_pending_; // files chosen in the dialog, to attach
+    std::optional<PictureToGo> picture_to_go_;
 
     // ---- the address navigator (navigator.cpp): X opens the whole address, digit by digit
     void open_navigator();

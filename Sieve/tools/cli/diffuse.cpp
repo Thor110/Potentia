@@ -98,12 +98,10 @@ int cmd_diffuse(const Args& a)
         }
         if (final_hex.empty()) bad("the run has not been trained (no final model in result.txt)");
         const AiSpace::Digits model = space.digits_at(BigUint::from_hex(final_hex), AddressMode::Positional);
-        ImageFormat fmt;
-        fmt.width = r.setup.width, fmt.height = r.setup.height, fmt.palette = &palette_by_id(r.palette);
-        const Space line(fmt.symbols_id(), fmt.palette->size(), fmt.unit_length());
+        const Space line = image_line_of(r);
         const uint32_t count = a.get_positive("count", 1);
         const uint64_t seed = a.has("seed") ? std::stoull(a.get("seed")) : 1;
-        const uint32_t background = fmt.palette->nearest(Rgb{255, 255, 255});
+        const uint32_t background = palette_by_id(r.palette).nearest(Rgb{255, 255, 255});
         diffusion::SplitMix noise_g(a.has("noise-seed") ? std::stoull(a.get("noise-seed")) : 1);
         for (uint32_t i = 0; i < count; ++i)
         {

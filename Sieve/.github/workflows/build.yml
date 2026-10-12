@@ -784,6 +784,16 @@ jobs:
           $H --no-menu --line ai --walk "0,0" --take --talk "Hello there" --screenshot ai-talk.png | tr -d '\r' | tee ai-talk.txt | sed -n 1p | q "^AI line, positional"
           q "^you: Hello there" ai-talk.txt
           q "^it: " ai-talk.txt
+          # The chat window (IDEAS §19.13): a file given to the model, two figures drawn with the shipped
+          # picture model (its pictures 1 and 2, as `sieve diffuse --make` makes them), and something
+          # said; GO TO IT on a figure holds it on the image line, J on a text file opens it on PAGES.
+          $H --no-menu --line ai --walk "0,0" --take --chat --chat-attach tests/training_corpus.txt --chat-draw 2 --talk "Hello there" --training-dir data/training --screenshot chat.png | tr -d '\r' > chat.txt
+          q "^file: training_corpus.txt (418 bytes)" chat.txt
+          q "^figure 1 by figures-2x32: fff0fc2f0de8f01c3fdbe6fff" chat.txt
+          q "^figure 2 by figures-2x32: fff29e4e04fbf01b3e05e9fff" chat.txt
+          q "^you: Hello there" chat.txt
+          $H --no-menu --line ai --walk "0,0" --take --chat --chat-draw 1 --chat-press "Ctrl+G" --training-dir data/training --screenshot chat-go.png | tr -d '\r' | q "^IMAGE line, .*the figure, on the image line, in hand"
+          $H --no-menu --line ai --walk "0,0" --take --chat --chat-attach tests/training_corpus.txt --chat-press "Ctrl+J" --training-dir data/training --screenshot chat-j.png | tr -d '\r' | q "^PAGES line, .*a TXT file, opened on the PAGES line"
           downs=$(python -c "print(','.join(['Down']*41))")
           $H --menu --press "$downs" --screenshot menu-ai.png | q "saved menu-ai.png"
           # The AI Training Harness (main menu): the run shipped with Sieve, trained again, comes out the

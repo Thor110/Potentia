@@ -112,6 +112,8 @@ ModelRun model_run_of(const std::string& id, const std::vector<std::filesystem::
 // set_model_run_loader with these folders, looked in in turn (the programs give the training folder
 // beside them, then data/training, for running from the repository).
 void use_training_runs(const std::vector<std::filesystem::path>& dirs);
+// The folders given to use_training_runs (none before it is called).
+const std::vector<std::filesystem::path>& training_run_dirs();
 
 int cmd_ai_train(const Args& a);
 // sieve diffuse: train, check and use a diffusion-v1 model of pictures (tools/cli/diffuse.cpp).

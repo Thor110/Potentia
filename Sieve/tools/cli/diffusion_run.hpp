@@ -13,12 +13,14 @@
 #include "sieve/aispace.hpp"
 #include "sieve/diffusion.hpp"
 #include "sieve/filter.hpp"
+#include "sieve/space.hpp"
 #include "sieve/training.hpp"
 
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -78,5 +80,30 @@ DiffusionOutcome train_diffusion_run(const DiffusionRun& run, unsigned threads,
 
 // The final model in a result.txt, or nothing if it has none.
 std::optional<std::string> final_address_of(const std::string& result_text);
+
+// The image line a run's pictures are units of (its width, height and palette), positional
+// addresses written as `sieve diffuse` writes them.
+Space image_line_of(const DiffusionRecipe& r);
+
+// The k-th picture a model makes (k = 1, 2, ...): from the k-th noise drawn from splitmix64 seeded
+// 1 (each cell next() mod B, cell after cell, picture after picture), with seed k. So the harness's
+// pictures, `sieve diffuse --make --count N` and the chat window's figures are the same ones.
+std::vector<uint32_t> nth_picture(const AiSpace& space, const AiSpace::Digits& digits, const diffusion::Setup& s, uint64_t k);
+
+// A trained run's final model, ready to make pictures with.
+struct PictureModel
+{
+    std::filesystem::path path;
+    std::string name;
+    DiffusionRecipe recipe;
+    std::shared_ptr<const AiSpace> space;
+    AiSpace::Digits digits;
+    std::vector<uint32_t> picture(uint64_t k) const { return nth_picture(*space, digits, recipe.setup, k); }
+};
+// Reads a run's recipe and final model (not its pictures). Throws if it is not a trained run.
+PictureModel load_picture_model(const std::filesystem::path& dir);
+// The trained diffusion runs in these folders, by name; a name in an earlier folder hides the same
+// name in a later one (as the training runs' loader looks).
+std::vector<std::filesystem::path> picture_models_in(const std::vector<std::filesystem::path>& dirs);
 
 } // namespace sieve::cli

@@ -175,6 +175,8 @@ spectrum, from fantasy to science fiction and beyond. In Sieve's terms a game is
 bearing: the lines it draws from, the filters that shape them, and where it sits on the spectrum.
 How a video game dimension would come into the hallway is open (IDEAS §19.11): discs on shelves (a
 copy of the CD model), a cabinet or a computer in each room, or a line that forms from the others.
+A first step, a text game that makes itself from a record of parameters and grows to 3D, is IDEAS
+§19.20.
 
 ---
 

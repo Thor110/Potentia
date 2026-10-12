@@ -412,8 +412,7 @@ void Hallway::draw_hud(int w, int h)
                                             : on_sound()                                                       ? "prompt.warp.sound"
                                             : line().kind == LineKind::Audio                                   ? "prompt.warp.notes"
                                                                                                                : "prompt.warp.text")
-                                       : input_ == Input::Talk ? tr("prompt.talk")
-                                                               : tr("prompt.goto");
+                                       : tr("prompt.goto");
         panel(10, H / 2 + 40, W - 20, 34);
         text(20, H / 2 + 49, prompt + text_ + ((SDL_GetTicks() / 400) % 2 ? "_" : " "), 2, ink);
     }
@@ -428,6 +427,7 @@ void Hallway::draw_hud(int w, int h)
     if (locator_.is_open()) locator_.draw(W, H);
     if (media_open_) draw_media_player(W, H);
     if (graph_open_) draw_graph_view(W, H);
+    if (chat_open_) draw_chat(W, H);
 }
 
 // A model in hand: its wireframe, turned by the mouse or by A and D, and its .obj text beside

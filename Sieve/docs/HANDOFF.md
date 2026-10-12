@@ -2531,3 +2531,37 @@ cover and a title.
   image line's figure-v1 connect = four, row-runs-v1 changes = 2). Reproduced exactly by the
   current build (7 minutes here). CI checks only that its final model makes the six pictures the
   harness shows, by address; training it again is by hand.
+
+### The chat window (12 October 2026)
+- **What** (Edward, IDEAS §19.13): a built-in window for talking to a model of the AI line, with a
+  plus button for files and, multimodal, figures drawn with a picture model, so a text model and a
+  picture model are one interface.
+- **client/chat.cpp** (Hallway methods; state in hallway.hpp's chat section): Enter on a model in
+  hand opens it (`open_chat`), replacing the old `SAY > ` prompt (`Input::Talk` is gone). The
+  conversation is `chat_` (entries: you, it, a note, a file card, a picture card) beside the text
+  transcript `talk_`, which the hand panel and `--talk` still print, and which seeds the replies as
+  before (`talk()` moved here from hallway.cpp, unchanged in what it says).
+  - **Files** (`chat_attach`; + or Ctrl+O, the system dialog, several at once): read and weighed on
+    `busy()` by `cli::weigh_files` under `locator_host().lines()`, the File Locator's own lines;
+    the vault refuses as everywhere. The model is given the first bytes, at most half its
+    positions (`talk_give`: no reply; when they and room for a message and a reply do not fit, it
+    starts again and says so). Card buttons: GO TO IT (`walk_to_file`), J (`open_as_kind`), SAVE.
+  - **Figures** (`chat_draw`; DRAW or Ctrl+D): `cli::picture_models_in(cli::training_run_dirs())`
+    lists the trained diffusion runs (the harness's folder, then data/training; Ctrl+P changes),
+    `cli::load_picture_model` loads one, and figure k is `nth_picture(k)`. The model is given its
+    rows (a character a cell). GO TO IT: `go_to_picture` when this hallway's image line has the
+    picture's size and palette, else `Request::GoToPicture` (app_main builds a hallway with that
+    image line and goes there). SAVE writes a PNG at one pixel a cell.
+  - Keys: Ctrl+G, Ctrl+J and Ctrl+S press the newest card's buttons; Page Up and Page Down or the
+    wheel scroll; Esc closes. The panel dims the hallway round it.
+- **tools/cli/diffusion_run:** `nth_picture` (the k-th noise from splitmix64 seeded 1, seed k),
+  `PictureModel`, `load_picture_model`, `picture_models_in`, `image_line_of`. The harness's
+  `make_pictures` and `sieve diffuse --make` use them, so all three make the same figures.
+  **tools/cli/train:** `training_run_dirs()` returns what `use_training_runs` was given.
+- **Scripted runs:** `--chat` (open it), `--chat-attach FILE`, `--chat-draw N`, then `--talk`, the
+  conversation printed; `--chat-press KEYS` after them. CI: a file, two figures (pictures 1 and 2,
+  by address) and a message; Ctrl+G on a figure holds it on IMAGE; Ctrl+J on a text file opens it
+  on PAGES.
+- **Not yet:** the model naming places in its replies, turned into cards (needs a model that follows
+  a format: a published one through `sieve chat`); published models in the window; a picture model
+  in hand on the AI line (its shape differs from the line's).
