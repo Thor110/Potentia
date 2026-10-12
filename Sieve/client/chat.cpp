@@ -23,7 +23,10 @@
 
 #include "hallway.hpp"
 
+#include "gpu_memory.hpp"
+
 #include "cli/locate.hpp"
+#include "cli/media_decode.hpp"
 #include "cli/train.hpp"
 #include "cli/vault.hpp"
 #include "sieve/filekind.hpp"
@@ -44,6 +47,10 @@ constexpr size_t kTalkReply = 80;
 constexpr size_t kTalkRoom = 64;
 // Text in the conversation: messages at scale 2, the rest at scale 1.
 constexpr float kBig = 2, kSmall = 1, kBigLine = 20, kSmallLine = 14, kPad = 10, kButtonH = 22;
+// A file card's thumbnail: its longer side, in pixels (and the most kept of its picture), and the
+// lines of a text shown.
+constexpr uint32_t kThumb = 96;
+constexpr size_t kPreviewLines = 4;
 
 fs::path from_u8(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
 
@@ -93,6 +100,47 @@ Entry entry_of(typename Entry::Kind kind, std::string text)
     return e;
 }
 
+// A picture made small: its longer side at most `side`, each pixel the average of those it
+// covers. A picture already that small is kept as it is.
+RgbaImage small_copy(const RgbaImage& f, uint32_t side)
+{
+    if (f.width <= side && f.height <= side) return f;
+    const double k = double(std::max(f.width, f.height)) / side;
+    RgbaImage out;
+    out.width = std::max<uint32_t>(1, uint32_t(f.width / k)), out.height = std::max<uint32_t>(1, uint32_t(f.height / k));
+    out.rgba.resize(size_t(out.width) * out.height * 4);
+    for (uint32_t y = 0; y < out.height; ++y)
+        for (uint32_t x = 0; x < out.width; ++x)
+        {
+            const uint32_t x0 = uint32_t(x * k), x1 = std::max(x0 + 1, std::min(f.width, uint32_t((x + 1) * k)));
+            const uint32_t y0 = uint32_t(y * k), y1 = std::max(y0 + 1, std::min(f.height, uint32_t((y + 1) * k)));
+            uint64_t sum[4] = {0, 0, 0, 0};
+            for (uint32_t v = y0; v < y1; ++v)
+                for (uint32_t u = x0; u < x1; ++u)
+                    for (int c = 0; c < 4; ++c) sum[c] += f.rgba[(size_t(v) * f.width + u) * 4 + size_t(c)];
+            const uint64_t n = uint64_t(x1 - x0) * (y1 - y0);
+            for (int c = 0; c < 4; ++c) out.rgba[(size_t(y) * out.width + x) * 4 + size_t(c)] = uint8_t(sum[c] / n);
+        }
+    return out;
+}
+
+// A line of a text file as the font can draw it: its own characters (the font falls back per
+// glyph), control characters a middle dot; a line that is not UTF-8 (or is cut mid-character) is
+// drawn byte by byte, as the model's words are (Hallway::printable).
+std::string text_line(const std::string& bytes)
+{
+    try
+    {
+        std::u32string out;
+        for (const char32_t c : sieve::utf8_decode(bytes)) out.push_back(c < 0x20 || (c >= 0x7F && c < 0xA0) ? U'\u00B7' : c);
+        return sieve::utf8_encode(out);
+    }
+    catch (const std::invalid_argument&)
+    {
+        return Hallway::printable(bytes);
+    }
+}
+
 // A number with its thousands apart: 12,345.
 std::string grouped(uint64_t n)
 {
@@ -112,6 +160,7 @@ void Hallway::talk_ready()
     talk_model_ = std::make_unique<sieve::llm::Model>(ai_space_->config(), ai_space_->tensors_of(*in_hand_->ai), 1);
     talk_.clear();
     chat_.clear();
+    chat_clear_thumbs();
     chat_scroll_ = 0;
     talk_hex_ = in_hand_->hex;
 }
@@ -242,6 +291,44 @@ void Hallway::chat_attach(const std::string& path)
                 return;
             }
             e.file_kind = sieve::file_kind(e.bytes, e.bytes.size());
+            // What it looks like: a picture or video's first frame, small (the vault looking at
+            // it as at any other picture); a text's first lines; anything else its first bytes.
+            const bool moving = e.file_kind == "MP4" || e.file_kind == "AVI" || e.file_kind == "WEBP";
+            if (e.file_kind == "PNG" || e.file_kind == "JPG" || e.file_kind == "GIF" || e.file_kind == "BMP" || (moving && cli::find_ffmpeg()))
+            {
+                try
+                {
+                    bool first = true;
+                    cli::read_media_frames(e.bytes.data(), e.bytes.size(), e.name, 1, [&](const RgbaImage& f) {
+                        if (!first) return;
+                        first = false;
+                        if (cli::vault::withheld_picture(f.rgba.data(), f.width, f.height)) withheld = true;
+                        else e.thumb = small_copy(f, kThumb);
+                    });
+                }
+                catch (const std::exception&)
+                {
+                    // Not readable as a picture after all: it has its first bytes instead, below.
+                }
+                if (withheld) return;
+            }
+            if (e.thumb.width == 0 && e.file_kind == "TXT")
+            {
+                const std::string head(e.bytes.begin(), e.bytes.begin() + std::ptrdiff_t(std::min<size_t>(e.bytes.size(), 600)));
+                for (std::string l : split_lines(head))
+                {
+                    if (!l.empty() && l.back() == '\r') l.pop_back();
+                    if (e.preview.size() < kPreviewLines && !l.empty()) e.preview.push_back(text_line(l));
+                }
+            }
+            else if (e.thumb.width == 0)
+            {
+                static const char kHex[] = "0123456789abcdef";
+                std::string hex;
+                for (size_t k = 0; k < std::min<size_t>(e.bytes.size(), 24); ++k)
+                    hex += std::string(k ? " " : "") + kHex[e.bytes[k] >> 4] + kHex[e.bytes[k] & 15];
+                if (!hex.empty()) e.preview.push_back(hex + (e.bytes.size() > 24 ? " ..." : ""));
+            }
             // Weighed as the File Locator weighs it, under this hallway's lines and filters.
             const cli::Weighing w = cli::weigh_files({}, {path}, locator_host().lines(), false);
             const cli::FileWeight& f = w.files.at(0);
@@ -420,7 +507,10 @@ void Hallway::chat_event(const SDL_Event& e)
     }
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT)
     {
-        const SDL_FPoint at{e.button.x, e.button.y};
+        // In the renderer's coordinates, as the buttons were drawn (the window's may differ: a
+        // scaled display, or a window of another size than what is drawn).
+        SDL_FPoint at{e.button.x, e.button.y};
+        SDL_RenderCoordinatesFromWindow(r_, e.button.x, e.button.y, &at.x, &at.y);
         for (const auto& [r, what] : chat_buttons_)
             if (SDL_PointInRectFloat(&at, &r))
             {
@@ -502,49 +592,83 @@ float Hallway::chat_entry(size_t i, float x, float y, float w, bool draw)
             }
         return h + kPad;
     }
-    // A card: a frame, its lines, and a row of buttons.
-    std::vector<std::pair<std::string, float>> lines; // text, scale
-    float pic = 0;                                     // a picture's side, drawn at the left
+    // A card: a frame, its lines, and a row of buttons; a picture at the left (a figure, or a
+    // picture or video file's thumbnail).
+    struct Line
+    {
+        std::string text;
+        float scale;
+        SDL_Color colour;
+    };
+    std::vector<Line> lines;
+    float pic_w = 0, pic_h = 0;
     std::vector<std::pair<std::string, ChatAct>> buttons{{tr("chat.go"), ChatAct::Go}};
     if (e.kind == K::File)
     {
-        lines.push_back({fit(e.name, w - 2 * kPad, kBig), kBig});
-        lines.push_back({trf("chat.file.what", {e.file_kind, grouped(e.bytes.size())}), kSmall});
+        if (e.thumb.width > 0)
+        {
+            const float k = kThumb / float(std::max(e.thumb.width, e.thumb.height));
+            pic_w = float(e.thumb.width) * k, pic_h = float(e.thumb.height) * k;
+        }
+        const float tw = w - 2 * kPad - (pic_w > 0 ? pic_w + kPad : 0);
+        const size_t cols = size_t(std::max(8.0f, tw / (8 * kSmall)));
+        lines.push_back({fit(e.name, tw, kBig), kBig, white});
+        lines.push_back({trf("chat.file.what", {e.file_kind, grouped(e.bytes.size())}), kSmall, ink});
         for (const std::string& para : paragraphs(e.weighing))
-            for (const std::string& l : wrap_words(para, small_cols)) lines.push_back({l, kSmall});
-        lines.push_back({trf("chat.given", {grouped(e.given)}), kSmall});
+            for (const std::string& l : wrap_words(para, cols)) lines.push_back({l, kSmall, ink});
+        lines.push_back({trf("chat.given", {grouped(e.given)}), kSmall, ink});
+        for (const std::string& l : e.preview) lines.push_back({fit(l, tw, kSmall), kSmall, grey});
         if (e.item_line >= 0 || e.file_kind != "?") buttons.push_back({tr("chat.item"), ChatAct::Item});
     }
     else
     {
-        pic = std::min(120.0f, std::max(40.0f, float(std::max(e.width, e.height)) * 8));
-        const size_t cols = size_t(std::max(8.0f, (w - 3 * kPad - pic) / (8 * kSmall)));
-        lines.push_back({trf("chat.figure", {std::to_string(e.number), e.model}), kBig});
-        lines.push_back({trf("chat.figure.what", {std::to_string(e.width), std::to_string(e.height), e.palette}), kSmall});
-        for (const std::string& l : wrap(trf("chat.figure.address", {e.address}), cols)) lines.push_back({l, kSmall});
-        lines.push_back({trf("chat.given.rows", {grouped(e.given)}), kSmall});
+        pic_w = pic_h = std::min(120.0f, std::max(40.0f, float(std::max(e.width, e.height)) * 8));
+        const size_t cols = size_t(std::max(8.0f, (w - 3 * kPad - pic_w) / (8 * kSmall)));
+        lines.push_back({trf("chat.figure", {std::to_string(e.number), e.model}), kBig, white});
+        lines.push_back({trf("chat.figure.what", {std::to_string(e.width), std::to_string(e.height), e.palette}), kSmall, ink});
+        for (const std::string& l : wrap(trf("chat.figure.address", {e.address}), cols)) lines.push_back({l, kSmall, ink});
+        lines.push_back({trf("chat.given.rows", {grouped(e.given)}), kSmall, ink});
     }
     buttons.push_back({tr("chat.save"), ChatAct::Save});
     float text_h = 0;
-    for (const auto& l : lines) text_h += l.second == kBig ? kBigLine : kSmallLine;
-    const float body = std::max(text_h, pic);
+    for (const Line& l : lines) text_h += l.scale == kBig ? kBigLine : kSmallLine;
+    const float body = std::max(text_h, pic_h);
     const float h = kPad + body + 6 + kButtonH + kPad;
     if (!draw) return h + kPad;
     SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 255);
     const SDL_FRect frame{x, y, w, h};
     SDL_RenderRect(r_, &frame);
     float ty = y + kPad;
-    const float tx = x + kPad + (pic > 0 ? pic + kPad : 0);
-    if (pic > 0)
+    const float tx = x + kPad + (pic_w > 0 ? pic_w + kPad : 0);
+    if (e.kind == K::Picture)
     {
         ImageFormat f;
         f.width = e.width, f.height = e.height, f.palette = &sieve::palette_by_id(e.palette);
-        draw_pixels(e.cells, f, x + kPad, y + kPad, pic, 0);
+        draw_pixels(e.cells, f, x + kPad, y + kPad, pic_w, 0);
     }
-    for (const auto& [t, scale] : lines)
+    else if (pic_w > 0)
     {
-        text(tx, ty, t, scale, scale == kBig ? white : ink);
-        ty += scale == kBig ? kBigLine : kSmallLine;
+        SDL_Texture*& tex = chat_thumbs_[i];
+        if (!tex)
+        {
+            tex = gpu::create(r_, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, int(e.thumb.width), int(e.thumb.height));
+            if (tex)
+            {
+                SDL_UpdateTexture(tex, nullptr, e.thumb.rgba.data(), int(e.thumb.width * 4));
+                // A picture smaller than the thumbnail is drawn in sharp cells, as the shelves draw it.
+                SDL_SetTextureScaleMode(tex, e.thumb.width < kThumb && e.thumb.height < kThumb ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_LINEAR);
+            }
+        }
+        const SDL_FRect at{x + kPad, y + kPad, pic_w, pic_h};
+        if (tex) SDL_RenderTexture(r_, tex, nullptr, &at);
+        SDL_SetRenderDrawColor(r_, grey.r, grey.g, grey.b, 255);
+        const SDL_FRect border{at.x - 1, at.y - 1, at.w + 2, at.h + 2};
+        SDL_RenderRect(r_, &border);
+    }
+    for (const Line& l : lines)
+    {
+        text(tx, ty, l.text, l.scale, l.colour);
+        ty += l.scale == kBig ? kBigLine : kSmallLine;
     }
     float bx = tx;
     const float by = y + kPad + body + 6;
@@ -561,6 +685,12 @@ float Hallway::chat_entry(size_t i, float x, float y, float w, bool draw)
         bx += bw + 8;
     }
     return h + kPad;
+}
+
+void Hallway::chat_clear_thumbs()
+{
+    for (auto& [i, tex] : chat_thumbs_) gpu::destroy(tex);
+    chat_thumbs_.clear();
 }
 
 void Hallway::chat_poll()

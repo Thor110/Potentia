@@ -2084,3 +2084,48 @@ seed, to aid very fast decompilation and conversion of formats into this data en
   is only as good as the model's predictions. Conversion between formats is a model mapping one to
   the other. Both need trained models that do not exist yet; the harness is where they would be
   made, and the ledger (§19.23) where their gains would be measured honestly.
+
+**19.26 Bigger models, and ComfyUI (Edward, 12 October 2026).** Next to look at: training, using
+or hooking in bigger models. He has ComfyUI and gets on well generating large images with it. He
+would like Sieve to stay self-contained, but there is the option of outside tools, as ffmpeg
+already is.
+
+*Notes.*
+- **Two kinds of outside help, kept apart:**
+  - *Tools that read and write formats* (ffmpeg). Optional, found on the PATH or set in the
+    settings; Sieve works without them, and only the formats they read are lost.
+  - *Generators* (ComfyUI, large language models). Their output is a file, and every file is
+    already on the lines, so the address belongs to the output, not to the process that made it.
+    A bridge to a generator therefore needs no trust in the generator: what comes back is
+    weighed, named and checked by its hash like any file given to CHAT.
+- **What Sieve has of its own:**
+  - its own engine for Llama-shaped models (`sieve chat`: safetensors, its own tokenizer, CPU);
+  - the harness's exact integer training, built for small models whose addresses matter;
+  - diffusion-v1 for small pictures.
+
+  Large models are trained elsewhere and come in as files.
+- **A ComfyUI bridge.** ComfyUI serves a local HTTP API (127.0.0.1:8188 by default):
+  - a workflow, exported in its API format, is posted to `/prompt`;
+  - the run is followed at `/history/{id}`;
+  - the image is fetched from `/view`.
+
+  CHAT could list ComfyUI beside the diffusion runs as a picture model. The prompt is typed, the
+  workflow file is chosen in the settings, and the image comes back as a file card (thumbnail,
+  address, GO TO IT, J, SAVE). The workflow, its seed and the image's SHA-256 are kept with the
+  card, so the request can be made again. The same seed on another card or driver can give
+  different pixels, so whether it reproduces is checked by the hash, never assumed.
+
+  It needs an HTTP client, and Sieve has none (SDL has no networking). The self-contained way is
+  a small HTTP/1.1 client in tools/cli for localhost only: no TLS, off unless a setting such as
+  `comfyui = http://127.0.0.1:8188` names the server.
+- **Bigger language models,** in order of how self-contained they stay:
+  1. CHAT talking to a published model folder through Sieve's own engine. It exists for
+     `sieve chat`; the window does not use it yet. It would give CHAT a model that answers
+     sensibly, which §19.13's finding needs.
+  2. Quantised weights (8 or 4 bits) in that engine, for models of a few billion weights on a CPU.
+  3. The same localhost client speaking to a local model server (llama.cpp's, or Ollama), for
+     what the CPU engine cannot run.
+- **Proposed order:**
+  1. published models in CHAT (self-contained);
+  2. the localhost bridge, ComfyUI first (optional, as ffmpeg is);
+  3. quantised weights.

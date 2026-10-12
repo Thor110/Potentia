@@ -1350,8 +1350,8 @@ void Harness::render()
         line(tr("harness.order"), trf("harness.order.value", {grouped(run_->order.size()), grouped(run_->steps())}));
         // How it reads, and its files in the order it first reads them.
         std::vector<std::string> seen;
-        for (const sieve::training::Window& w : run_->order)
-            if (std::find(seen.begin(), seen.end(), w.path) == seen.end()) seen.push_back(w.path);
+        for (const sieve::training::Window& win : run_->order)
+            if (std::find(seen.begin(), seen.end(), win.path) == seen.end()) seen.push_back(win.path);
         std::string files_line;
         for (size_t i = 0; i < seen.size(); ++i) files_line += (i ? "  " : "") + std::to_string(i + 1) + ". " + seen[i].substr(seen[i].rfind("corpus/", 0) == 0 ? 7 : 0);
         if (rc.order == "order-v1")

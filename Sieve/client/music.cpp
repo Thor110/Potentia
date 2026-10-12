@@ -595,11 +595,11 @@ void MusicPlayer::load(Channel& c, const sieve::NoteSet& set, const std::vector<
     // Every voice at once, each through its own stretch of the unit.
     const size_t voices = std::max<uint32_t>(1, set.voices), per = notes.size() / voices;
     c.parts.assign(voices, Part{});
-    for (size_t v = 0; v < voices; ++v)
+    for (size_t p = 0; p < voices; ++p)
     {
-        c.parts[v].from = c.parts[v].note = v * per;
-        c.parts[v].to = v + 1 == voices ? notes.size() : (v + 1) * per;
-        start_note(c, c.parts[v]);
+        c.parts[p].from = c.parts[p].note = p * per;
+        c.parts[p].to = p + 1 == voices ? notes.size() : (p + 1) * per;
+        start_note(c, c.parts[p]);
     }
 }
 
@@ -968,12 +968,12 @@ void MusicPlayer::load_settings()
                 // modes = each medium's mode by name, in Media's order (dimensions.hpp), not the doors'
                 std::istringstream w(v);
                 std::string name;
-                size_t m = 0;
-                while (std::getline(w, name, ',') && m < s.modes.size())
+                size_t at = 0;
+                while (std::getline(w, name, ',') && at < s.modes.size())
                 {
                     for (int i = 0; i < kMusicModes; ++i)
-                        if (trim(name) == kModes[i].name) s.modes[m] = i;
-                    ++m;
+                        if (trim(name) == kModes[i].name) s.modes[at] = i;
+                    ++at;
                 }
             }
             else if (k == "filters")
@@ -1029,9 +1029,9 @@ void MusicPlayer::save() const
         if (m == int(MusicMode::World))
         {
             o << "modes = ";
-            for (size_t m = 0; m < s.modes.size(); ++m) o << (m ? ", " : "") << kModes[s.modes[m]].name;
+            for (size_t i = 0; i < s.modes.size(); ++i) o << (i ? ", " : "") << kModes[s.modes[i]].name;
             o << "   ;";
-            for (size_t m = 0; m < s.modes.size(); ++m) o << (m ? ", " : " ") << kDimensions[line_of(Media(m))].id;
+            for (size_t i = 0; i < s.modes.size(); ++i) o << (i ? ", " : " ") << kDimensions[line_of(Media(i))].id;
             o << "\n"
               << "fifths = " << (s.fifths ? "on" : "off") << "\n";
         }

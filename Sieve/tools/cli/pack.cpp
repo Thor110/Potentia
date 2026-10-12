@@ -127,9 +127,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         if (const auto found = (*items)(bytes[i]))
         {
             // Lines are numbered in the order the files first use them.
-            auto at = std::find(used_lines.begin(), used_lines.end(), found->first);
-            if (at == used_lines.end()) at = used_lines.insert(used_lines.end(), found->first);
-            files[i]->way = "item " + std::to_string(at - used_lines.begin()) + " " + found->second;
+            auto slot = std::find(used_lines.begin(), used_lines.end(), found->first);
+            if (slot == used_lines.end()) slot = used_lines.insert(used_lines.end(), found->first);
+            files[i]->way = "item " + std::to_string(slot - used_lines.begin()) + " " + found->second;
             item[i] = true;
         }
     }
@@ -225,9 +225,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     m.items = !used_lines.empty();
     if (m.items)
     {
-        std::vector<std::string> lines;
-        for (size_t k : used_lines) lines.push_back(m.lines.at(k));
-        m.lines = std::move(lines);
+        std::vector<std::string> renumbered;
+        for (size_t k : used_lines) renumbered.push_back(m.lines.at(k));
+        m.lines = std::move(renumbered);
         for (size_t i = 0; i < files.size(); ++i)
             if (item[i])
             {

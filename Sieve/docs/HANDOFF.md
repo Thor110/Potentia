@@ -2578,3 +2578,36 @@ cover and a title.
   network; §19.23 limits of reduction, measured and kept (a ledger, proposed as a round); §19.24
   the predictive side as addressing, and usefulness as a metric; §19.25 a model's probabilities
   over every line, and models together.
+
+### Fixes after the CHAT tab (12 October 2026)
+- **CHAT's buttons took the window's coordinates** for the renderer's. Where the two differ (a
+  scaled display), a click could land on another button. Edward's GO TO IT on the Vitruvian Man
+  card opened it with J instead: the 949×1300 JPG fitted to the 10×10 mono image line, which comes
+  out white (reproduced here, the same tile). Clicks now go through
+  `SDL_RenderCoordinatesFromWindow`, as the navigator, pause menu and media player do.
+- **Shadowed names** (MSVC C4456 and C4457 in music.cpp, and the rest that GCC's -Wshadow=local
+  finds) renamed.
+- **The figures run's pictures are recorded, not hand-made:** drawn again from the image line's
+  stack (figure-v1 connect four, row-runs-v1 changes 2, seed 42), they are pictures.txt byte for
+  byte; CI now checks it.
+
+### CHAT cards show what a file is (12 October 2026)
+- **What** (Edward): a small thumbnail with a file's card, so it is clear what was given.
+- **client/chat.cpp:** `chat_attach` works out, on the same `busy()` job as the weighing:
+  - **a picture or video** (PNG, JPG, GIF, BMP; MP4, AVI and WEBP when ffmpeg is there): its first
+    frame through `cli::read_media_frames`. The vault checks it (`withheld_picture`), as every
+    picture shown, and it is kept at most 96 pixels on its longer side (`small_copy`, an average of
+    the pixels each covers);
+  - **a text:** its first four lines, as their own characters (`text_line`; a line that is not
+    UTF-8, or is cut mid-character, falls back to `printable`);
+  - **anything else:** its first 24 bytes in hex.
+
+  The thumbnail's texture is made the first time the card is drawn (`chat_thumbs_`, through
+  `gpu::create`, so it is counted) and let go with the conversation or the hallway's textures
+  (`chat_clear_thumbs`). Pictures smaller than 96 pixels are drawn in sharp cells.
+- **Scripted runs:** `--chat-attach` takes several files apart by ';'. CI attaches a JPG, a text cut
+  mid-character, a text and a MIDI file.
+- **IDEAS §19.26:** bigger models and ComfyUI, with a proposed order.
+- **A slip of mine, caught here:** the client build directory had been broken by a second build
+  directory sharing its SDL download, and the chat-fixes round's hallway CI lines ran on the hallway
+  built before it. Built again and run again on this round's hallway: they pass.

@@ -124,10 +124,10 @@ const char* kUsage =
     "  --pose X,Z,YAW,PITCH  camera position and angles in degrees\n"
     "  --tile N            then move N tiles along the corridor\n"
     "  --take              take the book you are looking at off the shelf\n"    "  --talk TEXT         with --take on the AI line: say TEXT to the model in hand; the conversation is printed\n"
-    "  --chat              with --take on the AI line: open the chat window on the model in hand\n"
-    "  --chat-attach FILE  with --take on the AI line: give FILE to the model, as the window's + does\n"
-    "  --chat-draw N       with --take on the AI line: draw N figures with the chat window's picture model\n"
-    "  --chat-press KEYS   keys pressed in the chat window after those (e.g. Ctrl+G: the newest card's GO TO IT)\n"
+    "  --chat              with --take on the AI line: open the CHAT tab on the model in hand\n"
+    "  --chat-attach FILES with --take on the AI line: give the files (apart by ';') to the model, as CHAT's + does\n"
+    "  --chat-draw N       with --take on the AI line: draw N figures with CHAT's picture model\n"
+    "  --chat-press KEYS   keys pressed in CHAT after those (e.g. Ctrl+G: the newest card's GO TO IT)\n"
     "  --tailor PATH       with --screenshot, the item in hand on COST: K, waited for, and what Return\n"
     "                      would apply saved to PATH as a settings file\n"
     "  --save-item PATH    then save it as a file (F on the item page), to PATH\n"
@@ -724,9 +724,9 @@ int run(const Args& a)
         // A picture of the AI Training Harness (for documentation and testing): --training-dir DIR
         // for its runs (else the training folder beside the programs); --script runs keys and typed
         // text as the designer's does, each step waiting for a training to finish.
-        Harness h(window, renderer, a.has("training-dir") ? std::filesystem::path(a.get("training-dir")) : training_dir(), ai_shape_of(settings),
-                  PictureSource{settings.image_w, settings.image_h, settings.image_palette, filters_path});
-        h.set_scripted(true);
+        Harness harness(window, renderer, a.has("training-dir") ? std::filesystem::path(a.get("training-dir")) : training_dir(), ai_shape_of(settings),
+                        PictureSource{settings.image_w, settings.image_h, settings.image_palette, filters_path});
+        harness.set_scripted(true);
         if (a.has("script"))
         {
             std::string script = a.get("script");
@@ -735,36 +735,36 @@ int run(const Args& a)
             {
                 const size_t comma = script.find(',', at);
                 const std::string item = script.substr(at, comma == std::string::npos ? std::string::npos : comma - at);
-                if (!item.empty() && item[0] == '=') h.type(item.substr(1));
+                if (!item.empty() && item[0] == '=') harness.type(item.substr(1));
                 else if (!item.empty())
-                    for (const auto& [key, mod] : parse_presses(item)) h.press(key, mod);
-                h.settle();
+                    for (const auto& [key, mod] : parse_presses(item)) harness.press(key, mod);
+                harness.settle();
                 if (comma == std::string::npos) break;
                 at = comma + 1;
             }
         }
-        if (h.going())
+        if (harness.going())
         {
             // GO TO IT: the hallway on the AI line, in the run's shape, the model in hand.
             Args ga = a;
             for (const char* k : {"harness", "script", "training-dir"}) ga.opts.erase(k);
             ga.opts["line"] = "ai";
-            ga.opts["ai-layers"] = std::to_string(h.go_shape.layers);
-            ga.opts["ai-width"] = std::to_string(h.go_shape.width);
-            ga.opts["ai-heads"] = std::to_string(h.go_shape.heads);
-            ga.opts["ai-bits"] = std::to_string(h.go_shape.bits);
+            ga.opts["ai-layers"] = std::to_string(harness.go_shape.layers);
+            ga.opts["ai-width"] = std::to_string(harness.go_shape.width);
+            ga.opts["ai-heads"] = std::to_string(harness.go_shape.heads);
+            ga.opts["ai-bits"] = std::to_string(harness.go_shape.bits);
             auto hall = make_hallway(window, renderer, ga, true, filters, app.angle_decimals);
-            hall->go_to_ai(h.go_digits);
+            hall->go_to_ai(harness.go_digits);
             hall->render();
             if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
             std::cout << "went to the model on the AI line: " << hall->status() << "\n";
             std::cout << "saved " << a.get("screenshot") << "\n";
             return finish();
         }
-        h.render();
+        harness.render();
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
-        std::cout << "harness: " << (h.verdict().empty() ? "-" : h.verdict()) << "\n";
-        if (!h.status().empty()) std::cout << "status: " << h.status() << "\n";
+        std::cout << "harness: " << (harness.verdict().empty() ? "-" : harness.verdict()) << "\n";
+        if (!harness.status().empty()) std::cout << "status: " << harness.status() << "\n";
         std::cout << "saved " << a.get("screenshot") << "\n";
         return finish();
     }
@@ -870,7 +870,17 @@ int run(const Args& a)
         // (--chat-attach FILE), figures drawn with its picture model (--chat-draw N), something
         // said to it (--talk TEXT), and the conversation printed.
         if (a.has("chat")) hall->open_chat();
-        if (a.has("chat-attach")) hall->chat_attach(a.get("chat-attach"));
+        if (a.has("chat-attach"))
+        {
+            // Several files apart by ';', given in turn.
+            const std::string all = a.get("chat-attach");
+            for (size_t at = 0; at <= all.size();)
+            {
+                const size_t semi = std::min(all.find(';', at), all.size());
+                if (semi > at) hall->chat_attach(all.substr(at, semi - at));
+                at = semi + 1;
+            }
+        }
         if (a.has("chat-draw"))
             for (uint32_t i = a.get_positive("chat-draw", 1); i > 0; --i) hall->chat_draw();
         if (a.has("talk")) hall->talk(a.get("talk"));
@@ -950,19 +960,19 @@ int run(const Args& a)
             {
                 // The AI Training Harness; GO TO IT goes into the hallway on the AI line, at the
                 // model, in the run's shape (and without the setup menu: the shape is the run's).
-                Harness h(window, renderer, training_dir(), ai_shape_of(settings),
-                          PictureSource{settings.image_w, settings.image_h, settings.image_palette, filters_path});
-                const Harness::Result hr = h.run();
+                Harness harness(window, renderer, training_dir(), ai_shape_of(settings),
+                                PictureSource{settings.image_w, settings.image_h, settings.image_palette, filters_path});
+                const Harness::Result hr = harness.run();
                 if (hr == Harness::Result::Quit) break;
                 if (hr == Harness::Result::Back) continue;
-                settings.ai_layers = h.go_shape.layers;
-                settings.ai_width = h.go_shape.width;
-                settings.ai_heads = h.go_shape.heads;
-                settings.ai_bits = h.go_shape.bits;
+                settings.ai_layers = harness.go_shape.layers;
+                settings.ai_width = harness.go_shape.width;
+                settings.ai_heads = harness.go_shape.heads;
+                settings.ai_bits = harness.go_shape.bits;
                 settings.start_line = "ai";
                 settings_chosen = true;
                 skip_setup = true;
-                pending_ai = h.go_digits;
+                pending_ai = harness.go_digits;
             }
             if (r == MainMenu::Result::Media)
             {
@@ -1145,18 +1155,18 @@ int run(const Args& a)
             if (hall->request() == Hallway::Request::Harness)
             {
                 hall->clear_request();
-                Harness h(window, renderer, training_dir(), ai_shape_of(settings),
-                          PictureSource{settings.image_w, settings.image_h, settings.image_palette, filters_path});
-                const Harness::Result hr = h.run();
+                Harness harness(window, renderer, training_dir(), ai_shape_of(settings),
+                                PictureSource{settings.image_w, settings.image_h, settings.image_palette, filters_path});
+                const Harness::Result hr = harness.run();
                 if (hr == Harness::Result::Quit) break;
                 if (hr == Harness::Result::GoTo)
                 {
-                    settings.ai_layers = h.go_shape.layers;
-                    settings.ai_width = h.go_shape.width;
-                    settings.ai_heads = h.go_shape.heads;
-                    settings.ai_bits = h.go_shape.bits;
+                    settings.ai_layers = harness.go_shape.layers;
+                    settings.ai_width = harness.go_shape.width;
+                    settings.ai_heads = harness.go_shape.heads;
+                    settings.ai_bits = harness.go_shape.bits;
                     settings.start_line = "ai";
-                    pending_ai = h.go_digits;
+                    pending_ai = harness.go_digits;
                     harness_went = true;
                     break;
                 }

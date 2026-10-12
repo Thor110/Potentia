@@ -613,7 +613,7 @@ void Hallway::open_as_kind(const std::vector<uint8_t>& bytes)
         const Line& l = unit_line(LineKind::Audio);
         const sieve::PcmFormat f = sieve::pcm_format_of(l.space.symbols_id());
         std::optional<sieve::PcmCanoniser> c;
-        const cli::AudioRead m = cli::read_media_audio(
+        const cli::AudioRead heard = cli::read_media_audio(
             bytes.data(), bytes.size(), kind,
             [&](uint32_t rate, uint32_t channels) { c.emplace(f, l.space.unit_length() / f.channels, rate, channels); },
             [&](std::span<const int32_t> b) { c->add(b); });
@@ -621,8 +621,8 @@ void Hallway::open_as_kind(const std::vector<uint8_t>& bytes)
         units = r.units;
         report = std::string(sieve::kPcmCanonVersion) + ": " + std::to_string(r.source_frames) + " sample(s) at " + std::to_string(r.source_rate) +
                  ", " + std::to_string(r.source_channels) + " channel(s) -> " + f.id() + ", " + std::to_string(units.size()) + " unit(s)";
-        if (m.decoder != "sieve-wav") report += "; decoded by " + m.decoder;
-        if (!m.complaints.empty()) report += "; ffmpeg reported: " + m.complaints;
+        if (heard.decoder != "sieve-wav") report += "; decoded by " + heard.decoder;
+        if (!heard.complaints.empty()) report += "; ffmpeg reported: " + heard.complaints;
         for (const auto& u : units)
             if (cli::unit_withheld(l, u)) throw cli::VaultWithheld("withheld by the vault");
     }

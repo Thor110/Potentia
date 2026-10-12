@@ -830,22 +830,22 @@ void add_text_m1_filters(std::vector<FilterSpec>& out)
     title.make = [](const FilterLine& l, const FilterValues& v, const FilterResources& r) -> std::unique_ptr<Filter> {
         const FilterSpec& spec = *find_filter("title-v1");
         const std::string id = param_value(spec, v, "dictionary");
-        auto dict = r.dictionary(id);
+        auto dictionary = r.dictionary(id);
         const uint32_t max_length = uint32_t(param_int(spec, v, "max_length"));
         const uint32_t n = std::min(l.length, max_length);
-        auto f = std::make_unique<TitleFilter>(dict, l.length, max_length,
-                                               "dictionary=" + (id.empty() ? std::string("default") : id) + " sha256=" + dict->sha256() +
+        auto f = std::make_unique<TitleFilter>(dictionary, l.length, max_length,
+                                               "dictionary=" + (id.empty() ? std::string("default") : id) + " sha256=" + dictionary->sha256() +
                                                    " max_length=" + std::to_string(max_length));
         double bytes = m1_table_bytes(n);
         if (bytes > filter_memory())
-            bytes = m1_table_bytes(n, m1_growth("words/1/" + dict->sha256(), [dict](uint32_t k) -> std::unique_ptr<Ranker> {
-                                       return std::make_unique<WordsRanker>(*dict, k, true);
+            bytes = m1_table_bytes(n, m1_growth("words/1/" + dictionary->sha256(), [dictionary](uint32_t k) -> std::unique_ptr<Ranker> {
+                                       return std::make_unique<WordsRanker>(*dictionary, k, true);
                                    }));
         f->set_table_bytes(bytes);
         if (bytes <= filter_memory())
         {
             const uint32_t L = l.length;
-            f->set_ranker([dict, n, L]() -> std::unique_ptr<Ranker> { return std::make_unique<TitleRanker>(std::make_unique<WordsRanker>(*dict, n, true), L); });
+            f->set_ranker([dictionary, n, L]() -> std::unique_ptr<Ranker> { return std::make_unique<TitleRanker>(std::make_unique<WordsRanker>(*dictionary, n, true), L); });
         }
         return f;
     };

@@ -323,6 +323,11 @@ jobs:
           # The shipped picture model (data/training/figures-2x32): its final model makes the six pictures
           # the harness shows, address for address (training it again takes minutes: run it by hand).
           $exe diffuse --make data/training/figures-2x32 --count 6 | tr -d '\r' | grep "^picture" | cut -c10-34 | tr '\n' ' ' | q "fff0fc2f0de8f01c3fdbe6fff fff29e4e04fbf01b3e05e9fff fff8ffee10bcf8f80f05c0fff fff83e1f15cef83a1f8de7fff fff93e3713a17f7e2fa3c9fff fff878af09e16a7e0f03c3fff"
+          # Its training pictures are no hand-made list: drawn again from the image line's stack (figure-v1
+          # connect four, row-runs-v1 changes 2, seed 42), they are pictures.txt byte for byte.
+          printf '[image]\nmode = compact\nfilters = figure-v1, row-runs-v1\n[image.figure-v1]\nconnect = four\n[image.row-runs-v1]\nchanges = 2\n' > figures.ini
+          $exe diffuse --record figs-again --filters figures.ini --ai-layers 2 --ai-width 32 --steps 1 --quiet
+          cmp figs-again/pictures.txt data/training/figures-2x32/pictures.txt
           # The AI line's filters (SPECIFICATIONS §12.0f): weight-rows-v1 counts and ranks; the model the
           # shipped run trains passes it, and so does its canonical form (canonical-model-v1), which the
           # oracle works out the same and which says what the model says.
@@ -792,6 +797,13 @@ jobs:
           q "^figure 1 by figures-2x32: fff0fc2f0de8f01c3fdbe6fff" chat.txt
           q "^figure 2 by figures-2x32: fff29e4e04fbf01b3e05e9fff" chat.txt
           q "^you: Hello there" chat.txt
+          # Cards show what a file is: a picture's thumbnail (the vault looking at it too), a text's first
+          # lines (one cut mid-character among them), anything else its first bytes.
+          head -c 30 data/anchors/public-domain/universalbibliothek.txt > cut.txt && printf '\303' >> cut.txt
+          $H --no-menu --line ai --walk "0,0" --take --chat --chat-attach "data/anchors/public-domain/Vitruvian.jpg;cut.txt;data/anchors/public-domain/universalbibliothek.txt;data/anchors/public-domain/hurrian-hymn-6.mid" --training-dir data/training --screenshot chat-cards.png | tr -d '\r' > cards.txt
+          q "^file: Vitruvian.jpg (207,500 bytes)" cards.txt
+          q "^file: cut.txt (31 bytes)" cards.txt
+          q "^file: hurrian-hymn-6.mid (1,377 bytes)" cards.txt
           $H --no-menu --line ai --walk "0,0" --take --chat --chat-draw 1 --chat-press "Ctrl+G" --training-dir data/training --screenshot chat-go.png | tr -d '\r' | q "^IMAGE line, .*the figure, on the image line, in hand"
           $H --no-menu --line ai --walk "0,0" --take --chat --chat-attach tests/training_corpus.txt --chat-press "Ctrl+J" --training-dir data/training --screenshot chat-j.png | tr -d '\r' | q "^PAGES line, .*a TXT file, opened on the PAGES line"
           downs=$(python -c "print(','.join(['Down']*41))")

@@ -158,9 +158,9 @@ int cmd_ai(const Args& a)
             if (run->final_address.empty()) std::cout << "layer        " << run->id << " has not been trained\n";
             else
             {
-                const AiSpace::Digits a = space.digits_at(space.parse(run->final_address), AddressMode::Positional);
+                const AiSpace::Digits trained = space.digits_at(space.parse(run->final_address), AddressMode::Positional);
                 uint64_t k = 0;
-                for (size_t i = 0; i < d.size(); ++i) k += a[i] != d[i] ? 1 : 0;
+                for (size_t i = 0; i < d.size(); ++i) k += trained[i] != d[i] ? 1 : 0;
                 std::cout << "layer        " << k << " (digits from the model " << run->id << " trained)\n";
             }
         }

@@ -153,14 +153,14 @@ void Dictionary::build(std::vector<std::string> words)
         ++h[k];
     };
     auto distinct_prefixes = [&](const std::vector<std::string>& sorted, std::vector<uint32_t>& h) {
-        const std::string* prev = nullptr;
+        const std::string* last = nullptr;
         for (const auto& s : sorted)
         {
             size_t lcp = 0;
-            if (prev)
-                while (lcp < s.size() && lcp < prev->size() && s[lcp] == (*prev)[lcp]) ++lcp;
+            if (last)
+                while (lcp < s.size() && lcp < last->size() && s[lcp] == (*last)[lcp]) ++lcp;
             for (size_t k = lcp + 1; k <= s.size(); ++k) bump(h, k);
-            prev = &s;
+            last = &s;
         }
     };
     for (const auto& w : sorted_words_) bump(words_by_len_, w.size());

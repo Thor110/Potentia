@@ -1709,8 +1709,7 @@ void test_plugins(const std::string& dir)
     // max-run-data-v1 and tidy-data-v1 can retire for them.
     {
         const auto t1 = load_plugin_file(filters + "tidy-data-v1.sfilter"), t2 = load_plugin_file(filters + "tidy-data-v2.sfilter");
-        const auto clean = load_plugin_file(filters + "clean-data-v1.sfilter");
-        const FilterSpec t1_spec = plugin_spec(t1), t2_spec = plugin_spec(t2), clean_spec = plugin_spec(clean);
+        const FilterSpec t1_spec = plugin_spec(t1), t2_spec = plugin_spec(t2); // clean_spec: clean-data-v1, above
         CHECK(t1_spec.retired && t1_spec.replaced_by == "tidy-data-v2" && !t2_spec.retired);
         CHECK(run_spec.retired && run_spec.replaced_by == "max-run-v1");
         CHECK(t2_spec.prerequisites.size() == 2);
@@ -4845,8 +4844,8 @@ void test_cross_vectors(const std::string& dir)
         CHECK(round);
         CHECK(ms.count() == BigUint(kept));
         CHECK(kept < 13824); // one model's number is a signed file
-        const ModelSieve none(space, {});
-        CHECK(none.empty() && none.count() == space.size());
+        const ModelSieve unfiltered(space, {});
+        CHECK(unfiltered.empty() && unfiltered.count() == space.size());
         // The line's own rules at the same shape: every model judged, the survivors in positional
         // order, and every one round trip through both compact orders.
         const ModelSieve rules(space, {{find_filter("distinct-vertices-v1"), {}}, {find_filter("distinct-indices-v1"), {}},
@@ -5581,15 +5580,15 @@ void test_filter_memory(const std::string& dir)
     // vertices in the default, not in less than its table.
     {
         set_filter_memory(kDefaultFilterMemory);
-        const ModelSpace space(13, 20, 16);
+        const ModelSpace thirteen(13, 20, 16);
         const std::vector<FilterStack::Entry> both{{find_filter("canonical-mesh-v1"), {}}, {find_filter("every-vertex-used-v1"), {}}};
-        const ModelSieve fits(space, both);
+        const ModelSieve fits(thirteen, both);
         CHECK(fits.can_rank() && fits.table_bytes() > 8.0 * 1024 * 1024);
         BigUint k = fits.count();
         k.divmod_small(3);
         CHECK(fits.index_of(fits.model_at(k, AddressMode::Positional), AddressMode::Positional) == k);
         set_filter_memory(fits.table_bytes() * 0.99);
-        const ModelSieve over(space, both);
+        const ModelSieve over(thirteen, both);
         CHECK(!over.can_rank() && over.blocker().find("the filter memory") != std::string::npos);
     }
     set_filter_memory(before);

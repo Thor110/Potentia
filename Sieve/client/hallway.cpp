@@ -2328,6 +2328,7 @@ Hallway::~Hallway()
 // Frees textures that belong to the renderer; call before destroying it.
 void Hallway::release_textures()
 {
+    chat_clear_thumbs();
     models_batch_.release();
     clear_faces();
     release_signs();

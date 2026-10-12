@@ -1478,6 +1478,10 @@ private:
         std::vector<uint8_t> bytes;
         size_t given = 0;
         int item_line = -1; // the LineKind it is exactly an item of, or -1
+        // What it looks like, worked out when it is given: a picture or video's first frame made
+        // small (thumb), else the first lines of a text or the first bytes in hex (preview).
+        RgbaImage thumb;
+        std::vector<std::string> preview;
         // A picture: its cells, the picture model and its number there, its format and its address
         // on the image line.
         std::vector<uint32_t> cells;
@@ -1523,6 +1527,10 @@ private:
     std::optional<size_t> chat_saving_;
     std::optional<std::string> chat_save_to_;
     std::vector<std::string> chat_pending_; // files chosen in the dialog, to attach
+    // The thumbnails' textures, by entry, made the first time each is drawn; let go with the
+    // conversation (chat_clear_thumbs).
+    std::unordered_map<size_t, SDL_Texture*> chat_thumbs_;
+    void chat_clear_thumbs();
     std::optional<PictureToGo> picture_to_go_;
 
     // ---- the address navigator (navigator.cpp): X opens the whole address, digit by digit
