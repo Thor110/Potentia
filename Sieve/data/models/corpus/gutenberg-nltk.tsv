@@ -1,0 +1,26 @@
+# Sieve training corpus: Project Gutenberg selections, as packaged by NLTK (public-domain texts).
+# Source: https://raw.githubusercontent.com/nltk/nltk_data/gh-pages/packages/corpora/gutenberg.zip
+# Fetch and check with: python3 tools/fetch_corpus.py
+#
+# Fields (tab-separated): file, encoding (utf-8 or latin-1), role (train or test), sha256.
+# Training reads the "train" files in this order, each canonicalised with canon-text-v2 and
+# joined by one SPACE. The "test" files are held out: sieve measure reports bits per character
+# on them, so the figure is not flattered by text the model has already seen.
+austen-emma.txt	utf-8	train	71b0923d75fcf2f1faa897b22da8de8e2476d7478a2b22388eb58a3420e00215
+austen-persuasion.txt	utf-8	train	cec097657cbfeb62aafe178973f514fa07ab66a5e28ea025ebd5d51ca870e40f
+austen-sense.txt	utf-8	train	57b169c7cfa502896dee25bd66616f61cc1d21084caf31f015176ee46fda9718
+bible-kjv.txt	utf-8	train	3f56c9f0bbc796312aacc5fcb49a799f5c5f729f00db3f86bff26319a93bfede
+blake-poems.txt	utf-8	train	840897a66e23a47dd1fd56b864f421b2be0af074dc081244f7995bf26939eee9
+bryant-stories.txt	utf-8	train	c87f2c50a00055010f02edb6bb643aabe2473465da7f62db43cb4cda1a1c768d
+burgess-busterbrown.txt	utf-8	train	7d8b1648ffeaa7268819c62852e5653f2f295528411c8c895ce3941581146331
+carroll-alice.txt	utf-8	test	5ce9042c0d8536b072b61d4c7c4e6d70c72d9dbb5f3d816261326d9280749266
+chesterton-ball.txt	latin-1	train	c6b6d4e8c09a3f49a09f37f4e47663d4d6f048b62d86c70ccafdfd8f27059a58
+chesterton-brown.txt	utf-8	train	67027976205b4b30e367c704807f56c8ffac3e8ea6037d993e57ab1fe28447ec
+chesterton-thursday.txt	utf-8	test	8b431a2a8db84089cd6f83fa66610c3b12c04114609df6e90137c0c58f2c5493
+edgeworth-parents.txt	utf-8	train	543b2162782f839b9917b88956acbd7507df37c543286c16c228b36dda0cf950
+melville-moby_dick.txt	utf-8	train	dc2466ee3c2e6e2ea1f86233d142e4b5578fdc1d6f0ca657bee7572202a980c7
+milton-paradise.txt	utf-8	train	49028a77c557de1459e96c026edbe72997be2d9015925f7baefb793cd6fe706f
+shakespeare-caesar.txt	latin-1	train	7c46bd32fc84d9596bcad55b61ec3c1a390239acb190b286422855aafc2774b3
+shakespeare-hamlet.txt	utf-8	train	1eceab7027ad7e0cc25c6b6aadcb2e6bb070395cb2085f775ac732d63d5db240
+shakespeare-macbeth.txt	utf-8	test	d4a204352cfe5924cbae76f764225d120e9f7617d39cb8c949dedd3f306353ac
+whitman-leaves.txt	utf-8	train	93ebaf1dccc8f1514b4b1c2f52e64e81829113fc58cff63fb51ada0c72f99c3e

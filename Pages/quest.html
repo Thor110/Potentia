@@ -85,6 +85,11 @@
     text-align: center;
     white-space: nowrap;
   }
+
+  /* On a phone, long titles and figures wrap rather than push the page sideways. */
+  @media (max-width: 720px) {
+    h1, .sub, .section-label, .counter-title, .counter-value, .counter-group, .btn-link, .footer, #star-loss-ticker { white-space: normal; overflow-wrap: anywhere; }
+  }
 </style>
 </head>
 <body>

@@ -2964,3 +2964,33 @@ cover and a title.
   - Charts are drawn at their container's width, so the text stays 11 pixels on a phone.
 - **Its button:** on Build or Buy, between "Every Build, On The Record" and "Build It Or Buy It".
 - **IDEAS §19.50** records it as built.
+
+### A once-over across Sieve, Potentia, the website and the docs (13 October 2026)
+- **Healthy:**
+  - the engine, tests and client build with no warnings, and the unit suite passes (76,549
+    checks, 0 failures, here);
+  - every Python tool compiles, and the CI file parses;
+  - every string the client asks for is in `en.txt`;
+  - every page of the site loads with its AI disclosure, no script errors and no broken local
+    links.
+- **Fixed:**
+  - *Phone width:* the front page and the audio, sieve, quest and space pages pushed sideways on a
+    390-pixel screen, because titles and footers could not wrap (the space page reached 804
+    pixels). Build or Buy was 4 pixels over, from a long run of zeros. Each page now has the
+    phone-only wrap rule the newer pages had; desktop layout is unchanged.
+  - *Duplicate idea number:* IDEAS had two entries numbered 5.12. The address navigator is now
+    5.11a; the one reference to §5.12 means the junction, which keeps it.
+  - *The corpus manifest:* `.gitignore`'s `corpus/` also hid
+    `data/models/corpus/gutenberg-nltk.tsv`, the manifest `tools/fetch_corpus.py` checks the
+    download against, so it has never been committed. It is now excepted. If Edward's copy
+    exists, it shows up to commit; if not, it has to be made again from the 15 NLTK books the
+    pinned model was trained on.
+- **Found, not changed:**
+  - *The CI never runs on GitHub.* `build.yml` is at `Sieve/.github/workflows/`, but GitHub runs
+    only `.github/workflows/` at the repository's root; its only runs are the website's Pages
+    builds. Its checks have been run by hand, line by line, in these sessions. Moving it to the
+    root needs every step to run in `Sieve/` (a `defaults: run: working-directory: Sieve`), and
+    then a first run to find what has drifted.
+  - *Model names:* "Claude Opus 5.5" appears in Edward's own acknowledgements (both READMEs,
+    GAME.md, the anchors' copy, `Art/credit.txt`), as he asked; kept as written.
+  - *`favicon.ico`:* the site has none, so browsers log one harmless 404 on the front page.

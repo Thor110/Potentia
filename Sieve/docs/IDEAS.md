@@ -307,7 +307,7 @@ knows, rendered wherever someone wants it. Large, and the right shape for it is 
 has to approve them, and there needs to be a hard cap per person. Decide this before the feature,
 not after.
 
-**5.12 The address navigator.** *Built (X in the hallway, `client/navigator.cpp`).* Walking and
+**5.11a The address navigator.** *Built (X in the hallway, `client/navigator.cpp`).* Walking and
 the jump keys only ever reach the right-hand end of an address. The navigator shows the whole of
 it, a hex digit at a time, full screen and scrolling; any digit can be chosen with the keys or the
 pointer and turned with Up/Down, the wheel or its arrows, carrying as counting does and wrapping

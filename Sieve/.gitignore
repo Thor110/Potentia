@@ -7,6 +7,9 @@ __pycache__/
 corpus/
 # (but not the corpus of the training-run fixture, which the tests read)
 !/tests/training_run_v1/corpus/
+# (nor the corpus manifest, data/models/corpus/gutenberg-nltk.tsv: the file names and pinned
+# SHA-256s tools/fetch_corpus.py checks the download against, which CI's model rebuild needs)
+!/data/models/corpus/
 
 # GNU Unifont, fetched by tools/fetch_unifont.py (GPLv2+ with the font embedding exception).
 # Not part of Sieve: run the script to get it.
