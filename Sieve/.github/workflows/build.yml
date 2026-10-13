@@ -1037,6 +1037,12 @@ jobs:
           # it, the same rule (a round trip); a word filter made and saved by script is registered
           # at once and named a duplicate of words-data-v1; saving other contents under that
           # version offers the next one instead (versions are never edited).
+          # The Encryption Engine's screen (IDEAS §19.52): its opening recipe there and back (Tab puts
+          # the output in as the input, and turns encrypt into decrypt), and a weak cipher broken.
+          $H --cipher --screenshot cipher.png | tr -d '\r' | q "^output: c0dfd54c54f353b432f1ba19925f$"
+          $H --cipher --script "Tab" --screenshot cipher-back.png | tr -d '\r' | q "^output: 61747461636b206174206461776e$"
+          $H --cipher --script "Ctrl+Backspace,=It was the best of times it was the worst of times it was the age of wisdom it was the age of foolishness,Down,Down,Ctrl+Backspace,=xor 736563726574,Return,Tab,Down,Right" --screenshot cipher-break.png | tr -d '\r' | q "^cipher: the best guess: xor 736563726574$"
+          $H --main-menu --press "Down,Down,Down,Down,Down,Down" --screenshot main-cipher.png | q "saved main-cipher.png"
           $H --designer --screenshot designer.png | q "designer: my-words-v1"
           $H --designer --busy --screenshot designer-busy.png | q "designer: my-words-v1"
           # Opening the designer compiles nothing: only F5 (TEST NOW), Save or the relation check do.

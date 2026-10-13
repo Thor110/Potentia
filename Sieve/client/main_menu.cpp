@@ -58,7 +58,7 @@ std::vector<MainMenu::Item> MainMenu::items() const
     // hallway already walked (the node graph, the navigator).
     case Screen::Main:
         return {{Kind::Action, "start"},    {Kind::Action, "locator"}, {Kind::Action, "media"}, {Kind::Action, "designer"},
-                {Kind::Action, "harness"}, {Kind::Action, "settings"}, {Kind::Action, "exit"}};
+                {Kind::Action, "harness"}, {Kind::Action, "settings"}, {Kind::Action, "cipher"}, {Kind::Action, "exit"}};
     case Screen::Settings:
         return {{Kind::Action, "graphics"}, {Kind::Action, "controls"}, {Kind::Action, "language"}, {Kind::Action, "back"}};
     case Screen::Graphics:
@@ -176,6 +176,7 @@ void MainMenu::change(int dir)
         else if (it.id == "designer") { result_ = Result::Designer; done_ = true; }
         else if (it.id == "harness") { result_ = Result::Harness; done_ = true; }
         else if (it.id == "media") { result_ = Result::Media; done_ = true; }
+        else if (it.id == "cipher") { result_ = Result::Cipher; done_ = true; }
         else if (it.id == "exit") { result_ = Result::Quit; done_ = true; }
         else if (it.id == "settings") { screen_ = Screen::Settings; row_ = 0; }
         else if (it.id == "graphics") { screen_ = Screen::Graphics; row_ = 0; }

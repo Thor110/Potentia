@@ -6,6 +6,7 @@
 #include "win_console.hpp"
 #include "cli/media_decode.hpp"
 #include "cli/plugins.hpp"
+#include "cipher_screen.hpp"
 #include "designer.hpp"
 #include "harness.hpp"
 #include "cli/items.hpp"
@@ -108,6 +109,8 @@ const char* kUsage =
     "  --menu              with --screenshot: a picture of the setup menu (--press keys go to it)\n"
     "                      (--busy: while the dimensions are still being calculated, if that is caught)\n"
     "  --main-menu         with --screenshot: a picture of the main menu (--press keys go to it)\n"
+    "  --cipher            with --screenshot: a picture of the Encryption Engine; --script \"Down,=text,Return\"\n"
+    "                      runs keys and typed text (=text types into the row chosen), as --designer's does\n"
     "  --designer          with --screenshot: a picture of the filter designer; --design FILE opens a\n"
     "                      plugin, --script \"Down,Right,=text,Return\" runs keys and typed text, and\n"
     "                      --design-out FILE writes the filter as the designer would save it\n"
@@ -687,6 +690,34 @@ int run(const Args& a)
     if (a.has("filters") && !std::filesystem::exists(filters_path))
         std::cerr << "note: " << filters_path << " does not exist yet: no filters ticked (the menu saves your choices there)\n";
     FilterConfig filters = FilterConfig::load(filters_path);
+    if (shot && a.has("cipher"))
+    {
+        // A picture of the Encryption Engine (for documentation and testing), after --script:
+        // keys, and "=text" typed into the row chosen.
+        CipherScreen c(window, renderer);
+        if (a.has("script"))
+        {
+            const std::string script = a.get("script");
+            size_t at = 0;
+            while (at <= script.size())
+            {
+                const size_t comma = script.find(',', at);
+                const std::string item = script.substr(at, comma == std::string::npos ? std::string::npos : comma - at);
+                if (!item.empty() && item[0] == '=') c.type(item.substr(1));
+                else if (!item.empty())
+                    for (const auto& [key, mod] : parse_presses(item)) c.press(key, mod);
+                if (comma == std::string::npos) break;
+                at = comma + 1;
+            }
+        }
+        c.render();
+        if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
+        std::cout << "cipher: " << c.status() << "\n";
+        for (const std::string& l : c.output_lines()) std::cout << "  " << l << "\n";
+        if (!c.output_hex().empty()) std::cout << "output: " << c.output_hex() << "\n";
+        std::cout << "saved " << a.get("screenshot") << "\n";
+        return finish();
+    }
     if (shot && a.has("designer"))
     {
         // A picture of the filter designer (for documentation and testing): --design FILE opens a
@@ -1012,6 +1043,13 @@ int run(const Args& a)
                 settings_chosen = true;
                 skip_setup = true;
             }
+            if (r == MainMenu::Result::Cipher)
+            {
+                // The Encryption Engine, and back to the main menu from it.
+                CipherScreen engine(window, renderer);
+                if (engine.run() == CipherScreen::Result::Quit) break;
+                continue;
+            }
             if (r == MainMenu::Result::Designer)
             {
                 // The filter designer, and back to the main menu from it.
@@ -1175,6 +1213,14 @@ int run(const Args& a)
             // The Filter Designer and the AI Training Harness from the pause menu, as from the main
             // menu: over the hallway, and then the same hallway again, still paused. The harness's
             // GO TO IT goes to its model instead, in a hallway on the AI line in the run's shape.
+            if (hall->request() == Hallway::Request::Cipher)
+            {
+                hall->clear_request();
+                CipherScreen engine(window, renderer);
+                if (engine.run() == CipherScreen::Result::Quit) break;
+                SDL_SetWindowRelativeMouseMode(window, false);
+                continue;
+            }
             if (hall->request() == Hallway::Request::Designer)
             {
                 hall->clear_request();

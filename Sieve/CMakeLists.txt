@@ -315,6 +315,7 @@ if(SIEVE_BUILD_CLIENT)
         client/app_settings.cpp
         client/binary_edge.cpp
         client/designer.cpp
+        client/cipher_screen.cpp
         client/harness.cpp
         client/designer_model.cpp
         client/item_faces.cpp

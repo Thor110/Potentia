@@ -2929,3 +2929,20 @@ cover and a title.
     guaranteed. The same words are in VOICES.md.
 - **VOICES.md:** "This, models across all dimensions?" (Edward).
 - **No code changed.**
+
+### The Encryption Engine's screen, a quick start (13 October 2026)
+- **`client/cipher_screen.{hpp,cpp}`:** class `CipherScreen`.
+  - Rows: the input (text or hex), INPUT IS, the recipe, and DO (encrypt, decrypt or break).
+  - The output is worked out again on every change.
+  - Tab puts the output in as the input and flips encrypt and decrypt; Ctrl+V pastes, Ctrl+C
+    copies the hex.
+  - Strings: `cipher.*` in `data/lang/en.txt`.
+- **Menus:**
+  - main menu `cipher` (`MainMenu::Result::Cipher`) and pause menu `cipher`
+    (`Hallway::Request::Cipher`), both placed after Settings so every CI step that counts Downs to
+    an existing row still lands on it;
+  - app_main runs the screen and comes back to the menu, or to the paused hallway.
+- **Scripting:** `hallway --cipher --script "Down,=text,Return" --screenshot F` prints
+  `cipher: <status>`, the output lines and `output: <hex>`. CI checks the opening recipe there
+  and back, an XOR broken, and the main menu's new row.
+- **Built and checked here** with the client (SDL_VIDEO_DRIVER=offscreen).

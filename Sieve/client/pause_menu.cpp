@@ -32,7 +32,7 @@ constexpr PauseItem kPauseItems[] = {
     // The main menu's systems in the same order (IDEAS §19.18), with what only a walked hallway has
     // (the node graph, the navigator) after Restart.
     {"resume", true}, {"restart", true}, {"graph", true}, {"navigator", true}, {"locator", true}, {"media", true},
-    {"designer", true}, {"harness", true}, {"settings", true}, {"exit", true},
+    {"designer", true}, {"harness", true}, {"settings", true}, {"cipher", true}, {"exit", true},
 };
 constexpr int kPauseCount = int(sizeof kPauseItems / sizeof kPauseItems[0]);
 
@@ -77,11 +77,11 @@ void Hallway::pause_choose(int row, bool& quit)
     else if (id == "navigator") open_navigator(); // over the pause menu: Esc comes back to it, ENTER goes
     else if (id == "locator") open_locator(); // over the pause menu, which is there again after it
     else if (id == "media") open_media_player(); // likewise
-    else if (id == "settings" || id == "designer" || id == "harness")
+    else if (id == "settings" || id == "designer" || id == "harness" || id == "cipher")
     {
         // Opened by the application over this hallway, which it comes back to, still paused
         // (the harness's GO TO IT builds a hallway on the AI line instead).
-        request_ = id == "settings" ? Request::Settings : id == "designer" ? Request::Designer : Request::Harness;
+        request_ = id == "settings" ? Request::Settings : id == "designer" ? Request::Designer : id == "cipher" ? Request::Cipher : Request::Harness;
         quit = true;
     }
     else if (id == "exit") pause_confirm_ = true;

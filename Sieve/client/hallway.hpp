@@ -1351,7 +1351,7 @@ public:
     // "use"), and from COST the item to hold again (tailored_unit()) on this line.
     // GoToPicture: a picture of the chat window on an image line of another size or palette than
     // this one's (picture_to_go()), which a hallway built with that image line goes to.
-    enum class Request { None, Settings, MainMenu, GoToMelody, Tailored, Designer, Harness, GoToPicture };
+    enum class Request { None, Settings, MainMenu, GoToMelody, Tailored, Designer, Harness, GoToPicture, Cipher };
     Request request() const { return request_; }
     void clear_request() { request_ = Request::None; }
     // After Settings, the new graphics and language: signs are lettered again, the rest is set.

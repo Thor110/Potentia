@@ -1,5 +1,6 @@
-// Sieve hallway — the main menu: Start Sieve, Settings (Graphics, Controls, Language), the File
-// Locator, the Filter Designer, the AI Training Harness, Exit.
+// Sieve hallway — the main menu: Start Sieve, the File Locator, the Media Player, the Filter
+// Designer, the AI Training Harness, Settings (Graphics, Controls, Language), the Encryption
+// Engine, Exit.
 //
 // Keyboard: Up/Down choose, Enter or Right change or open, Left change back, Esc goes back a
 // screen. Mouse: point to choose, click to change (right click changes back), the wheel scrolls
@@ -24,7 +25,7 @@ class MainMenu
 public:
     MainMenu(SDL_Window* window, SDL_Renderer* renderer, AppSettings& settings, std::filesystem::path settings_path, DisplayInfo display);
 
-    enum class Result { Start, Locator, Media, Designer, Harness, Quit };
+    enum class Result { Start, Locator, Media, Designer, Harness, Cipher, Quit };
     Result run();
     // Settings alone, as the hallway's pause menu opens them: the menu starts on the Settings
     // screen, and backing out of it ends the menu instead of going to the main screen.

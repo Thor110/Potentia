@@ -2792,7 +2792,20 @@ combinations of data, to be expanded and catalogued mathematically.
   - the catalogue counted exactly: 130 bits name one layer with keys of up to 16 bytes, and a
     recipe of depth d is d times that.
 
-  Checked against the oracle (55 encryptions, 15 guesses). *Next:* the Encryption Engine screen on
+  Checked against the oracle (55 encryptions, 15 guesses).
+- *Built (stage 2, its first screen, 13 October 2026):* **Encryption Engine** on the main menu and
+  the pause menu (`client/cipher_screen.cpp`):
+  - the input, as text or as hex;
+  - the recipe;
+  - encrypt, decrypt or break;
+  - the output in hex and, when it is printable, as text;
+  - Tab puts the output in as the input, so a result can be decrypted, broken or encrypted again.
+
+  It sits after Settings, so the menus' existing rows keep their places. CI: `hallway --cipher
+  --script ...`.
+- *Stage 2 to come:* the item in hand or a file as the input, the output as an item to Go to or
+  save, a layer keyed by a picture (§19.76), and the catalogue on the screen.
+- *Earlier plan, kept for the record:* the Encryption Engine screen on
   the main and pause menus, each layer's output an item; then layers that change the shape (a file
   as a picture, a page as a melody), which is the "as anything".
 
