@@ -308,7 +308,9 @@
         const seconds = now > BigInt(began) ? (now - BigInt(began)) / 1000n : 0n;
         const left = total - seconds;
         const year = BigInt(new Date().getUTCFullYear()) + left / SECONDS_PER_YEAR;
-        document.getElementById(id).innerHTML = grouped(seconds) + " " + what + "<br>" + percent(seconds, total) + " of them";
+        // And the inverse beside it, as every count here has (IDEAS 19.78): what is left.
+        document.getElementById(id).innerHTML = grouped(seconds) + " " + what + "<br>" + percent(seconds, total) + " of them" +
+            "<br><br>" + scientific(left) + " still to go<br>" + percent(left, total) + " of them";
         const note = document.getElementById(noteId);
         if (!note.dataset.base) note.dataset.base = note.innerHTML;
         note.innerHTML = note.dataset.base + " Finished in the year " + scientific(year) + ".";
@@ -317,8 +319,8 @@
     function update() {
         show("pictures-walked", "pictures-note", PICTURES, "pictures", EPOCH_MS);
         // The pages begin when the pictures end, so no page has been read yet.
-        document.getElementById("pages-walked").innerText = "0 of " + scientific(PAGES) + " pages";
-        document.getElementById("models-walked").innerText = "0 of " + scientific(MODELS) + " models";
+        document.getElementById("pages-walked").innerHTML = "0 of " + scientific(PAGES) + " pages<br><br>all " + scientific(PAGES) + " still to read<br>100% of them";
+        document.getElementById("models-walked").innerHTML = "0 of " + scientific(MODELS) + " models<br><br>all " + scientific(MODELS) + " still to try<br>100% of them";
         const after = BigInt(new Date().getUTCFullYear()) + PICTURES / SECONDS_PER_YEAR;
         const pagesNote = document.getElementById("pages-note");
         if (!pagesNote.dataset.base) pagesNote.dataset.base = pagesNote.innerHTML;
@@ -357,7 +359,8 @@
             "<b>Meanwhile, the audio:</b> at one track a minute, the audio pipeline could have made " + grouped(seconds / AUDIO_SECONDS_PER_TRACK) +
             " tracks in that time, as the <a href=\"audio.html\">Audio Archive</a> counts.";
         const said = PEOPLE_EVER * 100n * SECONDS_PER_YEAR;
-        document.getElementById("originality").innerHTML = tinyPercent(said, SENTENCES) + "<br>used up";
+        document.getElementById("originality").innerHTML = tinyPercent(said, SENTENCES) + "<br>used up<br><br>" +
+            scientific(SENTENCES - said) + " sentences<br>still unsaid: 100% less " + tinyPercent(said, SENTENCES);
     }
 
     // Folding everything. The universe's limits, with their sources, beside what the lines would
@@ -375,7 +378,8 @@
         // Every model written out: 2^32768 models of 32,768 bits each.
         const modelsBits = MODELS * MODEL_BITS;
         const digits = modelsBits.toString().length - 1;
-        document.getElementById("fold").innerHTML = "10^" + digits + " bits written out<br>one line folded";
+        document.getElementById("fold").innerHTML = "10^" + digits + " bits written out<br>one line folded" +
+            "<br><br>the rule, a line of under 10^4 bits,<br>is less than 1 part in 10^" + (digits - 4) + " of it";
         document.getElementById("f-hold").innerHTML =
             "<b>What the universe can hold:</b> about 10^" + UNIVERSE_BITS_EXP + " bits, and about 10^" + UNIVERSE_OPS_EXP +
             " operations could have been done on them since the Big Bang (Seth Lloyd, 2002). The models of the AI line, written out, would need 10^" +

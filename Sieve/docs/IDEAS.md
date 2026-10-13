@@ -3304,3 +3304,28 @@ in VOICES.md beside the format.
     is stored;
   - a voice already on the list (the same text) is not stored twice, so "whether it exists" is
     checked by the list itself.
+
+**19.78 Every figure with its inverse (Edward, 13 October 2026).** His words: "Running Out Of
+Original Things To Say" says how many are used up, but has no counter beside it saying how many
+are left. Always try to give the inverse of a metric, where and when it can be given, to put it in
+perspective.
+- *The rule:* a count of what is done comes with what is left, and a share with its complement.
+  Where the inverse cannot be known (no honest total to take from), the figure says so, and no
+  total is made up.
+- *Built on the website:*
+  - **Expected Completion:** the pictures looked at, and the pictures still to go, both as counts
+    and as shares (1.267 × 10^30 left, 99.99999999999999999999882...%).
+  - **And Then The Pages / The Language Models:** none read yet, so all of them still to read,
+    100%.
+  - **Running Out Of Original Things To Say:** the share used up, and the sentences still unsaid
+    (1.048 × 10^86, 100% less the share used).
+  - **Folding Everything:** the bits written out, and the rule that holds them: under 10^4 bits,
+    less than 1 part in 10^9864 of them.
+  - **The Orbital Simulation:** 95.4% unreachable, and 4.6% still reachable.
+- *Not given an inverse, and why:*
+  - **The audio page's tracks:** there is no total of tracks that could be made to take them from.
+    The honest inverse would be the tracks not made, which needs the number that were made.
+  - **The time since the last build:** a time has no "left", until there is a plan to measure
+    against.
+- *Next:* the game's figures (the setup menu's counts, the HUD's position along a line) get the
+  same pairing: how far along, and how far still to go.

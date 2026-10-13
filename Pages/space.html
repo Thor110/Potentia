@@ -348,7 +348,8 @@
     const totalSecondsElapsed = (now - EPOCH) / 1000;
     const starsLostTotal = Math.floor(totalSecondsElapsed * STARS_LOST_PER_SECOND).toLocaleString();
 
-    document.getElementById('limitation-counter').innerText = `${unreachablePct.toFixed(1)}% Unreachable`;
+    // And the inverse beside it: what can still be reached.
+    document.getElementById('limitation-counter').innerHTML = `${unreachablePct.toFixed(1)}% Unreachable<br>${(100 - unreachablePct).toFixed(1)}% Still Reachable`;
     document.getElementById('star-loss-ticker').innerText = `~${starsLostTotal} stars crossed permanently since the start of ${currentYear}.`;
   }
 

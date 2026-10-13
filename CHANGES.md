@@ -1,47 +1,28 @@
-# The Encryption Engine's screen: a quick start (13 October 2026)
+# Every figure with its inverse (13 October 2026)
 
-## What it does
-**Encryption Engine** is a new entry on the main menu and the pause menu, after Settings.
-- **The rows** (Up/Down choose, type to edit):
-  - **INPUT:** text, or bytes in hex.
-  - **INPUT IS:** TEXT or HEX (Left/Right).
-  - **RECIPE:** layers apart by `;`, as `sieve cipher` takes them: `reverse`, `caesar N`,
-    `xor HEX`, `vigenere TEXT`, `feistel TEXT`.
-  - **DO:** ENCRYPT, DECRYPT or BREAK (Left/Right).
-- **The output:** in hex, and as text when it is printable. **Break** shows the five best
-  guesses, ranked, as `sieve cipher --break` does.
-- **Keys:**
-  - **Enter** runs it again.
-  - **Tab** puts the output in as the input and flips encrypt and decrypt, so what was just
-    encrypted can be decrypted, or broken, at once.
-  - Ctrl+V pastes, Ctrl+C copies the output's hex, Ctrl+Backspace clears a row.
-  - Esc goes back.
-- **What it opens with:** "attack at dawn" encrypted with "vigenere lemon; feistel my key", so it
-  shows something straight away.
+## Build or Buy (`Pages/release.html`)
+Each counter now shows what is left beside what is done.
+- **Expected Completion:** the pictures looked at, and below them, the pictures still to go, as a
+  count and as a share (1.267 × 10^30, 99.99999999999999999999882...%).
+- **And Then The Pages / The Language Models:** none read yet, so all of them still to read,
+  100%.
+- **Running Out Of Original Things To Say:** the share used up, and below it the sentences still
+  unsaid: 1.048 × 10^86, which is 100% less the share used.
+- **Folding Everything:** the bits written out, and the rule that holds them (under 10^4 bits,
+  less than 1 part in 10^9864 of them).
 
-## Why after Settings
-Every CI step that counts Downs to an existing menu row still lands on the same row.
+## The Orbital Simulation (`Pages/space.html`)
+- "4.6% Still Reachable" under "95.4% Unreachable".
 
-## Files
-- **New:** `Sieve/client/cipher_screen.hpp` and `.cpp`.
-- **Wiring:** `main_menu.hpp`/`.cpp`, `pause_menu.cpp`, `hallway.hpp` (`Request::Cipher`),
-  `app_main.cpp`, `CMakeLists.txt`, and `tools/cli/args.hpp` (the `--cipher` switch).
-- **Strings:** `cipher.*`, `item.cipher` and `pause.cipher` in `data/lang/en.txt`.
-- **Scripting:** `hallway --cipher --script "Down,=text,Return" --screenshot F`.
-- **CI:**
-  - the opening recipe and its round trip (Tab gives back "attack at dawn");
-  - an XOR of a Dickens sentence broken, with `xor 736563726574` as the best guess;
-  - the main menu's new row.
-- **Docs:** README (the main menu, the pause menu and a paragraph on the screen), IDEAS §19.52
-  (stage 2 begun, what comes next), and a HANDOFF entry.
+## Notes
+- **IDEAS §19.78:** the rule, always give the inverse where it can be known and say so where it
+  cannot. It also covers what has no inverse yet, and why:
+  - the audio page's tracks: no total to take them from without the number actually made;
+  - the time since a build.
+- **HANDOFF:** an entry for this round.
 
 ## Checked here
-- The client builds here (SDL3, offscreen driver).
-- The four new CI lines pass.
-- Screenshots of the screen, the main menu and the pause menu look right.
-- The pause menu's help line was cut off, so it is shorter now.
-- The unit suite wasn't run: no core code changed.
-
-## Next for the engine
-The item in hand or a file as the input, the output as an item to Go to or save, a layer keyed by a
-picture (IDEAS §19.76), and the catalogue on the screen.
+- Both pages in Chromium at phone width: every counter shows its inverse, with no errors.
+- **Already like this before this change:** at 390 pixels the space page is 804 pixels wide (so
+  it scrolls sideways), and Build or Buy is 394. I left both as they were. Say if you'd like them
+  fixed.

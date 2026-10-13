@@ -2946,3 +2946,12 @@ cover and a title.
   `cipher: <status>`, the output lines and `output: <hex>`. CI checks the opening recipe there
   and back, an XOR broken, and the main menu's new row.
 - **Built and checked here** with the client (SDL_VIDEO_DRIVER=offscreen).
+
+### Every figure with its inverse (13 October 2026)
+- **Build or Buy:** each counter now shows what is left beside what is done (the pictures, pages
+  and models still to go, the sentences still unsaid, the rule's share of the bits written out).
+- **The Orbital Simulation:** "% Still Reachable" under "% Unreachable".
+- **IDEAS §19.78:** the rule, what has an inverse and what has none (the audio page's tracks, the
+  time since a build), and why.
+- **Widths at 390 pixels, already like this before:** the space page is 804 pixels wide and Build
+  or Buy 394. Both are older than this change, and left as they were.
