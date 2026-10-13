@@ -1,42 +1,22 @@
-# Metrics Over Time (13 October 2026)
+# Metrics Over Time: what each chart means, and a line between them (13 October 2026)
 
-## The new page: `Pages/metrics.html`
-- **What it shows:** your metrics, read from `Sieve/metrics/index.tsv` in the repository, as
-  line charts: a dot a build, joined in the order they were made.
-- **One chart a measure:**
-  - unit test checks;
-  - seconds for the unit suite;
-  - checks a second (the two divided);
-  - vector files, specification sections, commands, source files and lines, ideas, and voices;
-  - what the reference filters keep on each line.
-
-  Each chart has its own scale, because the measures are in different units. Putting two scales
-  on one axis would mislead.
-- **Choosing what to show:** the machine (`edward-1` by default, or every machine), and releases
-  or every build.
-- **Reading a chart:**
-  - hovering shows the nearest build's value, date and time, version and commit;
-  - every chart opens as a table too;
-  - a measure that hasn't changed says "the same in every build shown", with no made-up range
-    drawn around it;
-  - the line under each title says what the top and base lines stand for (the highest and lowest
-    on the record).
-- **On a phone:** charts are drawn at the screen's width, so their text stays readable. There's no
-  sideways scroll.
-- **The AI disclosure** is at the top, as on every page.
-
-## The button
-On Build or Buy: "Metrics Over Time", below every metric and above Build It Or Buy It.
-
-## Notes
-- IDEAS §19.50 records the page as built.
-- HANDOFF has an entry for this round.
+## `Pages/metrics.html`
+- **Every chart now says what its measure means,** under its title, in plain words:
+  - **Unit test checks:** each check compares something Sieve works out with the answer it must
+    give. The suite runs once with Sieve's own SHA-256 and again with the processor's, where it
+    has the instructions, and both runs count. A build is logged only when every check passes.
+  - **Seconds for the unit suite:** timed by make_release. Builds from run_tests.bat aren't timed,
+    so this line has only releases.
+  - **Checks a second:** the two above divided. Compare it only between builds of the same version
+    on the same machine.
+  - **Conformance vector files:** written by the Python oracle straight from the specification, and
+    reproduced byte for byte by the C++ engine.
+  - **Specification sections, commands, source files, lines of source, ideas, voices:** what each
+    counts, and where it is counted from.
+  - **What the reference filters keep, each line:** a power of ten. 0 means almost everything is
+    kept; −4 means about 1 in 10,000.
+- **A dividing line** sits between each chart and the next.
 
 ## Checked here
-- In Chromium, at phone width and desktop width, against your two release records: the charts
-  draw, the hover works, and there are no errors.
-- **What you'll see now:**
-  - the suite went from 478.0 to 407.8 seconds, −70.2;
-  - checks a second went from 320.28 to 375.42;
-  - lines of source went up by 440;
-  - unit checks stayed at 153,096.
+- In Chromium at phone width and desktop width: 21 charts with 20 dividers, the hover works, and
+  there are no errors or sideways scroll.

@@ -116,6 +116,7 @@
   .chart-head b { color: #e0ddd8; }
   .chart-wrap { position: relative; margin-top: 8px; }
   .chart-wrap svg { width: 100%; height: auto; display: block; }
+  .divider { border: 0; border-top: 1px solid #3a3a4a; width: 60%; margin: 8px auto 24px; }
   .tip { position: absolute; pointer-events: none; background: #0a0a0f; border: 1px solid #555; color: #e0ddd8; padding: 6px 8px; font-size: 13px; line-height: 1.4; white-space: nowrap; display: none; }
   .filters { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-bottom: 20px; width: 100%; max-width: 700px; }
   .filters select { background: #0a0a0f; color: #e0ddd8; border: 1px solid #2a2a3a; font-family: inherit; font-size: 15px; padding: 6px 8px; }
@@ -189,18 +190,30 @@
     const SOURCES = ["../Sieve/metrics/index.tsv", "https://raw.githubusercontent.com/Thor110/Potentia/main/Sieve/metrics/index.tsv"];
     // The measures, in the order shown: [column, title, how to read it]. "checks_per_second" is
     // worked out here from two columns; the rest are the record's own.
+    // [column, title, how to read it, what it means]
     const MEASURES = [
-        ["unit_checks", "Unit test checks", "every one passing"],
-        ["unit_seconds", "Seconds for the unit suite", "lower is faster"],
-        ["checks_per_second", "Unit test checks a second", "the two above, divided"],
-        ["vector_files", "Conformance vector files", "each reproduced by the independent oracle"],
-        ["spec_sections", "Sections of the specification", ""],
-        ["commands", "Commands of the sieve tool", ""],
-        ["source_files", "Source files", ""],
-        ["source_lines", "Lines of source", ""],
-        ["ideas", "Ideas noted", ""],
-        ["voices", "Voices of the halls", ""],
+        ["unit_checks", "Unit test checks", "every one passing",
+         "Every check the unit test program (sieve_tests) makes: each compares something Sieve works out with the answer it must give. The suite runs once with Sieve's own SHA-256, and again with the processor's SHA-256 instructions where it has them; both runs are counted. A build is logged only when every check passes."],
+        ["unit_seconds", "Seconds for the unit suite", "lower is faster",
+         "How long the whole unit suite took on this machine, timed by make_release as it makes a release. Builds logged by run_tests.bat are not timed, so this line has only releases."],
+        ["checks_per_second", "Unit test checks a second", "the two above, divided",
+         "The checks above divided by the seconds above: how fast this machine gets through the suite. Compare it only between builds of the same version on the same machine; a new version with more checks is a different race."],
+        ["vector_files", "Conformance vector files", "each reproduced by the independent oracle",
+         "Files of test vectors in Sieve/tests. Each is written by the Python oracle (sieve_ref.py) straight from the specification, and the C++ engine must reproduce it byte for byte. The more of them, the more of Sieve is checked from two independent sides."],
+        ["spec_sections", "Sections of the specification", "",
+         "Headings in docs/SPECIFICATIONS.md (from ## to ####): how much of Sieve is written down as exact rules that anyone could build again."],
+        ["commands", "Commands of the sieve tool", "",
+         "The sieve command-line tool's commands, counted as the sections the README gives them (each a heading that starts with a command's name)."],
+        ["source_files", "Source files", "",
+         "Files of C++ and Python (.cpp, .hpp, .h and .py) in Sieve's core, client, tools and reference folders: the engine, the game, the tools and the oracle."],
+        ["source_lines", "Lines of source", "",
+         "Every line in those source files, comments and blank lines included."],
+        ["ideas", "Ideas noted", "",
+         "Numbered entries in docs/IDEAS.md: ideas, plans and notes, each with who had it and when."],
+        ["voices", "Voices of the halls", "",
+         "Attributed lines in docs/VOICES.md: the quotes, questions, rules and notes the AIs of the halls will say, each with who first said it."],
     ];
+    const KEPT_ABOUT = "Of every unit on this line, the share the reference filters keep (data/metrics/reference-filters.ini: filters that set aside only noise, with no dictionary, model or taste), as a power of ten, counted by the hallway's --metrics. 0 means almost everything is kept; \u22124 means about 1 in 10,000.";
     const LINE = "#c8c4bd", GRID = "#2a2a3a", MUTED = "#666";
     let rows = [];
 
@@ -213,7 +226,7 @@
         return r[key] === undefined || r[key] === "" ? NaN : Number(r[key]);
     }
 
-    function chart(list, key, title, how) {
+    function chart(list, key, title, how, about) {
         const pts = list.map((r, i) => ({ r, i, v: value(r, key) })).filter(p => !isNaN(p.v));
         if (pts.length === 0) return null;
         const card = document.createElement("div");
@@ -223,6 +236,7 @@
         const sign = change > 0 ? "+" : change < 0 ? "−" : "±";
         card.innerHTML = '<div class="chart-head"><span><b>' + title + '</b>' + (how ? ' (' + how + ')' : '') + '</span><span><b>' + grouped(last) + '</b>' +
             (pts.length > 1 ? ' &nbsp;' + sign + grouped(Math.abs(change)) + ' since the first' : '') + '</span></div>';
+        if (about) card.innerHTML += '<div class="counter-note" style="margin-top:6px;font-size:14px;color:#888;">' + about + '</div>';
         // The scale in words: the top dashed line is the highest on the record, the base the lowest.
         const lo0 = Math.min(...pts.map(p => p.v)), hi0 = Math.max(...pts.map(p => p.v));
         card.innerHTML += '<div class="counter-note" style="margin-top:4px;font-size:13px;">' +
@@ -291,12 +305,17 @@
         if (list.length === 0) { summary.textContent = "No build matches these choices yet."; return; }
         summary.textContent = list.length + " build" + (list.length === 1 ? "" : "s") + " shown, from " + list[0].date.slice(0, 10) + " to " +
             list[list.length - 1].date.slice(0, 10) + ". With one build a measure is a single dot; the line begins with the second.";
-        for (const [key, title, how] of MEASURES) { const c = chart(list, key, title, how); if (c) box.appendChild(c); }
+        // Each chart, with a dividing line between one and the next.
+        const add = c => {
+            if (!c) return;
+            if (box.children.length) { const hr = document.createElement("hr"); hr.className = "divider"; box.appendChild(hr); }
+            box.appendChild(c);
+        };
+        for (const [key, title, how, about] of MEASURES) add(chart(list, key, title, how, about));
         // What the reference filters keep on each line, as log10 of the share (the hallway's metrics list).
         const kept = Object.keys(list[list.length - 1]).filter(k => k.startsWith("kept_log10_")).sort();
         for (const k of kept) {
-            const c = chart(list, k, "Kept on " + k.slice(11) + ": log10 of the share", "the reference filters");
-            if (c) box.appendChild(c);
+            add(chart(list, k, "Kept on " + k.slice(11) + ": log10 of the share", "the reference filters", KEPT_ABOUT));
         }
     }
 
