@@ -320,7 +320,7 @@ void Hallway::draw_hud(int w, int h)
     const std::string loop = trf("hud.loop", {loop_label_}) + (loop_.fills_whole_tiles()
                                                                                  ? std::string()
                                                                                  : " " + trf("hud.loop.padding", {std::to_string(loop_.padding())}));
-    text(10, 28, fit((on_books() ? books_->id() : on_composition() ? comp().space->id() : on_worlds() ? world_space_->id() : on_ai() ? ai_space_->id() : titled_here() ? titled_here()->id() : line().space.id()) + (guided_on() ? "   " + trf("hud.model", {line().model_id}) : std::string()) + "   " +
+    text(10, 28, fit(space_id() + (guided_on() ? "   " + trf("hud.model", {line().model_id}) : std::string()) + "   " +
                      loop + per_tile + "   " + filter_status() + "   " +
                      (on_binary() ? trf("hud.door_one", {tr(theme_of(binary_from_).key)})
                                   : trf("hud.doors", {tr(theme_of((li_ + 1) % kLines).key), tr(theme_of((li_ + kLines - 1) % kLines).key)})),
@@ -875,12 +875,7 @@ void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float botto
     // The filters tailored to it (tailoring.cpp).
     cy = draw_tailor(bk, held, x, cy, pw, bottom);
     // The other half of a written-down key: the shape that gives the address its meaning.
-    const std::string spec = on_books()         ? books_->id()
-                             : on_composition() ? comp().space->id()
-                             : on_worlds()      ? world_space_->id()
-                             : on_ai()          ? ai_space_->id()
-                             : titled_here()    ? titled_here()->id()
-                                                : line().space.id();
+    const std::string spec = space_id();
     text(x + 14, cy, tr("cost.spec"), 1, dim);
     cy += 14;
     for (const auto& l : wrap(spec, size_t((pw - 28) / 8)))

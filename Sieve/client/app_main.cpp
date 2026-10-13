@@ -133,6 +133,7 @@ const char* kUsage =
     "  --text-model DIR    CHAT talks with this model folder (config.json, model.safetensors, tokenizer.json)\n"
     "  --picture-model DIR DRAW uses this picture model's run folder\n"
     "  --chat-press KEYS   keys pressed in CHAT after those (e.g. Ctrl+G: the newest card's GO TO IT)\n"
+    "  --print-system-prompt  print the system prompt a model given as a file is told here\n"
     "  --tailor PATH       with --screenshot, the item in hand on COST: K, waited for, and what Return\n"
     "                      would apply saved to PATH as a settings file\n"
     "  --save-item PATH    then save it as a file (F on the item page), to PATH\n"
@@ -903,6 +904,8 @@ int run(const Args& a)
                 }
                 else line.push_back(c);
         }
+        // The system prompt a model file would be given here, word for word (docs/SYSTEM-PROMPT.md).
+        if (a.has("print-system-prompt")) std::cout << hall->system_prompt();
         // Keys pressed in the chat window after that (Ctrl+G: the newest card's GO TO IT, ...),
         // with where you are after each.
         if (a.has("chat-press"))

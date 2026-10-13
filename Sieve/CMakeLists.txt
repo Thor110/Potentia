@@ -353,6 +353,9 @@ if(SIEVE_BUILD_CLIENT)
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/lang
                 $<TARGET_FILE_DIR:hallway>/lang
         COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/prompts
+                $<TARGET_FILE_DIR:hallway>/prompts
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/fonts
                 $<TARGET_FILE_DIR:hallway>/fonts
         COMMAND ${CMAKE_COMMAND} -E copy_directory

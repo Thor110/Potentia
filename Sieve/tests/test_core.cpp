@@ -1104,6 +1104,20 @@ void test_image_vectors(const std::string& path, ImageFormat::Fit fit = ImageFor
     CHECK(n > 30);
 }
 
+// The system prompt sieve-system-v1 (docs/SYSTEM-PROMPT.md) is never edited: its bytes are the
+// published ones, and a change is a new version.
+void test_system_prompt(const std::string& path)
+{
+    std::ifstream in(path, std::ios::binary);
+    CHECK(bool(in));
+    std::ostringstream all;
+    all << in.rdbuf();
+    const std::string text = all.str();
+    CHECK(text.size() == 3370);
+    CHECK(Sha256::hex(Sha256::hash(text)) == "04bd46c89c16f86fbccffac8055636b03df1d1b7de2270a343bd20ddd74239a9");
+    std::cout << "system prompt checked: sieve-system-v1, " << text.size() << " bytes\n";
+}
+
 void test_image()
 {
     const Palette& mono = palette_by_id("mono");
@@ -5789,6 +5803,7 @@ void run_all(int argc, char** argv)
         test_model_vectors(dir + "vectors_models_v1.tsv");
         test_image_vectors(dir + "vectors_image_v1.tsv");
         test_image_vectors(dir + "vectors_image_v2.tsv", ImageFormat::Fit::Levels, 32);
+        test_system_prompt(dir + "../data/prompts/sieve-system-v1.txt");
         test_guided_vectors(dir);
         test_filters(dir);
         test_filter_vectors(dir);

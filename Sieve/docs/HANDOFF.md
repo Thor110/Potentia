@@ -168,6 +168,18 @@ the program. In a conversation, run the unit suite once and the CI lines the cha
 touches; leave the whole hallway step to GitHub's CI and to Edward. Make a check stricter where a
 change needs it, not by running everything twice.
 
+**More of the testing on Edward's side** (13 October 2026): he would rather run more tests himself,
+of every kind, than have them run here, as long as they are easy to run. `tools\run_tests.bat`
+runs the unit tests of every Windows build there is, then every conformance vector through the
+oracle (`tools/check_vectors.py`, the same checks as CI), and says what passed. Add to it rather
+than to the time spent here.
+
+**This conversation has not been handed off** (Edward, 13 October 2026): the work so far has been
+one long session, by choice. Whoever continues it keeps to the same principles: exact integer
+arithmetic for anything addressed, versioned rules that are never edited, an oracle written from
+the specification, the counting argument respected, measurements before claims, and every result
+stated as it was found.
+
 The hallway can be driven headless for checks — `--take` a screenshot, `--press` a key sequence —
 and note that `--take` runs after `--press`, so anything that needs a frame first must render one.
 
@@ -203,6 +215,10 @@ zip -qr Sieve.zip Sieve -x 'Sieve/build/*' 'Sieve/build-*/*' 'Sieve/out/*' 'Siev
 - Each file opens with a paragraph saying what it is for and how it fits.
 - Warning-free at `/W4` and `-Wall -Wextra -Wpedantic`.
 - The oracle mirrors the specification's vocabulary, so the two can be read side by side.
+- **The interface is even and distinguished** (Edward, 13 October 2026, IDEAS §19.44): rows line
+  up, controls in a row share their height, a symbol sits in the exact middle of its button (drawn
+  to the pixel where the font would put it off-centre), and the corridors' wireframe style carries
+  into the panels.
 - The code is meant, in the end, to document itself, and the program to explain itself to the
   person using it. Documents outside the code should shrink over time rather than grow: when
   something can be said in the file it describes, or in the program's own help, it goes there.
@@ -2729,3 +2745,41 @@ cover and a title.
     started from one; it does nothing when the output is already redirected (CI, scripted runs).
   - Not tried on Windows here (no Windows machine). On Linux both changes compile to the same
     behaviour as before.
+
+### The system prompt, FULL SIZE, an even CHAT row, and Buy or Build (13 October 2026)
+- **The system prompt, `sieve-system-v1`** (docs/SYSTEM-PROMPT.md), a specification like the
+  manifest's:
+  - *The file:* `data/prompts/sieve-system-v1.txt`, 3,370 bytes, its SHA-256 pinned in chat.cpp
+    and checked by the unit tests. It is never edited; a change is v2.
+  - *What a model is given:* the text, then "# The place, now", in the format the spec gives (line
+    and space id, ordering, filters, the model in hand, which model it is).
+  - *When:* given to a ChatML model file when a conversation starts. A model with too few
+    positions is given the one-line prompt, and CHAT says so; so is a missing file, and a changed
+    file is used but noted.
+  - *Seen with:* `/prompt` in CHAT and `hallway --print-system-prompt`. CI compares the printed
+    text with the file, byte for byte.
+  - *Shipped:* the build copies `data/prompts` next to the hallway, and make_release's FOLDERS
+    include it.
+  - *Found here:* the tiny model's conversation broke with the full prompt (too few positions),
+    and stayed silent about it. That is now the one-line fallback, with a note.
+  - `Hallway::space_id()` is the HUD's space id, now shared with the HUD and COST.
+- **FULL SIZE** (`ChatAct::Full`, F on the newest card), on picture file cards (PNG, JPG, GIF,
+  BMP):
+  - *What it does:* decodes the first frame and fits it to an rgb24 line of its own size, where
+    every pixel is exact (`canonicalise_frame`). It then goes there directly, or through
+    `Request::GoToPicture` as DRAW's GO TO IT does.
+  - *Measured:* Vitruvian.jpg is a 949x1300 rgb24 line, 1,233,700 positions. A room of such
+    pictures took about a minute here (1,024 items at 57 ms, half of it the vault), on workers.
+  - *Not tried here:* the scripted run follows no requests, so the rebuild path is checked only
+    by its being DRAW's.
+- **CHAT's row:** the box is at least a button's height, and +, DRAW and SEND share its bottom
+  edge. A one-line box is exactly their height; the + is two filled bars.
+- **The web page:** `Pages/release.html` (Buy or Build), linked from `index.html`. It has the
+  PayPal link Edward gave, the three steps, and exact BigInt counters. Checked in headless
+  Chromium at 1280 and 520 pixels wide (headless Chromium lays out no narrower than 500).
+- **Testing on Edward's side:** `tools/check_vectors.py` and `tools/run_tests.bat` (above, under
+  "Build, test, package").
+- **IDEAS:** §19.40 a file, its full size and its variants; §19.41 other developers' oddities;
+  §19.42 the web page; §19.43 all the AIs folding in on themselves; §19.44 keeping the interface
+  even.
+- **GAME.md:** the one-sentence description, and the philosophy as the lore.

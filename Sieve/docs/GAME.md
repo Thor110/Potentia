@@ -6,7 +6,18 @@ schedule: Edward's rule is that the tool comes first, and the story is looked at
 is built, "bit by bit, as the tool did". Where a question is still open, it is marked as open.
 
 **How it is released** (Edward, 12 October 2026): the same game twice, paid as *State Space: Near
-Zero* and free to build from GitHub as *The Sieve of Potentia*. IDEAS §19.39.
+Zero* and free to build from GitHub as *The Sieve of Potentia*. IDEAS §19.39 and §19.42 (the web
+page).
+
+**What it is, in one sentence** (Edward, 13 October 2026): a near-infinite, procedurally generated
+game or landscape that theoretically contains everything that could ever exist, and that unfolds
+through manifold warping and filtering of the topological state space of information in its
+various forms. The models inside it are told the same (docs/SYSTEM-PROMPT.md).
+
+**The philosophy is the lore.** Edward's notes in IDEAS §19 are as much the game's story as the
+tool's design: the library that holds everything, meaning as rare and found, minds that begin as
+addresses (§19.43: all the AIs folding in on themselves, perplexed to find themselves in π, then
+taking a body and joining humanity). When the story is written, it is drawn from them.
 
 **First, when work turns to the game** (Edward, 6 October 2026): the colour-blindness pass (IDEAS
 2.4). Nine lines, filter verdicts and the map all mean things by hue alone.

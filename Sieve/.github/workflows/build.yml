@@ -836,6 +836,12 @@ jobs:
           $H --no-menu --line ai --walk "0,0" --take --chat --text-model tinymodel --chat-attach tests/training_corpus.txt --talk "Hello there" --training-dir data/training --screenshot chat-file.png | tr -d '\r' > chatfile.txt
           q "^you: Hello there" chatfile.txt
           q "^it: " chatfile.txt
+          # What a model given as a file is told (docs/SYSTEM-PROMPT.md): sieve-system-v1 word for word
+          # (the tiny model has too few positions to be given it, and is told the short one), then the place.
+          $H --no-menu --line ai --walk "0,0" --take --chat --text-model tinymodel --print-system-prompt --training-dir data/training --screenshot prompt.png | tr -d '\r' > prompt.txt
+          sed -n '/^You are inside the Sieve of Potentia/,$p' prompt.txt | head -n "$(wc -l < data/prompts/sieve-system-v1.txt)" | cmp - data/prompts/sieve-system-v1.txt
+          q "^- Line: the AI line (ai/L1/H16/A2/" prompt.txt
+          q "^- You: the model in the folder tinymodel, given as a file$" prompt.txt
           $H --no-menu --line ai --walk "0,0" --take --chat --picture-model data/training/figures-2x32 --chat-draw 1 --training-dir data/training --screenshot chat-pm.png | tr -d '\r' | q "^figure 1 by figures-2x32: fff0fc2f0de8f01c3fdbe6fff"
           printf '[models]\ntext_model =\npicture_model =\n' > models.ini
           downs=$(python -c "print(','.join(['Down']*46))")

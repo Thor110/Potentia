@@ -417,6 +417,8 @@ public:
     // The filters' part of the readout, worked out when the line or its settings change (the
     // survivor count is a big number, too slow to write out every frame).
     const std::string& filter_status() const { return filter_status_; }
+    // The id of the space this line walks: the shape that gives an address its meaning.
+    std::string space_id() const;
     std::string compute_filter_status() const;
     BigUint units_of(int i) const;
 
@@ -678,6 +680,9 @@ public:
     static std::string ai_says(const AiSpace& space, const sieve::llm::Tokenizer& tok, const AiSpace::Digits& d, size_t bytes);
     static std::string printable(const std::string& bytes);
     const std::string& conversation() const { return talk_; }
+    // The system prompt a ChatML model file is given: sieve-system-v1 and the place
+    // (docs/SYSTEM-PROMPT.md). /prompt shows it in CHAT.
+    std::string system_prompt();
 
     void step_trail(int dir);
 
@@ -1500,7 +1505,7 @@ private:
         std::string heading() const;
         uint32_t width = 0, height = 0;
     };
-    enum class ChatAct { Go, Item, Save, Play };
+    enum class ChatAct { Go, Item, Save, Play, Full };
     void close_chat();
     void chat_event(const SDL_Event& e);
     // The CHAT tab drawn in the hand panel's area from (x, top), `w` wide, down to `bottom`.

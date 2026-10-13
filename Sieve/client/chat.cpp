@@ -26,6 +26,7 @@
 #include "dialogs.hpp"
 #include "gpu_memory.hpp"
 
+#include "cli/dictionaries.hpp"
 #include "cli/locate.hpp"
 #include "cli/media_decode.hpp"
 #include "cli/train.hpp"
@@ -35,6 +36,8 @@
 #include "sieve/sha256.hpp"
 
 #include <algorithm>
+#include <cctype>
+#include <cmath>
 #include <fstream>
 #include <sstream>
 
@@ -49,8 +52,12 @@ constexpr size_t kTalkReply = 80;
 // Room kept for what you say next after a file or picture is given (the reply's room besides).
 constexpr size_t kTalkRoom = 64;
 // The model file: the most a reply may be, in tokens; the most of a file or figure given to it, in
-// bytes (it reads them with the next message); and what a ChatML model is told it is.
+// bytes (it reads them with the next message).
 constexpr size_t kFileReply = 200, kFileGive = 1500;
+// What a ChatML model is told: the system prompt sieve-system-v1 (docs/SYSTEM-PROMPT.md), a file
+// that is never edited, by its SHA-256; and what it is told if that file is missing.
+constexpr const char* kSystemPromptFile = "sieve-system-v1.txt";
+constexpr const char* kSystemPromptSha256 = "04bd46c89c16f86fbccffac8055636b03df1d1b7de2270a343bd20ddd74239a9";
 constexpr const char* kFileSystem = "You are a helpful assistant.";
 // Text in the conversation: messages at scale 2, the rest at scale 1.
 constexpr float kBig = 2, kSmall = 1, kBigLine = 20, kSmallLine = 14, kPad = 10, kButtonH = 22;
@@ -228,6 +235,47 @@ void Hallway::set_model_files(const std::string& text_model, const std::string& 
     picture_model_path_ = picture_model;
 }
 
+// The system prompt a ChatML model file is given (docs/SYSTEM-PROMPT.md): sieve-system-v1's text,
+// then "# The place, now" and where the conversation is taking place. Missing, the plain one, and
+// a note says so; changed from the published file, it is used, and a note says that too.
+std::string Hallway::system_prompt()
+{
+    std::vector<fs::path> folders = {fs::path("data") / "prompts"};
+    if (const fs::path exe = cli::executable_dir(); !exe.empty())
+    {
+        folders.push_back(exe / "prompts");
+        folders.push_back(exe / ".." / "data" / "prompts");
+    }
+    std::string text;
+    for (const fs::path& f : folders)
+    {
+        std::ifstream in(f / kSystemPromptFile, std::ios::binary);
+        if (!in) continue;
+        std::ostringstream all;
+        all << in.rdbuf();
+        text = all.str();
+        break;
+    }
+    if (text.empty())
+    {
+        chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf("chat.prompt.missing", {kSystemPromptFile})));
+        return kFileSystem;
+    }
+    if (cli::sha256_hex(std::vector<uint8_t>(text.begin(), text.end())) != kSystemPromptSha256)
+        chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf("chat.prompt.changed", {kSystemPromptFile})));
+    while (!text.empty() && (text.back() == '\n' || text.back() == '\r')) text.pop_back();
+    const std::string folder = u8(from_u8(text_model_path_).filename());
+    text += "\n\n# The place, now\n\n";
+    std::string filters = filter_status();
+    if (!filters.empty()) filters[0] = char(std::toupper(static_cast<unsigned char>(filters[0])));
+    text += "- Line: the " + std::string(theme().name) + " line (" + space_id() + ")\n";
+    text += "- Ordering: " + ordering_name() + "\n";
+    text += "- " + filters + "\n";
+    text += "- In hand: a model of the AI line, address " + short_address(talk_hex_) + "\n";
+    text += folder.empty() ? std::string("- You: a model given as a file\n") : "- You: the model in the folder " + folder + ", given as a file\n";
+    return text;
+}
+
 // What the model file says back. A ChatML model answers in a conversation (llm::Chat, with
 // kFileSystem); any other continues the text, as the line's models do, until a newline. Its choices
 // are seeded by the conversation, as talk()'s are. When the conversation and the reply would not
@@ -269,6 +317,16 @@ void Hallway::talk_file(const std::string& said)
     std::string reply;
     try
     {
+        // A conversation started (or started again) is told what and where it is; a model with too
+        // few positions for that and the message together is told the short version, and a note
+        // says so.
+        const bool fresh = !file_chat_ || m.model->position() + need >= max;
+        std::string prompt = m.chatml && fresh ? system_prompt() : std::string();
+        if (!prompt.empty() && m.tokenizer->encode(prompt).size() + need + 16 >= max)
+        {
+            chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf("chat.prompt.too_long", {std::to_string(max)})));
+            prompt = kFileSystem;
+        }
         busy(tr("chat.thinking"), [&] {
             if (m.model->position() + need >= max) // its memory is full: it starts again
             {
@@ -278,7 +336,7 @@ void Hallway::talk_file(const std::string& said)
             }
             if (m.chatml)
             {
-                if (!file_chat_) file_chat_ = std::make_unique<sieve::llm::Chat>(*m.model, *m.tokenizer, kFileSystem);
+                if (!file_chat_) file_chat_ = std::make_unique<sieve::llm::Chat>(*m.model, *m.tokenizer, prompt);
                 reply = file_chat_->reply(message, sampler, kFileReply);
             }
             else
@@ -652,6 +710,11 @@ void Hallway::chat_command(const std::string& line)
         chat_show_unit(std::move(e));
         return;
     }
+    if (verb == "prompt") // what a model given as a file is told, word for word
+    {
+        chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, system_prompt()));
+        return;
+    }
     chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, tr(verb == "help" ? "chat.commands" : "chat.command.unknown")));
 }
 
@@ -697,6 +760,42 @@ void Hallway::chat_act(size_t i, ChatAct act)
         catch (const std::exception& ex)
         {
             message(trf("msg.jump.failed", {ex.what()}));
+        }
+        return;
+    }
+    if (file && act == ChatAct::Full)
+    {
+        // The picture at its own size, every pixel its own colour (rgb24): of all the ways the
+        // image line can hold it, the one that keeps every pixel. A hallway built with that image
+        // line goes to it, as GO TO IT on a figure of another size does.
+        try
+        {
+            RgbaImage first;
+            cli::read_media_frames(e.bytes.data(), e.bytes.size(), e.name, 1, [&](const RgbaImage& f) {
+                if (!first.width) first = f;
+            });
+            if (!first.width) throw std::runtime_error(tr("chat.full.none"));
+            if (uint64_t(first.width) * first.height > 0xFFFFFFFFull) throw std::runtime_error(tr("chat.full.big"));
+            sieve::ImageFormat own{first.width, first.height, 1, &sieve::palette_by_id("rgb24")};
+            picture_to_go_ = PictureToGo{own.width, own.height, "rgb24", sieve::canonicalise_frame(first, own)};
+        }
+        catch (const std::exception& ex)
+        {
+            chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf("chat.full.failed", {ex.what()})));
+            return;
+        }
+        const Line& image = unit_line(LineKind::Image);
+        if (image.image.width == picture_to_go_->width && image.image.height == picture_to_go_->height && image.image.palette &&
+            image.image.palette->id() == "rgb24")
+        {
+            const std::vector<uint32_t> cells = std::move(picture_to_go_->cells);
+            picture_to_go_.reset();
+            go_to_picture(cells);
+        }
+        else
+        {
+            close_chat();
+            request_ = Request::GoToPicture;
         }
         return;
     }
@@ -823,6 +922,7 @@ void Hallway::chat_event(const SDL_Event& e)
             if (e.key.key == SDLK_G) chat_act(*card, ChatAct::Go);
             else if (e.key.key == SDLK_J && chat_[*card].kind == ChatEntry::Kind::File) chat_act(*card, ChatAct::Item);
             else if (e.key.key == SDLK_S) chat_act(*card, ChatAct::Save);
+            else if (e.key.key == SDLK_F && chat_[*card].kind == ChatEntry::Kind::File) chat_act(*card, ChatAct::Full);
         }
         break;
     }
@@ -884,6 +984,8 @@ float Hallway::chat_entry(size_t i, float x, float y, float w, bool draw)
                          kSmall, ink});
         for (const std::string& l : e.preview) lines.push_back({fit(l, tw, kSmall), kSmall, grey});
         if (e.item_line >= 0 || e.file_kind != "?") buttons.push_back({tr("chat.item"), ChatAct::Item});
+        if (e.thumb.width && (e.file_kind == "PNG" || e.file_kind == "JPG" || e.file_kind == "GIF" || e.file_kind == "BMP"))
+            buttons.push_back({tr("chat.full"), ChatAct::Full});
     }
     else
     {
@@ -1086,26 +1188,39 @@ void Hallway::draw_chat(float x, float top, float w, float bottom)
         for (const std::string& l : wrap(para, cols)) typed.push_back(l);
     constexpr size_t kBoxLines = 6;
     if (typed.size() > kBoxLines) typed.erase(typed.begin(), typed.end() - kBoxLines);
-    const float box_h = 12 + kBigLine * float(std::max<size_t>(1, typed.size()));
+    // One line of the box is exactly a button's height, so the row is even: the box, +, DRAW and
+    // SEND share their top and bottom edges, and a box of more lines grows upwards from there.
+    const float lines_h = kBigLine * float(std::max<size_t>(1, typed.size()));
+    const float box_h = std::max(button, lines_h + (button - kBigLine));
     const float box_y = keys_y - 10 - box_h;
-    auto bar_button = [&](float bx, float by, float bw, float bh, const std::string& label, float scale, int which) {
-        const SDL_FRect b{bx, by, bw, bh};
+    const float row_y = box_y + box_h - button;
+    auto bar_button = [&](float bx, float bw, const std::string& label, int which) {
+        const SDL_FRect b{bx, row_y, bw, button};
         SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 60);
         SDL_RenderFillRect(r_, &b);
         SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 255);
         SDL_RenderRect(r_, &b);
-        text(bx + (bw - text_width(label, scale)) / 2, by + (bh - 8 * scale) / 2, label, scale, white);
+        if (!label.empty()) text(bx + (bw - text_width(label, 1)) / 2, row_y + (button - 8) / 2, label, 1, white);
         chat_bar_.push_back({b, which});
     };
-    bar_button(x, box_y + box_h - button, button, button, "+", 3, 0);
+    // The +: two bars drawn to the pixel, so it sits exactly in the middle of its square.
+    bar_button(x, button, std::string(), 0);
+    {
+        const float arm = std::round(button / 2), bar = 4, cx = x + button / 2, cy = row_y + button / 2;
+        SDL_SetRenderDrawColor(r_, white.r, white.g, white.b, 255);
+        const SDL_FRect across{std::round(cx - arm / 2), std::round(cy - bar / 2), arm, bar}, down{std::round(cx - bar / 2), std::round(cy - arm / 2), bar, arm};
+        SDL_RenderFillRect(r_, &across);
+        SDL_RenderFillRect(r_, &down);
+    }
     const float send_w = 72, draw_w = 72;
-    bar_button(x + w - send_w, box_y + box_h - button, send_w, button, tr("chat.send"), 1, 2);
-    bar_button(x + w - send_w - 8 - draw_w, box_y + box_h - button, draw_w, button, tr("chat.draw"), 1, 1);
+    bar_button(x + w - send_w, send_w, tr("chat.send"), 2);
+    bar_button(x + w - send_w - 8 - draw_w, draw_w, tr("chat.draw"), 1);
     const float tx = x + button + 8, tw = w - button - 8 - send_w - draw_w - 16;
     SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 255);
     const SDL_FRect box{tx, box_y, tw, box_h};
     SDL_RenderRect(r_, &box);
-    for (size_t k = 0; k < typed.size(); ++k) text(tx + 8, box_y + 8 + kBigLine * float(k), typed[k], kBig, white);
+    const float text_y = box_y + (box_h - lines_h) / 2 + (kBigLine - 8 * kBig) / 2;
+    for (size_t k = 0; k < typed.size(); ++k) text(tx + 8, text_y + kBigLine * float(k), typed[k], kBig, white);
     for (size_t k = 0; k < keys.size(); ++k) text(x, keys_y + kSmallLine * float(k), keys[k], kSmall, grey);
 
     // The conversation, newest at the foot, scrolled up by chat_scroll_.

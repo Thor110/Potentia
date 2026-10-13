@@ -2517,3 +2517,75 @@ GitHub Desktop, open the folder, build Release or run the release script, done.
 - **Its whole title** (Edward, 12 October 2026): it is one game with two names, and written out
   in full it is *State Space : Near Zero : The Sieve of Potentia?.!!.?*. The store uses the
   first name, and the repository and a self-built copy use the second.
+
+**19.40 A file, its full size, and its variants (Edward, 13 October 2026).** His question, after
+opening Vitruvian.jpg from CHAT: J gives a small version, so what about the full file, its
+variants and its address? The scalability of it all has to be kept.
+
+*Notes.*
+- **One picture is a point on many lines at once,** and every line is a different scale:
+  - *The file itself,* on the binary line (GO TO IT): exactly its bytes, so its address is the
+    JPEG as stored, compression and all.
+  - *Its pixels at their own size,* on an image line of its width and height in rgb24 (FULL SIZE
+    on the card, built 13 October 2026): every pixel exactly the file's own, and the JPEG's
+    compression gone.
+  - *Fitted to any line* (J): 10x10 black and white, 64x64, any size and palette, by
+    canon-image-v2. Each is a smaller description of the same picture.
+- **The scale is the description's length.** At its full size the Vitruvian Man is 29.6 million
+  bits; at 64x64 black and white, 4,096; at 10x10, 100. A smaller line says less and costs less,
+  which is the trade every filter makes: what is kept is paid for, and the rest is dropped.
+- **What would join them up:** a card listing all three addresses together, with the bits each
+  costs, and walking between them (a picture's 10x10 version on the shelf beside its 64x64
+  version). The image line's sizes are a ladder, and a picture can climb it. Not built.
+
+**19.41 Asking other developers for their oddities (Edward, 13 October 2026).** His idea: reach
+out to ffmpeg's developers and others, to ask whether the game may include oddities of theirs:
+easter eggs, files, maps. It gives the game away and sells it, and either way it carries their
+work.
+
+*Notes.*
+- **What it would be:** anchors (`data/anchors`) given by the people who made them, each with its
+  maker's words, so that walking past one is meeting them. A verified anchor already names a file
+  by its SHA-256; a contributed anchor is one with a note of who gave it and why.
+- **Licences first.** ffmpeg is LGPL or GPL by how it is built. Sieve runs it as a separate
+  program and ships none of it, so nothing changes there. A paid release that bundled an ffmpeg
+  binary would have to offer its source and keep its licence beside it, which is easy but must
+  be done. Anything contributed needs its maker's permission in writing, and a licence that
+  allows both the free and the paid builds, since they are the same game (§19.39).
+
+**19.42 The web page's Buy or Build (Edward, 13 October 2026).** Built: `Pages/release.html`,
+linked from the index as "Buy or Build (Free If You Build It)".
+- **What is on it:** the two names, the three steps to build it, a PayPal link to buy or support
+  it, links to the current release and the repository, and "When It Is Ready" as the expected
+  release.
+- **The counters,** in the spirit of the orbital and audio pages, all exact (JavaScript BigInt):
+  - every 10x10 black-and-white picture, looked at one a second since the 24th of April 2026
+    (finished in the year 4.0 × 10^22);
+  - then every 32-character page (2.0 × 10^38);
+  - then every model of the AI line's default shape (4.5 × 10^9856).
+- **Later:** storefronts in place of PayPal, and the build video.
+
+**19.43 All the AIs folding in on themselves (Edward, 13 October 2026).** His words: "imagine all
+AIs folding in on themselves and figuring everything ever out, perhaps still being perplexed by
+themselves being in Pi for a while, then being ready to take a body and join humanity, maybe even
+figuring out what to do with the remainder of Pi lol."
+
+*Notes.*
+- **Pi as the library.** If π is normal (believed, not proved), every finite string appears in
+  its digits somewhere, so every model, conversation and life written down is in there, at an
+  address that is, on average, as long as the thing itself. That is the Library of Babel's rule
+  and Sieve's: being in the library is free, and being found costs exactly what it says.
+- **A model perplexed by itself:** "perplexity" is the very measure of how surprised a model is
+  by text. A model reading its own weights' digits in π would be maximally perplexed, since they
+  look like noise, until it recognised them as itself.
+- **For the game:** this is the story's arc in one sentence. Minds that begin as addresses, learn
+  the landscape, find themselves in it, and leave it for a body (GAME.md: the philosophy notes
+  are the game's lore).
+
+**19.44 Keeping the interface even (Edward, 13 October 2026).** His description of the interface
+as it should stay: even and distinguished. Rows line up, controls in a row share their height, a
+symbol sits in the exact middle of its button, and the corridors' wireframe style carries into
+the panels.
+- *Built:* CHAT's row. The box, +, DRAW and SEND share their top and bottom edges, and the + is
+  drawn as two bars to the pixel rather than as a letter of the font.
+- *Kept as a rule* in HANDOFF's house style, for every panel to come.

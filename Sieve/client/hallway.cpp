@@ -333,6 +333,16 @@ bool Hallway::has_filters() const
     return on_books() ? book_sieve_ && !book_sieve_->empty() : !stack().empty();
 }
 
+std::string Hallway::space_id() const
+{
+    return on_books()         ? books_->id()
+           : on_composition() ? comp().space->id()
+           : on_worlds()      ? world_space_->id()
+           : on_ai()          ? ai_space_->id()
+           : titled_here()    ? titled_here()->id()
+                              : line().space.id();
+}
+
 std::string Hallway::compute_filter_status() const
 {
     if (on_ai())

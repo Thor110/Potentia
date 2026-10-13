@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Potentia // Buy or Build</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    background:#0a0a0f;
+    color:#e0ddd8;
+    font-family:'Courier New',monospace;
+    font-size: 16px;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content: center;
+    padding:32px;
+  }
+  h1{font-size:16px;letter-spacing:0.3em;text-transform:uppercase;color:#666;margin-bottom:12px;text-align:center;white-space:nowrap;}
+  .sub{font-size:16px;color:#444;margin-bottom:20px;letter-spacing:0.15em;text-align:center;max-width:2000px;line-height:1.6;}
+  
+  .manifesto-line {
+    font-size: 16px;
+    color: #666;
+    margin-bottom: 16px;
+    letter-spacing: 0.1em;
+    text-align: center;
+    max-width: 2000px;
+    line-height: 1.5;
+  }
+  
+  /* Counter block matching the mechanical aesthetic */
+  .counter-box {
+    width: 100%;
+    max-width: 600px;
+    border: 1px solid #2a2a3a;
+    background: #0d0d14;
+    padding: 20px;
+    margin-bottom: 24px;
+    text-align: center;
+  }
+  .counter-title {
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: #666;
+    margin-bottom: 8px;
+    white-space: nowrap;
+  }
+  .counter-value {
+    font-size: 16px;
+    color: #e0ddd8;
+    letter-spacing: 0.1em;
+    font-weight: bold;
+    white-space: nowrap;
+  }
+
+  .section-label {
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: #444;
+    margin-bottom: 16px;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .nav-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    max-width: 600px;
+    margin-bottom: 24px;
+  }
+
+  /* Matching the viewfinder button style exactly */
+  .btn-link {
+    display: block;
+    text-decoration: none;
+    background: transparent;
+    border: 1px solid #2a2a3a;
+    color: #888;
+    padding: 14px 20px;
+    font-family: 'Courier New',monospace;
+    font-size: 16px;
+    letter-spacing: 0.15em;
+    cursor: pointer;
+    text-transform: uppercase;
+    text-align: center;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+
+  .btn-link:hover {
+    border-color: #555;
+    color: #ccc;
+    background: #111;
+  }
+
+  .footer {
+    margin-top: 16px;
+    font-size: 16px;
+    color: #222;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    text-align: center;
+    white-space: nowrap;
+  }
+</style>
+<style>
+  .steps {
+    width: 100%;
+    max-width: 700px;
+    border: 1px solid #2a2a3a;
+    background: #0d0d14;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+    color: #b0aca5;
+    line-height: 1.6;
+  }
+  .steps ol { margin-left: 24px; }
+  .steps li { margin-bottom: 8px; }
+  .steps a { color: #ccc; }
+  .counter-note {
+    font-size: 16px;
+    color: #555;
+    margin-top: 8px;
+    letter-spacing: 0.05em;
+    line-height: 1.5;
+    white-space: normal;
+  }
+  @media (max-width: 720px) {
+    h1, .section-label, .counter-title, .counter-value, .btn-link, .footer { white-space: normal; }
+    .counter-value { overflow-wrap: anywhere; }
+  }
+</style>
+</head>
+<body>
+
+<h1>State Space : Near Zero // The Sieve of Potentia</h1>
+<div class="sub">
+  One game, two names. This game is free if you build it yourself!
+</div>
+
+<div class="manifesto-line">The same game twice, with no changes whatsoever: built by you from the repository as The Sieve of Potentia, or ready to play as State Space : Near Zero.</div>
+<div class="manifesto-line">Buying it supports the work. Building it costs nothing but a few minutes.</div>
+
+<div class="section-label">Build It Yourself (Free)</div>
+<div class="steps">
+  <ol>
+    <li>Install <a href="https://visualstudio.microsoft.com/downloads/" target="_blank">Visual Studio 2022</a> with the "Desktop development with C++" workload, which includes CMake.</li>
+    <li>Clone <a href="https://github.com/Thor110/Potentia" target="_blank">the repository</a> in <a href="https://desktop.github.com/" target="_blank">GitHub Desktop</a>.</li>
+    <li>In Visual Studio, Open Folder (the Sieve folder), choose x64 Release, and Build All. The first build downloads SDL3 and takes a few minutes.</li>
+  </ol>
+  A video of the whole process, start to finish, is on its way.
+</div>
+
+<div class="section-label">Buy It Or Download It</div>
+<div class="nav-group">
+  <a href="https://www.paypal.com/paypalme/invaderzimtwo" target="_blank" class="btn-link">Buy / Support (PayPal)</a>
+  <a href="https://github.com/Thor110/Potentia/releases" target="_blank" class="btn-link">Download The Current Release</a>
+  <a href="https://github.com/Thor110/Potentia" target="_blank" class="btn-link">Build From The Repository</a>
+</div>
+
+<div class="counter-box">
+  <div class="counter-title">Expected Release</div>
+  <div class="counter-value">When It Is Ready</div>
+  <div class="counter-note">Storefronts will follow. Until then, the PayPal link above supports the work, and the release is the same download either way.</div>
+</div>
+
+<div class="counter-box">
+  <div class="counter-title">Expected Completion</div>
+  <div class="counter-value" id="pictures-walked">0</div>
+  <div class="counter-note" id="pictures-note">Every 10 &times; 10 black-and-white picture, looked at one a second since the 24th of April 2026.</div>
+</div>
+
+<div class="counter-box">
+  <div class="counter-title">And Then The Pages</div>
+  <div class="counter-value" id="pages-walked">0</div>
+  <div class="counter-note" id="pages-note">Every page of 32 characters (27 symbols: a to z and the space), read one a second.</div>
+</div>
+
+<div class="counter-box">
+  <div class="counter-title">And Then The Language Models</div>
+  <div class="counter-value" id="models-walked">0</div>
+  <div class="counter-note" id="models-note">Every model of the AI line in its default shape (8,192 weights of 4 bits): 2<sup>32768</sup> of them, tried one a second.</div>
+</div>
+
+<div class="nav-group">
+  <a href="../index.html" class="btn-link">Return to Core Architecture</a>
+</div>
+
+<div class="footer">
+  Deterministic Sieve &middot; Free If You Build It
+</div>
+
+<script>
+    // The reference epoch: the audio archive's (the 24th of April 2026). Every count below is exact:
+    // BigInt arithmetic, one unit a second, and the year it would end in (365.2425 days a year).
+    const EPOCH_MS = Date.UTC(2026, 3, 24);
+    const SECONDS_PER_YEAR = 31556952n; // 365.2425 days
+    const PICTURES = 2n ** 100n;        // 10 x 10 pixels, black or white
+    const PAGES = 27n ** 32n;           // 32 characters of 27
+    const MODELS = 2n ** 32768n;        // the AI line at its defaults: 8,192 weights of 4 bits
+
+    function grouped(n) {
+        return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    }
+
+    // n as d.ddd x 10^k, for numbers too long to read.
+    function scientific(n) {
+        const s = n.toString();
+        if (s.length <= 21) return grouped(n);
+        return s[0] + "." + s.slice(1, 4) + " \u00d7 10^" + (s.length - 1);
+    }
+
+    // done / total as a percentage, written out in full: the zeros are the point.
+    function percent(done, total) {
+        const digits = 30n;
+        const scaled = (done * 100n * 10n ** digits) / total;
+        let s = scaled.toString().padStart(Number(digits) + 1, "0");
+        s = s.slice(0, s.length - Number(digits)) + "." + s.slice(s.length - Number(digits));
+        return s.replace(/0+$/, "").replace(/\.$/, ".0") + "%";
+    }
+
+    function show(id, noteId, total, what, began) {
+        const now = BigInt(Date.now());
+        const seconds = now > BigInt(began) ? (now - BigInt(began)) / 1000n : 0n;
+        const left = total - seconds;
+        const year = BigInt(new Date().getUTCFullYear()) + left / SECONDS_PER_YEAR;
+        document.getElementById(id).innerHTML = grouped(seconds) + " " + what + "<br>" + percent(seconds, total) + " of them";
+        const note = document.getElementById(noteId);
+        if (!note.dataset.base) note.dataset.base = note.innerHTML;
+        note.innerHTML = note.dataset.base + " Finished in the year " + scientific(year) + ".";
+    }
+
+    function update() {
+        show("pictures-walked", "pictures-note", PICTURES, "pictures", EPOCH_MS);
+        // The pages begin when the pictures end, so no page has been read yet.
+        document.getElementById("pages-walked").innerText = "0 of " + scientific(PAGES) + " pages";
+        document.getElementById("models-walked").innerText = "0 of " + scientific(MODELS) + " models";
+        const after = BigInt(new Date().getUTCFullYear()) + PICTURES / SECONDS_PER_YEAR;
+        const pagesNote = document.getElementById("pages-note");
+        if (!pagesNote.dataset.base) pagesNote.dataset.base = pagesNote.innerHTML;
+        pagesNote.innerHTML = pagesNote.dataset.base + " Begun in the year " + scientific(after) + "; finished in the year " + scientific(after + PAGES / SECONDS_PER_YEAR) + ".";
+        const modelsNote = document.getElementById("models-note");
+        if (!modelsNote.dataset.base) modelsNote.dataset.base = modelsNote.innerHTML;
+        modelsNote.innerHTML = modelsNote.dataset.base + " Finished in the year " + scientific(after + (PAGES + MODELS) / SECONDS_PER_YEAR) + ".";
+    }
+
+    setInterval(update, 1000);
+    update();
+</script>
+
+</body>
+</html>
