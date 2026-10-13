@@ -629,7 +629,8 @@ void Hallway::draw_in_hand(float W, float H)
         float tx = x + 14;
         for (int t = 0; t < tabs; ++t)
         {
-            const std::string label = tr(t == chat_tab() ? "hand.tab.chat"
+            const std::string label = tr(t == chat_tab()    ? "hand.tab.chat"
+                                         : t == chain_tab() ? "hand.tab.chain"
                                          : t == 0       ? "hand.tab.item"
                                          : t == 1       ? "hand.tab.cost"
                                          : t == 2       ? "hand.tab.sort"
@@ -648,6 +649,7 @@ void Hallway::draw_in_hand(float W, float H)
     }
     hand_view_rect_ = {};
     if (hand_tab_ == chat_tab()) { draw_chat(x + 14, cy, pw - 28, y + ph - 8); return; }
+    if (hand_tab_ == chain_tab()) { draw_chain(x + 14, cy, pw - 28, y + ph - 8); return; }
     if (hand_tab_ == 1) { draw_cost(bk, x, cy, pw, y + ph); return; }
     if (hand_tab_ == 2) { draw_sort(bk, x, cy, pw, y + ph - 16); return; }
     if (hand_tab_ == 3) { draw_meta(bk, x, cy, pw, y + ph - 16); return; }

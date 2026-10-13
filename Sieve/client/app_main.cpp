@@ -134,6 +134,9 @@ const char* kUsage =
     "  --picture-model DIR DRAW uses this picture model's run folder\n"
     "  --chat-press KEYS   keys pressed in CHAT after those (e.g. Ctrl+G: the newest card's GO TO IT)\n"
     "  --print-system-prompt  print the system prompt a model given as a file is told here\n"
+    "  --chain             show the CHAIN tab (with --take on the AI line); --chain-file PATH opens a\n"
+    "                      chain, --chain-press KEYS presses keys there, --chain-save PATH saves it;\n"
+    "                      --talk \"/chain WORDS\" runs it\n"
     "  --tailor PATH       with --screenshot, the item in hand on COST: K, waited for, and what Return\n"
     "                      would apply saved to PATH as a settings file\n"
     "  --save-item PATH    then save it as a file (F on the item page), to PATH\n"
@@ -892,6 +895,21 @@ int run(const Args& a)
         }
         if (a.has("chat-draw"))
             for (uint32_t i = a.get_positive("chat-draw", 1); i > 0; --i) hall->chat_draw();
+        // CHAIN: a chain opened (--chain-file), the tab shown (--chain), keys pressed there
+        // (--chain-press), and the chain saved (--chain-save); /chain in --talk runs it.
+        if (a.has("chain-file")) hall->chain_load(a.get("chain-file"));
+        if (a.has("chain") || a.has("chain-press")) hall->open_chain();
+        if (a.has("chain-press"))
+            for (const auto& [key, mod] : parse_presses(a.get("chain-press")))
+            {
+                SDL_Event e{};
+                e.type = SDL_EVENT_KEY_DOWN;
+                e.key.key = key;
+                e.key.mod = mod;
+                bool quit = false;
+                hall->handle(e, quit);
+            }
+        if (a.has("chain-save")) hall->chain_save(a.get("chain-save"));
         if (a.has("talk")) hall->talk(a.get("talk"));
         if (a.has("chat-attach") || a.has("chat-draw") || a.has("talk"))
         {

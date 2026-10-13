@@ -282,28 +282,47 @@ std::string Hallway::system_prompt()
 // fit in its positions, it starts again and says so.
 void Hallway::talk_file(const std::string& said)
 {
-    if (!file_model_)
+    if (!load_file_model())
     {
-        try
-        {
-            busy(tr("chat.loading"), [&] { file_model_ = cli::load_model_folder(from_u8(text_model_path_)); });
-        }
-        catch (const std::exception& ex)
-        {
-            // Not loaded: said so, and the model in hand answers instead (Ctrl+M tries the file again).
-            chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf("chat.model_failed", {ex.what()})));
-            talk_to_file_ = false;
-            talk(said);
-            return;
-        }
+        // Not loaded: said so, and the model in hand answers instead (Ctrl+M tries the file again).
+        talk_to_file_ = false;
+        talk(said);
+        return;
     }
-    cli::ModelFolder& m = *file_model_;
     const std::string message = file_context_ + said;
     file_context_.clear();
+    const std::optional<std::string> reply = file_reply(message, talk_ + said);
+    if (!reply) return;
+    talk_ += trf("talk.you", {said}) + "\n" + trf("talk.it", {*reply}) + "\n";
+    chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::You, said));
+    ChatEntry it = entry_of<ChatEntry>(ChatEntry::Kind::It, *reply);
+    it.model = file_model_->name;
+    chat_.push_back(std::move(it));
+    chat_scroll_ = 0;
+}
+
+bool Hallway::load_file_model()
+{
+    if (file_model_) return true;
+    try
+    {
+        busy(tr("chat.loading"), [&] { file_model_ = cli::load_model_folder(from_u8(text_model_path_)); });
+        return true;
+    }
+    catch (const std::exception& ex)
+    {
+        chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf("chat.model_failed", {ex.what()})));
+        return false;
+    }
+}
+
+std::optional<std::string> Hallway::file_reply(const std::string& message, const std::string& seed)
+{
+    cli::ModelFolder& m = *file_model_;
     sieve::llm::Sampling s;
     s.temperature = 0.7f;
     s.top_p = 0.9f;
-    const auto digest = sieve::Sha256::hash(talk_ + said);
+    const auto digest = sieve::Sha256::hash(seed);
     s.seed = 0;
     for (int i = 0; i < 8; ++i) s.seed = (s.seed << 8) | digest[size_t(i)];
     sieve::llm::Sampler sampler(s);
@@ -311,7 +330,7 @@ void Hallway::talk_file(const std::string& said)
     if (need >= max)
     {
         chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, tr("chat.too_long")));
-        return;
+        return std::nullopt;
     }
     bool restarted = false;
     std::string reply;
@@ -350,19 +369,14 @@ void Hallway::talk_file(const std::string& said)
     catch (const std::exception& ex)
     {
         chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf("chat.model_failed", {ex.what()})));
-        return;
+        return std::nullopt;
     }
     if (restarted)
     {
         talk_ += tr("talk.full") + "\n";
         chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, tr("talk.full")));
     }
-    talk_ += trf("talk.you", {said}) + "\n" + trf("talk.it", {reply}) + "\n";
-    chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::You, said));
-    ChatEntry it = entry_of<ChatEntry>(ChatEntry::Kind::It, reply);
-    it.model = m.name;
-    chat_.push_back(std::move(it));
-    chat_scroll_ = 0;
+    return reply;
 }
 
 size_t Hallway::give_file_model(const std::string& what, const std::string& text)
@@ -605,11 +619,29 @@ std::string Hallway::ChatEntry::heading() const
     return trf(melody() ? "chat.melody" : "chat.figure", {std::to_string(number), model});
 }
 
-void Hallway::chat_show_unit(ChatEntry e)
+std::string Hallway::unit_rows(const ChatEntry& e) const
 {
-    std::string rows; // what the model is given: a picture's rows, a melody's notation
-    if (e.melody()) rows = sieve::notes_to_notation(sieve::note_set_of(e.symbols), e.cells);
-    else
+    if (e.melody()) return sieve::notes_to_notation(sieve::note_set_of(e.symbols), e.cells);
+    // Its rows: a character a cell (the background a dot), a newline a row.
+    const sieve::Palette& pal = sieve::palette_by_id(e.palette);
+    const uint32_t background = pal.nearest(sieve::Rgb{255, 255, 255});
+    const char kDigits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+    std::string rows;
+    for (uint32_t y = 0; y < e.height; ++y)
+    {
+        for (uint32_t x = 0; x < e.width; ++x)
+        {
+            const uint32_t c = e.cells[size_t(y) * e.width + x];
+            rows.push_back(c == background ? '.' : pal.size() <= 2 ? '#' : kDigits[c % 36]);
+        }
+        if (y + 1 < e.height) rows.push_back('\n');
+    }
+    return rows;
+}
+
+bool Hallway::chat_show_unit(ChatEntry e)
+{
+    if (!e.melody())
     {
         // The vault looks at pictures as at any other.
         const sieve::Palette& pal = sieve::palette_by_id(e.palette);
@@ -622,21 +654,10 @@ void Hallway::chat_show_unit(ChatEntry e)
         if (cli::vault::withheld_picture(rgba.data(), e.width, e.height))
         {
             chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf("chat.withheld", {e.heading()})));
-            return;
-        }
-        // Its rows: a character a cell (the background a dot), a newline a row.
-        const uint32_t background = pal.nearest(sieve::Rgb{255, 255, 255});
-        const char kDigits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
-        for (uint32_t y = 0; y < e.height; ++y)
-        {
-            for (uint32_t x = 0; x < e.width; ++x)
-            {
-                const uint32_t c = e.cells[size_t(y) * e.width + x];
-                rows.push_back(c == background ? '.' : pal.size() <= 2 ? '#' : kDigits[c % 36]);
-            }
-            if (y + 1 < e.height) rows.push_back('\n');
+            return false;
         }
     }
+    const std::string rows = unit_rows(e); // what the model is given: a picture's rows, a melody's notation
     if (talking_to_file())
     {
         e.with_next = true;
@@ -648,6 +669,7 @@ void Hallway::chat_show_unit(ChatEntry e)
     talk_ += e.heading() + ": " + e.address + "\n";
     chat_.push_back(std::move(e));
     chat_scroll_ = 0;
+    return true;
 }
 
 namespace {
@@ -708,6 +730,14 @@ void Hallway::chat_command(const std::string& line)
         else e.width = l.image.width, e.height = l.image.height, e.palette = l.image.palette->id();
         e.address = l.space.address_of(e.cells, AddressMode::Positional);
         chat_show_unit(std::move(e));
+        return;
+    }
+    if (verb == "chain") // the chain of the CHAIN tab, given the rest of the line
+    {
+        const size_t at = line.find("chain") + 5;
+        std::string input = at < line.size() ? line.substr(at) : std::string();
+        input.erase(0, input.find_first_not_of(' ') == std::string::npos ? input.size() : input.find_first_not_of(' '));
+        chain_run(input);
         return;
     }
     if (verb == "prompt") // what a model given as a file is told, word for word

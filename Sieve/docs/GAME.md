@@ -19,6 +19,17 @@ tool's design: the library that holds everything, meaning as rare and found, min
 addresses (§19.43: all the AIs folding in on themselves, perplexed to find themselves in π, then
 taking a body and joining humanity). When the story is written, it is drawn from them.
 
+**Stories in the noise** (Edward, 13 October 2026, IDEAS §19.45): coincidences, recognition and
+pareidolia become the game's stories, kept as a contained lens on the madness of the Library of
+Babel. Every face in a cloud, message in static or tune almost heard is a survivor of a stack the
+player did not mean to build, and the game can show its odds beside it, so wonder stays honest.
+Around it all, the fun side of one equation: every unit of every line is a number, every number is
+every thing at once, and everything crosses over freely through the binary line.
+
+**An engine that could make every game** (IDEAS §19.47): a game as a starting state and a rule.
+That means content first (which exists), then rules as units (a Life-like line), then bodies with
+exact physics, then representation from voxels to triangles, then an optional learned upscaler.
+
 **First, when work turns to the game** (Edward, 6 October 2026): the colour-blindness pass (IDEAS
 2.4). Nine lines, filter verdicts and the map all mean things by hue alone.
 

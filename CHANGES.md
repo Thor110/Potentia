@@ -1,115 +1,100 @@
-# The system prompt, FULL SIZE, an even CHAT row, Buy or Build, and the notes
+# CHAIN: models one after another, and the notes that wrap it all up
 
-Against your main ("image levels"). Copy `Sieve/` over yours. This time there are two files at
-the repository's root as well, `index.html` and `Pages/release.html` (new). Other new files:
-- `Sieve/data/prompts/sieve-system-v1.txt`
-- `Sieve/docs/SYSTEM-PROMPT.md`
-- `Sieve/tools/check_vectors.py`
-- `Sieve/tools/run_tests.bat`
+Against your main ("prompt fullsize"). Copy `Sieve/` over yours. There is one new source file,
+`Sieve/client/chain.cpp`, already in CMakeLists.txt.
 
-## The full file and its variants: FULL SIZE
-- **What you saw:** J on a picture card gives the small version, because it fits the picture to
-  the image line's size. GO TO IT already gives the whole file: its exact bytes on the binary
-  line, and its full address.
-- **New: FULL SIZE** (or F) on a picture card (PNG, JPG, GIF, BMP). It opens the picture on an
-  image line of its own width and height, in full colour (rgb24), so every pixel is the file's
-  own. The hallway is built again with that line, as DRAW's GO TO IT does for another size.
-- **Vitruvian.jpg:** 949 x 1300, 1,233,700 pixels, exactly as it looks (screenshot sent with the
-  zip). A room full of pictures that size takes a while to fill: about a minute here, on worker
-  threads while you walk.
-- **The three, side by side:**
-  - the file (GO TO IT);
-  - its pixels at their own size (FULL SIZE);
-  - fitted to any line (J), at any size and palette.
+## CHAIN, a tab of its own beside CHAT
+- **Where it is:** the tab just before CHAT, so C reaches it on the way: ITEM, COST, SORT, CHAIN,
+  CHAT.
+- **What it shows:** the chain as a row of nodes with arrows: YOU (in CHAT), then each model in
+  turn.
+- **What it starts as:** the three trained models in one chain: universalbibliothek's text model,
+  then figures-2x32, then melodies-2x64.
+- **Running it:** type `/chain` and some words in CHAT. Every stage's result appears there as a
+  reply or a card, with GO TO IT, PLAY and SAVE as usual (screenshot sent with the zip).
+- **How each stage is fed:**
+  - *A text model* (the model in hand, a trained text run, or the model file) continues what it is
+    given.
+  - *A picture or melody model* takes no input, so what it is given chooses its noise (a generator
+    seeded by its SHA-256). The same words make the same picture.
+  - *Each stage after* is given what the one before made: text as it is, a picture as its rows, a
+    melody as its notation.
+- **Adjustable:**
+  - Up and Down choose a stage;
+  - Left and Right change its model, through every model there is, of any kind and shape;
+  - N adds a stage after it; Delete takes it away;
+  - Ctrl+Up and Ctrl+Down move it;
+  - Enter goes to CHAT with `/chain ` already typed.
+- **Savable:** Ctrl+S and Ctrl+O save and open a `.chain` file. The format, `sieve-chain-v1`, is in
+  SPECIFICATIONS §12.0h: one stage a line, such as `run universalbibliothek` or
+  `draw figures-2x32`.
+- **Mappable, for now as a row:** branching chains kept in the node graph's maps are noted next
+  (IDEAS §19.46).
+- **Deterministic:** a chain of picture and melody models makes the same units on every machine,
+  and CI checks three addresses. With text models it is the same on the same machine; their
+  arithmetic is floating point.
+- **Found and fixed here:** my first version picked a picture's noise as "the k-th noise" for a
+  large k. That meant drawing every noise before it, and a run took minutes. Now the noise is drawn
+  straight from a seeded generator, and a whole chain runs in under a second.
+- **Scripted runs:** `--chain`, `--chain-file PATH`, `--chain-press KEYS` and `--chain-save PATH`.
 
-  IDEAS §19.40 sets out how they could be joined into one ladder of scales.
+## The notes (IDEAS §19.45–19.53, GAME.md)
+- **§19.45 Stories in the noise, and one equation.**
+  - *Pareidolia is a filter with a false-positive rate,* so every coincidence can carry its exact
+    odds: a contained lens on the madness of Babel.
+  - *The one equation already exists:* a unit read as a number, one bijection per shape.
+  - *Everything crosses over freely* through the binary line.
+- **§19.46 CHAIN:** what was built, and what is next (branches in the node graph, steering, larger
+  models).
+- **§19.47 An engine that could make every game.** A game is a starting state and a rule (Life is
+  enough to compute anything). The order to build it in:
+  1. content (which exists);
+  2. rules as units (a Life-like line);
+  3. bodies with exact physics;
+  4. voxels to triangles;
+  5. an optional learned upscaler of our own, since DLSS is NVIDIA's and closed.
 
-## CHAT's row, even
-- **Heights:** the text box, +, DRAW and SEND now share their top and bottom edges. A box of more
-  lines grows upwards from them.
-- **The +** is drawn as two bars to the pixel, so it sits exactly in the middle of its square.
-- **The rule:** HANDOFF's house style now keeps your description, "even and distinguished", for
-  every panel to come.
+  The honest limit: almost nothing on the line is a game, so the work is in the filters that find
+  the playable ones.
+- **§19.48 The documentation inside the game:** `/docs`, with the documents on the lines and every
+  catalogued thing linked by its SHA-256.
+- **§19.49 The completion line on the main menu:**
+  - in colour, with notation, one line per dimension, folding into "and N more" so it always
+    fits;
+  - one specification for the numbers, with CI keeping the website and the game in sync.
+- **§19.50 Metrics for every build:** written by run_tests.bat after the tests pass, then charted
+  over time on the website and on a wall in the world. A change of measure starts a new series.
+- **§19.51 A decompilation engine:** compiling as a filter on the code line, with analysis first
+  (as Ghidra does) and search for small pieces. Mind the law on others' software.
+- **§19.52 The Encryption Engine: anything as anything.**
+  - *The catalogue of combinations:* payload, key, recipe, depth and output shape, each a line,
+    all countable.
+  - *"As anything" has a standard name:* format-preserving encryption. Sieve's scrambled ordering
+    is already a Feistel network, as FF1 and FF3-1 are, so with your own key every line is a cipher
+    of its own shape (for play and study, not secrets).
+  - *What flattening shows:* every output is reachable, so the key is what makes one path the
+    message.
+- **§19.53 The plan, in order of importance:**
+  1. the Encryption Engine, stage 1;
+  2. metrics for every build, charted;
+  3. models steered by the filters;
+  4. the documentation in the game;
+  5. the completion line on the main menu, in sync with the website;
+  6. chains as graphs;
+  7. rules as units;
+  8. research (decompilation, voice, code).
+- **GAME.md:** stories in the noise, and the engine.
 
-## The system prompt: sieve-system-v1 (docs/SYSTEM-PROMPT.md)
-- **What it is:** what a model given as a file is told about where it is and what it is, before
-  you say anything. It is written as a specification, like the manifest:
-  - pinned by its SHA-256, which the unit tests check;
-  - never edited, so a change is v2, and v1 stays;
-  - honest about what a model can and cannot do here.
-- **What it says:**
-  - *Its opening line,* made from your description: a near-infinite, procedurally generated
-    landscape that in principle contains everything.
-  - *Where they are:* lines, units, addresses, filters, stacks and survivors.
-  - *Who they are and what they can do:* they cannot run commands yet, only suggest them.
-  - *How to answer:* exactly, briefly, in the program's words.
-  - *Then the place, now:* the line and its space, the ordering, the filters, the model in hand,
-    and which model it is.
-- **Where your words are:** quoted in full in SYSTEM-PROMPT.md and in GAME.md.
-- **Seeing it:**
-  - `/prompt` in CHAT shows exactly what the model is told;
-  - `hallway --print-system-prompt` prints it;
-  - CI checks the printed text against the file, byte for byte.
-- **Small models:** a model with too few positions for it is told the old one-liner, and CHAT
-  says so.
-  - *Found here:* the tiny test model broke silently with the full prompt, which is why.
-- **Shipped:** the build copies `data/prompts` next to the hallway, and `make_release.py`
-  includes it.
+## Also
+- **SPECIFICATIONS §12.0h:** `sieve-chain-v1`, exactly, seeds and all.
+- **README:** CHAIN and `/chain`.
+- **HANDOFF:** a new entry.
 
-## Testing on your side: tools\run_tests.bat
-- **What it runs:**
-  - the unit tests of every build in `out\build` (Debug, RelWithDebInfo, Release);
-  - then, if Python is there, every conformance vector through the oracle
-    (`tools\check_vectors.py`, the same 36 checks CI runs).
-- **How it reports:** a summary line for each part.
-- **Speed:** the oracle part takes about a quarter of an hour; `run_tests.bat quick` skips it.
-
-## The web page: Buy or Build
-- **`Pages/release.html`,** linked from the index as "Buy or Build (Free If You Build It)", in the
-  same style as the other pages.
-- **What is on it:**
-  - the two names;
-  - the three steps to build it;
-  - your PayPal link to buy or support it;
-  - the current release and the repository;
-  - "When It Is Ready" as the release date.
-- **The counters,** exact (BigInt), and absurd as asked:
-  - every 10x10 black-and-white picture, one a second since the 24th of April 2026 (your audio
-    page's epoch): finished in the year 4.0 × 10^22;
-  - then every 32-character page: 2.0 × 10^38;
-  - then every model of the AI line's default shape: 4.5 × 10^9856.
-- **Change the epoch** in one line at the top of its script, if you'd rather count from another
-  date.
-
-## Notes (IDEAS §19.40–19.44, GAME.md, HANDOFF)
-- **§19.40** A file, its full size, and its variants: one picture is a point on many lines, each a
-  different scale.
-- **§19.41** Asking ffmpeg's developers and others for their oddities: easter eggs, files and maps
-  as anchors from the people who made them. Licences first, since the free and paid builds are
-  the same game.
-- **§19.42** The Buy or Build page.
-- **§19.43** Your note on all the AIs folding in on themselves, in your words, with what it means
-  here: π as the library, and "perplexity" being literally the measure of a model's surprise.
-- **§19.44** Keeping the interface even.
-- **GAME.md:** the one-sentence description, and "the philosophy is the lore".
-- **HANDOFF:**
-  - more of the testing on your side;
-  - this conversation has not been handed off, and whoever continues keeps the same principles;
-  - a new entry.
-
-## Checked here
-- **Unit tests:** 76,407 checks, 0 failures (once; no hardware SHA-256 here), including the
-  prompt's pinned hash.
-- **Every oracle vector:** 36 of 36 reproduced, through the new `check_vectors.py`.
-- **CI lines:**
-  - the CHAT lines, including the model file and the new prompt lines, on a clean copy of the
-    rebuilt hallway;
-  - FULL SIZE on Vitruvian.jpg, with a 949x1300 rgb24 line.
-- **The web page:** rendered in headless Chromium at 1280 and 520 pixels wide. Chromium won't lay
-  out narrower than 500, so a phone itself wasn't tried.
-- **Not tried here:**
-  - *`run_tests.bat`,* since there is no Windows here.
-  - *FULL SIZE's rebuild of the hallway,* since scripted runs don't follow requests. It is the
-    same path DRAW's GO TO IT already uses.
-  - *A large model given the full prompt,* since there is none here. The tiny model shows the
-    fallback.
+## Checked here (kept short, as you asked)
+- **Unit tests:** 76,407 checks, 0 failures.
+- **New CI lines,** run on a clean copy, passing:
+  - the tab edited by keys and saved, byte for byte;
+  - a four-stage chain run;
+  - a picture-and-melody chain, address for address.
+- **Run again:** the CHAT, model-file and prompt lines, since `talk_file` was split into
+  `load_file_model` and `file_reply`.

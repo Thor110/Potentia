@@ -1598,6 +1598,8 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
         pause_event(e, quit);
         return;
     }
+    // The CHAIN tab's keys (Up, Down, Left, Right, N, Delete, Enter, Ctrl+S, Ctrl+O) before walking's.
+    if (input_ == Input::None && e.type == SDL_EVENT_KEY_DOWN && in_hand_ && in_hand_->ai && hand_tab_ == chain_tab() && chain_key(e.key)) return;
     if (input_ != Input::None)
     {
         if (e.type == SDL_EVENT_TEXT_INPUT) text_ += e.text.text;
@@ -1920,6 +1922,7 @@ void Hallway::render()
     ++portal_frame_;
     item_save_poll(); // an item F asked to save, once the dialog has said where
     chat_poll();      // the CHAT tab's files to give and cards to save, from its dialogs
+    chain_poll();     // the CHAIN tab's chain to open or save, from its dialogs
     vault_ahead();    // your room's files checked by the vault ahead of a look at them
     vault_collect();  // and the verdicts on pictures, from their workers
     const Theme& th = theme();

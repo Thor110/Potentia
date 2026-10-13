@@ -658,6 +658,10 @@ public:
     // The CHAT tab (chat.cpp): Enter on a model of the AI line in hand. Scripted runs open it,
     // attach a file (read, weighed and given to the model) and draw figures with its picture model.
     void open_chat();
+    // The CHAIN tab shown (a model of the AI line in hand); a chain opened from, or saved to, a file.
+    void open_chain();
+    void chain_load(const std::string& path);
+    void chain_save(const std::string& path);
     void chat_attach(const std::string& path);
     void chat_draw();
     // The models given as files (the setup menu's AI rows; app_settings.hpp [models]): a language
@@ -1475,6 +1479,8 @@ private:
     // (IDEAS §19.13)
 public:
     void chat_saved(const std::string& path); // the save dialog's choice (any thread)
+    // Where a CHAIN dialog chose to open a chain from, or save it to (any thread; used next frame).
+    void chain_chosen(const std::string& path, bool save);
     void chat_picked(const std::vector<std::string>& paths); // the file dialog's (any thread)
 
 private:
@@ -1515,10 +1521,45 @@ private:
     void chat_poll();
     // The CHAT tab's index (the last tab, with a model of the AI line in hand), or -1.
     int chat_tab() { return in_hand_ && in_hand_->ai ? hand_tabs() - 1 : -1; }
+    // The CHAIN tab's index (just before CHAT, so C reaches it before CHAT takes the keys), or -1.
+    int chain_tab() { return in_hand_ && in_hand_->ai ? hand_tabs() - 2 : -1; }
+
+    // ---- CHAIN (client/chain.cpp, IDEAS §19.46): models one after another, each given what the one
+    // before it made. A text model continues it; a picture or melody model, which takes no input,
+    // is given it as the choice of its noise. Kept as a sieve-chain-v1 file.
+    struct ChainStage
+    {
+        enum class Kind { Hand, File, Run, Draw } kind = Kind::Hand;
+        std::string name; // a run's or picture model's name in the training folders, or its path
+    };
+    // Every model a stage can be, in the order Left and Right go through them.
+    std::vector<ChainStage> chain_choices();
+    std::string chain_stage_name(const ChainStage& s);
+    void chain_defaults();
+    // /chain TEXT: the chain run on TEXT, each stage's result in the conversation.
+    void chain_run(const std::string& input);
+    bool chain_key(const SDL_KeyboardEvent& k); // true when the CHAIN tab used the key
+    void draw_chain(float x, float top, float w, float bottom);
+    void chain_poll(); // every frame: what its dialogs chose
+    std::string chain_text() const;                  // as sieve-chain-v1
+    void chain_parse(const std::string& text);        // throws on a malformed file
+    std::vector<ChainStage> chain_;
+    bool chain_ready_ = false; // the defaults made, the first time the tab shows
+    int chain_sel_ = 0;
+    std::map<std::string, std::shared_ptr<sieve::llm::Model>> chain_text_models_; // runs' models, by name
+    std::map<std::string, std::shared_ptr<sieve::cli::PictureModel>> chain_picture_models_;
+    std::optional<std::string> chain_load_from_, chain_save_to_; // what the dialogs chose
+    // The model file loaded if it is not yet (false, and a note, if it cannot be); and its reply to
+    // `message`, its choices seeded by `seed`, without showing either (nothing, and a note, if it
+    // does not fit or fails).
+    bool load_file_model();
+    std::optional<std::string> file_reply(const std::string& message, const std::string& seed);
+    // A picture's rows (a character a cell) or a melody's notation: what a model is given of it.
+    std::string unit_rows(const ChatEntry& e) const;
     void chat_send();
     // A picture or melody card made (by DRAW or a command): shown, given to the model, and noted
     // in the transcript (the vault looking at a picture first).
-    void chat_show_unit(ChatEntry e);
+    bool chat_show_unit(ChatEntry e); // false when the vault withheld it
     // A line typed in CHAT that begins with '/': a command (/random picture, /random melody, /help).
     void chat_command(const std::string& line);
     void chat_act(size_t entry, ChatAct act);

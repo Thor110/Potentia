@@ -2783,3 +2783,34 @@ cover and a title.
   §19.42 the web page; §19.43 all the AIs folding in on themselves; §19.44 keeping the interface
   even.
 - **GAME.md:** the one-sentence description, and the philosophy as the lore.
+
+### CHAIN, and the notes to wrap it all up (13 October 2026)
+- **CHAIN** (client/chain.cpp, SPECIFICATIONS §12.0h, IDEAS §19.46):
+  - *The tab:* `chain_tab()` is `hand_tabs() - 2`, so C reaches it before CHAT takes the keys.
+    `hand_tabs()` adds two for a model of the AI line.
+  - *Its keys:* `chain_key()` takes them in `handle_event` before walking's.
+  - *Running:* `/chain WORDS` is `chain_run()`.
+    - Text stages use a fresh model each time (the model in hand's, or a run's via
+      `model_run_of`, cached), or the model file through `file_reply()`.
+    - Picture and melody stages draw their noise from splitmix64 seeded by the stage's SHA-256
+      seed and make it with `diffusion::make_picture`.
+    - *Found here:* drawing the k-th noise for a large k was far too slow, since it walks every
+      noise before it.
+  - *The file:* `sieve-chain-v1`, saved and opened with dialogs. Scripted runs use `--chain`,
+    `--chain-file`, `--chain-press` and `--chain-save`.
+  - *Refactors:* `talk_file` is now `load_file_model()` plus `file_reply()`; `unit_rows()` is
+    shared; `chat_show_unit()` returns false when the vault withholds.
+  - *CI:* the tab edited by keys and saved; the four-stage chain run (each stage checked to have
+    run); a picture-and-melody chain checked address for address.
+- **IDEAS §19.45 to §19.53:**
+  - stories in the noise, and one equation;
+  - CHAIN;
+  - an engine that could make every game;
+  - the documentation inside the game;
+  - the completion line on the main menu, kept in sync with the website;
+  - metrics for every build, charted;
+  - a decompilation engine;
+  - the Encryption Engine as format-preserving encryption;
+  - the plan in order of importance (§19.53).
+- **GAME.md:** stories in the noise, and the engine that could make every game.
+- **Next:** the Encryption Engine, stage 1 (§19.52, first in §19.53).

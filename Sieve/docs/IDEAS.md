@@ -2589,3 +2589,213 @@ the panels.
 - *Built:* CHAT's row. The box, +, DRAW and SEND share their top and bottom edges, and the + is
   drawn as two bars to the pixel rather than as a letter of the font.
 - *Kept as a rule* in HANDOFF's house style, for every panel to come.
+
+**19.45 Stories in the noise, and one equation for everything (Edward, 13 October 2026).** His
+words: the crazy stories, coincidences, recognition and pareidolia can be turned into stories for
+the game, kept as a contained lens focused on the madness of the Library of Babel's potential; and
+everything oriented around the fun side of one perfect mathematical equation for all games,
+simulations and information, all in one thing, forever, for the future of mankind to enjoy, where
+all things can cross over freely in any way, shape or form.
+
+*Notes.*
+- **Pareidolia is a filter with a false-positive rate.** Seeing a face in a cloud is a "face"
+  filter passing noise. Sieve can say exactly how often: a stack that keeps faces keeps some
+  fraction of random pictures too, and that fraction is countable. So a coincidence in the game can
+  carry its own odds ("one noise in 2^31 shows a face this clear"). That is the contained lens:
+  the madness of Babel, with the arithmetic beside it, so that wonder never turns into a false
+  claim.
+- **Stories from it:**
+  - *A message found in the noise,* and the odds that it is chance;
+  - *a face in a picture of nothing,* with its rate;
+  - *two strangers' books that agree word for word,* the birthday paradox at the library's scale;
+  - *a melody that is almost a known tune* (§19.8's near-matches).
+
+  Each is a survivor of a stack the player did not mean to build.
+- **The one equation already exists, and it is small.** Every line is the same function: a unit's
+  digits read as a number in base B (positional), or that number put through a keyed permutation
+  (scrambled). One bijection per shape; everything else is the choice of shape and the filters.
+  The binary line holds every file, so every other line's units are also there, as files: that is
+  where all things cross over freely. A game, a picture and a model are the same kind of thing, a
+  number, seen through different shapes.
+- **For the game:** this is its centre. Everything the player finds is a number, every number is
+  everything at once, and the filters are how meaning is chosen. GAME.md takes this as its lore.
+
+**19.46 Models in a chain (Edward, 13 October 2026).** His request: a way to chain models of
+different types together, such as the three trained models in a single chat. It should be its own
+tab next to CHAT, variable, mappable and savable, and adjustable to other models, shapes and sizes.
+- **Built (13 October 2026), SPECIFICATIONS §12.0h:**
+  - *The CHAIN tab,* just before CHAT. It shows the chain as a row of nodes with arrows (YOU,
+    then each model). Up and Down choose a stage, Left and Right change its model, N adds one, Delete
+    takes it away, Ctrl+Up and Ctrl+Down move it, and Ctrl+S and Ctrl+O save and open it as a
+    `sieve-chain-v1` file.
+  - *Running it:* `/chain WORDS` in CHAT runs it, every stage's result appearing there as a reply
+    or a card.
+  - *The default chain* is the three trained models: universalbibliothek's text model, then
+    figures-2x32, then melodies-2x64.
+  - *How a stage is fed:*
+    - a text model continues what it is given;
+    - a picture or melody model, which takes no input, has its noise chosen by what it is given (a
+      generator seeded by its SHA-256), so the same words make the same picture.
+  - *Deterministic:* a chain of picture and melody models makes the same units on every machine,
+    which CI checks.
+- **Not yet:**
+  - *Branches:* a graph rather than a line, with one stage feeding two, kept in the node graph's
+    map format so chains and maps are one system (§19.38).
+  - *Steering:* a picture stage that keeps only the survivors of the line's filters (§19.37).
+  - *Larger models* as stages, once they can be given as files of other kinds.
+
+**19.47 An engine that could make every game (Edward, 13 October 2026).** His idea: the game
+engine as a free-flowing, dynamic building and creation system.
+- *Bodies:* procedural skeletons and bones, boxes, gravity and kinematics, destruction.
+- *Scale:* from voxels to triangles, quads and other forms, all the way up to layering with
+  DLSS 5.
+- *Rules:* Conway's Game of Life, noise and much more.
+- *The aim:* theoretically, to create all games ever. It starts with models and content, and
+  eventually reaches form and function.
+
+*Notes.*
+- **A game is a starting state and a rule.** Life shows how far that goes: one rule on a grid is
+  enough to compute anything. So "all games" is a line whose units are (state, rule) pairs, and
+  each part already has a home here:
+  - *the content* is units of the models and worlds lines;
+  - *the rules* are units of a rule line (a cellular automaton's table is a short string);
+  - *the physics* is a fixed rule set (rigid boxes, joints, gravity) run in exact arithmetic, so
+    it is reproducible.
+- **The order it can be built in:**
+  1. *Content,* which exists: models, worlds, pictures, melodies.
+  2. *Rules as units:* a Life-like line, where a unit is a rule table and a seed pattern, walked
+     and filtered ("still lifes", "gliders", "grows forever"), and its survivors played in place.
+  3. *Bodies:* skeletons and boxes with exact-arithmetic physics, as world units that move.
+  4. *Representation:* the same world drawn as voxels, triangles or quads, chosen per view.
+  5. *Upscaling:* a learned upscaler. DLSS is NVIDIA's own and closed, so Sieve's would be its own
+     model, trained in the harness like the picture models, as an optional layer that changes
+     only how things look.
+- **The honest limit:** "all games" in principle is the counting argument again. Every game is
+  somewhere on the line, and almost every unit is not a game, so the work is in the filters that
+  find the playable ones: does it run, does it end, does a player have choices that matter.
+
+**19.48 The documentation inside the game (Edward, 13 October 2026).** His idea: /prompt and /help
+are useful, and commands could reach the documentation, kept as a .sieve file or found through
+the pages and books lines. There should be a free-flowing way between all catalogued information.
+
+*Notes.*
+- **The documents are files, so they are already in the library.** README, SPECIFICATIONS, IDEAS
+  and the rest each have an address on the binary line, and as text, on the pages and books
+  lines. A `.sieve` file of them (as the release is) names them all at once.
+- **Commands that reach them:**
+  - `/docs` lists the documents;
+  - `/docs NAME SECTION` shows a section in CHAT;
+  - each answer has GO TO IT (to the file on the binary line) and J (as a book).
+
+  The model given as a file could then be pointed at the right section, rather than told
+  everything in its system prompt.
+- **One catalogue:** every catalogued thing (documents, anchors, models, runs, maps, chains)
+  named by its SHA-256 and linked in the node graph's map, so that from any one of them the others
+  are a step away. The maps already do this for files; the rest are files too.
+
+**19.49 The completion date on the main menu, in colour (Edward, 13 October 2026).** His idea:
+show the absurd completion estimate, with its full calculation and meaning, on the main menu under
+the description, in slightly bigger text, with variable letters or names in mathematical notation,
+each coloured as its dimension is. It, the description and every dimension label should be tied
+together so that they flow in and out of the system as needed, perhaps acting as filters too. It
+must fit on screen as the dimensions grow (a note for the code and the docs). The website's and
+the game's calculations must stay in sync, and look alike.
+
+*Notes.*
+- **One source for the numbers.** The calculation lives in one specification, and both sides are
+  checked against it:
+  - *the lines' sizes* (2^100 pictures, 27^32 pages, 2^32768 models), from the setup menu's own
+    shapes;
+  - *one unit a second;*
+  - *the epoch.*
+
+  The website's script and the menu compute the same thing, and a CI line compares the page's
+  constants with the program's (`sieve info` prints each line's size exactly).
+- **Its form on the menu,** one line per dimension, each in its line's colour, for example
+  `P = 2^(10×10) pictures  →  t = P / (1 s⁻¹) ≈ 4.0 × 10^22 years`. As the setup menu changes a
+  shape, the line changes with it. Lines that would not fit are folded into "and N more
+  dimensions", so the menu never overflows.
+- **As filters:** each label is the line's name and size, so choosing one could open that line
+  with its stack, the same thing seen from the menu.
+
+**19.50 Metrics for every build, charted over time (Edward, 13 October 2026).** His idea: log each
+build's metrics, with its date, in a folder in the repository. Then chart how effective it all is
+over time (a line graph, dots joined by lines), shown both in the 3D world and on the website's
+Buy or Build page, with room for other visualisations.
+
+*Notes.*
+- **What to log:** `hallway --metrics` (§19.23's list) already prints the measures, versioned. One
+  file per build, `metrics/YYYY-MM-DD-HHMM.txt`, written by `run_tests.bat` after the tests pass,
+  so logging costs nothing extra.
+- **What makes a chart honest:** the same measure, the same version, on comparable machines. A
+  change of measure starts a new series rather than joining the old line. Each point carries its
+  build (the commit) and the machine.
+- **Where it shows:**
+  - *on the website,* a small chart drawn by the page from an index of the files;
+  - *in the world,* the same chart on a wall of the start room, made from the same files.
+
+**19.51 A decompilation engine (Edward, 13 October 2026).** His note: alongside all this, the only
+thing missing is a decompilation engine.
+
+*Notes.*
+- **In Sieve's terms:** given a binary and a known compiler, find a short program on the code line
+  (§19.36) that compiles to exactly that binary. A deterministic compiler makes "compiles to this"
+  a filter, so this is a search, as superoptimisation is, in reverse.
+- **What exists:** Ghidra and RetDec turn machine code into readable C-like code by analysis, not
+  search. A search finds exact sources only for small functions. The two together, analysis first
+  and search for the pieces, is the realistic shape.
+- **The law:** decompiling software one does not own is limited by licences and by law
+  (interoperability is the usual exception). Sieve's own files, and files whose licences allow it,
+  are where it starts.
+
+**19.52 The Encryption Engine: anything as anything (Edward, 13 October 2026; extends §19.34).**
+His words: next, the Encryption Engine, like File Cipher. It should encrypt anything as anything,
+with anything, through anything, in any number of layered ways, through infinite ciphers, and,
+in theory, flatten them as automata to count out the results of all things. Note all the possible
+combinations of data, to be expanded and catalogued mathematically.
+
+*Notes.*
+- **The catalogue of combinations.** Five choices, each a line:
+  - the payload (any unit of any line);
+  - the key (any unit);
+  - the recipe (§19.34: a list of layers);
+  - the depth (the number of layers);
+  - the output's shape (any line).
+
+  With A kinds of layer and depth L there are A^L recipes, each times its keys' count. That is
+  countable, and the counting is exactly the kind Sieve does.
+- **"As anything" already has a standard name: format-preserving encryption.** Encrypting a
+  picture into another picture of the same line is a keyed bijection of the line onto itself. That
+  is exactly what the scrambled ordering is: a Feistel network, as the standards FF1 and FF3-1 are.
+  With a secret key in place of "sieve", every line becomes a cipher of its own shape. (Sieve's
+  Feistel is not a reviewed standard, so it is for play and study, as §19.34 says.)
+- **What flattening shows:** with enough layers, a payload can become any output of the right
+  size, since bijections compose to any bijection. So the count of reachable outputs is the whole
+  line, and the mapping from payload to output is noise unless the key is known. The catalogue
+  names the paths; the key is what makes one path the message.
+- **The first build** (next round): the recipe line, the weak ciphers with their detectors and
+  key searches, and format-preserving encryption within a line with your own key. All of it in an
+  Encryption Engine screen on the main and pause menus, with each layer's output an item.
+  File Cipher's formats can join once their rules are written down.
+
+**19.53 The plan, in order of importance (13 October 2026).** What to build next, and why in this
+order.
+1. **The Encryption Engine, stage 1** (§19.52): asked for next. It also teaches the
+   format-preserving view of every line, which the rest builds on.
+2. **Metrics for every build, charted** (§19.50): cheap, and it makes progress visible on the
+   website and in the world from now on, so it is worth starting early.
+3. **Models steered by the filters** (§19.37): DRAW and CHAIN making survivors only, the clearest
+   demonstration that rules and models are one system.
+4. **The documentation inside the game** (§19.48): /docs, with the documents on the lines, so the
+   game explains itself, and models can be pointed at the right section.
+5. **The completion line on the main menu, from one source with the website** (§19.49): the
+   numbers specified once, checked by CI.
+6. **Chains as graphs in the node graph** (§19.46, §19.38): branches, and chains, maps and models
+   in one catalogue.
+7. **Rules as units:** the Life-like line, the first step of the engine (§19.47).
+8. **Research before building:** decompilation (§19.51), the voice (§19.33), the code line
+   (§19.36).
+
+Throughout: exact arithmetic for anything addressed; versioned rules that are never edited; the
+oracle written from the specification; measurements before claims; and the counting argument kept
+in view.

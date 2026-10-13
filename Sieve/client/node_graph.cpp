@@ -697,11 +697,11 @@ void Hallway::draw_sort(const Book& bk, float x, float cy, float pw, float botto
 }
 
 // The item page's tabs: ITEM, COST, SORT, and META when the item is an anchor of the chosen map
-// with metadata there.
+// with metadata there; and, for a model of the AI line, CHAIN and CHAT last.
 int Hallway::hand_tabs()
 {
     if (!in_hand_) return 3;
-    const int chat = in_hand_->ai ? 1 : 0; // CHAT, last
+    const int chat = in_hand_->ai ? 2 : 0; // CHAIN, then CHAT, last
     const int node = sort_node(*in_hand_);
     const GraphMap* g = graph_current();
     if (node <= 0 || !g) return 3 + chat;
