@@ -1,0 +1,15 @@
+sieve-machine-v1
+owner = Edward (Thor110)
+recorded = 13 October 2026
+motherboard = Gigabyte H510M H
+bios = American Megatrends International, LLC. F14, 25/03/2022
+cpu = 11th Gen Intel(R) Core(TM) i5-11400F @ 2.60GHz
+cores = 6
+logical_processors = 12
+clock_mhz = 2592
+gpu = RTX 3060 12GB
+memory_gb = 32
+power_supply = Corsair 550
+drives = Kingston NV2 NVMe SSD 2TB M.2; Western Digital 1TB SSD; Samsung 500GB SSD; Samsung 500GB SSD; Samsung 500GB SSD
+optical = External Blu Ray Disc Drive
+note = Edward's machine, as he gave it. It will change one day, when he chooses; a new machine gets a file of its own, so each one's figures stay their own series.

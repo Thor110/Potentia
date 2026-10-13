@@ -359,6 +359,10 @@ jobs:
           $exe diffuse --make data/training/figures-2x32 --count 6 | tr -d '\r' | grep "^picture" | cut -c10-34 | tr '\n' ' ' | q "fff0fc2f0de8f01c3fdbe6fff fff29e4e04fbf01b3e05e9fff fff8ffee10bcf8f80f05c0fff fff83e1f15cef83a1f8de7fff fff93e3713a17f7e2fa3c9fff fff878af09e16a7e0f03c3fff"
           # The shipped melody model (data/training/melodies-2x64): its first three melodies, by address.
           $exe diffuse --make data/training/melodies-2x64 --count 3 | tr -d '\r' | grep "^melody" | cut -c10-36 | tr '\n' ' ' | q "8ac6f76023e45b65ccb9d8e98b4 02dd451f986f45126c630368e9c 5754e9fcddb9cedeba2ddd88f64"
+          # The shipped characters model (data/training/type-2x32, IDEAS §19.73): its first six pictures, by
+          # address, and its training pictures, written again from the font, byte for byte.
+          $exe diffuse --make data/training/type-2x32 --count 6 | tr -d '\r' | grep "^picture" | cut -c10-34 | tr '\n' ' ' | q "fbf7fffdff6edbc77ffffffff fef7d66aacffb2db7e7ffffff fffbf7fe7c3efcffffb5f3fff fbfebf7bf5deffea7dddfffff fdffff3fffb17fff6ceffffff 7adfebeff9352bffcbfffffff"
+          python tools/build_character_pictures.py | cmp - data/training/type-2x32/pictures.txt
           # Its training pictures are no hand-made list: drawn again from the image line's stack (figure-v1
           # connect four, row-runs-v1 changes 2, seed 42), they are pictures.txt byte for byte.
           printf '[image]\nmode = compact\nfilters = figure-v1, row-runs-v1\n[image.figure-v1]\nconnect = four\n[image.row-runs-v1]\nchanges = 2\n' > figures.ini

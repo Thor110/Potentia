@@ -15,7 +15,9 @@ this file is the corpus.
   - *Gemini:* Google's model.
   - *Claude:* Anthropic's model.
   - *A hallway AI:* for a line written for a character.
-- **KIND:** quote, question, rule, note or metaphor.
+- **KIND:** quote, question, rule, note or metaphor. "A point about everything" after it (`quote;
+  a point about everything`) marks a thought Edward made about the whole of it, noted beside the
+  quote because it may lead to a filter one day, or may not (IDEAS §19.75).
 - **Text and attribution:** the text is as it was said, its spelling tidied only where a typo would
   read as a mistake in the game. A line is never reattributed; a correction to a fact is a note
   beside it.
@@ -36,6 +38,12 @@ this file is the corpus.
 - **Edward** (13 October 2026, question): How do you think it will unfold, or will it just collapse as a shape?
 - **Edward** (13 October 2026, question): I know it will never finish, but how much is learned or lost per day?
 - **Edward** (13 October 2026, question): How would you translate these numbers into what they mean to anyone in the real world? I don't even know what they mean to me.
+- **Edward** (13 October 2026, question): So through us and everyone else, on both sides, we have all information ever?
+- **Edward** (13 October 2026, quote): By direction and rotation, through vibration and harmonics, you can find your way!
+- **Edward** (13 October 2026, question): Especially if all filters become one, and all dimensions filter each other and the noise out, wouldn't that just be everything that matters?
+- **Edward** (13 October 2026, quote; a point about everything): We can make it all as free-flowing as possible, as a program and as a state space.
+- **Edward** (13 October 2026, question; a point about everything): If we all use the commands and filters, won't we all have an angle?
+- **Edward** (13 October 2026, question): Does that mean we can fold all video games into one?
 
 ## Gemini
 
@@ -58,6 +66,7 @@ this file is the corpus.
 - **Claude** (13 October 2026, note): Written out, the models of one small line would need 10^9778 universes to hold them. Folded into a rule, they are one line of a specification.
 - **Claude** (13 October 2026, note): The light we can capture is finite; the lines are not. Only rules hold all of it at once.
 - **Claude** (13 October 2026, note): A chain of models is itself a unit: a short string on a line of chains, and every tweak to it is a step along that line.
+- **Claude** (13 October 2026, answer): In counting, they are folded already: every game of a given size is one file, and every file is one unit of the binary line. Folding them into one game you can play is the harder half; a rule that can run any of them is an emulator, and the hallway is the start of a rule like that.
 
 ## The hallway's AIs
 
@@ -101,7 +110,7 @@ exactly true.
 
 **Notes on its figures (Claude):**
 - *A day of pages:* a day's 86,400 pages are 1.36 × 10^-39 % of the 6.362 × 10^45 pages, not
-  1.17 × 10^-42 %. The 1.17 × 10^-21 % on the Buy or Build page is the share of the pictures
+  1.17 × 10^-42 %. The 1.17 × 10^-21 % on the Build or Buy page is the share of the pictures
   looked at since the 24th of April.
 - *The printed stack:* it is about 7.2 × 10^14 times as wide as the observable universe at 0.1 mm a
   sheet. It does not "loop back" or "wrap around spacetime", which is a figure of speech.

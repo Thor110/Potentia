@@ -2553,8 +2553,8 @@ work.
   be done. Anything contributed needs its maker's permission in writing, and a licence that
   allows both the free and the paid builds, since they are the same game (§19.39).
 
-**19.42 The web page's Buy or Build (Edward, 13 October 2026).** Built: `Pages/release.html`,
-linked from the index as "Buy or Build (Free If You Build It)".
+**19.42 The web page's Build or Buy (Edward, 13 October 2026).** Built: `Pages/release.html`,
+linked from the index as "Build or Buy (Free If You Build It)".
 - **What is on it:** the two names, the three steps to build it, a PayPal link to buy or support
   it, links to the current release and the repository, and "When It Is Ready" as the expected
   release.
@@ -2721,7 +2721,7 @@ the game's calculations must stay in sync, and look alike.
 **19.50 Metrics for every build, charted over time (Edward, 13 October 2026).** His idea: log each
 build's metrics, with its date, in a folder in the repository. Then chart how effective it all is
 over time (a line graph, dots joined by lines), shown both in the 3D world and on the website's
-Buy or Build page, with room for other visualisations.
+Build or Buy page, with room for other visualisations.
 
 *Notes.*
 - **What to log:** `hallway --metrics` (§19.23's list) already prints the measures, versioned. One
@@ -2733,6 +2733,13 @@ Buy or Build page, with room for other visualisations.
 - **Where it shows:**
   - *on the website,* a small chart drawn by the page from an index of the files;
   - *in the world,* the same chart on a wall of the start room, made from the same files.
+- *Built (13 October 2026; §19.69):*
+  - `tools/log_metrics.py`, run by `run_tests.bat` once everything it ran has passed;
+  - a record a build (`sieve-metrics-v1`) in `metrics/builds`, with `metrics/index.tsv` written
+    again from all of them;
+  - the website's "Every Build, On The Record", which charts every measure.
+
+  *Still to build:* the wall in the start room.
 
 **19.51 A decompilation engine (Edward, 13 October 2026).** His note: alongside all this, the only
 thing missing is a decompilation engine.
@@ -2934,7 +2941,7 @@ translate to anyone in the real world? What do they mean for the information, ho
 take to get somewhere, and where is it all going? It will never finish, but how much is learned or
 lost per day? He wants lists of the strange ways a human can quantify these things, kept as
 statistics, ideas and filters for the AIs to talk about from every perspective.
-- *Built, on the Buy or Build page,* computed live and exactly:
+- *Built, on the Build or Buy page,* computed live and exactly:
   - *a day:* 86,400 pictures, 6.8 × 10^-24 % of the 10x10 ones;
   - *everyone at once:* all 8.1 billion people would take 5.0 × 10^12 years, 359 times the age of
     the universe;
@@ -2994,7 +3001,7 @@ statistics, ideas and filters for the AIs to talk about from every perspective.
 **19.64 Running out of original things to say (Edward, 13 October 2026).** Some people fear that
 if everything is put into grammar, there will be no room left for anyone to say anything original.
 He doubts it, and wants a counter.
-- *Built, on the Buy or Build page:*
+- *Built, on the Build or Buy page:*
   - *the space:* sentences of 20 words from a 20,000-word vocabulary, 20,000^20 of them;
   - *the speakers:* every person who has ever lived (about 117 billion), each saying a new one
     every second for a hundred years;
@@ -3017,11 +3024,11 @@ filters applied.
   nodes) are such a path.
 
 **19.66 Disclosure of AI, everywhere (Edward, 13 October 2026).** His request: an AI honesty
-disclosure across the whole website, as the audio page has, and fullest on the Buy or Build page.
+disclosure across the whole website, as the audio page has, and fullest on the Build or Buy page.
 It should say that Gemini helped to theorise and conceptualise (the website, many concepts and
 ideas), that Claude built with him, and that he has been building the theory and ideas himself
 over the past few years.
-- *Built:* a disclosure box on every page, and a fuller one on Buy or Build. It says what the
+- *Built:* a disclosure box on every page, and a fuller one on Build or Buy. It says what the
   game's own models are trained on: a public-domain text, and Sieve's own lines.
 - *Kept true:* as the project changes, the disclosure changes with it. A new contributor, human or
   model, is added when they contribute.
@@ -3051,20 +3058,196 @@ there." (VOICES.md).
 
   So what can ever be captured is bounded, while the lines are not. The rules are what reach past
   that bound: a rule written here describes what no telescope will ever see.
-- **Built, on the Buy or Build page:** "Folding Everything".
+- **Built, on the Build or Buy page:** "Folding Everything".
   - *Its counter:* bits written out against one line folded.
   - *Its list:* what the universe can hold, the light there is, the receding horizon, the stars
     crossing out of reach this year (the Orbital Simulation page's constants and formula, so the
     pages agree), and what fits and what folds.
-- **Also on the website:** the AI disclosure is now at the top of every page, and on Buy or Build
+- **Also on the website:** the AI disclosure is now at the top of every page, and on Build or Buy
   it comes before the buttons to buy or download, which are now at the bottom (Edward: it always
   has to be front and centre).
 
 **19.68 The voices on the website (Edward, 13 October 2026).** His idea: the site can read out a
-random voice from VOICES.md, at the very bottom of Buy or Build, under the donate button, as
+random voice from VOICES.md, at the very bottom of Build or Buy, under the donate button, as
 another quirk of the site.
 - *Built:* the page fetches `docs/VOICES.md` and shows one voice at random, with who said it and
   when, changing every 12 seconds. A "Read aloud" button speaks each voice with the browser's own
   speech synthesis, once a visitor turns it on (browsers do not let a page speak unasked). The page
   reads the file itself, so a voice added there is on the site with no change to the page. Where
   the file cannot be read (a page opened from disk), the box stays hidden.
+
+**19.69 Build or Buy, and every build on the website (Edward, 13 October 2026).** His words: the
+website should only ever read as build or buy, and not try to sell, which is why the buy button
+went to the bottom, as in the honesty disclosure he drafted with the audio page. All the metrics
+and statistics recorded by builds can go on the site too, some as counters and some fixed until
+new figures come in. All of it has to be kept in sync, and eventually it may all translate across
+every programming language, interface, address and taxonomy.
+- *Built:*
+  - *The name and the order:* the page is "Build or Buy" everywhere. Its buttons run Build, then
+    Download, then Buy, at the bottom. The line at the top says the game is the same either way and
+    that nothing on the page will try to talk anyone into buying it.
+  - *"Every Build, On The Record":*
+    - a counter of the time since the last recorded build;
+    - the latest build's figures, fixed until the next build: unit checks, oracle vector files,
+      specification sections, commands, source files and lines, ideas and voices;
+    - what the reference filters keep on each line, when a hallway was built;
+    - a chart for each measure, a dot a build, joined by lines.
+- *Kept in sync:* there is one source, `metrics/index.tsv`, written by `tools/log_metrics.py` from
+  the records. The page reads it, and the start room's wall will read the same file. Each measure is
+  a named column, so a change of meaning is a new column, never a new meaning for an old one.
+- *Honest by construction:*
+  - a record names its commit, with `+changes` when it was made before committing;
+  - it names the kind of machine (system, release and processor family), not which machine;
+  - nothing is logged from a run with a failure.
+- *Translating across everything:* every figure is a named, counted quantity in a plain table. A
+  program in any language can read it, and an interface in any language can label it. That is the
+  first step towards every address and taxonomy being one map (§19.54).
+
+**19.70 How rare a voice is, and a hall of voices (Edward, 13 October 2026).** His idea: note and
+count how rare it becomes to come across a given quote as the list grows, and perhaps a page in
+the game with all of them on it, almost like a leaderboard. Anything can become a statistic
+somewhere on the page.
+- *Built, on the website:*
+  - under the voice, its odds. With n voices, each turn shows one of the other n − 1, so a given
+    voice comes back once every n − 1 turns on average. Hearing them all takes
+    1 + (n − 1)(1 + 1/2 + … + 1/(n − 1)) turns on average (the coupon collector's problem, with
+    the voice on show left out of each draw). With 36 voices that is 35 turns and about 146 turns;
+  - and how many of them this visitor has met, kept in their own browser only.
+- *In the game:* a hall of voices, a page or a wall listing every voice with who said it, when, and
+  how often it has been heard. It ranks like a leaderboard: by how rarely each one comes up, by who
+  has said the most, or by which the players stopped to read.
+- *Anything a statistic:* any count the project can make honestly (a voice's odds, a filter's
+  share, a build's checks) is a figure the page can show. The rule is the same as for the build
+  metrics: named, with its source, and the same in the game as on the site.
+
+**19.71 Every release measured, on the machine that made it, and Specs vs Stats (Edward, 13
+October 2026).** His words: every time he makes a release with make_release.bat, record a full
+suite of metrics, so they can be followed over time on his hardware, which will not change until
+he chooses to fire up his next computer. The specifications can sit semi-hidden on the site in a
+category of their own, specs against stats: a leaderboard anyone could add to, which changes the
+game at its root by letting everyone contribute to the statistics. Each person's figures can then
+be weighed against their own hardware. From there, theorise about all the computers ever working
+together, and everything that might one day run or contribute at once. Dyson spheres go in a
+category of their own. There are infinite ways to look at it, from many angles.
+- *Built:*
+  - *Every release on the record:* `make_release` step 8c runs the build's unit suite and times
+    it. A failure stops the release. `tools/log_metrics.py` then writes a record (kind
+    `release`, with `unit_seconds`) and the hallway's metrics list under the reference filters.
+  - *Records say what the machine is:* the processor, the logical processors, the memory, and on
+    Windows the graphics adapters, read from the system; never the machine's name.
+  - *His machine on the record:* `metrics/machines/edward-1.txt` (`sieve-machine-v1`), in his
+    words, listed in `metrics/machines/list.txt`. A record whose processor matches a machine file
+    names it (`machine_profile`). When he changes machine, the new one gets `edward-2`, so each
+    machine's figures stay their own series.
+  - *`Pages/specs.html`, Specs vs Stats,* linked only from Build or Buy's builds section:
+    - every machine's specification with its builds;
+    - the leaderboard, by unit checks a second, comparing like with like (the same version);
+    - "All Of Them At Once": the fastest rate times however many machines the reader gives;
+    - the limits of physics: Landauer's kT ln 2 a bit, with all the sunlight that reaches Earth
+      spent at room temperature: 6.0 × 10^37 bits a second;
+    - a Dyson sphere in a category of its own: the Sun's whole output at the temperature of deep
+      space, 1.5 × 10^49 bits a second.
+
+    Both limits are set against the lines: the 10 × 10 pictures, the pages, and the AI line's
+    models (10^9807 years even for the sphere).
+  - *How to add a machine:* the page says how: a machine file, its name in the list, and the
+    records, by pull request.
+- *Still to come:*
+  - the start room's wall (§19.50);
+  - more timed measures (training steps a second, the filter counts' time) as the record grows.
+
+**19.72 A library of small baked models, the corpus of a multimodal system (Edward, 13 October
+2026).** His words: a characters image run at low resolution, a fourth entry in the model list.
+Aim to ship with various pre-baked small, low-resolution models, of shapes, figures, characters
+and more simple things, that add up to the corpus of a multimodal system. Across all model types,
+have numerous pretrainable shapes, models and variations, and ship some baked. People can then
+bake their own and share them.
+- *Built:* `data/training/type-2x32`, the characters model (§19.73's run). It sorts after the
+  others, so it is the fourth entry: figures, melodies, type, with the text run beside them.
+- *The library's shape:* each model is a run folder (a recipe, its pictures or melodies, and its
+  result), so baking is `sieve diffuse RUN`, reproduced exactly. Sharing one is sharing its
+  folder: anyone can check it trains again to the same SHA-256.
+- *What to bake next, smallest first:*
+  - digits alone;
+  - single strokes and arcs;
+  - the figure families of `figure-v1` (four-way, eight-way);
+  - textures (row-runs);
+  - chords and rhythms on the audio line;
+  - short words on the pages line (the text runs).
+
+  Each is a few minutes' training, and together they are the corpus a multimodal chain draws on
+  (§19.46).
+- *Variations:* the same pictures at other widths and depths (2 × 16, 2 × 64, 3 × 32), so the
+  library also measures what size a shape needs.
+
+**19.73 The characters model (13 October 2026).** `tools/build_character_pictures.py` draws every
+printable ASCII character but the space (94) from Sieve's own 8 × 8 font (font8x8, public domain)
+onto a 10 × 10 picture, at each of the 9 places a glyph fits: 846 pictures. `type-2x32` is trained
+on them as `figures-2x32` was on figures: 2 layers of width 32, 15,000 steps, seed 1, in 6 minutes
+52 seconds here. CI checks its first six pictures by address, and that the font gives its
+pictures again byte for byte.
+
+*What it draws, measured* (200 pictures from each model, against its own training pictures):
+- **The plain measure,** the Hamming distance to the nearest training character, flatters
+  near-blank pictures, since '.', ',' and '-' are almost blank.
+- **The stricter measure:** a picture counts when it is within 3 cells of a character with 8 or
+  more inked cells.
+
+| Run | Pictures | Median distance | Within 8 cells | Strict | Median ink (theirs) |
+|---|---|---|---|---|---|
+| `type-2x32` (shipped) | 846 | 16 | 1 | 0 | 17 (22) |
+| `type-2x64` | 846 | 17 | 0 | 0 | 20 (22) |
+| centred only, 2 × 32 | 94 | 6 | 133 | 0 | 6 (22) |
+| digits only, centred, 2 × 32 | 10 | 13 | 7 | 0 | 30 (25) |
+| `figures-2x32`, never shown a character | - | 20 | 0 | 0 | - |
+
+- **None of them draws a recognisable character yet.** Twice the width did not help, nor did 94
+  or even 10 pictures in place of 846.
+- **The centred model looks best on the plain measure,** but only by drawing almost nothing.
+- **So the limit is not the model's size or the number of shapes.** It is something in how
+  `diffusion-v1` learns or draws.
+- **A guess, not yet tested:** when making a picture (SPECIFICATIONS §12.0g), each level decides
+  all its cells at once, and each takes its own most likely colour. A stroke needs neighbouring
+  cells decided together, which a figure (one blob) forgives and a letter does not. A cell's most
+  likely colour on its own is usually the background, which fits the centred model drawing almost
+  nothing.
+- **What to try next, in order:**
+  - drawing a colour by its probability rather than the most likely one;
+  - deciding a few cells a level, in an order, so later cells see earlier ones;
+  - more levels and steps on the digits;
+  - a model told which character to draw.
+
+  Each is a measured run, compared in this table.
+
+**19.74 Accessibility: the voice in the game, and everything readable (Edward, 13 October 2026).**
+His words, after hearing the website's voice: push towards that voice being in the game too, with
+buttons that can be read aloud and objects that can be translated, and much more. The website
+already shows each voice as text while it speaks, so it has subtitles.
+- *The aims:*
+  - **The voices spoken in the game:** the AIs' lines (§19.55) read aloud, with subtitles, as the
+    website does. Windows has a speech engine built in (SAPI), so the voice costs no download;
+    elsewhere, the system's own.
+  - **Menus and buttons that can be read aloud:** the item under the cursor spoken when it
+    changes, as a screen reader would. Every string is already in the language files
+    (`data/lang`), so the speech reads what the screen shows.
+  - **Objects that can be translated:** every item's description and every sign through the same
+    language files, so a new language translates the world as well as the menus.
+  - **Other settings:** text size, contrast and colour-blind palettes (the lines' colours are
+    settings already), and holding a key in place of pressing it again and again.
+- *Quick-time events, noted and not wanted:* Edward's old idea, recorded so it is not lost. A
+  prompt could repeat across the screen in a grid, many at once, with how many on screen as a
+  setting, so no player could miss it. There are no quick-time events in this game or its story,
+  and he does not want them. If anything ever must be noticed at once, the grid is how.
+
+**19.75 Points about everything (Edward, 13 October 2026).** Some of his quotes are points about
+the whole of it, and VOICES.md marks them "a point about everything". The thought: any of them may
+lead to a filter one day, or may not; there is lots of time and ground to cover. Two so far:
+- *"We can make it all as free-flowing as possible, as a program and as a state space."* A filter
+  would measure how free-flowing a thing is: how few of its parts are fixed.
+- *"If we all use the commands and filters, won't we all have an angle?"* Yes: a person's filter
+  stack is their angle on the space, and it is a unit of its own. Many people's stacks, compared,
+  are where the space looks the same from every angle and where it does not.
+
+His question, "Does that mean we can fold all video games into one?", has Claude's answer in
+VOICES.md. Counting-wise they are folded already: every game is a file of the binary line. A rule
+that plays any of them is an emulator, and the hallway is the start of one.

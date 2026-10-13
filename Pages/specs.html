@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Potentia // Specs vs Stats</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    background:#0a0a0f;
+    color:#e0ddd8;
+    font-family:'Courier New',monospace;
+    font-size: 16px;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content: center;
+    padding:32px;
+  }
+  h1{font-size:16px;letter-spacing:0.3em;text-transform:uppercase;color:#666;margin-bottom:12px;text-align:center;white-space:nowrap;}
+  .sub{font-size:16px;color:#444;margin-bottom:20px;letter-spacing:0.15em;text-align:center;max-width:2000px;line-height:1.6;}
+  
+  .manifesto-line {
+    font-size: 16px;
+    color: #666;
+    margin-bottom: 16px;
+    letter-spacing: 0.1em;
+    text-align: center;
+    max-width: 2000px;
+    line-height: 1.5;
+  }
+  
+  /* Counter block matching the mechanical aesthetic */
+  .counter-box {
+    width: 100%;
+    max-width: 600px;
+    border: 1px solid #2a2a3a;
+    background: #0d0d14;
+    padding: 20px;
+    margin-bottom: 24px;
+    text-align: center;
+  }
+  .counter-title {
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: #666;
+    margin-bottom: 8px;
+    white-space: nowrap;
+  }
+  .counter-value {
+    font-size: 16px;
+    color: #e0ddd8;
+    letter-spacing: 0.1em;
+    font-weight: bold;
+    white-space: nowrap;
+  }
+
+  .section-label {
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: #444;
+    margin-bottom: 16px;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .nav-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    max-width: 600px;
+    margin-bottom: 24px;
+  }
+
+  /* Matching the viewfinder button style exactly */
+  .btn-link {
+    display: block;
+    text-decoration: none;
+    background: transparent;
+    border: 1px solid #2a2a3a;
+    color: #888;
+    padding: 14px 20px;
+    font-family: 'Courier New',monospace;
+    font-size: 16px;
+    letter-spacing: 0.15em;
+    cursor: pointer;
+    text-transform: uppercase;
+    text-align: center;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+
+  .btn-link:hover {
+    border-color: #555;
+    color: #ccc;
+    background: #111;
+  }
+
+  .footer {
+    margin-top: 16px;
+    font-size: 16px;
+    color: #222;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    text-align: center;
+    white-space: nowrap;
+  }
+</style>
+<style>
+  .steps {
+    width: 100%;
+    max-width: 700px;
+    border: 1px solid #2a2a3a;
+    background: #0d0d14;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+    color: #b0aca5;
+    line-height: 1.6;
+  }
+  .steps ol { margin-left: 24px; }
+  .steps li { margin-bottom: 8px; }
+  .steps a { color: #ccc; }
+  .counter-note {
+    font-size: 16px;
+    color: #555;
+    margin-top: 8px;
+    letter-spacing: 0.05em;
+    line-height: 1.5;
+    white-space: normal;
+  }
+  @media (max-width: 720px) {
+    h1, .section-label, .counter-title, .counter-value, .btn-link, .footer { white-space: normal; }
+    .counter-value { overflow-wrap: anywhere; }
+  }
+</style>
+</head>
+<body>
+
+<h1>State Space : Near Zero // Specs vs Stats</h1>
+<div class="sub">The machines that build it, and what each one measures.</div>
+
+<div class="steps" style="color:#777;font-size:14px;">
+  <div style="text-transform:uppercase;letter-spacing:0.2em;color:#666;margin-bottom:8px;text-align:center;">AI Disclosure</div>
+  The Sieve of Potentia (State Space : Near Zero) is Edward's (Thor110's) work. He has been building its theory and ideas himself over the past few years, and directs everything in it.
+  <ul style="margin:8px 0 8px 20px;">
+    <li><b>Gemini (Google)</b> helped him theorise and conceptualise: many of the concepts and ideas, and parts of this website.</li>
+    <li><b>Claude (Anthropic)</b> has written much of Sieve's code, its tests and its documentation with him, in long working sessions he reviews and tests.</li>
+    <li>The game's own models (the text, picture and melody models in the hallway) are small models trained by Sieve itself: the text model on a public-domain text, and the picture and melody models on units of Sieve's own lines.</li>
+  </ul>
+  Those happy to use AI-assisted work won't mind; those who prefer otherwise deserve to know. Transparency fosters trust.
+</div>
+
+<div class="manifesto-line">Every release Edward makes is measured on his own machine and logged, so the figures can be followed over time on the same hardware. Anyone can add their own machine and builds, and compare like with like.</div>
+
+<div class="section-label">The Machines</div>
+<div id="machines"><div class="steps">Loading the machines on the record...</div></div>
+
+<div class="section-label">The Leaderboard</div>
+<div class="steps">
+  <div id="board">No timed build is on the record yet. The first one comes from the first release made with tools\make_release.bat.</div>
+  <div class="counter-note">Ranked by unit test checks a second: the whole unit suite, timed by make_release. Compare runs of the same version: a version with more checks is a different race.</div>
+</div>
+
+<div class="section-label">All Of Them At Once</div>
+<div class="counter-box">
+  <div class="counter-title">Machines Working Together</div>
+  <div class="counter-value"><input id="many" type="number" min="1" value="1000000" style="width:60%;background:#0a0a0f;color:#e0ddd8;border:1px solid #2a2a3a;font-family:inherit;font-size:16px;padding:6px;text-align:center;" aria-label="How many machines"></div>
+  <div class="counter-note" id="many-note">How many machines like the fastest one on the record, working together.</div>
+</div>
+
+<div class="section-label">The Limits Of Physics</div>
+<div class="steps">
+  <div class="counter-note" style="margin-top:0;">A floor, not a forecast: the least energy any computer can spend is the energy to erase one bit, kT ln 2 (Landauer's principle). Below, one erased bit stands for one unit looked at, which flatters every computer there will ever be.</div>
+  <ul style="margin:12px 0 0 20px;" id="physics"></ul>
+</div>
+
+<div class="section-label">In A Category Of Its Own: A Dyson Sphere</div>
+<div class="steps">
+  <ul style="margin-left:20px;" id="dyson"></ul>
+</div>
+
+<div class="section-label">Add Your Own</div>
+<div class="steps">
+  <ol>
+    <li>Build Sieve (<a href="release.html">Build or Buy</a>) and run <code>tools\run_tests.bat</code>, or make a release with <code>tools\make_release.bat</code>, which also times the unit suite.</li>
+    <li>Each passing run writes a record to <code>Sieve/metrics/builds</code>, naming your processor, memory and graphics, never your machine's name.</li>
+    <li>Describe your machine in <code>Sieve/metrics/machines/YOURNAME-1.txt</code> (copy edward-1.txt), add its name to <code>list.txt</code>, and open a pull request with your records.</li>
+  </ol>
+  Every machine added makes the figures everyone's: the game's statistics become the sum of all of us.
+</div>
+
+<div class="nav-group">
+  <a href="release.html" class="btn-link">Return to Build or Buy</a>
+</div>
+
+<div class="footer">Specs vs Stats &middot; Every Figure On The Record</div>
+
+<script>
+    const ROOTS = ["../Sieve/metrics/", "https://raw.githubusercontent.com/Thor110/Potentia/main/Sieve/metrics/"];
+    const LABELS = {owner: "Owner", recorded: "Recorded", motherboard: "Motherboard", bios: "BIOS", cpu: "Processor", cores: "Cores",
+                    logical_processors: "Logical processors", clock_mhz: "Clock (MHz)", gpu: "Graphics", memory_gb: "Memory (GB)",
+                    power_supply: "Power supply", drives: "Drives", optical: "Optical drive", note: "Note"};
+
+    async function fetchText(path) {
+        for (const root of ROOTS) {
+            try { const r = await fetch(root + path); if (r.ok) return await r.text(); } catch (e) { /* the next */ }
+        }
+        return null;
+    }
+
+    function keyValues(text, format) {
+        const lines = text.split(/\r?\n/);
+        if (lines[0] !== format) return null;
+        const o = {};
+        for (const l of lines.slice(1)) { const i = l.indexOf(" = "); if (i > 0) o[l.slice(0, i)] = l.slice(i + 3); }
+        return o;
+    }
+
+    function cell(text) { const td = document.createElement("td"); td.textContent = text; td.style.padding = "4px 12px 4px 0"; td.style.verticalAlign = "top"; return td; }
+
+    let fastest = null; // checks a second, the best on the record
+
+    async function load() {
+        const list = await fetchText("machines/list.txt");
+        const names = list ? list.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith("#")) : [];
+        const index = await fetchText("index.tsv");
+        let rows = [];
+        if (index) {
+            const lines = index.split(/\r?\n/).filter(l => l);
+            const head = lines[0].split("\t");
+            rows = lines.slice(1).map(l => { const c = l.split("\t"), o = {}; head.forEach((h, i) => o[h] = c[i] || ""); return o; });
+        }
+        const box = document.getElementById("machines");
+        box.innerHTML = "";
+        if (names.length === 0) box.innerHTML = '<div class="steps">The machines could not be read here (a page opened from disk).</div>';
+        for (const name of names) {
+            const text = await fetchText("machines/" + name + ".txt");
+            const m = text && keyValues(text, "sieve-machine-v1");
+            if (!m) continue;
+            const div = document.createElement("div");
+            div.className = "steps";
+            const title = document.createElement("div");
+            title.className = "counter-title";
+            title.textContent = name;
+            div.appendChild(title);
+            const table = document.createElement("table");
+            table.style.borderCollapse = "collapse";
+            for (const [k, v] of Object.entries(m)) {
+                const tr = document.createElement("tr");
+                tr.appendChild(cell(LABELS[k] || k));
+                tr.appendChild(cell(v));
+                table.appendChild(tr);
+            }
+            div.appendChild(table);
+            const mine = rows.filter(r => r.machine_profile === name);
+            const timed = mine.filter(r => r.unit_seconds && r.unit_checks);
+            const stats = document.createElement("div");
+            stats.className = "counter-note";
+            stats.textContent = mine.length === 0 ? "No build of this machine's is on the record yet." :
+                mine.length + " build" + (mine.length === 1 ? "" : "s") + " on the record, " + mine.filter(r => r.kind === "release").length +
+                " of them releases; the latest is Sieve " + mine[mine.length - 1].version + "." +
+                (timed.length ? " Its latest timed unit suite: " + timed[timed.length - 1].unit_checks + " checks in " + timed[timed.length - 1].unit_seconds + " seconds." : "");
+            div.appendChild(stats);
+            box.appendChild(div);
+        }
+        // The leaderboard: every timed run, by checks a second.
+        const timed = rows.filter(r => r.unit_seconds && r.unit_checks && Number(r.unit_seconds) > 0)
+                          .map(r => ({ r, rate: Number(r.unit_checks) / Number(r.unit_seconds) }))
+                          .sort((a, b) => b.rate - a.rate);
+        if (timed.length) {
+            fastest = timed[0].rate;
+            const t = document.createElement("table");
+            t.style.borderCollapse = "collapse";
+            const headRow = document.createElement("tr");
+            ["#", "Machine", "Version", "Checks a second", "Date"].forEach(h => { const c = cell(h); c.style.color = "#666"; headRow.appendChild(c); });
+            t.appendChild(headRow);
+            timed.slice(0, 20).forEach((x, i) => {
+                const tr = document.createElement("tr");
+                [String(i + 1), x.r.machine_profile || x.r.cpu || "unnamed", x.r.version, Math.round(x.rate).toLocaleString("en-GB"), x.r.date.slice(0, 10)]
+                    .forEach(v => tr.appendChild(cell(v)));
+                t.appendChild(tr);
+            });
+            const board = document.getElementById("board");
+            board.innerHTML = "";
+            board.appendChild(t);
+        }
+        together();
+    }
+
+    // n as d.dd x 10^k from its base-10 logarithm, for numbers past what a double holds.
+    function fromLog(lg) {
+        const k = Math.floor(lg), m = Math.pow(10, lg - k);
+        if (lg >= 0 && lg < 3) return String(Number(Math.pow(10, lg).toPrecision(3)));
+        return lg >= 3 && lg < 6 ? Math.round(Math.pow(10, lg)).toLocaleString("en-GB") : m.toFixed(2) + " × 10^" + k;
+    }
+    function duration(lgSeconds) {
+        const YEAR = 31556952; // 365.2425 days
+        if (lgSeconds < Math.log10(YEAR)) return fromLog(lgSeconds) + " seconds";
+        return fromLog(lgSeconds - Math.log10(YEAR)) + " years";
+    }
+
+    // The lines, as base-10 logarithms of their sizes (the same lines the Build or Buy page counts).
+    const LINES = [
+        ["every 10 × 10 black-and-white picture", 100 * Math.log10(2)],
+        ["every page of 32 characters of 27", 32 * Math.log10(27)],
+        ["every model of the AI line in its default shape", 32768 * Math.log10(2)],
+    ];
+
+    function together() {
+        const n = Math.max(1, Math.floor(Number(document.getElementById("many").value) || 1));
+        const note = document.getElementById("many-note");
+        if (fastest === null) { note.textContent = "Once a timed build is on the record, this multiplies the fastest machine's rate by how many you give."; return; }
+        const rate = fastest * n;
+        note.textContent = n.toLocaleString("en-GB") + " machines like the fastest on the record would run about " +
+            fromLog(Math.log10(rate)) + " unit test checks a second between them.";
+    }
+    document.getElementById("many").addEventListener("input", together);
+
+    // Physics. Each constant named, with its source.
+    const BOLTZMANN = 1.380649e-23;   // J/K, exact in the SI since 2019
+    const LN2 = Math.LN2;
+    const SOLAR_CONSTANT = 1361;      // W/m^2 at Earth (Kopp and Lean, 2011)
+    const EARTH_RADIUS_M = 6.371e6;   // the mean radius
+    const ROOM_K = 300;               // a computer at room temperature
+    const SUN_WATTS = 3.828e26;       // the Sun's nominal luminosity (IAU 2015 Resolution B3)
+    const CMB_K = 2.7255;             // the cosmic microwave background (Fixsen, 2009)
+
+    function limits(list, watts, kelvin, what) {
+        const perSecond = watts / (BOLTZMANN * kelvin * LN2);
+        const ul = document.getElementById(list);
+        const li = document.createElement("li");
+        li.innerHTML = what + ": at most <b>" + fromLog(Math.log10(perSecond)) + "</b> bits erased a second.";
+        ul.appendChild(li);
+        for (const [name, lgSize] of LINES) {
+            const it = document.createElement("li");
+            it.textContent = name + ": " + duration(lgSize - Math.log10(perSecond)) + ".";
+            ul.appendChild(it);
+        }
+    }
+    limits("physics", SOLAR_CONSTANT * Math.PI * EARTH_RADIUS_M * EARTH_RADIUS_M, ROOM_K,
+           "All the sunlight that reaches Earth (about 1.7 × 10^17 watts), spent on computers at room temperature");
+    limits("dyson", SUN_WATTS, CMB_K,
+           "Every watt the Sun gives off, caught by a shell around it and spent at the temperature of deep space (2.7 K), which no real shell could reach");
+    load();
+</script>
+
+</body>
+</html>

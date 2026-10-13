@@ -2746,7 +2746,7 @@ cover and a title.
   - Not tried on Windows here (no Windows machine). On Linux both changes compile to the same
     behaviour as before.
 
-### The system prompt, FULL SIZE, an even CHAT row, and Buy or Build (13 October 2026)
+### The system prompt, FULL SIZE, an even CHAT row, and Build or Buy (13 October 2026)
 - **The system prompt, `sieve-system-v1`** (docs/SYSTEM-PROMPT.md), a specification like the
   manifest's:
   - *The file:* `data/prompts/sieve-system-v1.txt`, 3,370 bytes, its SHA-256 pinned in chat.cpp
@@ -2774,7 +2774,7 @@ cover and a title.
     by its being DRAW's.
 - **CHAT's row:** the box is at least a button's height, and +, DRAW and SEND share its bottom
   edge. A one-line box is exactly their height; the + is two filled bars.
-- **The web page:** `Pages/release.html` (Buy or Build), linked from `index.html`. It has the
+- **The web page:** `Pages/release.html` (Build or Buy), linked from `index.html`. It has the
   PayPal link Edward gave, the three steps, and exact BigInt counters. Checked in headless
   Chromium at 1280 and 520 pixels wide (headless Chromium lays out no narrower than 500).
 - **Testing on Edward's side:** `tools/check_vectors.py` and `tools/run_tests.bat` (above, under
@@ -2824,10 +2824,10 @@ cover and a title.
     are not lossless.
   - *Claude's version* is left out of the copy, as everywhere in the repository.
 - **The website:**
-  - *Disclosure:* an AI disclosure on every page, fuller on Buy or Build. Edward's own multi-year
+  - *Disclosure:* an AI disclosure on every page, fuller on Build or Buy. Edward's own multi-year
     theory, Gemini's help with concepts and the website, and Claude's with the code and
     documentation; what the game's own models are trained on.
-  - *Buy or Build:* gains "What The Numbers Mean" (a day; everyone at once; the pages printed;
+  - *Build or Buy:* gains "What The Numbers Mean" (a day; everyone at once; the pages printed;
     gained and lost; the audio page's tracks from the same epoch) and "Running Out Of Original
     Things To Say" (3.5 × 10^-64 %).
   - *How it stays exact:* every constant is named in the script, with its source.
@@ -2849,9 +2849,9 @@ cover and a title.
 
 ### Folding everything, and the disclosure first (13 October 2026)
 - **Website:**
-  - *Disclosure first:* the AI disclosure is at the top of every page. On Buy or Build it comes
+  - *Disclosure first:* the AI disclosure is at the top of every page. On Build or Buy it comes
     first and the buy and download buttons last (Edward: it always has to be front and centre).
-  - *"Folding Everything" on Buy or Build:*
+  - *"Folding Everything" on Build or Buy:*
     - 10^9868 bits written out against one line folded;
     - Lloyd's 10^90 bits and 10^120 operations;
     - 1.5 × 10^89 background photons;
@@ -2873,6 +2873,50 @@ cover and a title.
   15 guesses); `test_core` checks them, with round trips and refused recipes. 76,549 checks, 0
   failures. CI diffs the oracle and runs the CLI there and back, a broken XOR, an unbroken feistel
   and the catalogue. `tools/check_vectors.py` includes it.
-- **Website:** a random voice from VOICES.md at the very bottom of Buy or Build, under the
+- **Website:** a random voice from VOICES.md at the very bottom of Build or Buy, under the
   buttons, with a "Read aloud" button (IDEAS §19.68).
 - **Next:** the Encryption Engine screen in the game.
+
+### Build or Buy, every build on the record, and how rare a voice is (13 October 2026)
+- **Build or Buy:**
+  - the page is "Build or Buy" everywhere (title, the index's link, the docs);
+  - its buttons run Build, Download, then Buy, at the bottom;
+  - the line at the top says the game is the same either way and that the page will not try to
+    sell it (IDEAS §19.69).
+- **Metrics for every build** (IDEAS §19.50, §19.69):
+  - `tools/log_metrics.py` writes `metrics/builds/<UTC time>.txt` (`sieve-metrics-v1`) and
+    rewrites `metrics/index.tsv` from every record;
+  - `run_tests.bat` keeps each unit run's output and runs the logger once everything has passed,
+    with the hallway's metrics list under the reference filters when a hallway is built;
+  - the website's "Every Build, On The Record" reads the index: the time since the last build, the
+    latest figures and a chart for each measure.
+  - No record is committed yet: the first will be the first full Windows run's.
+- **Voices:**
+  - three more of Edward's in VOICES.md;
+  - under the website's voice, its odds by the length of the list, and how many of them this
+    visitor has met (IDEAS §19.70; a hall of voices in the game is noted there).
+
+### The characters model, every release on the record, Specs vs Stats (13 October 2026)
+- **`data/training/type-2x32`:** the characters model, the fourth entry in the model list
+  (IDEAS §19.72, §19.73). Its pictures are written by `tools/build_character_pictures.py`. The
+  list is alphabetical (`picture_models_in`), so naming it after `melodies` keeps
+  `figures-2x32` the default and leaves the menu's CI steps as they were.
+- **`make_release` step 8c:** runs and times the build's unit suite, then `log_metrics.py`
+  writes a `release` record with `unit_seconds` and the hallway's metrics list. `--no-record`
+  skips it.
+- **`log_metrics.py`:**
+  - `--set KEY=VALUE`;
+  - the machine as read from the system (`cpu`, `logical_processors`, `memory_gb`, `gpu` on
+    Windows), never its name;
+  - `machine_profile` when `metrics/machines/*.txt` (`sieve-machine-v1`) has the same `cpu`;
+  - empty values left out of a record.
+- **`metrics/machines/edward-1.txt`:** Edward's machine in his words, listed in `list.txt`.
+- **`Pages/specs.html`, Specs vs Stats** (linked from Build or Buy's builds section):
+  - machines, the leaderboard by checks a second, and machines working together;
+  - Landauer limits for Earth's sunlight, and a Dyson sphere in a category of its own;
+  - how to add a machine.
+- **VOICES.md:**
+  - three more of Edward's, two marked "a point about everything" (a new marker, explained in the
+    file's format);
+  - Claude's answer to "can we fold all video games into one?".
+- **IDEAS:** §19.71 to §19.75 (accessibility, with the quick-time-event grid noted and not wanted).

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Potentia // Buy or Build</title>
+<title>Potentia // Build or Buy</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
   body{
@@ -158,7 +158,7 @@
 </div>
 
 <div class="manifesto-line">The same game twice, with no changes whatsoever: built by you from the repository as The Sieve of Potentia, or ready to play as State Space : Near Zero.</div>
-<div class="manifesto-line">Buying it supports the work. Building it costs nothing but a few minutes.</div>
+<div class="manifesto-line">Build it, for nothing but a few minutes, or buy it, to support the work. Nothing in the game changes either way, and nothing here will try to talk you into buying it.</div>
 
 <div class="section-label">Build It Yourself (Free)</div>
 <div class="steps">
@@ -227,11 +227,22 @@
   <div class="counter-note" id="originality-note">Sentences of 20 words from a vocabulary of 20,000 words: 20,000<sup>20</sup> of them. If every person who has ever lived (about 117 billion) had said a new one every second for a hundred years, this is the share they would have used up.</div>
 </div>
 
-<div class="section-label">Buy It Or Download It</div>
+<div class="section-label">Every Build, On The Record</div>
+<div class="counter-box" id="builds-box">
+  <div class="counter-title">Since The Last Recorded Build</div>
+  <div class="counter-value" id="builds-since">No build recorded yet</div>
+  <div class="counter-note" id="builds-note">Each build that passes every test logs its measures (tools/log_metrics.py) to <a href="https://github.com/Thor110/Potentia/tree/main/Sieve/metrics" target="_blank">Sieve/metrics</a>, and this page reads them from there, so it and the game always show the same figures. The figures below stay as they are until the next build records new ones. The machines that made them are on <a href="specs.html">Specs vs Stats</a>.</div>
+</div>
+<div class="steps" id="builds-figures" style="display:none;">
+  <ul style="margin-left:20px;" id="builds-list"></ul>
+  <div id="builds-charts"></div>
+</div>
+
+<div class="section-label">Build It Or Buy It</div>
 <div class="nav-group">
-  <a href="https://www.paypal.com/paypalme/invaderzimtwo" target="_blank" class="btn-link">Buy / Support (PayPal)</a>
-  <a href="https://github.com/Thor110/Potentia/releases" target="_blank" class="btn-link">Download The Current Release</a>
   <a href="https://github.com/Thor110/Potentia" target="_blank" class="btn-link">Build From The Repository</a>
+  <a href="https://github.com/Thor110/Potentia/releases" target="_blank" class="btn-link">Download The Current Release</a>
+  <a href="https://www.paypal.com/paypalme/invaderzimtwo" target="_blank" class="btn-link">Buy / Support (PayPal)</a>
 </div>
 
 <div class="nav-group">
@@ -246,6 +257,7 @@
     <a href="#" class="btn-link" id="voice-speak">Read Aloud: Off</a>
     <a href="#" class="btn-link" id="voice-next">Another Voice</a>
   </div>
+  <div class="counter-note" id="voice-odds"></div>
   <div class="counter-note">Drawn at random from <a href="https://github.com/Thor110/Potentia/blob/main/Sieve/docs/VOICES.md" target="_blank">VOICES.md</a>, the lines the AIs of the halls will say, each with who said it first.</div>
 </div>
 
@@ -419,12 +431,36 @@
         const v = voices[i];
         document.getElementById("voice-text").textContent = "\u201c" + v.text + "\u201d";
         document.getElementById("voice-who").textContent = "\u2014 " + v.who + ", " + v.date + " (" + v.kind + ")";
+        voiceOdds(i);
         if (speaking && "speechSynthesis" in window) {
             speechSynthesis.cancel();
             const u = new SpeechSynthesisUtterance(v.text);
             u.lang = "en-GB";
             speechSynthesis.speak(u);
         }
+    }
+
+    // How rare a voice is, by the length of the list. Each turn shows one of the other n - 1 voices
+    // at random, so a voice comes back once in n - 1 turns on average, and seeing every one takes
+    // 1 + (n - 1)(1 + 1/2 + ... + 1/(n - 1)) turns on average (the coupon collector's problem, with
+    // the voice on show left out of each draw).
+    const VOICES_SEEN_KEY = "potentia-voices-seen";
+    function voiceOdds(i) {
+        const n = voices.length;
+        let seen = [];
+        try { seen = JSON.parse(localStorage.getItem(VOICES_SEEN_KEY) || "[]"); } catch (e) { seen = []; }
+        const key = voices[i].who + "|" + voices[i].text;
+        if (!seen.includes(key)) seen.push(key);
+        try { localStorage.setItem(VOICES_SEEN_KEY, JSON.stringify(seen)); } catch (e) { /* not kept: fine */ }
+        const count = seen.filter(k => voices.some(v => v.who + "|" + v.text === k)).length;
+        let h = 0;
+        for (let k = 1; k < n; k++) h += 1 / k;
+        const allTurns = 1 + (n - 1) * h;
+        const minutes = x => Math.round(x * VOICE_SECONDS / 60);
+        document.getElementById("voice-odds").textContent = n < 2 ? "" :
+            "One of " + n + " voices: each comes back about once every " + (n - 1) + " turns (about " + minutes(n - 1) +
+            " minutes), and hearing all of them takes about " + Math.round(allTurns) + " turns (about " + minutes(allTurns) +
+            " minutes). The longer the list grows, the rarer each one becomes. You have met " + count + " of the " + n + ".";
     }
 
     async function loadVoices() {
@@ -446,6 +482,76 @@
             } catch (e) { /* opened from disk, or offline: try the next source */ }
         }
     }
+
+    // Every build on the record (IDEAS 19.50): metrics/index.tsv, written by tools/log_metrics.py
+    // from the records in metrics/builds. The latest row is shown as it stands; the time since it
+    // counts up; each measure with two builds or more is charted, a dot a build, joined by lines.
+    const BUILD_SOURCES = ["../Sieve/metrics/index.tsv",
+                           "https://raw.githubusercontent.com/Thor110/Potentia/main/Sieve/metrics/index.tsv"];
+    const BUILD_MEASURES = [
+        ["unit_checks", "unit test checks, all passing"],
+        ["vector_files", "conformance vector files the independent oracle reproduces"],
+        ["spec_sections", "sections of the specification"],
+        ["commands", "commands of the sieve tool"],
+        ["source_files", "source files"],
+        ["source_lines", "lines of source"],
+        ["ideas", "ideas noted"],
+        ["voices", "voices of the halls"],
+    ];
+    let lastBuild = null;
+
+    function chart(rows, key, label) {
+        const pts = rows.map(r => Number(r[key])).map((v, i) => [i, v]).filter(p => rows[p[0]][key] !== "" && !isNaN(p[1]));
+        if (pts.length < 2) return "";
+        const W = 560, H = 90, pad = 8;
+        const lo = Math.min(...pts.map(p => p[1])), hi = Math.max(...pts.map(p => p[1]));
+        const x = i => pad + (W - 2 * pad) * i / (rows.length - 1);
+        const y = v => hi === lo ? H / 2 : H - pad - (H - 2 * pad) * (v - lo) / (hi - lo);
+        const line = pts.map(p => x(p[0]).toFixed(1) + "," + y(p[1]).toFixed(1)).join(" ");
+        const dots = pts.map(p => '<circle cx="' + x(p[0]).toFixed(1) + '" cy="' + y(p[1]).toFixed(1) + '" r="3" fill="#e0ddd8"/>').join("");
+        return '<div class="counter-note" style="margin-top:12px;">' + label + ": " + grouped(BigInt(lo)) + " to " + grouped(BigInt(hi)) + '</div>' +
+               '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;border:1px solid #2a2a3a;" role="img" aria-label="' + label + ' by build">' +
+               '<polyline points="' + line + '" fill="none" stroke="#666" stroke-width="1.5"/>' + dots + '</svg>';
+    }
+
+    async function loadBuilds() {
+        for (const src of BUILD_SOURCES) {
+            try {
+                const r = await fetch(src);
+                if (!r.ok) continue;
+                const lines = (await r.text()).split(/\r?\n/).filter(l => l.length > 0);
+                if (lines.length < 2) continue;
+                const head = lines[0].split("\t");
+                const rows = lines.slice(1).map(l => { const c = l.split("\t"), o = {}; head.forEach((h, i) => o[h] = c[i] || ""); return o; });
+                const last = rows[rows.length - 1];
+                lastBuild = Date.parse(last.date);
+                const list = document.getElementById("builds-list");
+                const item = html => { const li = document.createElement("li"); li.innerHTML = html; list.appendChild(li); };
+                item("<b>Builds on the record:</b> " + rows.length + "; the latest is Sieve " + last.version + " at commit " + last.commit + ", on " + last.machine + ".");
+                for (const [key, label] of BUILD_MEASURES)
+                    if (last[key]) item("<b>" + grouped(BigInt(last[key])) + "</b> " + label);
+                const kept = head.filter(h => h.startsWith("kept_log10_") && last[h] !== "");
+                if (kept.length)
+                    item("<b>What the reference filters keep</b> (log<sub>10</sub> of each line's share): " +
+                         kept.map(h => h.slice(11) + " 10^" + last[h]).join(", ") + ".");
+                document.getElementById("builds-charts").innerHTML = BUILD_MEASURES.map(([k, l]) => chart(rows, k, l)).join("");
+                document.getElementById("builds-figures").style.display = "";
+                updateBuildClock();
+                setInterval(updateBuildClock, 1000);
+                return;
+            } catch (e) { /* opened from disk, or offline: try the next source */ }
+        }
+    }
+
+    function updateBuildClock() {
+        if (lastBuild === null || isNaN(lastBuild)) return;
+        let s = Math.max(0, Math.floor((Date.now() - lastBuild) / 1000));
+        const d = Math.floor(s / 86400); s %= 86400;
+        const h = Math.floor(s / 3600); s %= 3600;
+        const m = Math.floor(s / 60); s %= 60;
+        document.getElementById("builds-since").textContent = d + " days, " + h + " hours, " + m + " minutes, " + s + " seconds";
+    }
+    loadBuilds();
 
     document.getElementById("voice-next").addEventListener("click", e => { e.preventDefault(); showVoice(); });
     const speakButton = document.getElementById("voice-speak");

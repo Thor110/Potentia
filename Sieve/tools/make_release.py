@@ -28,6 +28,10 @@ order matters and is easy to get wrong by hand:
      beside it.
   8b. metrics.txt: how much of each line the reference filters remove (data/metrics/
      reference-filters.ini), as the setup menu counts it, by the build's hallway (--metrics).
+  8c. The build's record (IDEAS §19.50, §19.71): the build's unit suite run and timed, then
+     tools/log_metrics.py writes a record (kind release) to metrics/builds and rewrites
+     metrics/index.tsv, with the machine it ran on. Commit them with the release, so every release
+     is measured on the record. --no-record leaves it out.
   9. SHA256SUMS.txt and a release-notes draft.
 
 Published (three files, Edward's naming): sieve.exe, sieve.sieve and sieve.map, the map naming the
@@ -54,8 +58,8 @@ strongest), so they install straight to a runnable folder and are smaller than t
 --seven-zip makes them from a solid 7z of the folder instead, as releases were made before v4, so
 the two can be weighed against each other on the same build.
 
-It needs Python 3.8+, CMake, and 7-Zip (7z on the PATH, or in Program Files) for the source archive. It changes nothing
-in the repository. (--with-source, which rewrote a shipped data/maps/sieve.map to name a source
+It needs Python 3.8+, CMake, and 7-Zip (7z on the PATH, or in Program Files) for the source archive. It changes
+nothing in the repository but the build's record in metrics/ (step 8c). (--with-source, which rewrote a shipped data/maps/sieve.map to name a source
 archive, was dropped on 27 September 2026: the published map holds the source instead.)
 """
 
@@ -250,6 +254,7 @@ def main():
     ap.add_argument("--name", default="sieve", help="the published files' base name (default: sieve)")
     ap.add_argument("--skip-build", action="store_true", help="use the build as it is")
     ap.add_argument("--seven-zip", action="store_true", help="carry a solid 7z of the folder (as before v4), not the folder packed")
+    ap.add_argument("--no-record", action="store_true", help="leave out step 8c, the build's record in metrics/")
     ap.add_argument("--map-with", type=Path, default=None, metavar="FILE",
                     help="after publishing: make sieve.map again, naming the release's files and FILE too (GitHub's source zip)")
     a = ap.parse_args()
@@ -384,6 +389,27 @@ def main():
     if not metrics.exists():
         fail("the hallway wrote no metrics.txt")
     metrics_text = metrics.read_text(encoding="utf-8")
+
+    # 8c. The build's record: every release measured, on the machine that made it (IDEAS §19.71).
+    # The unit suite is run here, timed, so its time is a figure of this machine; a failure stops
+    # the release, since a release must pass its own tests.
+    if not a.no_record:
+        step("the build's record (metrics/)")
+        tests = build / f"sieve_tests{EXE}"
+        if not tests.exists():
+            fail(f"sieve_tests{EXE} is not in {build}: build it, or pass --no-record")
+        import time
+        with tempfile.TemporaryDirectory() as tmp:
+            unit_out = Path(tmp) / "unit.txt"
+            began = time.monotonic()
+            with open(unit_out, "w", encoding="utf-8") as f:
+                tested = subprocess.run([str(tests), "tests"], cwd=ROOT, stdout=f, stderr=subprocess.STDOUT)
+            seconds = time.monotonic() - began
+            print(unit_out.read_text(encoding="utf-8", errors="replace").rstrip().splitlines()[-1])
+            if tested.returncode != 0:
+                fail("the unit tests failed: no release is made from a build that fails them")
+            run([sys.executable, ROOT / "tools" / "log_metrics.py", "--unit", f"{build.name}={unit_out}",
+                 "--hallway", build / f"hallway{EXE}", "--set", "kind=release", "--set", f"unit_seconds={seconds:.1f}"], cwd=ROOT)
 
     # 9. Sums and notes.
     step("SHA256SUMS.txt and the notes")
