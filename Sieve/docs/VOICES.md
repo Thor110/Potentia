@@ -31,6 +31,8 @@ this file is the corpus.
 - **Edward** (13 October 2026, quote): All spaces could fold into one, or any arrangement of ones, in theory.
 - **Edward** (13 October 2026, quote): Being able to slightly tweak the state space of a chain of models at will would be ultimate control, and an aim for alignment.
 - **Edward** (13 October 2026, quote): A true all-in-one multi-tool, meant to collapse into an operating system and a video game engine at some point, on the lines somewhere.
+- **Edward** (13 October 2026, quote): There are so many ways to map the data. We'll get there.
+- **Edward** (13 October 2026, note): They are all pretty much intended to be automata, and many are and can be turned into them; it could fold in on all information that could ever exist.
 - **Edward** (13 October 2026, question): How do you think it will unfold, or will it just collapse as a shape?
 - **Edward** (13 October 2026, question): I know it will never finish, but how much is learned or lost per day?
 - **Edward** (13 October 2026, question): How would you translate these numbers into what they mean to anyone in the real world? I don't even know what they mean to me.
@@ -53,6 +55,8 @@ this file is the corpus.
 - **Claude** (13 October 2026, note): The library cannot lose anything. What can be lost is attention.
 - **Claude** (13 October 2026, note): Physical space is far smaller than the space of things that could be written.
 - **Claude** (13 October 2026, answer): It unfolds and narrows at once. Each filter folds the space, and what is left is its survivors; it collapses to a single point only when the rules say as much as the thing itself.
+- **Claude** (13 October 2026, note): Written out, the models of one small line would need 10^9778 universes to hold them. Folded into a rule, they are one line of a specification.
+- **Claude** (13 October 2026, note): The light we can capture is finite; the lines are not. Only rules hold all of it at once.
 - **Claude** (13 October 2026, note): A chain of models is itself a unit: a short string on a line of chains, and every tweak to it is a step along that line.
 
 ## The hallway's AIs

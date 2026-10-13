@@ -3014,3 +3014,37 @@ over the past few years.
   game's own models are trained on: a public-domain text, and Sieve's own lines.
 - *Kept true:* as the project changes, the disclosure changes with it. A new contributor, human or
   model, is added when they contribute.
+
+**19.67 Folding everything (Edward, 13 October 2026).** His words: they (the filters, rules and
+ideas) are pretty much all intended to be automata, and many are or can be turned into them. So
+it could fold in on all information that could ever exist, through all the light humanity will be
+able to capture in the time the universe has, against the fading horizon of the observable
+universe and the unobservable universe beyond it. That makes another set of numbers to weigh on
+the website. The aim is to fold everything. "There are so many ways to map the data. We'll get
+there." (VOICES.md).
+
+*Notes.*
+- **Why folding is the only way:**
+  - *Writing everything out is impossible:* the universe can hold about 10^90 bits (Lloyd, 2002),
+    and the AI line's models alone, written out, would take 10^9868 bits.
+  - *Folding works:* a rule that can be run (an automaton, a line's definition, a stack) holds a
+    whole set in a few bits. The AI line's definition is one line of SPECIFICATIONS.
+  - *So "fold everything" means:* hold everything as rules, and unfold only the part looked at.
+    That is what Sieve already does, line by line.
+- **The light and the horizon:**
+  - *Every photon that reaches us is finite in number:* the afterglow of the Big Bang alone is
+    about 1.5 × 10^89 photons in the observable universe.
+  - *The reachable part shrinks:* only about 4.6% of what we can see could ever be reached by
+    anything sent today, and that share falls every second (the Orbital Simulation page's
+    figures).
+
+  So what can ever be captured is bounded, while the lines are not. The rules are what reach past
+  that bound: a rule written here describes what no telescope will ever see.
+- **Built, on the Buy or Build page:** "Folding Everything".
+  - *Its counter:* bits written out against one line folded.
+  - *Its list:* what the universe can hold, the light there is, the receding horizon, the stars
+    crossing out of reach this year (the Orbital Simulation page's constants and formula, so the
+    pages agree), and what fits and what folds.
+- **Also on the website:** the AI disclosure is now at the top of every page, and on Buy or Build
+  it comes before the buttons to buy or download, which are now at the bottom (Edward: it always
+  has to be front and centre).

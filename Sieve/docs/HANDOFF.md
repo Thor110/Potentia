@@ -2846,3 +2846,17 @@ cover and a title.
   - unfold or collapse;
   - disclosure everywhere.
 - **No code changed this round.**
+
+### Folding everything, and the disclosure first (13 October 2026)
+- **Website:**
+  - *Disclosure first:* the AI disclosure is at the top of every page. On Buy or Build it comes
+    first and the buy and download buttons last (Edward: it always has to be front and centre).
+  - *"Folding Everything" on Buy or Build:*
+    - 10^9868 bits written out against one line folded;
+    - Lloyd's 10^90 bits and 10^120 operations;
+    - 1.5 × 10^89 background photons;
+    - the 4.6% reachable share and the stars crossing out of reach this year, with the Orbital
+      Simulation page's constants and formula, so the pages agree.
+- **IDEAS §19.67** folding everything. **VOICES.md:** "There are so many ways to map the data.
+  We'll get there." (Edward), and two notes of Claude's.
+- **No code changed.**

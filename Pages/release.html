@@ -145,6 +145,18 @@
   One game, two names. This game is free if you build it yourself!
 </div>
 
+
+<div class="steps" style="color:#777;font-size:14px;">
+  <div style="text-transform:uppercase;letter-spacing:0.2em;color:#666;margin-bottom:8px;text-align:center;">AI Disclosure</div>
+  The Sieve of Potentia (State Space : Near Zero) is Edward's (Thor110's) work. He has been building its theory and ideas himself over the past few years, and directs everything in it.
+  <ul style="margin:8px 0 8px 20px;">
+    <li><b>Gemini (Google)</b> helped him theorise and conceptualise: many of the concepts and ideas, and parts of this website.</li>
+    <li><b>Claude (Anthropic)</b> has written much of Sieve's code, its tests and its documentation with him, in long working sessions he reviews and tests.</li>
+    <li>The game's own models (the text, picture and melody models in the hallway) are small models trained by Sieve itself: the text model on a public-domain text, and the picture and melody models on units of Sieve's own lines.</li>
+  </ul>
+  Those happy to use AI-assisted work won't mind; those who prefer otherwise deserve to know. Transparency fosters trust.
+</div>
+
 <div class="manifesto-line">The same game twice, with no changes whatsoever: built by you from the repository as The Sieve of Potentia, or ready to play as State Space : Near Zero.</div>
 <div class="manifesto-line">Buying it supports the work. Building it costs nothing but a few minutes.</div>
 
@@ -158,17 +170,10 @@
   A video of the whole process, start to finish, is on its way.
 </div>
 
-<div class="section-label">Buy It Or Download It</div>
-<div class="nav-group">
-  <a href="https://www.paypal.com/paypalme/invaderzimtwo" target="_blank" class="btn-link">Buy / Support (PayPal)</a>
-  <a href="https://github.com/Thor110/Potentia/releases" target="_blank" class="btn-link">Download The Current Release</a>
-  <a href="https://github.com/Thor110/Potentia" target="_blank" class="btn-link">Build From The Repository</a>
-</div>
-
 <div class="counter-box">
   <div class="counter-title">Expected Release</div>
   <div class="counter-value">When It Is Ready</div>
-  <div class="counter-note">Storefronts will follow. Until then, the PayPal link above supports the work, and the release is the same download either way.</div>
+  <div class="counter-note">Storefronts will follow. Until then, the PayPal link below supports the work, and the release is the same download either way.</div>
 </div>
 
 <div class="counter-box">
@@ -201,20 +206,32 @@
 </div>
 
 <div class="counter-box">
+  <div class="counter-title">Folding Everything</div>
+  <div class="counter-value" id="fold">0</div>
+  <div class="counter-note" id="fold-note">Written out one by one, every model of the AI line would take more bits than the universe can hold. Folded into a rule, all of them are one short line of the specification: the aim is to fold everything into rules like that.</div>
+</div>
+
+<div class="steps" id="fold-list">
+  <ul style="margin-left:20px;">
+    <li id="f-hold">...</li>
+    <li id="f-light">...</li>
+    <li id="f-reach">...</li>
+    <li id="f-stars">...</li>
+    <li id="f-fits">...</li>
+  </ul>
+</div>
+
+<div class="counter-box">
   <div class="counter-title">Running Out Of Original Things To Say</div>
   <div class="counter-value" id="originality">0</div>
   <div class="counter-note" id="originality-note">Sentences of 20 words from a vocabulary of 20,000 words: 20,000<sup>20</sup> of them. If every person who has ever lived (about 117 billion) had said a new one every second for a hundred years, this is the share they would have used up.</div>
 </div>
 
-<div class="steps" style="color:#777;font-size:14px;">
-  <div style="text-transform:uppercase;letter-spacing:0.2em;color:#666;margin-bottom:8px;text-align:center;">AI Disclosure</div>
-  The Sieve of Potentia (State Space : Near Zero) is Edward's (Thor110's) work. He has been building its theory and ideas himself over the past few years, and directs everything in it.
-  <ul style="margin:8px 0 8px 20px;">
-    <li><b>Gemini (Google)</b> helped him theorise and conceptualise: many of the concepts and ideas, and parts of this website.</li>
-    <li><b>Claude (Anthropic)</b> has written much of Sieve's code, its tests and its documentation with him, in long working sessions he reviews and tests.</li>
-    <li>The game's own models (the text, picture and melody models in the hallway) are small models trained by Sieve itself: the text model on a public-domain text, and the picture and melody models on units of Sieve's own lines.</li>
-  </ul>
-  Those happy to use AI-assisted work won't mind; those who prefer otherwise deserve to know. Transparency fosters trust.
+<div class="section-label">Buy It Or Download It</div>
+<div class="nav-group">
+  <a href="https://www.paypal.com/paypalme/invaderzimtwo" target="_blank" class="btn-link">Buy / Support (PayPal)</a>
+  <a href="https://github.com/Thor110/Potentia/releases" target="_blank" class="btn-link">Download The Current Release</a>
+  <a href="https://github.com/Thor110/Potentia" target="_blank" class="btn-link">Build From The Repository</a>
 </div>
 
 <div class="nav-group">
@@ -320,9 +337,52 @@
         document.getElementById("originality").innerHTML = tinyPercent(said, SENTENCES) + "<br>used up";
     }
 
+    // Folding everything. The universe's limits, with their sources, beside what the lines would
+    // take written out. The horizon and the stars are the Orbital Simulation page's constants, so
+    // the two pages agree.
+    const UNIVERSE_BITS_EXP = 90;            // about 10^90 bits in matter (Lloyd, 2002)
+    const UNIVERSE_OPS_EXP = 120;            // about 10^120 operations since the Big Bang (Lloyd, 2002)
+    const CMB_PHOTONS_PER_CM3 = 411n;        // the cosmic microwave background
+    const OBSERVABLE_RADIUS_M = 440000000000000000000000000n; // 46.5 billion light years, about 4.4 x 10^26 m
+    const REACH_GLY = 16.58, SEEN_GLY = 46.18; // as the Orbital Simulation page
+    const STARS_LOST_PER_SECOND = 24500;     // as the Orbital Simulation page
+    const MODEL_BITS = 32768n;               // a model of the AI line's default shape
+
+    function folding() {
+        // Every model written out: 2^32768 models of 32,768 bits each.
+        const modelsBits = MODELS * MODEL_BITS;
+        const digits = modelsBits.toString().length - 1;
+        document.getElementById("fold").innerHTML = "10^" + digits + " bits written out<br>one line folded";
+        document.getElementById("f-hold").innerHTML =
+            "<b>What the universe can hold:</b> about 10^" + UNIVERSE_BITS_EXP + " bits, and about 10^" + UNIVERSE_OPS_EXP +
+            " operations could have been done on them since the Big Bang (Seth Lloyd, 2002). The models of the AI line, written out, would need 10^" +
+            (digits - UNIVERSE_BITS_EXP) + " times more.";
+        // Photons of the cosmic microwave background in the observable universe: 411 a cubic centimetre.
+        const r_cm = OBSERVABLE_RADIUS_M * 100n;
+        const photons = (4n * 314159n * r_cm * r_cm * r_cm * CMB_PHOTONS_PER_CM3) / (3n * 100000n);
+        document.getElementById("f-light").innerHTML =
+            "<b>The light there is:</b> the afterglow of the Big Bang alone is about " + scientific(photons) +
+            " photons in the observable universe. All the light humanity will ever capture is a part of what reaches us; it is finite, and the lines are not.";
+        const now = Date.now();
+        const yearStart = Date.UTC(new Date().getUTCFullYear(), 0, 1);
+        const years = (now - yearStart) / (31557600 * 1000);
+        const reach = REACH_GLY - years * 1e-9, seen = SEEN_GLY + years * 1e-9;
+        document.getElementById("f-reach").innerHTML =
+            "<b>The horizon recedes:</b> of everything we can see, only " + (100 * (reach / seen) ** 3).toFixed(1) +
+            "% could ever be reached by anything we send today, and that share shrinks every second. What we cannot reach we can still see, as it was.";
+        document.getElementById("f-stars").innerHTML =
+            "<b>Out of reach this year:</b> about " + Math.floor((now - yearStart) / 1000 * STARS_LOST_PER_SECOND).toLocaleString("en-GB") +
+            " stars have crossed beyond it since the start of " + new Date().getUTCFullYear() + ", as the <a href=\"space.html\">Orbital Simulation</a> counts.";
+        const pagesBits = PAGES * 152n; // 32 characters of 27: 32 x log2(27), about 152 bits a page
+        document.getElementById("f-fits").innerHTML =
+            "<b>What fits and what folds:</b> every 32-character page written out is about " + scientific(pagesBits) +
+            " bits, which the universe could hold. Every model of the AI line is not; only the rule for them is. Rules that can be run (automata) are how all of it is held at once.";
+    }
+
     function updateAll() {
         update();
         meanings();
+        folding();
     }
 
     setInterval(updateAll, 1000);
