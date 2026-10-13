@@ -236,7 +236,6 @@
         const sign = change > 0 ? "+" : change < 0 ? "−" : "±";
         card.innerHTML = '<div class="chart-head"><span><b>' + title + '</b>' + (how ? ' (' + how + ')' : '') + '</span><span><b>' + grouped(last) + '</b>' +
             (pts.length > 1 ? ' &nbsp;' + sign + grouped(Math.abs(change)) + ' since the first' : '') + '</span></div>';
-        if (about) card.innerHTML += '<div class="counter-note" style="margin-top:6px;font-size:14px;color:#888;">' + about + '</div>';
         // The scale in words: the top dashed line is the highest on the record, the base the lowest.
         const lo0 = Math.min(...pts.map(p => p.v)), hi0 = Math.max(...pts.map(p => p.v));
         card.innerHTML += '<div class="counter-note" style="margin-top:4px;font-size:13px;">' +
@@ -288,6 +287,14 @@
             tip.style.top = "-6px";
         });
         svgEl.addEventListener("pointerleave", () => { tip.style.display = "none"; cross.setAttribute("visibility", "hidden"); });
+        // What the measure means, under its graph.
+        if (about) {
+            const d = document.createElement("div");
+            d.className = "counter-note";
+            d.style.cssText = "margin-top:10px;font-size:14px;color:#888;";
+            d.textContent = about;
+            card.appendChild(d);
+        }
         // The same figures as a table, for anyone who would rather read than look.
         const det = document.createElement("details");
         det.innerHTML = '<summary>As a table</summary><table><tr><th>Date</th><th>Commit</th><th>Value</th></tr>' +
