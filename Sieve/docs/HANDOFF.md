@@ -2920,3 +2920,12 @@ cover and a title.
     file's format);
   - Claude's answer to "can we fold all video games into one?".
 - **IDEAS:** §19.71 to §19.75 (accessibility, with the quick-time-event grid noted and not wanted).
+
+### Notes: characters and figures as filters and keys, and contributors' voices (13 October 2026)
+- **IDEAS:**
+  - §19.76: characters and figures as filters (a `glyph-v1` filter, cross-line pages) and as
+    keys (a picture's 100 cells as a cipher key, a model and noise as a key);
+  - §19.77: contributors' voices, unlimited within reason, a respectful amount asked, nothing
+    guaranteed. The same words are in VOICES.md.
+- **VOICES.md:** "This, models across all dimensions?" (Edward).
+- **No code changed.**

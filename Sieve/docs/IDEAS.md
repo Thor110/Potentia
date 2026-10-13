@@ -3251,3 +3251,43 @@ lead to a filter one day, or may not; there is lots of time and ground to cover.
 His question, "Does that mean we can fold all video games into one?", has Claude's answer in
 VOICES.md. Counting-wise they are folded already: every game is a file of the binary line. A rule
 that plays any of them is an emulator, and the hallway is the start of one.
+
+**19.76 Characters and figures as filters and keys (Edward, 13 October 2026; with §19.52 and the
+filters).** His thought: characters and figures could surely be used as filters or as keys, in
+strange ways. Why not? His question with it: "This, models across all dimensions?"
+- *As filters:*
+  - **A picture that is a character** (within a few cells of one of the 94 glyphs) is a filter
+    on the image line, an exact one, since the glyphs are a fixed list. Its survivors can be
+    counted: 846 placed glyphs, each with every picture a few cells from it.
+  - **A page whose characters are drawn,** not written, crosses lines: a row of pictures on the
+    image line that read as a word of the pages line. That is one line filtered by another
+    (SPECIFICATIONS, `not-written-v1` and its kin), with pictures as its letters.
+  - **A figure's shape** (`figure-v1`) can filter a line where shape means something else: a
+    melody whose plotted notes form one connected figure, or a model whose weights do.
+- *As keys:*
+  - **A picture as a cipher key:** its 100 cells are 100 bits, so a figure or a drawn character is
+    a key for `xor`, `vigenere` or `feistel` (`cipher-v1`). Anyone holding the picture holds the
+    key; a key that is a drawing can be remembered as one.
+  - **The model as the key:** a picture model and a noise address make a picture (§12.0g), so
+    the pair (model, noise) is a key, and every model of the AI line is a family of keys. A
+    message can be locked with a picture that only a given model draws.
+  - **Characters as an alphabet of keys:** a key spelt in glyphs, each glyph a picture, so a
+    recipe's key and its drawing are one thing seen on two lines.
+- *Models across all dimensions:* every line can have its baked models (§19.72). With those, a
+  character, a figure or a melody is at once a unit, a filter, a key, and something a model makes.
+  The same thing seen along every dimension.
+- *Next:* a `glyph-v1` filter (a picture within K cells of a glyph, counted exactly), and
+  `xor-picture`, a cipher layer keyed by a picture's address, in a later `cipher-v2`.
+
+**19.77 How many voices a contributor may add (Edward, 13 October 2026).** His words: let
+contributors add some number of quotes. He does not like numbers or money, so: unlimited within
+reason. "Within reason" is whether a quote exists, and whether he can store it, because infinite
+is infinite. So a respectful amount is asked for, and more may be considered, evaluated,
+enumerated and stored later. Nothing is guaranteed. Noted for now, not built. The same words are
+in VOICES.md beside the format.
+- *How it could work, when built:*
+  - each voice carries its contributor, as every voice already does;
+  - the website's odds (§19.70) count every voice, so the list's length is the measure of what
+    is stored;
+  - a voice already on the list (the same text) is not stored twice, so "whether it exists" is
+    checked by the list itself.

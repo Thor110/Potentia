@@ -22,6 +22,11 @@ this file is the corpus.
   read as a mistake in the game. A line is never reattributed; a correction to a fact is a note
   beside it.
 
+**Contributing voices.** Anyone may add voices of their own, attributed to them. There is no fixed
+number: unlimited within reason, and "within reason" means what exists, and what can be stored.
+Infinite is infinite, so a respectful amount is asked for. More may be considered, evaluated,
+enumerated and stored later. Nothing is guaranteed (IDEAS §19.77).
+
 ## Edward
 
 - **Edward** (12 October 2026, quote): Imagine all AIs folding in on themselves and figuring everything ever out, perhaps still being perplexed by themselves being in Pi for a while, then being ready to take a body and join humanity, maybe even figuring out what to do with the remainder of Pi.
@@ -44,6 +49,7 @@ this file is the corpus.
 - **Edward** (13 October 2026, quote; a point about everything): We can make it all as free-flowing as possible, as a program and as a state space.
 - **Edward** (13 October 2026, question; a point about everything): If we all use the commands and filters, won't we all have an angle?
 - **Edward** (13 October 2026, question): Does that mean we can fold all video games into one?
+- **Edward** (13 October 2026, question): This, models across all dimensions?
 
 ## Gemini
 
