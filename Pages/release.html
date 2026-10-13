@@ -189,6 +189,34 @@
   <div class="counter-note" id="models-note">Every model of the AI line in its default shape (8,192 weights of 4 bits): 2<sup>32768</sup> of them, tried one a second.</div>
 </div>
 
+<div class="section-label">What The Numbers Mean</div>
+<div class="steps" id="meanings">
+  <ul style="margin-left:20px;">
+    <li id="m-day">...</li>
+    <li id="m-everyone">...</li>
+    <li id="m-stack">...</li>
+    <li id="m-lost">...</li>
+    <li id="m-tracks">...</li>
+  </ul>
+</div>
+
+<div class="counter-box">
+  <div class="counter-title">Running Out Of Original Things To Say</div>
+  <div class="counter-value" id="originality">0</div>
+  <div class="counter-note" id="originality-note">Sentences of 20 words from a vocabulary of 20,000 words: 20,000<sup>20</sup> of them. If every person who has ever lived (about 117 billion) had said a new one every second for a hundred years, this is the share they would have used up.</div>
+</div>
+
+<div class="steps" style="color:#777;font-size:14px;">
+  <div style="text-transform:uppercase;letter-spacing:0.2em;color:#666;margin-bottom:8px;text-align:center;">AI Disclosure</div>
+  The Sieve of Potentia (State Space : Near Zero) is Edward's (Thor110's) work. He has been building its theory and ideas himself over the past few years, and directs everything in it.
+  <ul style="margin:8px 0 8px 20px;">
+    <li><b>Gemini (Google)</b> helped him theorise and conceptualise: many of the concepts and ideas, and parts of this website.</li>
+    <li><b>Claude (Anthropic)</b> has written much of Sieve's code, its tests and its documentation with him, in long working sessions he reviews and tests.</li>
+    <li>The game's own models (the text, picture and melody models in the hallway) are small models trained by Sieve itself: the text model on a public-domain text, and the picture and melody models on units of Sieve's own lines.</li>
+  </ul>
+  Those happy to use AI-assisted work won't mind; those who prefer otherwise deserve to know. Transparency fosters trust.
+</div>
+
 <div class="nav-group">
   <a href="../index.html" class="btn-link">Return to Core Architecture</a>
 </div>
@@ -226,6 +254,15 @@
         return s.replace(/0+$/, "").replace(/\.$/, ".0") + "%";
     }
 
+    // done / total as a percentage in scientific notation, for shares too small to write out.
+    function tinyPercent(done, total) {
+        const k = 200n;
+        const v = (done * 100n * 10n ** k) / total;
+        if (v === 0n) return "less than 10^-200%";
+        const t = v.toString();
+        return t[0] + "." + t.slice(1, 4).padEnd(3, "0") + " \u00d7 10^" + (t.length - 1 - Number(k)) + "%";
+    }
+
     function show(id, noteId, total, what, began) {
         const now = BigInt(Date.now());
         const seconds = now > BigInt(began) ? (now - BigInt(began)) / 1000n : 0n;
@@ -251,8 +288,45 @@
         modelsNote.innerHTML = modelsNote.dataset.base + " Finished in the year " + scientific(after + (PAGES + MODELS) / SECONDS_PER_YEAR) + ".";
     }
 
-    setInterval(update, 1000);
-    update();
+    // What the numbers mean in human terms. Each constant is named, with where it comes from.
+    const PEOPLE_ALIVE = 8100000000n;          // about 8.1 billion (UN, 2024)
+    const PEOPLE_EVER = 117000000000n;         // about 117 billion (Population Reference Bureau estimate)
+    const UNIVERSE_AGE_YEARS = 13800000000n;   // 13.8 billion years
+    const UNIVERSE_DIAMETER_M = 880000000000000000000000000n; // the observable universe, about 8.8 x 10^26 m
+    const PAGE_THICKNESS_UM = 100n;            // a sheet of paper, about 0.1 mm
+    const SENTENCES = 20000n ** 20n;           // 20 words from 20,000
+    const AUDIO_SECONDS_PER_TRACK = 60n;       // as the audio page counts
+
+    function meanings() {
+        const now = BigInt(Date.now());
+        const seconds = now > BigInt(EPOCH_MS) ? (now - BigInt(EPOCH_MS)) / 1000n : 0n;
+        document.getElementById("m-day").innerHTML =
+            "<b>A day:</b> 86,400 pictures looked at, which is " + percent(86400n, PICTURES) + " of the 10 &times; 10 pictures. Nothing in the library is ever lost; what a day adds is what has been found.";
+        const everyoneYears = PICTURES / PEOPLE_ALIVE / SECONDS_PER_YEAR;
+        document.getElementById("m-everyone").innerHTML =
+            "<b>Everyone at once:</b> if all 8.1 billion people alive looked at a different picture every second, the 10 &times; 10 pictures would take " +
+            scientific(everyoneYears) + " years, about " + grouped(everyoneYears / UNIVERSE_AGE_YEARS) + " times the age of the universe.";
+        const stackUm = PAGES * PAGE_THICKNESS_UM;
+        document.getElementById("m-stack").innerHTML =
+            "<b>The pages, printed:</b> one 32-character page a sheet, stacked, would be " +
+            scientific(stackUm / 1000000n / UNIVERSE_DIAMETER_M) + " times as tall as the observable universe is wide. Physical space is far smaller than the space of things that could be written.";
+        document.getElementById("m-lost").innerHTML =
+            "<b>Gained and lost:</b> the library cannot lose anything, since every page is already there. What can be lost is attention: in the " +
+            grouped(seconds) + " seconds since the 24th of April 2026, there was time to look at " + grouped(seconds) + " pictures, and every one not looked at is still waiting.";
+        document.getElementById("m-tracks").innerHTML =
+            "<b>Meanwhile, the audio:</b> at one track a minute, the audio pipeline could have made " + grouped(seconds / AUDIO_SECONDS_PER_TRACK) +
+            " tracks in that time, as the <a href=\"audio.html\">Audio Archive</a> counts.";
+        const said = PEOPLE_EVER * 100n * SECONDS_PER_YEAR;
+        document.getElementById("originality").innerHTML = tinyPercent(said, SENTENCES) + "<br>used up";
+    }
+
+    function updateAll() {
+        update();
+        meanings();
+    }
+
+    setInterval(updateAll, 1000);
+    updateAll();
 </script>
 
 </body>

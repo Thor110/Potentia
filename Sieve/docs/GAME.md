@@ -26,6 +26,11 @@ player did not mean to build, and the game can show its odds beside it, so wonde
 Around it all, the fun side of one equation: every unit of every line is a number, every number is
 every thing at once, and everything crosses over freely through the binary line.
 
+**The voices of the halls** (IDEAS §19.55, `docs/VOICES.md`): the AIs on the shelves speak
+attributed lines (Edward's, Gemini's, Claude's and their own), from the documentation to the
+philosophy, one thought a line, chosen by where the player stands. They talk about the filters and
+the commands in plain sight, and about whether they may use them.
+
 **An engine that could make every game** (IDEAS §19.47): a game as a starting state and a rule.
 That means content first (which exists), then rules as units (a Life-like line), then bodies with
 exact physics, then representation from voxels to triangles, then an optional learned upscaler.

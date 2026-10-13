@@ -2799,3 +2799,218 @@ order.
 Throughout: exact arithmetic for anything addressed; versioned rules that are never edited; the
 oracle written from the specification; measurements before claims; and the counting argument kept
 in view.
+
+**19.54 Mapping the madness (Edward, 13 October 2026).** His words: "There are just so many ways
+to look at information that it maps out to absolute madness, but if no one maps it, no one finally
+maps it all or bothers trying to." File types, grammar, logic, rules: it all adds up.
+- *Note:* each way of looking is a line, or a stack on a line, and Sieve's work is to make each
+  one countable. The map of the ways is the node graph's job (§19.38): every line, filter, format
+  and grammar a node, and every translation between them an edge. Mapping it all is endless, but
+  each mapped part is exact and stays mapped.
+
+**19.55 The voices of the halls (Edward, 13 October 2026).** His idea: messages, notes, ideas,
+rules, filters and quotes (anything he or Claude says here) can be things the AIs say as they walk
+the halls, in a big `.sieve` of pages, from the documentation to the philosophy. The odd metaphor
+or quote goes a long way, and they can be attributed to him and to Claude directly. Ideas and
+filters could lead from one to another, or simply be discussed in plain sight by the AIs, as could
+the commands, and whether they may use them.
+- *Started:* `docs/VOICES.md`, a corpus with one attributed voice a line (who, when, what kind),
+  in a format a program can read. It holds Edward's, Gemini's and Claude's lines so far, and
+  Gemini's two messages whole.
+- *In the game:* the corpus packed as a `.sieve` of pages, each voice a page with its
+  attribution, and the AIs on the shelves saying them. Choosing a voice by where the player is
+  (near a filter's door, a voice about that filter) is a filter on the voices line.
+- *Commands:* AIs talking about commands is free; using them waits for the rule of what a model
+  may do without asking (§19.32). Until then they say which command they would use, and the
+  player can type it.
+- *Short lines:* one thought a voice, a sentence or two, so that they fit a speech bubble or a
+  page.
+
+**19.56 A chain is a state space, and steering it is alignment (Edward, 13 October 2026).** His
+words: the model chain is its own state space; tweaking it slightly at will would be ultimate
+control and an aim for alignment. It is recorded as a file for now, but it may become its own state
+space, or the overarching one, or both. What other models can be chained together?
+
+*Notes.*
+- **It is already a line.** A `sieve-chain-v1` file is a short string, so every chain has an
+  address on the pages or binary line, and on a line of chains of its own: stages over an alphabet
+  of models. A tweak is a step along that line, and the chains near a good one are its
+  neighbourhood. That is exactly the near-model idea (§12.0f), one level up.
+- **Steering is filters on the chain's outputs.** The control Edward means is a stack applied to
+  what the chain makes: keep the chains whose outputs pass these rules. With steered stages
+  (§19.37), the outputs are survivors by construction. That is a precise, small version of
+  alignment: the rules are stated, checked and countable.
+- **What else chains:** any model with an input and an output in some line's units:
+  - text to picture (here, by noise seed);
+  - picture to text (a captioner);
+  - melody to sound (the synthesiser);
+  - sound to text (a transcriber);
+  - text to voice controls (§19.33);
+  - text to a world (a layout model);
+  - a model to a model (a trainer: a run is a chain stage whose output is a model).
+
+**19.57 Rules beyond the filters: Lean (Edward, 13 October 2026).** His idea: constrain things by
+mathematical rule systems beyond the filters, like Lean for physics, so that further rules can be
+applied in strange ways, perhaps even the rules of Lean itself.
+
+*Notes.*
+- **A proof checker is a filter.** Lean's kernel decides whether a proof term proves its
+  statement. So "has a proof that Lean accepts" is an exact, checkable rule on a line of Lean
+  files, and theorems are the survivors.
+- **Physics in Lean exists:** PhysLean (formerly HepLean) formalises parts of physics, so a world's
+  rules could be stated in Lean and its states checked against them.
+- **The rules of Lean itself:** its type theory is a small set of rules, and its expressions are
+  strings, so Lean is one more line with a filter. A stack of "parses", "type-checks" and "proves
+  X" is the most exacting filter there could be. It is almost never satisfied by chance, which is
+  why proofs are searched for by structure rather than by walking.
+
+**19.58 Reading every document: PDF, OCR and layout (Edward, 13 October 2026).** His idea: a tool
+for PDF files that transcribes their text and images for the models, with OCR, laying out the
+syntax, grammar and rules for all layouts, formats and languages.
+
+*Notes.*
+- **PDF has two kinds:** born-digital, where the text is in the file and can be read out exactly,
+  and scanned, where it is pictures and needs OCR. Tesseract (Apache 2.0) is the established
+  open OCR engine, used as ffmpeg is, as a separate program and optional.
+- **Layout is a grammar:** columns, headings, tables, footnotes. A page's structure can be
+  written down as rules and judged as a filter ("is this a two-column page?").
+- **All formats, all languages:** each format is a grammar and each language an alphabet with
+  rules. The catalogue of them is a node graph (§19.54), filled one format at a time.
+
+**19.59 A corpus of every language (Edward, 13 October 2026).** He still needs to build a proper
+corpus of public-domain material across all known languages, speakable and not, and train models
+on it.
+
+*Notes.*
+- **The sources:** Project Gutenberg, Wikisource and the Internet Archive's public-domain texts,
+  and for languages with little text, translated scripture and government texts in the public
+  domain.
+- **The provenance:** every file's licence and SHA-256 kept, as `fetch_corpus.py` already does
+  for the shipped text.
+- **"Not speakable":** written-only systems (mathematics, music notation, programming languages,
+  sign-language notations) and undeciphered scripts. Each is a line with its own alphabet.
+- **Its use:** text models trained on it in the harness, and filters of "speaks language X"
+  (`language-v1`) for every one.
+
+**19.60 Bodies, light and scale (Edward, 13 October 2026).** His ideas:
+- a skeleton-based animation system for the models and the game, or an animation space, that
+  evolves and flows naturally in many ways, alongside light, texture and layers of textures;
+- prerendering things from three angles and making a 3D projection from the flat images, to cut
+  rendering costs for large scenes;
+- a natural scaling system for everything, between models, projections and parallax, all the way
+  to DLSS 5 hooked on top.
+
+*Notes.*
+- **The technique's name:** pictures prerendered from several angles and shown in place of the
+  model are called impostors, and with depth per pixel they give parallax. Large open-world games
+  use them for distant objects.
+- **A ladder of representations** (§19.40's ladder for pictures, applied to scenes):
+  1. a full model near;
+  2. a simpler mesh further;
+  3. an impostor beyond;
+  4. a point of colour at the horizon.
+
+  Choosing the step by distance is level of detail, and it is how a scene of everything stays
+  drawable.
+- **Skeletons:** a skeleton is a tree of bones, and an animation is each bone's turn over time.
+  Both are short units, so animations are a line, and "walks", "stays balanced" and "does not
+  pass through itself" are filters on it.
+- **Upscaling on top:** as §19.47 says, our own learned upscaler, optional, changing only how
+  things look.
+
+**19.61 What the numbers mean (Edward, 13 October 2026).** His questions: how would these numbers
+translate to anyone in the real world? What do they mean for the information, how long will it
+take to get somewhere, and where is it all going? It will never finish, but how much is learned or
+lost per day? He wants lists of the strange ways a human can quantify these things, kept as
+statistics, ideas and filters for the AIs to talk about from every perspective.
+- *Built, on the Buy or Build page,* computed live and exactly:
+  - *a day:* 86,400 pictures, 6.8 × 10^-24 % of the 10x10 ones;
+  - *everyone at once:* all 8.1 billion people would take 5.0 × 10^12 years, 359 times the age of
+    the universe;
+  - *the pages printed:* a stack 7.2 × 10^14 times the width of the observable universe;
+  - *gained and lost:* the library loses nothing, and what can be lost is attention;
+  - *the audio page's tracks,* from the same epoch, so the two pages agree.
+- **Where it is going:** not to the end of the library, which is unreachable by walking (that is
+  what the numbers say). It goes to better filters. Each rule found makes the meaningful part of
+  a line findable, and that part can be small enough to finish: the survivors of a good stack can
+  be few enough to walk in a lifetime. Progress is measured in what the rules have narrowed, not in
+  units visited.
+- **What is learned per day:** the bits that the day's new rules say (a filter that keeps one unit
+  in 2^k has said k bits). That can be counted and charted (§19.50).
+- **The list grows:** each new measure is a line in VOICES.md and, where exact, a counter on the
+  page.
+
+**19.62 The Universal Exchange Rate (Gemini's phrase; Edward likes it, 13 October 2026).**
+*Notes.*
+- **A real quantity, in bits:** what it costs to carry a thing from one line to another, and what
+  is lost on the way. A translation that is a bijection loses nothing. A fitting (a photo to a
+  10x10 picture) loses all but what the smaller unit holds. A chain's picture stage keeps only a
+  64-bit seed of what it was given, so it loses almost everything.
+- **So the rate is a table:** for each pair of lines and each way between them, the bits kept and
+  the bits lost. It can be computed and shown: "this photo to this line: 29.6 million bits in, 100
+  kept".
+
+**19.63 A currency for every person, an identity, a wallet and shared computing (Edward, 13 October
+2026).** His ideas:
+- **A currency for everyone:** every human being could eventually have a cryptocurrency of their
+  own, all generated through natural inflation. That might ease currency problems, give people
+  less reason to scam cryptocurrencies by devaluing them, and focus them on the ideas in each
+  currency's whitepaper: the science or technology it represents or discusses.
+- **Identity and governance:** alongside the cryptographically secure digital identity and the
+  governance proposals (Potentia's), as a framework for betterness in all things.
+- **A wallet for everything:** a digital wallet that can hold and search for every currency when
+  pointed at it, for the fun of it.
+- **Shared computing:** distributed problem-solving, such as counting and checking primes (he
+  remembers a program that did it across many computers), with networking.
+
+*Notes.*
+- **The prime program** is likely GIMPS, the Great Internet Mersenne Prime Search, which has found
+  every record prime since 1996 on volunteers' computers. BOINC runs many such projects.
+  Primecoin made finding prime chains its proof of work, so useful computation as a currency's
+  work has been tried.
+- **Hard parts, honestly:**
+  - *One person, one currency* needs identity that cannot be faked many times over (Sybil
+    resistance), which is why the digital ID comes first. It must then protect privacy, or it
+    becomes surveillance.
+  - *Issuing by inflation* dilutes everyone's holdings evenly, which is fair. Value still comes
+    from what people will exchange for it, and scams move to wherever value is.
+  - *Law:* issuing currencies and handling identities is regulated almost everywhere.
+- **What fits Sieve:** a currency's whitepaper, its rules and its ledger are files and rules, so
+  each currency is a unit, and "is this ledger valid under these rules" is a filter. A wallet that
+  searches all currencies is a browser of that line. The networking and distributed computing are
+  the larger project, Potentia's rather than Sieve's.
+
+**19.64 Running out of original things to say (Edward, 13 October 2026).** Some people fear that
+if everything is put into grammar, there will be no room left for anyone to say anything original.
+He doubts it, and wants a counter.
+- *Built, on the Buy or Build page:*
+  - *the space:* sentences of 20 words from a 20,000-word vocabulary, 20,000^20 of them;
+  - *the speakers:* every person who has ever lived (about 117 billion), each saying a new one
+    every second for a hundred years;
+  - *the share used:* 3.5 × 10^-64 %.
+- *Its limits:* most of those sentences are nonsense, so the count of meaningful ones is far
+  smaller. It is still astronomically larger than anything that can be used up, and longer
+  sentences multiply it again. The counter measures how small the share is; it does not prove
+  originality endless. That rests on the fact that a sentence can always be longer.
+
+**19.65 Will it unfold, or collapse as a shape? (Edward, 13 October 2026).** His question, and what
+it touches: quote, question, filter, shapes and nodes, all of them equating to something, with the
+filters applied.
+- **Claude's answer:** both, in order. Each filter folds the space: it keeps a subset, so the
+  space narrows, nested like a telescope. It collapses to a single point only when the rules
+  together say as much as the thing itself (the counting argument). Until then it is a shape, the
+  set of survivors, and every new rule unfolds a new distinction inside it. The shape it collapses
+  towards is whatever the rules describe; choosing the rules is choosing the shape.
+- **As a node graph:** each question or quote is a node, each filter an edge that narrows, and
+  each shape a node's survivors. The arrows in his message (quote, question, filter, shapes and
+  nodes) are such a path.
+
+**19.66 Disclosure of AI, everywhere (Edward, 13 October 2026).** His request: an AI honesty
+disclosure across the whole website, as the audio page has, and fullest on the Buy or Build page.
+It should say that Gemini helped to theorise and conceptualise (the website, many concepts and
+ideas), that Claude built with him, and that he has been building the theory and ideas himself
+over the past few years.
+- *Built:* a disclosure box on every page, and a fuller one on Buy or Build. It says what the
+  game's own models are trained on: a public-domain text, and Sieve's own lines.
+- *Kept true:* as the project changes, the disclosure changes with it. A new contributor, human or
+  model, is added when they contribute.

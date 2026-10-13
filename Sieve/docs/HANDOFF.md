@@ -2814,3 +2814,35 @@ cover and a title.
   - the plan in order of importance (§19.53).
 - **GAME.md:** stories in the noise, and the engine that could make every game.
 - **Next:** the Encryption Engine, stage 1 (§19.52, first in §19.53).
+
+### Voices, disclosure, what the numbers mean, and notes 19.54 to 19.66 (13 October 2026)
+- **`docs/VOICES.md`:** the corpus of attributed voices for the halls, one a line (`- **WHO** (DATE,
+  KIND): TEXT`).
+  - *Who is in it:* Edward's, Gemini's and Claude's lines so far.
+  - *Gemini's two messages:* kept whole, with notes on their figures. Several were not exact: a
+    day of pages is 1.36 × 10^-39 %, the printed stack is 7.2 × 10^14 universe widths, and chains
+    are not lossless.
+  - *Claude's version* is left out of the copy, as everywhere in the repository.
+- **The website:**
+  - *Disclosure:* an AI disclosure on every page, fuller on Buy or Build. Edward's own multi-year
+    theory, Gemini's help with concepts and the website, and Claude's with the code and
+    documentation; what the game's own models are trained on.
+  - *Buy or Build:* gains "What The Numbers Mean" (a day; everyone at once; the pages printed;
+    gained and lost; the audio page's tracks from the same epoch) and "Running Out Of Original
+    Things To Say" (3.5 × 10^-64 %).
+  - *How it stays exact:* every constant is named in the script, with its source.
+- **IDEAS §19.54 to §19.66:**
+  - mapping the madness;
+  - the voices of the halls;
+  - a chain as a state space, and steering it;
+  - Lean as a filter;
+  - reading every document (PDF, OCR, layout);
+  - a corpus of every language;
+  - bodies, light and scale (skeletons, impostors, levels of detail);
+  - what the numbers mean;
+  - the Universal Exchange Rate in bits;
+  - a currency for every person, identity, a wallet and shared computing;
+  - the originality counter;
+  - unfold or collapse;
+  - disclosure everywhere.
+- **No code changed this round.**

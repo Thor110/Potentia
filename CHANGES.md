@@ -1,100 +1,104 @@
-# CHAIN: models one after another, and the notes that wrap it all up
+# Voices of the halls, AI disclosure, what the numbers mean, and notes 19.54–19.66
 
-Against your main ("prompt fullsize"). Copy `Sieve/` over yours. There is one new source file,
-`Sieve/client/chain.cpp`, already in CMakeLists.txt.
+Against your main ("chain"). Documentation and website only: no code changed, so nothing to build.
+Copy `Sieve/` over yours, and `index.html` and `Pages/` at the repository's root. There is one new
+file, `Sieve/docs/VOICES.md`.
 
-## CHAIN, a tab of its own beside CHAT
-- **Where it is:** the tab just before CHAT, so C reaches it on the way: ITEM, COST, SORT, CHAIN,
-  CHAT.
-- **What it shows:** the chain as a row of nodes with arrows: YOU (in CHAT), then each model in
-  turn.
-- **What it starts as:** the three trained models in one chain: universalbibliothek's text model,
-  then figures-2x32, then melodies-2x64.
-- **Running it:** type `/chain` and some words in CHAT. Every stage's result appears there as a
-  reply or a card, with GO TO IT, PLAY and SAVE as usual (screenshot sent with the zip).
-- **How each stage is fed:**
-  - *A text model* (the model in hand, a trained text run, or the model file) continues what it is
-    given.
-  - *A picture or melody model* takes no input, so what it is given chooses its noise (a generator
-    seeded by its SHA-256). The same words make the same picture.
-  - *Each stage after* is given what the one before made: text as it is, a picture as its rows, a
-    melody as its notation.
-- **Adjustable:**
-  - Up and Down choose a stage;
-  - Left and Right change its model, through every model there is, of any kind and shape;
-  - N adds a stage after it; Delete takes it away;
-  - Ctrl+Up and Ctrl+Down move it;
-  - Enter goes to CHAT with `/chain ` already typed.
-- **Savable:** Ctrl+S and Ctrl+O save and open a `.chain` file. The format, `sieve-chain-v1`, is in
-  SPECIFICATIONS §12.0h: one stage a line, such as `run universalbibliothek` or
-  `draw figures-2x32`.
-- **Mappable, for now as a row:** branching chains kept in the node graph's maps are noted next
-  (IDEAS §19.46).
-- **Deterministic:** a chain of picture and melody models makes the same units on every machine,
-  and CI checks three addresses. With text models it is the same on the same machine; their
-  arithmetic is floating point.
-- **Found and fixed here:** my first version picked a picture's noise as "the k-th noise" for a
-  large k. That meant drawing every noise before it, and a run took minutes. Now the noise is drawn
-  straight from a seeded generator, and a whole chain runs in under a second.
-- **Scripted runs:** `--chain`, `--chain-file PATH`, `--chain-press KEYS` and `--chain-save PATH`.
+## The voices of the halls: docs/VOICES.md
+- **What it is:** the corpus for the AIs that walk the halls to speak, one attributed voice a
+  line: `- **WHO** (DATE, KIND): TEXT`, with KIND a quote, question, rule, note or metaphor. A
+  program can read it, and it will become a `.sieve` of pages.
+- **Edward's lines from today:** "if no one maps it", "toolchains with AI", "all spaces could fold
+  into one", "a true all-in-one multi-tool", "unfold or collapse", and the rest.
+- **Gemini's four metaphors**, attributed to Gemini.
+- **Claude's lines:** such as "a rule can only say what it says" and "the library cannot lose
+  anything; what can be lost is attention".
+- **The hallway AI's photon question.**
+- **Gemini's two messages,** kept whole in an appendix, with my notes on their figures. Several
+  weren't exact:
+  - a day of pages is 1.36 × 10^-39 % (not 1.17 × 10^-42 %);
+  - the printed stack is 7.2 × 10^14 times the universe's width (it doesn't "wrap around
+    spacetime");
+  - a chain isn't lossless (a picture stage keeps only a 64-bit seed).
 
-## The notes (IDEAS §19.45–19.53, GAME.md)
-- **§19.45 Stories in the noise, and one equation.**
-  - *Pareidolia is a filter with a false-positive rate,* so every coincidence can carry its exact
-    odds: a contained lens on the madness of Babel.
-  - *The one equation already exists:* a unit read as a number, one bijection per shape.
-  - *Everything crosses over freely* through the binary line.
-- **§19.46 CHAIN:** what was built, and what is next (branches in the node graph, steering, larger
-  models).
-- **§19.47 An engine that could make every game.** A game is a starting state and a rule (Life is
-  enough to compute anything). The order to build it in:
-  1. content (which exists);
-  2. rules as units (a Life-like line);
-  3. bodies with exact physics;
-  4. voxels to triangles;
-  5. an optional learned upscaler of our own, since DLSS is NVIDIA's and closed.
+  The game should only speak numbers that are true.
+- **One honest difference from what you asked:** I named Claude without a version. Model version
+  names aren't put in files in the repository here: the model serving a long session can change,
+  so a version written down could be wrong. Gemini's message, where it named one, has a note
+  saying so. If you want the version shown, add it yourself.
 
-  The honest limit: almost nothing on the line is a game, so the work is in the filters that find
-  the playable ones.
-- **§19.48 The documentation inside the game:** `/docs`, with the documents on the lines and every
-  catalogued thing linked by its SHA-256.
-- **§19.49 The completion line on the main menu:**
-  - in colour, with notation, one line per dimension, folding into "and N more" so it always
-    fits;
-  - one specification for the numbers, with CI keeping the website and the game in sync.
-- **§19.50 Metrics for every build:** written by run_tests.bat after the tests pass, then charted
-  over time on the website and on a wall in the world. A change of measure starts a new series.
-- **§19.51 A decompilation engine:** compiling as a filter on the code line, with analysis first
-  (as Ghidra does) and search for small pieces. Mind the law on others' software.
-- **§19.52 The Encryption Engine: anything as anything.**
-  - *The catalogue of combinations:* payload, key, recipe, depth and output shape, each a line,
-    all countable.
-  - *"As anything" has a standard name:* format-preserving encryption. Sieve's scrambled ordering
-    is already a Feistel network, as FF1 and FF3-1 are, so with your own key every line is a cipher
-    of its own shape (for play and study, not secrets).
-  - *What flattening shows:* every output is reachable, so the key is what makes one path the
-    message.
-- **§19.53 The plan, in order of importance:**
-  1. the Encryption Engine, stage 1;
-  2. metrics for every build, charted;
-  3. models steered by the filters;
-  4. the documentation in the game;
-  5. the completion line on the main menu, in sync with the website;
-  6. chains as graphs;
-  7. rules as units;
-  8. research (decompilation, voice, code).
-- **GAME.md:** stories in the noise, and the engine.
+## AI disclosure, across the website
+- **Every page** (the index, Sieve, audio, governance FAQ, orbital and Buy or Build) has an "AI
+  Disclosure" box above its footer. It says:
+  - Potentia is your work, from theory you've built over the past few years;
+  - Google's Gemini helped you theorise and conceptualise, and helped write parts of the website;
+  - Anthropic's Claude has written much of Sieve's code and documentation with you;
+  - "Transparency fosters trust", as your audio page says.
+- **Buy or Build** has the fullest version, and also says what the game's own models were trained
+  on: a public-domain text, and units of Sieve's own lines.
+
+## Buy or Build: what the numbers mean
+- **A new section, computed live and exactly:**
+  - *A day:* 86,400 pictures, 6.8 × 10^-24 % of the 10x10 ones. Nothing in the library is ever
+    lost; a day adds what has been found.
+  - *Everyone at once:* all 8.1 billion people looking at a different picture each second would
+    take 5.0 × 10^12 years, 359 times the age of the universe.
+  - *The pages, printed:* the stack would be 7.2 × 10^14 times as tall as the observable universe
+    is wide.
+  - *Gained and lost:* the library can't lose anything. What can be lost is attention.
+  - *Meanwhile, the audio:* the tracks your audio page counts, from the same epoch, so the two
+    pages agree.
+- **A new counter, "Running Out Of Original Things To Say":** 20-word sentences from 20,000
+  words. If everyone who ever lived said a new one every second for a century, 3.5 × 10^-64 % would
+  be used up.
+- **The constants** are named in the script with their sources (UN population, PRB's 117 billion,
+  the age and width of the universe, 0.1 mm paper).
+
+## IDEAS §19.54–19.66 (with my thoughts on each)
+- **§19.54 Mapping the madness:** each way of looking is a line or a stack. The map of the ways
+  is the node graph, and each mapped part stays exact.
+- **§19.55 The voices of the halls:**
+  - VOICES.md, packed later as a `.sieve` of pages;
+  - voices chosen by where you stand;
+  - the AIs discuss commands openly, and say which they would use until they're allowed.
+- **§19.56 A chain is a state space:**
+  - a `.chain` is a short string, so chains are a line, and a tweak is a step along it;
+  - steering is a stack on the chain's outputs, a small exact form of alignment;
+  - more pairs that chain: a captioner, a transcriber, voice, world layout, even a trainer.
+- **§19.57 Lean as a filter:** a proof checker decides exactly. PhysLean formalises physics, and
+  Lean's own rules make one more line.
+- **§19.58 Reading every document:** born-digital PDFs read exactly; scans need OCR (Tesseract,
+  optional like ffmpeg); layout as a grammar.
+- **§19.59 A corpus of every language,** speakable and not, from the public domain, with each
+  file's provenance kept.
+- **§19.60 Bodies, light and scale:**
+  - skeletons and animations as lines;
+  - "impostors" (the prerendered-angles trick) with parallax;
+  - a ladder of levels of detail from full models to a point of colour, with our own upscaler on
+    top.
+- **§19.61 What the numbers mean, and where it is going:**
+  - it isn't going to the end of the library, which walking can't reach;
+  - it is going to better filters, until a good stack's survivors are few enough to walk in a
+    lifetime;
+  - what is learned per day is the bits the day's new rules say, which can be charted.
+- **§19.62 The Universal Exchange Rate, in bits:** what is kept and lost carrying a thing between
+  lines, as a table.
+- **§19.63 A currency for every person, identity, a wallet and shared computing:**
+  - the prime program you remember is probably GIMPS;
+  - the hard parts, plainly: one person per currency needs identity that can't be faked, without
+    becoming surveillance; value and scams follow people; and the law.
+- **§19.64 The originality counter,** with its limits stated.
+- **§19.65 Unfold or collapse?** Both, in order. Each filter folds the space, and it collapses to
+  a point only when the rules say as much as the thing itself. Choosing the rules is choosing the
+  shape.
+- **§19.66 Disclosure everywhere,** kept true as the project changes.
 
 ## Also
-- **SPECIFICATIONS §12.0h:** `sieve-chain-v1`, exactly, seeds and all.
-- **README:** CHAIN and `/chain`.
+- **GAME.md:** the voices of the halls.
+- **README:** VOICES.md in the documents table.
 - **HANDOFF:** a new entry.
 
-## Checked here (kept short, as you asked)
-- **Unit tests:** 76,407 checks, 0 failures.
-- **New CI lines,** run on a clean copy, passing:
-  - the tab edited by keys and saved, byte for byte;
-  - a four-stage chain run;
-  - a picture-and-melody chain, address for address.
-- **Run again:** the CHAT, model-file and prompt lines, since `talk_file` was split into
-  `load_file_model` and `file_reply`.
+## Checked here
+- **The pages:** Buy or Build and the index were rendered in headless Chromium, and every number
+  was checked by hand against Python.
+- **No code changed,** so there were no tests to run.

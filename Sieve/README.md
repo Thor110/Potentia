@@ -38,6 +38,7 @@ Special thanks to Claude Opus 5.5 for helping to build out the Sieve system base
 | `docs/SPECIFICATIONS.md` | The specification |
 | `core/src/biguint.cpp` | The exact big integer every address rests on: limbs of 2^64, pinned against Python's own integers |
 | `docs/HANDOFF.md` | The briefing for picking the project up cold: the standing rules, the build, and where the work stopped |
+| `docs/VOICES.md` | The voices of the halls: attributed quotes, questions, rules and notes for the game's AIs to say, one a line |
 | `docs/SYSTEM-PROMPT.md` | `sieve-system-v1`, what a language model is told about where it is and what it is: pinned, versioned, never edited |
 | `docs/REVIEW.md` | The last code review: what it fixed, and what it found and left |
 | `docs/IDEAS.md` | What is not built yet: defects, filters, open questions, and what to be careful of |
