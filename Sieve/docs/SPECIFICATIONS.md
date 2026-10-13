@@ -722,6 +722,33 @@ A **chain** is a list of stages, each a model, run one after another on some tex
 - **A picture or melody model** (`draw`): it takes no input, so G chooses its noise. The noise is one unit's worth of cells drawn from splitmix64 seeded with S (each `next()` mod B, cell after cell, as a run's k-th noise is drawn from seed 1), and the unit is made from that noise with the seed S (`diffusion-v1`'s making, §12.0g). What goes on is its rows (a picture: a character a cell, `.` for the palette's white, `#` for anything else on a two-colour palette, else the cell's base-36 digit; rows apart by newlines) or its notation (a melody).
 - **Shown:** each stage's result is a card or a reply in CHAT, titled `chain i/n, MODEL`, with the buttons any card has. A picture the vault withholds stops the chain there.
 
+### 12.0i Ciphers, stage 1 (`cipher-v1`, as built)
+
+The Encryption Engine's first stage (IDEAS §19.52): a **recipe** of layers applied to bytes in order, and undone in reverse. None of these is a reviewed cipher for protecting secrets (§19.34); they are for play and study, and the weak ones are there to be broken.
+
+- **Layers,** on n bytes b[0..n−1], with a key of bytes k[0..m−1]:
+  - `reverse`: the bytes in reverse order. No key.
+  - `caesar N`: each byte plus N, mod 256 (N a decimal from 0 to 255). Decrypting subtracts.
+  - `xor HEX`: b[i] XOR k[i mod m], the key in hex (one byte or more). Its own inverse.
+  - `vigenere TEXT`: b[i] plus k[i mod m], mod 256, the key TEXT's UTF-8 bytes. Decrypting subtracts.
+  - `feistel TEXT`: the binary line's scramble (the scrambled order of §4.1, `feistel-sha256-v1` with 8 rounds, as `Space` and the oracle build it) of the n bytes as the n digits of a base-256 line of length n, keyed with TEXT in place of `sieve`. Decrypting unscrambles. It is format-preserving: n bytes become n bytes. An empty input is left as it is.
+  - `vigenere-hex HEX`, `feistel-hex HEX`: the same with the key's bytes in hex.
+- **A recipe's text:** one layer a line, or layers apart by `;`, after an optional first line `sieve-cipher-v1`. Each line is trimmed of spaces, tabs and CRs at both ends; empty lines and lines starting with `#` are skipped. A layer is its word, then one space, then its key, which runs to the line's end. A recipe has at least one layer. Anything else is refused, naming what is wrong.
+- **Written out:** a recipe is written `sieve-cipher-v1` and a layer a line. A text key is written as text only when it reads back the same: printable ASCII (0x20 to 0x7E), no `;` or `#`, and no space at either end. Otherwise it is written with `-hex`. XOR keys and hex keys are written in lower case.
+- **The English score** of bytes is the sum of a weight for each byte:
+  - space: 1500;
+  - a letter (either case), its frequency in English in hundredths of a percent: a 817, b 149, c 278, d 425, e 1270, f 223, g 202, h 609, i 697, j 15, k 77, l 403, m 241, n 675, o 751, p 193, q 10, r 599, s 633, t 906, u 276, v 98, w 236, x 15, y 197, z 7;
+  - any other byte from 0x21 to 0x7E, and newline, CR and tab: 100;
+  - anything else: −1000.
+- **Breaking a weak cipher** (`--break`, with K the longest key, 16 by default): the guesses are made in this order:
+  1. `caesar` 0 to 255;
+  2. `xor` of one byte, 00 to ff;
+  3. for each key length m from 2 to K, while the cipher has at least 8m bytes: an `xor`, then a `vigenere`, each key fitted column by column. Column c is the bytes c, c + m, c + 2m and so on, and its key byte is the one whose decryption of that column scores highest (the lowest byte on a tie). A fitted key that repeats a shorter one (it is p bytes repeated, for some p dividing m) is left out, since that key was tried already.
+
+  Each guess's **rank** is its decryption's score less 1500 for each key byte beyond the first, since a key fitted column by column can always score a little higher by being longer. The guesses are sorted by rank, highest first, keeping the order above on a tie, and the best `--top` (5) are shown. When the best rank is 0 or less, none of the weak ciphers gives English.
+- **The catalogue** (`--catalogue`) counts recipes with keys of at most K bytes (`--key-bytes`, 16). There are 257 + 3 × (256 + 256² + … + 256^K) layers: reverse, 256 caesar shifts, and xor, vigenère and feistel with each key. There are layers^d recipes of depth d, counted exactly for d = 1 to `--depth` (4). Every recipe is a bijection of the files of each length, so between them they reach every file of that length.
+- **Vectors:** `tests/vectors_cipher_v1.tsv` (`sieve_ref.py cipher-vectors`): 55 encryptions (11 recipes on 5 inputs, among them the empty input), and the top three guesses for 5 ciphers.
+
 ### 12.1a The bytes256 alphabet
 
 `bytes256` is the 256 code points U+0000-U+00FF in code point order, so **digit d is byte d**. A file of N bytes is exactly one unit of a `bytes256` line of length N.

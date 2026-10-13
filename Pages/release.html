@@ -238,6 +238,17 @@
   <a href="../index.html" class="btn-link">Return to Core Architecture</a>
 </div>
 
+<div class="counter-box" id="voice-box" style="display:none;">
+  <div class="counter-title">A Voice From The Halls</div>
+  <div class="counter-note" id="voice-text" style="font-size:1.05em;"></div>
+  <div class="counter-note" id="voice-who"></div>
+  <div class="nav-group">
+    <a href="#" class="btn-link" id="voice-speak">Read Aloud: Off</a>
+    <a href="#" class="btn-link" id="voice-next">Another Voice</a>
+  </div>
+  <div class="counter-note">Drawn at random from <a href="https://github.com/Thor110/Potentia/blob/main/Sieve/docs/VOICES.md" target="_blank">VOICES.md</a>, the lines the AIs of the halls will say, each with who said it first.</div>
+</div>
+
 <div class="footer">
   Deterministic Sieve &middot; Free If You Build It
 </div>
@@ -387,6 +398,65 @@
 
     setInterval(updateAll, 1000);
     updateAll();
+
+    // The voices of the halls (IDEAS 19.68): one line of VOICES.md at random, changed every
+    // VOICE_SECONDS, read aloud by the browser once a visitor turns it on (a page may not speak
+    // unasked). The file is read, not copied, so a voice added there appears here as it is.
+    const VOICE_SECONDS = 12;
+    const VOICE_SOURCES = ["../Sieve/docs/VOICES.md",
+                           "https://raw.githubusercontent.com/Thor110/Potentia/main/Sieve/docs/VOICES.md"];
+    // "- **WHO** (DATE, KIND): TEXT", the format VOICES.md sets out.
+    const VOICE_LINE = /^- \*\*([^*]+)\*\* \(([^,)]+), ([^)]+)\): (.+)$/;
+    let voices = [], voiceAt = -1, speaking = false;
+
+    function plain(t) { return t.replace(/\*\*?|`/g, ""); }
+
+    function showVoice() {
+        if (voices.length === 0) return;
+        let i = Math.floor(Math.random() * voices.length);
+        if (voices.length > 1 && i === voiceAt) i = (i + 1) % voices.length;
+        voiceAt = i;
+        const v = voices[i];
+        document.getElementById("voice-text").textContent = "\u201c" + v.text + "\u201d";
+        document.getElementById("voice-who").textContent = "\u2014 " + v.who + ", " + v.date + " (" + v.kind + ")";
+        if (speaking && "speechSynthesis" in window) {
+            speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance(v.text);
+            u.lang = "en-GB";
+            speechSynthesis.speak(u);
+        }
+    }
+
+    async function loadVoices() {
+        for (const src of VOICE_SOURCES) {
+            try {
+                const r = await fetch(src);
+                if (!r.ok) continue;
+                const found = [];
+                for (const line of (await r.text()).split(/\r?\n/)) {
+                    const m = VOICE_LINE.exec(line);
+                    if (m) found.push({ who: m[1], date: m[2], kind: m[3], text: plain(m[4]) });
+                }
+                if (found.length === 0) continue;
+                voices = found;
+                document.getElementById("voice-box").style.display = "";
+                showVoice();
+                setInterval(showVoice, VOICE_SECONDS * 1000);
+                return;
+            } catch (e) { /* opened from disk, or offline: try the next source */ }
+        }
+    }
+
+    document.getElementById("voice-next").addEventListener("click", e => { e.preventDefault(); showVoice(); });
+    const speakButton = document.getElementById("voice-speak");
+    if (!("speechSynthesis" in window)) speakButton.style.display = "none";
+    speakButton.addEventListener("click", e => {
+        e.preventDefault();
+        speaking = !speaking;
+        speakButton.textContent = "Read Aloud: " + (speaking ? "On" : "Off");
+        if (speaking) showVoice(); else speechSynthesis.cancel();
+    });
+    loadVoices();
 </script>
 
 </body>

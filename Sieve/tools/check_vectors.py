@@ -30,6 +30,7 @@ CHECKS = [
     (["model-vectors"], "vectors_models_v1.tsv"),
     (["image-vectors"], "vectors_image_v1.tsv"),
     (["image-v2-vectors"], "vectors_image_v2.tsv"),
+    (["cipher-vectors"], "vectors_cipher_v1.tsv"),
     (["guided-vectors"], "vectors_guided_v1.tsv"),
     (["filter-vectors"], "vectors_filters_v1.tsv"),
     (["compact-vectors"], "vectors_compact_v1.tsv"),

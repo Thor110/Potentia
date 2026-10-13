@@ -25,6 +25,7 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
     python3 sieve_ref.py map ../tests/manifest_fixture                # sieve-map-v1
     python3 sieve_ref.py image-vectors  > ../tests/vectors_image_v1.tsv
     python3 sieve_ref.py image-v2-vectors > ../tests/vectors_image_v2.tsv
+    python3 sieve_ref.py cipher-vectors > ../tests/vectors_cipher_v1.tsv
     python3 sieve_ref.py guided-vectors > ../tests/vectors_guided_v1.tsv
     python3 sieve_ref.py filter-vectors > ../tests/vectors_filters_v1.tsv
     python3 sieve_ref.py model-build --out /tmp/check.model   # rebuilds the pinned model
@@ -794,6 +795,153 @@ def cmd_alphabet_vectors(_args):
                     pos, scr = sp.address_of(u, "positional"), sp.address_of(u, "scrambled")
                     assert sp.unit_at(pos, "positional") == u and sp.unit_at(scr, "scrambled") == u
                     print(f"{spec}\t{sp.n}\t{L}\t{key}\t{cp}\t{pos}\t{scr}")
+
+
+# -- cipher-v1 (SPECIFICATIONS §12.0i), written from the specification: a recipe of layers applied
+#    to bytes in order, undone in reverse; and the weak ciphers broken by English score.
+CIPHER_LETTERS = [817, 149, 278, 425, 1270, 223, 202, 609, 697, 15, 77, 403, 241,
+                  675, 751, 193, 10, 599, 633, 906, 276, 98, 236, 15, 197, 7]
+CIPHER_KEY_BYTE_COST = 1500
+
+
+def cipher_parse(text):
+    layers = []
+    first = True
+    for part in text.replace(";", "\n").split("\n"):
+        line = part.strip(" \t\r")
+        if not line or line.startswith("#"):
+            continue
+        if first and line == "sieve-cipher-v1":
+            first = False
+            continue
+        first = False
+        word, _, arg = line.partition(" ")
+        if word == "reverse" and not arg:
+            layers.append(("reverse", b""))
+        elif word == "caesar" and arg.isdigit() and len(arg) <= 3 and int(arg) <= 255:
+            layers.append(("caesar", bytes([int(arg)])))
+        elif word == "xor" and arg and len(arg) % 2 == 0:
+            layers.append(("xor", bytes.fromhex(arg)))
+        elif word in ("vigenere-hex", "feistel-hex") and arg and len(arg) % 2 == 0:
+            layers.append((word[:-4], bytes.fromhex(arg)))
+        elif word in ("vigenere", "feistel") and arg:
+            layers.append((word, arg.encode("utf-8")))
+        else:
+            raise ValueError("not a layer: " + line)
+    if not layers:
+        raise ValueError("a recipe needs at least one layer")
+    return layers
+
+
+def cipher_layer_text(kind, key):
+    if kind == "reverse":
+        return "reverse"
+    if kind == "caesar":
+        return "caesar %d" % key[0]
+    if kind == "xor":
+        return "xor " + key.hex()
+    plain = (len(key) > 0 and key[0] != 0x20 and key[-1] != 0x20
+             and all(0x20 <= c <= 0x7E and c not in b";#" for c in key))
+    return "%s %s" % (kind, key.decode("ascii")) if plain else "%s-hex %s" % (kind, key.hex())
+
+
+def cipher_apply(layer, data, forward):
+    kind, key = layer
+    b = list(data)
+    if kind == "reverse":
+        b.reverse()
+    elif kind == "caesar":
+        b = [(c + key[0]) % 256 if forward else (c - key[0]) % 256 for c in b]
+    elif kind == "xor":
+        b = [c ^ key[i % len(key)] for i, c in enumerate(b)]
+    elif kind == "vigenere":
+        b = [(c + key[i % len(key)]) % 256 if forward else (c - key[i % len(key)]) % 256 for i, c in enumerate(b)]
+    elif kind == "feistel" and b:
+        sp = Space(None, len(b), key.decode("latin-1"), base=256)
+        sp.key = key  # the key's own bytes, as given
+        b = sp.scramble(b) if forward else sp.unscramble(b)
+    return bytes(b)
+
+
+def cipher_encrypt(layers, data):
+    for l in layers:
+        data = cipher_apply(l, data, True)
+    return data
+
+
+def cipher_decrypt(layers, data):
+    for l in reversed(layers):
+        data = cipher_apply(l, data, False)
+    return data
+
+
+def cipher_weight(c):
+    if c == 0x20:
+        return 1500
+    if 0x61 <= c <= 0x7A:
+        return CIPHER_LETTERS[c - 0x61]
+    if 0x41 <= c <= 0x5A:
+        return CIPHER_LETTERS[c - 0x41]
+    if 0x21 <= c <= 0x7E or c in (0x0A, 0x0D, 0x09):
+        return 100
+    return -1000
+
+
+def cipher_score(data):
+    return sum(cipher_weight(c) for c in data)
+
+
+def cipher_break(data, max_key=16, top=5):
+    guesses = []
+
+    def add(kind, key):
+        plain = cipher_decrypt([(kind, key)], data)
+        score = cipher_score(plain)
+        guesses.append((score - CIPHER_KEY_BYTE_COST * (len(key) - 1), score, cipher_layer_text(kind, key), plain))
+
+    for k in range(256):
+        add("caesar", bytes([k]))
+    for k in range(256):
+        add("xor", bytes([k]))
+    m = 2
+    while m <= max_key and len(data) >= 8 * m:
+        for kind in ("xor", "vigenere"):
+            key = []
+            for col in range(m):
+                best, best_k = None, 0
+                for k in range(256):
+                    s = sum(cipher_weight(data[i] ^ k if kind == "xor" else (data[i] - k) % 256) for i in range(col, len(data), m))
+                    if best is None or s > best:
+                        best, best_k = s, k
+                key.append(best_k)
+            key = bytes(key)
+            repeats = any(m % p == 0 and key[p:] == key[:m - p] for p in range(1, m))
+            if not repeats:
+                add(kind, key)
+        m += 1
+    guesses.sort(key=lambda g: -g[0])  # stable: ties keep their order
+    return guesses[:top]
+
+
+def cmd_cipher_vectors(_args):
+    """cipher-v1 vectors: recipes applied to bytes, and the weak ciphers broken."""
+    print("# sieve cipher vectors (cipher-v1)")
+    print("# encrypt\trecipe\tplain_hex\tcipher_hex   |   break\tcipher_hex\trank\tscore\trecipe\tplain_hex")
+    texts = [b"", b"a", b"attack at dawn", bytes(range(256)),
+             b"It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness."]
+    recipes = ["reverse", "caesar 3", "caesar 255", "xor 5a", "xor 736563726574", "vigenere lemon", "vigenere-hex 00ff10",
+               "feistel my key", "feistel-hex 00ff", "vigenere lemon; feistel my key", "reverse; caesar 7; xor 0102; feistel k"]
+    for r in recipes:
+        layers = cipher_parse(r)
+        for t in texts:
+            c = cipher_encrypt(layers, t)
+            assert cipher_decrypt(layers, c) == t
+            print("encrypt\t%s\t%s\t%s" % (r, t.hex(), c.hex()))
+    english = texts[4] + b" It was the epoch of belief, it was the epoch of incredulity, it was the season of Light."
+    for r in ["caesar 13", "xor 5a", "xor 736563726574", "vigenere lemon", "feistel my key"]:
+        c = cipher_encrypt(cipher_parse(r), english)
+        for rank, score, text, plain in cipher_break(c, 16, 3):
+            print("break\t%s\t%d\t%d\t%s\t%s" % (c.hex(), rank, score, text, plain.hex()))
 
 
 def cmd_image_v2_vectors(_args):
@@ -8009,6 +8157,7 @@ def main():
     sub.add_parser("model-vectors")
     sub.add_parser("image-vectors")
     sub.add_parser("image-v2-vectors")
+    sub.add_parser("cipher-vectors")
     s = sub.add_parser("model-build")
     s.add_argument("--corpus", default="../data/models/corpus/gutenberg-nltk.tsv")
     s.add_argument("--texts", default="../corpus/gutenberg")
@@ -8159,6 +8308,8 @@ def main():
         cmd_image_vectors(args)
     elif args.cmd == "image-v2-vectors":
         cmd_image_v2_vectors(args)
+    elif args.cmd == "cipher-vectors":
+        cmd_cipher_vectors(args)
     elif args.cmd == "sieve":
         cmd_sieve(args)
     elif args.cmd == "model-build":

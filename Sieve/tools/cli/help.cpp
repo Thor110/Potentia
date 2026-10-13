@@ -511,6 +511,35 @@ const std::vector<Page>& pages()
          {{"sieve ai-train --record texts --out ub --sieve ub.sieve", "record a run from a folder, train it, pack it"},
           {"sieve ai-train ub.sieve", "train it again from the .sieve, and check"},
           {"sieve ai-train ub --model-out ub-model && sieve chat --model ub-model --raw", "and talk to what it became"}}},
+        {"cipher", "Encrypt or decrypt bytes with a recipe of layers, try to break a weak cipher, or count the recipes (the Encryption Engine, stage 1).",
+         "sieve cipher --encrypt|--decrypt (--recipe \"LAYER; LAYER\" | --recipe-file PATH) (--in FILE | --text TEXT | --in-hex HEX) [--out FILE]\n"
+         "  sieve cipher --break (--in FILE | --text TEXT | --in-hex HEX) [--top N] [--max-key K]\n"
+         "  sieve cipher --catalogue [--depth D] [--key-bytes K]",
+         "cipher-v1 (SPECIFICATIONS §12.0i; IDEAS §19.34, §19.52): a recipe is a list of layers, applied to the\n"
+         "bytes in order, and decrypting undoes them in reverse:\n"
+         "  reverse          the bytes in reverse order\n"
+         "  caesar N         each byte plus N, mod 256 (0 to 255)\n"
+         "  xor HEX          each byte XOR the key's bytes in turn\n"
+         "  vigenere TEXT    each byte plus the key's bytes in turn, mod 256\n"
+         "  feistel TEXT     the binary line's own keyed scramble (feistel-sha256-v1): a file of n bytes to another\n"
+         "                   of n bytes, so a key makes the line a cipher of its own shape (format-preserving)\n"
+         "The first four are the historical weak ciphers, which --break recognises and undoes: every caesar\n"
+         "shift, every one-byte XOR, and repeating XOR and Vigenere keys found column by column, ranked by how\n"
+         "English the result is. None of these is a reviewed cipher for protecting secrets; they are for study\n"
+         "and play. --catalogue counts the recipes there are, to show that, layered, they reach every file.",
+         {{"--encrypt, --decrypt", "Apply the recipe, or undo it."},
+          {"--recipe \"LAYER; LAYER\"", "The layers, in order, apart by ';' (a key then cannot hold ';')."},
+          {"--recipe-file PATH", "The layers from a file: \"sieve-cipher-v1\", then a layer a line."},
+          {"--in FILE, --text TEXT, --in-hex HEX", "The bytes: a file, a text's UTF-8 bytes, or bytes in hex."},
+          {"--out FILE", "Write the result there; otherwise it is printed in hex (and as text, when it is text)."},
+          {"--break", "Try every weak one-layer recipe and rank the results by English score."},
+          {"--top N, --max-key K", "How many guesses to show (5), and the longest repeating key to try (16)."},
+          {"--catalogue", "Count the layers and the recipes of each depth."},
+          {"--depth D, --key-bytes K", "Depths to count (4), and the longest key counted (16 bytes)."}},
+         {{"sieve cipher --encrypt --recipe \"vigenere lemon; feistel my key\" --text \"attack at dawn\"", "two layers"},
+          {"sieve cipher --decrypt --recipe \"vigenere lemon; feistel my key\" --in-hex HEX", "and back"},
+          {"sieve cipher --break --in secret.bin", "is it a weak cipher?"},
+          {"sieve cipher --catalogue --depth 3", "how many recipes there are"}}},
         {"diffuse", "Train a diffusion model that makes pictures of the image line or melodies of the audio line, check a run again, or make with it.",
          "sieve diffuse --record FOLDER [--line image|audio] [line options] [--filters PATH] [--figures N] [--figure-seed S] [--pictures FILE]\n"
          "  [--ai-layers L] [--ai-width H] [--ai-heads A] [--ai-bits B] [--levels S] [--steps N] [--batch N]\n"

@@ -2860,3 +2860,19 @@ cover and a title.
 - **IDEAS §19.67** folding everything. **VOICES.md:** "There are so many ways to map the data.
   We'll get there." (Edward), and two notes of Claude's.
 - **No code changed.**
+
+### The Encryption Engine, stage 1, and the voices on the website (13 October 2026)
+- **`cipher-v1`** (SPECIFICATIONS §12.0i; `core/include/sieve/cipher.hpp`, `core/src/cipher.cpp`):
+  - recipes of `reverse`, `caesar`, `xor`, `vigenere` and `feistel` layers, the last being the
+    binary line's keyed scramble (format-preserving);
+  - `break_weak`, which ranks every caesar shift, one-byte XOR and column-fitted repeating key by
+    English score less 1500 for each key byte beyond the first.
+- **`sieve cipher`** (`tools/cli/cipher_cmd.cpp`): `--encrypt`, `--decrypt`, `--break` and
+  `--catalogue`. Its input option is `--in-hex`, since `--hex` was already a switch.
+- **Oracle:** `sieve_ref.py cipher-vectors` writes `tests/vectors_cipher_v1.tsv` (55 encryptions,
+  15 guesses); `test_core` checks them, with round trips and refused recipes. 76,549 checks, 0
+  failures. CI diffs the oracle and runs the CLI there and back, a broken XOR, an unbroken feistel
+  and the catalogue. `tools/check_vectors.py` includes it.
+- **Website:** a random voice from VOICES.md at the very bottom of Buy or Build, under the
+  buttons, with a "Read aloud" button (IDEAS §19.68).
+- **Next:** the Encryption Engine screen in the game.

@@ -1022,6 +1022,23 @@ sieve ai-train ub.sieve                                                     # tr
 sieve ai-train ub --model-out ub-model && sieve chat --model ub-model --raw  # and talk to what it became
 ```
 
+### `cipher`: the Encryption Engine, stage 1
+
+```
+sieve cipher --encrypt|--decrypt (--recipe "LAYER; LAYER" | --recipe-file PATH) (--in FILE | --text TEXT | --in-hex HEX) [--out FILE]
+sieve cipher --break (--in FILE | --text TEXT | --in-hex HEX) [--top N] [--max-key K]
+sieve cipher --catalogue [--depth D] [--key-bytes K]
+```
+
+A recipe of layers on bytes (`cipher-v1`, SPECIFICATIONS §12.0i): `reverse`, `caesar N`, `xor HEX`, `vigenere TEXT` and `feistel TEXT`, the last being the binary line's own keyed scramble, so n bytes become n bytes. Decrypting undoes the layers in reverse. `--break` tries every caesar shift and one-byte XOR, and repeating XOR and Vigenère keys up to K bytes fitted column by column, and ranks what they give by how English it reads. The weak ciphers fall, and a feistel layer does not. `--catalogue` counts the recipes exactly. These are for study, not for keeping secrets.
+
+```sh
+sieve cipher --encrypt --recipe "vigenere lemon; feistel my key" --text "attack at dawn"
+sieve cipher --decrypt --recipe "vigenere lemon; feistel my key" --in-hex HEX      # "attack at dawn" again
+sieve cipher --break --in secret.bin                                               # guess 1 is the recipe, if it was a weak one
+sieve cipher --catalogue --depth 2                                                 # 130 bits name a layer with keys of up to 16 bytes
+```
+
 ### `diffuse`: a model that makes pictures and melodies
 
 ```

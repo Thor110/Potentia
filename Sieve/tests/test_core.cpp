@@ -1,5 +1,6 @@
 // Sieve core tests. Usage: sieve_tests <tests directory containing the vectors_*.tsv files>
 
+#include "sieve/cipher.hpp"
 #include "sieve/alphabet.hpp"
 #include "sieve/audio.hpp"
 #include "sieve/notes3.hpp"
@@ -1102,6 +1103,78 @@ void test_image_vectors(const std::string& path, ImageFormat::Fit fit = ImageFor
     std::cout << "image vectors checked (" << (fit == ImageFormat::Fit::Levels ? kImageCanonVersion2 : kImageCanonVersion) << "): " << n << "\n";
     CHECK(n == expected); // a truncated or emptied vector file must fail, not pass quietly
     CHECK(n > 30);
+}
+
+// cipher-v1 (SPECIFICATIONS §12.0i): every recipe applied as the oracle applies it, undone again,
+// and the weak ciphers broken to the oracle's guesses, rank for rank.
+void test_cipher_vectors(const std::string& path)
+{
+    using namespace sieve::cipher;
+    auto bytes = [](const std::string& h) {
+        std::vector<uint8_t> b;
+        for (size_t i = 0; i + 1 < h.size(); i += 2) b.push_back(uint8_t(std::stoi(h.substr(i, 2), nullptr, 16)));
+        return b;
+    };
+    auto hex = [](const std::vector<uint8_t>& b) {
+        static const char k[] = "0123456789abcdef";
+        std::string s;
+        for (const uint8_t c : b) s += {k[c >> 4], k[c & 15]};
+        return s;
+    };
+    int enc = 0, brk = 0;
+    std::map<std::string, std::vector<std::vector<std::string>>> breaks; // cipher hex -> its guesses, in order
+    std::vector<std::string> order;
+    std::ifstream in(path);
+    CHECK(bool(in));
+    std::string line;
+    while (std::getline(in, line))
+    {
+        if (line.empty() || line[0] == '#') continue;
+        std::vector<std::string> f;
+        std::stringstream ss(line);
+        for (std::string x; std::getline(ss, x, '\t');) f.push_back(x);
+        if (f[0] == "encrypt" && f.size() >= 3)
+        {
+            const Recipe r = Recipe::parse(f[1]);
+            const std::vector<uint8_t> plain = bytes(f[2]), want = bytes(f.size() > 3 ? f[3] : "");
+            const std::vector<uint8_t> got = encrypt(r, plain);
+            CHECK(got == want);
+            CHECK(decrypt(r, got) == plain);
+            if (got != want) std::cerr << "  cipher mismatch: " << f[1] << " on " << f[2].substr(0, 16) << "\n";
+            ++enc;
+        }
+        else if (f[0] == "break" && f.size() == 6)
+        {
+            if (!breaks.count(f[1])) order.push_back(f[1]);
+            breaks[f[1]].push_back(f);
+        }
+    }
+    for (const std::string& c : order)
+    {
+        const auto& want = breaks[c];
+        const std::vector<Guess> got = break_weak(bytes(c), 16, want.size());
+        CHECK(got.size() == want.size());
+        for (size_t i = 0; i < got.size() && i < want.size(); ++i)
+        {
+            const bool ok = std::to_string(got[i].rank) == want[i][2] && std::to_string(got[i].score) == want[i][3] &&
+                            got[i].recipe.layers.front().text() == want[i][4] && hex(got[i].plain) == want[i][5];
+            CHECK(ok);
+            if (!ok) std::cerr << "  break mismatch: guess " << i + 1 << " " << got[i].recipe.layers.front().text() << " vs " << want[i][4] << "\n";
+            ++brk;
+        }
+    }
+    std::cout << "cipher vectors checked: " << enc << " recipes, " << brk << " guesses\n";
+    CHECK(enc == 55 && brk == 15); // a truncated or emptied vector file must fail, not pass quietly
+    // A recipe reads back as itself, and bad ones say what is wrong.
+    const Recipe r = Recipe::parse("sieve-cipher-v1\nreverse\ncaesar 7\nxor 0a0b\nvigenere-hex 00ff\nfeistel key;vigenere lemon");
+    CHECK(Recipe::parse(r.text()).text() == r.text());
+    CHECK(r.layers.size() == 6 && r.layers[3].text() == "vigenere-hex 00ff");
+    for (const char* badr : {"", "caesar 256", "caesar", "xor 5", "xor zz", "rot13", "reverse x", "vigenere"})
+    {
+        bool threw = false;
+        try { Recipe::parse(badr); } catch (const std::invalid_argument&) { threw = true; }
+        CHECK(threw);
+    }
 }
 
 // The system prompt sieve-system-v1 (docs/SYSTEM-PROMPT.md) is never edited: its bytes are the
@@ -5804,6 +5877,7 @@ void run_all(int argc, char** argv)
         test_image_vectors(dir + "vectors_image_v1.tsv");
         test_image_vectors(dir + "vectors_image_v2.tsv", ImageFormat::Fit::Levels, 32);
         test_system_prompt(dir + "../data/prompts/sieve-system-v1.txt");
+        test_cipher_vectors(dir + "vectors_cipher_v1.tsv");
         test_guided_vectors(dir);
         test_filters(dir);
         test_filter_vectors(dir);

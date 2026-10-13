@@ -1,44 +1,50 @@
-# Folding everything, and the disclosure first
+# The Encryption Engine, stage 1, and the voices on the website (13 October 2026)
 
-Against your main ("game voices disclosure"). Website and documentation only: no code changed,
-nothing to build. Copy `index.html` and `Pages/` at the repository's root, and `Sieve/docs/`.
+## The Encryption Engine, stage 1 (`cipher-v1`)
+- **New:** `Sieve/core/include/sieve/cipher.hpp`, `Sieve/core/src/cipher.cpp`. A recipe of layers
+  on bytes, undone in reverse:
+  - `reverse`, `caesar N`, `xor HEX`, `vigenere TEXT`;
+  - `feistel TEXT`: the binary line's own keyed scramble, so n bytes become n bytes
+    (format-preserving);
+  - `vigenere-hex` and `feistel-hex` for keys that are not plain text.
+- **Breaking the weak ones:** every caesar shift and one-byte XOR, plus repeating XOR and Vigenère
+  keys up to 16 bytes, fitted column by column. They are ranked by an English score less 1500 for
+  each key byte beyond the first. Caesar, XOR and Vigenère come out first; a feistel layer gives
+  nothing English.
+- **New command, `sieve cipher`** (`Sieve/tools/cli/cipher_cmd.cpp`): `--encrypt`, `--decrypt`,
+  `--break` and `--catalogue`. The input is `--in FILE`, `--text TEXT` or `--in-hex HEX`.
+  - Registered in `CMakeLists.txt`, `sieve_cli.cpp`, `args.hpp`, `train.hpp` and `help.cpp`.
+- **The catalogue:** 130 bits name one layer with keys of up to 16 bytes, counted exactly.
+- **Oracle:** `sieve_ref.py cipher-vectors` writes `tests/vectors_cipher_v1.tsv` (55
+  encryptions, 15 guesses).
+  - `test_core` checks the vectors, round trips and refused recipes: 76,549 checks, 0 failures.
+  - CI diffs the oracle's output against the vectors. It also runs the CLI: an encryption and back,
+    a broken XOR, a feistel layer left unbroken, and the catalogue.
+  - `tools/check_vectors.py` includes the new vectors.
+- **Docs:**
+  - SPECIFICATIONS §12.0i (`cipher-v1`);
+  - README (`cipher`);
+  - IDEAS §19.52 "Built (stage 1)", and the new §19.68;
+  - a HANDOFF entry.
 
-## The disclosure, front and centre
-- **Every page:** the AI disclosure has moved from above the footer to the top, just under the
-  page's title.
-- **Buy or Build:** the full disclosure comes first, before anything else. The buy, download and
-  build buttons have moved to the bottom, just above "Return to Core Architecture". The line
-  under "Expected Release" now says the PayPal link is below.
+## Website: a voice from the halls
+- **Where:** `Pages/release.html`, at the very bottom, under the buy and download buttons. The
+  disclosure stays at the top.
+- **What it does:** shows one voice from `Sieve/docs/VOICES.md` at random, with who said it and
+  when, and changes it every 12 seconds. "Another Voice" picks a new one.
+- **Read aloud:** "Read Aloud" speaks each voice in the browser's own British English voice once
+  it is turned on. Browsers do not let a page speak unasked.
+- **Where the voices come from:** the page reads the file itself, so a voice added to VOICES.md
+  is on the site with no change to the page. It tries `../Sieve/docs/VOICES.md`, then the
+  repository's raw copy on GitHub. Opened from disk with neither reachable, the box stays hidden.
 
-## Folding Everything (Buy or Build)
-- **The counter:** "10^9868 bits written out, one line folded". Every model of the AI line written
-  out would take more bits than the universe can hold; folded into a rule, all of them are one line
-  of the specification. The aim is to fold everything into rules like that.
-- **Beside it, computed live:**
-  - *What the universe can hold:* about 10^90 bits, and 10^120 operations since the Big Bang
-    (Seth Lloyd, 2002). The AI line's models written out would need 10^9778 times more.
-  - *The light there is:* the afterglow of the Big Bang alone is about 1.5 × 10^89 photons in the
-    observable universe. All the light humanity will ever capture is finite, and the lines are not.
-  - *The horizon recedes:* only 4.6% of what we can see could ever be reached by anything sent
-    today, and that share shrinks every second.
-  - *Out of reach this year:* the stars that have crossed beyond the horizon since the start of
-    the year. It uses the Orbital Simulation page's own constants and formula, so the two pages
-    show the same thing.
-  - *What fits and what folds:* every 32-character page written out (9.7 × 10^47 bits) would fit
-    in the universe; every model of the AI line would not, only its rule.
+## For you to run
+- Build Debug and Release, then `tools\run_tests.bat`.
+- `sieve cipher --catalogue --depth 2`, and a round trip such as:
+  `sieve cipher --encrypt --recipe "vigenere lemon; feistel my key" --text "attack at dawn"`
+  followed by `--decrypt` with the printed hex as `--in-hex`.
+- Open Buy or Build from the site and turn on "Read Aloud".
 
-## Notes
-- **VOICES.md:**
-  - *Your quote:* "There are so many ways to map the data. We'll get there."
-  - *Your note:* the rules are all meant to be automata, folding in on all information.
-  - *Two of mine:* on the 10^9778 universes, and "the light we can capture is finite; the lines
-    are not".
-- **IDEAS §19.67 Folding everything:** writing everything out is impossible, so folding is the
-  only way. Hold everything as rules, and unfold only the part looked at, which is what Sieve
-  already does, line by line. A rule written here describes what no telescope will ever see.
-- **HANDOFF:** a new entry.
-
-## Checked here
-- **The page:** rendered in headless Chromium.
-- **The numbers:** checked against Python: 10^9868 bits, 1.47 × 10^89 photons, 9.67 × 10^47
-  bits, and 4.6% reachable, the same as the Orbital page's 95.4% unreachable.
+## Next
+The Encryption Engine screen in the game, on the main and pause menus, with each layer's output an
+item.

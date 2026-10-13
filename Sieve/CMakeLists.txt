@@ -70,6 +70,7 @@ add_library(sieve_core STATIC
     core/src/sieve.cpp
     core/src/sound.cpp
     core/src/space.cpp
+    core/src/cipher.cpp
     core/src/utf8.cpp)
 target_include_directories(sieve_core PUBLIC core/include)
 target_link_libraries(sieve_core PUBLIC Threads::Threads)
@@ -221,6 +222,7 @@ add_executable(sieve
     tools/cli/ai.cpp
     tools/cli/train_cmd.cpp
     tools/cli/diffuse.cpp
+    tools/cli/cipher_cmd.cpp
     ${SIEVE_ICON_RC})
 target_link_libraries(sieve PRIVATE sieve_lines sieve_locate sieve_compare)
 if(WIN32)

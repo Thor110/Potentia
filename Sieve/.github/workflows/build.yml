@@ -120,6 +120,16 @@ jobs:
           printf '[image]\nmode = compact\nfilters = neighbour-agreement-v1\n' > agree.ini
           $exe filters --line image --filters agree.ini | tr -d '\r' | q "^survivors    6053792982126620565936264884 "
           $exe browse --line image --filters agree.ini --compact --count 2 --seed 4 > /dev/null
+          # The Encryption Engine, stage 1 (cipher-v1): a recipe there and back, a weak cipher broken, a
+          # feistel layer left unbroken, and the recipes counted.
+          enc=$($exe cipher --encrypt --recipe "vigenere lemon; feistel my key" --text "attack at dawn" | tr -d '\r' | awk '$1 == "hex" {print $2}')
+          $exe cipher --decrypt --recipe "vigenere lemon; feistel my key" --in-hex "$enc" | tr -d '\r' | q '^as text      "attack at dawn"$'
+          t="It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness"
+          weak=$($exe cipher --encrypt --recipe "xor 736563726574" --text "$t" | tr -d '\r' | awk '$1 == "hex" {print $2}')
+          $exe cipher --break --in-hex "$weak" | tr -d '\r' | q '^guess 1      xor 736563726574 '
+          strong=$($exe cipher --encrypt --recipe "feistel my key" --text "$t" | tr -d '\r' | awk '$1 == "hex" {print $2}')
+          $exe cipher --break --in-hex "$strong" | tr -d '\r' | q "^none of the weak ciphers gives English"
+          $exe cipher --catalogue --depth 2 | tr -d '\r' | q "^layers       1024850422726591137019104700029796025345 (130 bits)$"
           # Fitting a picture from a file: canon-image-v2 (the default) keeps a line drawing's ink, which
           # v1's plain average (--fit average) turns into plain white paper; a picture already in the
           # line's colours, saved at three times the size, comes back as the same unit under both.
@@ -1339,6 +1349,7 @@ jobs:
           python sieve_ref.py model-vectors | diff - ../tests/vectors_models_v1.tsv
           python sieve_ref.py image-vectors | diff - ../tests/vectors_image_v1.tsv
           python sieve_ref.py image-v2-vectors | diff - ../tests/vectors_image_v2.tsv
+          python sieve_ref.py cipher-vectors | diff - ../tests/vectors_cipher_v1.tsv
           python sieve_ref.py guided-vectors | diff - ../tests/vectors_guided_v1.tsv
           python sieve_ref.py filter-vectors | diff - ../tests/vectors_filters_v1.tsv
           python sieve_ref.py compact-vectors | diff - ../tests/vectors_compact_v1.tsv

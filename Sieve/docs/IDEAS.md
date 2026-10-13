@@ -2777,6 +2777,17 @@ combinations of data, to be expanded and catalogued mathematically.
   key searches, and format-preserving encryption within a line with your own key. All of it in an
   Encryption Engine screen on the main and pause menus, with each layer's output an item.
   File Cipher's formats can join once their rules are written down.
+- *Built (stage 1, 13 October 2026):* `cipher-v1` (SPECIFICATIONS §12.0i) and `sieve cipher`:
+  - recipes of reverse, caesar, xor, Vigenère and feistel layers, there and back;
+  - breaking the weak ones, by caesar shift, one-byte XOR, and repeating keys fitted column by
+    column, ranked by an English score less a cost for each key byte. Caesar, XOR and Vigenère
+    keys come out first; a feistel layer's output gives nothing English;
+  - the catalogue counted exactly: 130 bits name one layer with keys of up to 16 bytes, and a
+    recipe of depth d is d times that.
+
+  Checked against the oracle (55 encryptions, 15 guesses). *Next:* the Encryption Engine screen on
+  the main and pause menus, each layer's output an item; then layers that change the shape (a file
+  as a picture, a page as a melody), which is the "as anything".
 
 **19.53 The plan, in order of importance (13 October 2026).** What to build next, and why in this
 order.
@@ -3048,3 +3059,12 @@ there." (VOICES.md).
 - **Also on the website:** the AI disclosure is now at the top of every page, and on Buy or Build
   it comes before the buttons to buy or download, which are now at the bottom (Edward: it always
   has to be front and centre).
+
+**19.68 The voices on the website (Edward, 13 October 2026).** His idea: the site can read out a
+random voice from VOICES.md, at the very bottom of Buy or Build, under the donate button, as
+another quirk of the site.
+- *Built:* the page fetches `docs/VOICES.md` and shows one voice at random, with who said it and
+  when, changing every 12 seconds. A "Read aloud" button speaks each voice with the browser's own
+  speech synthesis, once a visitor turns it on (browsers do not let a page speak unasked). The page
+  reads the file itself, so a voice added there is on the site with no change to the page. Where
+  the file cannot be read (a page opened from disk), the box stays hidden.

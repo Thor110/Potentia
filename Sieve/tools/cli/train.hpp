@@ -118,5 +118,7 @@ const std::vector<std::filesystem::path>& training_run_dirs();
 int cmd_ai_train(const Args& a);
 // sieve diffuse: train, check and use a diffusion-v1 model of pictures (tools/cli/diffuse.cpp).
 int cmd_diffuse(const Args& a);
+// sieve cipher: the Encryption Engine's ciphers (cipher-v1; tools/cli/cipher_cmd.cpp).
+int cmd_cipher(const Args& a);
 
 } // namespace sieve::cli
