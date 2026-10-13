@@ -2740,6 +2740,20 @@ Build or Buy page, with room for other visualisations.
   - the website's "Every Build, On The Record", which charts every measure.
 
   *Still to build:* the wall in the start room.
+- *Built (13 October 2026):* `Pages/metrics.html`, **Metrics Over Time**. Its button is on Build or
+  Buy below every metric and above Build It Or Buy It, since it is a metric of its own.
+  - **What it shows:** one line chart per measure, read from `metrics/index.tsv`: a dot a build,
+    joined in order. Each chart has its own scale, since the measures are in different units, and
+    one axis can't honestly carry two scales.
+  - **Choosing:** the machine (Edward's, `edward-1`, by default) and releases or every build.
+  - **The measures:**
+    - the unit checks, the seconds the suite took, and the checks a second worked out from the two;
+    - the vector files, specification sections, commands, source files and lines, ideas and
+      voices;
+    - what the reference filters keep on each line.
+  - **Reading it:** hovering over a chart gives the nearest build's value, date, version and
+    commit, and every chart can be read as a table. A measure that has not changed says so, and no
+    range is drawn around it.
 
 **19.51 A decompilation engine (Edward, 13 October 2026).** His note: alongside all this, the only
 thing missing is a decompilation engine.

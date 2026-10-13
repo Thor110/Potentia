@@ -2955,3 +2955,12 @@ cover and a title.
   time since a build), and why.
 - **Widths at 390 pixels, already like this before:** the space page is 804 pixels wide and Build
   or Buy 394. Both are older than this change, and left as they were.
+
+### Metrics Over Time (13 October 2026)
+- **`Pages/metrics.html`:** a line chart a measure from `Sieve/metrics/index.tsv` (the local copy,
+  else GitHub's raw copy).
+  - Filters: machine (`edward-1` by default) and releases or every build.
+  - Hover gives the nearest build; each chart has a table view.
+  - Charts are drawn at their container's width, so the text stays 11 pixels on a phone.
+- **Its button:** on Build or Buy, between "Every Build, On The Record" and "Build It Or Buy It".
+- **IDEAS §19.50** records it as built.

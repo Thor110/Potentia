@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Potentia // Metrics Over Time</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    background:#0a0a0f;
+    color:#e0ddd8;
+    font-family:'Courier New',monospace;
+    font-size: 16px;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content: center;
+    padding:32px;
+  }
+  h1{font-size:16px;letter-spacing:0.3em;text-transform:uppercase;color:#666;margin-bottom:12px;text-align:center;white-space:nowrap;}
+  .sub{font-size:16px;color:#444;margin-bottom:20px;letter-spacing:0.15em;text-align:center;max-width:2000px;line-height:1.6;}
+  
+  .manifesto-line {
+    font-size: 16px;
+    color: #666;
+    margin-bottom: 16px;
+    letter-spacing: 0.1em;
+    text-align: center;
+    max-width: 2000px;
+    line-height: 1.5;
+  }
+  
+  /* Counter block matching the mechanical aesthetic */
+  .counter-box {
+    width: 100%;
+    max-width: 600px;
+    border: 1px solid #2a2a3a;
+    background: #0d0d14;
+    padding: 20px;
+    margin-bottom: 24px;
+    text-align: center;
+  }
+  .counter-title {
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: #666;
+    margin-bottom: 8px;
+    white-space: nowrap;
+  }
+  .counter-value {
+    font-size: 16px;
+    color: #e0ddd8;
+    letter-spacing: 0.1em;
+    font-weight: bold;
+    white-space: nowrap;
+  }
+
+  .section-label {
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: #444;
+    margin-bottom: 16px;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .nav-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    max-width: 600px;
+    margin-bottom: 24px;
+  }
+
+  /* Matching the viewfinder button style exactly */
+  .btn-link {
+    display: block;
+    text-decoration: none;
+    background: transparent;
+    border: 1px solid #2a2a3a;
+    color: #888;
+    padding: 14px 20px;
+    font-family: 'Courier New',monospace;
+    font-size: 16px;
+    letter-spacing: 0.15em;
+    cursor: pointer;
+    text-transform: uppercase;
+    text-align: center;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+
+  .btn-link:hover {
+    border-color: #555;
+    color: #ccc;
+    background: #111;
+  }
+
+  .footer {
+    margin-top: 16px;
+    font-size: 16px;
+    color: #222;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    text-align: center;
+    white-space: nowrap;
+  }
+</style>
+<style>
+  .chart-card { width: 100%; max-width: 700px; border: 1px solid #2a2a3a; background: #0d0d14; padding: 16px 20px; margin-bottom: 16px; }
+  .chart-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; color: #b0aca5; }
+  .chart-head b { color: #e0ddd8; }
+  .chart-wrap { position: relative; margin-top: 8px; }
+  .chart-wrap svg { width: 100%; height: auto; display: block; }
+  .tip { position: absolute; pointer-events: none; background: #0a0a0f; border: 1px solid #555; color: #e0ddd8; padding: 6px 8px; font-size: 13px; line-height: 1.4; white-space: nowrap; display: none; }
+  .filters { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-bottom: 20px; width: 100%; max-width: 700px; }
+  .filters select { background: #0a0a0f; color: #e0ddd8; border: 1px solid #2a2a3a; font-family: inherit; font-size: 15px; padding: 6px 8px; }
+  details { margin-top: 8px; color: #888; }
+  details table { border-collapse: collapse; margin-top: 6px; font-size: 13px; }
+  details td, details th { padding: 2px 12px 2px 0; text-align: left; color: #b0aca5; }
+
+  .steps {
+    width: 100%;
+    max-width: 700px;
+    border: 1px solid #2a2a3a;
+    background: #0d0d14;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+    color: #b0aca5;
+    line-height: 1.6;
+  }
+  .steps ol { margin-left: 24px; }
+  .steps li { margin-bottom: 8px; }
+  .steps a { color: #ccc; }
+  .counter-note {
+    font-size: 16px;
+    color: #555;
+    margin-top: 8px;
+    letter-spacing: 0.05em;
+    line-height: 1.5;
+    white-space: normal;
+  }
+  @media (max-width: 720px) {
+    h1, .section-label, .counter-title, .counter-value, .btn-link, .footer { white-space: normal; }
+    .counter-value { overflow-wrap: anywhere; }
+  }
+</style>
+</head>
+<body>
+
+<h1>State Space : Near Zero // Metrics Over Time</h1>
+<div class="sub">Every build on the record, measure by measure.</div>
+
+<div class="steps" style="color:#777;font-size:14px;">
+  <div style="text-transform:uppercase;letter-spacing:0.2em;color:#666;margin-bottom:8px;text-align:center;">AI Disclosure</div>
+  The Sieve of Potentia (State Space : Near Zero) is Edward's (Thor110's) work. He has been building its theory and ideas himself over the past few years, and directs everything in it.
+  <ul style="margin:8px 0 8px 20px;">
+    <li><b>Gemini (Google)</b> helped him theorise and conceptualise: many of the concepts and ideas, and parts of this website.</li>
+    <li><b>Claude (Anthropic)</b> has written much of Sieve's code, its tests and its documentation with him, in long working sessions he reviews and tests.</li>
+    <li>The game's own models (the text, picture and melody models in the hallway) are small models trained by Sieve itself: the text model on a public-domain text, and the picture and melody models on units of Sieve's own lines.</li>
+  </ul>
+  Those happy to use AI-assisted work won't mind; those who prefer otherwise deserve to know. Transparency fosters trust.
+</div>
+
+<div class="manifesto-line">Each line below is one measure, read from <a href="https://github.com/Thor110/Potentia/tree/main/Sieve/metrics" target="_blank" style="color:#888;">Sieve/metrics</a> in the repository: a dot for every build, joined in the order they were made. Each chart has its own scale, since the measures are counted in different units.</div>
+
+<div class="filters">
+  <label>Machine <select id="f-machine" aria-label="Machine"></select></label>
+  <label>Builds <select id="f-kind" aria-label="Which builds">
+    <option value="release">Releases</option>
+    <option value="all">Every build</option>
+  </select></label>
+</div>
+
+<div class="steps" id="summary">Loading the record...</div>
+<div id="charts" style="width:100%;max-width:700px;"></div>
+
+<div class="nav-group">
+  <a href="release.html" class="btn-link">Return to Build or Buy</a>
+</div>
+
+<div class="footer">Metrics Over Time &middot; Every Figure On The Record</div>
+
+<script>
+    const SOURCES = ["../Sieve/metrics/index.tsv", "https://raw.githubusercontent.com/Thor110/Potentia/main/Sieve/metrics/index.tsv"];
+    // The measures, in the order shown: [column, title, how to read it]. "checks_per_second" is
+    // worked out here from two columns; the rest are the record's own.
+    const MEASURES = [
+        ["unit_checks", "Unit test checks", "every one passing"],
+        ["unit_seconds", "Seconds for the unit suite", "lower is faster"],
+        ["checks_per_second", "Unit test checks a second", "the two above, divided"],
+        ["vector_files", "Conformance vector files", "each reproduced by the independent oracle"],
+        ["spec_sections", "Sections of the specification", ""],
+        ["commands", "Commands of the sieve tool", ""],
+        ["source_files", "Source files", ""],
+        ["source_lines", "Lines of source", ""],
+        ["ideas", "Ideas noted", ""],
+        ["voices", "Voices of the halls", ""],
+    ];
+    const LINE = "#c8c4bd", GRID = "#2a2a3a", MUTED = "#666";
+    let rows = [];
+
+    function grouped(v) { return Number(v).toLocaleString("en-GB", { maximumFractionDigits: 2 }); }
+    function value(r, key) {
+        if (key === "checks_per_second") {
+            const c = Number(r.unit_checks), s = Number(r.unit_seconds);
+            return c > 0 && s > 0 ? c / s : NaN;
+        }
+        return r[key] === undefined || r[key] === "" ? NaN : Number(r[key]);
+    }
+
+    function chart(list, key, title, how) {
+        const pts = list.map((r, i) => ({ r, i, v: value(r, key) })).filter(p => !isNaN(p.v));
+        if (pts.length === 0) return null;
+        const card = document.createElement("div");
+        card.className = "chart-card";
+        const first = pts[0].v, last = pts[pts.length - 1].v;
+        const change = pts.length > 1 ? last - first : 0;
+        const sign = change > 0 ? "+" : change < 0 ? "−" : "±";
+        card.innerHTML = '<div class="chart-head"><span><b>' + title + '</b>' + (how ? ' (' + how + ')' : '') + '</span><span><b>' + grouped(last) + '</b>' +
+            (pts.length > 1 ? ' &nbsp;' + sign + grouped(Math.abs(change)) + ' since the first' : '') + '</span></div>';
+        // The scale in words: the top dashed line is the highest on the record, the base the lowest.
+        const lo0 = Math.min(...pts.map(p => p.v)), hi0 = Math.max(...pts.map(p => p.v));
+        card.innerHTML += '<div class="counter-note" style="margin-top:4px;font-size:13px;">' +
+            (lo0 === hi0 ? 'the same in every build shown' : 'top line: highest, ' + grouped(hi0) + ' &nbsp; base: lowest, ' + grouped(lo0)) + '</div>';
+        // Drawn at the card's own width, so the text stays its true size on a phone.
+        const W = Math.max(280, Math.round(document.getElementById("charts").clientWidth - 42)), H = 160, L = 8, R = 8, T = 12, B = 26;
+        const lo = Math.min(...pts.map(p => p.v)), hi = Math.max(...pts.map(p => p.v));
+        const flat = lo === hi; // one value throughout: drawn level, with no range made up around it
+        const n = list.length;
+        const x = i => n === 1 ? (L + W - R) / 2 : L + (W - L - R) * i / (n - 1);
+        const y = v => flat ? (T + H - B) / 2 : T + (H - T - B) * (1 - (v - lo) / (hi - lo));
+        // A date, with the time when two builds fall on the same day.
+        const sameDay = n > 1 && list[0].date.slice(0, 10) === list[n - 1].date.slice(0, 10);
+        const when = r => sameDay ? r.date.slice(0, 16).replace("T", " ") : r.date.slice(0, 10);
+        const label = (yy, t) => '<text x="' + L + '" y="' + yy + '" fill="' + MUTED + '" font-size="11" font-family="Courier New, monospace">' + t + '</text>';
+        let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + title + ', by build">';
+        svg += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + (H - B) + '" y2="' + (H - B) + '" stroke="' + GRID + '" stroke-width="1"/>';
+        if (!flat) svg += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + T + '" y2="' + T + '" stroke="' + GRID + '" stroke-width="1" stroke-dasharray="2 4"/>';
+        svg += label(H - 8, when(list[0]));
+        if (n > 1) svg += '<text x="' + (W - R) + '" y="' + (H - 8) + '" fill="' + MUTED + '" font-size="11" text-anchor="end" font-family="Courier New, monospace">' + when(list[n - 1]) + '</text>';
+        if (pts.length > 1)
+            svg += '<polyline fill="none" stroke="' + LINE + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="' +
+                   pts.map(p => x(p.i).toFixed(1) + ',' + y(p.v).toFixed(1)).join(' ') + '"/>';
+        svg += '<line class="cross" x1="0" x2="0" y1="' + T + '" y2="' + (H - B) + '" stroke="#555" stroke-width="1" visibility="hidden"/>';
+        for (const p of pts)
+            svg += '<circle cx="' + x(p.i).toFixed(1) + '" cy="' + y(p.v).toFixed(1) + '" r="4" fill="' + LINE + '" stroke="#0d0d14" stroke-width="2"/>';
+        svg += '<rect class="hit" x="0" y="0" width="' + W + '" height="' + H + '" fill="transparent"/></svg>';
+        const wrap = document.createElement("div");
+        wrap.className = "chart-wrap";
+        wrap.innerHTML = svg + '<div class="tip"></div>';
+        card.appendChild(wrap);
+        // Hover: the nearest build, with its date, commit and value.
+        const svgEl = wrap.querySelector("svg"), tip = wrap.querySelector(".tip"), cross = wrap.querySelector(".cross");
+        const near = ev => {
+            const box = svgEl.getBoundingClientRect();
+            const px = (ev.clientX - box.left) * W / box.width;
+            let best = pts[0];
+            for (const p of pts) if (Math.abs(x(p.i) - px) < Math.abs(x(best.i) - px)) best = p;
+            return { best, box };
+        };
+        svgEl.addEventListener("pointermove", ev => {
+            const { best, box } = near(ev);
+            cross.setAttribute("x1", x(best.i)); cross.setAttribute("x2", x(best.i)); cross.setAttribute("visibility", "visible");
+            tip.style.display = "block";
+            tip.innerHTML = '<b>' + grouped(best.v) + '</b><br>' + best.r.date.replace("T", " ").replace("Z", " UTC") + '<br>Sieve ' + best.r.version + ', ' + best.r.commit +
+                            (best.r.kind ? ' (' + best.r.kind + ')' : '');
+            const left = x(best.i) * box.width / W;
+            tip.style.left = Math.max(0, Math.min(box.width - tip.offsetWidth, left - tip.offsetWidth / 2)) + "px";
+            tip.style.top = "-6px";
+        });
+        svgEl.addEventListener("pointerleave", () => { tip.style.display = "none"; cross.setAttribute("visibility", "hidden"); });
+        // The same figures as a table, for anyone who would rather read than look.
+        const det = document.createElement("details");
+        det.innerHTML = '<summary>As a table</summary><table><tr><th>Date</th><th>Commit</th><th>Value</th></tr>' +
+            pts.map(p => '<tr><td>' + p.r.date.slice(0, 16).replace("T", " ") + '</td><td>' + p.r.commit + '</td><td>' + grouped(p.v) + '</td></tr>').join("") + '</table>';
+        card.appendChild(det);
+        return card;
+    }
+
+    function draw() {
+        const machine = document.getElementById("f-machine").value, kind = document.getElementById("f-kind").value;
+        const list = rows.filter(r => (machine === "*" || (r.machine_profile || r.cpu) === machine) && (kind === "all" || r.kind === kind));
+        const box = document.getElementById("charts");
+        box.innerHTML = "";
+        const summary = document.getElementById("summary");
+        if (list.length === 0) { summary.textContent = "No build matches these choices yet."; return; }
+        summary.textContent = list.length + " build" + (list.length === 1 ? "" : "s") + " shown, from " + list[0].date.slice(0, 10) + " to " +
+            list[list.length - 1].date.slice(0, 10) + ". With one build a measure is a single dot; the line begins with the second.";
+        for (const [key, title, how] of MEASURES) { const c = chart(list, key, title, how); if (c) box.appendChild(c); }
+        // What the reference filters keep on each line, as log10 of the share (the hallway's metrics list).
+        const kept = Object.keys(list[list.length - 1]).filter(k => k.startsWith("kept_log10_")).sort();
+        for (const k of kept) {
+            const c = chart(list, k, "Kept on " + k.slice(11) + ": log10 of the share", "the reference filters");
+            if (c) box.appendChild(c);
+        }
+    }
+
+    async function load() {
+        for (const src of SOURCES) {
+            try {
+                const r = await fetch(src);
+                if (!r.ok) continue;
+                const lines = (await r.text()).split(/\r?\n/).filter(l => l);
+                if (lines.length < 2) continue;
+                const head = lines[0].split("\t");
+                rows = lines.slice(1).map(l => { const c = l.split("\t"), o = {}; head.forEach((h, i) => o[h] = c[i] || ""); return o; })
+                            .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+                const machines = [...new Set(rows.map(r => r.machine_profile || r.cpu))];
+                const sel = document.getElementById("f-machine");
+                sel.innerHTML = machines.map(m => '<option value="' + m + '">' + m + '</option>').join("") + '<option value="*">Every machine</option>';
+                if (machines.includes("edward-1")) sel.value = "edward-1";
+                sel.addEventListener("change", draw);
+                document.getElementById("f-kind").addEventListener("change", draw);
+                draw();
+                return;
+            } catch (e) { /* the next source */ }
+        }
+        document.getElementById("summary").textContent = "The record could not be read here (a page opened from disk, or offline).";
+    }
+    load();
+</script>
+
+</body>
+</html>
