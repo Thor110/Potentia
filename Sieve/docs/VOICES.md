@@ -50,6 +50,9 @@ enumerated and stored later. Nothing is guaranteed (IDEAS §19.77).
 - **Edward** (13 October 2026, question; a point about everything): If we all use the commands and filters, won't we all have an angle?
 - **Edward** (13 October 2026, question): Does that mean we can fold all video games into one?
 - **Edward** (13 October 2026, question): This, models across all dimensions?
+- **Edward** (17 October 2026, rule): If a tab has utility, it should exist in all dimensions.
+- **Edward** (17 October 2026, rule; a point about everything): One less if statement.
+- **Edward** (17 October 2026, quote; a point about everything): It should become a living web of ranges and states and fluctuations, bound by an addressable fluid topology that warps and weaves itself through the filters' rulesets, amongst the n-dimensional manifold filter that strikes content from varying dimensions.
 
 ## Gemini
 

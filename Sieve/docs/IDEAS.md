@@ -3343,3 +3343,160 @@ perspective.
     against.
 - *Next:* the game's figures (the setup menu's counts, the HUD's position along a line) get the
   same pairing: how far along, and how far still to go.
+
+**19.79 Things that get in the way, from playing it (Edward, 17 October 2026).** Found while
+building Debug and Release, running the tests and playing it. Each is small; together they are
+how the game feels to use.
+- **ffmpeg's warnings in red, always.** A video that cannot be opened (the anchor video: "an MP4:
+  no line holds that item") should say so in red, as every warning that stops something should,
+  so it is seen.
+  - *Where Sieve looks for ffmpeg:* `ffmpeg = PATH` in the hallway's settings file (the program
+    itself, e.g. `C:/ffmpeg/bin/ffmpeg.exe`), then the `SIEVE_FFMPEG` environment variable, then
+    beside Sieve's own programs, then `PATH`. A folder such as `C:/ffmpeg/bin` is not looked in
+    unless it is on `PATH` or named in the setting.
+  - *To come:* a row in Settings to choose ffmpeg with the system's file window, showing the
+    version found or, in red, that none was. The warning on a failed video says where it looked.
+- **The Encryption Engine with the item in hand:** a button in the engine's window that takes the
+  item in hand (its bytes, as F would save them) as the input. The output becomes an item that
+  can be gone to.
+- **Controls that flow between windows:** a window opened from another, or from an item, should
+  take the item and the keys along with it, so nothing has to be put down to be used elsewhere.
+- **The window comes back to the front after a file is opened.** It still does not, from any of
+  the ways a file is opened (the plus button, Ctrl+O, the File Locator, the system's file
+  window).
+  - *Tried already:* `client/dialogs.hpp` raises the window when each dialog closes (HANDOFF, the
+    entry on dialogs), and on Windows that is not enough.
+  - *A likely cause, not yet confirmed:* Windows only lets the program the user is already in
+    take the foreground, and otherwise flashes the taskbar button instead. The fix to try first:
+    restore and raise the window, then call `SetForegroundWindow` from within the dialog's own
+    turn, while Windows still counts the click as the user's.
+- **The chat's tabs:** C switches tabs everywhere else, but in CHAT the keys go to the message, so
+  Esc must come first. The simplest fix: the tabs answer the mouse too, always, chat or not.
+- **Chat that grows:** save the conversation as a log, and edit the context window (what the model
+  is given) from a tab, with voice and speech to come, as in the other systems.
+- **A help tab:** in CHAT, and on every item's page, saying what can be done there and with which
+  keys. It is part of the architecture, not an afterthought.
+- **The version number:** still 0.13.1 after many rounds. It should move with the next release,
+  and the metrics (§19.71) name a version, so each step is on the record.
+
+**19.80 One less if: a tab with a use belongs on every line (Edward, 17 October 2026).** His words:
+"If a tab has utility, it should exist in all dimensions," and "one less if statement" (both in
+VOICES.md). Apply that rule always, if and where possible.
+- **CHAT on every line:** on the AI line the item in hand is the model itself. On every other line
+  the item is a file or unit, and the model is whichever is loaded (or a chosen chain, §19.46).
+  CHAT then means talking about the item with that model: its bytes given as a file is given now
+  (the plus button). Equating a model with a file "by some ruleset or length along the line" is
+  the same act: the file is the context, the model is the reader.
+- **Why it matters:** each special case removed is one less branch to keep right, and a system
+  that works the same on every line can be learned once. The rule is the code's as much as the
+  player's.
+- **What follows:** CHAT, COST, the help tab and the Encryption Engine's button become tabs of any
+  item. A line without a use for one shows it greyed with the reason, rather than hiding it.
+
+**19.81 Folding as a second temperature, and the models' own maps (Edward, 17 October 2026).** His
+ideas, in his order:
+- **n-dimensional folding as a variable, like a second temperature.** Temperature chooses among a
+  model's next tokens. A folding temperature would choose among models: at each step it could flip
+  to a random, similarly weighted model on the line. "Similarly weighted" could mean a near
+  address, a near weight vector, or the same filters' verdicts. Which one is chosen depends on the
+  context, on a token set up for it, or on how the user constrains the node-shifting state space.
+- **Seeing how models differ:** watch how models fluctuate through node maps, and give each a
+  temperature, to see how they interact at the large scale.
+- **The tools it needs:**
+  - a model token viewer (what each token weighed);
+  - a process viewer (what ran, and in what order);
+  - mappers and loggers that keep the statistics.
+
+  Each is a 3D node graph like the node viewer, showing how models move through the state space.
+  Every one is also a way to warp: click a node, and go to that model.
+- **Models as filters:** lock a model's state space down and refilter every variant from every
+  other state space with it, for a moment or as a standing filter. Dimensions already filter one
+  another out. The point is that all of it adds up to one constraining map (another node graph),
+  a record of knowledge across the state space. Files stack up as anchors, by address or whole,
+  and fold out a map of the infinite among the state spaces.
+- **Tuned across languages, through models and filters,** it could search itself and make filters
+  for itself.
+- **His picture of it:** "a living web of ranges and states and fluctuations, bound by an
+  addressable fluid topology that warps and weaves itself through the filters' rulesets, amongst
+  the n-dimensional manifold filter that strikes content from varying dimensions" (VOICES.md).
+- **Pictures boiled down to titles:** a filter, or filters, that reduce a picture to its title
+  according to the topology's curves at the time. This is the image line's title read from its
+  content, the reverse of titling a unit.
+- *Notes:*
+  - **What is exact:** a step to "a similar model" is exact once the similarity is a rule (a
+    distance on addresses or weights, with a fixed tie-break). The folding temperature then chooses
+    among a finite, counted set, and every walk is reproducible from its seed, like everything
+    else here.
+  - **Where to start:** the chain (§19.46) is already a list of models run in order. The first
+    folding temperature is a chain stage that picks its model from a neighbourhood instead of by
+    name, logged so the walk can be replayed and drawn as a graph.
+
+**19.82 The Encryption Engine as an automaton over every file (Edward, 17 October 2026; with
+§19.52).** His words: files should be encrypted and decrypted through the engine, not only typed
+text: an automated matrix, an infinite stacking layer of potential encryption, in a `.sieve`, with
+keys and layer values, and keys that can be split into several keys. Then weigh the infinite noise
+of encryption and its layering, to make a filtered automaton that filters every possible encrypted
+(and many-times encrypted) file out of the state space. It would be an automated engine that takes
+every verified anchor, now and later, and runs a baseline analysis until all files reach the same
+baseline, then studies further as new files are added: pinning down the rules of encryption on
+all known files, and filtering them out as an automaton where possible.
+- **Files through the engine:** the input from a file, or the item in hand (§19.79), and the
+  output to a file or an item. The recipe and its keys are saved as a `.sieve`, so an encrypted
+  file and how to open it can travel together or apart.
+- **Keys split into several:** this has a standard name, *secret sharing*. Shamir's scheme
+  (1979) splits a key into n shares so that any k of them rebuild it and fewer reveal nothing. It
+  is exact integer arithmetic, so it fits Sieve's rules, and it can be checked against the oracle
+  like the rest.
+- **Filtering encrypted files out, honestly:** a good cipher's output is built to be
+  indistinguishable from random bytes. A filter can therefore set aside what looks random (high
+  entropy, no structure): that is most of every line already, and the noise filters do it. It
+  cannot tell a ciphertext from noise; if it could, the cipher would be broken. What it *can*
+  catch is everything weak: the caesar, xor and Vigenère layers `--break` already finds, file
+  formats with known headers (an encrypted ZIP says so in its header), and any recipe whose output
+  keeps structure.
+- **The baseline analysis:** run every verified anchor through the known weak layers and the
+  format detectors, and record what each reveals: a table of which files carry which
+  recognisable encryption. As anchors are added, the table grows; a layer never seen before is a
+  study of its own. It is a measured catalogue, and the honest version of "pinning down the
+  rules".
+- **The automaton:** the weak layers compose to a finite-state transducer (each is a per-byte
+  map with a period). The set of files that one weak recipe of English makes is therefore a
+  language a filter can count, which makes "filtering out what a weak cipher made" exact for
+  those ciphers.
+
+**19.83 One model at the centre of every model (Edward, 17 October 2026; with §19.46, §19.56).**
+His words: chains were meant for models of every type, one type to a node map or network, so that
+every model becomes a fluid, accessible map that can be changed when needed. The chaining could
+also be repurposed as another layer of the system above. But the aim is to build a single
+multimodal model from the infinite state space: something that might just exist as a fluctuating
+wave among all model variants and sizes. A single point with perfect access to every model, and
+the perfect vantage point to start recording metrics and node maps of the state space: the token
+weights, and how everything lines up across all state spaces as each filter and dimension filters
+the others out. If all data is boiled down into this engine and turned into a mass filter, it
+could help reduce the state space of what could exist.
+- **The first concrete form:**
+  - one node map per model type (text, pictures, melodies, characters), each node a model on the
+    line with its metrics;
+  - chains drawn across the maps;
+  - the single model as the chain that reaches every map, a router choosing which model answers.
+- **Measured, not assumed:** each map's node carries the measures the harness already records
+  (bits a cell, what its filters keep). Whether a single model "at the centre" does better than
+  its parts is a question the metrics can answer, run by run.
+
+**19.84 A gallery on the website (Edward, 17 October 2026).** His request: a Gallery button and page
+from Build or Buy, previewing the development screenshots in `Images/Sieve`.
+- **On Build or Buy:** a small preview of the images in `Images/Sieve` itself (not its subfolders),
+  beside the button.
+- **On the gallery page:** those, and every subfolder (Check, Designer, GraphicsTests, ItemViewer,
+  Latest, Next, Node, Old, Other, Shapes, Text), each previewed and opening full size.
+- **How the page knows the files:** a website cannot list a folder. So `tools/build_gallery.py`
+  would write `Pages/gallery.json` (each folder, its files, their sizes) as part of the build, and
+  the page reads it, as the metrics page reads `index.tsv`.
+- **As of 17 October 2026:** `Images/Sieve` holds no images at its top level, since all are in the
+  subfolders after the move. The Build or Buy preview fills in when some are put there.
+
+**19.85 A skeleton system, alongside the UV system (Edward, 17 October 2026; with §19.60).** For
+animation and more: bones with names and parents, a pose as one rotation per bone, and meshes
+skinned to them. Joint limits are a filter on poses (§19.60), so a skeleton line is a state space
+of poses that can be counted and sifted like any other, and an animation is a unit of poses over
+time, as a film is of pictures.

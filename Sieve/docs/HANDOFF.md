@@ -2994,3 +2994,26 @@ cover and a title.
   - *Model names:* "Claude Opus 5.5" appears in Edward's own acknowledgements (both READMEs,
     GAME.md, the anchors' copy, `Art/credit.txt`), as he asked; kept as written.
   - *`favicon.ico`:* the site has none, so browsers log one harmless 404 on the front page.
+
+### Notes from playing it, and the ideas after (17 October 2026)
+- **IDEAS §19.79, things that get in the way:**
+  - ffmpeg warnings in red, with where it looked; a Settings row to choose ffmpeg;
+  - the Encryption Engine taking the item in hand;
+  - controls flowing between windows;
+  - the window still not returning to the front after a file is opened;
+  - CHAT's tabs answering the mouse;
+  - saving chat logs and editing the context window;
+  - a help tab;
+  - bumping the version (still 0.13.1).
+- **IDEAS §19.80, one less if:** a tab with a use belongs on every line; CHAT on every line, about
+  the item in hand.
+- **IDEAS §19.81:** folding as a second temperature, the models' own maps, models as filters,
+  pictures boiled down to titles.
+- **IDEAS §19.82:** the Encryption Engine over every file (`.sieve` recipes, keys split by secret
+  sharing), and what filtering encrypted files out can and cannot honestly do.
+- **IDEAS §19.83:** one model at the centre of every model.
+- **IDEAS §19.84:** a website gallery, and why it needs `gallery.json`. `Images/Sieve` has no
+  top-level images now.
+- **IDEAS §19.85:** a skeleton system beside the UV system.
+- **VOICES.md:** three of Edward's (two rules, one quote).
+- **No code changed.**
