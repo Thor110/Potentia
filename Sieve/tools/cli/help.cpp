@@ -403,6 +403,8 @@ const std::vector<Page>& pages()
           {"--repeat-penalty R", "Above 1, makes tokens already in the reply less likely (1: off)."},
           {"--seed S", "The seed of its choices: the same seed, the same reply (on the same machine) (1)."},
           {"--threads N", "Threads for the model (default: as many as the machine has); the result is the same."},
+          {"--widen-weights", "Widen BF16 and F16 weights to 32-bit floats as they load: twice the memory, no conversion\n"
+                              "as they are used. Without it they are kept as stored. The result is the same to the bit."},
           {"--encode TEXT", "The tokens of a text, one a line: its id and its bytes."},
           {"--encode-lines FILE", "The tokens of each line of FILE (each line a JSON string), one line each:\n"
                                  "what the oracle's llm-encode-lines prints."},

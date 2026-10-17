@@ -1,0 +1,61 @@
+sieve-metrics-v1
+date = 2026-10-17T15:12:56Z
+commit = 325a7c02fc4e
+version = 0.13.25
+machine = Windows 10 AMD64
+machine_profile = edward-1
+cpu = 11th Gen Intel(R) Core(TM) i5-11400F @ 2.60GHz
+logical_processors = 12
+memory_gb = 32
+gpu = NVIDIA GeForce RTX 3060
+kind = release
+unit_seconds = 410.9
+unit_checks = 153096
+unit_builds = x64-Release
+vector_files = 37
+voices = 44
+ideas = 164
+spec_sections = 57
+commands = 20
+source_files = 230
+source_lines = 85651
+kept_log10_binary = -4.34
+kept_log10_image = -0.000020
+kept_log10_pages = -0.00062
+kept_log10_books = -0.0032
+kept_log10_audio = 0.00
+kept_log10_tracks = -0.00064
+kept_log10_video = -0.000020
+kept_log10_movies = -0.00072
+kept_log10_models = -21.47
+kept_log10_worlds = -85.90
+kept_log10_ai = -145.65
+hallway-metrics
+Sieve 0.13.25: how much of each line its filters remove
+Filters: reference-filters.ini (SHA-256 aa78cf12db868b23e0ff81d843da7cc28ef0ab2d5c3c9b8c2d9260b756ad7195)
+Filter memory: 3072 MB
+
+Binary : 99.9954%              ( Kept : 10^-4.34 )
+Image  : 0.0045%               ( Kept : 10^-0.000020 )
+Pages  : 0.1%                  ( Kept : 10^-0.00062 )
+Books  : 0.7%                  ( Kept : 10^-0.0032 )
+Audio  : 0.000000000000...%    ( Kept : 10^0.00 )
+Tracks : 0.1%                  ( Kept : 10^-0.00064 )
+Video  : 0.0045%               ( Kept : 10^-0.000020 )
+Movies : 0.1%                  ( Kept : 10^-0.00072 )
+Models : 99.999999999999...%   ( Kept : 10^-21.47 )
+Worlds : 99.999999999999...%   ( Kept : 10^-85.90 )
+AI     : 99.999999999999...%   ( Kept : 10^-145.65 )
+
+Shapes (the setup menu's settings):
+Binary : title*files<=32B = ~10^122.9
+Image  : title*2^100 = ~10^75.9
+Pages  : title*27^32 = ~10^91.6
+Books  : cov*pg^5 = ~10^259.1
+Audio  : cov*title*104^16 = ~10^108.2
+Tracks : cov*title*au^4 = ~10^205.0
+Video  : cov*title*2^200 = ~10^136.1
+Movies : cov*title*vid^4 = ~10^316.7
+Models : title*16^24*8^36 = ~10^107.2
+Worlds : cov*title*(model*12288)^4 = ~10^337.9
+AI     : 16^8192 = ~10^9864.2

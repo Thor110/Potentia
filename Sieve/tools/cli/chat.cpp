@@ -64,6 +64,7 @@ int cmd_chat(const Args& a)
     }
     const json::Value config = json::parse(read_text(dir / "config.json"));
     const unsigned threads = a.has("threads") ? a.get_u32("threads", 0) : 0;
+    llm::set_widen_weights(a.has("widen-weights")); // BF16 and F16 as stored, unless asked: the same numbers either way
     const auto loaded_at = std::chrono::steady_clock::now();
     llm::Model model(config, dir / "model.safetensors", threads);
     const double load_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - loaded_at).count();

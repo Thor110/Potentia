@@ -12,7 +12,7 @@
 //   [world]      model_cache_mb, angle_decimals, filter_memory_mb, counting_memory_pct,
 //                merge_cache_pct, unit_time_ms, item_memory_pct
 //   [controls]   mouse_sensitivity, invert_mouse_y
-//   [models]     text_model, picture_model
+//   [models]     text_model, picture_model, widen_weights
 //   [setup]      every line's shape and the GLOBAL settings (Settings::entries, setup.hpp)
 //   [paths]      ffmpeg
 //   [language]   language
@@ -112,6 +112,9 @@ struct AppSettings
     // and a picture model's run folder for DRAW. Empty: the model in hand, and the first trained
     // picture model in the training folders.
     std::string text_model, picture_model;
+    // How a model given as a file keeps its BF16 and F16 weights (llm::set_widen_weights): off, as
+    // stored (half the memory); on, widened to 32-bit floats as it loads. The same numbers either way.
+    bool widen_weights = false;
     // The setup menu's settings ([setup]): every line's shape and the GLOBAL settings, as they
     // were when the setup menu last changed them. Its ffmpeg is not kept here but below.
     Settings setup;

@@ -3543,8 +3543,66 @@ void test_llm(const std::string& dir)
         });
         CHECK(streamed == r && chat.last_reply_tokens() <= 6);
         CHECK(throws([&] { (void)L::Model(sieve::json::parse(R"({"model_type":"gpt2"})"), path, 1); }));
+        // Kept as stored or widened as they load (widen_weights): the same logits to the bit, at
+        // half the memory stored.
+        L::set_widen_weights(true);
+        L::Model wide(config, path, 1);
+        L::set_widen_weights(false);
+        std::vector<float> w;
+        for (const uint32_t t : tok.encode("The library holds every book.", true)) w = wide.step(t);
+        CHECK(w == a);
+        CHECK(wide.weight_bytes() == 2 * one.weight_bytes());
     }
     std::filesystem::remove(path);
+    // The same model in F16: kept as stored (two bytes a value, no longer widened as it loads) and
+    // widened give the same logits to the bit, every F16 value being a 32-bit float exactly.
+    {
+        const auto config16 = sieve::json::parse(R"({"model_type":"llama","hidden_size":32,"intermediate_size":48,"num_attention_heads":4,
+            "num_hidden_layers":2,"num_key_value_heads":2,"tie_word_embeddings":true,"torch_dtype":"float16","vocab_size":300,"max_position_embeddings":64})");
+        std::vector<st::Tensor> laid16;
+        std::string file16 = st::layout_start(std::vector<std::pair<std::string, std::string>>{{"format", "pt"}}, st::llama_tensors(config16), &laid16);
+        CHECK(!laid16.empty() && laid16.front().dtype == "F16");
+        // A float to the nearest F16 (normal values only, which these all are; smaller ones to 0).
+        auto to_half = [](float x) {
+            uint32_t u;
+            std::memcpy(&u, &x, 4);
+            const uint32_t sign = (u >> 16) & 0x8000u, m = u & 0x7FFFFFu;
+            const int e = int((u >> 23) & 0xFFu) - 127 + 15;
+            if (e <= 0) return uint16_t(sign);
+            uint32_t h = (uint32_t(e) << 10) | (m >> 13);
+            if (m & 0x1000u) ++h;
+            return uint16_t(sign | h);
+        };
+        std::mt19937 rng16(3);
+        for (const st::Tensor& t : laid16)
+            for (uint64_t i = 0; i < t.bytes(); i += 2)
+            {
+                const bool norm = t.name.find("norm") != std::string::npos;
+                const uint16_t h = to_half(float((norm ? 1.0 : 0.0) + std::normal_distribution<double>(0, norm ? 0.05 : 0.1)(rng16)));
+                file16.push_back(char(h & 0xFF));
+                file16.push_back(char(h >> 8));
+            }
+        const std::filesystem::path path16 = std::filesystem::temp_directory_path() / "sieve_test_llm16.safetensors";
+        {
+            std::ofstream out(path16, std::ios::binary);
+            out.write(file16.data(), std::streamsize(file16.size()));
+        }
+        {
+            L::Model stored(config16, path16, 1);
+            L::set_widen_weights(true);
+            L::Model widened(config16, path16, 3);
+            L::set_widen_weights(false);
+            std::vector<float> a16, b16;
+            for (const uint32_t t : tok.encode("The library holds every book.", true))
+            {
+                a16 = stored.step(t);
+                b16 = widened.step(t);
+            }
+            CHECK(a16.size() == 300 && a16 == b16);
+            CHECK(widened.weight_bytes() == 2 * stored.weight_bytes());
+        }
+        std::filesystem::remove(path16);
+    }
 }
 
 // training-v1 (SPECIFICATIONS §12.0e): the oracle's steps on small shapes, the functions, the same

@@ -3194,6 +3194,26 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
 - **Checked here:** the two changed client files compile warning-free. Not run here: the build,
   the unit suite, CI.
 
+### F16 kept as stored, widening a setting; the AI figure with its parameters (17 October 2026)
+- **Edward's test:** built, tested and the repository updated with the last batch; the AI line's
+  figure still read `16^8192` in the release's metrics, without its parameters showing.
+- **The AI figure** now reads `(2^B)^(256H+16LH^2), B=4 L=1 H=16: 16^8192 = ~10^9864.2`: the
+  formula, the parameters it takes, and the count. The map shows the part before " = ".
+- **F16 weights** (Edward: do they have to be widened?): no. `llm.cpp`'s `Matrix` keeps F16 as
+  stored in `f16`, turned into floats as it is used through a table of all 65,536 values
+  (`half_table`, exact), as BF16 already was through a shift. **`widen_weights`** (core
+  `llm::set_widen_weights`) widens both to F32 as they load instead: `[models] widen_weights` in
+  `sieve-hallway.ini`, `--widen-weights` on the hallway and `sieve chat`. Off by default.
+  - *Unit tests:* the stand-in model, BF16 widened against stored, and an F16 copy of it stored
+    against widened: the same logits to the bit, and the widened weights exactly twice the bytes.
+    153,106 checks, 0 failures, here.
+  - *Measured here* (one thread, a model of 27.4 million weights): stored 54.9 MB, F16 64 tokens a
+    second, BF16 48; widened 109.7 MB, F16 78 to 94, BF16 65 to 85. Memory against speed, the
+    numbers unchanged.
+- **Packages** now have `Sieve/` at the top and `CHANGES.md` beside it, as Edward asked.
+- **Checked here:** the unit suite (core build), and every changed client and tool file compiles
+  warning-free. Not run here: the hallway build, CI.
+
 ### For the next session (17 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show
@@ -3214,8 +3234,8 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   - V5S2;
   - the melody tasks SM1 to SM4.
 - **How Edward works:**
-  - Hand work over as a zip holding `files/`, with a CHANGES.md inside; root website files go in
-    when they change.
+  - Hand work over as a zip with `Sieve/` at its top (no `files/` folder) and `CHANGES.md` beside
+    it (Edward, 17 October 2026); root website files go in, beside `Sieve/`, when they change.
   - Never commit or push: Edward reviews in GitHub Desktop and commits. (A cloud session's push is
     refused anyway; deliver the zip, which is what he wants: 17 October 2026.)
   - Sync first with `git fetch origin main && git reset origin/main && git checkout -- .`, keeping

@@ -201,6 +201,7 @@ AppSettings AppSettings::load(const fs::path& path)
         {
             if (key == "text_model") s.text_model = value;
             else if (key == "picture_model") s.picture_model = value;
+            else if (key == "widen_weights") s.widen_weights = on_off(value, false);
         }
         else if (section == "setup") s.setup.set_entry(key, value); // a value it cannot have is left out
         else if (section == "paths")
@@ -242,6 +243,7 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"controls", "invert_mouse_y", on_off(invert_mouse_y), "on: moving the mouse up looks down"},
         {"models", "text_model", text_model, "a model folder CHAT talks with; empty: the model in hand"},
         {"models", "picture_model", picture_model, "a picture model's run folder DRAW uses; empty: the first trained one"},
+        {"models", "widen_weights", on_off(widen_weights), "on: a model file's BF16 and F16 weights widened as they load (twice the memory); off: as stored; the same numbers either way"},
     };
     for (const Settings::Entry& e : setup.entries()) r.push_back({"setup", e.key, e.value, e.note});
     r.push_back({"paths", "ffmpeg", ffmpeg, "the ffmpeg program; empty: SIEVE_FFMPEG, then one beside Sieve, then the PATH"});

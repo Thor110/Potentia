@@ -11,6 +11,7 @@
 #include "harness.hpp"
 #include "cli/items.hpp"
 #include "cli/locate.hpp" // read_file_bytes (--cipher-in)
+#include "sieve/llm.hpp"
 #include "cli/timings.hpp"
 #include "hallway.hpp"
 #include "sieve/plugin.hpp"
@@ -138,6 +139,8 @@ const char* kUsage =
     "  --chat-attach FILES with --take on the AI line: give the files (apart by ';') to the model, as CHAT's + does\n"
     "  --chat-draw N       with --take on the AI line: draw N figures with CHAT's picture model\n"
     "  --text-model DIR    CHAT talks with this model folder (config.json, model.safetensors, tokenizer.json)\n"
+    "  --widen-weights     a model file's BF16 and F16 weights widened to 32-bit floats as they load (twice the\n"
+    "                      memory; the same numbers): [models] widen_weights in the settings\n"
     "  --picture-model DIR DRAW uses this picture model's run folder\n"
     "  --chat-press KEYS   keys pressed in CHAT after those (e.g. Ctrl+G: the newest card's GO TO IT)\n"
     "  --print-system-prompt  print the system prompt a model given as a file is told here\n"
@@ -621,6 +624,9 @@ int run(const Args& a)
     // The filter memory (the setup menu's FILTER MEMORY): what one count's tables may take.
     if (a.has("filter-memory")) app.filter_memory_mb = std::clamp(int(a.get_positive("filter-memory", 512)), 64, 1048576);
     sieve::set_filter_memory(double(app.filter_memory_mb) * 1024 * 1024);
+    // How a model given as a file keeps its weights ([models] widen_weights; --widen-weights for this run).
+    if (a.has("widen-weights")) app.widen_weights = true;
+    sieve::llm::set_widen_weights(app.widen_weights);
     // How much of installed memory the setup menu's counts may take at once (COUNTING MEMORY), and
     // how much of the filter memory keeps merged automata between counts (MERGE CACHE).
     if (a.has("counting-memory")) app.counting_memory_pct = std::clamp(int(a.get_positive("counting-memory", 50)), 5, 100);

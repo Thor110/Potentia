@@ -45,15 +45,29 @@ inline float widen(uint16_t b)
     return f;
 }
 
+// Every F16 value as a 32-bit float, made once: each is a float exactly, so the table is the
+// conversion, not an approximation of it (256 KB).
+const float* half_table()
+{
+    static const std::vector<float> table = [] {
+        std::vector<float> t(65536);
+        for (uint32_t h = 0; h < 65536; ++h) t[h] = float(safetensors::half_to_double(uint16_t(h), false));
+        return t;
+    }();
+    return table.data();
+}
+
+std::atomic<bool> g_widen{false};
+
 } // namespace
 
 // A weight matrix (rows x cols, row-major) as stored: BF16 kept as it is, anything else widened.
 struct Matrix
 {
     size_t rows = 0, cols = 0;
-    std::vector<uint16_t> bf16;
+    std::vector<uint16_t> bf16, f16; // as stored (one of the three holds the values)
     std::vector<float> f32;
-    uint64_t bytes() const { return bf16.size() * 2 + f32.size() * 4; }
+    uint64_t bytes() const { return (bf16.size() + f16.size()) * 2 + f32.size() * 4; }
     // One row's dot product with x, summed in eight lanes and then lane by lane: one fixed order.
     float dot(size_t r, const float* x) const
     {
@@ -66,6 +80,14 @@ struct Matrix
                 for (int k = 0; k < 8; ++k) acc[k] += widen(w[c + size_t(k)]) * x[c + size_t(k)];
             for (; c < cols; ++c) acc[c % 8] += widen(w[c]) * x[c];
         }
+        else if (!f16.empty())
+        {
+            const uint16_t* w = f16.data() + r * cols;
+            const float* t = half_table();
+            for (; c + 8 <= cols; c += 8)
+                for (int k = 0; k < 8; ++k) acc[k] += t[w[c + size_t(k)]] * x[c + size_t(k)];
+            for (; c < cols; ++c) acc[c % 8] += t[w[c]] * x[c];
+        }
         else
         {
             const float* w = f32.data() + r * cols;
@@ -75,7 +97,12 @@ struct Matrix
         }
         return ((acc[0] + acc[1]) + (acc[2] + acc[3])) + ((acc[4] + acc[5]) + (acc[6] + acc[7]));
     }
-    float at(size_t r, size_t c) const { return bf16.empty() ? f32[r * cols + c] : widen(bf16[r * cols + c]); }
+    float at(size_t r, size_t c) const
+    {
+        if (!bf16.empty()) return widen(bf16[r * cols + c]);
+        if (!f16.empty()) return half_table()[f16[r * cols + c]];
+        return f32[r * cols + c];
+    }
 };
 
 namespace {
@@ -189,6 +216,9 @@ Config Config::from_json(const json::Value& c)
     return m;
 }
 
+void set_widen_weights(bool on) { g_widen = on; }
+bool widen_weights() { return g_widen; }
+
 struct Model::Impl
 {
     struct Layer
@@ -223,15 +253,35 @@ Matrix load(std::ifstream& in, uint64_t data_start, const safetensors::Tensor& t
     std::vector<char> raw(size_t(t.bytes()));
     if (!in.read(raw.data(), std::streamsize(raw.size()))) bad("the file ends inside " + t.name);
     const size_t n = rows * cols;
+    const bool wide = g_widen.load();
+    auto half = [&](size_t i) { return uint16_t(uint8_t(raw[2 * i]) | (uint8_t(raw[2 * i + 1]) << 8)); };
     if (t.dtype == "BF16")
     {
-        m.bf16.resize(n);
-        for (size_t i = 0; i < n; ++i) m.bf16[i] = uint16_t(uint8_t(raw[2 * i]) | (uint8_t(raw[2 * i + 1]) << 8));
+        if (wide)
+        {
+            m.f32.resize(n);
+            for (size_t i = 0; i < n; ++i) m.f32[i] = widen(half(i));
+        }
+        else
+        {
+            m.bf16.resize(n);
+            for (size_t i = 0; i < n; ++i) m.bf16[i] = half(i);
+        }
     }
     else if (t.dtype == "F16")
     {
-        m.f32.resize(n);
-        for (size_t i = 0; i < n; ++i) m.f32[i] = float(safetensors::half_to_double(uint16_t(uint8_t(raw[2 * i]) | (uint8_t(raw[2 * i + 1]) << 8)), false));
+        // As stored, two bytes a value, unless widened (the same numbers either way).
+        if (wide)
+        {
+            m.f32.resize(n);
+            const float* tab = half_table();
+            for (size_t i = 0; i < n; ++i) m.f32[i] = tab[half(i)];
+        }
+        else
+        {
+            m.f16.resize(n);
+            for (size_t i = 0; i < n; ++i) m.f16[i] = half(i);
+        }
     }
     else if (t.dtype == "F32")
     {

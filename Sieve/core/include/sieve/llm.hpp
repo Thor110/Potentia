@@ -14,8 +14,10 @@
 //     h = rmsnorm(x) * post_attention_layernorm
 //     x += Wdown (silu(Wgate h) * Wup h)
 //   logits = Wout (rmsnorm(x) * norm), Wout the embedding when tied
-// rmsnorm(x) = x / sqrt(mean(x^2) + eps). Weights stay as they are stored (BF16 is widened as it is
-// used); the arithmetic is in 32-bit floats, each sum taken in one fixed order, so the logits are the
+// rmsnorm(x) = x / sqrt(mean(x^2) + eps). Weights stay as they are stored, BF16 and F16 at two bytes
+// a value, each widened to a 32-bit float as it is used (exactly: every BF16 and F16 value is a
+// float), unless widen_weights is set, when they are widened once as they load, at four bytes a
+// value, to be read faster. Either way the numbers are the same to the bit. The arithmetic is in 32-bit floats, each sum taken in one fixed order, so the logits are the
 // same whatever the number of threads. This is the model as a viewer runs it: floating point, so
 // it may differ in the last bits between processors and compilers. Addresses under a model will
 // need the pinned arithmetic IDEAS §15 describes.
@@ -41,6 +43,13 @@
 namespace sieve::llm {
 
 struct Matrix;
+
+// How BF16 and F16 weights are kept (sieve-hallway.ini's [models] widen_weights, sieve chat
+// --widen-weights): false, the default, as stored (half the memory); true, widened to 32-bit
+// floats as they load (twice the memory, and no conversion on the way). The model's numbers do
+// not depend on it. Read when a model is made.
+void set_widen_weights(bool on);
+bool widen_weights();
 
 struct Config
 {

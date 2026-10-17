@@ -3566,8 +3566,17 @@ and model types there are, then work out the best way to dissect them on the fly
     switches (biases, fused tensors, rope scaling, sliding windows), not by architecture. One
     engine with switches covers all four; that is §19.80's "one less if" applied to models.
   - Gemma 2 is llama-like with several more switches; GPT-2 and Mamba are other families.
-  - Size is the limit before architecture is. The engine keeps BF16 as stored but widens F16 to
+  - Size is the limit before architecture is. The engine kept BF16 as stored but widened F16 to
     F32 (twice the memory), and copies every tensor into memory before the first token.
+  - *Since 17 October 2026 (Edward: "do we have to widen the F16 weights?"):* no. F16 is kept as
+    stored, as BF16 is, and turned into a float as it is used through a table of all 65,536 F16
+    values (each is a float exactly). Widening is now a setting for both, `widen_weights` (off by
+    default; `sieve chat --widen-weights`). The logits are the same to the bit either way, which
+    the unit tests check for both types. Measured here on one thread, a model of 27.4 million
+    weights: as stored 54.9 MB, F16 64 tokens a second and BF16 48; widened 109.7 MB, F16 78 to
+    94 and BF16 65 to 85 (two runs on a shared machine). So it is memory against speed, and the
+    choice is the player's. *Still to come:* "auto", widening only while the model fits a share
+    of installed memory, as ITEM MEMORY is a share.
 - **The way to take them apart on the fly,** in stages, each one measured before the next:
   1. **Inspect without loading.** From `config.json` and the header (or a GGUF file's header)
      alone: the family, every tensor's role, the memory it needs at its stored width, the shards,
