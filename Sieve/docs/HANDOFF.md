@@ -3122,12 +3122,15 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   `chat-logs/chat-YYYY-MM-DD-HHMMSS.txt` beside the program.
 - **The window raise on Windows** (`client/window_front.cpp`, in both programs): from the
   dialog's callback, `AttachThreadInput` to the foreground's thread, `BringWindowToTop`,
-  `SetForegroundWindow`, then SDL's raise as before. **Not compiled here** (no Windows headers in
-  this container): Edward's build is the first to see it, and his test is the only one that tells.
+  `SetForegroundWindow`, then SDL's raise as before. Not compiled here (no Windows headers in
+  this container); Edward's build compiled it, and the window now comes back to the front.
 - **CI added:** the log (its header, the model's address, a file card, the command itself), and
   a picture of HELP.
 - **Checked here:** every changed file compiles warning-free against SDL's headers, but for the
   Windows half of `window_front.cpp`. Not run here: the hallway build, the unit suite, CI.
+- **Tested by Edward (17 October 2026):** Debug and Release built, the tests run, a release build
+  made as usual, and each change tried in the program: all of it works, the window raise too,
+  and the settings work of the entry before this one.
 - **Left of §19.79:** editing the context window, controls that flow between windows (wants a
   short design first: which windows, and what "the item and the keys" mean in each), and the
   Encryption Engine's item-in-hand button (stage 2).
@@ -3141,9 +3144,8 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   `working-directory: Sieve` (or `defaults.run.working-directory`) and the paths in it checked.
   This was reported, but Edward has not decided yet; don't move it unasked.
 - **Still open, in IDEAS order:**
-  - the rest of §19.79: the engine's item-in-hand button, controls between windows, editing the
-    context window, and testing the window raise on Windows (the other items were built on 17
-    October: see the entry above);
+  - the rest of §19.79: the engine's item-in-hand button, controls between windows, and editing
+    the context window (the other items were built and tested on 17 October: see the entry above);
   - §19.80 (tabs on every line), §19.81 to §19.83 (models), §19.82 (encrypting files) and §19.85
     (skeletons);
   - Encryption Engine stage 2;
@@ -3154,7 +3156,8 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
 - **How Edward works:**
   - Hand work over as a zip holding `files/`, with a CHANGES.md inside; root website files go in
     when they change.
-  - Never commit or push: Edward reviews in GitHub Desktop and commits.
+  - Never commit or push: Edward reviews in GitHub Desktop and commits. (A cloud session's push is
+    refused anyway; deliver the zip, which is what he wants: 17 October 2026.)
   - Sync first with `git fetch origin main && git reset origin/main && git checkout -- .`, keeping
     the root `CHANGES.md` (it is Edward's).
   - British English and exact wording; no figure that was not measured.

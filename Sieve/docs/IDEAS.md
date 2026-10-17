@@ -3375,9 +3375,10 @@ how the game feels to use.
     take the foreground, and otherwise flashes the taskbar button instead. The fix to try first:
     restore and raise the window, then call `SetForegroundWindow` from within the dialog's own
     turn, while Windows still counts the click as the user's.
-  - *Tried (17 October 2026), not yet tested on Windows:* `client/window_front.cpp` does exactly
-    that from the dialog's callback, with `AttachThreadInput` to the foreground's thread for the
-    moment it takes; SDL's raise on the main thread follows as before.
+  - *Built (17 October 2026), and it works on Windows (Edward tested it):*
+    `client/window_front.cpp` does exactly that from the dialog's callback, with
+    `AttachThreadInput` to the foreground's thread for the moment it takes; SDL's raise on the
+    main thread follows as before.
 - **The chat's tabs:** C switches tabs everywhere else, but in CHAT the keys go to the message, so
   Esc must come first. The simplest fix: the tabs answer the mouse too, always, chat or not.
   *Built (17 October 2026):* a click on any tab goes to it, in CHAT too (`click_hand_tab`).
