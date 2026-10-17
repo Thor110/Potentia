@@ -178,6 +178,8 @@ const char* kUsage =
     "                      made into Sieve instructions (--sample-out FILE, else DIR.sieve)\n"
     "  --locate PATH       open the File Locator on a file or folder (--tailored: and tailor the filters to its files;\n"
     "                      with --main-menu: the main menu's, with no world to walk to)\n"
+    "  --search-per-file S, --search-total S   the File Locator's search for shorter addresses: seconds a\n"
+    "                      file, or for the run (one of them; the other follows, the files counted)\n"
     "  --install FILE --install-to DIR   the File Locator's install, at once\n"
     "  --harness           a picture of the AI Training Harness (--training-dir DIR: its runs; --script KEYS:\n"
     "                      keys and =typed text, each step waiting for a training to finish)\n"
@@ -348,9 +350,31 @@ struct LocatedGo
     bool past = false; // longer than the binary line: the line is made long enough (asked twice)
 };
 
+// The search's time for a scripted File Locator: --search-per-file or --search-total, in seconds
+// (one of them: each sets the other); the seconds, and whether they are the run's.
+std::optional<std::pair<double, bool>> locator_search_of(const sieve::cli::Args& a)
+{
+    const bool file = a.has("search-per-file"), run = a.has("search-total");
+    if (!file && !run) return std::nullopt;
+    if (file && run) throw std::invalid_argument("--search-per-file and --search-total: give one, the File Locator works out the other");
+    const char* key = run ? "search-total" : "search-per-file";
+    const std::string v = a.get(key);
+    size_t used = 0;
+    double s = -1;
+    try
+    {
+        s = std::stod(v, &used);
+    }
+    catch (const std::exception&)
+    {
+    }
+    if (used != v.size() || !(s >= 0)) throw std::invalid_argument(std::string("--") + key + ": seconds, 0 or more (0: no limit): " + v);
+    return std::make_pair(s, run);
+}
+
 bool run_locator(SDL_Window* window, SDL_Renderer* renderer, const Settings& settings, FilterConfig& filters, const std::string& filters_path,
                  const std::string& path = "", bool tailor = false, const std::string& screenshot = "", const std::string& presses = "",
-                 std::optional<LocatedGo>* go = nullptr)
+                 std::optional<LocatedGo>* go = nullptr, std::optional<std::pair<double, bool>> search = std::nullopt)
 {
     MenuLocator m;
     settings.apply(m.la);
@@ -374,6 +398,17 @@ bool run_locator(SDL_Window* window, SDL_Renderer* renderer, const Settings& set
         host.binary_bytes = [&settings] { return uint64_t(settings.binary_bytes); };
         host.go = [go](const std::vector<uint8_t>& bytes, const std::string& name, bool past) { *go = LocatedGo{bytes, name, past}; };
     }
+    // An installer's items, on the lines of the setup menu's shapes: its pages and its AI line.
+    host.item_args = [&settings] {
+        Args a;
+        a.opts["alphabet"] = settings.alphabet;
+        a.opts["page-length"] = std::to_string(settings.length);
+        a.opts["ai-layers"] = std::to_string(settings.ai_layers);
+        a.opts["ai-width"] = std::to_string(settings.ai_width);
+        a.opts["ai-heads"] = std::to_string(settings.ai_heads);
+        a.opts["ai-bits"] = std::to_string(settings.ai_bits);
+        return a;
+    };
     FileLocator* self = nullptr;
     host.use_filters = [&](const FilterConfig& f) {
         filters = m.filters = f;
@@ -389,6 +424,7 @@ bool run_locator(SDL_Window* window, SDL_Renderer* renderer, const Settings& set
     };
     FileLocator loc(window, renderer, host);
     self = &loc;
+    if (search) loc.set_search(search->first, search->second);
     if (!path.empty()) loc.locate_now(path, tailor);
     else loc.open();
     auto frame = [&] {
@@ -519,6 +555,7 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
     if (!scripted) return hall;
 
     if (a.has("zoom")) hall->zoom_to(a.get_positive("zoom", 20));
+    if (const auto search = locator_search_of(a)) hall->locator_search(search->first, search->second);
     if (a.has("locate")) hall->locate_now(a.get("locate"), a.has("tailored"));
     if (a.has("install") && a.has("install-to")) hall->install_now(a.get("install"), a.get("install-to"));
     if (a.has("new-map")) hall->graph_picked(4, a.get("new-map")); // the viewer's New map..., at once
@@ -880,7 +917,7 @@ int run(const Args& a)
         // A picture of the File Locator opened from the main menu, on a file or folder (--tailored:
         // and its filters tailored): no world, so no Go to it.
         std::optional<LocatedGo> go; // offered as from the main menu (the screenshot does not go)
-        run_locator(window, renderer, settings, filters, filters_path, a.get("locate"), a.has("tailored"), a.get("screenshot"), a.get("press", ""), &go);
+        run_locator(window, renderer, settings, filters, filters_path, a.get("locate"), a.has("tailored"), a.get("screenshot"), a.get("press", ""), &go, locator_search_of(a));
         std::cout << "saved " << a.get("screenshot") << "\n";
         return finish();
     }

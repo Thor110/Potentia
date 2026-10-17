@@ -5814,6 +5814,22 @@ def v5_item(spec, address, path, items_from):
     return open(os.path.join(items_from, path), "rb").read()
 
 
+def v6_item(spec, place, path, items_from):
+    """A v6 item's bytes from its line and its place (an integer, read from the items stream): a page
+    as v5's are; a model of the AI line as the model.safetensors this oracle's own AI line writes for
+    the digits at that place (AiSpaceRef, written from §12.0d); any other taken from items_from."""
+    space_id, options = spec.split(" ", 1)
+    opts = dict(kv.split("=", 1) for kv in options.split(" "))
+    if opts.get("line") == "ai":
+        sp = AiSpaceRef(int(opts["ai-layers"]), int(opts["ai-width"]), int(opts["ai-heads"]), int(opts["ai-bits"]), opts.get("key", "sieve"))
+        if sp.id() != space_id:
+            sys.exit(f"{path}: its line {space_id} is not the one its options make ({sp.id()})")
+        if place >= sp.N:
+            sys.exit(f"{path}: its place is past the end of its line")
+        return sp.safetensors(sp.digits(place, "positional"))
+    return v5_item(spec, "%x" % place, path, items_from)
+
+
 def cmd_unpack(args):
     """A packed installer's manifest (sieve-manifest-v4, SPECIFICATIONS §12.2) unpacked from its
     definition, with nothing of Sieve's own: its two streams decoded by Python's lzma (raw LZMA2 at
@@ -5825,21 +5841,34 @@ def cmd_unpack(args):
     data = open(args.manifest, "rb").read()
     end = data.index(b"\nend\n") + len(b"\nend\n")
     lines = data[:end].decode("utf-8").split("\n")[:-1]
-    if lines[0] not in ("sieve-manifest-v4", "sieve-manifest-v5"):
-        sys.exit("not a v4 or v5 manifest: " + lines[0][:40])
-    v5 = lines[0] == "sieve-manifest-v5"
+    if lines[0] not in ("sieve-manifest-v4", "sieve-manifest-v5", "sieve-manifest-v6"):
+        sys.exit("not a v4, v5 or v6 manifest: " + lines[0][:40])
+    v6 = lines[0] == "sieve-manifest-v6"
+    v5 = lines[0] == "sieve-manifest-v5" or v6  # v6 is v5 with its items' places as raw bytes
     streams = []
     for i, name in ((4, "x86"), (5, "lzma2")):
         word, got, packed, size, dictionary = lines[i].split(" ")
         if word != "stream" or got != name:
             sys.exit(f"line {i + 1} is not the {name} stream")
         streams.append((int(packed), int(size), int(dictionary)))
-    # v5: its lines ("line K <space id> <options>"), then the tree's SHA-256.
-    item_lines, first, tree = [], 6, None
+    # v6: the items stream ("stream items <packed bytes> <bytes> <dictionary>", dictionary 0: its
+    # places as they are, else raw LZMA2), after the other two.
+    item_stream, first = (0, 0, 0), 6
+    if v6:
+        word, got, packed, size, dictionary = lines[6].split(" ")
+        if word != "stream" or got != "items":
+            sys.exit("line 7 is not the items stream")
+        item_stream, first = (int(packed), int(size), int(dictionary)), 7
+    # v5: its lines ("line K <space id> <options>"; v6: "line K <width> <space id> <options>"), then
+    # the tree's SHA-256.
+    item_lines, widths, tree = [], [], None
     while v5 and lines[first].startswith("line "):
         _, k, rest = lines[first].split(" ", 2)
         if int(k) != len(item_lines):
             sys.exit("its lines are not numbered from 0 in order")
+        if v6:
+            w, rest = rest.split(" ", 1)
+            widths.append(int(w))
         item_lines.append(rest)
         first += 1
     if v5:
@@ -5847,7 +5876,7 @@ def cmd_unpack(args):
             sys.exit("no tree line")
         tree, first = lines[first][5:], first + 1
     payload = data[end:]
-    if len(payload) != streams[0][0] + streams[1][0]:
+    if len(payload) != streams[0][0] + streams[1][0] + item_stream[0]:
         sys.exit("the streams are not the size their lines say")
 
     def decode(blob, size, dictionary, x86):
@@ -5860,18 +5889,30 @@ def cmd_unpack(args):
         return out
 
     x86 = decode(payload[:streams[0][0]], *streams[0][1:], True)
-    plain = decode(payload[streams[0][0]:], *streams[1][1:], False)
+    plain = decode(payload[streams[0][0]:streams[0][0] + streams[1][0]], *streams[1][1:], False)
+    # v6: every item's place, in the listing's order.
+    carried = payload[streams[0][0] + streams[1][0]:]
+    if item_stream[2] == 0:
+        if item_stream[0] != item_stream[1]:
+            sys.exit("a raw items stream is not its own size")
+        places = carried
+    else:
+        places = decode(carried, item_stream[1], item_stream[2], False)
     entries = []  # (path, size, sha, way) for files; (path,) for folders
     for line in lines[first:-1]:
         f = line.split("\t")
         entries.append((f[1],) if f[0] == "d" else (f[4], int(f[1]), f[2], f[3]))
     files = [e for e in entries if len(e) == 4]
-    got, xa, pa = [None] * len(files), 0, 0
+    got, xa, pa, ia = [None] * len(files), 0, 0, 0
     for i, (path, size, sha, way) in enumerate(files):
         if way == "x86":
             got[i], xa = x86[xa:xa + size], xa + size
         elif way == "raw":
             got[i], pa = plain[pa:pa + size], pa + size
+        elif v6 and way.startswith("item "):
+            k = int(way.split(" ")[1])
+            place, ia = int.from_bytes(places[ia:ia + widths[k]], "big"), ia + widths[k]
+            got[i] = v6_item(item_lines[k], place, path, args.items_from)
         elif v5 and way.startswith("item "):
             got[i] = v5_item(item_lines[int(way.split(" ")[1])], way.split(" ")[2], path, args.items_from)
     for i, (path, size, sha, way) in enumerate(files):
@@ -5881,7 +5922,7 @@ def cmd_unpack(args):
             n = (len(base) + 7) // 8
             mask, pa = plain[pa:pa + n], pa + n
             got[i] = b"\n".join(l for j, l in enumerate(base) if mask[j // 8] >> (j % 8) & 1)
-    if xa != len(x86) or pa != len(plain):
+    if xa != len(x86) or pa != len(plain) or ia != len(places):
         sys.exit("the streams hold more than the files")
     for (path, size, sha, way), b in zip(files, got):
         if len(b) != size or (hashlib.sha256(b).hexdigest() != sha and not (v5 and sha == "-" and way.startswith("item "))):

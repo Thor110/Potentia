@@ -3079,6 +3079,21 @@ FileLocator::Host Hallway::locator_host()
     };
     h.ink = [this] { return theme().edge; };
     h.binary_bytes = [this] { return binary_space_->max_bytes(); };
+    // An installer's items, on the lines of this hallway's shapes: its pages and its AI line.
+    h.item_args = [this] {
+        cli::Args a;
+        const Line& pages = unit_line(LineKind::Text);
+        a.opts["alphabet"] = pages.alphabet ? pages.alphabet->id() : std::string("lower27");
+        a.opts["page-length"] = std::to_string(pages.space.unit_length());
+        if (ai_space_)
+        {
+            a.opts["ai-layers"] = std::to_string(ai_space_->shape().layers);
+            a.opts["ai-width"] = std::to_string(ai_space_->shape().width);
+            a.opts["ai-heads"] = std::to_string(ai_space_->shape().heads);
+            a.opts["ai-bits"] = std::to_string(ai_space_->shape().bits);
+        }
+        return a;
+    };
     h.go = [this](const std::vector<uint8_t>& bytes, const std::string& name, bool past) {
         if (pause_open_) close_pause();
         walk_to_file(bytes, name, past);

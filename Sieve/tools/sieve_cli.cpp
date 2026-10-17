@@ -2342,7 +2342,29 @@ void print_weighing(const Args& a, const std::filesystem::path& root, const std:
     lines.audio = &audio;
     lines.video = &video;
     lines.filters = load_filter_config(a);
-    const Weighing w = weigh_files(root, files, lines, a.has("tailored"));
+    // The search's time (--search-per-file, --search-total, seconds): either gives the other, the
+    // files counted; both given, each bounds it.
+    WeighBudget budget;
+    auto seconds = [&](const char* key) {
+        const std::string v = a.get(key);
+        size_t used = 0;
+        double s = 0;
+        try
+        {
+            s = std::stod(v, &used);
+        }
+        catch (const std::exception&)
+        {
+            used = 0;
+        }
+        if (used != v.size() || !(s >= 0)) throw std::invalid_argument(std::string("--") + key + " is a number of seconds, 0 or more (0: no limit)");
+        return s;
+    };
+    if (a.has("search-per-file")) budget.per_file = seconds("search-per-file");
+    if (a.has("search-total")) budget.total = seconds("search-total");
+    if (a.has("search-per-file") && !a.has("search-total")) budget.total = budget_total(budget.per_file, files.size());
+    if (a.has("search-total") && !a.has("search-per-file")) budget.per_file = budget_per_file(budget.total, files.size());
+    const Weighing w = weigh_files(root, files, lines, a.has("tailored"), nullptr, budget);
     out << "\n" << weighing_table(w);
     if (a.has("tailored") && a.has("out-filters"))
     {
@@ -2359,7 +2381,8 @@ void print_weighing(const Args& a, const std::filesystem::path& root, const std:
 }
 
 // Packs an installer's files (v4), and with --items carries those that are items of Sieve's lines as
-// their lines and places there (v5; cli/items.hpp).
+// their lines and places there: v6, each place as raw bytes and the AI line's models among them
+// (--v5: as v5 wrote them, in hex, without the AI line; cli/items.hpp).
 void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackReport& rep)
 {
     if (!a.has("items"))
@@ -2367,10 +2390,7 @@ void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackRepor
         add_packed(m, root, &rep);
         return;
     }
-    const std::vector<ItemLine> lines = item_lines(a);
-    for (const ItemLine& l : lines) m.lines.push_back(l.spec);
-    const ItemFinder finder = item_finder(lines);
-    add_packed(m, root, &rep, &finder, a.has("item-hashes"));
+    add_packed_items(m, root, a, &rep, a.has("v5"), a.has("item-hashes"));
 }
 
 int cmd_locate(const Args& a)
@@ -2449,6 +2469,7 @@ int cmd_locate(const Args& a)
                 cmp.installer_hex = iaddr.is_zero() ? 1 : iaddr.to_hex().size();
                 cmp.installer_raw = address_bytes(iaddr);
                 cmp.packed = m.packed;
+                cmp.version = m.minimal ? kMinimalManifestVersion : m.items ? kItemsManifestVersion : kPackedManifestVersion;
             }
         }
         if (a.has("compare")) std::cout << "\n" << comparison_table(cmp);
@@ -2557,6 +2578,7 @@ int cmd_locate(const Args& a)
         const std::string o = a.get("installer");
         write_address_file(fs::path(std::u8string(o.begin(), o.end())), iaddr, a.has("hex"));
         *info << "installer " << o << ": the address of the installer's manifest (" << (!(m.with_contents ? m.packed : inst.packed) ? "v3: the listing, then every file's bytes"
+                                    : (m.with_contents ? m.minimal : inst.minimal) ? "v6: the listing, every other file packed, then the items' places as raw bytes"
                                     : (m.with_contents ? m.items : inst.items) ? "v5: the listing, the items of Sieve's lines by their places, then every other file packed"
                                                                                : "v4: the listing, then every file packed") << "), as "
               << (a.has("hex") ? "hex" : "raw bytes") << "; install it with\n"
@@ -2575,6 +2597,10 @@ int cmd_locate(const Args& a)
             cmp.installer_hex = iaddr.is_zero() ? 1 : iaddr.to_hex().size();
             cmp.installer_raw = address_bytes(iaddr);
             cmp.packed = m.with_contents ? m.packed : inst.packed;
+            {
+                const Manifest& made = m.with_contents ? m : inst;
+                cmp.version = made.minimal ? kMinimalManifestVersion : made.items ? kItemsManifestVersion : kPackedManifestVersion;
+            }
         }
         *info << "\n" << comparison_table(cmp);
     }

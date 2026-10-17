@@ -908,14 +908,22 @@ const std::vector<Page>& pages()
                                 "its end. Run, it installs the folder."},
           {"--hex", "Write the installer in hex rather than raw bytes."},
           {"--v3", "Make the older installer: every file's bytes as they are, not packed (sieve-manifest-v3)."},
-          {"--items", "Carry the files that are items of the pages, image, video and audio lines as their\n"
-                      "lines and places there (sieve-manifest-v5); the pages are --page-length characters\n"
-                      "of --alphabet."},
+          {"--items", "Carry the files that are items of the pages, image, video, audio and AI lines as\n"
+                      "their lines and places there, each place as raw bytes (sieve-manifest-v6): a model\n"
+                      "of the AI line as its weights' digits, not its file's floats. The pages are\n"
+                      "--page-length characters of --alphabet; the AI line is --ai-layers, --ai-width,\n"
+                      "--ai-heads and --ai-bits (Micro without them)."},
+          {"--v5", "With --items: as sieve-manifest-v5, each place in hex in the listing, and no AI line."},
           {"--item-hashes", "With --items: keep each item's own SHA-256 in the listing as well as the tree's."},
           {"--compare", "Compare the sizes: original, zip, 7z, and the address."},
           {"--weigh", "Weigh every file: its best way to be named against its own address."},
           {"--tailored", "With --weigh: tailor each line's filters to the files that are its items."},
           {"--out-filters PATH", "With --tailored: write the settings file with the filters found."},
+          {"--search-per-file S", "With --tailored: seconds the search for shorter addresses may take for each file (a\n"
+                                  "line's search gets that times its files); 0, the default, no limit. Out of time, a\n"
+                                  "line keeps the best filters it found by then."},
+          {"--search-total S", "With --tailored: seconds for the whole run, which caps each line's search at what is left.\n"
+                               "Either of the two alone gives the other: total = per file x files."},
           {"--page-length N", "With --weigh: the pages line's length (32)."}},
          {{"sieve locate sieve.exe --compare", "where the executable is, and what zip and 7z make of it"},
           {"sieve locate saved-items --weigh --tailored --length 8", "a folder of Sieve's own files (melodies of 8 notes), weighed and tailored"},

@@ -93,6 +93,23 @@ bool is_program(const std::vector<uint8_t>& b)
 
 } // namespace
 
+namespace {
+
+// The line an item's way ("item K <place>") names.
+size_t item_line_of_way(const std::string& way) { return size_t(std::stoull(way.substr(5, way.find(' ', 5) - 5))); }
+
+// A place (hex) as `width` raw bytes, most significant first.
+std::vector<uint8_t> place_bytes_of(const std::string& hex, uint32_t width)
+{
+    std::string h = BigUint::from_hex(hex).to_hex(size_t(width) * 2);
+    std::vector<uint8_t> out(width);
+    auto digit = [](char c) { return c <= '9' ? c - '0' : (c | 0x20) - 'a' + 10; };
+    for (uint32_t i = 0; i < width && 2 * i + 1 < h.size(); ++i) out[i] = uint8_t(digit(h[2 * i]) * 16 + digit(h[2 * i + 1]));
+    return out;
+}
+
+} // namespace
+
 void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const ItemFinder* items, bool item_hashes)
 {
     // Every file's bytes, checked against the walk: from the contents where a v3 manifest has them,
@@ -126,12 +143,55 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         if (!items || bytes[i].empty()) continue;
         if (const auto found = (*items)(bytes[i]))
         {
+            // v6 carries an item only where its place is shorter than the file: the least of the two.
+            if (m.minimal && m.line_widths.at(found->first) >= bytes[i].size()) continue;
             // Lines are numbered in the order the files first use them.
             auto slot = std::find(used_lines.begin(), used_lines.end(), found->first);
             if (slot == used_lines.end()) slot = used_lines.insert(used_lines.end(), found->first);
             files[i]->way = "item " + std::to_string(slot - used_lines.begin()) + " " + found->second;
             item[i] = true;
         }
+    }
+    // v6: each line's items carried as places only where that is smaller, as it would be carried:
+    // their places (raw, or LZMA2 where that is smaller) against their files packed together. Files
+    // that are near one another (a sample of a line's places) pack to almost nothing as files and
+    // stay files; a model alone is shorter as its digits. Measured at the quick preset the
+    // derivations use, both alike.
+    if (m.minimal)
+        for (size_t slot = 0; slot < used_lines.size(); ++slot)
+        {
+            std::vector<uint8_t> as_files, as_places;
+            for (size_t i = 0; i < files.size(); ++i)
+                if (item[i] && item_line_of_way(files[i]->way) == slot)
+                {
+                    as_files.insert(as_files.end(), bytes[i].begin(), bytes[i].end());
+                    const std::string& w = files[i]->way;
+                    const std::vector<uint8_t> p = place_bytes_of(w.substr(w.find(' ', 5) + 1), m.line_widths.at(used_lines[slot]));
+                    as_places.insert(as_places.end(), p.begin(), p.end());
+                }
+            const uint64_t places = std::min<uint64_t>(as_places.size(), estimate(as_places));
+            if (places < estimate(as_files)) continue;
+            for (size_t i = 0; i < files.size(); ++i)
+                if (item[i] && item_line_of_way(files[i]->way) == slot)
+                {
+                    files[i]->way = is_program(bytes[i]) ? "x86" : "raw";
+                    item[i] = false;
+                }
+        }
+    // The lines some item still uses, numbered again in the order the files first use them.
+    if (m.minimal)
+    {
+        std::vector<size_t> still;
+        for (size_t i = 0; i < files.size(); ++i)
+            if (item[i])
+            {
+                const size_t old = item_line_of_way(files[i]->way);
+                auto at = std::find(still.begin(), still.end(), used_lines[old]);
+                if (at == still.end()) at = still.insert(still.end(), used_lines[old]);
+                const std::string& w = files[i]->way;
+                files[i]->way = "item " + std::to_string(at - still.begin()) + w.substr(w.find(' ', 5));
+            }
+        used_lines = std::move(still);
     }
     std::vector<std::vector<std::string_view>> lines(files.size());
     std::vector<bool> text(files.size(), false);
@@ -226,19 +286,49 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     if (m.items)
     {
         std::vector<std::string> renumbered;
-        for (size_t k : used_lines) renumbered.push_back(m.lines.at(k));
+        std::vector<uint32_t> widths;
+        for (size_t k : used_lines)
+        {
+            renumbered.push_back(m.lines.at(k));
+            if (m.minimal) widths.push_back(m.line_widths.at(k));
+        }
         m.lines = std::move(renumbered);
+        m.line_widths = std::move(widths);
+        if (m.minimal)
+        {
+            // v6: the places, carried raw or as LZMA2, whichever is smaller.
+            const std::vector<uint8_t> places = m.items_stream();
+            const uint32_t dict = dictionary_for(places.size());
+            std::vector<uint8_t> packed = places.empty() ? std::vector<uint8_t>() : pack_stream(places, dict, false);
+            if (!places.empty() && packed.size() < places.size())
+            {
+                m.item_stream = {packed.size(), places.size(), dict};
+                m.items_carried = std::move(packed);
+            }
+            else
+            {
+                m.item_stream = {places.size(), places.size(), 0};
+                m.items_carried = places;
+            }
+            r.item_carried = m.items_carried.size();
+        }
         for (size_t i = 0; i < files.size(); ++i)
             if (item[i])
             {
                 if (!item_hashes) files[i]->sha256 = "-";
                 ++r.items;
                 r.item_bytes += bytes[i].size();
-                r.item_text += files[i]->way.size();
+                r.item_text += m.minimal ? files[i]->way.find(' ', 5) : files[i]->way.size();
+                if (m.minimal) r.item_places += m.line_widths.at(item_line_of_way(files[i]->way));
             }
         m.tree = tree_sha256(m);
     }
-    else m.lines.clear();
+    else
+    {
+        m.lines.clear();
+        m.line_widths.clear();
+        m.minimal = false; // no items: v4, as before
+    }
 
     // Where it is no smaller than the files as they are, they are carried so (v3). (Not with items:
     // they are what makes v5 smaller.)
@@ -276,7 +366,11 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         std::snprintf(b, sizeof b, "%.2f%%", original ? 100.0 * double(v) / double(original) : 100.0);
         return std::string(b);
     };
-    if (r.items)
+    if (r.items && r.item_places)
+        o << "items     " << r.items << " file(s) carried as items of Sieve's lines (" << r.item_bytes << " bytes, as " << r.item_places
+          << " bytes of places, carried in " << r.item_carried << ", and " << r.item_text
+          << " characters of the listing; sieve-manifest-v6, made again on installing)\n";
+    else if (r.items)
         o << "items     " << r.items << " file(s) carried as items of Sieve's lines (" << r.item_bytes << " bytes, named in " << r.item_text
           << " characters of the listing; sieve-manifest-v5, made again on installing)\n";
     o << "packed    " << r.packed << " bytes (" << pct(r.packed) << " of " << original << "): " << r.x86 << " program(s) in the x86 stream ("

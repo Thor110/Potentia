@@ -244,27 +244,88 @@ std::string manifest_path(const fs::path& p, const fs::path& root)
 
 std::string Manifest::text() const
 {
-    std::string t = std::string(items ? kItemsManifestVersion : packed ? kPackedManifestVersion : with_contents ? kInstallManifestVersion : with_addresses ? kAddressManifestVersion : kManifestVersion) + "\n";
+    std::string t = std::string(minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion : with_contents ? kInstallManifestVersion : with_addresses ? kAddressManifestVersion : kManifestVersion) + "\n";
     t += "root " + root + "\n";
     t += "files " + std::to_string(files) + "\n";
     t += "bytes " + std::to_string(bytes) + "\n";
     if (packed)
         for (const auto& [name, s] : {std::pair<const char*, const PackedStream*>{"x86", &x86}, {"lzma2", &lzma2}})
             t += std::string("stream ") + name + " " + std::to_string(s->packed) + " " + std::to_string(s->bytes) + " " + std::to_string(s->dictionary) + "\n";
+    if (minimal) t += "stream items " + std::to_string(item_stream.packed) + " " + std::to_string(item_stream.bytes) + " " + std::to_string(item_stream.dictionary) + "\n";
     if (items)
     {
-        for (size_t k = 0; k < lines.size(); ++k) t += "line " + std::to_string(k) + " " + lines[k] + "\n";
+        for (size_t k = 0; k < lines.size(); ++k)
+            t += "line " + std::to_string(k) + " " + (minimal ? std::to_string(line_widths.at(k)) + " " : std::string()) + lines[k] + "\n";
         t += "tree " + tree + "\n";
     }
     for (const ManifestEntry& e : entries)
     {
         if (e.dir) t += "d\t" + e.path + "\n";
         else
-            t += "f\t" + std::to_string(e.size) + "\t" + e.sha256 + "\t" + (packed ? e.way + "\t" : with_addresses ? e.address + "\t" : std::string()) +
+        {
+            // v6: an item's way is "item K", its place in the items stream.
+            std::string way = e.way;
+            if (minimal && way.rfind("item ", 0) == 0) way = way.substr(0, way.find(' ', 5));
+            t += "f\t" + std::to_string(e.size) + "\t" + e.sha256 + "\t" + (packed ? way + "\t" : with_addresses ? e.address + "\t" : std::string()) +
                  e.path + "\n";
+        }
     }
     t += "end\n";
     return t;
+}
+
+namespace {
+
+// A place (hex) as `width` raw bytes, most significant first, and back: v6's items stream. (Here
+// rather than with the lines, so that sieve-install, which has none of them, can read v6 too.)
+std::vector<uint8_t> raw_place(std::string_view hex, uint32_t width, const std::string& path)
+{
+    std::string h(hex.substr(std::min(hex.find_first_not_of('0'), hex.size())));
+    if (h.size() > size_t(width) * 2) throw std::runtime_error("manifest: " + path + "'s place is wider than its line's places");
+    h.insert(0, size_t(width) * 2 - h.size(), '0');
+    std::vector<uint8_t> out(width);
+    auto digit = [&](char c) {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        throw std::runtime_error("manifest: " + path + "'s place is not hex");
+    };
+    for (uint32_t i = 0; i < width; ++i) out[i] = uint8_t(digit(h[2 * i]) * 16 + digit(h[2 * i + 1]));
+    return out;
+}
+
+std::string hex_place(const uint8_t* b, uint32_t width)
+{
+    static const char k[] = "0123456789abcdef";
+    std::string h;
+    for (uint32_t i = 0; i < width; ++i) h += {k[b[i] >> 4], k[b[i] & 15]};
+    return h.empty() ? std::string("0") : h;
+}
+
+// The line an item's way ("item K ...") names.
+size_t item_line_of(const ManifestEntry& e, size_t lines)
+{
+    const size_t sp = e.way.find(' ', 5);
+    const size_t k = size_t(std::stoull(e.way.substr(5, sp == std::string::npos ? std::string::npos : sp - 5)));
+    if (k >= lines) throw std::runtime_error("manifest: " + e.path + " names a line it does not list");
+    return k;
+}
+
+} // namespace
+
+std::vector<uint8_t> Manifest::items_stream() const
+{
+    std::vector<uint8_t> out;
+    for (const ManifestEntry& e : entries)
+    {
+        if (e.dir || e.way.rfind("item ", 0) != 0) continue;
+        const size_t k = item_line_of(e, lines.size());
+        const size_t sp = e.way.find(' ', 5);
+        if (sp == std::string::npos) throw std::runtime_error("manifest: " + e.path + " has no place to carry");
+        const std::vector<uint8_t> b = raw_place(std::string_view(e.way).substr(sp + 1), line_widths.at(k), e.path);
+        out.insert(out.end(), b.begin(), b.end());
+    }
+    return out;
 }
 
 std::vector<uint8_t> Manifest::file() const
@@ -273,7 +334,13 @@ std::vector<uint8_t> Manifest::file() const
     std::vector<uint8_t> out;
     out.reserve(t.size() + (packed ? streams.size() : contents.size()));
     out.insert(out.end(), t.begin(), t.end());
-    if (packed) out.insert(out.end(), streams.begin(), streams.end());
+    if (minimal)
+    {
+        // v6: the two streams, then the items stream as carried.
+        out.insert(out.end(), streams.begin(), streams.end());
+        out.insert(out.end(), items_carried.begin(), items_carried.end());
+    }
+    else if (packed) out.insert(out.end(), streams.begin(), streams.end());
     else if (with_contents) out.insert(out.end(), contents.begin(), contents.end());
     return out;
 }
@@ -405,6 +472,7 @@ Manifest Manifest::parse(std::string_view whole)
     else if (lines[0] == kInstallManifestVersion) m.with_contents = true;
     else if (lines[0] == kPackedManifestVersion) m.packed = m.with_contents = true;
     else if (lines[0] == kItemsManifestVersion) m.items = m.packed = m.with_contents = true;
+    else if (lines[0] == kMinimalManifestVersion) m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] != kManifestVersion) throw std::runtime_error("not a sieve manifest (" + lines[0].substr(0, 40) + ")");
     if (m.packed) m.streams.assign(whole.begin() + std::ptrdiff_t(after), whole.end());
     else if (m.with_contents) m.contents.assign(whole.begin() + std::ptrdiff_t(after), whole.end());
@@ -425,14 +493,38 @@ Manifest Manifest::parse(std::string_view whole)
                 throw std::runtime_error(std::string("manifest: its ") + name + " stream's line is not three numbers");
             *s = PackedStream{packed, bytes, uint32_t(dictionary)};
         }
+        // v6: the items stream (its places, raw at dictionary 0, else LZMA2), the last of what
+        // follows "end".
+        if (m.minimal)
+        {
+            const std::string v = field(lines[first++], "stream items");
+            unsigned long long packed = 0, bytes = 0, dictionary = 0;
+            char extra = 0;
+            if (std::sscanf(v.c_str(), "%llu %llu %llu%c", &packed, &bytes, &dictionary, &extra) != 3 || dictionary > 0xFFFFFFFFull ||
+                (dictionary == 0 && packed != bytes))
+                throw std::runtime_error("manifest: its items stream's line is not three numbers");
+            m.item_stream = PackedStream{packed, bytes, uint32_t(dictionary)};
+            if (packed > m.streams.size()) throw std::runtime_error("manifest: its items stream is longer than what it carries");
+        }
         // v5: its lines, in order from 0, and the tree's SHA-256.
         while (m.items && first < lines.size() && lines[first].rfind("line ", 0) == 0)
         {
             const std::string v = lines[first++].substr(5);
-            const size_t sp = v.find(' ');
+            size_t sp = v.find(' ');
             if (sp == std::string::npos || v.substr(0, sp) != std::to_string(m.lines.size()))
                 throw std::runtime_error("manifest: its lines are not numbered from 0 in order");
-            m.lines.push_back(v.substr(sp + 1));
+            std::string rest = v.substr(sp + 1);
+            if (m.minimal)
+            {
+                // v6: the bytes a place on the line takes, then the line.
+                sp = rest.find(' ');
+                const std::string w = rest.substr(0, sp);
+                if (sp == std::string::npos || w.empty() || w.size() > 9 || w.find_first_not_of("0123456789") != std::string::npos)
+                    throw std::runtime_error("manifest: a line's width is not a number");
+                m.line_widths.push_back(uint32_t(std::stoul(w)));
+                rest = rest.substr(sp + 1);
+            }
+            m.lines.push_back(rest);
         }
         if (m.items) m.tree = field(lines[first++], "tree");
     }
@@ -474,6 +566,26 @@ Manifest Manifest::parse(std::string_view whole)
         }
         if (bad) throw std::runtime_error("manifest: refused path " + e.path);
         m.entries.push_back(std::move(e));
+    }
+    if (m.minimal)
+    {
+        // v6: every item's place from the items stream, in the listing's order, back into its way
+        // as v5 writes it, so that what follows is v5's unpacking.
+        m.items_carried.assign(m.streams.end() - std::ptrdiff_t(m.item_stream.packed), m.streams.end());
+        m.streams.resize(m.streams.size() - size_t(m.item_stream.packed));
+        const std::vector<uint8_t> places = m.item_stream.dictionary == 0 ? m.items_carried : unpack_stream(m.items_carried, m.item_stream, false);
+        if (places.size() != m.item_stream.bytes) throw std::runtime_error("manifest: its items stream is not the size its line says");
+        size_t at = 0;
+        for (ManifestEntry& e : m.entries)
+        {
+            if (e.dir || e.way.rfind("item ", 0) != 0) continue;
+            if (e.way.find(' ', 5) != std::string::npos) throw std::runtime_error("manifest: " + e.path + "'s way is not 'item K'");
+            const uint32_t width = m.line_widths.at(item_line_of(e, m.lines.size()));
+            if (places.size() - at < width) throw std::runtime_error("the installer's items stream ends before " + e.path);
+            e.way += " " + hex_place(places.data() + at, width);
+            at += width;
+        }
+        if (at != places.size()) throw std::runtime_error("manifest: its items stream holds more than its items");
     }
     if (m.packed) m.contents = unpack_v4(m); // every file's bytes, each by its way
     if (m.items && tree_sha256(m) != m.tree) throw std::runtime_error("these Sieve instructions do not give the tree they were made from (its SHA-256 differs)");

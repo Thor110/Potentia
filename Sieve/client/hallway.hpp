@@ -1190,6 +1190,7 @@ public:
     void open_locator() { locator_.open(); }
     void locate_now(const std::string& path, bool tailor = false) { locator_.locate_now(path, tailor); } // scripted: measured at once
     void install_now(const std::string& from, const std::string& to) { locator_.install_now(from, to); }
+    void locator_search(double seconds, bool total) { locator_.set_search(seconds, total); } // scripted
 
 private:
     FileLocator::Host locator_host(); // its lines, filters and BINARY length, and walking to a file

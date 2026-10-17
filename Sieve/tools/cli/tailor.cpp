@@ -5,6 +5,7 @@
 #include "sieve/corridor.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <map>
 #include <optional>
@@ -166,7 +167,21 @@ TailorResult tailor_filters(const FilterLine& line, const std::vector<std::vecto
     result.bits = result.route_bits = result.line_bits;
     result.count_bits = size.log10_approx() * kBitsPerDigit;
     result.filters.mode = FilterMode::Compact;
-    auto cancelled = [&] { return progress && progress->cancel.load(); };
+    // Stopped by the person, or by the time given (options.seconds): the filters on their own get the
+    // first 70% of it and the set the rest, so that a stack is grown from what was found even when
+    // the first part runs long. What is found by then is kept: every stack is checked as it is built.
+    using steady = std::chrono::steady_clock;
+    const steady::time_point start = steady::now();
+    const bool timed = options.seconds > 0;
+    auto time_at = [&](double share) { return start + std::chrono::duration_cast<steady::duration>(std::chrono::duration<double>(options.seconds * share)); };
+    steady::time_point limit = time_at(0.7);
+    bool out_of_time = false;
+    auto stopped = [&] { return progress && progress->cancel.load(); };
+    auto cancelled = [&] {
+        if (stopped()) return true;
+        if (timed && steady::now() >= limit) out_of_time = true;
+        return timed && steady::now() >= limit;
+    };
 
     // The filters that could count: not retired, and not one that judges only wherever it is used.
     std::vector<const FilterSpec*> specs;
@@ -283,11 +298,12 @@ TailorResult tailor_filters(const FilterLine& line, const std::vector<std::vecto
         result.choices.push_back(std::move(c));
         if (progress) ++progress->done;
     }
-    if (cancelled())
+    if (stopped())
     {
         result.finished = false;
         return result;
     }
+    limit = time_at(1.0); // the set: the rest of the time
 
     // 2. The set. Stacks are grown from each setting kept, two ways: adding every other where it
     // leaves fewer survivors, and adding every other where it shortens the routes. Ranks move as the
@@ -384,7 +400,9 @@ TailorResult tailor_filters(const FilterLine& line, const std::vector<std::vecto
     // Only the settings of what is ticked are kept.
     for (auto it = stack.values.begin(); it != stack.values.end();)
         it = stack.is_enabled(it->first) ? std::next(it) : stack.values.erase(it);
-    result.finished = !cancelled();
+    result.finished = !stopped() && !out_of_time;
+    result.timed_out = out_of_time && !stopped();
+    result.seconds = std::chrono::duration<double>(steady::now() - start).count();
     if (progress) progress->done = progress->total + 1;
     return result;
 }

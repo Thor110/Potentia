@@ -1,26 +1,44 @@
-# Changes: the build error fixed, and the trained model on the record (17 October 2026)
+# Changes: `sieve-manifest-v6`, and the search's time in the File Locator (17 October 2026)
 
 Copy `Sieve/` over the repository's `Sieve/`.
 
-- **Fixed: `'executable_dir': is not a member of 'sieve::cli'`** (`client/app_main.cpp`, the
-  `--metrics-text` lookup): the missing `#include "cli/dictionaries.hpp"`. I'd compile-checked
-  the other changed files, but not this one after its last edit. This time the whole hallway was
-  built here (Release, SDL3 from source, no warnings), and every CI line added this session was
-  run against it. All pass.
-- **The models Sieve trained, against their files** (`client/menu.cpp`: `Menu::record_metrics`):
-  a new last part of the metrics list, measured live on every build.
-  - universalbibliothek: its address on the AI line is 32,768 bits; `model.safetensors` (as F saves
-    it) is 272,576; zip's deflate 58,256; 7z's LZMA2 44,608. So the address is **12.0% of the
-    file, and 73.5% of the best compressor's result**.
-  - To keep it unbiased, a model drawn at random from the same line (fixed seed) is weighed beside
-    it: address 32,768, file 272,576, LZMA2 45,056. Every model of the line has the same address
-    length. The saving comes from knowing the line's shape (the file stores 4-bit weights as
-    32-bit floats), not from the training.
-  - The line's id, which a reader must also be given (360 bits), is shown.
-  - CI pins the address and file figures. The compressors' sizes depend on the zlib and liblzma
-    versions linked, so CI doesn't pin them.
-- **Your two statements of aim** are in `docs/VOICES.md`: reduce files to their theoretical limit
-  and prove it possible, even through absurdly strict filtering; keep metrics unbiased but
-  informative.
-- **README** (the new part of the metrics list) and **HANDOFF** (the entry, and a rule: build the
-  hallway whole before handing over a change to it).
+- **`sieve-manifest-v6`: the minimum viable address** (`--items` now makes it; `--items --v5` makes
+  the older one; SPECIFICATIONS §12.2 defines it).
+  - Each item's place is stored as raw bytes, using the fewest bytes its line's places need,
+    instead of hex. All the places go in one stream, carried raw or as LZMA2, whichever is smaller.
+  - A line's items are carried as places only where that's smaller than packing their files.
+    Otherwise they stay files. (The first version made the degree sample 1.87 MB: its 360
+    near-identical AI models pack to almost nothing as files.)
+  - Models of the AI line are now items, carried as their digits.
+  - Measured here:
+    - the degree sample: **391,033 bytes** (v5 443,973, v4 482,496);
+    - the universalbibliothek model (34,072-byte file): **4,443 bytes** (v4 5,775; your 7z of it
+      was 5,698).
+  - Both were installed by `sieve install` and by the oracle, byte for byte. `sieve-install`
+    refuses v6 as it does v5, and says to open it with Sieve.
+  - The File Locator makes v6 too (the AI line's shape comes from the setup menu's settings).
+  - Fixed: `--v5` and `--widen-weights` each swallowed the argument after them.
+- **How long to search for shorter addresses** (tailoring):
+  - **File Locator:** a new row above "Tailor the filters to these files", with − and + for
+    **a file** and for **the whole run**, or the keys `[` and `]` (Shift for the run). Moving
+    one moves the other, through the number of files: the run's time is the file's times the
+    files. The first step down is no limit. Choosing a new folder works the other value out again.
+  - **Command line:** `sieve locate --weigh --tailored --search-per-file S` or `--search-total S`.
+    Give one and the other is worked out; give both and each one is a limit. The hallway's
+    scripted `--locate` takes them too.
+  - A search stopped by its time keeps the best it found. The table says when a line was stopped,
+    found nothing in time, or never started because the run's time was used up. A `search:` line
+    gives the times set and the time taken.
+  - Measured on the CI's four-file folder: no limit, 530 bits in 2.7 s; 600 s for the run, the same
+    530 bits in 1.4 s; 0.001 s a file, 544 bits in 0.19 s.
+  - Caveat: a step already running isn't cut short, so a very small time can be overrun by one
+    step (0.004 s set, 0.19 s taken, above).
+- **Not done yet:**
+  - The times aren't saved in `sieve-hallway.ini`, so they last one session.
+  - v6 still stores each item's positional place. Storing a tailored stack's shorter address in
+    the manifest is the next step that would tie the search to the instructions.
+- **Checked here:** the whole hallway and tools built (no warnings), the unit suite, every new CI
+  line (v6 on the degree sample and on the model, the search times on the command line and in the
+  File Locator), and screenshots of the new row.
+- **Docs:** SPECIFICATIONS §12.2 (v6, the search's time), README, HANDOFF (a new entry), and your
+  "aiming in the right direction" quote in VOICES.

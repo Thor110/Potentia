@@ -37,6 +37,8 @@ struct PackReport
     std::vector<std::pair<std::string, std::string>> derivations; // a derived file, and the file it is made from
     size_t items = 0;                                // v5: files carried as items of Sieve's lines
     uint64_t item_bytes = 0, item_text = 0;          // their bytes, and what naming them takes in the listing
+    uint64_t item_places = 0;                        // v6: their places, as raw bytes in the items stream
+    uint64_t item_carried = 0;                       // v6: the items stream as carried (raw or LZMA2)
 };
 
 // v5: for a file's bytes, the line it is an item of (its place in the manifest's `lines`) and its
@@ -52,7 +54,9 @@ using ItemFinder = std::function<std::optional<std::pair<size_t, std::string>>(c
 //
 // With `items` (and m.lines set to the lines it names), a file that is an item of one of them is
 // carried as its line and its place there (v5), made again on installing; the lines no file uses are
-// dropped. Its own SHA-256 is left out ("-") unless `item_hashes`, the tree's covering it.
+// dropped. Its own SHA-256 is left out ("-") unless `item_hashes`, the tree's covering it. With
+// m.minimal (and m.line_widths beside m.lines), v6: each place carried as raw bytes, and an item
+// taken only where its place is shorter than the file.
 void add_packed(Manifest& m, const std::filesystem::path& root, PackReport* report = nullptr, const ItemFinder* items = nullptr,
                 bool item_hashes = false);
 

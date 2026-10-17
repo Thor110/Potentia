@@ -12,6 +12,7 @@
 // so the two agree.
 #pragma once
 
+#include "cli/args.hpp"
 #include "cli/filter_config.hpp"
 #include "cli/locate.hpp"
 #include "cli/weigh.hpp"
@@ -52,6 +53,10 @@ public:
         std::function<void(const sieve::cli::FilterConfig&)> use_filters;
         // Closed (Esc, or after Go to it or using the filters).
         std::function<void()> closed;
+        // The shapes of the lines an installer carries items of (sieve-manifest-v6): the pages'
+        // alphabet and length, the AI line's shape, as `sieve locate --items` takes them. Empty:
+        // their defaults. Called on the worker.
+        std::function<sieve::cli::Args()> item_args;
     };
 
     FileLocator(SDL_Window* window, SDL_Renderer* renderer, Host host);
@@ -73,6 +78,9 @@ public:
     // an install, at once.
     void locate_now(const std::string& path, bool tailor = false);
     void install_now(const std::string& from, const std::string& to);
+    // The search's time for tailoring, before a scripted run (--search-per-file, --search-total):
+    // seconds a file, or for the run (`total`); the other follows, the files counted.
+    void set_search(double seconds, bool total);
 
     // From the system dialogs' callbacks (any thread): what was chosen, handed to the next frame.
     void picked(const std::string& path);
@@ -115,6 +123,14 @@ private:
     bool go_armed_ = false; // Go to it pressed once for a file past the BINARY length
     float mouse_x_ = -1, mouse_y_ = -1;
     std::vector<std::pair<SDL_FRect, std::string>> buttons_;
+    // How long tailoring may search for shorter addresses (cli::WeighBudget): seconds a file and
+    // for the whole run, 0 for no limit. Each moves the other, through the files counted: the run's
+    // is the file's times the files, and the file's is the run's shared out among them.
+    double search_per_file_ = 0, search_total_ = 0;
+    bool search_by_total_ = false; // which was set last: the other follows it
+    size_t files_counted() const;
+    void step_search(bool total, int dir);
+    void relink_search();
 };
 
 } // namespace hallway

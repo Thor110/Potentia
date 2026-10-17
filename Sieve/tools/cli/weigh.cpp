@@ -42,7 +42,8 @@ std::string written_route(const BigUint& number, const BigUint& count)
 
 } // namespace
 
-Weighing weigh_files(const fs::path& root, const std::vector<std::string>& files, const WeighLines& given, bool tailor, TailorProgress* progress)
+Weighing weigh_files(const fs::path& root, const std::vector<std::string>& files, const WeighLines& given, bool tailor, TailorProgress* progress,
+                     const WeighBudget& budget)
 {
     Weighing out;
     // The lines, binary first: their names, shapes and stacks.
@@ -168,6 +169,9 @@ Weighing weigh_files(const fs::path& root, const std::vector<std::string>& files
 
     // With tailoring: each line's items are its anchors, its filters tailored to them, paid for.
     std::map<int, TailorResult> tailored;
+    std::map<int, std::string> stopped;
+    out.budget = budget;
+    double spent = 0; // seconds, every line's search so far
     if (tailor && !(progress && progress->cancel))
         for (size_t li = 1; li < lines.size(); ++li)
         {
@@ -183,8 +187,29 @@ Weighing weigh_files(const fs::path& root, const std::vector<std::string>& files
             if (anchors.empty()) continue;
             TailorOptions opt;
             opt.count_description = true;
+            // Its time: each of its files' share, and no more than is left of the run's.
+            double seconds = budget.per_file > 0 ? budget.per_file * double(anchors.size()) : 0;
+            if (budget.total > 0)
+            {
+                const double left = budget.total - spent;
+                if (left <= 0)
+                {
+                    stopped[int(li)] = "the run's time was spent before its search began"; // it keeps its filters
+                    continue;
+                }
+                seconds = seconds > 0 ? std::min(seconds, left) : left;
+            }
+            opt.seconds = seconds;
             TailorResult r = tailor_filters(w.fl, anchors, w.filters, nullptr, opt);
-            if (!r.finished || r.filters.enabled.empty()) continue;
+            spent += r.seconds;
+            out.searched = spent;
+            if (r.timed_out && r.filters.enabled.empty())
+            {
+                std::ostringstream t;
+                t << std::fixed << std::setprecision(r.seconds < 0.1 ? 3 : 1) << r.seconds;
+                stopped[int(li)] = "stopped at its time (" + t.str() + " s), nothing shorter found by then";
+            }
+            if ((!r.finished && !r.timed_out) || r.filters.enabled.empty()) continue;
             try
             {
                 const FilterStack st = build_stack(*w.line, r.filters);
@@ -263,6 +288,7 @@ Weighing weigh_files(const fs::path& root, const std::vector<std::string>& files
         lw[l].name = lines[l].name;
         lw[l].shape = lines[l].shape;
         if (auto it = tailored.find(int(l)); it != tailored.end()) lw[l].tailored = it->second;
+        if (auto it = stopped.find(int(l)); it != stopped.end()) lw[l].search_stopped = it->second;
     }
     std::vector<bool> group_used(groups.size(), false);
     for (size_t i = 0; i < out.files.size(); ++i)
@@ -334,8 +360,25 @@ std::string weighing_table(const Weighing& w, size_t max_rows)
             o << "  shared: " << l.name << ", " << l.files << " file(s): shape " << bits(l.shape_bits) << " bits"
               << (l.description_bits > 0 ? ", filters " + bits(l.description_bits) + " bits" : std::string()) << "\n";
         if (l.tailored)
+        {
+            std::ostringstream t;
+            t << std::fixed << std::setprecision(1) << l.tailored->seconds;
             o << "  tailored " << l.name << ": " << l.tailored->filters.enabled.size() << " filter(s), routes " << bits(l.tailored->route_bits)
-              << " bits + description " << bits(l.tailored->description_bits) << ", against " << bits(l.tailored->line_bits) << " on the line\n";
+              << " bits + description " << bits(l.tailored->description_bits) << ", against " << bits(l.tailored->line_bits) << " on the line ("
+              << t.str() << " s" << (l.tailored->timed_out ? ", stopped at its time: the best found by then" : "") << ")\n";
+        }
+        else if (!l.search_stopped.empty()) o << "  tailored " << l.name << ": none, " << l.search_stopped << "\n";
+    }
+    if (w.budget.per_file > 0 || w.budget.total > 0 || w.searched > 0)
+    {
+        // The search's time: what was given, a file and the run, and what was taken.
+        auto secs = [](double v) {
+            std::ostringstream t;
+            t << std::fixed << std::setprecision(v < 0.1 ? 3 : v < 1 ? 2 : 1) << v;
+            return t.str() + " s";
+        };
+        auto limit = [&](double v) { return v > 0 ? secs(v) : std::string("no limit"); };
+        o << "  search: " << limit(w.budget.per_file) << " a file, " << limit(w.budget.total) << " for the run; took " << secs(w.searched) << "\n";
     }
     o << "  total: own addresses " << bits(w.base_bits) << " bits; best ways " << bits(w.best_bits) << " + shared " << bits(w.shared_bits) << " = "
       << bits(w.total_bits()) << " bits (" << pct(w.total_bits(), w.base_bits) << " of the own addresses)\n";

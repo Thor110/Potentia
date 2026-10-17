@@ -210,6 +210,14 @@ jobs:
           echo "$out" | q "^  pic.png  *624  *4   image 3"
           echo "$out" | q "^  tune1.mid  *864  *36   audio, tailored 1e5230293"
           echo "$out" | q "total: own addresses 2488 bits; best ways 272 + shared 258 = 530 bits"
+          # The search's time: a generous one finds the same; a tiny one stops, and says so (each
+          # gives the other, the files counted: 0.001 s a file is 0.004 s for the four).
+          out=$($exe locate weigh --weigh --tailored --filters none.ini --length 8 --width 8 --height 8 --palette mono --search-total 600 2>&1 | tr -d '\r')
+          echo "$out" | q "^  search: 150.0 s a file, 600.0 s for the run; took "
+          echo "$out" | q "total: own addresses 2488 bits; best ways 272 + shared 258 = 530 bits"
+          out=$($exe locate weigh --weigh --tailored --filters none.ini --length 8 --width 8 --height 8 --palette mono --search-per-file 0.001 2>&1 | tr -d '\r')
+          echo "$out" | q "^  search: 0.001 s a file, 0.004 s for the run; took "
+          echo "$out" | q "^  tailored audio: none, "
 
       - name: A model is one object with an address on two lines
         run: |
@@ -957,6 +965,10 @@ jobs:
           $H --no-menu --line ai --filters ai-near.ini --walk "0,0" --screenshot ai-near.png | tr -d '\r' | sed -n 1p | q "within 2 digits of universalbibliothek's model (7548948481 survivors)"
           # From the main menu: the same locator; Go to it builds the hallway and walks to the file.
           $H --main-menu --locate tests/manifest_fixture/a.txt --press "Return" --screenshot locate-menu.png | q "file locator (main menu): open, Go to it offered"
+          # Its search for shorter addresses, given a time for the run (the file's follows), and the
+          # keys that move them: [ and ] a file, Shift the run.
+          $H --main-menu --locate tests/manifest_fixture --tailored --search-total 2 --screenshot locate-search.png | q "file locator (main menu)"
+          $H --main-menu --locate tests/manifest_fixture --press "],Shift+]" --screenshot locate-search-keys.png | q "file locator (main menu)"
           # The demonstration (IDEAS 16.9): every dimension's item at each whole degree, as one
           # .sieve, the same on every machine; installing it gives every file back, and a bearing
           # typed in the navigator (X, Tab) is the same item again.
@@ -968,7 +980,7 @@ jobs:
           # The same as sieve-manifest-v5 (--items): the pages, pictures, films and melodies carried as
           # their lines and places, made again on installing, every file the same; smaller than v4;
           # and the small sieve-install, which cannot make them, asks for Sieve instead.
-          build/sieve locate degrees --installer degrees-v5.sieve --items --manifest degrees-v5.manifest | tr -d '\r' | q "^items     1368 file(s) carried as items"
+          build/sieve locate degrees --installer degrees-v5.sieve --items --v5 --manifest degrees-v5.manifest | tr -d '\r' | q "^items     1368 file(s) carried as items"
           python reference/sieve_ref.py unpack degrees-v5.manifest --items-from degrees --to deg_oracle5 > /dev/null
           diff -r degrees deg_oracle5
           [ "$(wc -c < degrees-v5.sieve)" -lt "$(wc -c < degrees2.sieve)" ]
@@ -976,6 +988,33 @@ jobs:
           diff -r degrees deg_inst5
           if build/sieve-install degrees-v5.sieve --to deg_inst5b --yes > si.txt 2>&1; then exit 1; fi
           q "open them with Sieve" si.txt
+          # sieve-manifest-v6 (--items now): each item's place as raw bytes, the places carried raw or as
+          # LZMA2, whichever is smaller, and a line's items carried as places only where that is smaller
+          # than its files packed (the sample's 360 near-identical models pack smaller as files, and stay
+          # files). Smaller than v5; every file back, by sieve install and by the oracle.
+          build/sieve locate degrees --installer degrees-v6.sieve --items --manifest degrees-v6.manifest | tr -d '\r' | q "^items     1368 file(s) carried as items of Sieve's lines (.* sieve-manifest-v6"
+          [ "$(wc -c < degrees-v6.sieve)" -lt "$(wc -c < degrees-v5.sieve)" ]
+          build/sieve install degrees-v6.sieve --to deg_inst6 > /dev/null
+          diff -r degrees deg_inst6
+          python reference/sieve_ref.py unpack degrees-v6.manifest --items-from degrees --to deg_oracle6 > /dev/null
+          diff -r degrees deg_oracle6
+          if build/sieve-install degrees-v6.sieve --to deg_inst6b --yes > si6.txt 2>&1; then exit 1; fi
+          q "open them with Sieve" si6.txt
+          # A model trained by Sieve alone (universalbibliothek): carried as its 4,096 bytes of digits on the
+          # AI line, not its 34,072-byte file, smaller than the file packed (v4); the oracle makes the
+          # model's file again from the place itself, as sieve install does.
+          rm -rf ub_run ub_model ub_one ub_inst ub_oracle && mkdir ub_one
+          build/sieve install data/training/universalbibliothek.sieve --to ub_run > /dev/null
+          grep '^final ' ub_run/result.txt | cut -d' ' -f2 > ub_final.hex
+          build/sieve ai --address-file ub_final.hex --out ub_model > /dev/null
+          cp ub_model/model.safetensors ub_one/
+          build/sieve locate ub_one --installer ub-v4.sieve > /dev/null
+          build/sieve locate ub_one --installer ub-v6.sieve --items --manifest ub-v6.manifest | tr -d '\r' | q "^items     1 file(s) carried as items of Sieve's lines (34072 bytes, as 4096 bytes of places"
+          [ "$(wc -c < ub-v6.sieve)" -lt "$(wc -c < ub-v4.sieve)" ]
+          build/sieve install ub-v6.sieve --to ub_inst > /dev/null
+          cmp ub_one/model.safetensors ub_inst/model.safetensors
+          python reference/sieve_ref.py unpack ub-v6.manifest --to ub_oracle > /dev/null
+          cmp ub_one/model.safetensors ub_oracle/model.safetensors
           # (each file is named by its item's title; the report says which file each degree gave)
           $H --no-menu --press "X,Tab,9,0,Return" --take --save-item p90.txt --screenshot degp.png > /dev/null
           cmp p90.txt "degrees/$(sed -n 's/^pages 090 //p' deg.txt)"

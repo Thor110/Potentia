@@ -8,6 +8,7 @@
 #include "strings.hpp"
 
 #include "cli/compare.hpp"
+#include "cli/items.hpp"
 #include "cli/locate.hpp"
 #include "cli/pack.hpp"
 #include "cli/timings.hpp"
@@ -32,13 +33,13 @@ std::string u8(const fs::path& p)
 }
 
 // A single file's Sieve instructions, from the bytes already read: as a folder holding just it,
-// packed (v4) where that makes it smaller.
-cli::Manifest file_instructions(const fs::path& p, const std::vector<uint8_t>& bytes)
+// packed, its items of Sieve's lines carried as their places (v6) where that makes it smaller.
+cli::Manifest file_instructions(const fs::path& p, const std::vector<uint8_t>& bytes, const cli::Args& items)
 {
     cli::Manifest m = cli::manifest_of_file(p);
     m.contents = bytes;
     m.with_contents = true;
-    cli::add_packed(m, p.parent_path());
+    cli::add_packed_items(m, p.parent_path(), items);
     return m;
 }
 
@@ -155,7 +156,11 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
         std::lock_guard<std::mutex> lock(mx_);
         status_ = trf(tailor ? "loc.tailoring" : "loc.reading", {path});
     }
-    auto job = [this, path, tailor] {
+    // The search's time as last set (a file's or the run's); the other is worked out from the files
+    // counted, once they are.
+    const double per_file = search_per_file_, total = search_total_;
+    const bool by_total = search_by_total_;
+    auto job = [this, path, tailor, per_file, total, by_total] {
         Result r;
         r.path = path;
         try
@@ -176,9 +181,10 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 c.address_hex = a.is_zero() ? 0 : r.hex.size();
                 // Its Sieve instructions, as a folder's: its name, size and SHA-256, then its bytes.
                 r.manifest = cli::manifest_of_file(p);
-                const cli::Manifest fi = file_instructions(p, r.bytes);
+                const cli::Manifest fi = file_instructions(p, r.bytes, host_.item_args ? host_.item_args() : cli::Args{});
                 const std::vector<uint8_t> mb = fi.file();
                 c.packed = fi.packed;
+                c.version = fi.minimal ? cli::kMinimalManifestVersion : fi.items ? cli::kItemsManifestVersion : cli::kPackedManifestVersion;
                 const BigUint ma = cli::binary_address(mb);
                 c.manifest = mb.size();
                 c.manifest_deflate = cli::deflate_size(mb);
@@ -205,8 +211,9 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 c.lzma2 = cli::lzma2_size(all);
                 // The installer's manifest (v4: every file packed after it), compressed, and the installer.
                 cli::Manifest with = r.manifest;
-                cli::add_packed(with, p);
+                cli::add_packed_items(with, p, host_.item_args ? host_.item_args() : cli::Args{});
                 c.packed = with.packed;
+                c.version = with.minimal ? cli::kMinimalManifestVersion : with.items ? cli::kItemsManifestVersion : cli::kPackedManifestVersion;
                 const std::vector<uint8_t> mb = with.file();
                 const BigUint ma = cli::binary_address(mb);
                 c.manifest = mb.size();
@@ -232,7 +239,10 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                     for (const auto& e : r.manifest.entries)
                         if (!e.dir) files.push_back(e.path);
                 }
-                const cli::Weighing w = cli::weigh_files(root, files, wl, tailor);
+                cli::WeighBudget budget;
+                if (by_total) budget = {cli::budget_per_file(total, files.size()), total};
+                else budget = {per_file, cli::budget_total(per_file, files.size())};
+                const cli::Weighing w = cli::weigh_files(root, files, wl, tailor, nullptr, budget);
                 r.weighing = cli::weighing_table(w, 12);
                 r.tailored = tailor;
                 if (tailor)
@@ -259,6 +269,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
         }
         std::lock_guard<std::mutex> lock(mx_);
         result_ = std::move(r);
+        relink_search(); // the files counted may have changed
         status_.clear();
         busy_ = false;
     };
@@ -282,8 +293,9 @@ void FileLocator::save(const std::string& to)
             const fs::path out = from_u8(to);
             {
                 // A file's instructions are a folder's holding just it (file_instructions).
-                cli::Manifest with = r.kind == Result::File ? file_instructions(from_u8(r.path), r.bytes) : r.manifest;
-                if (r.kind != Result::File) cli::add_packed(with, from_u8(r.path));
+                const cli::Args items = host_.item_args ? host_.item_args() : cli::Args{};
+                cli::Manifest with = r.kind == Result::File ? file_instructions(from_u8(r.path), r.bytes, items) : r.manifest;
+                if (r.kind != Result::File) cli::add_packed_items(with, from_u8(r.path), items);
                 const BigUint address = cli::binary_address(with.file());
                 // The installer on its own (for anyone with Sieve: sieve install, or sieve-install),
                 // or an installer program, sieve-install with it attached, one file for anyone.
@@ -358,6 +370,9 @@ void FileLocator::event(const SDL_Event& e)
         case SDLK_F: pressed = "file"; break;
         case SDLK_D: pressed = "folder"; break;
         case SDLK_I: pressed = "install"; break;
+        // The search's time: [ and ] a file, with Shift the run.
+        case SDLK_LEFTBRACKET: pressed = (e.key.mod & SDL_KMOD_SHIFT) ? "search_run_less" : "search_file_less"; break;
+        case SDLK_RIGHTBRACKET: pressed = (e.key.mod & SDL_KMOD_SHIFT) ? "search_run_more" : "search_file_more"; break;
         case SDLK_RETURN:
         case SDLK_KP_ENTER: pressed = result_.kind == Result::File && in_world() ? "go" : ""; break;
         default: break;
@@ -370,6 +385,10 @@ void FileLocator::event(const SDL_Event& e)
     else if (pressed == "folder") open_folder_dialog(on_picked, this, window_, nullptr, false);
     else if (pressed == "go") go();
     else if (pressed == "tailor") analyse(result_.path, false, true);
+    else if (pressed == "search_file_less") step_search(false, -1);
+    else if (pressed == "search_file_more") step_search(false, 1);
+    else if (pressed == "search_run_less") step_search(true, -1);
+    else if (pressed == "search_run_more") step_search(true, 1);
     else if (pressed == "use_filters" && result_.tailored_filters)
     {
         // As Return on COST does: the settings saved, and a hallway built with them (in the world)
@@ -508,7 +527,7 @@ void FileLocator::draw(float W, float H)
         // The weighing: each file's best way to be named against its own address, and the totals.
         y += 6;
         at = 0;
-        while (at < r.weighing.size() && y < H - 110)
+        while (at < r.weighing.size() && y < H - 150)
         {
             const size_t nl = r.weighing.find('\n', at);
             const std::string row = r.weighing.substr(at, nl == std::string::npos ? std::string::npos : nl - at);
@@ -530,11 +549,90 @@ void FileLocator::draw(float W, float H)
         // The filters tailored to these files, and then used: the hallway built again with them,
         // or kept for the next one from the main menu (on a row of their own, under the saves).
         bx = 20;
-        if (!r.tailored) button("tailor", tr("loc.tailor"), y + 40);
+        if (!r.tailored)
+        {
+            // How long the search may take: a file, and the run, each moving the other.
+            auto secs = [](double v) {
+                char b[32];
+                std::snprintf(b, sizeof b, v < 1 ? "%.2f" : "%.1f", v);
+                return v > 0 ? trf("loc.search.seconds", {b}) : tr("loc.search.none");
+            };
+            draw_text(r_, 20, y + 48, tr("loc.search"), 1, grey);
+            bx = 20 + text_width(tr("loc.search"), 1) + 12;
+            button("search_file_less", "-", y + 40);
+            const std::string per = trf("loc.search.file", {secs(search_per_file_)});
+            draw_text(r_, bx, y + 48, per, 1, white);
+            bx += text_width(per, 1) + 12;
+            button("search_file_more", "+", y + 40);
+            bx += 12;
+            button("search_run_less", "-", y + 40);
+            const std::string run = trf("loc.search.run", {secs(search_total_), std::to_string(files_counted())});
+            draw_text(r_, bx, y + 48, run, 1, white);
+            bx += text_width(run, 1) + 12;
+            button("search_run_more", "+", y + 40);
+            bx = 20;
+            button("tailor", tr("loc.tailor"), y + 80);
+        }
         else if (r.tailored_filters) button("use_filters", tr("loc.use_filters"), y + 40);
     }
     if (!status.empty()) draw_text(r_, 20, H - 58, fit_text(status, W - 40, 1), 1, busy ? white : ink);
     draw_text(r_, 20, H - 26, fit_text(tr(in_world() ? "loc.keys" : "loc.keys.menu"), W - 40, 1), 1, grey);
+}
+
+size_t FileLocator::files_counted() const
+{
+    if (result_.kind == Result::Folder) return std::max<size_t>(1, size_t(result_.manifest.files));
+    return 1;
+}
+
+// One step of the search's time, a file or the run: up or down a ladder of seconds (the first step
+// down from the bottom is no limit), the other worked out from it.
+void FileLocator::step_search(bool total, int dir)
+{
+    static const double kFile[] = {0, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600};
+    static const double kRun[] = {0, 1, 2, 5, 10, 30, 60, 120, 300, 600, 1800, 3600, 7200, 14400};
+    const double* ladder = total ? kRun : kFile;
+    const size_t n = 14;
+    double& v = total ? search_total_ : search_per_file_;
+    // The next rung above or below the value as it stands (which the other's move may have put off it).
+    double next = v;
+    if (dir > 0)
+    {
+        for (size_t i = 0; i < n; ++i)
+            if (ladder[i] > v + 1e-9)
+            {
+                next = ladder[i];
+                break;
+            }
+    }
+    else
+    {
+        next = 0;
+        for (size_t i = n; i-- > 0;)
+            if (ladder[i] < v - 1e-9)
+            {
+                next = ladder[i];
+                break;
+            }
+    }
+    v = next;
+    search_by_total_ = total;
+    relink_search();
+}
+
+// The one not last set, worked out again from the one that was and the files counted.
+void FileLocator::relink_search()
+{
+    const size_t files = files_counted();
+    if (search_by_total_) search_per_file_ = cli::budget_per_file(search_total_, files);
+    else search_total_ = cli::budget_total(search_per_file_, files);
+}
+
+void FileLocator::set_search(double seconds, bool total)
+{
+    (total ? search_total_ : search_per_file_) = seconds;
+    search_by_total_ = total;
+    relink_search();
 }
 
 // For scripted runs (--locate PATH): open the locator on it, measured before the next frame.

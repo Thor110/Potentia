@@ -61,11 +61,16 @@ struct TailorResult
     double count_bits = 0;            // log2 of its survivors: the width of every compact address
     std::vector<TailorChoice> choices; // every filter weighed, in the order they were taken
     bool finished = true;             // false: cancelled before the end (what is here was found)
+    bool timed_out = false;           // stopped by the time given (TailorOptions::seconds), what it found kept
+    double seconds = 0;               // how long the search took
 };
 
 struct TailorOptions
 {
     bool count_description = false; // the stack's description is part of the score
+    // The longest the search may take, in seconds (0: no limit). Past it the search stops where it
+    // is and keeps the best it found, which is exact as built (a search, never a proof).
+    double seconds = 0;
 };
 
 // Where a search running on another thread has got to, and a way to stop it.

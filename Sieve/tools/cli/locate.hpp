@@ -84,6 +84,10 @@ inline constexpr const char* kAddressManifestVersion = "sieve-manifest-v2";
 inline constexpr const char* kInstallManifestVersion = "sieve-manifest-v3";
 inline constexpr const char* kPackedManifestVersion = "sieve-manifest-v4";
 inline constexpr const char* kItemsManifestVersion = "sieve-manifest-v5";
+// v5 with every item's place carried at its least: as raw bytes, at its line's width, in a third
+// stream after the other two, rather than in hex in the listing; and with the AI line among the
+// lines offered (SPECIFICATIONS §12.2).
+inline constexpr const char* kMinimalManifestVersion = "sieve-manifest-v6";
 
 std::vector<uint8_t> read_file_bytes(const std::filesystem::path& file);
 
@@ -101,7 +105,8 @@ struct ManifestEntry
     uint64_t size = 0;   // files
     std::string sha256;  // files
     std::string address; // files, in a v2 manifest: the file's positional address in hex
-    std::string way;     // files, in a v4 manifest: "x86", "raw" or "lines K"; in v5 also "item K <index>"
+    std::string way;     // files, in a v4 manifest: "x86", "raw" or "lines K"; in v5 and v6 also "item K <index>"
+                         // (v6 writes "item K" alone, the index carried in its items stream)
 };
 
 // One of a v4 manifest's two streams.
@@ -126,6 +131,14 @@ struct Manifest
     bool items = false;                  // v5: v4 with files carried as items of Sieve's lines
     std::vector<std::string> lines;      // v5: line K, "<its space id> <the options that make it>"
     std::string tree;                    // v5: the SHA-256 of the whole tree (tree_sha256)
+    bool minimal = false;                // v6: v5 with its items' places as raw bytes (the items stream)
+    std::vector<uint32_t> line_widths;   // v6: the bytes a place on line K takes
+    // v6: every item's place, line_widths[K] bytes each, in the listing's order: the third stream,
+    // as its places are (items_stream), and as carried (raw, dictionary 0, or LZMA2, whichever is
+    // smaller: set by the packer, and read back by parse).
+    std::vector<uint8_t> items_stream() const;
+    PackedStream item_stream;
+    std::vector<uint8_t> items_carried;
     std::string text() const;            // the canonical text above (for v3 and v4, its text part)
     std::vector<uint8_t> file() const;   // the whole manifest as a file: the text, and for v3 the contents, for v4 the streams
     // v1 to v4; throws if it is none of them. A v4 manifest's streams are unpacked into contents and

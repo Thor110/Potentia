@@ -6,12 +6,21 @@
 // as "<its space id> <the options that make it>", the options as `sieve` takes them; making the
 // line again from those options must give the same space id, or the file is refused, so a change
 // to a line's defaults can never make another file quietly.
+//
+// sieve-manifest-v6 carries the same items at the least their addresses can take: each one's
+// positional place as raw bytes, at its line's width (the bytes the line's largest place needs),
+// rather than in hex; and it adds the AI line, whose items are models given as the very
+// model.safetensors the line writes for them (so a model trained by Sieve is carried as its
+// weights' digits, 4 bits a weight at Micro, rather than its file's 32-bit floats).
 #pragma once
 
 #include "cli/args.hpp"
 #include "cli/lines.hpp"
 #include "cli/pack.hpp"
+#include "sieve/aispace.hpp"
 
+#include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -20,12 +29,22 @@ namespace sieve::cli {
 struct ItemLine
 {
     std::string spec; // "<space id> <options>", as the listing writes it
-    Line line;
+    std::optional<Line> line;                 // the pages, image, video and audio lines
+    std::shared_ptr<const AiSpace> ai;        // the AI line (v6)
+    uint32_t width = 0;                       // v6: bytes a place on the line takes (its largest place's)
 };
 
 // The lines files are carried as items of: the pages (of --alphabet and --page-length, as the
-// File Locator's weighing takes them), the image, video and audio lines at their defaults.
-std::vector<ItemLine> item_lines(const Args& a);
+// File Locator's weighing takes them), the image, video and audio lines at their defaults; and,
+// `with_ai` (v6), the AI line at the shape given (--ai-layers, --ai-width, --ai-heads, --ai-bits;
+// Micro without them).
+std::vector<ItemLine> item_lines(const Args& a, bool with_ai = false);
+// The bytes a place on a line of `size` places takes: those of its largest place, size - 1 (0 for a
+// line of one place).
+uint32_t place_width(const BigUint& size);
+// A place in hex as `width` raw bytes, most significant first, and back (v6's items stream).
+std::vector<uint8_t> place_bytes(const std::string& hex, uint32_t width);
+std::string place_hex(std::span<const uint8_t> bytes);
 // A line from its options ("line=text alphabet=lower27 length=32 model=none").
 Line line_of_options(const std::string& options);
 // Finds, for a file's bytes, the first of `lines` it is an item of, and its positional address.
@@ -33,5 +52,10 @@ ItemFinder item_finder(const std::vector<ItemLine>& lines);
 // Lets manifests with items be read (set_item_maker): each line made from its options once, and
 // checked against its space id.
 void use_item_maker();
+// An installer's files packed with the items of Sieve's lines carried as their places: v6, each
+// place at its least (`v5`: as v5 wrote them, in hex, without the AI line). The lines are those
+// item_lines makes of `a`. Shared by `sieve locate --items` and the File Locator.
+void add_packed_items(Manifest& m, const std::filesystem::path& root, const Args& a, PackReport* report = nullptr, bool v5 = false,
+                      bool item_hashes = false);
 
 } // namespace sieve::cli

@@ -3260,6 +3260,38 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   - CI pins the address and file figures; the compressors' depend on the zlib and liblzma linked.
 - **Checked here:** the full build; the unit suite as before; the CI lines above.
 
+### `sieve-manifest-v6`, minimum viable places; the search's time (17 October 2026)
+- **Asked:** the manifest to use the minimum viable address; and in the File Locator, how long to
+  search for a shorter address for each file and for the whole run, each moving the other.
+- **`sieve-manifest-v6`** (`--items` now; `--items --v5` the older one; SPECIFICATIONS §12.2):
+  - Each item's place as raw bytes, the fewest its line's places need (`line K <width> ...`); the
+    way is `item K` and the places are a third stream, `stream items`, carried raw or as LZMA2,
+    whichever is smaller.
+  - Per line, its items are kept as places only where that is smaller than its files packed. The
+    first try made §16.9's sample 1.87 MB: its 360 near-identical AI models pack to almost nothing
+    as files, so they stay files.
+  - Models of the AI line are items (their file must be exactly what the line writes).
+  - Measured here: the sample 391,033 bytes (v5 443,973, v4 482,496); the universalbibliothek
+    model 4,443 (v4 5,775; Edward's 7z of the file: 5,698). Both installed by `sieve install` and
+    by the oracle; `sieve-install` refuses v6 as it does v5.
+  - `--v5` and `--widen-weights` were missing from `is_flag`, so each swallowed the next argument.
+- **The search's time** (`cli::WeighBudget`; `--search-per-file`, `--search-total` on `sieve
+  locate --weigh` and on the hallway's scripted `--locate`):
+  - A line's search has the file's time for each of its items, capped at what is left of the
+    run's. Tailoring gives its first 70% to filters alone and the rest to stacks, and keeps the
+    best found when stopped.
+  - The table says when a line stopped, found nothing by then, or never began; the `search:` line
+    gives what was set and what it took. One step is not cut short, so a tiny time can be overrun
+    (0.001 s a file took 0.19 s on the four-file CI folder).
+  - The File Locator has a row above Tailor: − and + for a file and for the run, or `[` and `]`
+    (Shift for the run). The one last set leads; the other is worked out from the files counted,
+    again whenever a new folder is read.
+- **Not done:** the times are not saved in `sieve-hallway.ini` (one session only). v6's items are
+  still positional places; carrying a tailored stack's shorter address in the manifest is the
+  next step that would tie the search to the instructions.
+- **Checked here:** the full build (no warnings), the unit suite, the CI lines for v6 and for the
+  search's time, and the File Locator's row in pictures.
+
 ### For the next session (17 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show
