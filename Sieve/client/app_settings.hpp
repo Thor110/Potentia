@@ -1,27 +1,24 @@
-// Sieve hallway — the application's own settings (graphics, controls, language), kept in
-// sieve-hallway.ini next to the executable. The state-space settings of the setup menu travel
-// as command-line options instead, and the filters have sieve-filters.ini.
+// Sieve hallway — the application's settings, kept in sieve-hallway.ini next to the executable:
+// graphics, the world, controls, the models given as files, the setup menu's settings, the paths
+// to other programs, and the language. The filters have sieve-filters.ini instead.
 //
-//   [graphics]
-//   resolution = 1600x900       ; chosen on first start from the display (see detect_display)
-//   fullscreen = off
-//   vsync = on                  ; wait for the display (no tearing; frame rate capped at its refresh)
-//   edge_glow = off             ; Geometry Edge Glow
-//   real_graphics = off         ; Real Graphics (at most one of these two is on)
-//   door_portals = off          ; the doorways filled with procedural data noise
-//   model_cache_mb = 64         ; memory for the rendered faces of the models line's crates
-//   angle_decimals = 1          ; decimal places on the compass's degree readout (0 to 20)
-//   fps_counter = off           ; frames per second, top right of the hallway
-//   [controls]
-//   mouse_sensitivity = 100     ; percent
-//   invert_mouse_y = off
-//   [models]
-//   text_model =                ; a model folder CHAT talks with (config.json, model.safetensors,
-//                               ; tokenizer.json); empty: the model in hand
-//   picture_model =             ; a picture model's run folder DRAW uses; empty: the first trained one
-//   [language]
-//   language = en
+// Every entry the file can hold is written, each with its value and a comment saying what it is,
+// and an entry with nothing set is written empty rather than left out, so the file is a list of
+// every setting there is. The hallway's options (--length, --ffmpeg, ...) win over the file for
+// the run they are given in. save() writes the file in this order:
+//
+//   [graphics]   resolution, fullscreen, vsync, edge_glow, real_graphics, door_portals,
+//                graphics_memory_gb, view_rooms, picture_rooms, fps_counter
+//   [world]      model_cache_mb, angle_decimals, filter_memory_mb, counting_memory_pct,
+//                merge_cache_pct, unit_time_ms, item_memory_pct
+//   [controls]   mouse_sensitivity, invert_mouse_y
+//   [models]     text_model, picture_model
+//   [setup]      every line's shape and the GLOBAL settings (Settings::entries, setup.hpp)
+//   [paths]      ffmpeg
+//   [language]   language
 #pragma once
+
+#include "setup.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -115,7 +112,17 @@ struct AppSettings
     // and a picture model's run folder for DRAW. Empty: the model in hand, and the first trained
     // picture model in the training folders.
     std::string text_model, picture_model;
+    // The setup menu's settings ([setup]): every line's shape and the GLOBAL settings, as they
+    // were when the setup menu last changed them. Its ffmpeg is not kept here but below.
+    Settings setup;
+    // The ffmpeg program ([paths]) that reads and writes the picture, video and sound formats Sieve
+    // does not read itself. Empty: SIEVE_FFMPEG, then one beside Sieve, then the PATH
+    // (cli/media_decode.hpp). --ffmpeg wins over it.
+    std::string ffmpeg;
     std::string language = "en";
+    // Whether the file loaded had every entry save() writes (not saved). An older file lacks the
+    // entries added since it was written, and is written again at start so that it gains them.
+    bool complete = true;
 
     // Geometry Edge Glow and Real Graphics exclude each other; both may be off. Turning Real
     // Graphics on also turns Door Portals on, which is otherwise free to be set either way:
@@ -126,6 +133,14 @@ struct AppSettings
     static std::filesystem::path default_path();
     static AppSettings load(const std::filesystem::path& path); // missing file: defaults
     bool save(const std::filesystem::path& path) const;         // false if it cannot be written
+    std::string text() const;                                   // what save() writes
+
+    // One entry of the file: its section, key, value as written, and the comment beside it.
+    struct Row
+    {
+        std::string section, key, value, note;
+    };
+    std::vector<Row> rows() const; // every entry, in the order save() writes them
 };
 
 // Sizes the window (or switches to fullscreen) to match the settings.

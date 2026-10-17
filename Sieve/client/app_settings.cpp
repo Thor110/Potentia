@@ -3,9 +3,10 @@
 //
 // Two rules shape the loading. An unrecognised or malformed setting is not an error: the default
 // stands, and the file is rewritten in good order the next time anything is saved, so a file from
-// an older build still starts. And the first start has no file at all, so detect_display() picks a
-// resolution from what the display actually reports rather than assuming one, which is why the
-// defaults live in code here and not in a shipped ini.
+// an older build still starts; one that lacks an entry is rewritten at start (app_main.cpp), so
+// that it gains the entries added since it was written. And the first start has no file at all,
+// so detect_display() picks a resolution from what the display actually reports rather than
+// assuming one, which is why the defaults live in code here and not in a shipped ini.
 #include "app_settings.hpp"
 
 #include "cli/dictionaries.hpp"
@@ -14,6 +15,7 @@
 #include <cmath>
 #include <cstdio>
 #include <fstream>
+#include <set>
 #include <sstream>
 
 namespace hallway {
@@ -111,6 +113,7 @@ AppSettings AppSettings::load(const fs::path& path)
     AppSettings s;
     std::ifstream in(path);
     std::string line, section;
+    std::set<std::string> seen; // "section.key", for `complete`
     while (std::getline(in, line))
     {
         line = trim(line);
@@ -126,6 +129,7 @@ AppSettings AppSettings::load(const fs::path& path)
         std::string value = trim(line.substr(eq + 1));
         if (const size_t c = value.find(" ;"); c != std::string::npos) value = trim(value.substr(0, c));
         if (!value.empty() && value[0] == ';') value.clear(); // nothing set, only the comment
+        seen.insert(section + "." + key);
         // Unknown or malformed entries are ignored: this file only holds preferences.
         if (section == "graphics")
         {
@@ -198,46 +202,81 @@ AppSettings AppSettings::load(const fs::path& path)
             if (key == "text_model") s.text_model = value;
             else if (key == "picture_model") s.picture_model = value;
         }
+        else if (section == "setup") s.setup.set_entry(key, value); // a value it cannot have is left out
+        else if (section == "paths")
+        {
+            if (key == "ffmpeg") s.ffmpeg = value;
+        }
         else if (section == "language" && key == "language" && !value.empty()) s.language = value;
     }
     if (s.edge_glow && s.real_graphics) s.real_graphics = false; // they exclude each other
+    // Every entry save() writes, looked for in the file read. With no file at all nothing is
+    // missing: the first start writes the file once it has chosen a resolution.
+    if (in.is_open())
+        for (const Row& r : s.rows())
+            if (!seen.count(r.section + "." + r.key)) s.complete = false;
     return s;
+}
+
+std::vector<AppSettings::Row> AppSettings::rows() const
+{
+    std::vector<Row> r = {
+        {"graphics", "resolution", resolution.w > 0 ? resolution.str() : std::string(), "the window's size, WxH; empty: chosen from the display at start"},
+        {"graphics", "fullscreen", on_off(fullscreen), "on: fullscreen at the resolution; off: a window"},
+        {"graphics", "vsync", on_off(vsync), "on: wait for the display; off: frames as fast as they can be drawn (may tear)"},
+        {"graphics", "edge_glow", on_off(edge_glow), "Geometry Edge Glow (only one of it and Real Graphics is on)"},
+        {"graphics", "real_graphics", on_off(real_graphics), "Real Graphics (only one of it and Geometry Edge Glow is on)"},
+        {"graphics", "door_portals", on_off(door_portals), "Door Portals: procedural data noise in the doorways"},
+        {"graphics", "graphics_memory_gb", std::to_string(graphics_memory_gb), "the graphics card's memory, for the setup menu's budget, 1 to 128"},
+        {"graphics", "view_rooms", std::to_string(view_rooms), "View Distance: rooms drawn and kept either side of yours, 2 to 64"},
+        {"graphics", "picture_rooms", std::to_string(picture_rooms), "Picture Distance: rooms either side of yours with item pictures of their own, 0 to 8"},
+        {"graphics", "fps_counter", on_off(fps_counter), "frames per second, top right of the hallway"},
+        {"world", "model_cache_mb", std::to_string(model_cache_mb), "the display cache: memory for the pictures on items, 8 MB up"},
+        {"world", "angle_decimals", std::to_string(angle_decimals), "decimal places on the compass's degree readout, 0 to " + std::to_string(kMaxAngleDecimals)},
+        {"world", "filter_memory_mb", std::to_string(filter_memory_mb), "the most one count of the filters' survivors may take for its tables, 64 MB up"},
+        {"world", "counting_memory_pct", std::to_string(counting_memory_pct), "percent of installed memory the setup menu's counts may take at once, 5 to 100"},
+        {"world", "merge_cache_pct", std::to_string(merge_cache_pct), "percent of the filter memory kept for merged filters between counts, 0 to 100"},
+        {"world", "unit_time_ms", std::to_string(unit_time_ms), "the time budget: the longest one unit may take to open, 5 to 60000 ms"},
+        {"world", "item_memory_pct", std::to_string(item_memory_pct), "percent of installed memory the items around you may take, 5 to 90"},
+        {"controls", "mouse_sensitivity", std::to_string(mouse_sensitivity), "percent, 10 to 400"},
+        {"controls", "invert_mouse_y", on_off(invert_mouse_y), "on: moving the mouse up looks down"},
+        {"models", "text_model", text_model, "a model folder CHAT talks with; empty: the model in hand"},
+        {"models", "picture_model", picture_model, "a picture model's run folder DRAW uses; empty: the first trained one"},
+    };
+    for (const Settings::Entry& e : setup.entries()) r.push_back({"setup", e.key, e.value, e.note});
+    r.push_back({"paths", "ffmpeg", ffmpeg, "the ffmpeg program; empty: SIEVE_FFMPEG, then one beside Sieve, then the PATH"});
+    r.push_back({"language", "language", language, "the language file's name in data/lang (en: English)"});
+    return r;
+}
+
+std::string AppSettings::text() const
+{
+    std::ostringstream o;
+    o << "; Sieve hallway settings: every one there is, each with what it is. The main menu's Settings\n"
+      << "; and the setup menu edit them, and so may you: the hallway reads this file at start, and its\n"
+      << "; options (--length 64, --ffmpeg PATH, ...) win over it for that run. A line it cannot read\n"
+      << "; leaves that setting as it was. A comment starts a line with ';' or follows \" ;\".\n";
+    std::string section;
+    for (const Row& r : rows())
+    {
+        if (r.section != section)
+        {
+            section = r.section;
+            o << "\n[" << section << "]\n";
+        }
+        // The comments line up in a column, unless the entry is longer than it.
+        std::string entry = r.key + " = " + r.value;
+        entry.resize(std::max<size_t>(entry.size() + 1, 40), ' ');
+        o << entry << "; " << r.note << "\n";
+    }
+    return o.str();
 }
 
 bool AppSettings::save(const fs::path& path) const
 {
-    std::ostringstream o;
-    o << "; Sieve hallway settings, edited by the main menu's Settings and, for [world], by the setup\n"
-      << "; menu (hand edits are welcome).\n"
-      << "\n[graphics]\n"
-      << "resolution = " << (resolution.w > 0 ? resolution.str() : std::string()) << "\n"
-      << "fullscreen = " << on_off(fullscreen) << "\n"
-      << "vsync = " << on_off(vsync) << "   ; off: frames as fast as they can be drawn (may tear)\n"
-      << "edge_glow = " << on_off(edge_glow) << "       ; Geometry Edge Glow\n"
-      << "real_graphics = " << on_off(real_graphics) << "   ; Real Graphics (only one of the two is on)\n"
-      << "door_portals = " << on_off(door_portals) << "    ; Door Portals: procedural data noise in the doorways\n"
-      << "graphics_memory_gb = " << graphics_memory_gb << "   ; the graphics card's memory, for the setup menu's budget\n"
-      << "view_rooms = " << view_rooms << "   ; View Distance: rooms drawn and kept either side of yours\n"
-      << "picture_rooms = " << picture_rooms << "   ; Picture Distance: rooms either side of yours with item pictures of their own\n"
-      << "fps_counter = " << on_off(fps_counter) << "\n"
-      << "\n[world]\n"
-      << "model_cache_mb = " << model_cache_mb << "   ; the models line: memory for rendered crate faces\n"
-      << "angle_decimals = " << angle_decimals << "   ; decimal places on the compass's degree readout\n"
-      << "filter_memory_mb = " << filter_memory_mb << "   ; the most one count of the filters' survivors may take for its tables\n"
-      << "counting_memory_pct = " << counting_memory_pct << "   ; percent of installed memory the setup menu's counts may take at once\n"
-      << "merge_cache_pct = " << merge_cache_pct << "   ; percent of the filter memory kept for merged filters between counts\n"
-      << "unit_time_ms = " << unit_time_ms << "   ; the time budget: the longest one unit may take to open\n"
-      << "item_memory_pct = " << item_memory_pct << "   ; percent of installed memory the items around you may take\n"
-      << "\n[controls]\n"
-      << "mouse_sensitivity = " << mouse_sensitivity << "   ; percent\n"
-      << "invert_mouse_y = " << on_off(invert_mouse_y) << "\n"
-      << "\n[models]\n"
-      << "text_model = " << text_model << "   ; a model folder CHAT talks with; empty: the model in hand\n"
-      << "picture_model = " << picture_model << "   ; a picture model's run folder DRAW uses; empty: the first trained one\n"
-      << "\n[language]\n"
-      << "language = " << language << "\n";
+    const std::string t = text();
     std::ofstream out(path, std::ios::binary);
-    out << o.str();
+    out << t;
     return bool(out);
 }
 

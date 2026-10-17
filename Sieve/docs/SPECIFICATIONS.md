@@ -223,13 +223,16 @@ The client always displays: line, view, zoom depth, current address (truncated, 
 
 ### 5.3.1 Application Settings (as built)
 
-Besides the state spaces (§5.1) and the filters (§8.5), the client keeps its own settings in `sieve-hallway.ini` next to the executable, edited in the main menu (Start Sieve / Settings / Exit Sieve) and applied at once:
+Besides the filters (§8.5), the client keeps its settings, the state spaces' shapes (§5.1) among them, in `sieve-hallway.ini` next to the executable, edited in the main menu (Start Sieve / Settings / Exit Sieve) and applied at once:
 
 - **Graphics:** resolution (chosen from the display on first start), fullscreen, VSync (on by default), **Geometry Edge Glow** and **Real Graphics** (each turns the other off; both off by default), **Door Portals** (off by default; turning Real Graphics on turns it on, and nothing turns it off), and an FPS counter. Door Portals fills each doorway with procedural data noise in the colour of the line it leads to — an integer hash of the noise cell (two screen pixels square) and the frame number, fading to black at the frame. Real Graphics draws the four models of `data/meshes` (`hallway`, `bookshelf`, `book`, `marker`, one set per line) with a depth buffer; any missing model leaves that part wireframe.
 - **Controls:** mouse sensitivity and invert mouse Y. While a unit is in hand the player stands still.
+- **The setup menu's settings** (`[setup]`): every line's shape and the GLOBAL settings, under the hallway's option names with `_` for `-` (`items_per_wall`, `ai_width`, `binary_length`, ...), saved when the setup menu changes them. The options given to the hallway win over them for that run.
+- **Paths** (`[paths]`): `ffmpeg`, the program that reads and writes the formats Sieve does not read itself (`--ffmpeg` wins over it).
+- **The file:** every entry is written, each with its value and a comment, and one with nothing set is written empty. A file lacking an entry is written again at start, keeping its values; an entry that cannot be read leaves its setting as it was. Written from the defaults and again from that file, it is the same byte for byte (`hallway --write-settings`).
 - **Language:** every on-screen string comes from a language file in `data/lang` (`key = value`, UTF-8), whose first line names its bitmap font in `data/fonts` (Unifont `.hex` format). A key a language leaves out falls back to English.
 
-None of this changes an address, a filter or a count: it is presentation only.
+None of this but `[setup]` changes an address, a filter or a count: the rest is presentation only. `[setup]` is the state spaces' shapes (§5.1), kept so that the next start begins with them.
 
 ### 5.4 Appearance
 

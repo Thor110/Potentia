@@ -343,9 +343,11 @@ uint64_t large_file_bytes()
 
 // ---------------------------------------------------------------- settings
 
-Settings Settings::from_args(const sieve::cli::Args& a)
+Settings Settings::from_args(const sieve::cli::Args& a) { return from_args(a, Settings{}); }
+
+Settings Settings::from_args(const sieve::cli::Args& a, const Settings& base)
 {
-    Settings s;
+    Settings s = base;
     s.start_line = a.get("line", s.start_line);
     if (s.start_line == "pages") s.start_line = "text"; // another name for the text line
     s.mode = a.get("mode", s.mode);
@@ -353,7 +355,7 @@ Settings Settings::from_args(const sieve::cli::Args& a)
     s.length = parse_u32(a, "length", s.length);
     s.alphabet = a.get("alphabet", s.alphabet);
     s.canon = a.get("canon", s.canon);
-    s.model = a.get("model") != "none";
+    if (a.has("model")) s.model = a.get("model") != "none";
     s.image_w = parse_u32(a, "image-width", s.image_w);
     s.image_h = parse_u32(a, "image-height", s.image_h);
     s.image_palette = a.get("image-palette", s.image_palette);
@@ -466,6 +468,140 @@ void Settings::apply(sieve::cli::Args& a) const
     a.opts["video-fps"] = std::to_string(video_fps);
     if (ffmpeg.empty()) a.opts.erase("ffmpeg");
     else a.opts["ffmpeg"] = ffmpeg;
+}
+
+namespace {
+
+// [setup] in sieve-hallway.ini: each setting's option, in the setup menu's order (GLOBAL, then the
+// lines in door order), and what it is.
+struct SetupKey
+{
+    const char* option;
+    const char* note;
+};
+constexpr SetupKey kSetupKeys[] = {
+    {"line", "the line the hallway starts on"},
+    {"mode", "ordering: positional, scrambled or guided"},
+    {"key", "the key the scrambled ordering's shuffle is made from"},
+    {"items-per-wall", "items on one room's two walls, a power of two from 2 to 4096"},
+    {"title-length", "letters in every line's titles, but the books line's; 0: no titles"},
+    {"item-letters", "the letter size items are drawn for, in pixels; smaller letters are dashes"},
+    {"close-up", "the widest close-up display: screen, 0 for none, or a power of two in pixels"},
+    {"limits-focus", "the line FIND MY LIMITS grows (all: every line)"},
+    {"length", "pages: characters a page"},
+    {"alphabet", "pages: the alphabet (lower27, babel29, ascii95, or one sieve alphabets lists)"},
+    {"canon", "pages: the warp rules, v2 or v1"},
+    {"model", "pages: the guided ordering's model, default or none"},
+    {"image-width", "image: pixels across"},
+    {"image-height", "image: pixels down"},
+    {"image-palette", "image: the palette, mono, ega16, rgb332 or rgb24"},
+    {"image-fit", "image: how a picture from a file is fitted, levels (canon-image-v2) or average (v1)"},
+    {"note-set", "audio: the set, notes104, notes2, notes3 or pcm"},
+    {"notes", "audio: notes a unit (each voice's, on notes2 and notes3)"},
+    {"note-low", "audio, notes2: the lowest note"},
+    {"note-high", "audio, notes2: the highest note"},
+    {"note-durations", "audio, notes2: the lengths, from s e E q Q h H w"},
+    {"voices", "audio, notes2: voices"},
+    {"notes3-low", "audio, notes3: the lowest note"},
+    {"notes3-high", "audio, notes3: the highest note"},
+    {"notes3-tpq", "audio, notes3: ticks a quarter note"},
+    {"notes3-longest", "audio, notes3: the longest length, in ticks"},
+    {"notes3-levels", "audio, notes3: loudness levels, 1 to 127"},
+    {"notes3-voices", "audio, notes3: voices"},
+    {"notes3-tempo", "audio, notes3: quarter notes a minute, 1 to 1000"},
+    {"notes3-instruments", "audio, notes3: a General MIDI program (0 to 127) a voice, comma-separated"},
+    {"samples", "audio, pcm: samples a channel in a unit"},
+    {"pcm-rate", "audio, pcm: samples a second"},
+    {"pcm-bits", "audio, pcm: bits a sample"},
+    {"pcm-channels", "audio, pcm: channels"},
+    {"video-width", "video: pixels across"},
+    {"video-height", "video: pixels down"},
+    {"video-frames", "video: frames a unit"},
+    {"video-palette", "video: the palette, mono, ega16, rgb332 or rgb24"},
+    {"video-fit", "video: how a video from a file is fitted, levels or average"},
+    {"video-fps", "video: frames a second, for a video saved as GIF, MP4 or WebM"},
+    {"book-pages", "books: pages after the cover and the title page"},
+    {"track-units", "tracks: units of audio after the cover and the title"},
+    {"movie-units", "movies: units of video after the cover and the title"},
+    {"vertices", "models: vertices"},
+    {"faces", "models: triangles"},
+    {"coords", "models: the steps across [-1, 1] a coordinate takes"},
+    {"model-tile", "models: the picture on a crate's face, pixels square, a power of two"},
+    {"world-models", "worlds: models after the cover and the title"},
+    {"world-grid", "worlds: cells along each side of the grid, up to 1024"},
+    {"ai-layers", "AI: layers, 1 to 64"},
+    {"ai-width", "AI: the width, 2 to 4096, which the heads divide into even parts"},
+    {"ai-heads", "AI: attention heads"},
+    {"ai-bits", "AI: bits a weight, 1 to 8"},
+    {"binary-length", "binary: every file of 0 to this many bytes"},
+};
+
+std::string setup_key(const char* option)
+{
+    std::string k = option;
+    std::replace(k.begin(), k.end(), '-', '_');
+    return k;
+}
+
+bool one_of(const std::vector<std::string>& v, const std::string& x) { return std::find(v.begin(), v.end(), x) != v.end(); }
+
+// Whether the settings' named parts (the ones given by a word, not a number) are ones the lines
+// can be made with. The numbers are checked as the hallway's options are (from_args).
+bool named_parts_ok(const Settings& s)
+{
+    const std::vector<std::string> fits = {"levels", "average"};
+    if (!one_of(kStartLines, s.start_line) || !one_of(kModes, s.mode) || !one_of(kCanons, s.canon) || !one_of(kNoteSets, s.note_set) ||
+        !one_of(kFocuses, s.limits_focus) || !one_of(fits, s.image_fit) || !one_of(fits, s.video_fit) || s.key.empty())
+        return false;
+    try
+    {
+        alphabet_size(s.alphabet);
+        palette_size(s.image_palette);
+        palette_size(s.video_palette);
+        sieve::note_midi_of(s.note_low);
+        sieve::note_midi_of(s.note_high);
+        sieve::notes3_midi_of(s.n3_low);
+        sieve::notes3_midi_of(s.n3_high);
+    }
+    catch (const std::exception&)
+    {
+        return false;
+    }
+    return true;
+}
+
+} // namespace
+
+std::vector<Settings::Entry> Settings::entries() const
+{
+    sieve::cli::Args a;
+    apply(a);
+    std::vector<Entry> out;
+    for (const SetupKey& k : kSetupKeys)
+        out.push_back({setup_key(k.option), std::string(k.option) == "model" ? (model ? "default" : "none") : a.get(k.option), k.note});
+    return out;
+}
+
+bool Settings::set_entry(const std::string& key, const std::string& value)
+{
+    const SetupKey* found = nullptr;
+    for (const SetupKey& k : kSetupKeys)
+        if (setup_key(k.option) == key) found = &k;
+    if (!found || value.empty()) return false;
+    if (key == "model" && value != "default" && value != "none") return false;
+    sieve::cli::Args a;
+    a.opts[found->option] = value;
+    try
+    {
+        const Settings t = from_args(a, *this);
+        if (!named_parts_ok(t)) return false;
+        *this = t;
+        return true;
+    }
+    catch (const std::exception&)
+    {
+        return false; // a number that is not one (from_args throws), or 0 where 0 is not allowed
+    }
 }
 
 // b^e mod the tile (books_per_tile), by squaring: how many slots a count leaves in its last tile.

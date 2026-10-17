@@ -82,8 +82,8 @@ const char* kUsage =
     "                      AI: every language model of this shape (default 1 layer, width 16, 2 heads, 4 bits a\n"
     "                      weight; aispace-v1), numbered by its weights: take one and talk to it (Enter)\n"
     "  --ffmpeg PATH       the ffmpeg that reads and writes picture, video and sound formats beyond\n"
-    "                      PNG, JPEG, BMP, GIF, TGA, WAV and MIDI (default: SIEVE_FFMPEG, then beside\n"
-    "                      the hallway, then the PATH); kept in the settings\n"
+    "                      PNG, JPEG, BMP, GIF, TGA, WAV and MIDI (default: ffmpeg in the settings' [paths],\n"
+    "                      then SIEVE_FFMPEG, then beside the hallway, then the PATH)\n"
     "  --video-fps N       a video saved as GIF, MP4 or WebM (with ffmpeg): frames a second (default 8)\n"
     "  --key K             scramble key (default sieve)\n"
     "  --mode positional|scrambled|guided   starting ordering (default positional)\n"
@@ -104,7 +104,9 @@ const char* kUsage =
     "  failures, in their places, to check what the filters set aside). Saved to the\n"
     "  --filters file. In compact mode, G takes a compact address, as the books show it.\n"
     "  --no-menu           go straight into the hallway (F1 opens the setup menu from the hallway)\n"
-    "  --settings PATH     application settings (default: sieve-hallway.ini next to the executable)\n"
+    "  --settings PATH     application settings (default: sieve-hallway.ini next to the executable):\n"
+    "                      every setting there is, the setup menu's among them; the options win over it\n"
+    "  --write-settings OUT  write the settings (--settings PATH's, else the defaults) to OUT, and stop\n"
     "  --language CODE     menu language for this run (a file in the lang folder, e.g. en)\n"
     "  --menu              with --screenshot: a picture of the setup menu (--press keys go to it)\n"
     "                      (--busy: while the dimensions are still being calculated, if that is caught)\n"
@@ -586,6 +588,15 @@ int run(const Args& a)
         throw std::invalid_argument("--size expects WxH, e.g. 1280x720");
     const bool shot = a.has("screenshot");
 
+    // --write-settings OUT: the settings file as save() writes it, from --settings PATH or from the
+    // defaults, without a window. Written twice, once from the other, it comes out the same.
+    if (a.has("write-settings"))
+    {
+        const AppSettings s = a.has("settings") ? AppSettings::load(a.get("settings")) : AppSettings{};
+        if (!s.save(a.get("write-settings"))) throw std::runtime_error("cannot write " + a.get("write-settings"));
+        std::cout << "wrote " << a.get("write-settings") << "\n";
+        return 0;
+    }
     // --metrics FILE: the metrics list (IDEAS §19.12), counted without a window or a display.
     const bool metrics = a.has("metrics");
     if (!metrics && !SDL_Init(SDL_INIT_VIDEO)) throw std::runtime_error(std::string("SDL_Init failed: ") + SDL_GetError());
@@ -654,6 +665,7 @@ int run(const Args& a)
         app.resolution = default_resolution(display);
         app.save(app_path);
     }
+    else if (!shot && !app.complete) app.save(app_path); // an older file gains the entries added since, with its own values
     if (!shot && !a.has("size")) { w = app.resolution.w; h = app.resolution.h; }
     if (shot && app.resolution.w <= 0) app.resolution = {w, h}; // the screenshot's own size
     set_language(a.has("language") ? a.get("language") : app.language);
@@ -683,8 +695,20 @@ int run(const Args& a)
         return 0;
     };
 
-    Settings settings = Settings::from_args(a);
+    // The setup menu's settings: sieve-hallway.ini's [setup], and the options over it. The ffmpeg
+    // is --ffmpeg's, else [paths]'s.
+    Settings settings = Settings::from_args(a, app.setup);
+    if (!a.has("ffmpeg")) settings.ffmpeg = app.ffmpeg;
     sieve::cli::set_ffmpeg_path(settings.ffmpeg);
+    // When the setup menu has changed them, they are saved to [setup] (a scripted picture saves
+    // only into a --settings file, never into the one beside the program). They are saved as the
+    // menu had them, options and all, so that the next start begins where this one left off.
+    auto keep_setup = [&](const Settings& before, const Settings& now) {
+        if (now == before || (shot && !a.has("settings"))) return;
+        app.setup = now;
+        app.setup.ffmpeg.clear(); // [paths] keeps it, not [setup]
+        app.save(app_path);
+    };
     // Filter settings: --filters PATH, or sieve-filters.ini next to the executable.
     const std::string filters_path = a.has("filters") ? a.get("filters") : FilterConfig::default_path().string();
     if (a.has("filters") && !std::filesystem::exists(filters_path))
@@ -837,6 +861,7 @@ int run(const Args& a)
         Menu menu(window, renderer, settings, filters, filters_path, &app, a.has("settings") ? app_path : std::filesystem::path());
         if (a.has("press"))
             for (const auto& [key, mod] : parse_presses(a.get("press"))) menu.press(key, mod);
+        keep_setup(settings, menu.settings());
         menu.render();              // starts the counting workers
         // A picture shows the counts, not "counting..." (--busy: while they are still being
         // counted, if they take long enough to be caught).
@@ -1063,6 +1088,7 @@ int run(const Args& a)
         {
             Menu menu(window, renderer, settings, filters, filters_path, &app, app_path);
             const Menu::Result r = menu.run();
+            keep_setup(settings, menu.settings());
             if (r == Menu::Result::Quit) break;
             went_in_thin = menu.went_in_thin();
             settings = menu.settings();
@@ -1074,7 +1100,9 @@ int run(const Args& a)
             }
         }
         Args ha = a;
-        if (show_menu || settings_chosen) settings.apply(ha);
+        // The setup as the menu left it, or as the settings file has it (when it says anything
+        // the defaults do not, so that a run with neither is built from its options alone).
+        if (show_menu || settings_chosen || !(app.setup == Settings{})) settings.apply(ha);
         if (!first)
             for (const char* k : {"warp", "goto", "zoom", "tile", "pose", "walk", "press"}) ha.opts.erase(k);
         // The hallway is built on a worker thread -- a large shape takes a while, and none of
@@ -1205,6 +1233,7 @@ int run(const Args& a)
                 if (in_game_menu == Menu::Result::Enter)
                 {
                     went_in_thin = menu.went_in_thin();
+                    keep_setup(settings, menu.settings());
                     settings = menu.settings();
                     filters = menu.filters();
                 }

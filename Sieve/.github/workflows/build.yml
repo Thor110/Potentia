@@ -446,6 +446,25 @@ jobs:
           rm -f gm.ini
           $H --main-menu --settings gm.ini --press "Down,Down,Down,Down,Down,Return,Return,Down,Down,Down,Down,Down,Down,Right" --screenshot gm.png > /dev/null
           grep -q "^graphics_memory_gb = 5" gm.ini
+          # sieve-hallway.ini holds every setting there is, the setup menu's and ffmpeg's among
+          # them, each with a comment; and written from the defaults, then written again from that
+          # file, it comes out the same, byte for byte.
+          rm -f defaults.ini again.ini
+          $H --write-settings defaults.ini | q "wrote defaults.ini"
+          $H --settings defaults.ini --write-settings again.ini > /dev/null
+          cmp defaults.ini again.ini
+          for k in "^\[setup\]" "^\[paths\]" "^ffmpeg = *;" "^binary_length = 32 " "^ai_width = 16 " "^items_per_wall = 128 " "^title_length = 32 "; do grep -q "$k" defaults.ini; done
+          if grep -v "^;" defaults.ini | grep -v "^\[" | grep -v "^$" | grep -v " ; "; then exit 1; fi
+          # An older file gains the entries it lacks and keeps its own values; a value a setting
+          # cannot have leaves it at its default.
+          printf '[world]\nunit_time_ms = 70\n[setup]\nlength = 64\nalphabet = nonsense\n[paths]\nffmpeg = /opt/ff/ffmpeg\n' > older.ini
+          $H --settings older.ini --write-settings newer.ini > /dev/null
+          for k in "^unit_time_ms = 70 " "^length = 64 " "^alphabet = lower27 " "^ffmpeg = /opt/ff/ffmpeg " "^vsync = on "; do grep -q "$k" newer.ini; done
+          # The setup menu saves its own settings there too: the first row, the line to start on.
+          rm -f setup.ini
+          $H --menu --settings setup.ini --press "Right" --screenshot setup.png > /dev/null
+          grep -q "^line = " setup.ini
+          if grep -q "^line = text " setup.ini; then exit 1; fi
           # A different shape is a different line, and the setup menu draws all six of them.
           $exe mesh --vertices 12 --faces 20 --coords 64 | tr -d '\r' | q "^space        models/V12/F20/C64/key=sieve/modelspace-v1"
           $H --no-menu --line models --vertices 12 --faces 20 --coords 64 --walk "0,0" --screenshot shape.png | sed -n 1p | q "^MODELS line"
@@ -537,7 +556,7 @@ jobs:
           rm -f be.ini
           $H --main-menu --settings be.ini --press "Down,Down,Down,Down,Down,Return,Return,Down,Down,Down,Return" --screenshot be.png > /dev/null
           grep -q "^edge_glow = on" be.ini
-          if grep -q "binary" be.ini; then exit 1; fi
+          if grep -Eq "binary[_-]edge" be.ini; then exit 1; fi
           if $H --help 2>&1 | grep -q "binary-edge"; then exit 1; fi
           test -s walk.png
           test -s edge.png

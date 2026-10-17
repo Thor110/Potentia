@@ -3046,6 +3046,51 @@ can see every setting in one file and set it there.
   `C:\ffmpeg\bin` on `PATH`. IDEAS §19.79 and the README said the same wrong thing and are
   corrected.
 
+### `sieve-hallway.ini` holds every setting (17 October 2026)
+The task above, built. The handoff asked to check first where the setup menu's settings were
+already saved: nowhere. `sieve-filters.ini` holds only the filters, and the `.sieve` files are
+items, favourites and training runs, so every line's shape started from the defaults (or the
+command line) on every start. `sieve-hallway.ini` is now their one home.
+- **`[setup]`:** every setting of the setup menu, all 54 of them (`client/setup.hpp`, the
+  `Settings` struct, moved out of `menu.hpp` so the settings file can hold one). The keys are the
+  hallway's option names with `_` for `-` (`items_per_wall`, `ai_width`, `binary_length`), in the
+  menu's order, GLOBAL first. Their table, with the comments, is `kSetupKeys` in `menu.cpp`, beside
+  `from_args` and `apply`; it was checked against `apply` by hand here, and a setting added to
+  `Settings` needs a row there too. `model` is written `default` or `none`.
+- **`[paths]`:** `ffmpeg =`, the program itself. The hallway passes it to `set_ffmpeg_path`;
+  `--ffmpeg` still wins. What Edward was told on 17 October (above) is now true.
+- **Every entry is written,** each with its value and a comment in one column, and an empty one
+  is written empty (`AppSettings::rows`, `text`). The [graphics] entries that had no comment
+  have one.
+- **An older file is rewritten at start** when it lacks an entry (`AppSettings::complete`),
+  keeping its values. Not in scripted pictures, which never write the file unless given one.
+- **Reading `[setup]`:** each entry goes through `from_args`, so a number is checked as the option
+  is. A word is checked against what the lines can be made with (`named_parts_ok`: the alphabet,
+  the palettes, the note names, the modes, the fits). A value that fails leaves the setting as it
+  was, so a mistyped line cannot stop the hallway from starting.
+- **When `[setup]` is saved:** whenever the setup menu leaves with its settings changed (into the
+  hallway, back to the main menu, or quitting), and from F1 in the hallway on ENTER. It is saved
+  as the menu had it, options and all, so `--length 64` given once and then a change in the menu
+  keeps 64. A scripted `--menu` picture saves only into a `--settings` file.
+- **Runs without the menu:** `--no-menu` now builds from `[setup]` as well, when it says anything
+  the defaults do not. When it says nothing new, the run is built from its options alone, exactly
+  as before, so the CI's pictures are unchanged.
+- **`--write-settings OUT`:** writes the file (from `--settings PATH`, else the defaults) without
+  a window and stops. CI writes it from the defaults, again from that file, and compares the two
+  byte for byte. It also checks that every entry has a comment, that an older file gains its
+  missing entries and keeps its values, and that the setup menu's first row lands in `[setup]`.
+  One older CI line, which failed if the Graphics-written file contained "binary" at all, now
+  looks only for a binary-edge setting, since the file holds `binary_length`.
+- **Checked here:** every client file that includes the changed headers compiles without a
+  warning (`-Wall -Wextra -Wpedantic`, against SDL 3.2.30's headers). A scratch program built on
+  the real `app_settings.cpp`, `from_args`, `apply` and `[setup]` code, with only `sieve_core`
+  built, passed all ten of its checks: the defaults written, loaded and written again are the same
+  byte for byte, and an older file keeps its values, gains its missing entries, leaves bad values
+  at their defaults and reads `ffmpeg`. Not run here: the full hallway build and the new CI lines,
+  which need the hallway itself.
+- **Docs:** README (the settings paragraph and where ffmpeg is looked for), SPECIFICATIONS §5.3.1,
+  IDEAS §19.79.
+
 ### For the next session (17 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show
