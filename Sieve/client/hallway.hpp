@@ -1359,6 +1359,16 @@ public:
     enum class Request { None, Settings, MainMenu, GoToMelody, Tailored, Designer, Harness, GoToPicture, Cipher };
     Request request() const { return request_; }
     void clear_request() { request_ = Request::None; }
+    // The item in hand as I asked the Encryption Engine to take it (its bytes as F would save
+    // them, and its name), once: empty when the engine was opened from the pause menu.
+    std::optional<std::pair<std::vector<uint8_t>, std::string>> take_cipher_item()
+    {
+        auto c = std::move(cipher_item_);
+        cipher_item_.reset();
+        return c;
+    }
+    // Onto the binary line, in front of these bytes: the Encryption Engine's GO TO IT.
+    void go_to_bytes(const std::vector<uint8_t>& bytes, const std::string& name) { walk_to_file(bytes, name, bytes.size() > binary_space_->max_bytes()); }
     // After Settings, the new graphics and language: signs are lettered again, the rest is set.
     void settings_changed() { release_signs(); }
 
@@ -1371,6 +1381,7 @@ private:
     bool pause_open_ = false, pause_confirm_ = false;
     int pause_row_ = 0;
     Request request_ = Request::None;
+    std::optional<std::pair<std::vector<uint8_t>, std::string>> cipher_item_; // for take_cipher_item
     std::vector<SDL_FRect> pause_rects_; // the rows as last drawn, for the pointer
 
     // ---- the media player (media_player.cpp): the music's settings, its recent melodies and
@@ -1795,6 +1806,14 @@ private:
     std::unique_ptr<sieve::llm::Tokenizer> ai_tokenizer_;
     std::unique_ptr<sieve::llm::Model> talk_model_;
     std::string talk_, talk_hex_; // the conversation, and the address of the model it is with
+    // The context window: exactly the bytes the model in hand has been given since it last started
+    // (what was said, what it wrote back, files given), kept in step with its position; and a system
+    // prompt for the model file edited in CHAT (empty: system_prompt()).
+    std::string talk_given_, file_system_;
+    bool chat_editing_ = false; // the box holds the context to edit (Ctrl+E): Enter gives it, Esc leaves it
+    void chat_edit_context();   // Ctrl+E: the context into the box, or back out of editing it
+    void chat_apply_context();  // Enter while editing: the model given exactly what the box says
+    std::string context_text(); // what the model is given, as the box shows it (\xNN for a byte that is not text)
     BigUint loop_pos(const BigUint& unit) const;   // unit index -> loop position
     BigUint unit_of_pos(const BigUint& pos) const; // loop position (left-wall slot) -> unit index
     // How many units the current line holds: its loop's count, except on binary (see above). A

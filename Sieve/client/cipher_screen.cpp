@@ -2,13 +2,18 @@
 
 #include "cipher_screen.hpp"
 
+#include "dialogs.hpp"
 #include "font.hpp"
 #include "music.hpp"
 #include "strings.hpp"
 
+#include "cli/locate.hpp" // read_file_bytes
+#include "cli/vault.hpp"
 #include "sieve/cipher.hpp"
 
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
 #include <stdexcept>
 
 namespace hallway {
@@ -22,6 +27,30 @@ constexpr float kLine = 14;    // one line of text, at scale 1 (8-pixel cells an
 constexpr int kMinW = 1024, kMinH = 640;
 constexpr size_t kBreakTop = 5;  // the guesses shown, as `sieve cipher --break` shows them
 constexpr size_t kPreview = 48;  // the bytes of a guess shown beside it
+// BREAK reads at most this much of a long input: the weak ciphers' keys show in far less, and it
+// keeps a large file from holding the screen for seconds on every run.
+constexpr size_t kBreakBytes = 65536;
+// TAB puts an output this long or shorter in as hex the row can show; a longer one goes in as the
+// bytes it is, as a file would.
+constexpr size_t kTabHex = 4096;
+
+std::filesystem::path from_u8(const std::string& s) { return std::filesystem::path(std::u8string(s.begin(), s.end())); }
+
+std::string u8(const std::filesystem::path& p)
+{
+    const std::u8string s = p.u8string();
+    return std::string(s.begin(), s.end());
+}
+
+void SDLCALL input_chosen(void* user, const char* const* files, int)
+{
+    if (files && files[0]) static_cast<CipherScreen*>(user)->file_chosen(files[0], true);
+}
+
+void SDLCALL output_chosen(void* user, const char* const* files, int)
+{
+    if (files && files[0]) static_cast<CipherScreen*>(user)->file_chosen(files[0], false);
+}
 
 void txt(SDL_Renderer* r, float x, float y, const std::string& s, SDL_Color c, float scale = 1) { draw_text(r, x, y, s, scale, c); }
 
@@ -97,6 +126,116 @@ CipherScreen::CipherScreen(SDL_Window* window, SDL_Renderer* renderer) : window_
 
 std::string CipherScreen::output_hex() const { return have_out_ ? hex_of(out_) : std::string(); }
 
+void CipherScreen::give_item(std::vector<uint8_t> bytes, std::string name)
+{
+    item_ = std::move(bytes);
+    item_name_ = std::move(name);
+    set_input_file(*item_, item_name_);
+}
+
+void CipherScreen::set_input_file(std::vector<uint8_t> bytes, std::string name)
+{
+    if (sieve::cli::vault::withheld_bytes(bytes))
+    {
+        status_ = tr("vault.withheld"); // the vault keeps it out of the engine as out of everything else
+        return;
+    }
+    in_bytes_ = std::move(bytes);
+    in_name_ = std::move(name);
+    row_ = kInput;
+    run_recipe();
+}
+
+void CipherScreen::typed_input()
+{
+    if (!in_bytes_) return;
+    in_bytes_.reset();
+    in_name_.clear();
+    input_.clear();
+}
+
+std::string CipherScreen::go_name() const
+{
+    const std::string base = in_name_.empty() ? "engine-output" : in_name_;
+    return base + (action_ == Action::Decrypt ? ".dec" : ".enc");
+}
+
+bool CipherScreen::save_output(const std::string& path)
+{
+    if (!have_out_)
+    {
+        status_ = tr("cipher.no_output");
+        return false;
+    }
+    std::ofstream f(from_u8(path), std::ios::binary);
+    if (!f || !f.write(reinterpret_cast<const char*>(out_.data()), std::streamsize(out_.size())))
+    {
+        status_ = trf("cipher.save_failed", {path});
+        return false;
+    }
+    status_ = trf("cipher.saved", {std::to_string(out_.size()), path});
+    return true;
+}
+
+void CipherScreen::file_chosen(const std::string& path, bool for_input)
+{
+    std::lock_guard<std::mutex> lock(chosen_mx_);
+    chosen_ = std::make_pair(path, for_input);
+}
+
+void CipherScreen::poll_chosen()
+{
+    std::optional<std::pair<std::string, bool>> c;
+    {
+        std::lock_guard<std::mutex> lock(chosen_mx_);
+        c.swap(chosen_);
+    }
+    if (!c) return;
+    if (!c->second)
+    {
+        save_output(c->first);
+        return;
+    }
+    try
+    {
+        set_input_file(sieve::cli::read_file_bytes(from_u8(c->first)), u8(from_u8(c->first).filename()));
+    }
+    catch (const std::exception& ex)
+    {
+        status_ = ex.what();
+    }
+}
+
+void CipherScreen::button(int b)
+{
+    if (b == kItemButton)
+    {
+        if (item_) set_input_file(*item_, item_name_);
+        else status_ = tr("cipher.no_item");
+    }
+    else if (b == kFileButton) open_file_dialog(input_chosen, this, window_, nullptr, 0, nullptr, false);
+    else if (b == kSaveButton)
+    {
+        if (!have_out_) status_ = tr("cipher.no_output");
+        else
+        {
+            const char* docs = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
+            const std::string start = docs ? std::string(docs) + go_name() : go_name();
+            save_file_dialog(output_chosen, this, window_, nullptr, 0, start.c_str());
+        }
+    }
+    else if (b == kGoButton)
+    {
+        if (!have_out_) status_ = tr("cipher.no_output");
+        else if (!can_go_) status_ = tr("cipher.no_go");
+        else
+        {
+            result_ = Result::GoTo;
+            done_ = true;
+        }
+    }
+}
+
 CipherScreen::Result CipherScreen::run()
 {
     SDL_SetWindowRelativeMouseMode(window_, false);
@@ -111,6 +250,7 @@ CipherScreen::Result CipherScreen::run()
             handle(e);
             while (SDL_PollEvent(&e)) handle(e);
         }
+        poll_chosen();
         render();
         present(r_);
     }
@@ -130,6 +270,7 @@ std::string* CipherScreen::text_row()
 
 void CipherScreen::type(const std::string& utf8)
 {
+    if (row_ == kInput) typed_input();
     if (std::string* t = text_row()) *t += utf8;
 }
 
@@ -146,6 +287,12 @@ void CipherScreen::handle(const SDL_Event& event)
     else if (e.type == SDL_EVENT_KEY_DOWN) key(e.key.key, e.key.mod);
     else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
     {
+        for (int i = 0; i < int(button_rects_.size()); ++i)
+            if (e.button.button == SDL_BUTTON_LEFT && inside(button_rects_[size_t(i)], e.button.x, e.button.y))
+            {
+                button(i);
+                return;
+            }
         for (int i = 0; i < int(row_rects_.size()); ++i)
             if (inside(row_rects_[size_t(i)], e.button.x, e.button.y))
             {
@@ -168,7 +315,16 @@ void CipherScreen::key(SDL_Keycode k, SDL_Keymod mod)
     else if (k == SDLK_LEFT || k == SDLK_RIGHT)
     {
         const int dir = k == SDLK_RIGHT ? 1 : -1;
-        if (row_ == kInputKind) input_hex_ = !input_hex_;
+        if (row_ == kInputKind)
+        {
+            // From a file's bytes back to what was typed; otherwise text and hex in turn.
+            if (in_bytes_)
+            {
+                in_bytes_.reset();
+                in_name_.clear();
+            }
+            else input_hex_ = !input_hex_;
+        }
         else if (row_ == kAction) action_ = Action((int(action_) + 3 + dir) % 3);
         else return;
         run_recipe();
@@ -178,22 +334,43 @@ void CipherScreen::key(SDL_Keycode k, SDL_Keymod mod)
     {
         // The output in as the input, in hex: decrypt what was encrypted, or go another round.
         if (!have_out_) return;
-        input_ = hex_of(out_);
-        input_hex_ = true;
+        if (out_.size() > kTabHex)
+        {
+            const std::string name = go_name();
+            in_bytes_ = out_;
+            in_name_ = name;
+        }
+        else
+        {
+            in_bytes_.reset();
+            in_name_.clear();
+            input_ = hex_of(out_);
+            input_hex_ = true;
+        }
         if (action_ == Action::Encrypt) action_ = Action::Decrypt;
         else if (action_ == Action::Decrypt) action_ = Action::Encrypt;
         run_recipe();
     }
     else if (k == SDLK_BACKSPACE)
     {
+        if (row_ == kInput && in_bytes_)
+        {
+            typed_input(); // a file's input is let go whole
+            return;
+        }
         if (std::string* t = text_row())
         {
             if (ctrl) t->clear();
             else pop_char(*t);
         }
     }
+    else if (ctrl && k == SDLK_I) button(kItemButton);
+    else if (ctrl && k == SDLK_O) button(kFileButton);
+    else if (ctrl && k == SDLK_S) button(kSaveButton);
+    else if (ctrl && k == SDLK_G) button(kGoButton);
     else if (ctrl && k == SDLK_V)
     {
+        if (row_ == kInput) typed_input();
         if (std::string* t = text_row())
             if (char* clip = SDL_GetClipboardText())
             {
@@ -214,10 +391,14 @@ void CipherScreen::run_recipe()
     out_.clear();
     try
     {
-        const std::vector<uint8_t> in = input_hex_ ? bytes_of_hex(input_) : std::vector<uint8_t>(input_.begin(), input_.end());
+        const std::vector<uint8_t> in = in_bytes_  ? *in_bytes_
+                                        : input_hex_ ? bytes_of_hex(input_)
+                                                     : std::vector<uint8_t>(input_.begin(), input_.end());
         if (action_ == Action::Break)
         {
-            const auto guesses = sieve::cipher::break_weak(in, 16, kBreakTop);
+            const std::vector<uint8_t> head(in.begin(), in.begin() + std::ptrdiff_t(std::min(in.size(), kBreakBytes)));
+            const auto guesses = sieve::cipher::break_weak(head, 16, kBreakTop);
+            if (head.size() < in.size()) lines_.push_back(trf("cipher.break_first", {std::to_string(head.size()), std::to_string(in.size())}));
             lines_.push_back(trf("cipher.break_head", {std::to_string(in.size()), std::to_string(sieve::cipher::english_score(in))}));
             for (size_t i = 0; i < guesses.size(); ++i)
             {
@@ -277,12 +458,17 @@ void CipherScreen::render()
     for (int i = 0; i < kRows; ++i)
     {
         std::vector<std::string> value;
-        if (i == kInput) value = wrap(input_, cells);
+        if (i == kInput && in_bytes_)
+        {
+            const std::vector<uint8_t> head(in_bytes_->begin(), in_bytes_->begin() + std::ptrdiff_t(std::min<size_t>(in_bytes_->size(), 24)));
+            value = {fit_cells(trf("cipher.input.file", {in_name_, std::to_string(in_bytes_->size()), hex_of(head) + (head.size() < in_bytes_->size() ? ".." : "")}), cells)};
+        }
+        else if (i == kInput) value = wrap(input_, cells);
         else if (i == kRecipe) value = wrap(recipe_, cells);
-        else if (i == kInputKind) value = {"< " + tr(input_hex_ ? "cipher.kind.hex" : "cipher.kind.text") + " >"};
+        else if (i == kInputKind) value = {"< " + tr(in_bytes_ ? "cipher.kind.file" : input_hex_ ? "cipher.kind.hex" : "cipher.kind.text") + " >"};
         else value = {"< " + tr(actions[int(action_)]) + " >"};
         const bool chosen = row_ == i;
-        if (chosen && (i == kInput || i == kRecipe)) value.back() += "_"; // the caret, where typing goes
+        if (chosen && ((i == kInput && !in_bytes_) || i == kRecipe)) value.back() += "_"; // the caret, where typing goes
         const float rh = kLine * float(value.size()) + 6;
         row_rects_[size_t(i)] = {x - 6, y - 3, W - 2 * x + 12, rh};
         if (chosen)
@@ -293,6 +479,26 @@ void CipherScreen::render()
         txt(r_, x, y, tr(labels[i]), chosen ? kAccent : kGrey);
         for (size_t l = 0; l < value.size(); ++l) txt(r_, x + label_w, y + kLine * float(l), value[l], kWhite);
         y += rh + 6;
+    }
+
+    // The buttons: the item in hand or a file as the input, the output saved or gone to.
+    {
+        const char* names[kButtons] = {"cipher.button.item", "cipher.button.file", "cipher.button.save", "cipher.button.go"};
+        const bool on[kButtons] = {item_.has_value(), true, have_out_, have_out_ && can_go_};
+        button_rects_.assign(kButtons, SDL_FRect{});
+        float bx = x;
+        for (int b = 0; b < kButtons; ++b)
+        {
+            const std::string label = tr(names[b]);
+            const SDL_FRect r{bx, y, text_width(label, 1) + 20, 20};
+            button_rects_[size_t(b)] = r;
+            const SDL_Color c = on[b] ? kAccent : kDim;
+            SDL_SetRenderDrawColor(r_, c.r, c.g, c.b, 255);
+            SDL_RenderRect(r_, &r);
+            txt(r_, r.x + 10, r.y + 6, label, on[b] ? kWhite : kDim);
+            bx += r.w + 8;
+        }
+        y += 28;
     }
 
     // The output.

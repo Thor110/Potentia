@@ -3135,6 +3135,42 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   short design first: which windows, and what "the item and the keys" mean in each), and the
   Encryption Engine's item-in-hand button (stage 2).
 
+### The rest of §19.79: the engine takes items and files, and the context window (17 October 2026)
+- **Edward's calls first:**
+  - *Controls between windows* is mostly the ethos now: most things hand off to most things
+    already, the Encryption Engine being the exception (fixed below). He will keep an eye out.
+  - *CHAT on every line* (§19.80) is cancelled for now: he is not sure it fits. IDEAS §17.2
+    records it; the rest of §19.80 stands.
+- **The Encryption Engine with files and items** (`client/cipher_screen.*`):
+  - **I** on the item page opens the engine with the item in hand as its input, its bytes as F
+    would save them (`item_file`, or the file's own on the binary line). It has to be a key of
+    the page: Esc puts the item down before the pause menu opens. The vault withholds here as
+    everywhere.
+  - The INPUT row names the file and shows its first 24 bytes; typing there, or Backspace, goes
+    back to typed input; Left/Right on INPUT IS too. Ctrl+I takes the item again, Ctrl+O takes a
+    file. TAB puts an output of more than 4,096 bytes in as bytes rather than as hex.
+  - Ctrl+S saves the output; **GO TO IT** (Ctrl+G) puts you on the binary line in front of it
+    (`Hallway::go_to_bytes`; from the main menu, through the same `pending_file` as the File
+    Locator's Go to it). A row of four buttons does the same with the mouse.
+  - BREAK reads at most the first 64 KB of a long input, and says so.
+  - Scripted: `--cipher-in FILE`, `--cipher-out FILE`. CI checks that the engine's output on a
+    file is the same bytes as `sieve cipher --in --out` makes of it.
+- **The context window** (`chat.cpp`): `/context` shows what the model is given; **Ctrl+E**
+  puts it in the box to edit; Enter gives it, Esc or Ctrl+E leaves it as it was.
+  - *The model in hand:* `talk_given_` holds every byte it has been fed since it started, kept to
+    its position after each reply (the last byte written at the length limit is never fed). A
+    byte that is not text shows as `\xNN` and a backslash as `\x5c`, so the edit is exact
+    (checked here over every byte value). Enter starts the model again and feeds it exactly the
+    box, cut to leave room for a reply.
+  - *A model file:* its system prompt (`file_system_`); Enter starts the conversation again with
+    it. A model changed in the setup menu forgets it.
+  - The box only types at its end, so Ctrl+C copies it to edit elsewhere, Ctrl+V pastes it back,
+    and Ctrl+Backspace clears it.
+- **HELP** has a row for I.
+- **Checked here:** every changed file compiles warning-free against SDL's headers. Not run here:
+  the build, the unit suite, CI. No CI line drives Ctrl+E yet: it needs keys pressed after
+  `--talk`, which the scripting does not order.
+
 ### For the next session (17 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show
@@ -3144,11 +3180,11 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   `working-directory: Sieve` (or `defaults.run.working-directory`) and the paths in it checked.
   This was reported, but Edward has not decided yet; don't move it unasked.
 - **Still open, in IDEAS order:**
-  - the rest of §19.79: the engine's item-in-hand button, controls between windows, and editing
-    the context window (the other items were built and tested on 17 October: see the entry above);
-  - §19.80 (tabs on every line), §19.81 to §19.83 (models), §19.82 (encrypting files) and §19.85
-    (skeletons);
-  - Encryption Engine stage 2;
+  - §19.79 is done, but voice in CHAT;
+  - §19.80 (tabs on every line, CHAT left out for now: §17.2), §19.81 to §19.83 (models), §19.82
+    (`.sieve` recipes and keys split by secret sharing) and §19.85 (skeletons);
+  - the rest of Encryption Engine stage 2: a layer keyed by a picture (§19.76), the catalogue on
+    the screen;
   - the characters model's sampling experiments (§19.73: argmax in parallel per level is the
     likely reason no character comes out recognisable; untested);
   - V5S2;

@@ -1370,6 +1370,13 @@ few places as land near the unit (up to 20) and the walk carries the rest, leadi
 bit, because it is always 1.) Edward had hoped for a byte at least; it is one bit at most, and on
 an address nothing, so it is not worth a format of its own.
 
+**17.2 CHAT on every line (Edward, 17 October 2026; deprecated for now).** The proposal (§19.80):
+the CHAT tab on the item page of every line, the item in hand given to whichever model is loaded,
+as a file is given now with the plus button. Edward has cancelled it for now: he is not sure it
+fits. CHAT stays where it is, on the AI line, where the item in hand is the model itself; a file
+from any line can still be given to it there (the plus button, Ctrl+O). The rest of §19.80 stands:
+a tab with a use belongs on every line, as HELP now is.
+
 ## 18. Edward's ideas of 11 October 2026
 
 **18.1 Random maze generators as distortion filters.** Edward's words: random maze generators used
@@ -2817,8 +2824,9 @@ combinations of data, to be expanded and catalogued mathematically.
 
   It sits after Settings, so the menus' existing rows keep their places. CI: `hallway --cipher
   --script ...`.
-- *Stage 2 to come:* the item in hand or a file as the input, the output as an item to Go to or
-  save, a layer keyed by a picture (§19.76), and the catalogue on the screen.
+- *Stage 2, built (17 October 2026):* the item in hand or a file as the input, the output as an
+  item to Go to or save. *Still to come:* a layer keyed by a picture (§19.76), and the catalogue
+  on the screen.
 - *Earlier plan, kept for the record:* the Encryption Engine screen on
   the main and pause menus, each layer's output an item; then layers that change the shape (a file
   as a picture, a page as a melody), which is the "as anything".
@@ -3363,9 +3371,14 @@ how the game feels to use.
     of "no line holds that kind".
 - **The Encryption Engine with the item in hand:** a button in the engine's window that takes the
   item in hand (its bytes, as F would save them) as the input. The output becomes an item that
-  can be gone to.
+  can be gone to. *Built (17 October 2026):* I on the item page opens the engine with it (Esc
+  would put the item down before the pause menu opened); Ctrl+O takes a file; Ctrl+S saves the
+  output; GO TO IT puts you on the binary line in front of it; buttons do the same.
 - **Controls that flow between windows:** a window opened from another, or from an item, should
   take the item and the keys along with it, so nothing has to be put down to be used elsewhere.
+  *Mostly the ethos now (Edward, 17 October 2026):* most things can or do hand off to most things
+  already, the Encryption Engine being the exception (the item in hand, below). He will keep an
+  eye out for others.
 - **The window comes back to the front after a file is opened.** It still does not, from any of
   the ways a file is opened (the plus button, Ctrl+O, the File Locator, the system's file
   window).
@@ -3384,8 +3397,9 @@ how the game feels to use.
   *Built (17 October 2026):* a click on any tab goes to it, in CHAT too (`click_hand_tab`).
 - **Chat that grows:** save the conversation as a log, and edit the context window (what the model
   is given) from a tab, with voice and speech to come, as in the other systems.
-  *Built (17 October 2026):* the log, `/log [PATH]` or Ctrl+L. Still to come: editing the context
-  window, and voice.
+  *Built (17 October 2026):* the log, `/log [PATH]` or Ctrl+L; and the context window, `/context`
+  to see it and Ctrl+E to edit it (the model in hand's every byte, kept in step with its position;
+  a model file's system prompt). Still to come: voice.
 - **A help tab:** in CHAT, and on every item's page, saying what can be done there and with which
   keys. It is part of the architecture, not an afterthought.
   *Built (17 October 2026):* HELP on every item's page, after SORT and META and before CHAIN and
@@ -3397,7 +3411,8 @@ how the game feels to use.
 **19.80 One less if: a tab with a use belongs on every line (Edward, 17 October 2026).** His words:
 "If a tab has utility, it should exist in all dimensions," and "one less if statement" (both in
 VOICES.md). Apply that rule always, if and where possible.
-- **CHAT on every line:** on the AI line the item in hand is the model itself. On every other line
+- ~~**CHAT on every line:**~~ *Deprecated for now (Edward, 17 October 2026; §17.2): he is not sure
+  it fits.* On the AI line the item in hand is the model itself. On every other line
   the item is a file or unit, and the model is whichever is loaded (or a chosen chain, §19.46).
   CHAT then means talking about the item with that model: its bytes given as a file is given now
   (the plus button). Equating a model with a file "by some ruleset or length along the line" is
@@ -3405,8 +3420,8 @@ VOICES.md). Apply that rule always, if and where possible.
 - **Why it matters:** each special case removed is one less branch to keep right, and a system
   that works the same on every line can be learned once. The rule is the code's as much as the
   player's.
-- **What follows:** CHAT, COST, the help tab and the Encryption Engine's button become tabs of any
-  item. A line without a use for one shows it greyed with the reason, rather than hiding it.
+- **What follows:** COST, the help tab and the Encryption Engine's button become tabs of any item
+  (CHAT left out for now, §17.2). A line without a use for one shows it greyed with the reason, rather than hiding it.
 
 **19.81 Folding as a second temperature, and the models' own maps (Edward, 17 October 2026).** His
 ideas, in his order:
@@ -3456,7 +3471,8 @@ every verified anchor, now and later, and runs a baseline analysis until all fil
 baseline, then studies further as new files are added: pinning down the rules of encryption on
 all known files, and filtering them out as an automaton where possible.
 - **Files through the engine:** the input from a file, or the item in hand (§19.79), and the
-  output to a file or an item. The recipe and its keys are saved as a `.sieve`, so an encrypted
+  output to a file or an item. *Built (17 October 2026); the `.sieve` recipe and split keys are
+  still to come.* The recipe and its keys are saved as a `.sieve`, so an encrypted
   file and how to open it can travel together or apart.
 - **Keys split into several:** this has a standard name, *secret sharing*. Shamir's scheme
   (1979) splits a key into n shares so that any k of them rebuild it and fewer reveal nothing. It

@@ -1807,6 +1807,29 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
     case SDLK_J:
         if (in_hand_) jump_kind();
         break;
+    case SDLK_I:
+        // The Encryption Engine, with the item in hand as its input: its bytes, as F would save them.
+        if (in_hand_ && !withheld(*in_hand_))
+        {
+            try
+            {
+                std::string name;
+                std::vector<uint8_t> bytes;
+                if (on_binary() && in_hand_->is_file)
+                {
+                    bytes = file_of(*in_hand_);
+                    name = binary_file_name(*in_hand_, cli::sha256_hex(bytes));
+                }
+                else bytes = item_file(*in_hand_, name);
+                cipher_item_ = std::make_pair(std::move(bytes), name);
+                request_ = Request::Cipher;
+            }
+            catch (const std::exception& ex)
+            {
+                warn(trf("msg.jump.failed", {ex.what()}));
+            }
+        }
+        break;
     case SDLK_K:
         if (in_hand_) tailor_in_hand(); // COST: the filters tailored to it (tailoring.cpp)
         break;

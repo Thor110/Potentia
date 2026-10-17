@@ -774,6 +774,7 @@ void Hallway::draw_help(const Book& bk, float x, float cy, float pw, float botto
 {
     const SDL_Color ink = theme().edge;
     std::vector<const char*> rows = {"hand.help.put", "hand.help.tabs", "hand.help.viewer", "hand.help.save", on_binary() ? "hand.help.jump.binary" : "hand.help.jump"};
+    rows.push_back("hand.help.cipher");
     if (!bk.ai) rows.push_back("hand.help.tailor");
     rows.push_back("hand.help.map");
     if (bk.parts) rows.push_back("hand.help.pages");

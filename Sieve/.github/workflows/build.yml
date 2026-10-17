@@ -1071,6 +1071,12 @@ jobs:
           # the output in as the input, and turns encrypt into decrypt), and a weak cipher broken.
           $H --cipher --screenshot cipher.png | tr -d '\r' | q "^output: c0dfd54c54f353b432f1ba19925f$"
           $H --cipher --script "Tab" --screenshot cipher-back.png | tr -d '\r' | q "^output: 61747461636b206174206461776e$"
+          # A file's bytes as the input (as the item in hand or Ctrl+O gives them), and the output
+          # saved: the same bytes as sieve cipher makes of the same file with the same recipe.
+          rm -f engine.enc cli.enc
+          $H --cipher --cipher-in tests/manifest_fixture/a.txt --cipher-out engine.enc --screenshot cipher-file.png | tr -d '\r' | q "^cipher: the output saved: "
+          build/sieve cipher --encrypt --in tests/manifest_fixture/a.txt --recipe "vigenere lemon; feistel my key" --out cli.enc > /dev/null
+          cmp engine.enc cli.enc
           $H --cipher --script "Ctrl+Backspace,=It was the best of times it was the worst of times it was the age of wisdom it was the age of foolishness,Down,Down,Ctrl+Backspace,=xor 736563726574,Return,Tab,Down,Right" --screenshot cipher-break.png | tr -d '\r' | q "^cipher: the best guess: xor 736563726574$"
           $H --main-menu --press "Down,Down,Down,Down,Down,Down" --screenshot main-cipher.png | q "saved main-cipher.png"
           $H --designer --screenshot designer.png | q "designer: my-words-v1"

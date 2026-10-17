@@ -10,6 +10,7 @@
 #include "designer.hpp"
 #include "harness.hpp"
 #include "cli/items.hpp"
+#include "cli/locate.hpp" // read_file_bytes (--cipher-in)
 #include "cli/timings.hpp"
 #include "hallway.hpp"
 #include "sieve/plugin.hpp"
@@ -112,7 +113,8 @@ const char* kUsage =
     "                      (--busy: while the dimensions are still being calculated, if that is caught)\n"
     "  --main-menu         with --screenshot: a picture of the main menu (--press keys go to it)\n"
     "  --cipher            with --screenshot: a picture of the Encryption Engine; --script \"Down,=text,Return\"\n"
-    "                      runs keys and typed text (=text types into the row chosen), as --designer's does\n"
+    "                      runs keys and typed text (=text types into the row chosen), as --designer's does;\n"
+    "                      --cipher-in FILE takes a file's bytes as the input, --cipher-out FILE saves the output\n"
     "  --designer          with --screenshot: a picture of the filter designer; --design FILE opens a\n"
     "                      plugin, --script \"Down,Right,=text,Return\" runs keys and typed text, and\n"
     "                      --design-out FILE writes the filter as the designer would save it\n"
@@ -719,6 +721,15 @@ int run(const Args& a)
         // A picture of the Encryption Engine (for documentation and testing), after --script:
         // keys, and "=text" typed into the row chosen.
         CipherScreen c(window, renderer);
+        c.allow_go(false);
+        // --cipher-in FILE: the input a file's bytes, as the item in hand or Ctrl+O gives them.
+        if (a.has("cipher-in"))
+        {
+            const std::string given = a.get("cipher-in");
+            const std::filesystem::path in(std::u8string(given.begin(), given.end()));
+            const std::u8string name = in.filename().u8string();
+            c.set_input_file(sieve::cli::read_file_bytes(in), std::string(name.begin(), name.end()));
+        }
         if (a.has("script"))
         {
             const std::string script = a.get("script");
@@ -734,6 +745,8 @@ int run(const Args& a)
                 at = comma + 1;
             }
         }
+        // --cipher-out FILE: the output saved, as Ctrl+S saves it.
+        if (a.has("cipher-out") && !c.save_output(a.get("cipher-out"))) throw std::runtime_error(c.status());
         c.render();
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         std::cout << "cipher: " << c.status() << "\n";
@@ -1070,10 +1083,16 @@ int run(const Args& a)
             }
             if (r == MainMenu::Result::Cipher)
             {
-                // The Encryption Engine, and back to the main menu from it.
+                // The Encryption Engine, and back to the main menu from it; GO TO IT goes into the
+                // hallway as the settings stand, in front of the output on the binary line (made
+                // long enough for it, as the File Locator's Go to it does).
                 CipherScreen engine(window, renderer);
-                if (engine.run() == CipherScreen::Result::Quit) break;
-                continue;
+                const CipherScreen::Result er = engine.run();
+                if (er == CipherScreen::Result::Quit) break;
+                if (er != CipherScreen::Result::GoTo) continue;
+                pending_file = LocatedGo{engine.go_bytes(), engine.go_name(), engine.go_bytes().size() > settings.binary_bytes};
+                settings_chosen = true;
+                skip_setup = true;
             }
             if (r == MainMenu::Result::Designer)
             {
@@ -1244,9 +1263,13 @@ int run(const Args& a)
             // GO TO IT goes to its model instead, in a hallway on the AI line in the run's shape.
             if (hall->request() == Hallway::Request::Cipher)
             {
+                // From the pause menu, or from the item page's I with the item in hand as the input.
                 hall->clear_request();
                 CipherScreen engine(window, renderer);
-                if (engine.run() == CipherScreen::Result::Quit) break;
+                if (auto item = hall->take_cipher_item()) engine.give_item(std::move(item->first), std::move(item->second));
+                const CipherScreen::Result er = engine.run();
+                if (er == CipherScreen::Result::Quit) break;
+                if (er == CipherScreen::Result::GoTo) hall->go_to_bytes(engine.go_bytes(), engine.go_name());
                 SDL_SetWindowRelativeMouseMode(window, false);
                 continue;
             }

@@ -174,6 +174,8 @@ void Hallway::talk_ready()
     if (talk_model_ && talk_hex_ == in_hand_->hex) return;
     talk_model_ = std::make_unique<sieve::llm::Model>(ai_space_->config(), ai_space_->tensors_of(*in_hand_->ai), 1);
     talk_.clear();
+    talk_given_.clear();
+    chat_editing_ = false;
     chat_.clear();
     chat_clear_thumbs();
     chat_scroll_ = 0;
@@ -201,6 +203,7 @@ void Hallway::talk(const std::string& said)
     if (talk_model_->position() + text.size() + kTalkReply >= talk_model_->config().max_positions)
     {
         talk_model_->reset();
+        talk_given_.clear();
         talk_ += tr("talk.full") + "\n";
         chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, tr("talk.full")));
     }
@@ -214,6 +217,9 @@ void Hallway::talk(const std::string& said)
     for (int i = 0; i < 8; ++i) s.seed = (s.seed << 8) | digest[size_t(i)];
     sieve::llm::Sampler sampler(s);
     const std::string reply = sieve::llm::continue_text(*talk_model_, *ai_tokenizer_, text, sampler, kTalkReply, {}, uint32_t('\n'));
+    // What it was given: the text and what it wrote, but for the last byte it wrote when it stopped
+    // at its length (one byte a position, the line's vocabulary being the bytes).
+    talk_given_ = (talk_given_ + text + reply).substr(0, talk_model_->position());
     talk_ += trf("talk.you", {said}) + "\n" + trf("talk.it", {reply}) + "\n";
     chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::You, said));
     chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::It, reply));
@@ -230,6 +236,7 @@ void Hallway::set_model_files(const std::string& text_model, const std::string& 
         file_chat_.reset();
         file_model_.reset();
         file_context_.clear();
+        file_system_.clear();
         talk_to_file_ = true;
     }
     text_model_path_ = text_model;
@@ -341,7 +348,7 @@ std::optional<std::string> Hallway::file_reply(const std::string& message, const
         // few positions for that and the message together is told the short version, and a note
         // says so.
         const bool fresh = !file_chat_ || m.model->position() + need >= max;
-        std::string prompt = m.chatml && fresh ? system_prompt() : std::string();
+        std::string prompt = m.chatml && fresh ? (file_system_.empty() ? system_prompt() : file_system_) : std::string();
         if (!prompt.empty() && m.tokenizer->encode(prompt).size() + need + 16 >= max)
         {
             chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf("chat.prompt.too_long", {std::to_string(max)})));
@@ -399,12 +406,115 @@ size_t Hallway::talk_give(const std::vector<uint8_t>& bytes)
     if (talk_model_->position() + n + 1 + kTalkRoom + kTalkReply >= max)
     {
         talk_model_->reset();
+        talk_given_.clear();
         talk_ += tr("talk.full") + "\n";
         chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, tr("talk.full")));
     }
     for (size_t i = 0; i < n; ++i) talk_model_->step(bytes[i]);
     talk_model_->step(uint32_t('\n'));
+    talk_given_.append(reinterpret_cast<const char*>(bytes.data()), n);
+    talk_given_ += '\n';
     return n;
+}
+
+// ---- the context window
+
+namespace {
+
+// Bytes as the box shows them: text as it is, a newline as a new line, and every other byte that is
+// not printable ASCII, or a backslash, as \xNN, so that editing it and giving it back is exact.
+std::string escape_bytes(const std::string& b)
+{
+    static const char k[] = "0123456789abcdef";
+    std::string out;
+    for (const char ch : b)
+    {
+        const uint8_t c = uint8_t(ch);
+        if (c == '\n' || (c >= 0x20 && c < 0x7F && c != '\\')) out += ch;
+        else out += {'\\', 'x', k[c >> 4], k[c & 15]};
+    }
+    return out;
+}
+
+int hex_value(char c)
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+// The reverse: \xNN as that byte; anything else (typed text, UTF-8 and all) as its own bytes.
+std::string unescape_bytes(const std::string& s)
+{
+    std::string out;
+    for (size_t i = 0; i < s.size(); ++i)
+    {
+        if (s[i] == '\\' && i + 3 < s.size() && s[i + 1] == 'x' && hex_value(s[i + 2]) >= 0 && hex_value(s[i + 3]) >= 0)
+        {
+            out += char(hex_value(s[i + 2]) * 16 + hex_value(s[i + 3]));
+            i += 3;
+        }
+        else out += s[i];
+    }
+    return out;
+}
+
+} // namespace
+
+std::string Hallway::context_text()
+{
+    if (talking_to_file()) return file_system_.empty() ? system_prompt() : file_system_;
+    return escape_bytes(talk_given_);
+}
+
+void Hallway::chat_edit_context()
+{
+    if (chat_editing_)
+    {
+        // Out of editing, the context as it was.
+        chat_editing_ = false;
+        chat_text_.clear();
+        chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, tr("chat.context.left")));
+        return;
+    }
+    talk_ready();
+    chat_editing_ = true;
+    chat_text_ = context_text();
+    chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, tr(talking_to_file() ? "chat.context.editing.file" : "chat.context.editing")));
+    chat_scroll_ = 0;
+}
+
+void Hallway::chat_apply_context()
+{
+    chat_editing_ = false;
+    const std::string edited = chat_text_;
+    chat_text_.clear();
+    if (talking_to_file())
+    {
+        // The model file's conversation starts again, told this instead of the system prompt.
+        file_system_ = edited;
+        file_chat_.reset();
+        if (file_model_) file_model_->model->reset();
+        talk_ += tr("chat.context.set.file") + "\n";
+        chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf("chat.context.set.file.size", {std::to_string(edited.size())})));
+        chat_scroll_ = 0;
+        return;
+    }
+    if (!talk_model_) return;
+    // The model in hand starts again and is given exactly these bytes, leaving room for it to answer.
+    std::string bytes = unescape_bytes(edited);
+    const size_t room = talk_model_->config().max_positions - std::min<size_t>(talk_model_->config().max_positions, kTalkReply + kTalkRoom + 1);
+    const bool cut = bytes.size() > room;
+    if (cut) bytes.resize(room);
+    busy(tr("chat.thinking"), [&] {
+        talk_model_->reset();
+        for (const char c : bytes) talk_model_->step(uint8_t(c));
+    });
+    talk_given_ = bytes;
+    talk_ += tr("chat.context.set") + "\n";
+    chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf(cut ? "chat.context.cut" : "chat.context.size", {std::to_string(bytes.size()), std::to_string(room)})));
+    chat_scroll_ = 0;
 }
 
 // ---- the window
@@ -466,6 +576,11 @@ void Hallway::chat_pick_model(int dir)
 
 void Hallway::chat_send()
 {
+    if (chat_editing_)
+    {
+        chat_apply_context();
+        return;
+    }
     const std::string said = chat_text_;
     chat_text_.clear();
 
@@ -741,6 +856,12 @@ void Hallway::chat_command(const std::string& line)
         chain_run(input);
         return;
     }
+    if (verb == "context") // what the model is given, shown (Ctrl+E edits it)
+    {
+        const std::string c = context_text();
+        chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, c.empty() ? tr("chat.context.empty") : trf("chat.context.shown", {c})));
+        return;
+    }
     if (verb == "log") // the conversation so far, saved as text
     {
         std::string path = line.substr(std::min(line.size(), line.find("log") + 3));
@@ -998,8 +1119,16 @@ void Hallway::chat_event(const SDL_Event& e)
     const bool ctrl = e.key.mod & SDL_KMOD_CTRL, shift = e.key.mod & SDL_KMOD_SHIFT;
     switch (e.key.key)
     {
-    case SDLK_ESCAPE: close_chat(); break;
+    case SDLK_ESCAPE:
+        if (chat_editing_) chat_edit_context(); // out of editing first, the context as it was
+        else close_chat();
+        break;
     case SDLK_BACKSPACE:
+        if (ctrl)
+        {
+            chat_text_.clear(); // the whole box
+            break;
+        }
         // One UTF-8 character.
         while (!chat_text_.empty() && (static_cast<unsigned char>(chat_text_.back()) & 0xC0) == 0x80) chat_text_.pop_back();
         if (!chat_text_.empty()) chat_text_.pop_back();
@@ -1024,6 +1153,8 @@ void Hallway::chat_event(const SDL_Event& e)
         else if (e.key.key == SDLK_O) open_file_dialog(chat_files_chosen, this, window_, nullptr, 0, nullptr, true);
         else if (e.key.key == SDLK_D) chat_draw();
         else if (e.key.key == SDLK_L) chat_save_log("");
+        else if (e.key.key == SDLK_E) chat_edit_context();
+        else if (e.key.key == SDLK_C) SDL_SetClipboardText(chat_text_.c_str()); // the box, to edit elsewhere and paste back
         else if (e.key.key == SDLK_P) chat_pick_model(shift ? -1 : 1);
         else if (e.key.key == SDLK_M && !text_model_path_.empty())
         {
@@ -1296,7 +1427,7 @@ void Hallway::draw_chat(float x, float top, float w, float bottom)
     if (chat_models_.size() > 1) chat_bar_.push_back({SDL_FRect{x, top + 12, std::min(w, text_width(figures, 1)), 16}, 3});
 
     // The box to type in, its lines wrapped, the last few shown; the buttons round it.
-    const std::vector<std::string> keys = wrap_words(tr("chat.keys"), size_t(std::max(8.0f, w / 8)));
+    const std::vector<std::string> keys = wrap_words(tr(chat_editing_ ? "chat.keys.context" : "chat.keys"), size_t(std::max(8.0f, w / 8)));
     const float button = 36, keys_y = bottom - 8 - kSmallLine * float(keys.size());
     const size_t cols = size_t(std::max(8.0f, (w - 2 * button - 160) / (8 * kBig)));
     std::vector<std::string> typed;
