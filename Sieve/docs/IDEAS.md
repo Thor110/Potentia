@@ -3350,10 +3350,11 @@ how the game feels to use.
 - **ffmpeg's warnings in red, always.** A video that cannot be opened (the anchor video: "an MP4:
   no line holds that item") should say so in red, as every warning that stops something should,
   so it is seen.
-  - *Where Sieve looks for ffmpeg:* `ffmpeg = PATH` in the hallway's settings file (the program
-    itself, e.g. `C:/ffmpeg/bin/ffmpeg.exe`), then the `SIEVE_FFMPEG` environment variable, then
-    beside Sieve's own programs, then `PATH`. A folder such as `C:/ffmpeg/bin` is not looked in
-    unless it is on `PATH` or named in the setting.
+  - *Where Sieve looks for ffmpeg:* `--ffmpeg PATH` on the command line (the program itself, e.g.
+    `C:/ffmpeg/bin/ffmpeg.exe`), then the `SIEVE_FFMPEG` environment variable, then beside Sieve's
+    own programs, then `PATH`. `sieve-hallway.ini` does not read an `ffmpeg` entry yet (corrected
+    on 17 October 2026: an earlier note here said it did). A folder such as `C:/ffmpeg/bin` is not
+    looked in unless it is on `PATH`.
   - *To come:* a row in Settings to choose ffmpeg with the system's file window, showing the
     version found or, in red, that none was. The warning on a failed video says where it looked.
 - **The Encryption Engine with the item in hand:** a button in the engine's window that takes the

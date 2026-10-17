@@ -1092,7 +1092,7 @@ These rules are versioned, because they decide which unit a pasted input lands o
 A video takes up to `--frames` frames, adding black frames if the source is short.
 
 **Other formats through ffmpeg.** Sieve reads PNG, JPEG, BMP, GIF and TGA itself. Anything else, such as MP4, WebM, MKV, MOV, AVI, WebP or TIFF, is read by ffmpeg, if you have it:
-- **Where it looks:** `--ffmpeg PATH` (in the hallway, `ffmpeg=PATH` in its settings), then the `SIEVE_FFMPEG` environment variable, then `ffmpeg` beside Sieve's own program, then your `PATH`.
+- **Where it looks:** `--ffmpeg PATH` (the hallway takes it on its command line too), then the `SIEVE_FFMPEG` environment variable, then `ffmpeg` beside Sieve's own program, then your `PATH`.
 - **How:** it runs ffmpeg as a separate program and links none of it. Each frame the file stores is read once, in order, and fitted by the line's rule (`canon-image-v2`, or v1) as above.
 - **Exactly:** a lossless video lands where the same frames as PNGs do.
 - **Long videos:** frames are fitted one at a time and reading stops one frame past `--frames`. The whole of a 52 MB 1080p video (3,105 frames) went in at 308 MB peak memory.

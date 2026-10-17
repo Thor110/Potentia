@@ -3017,3 +3017,65 @@ cover and a title.
 - **IDEAS §19.85:** a skeleton system beside the UV system.
 - **VOICES.md:** three of Edward's (two rules, one quote).
 - **No code changed.**
+
+### Next: `sieve-hallway.ini` written with every entry it can hold (17 October 2026)
+This is the next task to tackle, ahead of the rest of §19.79. Edward asked for it so that a player
+can see every setting in one file and set it there.
+- **What happens now:** `AppSettings::save` (`client/app_settings.cpp`) writes `[graphics]`,
+  `[world]`, `[controls]`, `[models]` and `[language]`. The file is written on the first start
+  (when it has no resolution) and whenever Settings or the setup menu changes something
+  (`menu.cpp`, the `app_->save` call). So an older file that already has a resolution does not gain
+  new keys until something is changed in a menu.
+- **What is missing:** the settings that come only from the command line (`Settings::from_args` in
+  `client/menu.cpp`), among them `ffmpeg`, `video-fps`, the AI line's shape, `items-per-wall`,
+  `title-length` and `binary-length`. None of these can be set in the file. Check which of them
+  the setup menu already saves elsewhere (a setup's `.sieve`, `sieve-filters.ini`) before moving
+  any, so that each setting has one home.
+- **What to build:**
+  - Every entry the file can hold is written, each with its value and a one-line comment. An empty
+    one is written empty, never left out.
+  - The file is rewritten at start when a key is missing, so that an older file gains new keys
+    (it should keep the values it has).
+  - A `[paths]` section with `ffmpeg =` (the program itself). `AppSettings::load` reads it and the
+    hallway passes it to `set_ffmpeg_path`; `--ffmpeg` on the command line still wins.
+  - A unit or CI check that a file saved from the defaults, loaded again and saved again is the
+    same, byte for byte.
+- **Correction:** I told Edward on 17 October that `ffmpeg = C:/ffmpeg/bin/ffmpeg.exe` in
+  `sieve-hallway.ini` would work. It does not: nothing reads that key yet. What works today is
+  `--ffmpeg PATH`, the `SIEVE_FFMPEG` environment variable, `ffmpeg.exe` beside the program, or
+  `C:\ffmpeg\bin` on `PATH`. IDEAS §19.79 and the README said the same wrong thing and are
+  corrected.
+
+### For the next session (17 October 2026)
+- **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
+  top level on purpose and will sort them later, so the Build or Buy preview has nothing to show
+  yet.
+- **CI still never runs on GitHub.** The workflow is at `Sieve/.github/workflows/build.yml`, and
+  GitHub only reads `.github/workflows` at the repository root. Moving it needs
+  `working-directory: Sieve` (or `defaults.run.working-directory`) and the paths in it checked.
+  This was reported, but Edward has not decided yet; don't move it unasked.
+- **Still open, in IDEAS order:**
+  - the rest of §19.79: red ffmpeg warnings, the engine's item-in-hand button, controls between
+    windows, the window raise on Windows, CHAT's tabs answering the mouse, saving chat logs, a help
+    tab, and the version bump (still 0.13.1 in `CMakeLists.txt`);
+  - §19.80 (tabs on every line), §19.81 to §19.83 (models), §19.82 (encrypting files) and §19.85
+    (skeletons);
+  - Encryption Engine stage 2;
+  - the characters model's sampling experiments (§19.73: argmax in parallel per level is the
+    likely reason no character comes out recognisable; untested);
+  - V5S2;
+  - the melody tasks SM1 to SM4.
+- **How Edward works:**
+  - Hand work over as a zip holding `files/`, with a CHANGES.md inside; root website files go in
+    when they change.
+  - Never commit or push: Edward reviews in GitHub Desktop and commits.
+  - Sync first with `git fetch origin main && git reset origin/main && git checkout -- .`, keeping
+    the root `CHANGES.md` (it is Edward's).
+  - British English and exact wording; no figure that was not measured.
+  - Each metric is given with its inverse where the inverse can be known (§19.78).
+  - Edward's quotes go in `docs/VOICES.md`.
+  - The website's AI disclosure stays at the top of every page; the page is "Build or Buy", and it
+    never sells.
+  - Edward runs Debug, Release, `tools\run_tests.bat` and `make_release`; run the unit suite once
+    here, plus any CI lines a change adds.
+- **No code changed.**
