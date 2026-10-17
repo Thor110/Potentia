@@ -38,6 +38,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <ctime>
 #include <fstream>
 #include <sstream>
 
@@ -740,12 +741,94 @@ void Hallway::chat_command(const std::string& line)
         chain_run(input);
         return;
     }
+    if (verb == "log") // the conversation so far, saved as text
+    {
+        std::string path = line.substr(std::min(line.size(), line.find("log") + 3));
+        path.erase(0, std::min(path.size(), path.find_first_not_of(' ')));
+        chat_save_log(path);
+        return;
+    }
     if (verb == "prompt") // what a model given as a file is told, word for word
     {
         chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, system_prompt()));
         return;
     }
     chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, tr(verb == "help" ? "chat.commands" : "chat.command.unknown")));
+}
+
+namespace {
+
+// The time now, as the local clock has it (localtime_s and localtime_r, as music.cpp does, since
+// std::localtime is not thread-safe and MSVC warns about it).
+std::string local_time(const char* format)
+{
+    const std::time_t t = std::time(nullptr);
+    std::tm tm{};
+#ifdef _WIN32
+    localtime_s(&tm, &t);
+#else
+    localtime_r(&t, &tm);
+#endif
+    char out[64] = "";
+    std::strftime(out, sizeof out, format, &tm);
+    return out;
+}
+
+} // namespace
+
+std::string Hallway::chat_log_text() const
+{
+    std::ostringstream o;
+    o << "Sieve " SIEVE_VERSION " chat log, " << local_time("%Y-%m-%d %H:%M:%S") << "\n";
+    if (in_hand_)
+    {
+        o << "line: " << space_id() << "\n";
+        o << "model in hand, its address (" << in_hand_->hex.size() << " hex digits): " << in_hand_->hex << "\n";
+    }
+    if (talk_to_file_ && !text_model_path_.empty()) o << "speaking with the model file: " << text_model_path_ << "\n";
+    o << "\n";
+    for (const ChatEntry& e : chat_)
+        switch (e.kind)
+        {
+        case ChatEntry::Kind::You: o << trf("talk.you", {e.text}) << "\n"; break;
+        case ChatEntry::Kind::It: o << trf("talk.it", {e.text}) << (e.model.empty() ? "" : "   (" + e.model + ")") << "\n"; break;
+        case ChatEntry::Kind::Note: o << "  -- " << e.text << "\n"; break;
+        case ChatEntry::Kind::File:
+            o << "  [file] " << e.name << ", " << e.file_kind << ", " << e.bytes.size() << " bytes, " << e.given << " given to the model";
+            if (!e.weighing.empty()) o << "; " << e.weighing;
+            o << "\n";
+            break;
+        case ChatEntry::Kind::Picture:
+            o << "  [" << (e.melody() ? "melody" : "picture") << "] " << e.heading() << ", its address on the "
+              << (e.melody() ? "audio" : "image") << " line: " << e.address << "\n";
+            break;
+        }
+    return o.str();
+}
+
+void Hallway::chat_save_log(const std::string& path)
+{
+    fs::path to = from_u8(path);
+    try
+    {
+        if (path.empty())
+        {
+            const std::string stamp = local_time("chat-%Y-%m-%d-%H%M%S");
+            const fs::path exe = cli::executable_dir();
+            const fs::path dir = (exe.empty() ? fs::path(".") : exe) / "chat-logs";
+            fs::create_directories(dir);
+            to = dir / (stamp + ".txt");
+            for (int n = 2; fs::exists(to); ++n) to = dir / (stamp + "-" + std::to_string(n) + ".txt");
+        }
+        const std::string t = chat_log_text();
+        write_bytes(to, std::vector<uint8_t>(t.begin(), t.end()));
+        chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf("chat.log.saved", {u8(to)})));
+    }
+    catch (const std::exception& ex)
+    {
+        chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf("chat.log.failed", {ex.what()})));
+    }
+    chat_scroll_ = 0;
 }
 
 std::optional<size_t> Hallway::chat_last_card() const
@@ -789,7 +872,7 @@ void Hallway::chat_act(size_t i, ChatAct act)
         }
         catch (const std::exception& ex)
         {
-            message(trf("msg.jump.failed", {ex.what()}));
+            warn(trf("msg.jump.failed", {ex.what()}));
         }
         return;
     }
@@ -886,6 +969,8 @@ void Hallway::chat_event(const SDL_Event& e)
         chat_scroll_ = std::max(0.0f, chat_scroll_ + e.wheel.y * 40);
         return;
     }
+    // The item page's tabs answer the mouse here too: the keys go to the message, so C cannot.
+    if (click_hand_tab(e)) return;
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT)
     {
         // In the renderer's coordinates, as the buttons were drawn (the window's may differ: a
@@ -938,6 +1023,7 @@ void Hallway::chat_event(const SDL_Event& e)
         }
         else if (e.key.key == SDLK_O) open_file_dialog(chat_files_chosen, this, window_, nullptr, 0, nullptr, true);
         else if (e.key.key == SDLK_D) chat_draw();
+        else if (e.key.key == SDLK_L) chat_save_log("");
         else if (e.key.key == SDLK_P) chat_pick_model(shift ? -1 : 1);
         else if (e.key.key == SDLK_M && !text_model_path_.empty())
         {

@@ -3356,8 +3356,11 @@ how the game feels to use.
     `ffmpeg =` under `[paths]`, after `--ffmpeg` and before `SIEVE_FFMPEG` (an earlier note here
     said it did before it did). A folder such as `C:/ffmpeg/bin` is not looked in unless it is on
     `PATH`.
-  - *To come:* a row in Settings to choose ffmpeg with the system's file window, showing the
-    version found or, in red, that none was. The warning on a failed video says where it looked.
+  - *Built (17 October 2026):* Settings > Programs, an ffmpeg row: the version found, or "not
+    found" in red with where it looked; Enter chooses it with the system's file window, Left goes
+    back to looking. The hallway's messages that say something stopped (`Hallway::warn`) are red on
+    a dark plate, and a video with no ffmpeg says so and where it looked (`ffmpeg_looked`), instead
+    of "no line holds that kind".
 - **The Encryption Engine with the item in hand:** a button in the engine's window that takes the
   item in hand (its bytes, as F would save them) as the input. The output becomes an item that
   can be gone to.
@@ -3372,14 +3375,23 @@ how the game feels to use.
     take the foreground, and otherwise flashes the taskbar button instead. The fix to try first:
     restore and raise the window, then call `SetForegroundWindow` from within the dialog's own
     turn, while Windows still counts the click as the user's.
+  - *Tried (17 October 2026), not yet tested on Windows:* `client/window_front.cpp` does exactly
+    that from the dialog's callback, with `AttachThreadInput` to the foreground's thread for the
+    moment it takes; SDL's raise on the main thread follows as before.
 - **The chat's tabs:** C switches tabs everywhere else, but in CHAT the keys go to the message, so
   Esc must come first. The simplest fix: the tabs answer the mouse too, always, chat or not.
+  *Built (17 October 2026):* a click on any tab goes to it, in CHAT too (`click_hand_tab`).
 - **Chat that grows:** save the conversation as a log, and edit the context window (what the model
   is given) from a tab, with voice and speech to come, as in the other systems.
+  *Built (17 October 2026):* the log, `/log [PATH]` or Ctrl+L. Still to come: editing the context
+  window, and voice.
 - **A help tab:** in CHAT, and on every item's page, saying what can be done there and with which
   keys. It is part of the architecture, not an afterthought.
+  *Built (17 October 2026):* HELP on every item's page, after SORT and META and before CHAIN and
+  CHAT, its rows chosen by the item's line; CHAT's own keys are listed under its box as before.
 - **The version number:** still 0.13.1 after many rounds. It should move with the next release,
-  and the metrics (§19.71) name a version, so each step is on the record.
+  and the metrics (§19.71) name a version, so each step is on the record. *Done (17 October
+  2026):* 0.13.25, as Edward chose.
 
 **19.80 One less if: a tab with a use belongs on every line (Edward, 17 October 2026).** His words:
 "If a tab has utility, it should exist in all dimensions," and "one less if statement" (both in

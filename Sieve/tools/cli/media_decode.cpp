@@ -322,12 +322,34 @@ std::string TempFile::u8() const
     return std::string(s.begin(), s.end());
 }
 
+std::string ffmpeg_looked()
+{
+    const std::string sieve_ffmpeg = env("SIEVE_FFMPEG"), path = env("PATH");
+    size_t folders = 0;
+    for (size_t at = 0; at <= path.size();)
+    {
+        size_t end = path.find(kPathSep, at);
+        if (end == std::string::npos) end = path.size();
+        if (end > at) ++folders;
+        at = end + 1;
+    }
+    return "looked for " + std::string(kNames[0]) + " in SIEVE_FFMPEG (" + (sieve_ffmpeg.empty() ? "not set" : "'" + sieve_ffmpeg + "'") +
+           "), beside Sieve ('" + u8(executable_dir()) + "') and in the " + std::to_string(folders) + " folder" +
+           (folders == 1 ? "" : "s") + " on the PATH";
+}
+
+namespace {
+
+// What to do about a missing ffmpeg, said the same way everywhere.
+const char* const kGiveFfmpeg = "give it with --ffmpeg PATH, ffmpeg = under [paths] in sieve-hallway.ini (Settings > Programs in the "
+                                "hallway), the SIEVE_FFMPEG environment variable, or put it beside Sieve or on the PATH";
+
+} // namespace
+
 std::string ffmpeg_missing()
 {
     const std::optional<std::string> exe = find_ffmpeg();
-    if (!exe)
-        return "ffmpeg was not found (give it with --ffmpeg PATH, the SIEVE_FFMPEG environment variable, or put it beside Sieve or on "
-               "the PATH)";
+    if (!exe) return "ffmpeg was not found: " + ffmpeg_looked() + " (" + kGiveFfmpeg + ")";
     if (!is_file(from_u8(*exe))) return "there is no ffmpeg at '" + *exe + "'";
     return {};
 }
@@ -340,9 +362,8 @@ std::string ffmpeg_or_throw(const std::string& cannot, const char* own)
 {
     const std::optional<std::string> exe = find_ffmpeg();
     if (!exe)
-        throw std::runtime_error(cannot + ": Sieve " + own + " itself, and every other format through ffmpeg, which was not found "
-                                 "(give it with --ffmpeg PATH, the SIEVE_FFMPEG environment variable, or put it beside Sieve or on "
-                                 "the PATH)");
+        throw std::runtime_error(cannot + ": Sieve " + own + " itself, and every other format through ffmpeg, which was not found: " +
+                                 ffmpeg_looked() + " (" + kGiveFfmpeg + ")");
     if (!is_file(from_u8(*exe))) throw std::runtime_error(cannot + ": there is no ffmpeg at '" + *exe + "'");
     return *exe;
 }

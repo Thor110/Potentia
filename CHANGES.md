@@ -1,30 +1,30 @@
-# Changes: `sieve-hallway.ini` holds every setting (17 October 2026)
+# Changes: 0.13.25, and most of IDEAS §19.79 (17 October 2026)
 
-The next task from the handoff. Copy `files/` over the repository root.
+Copy `files/` over the repository root. This zip also holds everything from the earlier zip
+(`sieve-hallway.ini` with every setting), so it replaces it.
 
-- **What was checked first:** the setup menu's settings were saved nowhere (`sieve-filters.ini`
-  holds only filters), so they now live in `sieve-hallway.ini`, their one home.
-- **`[setup]`:** all 54 of the setup menu's settings (every line's shape and the GLOBAL ones),
-  under the hallway's option names with `_` for `-`: `items_per_wall`, `title_length`,
-  `binary_length`, `ai_layers`, `video_fps` and the rest. Saved when the setup menu changes them,
-  so the next start begins where the last one left off. Options on the command line still win.
-- **`[paths]`:** `ffmpeg = C:/ffmpeg/bin/ffmpeg.exe` now works (after `--ffmpeg`, before
-  `SIEVE_FFMPEG`).
-- **Every entry is written** with its value and a one-line comment, an empty one written empty.
-- **An older file is rewritten at start** when it lacks an entry, keeping its own values.
-- **A bad hand edit** (an unknown alphabet, a word where a number goes) leaves that setting as it
-  was instead of stopping the hallway.
-- **`hallway --write-settings OUT`** writes the file without a window. A new CI block checks
-  that the defaults, written, loaded and written again, are the same byte for byte; that every
-  entry has a comment; that an older file keeps its values and gains new entries; and that the
-  setup menu saves to `[setup]`. One older CI line (`be.ini`, which failed on the word "binary")
-  now looks only for a binary-edge setting.
-- **Files:** `client/setup.hpp` (new: the `Settings` struct, moved out of `menu.hpp`),
-  `client/app_settings.{hpp,cpp}`, `client/menu.{hpp,cpp}`, `client/app_main.cpp`,
-  `.github/workflows/build.yml`, `README.md`, `docs/SPECIFICATIONS.md` §5.3.1, `docs/IDEAS.md`
-  §19.79, `docs/HANDOFF.md` (a new entry).
-- **Checked here:** every changed client file compiles with no warnings. A scratch program built
-  on the real settings code passed all ten of its checks, the byte-for-byte round trip among them.
-- **Not run here:** the full hallway build, the unit suite and the new CI lines. Worth trying
-  Debug and Release, then starting once with your existing `sieve-hallway.ini`: it should gain
-  `[setup]` and `[paths]` and keep everything else.
+- **Version 0.13.25** (`CMakeLists.txt`, `vcpkg.json`, the release tool's examples).
+- **Settings > Programs:** an ffmpeg row showing the version found, or **not found** in red with
+  where it looked. Enter chooses it with the system's file window; Left goes back to looking.
+  Saved as `[paths] ffmpeg`.
+- **Red warnings:** every message that says something stopped (warp, go-to, save, J, a chain or an
+  anchor that would not open) is red on a dark plate. An MP4/AVI/WebP with no ffmpeg now says
+  ffmpeg is missing and where it looked, instead of "no line holds that kind". The command line's
+  "not found" messages say where it looked too.
+- **Tabs answer the mouse:** click any tab of the item page, CHAT included (Tab frees the mouse).
+- **HELP tab on every item:** the keys for what you hold, chosen by its line. It sits before CHAIN
+  and CHAT, so C still reaches them in the same order.
+- **Chat logs:** Ctrl+L or `/log [PATH]` saves the conversation as text, with the model's line and
+  address at the top; without a path, into `chat-logs/` beside the program.
+- **The window raise on Windows:** `client/window_front.cpp` (new, in both programs) calls
+  `SetForegroundWindow` from the dialog's own callback, with `AttachThreadInput`. **Not compiled
+  here**: there are no Windows headers in this container, so your build is its first compile, and
+  only you can tell if the window now comes back to the front.
+- **CI:** a check of the chat log, and a picture of HELP.
+- **Docs:** README (Programs, HELP, clicks on tabs, red warnings, /log), IDEAS §19.79 (each item
+  marked), HANDOFF (a new entry, and the open list).
+- **Checked here:** every changed file compiles with no warnings against SDL's headers, except
+  the Windows half of `window_front.cpp`. Not run here: the full build, unit suite or CI.
+- **Worth trying:** Settings > Programs with and without ffmpeg; J on an MP4 with no ffmpeg; Tab
+  then a click on COST, HELP and CHAT; Ctrl+L in CHAT; opening a file with + or Ctrl+O and seeing
+  whether the window comes back to the front.

@@ -7,7 +7,9 @@
 // nothing. Every change is applied and saved at once, with no confirm step, so that a setting that
 // makes the window unusable can be undone by changing it back rather than by editing a file.
 #include "main_menu.hpp"
+#include "cli/media_decode.hpp"
 #include "cli/timings.hpp"
+#include "dialogs.hpp"
 
 #include "dimensions.hpp"
 #include "font.hpp"
@@ -23,7 +25,8 @@ namespace {
 
 constexpr int kMinW = 1000, kMinH = 640; // smaller windows draw the menu scaled down
 constexpr int kListRows = 10;            // drop-down entries shown at once
-const SDL_Color kWhite{255, 255, 255, 255}, kGrey{150, 150, 150, 255}, kDim{90, 90, 90, 255}, kAccent{0, 255, 255, 255};
+const SDL_Color kWhite{255, 255, 255, 255}, kGrey{150, 150, 150, 255}, kDim{90, 90, 90, 255}, kAccent{0, 255, 255, 255},
+                kRed{255, 70, 70, 255};
 
 void draw_centred(SDL_Renderer* r, float cx, float y, const std::string& s, float scale, SDL_Color c)
 {
@@ -60,13 +63,15 @@ std::vector<MainMenu::Item> MainMenu::items() const
         return {{Kind::Action, "start"},    {Kind::Action, "locator"}, {Kind::Action, "media"}, {Kind::Action, "designer"},
                 {Kind::Action, "harness"}, {Kind::Action, "settings"}, {Kind::Action, "cipher"}, {Kind::Action, "exit"}};
     case Screen::Settings:
-        return {{Kind::Action, "graphics"}, {Kind::Action, "controls"}, {Kind::Action, "language"}, {Kind::Action, "back"}};
+        return {{Kind::Action, "graphics"}, {Kind::Action, "controls"}, {Kind::Action, "language"}, {Kind::Action, "programs"},
+                {Kind::Action, "back"}};
     case Screen::Graphics:
         return {{Kind::Choice, "resolution"}, {Kind::Toggle, "fullscreen"}, {Kind::Toggle, "vsync"}, {Kind::Toggle, "edge_glow"}, {Kind::Toggle, "real_graphics"}, {Kind::Toggle, "door_portals"}, {Kind::Number, "graphics_memory"}, {Kind::Toggle, "fps_counter"},
                 {Kind::Number, "view_rooms"}, {Kind::Number, "picture_rooms"},
                 {Kind::Action, "back"}};
     case Screen::Controls: return {{Kind::Number, "mouse_sensitivity"}, {Kind::Toggle, "invert_mouse_y"}, {Kind::Action, "back"}};
     case Screen::Language: return {{Kind::Choice, "language_choice"}, {Kind::Action, "back"}};
+    case Screen::Programs: return {{Kind::Program, "ffmpeg"}, {Kind::Action, "back"}};
     }
     return {};
 }
@@ -86,6 +91,7 @@ std::string MainMenu::value_of(const Item& it) const
     if (it.id == "picture_rooms") return trf("value.picture_rooms", {std::to_string(s_.picture_rooms)});
     if (it.id == "mouse_sensitivity") return std::to_string(s_.mouse_sensitivity) + "%";
     if (it.id == "invert_mouse_y") return onoff(s_.invert_mouse_y);
+    if (it.id == "ffmpeg") return ffmpeg_version_.empty() ? tr("value.ffmpeg.none") : ffmpeg_version_;
     if (it.id == "language_choice")
     {
         for (const auto& l : langs_)
@@ -98,6 +104,46 @@ std::string MainMenu::value_of(const Item& it) const
 void MainMenu::save()
 {
     s_.save(path_); // a read-only folder still keeps the choices for this session
+}
+
+void MainMenu::refresh_ffmpeg()
+{
+    namespace cli = sieve::cli;
+    ffmpeg_version_ = cli::ffmpeg_version();
+    const std::optional<std::string> exe = cli::find_ffmpeg();
+    if (!ffmpeg_version_.empty()) ffmpeg_where_ = trf(s_.ffmpeg.empty() ? "value.ffmpeg.found" : "value.ffmpeg.chosen", {*exe});
+    else if (!s_.ffmpeg.empty()) ffmpeg_where_ = trf("value.ffmpeg.bad", {s_.ffmpeg});
+    else if (exe) ffmpeg_where_ = trf("value.ffmpeg.bad", {*exe}); // found by its name, and it does not run
+    else ffmpeg_where_ = cli::ffmpeg_looked();
+}
+
+namespace {
+
+void SDLCALL ffmpeg_file_chosen(void* user, const char* const* files, int)
+{
+    if (files && files[0]) static_cast<MainMenu*>(user)->ffmpeg_chosen(files[0]);
+}
+
+} // namespace
+
+void MainMenu::ffmpeg_chosen(const std::string& path)
+{
+    std::lock_guard<std::mutex> lock(chosen_mx_);
+    ffmpeg_chosen_ = path;
+}
+
+void MainMenu::poll_ffmpeg_chosen()
+{
+    std::optional<std::string> chosen;
+    {
+        std::lock_guard<std::mutex> lock(chosen_mx_);
+        chosen.swap(ffmpeg_chosen_);
+    }
+    if (!chosen) return;
+    s_.ffmpeg = *chosen;
+    sieve::cli::set_ffmpeg_path(s_.ffmpeg); // for the rest of this run too, over --ffmpeg: it was chosen after
+    save();
+    refresh_ffmpeg();
 }
 
 std::vector<std::string> MainMenu::list_labels() const
@@ -159,6 +205,7 @@ void MainMenu::back()
     case Screen::Graphics: screen_ = Screen::Settings; row_ = 0; return;
     case Screen::Controls: screen_ = Screen::Settings; row_ = 1; return;
     case Screen::Language: screen_ = Screen::Settings; row_ = 2; return;
+    case Screen::Programs: screen_ = Screen::Settings; row_ = 3; return;
     }
 }
 
@@ -182,6 +229,12 @@ void MainMenu::change(int dir)
         else if (it.id == "graphics") { screen_ = Screen::Graphics; row_ = 0; }
         else if (it.id == "controls") { screen_ = Screen::Controls; row_ = 0; }
         else if (it.id == "language") { screen_ = Screen::Language; row_ = 0; }
+        else if (it.id == "programs")
+        {
+            screen_ = Screen::Programs;
+            row_ = 0;
+            refresh_ffmpeg();
+        }
         else if (it.id == "back") back();
         return;
     case Kind::Toggle:
@@ -210,6 +263,23 @@ void MainMenu::change(int dir)
         save();
         return;
     case Kind::Choice: open_list(it); return;
+    case Kind::Program:
+        if (dir > 0)
+        {
+#ifdef _WIN32
+            static const SDL_DialogFileFilter programs[] = {{"Programs", "exe"}, {"All files", "*"}};
+            open_file_dialog(ffmpeg_file_chosen, this, window_, programs, 2, nullptr, false);
+#else
+            open_file_dialog(ffmpeg_file_chosen, this, window_, nullptr, 0, nullptr, false);
+#endif
+            return;
+        }
+        // Left: back to looking for one (SIEVE_FFMPEG, beside Sieve, the PATH).
+        s_.ffmpeg.clear();
+        sieve::cli::set_ffmpeg_path("");
+        save();
+        refresh_ffmpeg();
+        return;
     }
 }
 
@@ -322,6 +392,7 @@ MainMenu::Result MainMenu::run()
             handle(e);
             while (SDL_PollEvent(&e)) handle(e);
         }
+        poll_ffmpeg_chosen();
         {
             sieve::cli::timings::Scope timed("menu.main.frame");
             render();
@@ -387,11 +458,12 @@ void MainMenu::render()
                           : screen_ == Screen::Graphics ? "screen.graphics"
                           : screen_ == Screen::Controls ? "screen.controls"
                           : screen_ == Screen::Language ? "screen.language"
+                          : screen_ == Screen::Programs ? "screen.programs"
                                                         : nullptr;
     // Everything below the title (heading, items, help, the key list) is one block, centred in
     // the space between the title and the footer; if it is taller than that, it starts at the top.
     const auto its = items();
-    const bool pairs = screen_ == Screen::Graphics || screen_ == Screen::Controls || screen_ == Screen::Language;
+    const bool pairs = screen_ == Screen::Graphics || screen_ == Screen::Controls || screen_ == Screen::Language || screen_ == Screen::Programs;
     const float rowh = screen_ == Screen::Main ? 44.0f : 36.0f, boxw = std::min(W - 60, 760.0f);
     size_t help_lines = 0, key_lines = 0;
     if (row_ >= 0 && row_ < int(its.size())) help_lines = split_lines(tr("help." + its[size_t(row_)].id)).size();
@@ -437,7 +509,9 @@ void MainMenu::render()
             std::string v = value_of(it);
             if (it.kind == Kind::Choice) v += "  v";
             if (it.kind == Kind::Number) v = "< " + v + " >";
-            draw_text(r_, r.x + r.w - 20 - text_width(v, 2), yy + 2, v, 2, sel ? kAccent : kGrey);
+            // A program that is not there is said in red, as every warning that stops something is.
+            const bool missing = it.kind == Kind::Program && ffmpeg_version_.empty();
+            draw_text(r_, r.x + r.w - 20 - text_width(v, 2), yy + 2, v, 2, missing ? kRed : sel ? kAccent : kGrey);
             if (it.id == list_) list_anchor = r;
         }
         item_y = yy + rowh;
@@ -449,6 +523,27 @@ void MainMenu::render()
         const std::string help = tr("help." + its[size_t(row_)].id);
         float hy = item_y + 16;
         for (const auto& line : split_lines(help)) { draw_centred(r_, cx, hy, line, 1, kGrey); hy += 14; }
+        // The ffmpeg row: which one is used, or where none was found (in red).
+        if (its[size_t(row_)].kind == Kind::Program)
+        {
+            // Broken at spaces to the box's width: a path, or the list of places looked in, is long.
+            hy += 6;
+            std::string rest = ffmpeg_where_;
+            while (!rest.empty())
+            {
+                size_t cut = rest.size();
+                while (cut > 0 && text_width(rest.substr(0, cut), 1) > boxw - 20)
+                {
+                    const size_t sp = rest.rfind(' ', cut - 1);
+                    cut = sp == std::string::npos || sp == 0 ? cut - 1 : sp;
+                }
+                if (cut == 0) cut = rest.size();
+                draw_centred(r_, cx, hy, rest.substr(0, cut), 1, ffmpeg_version_.empty() ? kRed : kWhite);
+                hy += 14;
+                rest = cut < rest.size() ? rest.substr(cut + (rest[cut] == ' ' ? 1 : 0)) : std::string();
+            }
+            hy += 6;
+        }
         item_y = hy;
     }
 

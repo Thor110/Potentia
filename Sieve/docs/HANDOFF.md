@@ -3091,6 +3091,47 @@ command line) on every start. `sieve-hallway.ini` is now their one home.
 - **Docs:** README (the settings paragraph and where ffmpeg is looked for), SPECIFICATIONS §5.3.1,
   IDEAS §19.79.
 
+### 0.13.25, and most of what gets in the way (17 October 2026)
+IDEAS §19.79, in the order of the plan agreed with Edward.
+- **The version is 0.13.25** (Edward's choice; `CMakeLists.txt`, `vcpkg.json`, and the release
+  tool's examples). The READMEs' "released (v0.13.1)" stays until a release is made.
+- **Settings > Programs** (`client/main_menu.cpp`, a fourth Settings page after Language, so
+  the CI's key sequences keep their rows): one row, ffmpeg. It shows the version found, or "not
+  found" in red with where it looked under it; Enter chooses the program with the system's file
+  window, Left clears it. It saves `[paths] ffmpeg` and calls `set_ffmpeg_path` at once, so it
+  wins over `--ffmpeg` for the rest of the run, being chosen later. Worked out when the page
+  opens and when it changes, not every frame, since finding ffmpeg looks through the PATH.
+- **Where ffmpeg was looked for** (`cli::ffmpeg_looked`, `tools/cli/media_decode.cpp`):
+  `SIEVE_FFMPEG`'s value or "not set", the folder beside Sieve, and how many folders the PATH
+  has. Every "not found" message now says it, and names `[paths]` and Settings > Programs too.
+- **Red warnings** (`Hallway::warn`): the messages that say something was stopped (a warp, a
+  go-to, a save, J, a chain or anchor that would not open) are red on a dark plate, as
+  [Null Title] is, so they read on the red lines too, and stay 10 seconds rather than 6. A video
+  or WebP with no ffmpeg now says that, and where it looked, instead of "no line holds that kind".
+- **The tabs answer the mouse** (`click_hand_tab`, `select_hand_tab`): a click on any tab of
+  the item page goes to it, with the mouse free, in CHAT too. C and a click go through the same
+  function, so CHAT opens and closes the same way either way.
+- **HELP on every item** (`draw_help`, hud.cpp; `hand.help.*` in en.txt): after ITEM, COST,
+  SORT and META, and before CHAIN and CHAT so that C reaches it before CHAT takes the keys. Its
+  rows are the keys that work on what is in hand, chosen by its line (pages to turn, a melody to
+  play, a model to turn or talk to, the binary line's J), read from the key handler, not guessed.
+  The tab count moved up by one (`hand_tabs`); no CI sequence presses C far enough to notice.
+- **Chat logs** (`chat_log_text`, `chat_save_log`, chat.cpp): Ctrl+L or `/log [PATH]`. The
+  version and the time, the line and the model's whole address, then who said what and each card
+  as a line (a file's size, kind and weighing; a picture's or melody's address). Without a path,
+  `chat-logs/chat-YYYY-MM-DD-HHMMSS.txt` beside the program.
+- **The window raise on Windows** (`client/window_front.cpp`, in both programs): from the
+  dialog's callback, `AttachThreadInput` to the foreground's thread, `BringWindowToTop`,
+  `SetForegroundWindow`, then SDL's raise as before. **Not compiled here** (no Windows headers in
+  this container): Edward's build is the first to see it, and his test is the only one that tells.
+- **CI added:** the log (its header, the model's address, a file card, the command itself), and
+  a picture of HELP.
+- **Checked here:** every changed file compiles warning-free against SDL's headers, but for the
+  Windows half of `window_front.cpp`. Not run here: the hallway build, the unit suite, CI.
+- **Left of §19.79:** editing the context window, controls that flow between windows (wants a
+  short design first: which windows, and what "the item and the keys" mean in each), and the
+  Encryption Engine's item-in-hand button (stage 2).
+
 ### For the next session (17 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show
@@ -3100,9 +3141,9 @@ command line) on every start. `sieve-hallway.ini` is now their one home.
   `working-directory: Sieve` (or `defaults.run.working-directory`) and the paths in it checked.
   This was reported, but Edward has not decided yet; don't move it unasked.
 - **Still open, in IDEAS order:**
-  - the rest of §19.79: red ffmpeg warnings, the engine's item-in-hand button, controls between
-    windows, the window raise on Windows, CHAT's tabs answering the mouse, saving chat logs, a help
-    tab, and the version bump (still 0.13.1 in `CMakeLists.txt`);
+  - the rest of §19.79: the engine's item-in-hand button, controls between windows, editing the
+    context window, and testing the window raise on Windows (the other items were built on 17
+    October: see the entry above);
   - §19.80 (tabs on every line), §19.81 to §19.83 (models), §19.82 (encrypting files) and §19.85
     (skeletons);
   - Encryption Engine stage 2;

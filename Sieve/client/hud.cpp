@@ -403,7 +403,18 @@ void Hallway::draw_hud(int w, int h)
     if (in_hand_) draw_in_hand(W, H);
 
     // Messages, input box and help.
-    if (!message_.empty() && SDL_GetTicks() < message_until_) text(12, H - 36, message_, 1, ink);
+    if (!message_.empty() && SDL_GetTicks() < message_until_)
+    {
+        if (message_warns_)
+        {
+            // A warning: red, on a dark plate, as [Null Title] is, so it reads on the red lines too.
+            const SDL_FRect plate{8, H - 40, text_width(message_, 1) + 8, 16};
+            SDL_SetRenderDrawColor(r_, 0, 0, 0, 220);
+            SDL_RenderFillRect(r_, &plate);
+            text(12, H - 36, message_, 1, SDL_Color{255, 70, 70, 255});
+        }
+        else text(12, H - 36, message_, 1, ink);
+    }
     if (input_ != Input::None)
     {
         const std::string prompt = input_ == Input::Warp
@@ -598,6 +609,7 @@ std::vector<std::string> Hallway::split_lines(const std::string& s)
 
 void Hallway::draw_in_hand(float W, float H)
 {
+    hand_tab_rects_.clear(); // drawn again below, where the page has tabs
     const Theme& th = theme();
     const SDL_Color ink = th.edge;
     const Book& bk = *in_hand_;
@@ -627,15 +639,18 @@ void Hallway::draw_in_hand(float W, float H)
         const int tabs = hand_tabs();
         if (hand_tab_ >= tabs) hand_tab_ = 0; // META, gone with a change of map
         float tx = x + 14;
+        hand_tab_rects_.assign(size_t(tabs), SDL_FRect{});
         for (int t = 0; t < tabs; ++t)
         {
             const std::string label = tr(t == chat_tab()    ? "hand.tab.chat"
                                          : t == chain_tab() ? "hand.tab.chain"
+                                         : t == help_tab()  ? "hand.tab.help"
                                          : t == 0       ? "hand.tab.item"
                                          : t == 1       ? "hand.tab.cost"
                                          : t == 2       ? "hand.tab.sort"
                                                         : "hand.tab.meta");
             const float tw = text_width(label, 1) + 16;
+            hand_tab_rects_[size_t(t)] = {tx, cy - 3, tw, 16};
             if (t == hand_tab_)
             {
                 SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 60);
@@ -652,6 +667,7 @@ void Hallway::draw_in_hand(float W, float H)
     if (hand_tab_ == chain_tab()) { draw_chain(x + 14, cy, pw - 28, y + ph - 8); return; }
     if (hand_tab_ == 1) { draw_cost(bk, x, cy, pw, y + ph); return; }
     if (hand_tab_ == 2) { draw_sort(bk, x, cy, pw, y + ph - 16); return; }
+    if (hand_tab_ == help_tab()) { draw_help(bk, x, cy, pw, y + ph - 16); return; }
     if (hand_tab_ == 3) { draw_meta(bk, x, cy, pw, y + ph - 16); return; }
     // A titled unit's cover and title, above the thing itself.
     if (const std::string title = title_text(bk); titled)
@@ -750,6 +766,46 @@ void Hallway::draw_in_hand(float W, float H)
 // thing in your hand is. A compact address is shorter too, by what the filters set aside.
 //
 // Above the rows, the balance: the cheapest of those addresses against the item as a file.
+// The HELP tab: the keys for the item in hand, the ones every item answers to first, then those
+// of its line (pages to turn, a melody to play, a model to turn or talk to, a file to open as its
+// kind). Each row is "keys|what they do" in the language file, drawn as the Controls screen draws
+// its keys; a row whose language has none is left out.
+void Hallway::draw_help(const Book& bk, float x, float cy, float pw, float bottom)
+{
+    const SDL_Color ink = theme().edge;
+    std::vector<const char*> rows = {"hand.help.put", "hand.help.tabs", "hand.help.viewer", "hand.help.save", on_binary() ? "hand.help.jump.binary" : "hand.help.jump"};
+    if (!bk.ai) rows.push_back("hand.help.tailor");
+    rows.push_back("hand.help.map");
+    if (bk.parts) rows.push_back("hand.help.pages");
+    if (!on_books() && line().kind == LineKind::Audio) rows.push_back("hand.help.play");
+    if (bk.model || bk.world) rows.push_back("hand.help.turn");
+    if (bk.ai)
+    {
+        rows.push_back("hand.help.chat");
+        rows.push_back("hand.help.chain");
+    }
+    rows.push_back("hand.help.sort");
+    text(x + 14, cy, tr("hand.help.title"), 1, ink);
+    cy += 20;
+    const float key_w = std::min(260.0f, pw * 0.35f), what_w = pw - 28 - key_w - 12;
+    for (const char* id : rows)
+    {
+        const std::string& line = tr(id);
+        const size_t bar = line.find('|');
+        if (line.empty() || bar == std::string::npos) continue;
+        // The description wrapped to its column, a row per line.
+        const std::vector<std::string> what = wrap(line.substr(bar + 1), size_t(std::max(16.0f, what_w / 8)));
+        if (cy + 14 * float(what.size()) > bottom) break;
+        text(x + 14, cy, fit(line.substr(0, bar), key_w, 1), 1, SDL_Color{255, 255, 255, 255});
+        for (const std::string& w : what)
+        {
+            text(x + 14 + key_w + 12, cy, w, 1, ink);
+            cy += 14;
+        }
+        cy += 4;
+    }
+}
+
 void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float bottom)
 {
     const Theme& th = theme();

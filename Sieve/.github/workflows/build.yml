@@ -526,6 +526,9 @@ jobs:
           # line the guided row is shorter than the other two exactly when the unit reads as text.
           $H --no-menu --warp "it was the best of times" --press "E,C" --screenshot cost.png > /dev/null
           test -s cost.png
+          # HELP, after ITEM, COST and SORT on every line: the keys for what is in hand.
+          $H --no-menu --warp "it was the best of times" --press "C,C,C" --screenshot help.png > /dev/null
+          test -s help.png
           # The compass: the degree readout beside the percentage, to the precision set in Graphics.
           $H --no-menu --line pages --goto "25%" --walk "0,0" --screenshot comp.png | sed -n 1p | q "25.0000000000% along"
           test -s comp.png
@@ -863,6 +866,14 @@ jobs:
           q "^file: Vitruvian.jpg (207,500 bytes)" cards.txt
           q "^file: cut.txt (31 bytes)" cards.txt
           q "^file: hurrian-hymn-6.mid (1,377 bytes)" cards.txt
+          # The conversation saved as text (/log PATH, or Ctrl+L into chat-logs): the model it was
+          # with, by its address, then who said what, each card a line.
+          rm -f chatlog.txt
+          $H --no-menu --line ai --walk "0,0" --take --chat --chat-attach tests/training_corpus.txt --talk "/log chatlog.txt" --training-dir data/training --screenshot chat-log.png > /dev/null
+          q "^Sieve .* chat log, " chatlog.txt
+          q "^model in hand, its address ([0-9]* hex digits): [0-9a-f]" chatlog.txt
+          q "^  \[file\] training_corpus.txt, TXT, " chatlog.txt
+          q "^you: /log chatlog.txt" chatlog.txt
           # CHAT with a model file (the setup menu's AI rows; here --text-model): the tiny model checked
           # against the oracle above answers, given a file with the message; and DRAW with a chosen picture
           # model. The setup menu's rows save them in sieve-hallway.ini's [models].

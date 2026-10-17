@@ -330,7 +330,7 @@ void Hallway::item_save_poll()
     }
     catch (const std::exception& ex)
     {
-        message(trf("hand.save_failed", {shown, ex.what()}));
+        warn(trf("hand.save_failed", {shown, ex.what()}));
     }
 }
 
@@ -496,7 +496,7 @@ void Hallway::jump_kind()
     }
     catch (const std::exception& e)
     {
-        message(trf("msg.jump.failed", {e.what()}));
+        warn(trf("msg.jump.failed", {e.what()}));
     }
 }
 
@@ -518,7 +518,7 @@ void Hallway::open_as_kind(const std::vector<uint8_t>& bytes)
         if (on_pcm == (kind != "MID")) to = audio_line;
         else
         {
-            message(trf(on_pcm ? "msg.jump.needs_notes" : "msg.jump.needs_pcm", {kind}));
+            warn(trf(on_pcm ? "msg.jump.needs_notes" : "msg.jump.needs_pcm", {kind}));
             return;
         }
     }
@@ -530,9 +530,15 @@ void Hallway::open_as_kind(const std::vector<uint8_t>& bytes)
     // without an ID3 tag) is sound first.
     else if ((kind == "MP4" || kind == "AVI" || kind == "WEBP" || kind == "?") && cli::find_ffmpeg())
         to = kind == "?" && on_pcm && cli::looks_like_mpeg_audio(bytes) ? audio_line : image_line;
+    if (to < 0 && (kind == "MP4" || kind == "AVI" || kind == "WEBP"))
+    {
+        // A line does hold it, through ffmpeg: say that it is ffmpeg that is missing, and where it was looked for.
+        warn(trf("msg.jump.no_ffmpeg", {kind, cli::ffmpeg_missing()}));
+        return;
+    }
     if (to < 0)
     {
-        message(trf("msg.jump.no_line", {kind}));
+        warn(trf("msg.jump.no_line", {kind}));
         return;
     }
     if (to == kBooksLine)

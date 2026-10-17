@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(Sieve VERSION 0.13.1 LANGUAGES CXX)
+project(Sieve VERSION 0.13.25 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -341,6 +341,7 @@ if(SIEVE_BUILD_CLIENT)
         client/strings.cpp
         client/synth.cpp
         client/win_console.cpp
+        client/window_front.cpp
         client/world.cpp)
     target_link_libraries(hallway PRIVATE sieve_lines sieve_locate sieve_compare SDL3::SDL3)
     if(WIN32)
@@ -375,7 +376,7 @@ if(SIEVE_BUILD_CLIENT)
     # the installer attached. SDL is linked statically where a static SDL is to be had, so that
     # program is one file; with only a shared SDL it also needs SDL3.dll beside it (sieve locate
     # --program says so). On Windows it is a windowed program, without a console.
-    add_executable(sieve-install WIN32 client/installer_main.cpp client/unpack_7z.cpp ${SIEVE_ICON_RC})
+    add_executable(sieve-install WIN32 client/installer_main.cpp client/unpack_7z.cpp client/window_front.cpp ${SIEVE_ICON_RC})
     target_link_libraries(sieve-install PRIVATE sieve_lzma)
     if(SIEVE_SMALL_INSTALLER)
         # Its own SDL, built once from the same source (or fetched, when SDL came from vcpkg or

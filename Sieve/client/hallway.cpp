@@ -885,7 +885,7 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
         // Never let one book stop the frame: show the slot as empty and say why.
         b = Book{};
         b.empty = true;
-        message(trf("msg.cannot_show", {e.what()}));
+        warn(trf("msg.cannot_show", {e.what()}));
     }
     return cache_.emplace(key, std::move(b)).first->second;
 }
@@ -1148,6 +1148,14 @@ void Hallway::message(const std::string& m)
 {
     message_ = m;
     message_until_ = SDL_GetTicks() + 6000;
+    message_warns_ = false;
+}
+
+void Hallway::warn(const std::string& m)
+{
+    message_ = m;
+    message_until_ = SDL_GetTicks() + 10000; // longer: it is the one to read
+    message_warns_ = true;
 }
 
 // The book the camera is looking at, or else the first book of the tile: the reference for
@@ -1324,7 +1332,7 @@ bool Hallway::warp(const std::string& input)
     }
     catch (const std::exception& e)
     {
-        message(trf("msg.warp.failed", {e.what()}));
+        warn(trf("msg.warp.failed", {e.what()}));
         return false;
     }
 }
@@ -1421,7 +1429,7 @@ bool Hallway::go_to(std::string input)
     }
     catch (const std::exception& e)
     {
-        message(trf("msg.goto.failed", {e.what()}));
+        warn(trf("msg.goto.failed", {e.what()}));
         return false;
     }
 }
@@ -1556,8 +1564,38 @@ void Hallway::handle(const SDL_Event& e, bool& quit)
     }
     catch (const std::exception& ex)
     {
-        message(trf("status.error", {ex.what()}));
+        warn(trf("status.error", {ex.what()}));
     }
+}
+
+void Hallway::select_hand_tab(int t)
+{
+    if (!in_hand_ || t < 0 || t >= hand_tabs()) return;
+    if (chat_open_ && t != chat_tab()) close_chat(); // the keys come back to the hallway
+    hand_tab_ = t;
+    if (hand_tab_ == chat_tab()) open_chat(); // the keys go to its box until Esc
+    else if (hand_tab_ == 2)
+    {
+        const int node = sort_node(*in_hand_);
+        GraphMap* g = graph_current();
+        if (node >= 0 && g) message(trf("msg.sort.anchor", {std::to_string(node), g->map.nodes[size_t(node)].path, g->title}));
+    }
+}
+
+bool Hallway::click_hand_tab(const SDL_Event& e)
+{
+    if (!in_hand_ || e.type != SDL_EVENT_MOUSE_BUTTON_DOWN || e.button.button != SDL_BUTTON_LEFT) return false;
+    if (SDL_GetWindowRelativeMouseMode(window_)) return false; // a captured mouse has no place on the page
+    // In the renderer's coordinates, as the tabs were drawn.
+    SDL_FPoint at{e.button.x, e.button.y};
+    SDL_RenderCoordinatesFromWindow(r_, e.button.x, e.button.y, &at.x, &at.y);
+    for (size_t t = 0; t < hand_tab_rects_.size(); ++t)
+        if (SDL_PointInRectFloat(&at, &hand_tab_rects_[t]))
+        {
+            if (int(t) != hand_tab_) select_hand_tab(int(t));
+            return true;
+        }
+    return false;
 }
 
 void Hallway::handle_event(const SDL_Event& e, bool& quit)
@@ -1648,8 +1686,9 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
     }
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
     {
-        // A click on the thing in hand opens it in the viewer; anywhere else, as before, it takes
-        // the mouse back or puts the thing down.
+        // A click on a tab goes to it; on the thing in hand opens it in the viewer; anywhere
+        // else, as before, it takes the mouse back or puts the thing down.
+        if (click_hand_tab(e)) return;
         if (e.button.button == SDL_BUTTON_LEFT && over_hand_view(e)) open_viewer();
         else if (!SDL_GetWindowRelativeMouseMode(window_)) SDL_SetWindowRelativeMouseMode(window_, true);
         else if (e.button.button == SDL_BUTTON_LEFT) take_or_return();
@@ -1719,17 +1758,7 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
     case SDLK_C:
         // The item page's tabs: the thing itself, what it costs to name it, and where it stands
         // in a map (SORT).
-        if (in_hand_)
-        {
-            hand_tab_ = (hand_tab_ + 1) % hand_tabs();
-            if (hand_tab_ == chat_tab()) open_chat(); // the keys go to its box until Esc
-            else if (hand_tab_ == 2)
-            {
-                const int node = sort_node(*in_hand_);
-                GraphMap* g = graph_current();
-                if (node >= 0 && g) message(trf("msg.sort.anchor", {std::to_string(node), g->map.nodes[size_t(node)].path, g->title}));
-            }
-        }
+        if (in_hand_) select_hand_tab((hand_tab_ + 1) % hand_tabs());
         break;
     case SDLK_R:
         if (in_hand_ && (in_hand_->model || in_hand_->world)) { model_spin_ = kModelSpin; model_tilt_ = kModelTilt; }

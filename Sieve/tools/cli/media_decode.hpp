@@ -7,7 +7,7 @@
 // one per stored frame (as a GIF's are), with bit-exact colour conversion; then canon-image-v1 fits
 // them to the line as it fits any picture.
 //
-// Which ffmpeg: the one set (the CLI's --ffmpeg, the hallway's "ffmpeg" setting), else the
+// Which ffmpeg: the one set (the CLI's --ffmpeg, the hallway's [paths] ffmpeg setting), else the
 // SIEVE_FFMPEG environment variable, else an ffmpeg beside Sieve's own program, else the first on
 // the PATH. Sieve works without one; only these other formats need it.
 #pragma once
@@ -45,6 +45,10 @@ std::optional<std::string> find_ffmpeg();
 // Why no ffmpeg can be run ("there is no ffmpeg at '...'", or that none was found and where to put
 // one), or empty if one can.
 std::string ffmpeg_missing();
+
+// Where an ffmpeg was looked for when none is set: "looked for ffmpeg.exe in SIEVE_FFMPEG (not
+// set), beside Sieve ('C:/Sieve') and in the 14 folders on the PATH".
+std::string ffmpeg_looked();
 
 // Its version, as "ffmpeg 7.0.2", or empty if there is none.
 std::string ffmpeg_version();

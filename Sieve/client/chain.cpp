@@ -394,7 +394,7 @@ void Hallway::chain_load(const std::string& path)
     }
     catch (const std::exception& ex)
     {
-        message(trf("chain.open_failed", {ex.what()}));
+        warn(trf("chain.open_failed", {ex.what()}));
     }
 }
 

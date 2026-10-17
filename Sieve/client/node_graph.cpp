@@ -334,7 +334,7 @@ void Hallway::graph_add_anchor(const Book& bk)
         }
         catch (const std::exception& ex)
         {
-            message(trf("anchor.failed", {ex.what()}));
+            warn(trf("anchor.failed", {ex.what()}));
         }
         return;
     }
@@ -350,7 +350,7 @@ void Hallway::graph_add_anchor(const Book& bk)
     }
     catch (const std::exception& ex)
     {
-        message(trf("anchor.failed", {ex.what()}));
+        warn(trf("anchor.failed", {ex.what()}));
     }
 }
 
@@ -700,14 +700,15 @@ void Hallway::draw_sort(const Book& bk, float x, float cy, float pw, float botto
 // with metadata there; and, for a model of the AI line, CHAIN and CHAT last.
 int Hallway::hand_tabs()
 {
-    if (!in_hand_) return 3;
+    if (!in_hand_) return 4;
     const int chat = in_hand_->ai ? 2 : 0; // CHAIN, then CHAT, last
+    // ITEM, COST and SORT, META with notes, then HELP, on every line.
     const int node = sort_node(*in_hand_);
     const GraphMap* g = graph_current();
-    if (node <= 0 || !g) return 3 + chat;
+    if (node <= 0 || !g) return 4 + chat;
     for (const cli::MapMeta& m : g->map.meta)
-        if (m.node == uint32_t(node)) return 4 + chat;
-    return 3 + chat;
+        if (m.node == uint32_t(node)) return 5 + chat;
+    return 4 + chat;
 }
 
 void Hallway::draw_meta(const Book& bk, float x, float cy, float pw, float bottom)

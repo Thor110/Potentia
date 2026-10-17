@@ -630,6 +630,9 @@ public:
     void face(uint32_t slot);
 
     void message(const std::string& m);
+    // A message saying that something was stopped (a warp, a save, a file that cannot be opened):
+    // the same line as message(), in red on a dark plate, so it is seen on every line's colour.
+    void warn(const std::string& m);
 
     const Book* reference_book();
 
@@ -1313,8 +1316,10 @@ private:
     std::optional<Book> save_item_;
     std::optional<std::vector<uint8_t>> save_blob_; // or a file made already: a view's picture or text
     std::string save_ext_;
-    int hand_tabs();                       // 3, or 4 with META; one more (CHAT) for a model of the AI line
+    int hand_tabs();                       // ITEM, COST, SORT, META (with notes), HELP; CHAIN and CHAT for a model of the AI line
     void draw_meta(const Book& bk, float x, float cy, float pw, float bottom);
+    // The HELP tab: what can be done with the item in hand, and with which keys, for its line.
+    void draw_help(const Book& bk, float x, float cy, float pw, float bottom);
     void graph_remove(int node);
     // The real names of files walked to (the locator, T with a path, a map's node), by SHA-256,
     // so an anchor made of one keeps its name rather than its canonicalised title.
@@ -1463,6 +1468,13 @@ private:
     int view_tex_w_ = 0, view_tex_h_ = 0;
     std::vector<uint32_t> view_px_;
     SDL_FRect hand_view_rect_{};                    // where the thing in hand was drawn on its page
+    std::vector<SDL_FRect> hand_tab_rects_;         // where each of the item page's tabs was drawn, by tab
+    // Goes to tab t of the item page, as C does when it reaches it: CHAT takes the keys for its
+    // box, leaving CHAT gives them back, SORT says where the item stands.
+    void select_hand_tab(int t);
+    // A left click on one of the item page's tabs, with the mouse free: goes to it (true), as C
+    // would, on every tab and CHAT too, where the keys go to the message.
+    bool click_hand_tab(const SDL_Event& e);
     int media_area_ = 1;          // 0 recent, 1 the controls, 2 favourites
     int media_list_ = 0;          // the list the actions act on: 0 recent, 2 favourites
     int media_row_ = 0, media_sel_[3] = {0, 0, 0}, media_top_ = 0;
@@ -1519,6 +1531,9 @@ private:
     // Every frame: what the dialogs chose (files to give, where to save a card), and the keys given
     // back when the CHAT tab no longer shows.
     void chat_poll();
+    // The HELP tab's index: after ITEM, COST, SORT and META, and before CHAIN and CHAT, so that C
+    // reaches it before CHAT takes the keys.
+    int help_tab() { return in_hand_ ? hand_tabs() - 1 - (in_hand_->ai ? 2 : 0) : -1; }
     // The CHAT tab's index (the last tab, with a model of the AI line in hand), or -1.
     int chat_tab() { return in_hand_ && in_hand_->ai ? hand_tabs() - 1 : -1; }
     // The CHAIN tab's index (just before CHAT, so C reaches it before CHAT takes the keys), or -1.
@@ -1562,6 +1577,12 @@ private:
     bool chat_show_unit(ChatEntry e); // false when the vault withheld it
     // A line typed in CHAT that begins with '/': a command (/random picture, /random melody, /help).
     void chat_command(const std::string& line);
+    // The conversation as a plain-text log (Ctrl+L, /log [PATH]): who said what, each card as a
+    // line, and at the top the model it was with (its line and its address), so that it can be
+    // found again. Saved at `path`, or else in chat-logs beside the program, named by the time;
+    // the conversation says where.
+    std::string chat_log_text() const;
+    void chat_save_log(const std::string& path);
     void chat_act(size_t entry, ChatAct act);
     // The model in hand made ready to talk (a new conversation for a new model).
     void talk_ready();
@@ -1646,6 +1667,7 @@ private:
     std::string text_;
     std::string message_;
     Uint64 message_until_ = 0;
+    bool message_warns_ = false; // drawn in red (warn)
     bool menu_requested_ = false;
     bool restart_from_pause_ = false; // the setup menu was opened by the pause menu's Restart
     float look_ = 0.0025f; // radians per pixel of mouse movement
