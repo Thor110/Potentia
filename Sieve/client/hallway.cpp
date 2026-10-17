@@ -1823,6 +1823,7 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
                 else bytes = item_file(*in_hand_, name);
                 cipher_item_ = std::make_pair(std::move(bytes), name);
                 request_ = Request::Cipher;
+                quit = true; // the frame loop hands over to the engine, as the pause menu's row does
             }
             catch (const std::exception& ex)
             {

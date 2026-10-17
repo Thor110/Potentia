@@ -3531,3 +3531,78 @@ animation and more: bones with names and parents, a pose as one rotation per bon
 skinned to them. Joint limits are a filter on poses (§19.60), so a skeleton line is a state space
 of poses that can be counted and sifted like any other, and an animation is a unit of poses over
 time, as a film is of pictures.
+
+**19.86 Larger models, plugged in: the models evaluated, and how to take them apart as they load
+(Edward, 17 October 2026).** His request: the AI line's figure (2^32768 at the defaults) should
+show where its parameters come in, and larger models should simply plug in; so evaluate the models
+and model types there are, then work out the best way to dissect them on the fly.
+- **The AI line's figure is right.** At the defaults (1 layer, width 16, 4 bits a weight) a model
+  has 8,192 weights: the embedding 256 × 16 = 4,096, and a layer's q, k, v and o (16 × 16 each)
+  and gate, up and down (64 × 16 each) another 4,096. Each weight is one of 2^4 = 16 values, so
+  the line holds 16^8192 = 2^32768 models. The heads do not change the count; they divide the
+  width. The setup menu now writes it `16^8192`, values^positions as the other lines are written,
+  so both parameters show. The line has no titles (SPECIFICATIONS §12.0d).
+- **The models looked at,** read from their own `config.json` and safetensors headers (a few KB
+  each by range request, no weights downloaded; 17 October 2026). Bytes are the values at their
+  stored width (BF16 two bytes, F32 four), worked out, not measured on a machine:
+
+  | Model | Family | Values | Stored | Files | What Sieve's engine lacks for it |
+  |---|---|---|---|---|---|
+  | SmolLM2-135M / 360M / 1.7B | llama | 134.5 M / 361.8 M / 1,711.4 M | BF16, 0.27 / 0.72 / 3.42 GB | 1 | nothing: runs today |
+  | TinyLlama-1.1B-Chat | llama | 1,100.0 M | BF16, 2.20 GB | 1 | nothing in the config (an untied `lm_head`, which is covered) |
+  | Llama-3.2-1B (unsloth's copy; Meta's is gated) | llama | 1,235.8 M | BF16, 2.47 GB | 1 | `rope_scaling` of type llama3, which `Config::from_json` refuses |
+  | Qwen2.5-0.5B / 1.5B | qwen2 | 494.0 M / 1,543.7 M | BF16, 0.99 / 3.09 GB | 1 | biases on q, k and v |
+  | Phi-3-mini-4k | phi3 | 3,821.1 M | BF16, 7.64 GB | 2 (sharded) | `qkv_proj` and `gate_up_proj` fused (one tensor each, to split), shards |
+  | Mistral-7B-v0.3 | mistral | 7,248.0 M | BF16, 14.50 GB | 3 (sharded) | shards; its shape is llama's, but its size needs quantised weights |
+  | Gemma-2-2B (unsloth's copy) | gemma2 | 2,614.3 M | BF16, 5.23 GB | 1 | GELU (tanh), two more norms a layer, soft-capped logits (30) and scores (50), a head size of 256 that is not width / heads, alternating sliding windows (4096), its own tokenizer |
+  | GPT-2 | gpt2 | 137.0 M | F32, 0.55 GB | 1 | another family: LayerNorm with biases, learned positions, GELU, fused attention, weights stored transposed |
+  | Mamba-130M | mamba | 129.1 M | F32, 0.52 GB | 1 | not a transformer: a state-space model, an engine of its own |
+
+  Quantised copies of the same models are published as single GGUF files, for example
+  SmolLM2-1.7B-Instruct: 993,874,912 bytes at Q4_0 (bartowski's), and Qwen2.5-1.5B-Instruct:
+  1,066,227,232 bytes at Q4_0, 1,894,532,128 at Q8_0 and 3,560,416,288 at F16 (Qwen's own).
+- **What it shows:**
+  - Most small chat models are *llama-shaped*: llama, qwen2, phi3 and mistral differ by a few
+    switches (biases, fused tensors, rope scaling, sliding windows), not by architecture. One
+    engine with switches covers all four; that is §19.80's "one less if" applied to models.
+  - Gemma 2 is llama-like with several more switches; GPT-2 and Mamba are other families.
+  - Size is the limit before architecture is. The engine keeps BF16 as stored but widens F16 to
+    F32 (twice the memory), and copies every tensor into memory before the first token.
+- **The way to take them apart on the fly,** in stages, each one measured before the next:
+  1. **Inspect without loading.** From `config.json` and the header (or a GGUF file's header)
+     alone: the family, every tensor's role, the memory it needs at its stored width, the shards,
+     and what the engine lacks for it, said before anything is read. `sieve tensors --inspect`,
+     and CHAT's model row says the same before it loads. Cost: the headers, a few KB.
+  2. **Map, do not copy.** Memory-map the files (and every shard named by
+     `model.safetensors.index.json`) and read each row of weights where it lies, BF16 and F16
+     both as stored. Loading becomes reading a header; the system pages weights in as they are
+     used, and two runs of the same model share them.
+  3. **Families as data.** One versioned table per family (`arch-llama-v1`, `arch-qwen2-v1`,
+     `arch-phi3-v1`, ...): the tensor names and their roles, which tensors are fused and how they
+     split, and the switches (biases, rope scaling, sliding window, norm offset, activation,
+     soft caps). The oracle checks each against a published model's logits, as SmolLM2's were
+     checked against ONNX Runtime. Llama 3's rope scaling, Qwen2's biases and Phi-3's fused
+     tensors first; then Gemma 2.
+  4. **Quantised weights, read in place.** A GGUF reader, its block formats dequantised a row at
+     a time inside the dot product: Q8_0 (32 values, int8, one F16 scale) and Q4_0 (32 values,
+     4 bits, one F16 scale) first, the K-quants after. This is what puts Mistral-7B, about 4 GB at
+     Q4, on a machine without 15 GB to spare.
+  5. **Tokenizers.** `tokenizer.json`'s byte-level BPE is covered with GPT-2's pattern. Qwen's
+     and Llama 3's patterns differ and need checking against Hugging Face's `tokenizers`, as the
+     5,736 texts were; Gemma's (and other SentencePiece tokenizers) are a second kind; a GGUF file
+     carries its vocabulary in its header.
+  6. **Other families,** each an engine of its own, only when one is wanted: GPT-2 (simple, and
+     the start of many), Mamba. Picture models (a UNet or a DiT, its VAE and text encoder) stay
+     behind the localhost bridge of §19.26 for now.
+- **Plugging a model into the AI line, honestly.** `aispace-v1` is one Llama shape with a
+  256-byte vocabulary, a feed-forward of 4H, its norms all 1, and digits evenly spaced over a
+  range. A published model fits none of that, so today it sits exactly on the binary line (its
+  file) and not on the AI line. A later `aispace-v2` could take its shape from a `config.json`
+  (the vocabulary, the feed-forward, the key and value heads, the norms as weights) and its
+  digits as the stored values, BF16 being 16 bits a digit. Then a published model *is* a unit of
+  that line, exactly, and the address of SmolLM2-360M is its 723,642,240 bytes of weights
+  written out: as long as the weights, never shorter (§0). What the line adds is the neighbours:
+  every model one digit away, the filters, and the walk.
+- **Proposed first step:** stage 1 and stage 2 together (inspect, then map), with Llama 3's rope
+  scaling, Qwen2's biases and Phi-3's fused tensors, since all three are small switches and they
+  bring in the three most used families of small chat models.

@@ -3171,6 +3171,29 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   the build, the unit suite, CI. No CI line drives Ctrl+E yet: it needs keys pressed after
   `--talk`, which the scripting does not order.
 
+### I opens the engine; the AI line's figure; larger models evaluated (17 October 2026)
+- **Edward's test of the last batch:** Debug, Release, the tests and the release package all
+  pass, and the context window works. One fault: I with an item in hand did not open the engine.
+- **Fixed:** the I key set the request but not `quit`, and the hallway's frame loop hands over
+  to another screen only when the key handler sets both (as the pause menu's rows do). It sets
+  `quit` now.
+- **The AI line's figure** (Edward asked whether 2^32768 was right, expecting a parameter in it):
+  it is right. 8,192 weights at the defaults, the embedding's 4,096 and the one layer's 4,096, at 4
+  bits each. The setup menu (and so `--metrics`) now writes it `16^8192 = ~10^9864.2`,
+  values^positions as the other lines are written. The `sieve ai` tool's own `2^32768` line is
+  unchanged (CI checks it).
+- **Larger models, evaluated** (IDEAS §19.86): twelve published models, read from their
+  `config.json` and safetensors headers by range request (no weights downloaded): SmolLM2 three
+  sizes, TinyLlama, Llama 3.2 1B, Qwen2.5 two sizes, Phi-3-mini, Gemma 2 2B, Mistral 7B, GPT-2 and
+  Mamba. What each needs beyond the engine, and a plan in six stages: inspect without loading,
+  memory-map rather than copy, families as versioned data, GGUF's quantised blocks read in place,
+  tokenizers, and other families only when wanted. It also says what plugging a published model
+  into the AI line would honestly mean (an `aispace-v2` whose digits are the stored values).
+- **Proposed next:** stages 1 and 2 with Llama 3's rope scaling, Qwen2's biases and Phi-3's fused
+  tensors. Waiting for Edward's word.
+- **Checked here:** the two changed client files compile warning-free. Not run here: the build,
+  the unit suite, CI.
+
 ### For the next session (17 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show
@@ -3185,6 +3208,7 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
     (`.sieve` recipes and keys split by secret sharing) and §19.85 (skeletons);
   - the rest of Encryption Engine stage 2: a layer keyed by a picture (§19.76), the catalogue on
     the screen;
+  - larger models plugged in (IDEAS §19.86), stages 1 and 2 first;
   - the characters model's sampling experiments (§19.73: argmax in parallel per level is the
     likely reason no character comes out recognisable; untested);
   - V5S2;

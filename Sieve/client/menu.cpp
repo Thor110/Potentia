@@ -721,13 +721,15 @@ std::array<LineSize, kLines> Menu::line_sizes() const
         worlds.units = "cov*title*(model*" + std::to_string(places) + ")^" + std::to_string(s_.world_models) + " = ~10^" +
                        fixed(worlds.bits * std::log10(2.0), 1);
     }
-    // AI (aispace-v1): every model of the shape, its W weights each one of 2^B values: 2^(B W) models.
+    // AI (aispace-v1): every model of the shape, its W weights each one of 2^B values: 2^(B W) models,
+    // written as the other lines are, values^positions ("16^8192" at the defaults: 4 bits a weight,
+    // and the 8,192 weights that 1 layer of width 16 has). No title: the line has none (§12.0d).
     LineSize ai;
     {
         const uint64_t per = sieve::books_per_tile(), w = ai_weights();
         ai.bits = double(s_.ai_bits) * double(w);
         ai.padding = uint32_t((per - tile_pow(2, uint64_t(s_.ai_bits) * w)) % per);
-        ai.units = "2^" + std::to_string(uint64_t(s_.ai_bits) * w) + " = ~10^" + fixed(ai.bits * std::log10(2.0), 1);
+        ai.units = std::to_string(uint64_t(1) << s_.ai_bits) + "^" + std::to_string(w) + " = ~10^" + fixed(ai.bits * std::log10(2.0), 1);
     }
     std::array<LineSize, kLines> out;
     out[size_t(kAiLine)] = ai;
