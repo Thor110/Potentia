@@ -3214,6 +3214,52 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
 - **Checked here:** the unit suite (core build), and every changed client and tool file compiles
   warning-free. Not run here: the hallway build, CI.
 
+### What each ordering saves, in the metrics list (17 October 2026)
+- **Edward's test of the last batch:** Debug, Release, the tests and the release package, and
+  the repository updated: all good.
+- **His request:** a metric of the bit reduction, at the least, each ordering can be expected to
+  give. The honest answer is in the list's new last part, "Orderings" (`Menu::ordering_metrics`):
+  - *Positional and scrambled:* 0 bits for every unit on every line (each a one-to-one numbering of
+    the whole line; §0's counting argument).
+  - *Compact:* exactly log2(line / survivors) bits off every survivor, from each line's count: the
+    one guaranteed saving.
+  - *Guided* (pages): no minimum. The bound over every page, from the model's tables
+    (`CharModel::frequency_range`, new: the least and most any symbol has in any table, 1 and
+    65,510 for the pinned model, which a unit test checks): 0.0 to 514.0 bits at 32 characters,
+    against 152.2 positional. And measured on a text the model was not trained on,
+    `data/metrics/reference-text.txt` (the opening of *A Tale of Two Cities*, copied from
+    `tests/example_book_source.txt`; Dickens is not among the 15 training books): 29 pages,
+    63.2 bits a page on average, 88.9 shorter, 1.98 bits a character against 4.75. The oracle
+    (`guided_code`, its own tables) gives the same figures, and a scratch program on the core
+    gives them too.
+- **`--metrics-text FILE`** names the text; by default it is found in `data/metrics`, beside the
+  program, or in the source tree. `make_release.py` and `log_metrics.py` pass it, as they pass the
+  reference filters. CI checks the new lines' shape.
+- **Checked here:** the unit suite, 153,108 checks, 0 failures; the changed client file compiles
+  warning-free. Not run here: the hallway build, CI.
+
+### The build error fixed; a full build here; the trained model on the record (17 October 2026)
+- **Edward's build failed:** `'executable_dir': is not a member of 'sieve::cli'` in `app_main.cpp`
+  (the `--metrics-text` lookup). It needed `cli/dictionaries.hpp`. The last batch was checked by
+  compiling the changed files, and `app_main.cpp` was changed after that check. So this time
+  **the whole hallway was built here** (Release, SDL3 from source, no warnings) and run.
+- **Run on that build:** every CI line added this session (the settings file's round trip and
+  older file, the setup menu's `[setup]`, Graphics' file, the engine on a file against
+  `sieve cipher`, HELP, the chat log, the metrics list and its new parts): all pass.
+- **The trained model, on the record** (Edward: "an insane reduction"; the aim is to reduce files
+  to their limit, and to keep the figures unbiased: both in VOICES.md). The metrics list's last
+  part, `Menu::record_metrics`, weighs every trained run of the AI line in the training folders,
+  live, on every build:
+  - universalbibliothek: address 32,768 bits; `model.safetensors` 272,576; deflate 58,256; LZMA2
+    44,608. The address is 12.0% of the file and 73.5% of LZMA2's.
+  - A model drawn at random from the same line (mt19937, seed 1): address 32,768; file 272,576;
+    deflate 59,600; LZMA2 45,056. So the address's advantage is knowing the line's shape (the
+    file keeps 4-bit weights as 32-bit floats), not the training. Training is what makes this
+    model one worth naming, and the compressors find a little more in it.
+  - The line's id, which the reader must be given (360 bits), is shown with it.
+  - CI pins the address and file figures; the compressors' depend on the zlib and liblzma linked.
+- **Checked here:** the full build; the unit suite as before; the CI lines above.
+
 ### For the next session (17 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show
@@ -3246,5 +3292,7 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   - The website's AI disclosure stays at the top of every page; the page is "Build or Buy", and it
     never sells.
   - Edward runs Debug, Release, `tools\run_tests.bat` and `make_release`; run the unit suite once
-    here, plus any CI lines a change adds.
+    here, plus any CI lines a change adds. Compile every changed file after the last edit, and when
+    a change touches the hallway, build it whole before handing over (17 October 2026: a missing
+    include reached Edward's build).
 - **No code changed.**

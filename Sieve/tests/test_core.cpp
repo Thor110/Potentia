@@ -1638,6 +1638,10 @@ void test_guided_vectors(const std::string& dir)
     sha = line.substr(tag.size());
     const auto model = std::make_shared<const CharModel>(CharModel::load_file(dir + "../data/models/gutenberg-lower27-o5.model"));
     CHECK(model->sha256() == sha);
+    // The least and most any symbol is given in any table (the metrics list's bound on a guided
+    // address): 1, as every table gives every symbol, and the padding table's 2^16 - 26, as the
+    // oracle's tables give them.
+    CHECK(model->frequency_range() == std::make_pair(uint32_t(1), uint32_t(65510)));
     const Alphabet& a = alphabet_by_id("lower27");
     std::map<uint32_t, std::unique_ptr<GuidedLine>> lines;
     int n = 0;

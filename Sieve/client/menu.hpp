@@ -168,7 +168,9 @@ public:
     // The metrics list (hallway --metrics; IDEAS §19.12): every line's tally as the setup menu
     // counts it, waited for, one line a dimension (binary first, then in door order), then each
     // line's shape. The same numbers the menu shows beside each line, so the two cannot differ.
-    std::string metrics_text();
+    // `reference_text`: a text the model was not trained on, for what the guided ordering saves on
+    // text (data/metrics/reference-text.txt; empty: not measured, and the list says so).
+    std::string metrics_text(const std::string& reference_text = "");
     void open_filters(int line)
     {
         overlay_ = line;
@@ -350,6 +352,11 @@ private:
         double table_bytes = 0;
     };
     static void survivors_of(StackInfo& out, const sieve::BigUint& n, const sieve::BigUint& total);
+    // The metrics list's last part: what each ordering saves on an address (menu.cpp).
+    std::string ordering_metrics(const std::vector<int>& order, const std::array<StackInfo, kLines>& got, size_t name_w,
+                                 const std::string& reference_text);
+    // And after it: the models Sieve trained, weighed against their files (menu.cpp).
+    std::string record_metrics();
     static void none_of(StackInfo& out);
     const StackInfo& stack_info(int line);
     const StackInfo& parts_stack_info(int line); // books, tracks, movies: every part counted, the whole exact

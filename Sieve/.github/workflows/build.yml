@@ -758,6 +758,18 @@ jobs:
           q "^Binary : 99.9954%" metrics.txt
           q "^Models : 99.999999999999...% *( Kept : 10^-21.47 )" metrics.txt
           [ "$(grep -c ' : .*Kept : ' metrics.txt)" = 11 ]
+          # ...and what each ordering saves: nothing in positional or scrambled order, what the
+          # filters remove off every survivor in compact order, and the guided ordering's bound and
+          # what it did on the reference text (Dickens, which the model was not trained on).
+          q "^Positional and scrambled : 0 bits, on every line" metrics.txt
+          q "^Binary : compact [0-9.]* bits off every survivor" metrics.txt
+          q "^Pages  : guided: no minimum" metrics.txt
+          q "^Pages  : guided on reference-text.txt (SHA-256 [0-9a-f]*\.\.\., [0-9]* pages): [0-9.]* bits a page" metrics.txt
+          # The model Sieve trained, against its own file and the compressors (whose sizes depend on
+          # the zlib and liblzma linked, so only the address and the file are pinned).
+          q "^universalbibliothek (ai/L1/H16/A2/F64/B4/V256/key=sieve/aispace-v1" metrics.txt
+          q "^  trained: address 32,768; file 272,576 " metrics.txt
+          q "^  random : address 32,768; file 272,576 " metrics.txt
           here=$($H --warp "$W" --walk "0,0" --screenshot a.png | book)
           next=$($H --warp "$W" --tile 1 --walk "0,0" --screenshot b.png | book)
           # Through a door and straight back: exactly where you were.

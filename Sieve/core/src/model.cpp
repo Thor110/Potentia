@@ -217,6 +217,20 @@ const uint32_t* CharModel::cumulative(std::span<const uint32_t> history) const
     throw std::logic_error("model has no empty context");
 }
 
+std::pair<uint32_t, uint32_t> CharModel::frequency_range() const
+{
+    const size_t per = size_t(params_.base) + 1;
+    uint32_t lo = kModelTotal, hi = 0;
+    for (size_t t = 0; t + per <= cum_.size(); t += per)
+        for (size_t s = 0; s + 1 < per; ++s)
+        {
+            const uint32_t f = cum_[t + s + 1] - cum_[t + s];
+            lo = std::min(lo, f);
+            hi = std::max(hi, f);
+        }
+    return {lo, hi};
+}
+
 double CharModel::stream_bits(std::span<const uint32_t> stream) const
 {
     double bits = 0;

@@ -30,6 +30,7 @@
 #include "cli/diffusion_run.hpp"
 #include "cli/model_folder.hpp"
 #include "cli/train.hpp"
+#include "cli/compare.hpp"
 
 #include "sieve/alphabet.hpp"
 #include "sieve/audio.hpp"
@@ -41,8 +42,14 @@
 #include "sieve/binaryspace.hpp"
 #include "sieve/biguint.hpp"
 #include "sieve/image.hpp"
+#include "sieve/canon.hpp"
+#include "sieve/guided.hpp"
+#include "sieve/sha256.hpp"
 
 #include <algorithm>
+#include <fstream>
+#include <random>
+#include <sstream>
 #include <optional>
 #include <atomic>
 #include <condition_variable>
@@ -2531,7 +2538,22 @@ const Menu::StackInfo& Menu::stack_info(int i)
     return resolve(i, key, std::move(work));
 }
 
-std::string Menu::metrics_text()
+namespace {
+
+// A line's name as the metrics list writes it: "Pages", "Binary" (a name of two letters or fewer
+// is an abbreviation, and stays as it is: AI).
+std::string name_of(int i)
+{
+    std::string n = tr(kDimensions[i].theme.key);
+    if (n.size() <= 2) return n;
+    for (size_t k = 1; k < n.size(); ++k)
+        if (n[k] >= 'A' && n[k] <= 'Z' && n[k - 1] != ' ') n[k] = char(n[k] - 'A' + 'a');
+    return n;
+}
+
+} // namespace
+
+std::string Menu::metrics_text(const std::string& reference_text)
 {
     // Each line's tally, waited for: the menu's workers count it, as they do on screen.
     std::array<StackInfo, kLines> got;
@@ -2547,14 +2569,6 @@ std::string Menu::metrics_text()
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
     // The line's name as the hallway writes it, in title case ("IMAGE" -> "Image").
-    auto name_of = [](int i) {
-        // (A name of two letters or fewer is an abbreviation, and stays as it is: AI.)
-        std::string n = tr(kDimensions[i].theme.key);
-        if (n.size() <= 2) return n;
-        for (size_t k = 1; k < n.size(); ++k)
-            if (n[k] >= 'A' && n[k] <= 'Z' && n[k - 1] != ' ') n[k] = char(n[k] - 'A' + 'a');
-        return n;
-    };
     std::vector<int> order{kBinaryLine};
     for (int i = 0; i < kLines; ++i)
         if (i != kBinaryLine) order.push_back(i);
@@ -2602,6 +2616,164 @@ std::string Menu::metrics_text()
         row.resize(name_w, ' ');
         out += row + " : " + line_sizes()[size_t(i)].units + "\n";
     }
+    out += ordering_metrics(order, got, name_w, reference_text);
+    out += record_metrics();
+    return out;
+}
+
+namespace {
+
+// A count of bits with thousands marked: 272,576.
+std::string grouped(uint64_t v)
+{
+    std::string s = std::to_string(v);
+    for (int i = int(s.size()) - 3; i > 0; i -= 3) s.insert(size_t(i), ",");
+    return s;
+}
+
+} // namespace
+
+// The models Sieve trained, weighed as the COST tab weighs an item (Edward, 17 October 2026): the
+// model's address on the AI line against the file F saves, and what zip and 7z make of that file.
+// It is a case that favours the address, so it is set out with what makes it so: every model of a
+// line has an address of the same length (its weights' digits), and the file keeps each 4-bit digit
+// as a 32-bit float. A model drawn at random from the same line, with a fixed seed, is weighed
+// beside it, so the difference training makes (none to the address; some to the compressors) shows
+// too. And the reader must be given the line itself, whose id is counted.
+std::string Menu::record_metrics()
+{
+    namespace fs = std::filesystem;
+    std::string out = "\nModels trained by Sieve, against their files (bits):\n";
+    std::vector<std::string> names;
+    for (const fs::path& dir : sieve::cli::training_run_dirs())
+    {
+        std::error_code ec;
+        for (const auto& e : fs::directory_iterator(dir, ec))
+        {
+            std::string n = e.path().filename().string();
+            if (e.is_regular_file(ec) && e.path().extension() == ".sieve") n = e.path().stem().string();
+            else if (!e.is_directory(ec)) continue;
+            if (std::find(names.begin(), names.end(), n) == names.end()) names.push_back(n);
+        }
+    }
+    std::sort(names.begin(), names.end());
+    bool any = false;
+    for (const std::string& name : names)
+    {
+        sieve::ModelRun run;
+        try
+        {
+            run = sieve::cli::model_run_of(name, sieve::cli::training_run_dirs());
+        }
+        catch (const std::exception&)
+        {
+            continue; // not a run of the AI line (a picture model's diffusion run), or not trained
+        }
+        if (run.final_address.empty()) continue;
+        const sieve::AiSpace space(sieve::AiShape{run.layers, run.width, run.heads, run.bits}, "sieve");
+        const sieve::AiSpace::Digits trained = space.digits_at(space.parse(run.final_address), sieve::AddressMode::Positional);
+        sieve::AiSpace::Digits random(trained.size());
+        std::mt19937 rng(1); // the same random model on every machine (mt19937 is fixed by the standard)
+        for (auto& d : random) d = uint8_t(rng() % (1u << run.bits));
+        auto weigh = [&](const char* what, const sieve::AiSpace::Digits& d) {
+            const std::string file = space.safetensors_of(d);
+            const std::span<const uint8_t> bytes(reinterpret_cast<const uint8_t*>(file.data()), file.size());
+            const uint64_t address = space.weights() * run.bits, file_bits = uint64_t(file.size()) * 8;
+            const uint64_t deflate = sieve::cli::deflate_size(bytes) * 8, lzma = sieve::cli::lzma2_size(bytes) * 8;
+            char share[64];
+            std::snprintf(share, sizeof share, "%.1f%% of the file, %.1f%% of LZMA2's", 100.0 * double(address) / double(file_bits),
+                          100.0 * double(address) / double(lzma));
+            out += "  " + std::string(what) + ": address " + grouped(address) + "; file " + grouped(file_bits) + " (model.safetensors, as F saves it); deflate " +
+                   grouped(deflate) + "; LZMA2 " + grouped(lzma) + ": the address is " + share + "\n";
+        };
+        out += name + " (" + space.id() + "; the line's id, which a reader must be given too, is " + grouped(space.id().size() * 8) + " bits):\n";
+        weigh("trained", trained);
+        weigh("random ", random);
+        out += "  every model of this line has an address of " + grouped(space.weights() * run.bits) + " bits, trained or not: the file keeps each " +
+               std::to_string(run.bits) + "-bit weight as a 32-bit float\n";
+        any = true;
+    }
+    if (!any) out += "  none found (the training folders: data/training)\n";
+    return out;
+}
+
+// What each ordering saves on an address, against positional order, in bits (Edward, 17 October
+// 2026). The counting argument first (IDEAS §0): positional and scrambled order are each a
+// one-to-one numbering of the whole line, so neither makes any unit's address shorter, and no
+// ordering can make every unit shorter. What can be guaranteed is what a filter removes: compact
+// order numbers the survivors alone, so every survivor's address is log2(line / survivors) bits
+// shorter, exactly. The guided ordering (the pages line's model) has no minimum: it shortens what
+// the model finds likely by lengthening the rest, so its figures are a bound over every page, from
+// the model's tables, and what it did on a text the model was not trained on, measured.
+std::string Menu::ordering_metrics(const std::vector<int>& order, const std::array<StackInfo, kLines>& got, size_t name_w,
+                                   const std::string& reference_text)
+{
+    std::string out = "\nOrderings (bits an address saves against positional order):\n";
+    out += "Positional and scrambled : 0 bits, on every line and for every unit (each numbers the whole line once)\n";
+    const double log2_10 = std::log2(10.0);
+    for (int i : order)
+    {
+        std::string row = name_of(i);
+        row.resize(name_w, ' ');
+        const StackInfo& s = got[size_t(i)];
+        if (!s.filtered.empty() && std::isfinite(s.kept_log10))
+        {
+            const double saved = std::max(0.0, -s.kept_log10 * log2_10);
+            row += " : compact " + fixed(saved, saved < 0.01 ? 6 : 2) + " bits off every survivor (of " +
+                   fixed(line_sizes()[size_t(i)].bits, 1) + "), under these filters";
+        }
+        else if (!s.filtered.empty()) row += " : compact: nothing survives these filters";
+        else row += " : compact: 0 bits (no filters counted)";
+        out += row + "\n";
+    }
+    // Guided: the pages line only, with its alphabet's default model.
+    std::string row = name_of(line_of(Media::Pages));
+    row.resize(name_w, ' ');
+    std::shared_ptr<const sieve::CharModel> model;
+    try
+    {
+        if (s_.model) model = sieve::cli::resolve_model("", s_.alphabet).model;
+    }
+    catch (const std::exception&)
+    {
+    }
+    if (!model)
+    {
+        out += row + " : guided: no model for this alphabet (or the model is off)\n";
+        return out;
+    }
+    const uint32_t L = s_.length;
+    const double positional = double(L) * std::log2(double(alphabet_size(s_.alphabet)));
+    // Every symbol has at least 1 of the 2^16 in every table and at most the largest any table
+    // gives one symbol; the guided address is within 2 bits above -log2 P (guided.hpp).
+    const auto [fmin, fmax] = model->frequency_range();
+    const double worst = double(L) * (16.0 - std::log2(double(fmin))) + 2, best = double(L) * (16.0 - std::log2(double(fmax)));
+    out += row + " : guided: no minimum. A page's address is " + fixed(best, 1) + " to " + fixed(worst, 1) + " bits (positional " +
+           fixed(positional, 1) + "): up to " + fixed(positional - best, 1) + " bits shorter, or up to " + fixed(worst - positional, 1) +
+           " longer\n";
+    std::ifstream in(path_utf8(reference_text), std::ios::binary);
+    if (reference_text.empty() || !in)
+    {
+        out += row + " : guided on text: not measured (no reference text)\n";
+        return out;
+    }
+    std::ostringstream all;
+    all << in.rdbuf();
+    const sieve::Alphabet& alpha = sieve::alphabet_of(s_.alphabet);
+    const sieve::CanonResult canon = sieve::canonicalise_text(all.str(), alpha, L, sieve::canon_version_from_string(s_.canon));
+    const sieve::GuidedLine guided(model, L);
+    uint64_t bits = 0;
+    for (const std::u32string& u : canon.units)
+    {
+        sieve::GuidedLine::Digits d;
+        for (const char32_t c : u) d.push_back(*alpha.digit_of(c)); // canonical text holds only the alphabet's symbols
+        bits += guided.code(d).bits;
+    }
+    const double pages = double(canon.units.size()), mean = pages ? double(bits) / pages : 0;
+    out += row + " : guided on " + std::filesystem::path(path_utf8(reference_text)).filename().string() + " (SHA-256 " +
+           sieve::Sha256::hex(sieve::Sha256::hash(all.str())).substr(0, 16) + "..., " + std::to_string(canon.units.size()) +
+           " pages): " + fixed(mean, 1) + " bits a page on average, " + fixed(positional - mean, 1) + " shorter (" +
+           fixed(mean / double(L), 2) + " bits a character, positional " + fixed(positional / double(L), 2) + ")\n";
     return out;
 }
 

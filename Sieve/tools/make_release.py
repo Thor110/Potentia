@@ -385,7 +385,8 @@ def main():
     step("metrics.txt")
     metrics = out / "metrics.txt"
     reference = ROOT / "data" / "metrics" / "reference-filters.ini"
-    run([build / f"hallway{EXE}", "--metrics", metrics, "--filters", reference], cwd=build)
+    run([build / f"hallway{EXE}", "--metrics", metrics, "--filters", reference,
+         "--metrics-text", ROOT / "data" / "metrics" / "reference-text.txt"], cwd=build)
     if not metrics.exists():
         fail("the hallway wrote no metrics.txt")
     metrics_text = metrics.read_text(encoding="utf-8")

@@ -1173,6 +1173,28 @@ then each line's size. Each release carries one, `metrics.txt`, made with Sieve'
 (`data/metrics/reference-filters.ini`: the hard filters that count together, its SHA-256 at the
 top), so releases can be compared; your own settings file gives your own list.
 
+The list ends with **what each ordering saves** on an address against positional order, in bits:
+- **Positional and scrambled:** 0, on every line and for every unit. Each numbers the whole line
+  once, and no ordering can make every unit's address shorter (the counting argument, IDEAS §0).
+- **Compact:** what the filters remove, off every survivor, exactly: log2(line / survivors) bits.
+  This is the one saving that is guaranteed.
+- **Guided** (the pages line's model): no minimum, since it shortens the likely by lengthening the
+  rest. The list gives the bound over every page from the model's tables, and what it did on a
+  text the model was not trained on (`data/metrics/reference-text.txt`, the opening of *A Tale of
+  Two Cities*, its SHA-256 shown; `--metrics-text FILE` for another). At the defaults: a page of 32
+  characters is 152.2 bits positionally, and its guided address anything from 0.0 to 514.0 bits;
+  the Dickens text took 63.2 bits a page on average, 88.9 shorter (1.98 bits a character against
+  4.75), measured the same by the oracle.
+
+And last, **the models Sieve trained, against their files**, weighed as the COST tab weighs an
+item. The universalbibliothek model (data/training) is 32,768 bits as its address on the AI line
+and 272,576 bits as the `model.safetensors` F saves; zip's deflate makes the file 58,256 bits and
+7z's LZMA2 44,608, so the address is 12.0% of the file and 73.5% of the best compressor's result
+(Linux build, 17 October 2026). It is a case that favours the address, and the list says why:
+every model of the line has an address of the same length, trained or not, because the file keeps
+each 4-bit weight as a 32-bit float; a model drawn at random from the line is weighed beside it
+(LZMA2: 45,056), and the line's id (360 bits), which a reader must also be given, is counted.
+
 **Measuring it yourself.** `--timings`, on any command and on the hallway, times each phase and writes a table at exit: how many runs, the total, the mean and the slowest, in milliseconds. It covers building the hallway (`hallway.build`), each item worked out (`hallway.item`, and within it `.filters` and `.vault`), each face painted (`hallway.face`, on the worker threads), each frame's update, render and present, the menus' frames, the budget test and the survivor counts, and the vault's own checks (`vault.bytes`, `vault.decoders`, `vault.pdq`). The hallway writes it to `sieve-timings.txt` beside its settings as well as to standard error, since it is usually started without a console. Phases nest, so their totals overlap. A heavy program in the background shows up here as slow phases everywhere at once; one slow phase is the thing to look at.
 
 After an intentional, versioned change, regenerate them:

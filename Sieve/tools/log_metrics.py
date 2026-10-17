@@ -42,6 +42,7 @@ BUILDS = os.path.join(METRICS, "builds")
 INDEX = os.path.join(METRICS, "index.tsv")
 FORMAT = "sieve-metrics-v1"
 REFERENCE_FILTERS = os.path.join(ROOT, "data", "metrics", "reference-filters.ini")
+REFERENCE_TEXT = os.path.join(ROOT, "data", "metrics", "reference-text.txt")
 
 # The source counted as lines of code: the engine, the game, the tools and the oracle.
 SOURCE_DIRS = ["core", "client", "tools", "reference"]
@@ -193,7 +194,8 @@ def hallway_metrics(exe):
     exe = os.path.abspath(exe)
     with tempfile.TemporaryDirectory() as tmp:
         out = os.path.join(tmp, "metrics.txt")
-        subprocess.run([exe, "--metrics", out, "--filters", REFERENCE_FILTERS], cwd=os.path.dirname(exe), capture_output=True)
+        subprocess.run([exe, "--metrics", out, "--filters", REFERENCE_FILTERS, "--metrics-text", REFERENCE_TEXT],
+                       cwd=os.path.dirname(exe), capture_output=True)
         if not os.path.exists(out):
             return "", {}
         text = read(out)

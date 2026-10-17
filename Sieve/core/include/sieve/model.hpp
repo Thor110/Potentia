@@ -74,6 +74,10 @@ public:
     // cum[0] = 0, cum[base()] = kModelTotal; symbol s has frequency cum[s+1] - cum[s].
     const uint32_t* cumulative(std::span<const uint32_t> history) const;
 
+    // The least and the most frequency any symbol has in any of the tables (the padding table's
+    // too), of kModelTotal: exact bounds on what one symbol can cost, -log2(f / kModelTotal) bits.
+    std::pair<uint32_t, uint32_t> frequency_range() const;
+
     // Information content of a symbol stream in bits, coded as one long history (context
     // carries across, capped at ORDER). DISPLAY/measurement only: uses floating point.
     double stream_bits(std::span<const uint32_t> stream) const;

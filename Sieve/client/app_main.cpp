@@ -10,6 +10,7 @@
 #include "designer.hpp"
 #include "harness.hpp"
 #include "cli/items.hpp"
+#include "cli/dictionaries.hpp" // executable_dir (--metrics-text)
 #include "cli/locate.hpp" // read_file_bytes (--cipher-in)
 #include "sieve/llm.hpp"
 #include "cli/timings.hpp"
@@ -139,6 +140,8 @@ const char* kUsage =
     "  --chat-attach FILES with --take on the AI line: give the files (apart by ';') to the model, as CHAT's + does\n"
     "  --chat-draw N       with --take on the AI line: draw N figures with CHAT's picture model\n"
     "  --text-model DIR    CHAT talks with this model folder (config.json, model.safetensors, tokenizer.json)\n"
+    "  --metrics-text FILE with --metrics: the text the guided ordering's saving is measured on\n"
+    "                      (default: data/metrics/reference-text.txt, Dickens, which the model was not trained on)\n"
     "  --widen-weights     a model file's BF16 and F16 weights widened to 32-bit floats as they load (twice the\n"
     "                      memory; the same numbers): [models] widen_weights in the settings\n"
     "  --picture-model DIR DRAW uses this picture model's run folder\n"
@@ -653,7 +656,26 @@ int run(const Args& a)
         const std::string filters_path = a.has("filters") ? a.get("filters") : FilterConfig::default_path().string();
         if (!std::filesystem::exists(filters_path)) throw std::invalid_argument("no filter settings file at " + filters_path);
         Menu menu(nullptr, nullptr, settings, FilterConfig::load(filters_path), filters_path);
-        std::string text = menu.metrics_text();
+        // The text the guided ordering is measured on (--metrics-text, else data/metrics/reference-text.txt
+        // from here, beside the program, or in the source tree above it).
+        std::string reference = a.get("metrics-text", "");
+        if (reference.empty())
+        {
+            std::vector<std::filesystem::path> where = {std::filesystem::path("data") / "metrics"};
+            if (const std::filesystem::path exe = sieve::cli::executable_dir(); !exe.empty())
+            {
+                where.push_back(exe / "metrics");
+                where.push_back(exe / ".." / "data" / "metrics");
+            }
+            for (const auto& w : where)
+                if (std::error_code ec; std::filesystem::is_regular_file(w / "reference-text.txt", ec))
+                {
+                    const std::u8string u = (w / "reference-text.txt").u8string();
+                    reference.assign(u.begin(), u.end());
+                    break;
+                }
+        }
+        std::string text = menu.metrics_text(reference);
         std::ifstream fin(filters_path, std::ios::binary);
         std::ostringstream body;
         body << fin.rdbuf();
