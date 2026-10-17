@@ -48,6 +48,7 @@ add_library(sieve_core STATIC
     core/src/llm_tokenizer.cpp
     core/src/llm.cpp
     core/src/aispace.cpp
+    core/src/digit_histogram.cpp
     core/src/training.cpp
     core/src/diffusion.cpp
     core/src/filters/models.cpp

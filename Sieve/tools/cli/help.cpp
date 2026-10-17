@@ -874,11 +874,14 @@ const std::vector<Page>& pages()
          "written. --v3 makes the older installer, every file's bytes as they are\n"
          "(sieve-manifest-v3). (sieve-manifest-v2, --with-addresses, lists every file's address in\n"
          "hex instead.)\n"
-         "--items makes sieve-manifest-v5: a file that is exactly an item of the pages, image,\n"
-         "video or audio line (a page as its text, a picture or film as its PNG, a melody as its\n"
-         "MIDI file) is carried as its line and its place there, not its bytes, and made again on\n"
-         "installing; one SHA-256 over the whole tree checks them all. sieve install and the\n"
-         "hallway install it; the small sieve-install asks for Sieve to be used instead.\n"
+         "--items makes sieve-manifest-v7: a file that is exactly an item of the pages, image,\n"
+         "video, audio or AI line (a page as its text, a picture or film as its PNG, a melody as its\n"
+         "MIDI file, a model as the model.safetensors the line writes) is carried as its line and\n"
+         "its place there, not its bytes, and made again on installing; one SHA-256 over the whole\n"
+         "tree checks every file. The listing says nothing the rest already gives, and is carried\n"
+         "as LZMA2 where that is smaller; the AI line's places are coded by their tensors' digit\n"
+         "histograms where that is smaller. sieve install and the hallway install it; the small\n"
+         "sieve-install asks for Sieve to be used instead. (--v6 and --v5 make the older ones.)\n"
          "\n"
          "--weigh weighs every file against its own address: its number among the binary line's\n"
          "survivors, where the settings file's [binary] filters rank and it passes them; and, where\n"
@@ -909,12 +912,17 @@ const std::vector<Page>& pages()
           {"--hex", "Write the installer in hex rather than raw bytes."},
           {"--v3", "Make the older installer: every file's bytes as they are, not packed (sieve-manifest-v3)."},
           {"--items", "Carry the files that are items of the pages, image, video, audio and AI lines as\n"
-                      "their lines and places there, each place as raw bytes (sieve-manifest-v6): a model\n"
+                      "their lines and places there (sieve-manifest-v7): each place as raw bytes, or, for\n"
+                      "the AI line, coded by its tensors' digit histograms where that is smaller; a model\n"
                       "of the AI line as its weights' digits, not its file's floats. The pages are\n"
                       "--page-length characters of --alphabet; the AI line is --ai-layers, --ai-width,\n"
                       "--ai-heads and --ai-bits (Micro without them)."},
+          {"--v6", "With --items: as sieve-manifest-v6, every place as raw bytes and the listing in full."},
           {"--v5", "With --items: as sieve-manifest-v5, each place in hex in the listing, and no AI line."},
-          {"--item-hashes", "With --items: keep each item's own SHA-256 in the listing as well as the tree's."},
+          {"--item-hashes", "With --items: keep each item's own SHA-256 in the listing as well as the tree's (v7:\n"
+                            "every file's own, as --file-hashes)."},
+          {"--file-hashes", "With --items: keep every file's own SHA-256 in the listing as well as the tree's (v7\n"
+                            "leaves them out, the tree's covering every file)."},
           {"--compare", "Compare the sizes: original, zip, 7z, and the address."},
           {"--weigh", "Weigh every file: its best way to be named against its own address."},
           {"--tailored", "With --weigh: tailor each line's filters to the files that are its items."},

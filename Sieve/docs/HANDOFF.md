@@ -3268,8 +3268,9 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
     way is `item K` and the places are a third stream, `stream items`, carried raw or as LZMA2,
     whichever is smaller.
   - Per line, its items are kept as places only where that is smaller than its files packed. The
-    first try made §16.9's sample 1.87 MB: its 360 near-identical AI models pack to almost nothing
-    as files, so they stay files.
+    first try made §16.9's sample 1.87 MB, because its 360 near-identical AI models' places were
+    carried raw; with the places stream carried as LZMA2 when smaller, they pack to almost nothing
+    and stay places. (This entry first said they stay files; corrected in the v7 entry below.)
   - Models of the AI line are items (their file must be exactly what the line writes).
   - Measured here: the sample 391,033 bytes (v5 443,973, v4 482,496); the universalbibliothek
     model 4,443 (v4 5,775; Edward's 7z of the file: 5,698). Both installed by `sieve install` and
@@ -3291,6 +3292,48 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   next step that would tie the search to the instructions.
 - **Checked here:** the full build (no warnings), the unit suite, the CI lines for v6 and for the
   search's time, and the File Locator's row in pictures.
+
+### `sieve-manifest-v7` and `digit-histogram-v1` (17 October 2026)
+- **Asked:** make a start on the next reductions (the text around a place, and a shorter place).
+- **Where the model's 4,486 bytes went (v6):** its place, 4,096 bytes (8,192 digits of 4 bits),
+  and about 390 of listing, the file's name twice among it. The search's time changed nothing:
+  the weighing used it, the instructions did not.
+- **What can shorten the place, measured:** the AI line's filters cannot, losslessly
+  (`weight-rows` sets aside about 10^-11.8 of the line; `canonical-model` gives an equivalent
+  model, not the file; `near-model` needs the model as its anchor). The digits are close to even:
+  3.97 bits each over the model, 3.66 to 3.99 within a tensor. Coded under counts that learn per
+  tensor, 4,012 to 4,027 bytes depending on the prior; Laplace's rule, 4,020.
+- **`digit-histogram-v1`** (`core/include/sieve/digit_histogram.hpp`, SPECIFICATIONS §12.2): each
+  segment's histogram ranked among all histograms, then its digits ranked among the rows with that
+  histogram; exactly Laplace's code, in integers. The model: 4,020 bytes, about 0.03 s each way.
+  The oracle decodes it its own way (`histogram_digits`). Unit tests: every row of 5 digits of 3
+  values, all numbers different and back; random even and uneven models.
+- **`sieve-manifest-v7`** (`--items` now; `--v6`, `--v5` the older ones):
+  - nothing the rest gives: counts, empty streams, a single file's root, options the id fixes
+    (an option is dropped when the line made without it has the same id), every file's own SHA-256
+    (the tree's covers them; `--file-hashes` keeps them); items as `i K path`;
+  - the listing carried as LZMA2 where smaller (`listing <packed> <bytes> <dictionary>` as line 2);
+  - a line's places coded where the codes, as carried, are smaller than the raw places as
+    carried. First built comparing them before compression: the sample's 360 near-identical
+    models then went to files (405,002 bytes), since their codes are far-apart numbers that do
+    not compress, while their raw places do.
+- **Measured here:** the model `sieve-ai-16432c2a3953.safetensors` 4,257 bytes (v6 4,486, v4
+  5,818; Edward's 7z 5,698); the CI's copy as `ub_one/model.safetensors` 4,253 (v6 4,443). The
+  degree sample 9,618 (v6 391,033); for comparison, `tar` + `xz -9e` of the folder 28,152, and 7z's
+  LZMA2 of its files' bytes alone, no names, 9,226 (no 7z here to make a real `.7z`).
+- **A correction:** the v6 entry above, SPECIFICATIONS, and last round's CHANGES said the
+  sample's AI models stay files under v6. They are carried as places (their raw places pack to
+  almost nothing). Corrected in SPECIFICATIONS and the CI comment.
+- **Tailored addresses, measured:** `sieve locate degrees --weigh --tailored --search-total 1800`
+  found no filter stack that shortens any line's places (it took 49.8 s, not stopped by its time):
+  the sample's items are spread evenly round each line. So carrying tailored addresses in the
+  instructions would not shorten this sample; it would where items cluster (the CI's two melodies:
+  864 and 800 bits as their own addresses, 36 and 32 under the tailored audio filters).
+- **Not done:** the File Locator's weighing does not weigh the AI line (a model shows as its own
+  address on the binary line), though its instructions carry it; tailored addresses in the
+  instructions.
+- **Checked here:** the full build (no warnings), the unit suite, the CI lines for v5, v6 and v7
+  on the sample and the model, the oracle on each, `sieve-install` refusing v7.
 
 ### For the next session (17 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s

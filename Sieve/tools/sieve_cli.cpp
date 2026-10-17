@@ -2381,8 +2381,8 @@ void print_weighing(const Args& a, const std::filesystem::path& root, const std:
 }
 
 // Packs an installer's files (v4), and with --items carries those that are items of Sieve's lines as
-// their lines and places there: v6, each place as raw bytes and the AI line's models among them
-// (--v5: as v5 wrote them, in hex, without the AI line; cli/items.hpp).
+// their lines and places there: v7, each place at its least and the AI line's models among them
+// (--v6: as v6 wrote them; --v5: as v5 did, in hex, without the AI line; cli/items.hpp).
 void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackReport& rep)
 {
     if (!a.has("items"))
@@ -2390,7 +2390,7 @@ void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackRepor
         add_packed(m, root, &rep);
         return;
     }
-    add_packed_items(m, root, a, &rep, a.has("v5"), a.has("item-hashes"));
+    add_packed_items(m, root, a, &rep, a.has("v5") ? 5 : a.has("v6") ? 6 : 7, a.has("item-hashes") || a.has("file-hashes"));
 }
 
 int cmd_locate(const Args& a)
@@ -2451,7 +2451,7 @@ int cmd_locate(const Args& a)
                 const std::string o = a.get("installer");
                 write_address_file(fs::path(std::u8string(o.begin(), o.end())), iaddr, a.has("hex"));
                 std::cout << "installer " << o << ": Sieve instructions for the file (its name, size and SHA-256, then its bytes"
-                          << (m.items ? ", as an item of a line: sieve-manifest-v5" : m.packed ? ", packed: sieve-manifest-v4" : ", as they are: sieve-manifest-v3") << "), as " << (a.has("hex") ? "hex" : "raw bytes") << "\n";
+                          << (m.items ? std::string(", as an item of a line: ") + m.version() : m.packed ? ", packed: sieve-manifest-v4" : ", as they are: sieve-manifest-v3") << "), as " << (a.has("hex") ? "hex" : "raw bytes") << "\n";
             }
             if (a.has("program"))
             {
@@ -2469,7 +2469,7 @@ int cmd_locate(const Args& a)
                 cmp.installer_hex = iaddr.is_zero() ? 1 : iaddr.to_hex().size();
                 cmp.installer_raw = address_bytes(iaddr);
                 cmp.packed = m.packed;
-                cmp.version = m.minimal ? kMinimalManifestVersion : m.items ? kItemsManifestVersion : kPackedManifestVersion;
+                cmp.version = m.version();
             }
         }
         if (a.has("compare")) std::cout << "\n" << comparison_table(cmp);
@@ -2578,6 +2578,7 @@ int cmd_locate(const Args& a)
         const std::string o = a.get("installer");
         write_address_file(fs::path(std::u8string(o.begin(), o.end())), iaddr, a.has("hex"));
         *info << "installer " << o << ": the address of the installer's manifest (" << (!(m.with_contents ? m.packed : inst.packed) ? "v3: the listing, then every file's bytes"
+                                    : (m.with_contents ? m.compact : inst.compact) ? "v7: the listing, every other file packed, then the items' places, the AI line's coded where that is smaller"
                                     : (m.with_contents ? m.minimal : inst.minimal) ? "v6: the listing, every other file packed, then the items' places as raw bytes"
                                     : (m.with_contents ? m.items : inst.items) ? "v5: the listing, the items of Sieve's lines by their places, then every other file packed"
                                                                                : "v4: the listing, then every file packed") << "), as "
@@ -2599,7 +2600,7 @@ int cmd_locate(const Args& a)
             cmp.packed = m.with_contents ? m.packed : inst.packed;
             {
                 const Manifest& made = m.with_contents ? m : inst;
-                cmp.version = made.minimal ? kMinimalManifestVersion : made.items ? kItemsManifestVersion : kPackedManifestVersion;
+                cmp.version = made.version();
             }
         }
         *info << "\n" << comparison_table(cmp);

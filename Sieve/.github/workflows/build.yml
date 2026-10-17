@@ -988,11 +988,12 @@ jobs:
           diff -r degrees deg_inst5
           if build/sieve-install degrees-v5.sieve --to deg_inst5b --yes > si.txt 2>&1; then exit 1; fi
           q "open them with Sieve" si.txt
-          # sieve-manifest-v6 (--items now): each item's place as raw bytes, the places carried raw or as
+          # sieve-manifest-v6 (--items --v6): each item's place as raw bytes, the places carried raw or as
           # LZMA2, whichever is smaller, and a line's items carried as places only where that is smaller
-          # than its files packed (the sample's 360 near-identical models pack smaller as files, and stay
-          # files). Smaller than v5; every file back, by sieve install and by the oracle.
-          build/sieve locate degrees --installer degrees-v6.sieve --items --manifest degrees-v6.manifest | tr -d '\r' | q "^items     1368 file(s) carried as items of Sieve's lines (.* sieve-manifest-v6"
+          # than its files packed (the sample's 360 near-identical models' places pack to almost nothing
+          # as LZMA2, so they are carried as places). Smaller than v5; every file back, by sieve install
+          # and by the oracle.
+          build/sieve locate degrees --installer degrees-v6.sieve --items --v6 --manifest degrees-v6.manifest | tr -d '\r' | q "^items     1368 file(s) carried as items of Sieve's lines (.* sieve-manifest-v6"
           [ "$(wc -c < degrees-v6.sieve)" -lt "$(wc -c < degrees-v5.sieve)" ]
           build/sieve install degrees-v6.sieve --to deg_inst6 > /dev/null
           diff -r degrees deg_inst6
@@ -1000,6 +1001,27 @@ jobs:
           diff -r degrees deg_oracle6
           if build/sieve-install degrees-v6.sieve --to deg_inst6b --yes > si6.txt 2>&1; then exit 1; fi
           q "open them with Sieve" si6.txt
+          # sieve-manifest-v7 (--items now): v6 with what the rest gives left out (every file's own
+          # SHA-256 among it, the tree's covering them all), items listed "i K path", and the listing
+          # carried as LZMA2 where that is smaller (the sample's paths repeat themselves). Far smaller
+          # than v6; every file back, by sieve install and by the oracle; refused by sieve-install as
+          # v5 and v6 are. --file-hashes keeps every file's own SHA-256, and installs the same.
+          build/sieve locate degrees --installer degrees-v7.sieve --items --manifest degrees-v7.manifest | tr -d '\r' > d7.txt
+          q "^items     1368 file(s) carried as items of Sieve's lines (.* sieve-manifest-v7" d7.txt
+          q "^listing   [0-9]* bytes, carried as LZMA2 in " d7.txt
+          [ "$(wc -c < degrees-v7.sieve)" -lt "$(( $(wc -c < degrees-v6.sieve) / 10 ))" ]
+          build/sieve install degrees-v7.sieve --to deg_inst7 > /dev/null
+          diff -r degrees deg_inst7
+          python reference/sieve_ref.py unpack degrees-v7.manifest --items-from degrees --to deg_oracle7 > /dev/null
+          diff -r degrees deg_oracle7
+          if build/sieve-install degrees-v7.sieve --to deg_inst7b --yes > si7.txt 2>&1; then exit 1; fi
+          q "open them with Sieve" si7.txt
+          build/sieve locate degrees --installer degrees-v7h.sieve --items --file-hashes --manifest degrees-v7h.manifest > /dev/null
+          [ "$(wc -c < degrees-v7h.sieve)" -gt "$(wc -c < degrees-v7.sieve)" ]
+          build/sieve install degrees-v7h.sieve --to deg_inst7h > /dev/null
+          diff -r degrees deg_inst7h
+          python reference/sieve_ref.py unpack degrees-v7h.manifest --items-from degrees --to deg_oracle7h > /dev/null
+          diff -r degrees deg_oracle7h
           # A model trained by Sieve alone (universalbibliothek): carried as its 4,096 bytes of digits on the
           # AI line, not its 34,072-byte file, smaller than the file packed (v4); the oracle makes the
           # model's file again from the place itself, as sieve install does.
@@ -1009,12 +1031,42 @@ jobs:
           build/sieve ai --address-file ub_final.hex --out ub_model > /dev/null
           cp ub_model/model.safetensors ub_one/
           build/sieve locate ub_one --installer ub-v4.sieve > /dev/null
-          build/sieve locate ub_one --installer ub-v6.sieve --items --manifest ub-v6.manifest | tr -d '\r' | q "^items     1 file(s) carried as items of Sieve's lines (34072 bytes, as 4096 bytes of places"
+          build/sieve locate ub_one --installer ub-v6.sieve --items --v6 --manifest ub-v6.manifest | tr -d '\r' | q "^items     1 file(s) carried as items of Sieve's lines (34072 bytes, as 4096 bytes of places"
           [ "$(wc -c < ub-v6.sieve)" -lt "$(wc -c < ub-v4.sieve)" ]
           build/sieve install ub-v6.sieve --to ub_inst > /dev/null
           cmp ub_one/model.safetensors ub_inst/model.safetensors
           python reference/sieve_ref.py unpack ub-v6.manifest --to ub_oracle > /dev/null
           cmp ub_one/model.safetensors ub_oracle/model.safetensors
+          # v7: the same model's place coded by its tensors' digit histograms (digit-histogram-v1):
+          # trained, its digits are not spread as evenly as chance spreads them, so its code, 4,020
+          # bytes, is shorter than its place, 4,096; and the listing round it shorter (4,253 bytes
+          # against v6's 4,443; nothing here is compressed, so the sizes are exact). Both v7
+          # readers (sieve install, the oracle's own decoding) give the model back.
+          rm -rf ub_inst7 ub_oracle7
+          build/sieve locate ub_one --installer ub-v7.sieve --items --manifest ub-v7.manifest | tr -d '\r' | q "^items     1 file(s) carried as items of Sieve's lines (34072 bytes, as 4022 bytes of places (4096 raw; digit-histogram-v1 on 1 line(s))"
+          [ "$(wc -c < ub-v7.sieve)" -eq 4253 ] && [ "$(wc -c < ub-v6.sieve)" -eq 4443 ]
+          q "^line 0 digit-histogram-v1 ai/L1/H16/A2/F64/B4/V256/key=sieve/aispace-v1 line=ai$" ub-v7.manifest
+          build/sieve install ub-v7.sieve --to ub_inst7 > /dev/null
+          cmp ub_one/model.safetensors ub_inst7/model.safetensors
+          python reference/sieve_ref.py unpack ub-v7.manifest --to ub_oracle7 > /dev/null
+          cmp ub_one/model.safetensors ub_oracle7/model.safetensors
+          # One file on its own: no root line (it is the file's name), 4,257 bytes for this name.
+          rm -rf ub_named ub_named_inst && mkdir ub_named && cp ub_one/model.safetensors ub_named/sieve-ai-16432c2a3953.safetensors
+          build/sieve locate ub_named/sieve-ai-16432c2a3953.safetensors --installer ub-file.sieve --items > /dev/null
+          [ "$(wc -c < ub-file.sieve)" -eq 4257 ]
+          build/sieve install ub-file.sieve --to ub_named_inst > /dev/null
+          cmp ub_one/model.safetensors ub_named_inst/sieve-ai-16432c2a3953.safetensors
+          # Pages of 64 characters: the line's options trimmed to what its id does not give (the
+          # alphabet is the default and goes; the length is not and stays), read back by both.
+          rm -rf pg64 pg64_inst pg64_oracle && mkdir pg64
+          python -c "import random; random.seed(3); [open(f'pg64/p{i}.txt','w').write(''.join(random.choice('abcdefghijklmnopqrstuvwxyz ') for _ in range(64))) for i in range(5)]"
+          build/sieve locate pg64 --installer pg64.sieve --items --page-length 64 --manifest pg64.manifest | tr -d '\r' | q "^items     5 file(s) carried as items of Sieve's lines (320 bytes, as 195 bytes of places"
+          [ "$(wc -c < pg64.sieve)" -eq 422 ]
+          python -c "import sys; sys.argv = ['x']; sys.path.insert(0, 'reference'); import sieve_ref; sys.stdout.buffer.write(sieve_ref.v7_listing(open('pg64.manifest', 'rb').read()))" | q -a "^line 0 39 lower27/L64/key=sieve/feistel-sha256-v1 length=64 line=text$"
+          build/sieve install pg64.sieve --to pg64_inst > /dev/null
+          diff -r pg64 pg64_inst
+          python reference/sieve_ref.py unpack pg64.manifest --to pg64_oracle > /dev/null
+          diff -r pg64 pg64_oracle
           # (each file is named by its item's title; the report says which file each degree gave)
           $H --no-menu --press "X,Tab,9,0,Return" --take --save-item p90.txt --screenshot degp.png > /dev/null
           cmp p90.txt "degrees/$(sed -n 's/^pages 090 //p' deg.txt)"

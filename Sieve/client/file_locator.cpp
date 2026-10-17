@@ -184,7 +184,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 const cli::Manifest fi = file_instructions(p, r.bytes, host_.item_args ? host_.item_args() : cli::Args{});
                 const std::vector<uint8_t> mb = fi.file();
                 c.packed = fi.packed;
-                c.version = fi.minimal ? cli::kMinimalManifestVersion : fi.items ? cli::kItemsManifestVersion : cli::kPackedManifestVersion;
+                c.version = fi.version();
                 const BigUint ma = cli::binary_address(mb);
                 c.manifest = mb.size();
                 c.manifest_deflate = cli::deflate_size(mb);
@@ -213,7 +213,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 cli::Manifest with = r.manifest;
                 cli::add_packed_items(with, p, host_.item_args ? host_.item_args() : cli::Args{});
                 c.packed = with.packed;
-                c.version = with.minimal ? cli::kMinimalManifestVersion : with.items ? cli::kItemsManifestVersion : cli::kPackedManifestVersion;
+                c.version = with.version();
                 const std::vector<uint8_t> mb = with.file();
                 const BigUint ma = cli::binary_address(mb);
                 c.manifest = mb.size();

@@ -88,6 +88,13 @@ inline constexpr const char* kItemsManifestVersion = "sieve-manifest-v5";
 // stream after the other two, rather than in hex in the listing; and with the AI line among the
 // lines offered (SPECIFICATIONS §12.2).
 inline constexpr const char* kMinimalManifestVersion = "sieve-manifest-v6";
+// v6 with less around its places: no line the rest gives (files, bytes, an empty stream, a single
+// file's root), a line's options only where its id does not already give them, an item's entry as
+// "i K path"; and a line's places coded where that is smaller (the AI line's by digit-histogram-v1,
+// SPECIFICATIONS §12.2).
+inline constexpr const char* kCompactManifestVersion = "sieve-manifest-v7";
+// v7: how a line's places are coded, where they are not raw bytes of its width.
+inline constexpr const char* kCodedPlaces = "digit-histogram-v1";
 
 std::vector<uint8_t> read_file_bytes(const std::filesystem::path& file);
 
@@ -106,8 +113,11 @@ struct ManifestEntry
     std::string sha256;  // files
     std::string address; // files, in a v2 manifest: the file's positional address in hex
     std::string way;     // files, in a v4 manifest: "x86", "raw" or "lines K"; in v5 and v6 also "item K <index>"
-                         // (v6 writes "item K" alone, the index carried in its items stream)
+                         // (v6 writes "item K" alone, the index carried in its items stream); in v7, on
+                         // a line whose places are coded, "item K h<the code's bytes in hex>"
 };
+// v7: an item's size, until it is made (its entry gives none).
+inline constexpr uint64_t kSizeAsMade = ~uint64_t(0);
 
 // One of a v4 manifest's two streams.
 struct PackedStream
@@ -139,6 +149,18 @@ struct Manifest
     std::vector<uint8_t> items_stream() const;
     PackedStream item_stream;
     std::vector<uint8_t> items_carried;
+    bool compact = false;                // v7: v6 with less around its places (above); minimal too
+    // v7: how line K's places are coded: "" raw, line_widths[K] bytes each; kCodedPlaces, each item's
+    // code as a varint of its length and then its bytes.
+    std::vector<std::string> line_codings;
+    bool one_file_root() const; // v7 writes no root: one file, named as the root
+    // v7: the listing (every line after the first, up to and including "end") carried as LZMA2 where
+    // that is smaller, after a line "listing <packed> <bytes> <dictionary>": set by the packer for
+    // the text it packed (listing_of), which file() checks is still the text.
+    PackedStream listing_stream;
+    std::vector<uint8_t> listing_carried;
+    std::string listing_of;
+    const char* version() const; // its first line ("sieve-manifest-v7")
     std::string text() const;            // the canonical text above (for v3 and v4, its text part)
     std::vector<uint8_t> file() const;   // the whole manifest as a file: the text, and for v3 the contents, for v4 the streams
     // v1 to v4; throws if it is none of them. A v4 manifest's streams are unpacked into contents and

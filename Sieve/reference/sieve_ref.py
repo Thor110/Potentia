@@ -5830,6 +5830,236 @@ def v6_item(spec, place, path, items_from):
     return v5_item(spec, "%x" % place, path, items_from)
 
 
+def histogram_digits(z, segments, K):
+    """digit-histogram-v1 (SPECIFICATIONS §12.2), from its definition: the digits number z names, cut
+    into segments of the lengths given, each digit below K. z = B * C + A: A the segments' histograms'
+    ranks (the first most significant, each among the C(n + K - 1, K - 1) histograms of its n digits in
+    lexicographic order of the counts), B their digits' ranks (each among the rows with that histogram,
+    in lexicographic order of the digits). Counted here one digit value at a time, not by the tool's
+    quotients."""
+    hc = [math.comb(n + K - 1, K - 1) for n in segments]
+    C = 1
+    for c in hc:
+        C *= c
+    B, A = divmod(z, C)
+    ranks = []
+    for c in reversed(hc):
+        A, h = divmod(A, c)
+        ranks.append(h)
+    ranks.reverse()
+    hists, ms = [], []
+    for n, h in zip(segments, ranks):
+        counts, rem = [], n
+        for j in range(K - 1):
+            p = K - j - 2
+            v = 0
+            while True:
+                w = math.comb(rem - v + p, p)  # the histograms with this count v
+                if h < w:
+                    break
+                h -= w
+                v += 1
+            counts.append(v)
+            rem -= v
+        counts.append(rem)
+        m = math.factorial(n)
+        for c in counts:
+            m //= math.factorial(c)
+        hists.append(counts)
+        ms.append(m)
+    M = 1
+    for m in ms:
+        M *= m
+    if B >= M:
+        raise ValueError("digit-histogram-v1: a number no item has")
+    rows = []
+    for m in reversed(ms):
+        B, r = divmod(B, m)
+        rows.append(r)
+    rows.reverse()
+    out = []
+    for counts, m, r in zip(hists, ms, rows):
+        counts, left, n = list(counts), m, sum(counts)
+        while n:
+            for d in range(K):
+                with_d = left * counts[d] // n  # the rows that go on with digit d
+                if r < with_d:
+                    break
+                r -= with_d
+            out.append(d)
+            left, counts[d], n = with_d, counts[d] - 1, n - 1
+    return out
+
+
+def ai_space_of_id(space_id):
+    """The AI line an id names (v7 writes its options only where the id does not give them)."""
+    parts = space_id.split("/")
+    if len(parts) != 9 or parts[0] != "ai" or parts[6] != "V256" or parts[8] != "aispace-v1" or not parts[7].startswith("key="):
+        sys.exit(f"not an AI line's id: {space_id}")
+    L, H, A, F, B = (int(parts[i][1:]) for i in range(1, 6))
+    sp = AiSpaceRef(L, H, A, B, parts[7][4:])
+    if sp.id() != space_id:
+        sys.exit(f"the AI line {space_id} is not one this oracle makes")
+    return sp
+
+
+def v7_item(spec, place, code, path, items_from):
+    """A v7 item's bytes: as v6's, its line's options read from its id where v7 leaves them out; and
+    on a line whose places are coded, the digits its code names (histogram_digits)."""
+    space_id, options = spec.split(" ", 1)
+    opts = dict(kv.split("=", 1) for kv in options.split(" "))
+    if opts.get("line") == "ai":
+        sp = ai_space_of_id(space_id)
+        if code is not None:
+            if code[:1] == b"\0":
+                sys.exit(f"{path}: its code is not the fewest bytes")
+            digits = histogram_digits(int.from_bytes(code, "big"), [rows * cols for _, rows, cols, _, _ in sp.tensors], 1 << sp.B)
+        else:
+            if place >= sp.N:
+                sys.exit(f"{path}: its place is past the end of its line")
+            digits = sp.digits(place, "positional")
+        return sp.safetensors(digits)
+    if code is not None:
+        sys.exit(f"{path}: a coded place on a line with no coding")
+    if opts.get("line") == "text":
+        alphabet, length = space_id.split("/")[0], space_id.split("/")[1]
+        opts.setdefault("alphabet", alphabet)
+        opts.setdefault("length", length[1:])
+        spec = space_id + " " + " ".join(f"{k}={v}" for k, v in opts.items())
+    return v5_item(spec, "%x" % place, path, items_from)
+
+
+def v7_listing(data):
+    """A v7 manifest's text, its listing unpacked where it is carried as LZMA2 ("listing <packed>
+    <bytes> <dictionary>" after the first line): the text it is, then what follows."""
+    import lzma
+    head = b"sieve-manifest-v7\nlisting "
+    if not data.startswith(head):
+        return data
+    nl = data.index(b"\n", len(head))
+    packed, size, dictionary = (int(x) for x in data[len(head):nl].decode().split(" "))
+    listing = lzma.decompress(data[nl + 1:nl + 1 + packed], format=lzma.FORMAT_RAW,
+                              filters=[{"id": lzma.FILTER_LZMA2, "dict_size": dictionary}])
+    if len(listing) != size:
+        sys.exit("the listing unpacks to the wrong size")
+    return b"sieve-manifest-v7\n" + listing + data[nl + 1 + packed:]
+
+
+def cmd_unpack_v7(args, data):
+    """sieve-manifest-v7 (SPECIFICATIONS §12.2): v6 with what the rest gives left out (files, bytes,
+    an empty stream, a single file's root), items listed "i K path", the listing perhaps LZMA2, and the
+    AI line's places perhaps coded (digit-histogram-v1, each a varint of its length and its bytes)."""
+    import lzma
+    data = v7_listing(data)
+    end = data.index(b"\nend\n") + len(b"\nend\n")
+    lines = data[:end].decode("utf-8").split("\n")[:-1]
+    at, root = 1, None
+    if lines[at].startswith("root "):
+        root, at = lines[at][5:], at + 1
+    streams = {"x86": (0, 0, 0), "lzma2": (0, 0, 0)}
+    for name in ("x86", "lzma2", "items"):
+        if lines[at].startswith(f"stream {name} "):
+            streams[name] = tuple(int(x) for x in lines[at].split(" ")[2:])
+            at += 1
+        elif name == "items":
+            sys.exit("no items stream")
+    item_lines, widths, coded = [], [], []
+    while lines[at].startswith("line "):
+        _, k, w, rest = lines[at].split(" ", 3)
+        if int(k) != len(item_lines):
+            sys.exit("its lines are not numbered from 0 in order")
+        coded.append(w == "digit-histogram-v1")
+        widths.append(0 if coded[-1] else int(w))
+        item_lines.append(rest)
+        at += 1
+    if not lines[at].startswith("tree "):
+        sys.exit("no tree line")
+    tree, at = lines[at][5:], at + 1
+    payload = data[end:]
+    sx, sl, si = streams["x86"], streams["lzma2"], streams["items"]
+    if len(payload) != sx[0] + sl[0] + si[0]:
+        sys.exit("the streams are not the size their lines say")
+
+    def decode(blob, size, dictionary, x86):
+        if size == 0:
+            return b""
+        filters = ([{"id": lzma.FILTER_X86}] if x86 else []) + [{"id": lzma.FILTER_LZMA2, "dict_size": dictionary}]
+        out = lzma.decompress(blob, format=lzma.FORMAT_RAW, filters=filters)
+        if len(out) != size:
+            sys.exit("a stream unpacks to the wrong size")
+        return out
+
+    x86 = decode(payload[:sx[0]], sx[1], sx[2], True)
+    plain = decode(payload[sx[0]:sx[0] + sl[0]], sl[1], sl[2], False)
+    carried = payload[sx[0] + sl[0]:]
+    places = carried if si[2] == 0 else decode(carried, si[1], si[2], False)
+    if si[2] == 0 and si[0] != si[1]:
+        sys.exit("a raw items stream is not its own size")
+    entries = []
+    for line in lines[at:-1]:
+        f = line.split("\t")
+        if f[0] == "d":
+            entries.append((f[1],))
+        elif f[0] == "i":
+            entries.append((f[2], None, "-", "item " + f[1]))
+        elif len(f) == 4:  # a file without its own SHA-256 (the tree's covers it)
+            entries.append((f[3], int(f[1]), "-", f[2]))
+        else:
+            entries.append((f[4], int(f[1]), f[2], f[3]))
+    files = [e for e in entries if len(e) == 4]
+    if root is None and (len(entries) != 1 or len(files) != 1):
+        sys.exit("no root, and not one file")
+    got, xa, pa, ia = [None] * len(files), 0, 0, 0
+    for i, (path, size, sha, way) in enumerate(files):
+        if way == "x86":
+            got[i], xa = x86[xa:xa + size], xa + size
+        elif way == "raw":
+            got[i], pa = plain[pa:pa + size], pa + size
+        elif way.startswith("item "):
+            k = int(way.split(" ")[1])
+            if coded[k]:
+                n, shift = 0, 0
+                while True:
+                    b = places[ia]
+                    ia += 1
+                    n |= (b & 0x7F) << shift
+                    shift += 7
+                    if not b & 0x80:
+                        break
+                code, ia = places[ia:ia + n], ia + n
+                got[i] = v7_item(item_lines[k], None, code, path, args.items_from)
+            else:
+                place, ia = int.from_bytes(places[ia:ia + widths[k]], "big"), ia + widths[k]
+                got[i] = v7_item(item_lines[k], place, None, path, args.items_from)
+    for i, (path, size, sha, way) in enumerate(files):
+        if way.startswith("lines "):
+            k = int(way[6:])
+            base = got[k].split(b"\n")
+            n = (len(base) + 7) // 8
+            mask, pa = plain[pa:pa + n], pa + n
+            got[i] = b"\n".join(l for j, l in enumerate(base) if mask[j // 8] >> (j % 8) & 1)
+    if xa != len(x86) or pa != len(plain) or ia != len(places):
+        sys.exit("the streams hold more than the files")
+    for (path, size, sha, way), b in zip(files, got):
+        if (size is not None and len(b) != size) or (sha != "-" and hashlib.sha256(b).hexdigest() != sha):
+            sys.exit(f"{path} does not unpack to its size and SHA-256")
+    h = hashlib.sha256()
+    for (path, size, sha, way), b in zip(files, got):
+        h.update((path + "\n" + hashlib.sha256(b).hexdigest() + "\n").encode("utf-8"))
+    if h.hexdigest() != tree:
+        sys.exit("the tree's SHA-256 differs")
+    if args.to:
+        for e in entries:
+            if len(e) == 1:
+                os.makedirs(os.path.join(args.to, e[0]), exist_ok=True)
+        for (path, size, sha, way), b in zip(files, got):
+            target = os.path.join(args.to, path)
+            os.makedirs(os.path.dirname(target) or ".", exist_ok=True)
+            open(target, "wb").write(b)
+    for (path, size, sha, way), b in zip(files, got):
+        print(f"{way.split(' ')[0] if way.startswith('item ') else way}\t{len(b)}\t{path}")
+
+
 def cmd_unpack(args):
     """A packed installer's manifest (sieve-manifest-v4, SPECIFICATIONS §12.2) unpacked from its
     definition, with nothing of Sieve's own: its two streams decoded by Python's lzma (raw LZMA2 at
@@ -5839,10 +6069,12 @@ def cmd_unpack(args):
     SHA-256. With --to DIR, the folders and files are written there. Prints the listing it unpacked."""
     import lzma
     data = open(args.manifest, "rb").read()
+    if data.startswith(b"sieve-manifest-v7\n"):
+        return cmd_unpack_v7(args, data)
     end = data.index(b"\nend\n") + len(b"\nend\n")
     lines = data[:end].decode("utf-8").split("\n")[:-1]
     if lines[0] not in ("sieve-manifest-v4", "sieve-manifest-v5", "sieve-manifest-v6"):
-        sys.exit("not a v4, v5 or v6 manifest: " + lines[0][:40])
+        sys.exit("not a v4, v5, v6 or v7 manifest: " + lines[0][:40])
     v6 = lines[0] == "sieve-manifest-v6"
     v5 = lines[0] == "sieve-manifest-v5" or v6  # v6 is v5 with its items' places as raw bytes
     streams = []

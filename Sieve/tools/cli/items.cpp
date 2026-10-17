@@ -3,7 +3,10 @@
 
 #include "cli/filter_config.hpp"
 #include "cli/locate.hpp"
+#include "sieve/digit_histogram.hpp"
 
+#include <algorithm>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -81,7 +84,65 @@ Args args_of_options(const std::string& options)
     return b;
 }
 
+// v7: a line's options with those its id already gives left out: each option the id spells out
+// (the AI line's shape and key, the pages' alphabet and length) whose absence makes the same space
+// id, and the guided model, which the maker sets to none itself. Reading it back makes the same line
+// or refuses it (its id is checked), so nothing is lost. Any other option is kept, even where the id
+// would not change without it: it may change the file the line writes without changing its places.
+std::string trimmed_spec(const ItemLine& l)
+{
+    const size_t sp = l.spec.find(' ');
+    const std::string id = l.spec.substr(0, sp);
+    Args all = args_of_options(l.spec.substr(sp + 1));
+    auto id_of = [&](Args b) {
+        if (b.get("line") == "ai") return ai_of_options(b)->id();
+        if (!b.has("model")) b.opts["model"] = "none";
+        return make_line(b).space.id();
+    };
+    Args kept = all;
+    for (const auto& [k, v] : all.opts)
+    {
+        static const char* const spelt_out[] = {"ai-layers", "ai-width", "ai-heads", "ai-bits", "key", "alphabet", "length", "model"};
+        if (std::find(std::begin(spelt_out), std::end(spelt_out), k) == std::end(spelt_out)) continue;
+        Args without = kept;
+        without.opts.erase(k);
+        if (k == "model" && v == "none") kept = without;
+        else
+        {
+            try
+            {
+                if (id_of(without) == id) kept = without;
+            }
+            catch (const std::exception&)
+            {
+            }
+        }
+    }
+    if (id_of(kept) != id) throw std::logic_error("a line's options trimmed to another line");
+    return id + " " + options_text(kept);
+}
+
+std::vector<uint64_t> ai_segments(const AiSpace& ai)
+{
+    std::vector<uint64_t> seg;
+    for (const AiSpace::Tensor& t : ai.tensors()) seg.push_back(uint64_t(t.rows) * t.cols);
+    return seg;
+}
+
 } // namespace
+
+std::vector<uint8_t> ai_place_code(const AiSpace& ai, const std::string& place)
+{
+    const AiSpace::Digits d = ai.digits_at(ai.parse(place), AddressMode::Positional);
+    const BigUint z = digit_histogram_number(d, ai_segments(ai), 1u << ai.shape().bits);
+    return z.to_bytes((z.bit_length() + 7) / 8);
+}
+
+std::vector<uint8_t> ai_digits_of_code(const AiSpace& ai, std::span<const uint8_t> code)
+{
+    if (!code.empty() && code[0] == 0) throw std::runtime_error("manifest: a model's code begins with a zero byte (not the fewest bytes)");
+    return digit_histogram_digits(BigUint::from_bytes(code), ai_segments(ai), 1u << ai.shape().bits);
+}
 
 uint32_t place_width(const BigUint& size)
 {
@@ -153,19 +214,26 @@ ItemFinder item_finder(const std::vector<ItemLine>& lines)
     };
 }
 
-void add_packed_items(Manifest& m, const std::filesystem::path& root, const Args& a, PackReport* report, bool v5, bool item_hashes)
+void add_packed_items(Manifest& m, const std::filesystem::path& root, const Args& a, PackReport* report, int version, bool item_hashes)
 {
-    const std::vector<ItemLine> lines = item_lines(a, !v5);
-    m.minimal = !v5;
+    if (version < 5 || version > 7) throw std::invalid_argument("Sieve instructions with items are v5, v6 or v7");
+    const std::vector<ItemLine> lines = item_lines(a, version >= 6);
+    m.minimal = version >= 6;
+    m.compact = version >= 7;
     m.lines.clear();
     m.line_widths.clear();
+    m.line_codings.clear();
     for (const ItemLine& l : lines)
     {
-        m.lines.push_back(l.spec);
+        m.lines.push_back(m.compact ? trimmed_spec(l) : l.spec);
         m.line_widths.push_back(l.width);
     }
     const ItemFinder finder = item_finder(lines);
-    add_packed(m, root, report, &finder, item_hashes);
+    const PlaceCoder coder = [&lines](size_t k, const std::string& place) -> std::optional<std::vector<uint8_t>> {
+        if (!lines.at(k).ai) return std::nullopt;
+        return ai_place_code(*lines[k].ai, place);
+    };
+    add_packed(m, root, report, &finder, item_hashes, m.compact ? &coder : nullptr);
 }
 
 void use_item_maker()
@@ -187,10 +255,14 @@ void use_item_maker()
             {
                 const size_t sp = spec.find(' ');
                 if (sp == std::string::npos) throw std::runtime_error("manifest: a line with no options: " + spec);
-                const Args b = args_of_options(spec.substr(sp + 1));
+                Args b = args_of_options(spec.substr(sp + 1));
                 auto made_line = std::make_shared<MadeLine>();
                 if (b.get("line") == "ai") made_line->ai = ai_of_options(b);
-                else made_line->line = std::make_shared<const Line>(make_line(b));
+                else
+                {
+                    if (!b.has("model")) b.opts["model"] = "none"; // v7 leaves it out: no part of a positional place
+                    made_line->line = std::make_shared<const Line>(make_line(b));
+                }
                 const std::string id = made_line->ai ? made_line->ai->id() : made_line->line->space.id();
                 if (id != spec.substr(0, sp))
                     throw std::runtime_error("manifest: its line " + spec.substr(0, sp) + " is made here as " + id +
@@ -198,6 +270,16 @@ void use_item_maker()
                 slot = std::move(made_line);
             }
             line = slot;
+        }
+        if (!address.empty() && address[0] == 'h')
+        {
+            // v7: a coded place (digit-histogram-v1), its bytes in hex after the h.
+            if (!line->ai) throw std::runtime_error("manifest: a coded place on a line that has no coding: " + spec);
+            const std::string h = address.substr(1);
+            std::vector<uint8_t> code;
+            for (size_t i = 0; i + 1 < h.size(); i += 2) code.push_back(uint8_t(std::stoul(h.substr(i, 2), nullptr, 16)));
+            const std::string file = line->ai->safetensors_of(ai_digits_of_code(*line->ai, code));
+            return std::vector<uint8_t>(file.begin(), file.end());
         }
         if (line->ai)
         {

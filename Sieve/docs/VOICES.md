@@ -56,6 +56,8 @@ enumerated and stored later. Nothing is guaranteed (IDEAS §19.77).
 - **Edward** (17 October 2026, rule; a point about everything): The aim is to reduce files to their theoretical maximum, as well as to show proof that it is possible, even if it requires absurdly strict filtering that causes a loss on the potential reduction.
 - **Edward** (17 October 2026, rule): Keep metrics and statistics as unbiased as possible while still being informative.
 - **Edward** (17 October 2026, quote; on the trained model's `.sieve`, 5,818 bytes, beside 7z's 5,698): I think it is demonstrable proof that it is aiming in the right direction.
+- **Edward** (17 October 2026, quote; on v6, 4,486 bytes for the model, 7z 5,698): These serve as a perfect proof of concept and demonstration that the .sieve format now beats traditional 7z compression by quite a considerable margin.
+- **Edward** (17 October 2026, quote): An 8192 weight model reduced to less bytes than it has floating point weights!
 
 ## Gemini
 

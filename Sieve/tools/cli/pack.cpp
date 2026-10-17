@@ -110,7 +110,7 @@ std::vector<uint8_t> place_bytes_of(const std::string& hex, uint32_t width)
 
 } // namespace
 
-void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const ItemFinder* items, bool item_hashes)
+void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const ItemFinder* items, bool item_hashes, const PlaceCoder* coder)
 {
     // Every file's bytes, checked against the walk: from the contents where a v3 manifest has them,
     // else read from the folder (the current one, for a file named without one).
@@ -152,6 +152,55 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             item[i] = true;
         }
     }
+    // v7: each line's places coded where every one has a code and they come to less than raw, each
+    // as it would be carried (as it is, or LZMA2 where that is smaller): near-identical models'
+    // places pack to almost nothing raw, while their codes, numbers far apart, do not. A code's
+    // length, as a varint, goes before it.
+    std::vector<std::string> coding(m.lines.size()); // by the line's place in m.lines
+    if (m.compact)
+        for (size_t slot = 0; slot < used_lines.size(); ++slot)
+        {
+            const size_t line = used_lines[slot];
+            if (!coder) continue;
+            std::vector<uint8_t> raw, coded;
+            bool all = true;
+            std::vector<std::pair<size_t, std::vector<uint8_t>>> codes;
+            for (size_t i = 0; i < files.size() && all; ++i)
+                if (item[i] && item_line_of_way(files[i]->way) == slot)
+                {
+                    const std::string& w = files[i]->way;
+                    const std::string place = w.substr(w.find(' ', 5) + 1);
+                    auto c = (*coder)(line, place);
+                    if (!c)
+                    {
+                        all = false;
+                        continue;
+                    }
+                    const std::vector<uint8_t> p = place_bytes_of(place, m.line_widths.at(line));
+                    raw.insert(raw.end(), p.begin(), p.end());
+                    uint64_t n = c->size();
+                    while (n >= 0x80)
+                    {
+                        coded.push_back(uint8_t(n | 0x80));
+                        n >>= 7;
+                    }
+                    coded.push_back(uint8_t(n));
+                    coded.insert(coded.end(), c->begin(), c->end());
+                    codes.emplace_back(i, std::move(*c));
+                }
+            if (!all) continue;
+            const uint64_t raw_carried = std::min<uint64_t>(raw.size(), estimate(raw));
+            const uint64_t coded_carried = std::min<uint64_t>(coded.size(), estimate(coded));
+            if (coded_carried >= raw_carried) continue;
+            coding[line] = kCodedPlaces;
+            static const char hx[] = "0123456789abcdef";
+            for (auto& [i, c] : codes)
+            {
+                std::string h = "item " + std::to_string(slot) + " h";
+                for (const uint8_t b : c) h += {hx[b >> 4], hx[b & 15]};
+                files[i]->way = std::move(h);
+            }
+        }
     // v6: each line's items carried as places only where that is smaller, as it would be carried:
     // their places (raw, or LZMA2 where that is smaller) against their files packed together. Files
     // that are near one another (a sample of a line's places) pack to almost nothing as files and
@@ -166,7 +215,24 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 {
                     as_files.insert(as_files.end(), bytes[i].begin(), bytes[i].end());
                     const std::string& w = files[i]->way;
-                    const std::vector<uint8_t> p = place_bytes_of(w.substr(w.find(' ', 5) + 1), m.line_widths.at(used_lines[slot]));
+                    const std::string place = w.substr(w.find(' ', 5) + 1);
+                    if (!coding[used_lines[slot]].empty())
+                    {
+                        // v7: a coded place, its length before it, as the items stream carries it.
+                        std::vector<uint8_t> c;
+                        for (size_t h = 1; h + 1 < place.size(); h += 2)
+                            c.push_back(uint8_t(std::stoul(place.substr(h, 2), nullptr, 16)));
+                        uint64_t n = c.size();
+                        while (n >= 0x80)
+                        {
+                            as_places.push_back(uint8_t(n | 0x80));
+                            n >>= 7;
+                        }
+                        as_places.push_back(uint8_t(n));
+                        as_places.insert(as_places.end(), c.begin(), c.end());
+                        continue;
+                    }
+                    const std::vector<uint8_t> p = place_bytes_of(place, m.line_widths.at(used_lines[slot]));
                     as_places.insert(as_places.end(), p.begin(), p.end());
                 }
             const uint64_t places = std::min<uint64_t>(as_places.size(), estimate(as_places));
@@ -285,19 +351,24 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     m.items = !used_lines.empty();
     if (m.items)
     {
-        std::vector<std::string> renumbered;
+        std::vector<std::string> renumbered, codings;
         std::vector<uint32_t> widths;
         for (size_t k : used_lines)
         {
             renumbered.push_back(m.lines.at(k));
             if (m.minimal) widths.push_back(m.line_widths.at(k));
+            if (m.compact) codings.push_back(coding.at(k));
+            if (m.compact && !coding[k].empty()) r.coded_lines.push_back(m.lines[k]);
         }
         m.lines = std::move(renumbered);
         m.line_widths = std::move(widths);
+        m.line_codings = std::move(codings);
+        r.compact = m.compact;
         if (m.minimal)
         {
             // v6: the places, carried raw or as LZMA2, whichever is smaller.
             const std::vector<uint8_t> places = m.items_stream();
+            r.item_places = places.size();
             const uint32_t dict = dictionary_for(places.size());
             std::vector<uint8_t> packed = places.empty() ? std::vector<uint8_t>() : pack_stream(places, dict, false);
             if (!places.empty() && packed.size() < places.size())
@@ -319,15 +390,19 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 ++r.items;
                 r.item_bytes += bytes[i].size();
                 r.item_text += m.minimal ? files[i]->way.find(' ', 5) : files[i]->way.size();
-                if (m.minimal) r.item_places += m.line_widths.at(item_line_of_way(files[i]->way));
+                if (m.minimal) r.item_raw_places += m.line_widths.at(item_line_of_way(files[i]->way));
             }
+        // v7: every file's own SHA-256 left out, as an item's is: the tree's covers them all.
+        if (m.compact && !item_hashes)
+            for (ManifestEntry* f : files) f->sha256 = "-";
         m.tree = tree_sha256(m);
     }
     else
     {
         m.lines.clear();
         m.line_widths.clear();
-        m.minimal = false; // no items: v4, as before
+        m.line_codings.clear();
+        m.minimal = m.compact = false; // no items: v4, as before
     }
 
     // Where it is no smaller than the files as they are, they are carried so (v3). (Not with items:
@@ -344,6 +419,27 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             r.kept_v3 = true;
             if (report) *report = std::move(r);
             return;
+        }
+    }
+    // v7: the listing carried as LZMA2 where that, with the line saying so, is smaller (a listing of
+    // many files repeats itself: paths, and the SHA-256 of every copy of a file).
+    m.listing_stream = {};
+    m.listing_carried.clear();
+    m.listing_of.clear();
+    if (m.compact)
+    {
+        const std::string t = m.text();
+        const std::vector<uint8_t> listing(t.begin() + std::ptrdiff_t(t.find('\n') + 1), t.end());
+        const uint32_t dict = dictionary_for(listing.size());
+        std::vector<uint8_t> packed = pack_stream(listing, dict, false);
+        const std::string line = "listing " + std::to_string(packed.size()) + " " + std::to_string(listing.size()) + " " + std::to_string(dict) + "\n";
+        if (line.size() + packed.size() < listing.size())
+        {
+            m.listing_stream = {packed.size(), listing.size(), dict};
+            m.listing_carried = std::move(packed);
+            m.listing_of = t;
+            r.listing = listing.size();
+            r.listing_carried = line.size() + m.listing_carried.size();
         }
     }
     // Read back before it is used: unpacked, every file as it was.
@@ -366,7 +462,16 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         std::snprintf(b, sizeof b, "%.2f%%", original ? 100.0 * double(v) / double(original) : 100.0);
         return std::string(b);
     };
-    if (r.items && r.item_places)
+    if (r.items && r.compact)
+    {
+        o << "items     " << r.items << " file(s) carried as items of Sieve's lines (" << r.item_bytes << " bytes, as " << r.item_places
+          << " bytes of places";
+        if (!r.coded_lines.empty())
+            o << " (" << r.item_raw_places << " raw; " << kCodedPlaces << " on " << r.coded_lines.size() << " line(s))";
+        o << ", carried in " << r.item_carried << "; sieve-manifest-v7, made again on installing)\n";
+        if (r.listing_carried) o << "listing   " << r.listing << " bytes, carried as LZMA2 in " << r.listing_carried << "\n";
+    }
+    else if (r.items && r.item_places)
         o << "items     " << r.items << " file(s) carried as items of Sieve's lines (" << r.item_bytes << " bytes, as " << r.item_places
           << " bytes of places, carried in " << r.item_carried << ", and " << r.item_text
           << " characters of the listing; sieve-manifest-v6, made again on installing)\n";

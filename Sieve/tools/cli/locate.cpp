@@ -88,14 +88,14 @@ ItemMaker& item_maker()
     return f;
 }
 
-std::vector<uint8_t> unpack_v4(const Manifest& m)
+std::vector<uint8_t> unpack_v4(Manifest& m)
 {
     if (m.streams.size() != m.x86.packed + m.lzma2.packed) throw std::runtime_error("manifest: its streams are not the size its lines say");
     const std::span<const uint8_t> all(m.streams);
     const std::vector<uint8_t> x86 = unpack_stream(all.subspan(0, size_t(m.x86.packed)), m.x86, true);
     const std::vector<uint8_t> plain = unpack_stream(all.subspan(size_t(m.x86.packed)), m.lzma2, false);
-    std::vector<const ManifestEntry*> files;
-    for (const ManifestEntry& e : m.entries)
+    std::vector<ManifestEntry*> files;
+    for (ManifestEntry& e : m.entries)
         if (!e.dir) files.push_back(&e);
     std::vector<std::vector<uint8_t>> bytes(files.size());
     std::vector<std::pair<size_t, std::vector<uint8_t>>> masks(files.size()); // derived: its base, its mask
@@ -156,6 +156,7 @@ std::vector<uint8_t> unpack_v4(const Manifest& m)
     contents.reserve(size_t(m.bytes));
     for (size_t i = 0; i < files.size(); ++i)
     {
+        if (files[i]->size == kSizeAsMade) files[i]->size = bytes[i].size(); // v7: an item is the size it is made
         if (bytes[i].size() != files[i]->size) throw std::runtime_error("the installer does not give " + files[i]->path + " (its size is wrong)");
         contents.insert(contents.end(), bytes[i].begin(), bytes[i].end());
     }
@@ -242,8 +243,75 @@ std::string manifest_path(const fs::path& p, const fs::path& root)
     return out;
 }
 
+const char* Manifest::version() const
+{
+    return compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
+         : with_contents ? kInstallManifestVersion : with_addresses ? kAddressManifestVersion : kManifestVersion;
+}
+
+bool Manifest::one_file_root() const { return entries.size() == 1 && !entries[0].dir && entries[0].path == root; }
+
+namespace {
+
+std::string stream_line(const char* name, const PackedStream& s)
+{
+    return std::string("stream ") + name + " " + std::to_string(s.packed) + " " + std::to_string(s.bytes) + " " + std::to_string(s.dictionary) + "\n";
+}
+
+// v7: an item's code (hex, after the "h" of its way) as bytes, and a varint of its length before it.
+std::vector<uint8_t> code_bytes(std::string_view hex, const std::string& path)
+{
+    if (hex.size() % 2) throw std::runtime_error("manifest: " + path + "'s code is not whole bytes");
+    std::vector<uint8_t> out;
+    auto digit = [&](char c) {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        throw std::runtime_error("manifest: " + path + "'s code is not hex");
+    };
+    for (size_t i = 0; i < hex.size(); i += 2) out.push_back(uint8_t(digit(hex[i]) * 16 + digit(hex[i + 1])));
+    return out;
+}
+
+void put_varint(std::vector<uint8_t>& out, uint64_t v)
+{
+    while (v >= 0x80)
+    {
+        out.push_back(uint8_t(v | 0x80));
+        v >>= 7;
+    }
+    out.push_back(uint8_t(v));
+}
+
+} // namespace
+
 std::string Manifest::text() const
 {
+    if (compact)
+    {
+        // v7: what the rest does not already give.
+        std::string t = std::string(kCompactManifestVersion) + "\n";
+        if (!one_file_root()) t += "root " + root + "\n";
+        if (x86.packed) t += stream_line("x86", x86);
+        if (lzma2.packed) t += stream_line("lzma2", lzma2);
+        t += stream_line("items", item_stream);
+        for (size_t k = 0; k < lines.size(); ++k)
+            t += "line " + std::to_string(k) + " " + (line_codings.at(k).empty() ? std::to_string(line_widths.at(k)) : line_codings[k]) + " " + lines[k] + "\n";
+        t += "tree " + tree + "\n";
+        for (const ManifestEntry& e : entries)
+        {
+            if (e.dir) t += "d\t" + e.path + "\n";
+            else if (e.way.rfind("item ", 0) == 0)
+            {
+                const std::string way = e.way.substr(0, e.way.find(' ', 5));
+                if (e.sha256 == "-") t += "i\t" + way.substr(5) + "\t" + e.path + "\n";
+                else t += "f\t" + std::to_string(e.size) + "\t" + e.sha256 + "\t" + way + "\t" + e.path + "\n"; // --item-hashes
+            }
+            else if (e.sha256 == "-") t += "f\t" + std::to_string(e.size) + "\t" + e.way + "\t" + e.path + "\n";
+            else t += "f\t" + std::to_string(e.size) + "\t" + e.sha256 + "\t" + e.way + "\t" + e.path + "\n"; // --file-hashes
+        }
+        t += "end\n";
+        return t;
+    }
     std::string t = std::string(minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion : with_contents ? kInstallManifestVersion : with_addresses ? kAddressManifestVersion : kManifestVersion) + "\n";
     t += "root " + root + "\n";
     t += "files " + std::to_string(files) + "\n";
@@ -322,6 +390,15 @@ std::vector<uint8_t> Manifest::items_stream() const
         const size_t k = item_line_of(e, lines.size());
         const size_t sp = e.way.find(' ', 5);
         if (sp == std::string::npos) throw std::runtime_error("manifest: " + e.path + " has no place to carry");
+        if (compact && !line_codings.at(k).empty())
+        {
+            // v7: a coded place, its length first.
+            if (e.way.size() < sp + 2 || e.way[sp + 1] != 'h') throw std::runtime_error("manifest: " + e.path + " has no code for its line");
+            const std::vector<uint8_t> b = code_bytes(std::string_view(e.way).substr(sp + 2), e.path);
+            put_varint(out, b.size());
+            out.insert(out.end(), b.begin(), b.end());
+            continue;
+        }
         const std::vector<uint8_t> b = raw_place(std::string_view(e.way).substr(sp + 1), line_widths.at(k), e.path);
         out.insert(out.end(), b.begin(), b.end());
     }
@@ -333,7 +410,15 @@ std::vector<uint8_t> Manifest::file() const
     const std::string t = text();
     std::vector<uint8_t> out;
     out.reserve(t.size() + (packed ? streams.size() : contents.size()));
-    out.insert(out.end(), t.begin(), t.end());
+    if (compact && listing_stream.packed)
+    {
+        // v7: its first line, the listing's line, then the listing as carried.
+        if (listing_of != t) throw std::logic_error("Sieve instructions changed after their listing was packed");
+        const std::string head = t.substr(0, t.find('\n') + 1) + stream_line("listing", listing_stream).substr(7);
+        out.insert(out.end(), head.begin(), head.end());
+        out.insert(out.end(), listing_carried.begin(), listing_carried.end());
+    }
+    else out.insert(out.end(), t.begin(), t.end());
     if (minimal)
     {
         // v6: the two streams, then the items stream as carried.
@@ -443,6 +528,32 @@ void add_contents(Manifest& m, const std::filesystem::path& root_in)
 
 Manifest Manifest::parse(std::string_view whole)
 {
+    // v7 with its listing carried as LZMA2: unpacked, and read as the text it is.
+    const std::string v7 = std::string(kCompactManifestVersion) + "\nlisting ";
+    if (whole.substr(0, v7.size()) == v7)
+    {
+        const size_t nl = whole.find('\n', v7.size());
+        if (nl == std::string_view::npos) throw std::runtime_error("manifest: the last line has no line feed");
+        const std::string v(whole.substr(v7.size(), nl - v7.size()));
+        unsigned long long packed = 0, bytes = 0, dictionary = 0;
+        char extra = 0;
+        if (std::sscanf(v.c_str(), "%llu %llu %llu%c", &packed, &bytes, &dictionary, &extra) != 3 || dictionary > 0xFFFFFFFFull || dictionary == 0 ||
+            packed > whole.size() - nl - 1 || bytes > (uint64_t(1) << 32))
+            throw std::runtime_error("manifest: its listing's line is not three numbers that fit");
+        const PackedStream ls{packed, bytes, uint32_t(dictionary)};
+        const std::span<const uint8_t> carried(reinterpret_cast<const uint8_t*>(whole.data()) + nl + 1, size_t(packed));
+        const std::vector<uint8_t> listing = unpack_stream(carried, ls, false);
+        std::string text = std::string(kCompactManifestVersion) + "\n";
+        if (std::string_view(reinterpret_cast<const char*>(listing.data()), listing.size()).substr(0, 8) == "listing ")
+            throw std::runtime_error("manifest: a listing inside a listing");
+        text.append(listing.begin(), listing.end());
+        text.append(whole.substr(nl + 1 + size_t(packed)));
+        Manifest m = parse(text);
+        m.listing_stream = ls;
+        m.listing_carried.assign(carried.begin(), carried.end());
+        m.listing_of = m.text();
+        return m;
+    }
     // Line by line, exactly as text() writes it, up to and including "end"; anything else is
     // refused rather than guessed at. After "end" a v3 manifest has its files' bytes, a v4 its two
     // streams, and the others nothing.
@@ -473,15 +584,62 @@ Manifest Manifest::parse(std::string_view whole)
     else if (lines[0] == kPackedManifestVersion) m.packed = m.with_contents = true;
     else if (lines[0] == kItemsManifestVersion) m.items = m.packed = m.with_contents = true;
     else if (lines[0] == kMinimalManifestVersion) m.minimal = m.items = m.packed = m.with_contents = true;
+    else if (lines[0] == kCompactManifestVersion) m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] != kManifestVersion) throw std::runtime_error("not a sieve manifest (" + lines[0].substr(0, 40) + ")");
     if (m.packed) m.streams.assign(whole.begin() + std::ptrdiff_t(after), whole.end());
     else if (m.with_contents) m.contents.assign(whole.begin() + std::ptrdiff_t(after), whole.end());
     else if (after != whole.size()) throw std::runtime_error("manifest: something after 'end'");
+    auto stream_of = [&](const std::string& v, const char* name) {
+        unsigned long long packed = 0, bytes = 0, dictionary = 0;
+        char extra = 0;
+        if (std::sscanf(v.c_str(), "%llu %llu %llu%c", &packed, &bytes, &dictionary, &extra) != 3 || dictionary > 0xFFFFFFFFull)
+            throw std::runtime_error(std::string("manifest: its ") + name + " stream's line is not three numbers");
+        return PackedStream{packed, bytes, uint32_t(dictionary)};
+    };
+    size_t first = 4;
+    bool root_given = true;
+    if (m.compact)
+    {
+        // v7: each line in its order, those the rest gives left out.
+        first = 1;
+        auto next_is = [&](const char* k) { return first < lines.size() && lines[first].rfind(k, 0) == 0; };
+        root_given = next_is("root ");
+        if (root_given) m.root = lines[first++].substr(5);
+        if (next_is("stream x86 ")) m.x86 = stream_of(lines[first++].substr(11), "x86");
+        if (next_is("stream lzma2 ")) m.lzma2 = stream_of(lines[first++].substr(13), "lzma2");
+        m.item_stream = stream_of(field(lines.at(first++), "stream items"), "items");
+        if ((m.item_stream.dictionary == 0 && m.item_stream.packed != m.item_stream.bytes) || m.item_stream.packed > m.streams.size())
+            throw std::runtime_error("manifest: its items stream's line does not fit what it carries");
+        while (next_is("line "))
+        {
+            const std::string v = lines[first++].substr(5);
+            const size_t a = v.find(' '), b = a == std::string::npos ? a : v.find(' ', a + 1);
+            if (b == std::string::npos || v.substr(0, a) != std::to_string(m.lines.size()))
+                throw std::runtime_error("manifest: its lines are not numbered from 0 in order");
+            const std::string w = v.substr(a + 1, b - a - 1);
+            if (w == kCodedPlaces)
+            {
+                m.line_codings.push_back(w);
+                m.line_widths.push_back(0);
+            }
+            else if (!w.empty() && w.size() <= 9 && w.find_first_not_of("0123456789") == std::string::npos)
+            {
+                m.line_codings.emplace_back();
+                m.line_widths.push_back(uint32_t(std::stoul(w)));
+            }
+            else throw std::runtime_error("manifest: a line's places are neither a width nor a coding this Sieve knows (" + w + ")");
+            m.lines.push_back(v.substr(b + 1));
+        }
+        if (m.lines.empty()) throw std::runtime_error("manifest: v7 with no line");
+        m.tree = field(lines.at(first++), "tree");
+    }
+    else
+    {
     m.root = field(lines[1], "root");
     m.files = std::stoull(field(lines[2], "files"));
     m.bytes = std::stoull(field(lines[3], "bytes"));
-    size_t first = 4;
-    if (m.packed)
+    }
+    if (m.packed && !m.compact)
     {
         if (lines.size() < 7) throw std::runtime_error("manifest: too short");
         for (const auto& [name, s] : {std::pair<const char*, PackedStream*>{"x86", &m.x86}, {"lzma2", &m.lzma2}})
@@ -544,6 +702,22 @@ Manifest Manifest::parse(std::string_view whole)
             e.dir = true;
             e.path = f[1];
         }
+        else if (m.compact && f.size() == 3 && f[0] == "i" && !f[1].empty() && f[1].size() <= 9 && f[1].find_first_not_of("0123456789") == std::string::npos)
+        {
+            // v7: an item, its size and SHA-256 those of what is made (the tree's checks it).
+            e.size = kSizeAsMade;
+            e.sha256 = "-";
+            e.way = "item " + f[1];
+            e.path = f[2];
+        }
+        else if (m.compact && f[0] == "f" && f.size() == 4)
+        {
+            // v7: a file without its own SHA-256 (the tree's covers it).
+            e.size = std::stoull(f[1]);
+            e.sha256 = "-";
+            e.way = f[2];
+            e.path = f[3];
+        }
         else if (f[0] == "f" && f.size() == (m.with_addresses || m.packed ? 5u : 4u))
         {
             e.size = std::stoull(f[1]);
@@ -580,14 +754,54 @@ Manifest Manifest::parse(std::string_view whole)
         {
             if (e.dir || e.way.rfind("item ", 0) != 0) continue;
             if (e.way.find(' ', 5) != std::string::npos) throw std::runtime_error("manifest: " + e.path + "'s way is not 'item K'");
-            const uint32_t width = m.line_widths.at(item_line_of(e, m.lines.size()));
+            const size_t k = item_line_of(e, m.lines.size());
+            if (m.compact && !m.line_codings.at(k).empty())
+            {
+                // v7: a coded place, a varint of its length first.
+                uint64_t n = 0;
+                for (int shift = 0;; shift += 7)
+                {
+                    if (at >= places.size() || shift > 56) throw std::runtime_error("the installer's items stream ends before " + e.path);
+                    const uint8_t b = places[at++];
+                    n |= uint64_t(b & 0x7F) << shift;
+                    if (!(b & 0x80)) break;
+                }
+                if (places.size() - at < n) throw std::runtime_error("the installer's items stream ends before " + e.path);
+                static const char hx[] = "0123456789abcdef";
+                std::string code = " h";
+                for (uint64_t i = 0; i < n; ++i) code += {hx[places[at + i] >> 4], hx[places[at + i] & 15]};
+                e.way += code;
+                at += size_t(n);
+                continue;
+            }
+            const uint32_t width = m.line_widths.at(k);
             if (places.size() - at < width) throw std::runtime_error("the installer's items stream ends before " + e.path);
             e.way += " " + hex_place(places.data() + at, width);
             at += width;
         }
         if (at != places.size()) throw std::runtime_error("manifest: its items stream holds more than its items");
     }
+    if (m.compact)
+    {
+        // v7: one file with no root is named as the root; the files and their bytes are counted.
+        if (!root_given)
+        {
+            if (m.entries.size() != 1 || m.entries[0].dir) throw std::runtime_error("manifest: no root, and not one file");
+            m.root = m.entries[0].path;
+        }
+    }
     if (m.packed) m.contents = unpack_v4(m); // every file's bytes, each by its way
+    if (m.compact)
+    {
+        m.files = 0;
+        m.bytes = 0;
+        for (const ManifestEntry& e : m.entries)
+            if (!e.dir)
+            {
+                ++m.files;
+                m.bytes += e.size;
+            }
+    }
     if (m.items && tree_sha256(m) != m.tree) throw std::runtime_error("these Sieve instructions do not give the tree they were made from (its SHA-256 differs)");
     if (m.with_contents)
     {

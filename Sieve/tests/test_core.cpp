@@ -21,6 +21,7 @@
 #include "sieve/weights.hpp"
 #include "sieve/llm.hpp"
 #include "sieve/aispace.hpp"
+#include "sieve/digit_histogram.hpp"
 #include "sieve/training.hpp"
 #include "sieve/diffusion.hpp"
 #include "sieve/llm_tokenizer.hpp"
@@ -5851,6 +5852,47 @@ void test_shortest_path()
 
 // BigUint's byte conversions (a file read as one number and back), against the hex path they
 // replaced, and BinarySpace::file_at_place against bytes_at.
+void test_digit_histogram()
+{
+    // Every row of 5 digits of 3 values, cut 2 + 3: one number each, all different, and back.
+    {
+        const std::vector<uint64_t> seg{2, 3};
+        std::set<std::string> seen;
+        bool back = true;
+        for (uint32_t v = 0; v < 243; ++v)
+        {
+            std::vector<uint8_t> d(5);
+            for (uint32_t i = 0, x = v; i < 5; ++i, x /= 3) d[4 - i] = uint8_t(x % 3);
+            const BigUint z = digit_histogram_number(d, seg, 3);
+            seen.insert(z.to_hex());
+            back = back && digit_histogram_digits(z, seg, 3) == d;
+        }
+        CHECK(seen.size() == 243);
+        CHECK(back);
+        // C = C(4, 2) * C(5, 2) = 60; the rows with A = 0 (c = (0,0,2), (0,0,3)) are 1 * 1, so
+        // Z = 60 names none.
+        CHECK(throws([&] { digit_histogram_digits(BigUint(60), seg, 3); }));
+        CHECK(small_binomial(5, 2) == BigUint(10));
+        CHECK(small_binomial(2, 5).is_zero());
+    }
+    // A model's shape at 4 bits: digits spread evenly by chance cost a little more than their
+    // place, digits spread unevenly less; and every one comes back.
+    {
+        const std::vector<uint64_t> seg{4096, 1024, 1024, 1024, 256, 256, 256, 256};
+        std::mt19937 rng(7);
+        std::vector<uint8_t> even(8192), uneven(8192);
+        for (auto& d : even) d = uint8_t(rng() % 16);
+        for (auto& d : uneven) d = uint8_t(rng() % 3 == 0 ? (rng() % 2 ? 0 : 15) : rng() % 16);
+        const BigUint ze = digit_histogram_number(even, seg, 16), zu = digit_histogram_number(uneven, seg, 16);
+        CHECK(ze.bit_length() > 32768 - 64 && ze.bit_length() < 32768 + 1024);
+        CHECK(zu.bit_length() < 32768);
+        CHECK(digit_histogram_digits(ze, seg, 16) == even);
+        CHECK(digit_histogram_digits(zu, seg, 16) == uneven);
+        CHECK(throws([&] { digit_histogram_number(std::vector<uint8_t>{16}, std::vector<uint64_t>{1}, 16); }));
+        CHECK(throws([&] { digit_histogram_number(even, std::vector<uint64_t>{8191}, 16); }));
+    }
+}
+
 void test_byte_conversions()
 {
     CHECK(BigUint::from_bytes(std::vector<uint8_t>{}).is_zero());
@@ -5985,6 +6027,7 @@ void run_all(int argc, char** argv)
         test_shortest_path();
         test_filter_memory(dir);
         test_byte_conversions();
+        test_digit_histogram();
     }
 }
 

@@ -39,11 +39,18 @@ struct PackReport
     uint64_t item_bytes = 0, item_text = 0;          // their bytes, and what naming them takes in the listing
     uint64_t item_places = 0;                        // v6: their places, as raw bytes in the items stream
     uint64_t item_carried = 0;                       // v6: the items stream as carried (raw or LZMA2)
+    uint64_t item_raw_places = 0;                    // v7: the places had every line's been raw
+    std::vector<std::string> coded_lines;            // v7: the lines whose places were coded
+    bool compact = false;                            // v7
+    uint64_t listing = 0, listing_carried = 0;       // v7: the listing, and as carried where packed (its line too)
 };
 
 // v5: for a file's bytes, the line it is an item of (its place in the manifest's `lines`) and its
 // positional address there, or nothing (items.hpp makes one from Sieve's lines).
 using ItemFinder = std::function<std::optional<std::pair<size_t, std::string>>(const std::vector<uint8_t>&)>;
+// v7: an item's place (hex) on line K of m.lines coded (kCodedPlaces), or nothing where the line
+// has no coding.
+using PlaceCoder = std::function<std::optional<std::vector<uint8_t>>(size_t line, const std::string& place)>;
 
 // Every file's bytes packed after the manifest, making it v4, an installer's. Reads every file again
 // (or takes them from a v3 manifest's contents, if it has them) and checks it against the size and
@@ -56,9 +63,10 @@ using ItemFinder = std::function<std::optional<std::pair<size_t, std::string>>(c
 // carried as its line and its place there (v5), made again on installing; the lines no file uses are
 // dropped. Its own SHA-256 is left out ("-") unless `item_hashes`, the tree's covering it. With
 // m.minimal (and m.line_widths beside m.lines), v6: each place carried as raw bytes, and an item
-// taken only where its place is shorter than the file.
+// taken only where its place is shorter than the file. With m.compact too, v7: a line's places
+// coded by `coder` where that is smaller than their raw bytes.
 void add_packed(Manifest& m, const std::filesystem::path& root, PackReport* report = nullptr, const ItemFinder* items = nullptr,
-                bool item_hashes = false);
+                bool item_hashes = false, const PlaceCoder* coder = nullptr);
 
 // The report as lines, for the tool and the File Locator.
 std::string pack_report_text(const PackReport& r, uint64_t original);

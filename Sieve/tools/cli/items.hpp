@@ -12,6 +12,12 @@
 // rather than in hex; and it adds the AI line, whose items are models given as the very
 // model.safetensors the line writes for them (so a model trained by Sieve is carried as its
 // weights' digits, 4 bits a weight at Micro, rather than its file's 32-bit floats).
+//
+// sieve-manifest-v7 writes less around them (a line's options only where its id does not already
+// give them, so "line=ai" for Micro's AI line), and codes the AI line's places by digit-histogram-v1
+// (sieve/digit_histogram.hpp: each tensor's histogram, then the model's rank among those with it)
+// where that comes to less than their raw bytes: a trained model's digits are not spread as evenly
+// as chance spreads them.
 #pragma once
 
 #include "cli/args.hpp"
@@ -52,10 +58,15 @@ ItemFinder item_finder(const std::vector<ItemLine>& lines);
 // Lets manifests with items be read (set_item_maker): each line made from its options once, and
 // checked against its space id.
 void use_item_maker();
-// An installer's files packed with the items of Sieve's lines carried as their places: v6, each
-// place at its least (`v5`: as v5 wrote them, in hex, without the AI line). The lines are those
-// item_lines makes of `a`. Shared by `sieve locate --items` and the File Locator.
-void add_packed_items(Manifest& m, const std::filesystem::path& root, const Args& a, PackReport* report = nullptr, bool v5 = false,
+// An installer's files packed with the items of Sieve's lines carried as their places: `version` 7
+// (the default), 6 (each place as raw bytes, the listing as v6 wrote it) or 5 (in hex, without the
+// AI line). The lines are those item_lines makes of `a`. Shared by `sieve locate --items` and the
+// File Locator.
+void add_packed_items(Manifest& m, const std::filesystem::path& root, const Args& a, PackReport* report = nullptr, int version = 7,
                       bool item_hashes = false);
+// v7: an AI model's place (hex) on `ai` coded by digit-histogram-v1, its tensors the segments, as
+// the fewest bytes that hold the number; and back.
+std::vector<uint8_t> ai_place_code(const AiSpace& ai, const std::string& place);
+std::vector<uint8_t> ai_digits_of_code(const AiSpace& ai, std::span<const uint8_t> code);
 
 } // namespace sieve::cli
