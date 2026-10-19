@@ -461,13 +461,13 @@ jobs:
           $H --write-settings defaults.ini | q "wrote defaults.ini"
           $H --settings defaults.ini --write-settings again.ini > /dev/null
           cmp defaults.ini again.ini
-          for k in "^\[setup\]" "^\[paths\]" "^ffmpeg = *;" "^binary_length = 32 " "^ai_width = 16 " "^items_per_wall = 128 " "^title_length = 32 "; do grep -q "$k" defaults.ini; done
+          for k in "^\[setup\]" "^\[paths\]" "^ffmpeg = *;" "^binary_length = 32 " "^ai_width = 16 " "^items_per_wall = 128 " "^title_length = 32 " "^\[locator\]" "^search_seconds = 0 " "^search_for = file "; do grep -q "$k" defaults.ini; done
           if grep -v "^;" defaults.ini | grep -v "^\[" | grep -v "^$" | grep -v " ; "; then exit 1; fi
           # An older file gains the entries it lacks and keeps its own values; a value a setting
           # cannot have leaves it at its default.
-          printf '[world]\nunit_time_ms = 70\n[setup]\nlength = 64\nalphabet = nonsense\n[paths]\nffmpeg = /opt/ff/ffmpeg\n' > older.ini
+          printf '[world]\nunit_time_ms = 70\n[setup]\nlength = 64\nalphabet = nonsense\n[paths]\nffmpeg = /opt/ff/ffmpeg\n[locator]\nsearch_seconds = 2.5\nsearch_for = run\n' > older.ini
           $H --settings older.ini --write-settings newer.ini > /dev/null
-          for k in "^unit_time_ms = 70 " "^length = 64 " "^alphabet = lower27 " "^ffmpeg = /opt/ff/ffmpeg " "^vsync = on "; do grep -q "$k" newer.ini; done
+          for k in "^unit_time_ms = 70 " "^length = 64 " "^alphabet = lower27 " "^ffmpeg = /opt/ff/ffmpeg " "^vsync = on " "^search_seconds = 2.5 " "^search_for = run "; do grep -q "$k" newer.ini; done
           # The setup menu saves its own settings there too: the first row, the line to start on.
           rm -f setup.ini
           $H --menu --settings setup.ini --press "Right" --screenshot setup.png > /dev/null

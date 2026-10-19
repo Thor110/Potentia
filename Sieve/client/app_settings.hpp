@@ -115,6 +115,11 @@ struct AppSettings
     // How a model given as a file keeps its BF16 and F16 weights (llm::set_widen_weights): off, as
     // stored (half the memory); on, widened to 32-bit floats as it loads. The same numbers either way.
     bool widen_weights = false;
+    // The File Locator's search for shorter addresses ([locator]): its time in seconds (0: no
+    // limit), for each file or for the whole run (`search_run`), the other worked out from the
+    // files counted. Kept so that the first search of the next run has it too.
+    double locator_search = 0;
+    bool locator_search_run = false;
     // The setup menu's settings ([setup]): every line's shape and the GLOBAL settings, as they
     // were when the setup menu last changed them. Its ffmpeg is not kept here but below.
     Settings setup;

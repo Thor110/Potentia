@@ -203,6 +203,21 @@ AppSettings AppSettings::load(const fs::path& path)
             else if (key == "picture_model") s.picture_model = value;
             else if (key == "widen_weights") s.widen_weights = on_off(value, false);
         }
+        else if (section == "locator")
+        {
+            if (key == "search_seconds")
+            {
+                try
+                {
+                    const double v = std::stod(value);
+                    if (v >= 0 && v <= 1e7) s.locator_search = v;
+                }
+                catch (...)
+                {
+                }
+            }
+            else if (key == "search_for") s.locator_search_run = value == "run";
+        }
         else if (section == "setup") s.setup.set_entry(key, value); // a value it cannot have is left out
         else if (section == "paths")
         {
@@ -218,6 +233,21 @@ AppSettings AppSettings::load(const fs::path& path)
             if (!seen.count(r.section + "." + r.key)) s.complete = false;
     return s;
 }
+
+namespace {
+
+// Seconds as few digits as say them ("0", "0.05", "2.5", "30").
+std::string seconds_text(double v)
+{
+    char b[32];
+    std::snprintf(b, sizeof b, "%.3f", v);
+    std::string t = b;
+    while (!t.empty() && t.back() == '0') t.pop_back();
+    if (!t.empty() && t.back() == '.') t.pop_back();
+    return t.empty() ? "0" : t;
+}
+
+} // namespace
 
 std::vector<AppSettings::Row> AppSettings::rows() const
 {
@@ -244,6 +274,8 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"models", "text_model", text_model, "a model folder CHAT talks with; empty: the model in hand"},
         {"models", "picture_model", picture_model, "a picture model's run folder DRAW uses; empty: the first trained one"},
         {"models", "widen_weights", on_off(widen_weights), "on: a model file's BF16 and F16 weights widened as they load (twice the memory); off: as stored; the same numbers either way"},
+        {"locator", "search_seconds", seconds_text(locator_search), "the File Locator's search for shorter addresses: seconds, 0 for no limit"},
+        {"locator", "search_for", locator_search_run ? "run" : "file", "file: those seconds for each file; run: for the whole run, shared among its files"},
     };
     for (const Settings::Entry& e : setup.entries()) r.push_back({"setup", e.key, e.value, e.note});
     r.push_back({"paths", "ffmpeg", ffmpeg, "the ffmpeg program; empty: SIEVE_FFMPEG, then one beside Sieve, then the PATH"});

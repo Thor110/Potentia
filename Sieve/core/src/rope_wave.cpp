@@ -1,12 +1,15 @@
 // Sieve — the tightened rope, rope-wave-v1 (see rope_wave.hpp).
 #include "sieve/rope_wave.hpp"
 
+#include "sieve/sha256.hpp"
 #include "sieve/weights.hpp"
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <map>
+#include <mutex>
 #include <stdexcept>
 
 namespace sieve {
@@ -307,7 +310,38 @@ double rope_estimate(std::span<const uint8_t> file, const RopeParams& p)
     return bytes;
 }
 
+namespace {
+
+RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds);
+
+// The searches done in this run, by the file's SHA-256 and the time given: the File Locator weighs
+// a file and then makes its instructions, and both pull it tight; the second is the first's answer.
+std::mutex g_cache_mx;
+std::map<std::string, RopeSearch> g_cache;
+
+} // namespace
+
 RopeSearch rope_search(std::span<const uint8_t> file, double seconds)
+{
+    char t[40];
+    std::snprintf(t, sizeof t, "|%.6f", seconds);
+    Sha256 h;
+    h.update(file);
+    const std::string key = Sha256::hex(h.finish()) + t;
+    {
+        std::lock_guard<std::mutex> lock(g_cache_mx);
+        if (auto it = g_cache.find(key); it != g_cache.end()) return it->second;
+    }
+    RopeSearch r = rope_search_uncached(file, seconds);
+    std::lock_guard<std::mutex> lock(g_cache_mx);
+    if (g_cache.size() >= 4096) g_cache.clear();
+    g_cache.emplace(key, r);
+    return r;
+}
+
+namespace {
+
+RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds)
 {
     using steady = std::chrono::steady_clock;
     const auto start = steady::now();
@@ -379,5 +413,7 @@ keep:
     else r.timed_out = true;
     return r;
 }
+
+} // namespace
 
 } // namespace sieve

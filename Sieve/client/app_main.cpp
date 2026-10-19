@@ -733,9 +733,18 @@ int run(const Args& a)
         app.save(app_path);
     }
     else if (!shot && !app.complete) app.save(app_path); // an older file gains the entries added since, with its own values
+    // The File Locator's search time, kept between runs (not by scripted runs, which save nothing).
+    FileLocator::remember_search(app.locator_search, app.locator_search_run, shot ? std::function<void(double, bool)>() : [&app, app_path](double s, bool run) {
+        app.locator_search = s;
+        app.locator_search_run = run;
+        app.save(app_path);
+    });
     if (!shot && !a.has("size")) { w = app.resolution.w; h = app.resolution.h; }
     if (shot && app.resolution.w <= 0) app.resolution = {w, h}; // the screenshot's own size
     set_language(a.has("language") ? a.get("language") : app.language);
+    // A fullscreen window is not minimised when it loses the focus: a system dialog (a file or a
+    // folder to choose) takes it every time, and minimising at each one hid the hallway behind it.
+    SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");
     SDL_Window* window = SDL_CreateWindow("Sieve - hallway", w, h, SDL_WINDOW_RESIZABLE | (shot ? SDL_WINDOW_HIDDEN : 0));
     set_window_icon(window);
     if (!window) throw std::runtime_error(std::string("cannot open a window: ") + SDL_GetError());

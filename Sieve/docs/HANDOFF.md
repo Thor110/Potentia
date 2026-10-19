@@ -3400,6 +3400,29 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
 - **Checked here:** the full build, the unit suite, the weighing's CI lines (unchanged: on those
   four small files the rope is not the best way), a new one for the rope, and the File Locator's.
 
+### The first search's time, the dialogs in fullscreen (19 October 2026)
+- **Edward asked:** with no time limit the default, does the File Locator's setting reach the
+  first search? It did not: the search row was drawn only once a file was read, so the first
+  search always had no limit, and the rope's search ran twice (the weighing, then the
+  instructions).
+  - The row is drawn before anything is chosen (and after a failure).
+  - The time is kept in `sieve-hallway.ini` `[locator]` (`search_seconds`, `search_for = file |
+    run`), loaded by both File Locators (the main menu's, the world's:
+    `FileLocator::remember_search`), saved when the player changes it.
+  - `rope_search` keeps its answers for the run, by the file's SHA-256 and the time given: the
+    mixed folder's weighing and instructions together took 5.5 s, each about 5 s before.
+- **Edward found:** installing from Sieve instructions, the folder dialog seemed to lock up, and
+  the hallway minimised at every dialog. Not reproducible here (no Windows dialogs on Linux);
+  three changes, each for a likely cause:
+  - `SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS` off: a fullscreen window was minimised whenever a
+    dialog took the focus.
+  - An exclusive fullscreen window is set to the desktop's fullscreen while a dialog is open and
+    given its mode back when the last one closes (`client/dialogs.hpp`): an exclusive window can
+    sit over a dialog, which is modal, so the hallway looked locked.
+  - The installer's first dialog ("which instructions") no longer raises the window when it
+    closes, since the folder's dialog follows at once and the raise could land on top of it.
+  Edward to confirm on Windows.
+
 ### For the next session (17 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show

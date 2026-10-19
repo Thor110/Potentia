@@ -75,7 +75,34 @@ void SDLCALL on_install_to(void* user, const char* const* files, int)
 
 } // namespace
 
-FileLocator::FileLocator(SDL_Window* window, SDL_Renderer* renderer, Host host) : window_(window), r_(renderer), host_(std::move(host)) {}
+namespace {
+
+// The search's time kept between runs, and what saves it (remember_search).
+struct KeptSearch
+{
+    double seconds = 0;
+    bool total = false;
+    std::function<void(double, bool)> changed;
+};
+KeptSearch& kept_search()
+{
+    static KeptSearch k;
+    return k;
+}
+
+} // namespace
+
+void FileLocator::remember_search(double seconds, bool total, std::function<void(double, bool)> changed)
+{
+    kept_search() = {seconds, total, std::move(changed)};
+}
+
+FileLocator::FileLocator(SDL_Window* window, SDL_Renderer* renderer, Host host) : window_(window), r_(renderer), host_(std::move(host))
+{
+    (kept_search().total ? search_total_ : search_per_file_) = kept_search().seconds;
+    search_by_total_ = kept_search().total;
+    relink_search();
+}
 
 void FileLocator::open()
 {
@@ -407,7 +434,7 @@ void FileLocator::event(const SDL_Event& e)
     {
         // First the installer, then (on_install_from, below in draw) the folder to put it in.
         static const SDL_DialogFileFilter kFrom[] = {{"Sieve instructions", "sieve"}, {"Installer program", "exe"}};
-        open_file_dialog(on_install_from, this, window_, kFrom, 2, nullptr, false);
+        open_file_dialog(on_install_from, this, window_, kFrom, 2, nullptr, false, true); // the folder's dialog follows
     }
     else
     {
@@ -486,9 +513,38 @@ void FileLocator::draw(float W, float H)
         status = status_;
     }
     const Result& r = result_;
+    // How long the search for shorter addresses may take: a file, and the run, each moving the
+    // other. Shown before anything is chosen too, so the first search can have its time.
+    auto search_row = [&](float row_y) {
+        auto secs = [](double v) {
+            char b[32];
+            std::snprintf(b, sizeof b, v < 1 ? "%.2f" : "%.1f", v);
+            return v > 0 ? trf("loc.search.seconds", {b}) : tr("loc.search.none");
+        };
+        draw_text(r_, 20, row_y + 8, tr("loc.search"), 1, grey);
+        bx = 20 + text_width(tr("loc.search"), 1) + 12;
+        button("search_file_less", "-", row_y);
+        const std::string per = trf("loc.search.file", {secs(search_per_file_)});
+        draw_text(r_, bx, row_y + 8, per, 1, white);
+        bx += text_width(per, 1) + 12;
+        button("search_file_more", "+", row_y);
+        bx += 12;
+        button("search_run_less", "-", row_y);
+        const std::string run = trf("loc.search.run", {secs(search_total_), std::to_string(files_counted())});
+        draw_text(r_, bx, row_y + 8, run, 1, white);
+        bx += text_width(run, 1) + 12;
+        button("search_run_more", "+", row_y);
+    };
     if (!busy && r.kind == Result::None && r.error.empty())
+    {
         draw_text(r_, 20, y, tr("loc.empty"), 2, grey);
-    else if (!r.error.empty() && !busy) draw_text(r_, 20, y, fit_text(trf("loc.failed", {r.error}), W - 40, 1), 1, red);
+        search_row(y + 40);
+    }
+    else if (!r.error.empty() && !busy)
+    {
+        draw_text(r_, 20, y, fit_text(trf("loc.failed", {r.error}), W - 40, 1), 1, red);
+        search_row(y + 40);
+    }
     else if (r.kind != Result::None && !busy)
     {
         auto line = [&](const std::string& label, const std::string& value) {
@@ -559,25 +615,7 @@ void FileLocator::draw(float W, float H)
         bx = 20;
         if (!r.tailored)
         {
-            // How long the search may take: a file, and the run, each moving the other.
-            auto secs = [](double v) {
-                char b[32];
-                std::snprintf(b, sizeof b, v < 1 ? "%.2f" : "%.1f", v);
-                return v > 0 ? trf("loc.search.seconds", {b}) : tr("loc.search.none");
-            };
-            draw_text(r_, 20, y + 48, tr("loc.search"), 1, grey);
-            bx = 20 + text_width(tr("loc.search"), 1) + 12;
-            button("search_file_less", "-", y + 40);
-            const std::string per = trf("loc.search.file", {secs(search_per_file_)});
-            draw_text(r_, bx, y + 48, per, 1, white);
-            bx += text_width(per, 1) + 12;
-            button("search_file_more", "+", y + 40);
-            bx += 12;
-            button("search_run_less", "-", y + 40);
-            const std::string run = trf("loc.search.run", {secs(search_total_), std::to_string(files_counted())});
-            draw_text(r_, bx, y + 48, run, 1, white);
-            bx += text_width(run, 1) + 12;
-            button("search_run_more", "+", y + 40);
+            search_row(y + 40);
             bx = 20;
             button("tailor", tr("loc.tailor"), y + 80);
         }
@@ -626,6 +664,11 @@ void FileLocator::step_search(bool total, int dir)
     v = next;
     search_by_total_ = total;
     relink_search();
+    // Kept for the next run, and for the other File Locator (the main menu's, the world's).
+    KeptSearch& k = kept_search();
+    k.seconds = v;
+    k.total = total;
+    if (k.changed) k.changed(v, total);
 }
 
 // The one not last set, worked out again from the one that was and the files counted.

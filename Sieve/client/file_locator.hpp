@@ -81,6 +81,9 @@ public:
     // The search's time for tailoring, before a scripted run (--search-per-file, --search-total):
     // seconds a file, or for the run (`total`); the other follows, the files counted.
     void set_search(double seconds, bool total);
+    // The search's time kept between runs (sieve-hallway.ini [locator]): what every File Locator
+    // starts with, and what is called when the player changes it. Set once, at start.
+    static void remember_search(double seconds, bool total, std::function<void(double, bool)> changed);
 
     // From the system dialogs' callbacks (any thread): what was chosen, handed to the next frame.
     void picked(const std::string& path);
