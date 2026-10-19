@@ -3615,3 +3615,221 @@ and model types there are, then work out the best way to dissect them on the fly
 - **Proposed first step:** stage 1 and stage 2 together (inspect, then map), with Llama 3's rope
   scaling, Qwen2's biases and Phi-3's fused tensors, since all three are small switches and they
   bring in the three most used families of small chat models.
+
+**19.87 The tightened rope: one filter that keeps bytes and propagates noise (Edward, 19 October
+2026; with §16.8c, §17.1 and his paper *Rope Around The Clock*).** Recorded from his notes, his
+diagram and the paper; his own words are quoted, and his notes ask that the AI conversation around
+them be given less weight than his own messages, so it is left out here.
+
+- **The inspiration, his paper *Rope Around The Clock*.** A rope-and-peg jig divides any length of
+  rope into exact thirds without arithmetic: the rope is secured at peg A, woven round peg B, then
+  peg C, and secured at peg D; pulling the jig's two pegboards apart sideways makes the rope take
+  three equal lengths between the pegs, which are then marked. Laid back along an arc, the marks
+  trisect the angle. With more pegs it divides by 5, 7 or 9. The principle: the pegs are fixed
+  constraints, and pulling the rope taut settles it into the one position they allow, with no
+  calculation. His words: "I wonder if in the end the filters might be able to be pulled tight
+  just like what I designed in this paper. Imagine a scale of bytes going through a file,
+  generated as a waveform of sorts and propagating through the file. That wave would then tweak
+  itself left and right like a set of pixelly steps adjusting to fit the state space
+  (bytes/floats/etc). Eventually you would have two ends of a line weaving itself through the file
+  that can be pulled tight until the file itself lands at the best position you can find." He
+  also pointed to a video of the Biham–Middleton–Levine traffic model
+  (https://www.youtube.com/watch?v=LUOLdcLbGnQ), where simple local rules sort a grid into lanes,
+  as how he imagines the values and the wave weaving through a file if drawn out in rows and
+  columns.
+- **The diagram** (his drawing, transcribed). Across the top, a bar labelled FILE with four marks
+  along it: at its start, about a third of the way, about three quarters of the way, and at its
+  end, coloured to match the points below. Below it, point **1, Start** (a circle, top left); a
+  line runs down to point **2**, inside a tall bar on the left; on through an oval in the middle,
+  labelled **State Space** and **Rotational Alignment**, holding two small circles on the line; up
+  to point **3**, near the top of a tall bar on the right; and down to point **4, End** (a circle,
+  bottom right). Written across the bottom: "The Keep Bytes or PropagateNoise filter". So the
+  line through the file is the rope, the two bars are the jig's two pegboards, points 1 to 4 are
+  its four pegs (start secured, woven round two, end secured), and the oval is the circle that
+  keeps count of the rotation.
+- **The filter, in his words.**
+  - *Notes 1:* "Tighten byte rope filter: a filter that works similarly to the noise filters that
+    propagate through the file as a wave, but instead of the wave propagating it would first find
+    the best wave to propagate through with a single line. Then it might still propagate if
+    necessary to get further reductions, so this might classify as a noise or wave propagation
+    filter in the long run. The first parameter would be bit length 8/16/32/64, with potential for
+    larger and more fine-tuned adjustments if necessary. The second parameter would be bits, bytes
+    or floats. Where the waveform repeats as if each sequence of bytes and or bits is a track":
+
+    ```
+    XXXXXXX
+    V-V-V-V
+    XXXXXXX
+    ```
+
+    each `V` and `-` the waveform and each `X` above or below it the values themselves.
+  - *Notes 2:* "This sounds like it might result in the absolute perfect alignment given enough
+    iterations, vs file length of course. Because if byte/bit/float length are parameters, as is
+    length, then all it takes is a basic waveform to weave its way through the file once to
+    fundamentally shift the file alignment in the state space by a serious amount. I suspect
+    ranging from 0-100% or 0-360 degrees, because of the way I have designed it. The wave could be
+    set to propagate like the noise filters, so it could weave itself through once, then repeat
+    the waveform going forwards or backwards. So three parameters, I think: value type, value
+    length, propagation radius. That literally adds up to infinite ways to shuffle the file
+    around."
+  - *The two functions:* "The circle in the centre keeps track of the rotation, while a wave of
+    noise propagates through the file to shift it around the state space. Then, once it finds the
+    shortest possible address, it logs how it found it, records the noise function and parameters
+    or the locked-in bytes of the file so that it can unscramble whatever was broken in the file by
+    the noise filter. This could be set to byte tracking mode or noise wave propagation mode. That
+    way one filter can track two potentials at once."
+  - *Four points:* "It has 4 constraining points, and with a minimum viable address of 4 values I
+    think this might be able to point directly to them with relative ease, depending upon the
+    file size of course. That 4 for 4 match might be coincidental, but it might also just be the
+    constraint required to reach the minimum viable addresses with relative ease." And: "it could
+    find a neighbour a mile away at an exact interval, only with a scrambled mess of bytes inside
+    it found through the noise wave; or while searching for it, it can track the bytes through the
+    file as well, keeping track of two rotations at once and picking the best at the end. It
+    wouldn't make any real difference, as through the noise wave it has to track the byte wave
+    through the file anyway, so it would just utilise the same recorded values in another
+    function."
+  - *Both at once:* "I think I would just have it search both at the same time by default. So it
+    wouldn't be a toggle, just the strongest, most hard-edge filter that tracks a wave through the
+    file, records four specific bytes at equal intervals throughout the file as it checks the
+    adjustment of those bytes to determine where it lands rotation-wise in the state space relative
+    to where it lands in the state space via the noise. I think it would still be quite
+    computationally heavy, but I have a feeling it forces the data line into a rigid structure with
+    an exact method for pulling it to the shortest possible address. That is the hope at least."
+    A version tracking more bytes across the file is noted too, as likely impractical for its
+    search time.
+- **So the proposal is one filter with two halves, searched together:**
+  1. **Propagate noise.** A waveform of a chosen value type (bits, bytes or floats) and value
+     length (8, 16, 32 or 64 bits, perhaps finer), run along the file's values like a track under
+     them, repeating forwards or backwards to a propagation radius; the search finds the wave that
+     moves the file to its shortest address, and the wave's parameters are recorded so the change
+     can be undone exactly.
+  2. **Keep bytes.** Four values recorded at equal intervals through the file (start, two inside,
+     end: the jig's four pegs), followed as the wave moves the file, to measure the turn (0 to 360
+     degrees, 0 to 100%) it lands at, against the turn the noise gives.
+  The better of the two is kept, with what is needed to undo it.
+- **Evaluation (Claude), so far.**
+  - **Reversible: yes.** A wave added to the values (modulo their width) or XORed with them, with
+    its parameters recorded, is undone exactly. So the filter can be lossless.
+  - **The counting argument still applies to the search part (§16).** A family of waves with k
+    settings, searched for the best one for a file, brings the file about log2 k bits nearer the
+    front at best, and recording which setting was chosen costs the same log2 k bits. "Infinite
+    ways to shuffle the file around" is exactly what makes naming the chosen way cost as much as
+    it saves, on average. This is §16.8c (one shifting byte) and §17.1 (the rotation transform)
+    again. A wave that shifts the file *as a whole* round its line is one of those rotations.
+  - **Where it can win: the wave as a prediction, not a shuffle.** A wave gains where it
+    *predicts* the values, so that taking it away leaves small, uneven residuals: that is how FLAC
+    (a fitted curve under the sound) and PNG (each row predicted from the last) win. The residuals
+    are still as many bytes, so the address does not shorten by itself; it shortens when they are
+    then numbered with small and repeated values first, which is what `digit-histogram-v1`
+    (SPECIFICATIONS §12.2) already does for a model's digits. So the testable form is: **find the
+    wave that best predicts the file's values, subtract it, and code the residuals by their
+    histogram**; the wave's few parameters are the "pegs", recorded, and pulling tight is the
+    search that minimises the residuals' cost. It should help smooth data (sound, pictures,
+    gradients, sorted tables), and not data that is already noise to every simple wave (packed
+    files, encrypted files, `sieve.exe`'s compressed parts, a trained model's digits).
+  - **The keep bytes, as anchors.** Four values recorded cost their width each and leave the rest
+    of the file to be named, so on their own they do not shorten the address. They help if they
+    are what the wave is fitted through (a wave pinned at four points, as the rope is pinned at
+    four pegs, is described by those four values and nothing more). That reading makes the four
+    pegs the wave's parameters, which fits "a minimum viable address of 4 values".
+- **Questions for Edward (what is not yet clear).**
+  1. How does the wave act on the values: added (wrapping at the value's width), XORed, or does it
+     move values to other positions (a shuffle)? "Shift the file around the state space" could
+     mean either.
+  2. Are the four kept bytes the points the wave is pinned through (so the wave is fixed by them),
+     or bytes left untouched by the wave, or a check on where the file lands?
+  3. The rotation the circle counts: the turn of the whole file round its line (as a bearing), or
+     the phase of the wave?
+  4. Propagation radius: how far one pass of the wave reaches before it repeats, or how many
+     values each step of the wave affects?
+  5. The equal intervals: the diagram's marks sit near the start, a third, three quarters and the
+     end; the notes say equal intervals (which with four points is the start, a third, two thirds
+     and the end: the jig's thirds). Which is meant?
+- **Edward's answers (19 October 2026).**
+  1. *The wave:* "the same as the previous noise filter idea, it could change values, shift values;
+     there is an infinite expanse of potential for different noise rules to take control there."
+     So the rule the wave applies is open: changing values and moving them are both in.
+  2. *The kept bytes:* this "could also become a parameter, like a sliding window around the
+     bytes": how many values are kept round each point.
+  3. *The circle:* "just a representation of its functionality": it is the centre of the file,
+     a single byte or the gap between two bytes, and stands for keeping count of the degrees of
+     rotation that part of the filter shifts the file to.
+  4. *Propagation:* whether "the wave propagates to the next line or phase of bytes; think
+     three-phase electricity, but we would have 0/1/2/3 etc, where 0 means it doesn't propagate
+     and just weaves a single wave through the file".
+  5. *The points:* the paper is a similar concept, mechanically the same; the intervals are equal
+     intervals through the file:
+
+     ```
+     0x00 = start
+     1/3
+     1/2  = centre
+     2/3
+     end
+     ```
+
+     "When bytes don't split evenly, the value or byte in the centre becomes the centre, rather
+     than the gap, allowing for even distribution."
+- **The design as it now stands.** Five points at equal intervals: the start, a third, the centre,
+  two thirds and the end (the jig's four pegs, with the circle at the centre between them). The
+  values round each point, within a window (a parameter), are kept. A wave of a chosen value type
+  and length, under a noise rule chosen from an open family (changing values or moving them),
+  weaves through the file; with propagation 0 it passes once, and with 1, 2, 3 and more it carries
+  on to the next line or phase of values, as the phases of a supply follow one another. The circle
+  at the centre counts the degrees the file is turned to. The search tries waves and keeps the one
+  that turns the file to its shortest address, recording the rule, its parameters and the kept
+  values, so the change is undone exactly.
+- **Edward's second answers (19 October 2026).** The aim is to shift the file towards an exact
+  degree along the line, as near a whole degree (0 to 359) as possible, 0 being ideal. The rules
+  will likely need a bitmask ruleset of their own later; for now a few parameters, written in the
+  instructions as other filters' are. The kept values fix the wave, and that could be a parameter
+  too, as could what a line of values is (its width) for propagation. Byte or bit tracking mode is
+  the wave drawn through the kept values. The points round down, the centre a value for an odd
+  length and the gap between two for an even one.
+- **What landing on a degree costs (Claude).** A whole degree names one of 360 points, 8.5 bits.
+  What else the instructions must hold is the walk from that degree to the file, and that is as
+  long as the file is far from it: the instructions are the rule and its parameters, the kept
+  values, the degree, and what is left. So a degree saves only as the wave leaves less behind,
+  and 0 degrees is the ideal because there the walk is the whole address: the file after the wave
+  is nearly all zeros. That is the reading the measurement below uses.
+- **Measured (19 October 2026), tracking mode, value length 8 unless said.** The wave is drawn
+  straight between the kept values at the start, 1/3, centre, 2/3 and end, taken away (wrapping
+  at 256), and what is left numbered by its histogram (`digit-histogram-v1`'s size, exactly); the
+  kept values are paid at 8 bits each. Bytes, after each:
+
+  | File | Bytes | Histogram, no wave | Rope, one wave | Value by value | LZMA2 |
+  |---|---|---|---|---|---|
+  | Vitruvian, as grey pixels (949 × 1300) | 1,233,700 | 993,816 | 1,045,592 | 877,954 | 865,400 |
+  | Vitruvian.jpg (already compressed) | 207,500 | 206,408 | 207,564 | 207,498 | 207,513 |
+  | universalbibliothek.txt | 21,084 | 12,833 | 18,912 | 17,308 | 8,490 |
+  | utah_teapot.obj | 248,968 | 124,493 | 189,202 | 158,037 | 34,380 |
+  | hurrian-hymn-6.mid | 1,377 | 718 | 1,381 | 912 | 172 |
+  | tones, 16-bit sound (made here, value length 16) | 110,240 | 104,848 | 108,932 | 88,526 | 58,173 |
+  | the trained model's .safetensors | 34,072 | 23,924 | 34,059 | 25,773 | 5,576 |
+
+  One wave through five points across a whole file is too coarse: on every file it leaves more
+  than the histogram does with no wave at all. On the pixels, with the file read as lines of the
+  picture's width:
+
+  | Way | Bytes |
+  |---|---|
+  | the rope drawn through each line's own five points | 1,056,133 |
+  | propagation 1: each line's wave is the line before | 894,073 |
+  | the line before, corrected by a rope through the difference | 967,990 |
+  | two phases: the line before and the value before, averaged | **843,855** |
+  | LZMA2 | 865,400 |
+
+  So the part of the idea that wins is **propagation**: a wave taken from the values next to each
+  value (the line before, the value before). Two phases name the pixels in 2.5% less than LZMA2.
+  The five kept points do not, at any scale tried: they are too few to follow a picture, a sound
+  or a text, and paying for them costs more than they save. Text, meshes, MIDI and models are not
+  smooth, so no wave helps them; LZMA2's repeats are what work there.
+- **Next (proposed):** take the propagating form further (more phases, a wave per line fitted to
+  more points, value lengths of 16 and 32 for sound and floats) on raw pictures and sound, the
+  files where it can win, and if it holds, make it a way to carry such a file in the
+  instructions. *The first step, as first proposed:* a measurement before a filter. On a handful of files of different
+  kinds (a WAV or MIDI, a mono picture, a text, a model), fit waves of a few simple families (a
+  constant, a line, a repeating wave pinned at four points) by value type and length, subtract,
+  and set the residuals' histogram-coded size, plus the wave's parameters, against the file's
+  own size and against LZMA2. If a family wins on some kind of file, it becomes a versioned filter
+  (`rope-wave-v1`) and a way to carry a file in the instructions; if not, the measurement says so.

@@ -58,6 +58,12 @@ enumerated and stored later. Nothing is guaranteed (IDEAS §19.77).
 - **Edward** (17 October 2026, quote; on the trained model's `.sieve`, 5,818 bytes, beside 7z's 5,698): I think it is demonstrable proof that it is aiming in the right direction.
 - **Edward** (17 October 2026, quote; on v6, 4,486 bytes for the model, 7z 5,698): These serve as a perfect proof of concept and demonstration that the .sieve format now beats traditional 7z compression by quite a considerable margin.
 - **Edward** (17 October 2026, quote): An 8192 weight model reduced to less bytes than it has floating point weights!
+- **Edward** (19 October 2026, quote): Eventually you would have two ends of a line weaving itself through the file that can be pulled tight until the file itself lands at the best position you can find.
+- **Edward** (19 October 2026, quote): That way one filter can track two potentials at once.
+- **Edward** (19 October 2026, quote): It could find a neighbour a mile away at an exact interval, only with a scrambled mess of bytes inside it found through the noise wave.
+- **Edward** (19 October 2026, quote; on the tightened rope filter): I have a feeling it forces the data line into a rigid structure with an exact method for pulling it to the shortest possible address. That is the hope at least.
+- **Edward** (19 October 2026, rule): The getting sidetracked thing is going to happen on a project like this: if an idea is worth pursuing or might give gains, I am going to take note of it as soon as I think of it.
+- **Edward** (19 October 2026, rule): Pay less attention to Gemini's responses and focus on my own messages and notes.
 
 ## Gemini
 

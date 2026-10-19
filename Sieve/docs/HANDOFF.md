@@ -3335,6 +3335,26 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
 - **Checked here:** the full build (no warnings), the unit suite, the CI lines for v5, v6 and v7
   on the sample and the model, the oracle on each, `sieve-install` refusing v7.
 
+### The plan from here, and the tightened rope (19 October 2026)
+- **Plan agreed in outline** (Edward: reductions first, after this idea was recorded):
+  1. Firm ground: the File Locator's weighing to weigh the AI line as the instructions carry it;
+     the search's times saved in `sieve-hallway.ini`; CI to the repository root (waits on
+     Edward's word).
+  2. A fixed benchmark set, every reduction measured on it. Edward would rather not crowd the
+     repository with large files, so its files must be small, or fetched or made by the tests
+     rather than stored. Undecided which published model, if any.
+  3. Reductions, in the order expected to pay: published models carried by `sieve-weights-v1`
+     in the instructions; file names given by their items' titles; tailored addresses (v8), where
+     items cluster.
+  4. Features, in IDEAS order.
+- **New idea recorded:** IDEAS §19.87, the tightened rope filter (keep bytes and propagate noise,
+  searched together), from Edward's notes, his diagram and his paper *Rope Around The Clock*.
+  Five questions for him are listed there; the proposed first step is a measurement (a wave
+  fitted to a file's values, subtracted, the residuals coded by their histogram) before any
+  filter. His notes ask that the AI conversation around the idea weigh less than his own words
+  (VOICES).
+- **No code changed.**
+
 ### For the next session (17 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show
