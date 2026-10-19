@@ -45,6 +45,7 @@ struct PackReport
     uint64_t listing = 0, listing_carried = 0;       // v7: the listing, and as carried where packed (its line too)
     size_t roped = 0, rope_tried = 0;                // v8: files carried by rope-wave-v1, and the waves tried
     uint64_t rope_bytes = 0, rope_carried = 0;       // v8: their bytes, and the rope stream
+    bool rope_columns = false;                       // v9: some of them rope-wave-v2's
 };
 
 // v5: for a file's bytes, the line it is an item of (its place in the manifest's `lines`) and its

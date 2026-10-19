@@ -5862,6 +5862,10 @@ void test_rope_wave()
     CHECK(throws([] { RopeParams::parse("L8 W0 S1 P0 K0"); }));
     CHECK(throws([] { RopeParams::parse("L8 W1 S1 P4 K0"); }));
     CHECK(throws([] { RopeParams::parse("L8 W01 S1 P0 K0"); }));
+    // rope-wave-v2: columns, written " C1"; lines of two values or more.
+    CHECK((RopeParams::parse("L8 W111 S1 P0 K0 C1") == RopeParams{8, 111, 1, 0, false, 1}));
+    CHECK(throws([] { RopeParams::parse("L8 W1 S1 P0 K0 C1"); }));
+    CHECK(throws([] { RopeParams::parse("L8 W5 S1 P0 K0 C0"); }));
     // A file that is the rope exactly (x_i = i, 100 values, kept at 0, 33, 66 and 99: an even count
     // has no centre value): nothing is left, so its code is the table of one byte (1 + 1 + 4), its
     // stream's two words (1 + 8) and the four kept bytes.
@@ -5897,10 +5901,12 @@ void test_rope_wave()
                 for (uint32_t step = 1; step <= 4; ++step)
                     for (uint32_t phases = 0; phases <= 3; ++phases)
                         for (const bool keep : {false, true})
-                        {
-                            const RopeParams p{bits, width, step, phases, keep};
-                            back = back && rope_file(rope_code(f, p), p, f.size()) == f;
-                        }
+                            for (const uint32_t columns : {0u, 1u})
+                            {
+                                if (columns && width < 2) continue;
+                                const RopeParams p{bits, width, step, phases, keep, columns};
+                                back = back && rope_file(rope_code(f, p), p, f.size()) == f;
+                            }
     CHECK(back);
     // A code that does not give the file is refused: one byte short, one too many, a size not its.
     {
@@ -5911,6 +5917,24 @@ void test_rope_wave()
         longer.push_back(0);
         CHECK(throws([&] { rope_file(longer, p, files[4].size()); }));
         CHECK(throws([&] { rope_file(c, p, files[4].size() + 1); }));
+    }
+    // Columns: digits in lines of ten with a space and a line feed after each line, every column of
+    // separators one byte value, so a table alone (no stream); the digits about log2(10) bits each.
+    {
+        std::vector<uint8_t> table;
+        for (int line = 0; line < 4000; ++line)
+        {
+            for (int d = 0; d < 10; ++d) table.push_back(uint8_t('0' + rng() % 10));
+            table.push_back(' ');
+            table.push_back('\n');
+        }
+        const RopeParams flat{8, 1, 1, 0, false, 0}, cols{8, 12, 1, 0, false, 1};
+        const size_t c1 = rope_code(table, cols).size(), c0 = rope_code(table, flat).size();
+        CHECK(c1 < c0);
+        CHECK(c1 < size_t(40000 * std::log2(10.0) / 8) + 12 * 50);
+        CHECK(rope_file(rope_code(table, cols), cols, table.size()) == table);
+        const RopeSearch found = rope_search(table);
+        CHECK(found.best.columns == 1 && found.best.width % 12 == 0);
     }
     // Pulling tight: on the smooth picture the search finds its lines and propagates through them,
     // and its code is far smaller than the picture.

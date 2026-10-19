@@ -3423,6 +3423,27 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
     closes, since the folder's dialog follows at once and the raise could land on top of it.
   Edward to confirm on Windows.
 
+### `rope-wave-v2`: columns; `sieve-manifest-v9` (19 October 2026)
+- **From Edward's stress test:** pi to a million digits as text, 1,111,103 bytes: 7z 512,745,
+  `.sieve` 490,473 (rebuilt byte for byte). The digits' floor is 415,241 bytes; the gap was the
+  layout. His file could not be fetched here (the site is blocked); a copy was made with mpmath and
+  laid out as his size suggests (groups of ten, ten a line, CRLF: 1,110,004 bytes).
+- **`rope-wave-v2`** (`C1`): what is left counted per column (position mod W); a segment of one
+  byte value has no stream. The copy: 420,025 bytes (v1's best 491,890; LZMA2 486,077). The colour
+  picture: 468,078 (was 494,774). `sieve-manifest-v9` when a file uses it; v8 refuses `C1`.
+- **The search's widths:** the copy's line length (111) was not found at first: random digits make
+  the scores noisy, and 111's multiples score as well. Now: the common divisor most often shared by
+  the best lags first; each best lag taken down to its smallest divisor within 2%; multiples of a
+  width taken left out; four widths; the shared divisor only where it matches within 10% of the
+  best lag (else a picture's lags near its width share 2, and 2 blocked the width itself). The
+  noisy CI sine now beats LZMA2 too (10,213 against 10,295, a line of nine of its cycles).
+- **Edward asked** whether the File Locator shows the wave: it does (the weighing's "how").
+- **Fixed in IDEAS:** last round's note that the weighing shows the rope had not landed (an edit
+  that half-applied); it is there now.
+- **Checked here:** the full build, the unit suite (new: columns in the round trips, a digit
+  table, parsing), the rope CI lines and new ones for v2 and v9 (sieve install, the oracle,
+  sieve-install), the earlier instruction lines again.
+
 ### For the next session (17 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show

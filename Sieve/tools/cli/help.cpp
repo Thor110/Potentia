@@ -357,7 +357,9 @@ const std::vector<Page>& pages()
          "length (8, 16 or 32 bits), W the values in a line, S how far back the value before is, P\n"
          "the phases (0 the rope alone, drawn through the kept values; 1 the value before; 2 the line\n"
          "before as well, averaged; 3 the diagonal too), K whether the values at the start, a third,\n"
-         "the centre, two thirds and the end are kept for the rope. Without --params, the search pulls\n"
+         "the centre, two thirds and the end are kept for the rope; and C1 (rope-wave-v2), what is left\n"
+         "counted column by column of the line, for files laid out in lines of a fixed length. Without\n"
+         "--params, the search pulls\n"
          "it tight: every value length, phase and step, keep or not, and the widths at which the file\n"
          "best matches itself a line later. The code is read back and checked; LZMA2 is shown beside it.",
          {{"--params P", "Use these parameters rather than searching."},

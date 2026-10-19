@@ -3876,7 +3876,18 @@ them be given less weight than his own messages, so it is left out here.
     is smaller than LZMA2 makes it; the oracle decodes both apart.
   - Across all dimensions, as Edward asked: it takes any file's bytes, so it serves the binary
     line, and through it every file. *Not yet:* the other lines' places coded by it (a line's
-    units are its digits, its width the line's own), and widths beyond the three best lags (a picture of three colours finds its pixel, not its row).
+    units are its digits, its width the line's own).
+  - *Since 19 October 2026* the weighing (`sieve locate --weigh`, the File Locator's table) weighs
+    every file's rope code as a way to name it.
+  - **Columns (`rope-wave-v2`, 19 October 2026).** From Edward's stress test: pi to a million
+    digits as text (1,111,103 bytes: 7z 512,745, `.sieve` 490,473, rebuilt byte for byte). The
+    digits' own floor is 415,241 bytes (log2(10) bits a digit); what stood between was the layout,
+    spaces and line ends priced as if they could be anywhere. Counting each column of the line
+    apart, a column of one byte value costing its table alone, a copy laid out in groups of ten
+    came to 420,025 bytes (LZMA2 486,077), and the colour picture to 468,078 (was 494,774). Finding
+    a noisy file's line length needed the common divisor of its best lags (its multiples score as
+    well as it does); and the widths are no longer only the three best lags, so a picture of three
+    colours finds its rows as well as its pixel. Instructions with it are `sieve-manifest-v9`.
 - **Next (proposed):** take the propagating form further (more phases, a wave per line fitted to
   more points, value lengths of 16 and 32 for sound and floats) on raw pictures and sound, the
   files where it can win, and if it holds, make it a way to carry such a file in the

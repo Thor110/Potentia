@@ -2302,10 +2302,11 @@ def sw_decode(words, freq, n):
 # definition apart from core/rope_wave.*.
 
 def rope_params(text):
-    m = re.fullmatch(r"L(8|16|32) W([1-9][0-9]*) S([1-8]) P([0-3]) K([01])", text)
-    if not m:
-        sys.exit(f"rope-wave-v1: parameters are written like \"L8 W949 S1 P3 K0\": {text}")
-    return tuple(int(g) for g in m.groups())
+    """(L, W, S, P, K, C): rope-wave-v1's parameters, and rope-wave-v2's columns (" C1" after K)."""
+    m = re.fullmatch(r"L(8|16|32) W([1-9][0-9]*) S([1-8]) P([0-3]) K([01])( C1)?", text)
+    if not m or (m.group(6) and int(m.group(2)) < 2):
+        sys.exit(f"rope-wave: parameters are written like \"L8 W949 S1 P3 K0\" (v2: and \" C1\", W 2 or more): {text}")
+    return tuple(int(g) for g in m.groups()[:5]) + (1 if m.group(6) else 0,)
 
 
 def rope_kept(n):
@@ -2320,7 +2321,7 @@ def rope_kept(n):
 
 
 def rope_wave_file(code, params, size):
-    L, W, S, P, K = rope_params(params)
+    L, W, S, P, K, C = rope_params(params)
     vb, mask = L // 8, (1 << L) - 1
     n = size // vb
     kept = rope_kept(n) if K else []
@@ -2339,29 +2340,40 @@ def rope_wave_file(code, params, size):
             if not b & 0x80:
                 return v
 
-    planes = []
-    for _ in range(vb):
+    def segment(count):
+        """A table, then its stream; v2 has no stream for a table of one byte value."""
         k = varint()
         if k == 0:
-            if m:
-                sys.exit("rope-wave-v1: an empty plane for values that are there")
-            planes.append([])
-            continue
+            if count:
+                sys.exit("rope-wave: an empty segment for values that are there")
+            return []
         freq, sym = {}, 0
         for j in range(k):
             gap = varint()
             sym = gap if j == 0 else sym + gap
             freq[sym] = varint()
         if sum(freq.values()) != SW_M or max(freq) > 255:
-            sys.exit("rope-wave-v1: a table out of range")
+            sys.exit("rope-wave: a table out of range")
+        if C and k == 1:
+            return [sym] * count
         w = varint()
         words = list(struct.unpack_from("<%dI" % w, code, at[0]))
         at[0] += 4 * w
-        planes.append(sw_decode(words, freq, m))
-    e = [sum(planes[j][i] << (8 * j) for j in range(vb)) for i in range(m)] if m else []
+        return sw_decode(words, freq, count)
+
+    # The values left, by position; v1 one segment a plane, v2 one a column (position mod W) a plane.
+    keptset = set(kept)
+    free = [i for i in range(n) if i not in keptset]
+    cols = [[j for j, i in enumerate(free) if i % W == c] for c in range(W)] if C else [list(range(m))]
+    e = [0] * m
+    for plane in range(vb):
+        for col in cols:
+            got = segment(len(col))
+            for j, b in zip(col, got):
+                e[j] |= b << (8 * plane)
     tail = size - n * vb
     if len(code) - at[0] != len(kept) * vb + tail:
-        sys.exit("rope-wave-v1: the code does not end where the kept bytes do")
+        sys.exit("rope-wave: the code does not end where the kept bytes do")
     x = [0] * n
     for k, i in enumerate(kept):
         x[i] = int.from_bytes(code[at[0] + k * vb:at[0] + (k + 1) * vb], "little")
@@ -2372,7 +2384,7 @@ def rope_wave_file(code, params, size):
     for a, b in zip(kept, kept[1:]):
         for i in range(a, b + 1):
             rope[i] = x[a] + (2 * (x[b] - x[a]) * (i - a) + (b - a)) // (2 * (b - a))
-    keptset, j = set(kept), 0
+    j = 0
     for i in range(n):
         if i in keptset:
             continue
@@ -6039,7 +6051,7 @@ def v7_listing(data):
     <bytes> <dictionary>" after the first line): the text it is, then what follows."""
     import lzma
     version = data[:18]
-    if version not in (b"sieve-manifest-v7\n", b"sieve-manifest-v8\n") or not data[18:].startswith(b"listing "):
+    if version not in (b"sieve-manifest-v7\n", b"sieve-manifest-v8\n", b"sieve-manifest-v9\n") or not data[18:].startswith(b"listing "):
         return data
     head = version + b"listing "
     nl = data.index(b"\n", len(head))
@@ -6062,7 +6074,8 @@ def cmd_unpack_v7(args, data):
     at, root = 1, None
     if lines[at].startswith("root "):
         root, at = lines[at][5:], at + 1
-    v8 = lines[0] == "sieve-manifest-v8"  # v7 with files carried by rope-wave-v1, in a fourth stream
+    v9 = lines[0] == "sieve-manifest-v9"  # v8 whose rope ways may be rope-wave-v2's (columns)
+    v8 = lines[0] == "sieve-manifest-v8" or v9  # v7 with files carried by rope-wave-v1, in a fourth stream
     streams = {"x86": (0, 0, 0), "lzma2": (0, 0, 0), "rope": (0, 0, 0)}
     for name in ("x86", "lzma2", "items", "rope"):
         if lines[at].startswith(f"stream {name} "):
@@ -6134,6 +6147,8 @@ def cmd_unpack_v7(args, data):
                 shift += 7
                 if not b & 0x80:
                     break
+            if way.endswith(" C1") and not v9:
+                sys.exit(f"{path}: a rope-wave-v2 way in sieve-manifest-v8")
             got[i], ra = rope_wave_file(ropes[ra:ra + n], way[5:], size), ra + n
         elif way.startswith("item "):
             k = int(way.split(" ")[1])
@@ -6189,7 +6204,7 @@ def cmd_unpack(args):
     SHA-256. With --to DIR, the folders and files are written there. Prints the listing it unpacked."""
     import lzma
     data = open(args.manifest, "rb").read()
-    if data.startswith(b"sieve-manifest-v7\n") or data.startswith(b"sieve-manifest-v8\n"):
+    if data.startswith((b"sieve-manifest-v7\n", b"sieve-manifest-v8\n", b"sieve-manifest-v9\n")):
         return cmd_unpack_v7(args, data)
     end = data.index(b"\nend\n") + len(b"\nend\n")
     lines = data[:end].decode("utf-8").split("\n")[:-1]

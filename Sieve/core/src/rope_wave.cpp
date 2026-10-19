@@ -11,12 +11,13 @@
 #include <map>
 #include <mutex>
 #include <stdexcept>
+#include <utility>
 
 namespace sieve {
 
 namespace {
 
-[[noreturn]] void bad(const std::string& why) { throw std::invalid_argument("rope-wave-v1: " + why); }
+[[noreturn]] void bad(const std::string& why) { throw std::invalid_argument("rope-wave: " + why); }
 
 int64_t floor_div(int64_t a, int64_t b) // b > 0
 {
@@ -93,6 +94,7 @@ uint64_t mask_of(uint32_t bits) { return bits == 64 ? ~uint64_t(0) : (uint64_t(1
 // What the wave leaves, for every value that is not kept, in order; and the kept points.
 std::vector<uint64_t> residuals(const std::vector<uint64_t>& x, const RopeParams& p, std::vector<uint64_t>& pts)
 {
+    if (x.size() > 0 && p.columns && p.width < 2) bad("columns need lines of two values or more");
     const uint64_t mask = mask_of(p.bits);
     pts = p.keep ? kept_points(x.size()) : std::vector<uint64_t>{};
     const std::vector<int64_t> rope = rope_of(x, pts);
@@ -148,6 +150,106 @@ double entropy_bytes(const std::vector<uint64_t>& counts, uint64_t n)
     return bits / 8 + 1 + double(k) * 4 + 3 + 8;
 }
 
+// rope-wave-v2's segments: a segment with one byte present has no stream (every value is that byte).
+double entropy_bytes_v2(const std::vector<uint64_t>& counts, uint64_t n)
+{
+    size_t k = 0;
+    for (const uint64_t c : counts) k += c != 0;
+    if (k <= 1) return 1 + double(k) * 4;
+    return entropy_bytes(counts, n);
+}
+
+// One segment of what is left (a plane's bytes, or one column's of them): its table, then its rANS
+// stream; v2 writes no stream for a segment of one byte value.
+void put_segment(std::vector<uint8_t>& out, const std::vector<uint16_t>& sym, bool v2)
+{
+    if (sym.empty())
+    {
+        put_varint(out, 0);
+        return;
+    }
+    std::vector<uint64_t> counts(65536, 0);
+    for (const uint16_t b : sym) ++counts[b];
+    const std::vector<uint32_t> freq = weights::quantise(counts);
+    uint64_t k = 0;
+    for (const uint32_t f : freq) k += f != 0;
+    put_varint(out, k);
+    uint32_t last = 0;
+    bool first = true;
+    for (uint32_t b = 0; b < freq.size(); ++b)
+        if (freq[b])
+        {
+            put_varint(out, first ? b : b - last);
+            put_varint(out, freq[b]);
+            last = b;
+            first = false;
+        }
+    if (v2 && k == 1) return;
+    const std::vector<uint32_t> words = weights::encode(sym, freq);
+    put_varint(out, words.size());
+    for (const uint32_t w : words)
+        for (int b = 0; b < 4; ++b) out.push_back(uint8_t(w >> (8 * b)));
+}
+
+std::vector<uint16_t> get_segment(std::span<const uint8_t> code, size_t& at, uint64_t count, bool v2)
+{
+    const uint64_t k = get_varint(code, at);
+    if (k == 0)
+    {
+        if (count) bad("an empty segment for values that are there");
+        return {};
+    }
+    if (k > 256 || !count) bad("a segment's table out of range");
+    std::vector<uint32_t> freq(65536, 0);
+    uint64_t s = 0, sum = 0;
+    for (uint64_t j = 0; j < k; ++j)
+    {
+        const uint64_t gap = get_varint(code, at);
+        if (j && gap == 0) bad("a table's symbols not increasing");
+        s = j ? s + gap : gap;
+        const uint64_t f = get_varint(code, at);
+        if (s > 255 || f == 0 || f > (uint64_t(1) << 24)) bad("a table's entry out of range");
+        freq[s] = uint32_t(f);
+        sum += f;
+    }
+    if (sum != (uint64_t(1) << 24)) bad("a table that does not sum to 2^24");
+    if (v2 && k == 1) return std::vector<uint16_t>(size_t(count), uint16_t(s));
+    const uint64_t w = get_varint(code, at);
+    if (w < 2 || w > (code.size() - at) / 4) bad("a segment's stream longer than the code");
+    std::vector<uint32_t> words(w);
+    for (uint64_t j = 0; j < w; ++j, at += 4)
+        words[j] = uint32_t(code[at]) | uint32_t(code[at + 1]) << 8 | uint32_t(code[at + 2]) << 16 | uint32_t(code[at + 3]) << 24;
+    return weights::decode(words, freq, count);
+}
+
+// The positions (value indices) of the values that are not kept, in order.
+std::vector<uint64_t> free_positions(uint64_t n, const std::vector<uint64_t>& pts)
+{
+    std::vector<uint64_t> out;
+    out.reserve(size_t(n - pts.size()));
+    size_t k = 0;
+    for (uint64_t i = 0; i < n; ++i)
+    {
+        if (k < pts.size() && pts[k] == i)
+        {
+            ++k;
+            continue;
+        }
+        out.push_back(i);
+    }
+    return out;
+}
+
+// The segments, in the order the code holds them: for each plane, every value left (v1, or no
+// columns), or each column's in turn (columns: position mod the line's width); each a list of
+// indices into what is left.
+std::vector<std::vector<size_t>> segments_of(const std::vector<uint64_t>& positions, const RopeParams& p)
+{
+    std::vector<std::vector<size_t>> seg(p.columns ? p.width : 1);
+    for (size_t j = 0; j < positions.size(); ++j) seg[p.columns ? size_t(positions[j] % p.width) : 0].push_back(j);
+    return seg;
+}
+
 } // namespace
 
 void RopeParams::check() const
@@ -156,12 +258,14 @@ void RopeParams::check() const
     if (width < 1) bad("a line of at least one value");
     if (step < 1 || step > 8) bad("a step of 1 to 8 values");
     if (phases > 3) bad("phases 0 to 3");
+    if (columns > 1) bad("columns 0 or 1");
+    if (columns && width < 2) bad("columns need lines of two values or more");
 }
 
 std::string RopeParams::text() const
 {
     return "L" + std::to_string(bits) + " W" + std::to_string(width) + " S" + std::to_string(step) + " P" + std::to_string(phases) + " K" +
-           (keep ? "1" : "0");
+           (keep ? "1" : "0") + (columns ? " C1" : "");
 }
 
 RopeParams RopeParams::parse(std::string_view t)
@@ -170,9 +274,11 @@ RopeParams RopeParams::parse(std::string_view t)
     unsigned long long L = 0, W = 0, S = 0, P = 0, K = 0;
     char extra = 0;
     const std::string s(t);
-    if (std::sscanf(s.c_str(), "L%llu W%llu S%llu P%llu K%llu%c", &L, &W, &S, &P, &K, &extra) != 5 || K > 1 || W > 0xFFFFFFFFull ||
-        L > 64 || S > 8 || P > 3)
-        bad("parameters are written \"L8 W949 S1 P3 K0\": " + s);
+    unsigned long long C = 0;
+    const int got = std::sscanf(s.c_str(), "L%llu W%llu S%llu P%llu K%llu C%llu%c", &L, &W, &S, &P, &K, &C, &extra);
+    if ((got != 5 && got != 6) || K > 1 || C > 1 || W > 0xFFFFFFFFull || L > 64 || S > 8 || P > 3)
+        bad("parameters are written \"L8 W949 S1 P3 K0\" (rope-wave-v2: and \" C1\"): " + s);
+    p.columns = uint32_t(C);
     p.bits = uint32_t(L);
     p.width = uint32_t(W);
     p.step = uint32_t(S);
@@ -191,39 +297,14 @@ std::vector<uint8_t> rope_code(std::span<const uint8_t> file, const RopeParams& 
     std::vector<uint64_t> pts;
     const std::vector<uint64_t> e = residuals(v.x, p, pts);
     std::vector<uint8_t> out;
+    const std::vector<std::vector<size_t>> seg = segments_of(free_positions(v.x.size(), pts), p);
     for (uint32_t plane = 0; plane < v.bytes; ++plane)
-    {
-        std::vector<uint64_t> counts(65536, 0);
-        std::vector<uint16_t> sym(e.size());
-        for (size_t i = 0; i < e.size(); ++i)
+        for (const std::vector<size_t>& one : seg)
         {
-            sym[i] = uint16_t((e[i] >> (8 * plane)) & 0xFF);
-            ++counts[sym[i]];
+            std::vector<uint16_t> sym(one.size());
+            for (size_t i = 0; i < one.size(); ++i) sym[i] = uint16_t((e[one[i]] >> (8 * plane)) & 0xFF);
+            put_segment(out, sym, p.columns != 0);
         }
-        if (e.empty())
-        {
-            put_varint(out, 0);
-            continue;
-        }
-        const std::vector<uint32_t> freq = weights::quantise(counts);
-        uint64_t k = 0;
-        for (const uint32_t f : freq) k += f != 0;
-        put_varint(out, k);
-        uint32_t last = 0;
-        bool first = true;
-        for (uint32_t s = 0; s < freq.size(); ++s)
-            if (freq[s])
-            {
-                put_varint(out, first ? s : s - last);
-                put_varint(out, freq[s]);
-                last = s;
-                first = false;
-            }
-        const std::vector<uint32_t> words = weights::encode(sym, freq);
-        put_varint(out, words.size());
-        for (const uint32_t w : words)
-            for (int b = 0; b < 4; ++b) out.push_back(uint8_t(w >> (8 * b)));
-    }
     for (const uint64_t i : pts)
         for (uint32_t b = 0; b < v.bytes; ++b) out.push_back(file[i * v.bytes + b]);
     for (size_t i = v.x.size() * v.bytes; i < file.size(); ++i) out.push_back(file[i]);
@@ -240,36 +321,13 @@ std::vector<uint8_t> rope_file(std::span<const uint8_t> code, const RopeParams& 
     const uint64_t m = n - pts.size();
     size_t at = 0;
     std::vector<uint64_t> e(m, 0);
+    const std::vector<std::vector<size_t>> seg = segments_of(free_positions(n, pts), p);
     for (uint32_t plane = 0; plane < vb; ++plane)
-    {
-        const uint64_t k = get_varint(code, at);
-        if (k == 0)
+        for (const std::vector<size_t>& one : seg)
         {
-            if (m) bad("an empty plane for values that are there");
-            continue;
+            const std::vector<uint16_t> sym = get_segment(code, at, one.size(), p.columns != 0);
+            for (size_t i = 0; i < one.size(); ++i) e[one[i]] |= uint64_t(sym[i]) << (8 * plane);
         }
-        if (k > 256 || !m) bad("a plane's table out of range");
-        std::vector<uint32_t> freq(65536, 0);
-        uint64_t s = 0, sum = 0;
-        for (uint64_t j = 0; j < k; ++j)
-        {
-            const uint64_t gap = get_varint(code, at);
-            if (j && gap == 0) bad("a table's symbols not increasing");
-            s = j ? s + gap : gap;
-            const uint64_t f = get_varint(code, at);
-            if (s > 255 || f == 0 || f > (uint64_t(1) << 24)) bad("a table's entry out of range");
-            freq[s] = uint32_t(f);
-            sum += f;
-        }
-        if (sum != (uint64_t(1) << 24)) bad("a table that does not sum to 2^24");
-        const uint64_t w = get_varint(code, at);
-        if (w < 2 || w > (code.size() - at) / 4) bad("a plane's stream longer than the code");
-        std::vector<uint32_t> words(w);
-        for (uint64_t j = 0; j < w; ++j, at += 4)
-            words[j] = uint32_t(code[at]) | uint32_t(code[at + 1]) << 8 | uint32_t(code[at + 2]) << 16 | uint32_t(code[at + 3]) << 24;
-        const std::vector<uint16_t> sym = weights::decode(words, freq, m);
-        for (uint64_t i = 0; i < m; ++i) e[i] |= uint64_t(sym[i]) << (8 * plane);
-    }
     const uint64_t tail = size - n * vb;
     if (code.size() - at != pts.size() * vb + tail) bad("the code does not end where the file's kept bytes do");
     std::vector<uint64_t> x(n, 0);
@@ -301,11 +359,32 @@ double rope_estimate(std::span<const uint8_t> file, const RopeParams& p)
     std::vector<uint64_t> pts;
     const std::vector<uint64_t> e = residuals(v.x, p, pts);
     double bytes = double(pts.size() * v.bytes + (file.size() - v.x.size() * v.bytes));
+    if (!p.columns)
+    {
+        for (uint32_t plane = 0; plane < v.bytes; ++plane)
+        {
+            std::vector<uint64_t> counts(256, 0);
+            for (const uint64_t r : e) ++counts[(r >> (8 * plane)) & 0xFF];
+            bytes += entropy_bytes(counts, e.size());
+        }
+        return bytes;
+    }
+    // Columns: each column's bytes counted on their own, a pass over what is left.
+    const std::vector<uint64_t> pos = free_positions(v.x.size(), pts);
     for (uint32_t plane = 0; plane < v.bytes; ++plane)
     {
-        std::vector<uint64_t> counts(256, 0);
-        for (const uint64_t r : e) ++counts[(r >> (8 * plane)) & 0xFF];
-        bytes += entropy_bytes(counts, e.size());
+        std::vector<uint64_t> counts(size_t(p.width) * 256, 0), n(p.width, 0);
+        for (size_t j = 0; j < e.size(); ++j)
+        {
+            const size_t c = size_t(pos[j] % p.width);
+            ++counts[c * 256 + ((e[j] >> (8 * plane)) & 0xFF)];
+            ++n[c];
+        }
+        for (uint32_t c = 0; c < p.width; ++c)
+        {
+            const std::vector<uint64_t> one(counts.begin() + std::ptrdiff_t(c) * 256, counts.begin() + std::ptrdiff_t(c + 1) * 256);
+            bytes += n[c] ? entropy_bytes_v2(one, n[c]) : 1;
+        }
     }
     return bytes;
 }
@@ -385,9 +464,53 @@ RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds)
             }
             lags.emplace_back(sum / double(samples), uint32_t(lag));
         }
+        std::vector<double> score(size_t(max_lag) + 1, -1);
+        for (const auto& [sc, lag] : lags) score[lag] = sc;
         std::sort(lags.begin(), lags.end());
+        // The four best, each taken down to its smallest divisor that matches almost as well (a
+        // file's lines repeat at every multiple of their length, so the true length can sit below a
+        // crowd of its multiples), and a multiple of one already taken left out (a picture of three
+        // colours would otherwise give 3, 6, 9 and miss its rows).
         std::vector<uint32_t> widths{1};
-        for (size_t i = 0; i < lags.size() && widths.size() < 4; ++i) widths.push_back(lags[i].second);
+        // And first, the length the best lags have in common: their greatest common divisors, pair
+        // by pair among the best sixteen, the one found most often (at least three times) taken as
+        // a width where it matches within 10% of the best lag. Where the values are noisy (digits, say) a line's own length scores no better than
+        // its multiples, and the multiples' scores are what show it.
+        {
+            std::map<uint32_t, int> common;
+            const size_t top = std::min<size_t>(lags.size(), 16);
+            for (size_t a = 0; a < top; ++a)
+                for (size_t b = a + 1; b < top; ++b)
+                {
+                    uint32_t x = lags[a].second, y = lags[b].second;
+                    while (y) x = std::exchange(y, x % y);
+                    if (x >= 2) ++common[x];
+                }
+            uint32_t best = 0;
+            int seen = 2;
+            for (const auto& [g, c] : common)
+                if (c > seen)
+                {
+                    best = g;
+                    seen = c;
+                }
+            // Only where it matches nearly as well as the best lag (within 10%): a divisor the best
+            // lags share by chance (2, say, among lags near a picture's width) is no line.
+            if (best && best <= max_lag && score[best] >= 0 && score[best] <= lags.front().first * 1.10 + 1e-9) widths.push_back(best);
+        }
+        for (size_t i = 0; i < lags.size() && widths.size() < 5; ++i)
+        {
+            uint32_t lag = lags[i].second;
+            for (uint32_t d = 2; d < lag; ++d)
+                if (lag % d == 0 && score[d] >= 0 && score[d] <= lags[i].first * 1.02 + 1e-9)
+                {
+                    lag = d;
+                    break;
+                }
+            bool multiple = false;
+            for (size_t w = 1; w < widths.size(); ++w) multiple = multiple || lag % widths[w] == 0;
+            if (!multiple) widths.push_back(lag);
+        }
         for (const uint32_t w : widths)
             for (uint32_t phases = 0; phases <= 3; ++phases)
                 for (uint32_t step = 1; step <= 4; ++step)
@@ -402,6 +525,18 @@ RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds)
                     if (w > 1 && step >= w) continue;
                     try_one(RopeParams{bits, w, step, phases, false});
                 }
+        // rope-wave-v2: each width's columns counted apart, for every phase (a column the same
+        // byte all the way down, a separator in a table, then costs only its table entry).
+        for (const uint32_t w : widths)
+            for (uint32_t phases = 0; phases <= 3 && w > 1 && w <= n / 4; ++phases)
+            {
+                if (out_of_time())
+                {
+                    r.timed_out = true;
+                    goto keep;
+                }
+                try_one(RopeParams{bits, w, 1, phases, false, 1});
+            }
     }
 keep:
     if (!out_of_time())

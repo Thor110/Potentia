@@ -318,7 +318,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     std::vector<std::vector<uint8_t>> rope_codes(files.size());
     std::vector<RopeParams> rope_params(files.size());
     PackReport r;
-    m.roped = false;
+    m.roped = m.rope_columns = false;
     if (m.compact && rope_seconds >= 0)
     {
         std::unordered_map<std::string, size_t> copies;
@@ -336,6 +336,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             rope_params[i] = found.best;
             files[i]->way = "rope " + found.best.text();
             m.roped = true;
+            if (found.best.columns) m.rope_columns = true; // v9
         }
     }
 
@@ -380,6 +381,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             r.rope_bytes += bytes[i].size();
         }
     r.rope_carried = m.rope_carried.size();
+    r.rope_columns = m.rope_columns;
     m.rope_stream = {m.rope_carried.size(), m.rope_carried.size(), 0};
     m.x86 = {0, x86.size(), dictionary_for(x86.size())};
     m.lzma2 = {0, plain.size(), dictionary_for(plain.size())};
@@ -450,7 +452,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         m.lines.clear();
         m.line_widths.clear();
         m.line_codings.clear();
-        m.minimal = m.compact = m.roped = false; // no items: v4, as before
+        m.minimal = m.compact = m.roped = m.rope_columns = false; // no items: v4, as before
     }
 
     // Where it is no smaller than the files as they are, they are carried so (v3). (Not with items:
@@ -512,7 +514,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
     };
     if (r.compact)
     {
-        const char* version = r.roped ? kRopeManifestVersion : kCompactManifestVersion;
+        const char* version = r.rope_columns ? kRopeColumnsManifestVersion : r.roped ? kRopeManifestVersion : kCompactManifestVersion;
         if (r.items)
         {
             o << "items     " << r.items << " file(s) carried as items of Sieve's lines (" << r.item_bytes << " bytes, as " << r.item_places
@@ -524,8 +526,8 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         else o << "items     none; " << version << "\n";
         if (r.listing_carried) o << "listing   " << r.listing << " bytes, carried as LZMA2 in " << r.listing_carried << "\n";
         if (r.roped)
-            o << "rope      " << r.roped << " file(s) pulled tight by rope-wave-v1 (" << r.rope_bytes << " bytes, carried in " << r.rope_carried
-              << "; sieve-manifest-v8)\n";
+            o << "rope      " << r.roped << " file(s) pulled tight by " << (r.rope_columns ? "rope-wave-v1 and v2" : "rope-wave-v1") << " (" << r.rope_bytes << " bytes, carried in " << r.rope_carried
+              << "; " << version << ")\n";
     }
     else if (r.items && r.item_places)
         o << "items     " << r.items << " file(s) carried as items of Sieve's lines (" << r.item_bytes << " bytes, as " << r.item_places
