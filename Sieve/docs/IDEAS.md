@@ -3886,3 +3886,25 @@ them be given less weight than his own messages, so it is left out here.
   and set the residuals' histogram-coded size, plus the wave's parameters, against the file's
   own size and against LZMA2. If a family wins on some kind of file, it becomes a versioned filter
   (`rope-wave-v1`) and a way to carry a file in the instructions; if not, the measurement says so.
+
+**19.88 Other compression schemes layered in, last (Edward, 19 October 2026).** His rule: the
+layering of other compression schemes and ways of saving takes a back seat, to be among the last
+things looked at, so that the basic utility of the tool is proven first. Kept here so it is not
+lost:
+- **JPEGs, losslessly smaller.** A JPEG is already compressed, so the instructions gain little on
+  it (Edward's photo, 4,047,272 bytes: 7z 4,034,819, its `.sieve` 4,031,460, rebuilt byte for
+  byte). The gain there is a step below the pixels: read the JPEG's stored frequency values out
+  of its entropy coding without making pixels, code them better, and write back exactly the same
+  file with its own tables (as Lepton, packJPG and JPEG XL's lossless JPEG transcoding do, about
+  20% smaller).
+- **ffmpeg cannot do it.** Decoding to pixels and encoding again gives a different file: another
+  encoder's tables, pixels already rounded, metadata and layout not kept.
+- **Two ways, for when it is taken up:**
+  - an optional outside tool, as ffmpeg is (`cjxl` and `djxl` from libjxl), which whoever
+    installs the `.sieve` would need too;
+  - or Sieve's own reader and writer of baseline JPEG's coding (a few hundred lines; progressive
+    JPEGs more), the values then coded by the rope or a coder of their own, checked by the oracle,
+    with nothing from outside. The second fits the aim of proving it within Sieve; `cjxl` is the
+    measure to set it against.
+- The same holds for other formats that are compressed already (PNG's deflate, MP3, MP4): each is
+  a scheme to undo exactly and redo, and each is for later.
