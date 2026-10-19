@@ -3888,6 +3888,12 @@ them be given less weight than his own messages, so it is left out here.
     a noisy file's line length needed the common divisor of its best lags (its multiples score as
     well as it does); and the widths are no longer only the three best lags, so a picture of three
     colours finds its rows as well as its pixel. Instructions with it are `sieve-manifest-v9`.
+  - **Columns by line (`rope-wave-v3`, 19 October 2026).** On Edward's own `pi6.txt` v2 gained
+    nothing: its lines are 55 and 54 bytes, with a blank line after every twenty and a form feed
+    in every tenth, so a fixed width drifts a byte at each form feed. Counting a byte's column from
+    the start of its line instead gives 421,306 bytes (v1 490,293; LZMA2 505,978; floor 415,241);
+    his file as Sieve instructions, 421,491 against 7z's 512,745. Instructions with it are
+    `sieve-manifest-v10`.
 - **Next (proposed):** take the propagating form further (more phases, a wave per line fitted to
   more points, value lengths of 16 and 32 for sound and floats) on raw pictures and sound, the
   files where it can win, and if it holds, make it a way to carry such a file in the

@@ -100,6 +100,8 @@ inline constexpr const char* kCodedPlaces = "digit-histogram-v1";
 inline constexpr const char* kRopeManifestVersion = "sieve-manifest-v8";
 // v8 whose rope ways may be rope-wave-v2's (columns, " C1"): made only where some file uses them.
 inline constexpr const char* kRopeColumnsManifestVersion = "sieve-manifest-v9";
+// v9 whose rope ways may be rope-wave-v3's (columns by line, " C2"): made only where some file's is.
+inline constexpr const char* kRopeLinesManifestVersion = "sieve-manifest-v10";
 
 std::vector<uint8_t> read_file_bytes(const std::filesystem::path& file);
 
@@ -164,6 +166,7 @@ struct Manifest
     // listing's order: the fourth stream, carried as it is after the items stream.
     bool roped = false;
     bool rope_columns = false; // v9: some rope way is rope-wave-v2's
+    bool rope_lines = false;   // v10: some rope way is rope-wave-v3's (and rope_columns is set too)
     PackedStream rope_stream;
     std::vector<uint8_t> rope_carried;
     // v7: the listing (every line after the first, up to and including "end") carried as LZMA2 where

@@ -2596,6 +2596,7 @@ int cmd_locate(const Args& a)
         const std::string o = a.get("installer");
         write_address_file(fs::path(std::u8string(o.begin(), o.end())), iaddr, a.has("hex"));
         *info << "installer " << o << ": the address of the installer's manifest (" << (!(m.with_contents ? m.packed : inst.packed) ? "v3: the listing, then every file's bytes"
+                                    : (m.with_contents ? m.rope_lines : inst.rope_lines) ? "v10: the listing, every other file packed, the items' places, then the files pulled tight by the rope, column by column or by line where that helps"
                                     : (m.with_contents ? m.rope_columns : inst.rope_columns) ? "v9: the listing, every other file packed, the items' places, then the files pulled tight by the rope, column by column where that helps"
                                     : (m.with_contents ? m.roped : inst.roped) ? "v8: the listing, every other file packed, the items' places, then the files pulled tight by the rope"
                                     : (m.with_contents ? m.compact : inst.compact) ? "v7: the listing, every other file packed, then the items' places, the AI line's coded where that is smaller"

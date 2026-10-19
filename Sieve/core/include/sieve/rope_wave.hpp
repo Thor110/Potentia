@@ -44,6 +44,7 @@ namespace sieve {
 
 inline constexpr const char* kRopeWaveVersion = "rope-wave-v1";
 inline constexpr const char* kRopeWaveColumnsVersion = "rope-wave-v2"; // v1 with columns (C1)
+inline constexpr const char* kRopeWaveLinesVersion = "rope-wave-v3";   // v2 with columns by line (C2)
 
 struct RopeParams
 {
@@ -51,6 +52,8 @@ struct RopeParams
     bool keep = false;
     // rope-wave-v2 (written " C1" after K): what is left counted column by column (the value's
     // position mod W), a table for each, and a column of one byte value given by its table alone.
+    // rope-wave-v3 (" C2"): bytes counted by their column in their text line (the bytes since the
+    // last line feed, held below W), for L8 S1 P0 K0 only; each column's count before its segment.
     // 0: rope-wave-v1, one table for every value.
     uint32_t columns = 0;
     void check() const; // throws std::invalid_argument for parameters out of range

@@ -3444,6 +3444,20 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   table, parsing), the rope CI lines and new ones for v2 and v9 (sieve install, the oracle,
   sieve-install), the earlier instruction lines again.
 
+### `rope-wave-v3`: columns by line; `sieve-manifest-v10` (19 October 2026)
+- **Edward found** v2 made his `pi6.txt` no smaller (490,473, the same as before). His file,
+  uploaded here: lines of 55 and 54 bytes, a blank line after every twenty, a form feed in every
+  tenth (100 of them), so any fixed width drifts a byte at each form feed. v2 had run (the file is
+  v9) and rightly kept v1's answer.
+- **`rope-wave-v3`** (`C2`, with `L8 S1 P0 K0` only): a byte's column is the bytes since the last
+  line feed, held below W; each column's count is written before its segment, since a reader learns
+  the columns only as it makes the file. His file: 421,306 bytes (v1 490,293; LZMA2 505,978; floor
+  415,241); as instructions 421,491 (`sieve-manifest-v10`), 7z 512,745. The search tries it for any
+  file with line feeds, W its longest line (at most 4,096).
+- **Checked here:** the full build, the unit suite (new: C2 parsing and refusals, round trips, a
+  table that drifts, the search choosing it), CI lines for v3 and v10 with all three readers, and
+  the earlier lines again.
+
 ### For the next session (17 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show

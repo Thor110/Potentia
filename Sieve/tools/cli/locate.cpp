@@ -143,6 +143,8 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
                 const RopeParams rp = RopeParams::parse(e.way.substr(5));
                 if (rp.columns && !m.rope_columns)
                     throw std::invalid_argument("a rope-wave-v2 way (columns) in " + std::string(kRopeManifestVersion) + ", which has none");
+                if (rp.columns == 2 && !m.rope_lines)
+                    throw std::invalid_argument("a rope-wave-v3 way (columns by line) in " + std::string(m.version()) + ", which has none");
                 bytes[i] = rope_file(std::span<const uint8_t>(m.rope_carried.data() + ra, size_t(len)), rp, e.size);
             }
             catch (const std::invalid_argument& x)
@@ -273,7 +275,7 @@ std::string manifest_path(const fs::path& p, const fs::path& root)
 
 const char* Manifest::version() const
 {
-    return rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
+    return rope_lines ? kRopeLinesManifestVersion : rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
          : with_contents ? kInstallManifestVersion : with_addresses ? kAddressManifestVersion : kManifestVersion;
 }
 
@@ -317,7 +319,7 @@ std::string Manifest::text() const
     if (compact)
     {
         // v7: what the rest does not already give.
-        std::string t = std::string(rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : kCompactManifestVersion) + "\n";
+        std::string t = std::string(version()) + "\n";
         if (!one_file_root()) t += "root " + root + "\n";
         if (x86.packed) t += stream_line("x86", x86);
         if (lzma2.packed) t += stream_line("lzma2", lzma2);
@@ -561,7 +563,7 @@ Manifest Manifest::parse(std::string_view whole)
     // v7 with its listing carried as LZMA2: unpacked, and read as the text it is.
     // (v7, v8 and v9 alike: their first line, then "listing ...")
     std::string packed_version;
-    for (const char* v : {kCompactManifestVersion, kRopeManifestVersion, kRopeColumnsManifestVersion})
+    for (const char* v : {kCompactManifestVersion, kRopeManifestVersion, kRopeColumnsManifestVersion, kRopeLinesManifestVersion})
         if (whole.substr(0, std::string(v).size() + 9) == std::string(v) + "\nlisting ") packed_version = v;
     if (!packed_version.empty())
     {
@@ -621,6 +623,8 @@ Manifest Manifest::parse(std::string_view whole)
     else if (lines[0] == kCompactManifestVersion) m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] == kRopeManifestVersion) m.roped = m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] == kRopeColumnsManifestVersion) m.rope_columns = m.roped = m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
+    else if (lines[0] == kRopeLinesManifestVersion)
+        m.rope_lines = m.rope_columns = m.roped = m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] != kManifestVersion) throw std::runtime_error("not a sieve manifest (" + lines[0].substr(0, 40) + ")");
     if (m.packed) m.streams.assign(whole.begin() + std::ptrdiff_t(after), whole.end());
     else if (m.with_contents) m.contents.assign(whole.begin() + std::ptrdiff_t(after), whole.end());

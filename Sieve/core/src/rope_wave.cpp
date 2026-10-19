@@ -222,6 +222,20 @@ std::vector<uint16_t> get_segment(std::span<const uint8_t> code, size_t& at, uin
     return weights::decode(words, freq, count);
 }
 
+// rope-wave-v3 (C2): each byte's column, the bytes since the last line feed (10) before it, held
+// below W (the last column takes every byte past it).
+std::vector<uint32_t> line_columns(std::span<const uint8_t> b, uint32_t width)
+{
+    std::vector<uint32_t> col(b.size());
+    uint64_t c = 0;
+    for (size_t i = 0; i < b.size(); ++i)
+    {
+        col[i] = uint32_t(std::min<uint64_t>(c, width - 1));
+        c = b[i] == 10 ? 0 : c + 1;
+    }
+    return col;
+}
+
 // The positions (value indices) of the values that are not kept, in order.
 std::vector<uint64_t> free_positions(uint64_t n, const std::vector<uint64_t>& pts)
 {
@@ -258,14 +272,16 @@ void RopeParams::check() const
     if (width < 1) bad("a line of at least one value");
     if (step < 1 || step > 8) bad("a step of 1 to 8 values");
     if (phases > 3) bad("phases 0 to 3");
-    if (columns > 1) bad("columns 0 or 1");
+    if (columns > 2) bad("columns 0, 1 or 2");
     if (columns && width < 2) bad("columns need lines of two values or more");
+    if (columns == 2 && (bits != 8 || phases != 0 || keep || step != 1))
+        bad("columns by line (C2) are for bytes with no wave: L8, S1, P0, K0");
 }
 
 std::string RopeParams::text() const
 {
     return "L" + std::to_string(bits) + " W" + std::to_string(width) + " S" + std::to_string(step) + " P" + std::to_string(phases) + " K" +
-           (keep ? "1" : "0") + (columns ? " C1" : "");
+           (keep ? "1" : "0") + (columns ? " C" + std::to_string(columns) : "");
 }
 
 RopeParams RopeParams::parse(std::string_view t)
@@ -276,8 +292,8 @@ RopeParams RopeParams::parse(std::string_view t)
     const std::string s(t);
     unsigned long long C = 0;
     const int got = std::sscanf(s.c_str(), "L%llu W%llu S%llu P%llu K%llu C%llu%c", &L, &W, &S, &P, &K, &C, &extra);
-    if ((got != 5 && got != 6) || K > 1 || C > 1 || W > 0xFFFFFFFFull || L > 64 || S > 8 || P > 3)
-        bad("parameters are written \"L8 W949 S1 P3 K0\" (rope-wave-v2: and \" C1\"): " + s);
+    if ((got != 5 && got != 6) || K > 1 || C > 2 || W > 0xFFFFFFFFull || L > 64 || S > 8 || P > 3)
+        bad("parameters are written \"L8 W949 S1 P3 K0\" (rope-wave-v2: and \" C1\"; v3: \" C2\"): " + s);
     p.columns = uint32_t(C);
     p.bits = uint32_t(L);
     p.width = uint32_t(W);
@@ -293,6 +309,21 @@ std::vector<uint8_t> rope_code(std::span<const uint8_t> file, const RopeParams& 
 {
     p.check();
     if (file.size() >= (uint64_t(1) << 30)) bad("a file of a gigabyte or more");
+    if (p.columns == 2)
+    {
+        // v3: each line column's bytes, its count first (a reader learns the columns only as it
+        // makes the file again), then its segment.
+        const std::vector<uint32_t> col = line_columns(file, p.width);
+        std::vector<std::vector<uint16_t>> seg(p.width);
+        for (size_t i = 0; i < file.size(); ++i) seg[col[i]].push_back(file[i]);
+        std::vector<uint8_t> out;
+        for (const auto& one : seg)
+        {
+            put_varint(out, one.size());
+            put_segment(out, one, true);
+        }
+        return out;
+    }
     const Values v = values_of(file, p.bits);
     std::vector<uint64_t> pts;
     const std::vector<uint64_t> e = residuals(v.x, p, pts);
@@ -315,6 +346,31 @@ std::vector<uint8_t> rope_file(std::span<const uint8_t> code, const RopeParams& 
 {
     p.check();
     if (size >= (uint64_t(1) << 30)) bad("a file of a gigabyte or more");
+    if (p.columns == 2)
+    {
+        size_t at = 0;
+        std::vector<std::vector<uint16_t>> seg(p.width);
+        uint64_t total = 0;
+        for (auto& one : seg)
+        {
+            const uint64_t n = get_varint(code, at);
+            if (n > size - total) bad("columns holding more bytes than the file");
+            total += n;
+            one = get_segment(code, at, n, true);
+        }
+        if (total != size || at != code.size()) bad("the code does not end where the file's columns do");
+        std::vector<uint8_t> out(static_cast<size_t>(size));
+        std::vector<size_t> next(p.width, 0);
+        uint64_t c = 0;
+        for (size_t i = 0; i < out.size(); ++i)
+        {
+            const size_t k = size_t(std::min<uint64_t>(c, p.width - 1));
+            if (next[k] >= seg[k].size()) bad("a column with fewer bytes than the file needs");
+            out[i] = uint8_t(seg[k][next[k]++]);
+            c = out[i] == 10 ? 0 : c + 1;
+        }
+        return out;
+    }
     const uint32_t vb = p.bits / 8;
     const uint64_t n = size / vb;
     const std::vector<uint64_t> pts = p.keep ? kept_points(n) : std::vector<uint64_t>{};
@@ -355,6 +411,23 @@ std::vector<uint8_t> rope_file(std::span<const uint8_t> code, const RopeParams& 
 double rope_estimate(std::span<const uint8_t> file, const RopeParams& p)
 {
     p.check();
+    if (p.columns == 2)
+    {
+        const std::vector<uint32_t> col = line_columns(file, p.width);
+        std::vector<uint64_t> counts(size_t(p.width) * 256, 0), n(p.width, 0);
+        for (size_t i = 0; i < file.size(); ++i)
+        {
+            ++counts[size_t(col[i]) * 256 + file[i]];
+            ++n[col[i]];
+        }
+        double bytes = 0;
+        for (uint32_t c = 0; c < p.width; ++c)
+        {
+            const std::vector<uint64_t> one(counts.begin() + std::ptrdiff_t(c) * 256, counts.begin() + std::ptrdiff_t(c + 1) * 256);
+            bytes += 3 + (n[c] ? entropy_bytes_v2(one, n[c]) : 1);
+        }
+        return bytes;
+    }
     const Values v = values_of(file, p.bits);
     std::vector<uint64_t> pts;
     const std::vector<uint64_t> e = residuals(v.x, p, pts);
@@ -538,12 +611,31 @@ RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds)
                 try_one(RopeParams{bits, w, 1, phases, false, 1});
             }
     }
+    // rope-wave-v3: columns counted from each line's start, for a file of lines (text, tables);
+    // as many columns as its longest line, up to 4,096.
+    if (!out_of_time())
+    {
+        uint64_t longest = 0, c = 0;
+        bool lines = false;
+        for (const uint8_t b : file)
+        {
+            if (b == 10)
+            {
+                lines = true;
+                longest = std::max(longest, c + 1);
+                c = 0;
+            }
+            else ++c;
+        }
+        longest = std::max(longest, c + 1);
+        if (lines && longest >= 2) try_one(RopeParams{8, uint32_t(std::min<uint64_t>(longest, 4096)), 1, 0, false, 2});
+    }
 keep:
     if (!out_of_time())
     {
         RopeParams k = r.best;
         k.keep = true;
-        try_one(k);
+        if (k.columns != 2) try_one(k); // columns by line keep nothing
     }
     else r.timed_out = true;
     return r;

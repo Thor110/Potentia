@@ -1140,6 +1140,38 @@ jobs:
           diff -r digits digits_oracle
           build/sieve-install digits.sieve --to digits_si --yes > /dev/null
           diff -r digits digits_si
+          # rope-wave-v3: the same kind of table laid out as pi6.txt is (Edward's stress test): lines of
+          # 55 and 54 bytes, a blank line after every twenty and a form feed in every tenth, which shift
+          # any fixed width. Counted by the column in each line, it is near the digits' floor (100,000
+          # digits: 41,525 bytes) and below LZMA2; sieve-manifest-v10; all three readers give it back.
+          rm -rf lines lines_inst lines_oracle lines_si && mkdir lines
+          python -c "
+          s = 314159
+          def r():
+              global s
+              s = (s * 1103515245 + 12345) % 2147483648
+              return (s >> 16) % 10
+          out = []
+          for block in range(100):
+              for line in range(20):
+                  groups = [''.join(str(r()) for _ in range(10)) for _ in range(5)]
+                  out.append(' '.join(groups) + (' ' if line % 2 == 0 else ''))
+              out.append('\\x0c' if block % 10 == 9 else '')
+          open('lines/pi-like.txt', 'wb').write(('\\n'.join(out) + '\\n').encode())
+          "
+          build/sieve rope lines/pi-like.txt --out lines.rope | tr -d '\r' > lines.txt
+          q "^wave      L8 W56 S1 P0 K0 C2 (rope-wave-v3)" lines.txt
+          [ "$(wc -c < lines.rope)" -lt "$(sed -n 's/^LZMA2     \([0-9]*\) bytes.*/\1/p' lines.txt)" ]
+          [ "$(wc -c < lines.rope)" -lt 45525 ] # the digits' floor, 41,525, and 4,000 for the columns' tables
+          python reference/sieve_ref.py rope-unpack lines.rope --params "L8 W56 S1 P0 K0 C2" --size "$(wc -c < lines/pi-like.txt)" --out lines.back > /dev/null
+          cmp lines/pi-like.txt lines.back
+          build/sieve locate lines --installer lines.sieve --items --manifest lines.manifest | tr -d '\r' | q "; sieve-manifest-v10)"
+          build/sieve install lines.sieve --to lines_inst > /dev/null
+          diff -r lines lines_inst
+          python reference/sieve_ref.py unpack lines.manifest --to lines_oracle > /dev/null
+          diff -r lines lines_oracle
+          build/sieve-install lines.sieve --to lines_si --yes > /dev/null
+          diff -r lines lines_si
           # (each file is named by its item's title; the report says which file each degree gave)
           $H --no-menu --press "X,Tab,9,0,Return" --take --save-item p90.txt --screenshot degp.png > /dev/null
           cmp p90.txt "degrees/$(sed -n 's/^pages 090 //p' deg.txt)"
