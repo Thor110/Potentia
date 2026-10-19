@@ -3824,6 +3824,60 @@ them be given less weight than his own messages, so it is left out here.
   The five kept points do not, at any scale tried: they are too few to follow a picture, a sound
   or a text, and paying for them costs more than they save. Text, meshes, MIDI and models are not
   smooth, so no wave helps them; LZMA2's repeats are what work there.
+- **Edward (19 October 2026):** make it a filter that works across all dimensions, for the edge
+  cases, even where it is expected to win only on some kinds of file; note everything down first,
+  then make a start.
+- **`rope-wave-v1`, as it is to be built (Claude, 19 October 2026).** A filter here means an
+  ordering: a way to number a line's units, so that the units the wave predicts well come first and
+  have short numbers. On the binary line a unit is a file's bytes, so it serves every file; on the
+  other lines a unit's digits, so every dimension. Its parameters, all written with what it numbers:
+  - `bits` L, the value length: 8, 16 or 32 (a file's bytes read as values of L bits, little-endian;
+    bytes past the last whole value are kept as they are). On a line other than the binary line,
+    the line's own digit.
+  - `width` W, the values in a line, for propagation (1 for a stream with no lines).
+  - `step` S, how far back "the value before" is (1 for neighbours; 3 for pixels of three colours).
+  - `phases` P, Edward's 0/1/2/3: 0, no propagation, the rope alone; 1, the value before (S back,
+    in the same line); 2, the value before and the line before (W back), averaged; 3, the value
+    before plus the line before less the one diagonal between them, held within the values (as
+    three phases follow one another). A value with no neighbour in a phase falls back to the
+    phases below it, and in the end to the rope.
+  - `keep` (0 or 1): the kept values, at the start, a third, the centre (only for an odd count: an
+    even count's centre is a gap), two thirds and the end; the rope is drawn straight between
+    them, rounded down, and is the wave where no neighbour is. Without `keep` the rope is 0.
+  - What is left, each value less its prediction wrapping at 2^L, is cut into L/8 planes of bytes
+    (the low byte of every value, then the next), each plane a segment, and numbered by
+    `digit-histogram-v1`; the kept values and the trailing bytes follow, as raw bytes.
+  - **Pulling tight** is the search over the parameters for the shortest number, with the time
+    the File Locator's search times set (a file's and the run's): every value length, phase, step and keep,
+    and widths found by where the file best matches itself shifted.
+- **Measured (19 October 2026), the definitions above, before they were built:**
+
+  | File | Bytes | LZMA2 | Best rope-wave | Its parameters |
+  |---|---|---|---|---|
+  | Vitruvian, grey pixels | 1,233,700 | 865,400 | **831,533** | L8 W949 S1 P3 |
+  | Vitruvian, colour pixels at 475 × 650 | 926,250 | 623,717 | **511,659** | L8 W1425 S1 P3 |
+  | tones, 16-bit sound (made here) | 110,240 | 58,173 | 75,540 | L16 W1 P2 |
+  | universalbibliothek.txt | 21,084 | 8,490 | 12,833 | no wave |
+
+  `keep` never helped by more than a few bytes. In colour, a step of 1 beats a step of 3: the third
+  phase then predicts each colour from the one beside it and the pixel above. The made tones repeat
+  exactly, which LZMA2 finds and no wave does; a recording would differ.
+- **Built (19 October 2026):** `rope-wave-v1` (SPECIFICATIONS §12.2), with these changes from
+  the plan above, each for a measured reason:
+  - What the wave leaves is coded by `sieve-weights-v1`'s tables and rANS, not numbered by
+    `digit-histogram-v1`: that one's exact numbering takes time growing with the square of the
+    length (0.03 s at 8,192 digits, too long at a megabyte). The sizes are within a few bytes of
+    each other.
+  - The search found waves better than the hand-made ones: on the colour pixels a line of 3
+    values (each colour from the one beside it and the same colour a pixel before), 494,774
+    bytes against LZMA2's 623,717; on a made sine, the sine's own period (a width of 2,639
+    values, 21 cycles).
+  - `sieve rope FILE` searches, codes and checks; `sieve-manifest-v8` carries a file so where it
+    is smaller than LZMA2 makes it; the oracle decodes both apart.
+  - Across all dimensions, as Edward asked: it takes any file's bytes, so it serves the binary
+    line, and through it every file. *Not yet:* the other lines' places coded by it (a line's
+    units are its digits, its width the line's own), the File Locator's weighing showing it, and
+    widths beyond the three best lags (a picture of three colours finds its pixel, not its row).
 - **Next (proposed):** take the propagating form further (more phases, a wave per line fitted to
   more points, value lengths of 16 and 32 for sound and floats) on raw pictures and sound, the
   files where it can win, and if it holds, make it a way to carry such a file in the

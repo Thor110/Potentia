@@ -2296,6 +2296,111 @@ def sw_decode(words, freq, n):
     return out
 
 
+# ---------------------------------------------------------------- rope-wave-v1 (IDEAS §19.87)
+# The tightened rope: a file's values predicted by a wave, what it leaves coded by sieve-weights-v1's
+# tables and rANS (SPECIFICATIONS §12.2), and the file back from its code, written from the
+# definition apart from core/rope_wave.*.
+
+def rope_params(text):
+    m = re.fullmatch(r"L(8|16|32) W([1-9][0-9]*) S([1-8]) P([0-3]) K([01])", text)
+    if not m:
+        sys.exit(f"rope-wave-v1: parameters are written like \"L8 W949 S1 P3 K0\": {text}")
+    return tuple(int(g) for g in m.groups())
+
+
+def rope_kept(n):
+    """The kept values' places: the start, a third, the centre (an odd count only), two thirds,
+    the end."""
+    if n == 0:
+        return []
+    p = {0, n // 3, 2 * n // 3, n - 1}
+    if n % 2:
+        p.add((n - 1) // 2)
+    return sorted(p)
+
+
+def rope_wave_file(code, params, size):
+    L, W, S, P, K = rope_params(params)
+    vb, mask = L // 8, (1 << L) - 1
+    n = size // vb
+    kept = rope_kept(n) if K else []
+    m = n - len(kept)
+    at = [0]
+
+    def varint():
+        v, shift = 0, 0
+        while True:
+            if at[0] >= len(code):
+                sys.exit("rope-wave-v1: the code ends inside a number")
+            b = code[at[0]]
+            at[0] += 1
+            v |= (b & 0x7F) << shift
+            shift += 7
+            if not b & 0x80:
+                return v
+
+    planes = []
+    for _ in range(vb):
+        k = varint()
+        if k == 0:
+            if m:
+                sys.exit("rope-wave-v1: an empty plane for values that are there")
+            planes.append([])
+            continue
+        freq, sym = {}, 0
+        for j in range(k):
+            gap = varint()
+            sym = gap if j == 0 else sym + gap
+            freq[sym] = varint()
+        if sum(freq.values()) != SW_M or max(freq) > 255:
+            sys.exit("rope-wave-v1: a table out of range")
+        w = varint()
+        words = list(struct.unpack_from("<%dI" % w, code, at[0]))
+        at[0] += 4 * w
+        planes.append(sw_decode(words, freq, m))
+    e = [sum(planes[j][i] << (8 * j) for j in range(vb)) for i in range(m)] if m else []
+    tail = size - n * vb
+    if len(code) - at[0] != len(kept) * vb + tail:
+        sys.exit("rope-wave-v1: the code does not end where the kept bytes do")
+    x = [0] * n
+    for k, i in enumerate(kept):
+        x[i] = int.from_bytes(code[at[0] + k * vb:at[0] + (k + 1) * vb], "little")
+    # The rope: straight between the kept values, rounded down; 0 without them.
+    rope = [0] * n
+    if len(kept) == 1:
+        rope[kept[0]] = x[kept[0]]
+    for a, b in zip(kept, kept[1:]):
+        for i in range(a, b + 1):
+            rope[i] = x[a] + (2 * (x[b] - x[a]) * (i - a) + (b - a)) // (2 * (b - a))
+    keptset, j = set(kept), 0
+    for i in range(n):
+        if i in keptset:
+            continue
+        left = P >= 1 and i % W >= S
+        up = P >= 2 and i >= W
+        if left and up:
+            if P == 2:
+                pred = (x[i - S] + x[i - W]) // 2
+            else:
+                pred = min(max(x[i - S] + x[i - W] - x[i - W - S], 0), mask)
+        elif left:
+            pred = x[i - S]
+        elif up:
+            pred = x[i - W]
+        else:
+            pred = rope[i] & mask
+        x[i] = (e[j] + pred) & mask
+        j += 1
+    return b"".join(v.to_bytes(vb, "little") for v in x) + code[at[0] + len(kept) * vb:]
+
+
+def cmd_rope_unpack(args):
+    code = open(args.code, "rb").read()
+    out = rope_wave_file(code, args.params, args.size)
+    open(args.out, "wb").write(out)
+    print(f"{len(out)}\t{hashlib.sha256(out).hexdigest()}")
+
+
 def sw_tensors(raw_start):
     """The tensors of a start, in the order of their bytes: (name, dtype, n, begin, end)."""
     import json
@@ -5933,16 +6038,17 @@ def v7_listing(data):
     """A v7 manifest's text, its listing unpacked where it is carried as LZMA2 ("listing <packed>
     <bytes> <dictionary>" after the first line): the text it is, then what follows."""
     import lzma
-    head = b"sieve-manifest-v7\nlisting "
-    if not data.startswith(head):
+    version = data[:18]
+    if version not in (b"sieve-manifest-v7\n", b"sieve-manifest-v8\n") or not data[18:].startswith(b"listing "):
         return data
+    head = version + b"listing "
     nl = data.index(b"\n", len(head))
     packed, size, dictionary = (int(x) for x in data[len(head):nl].decode().split(" "))
     listing = lzma.decompress(data[nl + 1:nl + 1 + packed], format=lzma.FORMAT_RAW,
                               filters=[{"id": lzma.FILTER_LZMA2, "dict_size": dictionary}])
     if len(listing) != size:
         sys.exit("the listing unpacks to the wrong size")
-    return b"sieve-manifest-v7\n" + listing + data[nl + 1 + packed:]
+    return version + listing + data[nl + 1 + packed:]
 
 
 def cmd_unpack_v7(args, data):
@@ -5956,13 +6062,16 @@ def cmd_unpack_v7(args, data):
     at, root = 1, None
     if lines[at].startswith("root "):
         root, at = lines[at][5:], at + 1
-    streams = {"x86": (0, 0, 0), "lzma2": (0, 0, 0)}
-    for name in ("x86", "lzma2", "items"):
+    v8 = lines[0] == "sieve-manifest-v8"  # v7 with files carried by rope-wave-v1, in a fourth stream
+    streams = {"x86": (0, 0, 0), "lzma2": (0, 0, 0), "rope": (0, 0, 0)}
+    for name in ("x86", "lzma2", "items", "rope"):
         if lines[at].startswith(f"stream {name} "):
             streams[name] = tuple(int(x) for x in lines[at].split(" ")[2:])
             at += 1
-        elif name == "items":
-            sys.exit("no items stream")
+        elif name == "items" or (name == "rope" and v8):
+            sys.exit(f"no {name} stream")
+    if streams["rope"][0] != streams["rope"][1] or streams["rope"][2] != 0:
+        sys.exit("the rope stream is carried as it is")
     item_lines, widths, coded = [], [], []
     while lines[at].startswith("line "):
         _, k, w, rest = lines[at].split(" ", 3)
@@ -5976,8 +6085,8 @@ def cmd_unpack_v7(args, data):
         sys.exit("no tree line")
     tree, at = lines[at][5:], at + 1
     payload = data[end:]
-    sx, sl, si = streams["x86"], streams["lzma2"], streams["items"]
-    if len(payload) != sx[0] + sl[0] + si[0]:
+    sx, sl, si, sr = streams["x86"], streams["lzma2"], streams["items"], streams["rope"]
+    if len(payload) != sx[0] + sl[0] + si[0] + sr[0]:
         sys.exit("the streams are not the size their lines say")
 
     def decode(blob, size, dictionary, x86):
@@ -5991,7 +6100,8 @@ def cmd_unpack_v7(args, data):
 
     x86 = decode(payload[:sx[0]], sx[1], sx[2], True)
     plain = decode(payload[sx[0]:sx[0] + sl[0]], sl[1], sl[2], False)
-    carried = payload[sx[0] + sl[0]:]
+    carried = payload[sx[0] + sl[0]:sx[0] + sl[0] + si[0]]
+    ropes = payload[sx[0] + sl[0] + si[0]:]
     places = carried if si[2] == 0 else decode(carried, si[1], si[2], False)
     if si[2] == 0 and si[0] != si[1]:
         sys.exit("a raw items stream is not its own size")
@@ -6009,12 +6119,22 @@ def cmd_unpack_v7(args, data):
     files = [e for e in entries if len(e) == 4]
     if root is None and (len(entries) != 1 or len(files) != 1):
         sys.exit("no root, and not one file")
-    got, xa, pa, ia = [None] * len(files), 0, 0, 0
+    got, xa, pa, ia, ra = [None] * len(files), 0, 0, 0, 0
     for i, (path, size, sha, way) in enumerate(files):
         if way == "x86":
             got[i], xa = x86[xa:xa + size], xa + size
         elif way == "raw":
             got[i], pa = plain[pa:pa + size], pa + size
+        elif v8 and way.startswith("rope "):
+            n, shift = 0, 0
+            while True:
+                b = ropes[ra]
+                ra += 1
+                n |= (b & 0x7F) << shift
+                shift += 7
+                if not b & 0x80:
+                    break
+            got[i], ra = rope_wave_file(ropes[ra:ra + n], way[5:], size), ra + n
         elif way.startswith("item "):
             k = int(way.split(" ")[1])
             if coded[k]:
@@ -6038,7 +6158,7 @@ def cmd_unpack_v7(args, data):
             n = (len(base) + 7) // 8
             mask, pa = plain[pa:pa + n], pa + n
             got[i] = b"\n".join(l for j, l in enumerate(base) if mask[j // 8] >> (j % 8) & 1)
-    if xa != len(x86) or pa != len(plain) or ia != len(places):
+    if xa != len(x86) or pa != len(plain) or ia != len(places) or ra != len(ropes):
         sys.exit("the streams hold more than the files")
     for (path, size, sha, way), b in zip(files, got):
         if (size is not None and len(b) != size) or (sha != "-" and hashlib.sha256(b).hexdigest() != sha):
@@ -6069,7 +6189,7 @@ def cmd_unpack(args):
     SHA-256. With --to DIR, the folders and files are written there. Prints the listing it unpacked."""
     import lzma
     data = open(args.manifest, "rb").read()
-    if data.startswith(b"sieve-manifest-v7\n"):
+    if data.startswith(b"sieve-manifest-v7\n") or data.startswith(b"sieve-manifest-v8\n"):
         return cmd_unpack_v7(args, data)
     end = data.index(b"\nend\n") + len(b"\nend\n")
     lines = data[:end].decode("utf-8").split("\n")[:-1]
@@ -8461,6 +8581,11 @@ def main():
     s = sub.add_parser("weights-unpack")
     s.add_argument("file")
     s.add_argument("--out", required=True)
+    s = sub.add_parser("rope-unpack")
+    s.add_argument("code")
+    s.add_argument("--params", required=True)
+    s.add_argument("--size", type=int, required=True)
+    s.add_argument("--out", required=True)
     s = sub.add_parser("llm-encode-lines")
     s.add_argument("file")
     s.add_argument("--model", required=True)
@@ -8643,6 +8768,8 @@ def main():
         cmd_weights_pack(args)
     elif args.cmd == "weights-unpack":
         cmd_weights_unpack(args)
+    elif args.cmd == "rope-unpack":
+        cmd_rope_unpack(args)
     elif args.cmd == "kind-vectors":
         cmd_kind_vectors(args)
     elif args.cmd == "written-vectors":

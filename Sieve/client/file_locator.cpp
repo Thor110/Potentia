@@ -33,13 +33,14 @@ std::string u8(const fs::path& p)
 }
 
 // A single file's Sieve instructions, from the bytes already read: as a folder holding just it,
-// packed, its items of Sieve's lines carried as their places (v6) where that makes it smaller.
-cli::Manifest file_instructions(const fs::path& p, const std::vector<uint8_t>& bytes, const cli::Args& items)
+// packed, its items of Sieve's lines carried as their places where that makes it smaller, and the
+// file pulled tight by the rope (searched for `rope_seconds`, 0: no limit) where that does.
+cli::Manifest file_instructions(const fs::path& p, const std::vector<uint8_t>& bytes, const cli::Args& items, double rope_seconds)
 {
     cli::Manifest m = cli::manifest_of_file(p);
     m.contents = bytes;
     m.with_contents = true;
-    cli::add_packed_items(m, p.parent_path(), items);
+    cli::add_packed_items(m, p.parent_path(), items, nullptr, 8, false, rope_seconds);
     return m;
 }
 
@@ -181,7 +182,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 c.address_hex = a.is_zero() ? 0 : r.hex.size();
                 // Its Sieve instructions, as a folder's: its name, size and SHA-256, then its bytes.
                 r.manifest = cli::manifest_of_file(p);
-                const cli::Manifest fi = file_instructions(p, r.bytes, host_.item_args ? host_.item_args() : cli::Args{});
+                const cli::Manifest fi = file_instructions(p, r.bytes, host_.item_args ? host_.item_args() : cli::Args{}, by_total ? total : per_file);
                 const std::vector<uint8_t> mb = fi.file();
                 c.packed = fi.packed;
                 c.version = fi.version();
@@ -211,7 +212,13 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 c.lzma2 = cli::lzma2_size(all);
                 // The installer's manifest (v4: every file packed after it), compressed, and the installer.
                 cli::Manifest with = r.manifest;
-                cli::add_packed_items(with, p, host_.item_args ? host_.item_args() : cli::Args{});
+                {
+                    // The rope's time for each file: the file's, or the run's shared among the files.
+                    size_t n = 0;
+                    for (const auto& e : r.manifest.entries) n += e.dir ? 0 : 1;
+                    cli::add_packed_items(with, p, host_.item_args ? host_.item_args() : cli::Args{}, nullptr, 8, false,
+                                          by_total ? cli::budget_per_file(total, n) : per_file);
+                }
                 c.packed = with.packed;
                 c.version = with.version();
                 const std::vector<uint8_t> mb = with.file();
@@ -286,7 +293,8 @@ void FileLocator::save(const std::string& to)
     busy_ = true;
     const int what = save_what_;
     const Result r = result_;
-    worker_ = std::thread([this, what, r, to] {
+    const double rope_seconds = search_per_file_; // the rope's time for each file, as the search row sets it
+    worker_ = std::thread([this, what, r, to, rope_seconds] {
         std::string done;
         try
         {
@@ -294,8 +302,8 @@ void FileLocator::save(const std::string& to)
             {
                 // A file's instructions are a folder's holding just it (file_instructions).
                 const cli::Args items = host_.item_args ? host_.item_args() : cli::Args{};
-                cli::Manifest with = r.kind == Result::File ? file_instructions(from_u8(r.path), r.bytes, items) : r.manifest;
-                if (r.kind != Result::File) cli::add_packed_items(with, from_u8(r.path), items);
+                cli::Manifest with = r.kind == Result::File ? file_instructions(from_u8(r.path), r.bytes, items, rope_seconds) : r.manifest;
+                if (r.kind != Result::File) cli::add_packed_items(with, from_u8(r.path), items, nullptr, 8, false, rope_seconds);
                 const BigUint address = cli::binary_address(with.file());
                 // The installer on its own (for anyone with Sieve: sieve install, or sieve-install),
                 // or an installer program, sieve-install with it attached, one file for anyone.

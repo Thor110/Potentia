@@ -44,11 +44,13 @@ add_library(sieve_core STATIC
     core/src/json.cpp
     core/src/safetensors.cpp
     core/src/weights.cpp
+    core/src/weights_rans.cpp
     core/src/unicode_classes.cpp
     core/src/llm_tokenizer.cpp
     core/src/llm.cpp
     core/src/aispace.cpp
     core/src/digit_histogram.cpp
+    core/src/rope_wave.cpp
     core/src/training.cpp
     core/src/diffusion.cpp
     core/src/filters/models.cpp
@@ -219,6 +221,7 @@ add_executable(sieve
     tools/sieve_cli.cpp
     tools/cli/help.cpp
     tools/cli/tensors.cpp
+    tools/cli/rope.cpp
     tools/cli/chat.cpp
     tools/cli/ai.cpp
     tools/cli/train_cmd.cpp

@@ -43,6 +43,8 @@ struct PackReport
     std::vector<std::string> coded_lines;            // v7: the lines whose places were coded
     bool compact = false;                            // v7
     uint64_t listing = 0, listing_carried = 0;       // v7: the listing, and as carried where packed (its line too)
+    size_t roped = 0, rope_tried = 0;                // v8: files carried by rope-wave-v1, and the waves tried
+    uint64_t rope_bytes = 0, rope_carried = 0;       // v8: their bytes, and the rope stream
 };
 
 // v5: for a file's bytes, the line it is an item of (its place in the manifest's `lines`) and its
@@ -64,9 +66,11 @@ using PlaceCoder = std::function<std::optional<std::vector<uint8_t>>(size_t line
 // dropped. Its own SHA-256 is left out ("-") unless `item_hashes`, the tree's covering it. With
 // m.minimal (and m.line_widths beside m.lines), v6: each place carried as raw bytes, and an item
 // taken only where its place is shorter than the file. With m.compact too, v7: a line's places
-// coded by `coder` where that is smaller than their raw bytes.
+// coded by `coder` where that is smaller than their raw bytes. With rope_seconds 0 or more (0: no
+// limit), v8 where it helps: a file carried by rope-wave-v1, searched for that long, where its code
+// is smaller than the file packed alone.
 void add_packed(Manifest& m, const std::filesystem::path& root, PackReport* report = nullptr, const ItemFinder* items = nullptr,
-                bool item_hashes = false, const PlaceCoder* coder = nullptr);
+                bool item_hashes = false, const PlaceCoder* coder = nullptr, double rope_seconds = -1);
 
 // The report as lines, for the tool and the File Locator.
 std::string pack_report_text(const PackReport& r, uint64_t original);

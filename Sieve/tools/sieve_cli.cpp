@@ -34,6 +34,7 @@
 #include "cli/pack.hpp"
 #include "cli/plugins.hpp"
 #include "cli/tailor.hpp"
+#include "cli/rope.hpp"
 #include "cli/tensors.hpp"
 #include "cli/chat.hpp"
 #include "cli/ai.hpp"
@@ -2381,8 +2382,9 @@ void print_weighing(const Args& a, const std::filesystem::path& root, const std:
 }
 
 // Packs an installer's files (v4), and with --items carries those that are items of Sieve's lines as
-// their lines and places there: v7, each place at its least and the AI line's models among them
-// (--v6: as v6 wrote them; --v5: as v5 did, in hex, without the AI line; cli/items.hpp).
+// their lines and places there: v8, each place at its least, the AI line's models among them, and
+// files pulled tight by the rope where that is smaller (--search-per-file: its search's time)
+// (--v7: no rope; --v6: as v6 wrote them; --v5: as v5 did, in hex, without the AI line; cli/items.hpp).
 void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackReport& rep)
 {
     if (!a.has("items"))
@@ -2390,7 +2392,23 @@ void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackRepor
         add_packed(m, root, &rep);
         return;
     }
-    add_packed_items(m, root, a, &rep, a.has("v5") ? 5 : a.has("v6") ? 6 : 7, a.has("item-hashes") || a.has("file-hashes"));
+    double rope_seconds = 0;
+    if (a.has("search-per-file"))
+    {
+        const std::string v = a.get("search-per-file");
+        size_t used = 0;
+        try
+        {
+            rope_seconds = std::stod(v, &used);
+        }
+        catch (const std::exception&)
+        {
+            used = 0;
+        }
+        if (used != v.size() || !(rope_seconds >= 0)) throw std::invalid_argument("--search-per-file: seconds, 0 or more (0: no limit): " + v);
+    }
+    add_packed_items(m, root, a, &rep, a.has("v5") ? 5 : a.has("v6") ? 6 : a.has("v7") ? 7 : 8, a.has("item-hashes") || a.has("file-hashes"),
+                     rope_seconds);
 }
 
 int cmd_locate(const Args& a)
@@ -2578,6 +2596,7 @@ int cmd_locate(const Args& a)
         const std::string o = a.get("installer");
         write_address_file(fs::path(std::u8string(o.begin(), o.end())), iaddr, a.has("hex"));
         *info << "installer " << o << ": the address of the installer's manifest (" << (!(m.with_contents ? m.packed : inst.packed) ? "v3: the listing, then every file's bytes"
+                                    : (m.with_contents ? m.roped : inst.roped) ? "v8: the listing, every other file packed, the items' places, then the files pulled tight by the rope"
                                     : (m.with_contents ? m.compact : inst.compact) ? "v7: the listing, every other file packed, then the items' places, the AI line's coded where that is smaller"
                                     : (m.with_contents ? m.minimal : inst.minimal) ? "v6: the listing, every other file packed, then the items' places as raw bytes"
                                     : (m.with_contents ? m.items : inst.items) ? "v5: the listing, the items of Sieve's lines by their places, then every other file packed"
@@ -2887,7 +2906,7 @@ int cmd_vault(const Args& a)
 
 bool is_command(const std::string& name)
 {
-    return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" || name == "world" || name == "tensors" || name == "chat" || name == "ai" || name == "ai-train" || name == "diffuse" || name == "cipher" ||
+    return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" || name == "world" || name == "tensors" || name == "rope" || name == "chat" || name == "ai" || name == "ai-train" || name == "diffuse" || name == "cipher" ||
            name == "version" || name == "models" || name == "train" || name == "measure" ||
            name == "filters" || name == "check" || name == "tailor" || name == "bind" || name == "unbind";
 }
@@ -2969,6 +2988,7 @@ int main(int argc, char** argv)
         if (a.command == "mesh") return cmd_mesh(a);
         if (a.command == "world") return cmd_world(a);
         if (a.command == "tensors") return cmd_tensors(a);
+        if (a.command == "rope") return cmd_rope(a);
         if (a.command == "chat") return cmd_chat(a);
         if (a.command == "ai") return cmd_ai(a);
         if (a.command == "ai-train") return cmd_ai_train(a);

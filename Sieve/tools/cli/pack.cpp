@@ -3,6 +3,7 @@
 #include "cli/pack.hpp"
 
 #include "sieve/filekind.hpp"
+#include "sieve/rope_wave.hpp"
 
 #include <lzma.h>
 
@@ -110,7 +111,8 @@ std::vector<uint8_t> place_bytes_of(const std::string& hex, uint32_t width)
 
 } // namespace
 
-void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const ItemFinder* items, bool item_hashes, const PlaceCoder* coder)
+void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const ItemFinder* items, bool item_hashes, const PlaceCoder* coder,
+                double rope_seconds)
 {
     // Every file's bytes, checked against the walk: from the contents where a v3 manifest has them,
     // else read from the folder (the current one, for a file named without one).
@@ -310,9 +312,35 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         }
     }
 
+    // v8: a file carried by the tightened rope (rope-wave-v1) where its code, searched for within the
+    // time given, is smaller than the file packed alone. Not a file with a copy in the folder: the
+    // LZMA2 stream carries a copy for almost nothing, a rope code each time; nor a small one.
+    std::vector<std::vector<uint8_t>> rope_codes(files.size());
+    std::vector<RopeParams> rope_params(files.size());
+    PackReport r;
+    m.roped = false;
+    if (m.compact && rope_seconds >= 0)
+    {
+        std::unordered_map<std::string, size_t> copies;
+        for (size_t i = 0; i < files.size(); ++i) ++copies[sha256_hex(bytes[i])];
+        for (size_t i = 0; i < files.size(); ++i)
+        {
+            if (files[i]->way != "raw" || bytes[i].size() < 512 || copies[sha256_hex(bytes[i])] > 1) continue;
+            const RopeSearch found = rope_search(bytes[i], rope_seconds);
+            r.rope_tried += found.tried;
+            std::vector<uint8_t> code = rope_code(bytes[i], found.best);
+            uint64_t len = code.size(), varint = 1;
+            while (len >>= 7) ++varint;
+            if (code.size() + varint >= estimate(bytes[i])) continue;
+            rope_codes[i] = std::move(code);
+            rope_params[i] = found.best;
+            files[i]->way = "rope " + found.best.text();
+            m.roped = true;
+        }
+    }
+
     // The streams: the programs; then every file carried as it is, and then the masks, in order.
     std::vector<uint8_t> x86, plain;
-    PackReport r;
     for (size_t i = 0; i < files.size(); ++i)
         if (files[i]->way == "x86")
         {
@@ -335,6 +363,24 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             r.mask_bytes += masks[i].size();
             r.derivations.emplace_back(files[i]->path, files[base[i]]->path);
         }
+    // v8: the rope stream, each code's length then the code, in the listing's order.
+    m.rope_carried.clear();
+    for (size_t i = 0; i < files.size(); ++i)
+        if (files[i]->way.rfind("rope ", 0) == 0)
+        {
+            uint64_t len = rope_codes[i].size();
+            while (len >= 0x80)
+            {
+                m.rope_carried.push_back(uint8_t(len | 0x80));
+                len >>= 7;
+            }
+            m.rope_carried.push_back(uint8_t(len));
+            m.rope_carried.insert(m.rope_carried.end(), rope_codes[i].begin(), rope_codes[i].end());
+            ++r.roped;
+            r.rope_bytes += bytes[i].size();
+        }
+    r.rope_carried = m.rope_carried.size();
+    m.rope_stream = {m.rope_carried.size(), m.rope_carried.size(), 0};
     m.x86 = {0, x86.size(), dictionary_for(x86.size())};
     m.lzma2 = {0, plain.size(), dictionary_for(plain.size())};
     const std::vector<uint8_t> px = pack_stream(x86, m.x86.dictionary, true), pp = pack_stream(plain, m.lzma2.dictionary, false);
@@ -348,7 +394,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     m.with_addresses = false;
     r.packed = m.streams.size();
     // v5: the lines the items use, renumbered, and the tree's SHA-256 over every file.
-    m.items = !used_lines.empty();
+    // v7 and v8 keep their form with no items too (no lines, an empty items stream): what they
+    // leave out and the listing packed help any folder, and the tree's SHA-256 is their check.
+    m.items = !used_lines.empty() || m.compact;
     if (m.items)
     {
         std::vector<std::string> renumbered, codings;
@@ -402,7 +450,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         m.lines.clear();
         m.line_widths.clear();
         m.line_codings.clear();
-        m.minimal = m.compact = false; // no items: v4, as before
+        m.minimal = m.compact = m.roped = false; // no items: v4, as before
     }
 
     // Where it is no smaller than the files as they are, they are carried so (v3). (Not with items:
@@ -462,14 +510,22 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         std::snprintf(b, sizeof b, "%.2f%%", original ? 100.0 * double(v) / double(original) : 100.0);
         return std::string(b);
     };
-    if (r.items && r.compact)
+    if (r.compact)
     {
-        o << "items     " << r.items << " file(s) carried as items of Sieve's lines (" << r.item_bytes << " bytes, as " << r.item_places
-          << " bytes of places";
-        if (!r.coded_lines.empty())
-            o << " (" << r.item_raw_places << " raw; " << kCodedPlaces << " on " << r.coded_lines.size() << " line(s))";
-        o << ", carried in " << r.item_carried << "; sieve-manifest-v7, made again on installing)\n";
+        const char* version = r.roped ? kRopeManifestVersion : kCompactManifestVersion;
+        if (r.items)
+        {
+            o << "items     " << r.items << " file(s) carried as items of Sieve's lines (" << r.item_bytes << " bytes, as " << r.item_places
+              << " bytes of places";
+            if (!r.coded_lines.empty())
+                o << " (" << r.item_raw_places << " raw; " << kCodedPlaces << " on " << r.coded_lines.size() << " line(s))";
+            o << ", carried in " << r.item_carried << "; " << version << ", made again on installing)\n";
+        }
+        else o << "items     none; " << version << "\n";
         if (r.listing_carried) o << "listing   " << r.listing << " bytes, carried as LZMA2 in " << r.listing_carried << "\n";
+        if (r.roped)
+            o << "rope      " << r.roped << " file(s) pulled tight by rope-wave-v1 (" << r.rope_bytes << " bytes, carried in " << r.rope_carried
+              << "; sieve-manifest-v8)\n";
     }
     else if (r.items && r.item_places)
         o << "items     " << r.items << " file(s) carried as items of Sieve's lines (" << r.item_bytes << " bytes, as " << r.item_places

@@ -22,6 +22,7 @@
 #include "sieve/llm.hpp"
 #include "sieve/aispace.hpp"
 #include "sieve/digit_histogram.hpp"
+#include "sieve/rope_wave.hpp"
 #include "sieve/training.hpp"
 #include "sieve/diffusion.hpp"
 #include "sieve/llm_tokenizer.hpp"
@@ -5852,6 +5853,73 @@ void test_shortest_path()
 
 // BigUint's byte conversions (a file read as one number and back), against the hex path they
 // replaced, and BinarySpace::file_at_place against bytes_at.
+void test_rope_wave()
+{
+    // The parameters as written, and refused when written otherwise or out of range.
+    CHECK(RopeParams::parse("L8 W949 S1 P3 K0").text() == "L8 W949 S1 P3 K0");
+    CHECK((RopeParams::parse("L16 W1 S1 P2 K1") == RopeParams{16, 1, 1, 2, true}));
+    CHECK(throws([] { RopeParams::parse("L12 W1 S1 P0 K0"); }));
+    CHECK(throws([] { RopeParams::parse("L8 W0 S1 P0 K0"); }));
+    CHECK(throws([] { RopeParams::parse("L8 W1 S1 P4 K0"); }));
+    CHECK(throws([] { RopeParams::parse("L8 W01 S1 P0 K0"); }));
+    // A file that is the rope exactly (x_i = i, 100 values, kept at 0, 33, 66 and 99: an even count
+    // has no centre value): nothing is left, so its code is the table of one byte (1 + 1 + 4), its
+    // stream's two words (1 + 8) and the four kept bytes.
+    std::vector<uint8_t> ramp(100);
+    for (size_t i = 0; i < ramp.size(); ++i) ramp[i] = uint8_t(i);
+    CHECK(rope_code(ramp, RopeParams{8, 1, 1, 0, true}).size() == 19);
+    // Every parameter, on files of every kind of shape: random, a smooth picture in lines, 16-bit
+    // values with a trailing byte, the empty file and one byte; each comes back exactly.
+    std::mt19937 rng(11);
+    std::vector<std::vector<uint8_t>> files{{}, {7}, std::vector<uint8_t>(1, 255)};
+    {
+        std::vector<uint8_t> r(257);
+        for (auto& b : r) b = uint8_t(rng());
+        files.push_back(r);
+        std::vector<uint8_t> pic(24 * 17);
+        for (size_t y = 0; y < 17; ++y)
+            for (size_t x = 0; x < 24; ++x) pic[y * 24 + x] = uint8_t(x * 7 + y * 3 + (rng() % 3));
+        files.push_back(pic);
+        std::vector<uint8_t> sound;
+        for (int i = 0; i < 301; ++i)
+        {
+            const int16_t v = int16_t(8000 * std::sin(i * 0.07));
+            sound.push_back(uint8_t(v & 0xFF));
+            sound.push_back(uint8_t((v >> 8) & 0xFF));
+        }
+        sound.push_back(42); // a byte past the last whole value
+        files.push_back(sound);
+    }
+    bool back = true;
+    for (const auto& f : files)
+        for (const uint32_t bits : {8u, 16u, 32u})
+            for (const uint32_t width : {1u, 3u, 24u})
+                for (uint32_t step = 1; step <= 4; ++step)
+                    for (uint32_t phases = 0; phases <= 3; ++phases)
+                        for (const bool keep : {false, true})
+                        {
+                            const RopeParams p{bits, width, step, phases, keep};
+                            back = back && rope_file(rope_code(f, p), p, f.size()) == f;
+                        }
+    CHECK(back);
+    // A code that does not give the file is refused: one byte short, one too many, a size not its.
+    {
+        const RopeParams p{8, 24, 1, 3, true};
+        const std::vector<uint8_t> c = rope_code(files[4], p);
+        CHECK(throws([&] { rope_file(std::span<const uint8_t>(c.data(), c.size() - 1), p, files[4].size()); }));
+        std::vector<uint8_t> longer = c;
+        longer.push_back(0);
+        CHECK(throws([&] { rope_file(longer, p, files[4].size()); }));
+        CHECK(throws([&] { rope_file(c, p, files[4].size() + 1); }));
+    }
+    // Pulling tight: on the smooth picture the search finds its lines and propagates through them,
+    // and its code is far smaller than the picture.
+    const RopeSearch s = rope_search(files[4]);
+    CHECK(s.best.phases >= 2 && s.best.width == 24);
+    CHECK(rope_code(files[4], s.best).size() * 2 < files[4].size());
+    CHECK(s.tried > 10 && !s.timed_out);
+}
+
 void test_digit_histogram()
 {
     // Every row of 5 digits of 3 values, cut 2 + 3: one number each, all different, and back.
@@ -6028,6 +6096,7 @@ void run_all(int argc, char** argv)
         test_filter_memory(dir);
         test_byte_conversions();
         test_digit_histogram();
+        test_rope_wave();
     }
 }
 

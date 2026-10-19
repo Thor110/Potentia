@@ -3,6 +3,7 @@
 #include "cli/locate.hpp"
 #include "cli/vault.hpp"
 
+#include "sieve/rope_wave.hpp"
 #include "sieve/sha256.hpp"
 
 #include "Bra.h"
@@ -99,7 +100,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
         if (!e.dir) files.push_back(&e);
     std::vector<std::vector<uint8_t>> bytes(files.size());
     std::vector<std::pair<size_t, std::vector<uint8_t>>> masks(files.size()); // derived: its base, its mask
-    size_t xa = 0, pa = 0;
+    size_t xa = 0, pa = 0, ra = 0;
     auto take = [](const std::vector<uint8_t>& from, size_t& at, uint64_t n, const std::string& path) {
         if (from.size() - at < n) throw std::runtime_error("the installer ends before " + path);
         std::vector<uint8_t> out(from.begin() + std::ptrdiff_t(at), from.begin() + std::ptrdiff_t(at + n));
@@ -125,14 +126,38 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
                                          "): open them with Sieve (sieve install, or the hallway's File Locator), which makes them again");
             bytes[i] = item_maker()(m.lines[k], rest.substr(sp + 1));
         }
+        else if (m.roped && e.way.rfind("rope ", 0) == 0)
+        {
+            // v8: made again from its code, next in the rope stream (a varint of its length first).
+            uint64_t len = 0;
+            for (int shift = 0;; shift += 7)
+            {
+                if (ra >= m.rope_carried.size() || shift > 56) throw std::runtime_error("the installer's rope stream ends before " + e.path);
+                const uint8_t b = m.rope_carried[ra++];
+                len |= uint64_t(b & 0x7F) << shift;
+                if (!(b & 0x80)) break;
+            }
+            if (m.rope_carried.size() - ra < len) throw std::runtime_error("the installer's rope stream ends before " + e.path);
+            try
+            {
+                bytes[i] = rope_file(std::span<const uint8_t>(m.rope_carried.data() + ra, size_t(len)), RopeParams::parse(e.way.substr(5)), e.size);
+            }
+            catch (const std::invalid_argument& x)
+            {
+                throw std::runtime_error("manifest: " + e.path + ": " + x.what());
+            }
+            ra += size_t(len);
+        }
         else if (e.way.rfind("lines ", 0) != 0) throw std::runtime_error("manifest: " + e.path + " has no way to be carried");
     }
+    if (ra != m.rope_carried.size()) throw std::runtime_error("manifest: its rope stream holds more than its files");
     for (size_t i = 0; i < files.size(); ++i)
     {
         const ManifestEntry& e = *files[i];
         if (e.way.rfind("lines ", 0) != 0) continue;
         const size_t k = size_t(std::stoull(e.way.substr(6)));
-        if (k >= files.size() || (files[k]->way != "x86" && files[k]->way != "raw" && files[k]->way.rfind("item ", 0) != 0))
+        if (k >= files.size() || (files[k]->way != "x86" && files[k]->way != "raw" && files[k]->way.rfind("item ", 0) != 0 &&
+                                  files[k]->way.rfind("rope ", 0) != 0))
             throw std::runtime_error("manifest: " + e.path + " is derived from a file that is not carried");
         const auto lines = lines_of(bytes[k]);
         masks[i] = {k, take(plain, pa, (lines.size() + 7) / 8, e.path)};
@@ -245,7 +270,7 @@ std::string manifest_path(const fs::path& p, const fs::path& root)
 
 const char* Manifest::version() const
 {
-    return compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
+    return roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
          : with_contents ? kInstallManifestVersion : with_addresses ? kAddressManifestVersion : kManifestVersion;
 }
 
@@ -289,11 +314,12 @@ std::string Manifest::text() const
     if (compact)
     {
         // v7: what the rest does not already give.
-        std::string t = std::string(kCompactManifestVersion) + "\n";
+        std::string t = std::string(roped ? kRopeManifestVersion : kCompactManifestVersion) + "\n";
         if (!one_file_root()) t += "root " + root + "\n";
         if (x86.packed) t += stream_line("x86", x86);
         if (lzma2.packed) t += stream_line("lzma2", lzma2);
         t += stream_line("items", item_stream);
+        if (roped) t += stream_line("rope", rope_stream);
         for (size_t k = 0; k < lines.size(); ++k)
             t += "line " + std::to_string(k) + " " + (line_codings.at(k).empty() ? std::to_string(line_widths.at(k)) : line_codings[k]) + " " + lines[k] + "\n";
         t += "tree " + tree + "\n";
@@ -424,6 +450,7 @@ std::vector<uint8_t> Manifest::file() const
         // v6: the two streams, then the items stream as carried.
         out.insert(out.end(), streams.begin(), streams.end());
         out.insert(out.end(), items_carried.begin(), items_carried.end());
+        if (roped) out.insert(out.end(), rope_carried.begin(), rope_carried.end());
     }
     else if (packed) out.insert(out.end(), streams.begin(), streams.end());
     else if (with_contents) out.insert(out.end(), contents.begin(), contents.end());
@@ -529,9 +556,11 @@ void add_contents(Manifest& m, const std::filesystem::path& root_in)
 Manifest Manifest::parse(std::string_view whole)
 {
     // v7 with its listing carried as LZMA2: unpacked, and read as the text it is.
-    const std::string v7 = std::string(kCompactManifestVersion) + "\nlisting ";
-    if (whole.substr(0, v7.size()) == v7)
+    const std::string v7p = std::string(kCompactManifestVersion) + "\nlisting ", v8p = std::string(kRopeManifestVersion) + "\nlisting ";
+    const bool packed_v8 = whole.substr(0, v8p.size()) == v8p;
+    if (whole.substr(0, v7p.size()) == v7p || packed_v8)
     {
+        const std::string& v7 = packed_v8 ? v8p : v7p;
         const size_t nl = whole.find('\n', v7.size());
         if (nl == std::string_view::npos) throw std::runtime_error("manifest: the last line has no line feed");
         const std::string v(whole.substr(v7.size(), nl - v7.size()));
@@ -543,7 +572,7 @@ Manifest Manifest::parse(std::string_view whole)
         const PackedStream ls{packed, bytes, uint32_t(dictionary)};
         const std::span<const uint8_t> carried(reinterpret_cast<const uint8_t*>(whole.data()) + nl + 1, size_t(packed));
         const std::vector<uint8_t> listing = unpack_stream(carried, ls, false);
-        std::string text = std::string(kCompactManifestVersion) + "\n";
+        std::string text = std::string(packed_v8 ? kRopeManifestVersion : kCompactManifestVersion) + "\n";
         if (std::string_view(reinterpret_cast<const char*>(listing.data()), listing.size()).substr(0, 8) == "listing ")
             throw std::runtime_error("manifest: a listing inside a listing");
         text.append(listing.begin(), listing.end());
@@ -585,6 +614,7 @@ Manifest Manifest::parse(std::string_view whole)
     else if (lines[0] == kItemsManifestVersion) m.items = m.packed = m.with_contents = true;
     else if (lines[0] == kMinimalManifestVersion) m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] == kCompactManifestVersion) m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
+    else if (lines[0] == kRopeManifestVersion) m.roped = m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] != kManifestVersion) throw std::runtime_error("not a sieve manifest (" + lines[0].substr(0, 40) + ")");
     if (m.packed) m.streams.assign(whole.begin() + std::ptrdiff_t(after), whole.end());
     else if (m.with_contents) m.contents.assign(whole.begin() + std::ptrdiff_t(after), whole.end());
@@ -610,6 +640,14 @@ Manifest Manifest::parse(std::string_view whole)
         m.item_stream = stream_of(field(lines.at(first++), "stream items"), "items");
         if ((m.item_stream.dictionary == 0 && m.item_stream.packed != m.item_stream.bytes) || m.item_stream.packed > m.streams.size())
             throw std::runtime_error("manifest: its items stream's line does not fit what it carries");
+        if (m.roped)
+        {
+            // v8: the rope stream, carried as it is (its codes are coded already).
+            m.rope_stream = stream_of(field(lines.at(first++), "stream rope"), "rope");
+            if (m.rope_stream.dictionary != 0 || m.rope_stream.packed != m.rope_stream.bytes ||
+                m.rope_stream.packed + m.item_stream.packed > m.streams.size())
+                throw std::runtime_error("manifest: its rope stream's line does not fit what it carries");
+        }
         while (next_is("line "))
         {
             const std::string v = lines[first++].substr(5);
@@ -630,7 +668,6 @@ Manifest Manifest::parse(std::string_view whole)
             else throw std::runtime_error("manifest: a line's places are neither a width nor a coding this Sieve knows (" + w + ")");
             m.lines.push_back(v.substr(b + 1));
         }
-        if (m.lines.empty()) throw std::runtime_error("manifest: v7 with no line");
         m.tree = field(lines.at(first++), "tree");
     }
     else
@@ -745,6 +782,11 @@ Manifest Manifest::parse(std::string_view whole)
     {
         // v6: every item's place from the items stream, in the listing's order, back into its way
         // as v5 writes it, so that what follows is v5's unpacking.
+        if (m.roped)
+        {
+            m.rope_carried.assign(m.streams.end() - std::ptrdiff_t(m.rope_stream.packed), m.streams.end());
+            m.streams.resize(m.streams.size() - size_t(m.rope_stream.packed));
+        }
         m.items_carried.assign(m.streams.end() - std::ptrdiff_t(m.item_stream.packed), m.streams.end());
         m.streams.resize(m.streams.size() - size_t(m.item_stream.packed));
         const std::vector<uint8_t> places = m.item_stream.dictionary == 0 ? m.items_carried : unpack_stream(m.items_carried, m.item_stream, false);

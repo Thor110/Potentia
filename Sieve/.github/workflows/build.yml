@@ -1067,6 +1067,46 @@ jobs:
           diff -r pg64 pg64_inst
           python reference/sieve_ref.py unpack pg64.manifest --to pg64_oracle > /dev/null
           diff -r pg64 pg64_oracle
+          # The tightened rope (rope-wave-v1, IDEAS 19.87): a smooth picture in lines and a noisy
+          # sound, made here from a fixed generator. The search finds each one's wave, the code is
+          # smaller than LZMA2's, and the oracle's own decoding gives the file back.
+          rm -rf rope_mix rope_inst rope_oracle rope_si && mkdir rope_mix
+          python -c "
+          import math
+          s = 12345
+          def r():
+              global s
+              s = (s * 1103515245 + 12345) % 2147483648
+              return s >> 16
+          open('rope_mix/picture.raw', 'wb').write(bytes((x * 3 + y * 2 + r() % 5) % 256 for y in range(150) for x in range(200)))
+          b = bytearray()
+          for i in range(8000):
+              b += (int(9000 * math.sin(i * 0.05)) + r() % 81 - 40).to_bytes(2, 'little', signed=True)
+          open('rope_mix/sound.raw', 'wb').write(bytes(b))
+          "
+          cp data/anchors/public-domain/universalbibliothek.txt rope_mix/
+          build/sieve rope rope_mix/picture.raw --out picture.rope | tr -d '\r' > rope.txt
+          q "^wave      L8 W[0-9]* S[1-8] P[123] K[01] (rope-wave-v1)" rope.txt
+          q "read back and checked" rope.txt
+          [ "$(wc -c < picture.rope)" -lt "$(sed -n 's/^LZMA2     \([0-9]*\) bytes.*/\1/p' rope.txt)" ]
+          params=$(sed -n 's/^wave      \(.*\) (rope-wave-v1)/\1/p' rope.txt)
+          python reference/sieve_ref.py rope-unpack picture.rope --params "$params" --size 30000 --out picture.back > /dev/null
+          cmp rope_mix/picture.raw picture.back
+          # sieve-manifest-v8: the picture carried by the rope; the text, and the sound (a sine whose
+          # cycles LZMA2 finds: 10,295 bytes, the rope's best 10,656), by LZMA2, each the smaller way.
+          # Smaller than v7 (no rope); installed by sieve install, the oracle, and sieve-install itself
+          # (no items, so the small installer needs nothing it lacks).
+          build/sieve locate rope_mix --installer rope8.sieve --items --manifest rope8.manifest | tr -d '\r' > rope8.txt
+          q "^rope      1 file(s) pulled tight by rope-wave-v1 (30000 bytes" rope8.txt
+          python -c "import sys; sys.argv = ['x']; sys.path.insert(0, 'reference'); import sieve_ref; sys.stdout.buffer.write(sieve_ref.v7_listing(open('rope8.manifest', 'rb').read()))" | q -a "^f	30000	rope L8 W[0-9]* S[1-8] P[0-3] K[01]	picture.raw$"
+          build/sieve locate rope_mix --installer rope7.sieve --items --v7 > /dev/null
+          [ "$(wc -c < rope8.sieve)" -lt "$(wc -c < rope7.sieve)" ]
+          build/sieve install rope8.sieve --to rope_inst > /dev/null
+          diff -r rope_mix rope_inst
+          python reference/sieve_ref.py unpack rope8.manifest --to rope_oracle > /dev/null
+          diff -r rope_mix rope_oracle
+          build/sieve-install rope8.sieve --to rope_si --yes > /dev/null
+          diff -r rope_mix rope_si
           # (each file is named by its item's title; the report says which file each degree gave)
           $H --no-menu --press "X,Tab,9,0,Return" --take --save-item p90.txt --screenshot degp.png > /dev/null
           cmp p90.txt "degrees/$(sed -n 's/^pages 090 //p' deg.txt)"

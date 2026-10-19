@@ -58,12 +58,13 @@ ItemFinder item_finder(const std::vector<ItemLine>& lines);
 // Lets manifests with items be read (set_item_maker): each line made from its options once, and
 // checked against its space id.
 void use_item_maker();
-// An installer's files packed with the items of Sieve's lines carried as their places: `version` 7
-// (the default), 6 (each place as raw bytes, the listing as v6 wrote it) or 5 (in hex, without the
-// AI line). The lines are those item_lines makes of `a`. Shared by `sieve locate --items` and the
-// File Locator.
-void add_packed_items(Manifest& m, const std::filesystem::path& root, const Args& a, PackReport* report = nullptr, int version = 7,
-                      bool item_hashes = false);
+// An installer's files packed with the items of Sieve's lines carried as their places: `version` 8
+// (the default: v7, and v8 where a file is carried by the tightened rope, searched for
+// `rope_seconds` a file, 0 for no limit), 7 (no rope), 6 (each place as raw bytes, the listing as v6
+// wrote it) or 5 (in hex, without the AI line). The lines are those item_lines makes of `a`. Shared
+// by `sieve locate --items` and the File Locator.
+void add_packed_items(Manifest& m, const std::filesystem::path& root, const Args& a, PackReport* report = nullptr, int version = 8,
+                      bool item_hashes = false, double rope_seconds = 0);
 // v7: an AI model's place (hex) on `ai` coded by digit-histogram-v1, its tensors the segments, as
 // the fewest bytes that hold the number; and back.
 std::vector<uint8_t> ai_place_code(const AiSpace& ai, const std::string& place);

@@ -3355,6 +3355,37 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   (VOICES).
 - **No code changed.**
 
+### The tightened rope built: `rope-wave-v1` and `sieve-manifest-v8` (19 October 2026)
+- **Asked:** a filter across all dimensions, from Edward's idea (IDEAS §19.87), everything
+  understood and noted first. His answers are recorded there in full.
+- **Measured first (Python, before building):** one wave through the five kept points over a
+  whole file never helped (worse than no wave on every file tried); propagation did. On raw
+  pixels the third phase (value before + line before − diagonal) beat LZMA2.
+- **`rope-wave-v1`** (`core/include/sieve/rope_wave.hpp`, SPECIFICATIONS §12.2): parameters
+  L (8/16/32-bit values), W (line), S (step), P (phases 0–3, Edward's), K (the kept values and the
+  rope through them); what is left coded per byte plane by `sieve-weights-v1`'s tables and rANS,
+  whose functions moved to `core/src/weights_rans.cpp` so that `sieve-install` links them without
+  the safetensors code (it went 2,308,920 → 2,140,984 bytes; the rope and its coder are 52 KB of
+  compiled code). `rope_search` pulls tight within a time. `digit-histogram-v1` was not used for
+  it: its exact numbering is quadratic.
+- **`sieve rope`** (search, code, check, beside LZMA2; `--params`, `--decode`); the oracle's
+  `rope-unpack`.
+- **`sieve-manifest-v8`**: way `rope <params>`, a fourth stream; tried on every file carried as
+  it is of 512 bytes or more with no copy in the folder, kept where smaller than LZMA2 alone (preset
+  6). `--search-per-file` is its time (the File Locator passes its time for a file). v7 and v8 are
+  now made for folders with no items too. `--v7` for no rope.
+- **Measured here:**
+  - the Vitruvian picture, grey pixels: 832,146 (LZMA2 865,400);
+  - in colour at 475 × 650: 494,774 (LZMA2 623,717);
+  - a noisy made sine: 4,583 (LZMA2 5,324);
+  - text: no gain;
+  - a mixed folder: v8 1,341,514, v7 1,504,516.
+- **Not done:** other lines' places coded by the rope; the File Locator's weighing showing it;
+  wider width candidates (a colour picture's row is not among the three best lags).
+- **Checked here:** the full build, the unit suite (new tests: every parameter on six files,
+  refusals, the search), the CI lines (`sieve rope`, v8 with sieve install, the oracle and
+  sieve-install, and the earlier v5 to v7 lines again).
+
 ### For the next session (17 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show

@@ -348,6 +348,25 @@ const std::vector<Page>& pages()
          {{"sieve world", "how big the default worlds line is"},
           {"sieve world --world-models 2 --compose \"0:0.0.0.0|1:7.7.7.5\"", "two models in opposite corners, one turned"},
           {"sieve world --read ADDR --out world.obj", "save the world at an address"}}},
+        {"rope", "A file pulled tight by the tightened rope (rope-wave-v1): a wave through its values.",
+         "sieve rope FILE [--params \"L8 W949 S1 P3 K0\"] [--seconds S] [--out CODE]\n"
+         "  sieve rope --decode CODE --params \"L8 W949 S1 P3 K0\" --size N --out FILE",
+         "Edward's filter (IDEAS §19.87): a wave runs through the file's values, each value predicted\n"
+         "from the values before it, and what the wave leaves is coded by how often each byte of it\n"
+         "occurs, exactly (sieve-weights-v1's tables and rANS). The wave's parameters: L the value\n"
+         "length (8, 16 or 32 bits), W the values in a line, S how far back the value before is, P\n"
+         "the phases (0 the rope alone, drawn through the kept values; 1 the value before; 2 the line\n"
+         "before as well, averaged; 3 the diagonal too), K whether the values at the start, a third,\n"
+         "the centre, two thirds and the end are kept for the rope. Without --params, the search pulls\n"
+         "it tight: every value length, phase and step, keep or not, and the widths at which the file\n"
+         "best matches itself a line later. The code is read back and checked; LZMA2 is shown beside it.",
+         {{"--params P", "Use these parameters rather than searching."},
+          {"--seconds S", "How long the search may take (0, the default: no limit); the best found by then."},
+          {"--out CODE", "Write the code here."},
+          {"--decode CODE", "The file back from its code, with --params, --size and --out."},
+          {"--size N", "With --decode: the file's size in bytes."}},
+         {{"sieve rope picture.bmp", "the best wave for a picture, and its code's size beside LZMA2's"},
+          {"sieve rope sound.wav --params \"L16 W1 S1 P2 K0\" --out sound.rope", "a sound by a wave chosen, written out"}}},
         {"tensors", "A model file (safetensors) taken apart into its start and its weights, and weighed.",
          "sieve tensors FILE.safetensors [--config config.json] [--stats | --tsv] [--start-out FILE] [--pack OUT.sieve-weights]\n"
          "  sieve tensors --config config.json [--start-out FILE]\n"
@@ -881,7 +900,9 @@ const std::vector<Page>& pages()
          "tree checks every file. The listing says nothing the rest already gives, and is carried\n"
          "as LZMA2 where that is smaller; the AI line's places are coded by their tensors' digit\n"
          "histograms where that is smaller. sieve install and the hallway install it; the small\n"
-         "sieve-install asks for Sieve to be used instead. (--v6 and --v5 make the older ones.)\n"
+         "sieve-install asks for Sieve to be used instead. A file the tightened rope codes smaller\n"
+         "than LZMA2 packs it (sieve help rope) is carried so, its search taking --search-per-file\n"
+         "seconds (no limit without it): sieve-manifest-v8. (--v7, --v6 and --v5 make the older ones.)\n"
          "\n"
          "--weigh weighs every file against its own address: its number among the binary line's\n"
          "survivors, where the settings file's [binary] filters rank and it passes them; and, where\n"
@@ -917,6 +938,7 @@ const std::vector<Page>& pages()
                       "of the AI line as its weights' digits, not its file's floats. The pages are\n"
                       "--page-length characters of --alphabet; the AI line is --ai-layers, --ai-width,\n"
                       "--ai-heads and --ai-bits (Micro without them)."},
+          {"--v7", "With --items: as sieve-manifest-v7, no file pulled tight by the rope."},
           {"--v6", "With --items: as sieve-manifest-v6, every place as raw bytes and the listing in full."},
           {"--v5", "With --items: as sieve-manifest-v5, each place in hex in the listing, and no AI line."},
           {"--item-hashes", "With --items: keep each item's own SHA-256 in the listing as well as the tree's (v7:\n"
@@ -929,7 +951,8 @@ const std::vector<Page>& pages()
           {"--out-filters PATH", "With --tailored: write the settings file with the filters found."},
           {"--search-per-file S", "With --tailored: seconds the search for shorter addresses may take for each file (a\n"
                                   "line's search gets that times its files); 0, the default, no limit. Out of time, a\n"
-                                  "line keeps the best filters it found by then."},
+                                  "line keeps the best filters it found by then. With --items: the seconds the\n"
+                                  "tightened rope searches each file for its wave."},
           {"--search-total S", "With --tailored: seconds for the whole run, which caps each line's search at what is left.\n"
                                "Either of the two alone gives the other: total = per file x files."},
           {"--page-length N", "With --weigh: the pages line's length (32)."}},
