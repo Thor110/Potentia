@@ -8,7 +8,11 @@
 //     file passes them;
 //   - where the file is exactly an item of another line (item_of: a page, a picture or film as its
 //     PNG, a melody as its MIDI file, byte for byte), its place on that line, and its number among
-//     that line's survivors where the line has filters that rank and it passes them.
+//     that line's survivors where the line has filters that rank and it passes them;
+//   - its code under the tightened rope (rope-wave-v1, sieve/rope_wave.hpp), the wave its search
+//     pulls tight to in the time for a file (and what is left of the run's), with the wave's
+//     parameters as the text they are and the file's size as a varint: any file, so the rope is
+//     weighed as a line of its own, its shape its name.
 //
 // Each number is weighed as its shortest route (tailor.hpp route_bits): the cleanest digits there
 // are for it, leading zeros dropped or a bearing and a walk. The best way is the shortest. A way

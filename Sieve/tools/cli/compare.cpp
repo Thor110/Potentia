@@ -46,7 +46,7 @@ std::string comparison_table(const Comparison& c)
         if (c.original == 0) std::snprintf(pct, sizeof pct, "%10s", "-");
         else std::snprintf(pct, sizeof pct, "%9.2f%%", 100.0 * double(v) / double(c.original));
         char line[256];
-        std::snprintf(line, sizeof line, "  %-22s %16llu bytes %s   %s\n", name, (unsigned long long)v, pct, note);
+        std::snprintf(line, sizeof line, "  %-24s %16llu bytes %s   %s\n", name, (unsigned long long)v, pct, note);
         return std::string(line);
     };
     std::string t = "comparison (the original is 100%; under 100% is smaller)\n";

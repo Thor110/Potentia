@@ -1107,6 +1107,11 @@ jobs:
           diff -r rope_mix rope_oracle
           build/sieve-install rope8.sieve --to rope_si --yes > /dev/null
           diff -r rope_mix rope_si
+          # Weighed: the rope is a way to name any file, its code, its parameters and its size paid
+          # for, and its name once for every file that uses it.
+          build/sieve locate rope_mix --weigh 2>&1 | tr -d '\r' > ropeweigh.txt
+          q "^  picture.raw  *[0-9]*  *[0-9]*   rope L8 W[0-9]* S[1-8] P[0-3] K[01]$" ropeweigh.txt
+          q "^  shared: rope, [1-3] file(s): shape 96 bits$" ropeweigh.txt
           # (each file is named by its item's title; the report says which file each degree gave)
           $H --no-menu --press "X,Tab,9,0,Return" --take --save-item p90.txt --screenshot degp.png > /dev/null
           cmp p90.txt "degrees/$(sed -n 's/^pages 090 //p' deg.txt)"

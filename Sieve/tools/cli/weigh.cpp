@@ -4,8 +4,10 @@
 #include "cli/locate.hpp"
 #include "sieve/corridor.hpp"
 #include "sieve/filekind.hpp"
+#include "sieve/rope_wave.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <iomanip>
 #include <map>
 #include <sstream>
@@ -102,6 +104,16 @@ Weighing weigh_files(const fs::path& root, const std::vector<std::string>& files
         }
     }
     lines[0].shape = bspace ? bspace->shape() : std::string("binary");
+    // The tightened rope (rope-wave-v1): a way for any file, so a line with no Line of its own; what
+    // a reader must be told for it is its name, paid once as a line's shape is.
+    const size_t rope_line = lines.size();
+    {
+        Weighed w;
+        w.name = "rope";
+        w.shape = kRopeWaveVersion;
+        lines.push_back(std::move(w));
+    }
+    double rope_spent = 0;
 
     std::vector<Group> groups;
     auto group_of = [&](int line, const std::string& name, double cost) {
@@ -138,9 +150,31 @@ Weighing weigh_files(const fs::path& root, const std::vector<std::string>& files
                 cand.push_back({group_of(0, "binary, compact", description_bits(binary_filter_line(binary_bytes), given.filters.binary)),
                                 route_bits(k, bsieve->count()), written_route(k, bsieve->count())});
             }
+            // The rope: the file's code under the wave its search pulls tight to (the time for a
+            // file), with what decoding it needs written beside it: the wave's parameters, as the
+            // text they are, and the file's size, as a varint.
+            // Its time: the file's, and no more than is left of the run's.
+            double rope_seconds = budget.per_file > 0 ? budget.per_file : 0;
+            if (budget.total > 0)
+            {
+                const double left = budget.total - rope_spent;
+                rope_seconds = left <= 0 ? -1 : rope_seconds > 0 ? std::min(rope_seconds, left) : left;
+            }
+            if (!bytes.empty() && rope_seconds >= 0)
+            {
+                const auto t0 = std::chrono::steady_clock::now();
+                const RopeSearch found = rope_search(bytes, rope_seconds);
+                const std::vector<uint8_t> code = rope_code(bytes, found.best);
+                rope_spent += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+                uint64_t size_bytes = 1;
+                for (uint64_t n = bytes.size(); n >= 0x80; n >>= 7) ++size_bytes;
+                const std::string params = found.best.text();
+                cand.push_back({group_of(int(rope_line), "rope", 0), 8.0 * double(code.size() + params.size() + size_bytes), params});
+            }
             for (size_t li = 1; li < lines.size(); ++li)
             {
                 const Weighed& w = lines[li];
+                if (!w.line) continue;
                 const auto unit = item_of(*w.line, bytes);
                 if (!unit) continue;
                 fw.line = int(w.line->kind);
@@ -171,11 +205,13 @@ Weighing weigh_files(const fs::path& root, const std::vector<std::string>& files
     std::map<int, TailorResult> tailored;
     std::map<int, std::string> stopped;
     out.budget = budget;
-    double spent = 0; // seconds, every line's search so far
+    double spent = rope_spent; // seconds, every search so far (the rope's come out of the run's time too)
+    out.searched = spent;
     if (tailor && !(progress && progress->cancel))
         for (size_t li = 1; li < lines.size(); ++li)
         {
             const Weighed& w = lines[li];
+            if (!w.line) continue;
             std::vector<std::vector<uint32_t>> anchors;
             std::vector<size_t> who;
             for (size_t i = 0; i < out.files.size(); ++i)

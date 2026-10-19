@@ -3876,8 +3876,7 @@ them be given less weight than his own messages, so it is left out here.
     is smaller than LZMA2 makes it; the oracle decodes both apart.
   - Across all dimensions, as Edward asked: it takes any file's bytes, so it serves the binary
     line, and through it every file. *Not yet:* the other lines' places coded by it (a line's
-    units are its digits, its width the line's own), the File Locator's weighing showing it, and
-    widths beyond the three best lags (a picture of three colours finds its pixel, not its row).
+    units are its digits, its width the line's own), and widths beyond the three best lags (a picture of three colours finds its pixel, not its row).
 - **Next (proposed):** take the propagating form further (more phases, a wave per line fitted to
   more points, value lengths of 16 and 32 for sound and floats) on raw pictures and sound, the
   files where it can win, and if it holds, make it a way to carry such a file in the

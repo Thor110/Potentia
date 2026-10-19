@@ -3386,6 +3386,20 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   refusals, the search), the CI lines (`sieve rope`, v8 with sieve install, the oracle and
   sieve-install, and the earlier v5 to v7 lines again).
 
+### The rope in the weighing; the comparison table's hex row (19 October 2026)
+- **The comparison table:** "address, written in hex" is 23 characters, one more than the name
+  column, so its row sat one space to the right (Edward). The column is 24 now
+  (`tools/cli/compare.cpp`).
+- **The rope in the weighing** (`tools/cli/weigh.cpp`): every file's code under the wave its
+  search pulls tight to is a way to name it, weighed at 8 bits a byte of the code, the parameters'
+  text and the file's size as a varint; the rope is a line of its own in the table, its shape its
+  name (`rope-wave-v1`, 96 bits, paid once). Its searches take the time for a file and come out of
+  the run's. The File Locator shows it in its table; the `search:` line now shows the rope's time
+  too. The mixed folder weighs at 61.4% of its own addresses, every file's best way the rope (the
+  text's being the rope with no wave: its bytes coded by how often each occurs).
+- **Checked here:** the full build, the unit suite, the weighing's CI lines (unchanged: on those
+  four small files the rope is not the best way), a new one for the rope, and the File Locator's.
+
 ### For the next session (17 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show
