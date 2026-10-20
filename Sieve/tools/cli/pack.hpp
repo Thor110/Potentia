@@ -58,6 +58,7 @@ struct PackReport
     bool archives_made = false;                      // v14: the instructions are v14
     bool rope_above = false;                         // v15: some of them rope-wave-v5's
     bool binary = false;                             // v16: the head in bytes
+    bool remake_gz = false;                          // v17: some gzip remade exactly
     uint64_t head_text = 0, head_bytes = 0;          // v16: the listing as v15's text, and as carried
 };
 
@@ -85,7 +86,8 @@ using PlaceCoder = std::function<std::optional<std::vector<uint8_t>>(size_t line
 // is smaller than the file packed alone.
 void add_packed(Manifest& m, const std::filesystem::path& root, PackReport* report = nullptr, const ItemFinder* items = nullptr,
                 bool item_hashes = false, const PlaceCoder* coder = nullptr, double rope_seconds = -1, uint32_t rope_newest = 5,
-                bool trim = false, bool pieces = false, bool optimise_archives = false, bool binary = false);
+                bool trim = false, bool pieces = false, bool optimise_archives = false, bool binary = false,
+                bool gzip = false);
 
 // A file's ways to be carried, each with its size in bytes as the instructions would hold it: LZMA2
 // alone (estimated, preset 6), the rope over the whole file, and (v13) the file cut into pieces,

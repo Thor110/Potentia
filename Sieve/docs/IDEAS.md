@@ -3990,9 +3990,20 @@ lost:
   - **Only where clearly smaller** (64 bytes and 0.5% under the archive as it is, its contents
     estimated by LZMA2 and, for one file, the rope): a small 7z, or an xz of text LZMA2 packs as
     well, stays as it is.
-  - **Not yet:** gzip (GNU gzip's deflate is not zlib's: of three files here, the small one
-    matched zlib and the larger did not, so most would be carried as contents), zip (deflate,
-    each entry), tar inside them; an xz written in several blocks (`xz -T`).
+  - **gzip and zip (`sieve-manifest-v17`, 21 October 2026):** a gzip is remade exactly where
+    zlib at some level gives its deflate back (Python's always; GNU gzip's -9 of `pi6.txt` too, at
+    level 6 and memory level 9, though of three smaller files only one matched), else carried as
+    what it holds; a zip as its contents. `pi6.txt` as a gzip (546,741) 417,128; as a zip
+    (546,827) 417,107; a `.tar.gz` (557,241) as its `.tar`, 425,767.
+  - **Tar needs nothing:** the pieces already cut a tar into its headers (LZMA2) and its files (the
+    rope): a tar of `pi6.txt` and a text, 425,701 as instructions, the two files alone 425,597.
+  - **The aim (Edward, 20 October 2026): every archive format there is,** in the long run. In
+    tiers: contents for whatever Sieve can read (next: bzip2, zstd, then cab and others, each
+    decoder taken where its licence allows; RAR's has conditions, to check first); remade exactly
+    where Sieve has the very compressor; and, for deflate made by other than zlib (zip, gzip and
+    PNG alike), the small differences from Sieve's own deflate recorded, so any deflate is remade
+    exactly (as preflate does), the largest piece.
+  - **Not yet:** an xz written in several blocks (`xz -T`); a gzip of several members.
   - The versions compared: GNU gzip 1.12 against zlib 1.3, and the `xz` program 5.4.5 against the
     liblzma Sieve was built with here.
 

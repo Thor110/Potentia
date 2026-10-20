@@ -950,10 +950,12 @@ const std::vector<Page>& pages()
                       "of the AI line as its weights' digits, not its file's floats. The pages are\n"
                       "--page-length characters of --alphabet; the AI line is --ai-layers, --ai-width,\n"
                       "--ai-heads and --ai-bits (Micro without them)."},
-          {"--optimise-archives", "With --items: Optimise Archive Formats (sieve-manifest-v14). An .xz is carried as what\n"
-                                  "it holds and remade exactly on installing; a .7z is carried as its contents, in a\n"
-                                  "folder named after it (installing says so: the archive itself is not given back);\n"
-                                  "each only where clearly smaller. Off unless given."},
+          {"--optimise-archives", "With --items: Optimise Archive Formats (sieve-manifest-v14, v17). An .xz, and a .gz\n"
+                                  "zlib made, is carried as what it holds and remade exactly on installing; another\n"
+                                  ".gz as what it holds; a .7z or .zip as its contents, in a folder named after it\n"
+                                  "(installing says so: the archive itself is not given back); each only where clearly\n"
+                                  "smaller. Off unless given."},
+          {"--v16", "With --items: as sieve-manifest-v16 at newest, no gzip remade (carried as what it holds)."},
           {"--v15", "With --items: as sieve-manifest-v15 at newest, the listing's head as text (v16 writes it in bytes)."},
           {"--v14", "With --items: as sieve-manifest-v14 at newest, the rope's ways those of rope-wave-v4 and before."},
           {"--v13", "With --items: as --v14, and no archives optimised (sieve-manifest-v13 at newest)."},

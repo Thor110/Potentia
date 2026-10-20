@@ -1,0 +1,2106 @@
+# Builds and tests Sieve on Windows, Linux and macOS on every push and pull request.
+#
+# GitHub only runs workflows from the repository root's .github/workflows folder, so this file is
+# there (moved from Sieve/.github on 21 October 2026), and every step runs in the project's folder,
+# PROJECT_DIR below.
+name: build
+
+on: [push, pull_request]
+
+env:
+  PROJECT_DIR: Sieve
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ env.PROJECT_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # The reference oracle: the same Python on every platform, as `python`.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Unit and conformance tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Same addresses on every platform
+        run: |
+          q() { grep -c "$@" > /dev/null; }
+          exe=build/sieve
+          [ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
+          $exe version
+          got=$($exe warp --length 32 --mode scrambled "It was the best of times" | tr -d '\r' | awk '/scrambled/ {print $2}')
+          echo "scrambled address: $got"
+          test "$got" = "007b30165818bf0311497600aa52996f9395e27"
+          test "$($exe read --length 32 --mode scrambled "$got" | tr -d '\r' | sed 's/ *$//')" = "it was the best of times"
+          $exe dicts
+          if $exe dicts | grep -Eq "MISMATCH|MISSING"; then exit 1; fi
+          $exe sift --lengths 1-8 --brute-max 4 --pruned-max 5 > /dev/null
+          $exe models
+          if $exe models | grep -Eq "MISMATCH|MISSING|UNREADABLE"; then exit 1; fi
+          # Alphabets: built in, stacked from Unicode blocks, and a line that can hold a file.
+          $exe alphabets > /dev/null
+          $exe alphabets --spec greek+cyrillic | tr -d '\r' | q "^symbols   400"
+          # Stacking is a union, in any order: the same alphabet however it is asked for.
+          test "$($exe alphabets --spec cyrillic+greek | tr -d '\r' | sed -n 1p)" = "$($exe alphabets --spec greek+cyrillic | tr -d '\r' | sed -n 1p)"
+          $exe alphabets --spec all-emojis+emoticons | tr -d '\r' | q "^symbols   2048"
+          $exe alphabets --spec ascii+surrogates | tr -d '\r' | q "have no text form"
+          $exe alphabets --spec ascii96 | tr -d '\r' | q "^digit 0   U+000A"
+          # An .obj keeps its line breaks through the ascii96 line, from either line ending.
+          printf 'v 0.5 0.5\nf 1 2 3\n' > obj.txt
+          printf 'v 0.5 0.5\r\nf 1 2 3\r\n' > objcrlf.txt
+          a=$($exe warp --alphabet ascii96 --length 32 --mode positional --file obj.txt | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          b=$($exe warp --alphabet ascii96 --length 32 --mode positional --file objcrlf.txt | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          test "$a" = "$b"
+          $exe read --alphabet ascii96 --length 32 --mode positional "$a" | tr -d '\r' | sed -n 2p | q "^f 1 2 3$"
+          got=$($exe warp --length 32 --mode guided "It was the best of times" | tr -d '\r' | awk '$1 == "guided" {print $2}')
+          echo "guided address: $got"
+          test "$got" = "90922c700685e28"
+          test "$($exe read --length 32 --mode guided "$got" | tr -d '\r' | sed 's/ *$//')" = "it was the best of times"
+          # Tracks and movies (composition-v1): a melody warped onto tracks, a cover and a title of
+          # its own (blank), and read back in both orderings.
+          out=$($exe warp --line tracks --length 4 "C4q E4q G4h C5w E5q D5q C5h G4w" | tr -d '\r')
+          echo "$out"
+          echo "$out" | q "positional  000000000000000000000000000000000000000000000000000000000000000076516a4a50a2870d43b3000000"
+          echo "$out" | q "scrambled   433166bee32c17ef720059c6681dc521b6da066d6111b72bd12451e56d8079d892befd71917b3804ca8f28a0f9"
+          for m in positional scrambled; do
+            a=$(echo "$out" | awk -v m=$m '$1 == m {print $2}')
+            $exe read --line tracks --length 4 --mode $m "$a" | tr -d '\r' | tail -1 | q "C4q E4q G4h C5w E5q D5q C5h G4w Re Re"
+          done
+          $exe info --line movies --title-length 0 | tr -d '\r' | q "^line         movies  (movies/image/mono/10x10/L100+-+video/mono/5x5x8/L200x4/key=sieve/composition-v1)"
+
+      - name: Filters judge, count and rank the same on every platform
+        run: |
+          # q PATTERN: like grep -q, but reads all its input, so the command before it never
+          # gets SIGPIPE (the steps run with pipefail).
+          q() { grep -c "$@" > /dev/null; }
+          exe=build/sieve
+          [ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
+          printf '[text]\nmode = compact\nfilters = words-v2\n' > words2.ini
+          printf '[text]\nmode = compact\nfilters = words-v2, max-run-v1\n' > mixed.ini
+          $exe filters --filters words2.ini | tr -d '\r' | q "^survivors    3037669199976796308182197712 "
+          $exe filters --filters mixed.ini | tr -d '\r' | q "words-v2 can rank, but not together with max-run-v1"
+          out=$($exe check --length 32 --filters words2.ini "It was the best of times" | tr -d '\r')
+          echo "$out"
+          echo "$out" | q "words-v1 *FAIL"
+          echo "$out" | q "words-v2 *pass"
+          k=$(echo "$out" | awk '/survivor number/ {print $(NF-2)}')
+          test "$k" = "1533066303779775957571202953"
+          test "$($exe read --length 32 --mode positional --filters words2.ini --survivor "$k" 2>/dev/null | tr -d '\r' | sed 's/ *$//')" = "it was the best of times"
+          test "$($exe read --length 32 --mode positional --filters words2.ini --survivor 1000000 2>/dev/null | tr -d '\r' | sed 's/ *$//')" = " a a a a a a a a a a a a maim pt"
+          # Compact in every ordering: warp gives the compact addresses, read takes them back.
+          out=$($exe warp --length 32 --filters words2.ini --compact "It was the best of times" 2>/dev/null | tr -d '\r')
+          echo "$out"
+          for m in positional scrambled guided; do
+            addr=$(echo "$out" | awk -v m=$m '/compact/ {seen = 1; next} seen && $1 == m {print $2; exit}')
+            echo "compact $m: $addr"
+            test "$($exe read --length 32 --mode $m --filters words2.ini --compact "$addr" 2>/dev/null | tr -d '\r' | sed 's/ *$//')" = "it was the best of times"
+          done
+          echo "$out" | q "scrambled   2afad38e8cb58c79243f9f6"
+          echo "$out" | q "guided      90b25da06c4d36a  (59 bits"
+          # The other lines: melodies in a key, black-and-white pictures of low entropy.
+          printf '[audio]\nmode = compact\nfilters = key-v1\n[audio.key-v1]\ntonic = A\nscale = minor-pentatonic\n[image]\nmode = compact\nfilters = symbol-entropy-v1\n[image.symbol-entropy-v1]\nmax_millibits = 500\n' > lines.ini
+          $exe filters --line audio --filters lines.ini | tr -d '\r' | q "^survivors    794071845499378503449051136 "
+          $exe filters --line image --filters lines.ini | tr -d '\r' | q "^survivors    322091425582872 "
+          printf '[image]\nmode = compact\nfilters = neighbour-agreement-v1\n' > agree.ini
+          $exe filters --line image --filters agree.ini | tr -d '\r' | q "^survivors    6053792982126620565936264884 "
+          $exe browse --line image --filters agree.ini --compact --count 2 --seed 4 > /dev/null
+          # The Encryption Engine, stage 1 (cipher-v1): a recipe there and back, a weak cipher broken, a
+          # feistel layer left unbroken, and the recipes counted.
+          enc=$($exe cipher --encrypt --recipe "vigenere lemon; feistel my key" --text "attack at dawn" | tr -d '\r' | awk '$1 == "hex" {print $2}')
+          $exe cipher --decrypt --recipe "vigenere lemon; feistel my key" --in-hex "$enc" | tr -d '\r' | q '^as text      "attack at dawn"$'
+          t="It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness"
+          weak=$($exe cipher --encrypt --recipe "xor 736563726574" --text "$t" | tr -d '\r' | awk '$1 == "hex" {print $2}')
+          $exe cipher --break --in-hex "$weak" | tr -d '\r' | q '^guess 1      xor 736563726574 '
+          strong=$($exe cipher --encrypt --recipe "feistel my key" --text "$t" | tr -d '\r' | awk '$1 == "hex" {print $2}')
+          $exe cipher --break --in-hex "$strong" | tr -d '\r' | q "^none of the weak ciphers gives English"
+          $exe cipher --catalogue --depth 2 | tr -d '\r' | q "^layers       1024850422726591137019104700029796025345 (130 bits)$"
+          # Fitting a picture from a file: canon-image-v2 (the default) keeps a line drawing's ink, which
+          # v1's plain average (--fit average) turns into plain white paper; a picture already in the
+          # line's colours, saved at three times the size, comes back as the same unit under both.
+          v=data/anchors/public-domain/Vitruvian.jpg
+          $exe warp --line image --file $v | tr -d '\r' | q "^canon        canon-image-v2: 949x1300 source"
+          $exe warp --line image --fit average --mode positional --file $v | tr -d '\r' | q "^  positional  fffffffffffffffffffffffff$"
+          vit=$($exe warp --line image --mode positional --file $v | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          [ "$vit" != "fffffffffffffffffffffffff" ]
+          $exe read --line image --palette ega16 --mode positional 1234567890123456789 --scale 3 --out ega3.png > /dev/null 2>&1
+          for f in levels average; do
+            back=$($exe warp --line image --palette ega16 --fit $f --mode positional --file ega3.png | tr -d '\r' | awk '$1 == "positional" {print $2}')
+            [ "$(echo "$back" | sed 's/^0*//')" = "1234567890123456789" ]
+          done
+          $exe browse --line audio --filters lines.ini --compact --count 2 --seed 4 > /dev/null
+          # The notes2 family: two voices of a larger set, warped, and a stack of melody plugins
+          # that judges each voice, counting one voice's survivors squared (218112^2).
+          $exe warp --line audio --note-set notes2 --voices 2 --length 6 "C4q E4q. G4h Bb5s // C3w G2h" | tr -d '\r' | q "C4q E4q. G4h A#5s Rs Rs // C3w G3h Rs Rs Rs Rs"
+          printf '[audio]\nmode = compact\nfilters = key-data-v2, melody-leap-v1\n[audio.key-data-v2]\ntonic = D\n[audio.melody-leap-v1]\nleap = 2\n' > n2.ini
+          $exe filters --line audio --note-set notes2 --voices 1 --length 3 --filters n2.ini | tr -d '\r' | q "^survivors    218112 "
+          $exe filters --line audio --note-set notes2 --voices 2 --length 3 --filters n2.ini | tr -d '\r' | q "^survivors    47572844544 "
+          $exe browse --line audio --note-set notes2 --voices 2 --length 3 --filters n2.ini --compact --count 2 --seed 4 | tr -d '\r' | q " // "
+          # The notes3 family: its own melody plugins, stacked, counted, and compact both ways.
+          N="--line audio --note-set notes3 --low C3 --high C6 --voices 2 --length 6"
+          printf '[audio]\nmode = compact\nfilters = key-notes3-v1, melody-leap-notes3-v1, melody-loudness-notes3-v1\n[audio.key-notes3-v1]\ntonic = D\n[audio.melody-loudness-notes3-v1]\nstep = 1\n' > n3.ini
+          $exe filters $N --filters n3.ini | tr -d '\r' | q "^survivors    3895893800931124287377439195136 "
+          out=$($exe warp $N --filters n3.ini --compact "D4q E4q F#4h A4q // D3w F#3w" 2>/dev/null | tr -d '\r')
+          echo "$out" | q "survivor number 1703397087741355665989795315712 of"
+          for m in positional scrambled; do
+            a=$(echo "$out" | awk -v m=$m '/compact/ {seen = 1; next} seen && $1 == m {print $2; exit}')
+            $exe read $N --filters n3.ini --compact --mode $m "$a" 2>/dev/null | tr -d '\r' | q "^D4:4!6 E4:4!6 F#4:8!6 A4:4!6 R:1 R:1 // D3:16!6 F#3:16!6"
+          done
+          $exe warp $N --filters n3.ini --compact "D4q E4q F#4h A4q // D3w A3w" 2>/dev/null | tr -d '\r' | q "not a survivor: fails melody-leap-notes3-v1"
+          # Tracks and movies: the units joined into one are judged as one (the joined stack), and
+          # counted exactly when the units have no filters of their own.
+          V="--width 2 --height 2 --frames 2 --movie-units 2 --title-length 0 --image-width 2 --image-height 2"
+          printf '[movies]\nmode = compact\n\n[movies.joined]\nfilters = neighbour-agreement-v1\n' > mj.ini
+          $exe filters --line movies $V --filters mj.ini | tr -d '\r' | q "^survivors    173984 movies"
+          printf '[movies]\nmode = compact\n\n[movies.units]\nfilters = neighbour-agreement-v1\n\n[movies.joined]\nfilters = neighbour-agreement-v1\n' > mb.ini
+          $exe filters --line movies $V --filters mb.ini | tr -d '\r' | q "^compact      unavailable: units and joined"
+          T="--length 4 --track-units 2 --title-length 0 --image-width 1 --image-height 1"
+          printf '[tracks]\nmode = compact\n\n[tracks.joined]\nfilters = key-v1\n\n[tracks.joined.key-v1]\ntonic = A\nscale = minor-pentatonic\n' > tj.ini
+          out=$($exe warp --line tracks $T --filters tj.ini --compact "A4q C5q D5q E5q G5q A4q C5q E5q" 2>/dev/null | tr -d '\r')
+          echo "$out"
+          echo "$out" | q "survivor number 12641768583633 of 56358560858112"
+          for m in positional scrambled; do
+            a=$(echo "$out" | awk -v m=$m '/compact/ {seen = 1; next} seen && $1 == m {print $2; exit}')
+            $exe read --line tracks $T --filters tj.ini --compact --mode $m "$a" 2>/dev/null | tr -d '\r' | tail -1 | q "A4q C5q D5q E5q G5q A4q C5q E5q"
+          done
+          $exe warp --line tracks $T --filters tj.ini --compact "A4q C5q D5q E5q G5q A4q C5q F5q" 2>/dev/null | tr -d '\r' | q "not a survivor: fails joined: key-v1"
+          # Tailoring: the filters and settings that keep one melody and write its number among the
+          # survivors with the cleanest digits (its shortest route), saved as a settings file, and
+          # the melody read back from its compact address under them.
+          M="A4q C5q D5q E5q G5q A4q C5q E5q"
+          printf '' > none.ini
+          out=$($exe tailor --line audio --length 8 --filters none.ini --out ta.ini "$M" | tr -d '\r')
+          echo "$out"
+          echo "$out" | q "^\[x\] key-data-v2 .* scale=major-pentatonic"
+          echo "$out" | q "^survivor     46327 of 204994, route b4f7"
+          out=$($exe warp --line audio --length 8 --filters ta.ini --compact "$M" 2>/dev/null | tr -d '\r')
+          a=$(echo "$out" | awk '/compact/ {seen = 1; next} seen && $1 == "positional" {print $2; exit}')
+          test "$a" = "0b4f7"
+          $exe read --line audio --length 8 --filters ta.ini --compact --mode positional "$a" 2>/dev/null | tr -d '\r' | tail -1 | q "^A4q C5q D5q E5q G5q A4q C5q E5q"
+          # Weighing a folder: two melodies and a picture that are exactly Sieve's own files (MIDI, and
+          # a PNG at one pixel a pixel), and a file that is not. Each is weighed against its own
+          # address; the audio line's filters are tailored to the melodies, their description paid.
+          mkdir -p weigh
+          n=0
+          for m in "$M" "C4q E4q G4q C5q G4q E4q C4h"; do
+            n=$((n+1))
+            a=$($exe warp --line audio --length 8 "$m" 2>/dev/null | tr -d '\r' | awk '$1 == "positional" {print $2; exit}')
+            $exe read --line audio --length 8 --mode positional "$a" --out weigh/tune$n.mid > /dev/null 2>&1
+          done
+          $exe read --line image --width 8 --height 8 --palette mono --mode positional 3 --scale 1 --out weigh/pic.png > /dev/null 2>&1
+          printf 'Not an item of any line.\n' > weigh/note.txt
+          out=$($exe locate weigh --weigh --tailored --filters none.ini --length 8 --width 8 --height 8 --palette mono 2>&1 | tr -d '\r')
+          echo "$out"
+          echo "$out" | q "^  note.txt  *200  *200   its own address"
+          echo "$out" | q "^  pic.png  *624  *4   image 3"
+          echo "$out" | q "^  tune1.mid  *864  *36   audio, tailored 1e5230293"
+          echo "$out" | q "total: own addresses 2488 bits; best ways 272 + shared 258 = 530 bits"
+          # The search's time: a generous one finds the same; a tiny one stops, and says so (each
+          # gives the other, the files counted: 0.001 s a file is 0.004 s for the four).
+          out=$($exe locate weigh --weigh --tailored --filters none.ini --length 8 --width 8 --height 8 --palette mono --search-total 600 2>&1 | tr -d '\r')
+          echo "$out" | q "^  search: 150.0 s a file, 600.0 s for the run; took "
+          echo "$out" | q "total: own addresses 2488 bits; best ways 272 + shared 258 = 530 bits"
+          out=$($exe locate weigh --weigh --tailored --filters none.ini --length 8 --width 8 --height 8 --palette mono --search-per-file 0.001 2>&1 | tr -d '\r')
+          echo "$out" | q "^  search: 0.001 s a file, 0.004 s for the run; took "
+          echo "$out" | q "^  tailored audio: none, "
+
+      - name: A model is one object with an address on two lines
+        run: |
+          q() { grep -c "$@" > /dev/null; }
+          exe=build/sieve
+          [ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
+          $exe mesh | tr -d '\r' | q "^space        models/V8/F12/C16/key=sieve/modelspace-v1"
+          $exe mesh | tr -d '\r' | q "^as text      304 characters"
+          # A cube in, its address out, and the same cube back.
+          printf 'v -1 -1 -1\nv 1 -1 -1\nv 1 1 -1\nv -1 1 -1\nv -1 -1 1\nv 1 -1 1\nv 1 1 1\nv -1 1 1\n' > cube.obj
+          printf 'f 1 2 3\nf 1 3 4\nf 5 7 6\nf 5 8 7\nf 1 5 6\nf 1 6 2\nf 2 6 7\nf 2 7 3\nf 3 7 8\nf 3 8 4\nf 4 8 5\nf 4 5 1\n' >> cube.obj
+          a=$($exe mesh --warp cube.obj 2>/dev/null | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          echo "cube: $a"
+          test "$a" = "000f00ff00f000ff0ffff0ff0504e6b3e128a4dc725baedf8e0"
+          $exe mesh --read "$a" --out round.obj 2>/dev/null
+          # Symmetric on the grid, and no two spaces in a row anywhere in the canonical form.
+          sed -n 1p round.obj | tr -d '\r' | q "^v -0.9375 -0.9375 -0.9375$"
+          sed -n 2p round.obj | tr -d '\r' | q "^v +0.9375 -0.9375 -0.9375$"
+          if grep -c "  " round.obj > /dev/null; then exit 1; fi
+          test "$(wc -c < round.obj | tr -d ' ')" = "304"
+          # The same file as a unit of an ascii96 text line, and back, byte for byte.
+          t=$($exe warp --alphabet ascii96 --length 304 --mode positional --file round.obj | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          $exe read --alphabet ascii96 --length 304 --mode positional "$t" --out viatext.obj > /dev/null
+          cmp round.obj viatext.obj
+          b=$($exe mesh --warp viatext.obj 2>/dev/null | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          test "$a" = "$b"
+          # Browsing the line, and a shape it cannot have.
+          $exe mesh --browse 2 --seed 4 > /dev/null
+          # Worlds: models of the models line placed in a world. Composed, read back, and its .obj
+          # the oracle's, byte for byte.
+          $exe world | tr -d '\r' | q "^line         worlds  (worlds/image/mono/10x10/L100+lower27/L32+V8/F12/C16x4/G8/key=sieve/worldspace-v1)"
+          $exe world --world-models 2 --compose "0:0.0.0.0|1:7.7.7.5" --title "two models" | tr -d '\r' > wc.txt
+          w=$(awk '$1 == "positional" {print $2}' wc.txt)
+          $exe world --world-models 2 --read "$w" --out world.obj | tr -d '\r' | q "^slots        0*:0.0.0.0|0*1:7.7.7.5$"
+          python reference/sieve_ref.py world-obj --world-models 2 --slots "0:0.0.0.0|1:7.7.7.5" > world-ref.obj
+          cmp world.obj world-ref.obj
+          ws=$(awk '$1 == "scrambled" {print $2}' wc.txt)
+          $exe world --world-models 2 --read "$ws" --mode scrambled --out world2.obj > /dev/null
+          cmp world.obj world2.obj
+          # A model file taken apart (sieve tensors; IDEAS §15): a small stand-in Llama model made by the
+          # oracle, its start rebuilt by the tool from the config alone, and its statistics the oracle's.
+          python reference/sieve_ref.py tensors-fixture --config tests/llama_tiny_config.json --seed 7 --out tiny.safetensors
+          $exe tensors tiny.safetensors --config tests/llama_tiny_config.json | tr -d '\r' > tens.txt
+          cat tens.txt
+          q "^layout       safetensors-layout-v1: the start is rebuilt" tens.txt
+          q "the start is rebuilt from config.json$" tens.txt
+          q "^weights      211072 bytes: 105536 values (BF16 20)$" tens.txt
+          $exe tensors --config tests/llama_tiny_config.json --start-out tiny-start.bin > /dev/null
+          head -c "$(wc -c < tiny-start.bin)" tiny.safetensors | cmp - tiny-start.bin
+          $exe tensors tiny.safetensors --tsv | tr -d '\r' > tens-cpp.tsv
+          python reference/sieve_ref.py tensors tiny.safetensors --tsv | tr -d '\r' | diff tens-cpp.tsv -
+          $exe tensors tiny.safetensors --stats | tr -d '\r' | q "^coded by frequency  "
+          # The same model coded under the prior (sieve-weights-v1): the tool's file and the oracle's are
+          # one file, and each rebuilds the model, byte for byte.
+          $exe tensors tiny.safetensors --pack tiny.sieve-weights | tr -d '\r' | q "read back: it rebuilds the file"
+          python reference/sieve_ref.py weights-pack tiny.safetensors --out tiny-ref.sieve-weights
+          cmp tiny.sieve-weights tiny-ref.sieve-weights
+          python reference/sieve_ref.py weights-unpack tiny.sieve-weights --out tiny-ref.safetensors
+          cmp tiny.safetensors tiny-ref.safetensors
+          $exe tensors --unpack tiny-ref.sieve-weights --out tiny-back.safetensors > /dev/null
+          cmp tiny.safetensors tiny-back.safetensors
+          # The same model run by Sieve itself (sieve chat): with the oracle's stand-in tokenizer, its tokens
+          # are the oracle's on texts of every kind, its logits the oracle's (computed in 64-bit floats)
+          # to within a thousandth, and a reply comes back.
+          mkdir -p tinymodel
+          cp tests/llama_tiny_config.json tinymodel/config.json
+          cp tests/llama_tiny_tokenizer.json tinymodel/tokenizer.json
+          cp tiny.safetensors tinymodel/model.safetensors
+          python reference/sieve_ref.py llm-tokenizer-fixture --out tok-again.json
+          python -c "import json,sys; sys.exit(json.load(open('tok-again.json',encoding='utf-8')) != json.load(open('tests/llama_tiny_tokenizer.json',encoding='utf-8')))"
+          python reference/sieve_ref.py llm-corpus --out corpus.jsonl
+          $exe chat --model tinymodel --encode-lines corpus.jsonl | tr -d '\r' > tok-cpp.txt
+          python reference/sieve_ref.py llm-encode-lines corpus.jsonl --model tinymodel | tr -d '\r' | diff tok-cpp.txt -
+          $exe chat --model tinymodel --logits "The library holds every book. It's 2026." --logits-out tiny-logits.f32 > /dev/null
+          python reference/sieve_ref.py llm-logits "The library holds every book. It's 2026." --model tinymodel --compare tiny-logits.f32
+          $exe chat --model tinymodel --prompt "hello" --temperature 0 --max-tokens 8 > /dev/null
+          # The AI line (sieve ai): every model of one shape, its weights its address. The model at a
+          # bearing is the oracle's, file for file, in both orderings; its logits are the oracle's; its
+          # file warps back to its address; and saved, sieve chat --raw talks to it.
+          $exe ai | tr -d '\r' | q "^models       2^32768 "
+          for m in positional scrambled; do
+            $exe ai --bearing 246 --mode $m --out ai246-$m > /dev/null
+            python reference/sieve_ref.py ai-read --bearing 246 --mode $m --out ai246-$m-ref.safetensors > /dev/null
+            cmp ai246-$m/model.safetensors ai246-$m-ref.safetensors
+          done
+          $exe ai --warp ai246-positional | tr -d '\r' | q "^positional   aeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\.\.\."
+          $exe chat --model ai246-scrambled --logits "Hello, shelf." --logits-out ai-logits.f32 > /dev/null
+          python reference/sieve_ref.py llm-logits "Hello, shelf." --model ai246-scrambled --compare ai-logits.f32
+          $exe chat --model ai246-positional --raw --prompt "Hello" --max-tokens 16 > /dev/null
+          # Training (sieve ai-train, training-v1): runs recorded and trained, the order made from
+          # training.ini (order-v1) in each of its three readings, the files in a chosen order; the
+          # oracle, written apart, trains each again and writes the same result.txt. Trained again
+          # from its .sieve with one thread, a run is reproduced. A run whose order is written out
+          # (order.txt), with windows of two steps swapped, is not (within a step the order cannot
+          # matter: its windows' gradients are summed). A run in the first runs' format still trains
+          # to its result, by the tool and the oracle; and the run shipped with Sieve trains again to
+          # its own result, as it did where it was made.
+          mkdir -p corp && cp tests/training_corpus.txt corp/a.txt && head -c 150 tests/training_corpus.txt | tr 'a-z' 'b-za' > corp/b.txt
+          printf 'b.txt\n' > file-order.txt
+          for rd in in-order shuffled-within-files shuffled; do
+            $exe ai-train --record corp --out run-$rd --reading $rd --file-order file-order.txt --ai-width 8 --ai-heads 2 --ai-bits 3 --window 17 --epochs 2 --checkpoint-every 3 --learning-rate 0.01 --quiet > /dev/null
+            python reference/sieve_ref.py train-replay --run run-$rd | tr -d '\r' | cmp - run-$rd/result.txt
+          done
+          q "^file = corpus/b.txt" run-in-order/training.ini
+          # A corpus is a folder: a single file is refused.
+          if $exe ai-train --record tests/training_corpus.txt --out not-a-run > /dev/null 2>&1; then exit 1; fi
+          mkdir -p tiny-corp && cp tests/training_corpus.txt tiny-corp/
+          $exe ai-train --record tiny-corp --out tiny-run --ai-width 8 --ai-heads 2 --ai-bits 3 --window 17 --epochs 2 --checkpoint-every 3 --learning-rate 0.01 --write-order --checkpoint-addresses --sieve tiny-run.sieve --quiet > /dev/null
+          python reference/sieve_ref.py train-replay --run tiny-run | tr -d '\r' | cmp - tiny-run/result.txt
+          $exe ai-train tiny-run.sieve --threads 1 --quiet | tr -d '\r' | q "^reproduced exactly"
+          python -c "import sys; p='tiny-run/order.txt'; l=open(p).read().split('\n'); l[1],l[5]=l[5],l[1]; open(p,'w').write('\n'.join(l))"
+          $exe ai-train tiny-run --quiet | tr -d '\r' | q "^NOT reproduced"
+          $exe ai-train tests/training_run_v1 --quiet | tr -d '\r' | q "^reproduced exactly"
+          python reference/sieve_ref.py train-replay --run tests/training_run_v1 | tr -d '\r' | cmp - tests/training_run_v1/result.txt
+          $exe ai-train data/training/universalbibliothek.sieve --quiet | tr -d '\r' | q "^reproduced exactly"
+          # training-v2: a loss scale of 2^5, the oracle training it again to the same result.
+          $exe ai-train --record tiny-corp --out run-v2 --ai-width 8 --ai-heads 2 --ai-bits 3 --window 17 --epochs 2 --checkpoint-every 3 --loss-scale-bits 5 --learning-rate 0.0005 --quiet > /dev/null
+          q "^version = training-v2" run-v2/training.ini
+          python reference/sieve_ref.py train-replay --run run-v2 | tr -d '\r' | cmp - run-v2/result.txt
+          # Stopped part-way twice and carried on (--resume), a run ends exactly as one never stopped.
+          $exe ai-train --record tiny-corp --out run-stop --ai-width 8 --ai-heads 2 --ai-bits 3 --window 17 --epochs 3 --checkpoint-every 4 --stop-after 7 --quiet | tr -d '\r' | q "^stopped at step 7"
+          [ -f run-stop.resume ]
+          $exe ai-train run-stop --resume --stop-after 13 --quiet | tr -d '\r' | q "^stopped at step 13"
+          $exe ai-train run-stop --resume --quiet | tr -d '\r' | q "^result written"
+          [ ! -f run-stop.resume ]
+          python reference/sieve_ref.py train-replay --run run-stop | tr -d '\r' | cmp - run-stop/result.txt
+          # diffusion-v1 (sieve diffuse): a run whose pictures are drawn from the image line's stack, trained,
+          # checked again by the tool, and trained again by the oracle to the same result.txt; then pictures made.
+          printf '[image]\nmode = compact\nfilters = figure-v1\n[image.figure-v1]\nconnect = four\nborder = any\n' > figs.ini
+          $exe diffuse --record diff-run --filters figs.ini --width 4 --height 3 --figures 40 --ai-width 8 --ai-heads 2 --ai-bits 3 --steps 8 --checkpoint-every 3 --levels 5 --batch 3 --learning-rate 0.01 --quiet
+          $exe diffuse diff-run --quiet | tr -d '\r' | q "^reproduced exactly"
+          python reference/sieve_ref.py diffuse-replay --run diff-run | tr -d '\r' | cmp - diff-run/result.txt
+          $exe diffuse --make diff-run --count 2 | tr -d '\r' | q "^picture "
+          # The same on the audio line: a melody run (notes104, 6 events), its melodies drawn from the audio
+          # line's stack, trained, trained again, and trained by the oracle to the same result.txt. The
+          # cells are 104 symbols, so pictures.txt holds numbers apart by spaces.
+          printf '[audio]\nmode = compact\nfilters = key-data-v2, melody-ending-v2\n' > mels.ini
+          $exe diffuse --record mel-run --line audio --length 6 --filters mels.ini --figures 40 --ai-width 8 --ai-heads 2 --ai-bits 3 --steps 8 --checkpoint-every 3 --levels 5 --batch 3 --learning-rate 0.01 --quiet
+          q "^line = audio" mel-run/diffusion.ini
+          $exe diffuse mel-run --quiet | tr -d '\r' | q "^reproduced exactly"
+          python reference/sieve_ref.py diffuse-replay --run mel-run | tr -d '\r' | cmp - mel-run/result.txt
+          $exe diffuse --make mel-run --count 2 | tr -d '\r' | q "^melody "
+          # --judge counts what a model makes, and the noise it started from, against a stack.
+          $exe diffuse --make mel-run --count 20 --judge mels.ini | tr -d '\r' | q "^  the stack  *made [0-9]* of 20, noise [0-9]* of 20"
+          # The shipped picture model (data/training/figures-2x32): its final model makes the six pictures
+          # the harness shows, address for address (training it again takes minutes: run it by hand).
+          $exe diffuse --make data/training/figures-2x32 --count 6 | tr -d '\r' | grep "^picture" | cut -c10-34 | tr '\n' ' ' | q "fff0fc2f0de8f01c3fdbe6fff fff29e4e04fbf01b3e05e9fff fff8ffee10bcf8f80f05c0fff fff83e1f15cef83a1f8de7fff fff93e3713a17f7e2fa3c9fff fff878af09e16a7e0f03c3fff"
+          # The shipped melody model (data/training/melodies-2x64): its first three melodies, by address.
+          $exe diffuse --make data/training/melodies-2x64 --count 3 | tr -d '\r' | grep "^melody" | cut -c10-36 | tr '\n' ' ' | q "8ac6f76023e45b65ccb9d8e98b4 02dd451f986f45126c630368e9c 5754e9fcddb9cedeba2ddd88f64"
+          # The shipped characters model (data/training/type-2x32, IDEAS §19.73): its first six pictures, by
+          # address, and its training pictures, written again from the font, byte for byte.
+          $exe diffuse --make data/training/type-2x32 --count 6 | tr -d '\r' | grep "^picture" | cut -c10-34 | tr '\n' ' ' | q "fbf7fffdff6edbc77ffffffff fef7d66aacffb2db7e7ffffff fffbf7fe7c3efcffffb5f3fff fbfebf7bf5deffea7dddfffff fdffff3fffb17fff6ceffffff 7adfebeff9352bffcbfffffff"
+          python tools/build_character_pictures.py | cmp - data/training/type-2x32/pictures.txt
+          # Its training pictures are no hand-made list: drawn again from the image line's stack (figure-v1
+          # connect four, row-runs-v1 changes 2, seed 42), they are pictures.txt byte for byte.
+          printf '[image]\nmode = compact\nfilters = figure-v1, row-runs-v1\n[image.figure-v1]\nconnect = four\n[image.row-runs-v1]\nchanges = 2\n' > figures.ini
+          $exe diffuse --record figs-again --filters figures.ini --ai-layers 2 --ai-width 32 --steps 1 --quiet
+          cmp figs-again/pictures.txt data/training/figures-2x32/pictures.txt
+          # The AI line's filters (SPECIFICATIONS §12.0f): weight-rows-v1 counts and ranks; the model the
+          # shipped run trains passes it, and so does its canonical form (canonical-model-v1), which the
+          # oracle works out the same and which says what the model says.
+          printf '[ai]\nmode = compact\nfilters = weight-rows-v1\n' > ai-rows.ini
+          $exe filters --line ai --filters ai-rows.ini | tr -d '\r' | q "^survivors    2\^32768.00 (exact; compact mode available)"
+          # The two that cannot be counted are marked judge-only (their own tab in the filters window).
+          $exe filters --line ai | tr -d '\r' | q "^\[ \] canonical-model-v1   (hard, judge-only)"
+          $exe filters --line ai | tr -d '\r' | q "^\[ \] language-v1   (soft, judge-only)"
+          $exe filters --line ai --filters ai-rows.ini | tr -d '\r' | q "keeps 10\^-145.65 of the line (exact; it judges)"
+          $exe ai-train data/training/universalbibliothek.sieve --address-out ub.hex --quiet > /dev/null
+          $exe ai --address-file ub.hex --filters ai-rows.ini --temperature 0 | tr -d '\r' | tee ub-ai.txt | q "weight-rows-v1 \[x\] pass, canonical-model-v1 \[ \] FAIL"
+          q "^compact      positional " ub-ai.txt
+          $exe ai --address-file ub.hex --filters ai-rows.ini --temperature 0 --canonical --address-out ubc.hex | tr -d '\r' | tee ubc-ai.txt | q "weight-rows-v1 \[x\] pass, canonical-model-v1 \[ \] pass"
+          [ "$(grep '^says' ub-ai.txt)" = "$(grep '^says' ubc-ai.txt)" ]
+          python reference/sieve_ref.py ai-canonical --address-file ub.hex --rows | tr -d '\r' > ubc-ref.txt
+          head -1 ubc-ref.txt | cmp - ubc.hex
+          q "^weight-rows-v1 pass" ubc-ref.txt
+          # Runs named by the AI line's filters (the shipped run, from data/training): near-model-v1 keeps
+          # the models within two digits of its model, counted exactly and in compact order; language-v1
+          # scores a model on its text, exactly. Its model passes both, a model from the line's middle
+          # neither, and the oracle's vectors agree.
+          printf '[ai]\nmode = compact\nfilters = near-model-v1, language-v1\n' > ai-run.ini
+          printf '[ai]\nmode = compact\nfilters = near-model-v1\n' > ai-near.ini
+          $exe filters --line ai --filters ai-near.ini --exact | tr -d '\r' | q "^survivors    2\^32.81 (exact; compact mode available): 7548948481$"
+          $exe ai --address-file ub.hex --filters ai-run.ini --temperature 0 | tr -d '\r' | tee ub-run.txt | q "near-model-v1 \[x\] pass, language-v1 \[x\] pass"
+          q "^layer        0 (digits from the model universalbibliothek trained)" ub-run.txt
+          q "^speaks       universalbibliothek (corpus/universalbibliothek.txt): 275.71 thousandths" ub-run.txt
+          $exe ai --bearing 180 --filters ai-run.ini --temperature 0 | tr -d '\r' | q "near-model-v1 \[x\] FAIL, language-v1 \[x\] FAIL"
+          # And the same line in the hallway: a sixth door, the cube in hand, green on clay.
+          H=build/hallway
+          [ -f build/Release/hallway.exe ] && H=build/Release/hallway.exe
+          $H --no-menu --line models --walk "0,0" --screenshot models.png | sed -n 1p | q "^MODELS line, positional"
+          out=$($H --no-menu --line models --goto "$a" --walk "0,0" --take --screenshot cube.png)
+          echo "$out"
+          echo "$out" | q "8/8 vertices used"
+          $H --no-menu --line movies --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door6.png | sed -n 1p | q "^MODELS line"
+          # The crates render their models onto their faces, and the cache has a budget.
+          $H --no-menu --line models --model-cache 8 --walk "0,0" --bench 12 --screenshot crates.png 2>&1 | q "^bench: 12 frames"
+          # The display cache is a world setting, in the setup menu's GLOBAL section (row 8),
+          # in steps of 8 MB, and saved with the application's settings. From a settings file that
+          # does not exist yet, so it starts at its default.
+          rm -f mc.ini
+          downs=$(python -c "print(','.join(['Down']*8))")
+          $H --menu --settings mc.ini --press "$downs,Right,Right" --screenshot mc.png > /dev/null
+          grep -q "^model_cache_mb = 80" mc.ini
+          # The settings panel slides out with Tab (the map takes the width), and back with a move.
+          $H --menu --press "Tab" --screenshot panel-out.png | q "saved panel-out.png"
+          $H --menu --press "Tab,Down" --screenshot panel-back.png | q "saved panel-back.png"
+          # The filter memory (GLOBAL row 11): what one count's tables may take, in steps of 256 MB
+          # from 512, saved with the application's settings.
+          rm -f fm.ini
+          downs=$(python -c "print(','.join(['Down']*11))")
+          $H --menu --settings fm.ini --press "$downs,Right" --screenshot fm.png > /dev/null
+          grep -q "^filter_memory_mb = 768" fm.ini
+          # The counting memory and the merge cache, GLOBAL rows 12 and 13: percentages, 5 a
+          # step from 50, saved with the application's settings.
+          rm -f cm.ini
+          downs=$(python -c "print(','.join(['Down']*12))")
+          $H --menu --settings cm.ini --press "$downs,Right,Down,Left,Left" --screenshot cm.png > /dev/null
+          grep -q "^counting_memory_pct = 55" cm.ini
+          grep -q "^merge_cache_pct = 40" cm.ini
+          # The time budget, GLOBAL row 14: 5 ms a step from 50, saved with the application's
+          # settings; the menu says it is waiting for X.
+          rm -f tb.ini
+          downs=$(python -c "print(','.join(['Down']*14))")
+          $H --menu --settings tb.ini --press "$downs,Right,Right" --screenshot tb.png > /dev/null
+          grep -q "^unit_time_ms = 60" tb.ini
+          # The item memory, the last GLOBAL row (15): percent of installed memory, 5 a step from 25,
+          # saved with the application's settings.
+          rm -f im.ini
+          downs=$(python -c "print(','.join(['Down']*15))")
+          $H --menu --settings im.ini --press "$downs,Right" --screenshot im.png > /dev/null
+          grep -q "^item_memory_pct = 30" im.ini
+          # ...and Graphics Memory, which the setup menu's budget keeps it within, is a graphics
+          # setting: Settings, Graphics, then the seventh row.
+          rm -f gm.ini
+          $H --main-menu --settings gm.ini --press "Down,Down,Down,Down,Down,Return,Return,Down,Down,Down,Down,Down,Down,Right" --screenshot gm.png > /dev/null
+          grep -q "^graphics_memory_gb = 5" gm.ini
+          # sieve-hallway.ini holds every setting there is, the setup menu's and ffmpeg's among
+          # them, each with a comment; and written from the defaults, then written again from that
+          # file, it comes out the same, byte for byte.
+          rm -f defaults.ini again.ini
+          $H --write-settings defaults.ini | q "wrote defaults.ini"
+          $H --settings defaults.ini --write-settings again.ini > /dev/null
+          cmp defaults.ini again.ini
+          for k in "^\[setup\]" "^\[paths\]" "^ffmpeg = *;" "^binary_length = 32 " "^ai_width = 16 " "^items_per_wall = 128 " "^title_length = 32 " "^\[locator\]" "^search_seconds = 0 " "^search_for = file "; do grep -q "$k" defaults.ini; done
+          if grep -v "^;" defaults.ini | grep -v "^\[" | grep -v "^$" | grep -v " ; "; then exit 1; fi
+          # An older file gains the entries it lacks and keeps its own values; a value a setting
+          # cannot have leaves it at its default.
+          printf '[world]\nunit_time_ms = 70\n[setup]\nlength = 64\nalphabet = nonsense\n[paths]\nffmpeg = /opt/ff/ffmpeg\n[locator]\nsearch_seconds = 2.5\nsearch_for = run\n' > older.ini
+          $H --settings older.ini --write-settings newer.ini > /dev/null
+          for k in "^unit_time_ms = 70 " "^length = 64 " "^alphabet = lower27 " "^ffmpeg = /opt/ff/ffmpeg " "^vsync = on " "^search_seconds = 2.5 " "^search_for = run "; do grep -q "$k" newer.ini; done
+          # The setup menu saves its own settings there too: the first row, the line to start on.
+          rm -f setup.ini
+          $H --menu --settings setup.ini --press "Right" --screenshot setup.png > /dev/null
+          grep -q "^line = " setup.ini
+          if grep -q "^line = text " setup.ini; then exit 1; fi
+          # A different shape is a different line, and the setup menu draws all six of them.
+          $exe mesh --vertices 12 --faces 20 --coords 64 | tr -d '\r' | q "^space        models/V12/F20/C64/key=sieve/modelspace-v1"
+          $H --no-menu --line models --vertices 12 --faces 20 --coords 64 --walk "0,0" --screenshot shape.png | sed -n 1p | q "^MODELS line"
+          $H --menu --vertices 12 --faces 20 --coords 64 --screenshot map6.png | q "saved map6.png"
+          # The setup menu's last three rows: find my limits, reset, and the way in. Finding the
+          # limits changes every shape; resetting puts them all back.
+          # Up from the first row wraps to the last, so three Ups land on find-my-limits whatever
+          # else is in the list: the last three rows are always find-my-limits, reset, the way in.
+          toend="Up,Up,Up"
+          $H --menu --press "$toend" --screenshot plain.png > /dev/null
+          $H --menu --press "$toend,Return" --screenshot lim.png > /dev/null
+          $H --menu --press "$toend,Return,Down,Return,Up" --screenshot res.png > /dev/null
+          # Finding the limits changes the shapes; resetting puts them back exactly as they were.
+          if cmp -s plain.png lim.png; then exit 1; fi
+          cmp -s plain.png res.png
+          # The setup menu's rows are numbered, and F on a row opens that line's filters, so the
+          # mapping has to be pinned or a row inserted anywhere above silently opens the wrong
+          # line's list. Each row here ticks a mode and the saved file says which line it was.
+          # Closing the overlay is what writes it, which also covers that path.
+          # The lines' rows follow the doors (image, pages, books, audio, tracks, video, movies,
+          # models, worlds, AI, binary); the audio rows are six: its notes, its note set, and notes2's
+          # range, durations and voices. (AI has no filters yet, so F on its rows opens none.)
+          for pair in "16 image" "19 text" "23 books" "24 audio" "27 audio" "30 tracks" "31 video" "35 movies" "36 models" "39 worlds" "47 binary"; do
+            set -- $pair
+            rm -f row$1.ini
+            downs=$(python -c "print(','.join(['Down']*$1))")
+            $H --menu --filters row$1.ini --press "$downs,F,Space,Escape" --screenshot row$1.png > /dev/null
+            grep -A1 "^\[$2\]" row$1.ini | q "mode = mark"
+          done
+          # On the rows that belong to no line, F opens the filters of the line you start on: pages
+          # by default, and models once the "line" row (the first) is turned to models.
+          rm -f start.ini start2.ini
+          $H --menu --filters start.ini --press "F,Space,Escape" --screenshot start.png > /dev/null
+          grep -A1 "^\[text\]" start.ini | q "mode = mark"
+          $H --menu --filters start2.ini --press "Right,Right,Right,Right,Right,Right,F,Space,Escape" --screenshot start2.png > /dev/null
+          grep -A1 "^\[models\]" start2.ini | q "mode = mark"
+          # Items per wall: the corridor's tile size is a setting. It changes no address -- the
+          # same unit, at the same percentage along the same line -- only the tile and slot that
+          # name where it stands, and at 256 a tile the tile number is half what it was. Untitled
+          # (title length 0), so the starting page stands well along the line, not at its start.
+          a=$($H --no-menu --title-length 0 --walk "0,0" --screenshot t128.png | sed -n 1p)
+          b=$($H --no-menu --title-length 0 --items-per-wall 256 --walk "0,0" --screenshot t256.png | sed -n 1p)
+          echo "$a"; echo "$b"
+          echo "$a" | q "85.9326950016% along"
+          echo "$b" | q "85.9326950016% along"
+          # ...and it is the same book, with the same address, on both.
+          test "$(echo "$a" | book)" = "$(echo "$b" | book)"
+          if [ "$(echo "$a" | sed -n 's/.*tile \([0-9.]*\).*/\1/p')" = "$(echo "$b" | sed -n 's/.*tile \([0-9.]*\).*/\1/p')" ]; then exit 1; fi
+          # What stands in a slot is scaled to the slot, so twice as many to a tile is half-size
+          # items rather than items running into each other: an item must be narrower than the
+          # pitch at every size, or the crosshair cannot tell two of them apart.
+          python -c "shelf=6.0; base=shelf/16; bad=[n for n in (128,256,512,1024) if not 0.28*min(1.0,(shelf/(n//8))/base) < shelf/(n//8)]; assert not bad, bad; print('slots fit at every tile size')"
+          $H --no-menu --items-per-wall 256 --take --screenshot take256.png | q "saved take256.png"
+          # The pictures on the crate faces have a size of their own, and it is thrown away and
+          # redrawn when it changes rather than being stretched.
+          $H --no-menu --line models --model-tile 128 --walk "0,0" --bench 8 --screenshot tile128.png 2>&1 | q "^bench: 8 frames"
+          test -s t128.png && test -s t256.png && test -s tile128.png
+          # The item page has two tabs: the thing itself, and what it costs to name it. On a text
+          # line the guided row is shorter than the other two exactly when the unit reads as text.
+          $H --no-menu --warp "it was the best of times" --press "E,C" --screenshot cost.png > /dev/null
+          test -s cost.png
+          # HELP, after ITEM, COST and SORT on every line: the keys for what is in hand.
+          $H --no-menu --warp "it was the best of times" --press "C,C,C" --screenshot help.png > /dev/null
+          test -s help.png
+          # The compass: the degree readout beside the percentage, to the precision set in Graphics.
+          $H --no-menu --line pages --goto "25%" --walk "0,0" --screenshot comp.png | sed -n 1p | q "25.0000000000% along"
+          test -s comp.png
+          # The binary line: one wall of empty shelves, and on the other side the edge, the short
+          # wall and the rain falling off it. It draws with whatever font is present, so it works
+          # with Sieve's own small one.
+          python -c "import ast,sys; ast.parse(open('tools/fetch_unifont.py').read())"
+          $H --no-menu --line binary --pose "0,1.7,4,0" --bench 8 --screenshot edge.png 2>&1 | q "^bench: 8 frames"
+          # It is a line like the others now: every file up to its length, one loop (its filters,
+          # by the files' kinds, are checked with the other filters below).
+          $H --no-menu --line binary --walk "0,0" --screenshot bin.png | sed -n 1p | q "^BINARY line"
+          # The lines no longer loop into one another: they start and finish at binary.
+          # Left out of models is worlds, left out of worlds is AI, and left out of AI is binary, where
+          # you are turned round to come out of its one door (in its left wall); back out through that
+          # door is AI again. Right out of image is binary too, and there the door leads back to image.
+          $H --no-menu --line models --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door7m.png | sed -n 1p | q "^WORLDS line"
+          $H --no-menu --line worlds --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door7w.png | sed -n 1p | q "^AI line"
+          $H --no-menu --line ai --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door7.png | sed -n 1p | q "^BINARY line"
+          # (A walk is in the walker's frame, so after being turned round, 4.2 is back the way you came.)
+          $H --no-menu --line ai --pose "-1.7,7.0,0,0" --walk "-1,0;4.2,0" --screenshot door8.png | sed -n 2p | q "^AI line"
+          $H --no-menu --line image --pose "1.7,7.0,0,0" --walk "1,0" --screenshot door9.png | sed -n 1p | q "^BINARY line"
+          $H --no-menu --line image --pose "1.7,7.0,0,0" --walk "1,0;-1,0" --screenshot door10.png | sed -n 2p | q "^IMAGE line"
+          # Binary's other side is the drop, always on its right: the short wall stops you at the
+          # edge of the floor. No door, no crossing, whatever the doorway is doing at that z.
+          $H --no-menu --line ai --pose "-1.7,7.0,0,0" --walk "-1,0;-9,0" --screenshot walk.png | sed -n 2p | q "^BINARY line.*x 1.650000"
+          # There is no setting for it: not in Settings > Graphics, not in a settings file that
+          # Graphics has just written, and not on the command line.
+          rm -f be.ini
+          $H --main-menu --settings be.ini --press "Down,Down,Down,Down,Down,Return,Return,Down,Down,Down,Return" --screenshot be.png > /dev/null
+          grep -q "^edge_glow = on" be.ini
+          if grep -Eq "binary[_-]edge" be.ini; then exit 1; fi
+          if $H --help 2>&1 | grep -q "binary-edge"; then exit 1; fi
+          test -s walk.png
+          test -s edge.png
+          test -s models.png && test -s cube.png && test -s crates.png && test -s map6.png
+          if $exe mesh --coords 12 > /dev/null 2>&1; then exit 1; fi
+
+      - name: BigUint's arithmetic also builds and passes without a 128-bit integer type
+        if: runner.os == 'Linux'
+        run: |
+          # Every limb operation has two implementations: one using the compiler's 128-bit
+          # integer, and one built from 32-bit halves for compilers that have no such type.
+          # The second is the one nothing would otherwise exercise, so it is built and run here
+          # against the same vectors.
+          cmake -S . -B build-portable -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-DSIEVE_BIGUINT_PORTABLE"
+          cmake --build build-portable --target sieve_tests --parallel
+          ./build-portable/sieve_tests tests | tail -1 | grep -q ", 0 failures"
+
+      - name: A file is one unit of the bytes256 line, and its address is its own bytes
+        run: |
+          q() { grep -c "$@" > /dev/null; }
+          exe=build/sieve
+          [ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
+          # bytes256 holds every byte value in byte order, so canonicalisation is the identity
+          # (canon-bytes-v1) and a file of N bytes is exactly one unit of a line of length N.
+          $exe alphabets | tr -d '\r' | q "bytes256"
+          python -c "open('four.bin','wb').write(bytes([0xde,0xad,0xbe,0xef]))"
+          out=$($exe warp --alphabet bytes256 --length 4 --file four.bin)
+          echo "$out"
+          echo "$out" | q "canon-bytes-v1"
+          # The positional address IS the file, read as one number.
+          echo "$out" | q "deadbeef"
+          $exe read --alphabet bytes256 --length 4 --mode positional deadbeef --out back.bin > /dev/null
+          cmp four.bin back.bin
+          # A file-sized address is far too long for a command line, so it can come from a file.
+          python -c "d=open('$exe','rb').read()[:20000]; open('big.bin','wb').write(d); open('big.hex','w').write(d.hex())"
+          $exe read --alphabet bytes256 --length 20000 --mode positional --address-file big.hex --out back2.bin > /dev/null
+          cmp big.bin back2.bin
+          # Nothing is folded away: a file of every byte value comes back unchanged.
+          python -c "open('all.bin','wb').write(bytes(range(256)))"
+          python -c "open('all.hex','w').write(bytes(range(256)).hex())"
+          $exe read --alphabet bytes256 --length 256 --mode positional --address-file all.hex --out allback.bin > /dev/null
+          cmp all.bin allback.bin
+          # ...and the address it prints for that file is exactly that hex dump.
+          $exe warp --alphabet bytes256 --length 256 --file all.bin | tr -d '\r' | q "000102030405"
+
+      - name: Sound itself is a set of the audio line, and comes back as the same WAV
+        run: |
+          q() { grep -c "$@" > /dev/null; }
+          exe=build/sieve
+          [ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
+          # A quarter second of a 440 Hz tone, 16-bit stereo at 22050 a second, written here.
+          python -c "import math,struct; n=5512; d=b''.join(struct.pack('<hh', int(12000*math.sin(2*math.pi*440*i/22050)), int(6000*math.sin(2*math.pi*660*i/22050))) for i in range(n)); open('tone.wav','wb').write(b'RIFF'+struct.pack('<I',36+len(d))+b'WAVEfmt '+struct.pack('<IHHIIHH',16,1,2,22050,22050*4,4,16)+b'data'+struct.pack('<I',len(d))+d)"
+          # Mixed to one channel, resampled to 8000 a second and rounded to 8 bits: one unit of a second.
+          out=$($exe warp --line audio --note-set pcm --mode positional --file tone.wav)
+          echo "$out" | tr -d '\r' | q "canon-pcm-v1: 5512 sample(s) per channel at 22050 a second, 2 channel(s) -> pcm/8000/8/C1, 1 unit(s)"
+          echo "$out" | tr -d '\r' | q "mixed to one"
+          echo "$out" | tr -d '\r' | awk '$1 == "positional" {print $2}' > a.hex
+          # Read back as a WAV file, which warps to the same address.
+          $exe read --line audio --note-set pcm --mode positional --address-file a.hex --out back.wav > /dev/null
+          $exe warp --line audio --note-set pcm --mode positional --file back.wav | tr -d '\r' | awk '$1 == "positional" {print $2}' > b.hex
+          cmp a.hex b.hex
+          # Any depth and channels: 12 bits, three channels (the last repeated), at its own rate.
+          $exe warp --line audio --note-set pcm --rate 22050 --bits 12 --channels 3 --length 6000 --mode positional --file tone.wav | tr -d '\r' | awk '$1 == "positional" {print $2}' > c.hex
+          $exe read --line audio --note-set pcm --rate 22050 --bits 12 --channels 3 --length 6000 --mode positional --address-file c.hex --out back3.wav > /dev/null
+          $exe warp --line audio --note-set pcm --rate 22050 --bits 12 --channels 3 --length 6000 --mode positional --file back3.wav | tr -d '\r' | awk '$1 == "positional" {print $2}' | cmp - c.hex
+          # Notes stay notes: notes104 is still the default, and pcm options are refused there.
+          $exe info --line audio | tr -d '\r' | q "notes104"
+          if $exe info --line audio --rate 8000 > /dev/null 2>&1; then exit 1; fi
+          # Saving as a format that needs ffmpeg says so when there is none.
+          if out=$($exe read --ffmpeg no-such-ffmpeg --line audio --note-set pcm --mode positional --address-file a.hex --out x.mp3 2>&1); then exit 1; fi
+          echo "$out" | tr -d '\r' | q "there is no ffmpeg at"
+          # Its filters judge each channel; the three of them merge and count exactly at 800 samples.
+          printf '[audio]\nmode = mark\nfilters = sound-peak-v1, sound-step-v1, silence-run-v1\n[audio.silence-run-v1]\nsamples = 800\n' > sound.ini
+          $exe filters --line audio --note-set pcm --length 800 --filters sound.ini | tr -d '\r' | q "keeps 10^-102.20"
+          # Open-ended notes (notes3): ticks and levels, and a MIDI file that reads back as the same music.
+          o="--line audio --note-set notes3 --voices 2 --length 4 --instruments 0,40 --mode positional"
+          $exe warp $o "C#4:3!5 R:1 D4:16!8 E4:1!1 // C2:16!3 R:2 G9:1!8 C-1:3!2" | tr -d '\r' | q "C#4:3!5 R:1 D4:16!8 E4:1!1 // C2:16!3 R:2 G9:1!8 C-1:3!2"
+          n3=$($exe warp $o "C#4:3!5 R:1 D4:16!8 E4:1!1 // C2:16!3 R:2 G9:1!8 C-1:3!2" | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          $exe read $o --out n3.mid "$n3" > /dev/null
+          test "$($exe warp $o --file n3.mid | tr -d '\r' | awk '$1 == "positional" {print $2}')" = "$n3"
+          printf '[audio]\nmode = mark\nfilters = sound-peak-v1\n' > peak.ini
+          $exe filters --line audio --note-set pcm --bits 16 --channels 2 --filters peak.ini | tr -d '\r' | q "keeps 10^-732.05"
+
+      - name: Other picture and video formats come in through ffmpeg
+        run: |
+          q() { grep -c "$@" > /dev/null; }
+          exe=build/sieve
+          [ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
+          # Without an ffmpeg, a format stb_image does not read says where to give one.
+          printf '\x1aE\xdf\xa3 not really a video' > fake.webm
+          if out=$($exe warp --ffmpeg no-such-ffmpeg --line video --file fake.webm 2>&1); then exit 1; fi
+          echo "$out" | tr -d '\r' | q "there is no ffmpeg at"
+          if [ "$RUNNER_OS" = "Linux" ] && ! command -v ffmpeg > /dev/null; then sudo apt-get update && sudo apt-get install -y ffmpeg || true; fi
+          if ! command -v ffmpeg > /dev/null; then echo "no ffmpeg on this runner: the rest is checked where there is one"; exit 0; fi
+          ffmpeg -hide_banner -version | head -1
+          # A lossless video's frame lands exactly where the same frame as a PNG (read by stb_image) does.
+          ffmpeg -v error -y -f lavfi -i testsrc=size=16x12:rate=10 -frames:v 1 -pix_fmt rgb24 f.png
+          ffmpeg -v error -y -i f.png -c:v ffv1 -pix_fmt bgr0 f.mkv
+          a=$($exe warp --line image --width 16 --height 12 --palette rgb24 --mode positional --file f.png | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          b=$($exe warp --line image --width 16 --height 12 --palette rgb24 --mode positional --file f.mkv | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          test -n "$a" && test "$a" = "$b"
+          # A video in a folder whose name needs quoting: every stored frame, in order, up to --frames.
+          mkdir -p "it's a folder"
+          ffmpeg -v error -y -f lavfi -i testsrc=size=64x48:rate=10 -frames:v 12 -c:v ffv1 "it's a folder/clip.mkv"
+          $exe warp --line video --frames 16 --file "it's a folder/clip.mkv" | tr -d '\r' | q "12 frame(s)"
+          $exe warp --line video --frames 8 --file "it's a folder/clip.mkv" | tr -d '\r' | q "stopped after 8 frame(s)"
+          # The same file gives the same address every time.
+          c=$($exe warp --line video --frames 8 --mode positional --file "it's a folder/clip.mkv" | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          d=$($exe warp --line video --frames 8 --mode positional --file "it's a folder/clip.mkv" | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          test -n "$c" && test "$c" = "$d"
+          # Sound in any format ffmpeg reads: FLAC lands where the same sound as WAV does.
+          ffmpeg -v error -y -f lavfi -i "sine=frequency=440:sample_rate=16000:duration=0.2" -c:a pcm_s16le s.wav
+          ffmpeg -v error -y -i s.wav s.flac
+          e=$($exe warp --line audio --note-set pcm --mode positional --file s.wav | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          f=$($exe warp --line audio --note-set pcm --mode positional --file s.flac | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          test -n "$e" && test "$e" = "$f"
+          # And saved through ffmpeg: a lossless format comes back to the same address.
+          echo "$e" > e.hex
+          $exe read --line audio --note-set pcm --mode positional --address-file e.hex --out back.flac > /dev/null
+          $exe warp --line audio --note-set pcm --mode positional --file back.flac | tr -d '\r' | awk '$1 == "positional" {print $2}' | cmp - e.hex
+          $exe read --line video --mode positional --out v.gif 00ff00ff00ff0f00ff > /dev/null
+          $exe warp --line video --mode positional --file v.gif | tr -d '\r' | q "00ff00ff00ff0f00ff"
+
+      - name: Books bind, unbind and keep their id in every ordering
+        run: |
+          # q PATTERN: like grep -q, but reads all its input, so the command before it never
+          # gets SIGPIPE (the steps run with pipefail).
+          q() { grep -c "$@" > /dev/null; }
+          exe=build/sieve
+          [ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
+          T=tests/example_book_source.txt
+          # The committed example reads back to its text, and rebinding its source gives the same record.
+          $exe unbind tests/example_book_v1.book --pages unbound.txt > /dev/null
+          cmp unbound.txt tests/example_book_v1.pages.txt
+          $exe bind --title "A Tale of Two Cities" --cover tests/example_book_cover.png --pages $T --length 400 --mode guided --out again.book
+          cmp again.book tests/example_book_v1.book
+          id=$(awk '$1 == "id" {print $2}' tests/example_book_v1.book)
+          for m in positional scrambled; do
+            $exe bind --title "A Tale of Two Cities" --cover tests/example_book_cover.png --pages $T --length 400 --mode $m --key other --out $m.book
+            test "$(awk '$1 == "id" {print $2}' $m.book)" = "$id"
+            $exe unbind $m.book --pages $m.txt > /dev/null
+            cmp $m.txt tests/example_book_v1.pages.txt
+          done
+          # A changed address is refused.
+          python - <<'PY'
+          l = open("scrambled.book").read().split("\n")
+          i = l.index("end") - 1
+          l[i] = l[i][:5] + ("0" if l[i][5] != "0" else "1") + l[i][6:]
+          open("tampered.book", "w").write("\n".join(l))
+          PY
+          if $exe unbind tampered.book > /dev/null 2>&1; then exit 1; fi
+          # Book filters: the title as one page, the pages as one continuous text, so the word cut
+          # by each page break is judged whole and the real book survives.
+          printf '[books]\nmode = compact\n[books.title]\nfilters = title-v1\n[books.pages]\nfilters = words-v2\n' > books.ini
+          out=$($exe check --book tests/example_book_v1.book --filters books.ini | tr -d '\r')
+          echo "$out" | tail -4
+          echo "$out" | q "^book: passes, survivor number 18219131502697305122077923717432538631140150329658"
+          echo "$out" | q "scrambled  19d1fa4fa0d76f9f2d6b01ef5aa4bfc9959be451"
+          $exe filters --line books --length 400 --book-pages 3 --filters books.ini | tr -d '\r' | q "^survivors    2186621054492622425964839597190822589524897221183860035461407467124"
+          # Tracks and movies keep records too (sieve-book-v2 where an audio section names a note set
+          # other than notes104): bind makes one from a melody, read --record makes the same one
+          # from the item's address, and unbind gives the units back joined, as one MIDI file.
+          T="--note-set notes2 --voices 2 --length 4 --track-units 3"
+          printf 'C4q E4q G4q C5q D5q E5q F5q G5q // C3w G3w C3w\n' > tune.txt
+          out=$($exe bind --line tracks $T --file tune.txt --title "a small tune" --out tune.track 2>/dev/null | tr -d '\r')
+          echo "$out"
+          head -1 tune.track | q "^sieve-book-v2$"
+          q "^notes notes2/C3-C6/seEqQhHw/V2$" tune.track
+          a=$(echo "$out" | awk '$1 == "address" {print $2}')
+          $exe read --line tracks $T --mode scrambled "$a" --record back.track > /dev/null 2>&1
+          cmp tune.track back.track
+          $exe unbind tune.track --units tune.mid 2> /dev/null | tr -d '\r' | q "^a small tune"
+          head -c 4 tune.mid | q MThd
+          # A record of notes104 stays sieve-book-v1, readable by every earlier Sieve.
+          printf 'C4q E4q G4q C5q D5q E5q\n' > tune1.txt
+          $exe bind --line tracks --length 4 --track-units 2 --file tune1.txt --out plain.track > /dev/null 2>&1
+          head -1 plain.track | q "^sieve-book-v1$"
+
+      - name: Hallway renders, and its doors keep the corridor position (Linux, no display)
+        if: runner.os == 'Linux'
+        env:
+          SDL_VIDEO_DRIVER: offscreen
+          SDL_RENDER_DRIVER: software
+        run: |
+          # q PATTERN: like grep -q, but reads all its input, so the command before it never
+          # gets SIGPIPE (the steps run with pipefail).
+          q() { grep -c "$@" > /dev/null; }
+          H=build/hallway
+          W="it was the best of times"
+          book() { grep -o 'first book [0-9a-f.]*' | tail -1; }
+          $H --screenshot hallway.png --size 640x360
+          test -s hallway.png
+          # The metrics list (hallway --metrics, no window): every line under the reference filters,
+          # as the setup menu counts them; the binary line's binary-kind-v1 removes 99.9954%.
+          $H --metrics metrics.txt --filters data/metrics/reference-filters.ini > /dev/null
+          q "^Binary : 99.9954%" metrics.txt
+          q "^Models : 99.999999999999...% *( Kept : 10^-21.47 )" metrics.txt
+          [ "$(grep -c ' : .*Kept : ' metrics.txt)" = 11 ]
+          # ...and what each ordering saves: nothing in positional or scrambled order, what the
+          # filters remove off every survivor in compact order, and the guided ordering's bound and
+          # what it did on the reference text (Dickens, which the model was not trained on).
+          q "^Positional and scrambled : 0 bits, on every line" metrics.txt
+          q "^Binary : compact [0-9.]* bits off every survivor" metrics.txt
+          q "^Pages  : guided: no minimum" metrics.txt
+          q "^Pages  : guided on reference-text.txt (SHA-256 [0-9a-f]*\.\.\., [0-9]* pages): [0-9.]* bits a page" metrics.txt
+          # The model Sieve trained, against its own file and the compressors (whose sizes depend on
+          # the zlib and liblzma linked, so only the address and the file are pinned).
+          q "^universalbibliothek (ai/L1/H16/A2/F64/B4/V256/key=sieve/aispace-v1" metrics.txt
+          q "^  trained: address 32,768; file 272,576 " metrics.txt
+          q "^  random : address 32,768; file 272,576 " metrics.txt
+          here=$($H --warp "$W" --walk "0,0" --screenshot a.png | book)
+          next=$($H --warp "$W" --tile 1 --walk "0,0" --screenshot b.png | book)
+          # Through a door and straight back: exactly where you were.
+          out=$($H --warp "$W" --pose 0,7,-90,0 --walk "-2.3,0;2.5,0" --screenshot door.png)
+          echo "$out"
+          echo "$out" | sed -n 1p | q "through the door into the BOOKS line"
+          test "$(echo "$out" | tail -2 | book)" = "$here"
+          # A door keeps your angle: 36.25% along pages is 36.25% along books; one tile along
+          # there and back through the door is still 36.25% (to the readout's ten places), on pages.
+          out=$($H --goto "36.25%" --pose 0,7,-90,0 --walk "-2.3,0;-0.8,0;0,8;1.5,0" --screenshot loop.png)
+          echo "$out"
+          echo "$out" | sed -n 1p | q "BOOKS line.* 36.2500000000% along"
+          echo "$out" | tail -2 | sed -n 1p | q "PAGES line.* 36.2500000000% along"
+          # Guided order: M cycles to it and - zooms out.
+          $H --warp "$W" --press "M,M,-" --screenshot keys.png | tail -2 | sed -n 1p | q "PAGES line, guided zoom 57"
+          # The address navigator: X opens the whole address, Home chooses its first digit, Up turns
+          # it (carrying and wrapping), and ENTER goes there, far from where the walk started.
+          # Its random buttons: R draws a place on this line, Shift+R a line too; ENTER goes there.
+          $H --no-menu --press "X,R,Return" --screenshot nav-random.png | tr -d '\r' | tail -2 | sed -n 1p | q "^PAGES line, positional"
+          $H --no-menu --press "X,Shift+R" --screenshot nav-random-any.png | q "saved nav-random-any.png"
+          # sieve-install, unattended: the fixture put back from its installer (v4, packed),
+          # identical; a second time over it is refused (exit 1), as is a damaged installer. Then
+          # the fixture with a program and a list made from another's lines in it, packed, too.
+          build/sieve locate tests/manifest_fixture --installer fx.sieve > /dev/null
+          rm -rf fx_installed
+          build/sieve-install fx.sieve --to fx_installed --yes --screenshot installer.bmp
+          diff -r tests/manifest_fixture fx_installed
+          test -s installer.bmp
+          if build/sieve-install fx.sieve --to fx_installed --yes; then exit 1; fi
+          head -c 100 fx.sieve > broken.sieve
+          if build/sieve-install broken.sieve --to fx_broken --yes; then exit 1; fi
+          test ! -e fx_broken
+          rm -rf fx4 fx4_installed && cp -r tests/manifest_fixture fx4 && cp build/sieve fx4/program
+          seq 1 20000 > fx4/all.txt && awk 'NR % 3 == 0' fx4/all.txt > fx4/third.txt
+          build/sieve locate fx4 --installer fx4.sieve 2>&1 | grep -c "1 derived from another's lines" > /dev/null
+          build/sieve-install fx4.sieve --to fx4_installed --yes
+          diff -r fx4 fx4_installed
+          # An installer carrying one 7z: sieve-install unpacks it into a folder named after the file,
+          # its one top folder left out, so the fixture comes back as it was; the locator's own
+          # install gives back the archive itself, byte for byte.
+          build/sieve locate tests/manifest_fixture.7z --installer fx7.sieve > /dev/null
+          rm -rf fx7 fx7raw
+          build/sieve-install fx7.sieve --to fx7 --yes
+          diff -r tests/manifest_fixture fx7
+          build/sieve install fx7.sieve --to fx7raw > /dev/null
+          cmp tests/manifest_fixture.7z fx7raw/manifest_fixture.7z
+          # A release's layout: sieve and sieve-install in tools/ below the data folders. sieve there
+          # finds the dictionaries and models in the folder above, and still makes installer
+          # programs from the sieve-install beside it.
+          rm -rf layout && mkdir -p layout/tools
+          cp build/sieve build/sieve-install layout/tools/ && cp -r build/dictionaries build/models layout/
+          (cd layout/tools && ./sieve dicts | grep -q "layout/dictionaries/dictionaries.tsv")
+          (cd layout/tools && ./sieve models | grep -q "layout/models/models.tsv")
+          layout/tools/sieve locate tests/manifest_fixture --program layout-installer > /dev/null
+          rm -rf fx_layout && ./layout-installer --to fx_layout --yes && diff -r tests/manifest_fixture fx_layout
+          # An installer program: sieve-install with the installer attached, run on its own, and
+          # read by sieve install; exactly the program, the installer and a 24-byte trailer; and
+          # made from a program that already has one attached, the old one replaced, not added to.
+          build/sieve locate tests/manifest_fixture --program fx-installer > /dev/null
+          rm -rf fx_prog fx_prog2
+          ./fx-installer --to fx_prog --yes
+          diff -r tests/manifest_fixture fx_prog
+          build/sieve install fx-installer --to fx_prog2 > /dev/null
+          diff -r tests/manifest_fixture fx_prog2
+          # The File Locator's Install from an installer, in the hallway: the same folder again.
+          rm -rf fx_gui
+          $H --no-menu --install fx.sieve --install-to fx_gui --screenshot locinstall.png | q "saved locinstall.png"
+          diff -r tests/manifest_fixture fx_gui
+          test "$(wc -c < fx-installer)" = "$(( $(wc -c < build/sieve-install) + $(wc -c < fx.sieve) + 24 ))"
+          rm -rf again && mkdir again && cp build/sieve again/ && cp fx-installer again/sieve-install
+          again/sieve locate tests/manifest_fixture --program fx-again > /dev/null
+          cmp fx-installer fx-again
+          # The File Locator (pause menu): a folder measured, and a file walked to on the binary line.
+          $H --no-menu --locate tests/manifest_fixture --screenshot locate.png | q "saved locate.png"
+          $H --no-menu --binary-length 64 --locate tests/manifest_fixture/a.txt --press "Return" --screenshot locate2.png | tail -2 | sed -n 1p | tee l2.txt | q "^BINARY line"
+          # Its kind, read from its first bytes.
+          grep -q " TXT " l2.txt
+          # Worlds in the hallway: the world at an address the tool composed, saved with F, is the
+          # tool's .obj of it, byte for byte; the setup menu draws the WORLDS rows and column.
+          wa=$(build/sieve world --compose "1:1.2.3.4|2:7.0.7.23" --title "a small world" | tr -d '\r' | awk '$1 == "positional" {print $2}')
+          $H --no-menu --line worlds --goto "$wa" --save-item hw.obj --screenshot hw.png > /dev/null
+          build/sieve world --read "$wa" --out hw-ref.obj > /dev/null
+          cmp hw.obj hw-ref.obj
+          $H --no-menu --line worlds --walk "0,0" --screenshot worlds.png | sed -n 1p | q "^WORLDS line, positional"
+          # The AI line in the hallway: the model at a bearing, saved with F, is the tool's file of it,
+          # byte for byte; talked to, it answers; the setup menu draws the AI rows and its broken bar.
+          build/sieve ai --bearing 137 --mode scrambled --out ai137 > /dev/null
+          aa=$(build/sieve ai --warp ai137 --address-out ai137.hex --mode scrambled > /dev/null; tr -d '\r\n' < ai137.hex)
+          $H --no-menu --line ai --mode scrambled --goto "$aa" --save-item hai.safetensors --screenshot hai.png > /dev/null
+          cmp hai.safetensors ai137/model.safetensors
+          $H --no-menu --line ai --walk "0,0" --take --talk "Hello there" --screenshot ai-talk.png | tr -d '\r' | tee ai-talk.txt | sed -n 1p | q "^AI line, positional"
+          q "^you: Hello there" ai-talk.txt
+          q "^it: " ai-talk.txt
+          # The chat window (IDEAS §19.13): a file given to the model, two figures drawn with the shipped
+          # picture model (its pictures 1 and 2, as `sieve diffuse --make` makes them), and something
+          # said; GO TO IT on a figure holds it on the image line, J on a text file opens it on PAGES.
+          $H --no-menu --line ai --walk "0,0" --take --chat --chat-attach tests/training_corpus.txt --chat-draw 2 --talk "Hello there" --training-dir data/training --screenshot chat.png | tr -d '\r' > chat.txt
+          q "^file: training_corpus.txt (418 bytes)" chat.txt
+          q "^figure 1 by figures-2x32: fff0fc2f0de8f01c3fdbe6fff" chat.txt
+          q "^figure 2 by figures-2x32: fff29e4e04fbf01b3e05e9fff" chat.txt
+          q "^you: Hello there" chat.txt
+          # Cards show what a file is: a picture's thumbnail (the vault looking at it too), a text's first
+          # lines (one cut mid-character among them), anything else its first bytes.
+          head -c 30 data/anchors/public-domain/universalbibliothek.txt > cut.txt && printf '\303' >> cut.txt
+          $H --no-menu --line ai --walk "0,0" --take --chat --chat-attach "data/anchors/public-domain/Vitruvian.jpg;cut.txt;data/anchors/public-domain/universalbibliothek.txt;data/anchors/public-domain/hurrian-hymn-6.mid" --training-dir data/training --screenshot chat-cards.png | tr -d '\r' > cards.txt
+          q "^file: Vitruvian.jpg (207,500 bytes)" cards.txt
+          q "^file: cut.txt (31 bytes)" cards.txt
+          q "^file: hurrian-hymn-6.mid (1,377 bytes)" cards.txt
+          # The conversation saved as text (/log PATH, or Ctrl+L into chat-logs): the model it was
+          # with, by its address, then who said what, each card a line.
+          rm -f chatlog.txt
+          $H --no-menu --line ai --walk "0,0" --take --chat --chat-attach tests/training_corpus.txt --talk "/log chatlog.txt" --training-dir data/training --screenshot chat-log.png > /dev/null
+          q "^Sieve .* chat log, " chatlog.txt
+          q "^model in hand, its address ([0-9]* hex digits): [0-9a-f]" chatlog.txt
+          q "^  \[file\] training_corpus.txt, TXT, " chatlog.txt
+          q "^you: /log chatlog.txt" chatlog.txt
+          # CHAT with a model file (the setup menu's AI rows; here --text-model): the tiny model checked
+          # against the oracle above answers, given a file with the message; and DRAW with a chosen picture
+          # model. The setup menu's rows save them in sieve-hallway.ini's [models].
+          $H --no-menu --line ai --walk "0,0" --take --chat --text-model tinymodel --chat-attach tests/training_corpus.txt --talk "Hello there" --training-dir data/training --screenshot chat-file.png | tr -d '\r' > chatfile.txt
+          q "^you: Hello there" chatfile.txt
+          q "^it: " chatfile.txt
+          # What a model given as a file is told (docs/SYSTEM-PROMPT.md): sieve-system-v1 word for word
+          # (the tiny model has too few positions to be given it, and is told the short one), then the place.
+          $H --no-menu --line ai --walk "0,0" --take --chat --text-model tinymodel --print-system-prompt --training-dir data/training --screenshot prompt.png | tr -d '\r' > prompt.txt
+          sed -n '/^You are inside the Sieve of Potentia/,$p' prompt.txt | head -n "$(wc -l < data/prompts/sieve-system-v1.txt)" | cmp - data/prompts/sieve-system-v1.txt
+          q "^- Line: the AI line (ai/L1/H16/A2/" prompt.txt
+          q "^- You: the model in the folder tinymodel, given as a file$" prompt.txt
+          # CHAIN (SPECIFICATIONS §12.0h): the tab edited by keys and saved as sieve-chain-v1, and chains run
+          # with /chain. Pictures and melodies are integer arithmetic, so a chain of them makes the same
+          # units everywhere; with text models (floating point) each stage is checked to have run.
+          # The training folder's models, in the tab's order: hand, universalbibliothek, figures-2x32,
+          # melodies-2x64, type-2x32; the default chain is the text run, then every picture and melody
+          # model. Down, N, then Right three times: a copy of figures-2x32 stepped round to hand.
+          $H --no-menu --line ai --walk "0,0" --take --chain --chain-press "Down,N,Right,Right,Right" --chain-save chain1.chain --training-dir data/training --screenshot chain-tab.png | q "saved chain-tab.png"
+          printf 'sieve-chain-v1\nrun universalbibliothek\ndraw figures-2x32\nhand\ndraw melodies-2x64\ndraw type-2x32\n' | cmp - chain1.chain
+          $H --no-menu --line ai --walk "0,0" --take --chat --chain-file chain1.chain --talk "/chain the library of babel" --training-dir data/training --screenshot chain-run.png | tr -d '\r' > chainrun.txt
+          for n in "1/5, text run universalbibliothek: " "2/5, figures-2x32: " "3/5, the model in hand: " "4/5, melodies-2x64: " "5/5, type-2x32: "; do q "^chain $n" chainrun.txt; done
+          printf 'sieve-chain-v1\ndraw figures-2x32\ndraw melodies-2x64\ndraw figures-2x32\n' > pm.chain
+          $H --no-menu --line ai --walk "0,0" --take --chat --chain-file pm.chain --talk "/chain hello" --training-dir data/training --screenshot chain-pm.png | tr -d '\r' > chainpm.txt
+          q "^chain 1/3, figures-2x32: fff83c0780e2f83ec70b81fff$" chainpm.txt
+          q "^chain 2/3, melodies-2x64: 758454efa87a3b3fcbb9dbf5afc$" chainpm.txt
+          q "^chain 3/3, figures-2x32: fff4bc570790ba3e5f034afff$" chainpm.txt
+          $H --no-menu --line ai --walk "0,0" --take --chat --picture-model data/training/figures-2x32 --chat-draw 1 --training-dir data/training --screenshot chat-pm.png | tr -d '\r' | q "^figure 1 by figures-2x32: fff0fc2f0de8f01c3fdbe6fff"
+          printf '[models]\ntext_model =\npicture_model =\n' > models.ini
+          downs=$(python -c "print(','.join(['Down']*46))")
+          # Empty means the first trained run (figures-2x32); Right steps to the next (melodies-2x64), Left back.
+          $H --menu --settings models.ini --training-dir data/training --press "$downs,Right" --screenshot menu-models.png | q "saved menu-models.png"
+          q "^picture_model = .*melodies-2x64" models.ini
+          $H --menu --settings models.ini --training-dir data/training --press "$downs,Left" --screenshot menu-models.png | q "saved menu-models.png"
+          q "^picture_model = .*figures-2x32" models.ini
+          # Melodies in CHAT: a melody model's (the same addresses as --make), a random melody and picture
+          # (/random), and GO TO IT on a melody holds it on AUDIO.
+          $H --no-menu --line ai --walk "0,0" --take --chat --picture-model data/training/melodies-2x64 --chat-draw 1 --talk "/random melody" --training-dir data/training --screenshot chat-mel.png | tr -d '\r' > chatmel.txt
+          q "^melody 1 by melodies-2x64: 8ac6f76023e45b65ccb9d8e98b4" chatmel.txt
+          q "^a random melody: " chatmel.txt
+          $H --no-menu --line ai --walk "0,0" --take --chat --talk "/random picture" --training-dir data/training --screenshot chat-rand.png | tr -d '\r' | q "^a random picture: "
+          $H --no-menu --line ai --walk "0,0" --take --chat --picture-model data/training/melodies-2x64 --chat-draw 1 --chat-press "Ctrl+G" --training-dir data/training --screenshot chat-mgo.png | tr -d '\r' | q "^AUDIO line, .*on the audio line, in hand"
+          $H --no-menu --line ai --walk "0,0" --take --chat --chat-draw 1 --chat-press "Ctrl+G" --training-dir data/training --screenshot chat-go.png | tr -d '\r' | q "^IMAGE line, .*the figure, on the image line, in hand"
+          $H --no-menu --line ai --walk "0,0" --take --chat --chat-attach tests/training_corpus.txt --chat-press "Ctrl+J" --training-dir data/training --screenshot chat-j.png | tr -d '\r' | q "^PAGES line, .*a TXT file, opened on the PAGES line"
+          downs=$(python -c "print(','.join(['Down']*41))")
+          $H --menu --press "$downs" --screenshot menu-ai.png | q "saved menu-ai.png"
+          # The AI Training Harness (main menu): the run shipped with Sieve, trained again, comes out the
+          # same; a run recorded there from a folder, its second file moved first and read in order, is
+          # trained and its result written; and GO TO IT stands on the AI line with the model in hand.
+          $H --harness --training-dir data/training --script "Return" --screenshot harness.png | tr -d '\r' | q "^harness: REPRODUCED EXACTLY"
+          mkdir -p hruns corp && cp tests/training_corpus.txt corp/a.txt && head -c 150 tests/training_corpus.txt | tr 'a-z' 'b-za' > corp/b.txt
+          $H --harness --training-dir hruns --script "N,=corp,Return,Down,Shift+Up,M,Return" --screenshot harness-new.png | tr -d '\r' | q "^harness: TRAINED"
+          [ -f hruns/corp/result.txt ]
+          q "^reading = in-order" hruns/corp/training.ini
+          [ "$(grep '^file = ' hruns/corp/training.ini | head -1)" = "file = corpus/b.txt" ]
+          # Its settings: the width one step up (two heads' worth, 16 to 20), the learning rate
+          # following it, as suggested (0.008 / 20, rounded down: 0.0002).
+          mkdir -p hruns2
+          $H --harness --training-dir hruns2 --script "N,=corp,Return,Tab,Down,Right,Return" --screenshot harness-set.png | tr -d '\r' | q "^harness: TRAINED"
+          q "^width = 20" hruns2/corp/training.ini
+          q "^learning-rate = 0.0002" hruns2/corp/training.ini
+          $H --harness --training-dir hruns --script "g" --screenshot harness-go.png | tr -d '\r' | q "the model the run trained, in hand"
+          # The AI line's filters in the hallway: compact (weight-rows-v1), its survivors closed up; and
+          # with canonical-model-v1 hiding the rest, GO TO IT stands on the model's canonical form.
+          printf '[ai]\nmode = compact\nfilters = weight-rows-v1\n' > ai-rows.ini
+          printf '[ai]\nmode = hide\nfilters = canonical-model-v1\n' > ai-canon.ini
+          $H --no-menu --line ai --filters ai-rows.ini --walk "0,0" --screenshot ai-compact.png | tr -d '\r' | sed -n 1p | q "^AI line, positional, filters: 1 compact"
+          $H --harness --training-dir data/training --filters ai-canon.ini --script "g" --screenshot harness-go-canon.png | tr -d '\r' | q "as its class's canonical form"
+          $H --menu --line ai --filters ai-rows.ini --settle 200 --press "F" --screenshot menu-ai-filters.png | q "saved menu-ai-filters.png"
+          $H --menu --line ai --press "F,Down,Left" --settle 100 --screenshot menu-ai-judge-only.png | q "saved menu-ai-judge-only.png"
+          printf '[ai]\nmode = compact\nfilters = near-model-v1\n' > ai-near.ini
+          $H --no-menu --line ai --filters ai-near.ini --walk "0,0" --screenshot ai-near.png | tr -d '\r' | sed -n 1p | q "within 2 digits of universalbibliothek's model (7548948481 survivors)"
+          # From the main menu: the same locator; Go to it builds the hallway and walks to the file.
+          $H --main-menu --locate tests/manifest_fixture/a.txt --press "Return" --screenshot locate-menu.png | q "file locator (main menu): open, Go to it offered"
+          # Its search for shorter addresses, given a time for the run (the file's follows), and the
+          # keys that move them: [ and ] a file, Shift the run.
+          $H --main-menu --locate tests/manifest_fixture --tailored --search-total 2 --screenshot locate-search.png | q "file locator (main menu)"
+          $H --main-menu --locate tests/manifest_fixture --press "],Shift+]" --screenshot locate-search-keys.png | q "file locator (main menu)"
+          # The demonstration (IDEAS 16.9): every dimension's item at each whole degree, as one
+          # .sieve, the same on every machine; installing it gives every file back, and a bearing
+          # typed in the navigator (X, Tab) is the same item again.
+          $H --no-menu --sample-degrees degrees --screenshot deg.png | tee deg.txt | q "^sample: 3960 items"
+          $H --no-menu --sample-degrees degrees2 --sample-out degrees2.sieve --screenshot deg2.png > /dev/null
+          diff -r degrees degrees2
+          build/sieve install degrees.sieve --to deg_inst > /dev/null
+          diff -r degrees deg_inst
+          # The same as sieve-manifest-v5 (--items): the pages, pictures, films and melodies carried as
+          # their lines and places, made again on installing, every file the same; smaller than v4;
+          # and the small sieve-install, which cannot make them, asks for Sieve instead.
+          build/sieve locate degrees --installer degrees-v5.sieve --items --v5 --manifest degrees-v5.manifest | tr -d '\r' | q "^items     1368 file(s) carried as items"
+          python reference/sieve_ref.py unpack degrees-v5.manifest --items-from degrees --to deg_oracle5 > /dev/null
+          diff -r degrees deg_oracle5
+          [ "$(wc -c < degrees-v5.sieve)" -lt "$(wc -c < degrees2.sieve)" ]
+          build/sieve install degrees-v5.sieve --to deg_inst5 > /dev/null
+          diff -r degrees deg_inst5
+          if build/sieve-install degrees-v5.sieve --to deg_inst5b --yes > si.txt 2>&1; then exit 1; fi
+          q "open them with Sieve" si.txt
+          # sieve-manifest-v6 (--items --v6): each item's place as raw bytes, the places carried raw or as
+          # LZMA2, whichever is smaller, and a line's items carried as places only where that is smaller
+          # than its files packed (the sample's 360 near-identical models' places pack to almost nothing
+          # as LZMA2, so they are carried as places). Smaller than v5; every file back, by sieve install
+          # and by the oracle.
+          build/sieve locate degrees --installer degrees-v6.sieve --items --v6 --manifest degrees-v6.manifest | tr -d '\r' | q "^items     1368 file(s) carried as items of Sieve's lines (.* sieve-manifest-v6"
+          [ "$(wc -c < degrees-v6.sieve)" -lt "$(wc -c < degrees-v5.sieve)" ]
+          build/sieve install degrees-v6.sieve --to deg_inst6 > /dev/null
+          diff -r degrees deg_inst6
+          python reference/sieve_ref.py unpack degrees-v6.manifest --items-from degrees --to deg_oracle6 > /dev/null
+          diff -r degrees deg_oracle6
+          if build/sieve-install degrees-v6.sieve --to deg_inst6b --yes > si6.txt 2>&1; then exit 1; fi
+          q "open them with Sieve" si6.txt
+          # sieve-manifest-v7 (--items now): v6 with what the rest gives left out (every file's own
+          # SHA-256 among it, the tree's covering them all), items listed "i K path", and the listing
+          # carried as LZMA2 where that is smaller (the sample's paths repeat themselves). Far smaller
+          # than v6; every file back, by sieve install and by the oracle; refused by sieve-install as
+          # v5 and v6 are. --file-hashes keeps every file's own SHA-256, and installs the same.
+          build/sieve locate degrees --installer degrees-v7.sieve --items --v15 --manifest degrees-v7.manifest | tr -d '\r' > d7.txt
+          q "^items     1368 file(s) carried as items of Sieve's lines (.* sieve-manifest-v7" d7.txt
+          q "^listing   [0-9]* bytes, carried as LZMA2 in " d7.txt
+          [ "$(wc -c < degrees-v7.sieve)" -lt "$(( $(wc -c < degrees-v6.sieve) / 10 ))" ]
+          build/sieve install degrees-v7.sieve --to deg_inst7 > /dev/null
+          diff -r degrees deg_inst7
+          python reference/sieve_ref.py unpack degrees-v7.manifest --items-from degrees --to deg_oracle7 > /dev/null
+          diff -r degrees deg_oracle7
+          if build/sieve-install degrees-v7.sieve --to deg_inst7b --yes > si7.txt 2>&1; then exit 1; fi
+          q "open them with Sieve" si7.txt
+          # sieve-manifest-v16 (--items now): v7's listing with its head in bytes (the streams' sizes,
+          # the tree's SHA-256 as 32 bytes), the rest of it packed as before: smaller; every file back.
+          build/sieve locate degrees --installer degrees-v16.sieve --items --manifest degrees-v16.manifest | tr -d '\r' > d16.txt
+          q "^items     1368 file(s) carried as items of Sieve's lines (.* sieve-manifest-v16" d16.txt
+          q "^head      [0-9]* bytes in bytes, the listing [0-9]* as text (sieve-manifest-v16)$" d16.txt
+          [ "$(wc -c < degrees-v16.sieve)" -lt "$(wc -c < degrees-v7.sieve)" ]
+          build/sieve install degrees-v16.sieve --to deg_inst16 > /dev/null
+          diff -r degrees deg_inst16
+          python reference/sieve_ref.py unpack degrees-v16.manifest --items-from degrees --to deg_oracle16 > /dev/null
+          diff -r degrees deg_oracle16
+          build/sieve locate degrees --installer degrees-v7h.sieve --items --v15 --file-hashes --manifest degrees-v7h.manifest > /dev/null
+          [ "$(wc -c < degrees-v7h.sieve)" -gt "$(wc -c < degrees-v7.sieve)" ]
+          build/sieve install degrees-v7h.sieve --to deg_inst7h > /dev/null
+          diff -r degrees deg_inst7h
+          python reference/sieve_ref.py unpack degrees-v7h.manifest --items-from degrees --to deg_oracle7h > /dev/null
+          diff -r degrees deg_oracle7h
+          # A model trained by Sieve alone (universalbibliothek): carried as its 4,096 bytes of digits on the
+          # AI line, not its 34,072-byte file, smaller than the file packed (v4); the oracle makes the
+          # model's file again from the place itself, as sieve install does.
+          rm -rf ub_run ub_model ub_one ub_inst ub_oracle && mkdir ub_one
+          build/sieve install data/training/universalbibliothek.sieve --to ub_run > /dev/null
+          grep '^final ' ub_run/result.txt | cut -d' ' -f2 > ub_final.hex
+          build/sieve ai --address-file ub_final.hex --out ub_model > /dev/null
+          cp ub_model/model.safetensors ub_one/
+          build/sieve locate ub_one --installer ub-v4.sieve > /dev/null
+          build/sieve locate ub_one --installer ub-v6.sieve --items --v6 --manifest ub-v6.manifest | tr -d '\r' | q "^items     1 file(s) carried as items of Sieve's lines (34072 bytes, as 4096 bytes of places"
+          [ "$(wc -c < ub-v6.sieve)" -lt "$(wc -c < ub-v4.sieve)" ]
+          build/sieve install ub-v6.sieve --to ub_inst > /dev/null
+          cmp ub_one/model.safetensors ub_inst/model.safetensors
+          python reference/sieve_ref.py unpack ub-v6.manifest --to ub_oracle > /dev/null
+          cmp ub_one/model.safetensors ub_oracle/model.safetensors
+          # v7: the same model's place coded by its tensors' digit histograms (digit-histogram-v1):
+          # trained, its digits are not spread as evenly as chance spreads them, so its code, 4,020
+          # bytes, is shorter than its place, 4,096; and the listing round it shorter (4,253 bytes
+          # against v6's 4,443; nothing here is compressed, so the sizes are exact). Both v7
+          # readers (sieve install, the oracle's own decoding) give the model back.
+          rm -rf ub_inst7 ub_oracle7
+          build/sieve locate ub_one --installer ub-v7.sieve --items --v15 --manifest ub-v7.manifest | tr -d '\r' | q "^items     1 file(s) carried as items of Sieve's lines (34072 bytes, as 4022 bytes of places (4096 raw; digit-histogram-v1 on 1 line(s))"
+          [ "$(wc -c < ub-v7.sieve)" -eq 4253 ] && [ "$(wc -c < ub-v6.sieve)" -eq 4443 ]
+          q "^line 0 digit-histogram-v1 ai/L1/H16/A2/F64/B4/V256/key=sieve/aispace-v1 line=ai$" ub-v7.manifest
+          build/sieve install ub-v7.sieve --to ub_inst7 > /dev/null
+          cmp ub_one/model.safetensors ub_inst7/model.safetensors
+          python reference/sieve_ref.py unpack ub-v7.manifest --to ub_oracle7 > /dev/null
+          cmp ub_one/model.safetensors ub_oracle7/model.safetensors
+          # One file on its own: no root line (it is the file's name), 4,257 bytes for this name.
+          rm -rf ub_named ub_named_inst && mkdir ub_named && cp ub_one/model.safetensors ub_named/sieve-ai-16432c2a3953.safetensors
+          build/sieve locate ub_named/sieve-ai-16432c2a3953.safetensors --installer ub-file.sieve --items --v15 > /dev/null
+          [ "$(wc -c < ub-file.sieve)" -eq 4257 ]
+          build/sieve install ub-file.sieve --to ub_named_inst > /dev/null
+          cmp ub_one/model.safetensors ub_named_inst/sieve-ai-16432c2a3953.safetensors
+          # v16 (--items now): the same, its head in bytes: 4,185 bytes (the folder's, 4,176).
+          rm -rf ub_named16 ub_inst16 ub_oracle16
+          build/sieve locate ub_named/sieve-ai-16432c2a3953.safetensors --installer ub-file16.sieve --items > /dev/null
+          [ "$(wc -c < ub-file16.sieve)" -eq 4185 ]
+          build/sieve install ub-file16.sieve --to ub_named16 > /dev/null
+          cmp ub_one/model.safetensors ub_named16/sieve-ai-16432c2a3953.safetensors
+          build/sieve locate ub_one --installer ub-v16.sieve --items --manifest ub-v16.manifest > /dev/null
+          [ "$(wc -c < ub-v16.sieve)" -eq 4176 ]
+          build/sieve install ub-v16.sieve --to ub_inst16 > /dev/null
+          cmp ub_one/model.safetensors ub_inst16/model.safetensors
+          python reference/sieve_ref.py unpack ub-v16.manifest --to ub_oracle16 > /dev/null
+          cmp ub_one/model.safetensors ub_oracle16/model.safetensors
+          # Pages of 64 characters: the line's options trimmed to what its id does not give (the
+          # alphabet is the default and goes; the length is not and stays), read back by both.
+          rm -rf pg64 pg64_inst pg64_oracle && mkdir pg64
+          python -c "import random; random.seed(3); [open(f'pg64/p{i}.txt','w').write(''.join(random.choice('abcdefghijklmnopqrstuvwxyz ') for _ in range(64))) for i in range(5)]"
+          build/sieve locate pg64 --installer pg64.sieve --items --page-length 64 --manifest pg64.manifest | tr -d '\r' | q "^items     5 file(s) carried as items of Sieve's lines (320 bytes, as 195 bytes of places"
+          [ "$(wc -c < pg64.sieve)" -eq 345 ] # v16 (v7, its listing as text: 422)
+          python -c "import sys; sys.argv = ['x']; sys.path.insert(0, 'reference'); import sieve_ref; sys.stdout.buffer.write(sieve_ref.v7_listing(sieve_ref.v16_text(open('pg64.manifest', 'rb').read())))" | q -a "^line 0 39 lower27/L64/key=sieve/feistel-sha256-v1 length=64 line=text$"
+          build/sieve install pg64.sieve --to pg64_inst > /dev/null
+          diff -r pg64 pg64_inst
+          python reference/sieve_ref.py unpack pg64.manifest --to pg64_oracle > /dev/null
+          diff -r pg64 pg64_oracle
+          # The tightened rope (rope-wave-v1, IDEAS 19.87): a smooth picture in lines and a noisy
+          # sound, made here from a fixed generator. The search finds each one's wave, the code is
+          # smaller than LZMA2's, and the oracle's own decoding gives the file back.
+          rm -rf rope_mix rope_inst rope_oracle rope_si && mkdir rope_mix
+          python -c "
+          import math
+          s = 12345
+          def r():
+              global s
+              s = (s * 1103515245 + 12345) % 2147483648
+              return s >> 16
+          open('rope_mix/picture.raw', 'wb').write(bytes((x * 3 + y * 2 + r() % 5) % 256 for y in range(150) for x in range(200)))
+          b = bytearray()
+          for i in range(8000):
+              b += (int(9000 * math.sin(i * 0.05)) + r() % 81 - 40).to_bytes(2, 'little', signed=True)
+          open('rope_mix/sound.raw', 'wb').write(bytes(b))
+          "
+          cp data/anchors/public-domain/universalbibliothek.txt rope_mix/
+          build/sieve rope rope_mix/picture.raw --out picture.rope | tr -d '\r' > rope.txt
+          q "^wave      L8 W[0-9]* S[1-8] P[0-3] K[01]\( C[12]\)\?\( G1\)\? (rope-wave-v[1-4])" rope.txt
+          q "read back and checked" rope.txt
+          [ "$(wc -c < picture.rope)" -lt "$(sed -n 's/^LZMA2     \([0-9]*\) bytes.*/\1/p' rope.txt)" ]
+          params=$(sed -n 's/^wave      \(.*\) (rope-wave-v[1-4])/\1/p' rope.txt)
+          python reference/sieve_ref.py rope-unpack picture.rope --params "$params" --size 30000 --out picture.back > /dev/null
+          cmp rope_mix/picture.raw picture.back
+          # sieve-manifest-v8: the picture and the sound carried by the rope (the sound's wave at nine
+          # of its cycles, a line of 1,131 values: 10,213 bytes against LZMA2's 10,295), the text by LZMA2,
+          # each the smaller way. Smaller than v7 (no rope); installed by sieve install, the oracle, and
+          # sieve-install itself (no items, so the small installer needs nothing it lacks).
+          build/sieve locate rope_mix --installer rope8.sieve --items --manifest rope8.manifest | tr -d '\r' > rope8.txt
+          q "^rope      2 file(s) pulled tight by rope-wave-v1\( and v2\| to v[34]\)\? (46000 bytes" rope8.txt
+          python -c "import sys; sys.argv = ['x']; sys.path.insert(0, 'reference'); import sieve_ref; sys.stdout.buffer.write(sieve_ref.v7_listing(sieve_ref.v16_text(open('rope8.manifest', 'rb').read())))" | q -a "^f	30000	rope L8 W[0-9]* S[1-8] P[0-3] K[01]\( C[12]\)\?\( G1\)\?	picture.raw$"
+          build/sieve locate rope_mix --installer rope7.sieve --items --v7 > /dev/null
+          [ "$(wc -c < rope8.sieve)" -lt "$(wc -c < rope7.sieve)" ]
+          build/sieve install rope8.sieve --to rope_inst > /dev/null
+          diff -r rope_mix rope_inst
+          python reference/sieve_ref.py unpack rope8.manifest --to rope_oracle > /dev/null
+          diff -r rope_mix rope_oracle
+          build/sieve-install rope8.sieve --to rope_si --yes > /dev/null
+          diff -r rope_mix rope_si
+          # Weighed: the rope is a way to name any file, its code, its parameters and its size paid
+          # for, and its name once for every file that uses it.
+          build/sieve locate rope_mix --weigh 2>&1 | tr -d '\r' > ropeweigh.txt
+          q "^  picture.raw  *[0-9]*  *[0-9]*   rope L8 W[0-9]* S[1-8] P[0-3] K[01]\( C[12]\)\?\( G1\)\?$" ropeweigh.txt
+          q "^  shared: rope, [1-3] file(s): shape 96 bits$" ropeweigh.txt
+          # rope-wave-v2: digits in a table (groups of ten, ten groups a line, Windows line ends, from a
+          # fixed generator), each column's bytes counted apart: the separators' columns cost their
+          # tables alone, the digits about log2(10) bits each. Smaller than LZMA2; the oracle decodes it
+          # its own way; as instructions it is sieve-manifest-v9 (--v9), installed by all three readers.
+          # rope-wave-v4: the search groups the columns (the digits' share one table): smaller again,
+          # sieve-manifest-v12 (no items, so no items line), installed by all three readers; --v11 makes
+          # v11 again, a line longer.
+          rm -rf digits digits_inst digits_oracle digits_si digits_inst9 digits_oracle9 digits_si9 && mkdir digits
+          python -c "
+          s = 271828
+          def r():
+              global s
+              s = (s * 1103515245 + 12345) % 2147483648
+              return (s >> 16) % 10
+          rows = [' '.join(''.join(str(r()) for _ in range(10)) for _ in range(10)) for _ in range(2000)]
+          open('digits/table.txt', 'wb').write(('\\r\\n'.join(rows) + '\\r\\n').encode())
+          "
+          build/sieve rope digits/table.txt --out table.rope | tr -d '\r' > table.txt
+          q "^wave      L8 W111 S1 P[0-3] K[01] C1 G1 (rope-wave-v4)" table.txt
+          [ "$(wc -c < table.rope)" -lt "$(sed -n 's/^LZMA2     \([0-9]*\) bytes.*/\1/p' table.txt)" ]
+          [ "$(wc -c < table.rope)" -lt 89048 ] # the digits' floor, 200,000 x log2(10) / 8 = 83,048, and 6,000 for the columns' tables
+          tparams=$(sed -n 's/^wave      \(.*\) (rope-wave-v4)/\1/p' table.txt)
+          python reference/sieve_ref.py rope-unpack table.rope --params "$tparams" --size 222000 --out table.back > /dev/null
+          cmp digits/table.txt table.back
+          build/sieve rope digits/table.txt --params "${tparams% G1}" --out table2.rope | tr -d '\r' | q "(rope-wave-v2)"
+          [ "$(wc -c < table.rope)" -lt "$(wc -c < table2.rope)" ]
+          python reference/sieve_ref.py rope-unpack table2.rope --params "${tparams% G1}" --size 222000 --out table2.back > /dev/null
+          cmp digits/table.txt table2.back
+          build/sieve locate digits --installer digits.sieve --items --manifest digits.manifest | tr -d '\r' | q "^rope      1 file(s) pulled tight by rope-wave-v1 to v4 (222000 bytes, carried in [0-9]*; sieve-manifest-v16)"
+          build/sieve install digits.sieve --to digits_inst > /dev/null
+          diff -r digits digits_inst
+          python reference/sieve_ref.py unpack digits.manifest --to digits_oracle > /dev/null
+          diff -r digits digits_oracle
+          build/sieve-install digits.sieve --to digits_si --yes > /dev/null
+          diff -r digits digits_si
+          build/sieve locate digits --installer digits11.sieve --items --v11 --manifest digits11.manifest | tr -d '\r' | q "; sieve-manifest-v11)"
+          [ "$(wc -c < digits.sieve)" -lt "$(wc -c < digits11.sieve)" ]
+          rm -rf digits_oracle11 && python reference/sieve_ref.py unpack digits11.manifest --to digits_oracle11 > /dev/null
+          diff -r digits digits_oracle11
+          build/sieve locate digits --installer digits9.sieve --items --v9 --manifest digits9.manifest | tr -d '\r' | q "^rope      1 file(s) pulled tight by rope-wave-v1 and v2 (222000 bytes, carried in [0-9]*; sieve-manifest-v9)"
+          [ "$(wc -c < digits.sieve)" -lt "$(wc -c < digits9.sieve)" ]
+          build/sieve install digits9.sieve --to digits_inst9 > /dev/null
+          diff -r digits digits_inst9
+          python reference/sieve_ref.py unpack digits9.manifest --to digits_oracle9 > /dev/null
+          diff -r digits digits_oracle9
+          build/sieve-install digits9.sieve --to digits_si9 --yes > /dev/null
+          diff -r digits digits_si9
+          # rope-wave-v3: the same kind of table laid out as pi6.txt is (Edward's stress test): lines of
+          # 55 and 54 bytes, a blank line after every twenty and a form feed in every tenth, which shift
+          # any fixed width. Counted by the column in each line, it is near the digits' floor (100,000
+          # digits: 41,525 bytes) and below LZMA2; sieve-manifest-v10 (--v10); all three readers give it
+          # back. rope-wave-v4: the columns grouped, smaller again; rope-wave-v5: the byte above too,
+          # smaller again; sieve-manifest-v15, all three readers.
+          rm -rf lines lines_inst lines_oracle lines_si lines_inst10 lines_oracle10 lines_si10 lines_bad && mkdir lines
+          python -c "
+          s = 314159
+          def r():
+              global s
+              s = (s * 1103515245 + 12345) % 2147483648
+              return (s >> 16) % 10
+          out = []
+          for block in range(100):
+              for line in range(20):
+                  groups = [''.join(str(r()) for _ in range(10)) for _ in range(5)]
+                  out.append(' '.join(groups) + (' ' if line % 2 == 0 else ''))
+              out.append('\\x0c' if block % 10 == 9 else '')
+          open('lines/pi-like.txt', 'wb').write(('\\n'.join(out) + '\\n').encode())
+          "
+          build/sieve rope lines/pi-like.txt --out lines.rope | tr -d '\r' > lines.txt
+          q "^wave      L8 W56 S1 P0 K0 C2 G1 A1 (rope-wave-v5)" lines.txt
+          [ "$(wc -c < lines.rope)" -lt "$(sed -n 's/^LZMA2     \([0-9]*\) bytes.*/\1/p' lines.txt)" ]
+          [ "$(wc -c < lines.rope)" -lt 42525 ] # the digits' floor, 41,525, and 1,000 for the groups and the layout (measured: 41,790)
+          python reference/sieve_ref.py rope-unpack lines.rope --params "L8 W56 S1 P0 K0 C2 G1 A1" --size "$(wc -c < lines/pi-like.txt)" --out lines.back > /dev/null
+          cmp lines/pi-like.txt lines.back
+          # rope-wave-v4 (the columns grouped, no byte above): larger, and the oracle decodes it too.
+          build/sieve rope lines/pi-like.txt --params "L8 W56 S1 P0 K0 C2 G1" --out lines4.rope | tr -d '\r' | q "(rope-wave-v4)"
+          [ "$(wc -c < lines.rope)" -lt "$(wc -c < lines4.rope)" ]
+          [ "$(wc -c < lines4.rope)" -lt 43525 ] # the digits' floor, and 2,000 for the groups' tables and the layout
+          python reference/sieve_ref.py rope-unpack lines4.rope --params "L8 W56 S1 P0 K0 C2 G1" --size "$(wc -c < lines/pi-like.txt)" --out lines4.back > /dev/null
+          cmp lines/pi-like.txt lines4.back
+          build/sieve rope lines/pi-like.txt --params "L8 W56 S1 P0 K0 C2" --out lines3.rope | tr -d '\r' | q "(rope-wave-v3)"
+          [ "$(wc -c < lines.rope)" -lt "$(wc -c < lines3.rope)" ]
+          [ "$(wc -c < lines3.rope)" -lt 45525 ] # the digits' floor, 41,525, and 4,000 for the columns' tables
+          python reference/sieve_ref.py rope-unpack lines3.rope --params "L8 W56 S1 P0 K0 C2" --size "$(wc -c < lines/pi-like.txt)" --out lines3.back > /dev/null
+          cmp lines/pi-like.txt lines3.back
+          build/sieve locate lines --installer lines.sieve --items --manifest lines.manifest | tr -d '\r' | q "; sieve-manifest-v16)"
+          build/sieve install lines.sieve --to lines_inst > /dev/null
+          diff -r lines lines_inst
+          python reference/sieve_ref.py unpack lines.manifest --to lines_oracle > /dev/null
+          diff -r lines lines_oracle
+          build/sieve-install lines.sieve --to lines_si --yes > /dev/null
+          diff -r lines lines_si
+          # --v14 (no rope-wave-v5): v12 here, larger; refused when its v5 way is called v14.
+          build/sieve locate lines --installer lines14.sieve --items --v14 --manifest lines14.manifest | tr -d '\r' | q "; sieve-manifest-v12)"
+          [ "$(wc -c < lines.sieve)" -lt "$(wc -c < lines14.sieve)" ]
+          build/sieve locate lines --installer lines15.sieve --items --v15 --manifest lines15.manifest | tr -d '\r' | q "; sieve-manifest-v15)"
+          [ "$(wc -c < lines.sieve)" -lt "$(wc -c < lines15.sieve)" ]
+          sed '1s/v15/v14/' lines15.manifest > lines-as-v14.manifest
+          if build/sieve install lines-as-v14.manifest --to lines_bad > /dev/null 2>&1; then exit 1; fi
+          if python reference/sieve_ref.py unpack lines-as-v14.manifest --to lines_bad > /dev/null 2>&1; then exit 1; fi
+          test ! -e lines_bad
+          build/sieve locate lines --installer lines10.sieve --items --v10 --manifest lines10.manifest | tr -d '\r' | q "; sieve-manifest-v10)"
+          [ "$(wc -c < lines.sieve)" -lt "$(wc -c < lines10.sieve)" ]
+          build/sieve install lines10.sieve --to lines_inst10 > /dev/null
+          diff -r lines lines_inst10
+          python reference/sieve_ref.py unpack lines10.manifest --to lines_oracle10 > /dev/null
+          diff -r lines lines_oracle10
+          build/sieve-install lines10.sieve --to lines_si10 --yes > /dev/null
+          diff -r lines lines_si10
+          # sieve-manifest-v12: a file LZMA2 cannot make smaller (bytes from a fixed generator, as a
+          # PNG's or a JPEG's are, near enough) carried as it is, its stream "stream lzma2 B B 0"; the
+          # instructions are the file and 153 bytes (v11: 179, with LZMA2's framing and an items line).
+          rm -rf noisy noisy_inst noisy_oracle noisy_si && mkdir noisy
+          python -c "
+          s = 161803
+          out = bytearray()
+          for _ in range(50000):
+              s = (s * 6364136223846793005 + 1442695040888963407) % 2**64
+              out.append(s >> 56)
+          open('noisy/noise.bin', 'wb').write(bytes(out))
+          "
+          build/sieve locate noisy --installer noisy.sieve --items --manifest noisy.manifest | tr -d '\r' > noisy.txt
+          q "^as is     the files packed by LZMA2 carried as they are instead" noisy.txt
+          q "^items     none; sieve-manifest-v16$" noisy.txt
+          build/sieve locate noisy --installer noisy15.sieve --items --v15 --manifest noisy15.manifest | tr -d '\r' | q "^items     none; sieve-manifest-v12$"
+          head -c 200 noisy15.manifest | q -a "^stream lzma2 50000 50000 0$"
+          [ "$(wc -c < noisy.sieve)" -le 50160 ] # the file, its name, size and the tree's SHA-256
+          build/sieve locate noisy --installer noisy11.sieve --items --v11 > /dev/null
+          [ "$(wc -c < noisy.sieve)" -lt "$(wc -c < noisy11.sieve)" ]
+          build/sieve install noisy.sieve --to noisy_inst > /dev/null
+          diff -r noisy noisy_inst
+          python reference/sieve_ref.py unpack noisy.manifest --to noisy_oracle > /dev/null
+          diff -r noisy noisy_oracle
+          build/sieve-install noisy.sieve --to noisy_si --yes > /dev/null
+          diff -r noisy noisy_si
+          # The same instructions called v11, which has neither: refused by Sieve and by the oracle.
+          sed '1s/v12/v11/' noisy15.manifest > noisy-as-v11.manifest
+          if build/sieve install noisy-as-v11.manifest --to noisy_bad > /dev/null 2>&1; then exit 1; fi
+          if python reference/sieve_ref.py unpack noisy-as-v11.manifest --to noisy_bad > /dev/null 2>&1; then exit 1; fi
+          test ! -e noisy_bad
+          # sieve-manifest-v13: a file cut into pieces, each coded the way that suits it: 20,000 bytes of
+          # text (LZMA2's: they repeat) before 300,000 bytes that do not repeat but are unevenly spread
+          # (the rope's), as a phone's photo has its metadata before its picture. Smaller than v12 (one
+          # way for the whole file) and than xz; the cut found within a block of where it is; all
+          # three readers give it back, and the same instructions called v12 are refused.
+          rm -rf mixed mixed_inst mixed_oracle mixed_si mixed_bad && mkdir mixed
+          python -c "
+          import math
+          s = 2718281
+          def u():
+              global s
+              s = (s * 6364136223846793005 + 1442695040888963407) % 2**64
+              return ((s >> 11) + 0.5) / 2**53
+          text = open('data/anchors/public-domain/universalbibliothek.txt', 'rb').read()[:20000]
+          body = bytes(min(255, int(-math.log(u()) * 40)) for _ in range(300000))
+          open('mixed/photo-like.bin', 'wb').write(text + body)
+          "
+          build/sieve locate mixed --installer mixed.sieve --items --manifest mixed.manifest | tr -d '\r' > mixed.txt
+          q "^pieces    1 file(s) cut into pieces: [0-9]* bytes packed by LZMA2, [0-9]* pulled tight by the rope (sieve-manifest-v13)$" mixed.txt
+          z=$(sed -n 's/^pieces .* cut into pieces: \([0-9]*\) bytes packed.*/\1/p' mixed.txt)
+          [ "$z" -ge 15904 ] && [ "$z" -le 24096 ] # the text's 20,000, within a block either way
+          build/sieve locate mixed --installer mixed12.sieve --items --v12 > /dev/null
+          [ "$(wc -c < mixed.sieve)" -lt "$(wc -c < mixed12.sieve)" ]
+          [ "$(wc -c < mixed.sieve)" -lt "$(xz -9e -c mixed/photo-like.bin | wc -c)" ]
+          build/sieve install mixed.sieve --to mixed_inst > /dev/null
+          diff -r mixed mixed_inst
+          # Weighed, the file's best way is its pieces, as the instructions carry it (the weighing
+          # and the packer choose by the same code).
+          build/sieve locate mixed --weigh 2>&1 | tr -d '\r' > mixedweigh.txt
+          q "^  photo-like.bin  *[0-9]*  *[0-9]*   pieces z[0-9]* r[0-9]* rope L" mixedweigh.txt
+          q "^  shared: pieces, 1 file(s): shape 232 bits$" mixedweigh.txt
+          python reference/sieve_ref.py unpack mixed.manifest --to mixed_oracle > /dev/null
+          diff -r mixed mixed_oracle
+          build/sieve-install mixed.sieve --to mixed_si --yes > /dev/null
+          diff -r mixed mixed_si
+          build/sieve locate mixed --installer mixed15.sieve --items --v15 --manifest mixed15.manifest > /dev/null
+          sed '1s/v13/v12/' mixed15.manifest > mixed-as-v12.manifest
+          if build/sieve install mixed-as-v12.manifest --to mixed_bad > /dev/null 2>&1; then exit 1; fi
+          if python reference/sieve_ref.py unpack mixed-as-v12.manifest --to mixed_bad > /dev/null 2>&1; then exit 1; fi
+          test ! -e mixed_bad
+          # sieve-manifest-v14, "Optimise Archive Formats" (--optimise-archives; the File Locator's box):
+          # off by default, and then nothing changes. Ticked, an xz file is remade exactly from what it
+          # holds (liblzma, as the xz program writes it) and a 7z (tests/optimise_fixture.7z: 20 blocks
+          # of the pi-like table above, 22,222 bytes in 10,513) is carried as its contents, in a folder
+          # named after it, installing saying so; each only where clearly smaller. Sieve and the oracle
+          # give the same; sieve-install, which has no compressor, asks for Sieve; called v13, refused.
+          rm -rf arch arch_inst arch_oracle arch_si arch_bad arch_bad16 && mkdir -p arch/x
+          cp tests/optimise_fixture.7z arch/digits.7z
+          python -c "
+          s = 314159
+          def r():
+              global s
+              s = (s * 1103515245 + 12345) % 2147483648
+              return (s >> 16) % 10
+          def table(blocks):
+              out = []
+              for block in range(blocks):
+                  for line in range(20):
+                      groups = [''.join(str(r()) for _ in range(10)) for _ in range(5)]
+                      out.append(' '.join(groups) + (' ' if line % 2 == 0 else ''))
+                  out.append('\x0c' if block % 10 == 9 else '')
+              return ('\n'.join(out) + '\n').encode()
+          open('arch-digits.txt', 'wb').write(table(20))
+          s = 271828
+          open('arch/x/table.txt', 'wb').write(table(60))
+          # v17: a gzip file as zlib writes it (Python's gzip), remade exactly; a zip of the same
+          # kind of table, carried as its contents.
+          import gzip, io, zipfile
+          s = 161803
+          t = table(40)
+          with open('arch/y.txt.gz', 'wb') as f:
+              with gzip.GzipFile(filename='y.txt', mode='wb', fileobj=f, compresslevel=9, mtime=0) as g:
+                  g.write(t)
+          open('arch-y.txt', 'wb').write(t)
+          with zipfile.ZipFile('arch/w.zip', 'w', zipfile.ZIP_DEFLATED) as z:
+              z.writestr('w/one.txt', table(30))
+              z.writestr('w/two.txt', b'hello\n')
+          "
+          xz -9 arch/x/table.txt
+          build/sieve locate arch --installer arch_off.sieve --items --manifest arch_off.manifest | tr -d '\r' > arch_off.txt
+          q "^items     none; sieve-manifest-v1[2-6]$" arch_off.txt
+          if grep -q "sieve-manifest-v14\|^remade\|^unpacked" arch_off.txt; then exit 1; fi
+          build/sieve locate arch --installer arch.sieve --items --optimise-archives --manifest arch.manifest | tr -d '\r' > arch.txt
+          q "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v14)$" arch.txt
+          q "^unpacked  2 archive(s) carried as their contents, not as the archives (Optimise Archive Formats; sieve-manifest-v14)$" arch.txt
+          q "^items     none; sieve-manifest-v17$" arch.txt
+          [ "$(wc -c < arch.sieve)" -lt "$(wc -c < arch_off.sieve)" ]
+          build/sieve install arch.sieve --to arch_inst | tr -d '\r' > arch_inst.txt
+          q "^note      digits.7z (7z, 10513 bytes) was carried as its contents (Optimise Archive Formats): digits holds them, not the archive itself$" arch_inst.txt
+          cmp arch/x/table.txt.xz arch_inst/x/table.txt.xz
+          cmp arch/y.txt.gz arch_inst/y.txt.gz
+          q "^note      w.zip (zip, [0-9]* bytes) was carried as its contents (Optimise Archive Formats): w holds them, not the archive itself$" arch_inst.txt
+          test "$(cat arch_inst/w/two.txt)" = "hello"
+          test ! -e arch_inst/w.zip
+          cmp arch-digits.txt arch_inst/digits/digits.txt
+          test ! -e arch_inst/digits.7z
+          python reference/sieve_ref.py unpack arch.manifest --to arch_oracle | tr -d '\r' | q "^unpacked	7z	10513	digits.7z	digits$"
+          diff -r arch_inst arch_oracle
+          if build/sieve-install arch.sieve --to arch_si --yes > /dev/null 2>&1; then exit 1; fi
+          build/sieve locate arch --installer arch15.sieve --items --optimise-archives --v15 --manifest arch15.manifest > /dev/null
+          sed '1s/v1[45]$/v13/' arch15.manifest > arch-as-v13.manifest
+          if build/sieve install arch-as-v13.manifest --to arch_bad > /dev/null 2>&1; then exit 1; fi
+          if python reference/sieve_ref.py unpack arch-as-v13.manifest --to arch_bad > /dev/null 2>&1; then exit 1; fi
+          test ! -e arch_bad
+          # v17 called v16 (its head's byte 17 made 16): the gzip way refused, by Sieve and the oracle.
+          python -c "d = bytearray(open('arch.manifest', 'rb').read()); assert d[:6] == b'sieve\x11'; d[5] = 16; open('arch-as-v16.manifest', 'wb').write(d)"
+          if build/sieve install arch-as-v16.manifest --to arch_bad16 > /dev/null 2>&1; then exit 1; fi
+          if python reference/sieve_ref.py unpack arch-as-v16.manifest --to arch_bad16 > /dev/null 2>&1; then exit 1; fi
+          test ! -e arch_bad16
+          # sieve-manifest-v16's head: a flag this Sieve does not know is refused, by Sieve and the oracle.
+          python -c "d = bytearray(open('noisy.manifest', 'rb').read()); assert d[:6] == b'sieve\x10'; d[6] |= 0x40; open('noisy-flag.manifest', 'wb').write(d)"
+          if build/sieve install noisy-flag.manifest --to noisy_flag > /dev/null 2>&1; then exit 1; fi
+          if python reference/sieve_ref.py unpack noisy-flag.manifest --to noisy_flag > /dev/null 2>&1; then exit 1; fi
+          test ! -e noisy_flag
+          # (each file is named by its item's title; the report says which file each degree gave)
+          $H --no-menu --press "X,Tab,9,0,Return" --take --save-item p90.txt --screenshot degp.png > /dev/null
+          cmp p90.txt "degrees/$(sed -n 's/^pages 090 //p' deg.txt)"
+          $H --no-menu --line models --press "X,Tab,1,3,Return" --take --save-item m13.obj --screenshot degm.png > /dev/null
+          cmp m13.obj "degrees/$(sed -n 's/^models 013 //p' deg.txt)"
+          # The excluded mode: read back from the settings, and the excluded count is exactly the
+          # line less the survivors (27^32 less clean-v2's survivors at length 32).
+          printf "[text]\nmode = excluded\nfilters = clean-v2\n" > excluded.ini
+          build/sieve filters --line text --length 32 --filters excluded.ini | q "^mode *excluded"
+          build/sieve filters --line text --length 32 --filters excluded.ini | q "^excluded *247982505688110457657730525203966127924868733 "
+          $H --no-menu --filters excluded.ini --goto 0% --press Escape --screenshot excluded.png | q "saved excluded.png"
+          # The vault (docs/VAULT.md): its built-in test entry, the 16 bytes "sieve vault test", is
+          # withheld as a file everywhere (located, mapped, installed by either installer) and
+          # written out as text (as it is, or in any vault-decoders-v1 form, such as hex, base64 or
+          # the a-p nibbles a lower27 line can hold), while text that is not a known file, however
+          # close its words, is not. A vault file that cannot be read fails it closed.
+          printf 'sieve vault test' > vt.txt
+          build/sieve vault | q "3 built in"
+          build/sieve vault | q "vault-decoders-v1"
+          # Pictures, by PDQ: this cover's hash as Meta's own pdqhash (Pillow decoding) gives it, so
+          # Sieve's reading of the reference code agrees bit for bit; then the test picture withheld
+          # as it is, scaled, as an image unit, and base64'd, while an ordinary picture is not.
+          build/sieve vault --pdq tests/example_book_cover.png | q "^cc661c39738cc4c68c713399cc63cc66739c1939cc66e3ce39391c71e3c6e38e  quality 56 "
+          build/sieve vault --test-picture vtp.png > /dev/null
+          build/sieve vault --test-picture vtp4.png --scale 4 > /dev/null
+          if build/sieve vault vtp.png > /dev/null; then exit 1; fi
+          if build/sieve vault vtp4.png > /dev/null; then exit 1; fi
+          if build/sieve locate vtp4.png > /dev/null 2>&1; then exit 1; fi
+          if build/sieve warp --line image --palette rgb24 --width 32 --height 32 --file vtp.png > /dev/null 2>&1; then exit 1; fi
+          base64 vtp.png > vtp.b64
+          if build/sieve vault --written vtp.b64 > /dev/null; then exit 1; fi
+          build/sieve vault tests/example_book_cover.png | q "^clear"
+          build/sieve warp --line image --palette rgb24 --width 32 --height 32 --file tests/example_book_cover.png | q "positional"
+          if build/sieve vault vt.txt > /dev/null; then exit 1; fi
+          if build/sieve locate vt.txt > /dev/null 2>&1; then exit 1; fi
+          if build/sieve warp --line text --length 32 "sieve vault test" > /dev/null 2>&1; then exit 1; fi
+          if build/sieve warp --line text --length 32 hdgjgfhggfcahggbhfgmhecahegfhdhe > /dev/null 2>&1; then exit 1; fi
+          printf '73 69 65 76 65 20 76 61 75 6c 74 20 74 65 73 74\n' > vhex.txt
+          printf 'c2lldmUgdmF1bHQgdGVzdA==' > vb64.txt
+          if build/sieve vault --written vhex.txt > /dev/null; then exit 1; fi
+          if build/sieve vault --written vb64.txt > /dev/null; then exit 1; fi
+          build/sieve warp --line text --length 32 "sieve vault tests" | q "positional"
+          build/sieve map --new vt --out vt.map 2> /dev/null
+          if build/sieve map vt.map --add vt.txt --out vt.map > /dev/null 2>&1; then exit 1; fi
+          python reference/sieve_ref.py manifest vt.txt --with-contents > vt.manifest
+          python -c "b=open('vt.manifest','rb').read(); n=int.from_bytes(b,'big')+(256**len(b)-1)//255; open('vt.sieve','wb').write(n.to_bytes((n.bit_length()+7)//8,'big'))"
+          rm -rf vti vti2
+          if build/sieve install vt.sieve --to vti > /dev/null 2>&1; then exit 1; fi
+          if build/sieve-install vt.sieve --to vti2 --yes; then exit 1; fi
+          test ! -e vti && test ! -e vti2
+          printf 'nonsense\n' > data/vault/broken.vault
+          printf 'harmless' > vok.txt
+          build/sieve vault | q "FAILED CLOSED"
+          if build/sieve locate vok.txt > /dev/null 2>&1; then exit 1; fi
+          rm data/vault/broken.vault
+          build/sieve locate vok.txt | q "^sha256"
+          # Pieces, by chunks (cdc-v1, chunk-match-v1): the built-in test file is listed by its chunks
+          # only, so a 2.5 KB piece of it between other bytes is withheld, as a file, located, and
+          # base64'd; a vault file written by --chunks lists another file the same way; and
+          # --common leaves out chunks that ordinary files also hold.
+          build/sieve vault | q "1 chunks: 13 chunks in all"
+          build/sieve vault --test-file vtf.bin > /dev/null
+          python -c "import base64; b=open('vtf.bin','rb').read(); open('vtf-piece.bin','wb').write(b'junk'+b[1000:3500]+b'junk'); open('vtf-piece.b64','w').write(base64.b64encode(b[500:3000]).decode())"
+          if build/sieve vault vtf-piece.bin > /dev/null; then exit 1; fi
+          if build/sieve locate vtf-piece.bin > /dev/null 2>&1; then exit 1; fi
+          if build/sieve vault --written vtf-piece.b64 > /dev/null; then exit 1; fi
+          python -c "import hashlib; open('listed.bin','wb').write(b''.join(hashlib.sha256(b'listed %d' % i).digest() for i in range(300)))"
+          python -c "b=open('listed.bin','rb').read(); open('listed-piece.bin','wb').write(b[3000:6000])"
+          build/sieve vault listed-piece.bin | q "^clear"
+          build/sieve vault --chunks listed.bin > data/vault/listed.vault
+          build/sieve vault --parse data/vault/listed.vault | q "1 chunks), well formed"
+          if build/sieve vault listed-piece.bin > /dev/null; then exit 1; fi
+          rm data/vault/listed.vault
+          rm -rf ordinary && mkdir ordinary && cp listed-piece.bin ordinary/
+          test "$(build/sieve vault --chunks listed.bin --common ordinary | tail -2 | head -1 | tr ',' '\n' | wc -l)" -lt "$(build/sieve vault --chunks listed.bin | tail -2 | head -1 | tr ',' '\n' | wc -l)"
+          # Filter plugins that do not load are listed with the reason, never skipped: a malformed
+          # file, and two different files under one name (neither is used: versions are never edited).
+          printf 'sieve-filter-v1\nid broken\n' > build/filters/broken.sfilter
+          sed 's/^describe.*/describe edited/' data/filters/clean-data-v1.sfilter > build/filters/clean-edited.sfilter
+          build/sieve filters --plugins > plugins.out
+          grep -A1 "broken.sfilter" plugins.out | q "ends with end"
+          grep -A1 "clean-edited.sfilter" plugins.out | q "with different contents"
+          if build/sieve filters --length 8 | grep -q "^\[.\] clean-data-v1 "; then exit 1; fi
+          rm build/filters/broken.sfilter build/filters/clean-edited.sfilter
+          build/sieve filters --length 8 | q "^\[.\] clean-data-v1 "
+          # `requires`: ticking tidy-data-v2 alone brings clean-data-v1 and the built-in max-run-v1
+          # (at the max_run it pins) into the stack, which still counts, exactly as tidy-data-v1 and
+          # max-run-data-v1 did (both retired for them); a different setting is flagged; and a
+          # copy of a plugin under another name is found to be the same rule.
+          printf "[text]\nmode = compact\nfilters = tidy-data-v2\n" > tidy.ini
+          build/sieve filters --length 12 --filters tidy.ini | q "max-run-v1{max_run=3}; clean-data-v1"
+          build/sieve filters --length 12 --filters tidy.ini | q "^survivors    147852209843303498 (exact; compact mode available)"
+          printf "[text]\nmode = compact\nfilters = tidy-data-v1\n" > tidy1.ini
+          build/sieve filters --length 12 --filters tidy1.ini | q "^survivors    147852209843303498 (exact; compact mode available)"
+          build/sieve filters --length 12 | q "tidy-data-v1   (custom)   (retired: replaced by tidy-data-v2)"
+          printf "[text]\nfilters = tidy-data-v2, max-run-v1\n[text.max-run-v1]\nmax_run = 5\n" > tidy5.ini
+          build/sieve filters --length 12 --filters tidy5.ini | q "requires max-run-v1 at max_run=3; it is set to max_run=5"
+          sed 's/^id        clean-data/id        clean-copy/' data/filters/clean-data-v1.sfilter > clean-copy.sfilter
+          build/sieve filters --plugin clean-copy.sfilter --relations | q "the same rule as clean-data-v1  -- a duplicate"
+          # The filter designer (main menu): it opens a plugin and writes it back as it would save
+          # it, the same rule (a round trip); a word filter made and saved by script is registered
+          # at once and named a duplicate of words-data-v1; saving other contents under that
+          # version offers the next one instead (versions are never edited).
+          # The Encryption Engine's screen (IDEAS §19.52): its opening recipe there and back (Tab puts
+          # the output in as the input, and turns encrypt into decrypt), and a weak cipher broken.
+          $H --cipher --screenshot cipher.png | tr -d '\r' | q "^output: c0dfd54c54f353b432f1ba19925f$"
+          $H --cipher --script "Tab" --screenshot cipher-back.png | tr -d '\r' | q "^output: 61747461636b206174206461776e$"
+          # A file's bytes as the input (as the item in hand or Ctrl+O gives them), and the output
+          # saved: the same bytes as sieve cipher makes of the same file with the same recipe.
+          rm -f engine.enc cli.enc
+          $H --cipher --cipher-in tests/manifest_fixture/a.txt --cipher-out engine.enc --screenshot cipher-file.png | tr -d '\r' | q "^cipher: the output saved: "
+          build/sieve cipher --encrypt --in tests/manifest_fixture/a.txt --recipe "vigenere lemon; feistel my key" --out cli.enc > /dev/null
+          cmp engine.enc cli.enc
+          $H --cipher --script "Ctrl+Backspace,=It was the best of times it was the worst of times it was the age of wisdom it was the age of foolishness,Down,Down,Ctrl+Backspace,=xor 736563726574,Return,Tab,Down,Right" --screenshot cipher-break.png | tr -d '\r' | q "^cipher: the best guess: xor 736563726574$"
+          $H --main-menu --press "Down,Down,Down,Down,Down,Down" --screenshot main-cipher.png | q "saved main-cipher.png"
+          $H --designer --screenshot designer.png | q "designer: my-words-v1"
+          $H --designer --busy --screenshot designer-busy.png | q "designer: my-words-v1"
+          # Opening the designer compiles nothing: only F5 (TEST NOW), Save or the relation check do.
+          test "$($H --designer --timings --screenshot designer-idle.png 2>&1 | grep -c '^designer.test ')" = 0
+          $H --designer --design tests/plugins/toy-grammar-v1.sfilter --design-out tests/plugins/roundtrip-v1.sfilter --screenshot designer2.png | q "designer: toy-grammar-v1"
+          build/sieve filters --plugin tests/plugins/toy-grammar-v1.sfilter --length 11 | grep -v "^sha256" > rt.a
+          build/sieve filters --plugin tests/plugins/roundtrip-v1.sfilter --length 11 | grep -v "^sha256" > rt.b
+          diff rt.a rt.b
+          rm tests/plugins/roundtrip-v1.sfilter
+          rm -f build/filters/designed-words-v*.sfilter
+          $H --designer --script "Ctrl+N,Down,Return,Ctrl+Backspace,=designed-words,Return,Ctrl+S" --screenshot designer3.png | q "status: saved to .*designed-words-v1.sfilter"
+          build/sieve filters --plugins | q "^loaded   designed-words-v1"
+          build/sieve filters --plugin build/filters/designed-words-v1.sfilter --length 6 --relations | q "the same rule as words-data-v1  -- a duplicate"
+          $H --designer --design build/filters/designed-words-v1.sfilter --script "Down,Down,Down,Down,Down,Down,Down,Return,=!,Return,Ctrl+S" --screenshot designer4.png | q "save as version 2"
+          rm build/filters/designed-words-v1.sfilter
+          # --timings: the table at exit, on the command line and from the hallway (to its file too).
+          build/sieve warp --line text --length 32 --timings "timed" 2>&1 | q "^sieve warp "
+          $H --no-menu --timings --settings timed.ini --screenshot timed.png 2>&1 | q "^hallway.item "
+          grep -q "^hallway.build " sieve-timings.txt
+          # F on the item page saves the item in hand (here without its dialog): a page of the text
+          # line as text, and a file of the binary line as exactly its bytes.
+          rm -f saved_page.txt saved_file.bin
+          $H --no-menu --pose 0.8,3.12,-90,-5 --take --save-item saved_page --screenshot savepage.png | q "saved savepage.png"
+          test -s saved_page.txt
+          $H --no-menu --line binary --binary-length 64 --pose 0.8,3.12,-90,-5 --take --save-item saved_file.bin --screenshot savefile.png | q "saved savefile.png"
+          test "$(wc -c < saved_file.bin)" -gt 0
+          # Past the budget: a 100 KB file, twice the BINARY length, is still reached by pressing
+          # Go to it twice; the line is made long enough, positional, and only the room is kept.
+          head -c 100000 /dev/urandom > big.bin
+          $H --no-menu --binary-length 1000 --locate big.bin --press "Return,Return" --screenshot big.png | tail -2 | sed -n 1p | q "^BINARY line, positional"
+          # The node graph (O, and the pause menu's third row): the fixture's map, laid out; Tab to
+          # its third node (a.txt) and Enter walk to it on the binary line; and the item page's
+          # SORT tab knows a.txt for a verified anchor of that map, and anything else for a lone point.
+          $H --no-menu --map tests/manifest_fixture --graph --screenshot graph.png | q "saved graph.png"
+          $H --no-menu --binary-length 64 --map tests/manifest_fixture --graph --press "Tab,Tab,Tab,Return" --screenshot graph2.png | tail -2 | sed -n 1p | q "^BINARY line.* TXT 34 bytes"
+          $H --no-menu --binary-length 64 --map tests/manifest_fixture --locate tests/manifest_fixture/a.txt --press "Return,C,C" --screenshot sort.png | tail -2 | sed -n 1p | q "a verified anchor: node 2, a.txt, in manifest_fixture"
+          $H --no-menu --line binary --map tests/manifest_fixture --walk "0,0" --press "E,C,C" --screenshot sort2.png | tail -2 | sed -n 1p > sort2.txt
+          if grep -q "verified anchor" sort2.txt; then exit 1; fi
+          # (--warp starts with the item in your hands: the first Escape puts it down, the second pauses.)
+          $H --warp "$W" --press "Escape,Escape,Down,Down,Return" --screenshot pausegraph.png | q "saved pausegraph.png"
+          $H --no-menu --graph --screenshot installation.png | q "saved installation.png"
+          # Verified anchors: New map... makes an empty map; V adds the file in hand to it, held
+          # (its bytes kept in the map), and V again takes it out; with metadata, the item page
+          # gains a META tab; a held anchor can be walked to from the viewer, whose Delete removes
+          # it; a sealed map will not take one.
+          rm -f build/maps/finds.map
+          $H --no-menu --binary-length 64 --new-map build/maps/finds.map --locate tests/manifest_fixture/a.txt --press "Return,V" --screenshot anchor.png | q "added a.txt to finds as a verified anchor (node 1)"
+          build/sieve map build/maps/finds.map 2>&1 | q "1 held"
+          $H --no-menu --binary-length 64 --map build/maps/finds.map --locate tests/manifest_fixture/a.txt --press "Return,V" --screenshot anchor2.png | q "removed a.txt from finds"
+          build/sieve map build/maps/finds.map 2>&1 | q "0 held"
+          build/sieve map build/maps/finds.map --add tests/manifest_fixture/a.txt --out build/maps/finds.map 2> /dev/null
+          build/sieve map build/maps/finds.map --meta "1:source=the fixture folder" --out build/maps/finds.map 2> /dev/null
+          $H --no-menu --binary-length 64 --map build/maps/finds.map --locate tests/manifest_fixture/a.txt --press "Return,C,C,C" --screenshot meta.png | q "saved meta.png"
+          $H --no-menu --binary-length 64 --map build/maps/finds.map --graph --press "Tab,Tab,Return" --screenshot anchorgo.png | tail -2 | sed -n 1p | q "^BINARY line.* TXT 34 bytes"
+          $H --no-menu --map build/maps/finds.map --graph --press "Tab,Tab,Delete" --screenshot anchordel.png | q "saved anchordel.png"
+          build/sieve map build/maps/finds.map 2>&1 | q "0 held"
+          rm -f build/maps/finds.map
+          build/sieve map --new sealed --seal --out build/maps/sealed.map 2> /dev/null
+          $H --no-menu --binary-length 64 --map build/maps/sealed.map --locate tests/manifest_fixture/a.txt --press "Return,V" --screenshot sealed.png | q "sealed is read-only"
+          rm -f build/maps/sealed.map
+          # The pause menu (Esc): its fourth row is the Navigation System, which opens the navigator.
+          $H --warp "$W" --press "Escape,Escape,Down,Down,Down,Return,Escape" --screenshot pause.png | q "saved pause.png"
+          # The Media Player (pause menu, sixth row): with --media-player a silent music player is
+          # made for the picture; its settings file goes where --settings says, not beside the program.
+          mkdir -p mp
+          $H --no-menu --media-player --settings mp/hallway.ini --press "Escape,Down,Down,Down,Down,Down,Return" --screenshot media.png | q "saved media.png"
+          out=$($H --warp "$W" --press "X,Home,Up,Return" --screenshot nav.png)
+          echo "$out" | tail -2 | sed -n 1p | q "went to 1"
+          if [ "$(echo "$out" | tail -2 | book)" = "$here" ]; then exit 1; fi
+          # The navigator's bearing field: Tab, a bearing, ENTER, and you stand at that angle round
+          # the loop (180 degrees is exactly halfway); a bearing of 360 or more is refused.
+          $H --warp "$W" --press "X,Tab,1,8,0,Return" --screenshot navangle.png | tail -2 | sed -n 1p | q "50.0000000000% along"
+          if $H --warp "$W" --press "X,Tab,3,6,0,Return" --screenshot navangle2.png | tail -2 | sed -n 1p | grep -q "went to"; then exit 1; fi
+          start=$($H --mode guided --warp "$W" --zoom 20 --walk "0,0" --screenshot start.png | book)
+          # The corridor end to end and back: nine doors left from pages reach binary (books,
+          # audio, tracks, video, movies, models, worlds, AI), which is where the run finishes, and
+          # nine right brings you back to the same book on pages.
+          out=$($H --mode guided --warp "$W" --zoom 20 --pose 0,7,-90,0 --walk "-2.3,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0" --screenshot guided.png)
+          echo "$out"
+          echo "$out" | q "BOOKS line"
+          echo "$out" | q "TRACKS line"
+          echo "$out" | q "VIDEO line"
+          echo "$out" | q "MOVIES line"
+          echo "$out" | q "MODELS line"
+          echo "$out" | q "WORLDS line, positional"
+          echo "$out" | q "AI line, positional"
+          echo "$out" | q "BINARY line"
+          echo "$out" | sed -n 9p | q "^BINARY line"
+          echo "$out" | tail -2 | sed -n 1p | q "^PAGES line"
+          test "$(echo "$out" | tail -2 | book)" = "$start"
+          # Loops: a 2-character line is 729 units = 6 tiles, so tile 6 starts the second copy,
+          # and the CLI reads the same corridor places the hallway shows. The CLI's lines are bare,
+          # and a title length of 0 makes the hallway's the same.
+          $H --length 2 --title-length 0 --goto @6 --walk "0,0" --screenshot loop6.png | q "first book 000 "
+          test "$(build/sieve read --length 2 --mode positional --at 6:0 2>/dev/null)" = "  "
+          test "$(build/sieve read --length 2 --mode positional --at -1:127 2>/dev/null)" = "(empty: padding at the end of a loop)"
+          build/sieve info --length 2 | q "39 empty slots"
+          build/sieve info --line image | q "fills whole tiles exactly"
+          # The setup menu renders at ordinary and enormous sizes, and scripted keys reach it.
+          $H --menu --screenshot menu.png | q "saved menu.png"
+          $H --menu --press "Down,Down,Down,Right,PageUp" --screenshot menu2.png | q "saved menu2.png"
+          $H --menu --length 4000000000 --video-width 100000 --video-frames 100000 --screenshot menu3.png | q "saved menu3.png"
+          test -s menu.png && test -s menu2.png && test -s menu3.png
+          # Books: the fifth line. Its books are a cover, a title and pages; the committed example
+          # book opens on its shelf when the lines have its shape, and page N turns.
+          $H --line books --walk "0,0" --screenshot books.png | sed -n 1p | q "BOOKS line, positional, filters: none"
+          out=$($H --line books --length 400 --book-pages 3 --warp tests/example_book_v1.book --walk "0,0" --press N --screenshot book-open.png)
+          echo "$out"
+          echo "$out" | sed -n 1p | q '"a tale of two cities'
+          echo "$out" | q "opened the book"
+          $H --line books --warp tests/example_book_v1.book --walk "0,0" --screenshot book-wrong.png | sed -n 1p | q "in the menu to the book's shape"
+          $H --line books --mode scrambled --walk "0,0" --take --screenshot book-hand.png | sed -n 1p | q "BOOKS line, scrambled"
+          printf '[books]\nmode = compact\n[books.title]\nfilters = title-v1\n[books.pages]\nfilters = words-v2\n' > books.ini
+          $H --filters books.ini --line books --length 400 --book-pages 3 --warp tests/example_book_v1.book --walk "0,0" --screenshot book-compact.png | sed -n 1p | q "surviving books"
+          $H --filters books.ini --line books --length 400 --book-pages 3 --mode scrambled --walk "0,0" --take --screenshot book-compact2.png | sed -n 1p | q "BOOKS line, scrambled, filters: 0+1+1 compact"
+          # Tracks and movies (composition-v1): each line comes up in both orderings; a warp onto
+          # tracks splits into its units; an item saves as one unit of its line N units long; and
+          # a units filter that can rank makes the line compact, in either ordering.
+          $H --no-menu --line tracks --walk "0,0" --screenshot tracks.png | sed -n 1p | q "^TRACKS line, positional, filters: none"
+          $H --no-menu --line movies --mode scrambled --walk "0,0" --screenshot movies.png | sed -n 1p | q "^MOVIES line, scrambled, filters: none"
+          $H --no-menu --line tracks --warp "C4q E4q G4h Re B4e C5w" --walk "0,0" --screenshot trackwarp.png | sed -n 1p | q "warped: canon-notes-v1: 6 event(s), 1 unit(s)"
+          $H --no-menu --line tracks --settle 30 --walk "0,0" --take --save-item track.mid --screenshot tracksave.png > /dev/null
+          head -c 4 track.mid | q MThd
+          # A track or movie saved as a record (F, .track or .movie) and opened again with J from the
+          # binary line comes back the same item: saved again, the same record.
+          $H --no-menu --line tracks --settle 30 --walk "0,0" --take --save-item h.track --screenshot rec1.png > /dev/null
+          head -1 h.track | q "^sieve-book-v1$"
+          $H --no-menu --binary-length 1024 --locate h.track --press "Return,J" --save-item h2.track --screenshot rec2.png | q "opened on the TRACKS line"
+          cmp h.track h2.track
+          $H --no-menu --line movies --settle 30 --walk "0,0" --take --save-item m.movie --screenshot rec3.png > /dev/null
+          $H --no-menu --binary-length 4096 --locate m.movie --press "Return,J" --save-item m2.movie --screenshot rec4.png | q "opened on the MOVIES line"
+          cmp m.movie m2.movie
+          $H --no-menu --line movies --settle 30 --walk "0,0" --take --save-item movie.png --screenshot moviesave.png > /dev/null
+          test -s movie.png
+          printf '[movies]\nmode = compact\n\n[movies.units]\nfilters = neighbour-agreement-v1\n' > mv.ini
+          for m in positional scrambled; do
+            $H --no-menu --line movies --video-width 2 --video-height 2 --video-frames 2 --filters mv.ini --mode $m --walk "0,0" --screenshot mc-$m.png | sed -n 1p | q "^MOVIES line, $m, filters: 0+0+1+0 compact"
+          done
+          # The same tracks in the sieve tool and the hallway: an address from one is the same item
+          # in the other, plainly and compact through the joined stack (the MIDI files identical).
+          S=build/sieve
+          out=$($S warp --line tracks --length 4 "C4q E4q G4h C5w E5q D5q C5h G4w")
+          for m in positional scrambled; do
+            a=$(echo "$out" | awk -v m=$m '$1 == m {print $2}')
+            $S read --line tracks --length 4 --mode $m "$a" --out cli-$m.mid > /dev/null 2>&1
+            $H --no-menu --line tracks --notes 4 --mode $m --goto "$a" --walk "0,0" --take --save-item hall-$m.mid --screenshot tx-$m.png > /dev/null
+            cmp cli-$m.mid hall-$m.mid
+          done
+          T="--track-units 2 --title-length 0 --image-width 1 --image-height 1"
+          printf '[tracks]\nmode = compact\n\n[tracks.joined]\nfilters = key-v1\n\n[tracks.joined.key-v1]\ntonic = A\nscale = minor-pentatonic\n' > tj.ini
+          out=$($S warp --line tracks --length 4 $T --filters tj.ini --compact "A4q C5q D5q E5q G5q A4q C5q E5q" 2>/dev/null)
+          for m in positional scrambled; do
+            a=$(echo "$out" | awk -v m=$m '/compact/ {seen = 1; next} seen && $1 == m {print $2; exit}')
+            $S read --line tracks --length 4 $T --filters tj.ini --compact --mode $m "$a" --out clic-$m.mid > /dev/null 2>&1
+            $H --no-menu --line tracks --notes 4 $T --filters tj.ini --mode $m --goto "$a" --walk "0,0" --take --save-item hallc-$m.mid --screenshot tj-$m.png | sed -n 1p | q "^TRACKS line, $m, filters: 0+0+0+1 compact"
+            cmp clic-$m.mid hallc-$m.mid
+          done
+          $H --menu --screenshot menu5.png | q "saved menu5.png"
+          # The main menu, its settings screens and a language file with gaps (English fills them).
+          $H --main-menu --screenshot main.png | q "saved main.png"
+          $H --line image --edge-glow --walk "0,0" --screenshot glow.png 2>&1 | q "graphics: edge glow on, real graphics off"
+          # Real Graphics: a line loads its own item model where there is one (data/meshes/book-audio.obj
+          # here) and the templates for the rest.
+          out=$($H --line audio --real-graphics --walk "0,0" --screenshot real.png 2>&1)
+          echo "$out" | q "real graphics for the audio line: hallway=hallway.obj bookshelf=bookshelf.obj book=book-audio.obj marker=marker.obj"
+          # Tracks and movies have models of their own (begun as copies of audio's and video's).
+          for l in tracks movies; do
+            $H --line $l --real-graphics --walk "0,0" --screenshot real-$l.png 2>&1 | q "real graphics for the $l line: .* book=book-$l.obj"
+          done
+          out=$($H --real-graphics --fps-counter --bench 5 --walk "0,0" --screenshot fps.png 2>&1)
+          echo "$out" | q "^bench: 5 frames"
+          echo "$out" | q "graphics: edge glow off, real graphics on, door portals on, fps counter on"
+          # Door Portals: Real Graphics brings them, and they also stand alone with the wireframe.
+          $H --line image --door-portals --walk "0,0" --screenshot portal.png 2>&1 | q "door portals on"
+          $H --line image --edge-glow --walk "0,0" --screenshot noportal.png 2>&1 | q "door portals off"
+          test -s portal.png && test -s noportal.png
+          $H --main-menu --press "Down,Down,Down,Down,Down,Return,Return,Return" --screenshot main-res.png | q "saved"
+          # Settings, Graphics, then VSync off, Geometry Edge Glow on, Real Graphics on — which
+          # turns the glow back off, the two being mutually exclusive. From a settings file that
+          # does not exist yet, so the toggles start from their defaults whatever ran before.
+          rm -f app.ini
+          $H --main-menu --settings app.ini --press "Down,Down,Down,Down,Down,Return,Return,Down,Down,Return,Down,Return,Down,Return" --screenshot main-gfx.png > /dev/null
+          grep -q "^vsync = off" app.ini
+          grep -q "^edge_glow = off" app.ini
+          grep -q "^real_graphics = on" app.ini
+          grep -q "^door_portals = on" app.ini   # Real Graphics brings Door Portals with it
+          # View Distance and Picture Distance, the two rows after the FPS counter, save.
+          rm -f vr.ini
+          $H --main-menu --settings vr.ini --press "Down,Down,Down,Down,Down,Return,Return,Down,Down,Down,Down,Down,Down,Down,Down,Right,Down,Right,Right" --screenshot main-view.png > /dev/null
+          grep -q "^view_rooms = 8" vr.ini
+          grep -q "^picture_rooms = 3" vr.ini
+          mkdir -p lt/data/lang && cp data/lang/en.txt lt/data/lang/ && printf 'language.name = Test\nitem.start = START TEST\n' > lt/data/lang/tt.txt
+          (cd lt && ../$H --main-menu --language tt --screenshot ../main-tt.png) | q "main menu: language tt, font sieve8x8"
+          # The language's font: sieve8x8 draws accented and Greek letters; a missing font is reported.
+          mkdir -p lt/data/fonts && cp data/fonts/sieve8x8.hex lt/data/fonts/
+          printf 'font = sieve8x8\nlanguage.name = Fran\xc3\xa7ais\nitem.start = D\xc3\xa9marrer Sieve\n' > lt/data/lang/fr.txt
+          out=$(cd lt && ../$H --main-menu --language fr --screenshot ../main-fr.png 2>&1)
+          echo "$out" | q "main menu: language fr, font sieve8x8"
+          if echo "$out" | grep -c "not found" > /dev/null; then exit 1; fi
+          printf 'font = nosuchfont\nitem.start = X\n' > lt/data/lang/xx.txt
+          out=$(cd lt && ../$H --main-menu --language xx --screenshot ../main-xx.png 2>&1)
+          echo "$out" | q "font 'nosuchfont' not found"
+          echo "$out" | q "main menu: language xx, font sieve8x8"
+          # Filter modes: compact shelves only survivors (warped text lands on a shelf, not in hand),
+          # an unrankable stack falls back to hide, and the filter overlay renders.
+          printf '[text]\nmode = compact\nfilters = words-v2\n' > words2.ini
+          printf '[text]\nmode = compact\nfilters = words-v2, max-run-v1\n' > mixed.ini
+          printf '[text]\nmode = mark\nfilters = words-v1\n' > mark.ini
+          printf '[audio]\nmode = compact\nfilters = key-v1\n[audio.key-v1]\ntonic = A\nscale = minor-pentatonic\n[image]\nmode = compact\nfilters = symbol-entropy-v1\n[image.symbol-entropy-v1]\nmax_millibits = 500\n' > lines.ini
+          out=$($H --filters words2.ini --warp "$W" --walk "0,0" --screenshot compact.png)
+          echo "$out"
+          echo "$out" | q "filters: 1 compact (303766...7712 (28 digits) survivors), tile 119770...5023 (26 digits)"
+          $H --filters mixed.ini --walk "0,0" --screenshot mixed.png | q "filters: 2 hide (compact: words-v2 can rank, but not together with max-run-v1)"
+          $H --filters mark.ini --length 3 --walk "0,0" --screenshot mark.png | q "filters: 1 mark"
+          $H --menu --filters words2.ini --press "F" --screenshot overlay.png | q "saved overlay.png"
+          # Compact in the scrambled and guided orderings, and on the image and audio lines.
+          $H --filters words2.ini --mode scrambled --warp "$W" --walk "0,0" --screenshot cs.png | sed -n 1p | q "PAGES line, scrambled, filters: 1 compact"
+          $H --filters words2.ini --mode guided --warp "$W" --walk "0,0" --screenshot cg.png | sed -n 1p | q "PAGES line, guided zoom 59, filters: 1 compact"
+          $H --filters lines.ini --line image --mode scrambled --walk "0,0" --screenshot ci.png | sed -n 1p | q "IMAGE line, scrambled, filters: 1 compact (322091425582872 survivors)"
+          $H --filters lines.ini --line audio --walk "0,0" --screenshot ca.png | sed -n 1p | q "AUDIO line, positional, filters: 1 compact"
+          # A notes2 audio line of two voices, its plugins judging each voice, in compact order.
+          printf '[audio]\nmode = compact\nfilters = key-data-v2, melody-leap-v1\n[audio.key-data-v2]\ntonic = D\n[audio.melody-leap-v1]\nleap = 2\n' > n2h.ini
+          $H --filters n2h.ini --line audio --note-set notes2 --voices 2 --notes 3 --walk "0,0" --screenshot n2a.png | sed -n 1p | q "AUDIO line, positional, filters: 2 compact (47572844544 survivors)"
+          # One line filtered by another. The CLI's counts are the oracle's (the vector files'
+          # rows): not-written-v1 on 32-letter pages, alone and with max-run-data-v1; binary-kind-v1
+          # on a 33-byte binary line. The kinds a file says it is, from locate and check.
+          printf "[text]\nmode = compact\nfilters = not-written-v1\n" > nw.ini
+          want=$(awk -F'\t' '$1 == "count" && $2 == "lower27" && $3 == "all" && $4 == "32" && NF == 5 {print $5}' tests/vectors_written_v1.tsv)
+          build/sieve filters --length 32 --filters nw.ini | q "^survivors    $want (exact; compact mode available)"
+          build/sieve filters --length 32 --filters nw.ini | q "^share        the stack keeps about all of the line and sets aside 10\^-4.23"
+          printf "[text]\nmode = compact\nfilters = not-written-v1, max-run-data-v1\n[text.max-run-data-v1]\nmax = 2\n" > nw2.ini
+          want=$(awk -F'\t' '$1 == "count" && $6 == "max-run-data-v1" && $7 == "max=2" {print $5}' tests/vectors_written_v1.tsv)
+          build/sieve filters --length 16 --filters nw2.ini | q "^survivors    $want (exact; compact mode available)"
+          build/sieve check --length 32 --filters nw.ini "enfk" | q "stack: fails at not-written-v1"
+          build/sieve check --length 32 --filters nw.ini "hello world" | q "stack: passes, survivor number"
+          printf "[binary]\nmode = compact\nfilters = binary-kind-v1\n[binary.binary-kind-v1]\nkinds = png\n" > bk.ini
+          want=$(awk -F'\t' '$1 == "count" && $2 == "33" && $3 == "png" && $4 == "keep" {print $5}' tests/vectors_kinds_v1.tsv)
+          build/sieve filters --line binary --length 33 --filters bk.ini | q "^survivors    $want (exact; compact mode available)"
+          build/sieve filters --line binary --length 32 | q "^  TXT  *10\^-0.87"
+          printf 'MThd\0\0\0\6' > k.mid
+          build/sieve locate k.mid | q "^kind      MID (file-kinds-v1, from its first bytes)"
+          build/sieve check --line binary --file k.mid --filters bk.ini | q "stack: fails at binary-kind-v1"
+          # In the hallway: the binary line compacted to PNGs, every file on the shelves a PNG; J
+          # from a page to its file on the binary line and back; and from a picture, a PNG.
+          $H --no-menu --line binary --filters bk.ini --walk "0,0" --screenshot binpng.png | sed -n 1p | q "^BINARY line, positional, filters: 1 compact .* PNG 32 bytes: 89 50 4e 47"
+          $H --no-menu --warp "hello world" --press "J" --screenshot j1.png | q "^BINARY line.*its file: TXT, 32 bytes, on the binary line"
+          $H --no-menu --warp "hello world" --press "J,J" --screenshot j2.png | q "^PAGES line.*a TXT file, opened on the PAGES line"
+          $H --no-menu --line image --walk "0,0" --press "E,J,J" --screenshot j3.png | q "^IMAGE line.*a PNG file, opened on the IMAGE line"
+          $H --no-menu --line audio --warp "C4q E4q G4h Re B4e C5w" --press "J,J" --screenshot j4.png | q "^AUDIO line.*a MID file, opened on the AUDIO line"
+          # The item viewer: a click on the page in hand opens all of it, laid out as the picture on
+          # the item lays it out (52 columns of 77 rows, in cells 8 x 10); Z opens it too, Shift+=
+          # doubles the zoom, and Esc closes it with the page still in hand.
+          $H --no-menu --length 4000 --pose 0.9,3,94,-30 --press "E,Click" --screenshot view.png | q "viewing its TEXT, 416 x 770 at one to one"
+          $H --no-menu --length 4000 --pose 0.9,3,94,-30 --press "E,Z,Shift+=,End" --screenshot view2.png | tail -2 | sed -n 1p | q "viewing at 400%"
+          $H --no-menu --length 4000 --pose 0.9,3,94,-30 --press "E,Z,Escape" --screenshot view3.png | tail -2 | sed -n 1p > view3.txt
+          if grep -q "viewing at" view3.txt; then echo "Esc left the viewer open"; exit 1; fi
+          # Its views (Tab): the picture on the item, drawn again and saved as a PNG (F, here
+          # --save-view); a book's cover and its title page, saved as a PNG and as text.
+          $H --no-menu --length 4000 --pose 0.9,3,94,-30 --press "E,Z,Tab" --save-view vpic.png --screenshot vpic-shot.png | q "viewing its PICTURE"
+          test "$(head -c 4 vpic.png | tail -c 3)" = "PNG"
+          $H --no-menu --line books --mode scrambled --pose 0.9,3,94,-30 --press "E,Z,Tab,Tab" --save-view vcover.png --screenshot vcover-shot.png | q "viewing its COVER, 10 x 10"
+          test "$(head -c 4 vcover.png | tail -c 3)" = "PNG"
+          $H --no-menu --line books --mode scrambled --pose 0.9,3,94,-30 --press "E,Z,Tab,Tab,Tab" --save-view vtitle.txt --screenshot vtitle-shot.png | q "viewing its TITLE"
+          test -s vtitle.txt
+          # Every line filtered by every other (FILTER-PLUGINS.md section 16): the CLI's counts are
+          # the oracle's cross-vectors; a page's file fails not-an-item-v1 on the binary line, and
+          # the hallway says why the binary line cannot compact with every item form asked for.
+          printf "[text]\nmode = compact\nfilters = not-a-file-v1\n" > naf.ini
+          want=$(awk -F'\t' '$1 == "not-a-file" && $2 == "27" && $3 == "32" {print $4}' tests/vectors_cross_v1.tsv)
+          build/sieve filters --length 32 --filters naf.ini | q "^survivors    $want (exact; compact mode available)"
+          printf "[image]\nmode = compact\nfilters = not-packed-v1\n" > np.ini
+          want=$(awk -F'\t' '$1 == "packed" && $2 == "2" && $3 == "100" {print $4}' tests/vectors_cross_v1.tsv)
+          build/sieve filters --line image --filters np.ini | q "^survivors    $want (exact; compact mode available)"
+          printf "[binary]\nmode = compact\nfilters = binary-kind-v1, not-an-item-v1\n[binary.binary-kind-v1]\nkinds = signed\nkeep = exclude\n" > ni.ini
+          want=$(awk -F'\t' '$1 == "item-pages" && $2 == "40" {print $7}' tests/vectors_cross_v1.tsv)
+          build/sieve filters --line binary --length 40 --alphabet ascii95 --page-length 20 --filters ni.ini | q "^survivors    $want (exact; compact mode available)"
+          printf 'hello world, 20 char' > page.txt
+          build/sieve check --line binary --length 40 --alphabet ascii95 --page-length 20 --file page.txt --filters ni.ini | q "stack: fails at not-an-item-v1"
+          # The models line's own stack: not-a-file-v1 on a model's number, counted as the oracle
+          # counts it, a cube's verdict and compact address, and the line compacted in the hallway.
+          printf "[models]\nmode = compact\nfilters = not-a-file-v1\n" > mf.ini
+          want=$(awk -F'\t' '$1 == "models" && $2 == "8" && $3 == "12" && $4 == "16" {print $5}' tests/vectors_cross_v1.tsv)
+          build/sieve filters --line models --filters mf.ini | q "^survivors    $want (exact; compact mode available)"
+          build/sieve mesh --warp cube.obj --filters mf.ini | q "^stack: passes, survivor number"
+          $H --no-menu --line models --filters mf.ini --walk "0,0" --screenshot mcompact.png | q "^MODELS line, positional, filters: 1 compact"
+          # And the line's own filters: counted as the oracle's face walk counts them, a cube passes
+          # all three, and the hallway's compact line holds only well-formed models.
+          printf "[models]\nmode = compact\nfilters = distinct-vertices-v1, distinct-indices-v1, every-vertex-used-v1\n" > mr.ini
+          want=$(awk -F'\t' '$1 == "mesh" && $2 == "8" && $3 == "12" && $4 == "16" && $5 == "viu" {print $6}' tests/vectors_cross_v1.tsv)
+          build/sieve filters --line models --filters mr.ini | q "^survivors    $want (exact; compact mode available)"
+          build/sieve mesh --warp cube.obj --filters mr.ini | q "^stack: passes, survivor number"
+          $H --no-menu --line models --filters mr.ini --walk "0,0" --take --screenshot mrules.png | q "8/8 vertices used, 0 degenerate faces"
+          # not-a-pattern-v1: counted as the oracle counts it (by inclusion and exclusion over the
+          # block lengths), and a ramp through the alphabet fails while text passes.
+          printf "[text]\nmode = compact\nfilters = not-a-pattern-v1\n" > pat.ini
+          want=$(awk -F'\t' '$1 == "pattern" && $2 == "27" && $3 == "32" && $4 == "1" {print $8}' tests/vectors_cross_v1.tsv)
+          build/sieve filters --length 32 --filters pat.ini | q "^survivors    $want (exact; compact mode available)"
+          build/sieve check --length 26 --filters pat.ini --model none "abcdefghijklmnopqrstuvwxyz" | q "stack: fails at not-a-pattern-v1"
+          build/sieve check --length 26 --filters pat.ini --model none "it was the best of times it" | q "stack: passes"
+          printf "[binary]\nmode = compact\nfilters = not-an-item-v1\n[binary.not-an-item-v1]\nitems = all\n" > nia.ini
+          $H --no-menu --line binary --filters nia.ini --walk "0,0" --screenshot nia.png | q "^BINARY line, positional, filters: 1 hide (compact: not-an-item-v1 judges models file by file"
+          test -s compact.png && test -s mixed.png && test -s mark.png && test -s overlay.png
+
+      - name: Reference oracle reproduces the committed vectors
+        run: |
+          cd reference
+          python sieve_ref.py vectors       | diff - ../tests/vectors_v1.tsv
+          python sieve_ref.py biguint-vectors | diff - ../tests/vectors_biguint_v1.tsv
+          python sieve_ref.py biguint-large-vectors | diff - ../tests/vectors_biguint_large_v1.tsv
+          python sieve_ref.py digit-vectors | diff - ../tests/vectors_digits_v1.tsv
+          python sieve_ref.py canon-vectors | diff - ../tests/vectors_canon.tsv
+          python sieve_ref.py bytes-vectors | diff - ../tests/vectors_bytes_v1.tsv
+          python sieve_ref.py alphabet-vectors | diff - ../tests/vectors_alphabets_v1.tsv
+          python sieve_ref.py model-vectors | diff - ../tests/vectors_models_v1.tsv
+          python sieve_ref.py image-vectors | diff - ../tests/vectors_image_v1.tsv
+          python sieve_ref.py image-v2-vectors | diff - ../tests/vectors_image_v2.tsv
+          python sieve_ref.py cipher-vectors | diff - ../tests/vectors_cipher_v1.tsv
+          python sieve_ref.py guided-vectors | diff - ../tests/vectors_guided_v1.tsv
+          python sieve_ref.py filter-vectors | diff - ../tests/vectors_filters_v1.tsv
+          python sieve_ref.py compact-vectors | diff - ../tests/vectors_compact_v1.tsv
+          python sieve_ref.py book-vectors | diff - ../tests/vectors_books_v1.tsv
+          python sieve_ref.py composition-vectors | diff - ../tests/vectors_compositions_v1.tsv
+          python sieve_ref.py world-vectors | diff - ../tests/vectors_worlds_v1.tsv
+          python sieve_ref.py ai-vectors | diff - ../tests/vectors_ai_v1.tsv
+          python sieve_ref.py ai-filter-vectors | diff - ../tests/vectors_ai_filters_v1.tsv
+          python sieve_ref.py ai-run-filter-vectors | diff - ../tests/vectors_ai_run_filters_v1.tsv
+          python sieve_ref.py train-vectors --corpus ../tests/training_corpus.txt | diff - ../tests/vectors_training_v1.tsv
+          python sieve_ref.py train-vectors --corpus ../tests/training_corpus.txt --v2 | diff - ../tests/vectors_training_v2.tsv
+          python sieve_ref.py titled-vectors | diff - ../tests/vectors_titled_v1.tsv
+          python sieve_ref.py binary-vectors | diff - ../tests/vectors_binary_v1.tsv
+          python sieve_ref.py chunk-vectors | diff - ../tests/vectors_chunks_v1.tsv
+          python sieve_ref.py notes2-vectors | diff - ../tests/vectors_notes2_v1.tsv
+          python sieve_ref.py pcm-vectors | diff - ../tests/vectors_pcm_v1.tsv
+          python sieve_ref.py sound-vectors | diff - ../tests/vectors_sound_v1.tsv
+          python sieve_ref.py notes3-vectors | diff - ../tests/vectors_notes3_v1.tsv
+          # One line filtered by another (FILTER-PLUGINS.md section 15): file kinds and the binary
+          # line's filter by them, and not-written-v1, counted by the oracle's own machines, its
+          # closed form for the binary reading and the overlap walked pair by pair (about 3 minutes).
+          python sieve_ref.py kind-vectors | diff - ../tests/vectors_kinds_v1.tsv
+          python sieve_ref.py written-vectors | diff - ../tests/vectors_written_v1.tsv
+          # Every line filtered by every other (section 16): not-a-file, the notation and .obj
+          # machines, the packed closed form and the pages among the binary kinds; and the models
+          # line's rules with canonical-mesh-v1 (about 45 s).
+          python sieve_ref.py cross-vectors | diff - ../tests/vectors_cross_v1.tsv
+          # palette-size-v1 and row-runs-v1 (closed forms, brute force on small lines), and
+          # utf8-valid-v1 on the binary line (code points by encoded length, Python's decoder).
+          python sieve_ref.py picture-vectors | diff - ../tests/vectors_picture_v1.tsv
+          # figure-v1: shapes found by a flood fill on small lines, and at 10 by 10 counted by a
+          # frontier walk that knows each pixel's row (the engine's automaton does not).
+          python sieve_ref.py figure-vectors | diff - ../tests/vectors_figure_v1.tsv
+          # diffusion-v1: training steps that attend everywhere, scored on every clean cell, and a picture made.
+          python sieve_ref.py diffusion-vectors | diff - ../tests/vectors_diffusion_v1.tsv
+          python sieve_ref.py utf8-vectors | diff - ../tests/vectors_utf8_v1.tsv
+          # The generated text plugins are what tools/build_text_plugins.py makes from the pinned lists.
+          python ../tools/build_text_plugins.py --check
+          python sieve_ref.py book-filter-vectors | diff - ../tests/vectors_book_filters_v1.tsv
+          python sieve_ref.py book-read ../tests/example_book_v1.book > book.out
+          test "$(head -1 book.out)" = "$(awk '$1 == "id" {print $2}' ../tests/example_book_v1.book)"
+          tail -n +3 book.out | cmp - ../tests/example_book_v1.pages.txt
+          # The file locator and the manifest creator: the tool's manifest of the fixture folder is
+          # the oracle's to the byte, and every file's address it writes is binary-v1's.
+          S=../build/sieve
+          [ -f ../build/Release/sieve.exe ] && S=../build/Release/sieve.exe
+          # Filter plugins (docs/FILTER-PLUGINS.md): every reference plugin, at several lengths and
+          # settings, reported identically by the engine and by the oracle's own parser and engine
+          # (states declared and minimal, survivors, excluded, and survivors by rank).
+          for L in 1 2 5 17 40; do
+            for spec in "clean-data-v1:" "clean-data-v2:" "max-run-data-v1:max=1" "max-run-data-v1:max=3" "max-run-data-v1:max=5" "key-data-v1:tonic=0" "key-data-v1:tonic=5" "key-data-v1:tonic=11" "tidy-data-v1:" "tidy-data-v1:longest=3" "tidy-data-v2:" "tidy-data-v2:longest=3"; do
+              f=${spec%%:*}; p=${spec#*:}
+              python sieve_ref.py plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} > plugin.oracle
+              $S filters --plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
+              diff plugin.oracle plugin.engine
+            done
+          done
+          # The token form: the ports of words-v1 and window-v1 (a dictionary each, built another way
+          # by the oracle: an NFA and the subset construction, then Hopcroft), and a toy grammar
+          # (word lists, follow, first and last, a word in two sets; whole and cut edges).
+          for f in words-data-v1 window-data-v1 words-data-v2 window-data-v2 title-data-v1; do
+            python sieve_ref.py plugin ../data/filters/$f.sfilter --length 6 --params dictionary=scowl-en-35 > plugin.oracle
+            $S filters --plugin ../data/filters/$f.sfilter --length 6 --params dictionary=scowl-en-35 | tr -d '\r' > plugin.engine
+            diff plugin.oracle plugin.engine
+          done
+          # title-data-v1 with its words held to fewer symbols than the unit has (`within`).
+          python sieve_ref.py plugin ../data/filters/title-data-v1.sfilter --length 9 --params dictionary=scowl-en-35,max_length=4 > plugin.oracle
+          $S filters --plugin ../data/filters/title-data-v1.sfilter --length 9 --params dictionary=scowl-en-35,max_length=4 | tr -d '\r' > plugin.engine
+          diff plugin.oracle plugin.engine
+          # toy-tags: tagged lists (two files as one, an excluded tag, capitals folded, lines skipped).
+          # toy-padding: trailing padding and `within` with two separators, cut and whole edges.
+          for f in toy-grammar-v1 toy-grammar-cut-v1 toy-tags-v1 toy-tags-cut-v1 toy-padding-v1 toy-padding-whole-v1; do
+            for L in 1 3 11 25; do
+              python sieve_ref.py plugin ../tests/plugins/$f.sfilter --length $L > plugin.oracle
+              $S filters --plugin ../tests/plugins/$f.sfilter --length $L | tr -d '\r' > plugin.engine
+              diff plugin.oracle plugin.engine
+            done
+          done
+          # sieve-filter-v2 (comparisons, && || !, min max abs, if/else/fi, choice parameters, the
+          # line's constants, symbols families): the melody plugins on the audio line at several
+          # settings, and a toy of the grammar on the text line.
+          for spec in "key-data-v2:" "key-data-v2:tonic=A,scale=minor" "key-data-v2:tonic=F#,scale=blues" "melody-leap-v1:" "melody-leap-v1:leap=2,rest_resets=yes" "melody-lengths-v1:" "melody-lengths-v1:shortest=q,longest=h,eighths=0" "melody-rests-v1:" "melody-rests-v1:run=1,total=3,leading=yes" "melody-ending-v1:tonic=A,hold=h" "melody-range-v1:low=64,high=72"; do
+            f=${spec%%:*}; p=${spec#*:}
+            for L in 1 2 5 17; do
+              python sieve_ref.py plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} > plugin.oracle
+              $S filters --plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
+              diff plugin.oracle plugin.engine
+            done
+          done
+          for spec in "melody-metre-v1:" "melody-metre-v1:time=3-4,complete=yes" "melody-metre-v1:time=5-4" "melody-ambitus-v1:" "melody-ambitus-v1:span=4" "melody-gapfill-v1:" "melody-gapfill-v1:leap=2,step=5,resolve=yes"; do
+            f=${spec%%:*}; p=${spec#*:}
+            for L in 1 2 5 17; do
+              python sieve_ref.py plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} > plugin.oracle
+              $S filters --plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
+              diff plugin.oracle plugin.engine
+            done
+          done
+          # The generated text plugins (tools/build_text_plugins.py), at several lengths and settings.
+          for spec in "letter-pairs-v1:" "letter-pairs-v1:min_words=5" "letter-triples-v1:" "letter-triples-v1:min_words=3" "word-cost-v1:" "word-cost-v1:rate=12,slack=8" "sentence-shape-v1:" "sentence-shape-v1:capitals=no,others=yes" "babel-punctuation-v1:"; do
+            f=${spec%%:*}; p=${spec#*:}
+            for L in 1 2 5 17 40; do
+              python sieve_ref.py plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} > plugin.oracle
+              $S filters --plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
+              diff plugin.oracle plugin.engine
+            done
+          done
+          python sieve_ref.py plugin ../data/filters/sentence-shape-v1.sfilter --length 6 --judge ../tests/plugins/sentence-shape-cases.txt > plugin.oracle
+          $S filters --plugin ../data/filters/sentence-shape-v1.sfilter --length 6 --judge ../tests/plugins/sentence-shape-cases.txt | tr -d '\r' > plugin.engine
+          diff plugin.oracle plugin.engine
+          # function-words-v1 reads every word of scowl-en-60-names: the oracle's lazy mode, as for Moby.
+          python sieve_ref.py plugin ../data/filters/function-words-v1.sfilter --length 6 --lazy --judge ../tests/plugins/moby-sentences.txt | grep -v "^states" > plugin.oracle
+          $S filters --plugin ../data/filters/function-words-v1.sfilter --length 6 --judge ../tests/plugins/moby-sentences.txt | tr -d '\r' | grep -v "^states" > plugin.engine
+          diff plugin.oracle plugin.engine
+          # Anchor plugins (tools/build_anchor_plugins.py): near one anchor, near several, and fragments.
+          for spec in "near-example-v1:" "near-example-v1:distance=0" "near-example-v1:distance=7" "near-many-example-v1:" "contains-example-v1:"; do
+            f=${spec%%:*}; p=${spec#*:}
+            for L in 1 8 20 32; do
+              python sieve_ref.py plugin ../tests/plugins/$f.sfilter --length $L ${p:+--params $p} > plugin.oracle
+              $S filters --plugin ../tests/plugins/$f.sfilter --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
+              diff plugin.oracle plugin.engine
+            done
+          done
+          # Within d substitutions of one 32-letter page: sum over i <= d of C(32, i) 26^i.
+          $S filters --plugin ../tests/plugins/near-example-v1.sfilter --length 32 --params distance=3 | grep -qx "survivors  87513089"
+          for p in "" "gap=0" "mode=far" "mode=any,gap=5"; do
+            for L in 1 2 5 12; do
+              python sieve_ref.py plugin ../tests/plugins/toy-v2-v1.sfilter --length $L ${p:+--params $p} > plugin.oracle
+              $S filters --plugin ../tests/plugins/toy-v2-v1.sfilter --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
+              diff plugin.oracle plugin.engine
+            done
+          done
+          # The notes2 family: the note plugins on sets of other ranges and durations, one to three
+          # voices, each voice judged on its own (counts to the power of the voices, ranks by voice).
+          for set in "--low C3 --high C6 --durations seEqQhHw" "--low F#3 --high G5 --durations EQH"; do
+            for V in 1 2 3; do
+              for spec in "key-data-v2:tonic=D,scale=blues" "melody-leap-v1:leap=3" "melody-rests-v1:run=1,total=2,leading=yes" "melody-range-v1:low=62,high=70" "melody-lengths-v2:shortest=e,longest=h,eighths=1" "melody-ending-v2:tonic=G,hold=Q"; do
+                f=${spec%%:*}; p=${spec#*:}
+                for L in 1 2 5; do
+                  python sieve_ref.py plugin ../data/filters/$f.sfilter --line audio --note-set notes2 $set --voices $V --length $L --params $p > plugin.oracle
+                  $S filters --plugin ../data/filters/$f.sfilter --line audio --note-set notes2 $set --voices $V --length $L --params $p | tr -d '\r' > plugin.engine
+                  diff plugin.oracle plugin.engine
+                done
+              done
+            done
+          done
+          # The notes3 family (symbols notes3*, NOTE() and REST()): every notes3 plugin, on two small
+          # sets of other ranges, ticks and levels, one and two voices.
+          for set in "--low C4 --high C5 --tpq 2 --longest 4 --levels 2" "--low A3 --high B4 --tpq 3 --longest 5 --levels 3"; do
+            for V in 1 2; do
+              for spec in "key-notes3-v1:" "key-notes3-v1:tonic=A,scale=minor" "melody-leap-notes3-v1:leap=2,rest_resets=yes" "melody-range-notes3-v1:low=62,high=70" "melody-ambitus-notes3-v1:span=4" "melody-rests-notes3-v1:run=1,total=2,leading=yes" "melody-gapfill-notes3-v1:leap=2,step=3,resolve=yes" "melody-metre-notes3-v1:" "melody-metre-notes3-v1:time=6-8,complete=yes" "melody-ending-notes3-v1:tonic=G,hold=q" "melody-lengths-notes3-v1:shortest=e,longest=h,eighths=1" "melody-loudness-notes3-v1:softest=2,loudest=3,step=1"; do
+                f=${spec%%:*}; p=${spec#*:}
+                for L in 1 2 4; do
+                  python sieve_ref.py plugin ../data/filters/$f.sfilter --line audio --note-set notes3 $set --voices $V --length $L ${p:+--params $p} > plugin.oracle
+                  $S filters --plugin ../data/filters/$f.sfilter --line audio --note-set notes3 $set --voices $V --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
+                  diff plugin.oracle plugin.engine
+                done
+              done
+            done
+          done
+          # The Moby grammars: too large for the oracle to determinise in full (its NFA keeps each
+          # token's reading apart, and the subsets run past ten million), so its lazy mode makes the
+          # subsets only as they are reached: counts, ranks and verdicts on real and shuffled
+          # sentences must match the engine's; the minimal size is the engine's alone.
+          for f in moby-grammar-v1 moby-grammar-strict-v1; do
+            python sieve_ref.py plugin ../data/filters/$f.sfilter --length 6 --lazy --judge ../tests/plugins/moby-sentences.txt | grep -v "^states" > plugin.oracle
+            $S filters --plugin ../data/filters/$f.sfilter --length 6 --judge ../tests/plugins/moby-sentences.txt | tr -d '\r' | grep -v "^states" > plugin.engine
+            diff plugin.oracle plugin.engine
+          done
+          # Every shipped plugin loads: as many as data/filters holds (not a fixed number, which went
+          # stale when key-data-v2 was added).
+          test "$($S filters --plugins | grep -c "^loaded")" = "$(ls ../data/filters/*.sfilter | wc -l | tr -d ' ')"
+          $S filters --plugin ../data/filters/words-data-v1.sfilter --length 6 --relations | grep -q "stricter than (implies) window-data-v1"
+          rm -rf addr
+          $S locate ../tests/manifest_fixture --manifest fixture.manifest --addresses addr --compare > locate.out
+          python sieve_ref.py manifest ../tests/manifest_fixture | cmp - fixture.manifest
+          python sieve_ref.py manifest ../tests/manifest_fixture --addresses addr
+          grep -q "7z (LZMA2" locate.out
+          # A map (sieve-map-v1) of the fixture is the oracle's to the byte, reads back to itself,
+          # and is written for other programs as DOT and as well-formed GraphML.
+          $S map ../tests/manifest_fixture --out fixture.map --dot fixture.dot --graphml fixture.graphml > /dev/null
+          python sieve_ref.py map ../tests/manifest_fixture | cmp - fixture.map
+          $S map fixture.map | cmp - fixture.map
+          grep -q '^digraph "manifest_fixture"' fixture.dot
+          python -c "import xml.dom.minidom as m; m.parse('fixture.graphml')"
+          # Maps v2: a release map (files found beside it, sealed) and a map holding anchors (their
+          # bytes inside it) are the oracle's to the byte; removing an anchor leaves the oracle's
+          # map of the rest; a sealed map refuses to change.
+          F=../tests/manifest_fixture
+          $S map $F/a.txt $F/Zebra.txt --name release --seal --out rel.map 2> /dev/null
+          python sieve_ref.py map $F/a.txt $F/Zebra.txt --name release --seal | cmp - rel.map
+          if $S map rel.map --add $F/a.txt --out rel2.map 2> /dev/null; then exit 1; fi
+          $S map --new default --out empty.map 2> /dev/null
+          $S map empty.map --add "$F/sub dir/b.bin" --out held.map 2> /dev/null
+          $S map held.map --add $F/a.txt --out held.map 2> /dev/null
+          python sieve_ref.py map "$F/sub dir/b.bin" $F/a.txt --held --name default | cmp - held.map
+          if $S map held.map --add $F/a.txt --out held2.map 2> /dev/null; then exit 1; fi
+          $S map held.map --remove 1 --out held1.map 2> /dev/null
+          python sieve_ref.py map $F/a.txt --held --name default | cmp - held1.map
+          # Metadata on a node, set and read back as the oracle writes it.
+          $S map held1.map --meta "1:source=the fixture folder" --out meta.map 2> /dev/null
+          $S map meta.map --meta "1:found=2026-09-27" --out meta.map 2> /dev/null
+          python sieve_ref.py map $F/a.txt --held --name default --meta "1:source=the fixture folder" --meta "1:found=2026-09-27" | cmp - meta.map
+          $S map --new sealed --seal --out sealed.map 2> /dev/null
+          $S map sealed.map 2>&1 | grep -c "sealed (sealed)" > /dev/null
+          if $S map sealed.map --add $F/a.txt --out sealed2.map 2> /dev/null; then exit 1; fi
+          # A v2 manifest (every file's address listed) is the oracle's to the byte.
+          $S locate ../tests/manifest_fixture --manifest fixture2.manifest --with-addresses > /dev/null
+          python sieve_ref.py manifest ../tests/manifest_fixture --with-addresses | cmp - fixture2.manifest
+          # The older installer, --v3: a v3 manifest (the listing, then every file's bytes; the
+          # oracle's, to the byte), its address, and the folder put back from that one address,
+          # identical.
+          $S locate ../tests/manifest_fixture --manifest fixture3.manifest --installer fixture.sieve --v3 > /dev/null
+          python sieve_ref.py manifest ../tests/manifest_fixture --with-contents | cmp - fixture3.manifest
+          # The installer is the manifest's address as raw bytes: exactly the manifest's size here,
+          # which is the files' bytes and the listing, no more.
+          test "$(wc -c < fixture.sieve)" = "$(wc -c < fixture3.manifest)"
+          test "$(wc -c < fixture3.manifest)" = "$(( $(python sieve_ref.py manifest ../tests/manifest_fixture | wc -c) + $(awk '$1 == "bytes" {print $2}' fixture.manifest) ))"
+          rm -rf installed
+          $S install fixture.sieve --to installed > /dev/null
+          diff -r ../tests/manifest_fixture installed
+          # A single file's Sieve instructions: as a folder holding just it, the oracle's v3 manifest
+          # to the byte (seen through its address), installed back as the file under its name.
+          $S locate ../tests/manifest_fixture/a.txt --installer a.sieve --v3 > /dev/null
+          python sieve_ref.py manifest ../tests/manifest_fixture/a.txt --with-contents > a3.manifest
+          python -c "
+          import sys
+          o = open('a3.manifest', 'rb').read(); s = open('a.sieve', 'rb').read()
+          n = int.from_bytes(o, 'big') + int('01' * len(o), 16)
+          sys.exit(0 if n.to_bytes((n.bit_length() + 7) // 8, 'big') == s else 1)"
+          rm -rf one_file
+          $S install a.sieve --to one_file > /dev/null
+          cmp one_file/a.txt ../tests/manifest_fixture/a.txt
+          # An installer's manifest installs as it is too (it holds the files); a v1 manifest,
+          # which only lists them, is refused.
+          rm -rf installed3
+          $S install fixture3.manifest --to installed3 > /dev/null
+          diff -r ../tests/manifest_fixture installed3
+          if $S install fixture.manifest --to installed_v1 2> /dev/null; then exit 1; fi
+          # An older installer, of a v2 manifest, still installs.
+          python -c "
+          import sys; sys.path.insert(0, '.')
+          from sieve_ref import binary_index
+          d = open('fixture2.manifest', 'rb').read(); a = binary_index(d)
+          open('fixture_v2.sieve', 'wb').write(a.to_bytes((a.bit_length() + 7) // 8, 'big'))"
+          rm -rf installed2
+          $S install fixture_v2.sieve --to installed2 > /dev/null
+          diff -r ../tests/manifest_fixture installed2
+          test "$($S locate ../tests/manifest_fixture/a.txt | awk '$1 == "sha256" {print $2}')" = "$(python -c "import hashlib;print(hashlib.sha256(open('../tests/manifest_fixture/a.txt','rb').read()).hexdigest())")"
+          # The installer as made now, v4: the fixture with a program (the x86 stream) and a list
+          # made from another's lines (a mask), packed; the oracle unpacks it with Python's own
+          # lzma, nothing of Sieve's, and gives back the folder, as sieve install does.
+          rm -rf v4fx && cp -r ../tests/manifest_fixture v4fx && cp $S v4fx/program
+          python -c "open('v4fx/all.txt', 'w').write(''.join(f'{i}\n' for i in range(1, 20001)))"
+          python -c "open('v4fx/third.txt', 'w').write(''.join(f'{i}\n' for i in range(3, 20001, 3)))"
+          out=$($S locate v4fx --manifest fixture4.manifest --installer fixture4.sieve | tr -d '\r')
+          echo "$out" | grep -v "^[df]	"
+          echo "$out" | grep -c "1 program(s) in the x86 stream" > /dev/null
+          echo "$out" | grep -c "third.txt: lines of all.txt" > /dev/null
+          head -1 fixture4.manifest | grep -c "^sieve-manifest-v4" > /dev/null
+          rm -rf unpacked4 installed4
+          python sieve_ref.py unpack fixture4.manifest --to unpacked4 > /dev/null
+          diff -r v4fx unpacked4
+          $S install fixture4.sieve --to installed4 > /dev/null
+          diff -r v4fx installed4
+          # A damaged stream is refused, and nothing is written.
+          python -c "
+          d = bytearray(open('fixture4.manifest', 'rb').read()); d[-40] ^= 0xFF
+          open('broken4.manifest', 'wb').write(bytes(d))"
+          if $S install broken4.manifest --to broken4 2> /dev/null; then exit 1; fi
+          test ! -e broken4
+
+      - name: The pinned model rebuilds byte for byte from its corpus (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          python tools/fetch_corpus.py
+          pinned=$(awk -F'\t' '$1 == "gutenberg-lower27-o5" {print $5}' data/models/models.tsv)
+          build/sieve train --out rebuilt.model
+          test "$(sha256sum rebuilt.model | cut -d' ' -f1)" = "$pinned"
+          (cd reference && python sieve_ref.py model-build --out ../oracle.model)
+          test "$(sha256sum oracle.model | cut -d' ' -f1)" = "$pinned"
+          build/sieve measure

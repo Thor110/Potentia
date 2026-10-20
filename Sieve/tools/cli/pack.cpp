@@ -7,6 +7,7 @@
 #include "unpack_7z.hpp"
 
 #include <lzma.h>
+#include <zlib.h>
 
 #include <algorithm>
 #include <cmath>
@@ -195,12 +196,217 @@ std::optional<std::vector<uint8_t>> xz_inner(const std::vector<uint8_t>& b)
     return out;
 }
 
+// ---- gzip and zip (v17's gzip remade exactly; both carried as their contents)
+
+bool is_gzip(const std::vector<uint8_t>& b) { return b.size() >= 18 && b[0] == 0x1F && b[1] == 0x8B && b[2] == 8; }
+
+// One gzip member: its header's length (to the deflate), or 0 if it is not one this reads.
+size_t gzip_header_size(const std::vector<uint8_t>& b)
+{
+    if (!is_gzip(b)) return 0;
+    const uint8_t flg = b[3];
+    if (flg & 0xE0) return 0;
+    size_t at = 10;
+    if (flg & 4)
+    {
+        if (at + 2 > b.size()) return 0;
+        at += 2 + size_t(b[at] | b[at + 1] << 8);
+    }
+    for (const uint8_t bit : {uint8_t(8), uint8_t(16)})
+        if (flg & bit)
+        {
+            while (at < b.size() && b[at]) ++at;
+            ++at;
+        }
+    if (flg & 2) at += 2;
+    return at < b.size() ? at : 0;
+}
+
+// Raw deflate undone (zlib), all of it, with how much input it took; nothing if it is not whole.
+std::optional<std::vector<uint8_t>> inflate_raw(const uint8_t* in, size_t n, size_t* used, uint64_t expect = UINT64_MAX)
+{
+    z_stream z{};
+    if (inflateInit2(&z, -15) != Z_OK) return std::nullopt;
+    std::vector<uint8_t> out;
+    std::vector<uint8_t> buf(1 << 20);
+    z.next_in = const_cast<Bytef*>(in);
+    z.avail_in = uInt(std::min<size_t>(n, 0xFFFFFFFFu));
+    int r = Z_OK;
+    while (r == Z_OK)
+    {
+        z.next_out = buf.data();
+        z.avail_out = uInt(buf.size());
+        r = inflate(&z, Z_NO_FLUSH);
+        out.insert(out.end(), buf.data(), buf.data() + (buf.size() - z.avail_out));
+        if (out.size() > expect) break;
+        if (r == Z_BUF_ERROR && z.avail_in == 0) break;
+    }
+    const bool whole = r == Z_STREAM_END;
+    if (used) *used = n - z.avail_in;
+    inflateEnd(&z);
+    if (!whole) return std::nullopt;
+    return out;
+}
+
+// What a gzip file holds: one member, its CRC and length checked, nothing after it.
+std::optional<std::vector<uint8_t>> gzip_inner(const std::vector<uint8_t>& b)
+{
+    const size_t h = gzip_header_size(b);
+    if (!h || b.size() < h + 8) return std::nullopt;
+    size_t used = 0;
+    auto out = inflate_raw(b.data() + h, b.size() - h - 8, &used);
+    if (!out || h + used + 8 != b.size()) return std::nullopt;
+    const uint8_t* t = b.data() + h + used;
+    const uint32_t crc = uint32_t(t[0]) | uint32_t(t[1]) << 8 | uint32_t(t[2]) << 16 | uint32_t(t[3]) << 24;
+    const uint32_t len = uint32_t(t[4]) | uint32_t(t[5]) << 8 | uint32_t(t[6]) << 16 | uint32_t(t[7]) << 24;
+    if (crc32(0, out->data(), uInt(out->size())) != crc || uint32_t(out->size()) != len) return std::nullopt;
+    return out;
+}
+
+std::vector<uint8_t> deflate_raw(const std::vector<uint8_t>& in, int level, int mem)
+{
+    z_stream z{};
+    if (deflateInit2(&z, level, Z_DEFLATED, -15, mem, Z_DEFAULT_STRATEGY) != Z_OK) throw std::runtime_error("zlib could not start");
+    std::vector<uint8_t> out(deflateBound(&z, uLong(in.size())) + 16);
+    z.next_in = const_cast<Bytef*>(in.data());
+    z.avail_in = uInt(in.size());
+    z.next_out = out.data();
+    z.avail_out = uInt(out.size());
+    const int r = deflate(&z, Z_FINISH);
+    const size_t n = out.size() - z.avail_out;
+    deflateEnd(&z);
+    if (r != Z_STREAM_END) throw std::runtime_error("zlib could not pack");
+    out.resize(n);
+    return out;
+}
+
+std::string hex_of(const uint8_t* p, size_t n)
+{
+    static const char* d = "0123456789abcdef";
+    std::string s;
+    for (size_t i = 0; i < n; ++i) (s += d[p[i] >> 4]) += d[p[i] & 15];
+    return s;
+}
+
+// A zip's entries, read into memory: stored and deflated ones, each checked against its CRC; the
+// one top folder left out as a 7z's is. Nothing where any entry is encrypted, in another method,
+// zip64, or named so it could leave its folder.
+std::optional<std::vector<sieve::install::InMemory>> zip_entries(const std::vector<uint8_t>& b)
+{
+    auto u16 = [&](size_t at) { return uint32_t(b[at]) | uint32_t(b[at + 1]) << 8; };
+    auto u32 = [&](size_t at) { return u16(at) | u16(at + 2) << 16; };
+    if (b.size() < 22 || u32(0) != 0x04034b50) return std::nullopt;
+    size_t eocd = std::string::npos;
+    for (size_t at = b.size() - 22 + 1; at-- > 0 && b.size() - at <= 65557;)
+        if (u32(at) == 0x06054b50)
+        {
+            eocd = at;
+            break;
+        }
+    if (eocd == std::string::npos) return std::nullopt;
+    const uint32_t count = u16(eocd + 10), cd_size = u32(eocd + 12), cd_at = u32(eocd + 16);
+    if (count == 0xFFFF || cd_at == 0xFFFFFFFFu || size_t(cd_at) + cd_size > eocd) return std::nullopt;
+    std::vector<sieve::install::InMemory> out;
+    size_t at = cd_at;
+    for (uint32_t k = 0; k < count; ++k)
+    {
+        if (at + 46 > b.size() || u32(at) != 0x02014b50) return std::nullopt;
+        const uint32_t flags = u16(at + 8), method = u16(at + 10), crc = u32(at + 16), csize = u32(at + 20), usize = u32(at + 24);
+        const uint32_t nlen = u16(at + 28), xlen = u16(at + 30), clen = u16(at + 32), local = u32(at + 42);
+        if (at + 46 + nlen > b.size()) return std::nullopt;
+        std::string name(b.begin() + std::ptrdiff_t(at + 46), b.begin() + std::ptrdiff_t(at + 46 + nlen));
+        at += 46 + nlen + xlen + clen;
+        if ((flags & 1) || (method != 0 && method != 8) || csize == 0xFFFFFFFFu || usize == 0xFFFFFFFFu) return std::nullopt;
+        // Its name: relative, '/' between parts, no "." or ".." part, no drive, no backslash.
+        if (name.empty() || name[0] == '/' || name.find('\\') != std::string::npos || name.find(':') != std::string::npos) return std::nullopt;
+        for (size_t p = 0; p <= name.size();)
+        {
+            size_t slash = name.find('/', p);
+            if (slash == std::string::npos) slash = name.size();
+            const std::string part = name.substr(p, slash - p);
+            if (part == "." || part == ".." || (part.empty() && slash != name.size() && slash + 1 != name.size())) return std::nullopt;
+            p = slash + 1;
+        }
+        sieve::install::InMemory m;
+        m.entry.dir = name.back() == '/';
+        m.entry.path = m.entry.dir ? name.substr(0, name.size() - 1) : name;
+        if (!m.entry.dir)
+        {
+            if (size_t(local) + 30 > b.size() || u32(local) != 0x04034b50) return std::nullopt;
+            const size_t data = size_t(local) + 30 + u16(local + 26) + u16(local + 28);
+            if (data + csize > b.size()) return std::nullopt;
+            if (method == 0)
+            {
+                if (csize != usize) return std::nullopt;
+                m.bytes.assign(b.begin() + std::ptrdiff_t(data), b.begin() + std::ptrdiff_t(data + csize));
+            }
+            else
+            {
+                size_t used = 0;
+                auto got = inflate_raw(b.data() + data, csize, &used, usize);
+                if (!got || got->size() != usize) return std::nullopt;
+                m.bytes = std::move(*got);
+            }
+            if (crc32(0, m.bytes.data(), uInt(m.bytes.size())) != crc) return std::nullopt;
+            m.entry.size = m.bytes.size();
+        }
+        out.push_back(std::move(m));
+    }
+    // One top folder: every entry is it or inside it, at least one inside: left out.
+    if (!out.empty())
+    {
+        const std::string top = out[0].entry.path.substr(0, out[0].entry.path.find('/'));
+        bool one = true, inside = false;
+        for (const auto& m : out)
+        {
+            const std::string& p = m.entry.path;
+            if (p.substr(0, p.find('/')) != top || (p == top && !m.entry.dir)) one = false;
+            if (p.size() > top.size()) inside = true;
+        }
+        if (one && inside)
+        {
+            std::vector<sieve::install::InMemory> kept;
+            for (auto& m : out)
+                if (m.entry.path != top)
+                {
+                    m.entry.path = m.entry.path.substr(top.size() + 1);
+                    kept.push_back(std::move(m));
+                }
+            out = std::move(kept);
+        }
+    }
+    return out;
+}
+
 const char* xz_check_name(int id) { return id == 0 ? "none" : id == 1 ? "crc32" : id == 4 ? "crc64" : id == 10 ? "sha256" : nullptr; }
 
 } // namespace
 
 std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector<uint8_t>& inner)
 {
+    if (recipe.rfind("gz ", 0) == 0)
+    {
+        // "gz <level> <memory level> <header in hex> <inner size>" (v17): the header as it was, the
+        // deflate made again by zlib, then the CRC-32 and the length, little-endian.
+        char hexbuf[8192] = {0};
+        int level = 0, mem = 0;
+        unsigned long long size = 0;
+        char extra = 0;
+        if (recipe.size() > 8000 || std::sscanf(recipe.c_str(), "gz %d %d %8191s %llu%c", &level, &mem, hexbuf, &size, &extra) != 4 || level < 1 ||
+            level > 9 || mem < 1 || mem > 9 || size != inner.size())
+            throw std::runtime_error("a gzip recipe this Sieve does not know: " + recipe.substr(0, 80));
+        const std::string hx(hexbuf);
+        if (hx.size() < 20 || hx.size() % 2 || hx.find_first_not_of("0123456789abcdef") != std::string::npos)
+            throw std::runtime_error("a gzip recipe's header is not hex");
+        std::vector<uint8_t> out;
+        for (size_t i = 0; i < hx.size(); i += 2) out.push_back(uint8_t(std::stoul(hx.substr(i, 2), nullptr, 16)));
+        const std::vector<uint8_t> d = deflate_raw(inner, level, mem);
+        out.insert(out.end(), d.begin(), d.end());
+        const uint32_t crc = uint32_t(crc32(0, inner.data(), uInt(inner.size()))), len = uint32_t(inner.size());
+        for (int k = 0; k < 4; ++k) out.push_back(uint8_t(crc >> (8 * k)));
+        for (int k = 0; k < 4; ++k) out.push_back(uint8_t(len >> (8 * k)));
+        return out;
+    }
     // "xz <preset>[e] <check> <inner size>": liblzma's single-call encoder, as xz writes one stream.
     char kind[8] = {0}, preset[8] = {0}, check[8] = {0};
     unsigned long long size = 0;
@@ -277,6 +483,21 @@ std::string xz_recipe(const std::vector<uint8_t>& b, const std::vector<uint8_t>&
             const std::string recipe = "xz " + std::to_string(level) + (extreme ? "e" : "") + " " + check + " " + std::to_string(inner.size());
             if (remake_archive(recipe, inner) == b) return recipe;
         }
+    return "";
+}
+
+// The recipe that remakes a gzip file exactly ("gz <level> <memory level> <its header in hex>"),
+// or "" if zlib at no level gives its deflate back: the header is kept as it is, the deflate made
+// again and its CRC and length after it.
+std::string gzip_recipe(const std::vector<uint8_t>& b, const std::vector<uint8_t>& inner)
+{
+    const size_t h = gzip_header_size(b);
+    if (!h) return "";
+    const std::vector<uint8_t> stream(b.begin() + std::ptrdiff_t(h), b.end() - 8);
+    for (const int level : {6, 9, 1, 2, 3, 4, 5, 7, 8})
+        for (const int mem : {8, 9})
+            if (deflate_raw(inner, level, mem) == stream)
+                return "gz " + std::to_string(level) + " " + std::to_string(mem) + " " + hex_of(b.data(), h) + " " + std::to_string(inner.size());
     return "";
 }
 
@@ -382,7 +603,7 @@ std::vector<uint8_t> place_bytes_of(const std::string& hex, uint32_t width)
 } // namespace
 
 void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const ItemFinder* items, bool item_hashes, const PlaceCoder* coder,
-                double rope_seconds, uint32_t rope_newest, bool trim, bool pieces, bool optimise_archives, bool binary)
+                double rope_seconds, uint32_t rope_newest, bool trim, bool pieces, bool optimise_archives, bool binary, bool gzip)
 {
     // Every file's bytes, checked against the walk: from the contents where a v3 manifest has them,
     // else read from the folder (the current one, for a file named without one).
@@ -412,6 +633,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     std::vector<std::vector<uint8_t>> original(files.size()); // a remade file's own bytes
     m.unpacked.clear();
     m.archives = false;
+    const bool gzip_remake = binary && gzip; // v17's (a binary head's): gzip remade exactly
+    m.remake_gz = false;
     if (optimise_archives && m.compact)
     {
         std::unordered_set<std::string> taken;
@@ -463,28 +686,76 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 // preset 9, and a near thing is not worth giving up the archive as it was.
                 return cost + extra + 64 + as_is / 200 < as_is;
             };
-            if (is_xz(b))
-                if (auto inner = xz_inner(b); inner && worth(*inner, 40))
+            // A single-stream archive (xz, gzip): remade exactly where a recipe gives it back, else
+            // carried as what it holds, under its name without the extension.
+            auto single = [&](const char* format, std::optional<std::vector<uint8_t>> inner, const std::string& recipe, const std::string& name,
+                              uint64_t extra) {
+                if (!inner || !worth(*inner, extra)) return false;
+                if (!recipe.empty())
                 {
-                    const std::string recipe = xz_recipe(b, *inner);
-                    if (!recipe.empty())
-                    {
-                        ManifestEntry r = e;
-                        r.remake = recipe;
-                        add_file(r, std::move(*inner), std::move(b));
-                        continue;
-                    }
-                    const std::string name = contents_name(e.path, ".xz");
-                    if (!taken.count(name))
-                    {
-                        taken.insert(name);
-                        m.unpacked.push_back({"xz", e.path, name, e.size});
-                        ManifestEntry c = e;
-                        c.path = name;
-                        add_file(c, std::move(*inner), {});
-                        continue;
-                    }
+                    ManifestEntry r = e;
+                    r.remake = recipe;
+                    add_file(r, std::move(*inner), std::move(b));
+                    return true;
                 }
+                if (taken.count(name)) return false;
+                taken.insert(name);
+                m.unpacked.push_back({format, e.path, name, e.size});
+                ManifestEntry c = e;
+                c.path = name;
+                if (one) m.root = name; // one archive located alone: what it holds is the root
+                add_file(c, std::move(*inner), {});
+                return true;
+            };
+            // An archive of files (7z, zip): carried as its contents, in a folder named after it.
+            auto contents = [&](const char* format, std::vector<sieve::install::InMemory> all, const char* ext) {
+                const std::string folder = contents_name(e.path, ext);
+                std::vector<uint8_t> joined;
+                uint64_t names = 0;
+                size_t nfiles = 0;
+                for (const auto& in : all)
+                {
+                    joined.insert(joined.end(), in.bytes.begin(), in.bytes.end());
+                    names += folder.size() + in.entry.path.size() + 12;
+                    nfiles += !in.entry.dir;
+                }
+                // (The rope's estimate only for an archive of one file: for more, their bytes joined
+                // are not what the rope would be given.)
+                if (all.empty() || taken.count(folder) || !worth(joined, names, nfiles == 1)) return false;
+                taken.insert(folder);
+                m.unpacked.push_back({format, e.path, folder, e.size});
+                const std::string prefix = one ? std::string() : folder + "/";
+                if (!one) add_dirs(prefix);
+                for (auto& in : all)
+                {
+                    const std::string path = prefix + in.entry.path;
+                    add_dirs(path);
+                    if (in.entry.dir)
+                    {
+                        add_dir(path + "/");
+                        continue;
+                    }
+                    ManifestEntry fe;
+                    fe.path = path;
+                    add_file(fe, std::move(in.bytes), {});
+                }
+                if (one) m.root = folder; // one archive located alone: its contents' folder is the root
+                return true;
+            };
+            if (is_xz(b))
+            {
+                auto inner = xz_inner(b);
+                const std::string recipe = inner ? xz_recipe(b, *inner) : std::string();
+                if (single("xz", std::move(inner), recipe, contents_name(e.path, ".xz"), 40)) continue;
+            }
+            if (is_gzip(b))
+            {
+                auto inner = gzip_inner(b);
+                const std::string recipe = inner && gzip_remake ? gzip_recipe(b, *inner) : std::string();
+                std::string name = contents_name(e.path, ".gz");
+                if (e.path.size() > 4 && e.path.compare(e.path.size() - 4, 4, ".tgz") == 0) name = e.path.substr(0, e.path.size() - 4) + ".tar";
+                if (single("gz", std::move(inner), recipe, name, 40 + 2 * gzip_header_size(b))) continue;
+            }
             if (sieve::install::is_7z(b))
             {
                 std::vector<sieve::install::InMemory> all;
@@ -496,46 +767,16 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 {
                     all.clear();
                 }
-                const std::string folder = contents_name(e.path, ".7z");
-                std::vector<uint8_t> joined;
-                uint64_t names = 0;
-                for (const auto& in : all)
-                {
-                    joined.insert(joined.end(), in.bytes.begin(), in.bytes.end());
-                    names += folder.size() + in.entry.path.size() + 12;
-                }
-                // (The rope's estimate only for an archive of one file: for more, their bytes joined
-                // are not what the rope would be given.)
-                size_t nfiles = 0;
-                for (const auto& in : all) nfiles += !in.entry.dir;
-                if (!all.empty() && !taken.count(folder) && worth(joined, names, nfiles == 1))
-                {
-                    taken.insert(folder);
-                    m.unpacked.push_back({"7z", e.path, folder, e.size});
-                    const std::string prefix = one ? std::string() : folder + "/";
-                    if (!one) add_dirs(prefix);
-                    for (auto& in : all)
-                    {
-                        const std::string path = prefix + in.entry.path;
-                        add_dirs(path);
-                        if (in.entry.dir)
-                        {
-                            add_dir(path + "/");
-                            continue;
-                        }
-                        ManifestEntry fe;
-                        fe.path = path;
-                        add_file(fe, std::move(in.bytes), {});
-                    }
-                    if (one) m.root = folder; // one archive located alone: its contents' folder is the root
-                    continue;
-                }
+                if (contents("7z", std::move(all), ".7z")) continue;
             }
+            if (auto all = zip_entries(b))
+                if (contents("zip", std::move(*all), ".zip")) continue;
             add_file(e, std::move(b), {});
         }
         if (!m.unpacked.empty() || std::any_of(entries.begin(), entries.end(), [](const ManifestEntry& x) { return !x.remake.empty(); }))
         {
             m.archives = true;
+            m.remake_gz = std::any_of(entries.begin(), entries.end(), [](const ManifestEntry& x) { return x.remake.rfind("gz ", 0) == 0; });
             m.entries.clear();
             bytes.clear();
             original.clear();
@@ -926,6 +1167,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         m.trimmed = trim && m.compact && (lzma2_as_is || m.pieces || (m.item_stream.packed == 0 && m.item_stream.bytes == 0));
         r.pieces_made = m.pieces;
         r.archives_made = m.archives;
+        r.remake_gz = m.remake_gz;
         r.rope_above = m.rope_above;
         r.trimmed = m.trimmed;
         r.lzma2_as_is = lzma2_as_is;
@@ -1020,7 +1262,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
     };
     if (r.compact)
     {
-        const char* version = r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
+        const char* version = r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
                             : r.roped ? kRopeManifestVersion : kCompactManifestVersion;
         if (r.items)
         {

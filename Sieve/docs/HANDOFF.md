@@ -3573,14 +3573,31 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   `--v15`; new: v16 on the degree sample and the model, and a v16 head with an unknown flag refused.
 - **Still open:** the entries in bytes too (IDEAS §19.90).
 
+### Optimise Archive Formats: gzip and zip; `sieve-manifest-v17` (21 October 2026)
+- **Edward's aim:** every archive format there is, in the long run (VOICES; IDEAS §19.88 has the
+  tiers).
+- **Built:** a gzip remade exactly where zlib gives its deflate back (`gz <level> <memory level>
+  <header hex> <size>`, v17, head byte 17), else carried as what it holds (`.tgz` as `.tar`); a
+  zip as its contents (stored and deflated entries, CRC-checked; refused, so left as it is, if
+  encrypted, another method, zip64 or a name that leaves its folder). `--v16` makes v16.
+- **Measured first:** a tar needs no unpacking (the pieces split it: 425,701 as it is, 425,597 for
+  its two files). `pi6.txt` as a gzip 546,741 → 417,128 (remade); GNU gzip -9's 546,777 → 417,128
+  (remade too); a zip 546,827 → 417,107; a `.tar.gz` 557,241 → 425,767.
+- **Fixed:** an xz or gzip located on its own and carried as what it holds now takes its new name
+  as the root (before, the archive's name stayed the root: installing would have made a folder).
+- **CI:** the archive check gains a Python gzip (remade) and a zip (contents), and v17 called v16
+  refused.
+
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show
   yet.
-- **CI still never runs on GitHub.** The workflow is at `Sieve/.github/workflows/build.yml`, and
-  GitHub only reads `.github/workflows` at the repository root. Moving it needs
-  `working-directory: Sieve` (or `defaults.run.working-directory`) and the paths in it checked.
-  This was reported, but Edward has not decided yet; don't move it unasked.
+- **CI moved to the repository root (21 October 2026),** at Edward's word: `.github/workflows/build.yml`
+  beside `Sieve/`, its steps in `Sieve/` (`PROJECT_DIR`), so GitHub runs it on every push. Its first
+  runs on GitHub (Windows and macOS above all, which have never run it) may show what Linux here did
+  not. The file already set `defaults.run.working-directory` to `PROJECT_DIR`, so no path in it
+  changed. Edward's copy needs `Sieve/.github/workflows/build.yml` deleted by hand (copying a zip
+  over the folder does not remove it).
 - **Still open, in IDEAS order:**
   - §19.79 is done, but voice in CHAT;
   - §19.80 (tabs on every line, CHAT left out for now: §17.2), §19.81 to §19.83 (models), §19.82
@@ -3599,7 +3616,8 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
     entries still text (IDEAS §19.90).
   - **The weighing** (`--weigh`, the File Locator's table): LZMA2 and v13's pieces weighed since
     21 October; v14's archives with the box ticked not yet (contents make one file many).
-  - **Archives not yet optimised:** gzip (GNU gzip is not zlib), zip, multi-block xz.
+  - **Archives not yet optimised:** multi-block xz, multi-member gzip, bzip2, zstd, cab, rar, and
+    deflate not made by zlib remade exactly (the preflate route); IDEAS §19.88.
   - **The rope for the other lines' places**, and V5S2 above.
 - **How Edward works:**
   - Hand work over as a zip with `Sieve/` at its top (no `files/` folder) and `CHANGES.md` beside

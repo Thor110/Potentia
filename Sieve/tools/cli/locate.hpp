@@ -127,6 +127,10 @@ inline constexpr const char* kRopeAboveManifestVersion = "sieve-manifest-v15";
 // archives' lines and its entries, as v15 writes them, without "end"), its length first, packed as
 // LZMA2 where that is smaller. Read, it is v15's text again.
 inline constexpr const char* kBinaryManifestVersion = "sieve-manifest-v16";
+// v16 whose remade archives may be gzip files: a way "gz <level> <memory level> <header in hex>
+// <inner size> <way>", remade by zlib (SPECIFICATIONS §12.2); its head's byte 17. Made only where
+// some file's is.
+inline constexpr const char* kGzipManifestVersion = "sieve-manifest-v17";
 
 std::vector<uint8_t> read_file_bytes(const std::filesystem::path& file);
 
@@ -199,6 +203,7 @@ struct Manifest
     bool archives = false;     // v14: some archive is remade or carried as its contents (and pieces is set too)
     bool rope_above = false;   // v15: some rope way is rope-wave-v5's
     bool binary = false;       // v16: the head in bytes (and everything v15 allows)
+    bool remake_gz = false;    // v17: some file is a gzip remade exactly (binary is set too)
     // v14: each archive carried as its contents: its format ("7z", "xz"), its size, its path, and the
     // folder (or file) its contents are in.
     struct UnpackedArchive

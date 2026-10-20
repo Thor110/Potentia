@@ -6159,8 +6159,9 @@ def v16_text(data):
     the streams' sizes and dictionaries' bytes, the tree's SHA-256 as 32 bytes, the body, packed or
     not) read back into v15's text, followed by what follows it. Anything else is returned as it is."""
     import lzma
-    if not data.startswith(b"sieve\x10"):
+    if not data.startswith((b"sieve\x10", b"sieve\x11")):
         return data
+    v17 = data[5] == 17  # v16 whose remade archives may be gzip files
     at = [6]
 
     def varint():
@@ -6194,7 +6195,7 @@ def v16_text(data):
     flags = take(1)[0]
     if flags & 0xC0:
         sys.exit("v16: flags this reader does not know")
-    head = b"sieve-manifest-v15\n"
+    head = b"sieve-manifest-v17\n" if v17 else b"sieve-manifest-v15\n"
     if flags & 1:
         head += b"root " + take(varint()) + b"\n"
     for bit, name in ((2, b"x86"), (4, b"lzma2"), (8, b"items")):
@@ -6224,7 +6225,7 @@ def v7_listing(data):
     version = data[:data.index(b"\n") + 1] if b"\n" in data[:24] else b""
     if version not in (b"sieve-manifest-v7\n", b"sieve-manifest-v8\n", b"sieve-manifest-v9\n", b"sieve-manifest-v10\n",
                        b"sieve-manifest-v11\n", b"sieve-manifest-v12\n", b"sieve-manifest-v13\n", b"sieve-manifest-v14\n",
-                        b"sieve-manifest-v15\n") or \
+                        b"sieve-manifest-v15\n", b"sieve-manifest-v17\n") or \
             not data[len(version):].startswith(b"listing "):
         return data
     head = version + b"listing "
@@ -6251,7 +6252,8 @@ def cmd_unpack_v7(args, data):
     # v11 with no line for an empty items or rope stream, and the lzma2 stream perhaps carried as it is
     # v13 with archives optimised: an xz file remade exactly from what it holds, or an archive carried
     # as its contents ("u" lines after the tree's)
-    v15 = lines[0] == "sieve-manifest-v15"  # v14 whose rope ways may be rope-wave-v5's (the byte above)
+    v17 = lines[0] == "sieve-manifest-v17"  # v15 (in bytes, v16) with gzip files remade exactly
+    v15 = lines[0] == "sieve-manifest-v15" or v17  # v14 whose rope ways may be rope-wave-v5's (the byte above)
     v14 = lines[0] == "sieve-manifest-v14" or v15
     # v12 whose files may be cut into pieces, LZMA2's and the rope's
     v13 = lines[0] == "sieve-manifest-v13" or v14
@@ -6327,13 +6329,23 @@ def cmd_unpack_v7(args, data):
     got, xa, pa, ia, ra = [None] * len(files), 0, 0, 0, 0
     remakes = {}
     for i, (path, size, sha, way) in enumerate(files):
+        if v17 and way.startswith("gz "):
+            # "gz <level> <memory level> <header in hex> <inner size> <way>": the header as it is,
+            # the deflate made again by zlib, then the CRC-32 and length (little-endian).
+            _, level, mem, header, n, way = way.split(" ", 5)
+            if not re.fullmatch(r"[1-9]", level) or not re.fullmatch(r"[1-9]", mem) or \
+                    not re.fullmatch(r"(?:[0-9a-f]{2}){10,}", header) or \
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ")):
+                sys.exit(f"{path}: a gzip recipe Sieve does not write")
+            remakes[i] = ("gz", int(level), int(mem), bytes.fromhex(header), size)
+            size = int(n)
         if v14 and way.startswith("xz "):
             # "xz <preset> <check> <inner size> <way>": what it holds first, by that way; remade below.
             _, preset, check, n, way = way.split(" ", 4)
             if not re.fullmatch(r"[0-9]e?", preset) or check not in ("none", "crc32", "crc64", "sha256") or \
                     not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ")):
                 sys.exit(f"{path}: an xz recipe Sieve does not write")
-            remakes[i] = (int(preset[0]) | (lzma.PRESET_EXTREME if preset.endswith("e") else 0),
+            remakes[i] = ("xz", int(preset[0]) | (lzma.PRESET_EXTREME if preset.endswith("e") else 0),
                           {"none": lzma.CHECK_NONE, "crc32": lzma.CHECK_CRC32, "crc64": lzma.CHECK_CRC64, "sha256": lzma.CHECK_SHA256}[check],
                           size)
             size = int(n)
@@ -6416,8 +6428,17 @@ def cmd_unpack_v7(args, data):
             n = (len(base) + 7) // 8
             mask, pa = plain[pa:pa + n], pa + n
             got[i] = b"\n".join(l for j, l in enumerate(base) if mask[j // 8] >> (j % 8) & 1)
-    for i, (preset, check, size) in remakes.items():  # v14: remade by Python's lzma, as the xz program writes
-        got[i] = lzma.compress(got[i], format=lzma.FORMAT_XZ, check=check, preset=preset)
+    import zlib
+    for i, r in remakes.items():  # v14: xz remade by Python's lzma, as the xz program writes; v17: gzip by zlib
+        if r[0] == "xz":
+            _, preset, check, size = r
+            got[i] = lzma.compress(got[i], format=lzma.FORMAT_XZ, check=check, preset=preset)
+        else:
+            _, level, mem, header, size = r
+            c = zlib.compressobj(level, zlib.DEFLATED, -15, mem)
+            inner = got[i]
+            got[i] = header + c.compress(inner) + c.flush() + struct.pack("<II", zlib.crc32(inner) & 0xFFFFFFFF,
+                                                                           len(inner) & 0xFFFFFFFF)
         if len(got[i]) != size:
             sys.exit(f"{files[i][0]}: not remade at its size")
     if xa != len(x86) or pa != len(plain) or ia != len(places) or ra != len(ropes):
@@ -6455,7 +6476,7 @@ def cmd_unpack(args):
     data = v16_text(open(args.manifest, "rb").read())  # v16: its head in bytes, read as v15's text
     if data.startswith((b"sieve-manifest-v7\n", b"sieve-manifest-v8\n", b"sieve-manifest-v9\n", b"sieve-manifest-v10\n",
                         b"sieve-manifest-v11\n", b"sieve-manifest-v12\n", b"sieve-manifest-v13\n", b"sieve-manifest-v14\n",
-                        b"sieve-manifest-v15\n")):
+                        b"sieve-manifest-v15\n", b"sieve-manifest-v17\n")):
         return cmd_unpack_v7(args, data)
     end = data.index(b"\nend\n") + len(b"\nend\n")
     lines = data[:end].decode("utf-8").split("\n")[:-1]
