@@ -909,10 +909,13 @@ jobs:
           # CHAIN (SPECIFICATIONS §12.0h): the tab edited by keys and saved as sieve-chain-v1, and chains run
           # with /chain. Pictures and melodies are integer arithmetic, so a chain of them makes the same
           # units everywhere; with text models (floating point) each stage is checked to have run.
-          $H --no-menu --line ai --walk "0,0" --take --chain --chain-press "Down,N,Right,Right" --chain-save chain1.chain --training-dir data/training --screenshot chain-tab.png | q "saved chain-tab.png"
-          printf 'sieve-chain-v1\nrun universalbibliothek\ndraw figures-2x32\nhand\ndraw melodies-2x64\n' | cmp - chain1.chain
+          # The training folder's models, in the tab's order: hand, universalbibliothek, figures-2x32,
+          # melodies-2x64, type-2x32; the default chain is the text run, then every picture and melody
+          # model. Down, N, then Right three times: a copy of figures-2x32 stepped round to hand.
+          $H --no-menu --line ai --walk "0,0" --take --chain --chain-press "Down,N,Right,Right,Right" --chain-save chain1.chain --training-dir data/training --screenshot chain-tab.png | q "saved chain-tab.png"
+          printf 'sieve-chain-v1\nrun universalbibliothek\ndraw figures-2x32\nhand\ndraw melodies-2x64\ndraw type-2x32\n' | cmp - chain1.chain
           $H --no-menu --line ai --walk "0,0" --take --chat --chain-file chain1.chain --talk "/chain the library of babel" --training-dir data/training --screenshot chain-run.png | tr -d '\r' > chainrun.txt
-          for n in "1/4, text run universalbibliothek: " "2/4, figures-2x32: " "3/4, the model in hand: " "4/4, melodies-2x64: "; do q "^chain $n" chainrun.txt; done
+          for n in "1/5, text run universalbibliothek: " "2/5, figures-2x32: " "3/5, the model in hand: " "4/5, melodies-2x64: " "5/5, type-2x32: "; do q "^chain $n" chainrun.txt; done
           printf 'sieve-chain-v1\ndraw figures-2x32\ndraw melodies-2x64\ndraw figures-2x32\n' > pm.chain
           $H --no-menu --line ai --walk "0,0" --take --chat --chain-file pm.chain --talk "/chain hello" --training-dir data/training --screenshot chain-pm.png | tr -d '\r' > chainpm.txt
           q "^chain 1/3, figures-2x32: fff83c0780e2f83ec70b81fff$" chainpm.txt

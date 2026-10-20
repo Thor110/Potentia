@@ -3478,9 +3478,12 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   being at the root):
   - the filter check for `clean-data-v1` matched the retired clean-v1's note too ("replaced by
     clean-data-v1"); it now matches the filter's own row. Fixed.
-  - the CHAIN tab check (`--chain-press "Down,N,Right,Right"`, written 13 October) now saves
-    `draw type-2x32` where it expects `hand`; the chain tab changed on 17 October. Not touched by
-    this round and not fixed: it needs a look at what those keys should do now.
+  - the CHAIN tab check (`--chain-press "Down,N,Right,Right"`, written 13 October) saved
+    `draw type-2x32` where it expected `hand`. **Fixed 20 October:** the training run `type-2x32`
+    came later the same day ("character specs"), adding a stage to the default chain and a choice
+    to the tab's list, so two steps of Right no longer wrapped round to `hand`. The check now
+    presses Right three times and expects five stages (`hand` still among them); the whole step
+    passes here.
 
 ### For the next session (17 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
