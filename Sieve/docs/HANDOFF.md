@@ -3502,6 +3502,22 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   noise carried as it is, v12 against v11, all three readers, v12's lines refused when called
   v11; v11 still made with `--v11`).
 
+### `sieve-manifest-v13`: files cut into pieces (20 October 2026)
+- **Why:** Edward's photos packed smaller as `.7z.sieve` than as `.jpg.sieve`. Measured on his
+  originals: the phone's metadata at the start (17,733 and 25,652 bytes) is LZMA2's (to 4,678 and
+  12,536); the picture is the rope's (LZMA2 gains nothing on it). Chaining the two (the rope on
+  LZMA2's output) lost on a test photo, LZMA2 having scrambled the bytes' spread.
+- **`sieve-manifest-v13`:** a way `pieces z… r… rope <parameters>`; z pieces in the lzma2 stream
+  at the file's turn, r pieces joined and coded by the rope. The cut is found from the bytes (4 KB
+  blocks, then each boundary moved in 64-byte steps); used only where smaller than either way
+  alone. `--v12` makes v12. His photos: 4,111,592 and 4,558,132 (were 4,122,470 and 4,569,466;
+  7z 4,127,434 and 4,575,201); about 45 s each with no search limit.
+- **Agreed next:** "Optimise Archive Formats", one box, off by default (IDEAS §19.88).
+- **Edward's uploads:** the two photos were measured only; nothing of them is in the repository.
+- **Checked here:** the full build, the unit suite, the hallway CI step whole (new: a file of text
+  then unevenly spread bytes, cut within a block of where the text ends, smaller than v12 and xz,
+  all three readers, refused when called v12).
+
 ### For the next session (17 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show

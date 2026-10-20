@@ -1239,6 +1239,40 @@ jobs:
           if build/sieve install noisy-as-v11.manifest --to noisy_bad > /dev/null 2>&1; then exit 1; fi
           if python reference/sieve_ref.py unpack noisy-as-v11.manifest --to noisy_bad > /dev/null 2>&1; then exit 1; fi
           test ! -e noisy_bad
+          # sieve-manifest-v13: a file cut into pieces, each coded the way that suits it: 20,000 bytes of
+          # text (LZMA2's: they repeat) before 300,000 bytes that do not repeat but are unevenly spread
+          # (the rope's), as a phone's photo has its metadata before its picture. Smaller than v12 (one
+          # way for the whole file) and than xz; the cut found within a block of where it is; all
+          # three readers give it back, and the same instructions called v12 are refused.
+          rm -rf mixed mixed_inst mixed_oracle mixed_si mixed_bad && mkdir mixed
+          python -c "
+          import math
+          s = 2718281
+          def u():
+              global s
+              s = (s * 6364136223846793005 + 1442695040888963407) % 2**64
+              return ((s >> 11) + 0.5) / 2**53
+          text = open('data/anchors/public-domain/universalbibliothek.txt', 'rb').read()[:20000]
+          body = bytes(min(255, int(-math.log(u()) * 40)) for _ in range(300000))
+          open('mixed/photo-like.bin', 'wb').write(text + body)
+          "
+          build/sieve locate mixed --installer mixed.sieve --items --manifest mixed.manifest | tr -d '\r' > mixed.txt
+          q "^pieces    1 file(s) cut into pieces: [0-9]* bytes packed by LZMA2, [0-9]* pulled tight by the rope (sieve-manifest-v13)$" mixed.txt
+          z=$(sed -n 's/^pieces .* cut into pieces: \([0-9]*\) bytes packed.*/\1/p' mixed.txt)
+          [ "$z" -ge 15904 ] && [ "$z" -le 24096 ] # the text's 20,000, within a block either way
+          build/sieve locate mixed --installer mixed12.sieve --items --v12 > /dev/null
+          [ "$(wc -c < mixed.sieve)" -lt "$(wc -c < mixed12.sieve)" ]
+          [ "$(wc -c < mixed.sieve)" -lt "$(xz -9e -c mixed/photo-like.bin | wc -c)" ]
+          build/sieve install mixed.sieve --to mixed_inst > /dev/null
+          diff -r mixed mixed_inst
+          python reference/sieve_ref.py unpack mixed.manifest --to mixed_oracle > /dev/null
+          diff -r mixed mixed_oracle
+          build/sieve-install mixed.sieve --to mixed_si --yes > /dev/null
+          diff -r mixed mixed_si
+          sed '1s/v13/v12/' mixed.manifest > mixed-as-v12.manifest
+          if build/sieve install mixed-as-v12.manifest --to mixed_bad > /dev/null 2>&1; then exit 1; fi
+          if python reference/sieve_ref.py unpack mixed-as-v12.manifest --to mixed_bad > /dev/null 2>&1; then exit 1; fi
+          test ! -e mixed_bad
           # (each file is named by its item's title; the report says which file each degree gave)
           $H --no-menu --press "X,Tab,9,0,Return" --take --save-item p90.txt --screenshot degp.png > /dev/null
           cmp p90.txt "degrees/$(sed -n 's/^pages 090 //p' deg.txt)"

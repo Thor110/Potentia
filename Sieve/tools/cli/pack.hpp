@@ -50,6 +50,9 @@ struct PackReport
     bool rope_groups = false;                        // v11: some of them rope-wave-v4's
     bool trimmed = false;                            // v12: no empty items line, or the files carried as they are
     bool lzma2_as_is = false;                        // v12: the lzma2 stream carried as it is (LZMA2 made it no smaller)
+    size_t pieces = 0;                               // v13: files cut into pieces, LZMA2's and the rope's
+    uint64_t pieces_lzma2 = 0, pieces_rope = 0;      // v13: their bytes, each way's
+    bool pieces_made = false;                        // v13: the instructions are v13
 };
 
 // v5: for a file's bytes, the line it is an item of (its place in the manifest's `lines`) and its
@@ -76,7 +79,7 @@ using PlaceCoder = std::function<std::optional<std::vector<uint8_t>>(size_t line
 // is smaller than the file packed alone.
 void add_packed(Manifest& m, const std::filesystem::path& root, PackReport* report = nullptr, const ItemFinder* items = nullptr,
                 bool item_hashes = false, const PlaceCoder* coder = nullptr, double rope_seconds = -1, uint32_t rope_newest = 4,
-                bool trim = false);
+                bool trim = false, bool pieces = false);
 
 // The report as lines, for the tool and the File Locator.
 std::string pack_report_text(const PackReport& r, uint64_t original);

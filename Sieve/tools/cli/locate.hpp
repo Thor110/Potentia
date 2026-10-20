@@ -109,6 +109,10 @@ inline constexpr const char* kRopeGroupsManifestVersion = "sieve-manifest-v11";
 // carried as it is ("stream lzma2 B B 0") where LZMA2 makes it no smaller. Made only where one of
 // these applies.
 inline constexpr const char* kTrimmedManifestVersion = "sieve-manifest-v12";
+// v12 whose files may be cut into pieces: a way "pieces z17733 r4121949 rope <parameters>", the z
+// pieces next in the lzma2 stream at the file's turn (as a raw file's bytes are), the r pieces
+// joined and coded by the rope, next in the rope stream; made only where some file's is.
+inline constexpr const char* kPiecesManifestVersion = "sieve-manifest-v13";
 
 std::vector<uint8_t> read_file_bytes(const std::filesystem::path& file);
 
@@ -176,6 +180,7 @@ struct Manifest
     bool rope_lines = false;   // v10: some rope way is rope-wave-v3's (and rope_columns is set too)
     bool rope_groups = false;  // v11: some rope way is rope-wave-v4's (and rope_lines is set too)
     bool trimmed = false;      // v12: no empty items line; the lzma2 stream perhaps carried as it is
+    bool pieces = false;       // v13: some file is cut into pieces (and trimmed is set too)
     PackedStream rope_stream;
     std::vector<uint8_t> rope_carried;
     // v7: the listing (every line after the first, up to and including "end") carried as LZMA2 where

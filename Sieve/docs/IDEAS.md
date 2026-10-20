@@ -3950,3 +3950,15 @@ lost:
   pack as it is, so the rope still finds that in the 7z. The two gains nearly add up (12,248 and
   17,194 against 26,995). A file's instructions could take both, LZMA2's matches and the rope's
   coding together (not measured).
+- **Done, in Sieve's own ways (`sieve-manifest-v13`, 20 October 2026):** with his originals
+  (uploaded in a zip) the split was plain: the first photo's metadata, 17,733 bytes, packs by
+  LZMA2 to 4,678 and its picture, 4,121,949 bytes, not at all, while the rope's counts take the
+  picture to about 4,105,653. A file is now cut into pieces, LZMA2's and the rope's, found from
+  its bytes alone (no reading of JPEG): his photos come to 4,111,592 and 4,558,132, below 7z
+  (4,127,434 and 4,575,201) and below his `.7z.sieve` (4,112,669 and 4,559,241), the cut within
+  5 bytes of where the metadata ends. Nothing from outside is used: LZMA2 was Sieve's already.
+- **Archives (Edward, 20 October 2026):** one box in the File Locator, **"Optimise Archive
+  Formats"**, off by default (a command-line flag to match): an archive remade exactly where
+  Sieve can, else carried as its contents, said plainly in the instructions and on installing.
+  Off, every file comes back byte for byte as now. Testing against 7z and others stays a
+  measurement, never a part of Sieve. Not started.

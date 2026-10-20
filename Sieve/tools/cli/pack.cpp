@@ -8,6 +8,7 @@
 #include <lzma.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <optional>
 #include <sstream>
@@ -53,6 +54,114 @@ std::vector<uint8_t> pack_stream(const std::vector<uint8_t>& data, uint32_t dict
 
 // What a stream of `data` packs to, quickly (preset 6): for choosing between two ways.
 uint64_t estimate(const std::vector<uint8_t>& data) { return data.empty() ? 0 : pack_stream(data, dictionary_for(data.size()), false, 6).size(); }
+
+// v13: a file cut into pieces, each coded by the way that suits it: LZMA2 (z, carried in the lzma2
+// stream) where its bytes repeat, the rope (r, all of them joined and coded as one) where they do
+// not repeat but are unevenly spread. A phone's photo: its metadata to LZMA2, its picture to the
+// rope. The pieces in order, each its kind and length; empty where one way would take it all.
+struct Pieces
+{
+    std::vector<std::pair<char, uint64_t>> list;
+    std::vector<uint8_t> z, r;
+};
+
+Pieces pieces_of(const std::vector<uint8_t>& b)
+{
+    constexpr size_t B = 4096;
+    Pieces out;
+    if (b.size() < 4 * B) return out;
+    // Each byte's cost under the whole file's counts (what the rope pays at least, near enough), and
+    // each block's under LZMA2 alone: a block is the rope's unless LZMA2 codes it smaller.
+    std::vector<uint64_t> count(256, 0);
+    for (const uint8_t v : b) ++count[v];
+    std::vector<double> bits(256, 0);
+    for (int v = 0; v < 256; ++v)
+        if (count[size_t(v)]) bits[size_t(v)] = std::log2(double(b.size()) / double(count[size_t(v)]));
+    auto rope_cost = [&](size_t from, size_t to) {
+        double c = 0;
+        for (size_t i = from; i < to; ++i) c += bits[b[i]];
+        return c / 8;
+    };
+    auto lzma_cost = [&](size_t from, size_t to) {
+        const std::vector<uint8_t> part(b.begin() + std::ptrdiff_t(from), b.begin() + std::ptrdiff_t(to));
+        return double(pack_stream(part, dictionary_for(part.size()), false, 6).size());
+    };
+    const size_t blocks = (b.size() + B - 1) / B;
+    std::vector<char> kind(blocks);
+    std::vector<double> gain(blocks); // what LZMA2 saves over the rope on the block (negative: it costs)
+    for (size_t k = 0; k < blocks; ++k)
+    {
+        const size_t from = k * B, to = std::min(b.size(), from + B);
+        gain[k] = rope_cost(from, to) - lzma_cost(from, to);
+        kind[k] = gain[k] > 0 ? 'z' : 'r';
+    }
+    // Runs: one that saves less than 64 bytes over the other way goes to its neighbours' way.
+    for (int pass = 0; pass < 2; ++pass)
+        for (size_t a = 0; a < blocks;)
+        {
+            size_t e = a;
+            double g = 0;
+            while (e < blocks && kind[e] == kind[a]) g += kind[a] == 'z' ? gain[e] : -gain[e], ++e;
+            const bool inner = a > 0 && e < blocks;
+            if (g < 64 && (inner || pass == 1) && !(a == 0 && e == blocks))
+                for (size_t k = a; k < e; ++k) kind[k] = kind[a] == 'z' ? 'r' : 'z';
+            a = e;
+        }
+    std::vector<std::pair<char, uint64_t>> runs;
+    for (size_t k = 0; k < blocks; ++k)
+    {
+        const uint64_t len = std::min(b.size(), (k + 1) * B) - k * B;
+        if (!runs.empty() && runs.back().first == kind[k]) runs.back().second += len;
+        else runs.emplace_back(kind[k], len);
+    }
+    if (runs.size() < 2) return out;
+    // Each boundary moved, in steps of 64 bytes up to a block either way, to where the two ways
+    // cost least: the LZMA2 run packed again at each step (where it is no longer than 1 MiB), the
+    // rope's side counted over the two blocks around the boundary.
+    uint64_t start = 0;
+    for (size_t j = 0; j + 1 < runs.size(); ++j)
+    {
+        const uint64_t edge = start + runs[j].second, end = edge + runs[j + 1].second;
+        const bool z_left = runs[j].first == 'z';
+        const uint64_t zlen = z_left ? runs[j].second : runs[j + 1].second;
+        const uint64_t lo0 = std::max(start + 64, edge >= B ? edge - B : 0), hi0 = std::min(end - 64, edge + B);
+        if (zlen <= (uint64_t(1) << 20) && lo0 <= edge && edge <= hi0)
+        {
+            const uint64_t lo = std::max(start + 64, edge >= B ? edge - B : 0), hi = std::min(end - 64, edge + B);
+            const uint64_t wlo = edge >= B ? edge - B : 0, whi = std::min(uint64_t(b.size()), edge + B);
+            double best = -1;
+            uint64_t best_e = edge;
+            for (uint64_t e = lo + (edge - lo) % 64; e <= hi; e += 64)
+            {
+                const double c = z_left ? lzma_cost(size_t(start), size_t(e)) + rope_cost(size_t(e), size_t(whi))
+                                        : lzma_cost(size_t(e), size_t(end)) + rope_cost(size_t(wlo), size_t(e));
+                if (best < 0 || c < best)
+                {
+                    best = c;
+                    best_e = e;
+                }
+            }
+            runs[j].second = best_e - start;
+            runs[j + 1].second = end - best_e;
+        }
+        start += runs[j].second;
+    }
+    uint64_t pos = 0;
+    for (const auto& [k, len] : runs)
+    {
+        (k == 'z' ? out.z : out.r).insert((k == 'z' ? out.z : out.r).end(), b.begin() + std::ptrdiff_t(pos), b.begin() + std::ptrdiff_t(pos + len));
+        pos += len;
+    }
+    out.list = std::move(runs);
+    return out;
+}
+
+std::string pieces_text(const std::vector<std::pair<char, uint64_t>>& list)
+{
+    std::string t;
+    for (const auto& [k, len] : list) t += std::string(t.empty() ? "" : " ") + k + std::to_string(len);
+    return t;
+}
 
 // A text's lines, as locate.cpp's unpacking splits them (at each line feed).
 std::vector<std::string_view> lines_of(const std::vector<uint8_t>& t)
@@ -112,7 +221,7 @@ std::vector<uint8_t> place_bytes_of(const std::string& hex, uint32_t width)
 } // namespace
 
 void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const ItemFinder* items, bool item_hashes, const PlaceCoder* coder,
-                double rope_seconds, uint32_t rope_newest, bool trim)
+                double rope_seconds, uint32_t rope_newest, bool trim, bool pieces)
 {
     // Every file's bytes, checked against the walk: from the contents where a v3 manifest has them,
     // else read from the folder (the current one, for a file named without one).
@@ -317,8 +426,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // LZMA2 stream carries a copy for almost nothing, a rope code each time; nor a small one.
     std::vector<std::vector<uint8_t>> rope_codes(files.size());
     std::vector<RopeParams> rope_params(files.size());
+    std::vector<std::vector<uint8_t>> piece_z(files.size()); // v13: a file's LZMA2 pieces, joined
     PackReport r;
-    m.roped = m.rope_columns = m.rope_lines = m.rope_groups = false;
+    m.roped = m.rope_columns = m.rope_lines = m.rope_groups = m.pieces = false;
     if (m.compact && rope_seconds >= 0)
     {
         std::unordered_map<std::string, size_t> copies;
@@ -329,16 +439,54 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             const RopeSearch found = rope_search(bytes[i], rope_seconds, rope_newest);
             r.rope_tried += found.tried;
             std::vector<uint8_t> code = rope_code(bytes[i], found.best);
-            uint64_t len = code.size(), varint = 1;
-            while (len >>= 7) ++varint;
-            if (code.size() + varint >= estimate(bytes[i])) continue;
+            auto varint_of = [](uint64_t n) {
+                uint64_t v = 1;
+                while (n >>= 7) ++v;
+                return v;
+            };
+            const uint64_t alone = estimate(bytes[i]);
+            uint64_t best = alone;
+            RopeParams params = found.best;
+            if (code.size() + varint_of(code.size()) < best) best = code.size() + varint_of(code.size());
+            else code.clear();
+            // v13: the file in pieces, LZMA2's and the rope's, where that is smaller than either alone
+            // (the way's longer text counted too).
+            std::string way = code.empty() ? std::string() : "rope " + found.best.text();
+            if (pieces)
+            {
+                Pieces p = pieces_of(bytes[i]);
+                if (!p.list.empty())
+                {
+                    const RopeSearch pr = rope_search(p.r, rope_seconds, rope_newest);
+                    r.rope_tried += pr.tried;
+                    std::vector<uint8_t> pcode = rope_code(p.r, pr.best);
+                    const std::string pway = "pieces " + pieces_text(p.list) + " rope " + pr.best.text();
+                    const uint64_t total = estimate(p.z) + pcode.size() + varint_of(pcode.size()) + pway.size();
+                    if (total < best)
+                    {
+                        best = total;
+                        code = std::move(pcode);
+                        params = pr.best;
+                        way = pway;
+                        piece_z[i] = std::move(p.z);
+                    }
+                }
+            }
+            if (way.empty()) continue;
             rope_codes[i] = std::move(code);
-            rope_params[i] = found.best;
-            files[i]->way = "rope " + found.best.text();
+            rope_params[i] = params;
+            files[i]->way = way;
             m.roped = true;
-            if (found.best.columns) m.rope_columns = true;    // v9
-            if (found.best.columns == 2) m.rope_lines = true; // v10
-            if (found.best.grouped) m.rope_groups = m.rope_lines = true; // v11 (which reads v10's ways too)
+            if (way.rfind("pieces ", 0) == 0)
+            {
+                m.pieces = true; // v13
+                ++r.pieces;
+                r.pieces_lzma2 += piece_z[i].size();
+                r.pieces_rope += bytes[i].size() - piece_z[i].size();
+            }
+            if (params.columns) m.rope_columns = true;    // v9
+            if (params.columns == 2) m.rope_lines = true; // v10
+            if (params.grouped) m.rope_groups = m.rope_lines = true; // v11 (which reads v10's ways too)
         }
     }
 
@@ -357,6 +505,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             ++r.raw;
             r.raw_bytes += bytes[i].size();
         }
+        else if (files[i]->way.rfind("pieces ", 0) == 0) plain.insert(plain.end(), piece_z[i].begin(), piece_z[i].end()); // v13: its LZMA2 pieces, at its turn
     for (size_t i = 0; i < files.size(); ++i)
         if (derived[i])
         {
@@ -369,7 +518,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // v8: the rope stream, each code's length then the code, in the listing's order.
     m.rope_carried.clear();
     for (size_t i = 0; i < files.size(); ++i)
-        if (files[i]->way.rfind("rope ", 0) == 0)
+        if (files[i]->way.rfind("rope ", 0) == 0 || files[i]->way.rfind("pieces ", 0) == 0)
         {
             uint64_t len = rope_codes[i].size();
             while (len >= 0x80)
@@ -460,7 +609,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         m.tree = tree_sha256(m);
         // v12, only where it differs from v11: no items line where there are no items, or the
         // lzma2 stream carried as it is.
-        m.trimmed = trim && m.compact && (lzma2_as_is || (m.item_stream.packed == 0 && m.item_stream.bytes == 0));
+        m.trimmed = trim && m.compact && (lzma2_as_is || m.pieces || (m.item_stream.packed == 0 && m.item_stream.bytes == 0));
+        r.pieces_made = m.pieces;
         r.trimmed = m.trimmed;
         r.lzma2_as_is = lzma2_as_is;
     }
@@ -531,7 +681,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
     };
     if (r.compact)
     {
-        const char* version = r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
+        const char* version = r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
                             : r.roped ? kRopeManifestVersion : kCompactManifestVersion;
         if (r.items)
         {
@@ -543,6 +693,9 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         }
         else o << "items     none; " << version << "\n";
         if (r.listing_carried) o << "listing   " << r.listing << " bytes, carried as LZMA2 in " << r.listing_carried << "\n";
+        if (r.pieces)
+            o << "pieces    " << r.pieces << " file(s) cut into pieces: " << r.pieces_lzma2 << " bytes packed by LZMA2, " << r.pieces_rope
+              << " pulled tight by the rope (" << kPiecesManifestVersion << ")\n";
         if (r.lzma2_as_is) o << "as is     the files packed by LZMA2 carried as they are instead: it made them no smaller (" << kTrimmedManifestVersion << ")\n";
         if (r.roped)
             o << "rope      " << r.roped << " file(s) pulled tight by " << (r.rope_groups ? "rope-wave-v1 to v4" : r.rope_lines ? "rope-wave-v1 to v3" : r.rope_columns ? "rope-wave-v1 and v2" : "rope-wave-v1") << " (" << r.rope_bytes << " bytes, carried in " << r.rope_carried

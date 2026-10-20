@@ -1,65 +1,63 @@
-# Changes: `sieve-manifest-v12`, less around a file's bytes (20 October 2026)
+# Changes: `sieve-manifest-v13`, files cut into pieces (20 October 2026)
 
 Copy `Sieve/` over the repository's `Sieve/`. No new files.
 
-## Why a PNG came out larger
+## What your photos showed
 
-A PNG saved at zlib's strongest has nothing left for LZMA2 or the rope to take out (`xz -9e`
-grows it too). So the only change is what the instructions add around it. Measured here:
+Measured on the originals you sent in the zip:
 
-| file | its size | v11 | `xz -9e` |
+| part | bytes | LZMA2 | the rope's byte counts |
 |---|---|---|---|
-| a photo as PNG | 715,596 | 715,801 (+205) | 715,692 (+96) |
-| noise as PNG | 270,448 | 270,632 (+184) | 270,520 (+72) |
+| 20230830_163945: phone metadata (start) | 17,733 | **4,678** | 7,206 |
+| 20230830_163945: picture data | 4,121,949 | 4,122,154 (no gain) | **4,105,653** |
+| 20240407_153939: phone metadata (start) | 25,652 | **12,536** | 16,126 |
+| 20240407_153939: picture data | 4,561,723 | 4,561,949 (no gain) | **4,544,237** |
 
-Of the noise picture's 184 bytes:
-- 168 were the listing, 19 of them an empty `stream items 0 0 0` line;
-- 16 were LZMA2's framing on bytes it couldn't shrink.
+So 7z's gain was all in the metadata, and the rope's was all in the picture. Chaining them (the
+rope on LZMA2's output) lost on a test photo, because LZMA2 scrambled the uneven spread of bytes
+that the rope uses.
 
-## What v12 changes
+## What v13 does
 
-- **No line for an empty stream:** no items line where there are no items, and no rope line where
-  no file is pulled tight. A v12 reader takes a missing line as an empty stream.
-- **Files carried as they are** where LZMA2 makes them no smaller, written `stream lzma2 B B 0`
-  (dictionary 0). Only the lzma2 stream, and only in v12. Older readers now refuse such a line
-  with a clear message, rather than failing inside LZMA2.
-- **Made only where one of these applies**; otherwise the version is v11 or older, as before.
-  `--v11` (with `--items`) makes v11.
-- `sieve locate` says when it carried the files as they are (an `as is` line).
+A file can now be cut into pieces, each coded the way that suits it: LZMA2 where bytes repeat, the
+rope where they're unevenly spread.
 
-## Measured here
+- Sieve finds the cut from the bytes alone, with nothing JPEG-specific. It looks at 4 KB blocks,
+  then moves each boundary in 64-byte steps to where the two ways cost least.
+- It's used only where it's smaller than either way alone.
+- The way reads, for example, `pieces z17728 r4121954 rope L8 W1 S1 P0 K0`. The `z` pieces go into
+  the LZMA2 stream; the `r` pieces are joined and coded once by the rope.
+- Nothing from outside Sieve is used: LZMA2 was already Sieve's.
+- `--v12` (with `--items`) makes the older form.
 
-| file | v11 | v12 |
-|---|---|---|
-| photo PNG (715,596) | 715,801 | **715,741** (+145) |
-| noise PNG (270,448) | 270,632 | **270,593** (+145) |
-| pi6.txt | 419,115 | **419,096** |
+## Measured here, on your photos
 
-The 145 bytes left are the version line, the stream's line, the SHA-256 that checks the file on
-installing, the file's line (size, how it's carried, name) and `end`. No format of this kind can
-drop the name or the check. What would make a PNG itself smaller is its pixels, under the deflate.
-That's the "other schemes" kind of work you put last, so it's in IDEAS §19.88 beside JPEGs.
+| photo | file | 7z | `.jpg.sieve` before | your `.7z.sieve` | **now** |
+|---|---|---|---|---|---|
+| 20230830_163945 | 4,139,682 | 4,127,434 | 4,122,470 | 4,112,669 | **4,111,592** |
+| 20240407_153939 | 4,587,473 | 4,575,201 | 4,569,466 | 4,559,241 | **4,558,132** |
 
-All three of these install byte for byte with `sieve install`, `sieve-install` and the oracle.
+- On the first photo, the cut fell at 17,728 bytes; the metadata ends at 17,733.
+- Both photos install byte for byte with `sieve install`, `sieve-install` and the oracle.
+- Each took about 45 seconds with no search time limit.
+- pi6.txt is unchanged at 419,096, since it has nothing for LZMA2 to take.
 
-## Your two photos
+Your photos were only measured. Nothing of them is in the repository.
 
-They're in IDEAS §19.88. On both, Sieve on the 7z beat Sieve on the JPEG, because the two find
-different savings:
-- **LZMA2** finds what repeats, mostly the headers and tables.
-- **The rope** finds how unevenly the byte values are spread.
+## Next, as agreed
 
-7z stores what it can't pack as it is, so the rope still finds that unevenness in the 7z, and the
-two gains nearly add up. One set of instructions could use both; I haven't measured that.
+The **"Optimise Archive Formats"** box, off by default, with a command-line flag to match. It's
+written up in IDEAS §19.88 and not started yet.
 
 ## Checked here
 
 - The full build, with no warnings.
 - The unit suite: 153,210 checks, 0 failures.
-- The hallway CI step, start to end. New in it:
-  - a file of noise carried as it is (`stream lzma2 50000 50000 0`): 153 bytes over the file in a
-    folder, against v11's 179, installed by all three readers;
-  - the same instructions relabelled v11, refused by Sieve and by the oracle;
-  - v11 still made with `--v11` for the digit table.
+- The hallway CI step, start to end. New in it: a file of 20,000 bytes of text followed by 300,000
+  unevenly spread bytes.
+  - It's cut within a block of where the text ends.
+  - It's smaller than v12 and than `xz -9e`.
+  - All three readers install it.
+  - The same instructions relabelled v12 are refused.
 
 **Docs:** SPECIFICATIONS §12.2, IDEAS §19.88, README, HANDOFF, help.

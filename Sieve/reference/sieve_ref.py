@@ -6117,7 +6117,7 @@ def v7_listing(data):
     import lzma
     version = data[:data.index(b"\n") + 1] if b"\n" in data[:24] else b""
     if version not in (b"sieve-manifest-v7\n", b"sieve-manifest-v8\n", b"sieve-manifest-v9\n", b"sieve-manifest-v10\n",
-                       b"sieve-manifest-v11\n", b"sieve-manifest-v12\n") or \
+                       b"sieve-manifest-v11\n", b"sieve-manifest-v12\n", b"sieve-manifest-v13\n") or \
             not data[len(version):].startswith(b"listing "):
         return data
     head = version + b"listing "
@@ -6142,7 +6142,9 @@ def cmd_unpack_v7(args, data):
     if lines[at].startswith("root "):
         root, at = lines[at][5:], at + 1
     # v11 with no line for an empty items or rope stream, and the lzma2 stream perhaps carried as it is
-    v12 = lines[0] == "sieve-manifest-v12"
+    # v12 whose files may be cut into pieces, LZMA2's and the rope's
+    v13 = lines[0] == "sieve-manifest-v13"
+    v12 = lines[0] == "sieve-manifest-v12" or v13
     v11 = lines[0] == "sieve-manifest-v11" or v12  # v10 whose rope ways may be rope-wave-v4's (columns sharing tables)
     v10 = lines[0] == "sieve-manifest-v10" or v11  # v9 whose rope ways may be rope-wave-v3's (columns by line)
     v9 = lines[0] == "sieve-manifest-v9" or v10  # v8 whose rope ways may be rope-wave-v2's (columns)
@@ -6214,6 +6216,38 @@ def cmd_unpack_v7(args, data):
             got[i], xa = x86[xa:xa + size], xa + size
         elif way == "raw":
             got[i], pa = plain[pa:pa + size], pa + size
+        elif v13 and way.startswith("pieces "):
+            # "pieces z17733 r4121949 rope <parameters>": the z pieces next in the lzma2 stream, the r
+            # pieces joined and coded by the rope, next in the rope stream; laid out in order.
+            head, _, params = way[7:].partition(" rope ")
+            pieces = head.split(" ")
+            if not params or len(pieces) < 2 or any(not re.fullmatch(r"[zr][1-9][0-9]*", p) for p in pieces) or \
+                    any(a[0] == b[0] for a, b in zip(pieces, pieces[1:])):
+                sys.exit(f"{path}: pieces not written as Sieve writes them")
+            zsum = sum(int(p[1:]) for p in pieces if p[0] == "z")
+            rsum = sum(int(p[1:]) for p in pieces if p[0] == "r")
+            if zsum + rsum != size:
+                sys.exit(f"{path}: pieces that are not its size")
+            z, pa = plain[pa:pa + zsum], pa + zsum
+            n, shift = 0, 0
+            while True:
+                b = ropes[ra]
+                ra += 1
+                n |= (b & 0x7F) << shift
+                shift += 7
+                if not b & 0x80:
+                    break
+            r, ra = rope_wave_file(ropes[ra:ra + n], params, rsum), ra + n
+            out, za, rb = bytearray(), 0, 0
+            for p in pieces:
+                k = int(p[1:])
+                if p[0] == "z":
+                    out += z[za:za + k]
+                    za += k
+                else:
+                    out += r[rb:rb + k]
+                    rb += k
+            got[i] = bytes(out)
         elif v8 and way.startswith("rope "):
             n, shift = 0, 0
             while True:
@@ -6285,7 +6319,7 @@ def cmd_unpack(args):
     import lzma
     data = open(args.manifest, "rb").read()
     if data.startswith((b"sieve-manifest-v7\n", b"sieve-manifest-v8\n", b"sieve-manifest-v9\n", b"sieve-manifest-v10\n",
-                        b"sieve-manifest-v11\n", b"sieve-manifest-v12\n")):
+                        b"sieve-manifest-v11\n", b"sieve-manifest-v12\n", b"sieve-manifest-v13\n")):
         return cmd_unpack_v7(args, data)
     end = data.index(b"\nend\n") + len(b"\nend\n")
     lines = data[:end].decode("utf-8").split("\n")[:-1]

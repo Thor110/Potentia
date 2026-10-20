@@ -133,6 +133,59 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
                                          "): open them with Sieve (sieve install, or the hallway's File Locator), which makes them again");
             bytes[i] = item_maker()(m.lines[k], rest.substr(sp + 1));
         }
+        else if (m.pieces && m.roped && e.way.rfind("pieces ", 0) == 0)
+        {
+            // v13: "pieces z17733 r4121949 rope <parameters>": its z pieces next in the lzma2 stream,
+            // its r pieces joined and coded by the rope, next in the rope stream; laid out in order.
+            const std::string w = e.way.substr(7);
+            const size_t rp_at = w.find(" rope ");
+            if (rp_at == std::string::npos) throw std::runtime_error("manifest: " + e.path + "'s pieces name no rope");
+            std::vector<std::pair<char, uint64_t>> list;
+            uint64_t zsum = 0, rsum = 0;
+            for (size_t a = 0; a < rp_at;)
+            {
+                size_t sp = w.find(' ', a);
+                if (sp == std::string::npos || sp > rp_at) sp = rp_at;
+                const std::string t = w.substr(a, sp - a);
+                if (t.size() < 2 || (t[0] != 'z' && t[0] != 'r') || t.find_first_not_of("0123456789", 1) != std::string::npos || t[1] == '0' ||
+                    t.size() > 17 || (!list.empty() && list.back().first == t[0]))
+                    throw std::runtime_error("manifest: " + e.path + "'s pieces are not written as Sieve writes them");
+                const uint64_t n = std::stoull(t.substr(1));
+                list.emplace_back(t[0], n);
+                (t[0] == 'z' ? zsum : rsum) += n;
+                a = sp + 1;
+            }
+            if (list.size() < 2 || zsum + rsum != e.size) throw std::runtime_error("manifest: " + e.path + "'s pieces are not its size");
+            const std::vector<uint8_t> z = take(plain, pa, zsum, e.path);
+            uint64_t len = 0;
+            for (int shift = 0;; shift += 7)
+            {
+                if (ra >= m.rope_carried.size() || shift > 56) throw std::runtime_error("the installer's rope stream ends before " + e.path);
+                const uint8_t c = m.rope_carried[ra++];
+                len |= uint64_t(c & 0x7F) << shift;
+                if (!(c & 0x80)) break;
+            }
+            if (m.rope_carried.size() - ra < len) throw std::runtime_error("the installer's rope stream ends before " + e.path);
+            std::vector<uint8_t> rbytes;
+            try
+            {
+                rbytes = rope_file(std::span<const uint8_t>(m.rope_carried.data() + ra, size_t(len)), RopeParams::parse(w.substr(rp_at + 6)), rsum);
+            }
+            catch (const std::invalid_argument& x)
+            {
+                throw std::runtime_error("manifest: " + e.path + ": " + x.what());
+            }
+            ra += size_t(len);
+            bytes[i].reserve(size_t(e.size));
+            size_t za = 0, rb = 0;
+            for (const auto& [k, n] : list)
+            {
+                const std::vector<uint8_t>& from = k == 'z' ? z : rbytes;
+                size_t& at = k == 'z' ? za : rb;
+                bytes[i].insert(bytes[i].end(), from.begin() + std::ptrdiff_t(at), from.begin() + std::ptrdiff_t(at + n));
+                at += size_t(n);
+            }
+        }
         else if (m.roped && e.way.rfind("rope ", 0) == 0)
         {
             // v8: made again from its code, next in the rope stream (a varint of its length first).
@@ -171,7 +224,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
         if (e.way.rfind("lines ", 0) != 0) continue;
         const size_t k = size_t(std::stoull(e.way.substr(6)));
         if (k >= files.size() || (files[k]->way != "x86" && files[k]->way != "raw" && files[k]->way.rfind("item ", 0) != 0 &&
-                                  files[k]->way.rfind("rope ", 0) != 0))
+                                  files[k]->way.rfind("rope ", 0) != 0 && files[k]->way.rfind("pieces ", 0) != 0))
             throw std::runtime_error("manifest: " + e.path + " is derived from a file that is not carried");
         const auto lines = lines_of(bytes[k]);
         masks[i] = {k, take(plain, pa, (lines.size() + 7) / 8, e.path)};
@@ -284,7 +337,7 @@ std::string manifest_path(const fs::path& p, const fs::path& root)
 
 const char* Manifest::version() const
 {
-    return trimmed ? kTrimmedManifestVersion : rope_groups ? kRopeGroupsManifestVersion : rope_lines ? kRopeLinesManifestVersion : rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
+    return pieces ? kPiecesManifestVersion : trimmed ? kTrimmedManifestVersion : rope_groups ? kRopeGroupsManifestVersion : rope_lines ? kRopeLinesManifestVersion : rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
          : with_contents ? kInstallManifestVersion : with_addresses ? kAddressManifestVersion : kManifestVersion;
 }
 
@@ -572,7 +625,7 @@ Manifest Manifest::parse(std::string_view whole)
     // v7 with its listing carried as LZMA2: unpacked, and read as the text it is.
     // (v7, v8 and v9 alike: their first line, then "listing ...")
     std::string packed_version;
-    for (const char* v : {kCompactManifestVersion, kRopeManifestVersion, kRopeColumnsManifestVersion, kRopeLinesManifestVersion, kRopeGroupsManifestVersion, kTrimmedManifestVersion})
+    for (const char* v : {kCompactManifestVersion, kRopeManifestVersion, kRopeColumnsManifestVersion, kRopeLinesManifestVersion, kRopeGroupsManifestVersion, kTrimmedManifestVersion, kPiecesManifestVersion})
         if (whole.substr(0, std::string(v).size() + 9) == std::string(v) + "\nlisting ") packed_version = v;
     if (!packed_version.empty())
     {
@@ -636,6 +689,8 @@ Manifest Manifest::parse(std::string_view whole)
         m.rope_lines = m.rope_columns = m.roped = m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] == kRopeGroupsManifestVersion)
         m.rope_groups = m.rope_lines = m.rope_columns = m.roped = m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
+    else if (lines[0] == kPiecesManifestVersion)
+        m.pieces = m.trimmed = m.rope_groups = m.rope_lines = m.rope_columns = m.roped = m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] == kTrimmedManifestVersion)
         m.trimmed = m.rope_groups = m.rope_lines = m.rope_columns = m.roped = m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] != kManifestVersion) throw std::runtime_error("not a sieve manifest (" + lines[0].substr(0, 40) + ")");

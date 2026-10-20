@@ -215,7 +215,7 @@ ItemFinder item_finder(const std::vector<ItemLine>& lines)
 }
 
 void add_packed_items(Manifest& m, const std::filesystem::path& root, const Args& a, PackReport* report, int version, bool item_hashes,
-                      double rope_seconds, uint32_t rope_newest, bool trim)
+                      double rope_seconds, uint32_t rope_newest, bool trim, bool pieces)
 {
     if (version < 5 || version > 8) throw std::invalid_argument("Sieve instructions with items are v5, v6, v7 or v8");
     const std::vector<ItemLine> lines = item_lines(a, version >= 6);
@@ -235,7 +235,7 @@ void add_packed_items(Manifest& m, const std::filesystem::path& root, const Args
         return ai_place_code(*lines[k].ai, place);
     };
     add_packed(m, root, report, &finder, item_hashes, m.compact ? &coder : nullptr, version >= 8 ? rope_seconds : -1, rope_newest,
-               version >= 8 && trim);
+               version >= 8 && trim, version >= 8 && trim && pieces);
 }
 
 void use_item_maker()

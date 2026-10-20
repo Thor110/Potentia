@@ -909,8 +909,9 @@ const std::vector<Page>& pages()
          "than LZMA2 packs it (sieve help rope) is carried so, its search taking --search-per-file\n"
          "seconds (no limit without it): sieve-manifest-v8, or v9 to v11 where its way is one of the\n"
          "rope's newer ones; v12 where there is less to write around the bytes (no line for an empty\n"
-         "stream, and the files carried as they are where LZMA2 makes them no smaller). (--v11 down to\n"
-         "--v5 make the older ones.)\n"
+         "stream, and the files carried as they are where LZMA2 makes them no smaller); v13 where a\n"
+         "file is cut into pieces, LZMA2 taking what repeats and the rope what is unevenly spread (a\n"
+         "phone's photo: its metadata and its picture). (--v12 down to --v5 make the older ones.)\n"
          "\n"
          "--weigh weighs every file against its own address: its number among the binary line's\n"
          "survivors, where the settings file's [binary] filters rank and it passes them; and, where\n"
@@ -947,6 +948,7 @@ const std::vector<Page>& pages()
                       "of the AI line as its weights' digits, not its file's floats. The pages are\n"
                       "--page-length characters of --alphabet; the AI line is --ai-layers, --ai-width,\n"
                       "--ai-heads and --ai-bits (Micro without them)."},
+          {"--v12", "With --items: as sieve-manifest-v12 at newest, no file cut into pieces."},
           {"--v11", "With --items: as sieve-manifest-v11 at newest, an empty stream's line kept and the files\n"
                     "always packed by LZMA2."},
           {"--v10", "With --items: as sieve-manifest-v10 at newest, the rope's ways those of rope-wave-v3 and before\n"
