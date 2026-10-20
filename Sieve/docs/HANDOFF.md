@@ -3520,7 +3520,8 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
 
 ### `sieve-manifest-v14`: Optimise Archive Formats (20 October 2026)
 - **Edward asked** for one box, off by default (VOICES), and noted another for later: size and
-  decoding time as one setting, for `.sieve` files served on the internet (IDEAS §19.89).
+  decoding time as one setting, for `.sieve` files served on the internet (IDEAS §19.89; set
+  aside the same day, §17.3).
 - **Built:** `--optimise-archives` and the File Locator's "Optimise Archive Formats" box (key A,
   kept in `sieve-hallway.ini` `[locator] optimise_archives`). xz remade exactly (liblzma's
   streaming encoder; the single-call one writes block sizes xz does not); 7z as its contents
@@ -3534,7 +3535,34 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
 - **Checked here:** the full build, the unit suite, the hallway CI step whole (new: an xz remade,
   the 7z as contents, nothing changed with the box off, sieve-install refusing, v13 refused).
 
-### For the next session (17 October 2026)
+### IDEAS: size and decoding time set aside; proofread (20 October 2026)
+- **Edward deprecated** the size-and-decoding-time setting for now (IDEAS §19.89, struck through;
+  §17.3 says why): as he recalls, decoding takes fractions of a second, while the seconds go on
+  loading and working in the hallway. Deprecated ideas are to be looked back over in the far
+  future.
+- **IDEAS proofread:** across the whole file by script (every section it refers to exists; no
+  American spellings; no doubled words), and §19.87 to §19.89 read through: §19.87's "Next
+  (proposed)" step, done since, now says so and lists what is still open; three smaller fixes.
+- **No code changed.**
+
+### The weighing weighs every way; `rope-wave-v5` and `sieve-manifest-v15` (21 October 2026)
+- **Edward asked** for all five next steps (weighing, the byte above, a binary listing, more
+  archive formats, CI at the root), and that Optimise Archive Formats aim, in the long run, at
+  every archive format there is.
+- **The weighing:** `file_ways` (pack.hpp) gives a file's three ways (LZMA2 alone, the rope,
+  the pieces) with their sizes; the packer carries the smallest and the weighing weighs all three
+  (new pseudo-lines `lzma2` and `pieces`). Edward's first photo now weighs 32,891,480 bits
+  (4,111,435 bytes) against instructions of 4,111,599 (was 4,122,311). Not yet: archives weighed
+  as carried with the box ticked (contents make one file many).
+- **`rope-wave-v5`** (` A1` after `C2 G1`): each byte counted by its column and the byte above;
+  pairs take the next listed group number when first met. `pi6.txt` 416,967 (v4 418,927),
+  instructions 417,139 (were 419,096). `sieve-manifest-v15`; `--v14` and `--v13` make the older.
+- **CI:** two checks read `sieve locate`'s report from standard output without `--manifest`
+  (where it goes to standard error); fixed.
+- **Checked here:** the full build, the unit suite (153,230 checks, 0 failures; new: A1 parsing,
+  round trips, the search choosing v5 and v4 under `newest` 4, refusals), the hallway CI step whole.
+
+### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show
   yet.
@@ -3553,11 +3581,21 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
     likely reason no character comes out recognisable; untested);
   - V5S2;
   - the melody tasks SM1 to SM4.
+- **Open from the compression work (19 and 20 October 2026), measured where it says so:**
+  - **The rope's last gap on `pi6.txt`** (IDEAS §19.87): the byte above is done (`rope-wave-v5`,
+    417,139); what is left is mostly the blank lines, one after every twenty lines.
+  - **The listing in binary:** on a 1,597-byte script the listing is 142 bytes of the
+    instructions, 70 of them the SHA-256 as hex; Edward's `control.py` came out 10 bytes over 7z.
+  - **The weighing** (`--weigh`, the File Locator's table): LZMA2 and v13's pieces weighed since
+    21 October; v14's archives with the box ticked not yet (contents make one file many).
+  - **Archives not yet optimised:** gzip (GNU gzip is not zlib), zip, multi-block xz.
+  - **The rope for the other lines' places**, and V5S2 above.
 - **How Edward works:**
   - Hand work over as a zip with `Sieve/` at its top (no `files/` folder) and `CHANGES.md` beside
     it (Edward, 17 October 2026); root website files go in, beside `Sieve/`, when they change.
-  - Never commit or push: Edward reviews in GitHub Desktop and commits. (A cloud session's push is
-    refused anyway; deliver the zip, which is what he wants: 17 October 2026.)
+  - Never push: Edward reviews in GitHub Desktop and commits. A cloud session's push is refused
+    anyway (403), and the stop hook's reminders to push can be ignored; commit locally if useful,
+    and deliver the zip, which is what he wants (17 October 2026).
   - Sync first with `git fetch origin main && git reset origin/main && git checkout -- .`, keeping
     the root `CHANGES.md` (it is Edward's).
   - British English and exact wording; no figure that was not measured.
@@ -3569,4 +3607,3 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
     here, plus any CI lines a change adds. Compile every changed file after the last edit, and when
     a change touches the hallway, build it whole before handing over (17 October 2026: a missing
     include reached Edward's build).
-- **No code changed.**

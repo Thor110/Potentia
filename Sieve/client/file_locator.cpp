@@ -40,7 +40,7 @@ cli::Manifest file_instructions(const fs::path& p, const std::vector<uint8_t>& b
     cli::Manifest m = cli::manifest_of_file(p);
     m.contents = bytes;
     m.with_contents = true;
-    cli::add_packed_items(m, p.parent_path(), items, nullptr, 8, false, rope_seconds, 4, true, true, archives);
+    cli::add_packed_items(m, p.parent_path(), items, nullptr, 8, false, rope_seconds, 5, true, true, archives);
     return m;
 }
 
@@ -261,7 +261,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                     size_t n = 0;
                     for (const auto& e : r.manifest.entries) n += e.dir ? 0 : 1;
                     cli::add_packed_items(with, p, host_.item_args ? host_.item_args() : cli::Args{}, nullptr, 8, false,
-                                          by_total ? cli::budget_per_file(total, n) : per_file, 4, true, true, archives);
+                                          by_total ? cli::budget_per_file(total, n) : per_file, 5, true, true, archives);
                 }
                 c.packed = with.packed;
                 c.version = with.version();
@@ -348,7 +348,7 @@ void FileLocator::save(const std::string& to)
                 // A file's instructions are a folder's holding just it (file_instructions).
                 const cli::Args items = host_.item_args ? host_.item_args() : cli::Args{};
                 cli::Manifest with = r.kind == Result::File ? file_instructions(from_u8(r.path), r.bytes, items, rope_seconds, archives) : r.manifest;
-                if (r.kind != Result::File) cli::add_packed_items(with, from_u8(r.path), items, nullptr, 8, false, rope_seconds, 4, true, true, archives);
+                if (r.kind != Result::File) cli::add_packed_items(with, from_u8(r.path), items, nullptr, 8, false, rope_seconds, 5, true, true, archives);
                 const BigUint address = cli::binary_address(with.file());
                 // The installer on its own (for anyone with Sieve: sieve install, or sieve-install),
                 // or an installer program, sieve-install with it attached, one file for anyone.

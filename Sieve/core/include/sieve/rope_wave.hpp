@@ -46,6 +46,7 @@ inline constexpr const char* kRopeWaveVersion = "rope-wave-v1";
 inline constexpr const char* kRopeWaveColumnsVersion = "rope-wave-v2"; // v1 with columns (C1)
 inline constexpr const char* kRopeWaveLinesVersion = "rope-wave-v3";   // v2 with columns by line (C2)
 inline constexpr const char* kRopeWaveGroupsVersion = "rope-wave-v4";  // v3 with columns sharing tables (G1)
+inline constexpr const char* kRopeWaveAboveVersion = "rope-wave-v5";   // v4 with the byte above as context (A1)
 
 struct RopeParams
 {
@@ -60,6 +61,10 @@ struct RopeParams
     // rope-wave-v4 (" G1" after C1 or C2): the columns in groups that share a table and a stream,
     // each column's group number before them (SPECIFICATIONS §12.2). Columns only.
     bool grouped = false;
+    // rope-wave-v5 (" A1" after C2 G1): each byte counted by its column in its line and the byte
+    // above it (the same column of the line before, or none where that line is shorter), each
+    // such pair given its group the first time it is met (SPECIFICATIONS §12.2).
+    bool above = false;
     void check() const; // throws std::invalid_argument for parameters out of range
     std::string text() const; // "L8 W949 S1 P3 K0"
     static RopeParams parse(std::string_view text);
@@ -78,7 +83,7 @@ double rope_estimate(std::span<const uint8_t> file, const RopeParams& p);
 // Pulling tight: the parameters that give the shortest code, searched over every value length,
 // phase and step, keep or not, and the widths at which the file best matches itself shifted by a
 // line, within `seconds` (0: no limit); the best found by then on a timeout. `newest`: the newest
-// rope-wave version tried (1 to 4), for instructions that an older reader must read.
+// rope-wave version tried (1 to 5), for instructions that an older reader must read.
 struct RopeSearch
 {
     RopeParams best;
@@ -86,6 +91,6 @@ struct RopeSearch
     size_t tried = 0;
     bool timed_out = false;
 };
-RopeSearch rope_search(std::span<const uint8_t> file, double seconds = 0, uint32_t newest = 4);
+RopeSearch rope_search(std::span<const uint8_t> file, double seconds = 0, uint32_t newest = 5);
 
 } // namespace sieve

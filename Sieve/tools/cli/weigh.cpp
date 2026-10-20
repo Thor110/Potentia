@@ -2,6 +2,7 @@
 #include "cli/weigh.hpp"
 
 #include "cli/locate.hpp"
+#include "cli/pack.hpp"
 #include "sieve/corridor.hpp"
 #include "sieve/filekind.hpp"
 #include "sieve/rope_wave.hpp"
@@ -113,6 +114,22 @@ Weighing weigh_files(const fs::path& root, const std::vector<std::string>& files
         w.shape = kRopeWaveVersion;
         lines.push_back(std::move(w));
     }
+    // LZMA2, and a file cut into pieces (LZMA2's and the rope's, sieve-manifest-v13): the ways the
+    // instructions carry a file, so the weighing weighs what they would (cli/pack.hpp file_ways).
+    const size_t lzma2_line = lines.size();
+    {
+        Weighed w;
+        w.name = "lzma2";
+        w.shape = "lzma2";
+        lines.push_back(std::move(w));
+    }
+    const size_t pieces_line = lines.size();
+    {
+        Weighed w;
+        w.name = "pieces";
+        w.shape = "pieces of lzma2 and rope-wave";
+        lines.push_back(std::move(w));
+    }
     double rope_spent = 0;
 
     std::vector<Group> groups;
@@ -162,14 +179,19 @@ Weighing weigh_files(const fs::path& root, const std::vector<std::string>& files
             }
             if (!bytes.empty() && rope_seconds >= 0)
             {
+                // Each with what decoding it needs written beside it: the file's size (a varint)
+                // and, for the rope, the wave's parameters as the text they are; the pieces' way
+                // holds both its pieces and its wave.
                 const auto t0 = std::chrono::steady_clock::now();
-                const RopeSearch found = rope_search(bytes, rope_seconds);
-                const std::vector<uint8_t> code = rope_code(bytes, found.best);
+                const FileWays ways = file_ways(bytes, rope_seconds);
                 rope_spent += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
                 uint64_t size_bytes = 1;
                 for (uint64_t n = bytes.size(); n >= 0x80; n >>= 7) ++size_bytes;
-                const std::string params = found.best.text();
-                cand.push_back({group_of(int(rope_line), "rope", 0), 8.0 * double(code.size() + params.size() + size_bytes), params});
+                const std::string params = ways.rope.text();
+                cand.push_back({group_of(int(rope_line), "rope", 0), 8.0 * double(ways.rope_code.size() + params.size() + size_bytes), params});
+                cand.push_back({group_of(int(lzma2_line), "lzma2", 0), 8.0 * double(ways.lzma2 + size_bytes), ""});
+                if (ways.has_pieces)
+                    cand.push_back({group_of(int(pieces_line), "pieces", 0), 8.0 * double(ways.pieces_bytes + size_bytes), ways.pieces_way.substr(7)});
             }
             for (size_t li = 1; li < lines.size(); ++li)
             {

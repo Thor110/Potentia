@@ -11,6 +11,7 @@
 #include <map>
 #include <mutex>
 #include <stdexcept>
+#include <unordered_map>
 #include <utility>
 
 namespace sieve {
@@ -271,7 +272,8 @@ std::vector<std::vector<size_t>> segments_of(const std::vector<uint64_t>& positi
 // (the count C2 writes before each group). At most 256 groups: past them a column joins the best.
 // Groups are numbered in the order they start, so each column's number is at most one past the
 // largest before it (what a reader checks). Gives each column's group; `cost` their total.
-std::vector<uint32_t> group_columns(const std::vector<uint64_t>& counts, const std::vector<uint64_t>& n, double per_group, double& cost)
+std::vector<uint32_t> group_columns(const std::vector<uint64_t>& counts, const std::vector<uint64_t>& n, double per_group, double& cost,
+                                    bool numbers_counted = true)
 {
     const size_t W = n.size();
     auto cost_of = [&](const uint64_t* c, uint64_t m) {
@@ -319,8 +321,47 @@ std::vector<uint32_t> group_columns(const std::vector<uint64_t>& counts, const s
     }
     cost = 0;
     for (const double g : gcost) cost += g;
-    for (size_t c = 0; c < W; ++c) cost += group[c] < 128 ? 1 : 2; // each column's group number
+    if (numbers_counted)
+        for (size_t c = 0; c < W; ++c) cost += group[c] < 128 ? 1 : 2; // each column's group number
     return group;
+}
+
+// rope-wave-v5: each byte's pair (its column in its line, held below W; the byte above it, the same
+// column of the line before, 256 where that line is shorter or there is none), numbered in the
+// order the pairs are first met. Gives each byte's pair's number; `pairs` their count.
+std::vector<uint32_t> above_pairs(std::span<const uint8_t> b, uint32_t width, uint32_t& pairs)
+{
+    std::vector<uint32_t> out(b.size());
+    std::unordered_map<uint64_t, uint32_t> seen;
+    size_t line = 0, prev = 0, prev_len = 0; // where this line and the one before start; its length
+    bool have_prev = false;
+    for (size_t i = 0; i < b.size(); ++i)
+    {
+        const size_t c = i - line;
+        const uint32_t col = uint32_t(std::min<size_t>(c, width - 1));
+        const uint32_t up = have_prev && c < prev_len ? b[prev + c] : 256u;
+        const uint64_t key = uint64_t(col) * 257 + up;
+        auto it = seen.find(key);
+        if (it == seen.end()) it = seen.emplace(key, uint32_t(seen.size())).first;
+        out[i] = it->second;
+        if (b[i] == 10)
+        {
+            prev = line;
+            prev_len = i + 1 - line;
+            have_prev = true;
+            line = i + 1;
+        }
+    }
+    pairs = uint32_t(seen.size());
+    return out;
+}
+
+// v5's estimate: the groups' cost, and their numbers (one a pair) coded as a segment of their own.
+double above_cost(const std::vector<uint32_t>& group)
+{
+    std::vector<uint64_t> h(256, 0);
+    for (const uint32_t g : group) ++h[g];
+    return entropy_bytes_v2(h, group.size()) + 3;
 }
 
 // The groups' numbers, written and read: one varint for each column.
@@ -352,6 +393,7 @@ void RopeParams::check() const
     if (step < 1 || step > 8) bad("a step of 1 to 8 values");
     if (phases > 3) bad("phases 0 to 3");
     if (columns > 2) bad("columns 0, 1 or 2");
+    if (above && (columns != 2 || !grouped)) bad("the byte above (A1) is for columns by line in groups: C2 G1 first");
     if (columns && width < 2) bad("columns need lines of two values or more");
     if (columns == 2 && (bits != 8 || phases != 0 || keep || step != 1))
         bad("columns by line (C2) are for bytes with no wave: L8, S1, P0, K0");
@@ -361,7 +403,7 @@ void RopeParams::check() const
 std::string RopeParams::text() const
 {
     return "L" + std::to_string(bits) + " W" + std::to_string(width) + " S" + std::to_string(step) + " P" + std::to_string(phases) + " K" +
-           (keep ? "1" : "0") + (columns ? " C" + std::to_string(columns) : "") + (grouped ? " G1" : "");
+           (keep ? "1" : "0") + (columns ? " C" + std::to_string(columns) : "") + (grouped ? " G1" : "") + (above ? " A1" : "");
 }
 
 RopeParams RopeParams::parse(std::string_view t)
@@ -370,12 +412,13 @@ RopeParams RopeParams::parse(std::string_view t)
     unsigned long long L = 0, W = 0, S = 0, P = 0, K = 0;
     char extra = 0;
     const std::string s(t);
-    unsigned long long C = 0, G = 0;
-    const int got = std::sscanf(s.c_str(), "L%llu W%llu S%llu P%llu K%llu C%llu G%llu%c", &L, &W, &S, &P, &K, &C, &G, &extra);
-    if ((got != 5 && got != 6 && got != 7) || K > 1 || C > 2 || G != (got == 7 ? 1u : 0u) || W > 0xFFFFFFFFull || L > 64 || S > 8 || P > 3)
-        bad("parameters are written \"L8 W949 S1 P3 K0\" (rope-wave-v2: and \" C1\"; v3: \" C2\"; v4: and \" G1\"): " + s);
+    unsigned long long C = 0, G = 0, A = 0;
+    const int got = std::sscanf(s.c_str(), "L%llu W%llu S%llu P%llu K%llu C%llu G%llu A%llu%c", &L, &W, &S, &P, &K, &C, &G, &A, &extra);
+    if (got < 5 || got > 8 || K > 1 || C > 2 || G != (got >= 7 ? 1u : 0u) || A != (got == 8 ? 1u : 0u) || W > 0xFFFFFFFFull || L > 64 || S > 8 || P > 3)
+        bad("parameters are written \"L8 W949 S1 P3 K0\" (rope-wave-v2: and \" C1\"; v3: \" C2\"; v4: and \" G1\"; v5: and \" A1\"): " + s);
     p.columns = uint32_t(C);
     p.grouped = G == 1;
+    p.above = A == 1;
     p.bits = uint32_t(L);
     p.width = uint32_t(W);
     p.step = uint32_t(S);
@@ -390,6 +433,33 @@ std::vector<uint8_t> rope_code(std::span<const uint8_t> file, const RopeParams& 
 {
     p.check();
     if (file.size() >= (uint64_t(1) << 30)) bad("a file of a gigabyte or more");
+    if (p.columns == 2 && p.above)
+    {
+        // v5: the pairs' count and their groups (a segment of group numbers, one a pair, in the
+        // order the pairs are first met), then each group's count and segment.
+        uint32_t pairs = 0;
+        const std::vector<uint32_t> pair = above_pairs(file, p.width, pairs);
+        std::vector<uint64_t> counts(size_t(pairs) * 256, 0), n(pairs, 0);
+        for (size_t i = 0; i < file.size(); ++i)
+        {
+            ++counts[size_t(pair[i]) * 256 + file[i]];
+            ++n[pair[i]];
+        }
+        double cost = 0;
+        const std::vector<uint32_t> group = pairs ? group_columns(counts, n, 3, cost, false) : std::vector<uint32_t>{};
+        std::vector<uint8_t> out;
+        put_varint(out, pairs);
+        put_segment(out, std::vector<uint16_t>(group.begin(), group.end()), true);
+        const size_t groups = group.empty() ? 0 : size_t(*std::max_element(group.begin(), group.end())) + 1;
+        std::vector<std::vector<uint16_t>> seg(groups);
+        for (size_t i = 0; i < file.size(); ++i) seg[group[pair[i]]].push_back(file[i]);
+        for (const auto& one : seg)
+        {
+            put_varint(out, one.size());
+            put_segment(out, one, true);
+        }
+        return out;
+    }
     if (p.columns == 2)
     {
         // v3: each line column's bytes, its count first (a reader learns the columns only as it
@@ -466,6 +536,61 @@ std::vector<uint8_t> rope_file(std::span<const uint8_t> code, const RopeParams& 
 {
     p.check();
     if (size >= (uint64_t(1) << 30)) bad("a file of a gigabyte or more");
+    if (p.columns == 2 && p.above)
+    {
+        // v5: the pairs' groups, each group's bytes; then the file made again byte by byte, each
+        // pair given the next group number the first time it is met.
+        size_t at = 0;
+        const uint64_t pairs = get_varint(code, at);
+        if (pairs > size) bad("more pairs than the file has bytes");
+        const std::vector<uint16_t> listed = get_segment(code, at, pairs, true);
+        uint32_t groups = 0;
+        for (const uint16_t g : listed)
+        {
+            if (g > groups || g >= 256) bad("a pair's group past the groups started before it");
+            if (g == groups) ++groups;
+        }
+        std::vector<std::vector<uint16_t>> seg(groups);
+        uint64_t total = 0;
+        for (auto& one : seg)
+        {
+            const uint64_t n = get_varint(code, at);
+            if (n > size - total) bad("groups holding more bytes than the file");
+            total += n;
+            one = get_segment(code, at, n, true);
+        }
+        if (total != size || at != code.size()) bad("the code does not end where the file's groups do");
+        std::vector<uint8_t> out(static_cast<size_t>(size));
+        std::vector<size_t> next(groups, 0);
+        std::unordered_map<uint64_t, uint32_t> seen;
+        size_t line = 0, prev = 0, prev_len = 0, met = 0;
+        bool have_prev = false;
+        for (size_t i = 0; i < out.size(); ++i)
+        {
+            const size_t c = i - line;
+            const uint64_t col = std::min<uint64_t>(c, p.width - 1);
+            const uint32_t up = have_prev && c < prev_len ? out[prev + c] : 256u;
+            const uint64_t key = col * 257 + up;
+            auto it = seen.find(key);
+            if (it == seen.end())
+            {
+                if (met >= listed.size()) bad("a pair met that has no group");
+                it = seen.emplace(key, listed[met++]).first;
+            }
+            const uint32_t k = it->second;
+            if (next[k] >= seg[k].size()) bad("a group with fewer bytes than the file needs");
+            out[i] = uint8_t(seg[k][next[k]++]);
+            if (out[i] == 10)
+            {
+                prev = line;
+                prev_len = i + 1 - line;
+                have_prev = true;
+                line = i + 1;
+            }
+        }
+        if (met != listed.size()) bad("groups listed for pairs the file never meets");
+        return out;
+    }
     if (p.columns == 2)
     {
         size_t at = 0;
@@ -548,6 +673,21 @@ std::vector<uint8_t> rope_file(std::span<const uint8_t> code, const RopeParams& 
 double rope_estimate(std::span<const uint8_t> file, const RopeParams& p)
 {
     p.check();
+    if (p.columns == 2 && p.above)
+    {
+        uint32_t pairs = 0;
+        const std::vector<uint32_t> pair = above_pairs(file, p.width, pairs);
+        if (!pairs) return 2;
+        std::vector<uint64_t> counts(size_t(pairs) * 256, 0), n(pairs, 0);
+        for (size_t i = 0; i < file.size(); ++i)
+        {
+            ++counts[size_t(pair[i]) * 256 + file[i]];
+            ++n[pair[i]];
+        }
+        double bytes = 0;
+        const std::vector<uint32_t> group = group_columns(counts, n, 3, bytes, false);
+        return bytes + above_cost(group) + 3;
+    }
     if (p.columns == 2)
     {
         const std::vector<uint32_t> col = line_columns(file, p.width);
@@ -624,7 +764,7 @@ std::map<std::string, RopeSearch> g_cache;
 
 RopeSearch rope_search(std::span<const uint8_t> file, double seconds, uint32_t newest)
 {
-    if (newest < 1 || newest > 4) bad("the newest version searched is 1 to 4");
+    if (newest < 1 || newest > 5) bad("the newest version searched is 1 to 5");
     char t[48];
     std::snprintf(t, sizeof t, "|%.6f|%u", seconds, newest);
     Sha256 h;
@@ -785,6 +925,7 @@ RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds, u
             const uint32_t w = uint32_t(std::min<uint64_t>(longest, 4096));
             try_one(RopeParams{8, w, 1, 0, false, 2});
             if (newest >= 4 && !out_of_time()) try_one(RopeParams{8, w, 1, 0, false, 2, true}); // rope-wave-v4
+            if (newest >= 5 && !out_of_time()) try_one(RopeParams{8, w, 1, 0, false, 2, true, true}); // rope-wave-v5
         }
     }
 keep:

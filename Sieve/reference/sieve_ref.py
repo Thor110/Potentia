@@ -2302,13 +2302,17 @@ def sw_decode(words, freq, n):
 # definition apart from core/rope_wave.*.
 
 def rope_params(text):
-    """(L, W, S, P, K, C, G): rope-wave-v1's parameters, rope-wave-v2's columns (" C1" after K),
-    v3's columns by line (" C2") and v4's groups of columns (" G1" after either)."""
-    m = re.fullmatch(r"L(8|16|32) W([1-9][0-9]*) S([1-8]) P([0-3]) K([01])(?:( C[12])( G1)?)?", text)
+    """(L, W, S, P, K, C, G, A): rope-wave-v1's parameters, rope-wave-v2's columns (" C1" after K),
+    v3's columns by line (" C2"), v4's groups of columns (" G1" after either) and v5's byte above
+    (" A1" after C2 G1)."""
+    m = re.fullmatch(r"L(8|16|32) W([1-9][0-9]*) S([1-8]) P([0-3]) K([01])(?:( C[12])(?:( G1)( A1)?)?)?", text)
+    if m and m.group(8) and m.group(6) != " C2":
+        m = None
     if not m or (m.group(6) and int(m.group(2)) < 2) or (m.group(6) == " C2" and not text.startswith("L8 ") or
                                                           m.group(6) == " C2" and m.group(3, 4, 5) != ("1", "0", "0")):
         sys.exit(f"rope-wave: parameters are written like \"L8 W949 S1 P3 K0\" (v2: and \" C1\", W 2 or more; v3: \" C2\", L8 S1 P0 K0; v4: and \" G1\"): {text}")
-    return tuple(int(g) for g in m.groups()[:5]) + (int(m.group(6)[2]) if m.group(6) else 0, 1 if m.group(7) else 0)
+    return tuple(int(g) for g in m.groups()[:5]) + (int(m.group(6)[2]) if m.group(6) else 0, 1 if m.group(7) else 0,
+                                                    1 if m.group(8) else 0)
 
 
 def rope_kept(n):
@@ -2323,7 +2327,7 @@ def rope_kept(n):
 
 
 def rope_wave_file(code, params, size):
-    L, W, S, P, K, C, G = rope_params(params)
+    L, W, S, P, K, C, G, A = rope_params(params)
     vb, mask = L // 8, (1 << L) - 1
     n = size // vb
     kept = rope_kept(n) if K else []
@@ -2373,6 +2377,45 @@ def rope_wave_file(code, params, size):
             seen += x == seen
             g.append(x)
         return g, seen
+
+    if A:
+        # rope-wave-v5: the pairs' groups (a segment of group numbers, one a pair (its column in its
+        # line, below W, and the byte above it, the same column of the line before, or none), in
+        # the order the pairs are first met), each group's count and segment; then the file made
+        # byte by byte, each pair given the next group number the first time it is met.
+        pairs = varint()
+        listed = segment_of(pairs)
+        seen = 0
+        for g in listed:
+            if g > seen or g >= 256:
+                sys.exit("rope-wave-v5: a pair's group past those started before it")
+            seen += g == seen
+        cols = []
+        for _ in range(seen):
+            count = varint()
+            cols.append(segment_of(count))
+        if sum(len(c) for c in cols) != size or at[0] != len(code):
+            sys.exit("rope-wave-v5: the code does not end where the file's groups do")
+        out, nxt, group_of, met, line, prev, prev_len = bytearray(), [0] * seen, {}, 0, 0, 0, None
+        for i in range(size):
+            c = i - line
+            up = out[prev + c] if prev_len is not None and c < prev_len else 256
+            key = (min(c, W - 1), up)
+            if key not in group_of:
+                if met >= len(listed):
+                    sys.exit("rope-wave-v5: a pair with no group")
+                group_of[key], met = listed[met], met + 1
+            k = group_of[key]
+            if nxt[k] >= len(cols[k]):
+                sys.exit("rope-wave-v5: a group with fewer bytes than the file needs")
+            b = cols[k][nxt[k]]
+            nxt[k] += 1
+            out.append(b)
+            if b == 10:
+                prev, prev_len, line = line, i + 1 - line, i + 1
+        if met != len(listed):
+            sys.exit("rope-wave-v5: groups listed for pairs never met")
+        return bytes(out)
 
     if C == 2:
         # rope-wave-v3: each line column's count and segment (a column the bytes since the last line
@@ -6117,7 +6160,8 @@ def v7_listing(data):
     import lzma
     version = data[:data.index(b"\n") + 1] if b"\n" in data[:24] else b""
     if version not in (b"sieve-manifest-v7\n", b"sieve-manifest-v8\n", b"sieve-manifest-v9\n", b"sieve-manifest-v10\n",
-                       b"sieve-manifest-v11\n", b"sieve-manifest-v12\n", b"sieve-manifest-v13\n", b"sieve-manifest-v14\n") or \
+                       b"sieve-manifest-v11\n", b"sieve-manifest-v12\n", b"sieve-manifest-v13\n", b"sieve-manifest-v14\n",
+                        b"sieve-manifest-v15\n") or \
             not data[len(version):].startswith(b"listing "):
         return data
     head = version + b"listing "
@@ -6144,7 +6188,8 @@ def cmd_unpack_v7(args, data):
     # v11 with no line for an empty items or rope stream, and the lzma2 stream perhaps carried as it is
     # v13 with archives optimised: an xz file remade exactly from what it holds, or an archive carried
     # as its contents ("u" lines after the tree's)
-    v14 = lines[0] == "sieve-manifest-v14"
+    v15 = lines[0] == "sieve-manifest-v15"  # v14 whose rope ways may be rope-wave-v5's (the byte above)
+    v14 = lines[0] == "sieve-manifest-v14" or v15
     # v12 whose files may be cut into pieces, LZMA2's and the rope's
     v13 = lines[0] == "sieve-manifest-v13" or v14
     v12 = lines[0] == "sieve-manifest-v12" or v13
@@ -6254,6 +6299,8 @@ def cmd_unpack_v7(args, data):
                 shift += 7
                 if not b & 0x80:
                     break
+            if params.endswith(" A1") and not v15:
+                sys.exit(f"{path}: a rope-wave-v5 way before sieve-manifest-v15")
             r, ra = rope_wave_file(ropes[ra:ra + n], params, rsum), ra + n
             out, za, rb = bytearray(), 0, 0
             for p in pieces:
@@ -6276,7 +6323,9 @@ def cmd_unpack_v7(args, data):
                     break
             if " C1" in way and not v9:
                 sys.exit(f"{path}: a rope-wave-v2 way in sieve-manifest-v8")
-            if way.endswith(" G1") and not v11:
+            if way.endswith(" A1") and not v15:
+                sys.exit(f"{path}: a rope-wave-v5 way before sieve-manifest-v15")
+            if " G1" in way and not v11:
                 sys.exit(f"{path}: a rope-wave-v4 way before sieve-manifest-v11")
             if " C2" in way and not v10:
                 sys.exit(f"{path}: a rope-wave-v3 way before sieve-manifest-v10")
@@ -6342,7 +6391,8 @@ def cmd_unpack(args):
     import lzma
     data = open(args.manifest, "rb").read()
     if data.startswith((b"sieve-manifest-v7\n", b"sieve-manifest-v8\n", b"sieve-manifest-v9\n", b"sieve-manifest-v10\n",
-                        b"sieve-manifest-v11\n", b"sieve-manifest-v12\n", b"sieve-manifest-v13\n", b"sieve-manifest-v14\n")):
+                        b"sieve-manifest-v11\n", b"sieve-manifest-v12\n", b"sieve-manifest-v13\n", b"sieve-manifest-v14\n",
+                        b"sieve-manifest-v15\n")):
         return cmd_unpack_v7(args, data)
     end = data.index(b"\nend\n") + len(b"\nend\n")
     lines = data[:end].decode("utf-8").split("\n")[:-1]

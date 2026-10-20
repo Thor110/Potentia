@@ -1166,9 +1166,9 @@ jobs:
           # 55 and 54 bytes, a blank line after every twenty and a form feed in every tenth, which shift
           # any fixed width. Counted by the column in each line, it is near the digits' floor (100,000
           # digits: 41,525 bytes) and below LZMA2; sieve-manifest-v10 (--v10); all three readers give it
-          # back. rope-wave-v4: the columns grouped, smaller again; sieve-manifest-v12 (v11 with no items
-          # line), all three readers.
-          rm -rf lines lines_inst lines_oracle lines_si lines_inst10 lines_oracle10 lines_si10 && mkdir lines
+          # back. rope-wave-v4: the columns grouped, smaller again; rope-wave-v5: the byte above too,
+          # smaller again; sieve-manifest-v15, all three readers.
+          rm -rf lines lines_inst lines_oracle lines_si lines_inst10 lines_oracle10 lines_si10 lines_bad && mkdir lines
           python -c "
           s = 314159
           def r():
@@ -1184,23 +1184,36 @@ jobs:
           open('lines/pi-like.txt', 'wb').write(('\\n'.join(out) + '\\n').encode())
           "
           build/sieve rope lines/pi-like.txt --out lines.rope | tr -d '\r' > lines.txt
-          q "^wave      L8 W56 S1 P0 K0 C2 G1 (rope-wave-v4)" lines.txt
+          q "^wave      L8 W56 S1 P0 K0 C2 G1 A1 (rope-wave-v5)" lines.txt
           [ "$(wc -c < lines.rope)" -lt "$(sed -n 's/^LZMA2     \([0-9]*\) bytes.*/\1/p' lines.txt)" ]
-          [ "$(wc -c < lines.rope)" -lt 43525 ] # the digits' floor, 41,525, and 2,000 for the groups' tables and the layout
-          python reference/sieve_ref.py rope-unpack lines.rope --params "L8 W56 S1 P0 K0 C2 G1" --size "$(wc -c < lines/pi-like.txt)" --out lines.back > /dev/null
+          [ "$(wc -c < lines.rope)" -lt 42525 ] # the digits' floor, 41,525, and 1,000 for the groups and the layout (measured: 41,790)
+          python reference/sieve_ref.py rope-unpack lines.rope --params "L8 W56 S1 P0 K0 C2 G1 A1" --size "$(wc -c < lines/pi-like.txt)" --out lines.back > /dev/null
           cmp lines/pi-like.txt lines.back
+          # rope-wave-v4 (the columns grouped, no byte above): larger, and the oracle decodes it too.
+          build/sieve rope lines/pi-like.txt --params "L8 W56 S1 P0 K0 C2 G1" --out lines4.rope | tr -d '\r' | q "(rope-wave-v4)"
+          [ "$(wc -c < lines.rope)" -lt "$(wc -c < lines4.rope)" ]
+          [ "$(wc -c < lines4.rope)" -lt 43525 ] # the digits' floor, and 2,000 for the groups' tables and the layout
+          python reference/sieve_ref.py rope-unpack lines4.rope --params "L8 W56 S1 P0 K0 C2 G1" --size "$(wc -c < lines/pi-like.txt)" --out lines4.back > /dev/null
+          cmp lines/pi-like.txt lines4.back
           build/sieve rope lines/pi-like.txt --params "L8 W56 S1 P0 K0 C2" --out lines3.rope | tr -d '\r' | q "(rope-wave-v3)"
           [ "$(wc -c < lines.rope)" -lt "$(wc -c < lines3.rope)" ]
           [ "$(wc -c < lines3.rope)" -lt 45525 ] # the digits' floor, 41,525, and 4,000 for the columns' tables
           python reference/sieve_ref.py rope-unpack lines3.rope --params "L8 W56 S1 P0 K0 C2" --size "$(wc -c < lines/pi-like.txt)" --out lines3.back > /dev/null
           cmp lines/pi-like.txt lines3.back
-          build/sieve locate lines --installer lines.sieve --items --manifest lines.manifest | tr -d '\r' | q "; sieve-manifest-v12)"
+          build/sieve locate lines --installer lines.sieve --items --manifest lines.manifest | tr -d '\r' | q "; sieve-manifest-v15)"
           build/sieve install lines.sieve --to lines_inst > /dev/null
           diff -r lines lines_inst
           python reference/sieve_ref.py unpack lines.manifest --to lines_oracle > /dev/null
           diff -r lines lines_oracle
           build/sieve-install lines.sieve --to lines_si --yes > /dev/null
           diff -r lines lines_si
+          # --v14 (no rope-wave-v5): v12 here, larger; refused when its v5 way is called v14.
+          build/sieve locate lines --installer lines14.sieve --items --v14 --manifest lines14.manifest | tr -d '\r' | q "; sieve-manifest-v12)"
+          [ "$(wc -c < lines.sieve)" -lt "$(wc -c < lines14.sieve)" ]
+          sed '1s/v15/v14/' lines.manifest > lines-as-v14.manifest
+          if build/sieve install lines-as-v14.manifest --to lines_bad > /dev/null 2>&1; then exit 1; fi
+          if python reference/sieve_ref.py unpack lines-as-v14.manifest --to lines_bad > /dev/null 2>&1; then exit 1; fi
+          test ! -e lines_bad
           build/sieve locate lines --installer lines10.sieve --items --v10 --manifest lines10.manifest | tr -d '\r' | q "; sieve-manifest-v10)"
           [ "$(wc -c < lines.sieve)" -lt "$(wc -c < lines10.sieve)" ]
           build/sieve install lines10.sieve --to lines_inst10 > /dev/null
@@ -1265,6 +1278,11 @@ jobs:
           [ "$(wc -c < mixed.sieve)" -lt "$(xz -9e -c mixed/photo-like.bin | wc -c)" ]
           build/sieve install mixed.sieve --to mixed_inst > /dev/null
           diff -r mixed mixed_inst
+          # Weighed, the file's best way is its pieces, as the instructions carry it (the weighing
+          # and the packer choose by the same code).
+          build/sieve locate mixed --weigh 2>&1 | tr -d '\r' > mixedweigh.txt
+          q "^  photo-like.bin  *[0-9]*  *[0-9]*   pieces z[0-9]* r[0-9]* rope L" mixedweigh.txt
+          q "^  shared: pieces, 1 file(s): shape 232 bits$" mixedweigh.txt
           python reference/sieve_ref.py unpack mixed.manifest --to mixed_oracle > /dev/null
           diff -r mixed mixed_oracle
           build/sieve-install mixed.sieve --to mixed_si --yes > /dev/null
@@ -1300,7 +1318,8 @@ jobs:
           open('arch/x/table.txt', 'wb').write(table(60))
           "
           xz -9 arch/x/table.txt
-          build/sieve locate arch --installer arch_off.sieve --items | tr -d '\r' > arch_off.txt
+          build/sieve locate arch --installer arch_off.sieve --items --manifest arch_off.manifest | tr -d '\r' > arch_off.txt
+          q "^items     none; sieve-manifest-v1[25]$" arch_off.txt
           if grep -q "sieve-manifest-v14\|^remade\|^unpacked" arch_off.txt; then exit 1; fi
           build/sieve locate arch --installer arch.sieve --items --optimise-archives --manifest arch.manifest | tr -d '\r' > arch.txt
           q "^remade    1 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v14)$" arch.txt
@@ -1314,7 +1333,7 @@ jobs:
           python reference/sieve_ref.py unpack arch.manifest --to arch_oracle | tr -d '\r' | q "^unpacked	7z	10513	digits.7z	digits$"
           diff -r arch_inst arch_oracle
           if build/sieve-install arch.sieve --to arch_si --yes > /dev/null 2>&1; then exit 1; fi
-          sed '1s/v14/v13/' arch.manifest > arch-as-v13.manifest
+          sed '1s/v1[45]$/v13/' arch.manifest > arch-as-v13.manifest
           if build/sieve install arch-as-v13.manifest --to arch_bad > /dev/null 2>&1; then exit 1; fi
           if python reference/sieve_ref.py unpack arch-as-v13.manifest --to arch_bad > /dev/null 2>&1; then exit 1; fi
           test ! -e arch_bad

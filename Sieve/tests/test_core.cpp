@@ -5878,6 +5878,12 @@ void test_rope_wave()
     CHECK(throws([] { RopeParams::parse("L8 W56 S1 P0 K0 C2 G0"); }));
     CHECK(throws([] { RopeParams::parse("L8 W56 S1 P0 K0 C2 G2"); }));
     CHECK(throws([] { RopeParams::parse("L8 W56 S1 P0 K0 C2 G1 "); }));
+    // rope-wave-v5: the byte above, " A1" after C2 G1 only.
+    CHECK((RopeParams::parse("L8 W56 S1 P0 K0 C2 G1 A1") == RopeParams{8, 56, 1, 0, false, 2, true, true}));
+    CHECK(throws([] { RopeParams::parse("L8 W56 S1 P0 K0 C2 A1"); }));
+    CHECK(throws([] { RopeParams::parse("L8 W56 S1 P0 K0 C1 G1 A1"); }));
+    CHECK(throws([] { RopeParams::parse("L8 W56 S1 P0 K0 C2 G1 A2"); }));
+    CHECK(throws([] { RopeParams::parse("L8 W56 S1 P0 K0 C2 G1 A0"); }));
     // A file that is the rope exactly (x_i = i, 100 values, kept at 0, 33, 66 and 99: an even count
     // has no centre value): nothing is left, so its code is the table of one byte (1 + 1 + 4), its
     // stream's two words (1 + 8) and the four kept bytes.
@@ -5978,14 +5984,21 @@ void test_rope_wave()
         const size_t g2 = rope_code(text, grouped).size();
         CHECK(g2 + 56 * 30 < c2); // measured: 2,187 bytes smaller (128,145 and 125,958)
         CHECK(rope_file(rope_code(text, grouped), grouped, text.size()) == text);
-        CHECK(rope_search(text).best == grouped);
-        std::cout << "rope-wave-v3 and v4 on lines of digits: " << c2 << " and " << g2 << " bytes\n";
+        // rope-wave-v5: the byte above sees what the column alone cannot (the last column's space
+        // and line feed taking turns, the line after a blank one); smaller again, and the search's.
+        const RopeParams above{8, 56, 1, 0, false, 2, true, true};
+        const size_t a2 = rope_code(text, above).size();
+        CHECK(a2 + 200 < g2);
+        CHECK(rope_file(rope_code(text, above), above, text.size()) == text);
+        CHECK(rope_search(text).best == above);
+        CHECK(rope_search(text, 0, 4).best == grouped); // the newest version 4: v4's
+        std::cout << "rope-wave-v3, v4 and v5 on lines of digits: " << c2 << ", " << g2 << " and " << a2 << " bytes\n";
         bool all = true;
         for (const auto& f : files)
             for (const uint32_t w : {2u, 7u, 300u})
-                for (const bool g : {false, true})
+                for (const int g : {0, 1, 2}) // v3, v4, v5
                 {
-                    const RopeParams p{8, w, 1, 0, false, 2, g};
+                    const RopeParams p{8, w, 1, 0, false, 2, g >= 1, g == 2};
                     all = all && rope_file(rope_code(f, p), p, f.size()) == f;
                 }
         CHECK(all);
@@ -5994,6 +6007,13 @@ void test_rope_wave()
         std::vector<uint8_t> past = rope_code(text, grouped);
         past[0] = 1;
         CHECK(throws([&] { rope_file(past, grouped, text.size()); }));
+        // v5: one pair fewer than the file meets is refused, as is a code cut short.
+        std::vector<uint8_t> fewer = rope_code(text, above);
+        fewer[0] = uint8_t(fewer[0] - 1); // the pairs' count (a varint; its low byte here is not 0)
+        CHECK(throws([&] { rope_file(fewer, above, text.size()); }));
+        std::vector<uint8_t> cut = rope_code(text, above);
+        cut.pop_back();
+        CHECK(throws([&] { rope_file(cut, above, text.size()); }));
         std::vector<uint8_t> shorter = rope_code(text, byline);
         shorter.pop_back();
         CHECK(throws([&] { rope_file(shorter, byline, text.size()); }));

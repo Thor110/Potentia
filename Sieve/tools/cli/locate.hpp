@@ -118,6 +118,9 @@ inline constexpr const char* kPiecesManifestVersion = "sieve-manifest-v13";
 // an archive carried as its contents, a line "u\t<format>\t<size>\t<archive>\t<folder>" after the
 // tree's saying so. Made only where some file's is.
 inline constexpr const char* kArchivesManifestVersion = "sieve-manifest-v14";
+// v14 whose rope ways may be rope-wave-v5's (columns by line counted by the byte above too, " A1"):
+// made only where some file's is.
+inline constexpr const char* kRopeAboveManifestVersion = "sieve-manifest-v15";
 
 std::vector<uint8_t> read_file_bytes(const std::filesystem::path& file);
 
@@ -188,6 +191,7 @@ struct Manifest
     bool trimmed = false;      // v12: no empty items line; the lzma2 stream perhaps carried as it is
     bool pieces = false;       // v13: some file is cut into pieces (and trimmed is set too)
     bool archives = false;     // v14: some archive is remade or carried as its contents (and pieces is set too)
+    bool rope_above = false;   // v15: some rope way is rope-wave-v5's
     // v14: each archive carried as its contents: its format ("7z", "xz"), its size, its path, and the
     // folder (or file) its contents are in.
     struct UnpackedArchive

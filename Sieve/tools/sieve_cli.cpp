@@ -2384,7 +2384,7 @@ void print_weighing(const Args& a, const std::filesystem::path& root, const std:
 // Packs an installer's files (v4), and with --items carries those that are items of Sieve's lines as
 // their lines and places there: v8, each place at its least, the AI line's models among them, and
 // files pulled tight by the rope where that is smaller (--search-per-file: its search's time)
-// (--v12: no pieces, v13's; --v11: no trimming, v12's; --v10, --v9, --v8: the rope's ways those versions have, rope-wave-v3, v2, v1; --v7: no rope; --v6: as v6 wrote them; --v5: as v5 did, in hex, without the AI line; cli/items.hpp).
+// (--v14: no rope-wave-v5; --v13: and no archives optimised; --v12: no pieces, v13's; --v11: no trimming, v12's; --v10, --v9, --v8: the rope's ways those versions have, rope-wave-v3, v2, v1; --v7: no rope; --v6: as v6 wrote them; --v5: as v5 did, in hex, without the AI line; cli/items.hpp).
 void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackReport& rep)
 {
     if (!a.has("items"))
@@ -2408,9 +2408,10 @@ void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackRepor
         if (used != v.size() || !(rope_seconds >= 0)) throw std::invalid_argument("--search-per-file: seconds, 0 or more (0: no limit): " + v);
     }
     add_packed_items(m, root, a, &rep, a.has("v5") ? 5 : a.has("v6") ? 6 : a.has("v7") ? 7 : 8, a.has("item-hashes") || a.has("file-hashes"),
-                     rope_seconds, a.has("v8") ? 1 : a.has("v9") ? 2 : a.has("v10") ? 3 : 4,
+                     rope_seconds, a.has("v8") ? 1 : a.has("v9") ? 2 : a.has("v10") ? 3 : a.has("v11") || a.has("v12") || a.has("v13") || a.has("v14") ? 4 : 5,
                      !(a.has("v8") || a.has("v9") || a.has("v10") || a.has("v11")),
-                     !(a.has("v8") || a.has("v9") || a.has("v10") || a.has("v11") || a.has("v12")), a.has("optimise-archives"));
+                     !(a.has("v8") || a.has("v9") || a.has("v10") || a.has("v11") || a.has("v12")),
+                     a.has("optimise-archives") && !a.has("v13"));
 }
 
 int cmd_locate(const Args& a)
@@ -2598,6 +2599,7 @@ int cmd_locate(const Args& a)
         const std::string o = a.get("installer");
         write_address_file(fs::path(std::u8string(o.begin(), o.end())), iaddr, a.has("hex"));
         *info << "installer " << o << ": the address of the installer's manifest (" << (!(m.with_contents ? m.packed : inst.packed) ? "v3: the listing, then every file's bytes"
+                                    : (m.with_contents ? m.rope_above : inst.rope_above) ? "v15: as v14, and the rope's columns by line counted by the byte above as well"
                                     : (m.with_contents ? m.archives : inst.archives) ? "v14: as v13, with archives optimised: remade exactly from what they hold, or carried as their contents"
                                     : (m.with_contents ? m.pieces : inst.pieces) ? "v13: as v12, and a file cut into pieces where that is smaller, LZMA2's where its bytes repeat and the rope's where they are unevenly spread"
                                     : (m.with_contents ? m.trimmed : inst.trimmed) ? "v12: the listing, every other file packed (or carried as it is where packing makes it no smaller), the items' places, then the files pulled tight by the rope, with no line for a stream that is empty"

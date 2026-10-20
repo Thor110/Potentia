@@ -288,6 +288,42 @@ std::string contents_name(const std::string& path, const char* ext)
     return path + ".contents";
 }
 
+} // namespace
+
+FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest, bool pieces)
+{
+    auto varint_of = [](uint64_t n) {
+        uint64_t v = 1;
+        while (n >>= 7) ++v;
+        return v;
+    };
+    FileWays w;
+    w.lzma2 = estimate(bytes);
+    const RopeSearch found = rope_search(bytes, rope_seconds, rope_newest);
+    w.tried += found.tried;
+    w.rope = found.best;
+    w.rope_code = rope_code(bytes, found.best);
+    w.rope_bytes = w.rope_code.size() + varint_of(w.rope_code.size());
+    if (pieces)
+    {
+        Pieces p = pieces_of(bytes);
+        if (!p.list.empty())
+        {
+            const RopeSearch pr = rope_search(p.r, rope_seconds, rope_newest);
+            w.tried += pr.tried;
+            w.has_pieces = true;
+            w.pieces_rope = pr.best;
+            w.pieces_code = rope_code(p.r, pr.best);
+            w.pieces_way = "pieces " + pieces_text(p.list) + " rope " + pr.best.text();
+            w.pieces_bytes = estimate(p.z) + w.pieces_code.size() + varint_of(w.pieces_code.size()) + w.pieces_way.size();
+            w.pieces_z = std::move(p.z);
+        }
+    }
+    return w;
+}
+
+namespace {
+
 // A text's lines, as locate.cpp's unpacking splits them (at each line feed).
 std::vector<std::string_view> lines_of(const std::vector<uint8_t>& t)
 {
@@ -712,7 +748,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     std::vector<RopeParams> rope_params(files.size());
     std::vector<std::vector<uint8_t>> piece_z(files.size()); // v13: a file's LZMA2 pieces, joined
     PackReport r;
-    m.roped = m.rope_columns = m.rope_lines = m.rope_groups = m.pieces = false;
+    m.roped = m.rope_columns = m.rope_lines = m.rope_groups = m.pieces = m.rope_above = false;
     if (m.compact && rope_seconds >= 0)
     {
         std::unordered_map<std::string, size_t> copies;
@@ -720,41 +756,27 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         for (size_t i = 0; i < files.size(); ++i)
         {
             if (files[i]->way != "raw" || bytes[i].size() < 512 || copies[sha256_hex(bytes[i])] > 1) continue;
-            const RopeSearch found = rope_search(bytes[i], rope_seconds, rope_newest);
-            r.rope_tried += found.tried;
-            std::vector<uint8_t> code = rope_code(bytes[i], found.best);
-            auto varint_of = [](uint64_t n) {
-                uint64_t v = 1;
-                while (n >>= 7) ++v;
-                return v;
-            };
-            const uint64_t alone = estimate(bytes[i]);
-            uint64_t best = alone;
-            RopeParams params = found.best;
-            if (code.size() + varint_of(code.size()) < best) best = code.size() + varint_of(code.size());
-            else code.clear();
-            // v13: the file in pieces, LZMA2's and the rope's, where that is smaller than either alone
-            // (the way's longer text counted too).
-            std::string way = code.empty() ? std::string() : "rope " + found.best.text();
-            if (pieces)
+            // The smallest of LZMA2 alone, the rope, and (v13) the file in pieces (file_ways).
+            FileWays fw = file_ways(bytes[i], rope_seconds, rope_newest, pieces);
+            r.rope_tried += fw.tried;
+            std::string way;
+            std::vector<uint8_t> code;
+            RopeParams params;
+            uint64_t best = fw.lzma2;
+            if (fw.rope_bytes < best)
             {
-                Pieces p = pieces_of(bytes[i]);
-                if (!p.list.empty())
-                {
-                    const RopeSearch pr = rope_search(p.r, rope_seconds, rope_newest);
-                    r.rope_tried += pr.tried;
-                    std::vector<uint8_t> pcode = rope_code(p.r, pr.best);
-                    const std::string pway = "pieces " + pieces_text(p.list) + " rope " + pr.best.text();
-                    const uint64_t total = estimate(p.z) + pcode.size() + varint_of(pcode.size()) + pway.size();
-                    if (total < best)
-                    {
-                        best = total;
-                        code = std::move(pcode);
-                        params = pr.best;
-                        way = pway;
-                        piece_z[i] = std::move(p.z);
-                    }
-                }
+                best = fw.rope_bytes;
+                way = "rope " + fw.rope.text();
+                code = std::move(fw.rope_code);
+                params = fw.rope;
+            }
+            if (fw.has_pieces && fw.pieces_bytes < best)
+            {
+                best = fw.pieces_bytes;
+                way = fw.pieces_way;
+                code = std::move(fw.pieces_code);
+                params = fw.pieces_rope;
+                piece_z[i] = std::move(fw.pieces_z);
             }
             if (way.empty()) continue;
             rope_codes[i] = std::move(code);
@@ -771,6 +793,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             if (params.columns) m.rope_columns = true;    // v9
             if (params.columns == 2) m.rope_lines = true; // v10
             if (params.grouped) m.rope_groups = m.rope_lines = true; // v11 (which reads v10's ways too)
+            if (params.above) m.rope_above = true;                   // v15
         }
     }
 
@@ -903,6 +926,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         m.trimmed = trim && m.compact && (lzma2_as_is || m.pieces || (m.item_stream.packed == 0 && m.item_stream.bytes == 0));
         r.pieces_made = m.pieces;
         r.archives_made = m.archives;
+        r.rope_above = m.rope_above;
         r.trimmed = m.trimmed;
         r.lzma2_as_is = lzma2_as_is;
     }
@@ -911,7 +935,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         m.lines.clear();
         m.line_widths.clear();
         m.line_codings.clear();
-        m.minimal = m.compact = m.roped = m.rope_columns = m.rope_lines = m.rope_groups = false; // no items: v4, as before
+        m.minimal = m.compact = m.roped = m.rope_columns = m.rope_lines = m.rope_groups = m.rope_above = false; // no items: v4, as before
     }
 
     // Where it is no smaller than the files as they are, they are carried so (v3). (Not with items:
@@ -973,7 +997,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
     };
     if (r.compact)
     {
-        const char* version = r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
+        const char* version = r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
                             : r.roped ? kRopeManifestVersion : kCompactManifestVersion;
         if (r.items)
         {
@@ -994,7 +1018,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
               << " pulled tight by the rope (" << kPiecesManifestVersion << ")\n";
         if (r.lzma2_as_is) o << "as is     the files packed by LZMA2 carried as they are instead: it made them no smaller (" << kTrimmedManifestVersion << ")\n";
         if (r.roped)
-            o << "rope      " << r.roped << " file(s) pulled tight by " << (r.rope_groups ? "rope-wave-v1 to v4" : r.rope_lines ? "rope-wave-v1 to v3" : r.rope_columns ? "rope-wave-v1 and v2" : "rope-wave-v1") << " (" << r.rope_bytes << " bytes, carried in " << r.rope_carried
+            o << "rope      " << r.roped << " file(s) pulled tight by " << (r.rope_above ? "rope-wave-v1 to v5" : r.rope_groups ? "rope-wave-v1 to v4" : r.rope_lines ? "rope-wave-v1 to v3" : r.rope_columns ? "rope-wave-v1 and v2" : "rope-wave-v1") << " (" << r.rope_bytes << " bytes, carried in " << r.rope_carried
               << "; " << version << ")\n";
     }
     else if (r.items && r.item_places)

@@ -12,7 +12,10 @@
 //   - its code under the tightened rope (rope-wave-v1, sieve/rope_wave.hpp), the wave its search
 //     pulls tight to in the time for a file (and what is left of the run's), with the wave's
 //     parameters as the text they are and the file's size as a varint: any file, so the rope is
-//     weighed as a line of its own, its shape its name.
+//     weighed as a line of its own, its shape its name;
+//   - the file packed by LZMA2 alone, and cut into pieces, LZMA2's and the rope's (sieve-manifest-v13):
+//     with the rope, the ways Sieve instructions carry a file, chosen by the same code as the packer
+//     (pack.hpp file_ways), so the weighing weighs what the instructions would hold.
 //
 // Each number is weighed as its shortest route (tailor.hpp route_bits): the cleanest digits there
 // are for it, leading zeros dropped or a bearing and a walk. The best way is the shortest. A way

@@ -18,6 +18,7 @@
 #pragma once
 
 #include "cli/locate.hpp"
+#include "sieve/rope_wave.hpp"
 
 #include <filesystem>
 #include <functional>
@@ -55,6 +56,7 @@ struct PackReport
     bool pieces_made = false;                        // v13: the instructions are v13
     size_t remade = 0, unpacked = 0;                 // v14: archives remade exactly, and carried as their contents
     bool archives_made = false;                      // v14: the instructions are v14
+    bool rope_above = false;                         // v15: some of them rope-wave-v5's
 };
 
 // v5: for a file's bytes, the line it is an item of (its place in the manifest's `lines`) and its
@@ -80,8 +82,28 @@ using PlaceCoder = std::function<std::optional<std::vector<uint8_t>>(size_t line
 // limit), v8 where it helps: a file carried by rope-wave-v1, searched for that long, where its code
 // is smaller than the file packed alone.
 void add_packed(Manifest& m, const std::filesystem::path& root, PackReport* report = nullptr, const ItemFinder* items = nullptr,
-                bool item_hashes = false, const PlaceCoder* coder = nullptr, double rope_seconds = -1, uint32_t rope_newest = 4,
+                bool item_hashes = false, const PlaceCoder* coder = nullptr, double rope_seconds = -1, uint32_t rope_newest = 5,
                 bool trim = false, bool pieces = false, bool optimise_archives = false);
+
+// A file's ways to be carried, each with its size in bytes as the instructions would hold it: LZMA2
+// alone (estimated, preset 6), the rope over the whole file, and (v13) the file cut into pieces,
+// LZMA2's and the rope's. The packer carries the smallest; the weighing weighs all three, so the
+// two cannot disagree. The rope's search takes `rope_seconds` (0: no limit) and is remembered.
+struct FileWays
+{
+    uint64_t lzma2 = 0;             // LZMA2 alone, estimated
+    RopeParams rope;                // the whole file's wave
+    std::vector<uint8_t> rope_code; // and its code
+    uint64_t rope_bytes = 0;        // its code and the code's length (a varint)
+    bool has_pieces = false;
+    std::string pieces_way;          // "pieces z… r… rope <parameters>"
+    std::vector<uint8_t> pieces_z;   // the pieces LZMA2 packs, joined
+    std::vector<uint8_t> pieces_code; // the rope's code of the rest
+    RopeParams pieces_rope;
+    uint64_t pieces_bytes = 0;      // LZMA2's estimate of z, the code, its length and the way's longer text
+    size_t tried = 0;               // waves tried
+};
+FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest = 5, bool pieces = true);
 
 // v14: an archive remade from what it holds, by its recipe ("xz 6 crc64 <size>"): what installing
 // does (set as the manifest's remaker).

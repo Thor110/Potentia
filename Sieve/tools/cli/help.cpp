@@ -360,9 +360,10 @@ const std::vector<Page>& pages()
          "the centre, two thirds and the end are kept for the rope; and C1 (rope-wave-v2), what is left\n"
          "counted column by column of the line, for files laid out in lines of a fixed length; and C2\n"
          "(rope-wave-v3, with L8 S1 P0 K0), bytes counted by their column in their text line, for\n"
-         "text whose lines vary or break (tables, digits, logs); and G1 after either (rope-wave-v4),\n"
-         "the columns in groups that share one table and one stream, where they hold alike. Without\n"
-         "--params, the search pulls\n"
+         "text whose lines vary or break (tables, digits, logs); G1 after either (rope-wave-v4),\n"
+         "the columns in groups that share one table and one stream, where they hold alike; and A1\n"
+         "after C2 G1 (rope-wave-v5), each byte counted by the byte above it too. Without --params,\n"
+         "the search pulls\n"
          "it tight: every value length, phase and step, keep or not, and the widths at which the file\n"
          "best matches itself a line later. The code is read back and checked; LZMA2 is shown beside it.",
          {{"--params P", "Use these parameters rather than searching."},
@@ -952,6 +953,8 @@ const std::vector<Page>& pages()
                                   "it holds and remade exactly on installing; a .7z is carried as its contents, in a\n"
                                   "folder named after it (installing says so: the archive itself is not given back);\n"
                                   "each only where clearly smaller. Off unless given."},
+          {"--v14", "With --items: as sieve-manifest-v14 at newest, the rope's ways those of rope-wave-v4 and before."},
+          {"--v13", "With --items: as --v14, and no archives optimised (sieve-manifest-v13 at newest)."},
           {"--v12", "With --items: as sieve-manifest-v12 at newest, no file cut into pieces."},
           {"--v11", "With --items: as sieve-manifest-v11 at newest, an empty stream's line kept and the files\n"
                     "always packed by LZMA2."},

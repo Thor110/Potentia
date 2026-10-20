@@ -3915,6 +3915,14 @@ them be given less weight than his own messages, so it is left out here.
     and a line feed on the next, which counting by column cannot see; about 900 its blank lines
     and form feeds. *Proposed next:* a byte's context taken from the byte above it (the same
     column on the line before), which would see the alternation.
+  - **The byte above (`rope-wave-v5`, 21 October 2026).** Measured first: counted by its column
+    and the byte above, `pi6.txt`'s entropy is 415,679 bytes, 438 over the floor (by its column
+    alone, 418,604). Naming each of the 566 pairs would cost more than it saves, so each pair
+    takes the next group number the first time it is met, and the numbers are coded as a stream
+    of their own (3 groups). His file: 416,967 bytes, as Sieve instructions 417,139 (were 419,096),
+    0.46% over the floor of 415,241. What is left is mostly the blank lines (one after every
+    twenty lines, which the byte above cannot count) and the tables. Classing the byte above by
+    hand (digit, space) did as well on pi but would be tuned to it; the pairs serve any text.
 - **As first proposed (done since):** a measurement before a filter: on a handful of files of
   different kinds, fit waves of a few simple families by value type and length, subtract, and set
   the residuals' histogram-coded size, plus the wave's parameters, against the file's own size and

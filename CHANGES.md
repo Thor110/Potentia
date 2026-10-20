@@ -1,36 +1,58 @@
-# Changes: IDEAS updated and proofread (20 October 2026)
+# Changes: the weighing weighs every way; the byte above, `rope-wave-v5` (21 October 2026)
 
-Copy `Sieve/` over the repository's `Sieve/`. One file: `docs/IDEAS.md`. No code changed.
+Copy `Sieve/` over the repository's `Sieve/`. No new files. Steps 1 and 2 of the five; steps 3 to 5
+follow in later zips.
 
-## Size and decoding time as one setting: deprecated for now
+## 1. The weighing weighs every way the instructions use
 
-- **§19.89:** its title is struck through and marked "deprecated for now, §17.3", as §19.80's CHAT
-  point was. It also now says the decode times are your recollection; they weren't measured.
-- **§17.3**, new in the deprecated ideas section: the proposal, and why you set it aside. As you
-  recall, decoding takes fractions of a second, while the seconds go on loading and working in the
-  hallway, which this wouldn't touch. It also notes that the deprecated ideas can be looked back
-  over in the far future. That's in reported speech rather than a quotation, so as not to change
-  your wording.
+- **One shared function** now gives a file's three ways and their sizes: LZMA2 alone, the rope,
+  and the pieces. The packer carries the smallest; the weighing weighs all three. They can't
+  disagree again.
+- **The File Locator's table** shows `lzma2` and `pieces z… r… rope …` as ways, beside the rope.
+- **Your first photo:** it now weighs 4,111,435 bytes, against its instructions' 4,111,599. Before
+  this change it weighed 4,122,311.
+- **Not yet:** archives weighed as they'd be carried with the box ticked. Carried as its contents,
+  one archive becomes many files, which the table's one-row-per-file layout doesn't fit yet.
 
-## Proofread
+## 2. The byte above: `rope-wave-v5`
 
-- **The whole file, checked by script:**
-  - every reference to a section of IDEAS points to one that exists (the `12.x` ones point into
-    SPECIFICATIONS);
-  - no American spellings;
-  - no doubled words.
-- **This week's sections (§19.87 to §19.89), read through. Fixed:**
-  - §19.87 still ended with a "Next (proposed)" step that has since been done and built. It's now
-    "As first proposed (done since)", with what is still open listed: more phases, a wave per line,
-    16- and 32-bit values, the byte above as context, and the other lines' places.
-  - "the oracle decodes both apart" was unclear. It now reads "the oracle, written apart from
-    Sieve's code, decodes both".
-  - §19.88's two-photos point ended "(not measured)", though the next point records it done. It now
-    reads "done the next day, below".
-  - §19.88's version line now says plainly what was compared: GNU gzip 1.12 against zlib 1.3, and
-    the `xz` program 5.4.5 against the liblzma Sieve was built with.
+- **Measured first.** Counted by its column and the byte above it, pi6.txt's entropy is 415,679
+  bytes, 438 over the floor. By its column alone it's 418,604.
+- **How it's coded.** Writing down all 566 combinations of column and byte above would cost more
+  than they save. Instead, each combination takes the next group number the first time it appears,
+  and those numbers are coded as a small stream of their own. Only 3 groups form. It works on any
+  text, with nothing tuned to digits.
+- **Results:**
 
-## Not touched
+| file | before | now |
+|---|---|---|
+| pi6.txt, rope code | 418,927 | **416,967** |
+| **pi6.txt as Sieve instructions** | 419,096 | **417,139** |
+| the CI's pi-like table (100,000 digits) | 42,083 | 41,790 |
 
-HANDOFF still refers to §19.89 as "noted for later". It's a one-line fix for the next round, since
-this round was IDEAS only.
+- pi6.txt is now **0.46% over the floor** of 415,241. What's left is mostly the blank lines, one
+  after every twenty lines, which the byte above can't count.
+- All three readers rebuild it byte for byte: `sieve install`, `sieve-install` and the oracle.
+- **Format:** `sieve-manifest-v15`, made only where a file uses v5. `--v14` and `--v13` make the
+  older forms.
+
+## Also
+
+Two CI checks read `sieve locate`'s report from standard output without `--manifest`. Without it
+the report goes to standard error, so the checks couldn't see it. Both now pass `--manifest`.
+
+## Checked here
+
+- The full build, with no warnings.
+- The unit suite: 153,230 checks, 0 failures. New checks cover A1 parsing, round trips, the search
+  choosing v5 (and v4 when limited), and refusals.
+- The hallway CI step, start to end. New in it:
+  - the weighing choosing pieces;
+  - v5 against v4 on the pi-like table, with the oracle decoding both;
+  - v15 installed by all three readers;
+  - `--v14` making the older form;
+  - v15 relabelled v14, refused.
+
+I've sent pi6.txt as v15 instructions beside this zip.
+
+**Docs:** SPECIFICATIONS §12.2, IDEAS §19.87, README, HANDOFF, help.
