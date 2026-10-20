@@ -4022,3 +4022,25 @@ keeps the rest, the entries, as the text they are, packed as before where that i
 listing is now 67 bytes, `pi6.txt` 417,061, the trained model 4,185. *Still open:* the entries
 themselves in bytes (each way a code and its numbers), where a listing of many small files would
 gain most; measure first.
+
+**19.91 A file's opposite found in noise (Edward, 21 October 2026; an answer, nothing built).** His
+thought: there might be an inverse of a file, found amongst noise, that cancels it to nothing, so
+that the noise could be generated to pull the file back. Filters tailored to a file, he adds,
+should stay dynamic.
+- *The opposite always exists:* for any file, the noise that cancels it under XOR is the file
+  itself (under subtraction, its negative). So the question is never whether it exists, only what
+  it costs to name it.
+- *Naming it costs what the file costs:* noise from a generator is named by its seed. There are
+  256^n files of n bytes and fewer than 256^n seeds shorter than n bytes, so for almost every file
+  the seed that makes its opposite is as long as the file. This is the same counting that holds
+  every compressor to its floor.
+- *Cancelling part of it:* noise that cancels most of a file leaves a remainder, and the seed plus
+  the remainder is never less than the file's entropy. Where the noise is chosen well the remainder
+  is small, and that is what a prediction is.
+- *Where the idea pays, and stays dynamic:* noise generated from what the reader has already
+  unpacked costs nothing to name, because the reader can make it again. That is how `rope-wave`
+  works: its prediction of each byte, from the bytes before and above it, is the "noise", and only
+  the remainder is written. A filter tailored this way adapts to each file without being fitted to
+  any one file, so better generators of that kind are the route the idea points to.
+- *A side note:* XOR with noise that only one side can make is a one-time pad, so the same idea is
+  the Encryption Engine's rather than compression's when the seed is kept secret.

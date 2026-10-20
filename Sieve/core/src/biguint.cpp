@@ -1036,7 +1036,7 @@ BigUint BigUint::mod(const BigUint& a, const BigUint& m)
     {
         const size_t bits = m.bit_length() - 1;
         BigUint r = a;
-        r.limbs_.resize(std::min(r.limbs_.size(), (bits + kLimbBits - 1) / kLimbBits));
+        r.limbs_.resize(std::min<size_t>(r.limbs_.size(), (bits + kLimbBits - 1) / kLimbBits));
         if (bits % kLimbBits && !r.limbs_.empty() && r.limbs_.size() == (bits + kLimbBits - 1) / kLimbBits)
             r.limbs_.back() &= (uint64_t(1) << (bits % kLimbBits)) - 1;
         r.trim();

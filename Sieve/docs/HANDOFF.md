@@ -3588,6 +3588,19 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
 - **CI:** the archive check gains a Python gzip (remade) and a zip (contents), and v17 called v16
   refused.
 
+### CI's first runs on GitHub: three fixes (21 October 2026)
+- **Linux:** SDL found no X11 or Wayland development files on GitHub's runner, so configuring
+  stopped. The workflow now installs them (`apt-get`) before configuring.
+- **macOS:** `std::min` was given a `size_t` and a `uint64_t` in `biguint.cpp`; on macOS those are
+  different types, so it did not compile. Now `std::min<size_t>`. A check with `uint64_t` made a
+  distinct type compiled all 124 core, client and tool files and found no other.
+- **Windows:** 18 training checks failed because Git on GitHub's Windows runner turns LF into CRLF
+  on checkout, and `tests/training_corpus.txt` was not among the files `.gitattributes` protects,
+  so the corpus the vectors were made from changed. Reproduced here (the same 18 checks at the same
+  lines with the corpus given CRLF); `.gitattributes` now protects all of `tests/`. A build with
+  GCC's undefined-behaviour checker ran the whole suite with none found.
+- **Edward's IDEAS note on a file's opposite in noise** is §19.91 (an answer; nothing built).
+
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show
