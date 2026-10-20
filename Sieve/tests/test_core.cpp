@@ -5871,6 +5871,13 @@ void test_rope_wave()
     CHECK(throws([] { RopeParams::parse("L16 W56 S1 P0 K0 C2"); }));
     CHECK(throws([] { RopeParams::parse("L8 W56 S1 P1 K0 C2"); }));
     CHECK(throws([] { RopeParams::parse("L8 W56 S1 P0 K1 C2"); }));
+    // rope-wave-v4: the columns in groups, " G1" after C1 or C2, and nothing else.
+    CHECK((RopeParams::parse("L8 W56 S1 P0 K0 C2 G1") == RopeParams{8, 56, 1, 0, false, 2, true}));
+    CHECK(RopeParams::parse("L16 W12 S1 P2 K0 C1 G1").text() == "L16 W12 S1 P2 K0 C1 G1");
+    CHECK(throws([] { RopeParams::parse("L8 W56 S1 P0 K0 G1"); }));
+    CHECK(throws([] { RopeParams::parse("L8 W56 S1 P0 K0 C2 G0"); }));
+    CHECK(throws([] { RopeParams::parse("L8 W56 S1 P0 K0 C2 G2"); }));
+    CHECK(throws([] { RopeParams::parse("L8 W56 S1 P0 K0 C2 G1 "); }));
     // A file that is the rope exactly (x_i = i, 100 values, kept at 0, 33, 66 and 99: an even count
     // has no centre value): nothing is left, so its code is the table of one byte (1 + 1 + 4), its
     // stream's two words (1 + 8) and the four kept bytes.
@@ -5907,11 +5914,12 @@ void test_rope_wave()
                     for (uint32_t phases = 0; phases <= 3; ++phases)
                         for (const bool keep : {false, true})
                             for (const uint32_t columns : {0u, 1u})
-                            {
-                                if (columns && width < 2) continue;
-                                const RopeParams p{bits, width, step, phases, keep, columns};
-                                back = back && rope_file(rope_code(f, p), p, f.size()) == f;
-                            }
+                                for (const bool grouped : {false, true})
+                                {
+                                    if ((columns && width < 2) || (grouped && !columns)) continue;
+                                    const RopeParams p{bits, width, step, phases, keep, columns, grouped};
+                                    back = back && rope_file(rope_code(f, p), p, f.size()) == f;
+                                }
     CHECK(back);
     // A code that does not give the file is refused: one byte short, one too many, a size not its.
     {
@@ -5965,15 +5973,27 @@ void test_rope_wave()
         CHECK(c2 < rope_code(text, flat).size());
         CHECK(c2 < size_t(300 * 20 * 50 * std::log2(10.0) / 8) + 56 * 70); // each column's table, count and stream: about 65 bytes
         CHECK(rope_file(rope_code(text, byline), byline, text.size()) == text);
-        CHECK(rope_search(text).best.columns == 2);
+        // rope-wave-v4: the digits' columns share one table, the separators' columns theirs.
+        const RopeParams grouped{8, 56, 1, 0, false, 2, true};
+        const size_t g2 = rope_code(text, grouped).size();
+        CHECK(g2 + 56 * 30 < c2); // measured: 2,187 bytes smaller (128,145 and 125,958)
+        CHECK(rope_file(rope_code(text, grouped), grouped, text.size()) == text);
+        CHECK(rope_search(text).best == grouped);
+        std::cout << "rope-wave-v3 and v4 on lines of digits: " << c2 << " and " << g2 << " bytes\n";
         bool all = true;
         for (const auto& f : files)
             for (const uint32_t w : {2u, 7u, 300u})
-            {
-                const RopeParams p{8, w, 1, 0, false, 2};
-                all = all && rope_file(rope_code(f, p), p, f.size()) == f;
-            }
+                for (const bool g : {false, true})
+                {
+                    const RopeParams p{8, w, 1, 0, false, 2, g};
+                    all = all && rope_file(rope_code(f, p), p, f.size()) == f;
+                }
         CHECK(all);
+        // A column's group number past the groups started before it is refused: the first column's
+        // must be 0.
+        std::vector<uint8_t> past = rope_code(text, grouped);
+        past[0] = 1;
+        CHECK(throws([&] { rope_file(past, grouped, text.size()); }));
         std::vector<uint8_t> shorter = rope_code(text, byline);
         shorter.pop_back();
         CHECK(throws([&] { rope_file(shorter, byline, text.size()); }));

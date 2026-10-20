@@ -360,7 +360,8 @@ const std::vector<Page>& pages()
          "the centre, two thirds and the end are kept for the rope; and C1 (rope-wave-v2), what is left\n"
          "counted column by column of the line, for files laid out in lines of a fixed length; and C2\n"
          "(rope-wave-v3, with L8 S1 P0 K0), bytes counted by their column in their text line, for\n"
-         "text whose lines vary or break (tables, digits, logs). Without\n"
+         "text whose lines vary or break (tables, digits, logs); and G1 after either (rope-wave-v4),\n"
+         "the columns in groups that share one table and one stream, where they hold alike. Without\n"
          "--params, the search pulls\n"
          "it tight: every value length, phase and step, keep or not, and the widths at which the file\n"
          "best matches itself a line later. The code is read back and checked; LZMA2 is shown beside it.",
@@ -906,7 +907,8 @@ const std::vector<Page>& pages()
          "histograms where that is smaller. sieve install and the hallway install it; the small\n"
          "sieve-install asks for Sieve to be used instead. A file the tightened rope codes smaller\n"
          "than LZMA2 packs it (sieve help rope) is carried so, its search taking --search-per-file\n"
-         "seconds (no limit without it): sieve-manifest-v8. (--v7, --v6 and --v5 make the older ones.)\n"
+         "seconds (no limit without it): sieve-manifest-v8, or v9 to v11 where its way is one of the\n"
+         "rope's newer ones. (--v10 down to --v5 make the older ones.)\n"
          "\n"
          "--weigh weighs every file against its own address: its number among the binary line's\n"
          "survivors, where the settings file's [binary] filters rank and it passes them; and, where\n"
@@ -943,6 +945,10 @@ const std::vector<Page>& pages()
                       "of the AI line as its weights' digits, not its file's floats. The pages are\n"
                       "--page-length characters of --alphabet; the AI line is --ai-layers, --ai-width,\n"
                       "--ai-heads and --ai-bits (Micro without them)."},
+          {"--v10", "With --items: as sieve-manifest-v10 at newest, the rope's ways those of rope-wave-v3 and before\n"
+                    "(no columns sharing tables)."},
+          {"--v9", "With --items: as sieve-manifest-v9 at newest, the rope's ways those of rope-wave-v2 and before."},
+          {"--v8", "With --items: as sieve-manifest-v8, the rope's ways those of rope-wave-v1."},
           {"--v7", "With --items: as sieve-manifest-v7, no file pulled tight by the rope."},
           {"--v6", "With --items: as sieve-manifest-v6, every place as raw bytes and the listing in full."},
           {"--v5", "With --items: as sieve-manifest-v5, each place in hex in the listing, and no AI line."},

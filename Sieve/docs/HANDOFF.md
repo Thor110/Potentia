@@ -3458,6 +3458,30 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   table that drifts, the search choosing it), CI lines for v3 and v10 with all three readers, and
   the earlier lines again.
 
+### `rope-wave-v4`: columns sharing tables; `sieve-manifest-v11` (19 October 2026)
+- **Edward chose** shared column tables as the next step. On a benchmark script for the testers:
+  "I feel like handing an automated script that tells them the right answer is the wrong move" —
+  none is planned.
+- **`rope-wave-v4`** (` G1` after C1 or C2): each column's group number first, then a segment for
+  each group (C2: its count first). The coder groups greedily by estimated size; at most 256
+  groups. `pi6.txt` 418,927 bytes (v3 421,306), instructions 419,115; a 200,000-digit table 83,225
+  (v2 87,967, floor 83,048); grey picture 831,022 (v1 832,146).
+- **`--v10`, `--v9`, `--v8`** make the older instructions (the search limited to the rope's ways
+  they have), so CI still makes and checks v9 and v10 now that the search prefers v4.
+- **What is left of pi6's gap** is layout (IDEAS §19.87): 2,500 bytes for the last column's
+  alternating space and line feed, about 900 for blank lines and form feeds. Proposed: the byte
+  above as context.
+- **Checked here:** the full build, the unit suite (new: G1 parsing and refusals, round trips with
+  groups, a group number out of order refused, the search choosing v4), the rope CI lines with
+  v4 and v11 and v9, v10 still made with the new flags, all three readers each time.
+- **Found running the hallway step's CI here** (it has never run on GitHub, the workflow not
+  being at the root):
+  - the filter check for `clean-data-v1` matched the retired clean-v1's note too ("replaced by
+    clean-data-v1"); it now matches the filter's own row. Fixed.
+  - the CHAIN tab check (`--chain-press "Down,N,Right,Right"`, written 13 October) now saves
+    `draw type-2x32` where it expects `hand`; the chain tab changed on 17 October. Not touched by
+    this round and not fixed: it needs a look at what those keys should do now.
+
 ### For the next session (17 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show

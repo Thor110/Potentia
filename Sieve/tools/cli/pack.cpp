@@ -112,7 +112,7 @@ std::vector<uint8_t> place_bytes_of(const std::string& hex, uint32_t width)
 } // namespace
 
 void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const ItemFinder* items, bool item_hashes, const PlaceCoder* coder,
-                double rope_seconds)
+                double rope_seconds, uint32_t rope_newest)
 {
     // Every file's bytes, checked against the walk: from the contents where a v3 manifest has them,
     // else read from the folder (the current one, for a file named without one).
@@ -318,7 +318,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     std::vector<std::vector<uint8_t>> rope_codes(files.size());
     std::vector<RopeParams> rope_params(files.size());
     PackReport r;
-    m.roped = m.rope_columns = m.rope_lines = false;
+    m.roped = m.rope_columns = m.rope_lines = m.rope_groups = false;
     if (m.compact && rope_seconds >= 0)
     {
         std::unordered_map<std::string, size_t> copies;
@@ -326,7 +326,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         for (size_t i = 0; i < files.size(); ++i)
         {
             if (files[i]->way != "raw" || bytes[i].size() < 512 || copies[sha256_hex(bytes[i])] > 1) continue;
-            const RopeSearch found = rope_search(bytes[i], rope_seconds);
+            const RopeSearch found = rope_search(bytes[i], rope_seconds, rope_newest);
             r.rope_tried += found.tried;
             std::vector<uint8_t> code = rope_code(bytes[i], found.best);
             uint64_t len = code.size(), varint = 1;
@@ -338,6 +338,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             m.roped = true;
             if (found.best.columns) m.rope_columns = true;    // v9
             if (found.best.columns == 2) m.rope_lines = true; // v10
+            if (found.best.grouped) m.rope_groups = m.rope_lines = true; // v11 (which reads v10's ways too)
         }
     }
 
@@ -384,6 +385,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     r.rope_carried = m.rope_carried.size();
     r.rope_columns = m.rope_columns;
     r.rope_lines = m.rope_lines;
+    r.rope_groups = m.rope_groups;
     m.rope_stream = {m.rope_carried.size(), m.rope_carried.size(), 0};
     m.x86 = {0, x86.size(), dictionary_for(x86.size())};
     m.lzma2 = {0, plain.size(), dictionary_for(plain.size())};
@@ -454,7 +456,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         m.lines.clear();
         m.line_widths.clear();
         m.line_codings.clear();
-        m.minimal = m.compact = m.roped = m.rope_columns = m.rope_lines = false; // no items: v4, as before
+        m.minimal = m.compact = m.roped = m.rope_columns = m.rope_lines = m.rope_groups = false; // no items: v4, as before
     }
 
     // Where it is no smaller than the files as they are, they are carried so (v3). (Not with items:
@@ -516,7 +518,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
     };
     if (r.compact)
     {
-        const char* version = r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
+        const char* version = r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
                             : r.roped ? kRopeManifestVersion : kCompactManifestVersion;
         if (r.items)
         {
@@ -529,7 +531,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         else o << "items     none; " << version << "\n";
         if (r.listing_carried) o << "listing   " << r.listing << " bytes, carried as LZMA2 in " << r.listing_carried << "\n";
         if (r.roped)
-            o << "rope      " << r.roped << " file(s) pulled tight by " << (r.rope_lines ? "rope-wave-v1 to v3" : r.rope_columns ? "rope-wave-v1 and v2" : "rope-wave-v1") << " (" << r.rope_bytes << " bytes, carried in " << r.rope_carried
+            o << "rope      " << r.roped << " file(s) pulled tight by " << (r.rope_groups ? "rope-wave-v1 to v4" : r.rope_lines ? "rope-wave-v1 to v3" : r.rope_columns ? "rope-wave-v1 and v2" : "rope-wave-v1") << " (" << r.rope_bytes << " bytes, carried in " << r.rope_carried
               << "; " << version << ")\n";
     }
     else if (r.items && r.item_places)

@@ -3894,6 +3894,17 @@ them be given less weight than his own messages, so it is left out here.
     the start of its line instead gives 421,306 bytes (v1 490,293; LZMA2 505,978; floor 415,241);
     his file as Sieve instructions, 421,491 against 7z's 512,745. Instructions with it are
     `sieve-manifest-v10`.
+  - **Shared tables (`rope-wave-v4`, 19 October 2026).** v3 paid a table and a stream for each
+    of `pi6.txt`'s 56 columns, though fifty of them hold the same thing, digits spread evenly.
+    Columns that hold alike now share one (` G1`), each column's group number written first:
+    his file comes to 418,927 bytes (as instructions 419,115, `sieve-manifest-v11`), a table of
+    200,000 digits to 83,225 against its floor of 83,048 (v2 87,967), and the grey picture to
+    831,022 (v1 832,146), the first time columns have won on it. What is left of `pi6.txt`'s gap
+    to the floor is its layout, not its tables: summed column by column its entropy is 418,604
+    bytes, 323 under the code. Of the rest, 2,500 bytes are its last column, a space on one line
+    and a line feed on the next, which counting by column cannot see; about 900 its blank lines
+    and form feeds. *Proposed next:* a byte's context taken from the byte above it (the same
+    column on the line before), which would see the alternation.
 - **Next (proposed):** take the propagating form further (more phases, a wave per line fitted to
   more points, value lengths of 16 and 32 for sound and floats) on raw pictures and sound, the
   files where it can win, and if it holds, make it a way to carry such a file in the

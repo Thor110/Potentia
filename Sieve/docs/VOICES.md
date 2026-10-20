@@ -64,6 +64,7 @@ enumerated and stored later. Nothing is guaranteed (IDEAS §19.77).
 - **Edward** (19 October 2026, quote; on the tightened rope filter): I have a feeling it forces the data line into a rigid structure with an exact method for pulling it to the shortest possible address. That is the hope at least.
 - **Edward** (19 October 2026, rule): The getting sidetracked thing is going to happen on a project like this: if an idea is worth pursuing or might give gains, I am going to take note of it as soon as I think of it.
 - **Edward** (19 October 2026, rule): Pay less attention to Gemini's responses and focus on my own messages and notes.
+- **Edward** (19 October 2026, on a benchmark script for the people testing Sieve): I feel like handing an automated script that tells them the right answer is the wrong move. I will just let them have at it.
 
 ## Gemini
 

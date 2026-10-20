@@ -264,6 +264,85 @@ std::vector<std::vector<size_t>> segments_of(const std::vector<uint64_t>& positi
     return seg;
 }
 
+// rope-wave-v4 (G1): columns that share a table. Each column's bytes are counted (counts: 256 to a
+// column); the columns are taken in order, each joining the group whose cost grows least by it, or
+// starting a group of its own where that costs less (a tie joins the first such group). A group's
+// cost is its bytes' entropy, its table and its stream, as entropy_bytes_v2, and `per_group` more
+// (the count C2 writes before each group). At most 256 groups: past them a column joins the best.
+// Groups are numbered in the order they start, so each column's number is at most one past the
+// largest before it (what a reader checks). Gives each column's group; `cost` their total.
+std::vector<uint32_t> group_columns(const std::vector<uint64_t>& counts, const std::vector<uint64_t>& n, double per_group, double& cost)
+{
+    const size_t W = n.size();
+    auto cost_of = [&](const uint64_t* c, uint64_t m) {
+        if (!m) return 0.0;
+        const std::vector<uint64_t> one(c, c + 256);
+        return entropy_bytes_v2(one, m) + per_group;
+    };
+    std::vector<std::vector<uint64_t>> gc;
+    std::vector<uint64_t> gn;
+    std::vector<double> gcost;
+    std::vector<uint32_t> group(W, 0);
+    std::vector<uint64_t> merged(256);
+    for (size_t c = 0; c < W; ++c)
+    {
+        const uint64_t* col = counts.data() + c * 256;
+        const double alone = cost_of(col, n[c]);
+        double best = gc.size() < 256 ? alone : HUGE_VAL;
+        size_t pick = gc.size(); // a group of its own
+        double best_cost = alone;
+        for (size_t g = 0; g < gc.size(); ++g)
+        {
+            for (size_t b = 0; b < 256; ++b) merged[b] = gc[g][b] + col[b];
+            const double m = cost_of(merged.data(), gn[g] + n[c]);
+            const double d = m - gcost[g];
+            if (d < best || (d == best && pick == gc.size()))
+            {
+                best = d;
+                pick = g;
+                best_cost = m;
+            }
+        }
+        if (pick == gc.size())
+        {
+            gc.emplace_back(col, col + 256);
+            gn.push_back(n[c]);
+            gcost.push_back(alone);
+        }
+        else
+        {
+            for (size_t b = 0; b < 256; ++b) gc[pick][b] += col[b];
+            gn[pick] += n[c];
+            gcost[pick] = best_cost;
+        }
+        group[c] = uint32_t(pick);
+    }
+    cost = 0;
+    for (const double g : gcost) cost += g;
+    for (size_t c = 0; c < W; ++c) cost += group[c] < 128 ? 1 : 2; // each column's group number
+    return group;
+}
+
+// The groups' numbers, written and read: one varint for each column.
+void put_groups(std::vector<uint8_t>& out, const std::vector<uint32_t>& group)
+{
+    for (const uint32_t g : group) put_varint(out, g);
+}
+
+std::vector<uint32_t> get_groups(std::span<const uint8_t> code, size_t& at, uint32_t width, uint32_t& count)
+{
+    std::vector<uint32_t> group(width);
+    count = 0;
+    for (uint32_t c = 0; c < width; ++c)
+    {
+        const uint64_t g = get_varint(code, at);
+        if (g > count || g >= 256) bad("a column's group past the groups started before it");
+        group[c] = uint32_t(g);
+        if (g == count) ++count;
+    }
+    return group;
+}
+
 } // namespace
 
 void RopeParams::check() const
@@ -276,12 +355,13 @@ void RopeParams::check() const
     if (columns && width < 2) bad("columns need lines of two values or more");
     if (columns == 2 && (bits != 8 || phases != 0 || keep || step != 1))
         bad("columns by line (C2) are for bytes with no wave: L8, S1, P0, K0");
+    if (grouped && !columns) bad("groups (G1) are of columns: C1 or C2 first");
 }
 
 std::string RopeParams::text() const
 {
     return "L" + std::to_string(bits) + " W" + std::to_string(width) + " S" + std::to_string(step) + " P" + std::to_string(phases) + " K" +
-           (keep ? "1" : "0") + (columns ? " C" + std::to_string(columns) : "");
+           (keep ? "1" : "0") + (columns ? " C" + std::to_string(columns) : "") + (grouped ? " G1" : "");
 }
 
 RopeParams RopeParams::parse(std::string_view t)
@@ -290,11 +370,12 @@ RopeParams RopeParams::parse(std::string_view t)
     unsigned long long L = 0, W = 0, S = 0, P = 0, K = 0;
     char extra = 0;
     const std::string s(t);
-    unsigned long long C = 0;
-    const int got = std::sscanf(s.c_str(), "L%llu W%llu S%llu P%llu K%llu C%llu%c", &L, &W, &S, &P, &K, &C, &extra);
-    if ((got != 5 && got != 6) || K > 1 || C > 2 || W > 0xFFFFFFFFull || L > 64 || S > 8 || P > 3)
-        bad("parameters are written \"L8 W949 S1 P3 K0\" (rope-wave-v2: and \" C1\"; v3: \" C2\"): " + s);
+    unsigned long long C = 0, G = 0;
+    const int got = std::sscanf(s.c_str(), "L%llu W%llu S%llu P%llu K%llu C%llu G%llu%c", &L, &W, &S, &P, &K, &C, &G, &extra);
+    if ((got != 5 && got != 6 && got != 7) || K > 1 || C > 2 || G != (got == 7 ? 1u : 0u) || W > 0xFFFFFFFFull || L > 64 || S > 8 || P > 3)
+        bad("parameters are written \"L8 W949 S1 P3 K0\" (rope-wave-v2: and \" C1\"; v3: \" C2\"; v4: and \" G1\"): " + s);
     p.columns = uint32_t(C);
+    p.grouped = G == 1;
     p.bits = uint32_t(L);
     p.width = uint32_t(W);
     p.step = uint32_t(S);
@@ -314,9 +395,26 @@ std::vector<uint8_t> rope_code(std::span<const uint8_t> file, const RopeParams& 
         // v3: each line column's bytes, its count first (a reader learns the columns only as it
         // makes the file again), then its segment.
         const std::vector<uint32_t> col = line_columns(file, p.width);
-        std::vector<std::vector<uint16_t>> seg(p.width);
-        for (size_t i = 0; i < file.size(); ++i) seg[col[i]].push_back(file[i]);
         std::vector<uint8_t> out;
+        std::vector<uint32_t> group(p.width);
+        for (uint32_t c = 0; c < p.width; ++c) group[c] = c;
+        size_t groups = p.width;
+        if (p.grouped)
+        {
+            // v4: the columns' groups first, then each group's count and segment.
+            std::vector<uint64_t> counts(size_t(p.width) * 256, 0), n(p.width, 0);
+            for (size_t i = 0; i < file.size(); ++i)
+            {
+                ++counts[size_t(col[i]) * 256 + file[i]];
+                ++n[col[i]];
+            }
+            double cost = 0;
+            group = group_columns(counts, n, 3, cost);
+            put_groups(out, group);
+            groups = size_t(*std::max_element(group.begin(), group.end())) + 1;
+        }
+        std::vector<std::vector<uint16_t>> seg(groups);
+        for (size_t i = 0; i < file.size(); ++i) seg[group[col[i]]].push_back(file[i]);
         for (const auto& one : seg)
         {
             put_varint(out, one.size());
@@ -328,14 +426,36 @@ std::vector<uint8_t> rope_code(std::span<const uint8_t> file, const RopeParams& 
     std::vector<uint64_t> pts;
     const std::vector<uint64_t> e = residuals(v.x, p, pts);
     std::vector<uint8_t> out;
-    const std::vector<std::vector<size_t>> seg = segments_of(free_positions(v.x.size(), pts), p);
+    const std::vector<uint64_t> pos = free_positions(v.x.size(), pts);
+    const std::vector<std::vector<size_t>> cols = segments_of(pos, p);
     for (uint32_t plane = 0; plane < v.bytes; ++plane)
-        for (const std::vector<size_t>& one : seg)
+    {
+        auto byte_of = [&](size_t j) { return uint16_t((e[j] >> (8 * plane)) & 0xFF); };
+        const std::vector<std::vector<size_t>>* seg = &cols;
+        std::vector<std::vector<size_t>> grouped;
+        if (p.grouped)
+        {
+            // v4: this plane's columns' groups, then each group's segment (its values in order).
+            std::vector<uint64_t> counts(size_t(p.width) * 256, 0), n(p.width, 0);
+            for (uint32_t c = 0; c < p.width; ++c)
+            {
+                for (const size_t j : cols[c]) ++counts[size_t(c) * 256 + byte_of(j)];
+                n[c] = cols[c].size();
+            }
+            double cost = 0;
+            const std::vector<uint32_t> group = group_columns(counts, n, 0, cost);
+            put_groups(out, group);
+            grouped.resize(size_t(*std::max_element(group.begin(), group.end())) + 1);
+            for (size_t j = 0; j < pos.size(); ++j) grouped[group[size_t(pos[j] % p.width)]].push_back(j);
+            seg = &grouped;
+        }
+        for (const std::vector<size_t>& one : *seg)
         {
             std::vector<uint16_t> sym(one.size());
-            for (size_t i = 0; i < one.size(); ++i) sym[i] = uint16_t((e[one[i]] >> (8 * plane)) & 0xFF);
+            for (size_t i = 0; i < one.size(); ++i) sym[i] = byte_of(one[i]);
             put_segment(out, sym, p.columns != 0);
         }
+    }
     for (const uint64_t i : pts)
         for (uint32_t b = 0; b < v.bytes; ++b) out.push_back(file[i * v.bytes + b]);
     for (size_t i = v.x.size() * v.bytes; i < file.size(); ++i) out.push_back(file[i]);
@@ -349,7 +469,11 @@ std::vector<uint8_t> rope_file(std::span<const uint8_t> code, const RopeParams& 
     if (p.columns == 2)
     {
         size_t at = 0;
-        std::vector<std::vector<uint16_t>> seg(p.width);
+        std::vector<uint32_t> group(p.width);
+        for (uint32_t c = 0; c < p.width; ++c) group[c] = c;
+        uint32_t groups = p.width;
+        if (p.grouped) group = get_groups(code, at, p.width, groups);
+        std::vector<std::vector<uint16_t>> seg(groups);
         uint64_t total = 0;
         for (auto& one : seg)
         {
@@ -360,11 +484,11 @@ std::vector<uint8_t> rope_file(std::span<const uint8_t> code, const RopeParams& 
         }
         if (total != size || at != code.size()) bad("the code does not end where the file's columns do");
         std::vector<uint8_t> out(static_cast<size_t>(size));
-        std::vector<size_t> next(p.width, 0);
+        std::vector<size_t> next(groups, 0);
         uint64_t c = 0;
         for (size_t i = 0; i < out.size(); ++i)
         {
-            const size_t k = size_t(std::min<uint64_t>(c, p.width - 1));
+            const size_t k = group[size_t(std::min<uint64_t>(c, p.width - 1))];
             if (next[k] >= seg[k].size()) bad("a column with fewer bytes than the file needs");
             out[i] = uint8_t(seg[k][next[k]++]);
             c = out[i] == 10 ? 0 : c + 1;
@@ -377,13 +501,26 @@ std::vector<uint8_t> rope_file(std::span<const uint8_t> code, const RopeParams& 
     const uint64_t m = n - pts.size();
     size_t at = 0;
     std::vector<uint64_t> e(m, 0);
-    const std::vector<std::vector<size_t>> seg = segments_of(free_positions(n, pts), p);
+    const std::vector<uint64_t> pos = free_positions(n, pts);
+    const std::vector<std::vector<size_t>> cols = segments_of(pos, p);
     for (uint32_t plane = 0; plane < vb; ++plane)
-        for (const std::vector<size_t>& one : seg)
+    {
+        const std::vector<std::vector<size_t>>* seg = &cols;
+        std::vector<std::vector<size_t>> grouped;
+        if (p.grouped)
+        {
+            uint32_t groups = 0;
+            const std::vector<uint32_t> group = get_groups(code, at, p.width, groups);
+            grouped.resize(groups);
+            for (size_t j = 0; j < pos.size(); ++j) grouped[group[size_t(pos[j] % p.width)]].push_back(j);
+            seg = &grouped;
+        }
+        for (const std::vector<size_t>& one : *seg)
         {
             const std::vector<uint16_t> sym = get_segment(code, at, one.size(), p.columns != 0);
             for (size_t i = 0; i < one.size(); ++i) e[one[i]] |= uint64_t(sym[i]) << (8 * plane);
         }
+    }
     const uint64_t tail = size - n * vb;
     if (code.size() - at != pts.size() * vb + tail) bad("the code does not end where the file's kept bytes do");
     std::vector<uint64_t> x(n, 0);
@@ -421,6 +558,11 @@ double rope_estimate(std::span<const uint8_t> file, const RopeParams& p)
             ++n[col[i]];
         }
         double bytes = 0;
+        if (p.grouped)
+        {
+            group_columns(counts, n, 3, bytes);
+            return bytes;
+        }
         for (uint32_t c = 0; c < p.width; ++c)
         {
             const std::vector<uint64_t> one(counts.begin() + std::ptrdiff_t(c) * 256, counts.begin() + std::ptrdiff_t(c + 1) * 256);
@@ -453,6 +595,13 @@ double rope_estimate(std::span<const uint8_t> file, const RopeParams& p)
             ++counts[c * 256 + ((e[j] >> (8 * plane)) & 0xFF)];
             ++n[c];
         }
+        if (p.grouped)
+        {
+            double cost = 0;
+            group_columns(counts, n, 0, cost);
+            bytes += cost;
+            continue;
+        }
         for (uint32_t c = 0; c < p.width; ++c)
         {
             const std::vector<uint64_t> one(counts.begin() + std::ptrdiff_t(c) * 256, counts.begin() + std::ptrdiff_t(c + 1) * 256);
@@ -464,7 +613,7 @@ double rope_estimate(std::span<const uint8_t> file, const RopeParams& p)
 
 namespace {
 
-RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds);
+RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds, uint32_t newest);
 
 // The searches done in this run, by the file's SHA-256 and the time given: the File Locator weighs
 // a file and then makes its instructions, and both pull it tight; the second is the first's answer.
@@ -473,10 +622,11 @@ std::map<std::string, RopeSearch> g_cache;
 
 } // namespace
 
-RopeSearch rope_search(std::span<const uint8_t> file, double seconds)
+RopeSearch rope_search(std::span<const uint8_t> file, double seconds, uint32_t newest)
 {
-    char t[40];
-    std::snprintf(t, sizeof t, "|%.6f", seconds);
+    if (newest < 1 || newest > 4) bad("the newest version searched is 1 to 4");
+    char t[48];
+    std::snprintf(t, sizeof t, "|%.6f|%u", seconds, newest);
     Sha256 h;
     h.update(file);
     const std::string key = Sha256::hex(h.finish()) + t;
@@ -484,7 +634,7 @@ RopeSearch rope_search(std::span<const uint8_t> file, double seconds)
         std::lock_guard<std::mutex> lock(g_cache_mx);
         if (auto it = g_cache.find(key); it != g_cache.end()) return it->second;
     }
-    RopeSearch r = rope_search_uncached(file, seconds);
+    RopeSearch r = rope_search_uncached(file, seconds, newest);
     std::lock_guard<std::mutex> lock(g_cache_mx);
     if (g_cache.size() >= 4096) g_cache.clear();
     g_cache.emplace(key, r);
@@ -493,7 +643,7 @@ RopeSearch rope_search(std::span<const uint8_t> file, double seconds)
 
 namespace {
 
-RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds)
+RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds, uint32_t newest)
 {
     using steady = std::chrono::steady_clock;
     const auto start = steady::now();
@@ -601,7 +751,7 @@ RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds)
         // rope-wave-v2: each width's columns counted apart, for every phase (a column the same
         // byte all the way down, a separator in a table, then costs only its table entry).
         for (const uint32_t w : widths)
-            for (uint32_t phases = 0; phases <= 3 && w > 1 && w <= n / 4; ++phases)
+            for (uint32_t phases = 0; phases <= 3 && w > 1 && w <= n / 4 && newest >= 2; ++phases)
             {
                 if (out_of_time())
                 {
@@ -609,11 +759,13 @@ RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds)
                     goto keep;
                 }
                 try_one(RopeParams{bits, w, 1, phases, false, 1});
+                // rope-wave-v4: and the columns in groups that share tables.
+                if (newest >= 4 && !out_of_time()) try_one(RopeParams{bits, w, 1, phases, false, 1, true});
             }
     }
     // rope-wave-v3: columns counted from each line's start, for a file of lines (text, tables);
     // as many columns as its longest line, up to 4,096.
-    if (!out_of_time())
+    if (newest >= 3 && !out_of_time())
     {
         uint64_t longest = 0, c = 0;
         bool lines = false;
@@ -628,7 +780,12 @@ RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds)
             else ++c;
         }
         longest = std::max(longest, c + 1);
-        if (lines && longest >= 2) try_one(RopeParams{8, uint32_t(std::min<uint64_t>(longest, 4096)), 1, 0, false, 2});
+        if (lines && longest >= 2)
+        {
+            const uint32_t w = uint32_t(std::min<uint64_t>(longest, 4096));
+            try_one(RopeParams{8, w, 1, 0, false, 2});
+            if (newest >= 4 && !out_of_time()) try_one(RopeParams{8, w, 1, 0, false, 2, true}); // rope-wave-v4
+        }
     }
 keep:
     if (!out_of_time())

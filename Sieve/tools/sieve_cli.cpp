@@ -2384,7 +2384,7 @@ void print_weighing(const Args& a, const std::filesystem::path& root, const std:
 // Packs an installer's files (v4), and with --items carries those that are items of Sieve's lines as
 // their lines and places there: v8, each place at its least, the AI line's models among them, and
 // files pulled tight by the rope where that is smaller (--search-per-file: its search's time)
-// (--v7: no rope; --v6: as v6 wrote them; --v5: as v5 did, in hex, without the AI line; cli/items.hpp).
+// (--v10, --v9, --v8: the rope's ways those versions have, rope-wave-v3, v2, v1; --v7: no rope; --v6: as v6 wrote them; --v5: as v5 did, in hex, without the AI line; cli/items.hpp).
 void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackReport& rep)
 {
     if (!a.has("items"))
@@ -2408,7 +2408,7 @@ void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackRepor
         if (used != v.size() || !(rope_seconds >= 0)) throw std::invalid_argument("--search-per-file: seconds, 0 or more (0: no limit): " + v);
     }
     add_packed_items(m, root, a, &rep, a.has("v5") ? 5 : a.has("v6") ? 6 : a.has("v7") ? 7 : 8, a.has("item-hashes") || a.has("file-hashes"),
-                     rope_seconds);
+                     rope_seconds, a.has("v8") ? 1 : a.has("v9") ? 2 : a.has("v10") ? 3 : 4);
 }
 
 int cmd_locate(const Args& a)
@@ -2596,6 +2596,7 @@ int cmd_locate(const Args& a)
         const std::string o = a.get("installer");
         write_address_file(fs::path(std::u8string(o.begin(), o.end())), iaddr, a.has("hex"));
         *info << "installer " << o << ": the address of the installer's manifest (" << (!(m.with_contents ? m.packed : inst.packed) ? "v3: the listing, then every file's bytes"
+                                    : (m.with_contents ? m.rope_groups : inst.rope_groups) ? "v11: the listing, every other file packed, the items' places, then the files pulled tight by the rope, column by column or by line, the columns sharing tables, where that helps"
                                     : (m.with_contents ? m.rope_lines : inst.rope_lines) ? "v10: the listing, every other file packed, the items' places, then the files pulled tight by the rope, column by column or by line where that helps"
                                     : (m.with_contents ? m.rope_columns : inst.rope_columns) ? "v9: the listing, every other file packed, the items' places, then the files pulled tight by the rope, column by column where that helps"
                                     : (m.with_contents ? m.roped : inst.roped) ? "v8: the listing, every other file packed, the items' places, then the files pulled tight by the rope"

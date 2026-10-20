@@ -88,7 +88,7 @@ int cmd_rope(const Args& a)
     const std::vector<uint8_t> code = rope_code(file, p);
     if (rope_file(code, p, file.size()) != file) throw std::logic_error("rope-wave-v1 did not give the file back (a fault in the coder)");
     const uint64_t lz = lzma2_size(file);
-    std::cout << "wave      " << p.text() << " (" << (p.columns == 2 ? kRopeWaveLinesVersion : p.columns ? kRopeWaveColumnsVersion : kRopeWaveVersion) << ")\n"
+    std::cout << "wave      " << p.text() << " (" << (p.grouped ? kRopeWaveGroupsVersion : p.columns == 2 ? kRopeWaveLinesVersion : p.columns ? kRopeWaveColumnsVersion : kRopeWaveVersion) << ")\n"
               << "code      " << code.size() << " bytes, " << pct(code.size(), file.size()) << " of the file; read back and checked\n"
               << "LZMA2     " << lz << " bytes, " << pct(lz, file.size()) << " (7z's, one stream, no container)\n";
     if (a.has("out"))

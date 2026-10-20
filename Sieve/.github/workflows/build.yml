@@ -1086,10 +1086,10 @@ jobs:
           "
           cp data/anchors/public-domain/universalbibliothek.txt rope_mix/
           build/sieve rope rope_mix/picture.raw --out picture.rope | tr -d '\r' > rope.txt
-          q "^wave      L8 W[0-9]* S[1-8] P[0-3] K[01]\( C1\)\? (rope-wave-v[12])" rope.txt
+          q "^wave      L8 W[0-9]* S[1-8] P[0-3] K[01]\( C[12]\)\?\( G1\)\? (rope-wave-v[1-4])" rope.txt
           q "read back and checked" rope.txt
           [ "$(wc -c < picture.rope)" -lt "$(sed -n 's/^LZMA2     \([0-9]*\) bytes.*/\1/p' rope.txt)" ]
-          params=$(sed -n 's/^wave      \(.*\) (rope-wave-v[12])/\1/p' rope.txt)
+          params=$(sed -n 's/^wave      \(.*\) (rope-wave-v[1-4])/\1/p' rope.txt)
           python reference/sieve_ref.py rope-unpack picture.rope --params "$params" --size 30000 --out picture.back > /dev/null
           cmp rope_mix/picture.raw picture.back
           # sieve-manifest-v8: the picture and the sound carried by the rope (the sound's wave at nine
@@ -1097,8 +1097,8 @@ jobs:
           # each the smaller way. Smaller than v7 (no rope); installed by sieve install, the oracle, and
           # sieve-install itself (no items, so the small installer needs nothing it lacks).
           build/sieve locate rope_mix --installer rope8.sieve --items --manifest rope8.manifest | tr -d '\r' > rope8.txt
-          q "^rope      2 file(s) pulled tight by rope-wave-v1\( and v2\)\? (46000 bytes" rope8.txt
-          python -c "import sys; sys.argv = ['x']; sys.path.insert(0, 'reference'); import sieve_ref; sys.stdout.buffer.write(sieve_ref.v7_listing(open('rope8.manifest', 'rb').read()))" | q -a "^f	30000	rope L8 W[0-9]* S[1-8] P[0-3] K[01]\( C1\)\?	picture.raw$"
+          q "^rope      2 file(s) pulled tight by rope-wave-v1\( and v2\| to v[34]\)\? (46000 bytes" rope8.txt
+          python -c "import sys; sys.argv = ['x']; sys.path.insert(0, 'reference'); import sieve_ref; sys.stdout.buffer.write(sieve_ref.v7_listing(open('rope8.manifest', 'rb').read()))" | q -a "^f	30000	rope L8 W[0-9]* S[1-8] P[0-3] K[01]\( C[12]\)\?\( G1\)\?	picture.raw$"
           build/sieve locate rope_mix --installer rope7.sieve --items --v7 > /dev/null
           [ "$(wc -c < rope8.sieve)" -lt "$(wc -c < rope7.sieve)" ]
           build/sieve install rope8.sieve --to rope_inst > /dev/null
@@ -1110,13 +1110,15 @@ jobs:
           # Weighed: the rope is a way to name any file, its code, its parameters and its size paid
           # for, and its name once for every file that uses it.
           build/sieve locate rope_mix --weigh 2>&1 | tr -d '\r' > ropeweigh.txt
-          q "^  picture.raw  *[0-9]*  *[0-9]*   rope L8 W[0-9]* S[1-8] P[0-3] K[01]\( C1\)\?$" ropeweigh.txt
+          q "^  picture.raw  *[0-9]*  *[0-9]*   rope L8 W[0-9]* S[1-8] P[0-3] K[01]\( C[12]\)\?\( G1\)\?$" ropeweigh.txt
           q "^  shared: rope, [1-3] file(s): shape 96 bits$" ropeweigh.txt
           # rope-wave-v2: digits in a table (groups of ten, ten groups a line, Windows line ends, from a
           # fixed generator), each column's bytes counted apart: the separators' columns cost their
           # tables alone, the digits about log2(10) bits each. Smaller than LZMA2; the oracle decodes it
-          # its own way; as instructions it is sieve-manifest-v9, installed by all three readers.
-          rm -rf digits digits_inst digits_oracle digits_si && mkdir digits
+          # its own way; as instructions it is sieve-manifest-v9 (--v9), installed by all three readers.
+          # rope-wave-v4: the search groups the columns (the digits' share one table): smaller again,
+          # sieve-manifest-v11, installed by all three readers.
+          rm -rf digits digits_inst digits_oracle digits_si digits_inst9 digits_oracle9 digits_si9 && mkdir digits
           python -c "
           s = 271828
           def r():
@@ -1127,24 +1129,37 @@ jobs:
           open('digits/table.txt', 'wb').write(('\\r\\n'.join(rows) + '\\r\\n').encode())
           "
           build/sieve rope digits/table.txt --out table.rope | tr -d '\r' > table.txt
-          q "^wave      L8 W111 S1 P[0-3] K[01] C1 (rope-wave-v2)" table.txt
+          q "^wave      L8 W111 S1 P[0-3] K[01] C1 G1 (rope-wave-v4)" table.txt
           [ "$(wc -c < table.rope)" -lt "$(sed -n 's/^LZMA2     \([0-9]*\) bytes.*/\1/p' table.txt)" ]
           [ "$(wc -c < table.rope)" -lt 89048 ] # the digits' floor, 200,000 x log2(10) / 8 = 83,048, and 6,000 for the columns' tables
-          tparams=$(sed -n 's/^wave      \(.*\) (rope-wave-v2)/\1/p' table.txt)
+          tparams=$(sed -n 's/^wave      \(.*\) (rope-wave-v4)/\1/p' table.txt)
           python reference/sieve_ref.py rope-unpack table.rope --params "$tparams" --size 222000 --out table.back > /dev/null
           cmp digits/table.txt table.back
-          build/sieve locate digits --installer digits.sieve --items --manifest digits.manifest | tr -d '\r' | q "^rope      1 file(s) pulled tight by rope-wave-v1 and v2 (222000 bytes, carried in [0-9]*; sieve-manifest-v9)"
+          build/sieve rope digits/table.txt --params "${tparams% G1}" --out table2.rope | tr -d '\r' | q "(rope-wave-v2)"
+          [ "$(wc -c < table.rope)" -lt "$(wc -c < table2.rope)" ]
+          python reference/sieve_ref.py rope-unpack table2.rope --params "${tparams% G1}" --size 222000 --out table2.back > /dev/null
+          cmp digits/table.txt table2.back
+          build/sieve locate digits --installer digits.sieve --items --manifest digits.manifest | tr -d '\r' | q "^rope      1 file(s) pulled tight by rope-wave-v1 to v4 (222000 bytes, carried in [0-9]*; sieve-manifest-v11)"
           build/sieve install digits.sieve --to digits_inst > /dev/null
           diff -r digits digits_inst
           python reference/sieve_ref.py unpack digits.manifest --to digits_oracle > /dev/null
           diff -r digits digits_oracle
           build/sieve-install digits.sieve --to digits_si --yes > /dev/null
           diff -r digits digits_si
+          build/sieve locate digits --installer digits9.sieve --items --v9 --manifest digits9.manifest | tr -d '\r' | q "^rope      1 file(s) pulled tight by rope-wave-v1 and v2 (222000 bytes, carried in [0-9]*; sieve-manifest-v9)"
+          [ "$(wc -c < digits.sieve)" -lt "$(wc -c < digits9.sieve)" ]
+          build/sieve install digits9.sieve --to digits_inst9 > /dev/null
+          diff -r digits digits_inst9
+          python reference/sieve_ref.py unpack digits9.manifest --to digits_oracle9 > /dev/null
+          diff -r digits digits_oracle9
+          build/sieve-install digits9.sieve --to digits_si9 --yes > /dev/null
+          diff -r digits digits_si9
           # rope-wave-v3: the same kind of table laid out as pi6.txt is (Edward's stress test): lines of
           # 55 and 54 bytes, a blank line after every twenty and a form feed in every tenth, which shift
           # any fixed width. Counted by the column in each line, it is near the digits' floor (100,000
-          # digits: 41,525 bytes) and below LZMA2; sieve-manifest-v10; all three readers give it back.
-          rm -rf lines lines_inst lines_oracle lines_si && mkdir lines
+          # digits: 41,525 bytes) and below LZMA2; sieve-manifest-v10 (--v10); all three readers give it
+          # back. rope-wave-v4: the columns grouped, smaller again; sieve-manifest-v11, all three readers.
+          rm -rf lines lines_inst lines_oracle lines_si lines_inst10 lines_oracle10 lines_si10 && mkdir lines
           python -c "
           s = 314159
           def r():
@@ -1160,18 +1175,31 @@ jobs:
           open('lines/pi-like.txt', 'wb').write(('\\n'.join(out) + '\\n').encode())
           "
           build/sieve rope lines/pi-like.txt --out lines.rope | tr -d '\r' > lines.txt
-          q "^wave      L8 W56 S1 P0 K0 C2 (rope-wave-v3)" lines.txt
+          q "^wave      L8 W56 S1 P0 K0 C2 G1 (rope-wave-v4)" lines.txt
           [ "$(wc -c < lines.rope)" -lt "$(sed -n 's/^LZMA2     \([0-9]*\) bytes.*/\1/p' lines.txt)" ]
-          [ "$(wc -c < lines.rope)" -lt 45525 ] # the digits' floor, 41,525, and 4,000 for the columns' tables
-          python reference/sieve_ref.py rope-unpack lines.rope --params "L8 W56 S1 P0 K0 C2" --size "$(wc -c < lines/pi-like.txt)" --out lines.back > /dev/null
+          [ "$(wc -c < lines.rope)" -lt 43525 ] # the digits' floor, 41,525, and 2,000 for the groups' tables and the layout
+          python reference/sieve_ref.py rope-unpack lines.rope --params "L8 W56 S1 P0 K0 C2 G1" --size "$(wc -c < lines/pi-like.txt)" --out lines.back > /dev/null
           cmp lines/pi-like.txt lines.back
-          build/sieve locate lines --installer lines.sieve --items --manifest lines.manifest | tr -d '\r' | q "; sieve-manifest-v10)"
+          build/sieve rope lines/pi-like.txt --params "L8 W56 S1 P0 K0 C2" --out lines3.rope | tr -d '\r' | q "(rope-wave-v3)"
+          [ "$(wc -c < lines.rope)" -lt "$(wc -c < lines3.rope)" ]
+          [ "$(wc -c < lines3.rope)" -lt 45525 ] # the digits' floor, 41,525, and 4,000 for the columns' tables
+          python reference/sieve_ref.py rope-unpack lines3.rope --params "L8 W56 S1 P0 K0 C2" --size "$(wc -c < lines/pi-like.txt)" --out lines3.back > /dev/null
+          cmp lines/pi-like.txt lines3.back
+          build/sieve locate lines --installer lines.sieve --items --manifest lines.manifest | tr -d '\r' | q "; sieve-manifest-v11)"
           build/sieve install lines.sieve --to lines_inst > /dev/null
           diff -r lines lines_inst
           python reference/sieve_ref.py unpack lines.manifest --to lines_oracle > /dev/null
           diff -r lines lines_oracle
           build/sieve-install lines.sieve --to lines_si --yes > /dev/null
           diff -r lines lines_si
+          build/sieve locate lines --installer lines10.sieve --items --v10 --manifest lines10.manifest | tr -d '\r' | q "; sieve-manifest-v10)"
+          [ "$(wc -c < lines.sieve)" -lt "$(wc -c < lines10.sieve)" ]
+          build/sieve install lines10.sieve --to lines_inst10 > /dev/null
+          diff -r lines lines_inst10
+          python reference/sieve_ref.py unpack lines10.manifest --to lines_oracle10 > /dev/null
+          diff -r lines lines_oracle10
+          build/sieve-install lines10.sieve --to lines_si10 --yes > /dev/null
+          diff -r lines lines_si10
           # (each file is named by its item's title; the report says which file each degree gave)
           $H --no-menu --press "X,Tab,9,0,Return" --take --save-item p90.txt --screenshot degp.png > /dev/null
           cmp p90.txt "degrees/$(sed -n 's/^pages 090 //p' deg.txt)"
@@ -1254,9 +1282,9 @@ jobs:
           build/sieve filters --plugins > plugins.out
           grep -A1 "broken.sfilter" plugins.out | q "ends with end"
           grep -A1 "clean-edited.sfilter" plugins.out | q "with different contents"
-          if build/sieve filters --length 8 | grep -q "clean-data-v1"; then exit 1; fi
+          if build/sieve filters --length 8 | grep -q "^\[.\] clean-data-v1 "; then exit 1; fi
           rm build/filters/broken.sfilter build/filters/clean-edited.sfilter
-          build/sieve filters --length 8 | q "clean-data-v1"
+          build/sieve filters --length 8 | q "^\[.\] clean-data-v1 "
           # `requires`: ticking tidy-data-v2 alone brings clean-data-v1 and the built-in max-run-v1
           # (at the max_run it pins) into the stack, which still counts, exactly as tidy-data-v1 and
           # max-run-data-v1 did (both retired for them); a different setting is flagged; and a

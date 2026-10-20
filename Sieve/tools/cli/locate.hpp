@@ -102,6 +102,9 @@ inline constexpr const char* kRopeManifestVersion = "sieve-manifest-v8";
 inline constexpr const char* kRopeColumnsManifestVersion = "sieve-manifest-v9";
 // v9 whose rope ways may be rope-wave-v3's (columns by line, " C2"): made only where some file's is.
 inline constexpr const char* kRopeLinesManifestVersion = "sieve-manifest-v10";
+// v10 whose rope ways may be rope-wave-v4's (columns sharing tables, " G1"): made only where some
+// file's is.
+inline constexpr const char* kRopeGroupsManifestVersion = "sieve-manifest-v11";
 
 std::vector<uint8_t> read_file_bytes(const std::filesystem::path& file);
 
@@ -167,6 +170,7 @@ struct Manifest
     bool roped = false;
     bool rope_columns = false; // v9: some rope way is rope-wave-v2's
     bool rope_lines = false;   // v10: some rope way is rope-wave-v3's (and rope_columns is set too)
+    bool rope_groups = false;  // v11: some rope way is rope-wave-v4's (and rope_lines is set too)
     PackedStream rope_stream;
     std::vector<uint8_t> rope_carried;
     // v7: the listing (every line after the first, up to and including "end") carried as LZMA2 where

@@ -45,6 +45,7 @@ namespace sieve {
 inline constexpr const char* kRopeWaveVersion = "rope-wave-v1";
 inline constexpr const char* kRopeWaveColumnsVersion = "rope-wave-v2"; // v1 with columns (C1)
 inline constexpr const char* kRopeWaveLinesVersion = "rope-wave-v3";   // v2 with columns by line (C2)
+inline constexpr const char* kRopeWaveGroupsVersion = "rope-wave-v4";  // v3 with columns sharing tables (G1)
 
 struct RopeParams
 {
@@ -56,6 +57,9 @@ struct RopeParams
     // last line feed, held below W), for L8 S1 P0 K0 only; each column's count before its segment.
     // 0: rope-wave-v1, one table for every value.
     uint32_t columns = 0;
+    // rope-wave-v4 (" G1" after C1 or C2): the columns in groups that share a table and a stream,
+    // each column's group number before them (SPECIFICATIONS §12.2). Columns only.
+    bool grouped = false;
     void check() const; // throws std::invalid_argument for parameters out of range
     std::string text() const; // "L8 W949 S1 P3 K0"
     static RopeParams parse(std::string_view text);
@@ -73,7 +77,8 @@ double rope_estimate(std::span<const uint8_t> file, const RopeParams& p);
 
 // Pulling tight: the parameters that give the shortest code, searched over every value length,
 // phase and step, keep or not, and the widths at which the file best matches itself shifted by a
-// line, within `seconds` (0: no limit); the best found by then on a timeout.
+// line, within `seconds` (0: no limit); the best found by then on a timeout. `newest`: the newest
+// rope-wave version tried (1 to 4), for instructions that an older reader must read.
 struct RopeSearch
 {
     RopeParams best;
@@ -81,6 +86,6 @@ struct RopeSearch
     size_t tried = 0;
     bool timed_out = false;
 };
-RopeSearch rope_search(std::span<const uint8_t> file, double seconds = 0);
+RopeSearch rope_search(std::span<const uint8_t> file, double seconds = 0, uint32_t newest = 4);
 
 } // namespace sieve
