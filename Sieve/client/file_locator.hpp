@@ -84,6 +84,11 @@ public:
     // The search's time kept between runs (sieve-hallway.ini [locator]): what every File Locator
     // starts with, and what is called when the player changes it. Set once, at start.
     static void remember_search(double seconds, bool total, std::function<void(double, bool)> changed);
+    // "Optimise Archive Formats" (sieve-manifest-v14), kept between runs as the search's time is:
+    // off unless ticked; ticked, an archive is remade exactly from what it holds where Sieve can,
+    // else carried as its contents, where either is clearly smaller. Set once, at start.
+    static void remember_archives(bool on, std::function<void(bool)> changed);
+    void set_archives(bool on); // scripted runs (--optimise-archives)
 
     // From the system dialogs' callbacks (any thread): what was chosen, handed to the next frame.
     void picked(const std::string& path);
@@ -129,6 +134,7 @@ private:
     // How long tailoring may search for shorter addresses (cli::WeighBudget): seconds a file and
     // for the whole run, 0 for no limit. Each moves the other, through the files counted: the run's
     // is the file's times the files, and the file's is the run's shared out among them.
+    bool optimise_archives_ = false; // the box, off by default
     double search_per_file_ = 0, search_total_ = 0;
     bool search_by_total_ = false; // which was set last: the other follows it
     size_t files_counted() const;

@@ -236,6 +236,40 @@ SevenZip list_7z(const std::vector<uint8_t>& archive)
     return listing(a, nullptr);
 }
 
+std::vector<InMemory> read_7z(const std::vector<uint8_t>& archive)
+{
+    Open7z a(archive);
+    std::vector<UInt32> index;
+    const SevenZip z = listing(a, &index);
+    std::vector<InMemory> out;
+    UInt32 block = 0xFFFFFFFF;
+    Byte* buf = nullptr;
+    size_t buf_size = 0;
+    try
+    {
+        for (size_t k = 0; k < z.entries.size(); ++k)
+        {
+            InMemory m;
+            m.entry = z.entries[k];
+            if (!m.entry.dir)
+            {
+                size_t offset = 0, got = 0;
+                const SRes r = SzArEx_Extract(&a.db, &a.look.vt, index[k], &block, &buf, &buf_size, &offset, &got, &kAlloc, &kAlloc);
+                if (r != SZ_OK) throw std::runtime_error("cannot unpack " + m.entry.path + ": " + sz_error(r));
+                m.bytes.assign(buf + offset, buf + offset + got);
+            }
+            out.push_back(std::move(m));
+        }
+    }
+    catch (...)
+    {
+        std::free(buf);
+        throw;
+    }
+    std::free(buf);
+    return out;
+}
+
 bool unpack_7z(const std::vector<uint8_t>& archive, const fs::path& dest, bool force,
                const std::function<void(size_t, size_t, const std::string&)>& progress, const std::atomic<bool>* cancel)
 {

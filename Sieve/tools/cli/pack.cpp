@@ -4,6 +4,7 @@
 
 #include "sieve/filekind.hpp"
 #include "sieve/rope_wave.hpp"
+#include "unpack_7z.hpp"
 
 #include <lzma.h>
 
@@ -163,6 +164,130 @@ std::string pieces_text(const std::vector<std::pair<char, uint64_t>>& list)
     return t;
 }
 
+// ---- v14: archives ("Optimise Archive Formats")
+
+bool is_xz(const std::vector<uint8_t>& b)
+{
+    static const uint8_t sig[6] = {0xFD, '7', 'z', 'X', 'Z', 0x00};
+    return b.size() >= 32 && std::equal(sig, sig + 6, b.begin());
+}
+
+// What an xz file holds, or nothing if liblzma cannot read it (or it is not one stream).
+std::optional<std::vector<uint8_t>> xz_inner(const std::vector<uint8_t>& b)
+{
+    lzma_stream z = LZMA_STREAM_INIT;
+    if (lzma_stream_decoder(&z, UINT64_MAX, 0) != LZMA_OK) return std::nullopt;
+    std::vector<uint8_t> out;
+    std::vector<uint8_t> buf(1 << 20);
+    z.next_in = b.data();
+    z.avail_in = b.size();
+    lzma_ret r = LZMA_OK;
+    while (r == LZMA_OK)
+    {
+        z.next_out = buf.data();
+        z.avail_out = buf.size();
+        r = lzma_code(&z, LZMA_FINISH);
+        out.insert(out.end(), buf.data(), buf.data() + (buf.size() - z.avail_out));
+    }
+    const bool whole = r == LZMA_STREAM_END && z.avail_in == 0;
+    lzma_end(&z);
+    if (!whole) return std::nullopt;
+    return out;
+}
+
+const char* xz_check_name(int id) { return id == 0 ? "none" : id == 1 ? "crc32" : id == 4 ? "crc64" : id == 10 ? "sha256" : nullptr; }
+
+} // namespace
+
+std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector<uint8_t>& inner)
+{
+    // "xz <preset>[e] <check> <inner size>": liblzma's single-call encoder, as xz writes one stream.
+    char kind[8] = {0}, preset[8] = {0}, check[8] = {0};
+    unsigned long long size = 0;
+    char extra = 0;
+    if (std::sscanf(recipe.c_str(), "%7s %7s %7s %llu%c", kind, preset, check, &size, &extra) != 4 || std::string(kind) != "xz" || size != inner.size())
+        throw std::runtime_error("an archive's recipe this Sieve does not know: " + recipe);
+    const std::string ps(preset), cs(check);
+    if (ps.empty() || ps[0] < '0' || ps[0] > '9' || (ps.size() == 2 && ps[1] != 'e') || ps.size() > 2)
+        throw std::runtime_error("an xz preset this Sieve does not know: " + recipe);
+    const uint32_t level = uint32_t(ps[0] - '0') | (ps.size() == 2 ? LZMA_PRESET_EXTREME : 0);
+    int id = -1;
+    for (const int c : {0, 1, 4, 10})
+        if (cs == xz_check_name(c)) id = c;
+    if (id < 0) throw std::runtime_error("an xz check this Sieve does not know: " + recipe);
+    // The streaming encoder, as the xz program uses: the single-call one writes each block's sizes
+    // in its header, which xz does not, so its files would not come out the same.
+    lzma_stream z = LZMA_STREAM_INIT;
+    if (lzma_easy_encoder(&z, level, lzma_check(id)) != LZMA_OK) throw std::runtime_error("liblzma could not remake an xz file");
+    std::vector<uint8_t> out(lzma_stream_buffer_bound(inner.size()));
+    z.next_in = inner.data();
+    z.avail_in = inner.size();
+    z.next_out = out.data();
+    z.avail_out = out.size();
+    const lzma_ret r = lzma_code(&z, LZMA_FINISH);
+    const size_t pos = out.size() - z.avail_out;
+    lzma_end(&z);
+    if (r != LZMA_STREAM_END) throw std::runtime_error("liblzma could not remake an xz file");
+    out.resize(pos);
+    return out;
+}
+
+namespace {
+
+// The recipe that remakes an xz file exactly from what it holds ("xz 6 crc64"), or "" if none does:
+// the presets whose dictionary is the one its first block names, each with and without extreme.
+std::string xz_recipe(const std::vector<uint8_t>& b, const std::vector<uint8_t>& inner)
+{
+    const char* check = xz_check_name(b[7]);
+    if (b[6] != 0 || !check) return "";
+    // The first block's header: its filters, the last LZMA2's dictionary byte.
+    uint32_t dict = 0;
+    {
+        size_t at = 12;
+        const size_t hsize = (size_t(b[at]) + 1) * 4;
+        const uint8_t flags = b[at + 1];
+        size_t p = at + 2;
+        auto vli = [&]() {
+            uint64_t v = 0;
+            for (int k = 0; k < 9 && p < at + hsize; ++k)
+            {
+                const uint8_t c = b[p++];
+                v |= uint64_t(c & 0x7F) << (7 * k);
+                if (!(c & 0x80)) break;
+            }
+            return v;
+        };
+        if (b[at] != 0 && at + hsize <= b.size())
+        {
+            if (flags & 0x40) vli();
+            if (flags & 0x80) vli();
+            for (int f = 0; f <= (flags & 3); ++f)
+            {
+                const uint64_t id = vli(), n = vli();
+                if (id == 0x21 && n == 1 && p < b.size() && b[p] <= 40) dict = b[p] == 40 ? 0xFFFFFFFFu : (2u | (b[p] & 1u)) << (b[p] / 2 + 11);
+                p += size_t(n);
+            }
+        }
+    }
+    static const uint32_t preset_dict[10] = {1u << 18, 1u << 20, 1u << 21, 1u << 22, 1u << 22, 1u << 23, 1u << 23, 1u << 24, 1u << 25, 1u << 26};
+    for (const int level : {6, 9, 5, 7, 8, 4, 3, 2, 1, 0})
+        for (const bool extreme : {false, true})
+        {
+            if (dict && preset_dict[level] != dict) continue;
+            const std::string recipe = "xz " + std::to_string(level) + (extreme ? "e" : "") + " " + check + " " + std::to_string(inner.size());
+            if (remake_archive(recipe, inner) == b) return recipe;
+        }
+    return "";
+}
+
+// An archive's contents' folder (or file): its name without the extension, else with ".contents".
+std::string contents_name(const std::string& path, const char* ext)
+{
+    const std::string e(ext);
+    if (path.size() > e.size() && path.compare(path.size() - e.size(), e.size(), e) == 0) return path.substr(0, path.size() - e.size());
+    return path + ".contents";
+}
+
 // A text's lines, as locate.cpp's unpacking splits them (at each line feed).
 std::vector<std::string_view> lines_of(const std::vector<uint8_t>& t)
 {
@@ -221,7 +346,7 @@ std::vector<uint8_t> place_bytes_of(const std::string& hex, uint32_t width)
 } // namespace
 
 void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const ItemFinder* items, bool item_hashes, const PlaceCoder* coder,
-                double rope_seconds, uint32_t rope_newest, bool trim, bool pieces)
+                double rope_seconds, uint32_t rope_newest, bool trim, bool pieces, bool optimise_archives)
 {
     // Every file's bytes, checked against the walk: from the contents where a v3 manifest has them,
     // else read from the folder (the current one, for a file named without one).
@@ -244,14 +369,173 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         if (bytes[i].size() != e.size || sha256_hex(bytes[i]) != e.sha256) throw std::runtime_error(e.path + " changed while the folder was being read");
     }
 
+    // v14, "Optimise Archive Formats" (asked for, never by default): an xz file remade exactly from
+    // what it holds where liblzma does that, its contents carried; else, and a 7z always (Sieve has
+    // no 7-Zip encoder), the archive carried as its contents, in a folder (or file) named after it,
+    // and said so. Where that name is taken, or the archive cannot be read, it stays as it is.
+    std::vector<std::vector<uint8_t>> original(files.size()); // a remade file's own bytes
+    m.unpacked.clear();
+    m.archives = false;
+    if (optimise_archives && m.compact)
+    {
+        std::unordered_set<std::string> taken;
+        for (const ManifestEntry& e : m.entries) taken.insert(e.dir && !e.path.empty() && e.path.back() == '/' ? e.path.substr(0, e.path.size() - 1) : e.path);
+        const bool one = m.one_file_root();
+        std::vector<ManifestEntry> entries;
+        std::vector<std::vector<uint8_t>> carried, kept;
+        size_t fi = 0;
+        auto add_file = [&](ManifestEntry e, std::vector<uint8_t> b, std::vector<uint8_t> orig) {
+            e.size = (orig.empty() ? b : orig).size();
+            e.sha256 = sha256_hex(orig.empty() ? b : orig);
+            entries.push_back(std::move(e));
+            carried.push_back(std::move(b));
+            kept.push_back(std::move(orig));
+        };
+        std::unordered_set<std::string> dirs; // the folders listed, each ending in '/'
+        for (const ManifestEntry& e : m.entries)
+            if (e.dir) dirs.insert(e.path);
+        auto add_dir = [&](const std::string& d) { // d ends in '/'
+            if (!dirs.insert(d).second) return;
+            ManifestEntry de;
+            de.dir = true;
+            de.path = d;
+            entries.push_back(de);
+            carried.emplace_back();
+            kept.emplace_back();
+        };
+        auto add_dirs = [&](const std::string& path) { // every folder above path
+            for (size_t at = path.find('/'); at != std::string::npos; at = path.find('/', at + 1)) add_dir(path.substr(0, at + 1));
+        };
+        for (ManifestEntry& e : m.entries)
+        {
+            if (e.dir)
+            {
+                entries.push_back(e); // listed already in dirs
+                carried.emplace_back();
+                kept.emplace_back();
+                continue;
+            }
+            std::vector<uint8_t>& b = bytes[fi++];
+            // Only where it comes out clearly smaller: the archive as it is (packed, if that is smaller)
+            // against what it holds, packed by LZMA2 or pulled tight by the rope (the search is
+            // remembered, so packing it later does not search again), its names and recipe counted.
+            const uint64_t as_is = std::min<uint64_t>(b.size(), estimate(b));
+            auto worth = [&](const std::vector<uint8_t>& inner, uint64_t extra, bool one_file = true) {
+                uint64_t cost = estimate(inner);
+                if (one_file && rope_seconds >= 0 && inner.size() >= 512) cost = std::min<uint64_t>(cost, uint64_t(rope_search(inner, rope_seconds, rope_newest).estimate));
+                // By a clear margin (64 bytes and 0.5%): the estimate is LZMA2 at preset 6, the stream
+                // preset 9, and a near thing is not worth giving up the archive as it was.
+                return cost + extra + 64 + as_is / 200 < as_is;
+            };
+            if (is_xz(b))
+                if (auto inner = xz_inner(b); inner && worth(*inner, 40))
+                {
+                    const std::string recipe = xz_recipe(b, *inner);
+                    if (!recipe.empty())
+                    {
+                        ManifestEntry r = e;
+                        r.remake = recipe;
+                        add_file(r, std::move(*inner), std::move(b));
+                        continue;
+                    }
+                    const std::string name = contents_name(e.path, ".xz");
+                    if (!taken.count(name))
+                    {
+                        taken.insert(name);
+                        m.unpacked.push_back({"xz", e.path, name, e.size});
+                        ManifestEntry c = e;
+                        c.path = name;
+                        add_file(c, std::move(*inner), {});
+                        continue;
+                    }
+                }
+            if (sieve::install::is_7z(b))
+            {
+                std::vector<sieve::install::InMemory> all;
+                try
+                {
+                    all = sieve::install::read_7z(b);
+                }
+                catch (const std::exception&)
+                {
+                    all.clear();
+                }
+                const std::string folder = contents_name(e.path, ".7z");
+                std::vector<uint8_t> joined;
+                uint64_t names = 0;
+                for (const auto& in : all)
+                {
+                    joined.insert(joined.end(), in.bytes.begin(), in.bytes.end());
+                    names += folder.size() + in.entry.path.size() + 12;
+                }
+                // (The rope's estimate only for an archive of one file: for more, their bytes joined
+                // are not what the rope would be given.)
+                size_t nfiles = 0;
+                for (const auto& in : all) nfiles += !in.entry.dir;
+                if (!all.empty() && !taken.count(folder) && worth(joined, names, nfiles == 1))
+                {
+                    taken.insert(folder);
+                    m.unpacked.push_back({"7z", e.path, folder, e.size});
+                    const std::string prefix = one ? std::string() : folder + "/";
+                    if (!one) add_dirs(prefix);
+                    for (auto& in : all)
+                    {
+                        const std::string path = prefix + in.entry.path;
+                        add_dirs(path);
+                        if (in.entry.dir)
+                        {
+                            add_dir(path + "/");
+                            continue;
+                        }
+                        ManifestEntry fe;
+                        fe.path = path;
+                        add_file(fe, std::move(in.bytes), {});
+                    }
+                    if (one) m.root = folder; // one archive located alone: its contents' folder is the root
+                    continue;
+                }
+            }
+            add_file(e, std::move(b), {});
+        }
+        if (!m.unpacked.empty() || std::any_of(entries.begin(), entries.end(), [](const ManifestEntry& x) { return !x.remake.empty(); }))
+        {
+            m.archives = true;
+            m.entries.clear();
+            bytes.clear();
+            original.clear();
+            for (size_t k = 0; k < entries.size(); ++k)
+            {
+                m.entries.push_back(std::move(entries[k]));
+                if (!m.entries.back().dir)
+                {
+                    bytes.push_back(std::move(carried[k]));
+                    original.push_back(std::move(kept[k]));
+                }
+            }
+            files.clear();
+            for (ManifestEntry& e : m.entries)
+                if (!e.dir) files.push_back(&e);
+            m.files = files.size();
+            m.bytes = 0;
+            for (const ManifestEntry* f : files) m.bytes += f->size;
+        }
+        else
+        {
+            // Nothing changed: the bytes back where they were (the entries are the walk's still).
+            bytes.clear();
+            for (size_t k = 0; k < entries.size(); ++k)
+                if (!entries[k].dir) bytes.push_back(std::move(carried[k]));
+        }
+    }
+
     // Each file's way: an item of one of Sieve's lines, its place there (v5); a program in the x86
     // stream; a text made from another's lines, a mask; the rest as it is.
     std::vector<bool> item(files.size(), false);
     std::vector<size_t> used_lines;
     for (size_t i = 0; i < files.size(); ++i)
     {
-        files[i]->way = is_program(bytes[i]) ? "x86" : "raw";
-        if (!items || bytes[i].empty()) continue;
+        files[i]->way = is_program(bytes[i]) && files[i]->remake.empty() ? "x86" : "raw";
+        if (!items || bytes[i].empty() || !files[i]->remake.empty()) continue;
         if (const auto found = (*items)(bytes[i]))
         {
             // v6 carries an item only where its place is shorter than the file: the least of the two.
@@ -373,7 +657,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     std::vector<std::vector<std::string_view>> lines(files.size());
     std::vector<bool> text(files.size(), false);
     for (size_t i = 0; i < files.size(); ++i)
-        if (files[i]->way == "raw" && std::find(bytes[i].begin(), bytes[i].end(), uint8_t('\n')) != bytes[i].end())
+        if (files[i]->way == "raw" && files[i]->remake.empty() && std::find(bytes[i].begin(), bytes[i].end(), uint8_t('\n')) != bytes[i].end())
         {
             text[i] = true;
             lines[i] = lines_of(bytes[i]);
@@ -552,7 +836,11 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     }
     else m.streams.insert(m.streams.end(), pp.begin(), pp.end());
     m.contents.clear();
-    for (const auto& b : bytes) m.contents.insert(m.contents.end(), b.begin(), b.end());
+    for (size_t i = 0; i < bytes.size(); ++i) // a remade file's own bytes, not what it holds
+    {
+        const std::vector<uint8_t>& b = original[i].empty() ? bytes[i] : original[i];
+        m.contents.insert(m.contents.end(), b.begin(), b.end());
+    }
     m.packed = m.with_contents = true;
     m.with_addresses = false;
     r.packed = m.streams.size();
@@ -609,8 +897,12 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         m.tree = tree_sha256(m);
         // v12, only where it differs from v11: no items line where there are no items, or the
         // lzma2 stream carried as it is.
+        if (m.archives) m.pieces = true; // v14 reads v13's ways
+        for (const ManifestEntry* f : files) r.remade += !f->remake.empty();
+        r.unpacked = m.unpacked.size();
         m.trimmed = trim && m.compact && (lzma2_as_is || m.pieces || (m.item_stream.packed == 0 && m.item_stream.bytes == 0));
         r.pieces_made = m.pieces;
+        r.archives_made = m.archives;
         r.trimmed = m.trimmed;
         r.lzma2_as_is = lzma2_as_is;
     }
@@ -681,7 +973,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
     };
     if (r.compact)
     {
-        const char* version = r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
+        const char* version = r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
                             : r.roped ? kRopeManifestVersion : kCompactManifestVersion;
         if (r.items)
         {
@@ -693,6 +985,10 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         }
         else o << "items     none; " << version << "\n";
         if (r.listing_carried) o << "listing   " << r.listing << " bytes, carried as LZMA2 in " << r.listing_carried << "\n";
+        if (r.remade) o << "remade    " << r.remade << " archive(s) carried as what they hold, remade exactly on installing (" << kArchivesManifestVersion << ")\n";
+        if (r.unpacked)
+            o << "unpacked  " << r.unpacked << " archive(s) carried as their contents, not as the archives (Optimise Archive Formats; " << kArchivesManifestVersion
+              << ")\n";
         if (r.pieces)
             o << "pieces    " << r.pieces << " file(s) cut into pieces: " << r.pieces_lzma2 << " bytes packed by LZMA2, " << r.pieces_rope
               << " pulled tight by the rope (" << kPiecesManifestVersion << ")\n";

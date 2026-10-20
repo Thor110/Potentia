@@ -96,6 +96,12 @@ ItemMaker& item_maker()
     return f;
 }
 
+Remaker& remaker()
+{
+    static Remaker f;
+    return f;
+}
+
 std::vector<uint8_t> unpack_v4(Manifest& m)
 {
     if (m.streams.size() != m.x86.packed + m.lzma2.packed) throw std::runtime_error("manifest: its streams are not the size its lines say");
@@ -118,7 +124,16 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
     std::vector<size_t> base_lines(files.size(), 0);
     for (size_t i = 0; i < files.size(); ++i)
     {
-        const ManifestEntry& e = *files[i];
+        // v14: a file remade from what it holds is that first (its inner size), then remade below.
+        ManifestEntry e = *files[i];
+        if (!e.remake.empty())
+        {
+            const std::string inner = e.remake.substr(e.remake.rfind(' ') + 1);
+            if (inner.empty() || inner.size() > 19 || inner.find_first_not_of("0123456789") != std::string::npos ||
+                (e.way != "raw" && e.way.rfind("rope ", 0) != 0 && e.way.rfind("pieces ", 0) != 0))
+                throw std::runtime_error("manifest: " + e.path + " is remade from what no way gives");
+            e.size = std::stoull(inner);
+        }
         if (e.way == "x86") bytes[i] = take(x86, xa, e.size, e.path);
         else if (e.way == "raw") bytes[i] = take(plain, pa, e.size, e.path);
         else if (m.items && e.way.rfind("item ", 0) == 0)
@@ -216,6 +231,16 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
             ra += size_t(len);
         }
         else if (e.way.rfind("lines ", 0) != 0) throw std::runtime_error("manifest: " + e.path + " has no way to be carried");
+        if (!e.remake.empty())
+        {
+            if (!remaker())
+                throw std::runtime_error("these Sieve instructions remake an archive from what it holds (" + e.path +
+                                         "): open them with Sieve (sieve install, or the hallway's File Locator), which remakes it");
+            bytes[i] = remaker()(e.remake, bytes[i]);
+            if (bytes[i].size() != files[i]->size)
+                throw std::runtime_error(e.path + " was not remade as it was (" + std::to_string(bytes[i].size()) + " bytes, not " +
+                                         std::to_string(files[i]->size) + "): this Sieve's compressor writes differently from the one that made the instructions");
+        }
     }
     if (ra != m.rope_carried.size()) throw std::runtime_error("manifest: its rope stream holds more than its files");
     for (size_t i = 0; i < files.size(); ++i)
@@ -337,7 +362,7 @@ std::string manifest_path(const fs::path& p, const fs::path& root)
 
 const char* Manifest::version() const
 {
-    return pieces ? kPiecesManifestVersion : trimmed ? kTrimmedManifestVersion : rope_groups ? kRopeGroupsManifestVersion : rope_lines ? kRopeLinesManifestVersion : rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
+    return archives ? kArchivesManifestVersion : pieces ? kPiecesManifestVersion : trimmed ? kTrimmedManifestVersion : rope_groups ? kRopeGroupsManifestVersion : rope_lines ? kRopeLinesManifestVersion : rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
          : with_contents ? kInstallManifestVersion : with_addresses ? kAddressManifestVersion : kManifestVersion;
 }
 
@@ -390,8 +415,12 @@ std::string Manifest::text() const
         for (size_t k = 0; k < lines.size(); ++k)
             t += "line " + std::to_string(k) + " " + (line_codings.at(k).empty() ? std::to_string(line_widths.at(k)) : line_codings[k]) + " " + lines[k] + "\n";
         t += "tree " + tree + "\n";
-        for (const ManifestEntry& e : entries)
+        for (const UnpackedArchive& u : unpacked) // v14
+            t += "u\t" + u.format + "\t" + std::to_string(u.size) + "\t" + u.archive + "\t" + u.folder + "\n";
+        for (const ManifestEntry& e0 : entries)
         {
+            ManifestEntry e = e0;
+            if (!e.remake.empty()) e.way = e.remake + " " + e.way; // v14
             if (e.dir) t += "d\t" + e.path + "\n";
             else if (e.way.rfind("item ", 0) == 0)
             {
@@ -625,7 +654,7 @@ Manifest Manifest::parse(std::string_view whole)
     // v7 with its listing carried as LZMA2: unpacked, and read as the text it is.
     // (v7, v8 and v9 alike: their first line, then "listing ...")
     std::string packed_version;
-    for (const char* v : {kCompactManifestVersion, kRopeManifestVersion, kRopeColumnsManifestVersion, kRopeLinesManifestVersion, kRopeGroupsManifestVersion, kTrimmedManifestVersion, kPiecesManifestVersion})
+    for (const char* v : {kCompactManifestVersion, kRopeManifestVersion, kRopeColumnsManifestVersion, kRopeLinesManifestVersion, kRopeGroupsManifestVersion, kTrimmedManifestVersion, kPiecesManifestVersion, kArchivesManifestVersion})
         if (whole.substr(0, std::string(v).size() + 9) == std::string(v) + "\nlisting ") packed_version = v;
     if (!packed_version.empty())
     {
@@ -689,6 +718,9 @@ Manifest Manifest::parse(std::string_view whole)
         m.rope_lines = m.rope_columns = m.roped = m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] == kRopeGroupsManifestVersion)
         m.rope_groups = m.rope_lines = m.rope_columns = m.roped = m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
+    else if (lines[0] == kArchivesManifestVersion)
+        m.archives = m.pieces = m.trimmed = m.rope_groups = m.rope_lines = m.rope_columns = m.roped = m.compact = m.minimal = m.items = m.packed =
+            m.with_contents = true;
     else if (lines[0] == kPiecesManifestVersion)
         m.pieces = m.trimmed = m.rope_groups = m.rope_lines = m.rope_columns = m.roped = m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] == kTrimmedManifestVersion)
@@ -818,6 +850,19 @@ Manifest Manifest::parse(std::string_view whole)
             if (tab == std::string::npos) break;
             at = tab + 1;
         }
+        if (m.archives && f.size() == 5 && f[0] == "u")
+        {
+            // v14: an archive carried as its contents.
+            Manifest::UnpackedArchive u;
+            u.format = f[1];
+            if (f[2].empty() || f[2].size() > 19 || f[2].find_first_not_of("0123456789") != std::string::npos)
+                throw std::runtime_error("manifest: line " + std::to_string(i + 1) + " is not an archive's line");
+            u.size = std::stoull(f[2]);
+            u.archive = f[3];
+            u.folder = f[4];
+            m.unpacked.push_back(u);
+            continue;
+        }
         ManifestEntry e;
         if (f.size() == 2 && f[0] == "d")
         {
@@ -839,6 +884,15 @@ Manifest Manifest::parse(std::string_view whole)
             e.sha256 = "-";
             e.way = f[2];
             e.path = f[3];
+            if (m.archives && e.way.rfind("xz ", 0) == 0)
+            {
+                // v14: "xz <preset> <check> <inner size> <way>": the recipe, then the inner way.
+                size_t at = 0;
+                for (int k = 0; k < 4 && at != std::string::npos; ++k) at = e.way.find(' ', at + 1);
+                if (at == std::string::npos) throw std::runtime_error("manifest: " + e.path + "'s way has no inner way");
+                e.remake = e.way.substr(0, at);
+                e.way = e.way.substr(at + 1);
+            }
         }
         else if (f[0] == "f" && f.size() == (m.with_addresses || m.packed ? 5u : 4u))
         {
@@ -956,6 +1010,7 @@ std::string tree_sha256(const Manifest& m)
 }
 
 void set_item_maker(ItemMaker maker) { item_maker() = std::move(maker); }
+void set_remaker(Remaker r) { remaker() = std::move(r); }
 bool has_item_maker() { return bool(item_maker()); }
 
 BigUint read_address_file(const fs::path& file, bool hex)

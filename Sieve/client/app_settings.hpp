@@ -120,6 +120,8 @@ struct AppSettings
     // files counted. Kept so that the first search of the next run has it too.
     double locator_search = 0;
     bool locator_search_run = false;
+    // "Optimise Archive Formats" ([locator] optimise_archives): off unless ticked.
+    bool locator_archives = false;
     // The setup menu's settings ([setup]): every line's shape and the GLOBAL settings, as they
     // were when the setup menu last changed them. Its ffmpeg is not kept here but below.
     Settings setup;

@@ -53,6 +53,8 @@ struct PackReport
     size_t pieces = 0;                               // v13: files cut into pieces, LZMA2's and the rope's
     uint64_t pieces_lzma2 = 0, pieces_rope = 0;      // v13: their bytes, each way's
     bool pieces_made = false;                        // v13: the instructions are v13
+    size_t remade = 0, unpacked = 0;                 // v14: archives remade exactly, and carried as their contents
+    bool archives_made = false;                      // v14: the instructions are v14
 };
 
 // v5: for a file's bytes, the line it is an item of (its place in the manifest's `lines`) and its
@@ -79,7 +81,11 @@ using PlaceCoder = std::function<std::optional<std::vector<uint8_t>>(size_t line
 // is smaller than the file packed alone.
 void add_packed(Manifest& m, const std::filesystem::path& root, PackReport* report = nullptr, const ItemFinder* items = nullptr,
                 bool item_hashes = false, const PlaceCoder* coder = nullptr, double rope_seconds = -1, uint32_t rope_newest = 4,
-                bool trim = false, bool pieces = false);
+                bool trim = false, bool pieces = false, bool optimise_archives = false);
+
+// v14: an archive remade from what it holds, by its recipe ("xz 6 crc64 <size>"): what installing
+// does (set as the manifest's remaker).
+std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector<uint8_t>& inner);
 
 // The report as lines, for the tool and the File Locator.
 std::string pack_report_text(const PackReport& r, uint64_t original);

@@ -180,6 +180,7 @@ const char* kUsage =
     "                      with --main-menu: the main menu's, with no world to walk to)\n"
     "  --search-per-file S, --search-total S   the File Locator's search for shorter addresses: seconds a\n"
     "                      file, or for the run (one of them; the other follows, the files counted)\n"
+    "  --optimise-archives the File Locator's Optimise Archive Formats ticked, for this run\n"
     "  --install FILE --install-to DIR   the File Locator's install, at once\n"
     "  --harness           a picture of the AI Training Harness (--training-dir DIR: its runs; --script KEYS:\n"
     "                      keys and =typed text, each step waiting for a training to finish)\n"
@@ -737,6 +738,10 @@ int run(const Args& a)
     FileLocator::remember_search(app.locator_search, app.locator_search_run, shot ? std::function<void(double, bool)>() : [&app, app_path](double s, bool run) {
         app.locator_search = s;
         app.locator_search_run = run;
+        app.save(app_path);
+    });
+    FileLocator::remember_archives(app.locator_archives || a.has("optimise-archives"), shot ? std::function<void(bool)>() : [&app, app_path](bool on) {
+        app.locator_archives = on;
         app.save(app_path);
     });
     if (!shot && !a.has("size")) { w = app.resolution.w; h = app.resolution.h; }

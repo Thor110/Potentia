@@ -113,6 +113,11 @@ inline constexpr const char* kTrimmedManifestVersion = "sieve-manifest-v12";
 // pieces next in the lzma2 stream at the file's turn (as a raw file's bytes are), the r pieces
 // joined and coded by the rope, next in the rope stream; made only where some file's is.
 inline constexpr const char* kPiecesManifestVersion = "sieve-manifest-v13";
+// v13 with archives optimised ("Optimise Archive Formats", off unless asked for): a file remade
+// exactly from what it holds, its way "xz <preset> <check> <inner size> <way of what it holds>"; or
+// an archive carried as its contents, a line "u\t<format>\t<size>\t<archive>\t<folder>" after the
+// tree's saying so. Made only where some file's is.
+inline constexpr const char* kArchivesManifestVersion = "sieve-manifest-v14";
 
 std::vector<uint8_t> read_file_bytes(const std::filesystem::path& file);
 
@@ -130,6 +135,7 @@ struct ManifestEntry
     uint64_t size = 0;   // files
     std::string sha256;  // files
     std::string address; // files, in a v2 manifest: the file's positional address in hex
+    std::string remake;  // files, in v14: "xz <preset> <check> <inner size>", the file remade from what its way gives
     std::string way;     // files, in a v4 manifest: "x86", "raw" or "lines K"; in v5 and v6 also "item K <index>"
                          // (v6 writes "item K" alone, the index carried in its items stream); in v7, on
                          // a line whose places are coded, "item K h<the code's bytes in hex>"; in v8
@@ -181,6 +187,15 @@ struct Manifest
     bool rope_groups = false;  // v11: some rope way is rope-wave-v4's (and rope_lines is set too)
     bool trimmed = false;      // v12: no empty items line; the lzma2 stream perhaps carried as it is
     bool pieces = false;       // v13: some file is cut into pieces (and trimmed is set too)
+    bool archives = false;     // v14: some archive is remade or carried as its contents (and pieces is set too)
+    // v14: each archive carried as its contents: its format ("7z", "xz"), its size, its path, and the
+    // folder (or file) its contents are in.
+    struct UnpackedArchive
+    {
+        std::string format, archive, folder;
+        uint64_t size = 0;
+    };
+    std::vector<UnpackedArchive> unpacked;
     PackedStream rope_stream;
     std::vector<uint8_t> rope_carried;
     // v7: the listing (every line after the first, up to and including "end") carried as LZMA2 where
@@ -204,6 +219,10 @@ std::string tree_sha256(const Manifest& m);
 // What makes an item's bytes from its line ("<space id> <options>") and its positional address
 // (hex): set by the programs that hold every line's code (sieve, the hallway). Without it a v5
 // manifest with items is refused with a word to open it with Sieve (the small installer has none).
+// v14: what remakes an archive exactly from what it holds ("xz 6 crc64 <size>"); the full Sieve sets
+// it (sieve-install has no compressor in it, and asks for Sieve, as it does for items).
+using Remaker = std::function<std::vector<uint8_t>(const std::string& recipe, const std::vector<uint8_t>& inner)>;
+void set_remaker(Remaker remaker);
 using ItemMaker = std::function<std::vector<uint8_t>(const std::string& line, const std::string& address)>;
 void set_item_maker(ItemMaker maker);
 bool has_item_maker();

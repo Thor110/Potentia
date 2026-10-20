@@ -2410,7 +2410,7 @@ void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackRepor
     add_packed_items(m, root, a, &rep, a.has("v5") ? 5 : a.has("v6") ? 6 : a.has("v7") ? 7 : 8, a.has("item-hashes") || a.has("file-hashes"),
                      rope_seconds, a.has("v8") ? 1 : a.has("v9") ? 2 : a.has("v10") ? 3 : 4,
                      !(a.has("v8") || a.has("v9") || a.has("v10") || a.has("v11")),
-                     !(a.has("v8") || a.has("v9") || a.has("v10") || a.has("v11") || a.has("v12")));
+                     !(a.has("v8") || a.has("v9") || a.has("v10") || a.has("v11") || a.has("v12")), a.has("optimise-archives"));
 }
 
 int cmd_locate(const Args& a)
@@ -2598,6 +2598,7 @@ int cmd_locate(const Args& a)
         const std::string o = a.get("installer");
         write_address_file(fs::path(std::u8string(o.begin(), o.end())), iaddr, a.has("hex"));
         *info << "installer " << o << ": the address of the installer's manifest (" << (!(m.with_contents ? m.packed : inst.packed) ? "v3: the listing, then every file's bytes"
+                                    : (m.with_contents ? m.archives : inst.archives) ? "v14: as v13, with archives optimised: remade exactly from what they hold, or carried as their contents"
                                     : (m.with_contents ? m.pieces : inst.pieces) ? "v13: as v12, and a file cut into pieces where that is smaller, LZMA2's where its bytes repeat and the rope's where they are unevenly spread"
                                     : (m.with_contents ? m.trimmed : inst.trimmed) ? "v12: the listing, every other file packed (or carried as it is where packing makes it no smaller), the items' places, then the files pulled tight by the rope, with no line for a stream that is empty"
                                     : (m.with_contents ? m.rope_groups : inst.rope_groups) ? "v11: the listing, every other file packed, the items' places, then the files pulled tight by the rope, column by column or by line, the columns sharing tables, where that helps"
@@ -2761,6 +2762,10 @@ int cmd_install(const Args& a)
     });
     std::cout << "installed " << m.files << (m.files == 1 ? " file into " : " files into ") << to
               << (m.files == 1 ? ", checked against its SHA-256\n" : ", every one checked against its SHA-256\n");
+    // v14: an archive carried as its contents is said so, never passed off as the archive.
+    for (const auto& u : m.unpacked)
+        std::cout << "note      " << u.archive << " (" << u.format << ", " << u.size << " bytes) was carried as its contents (Optimise Archive Formats): "
+                  << u.folder << " holds them, not the archive itself\n";
     return 0;
 }
 

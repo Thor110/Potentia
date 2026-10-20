@@ -210,9 +210,12 @@ target_include_directories(sieve_locate PUBLIC tools)
 # The vault checks pictures (PDQ), including files that are pictures, so it reads them (stb).
 target_link_libraries(sieve_locate PUBLIC sieve_core PRIVATE sieve_pdq sieve_image_io sieve_lzma)
 target_link_libraries(sieve_lines PUBLIC sieve_locate) # the lines check units against the vault
-add_library(sieve_compare STATIC tools/cli/compare.cpp tools/cli/pack.cpp tools/cli/train.cpp tools/cli/diffusion_run.cpp tools/cli/model_folder.cpp)
-target_include_directories(sieve_compare PUBLIC tools)
-target_link_libraries(sieve_compare PUBLIC sieve_core sieve_locate PRIVATE ${SIEVE_ZLIB} ${SIEVE_LZMA})
+# (client/unpack_7z.cpp too: "Optimise Archive Formats" reads a 7z's contents with the installer's
+# own decoder.)
+add_library(sieve_compare STATIC tools/cli/compare.cpp tools/cli/pack.cpp tools/cli/train.cpp tools/cli/diffusion_run.cpp tools/cli/model_folder.cpp
+    client/unpack_7z.cpp)
+target_include_directories(sieve_compare PUBLIC tools PRIVATE client)
+target_link_libraries(sieve_compare PUBLIC sieve_core sieve_locate PRIVATE ${SIEVE_ZLIB} ${SIEVE_LZMA} sieve_lzma)
 if(SIEVE_LZMA_INCLUDE)
     target_include_directories(sieve_compare SYSTEM PRIVATE ${SIEVE_LZMA_INCLUDE})
 endif()

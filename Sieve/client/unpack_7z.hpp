@@ -47,6 +47,15 @@ struct SevenZip
 // any name in it could reach outside the folder it unpacks into (absolute, a drive, or a ".." part).
 SevenZip list_7z(const std::vector<uint8_t>& archive);
 
+// Every entry with its bytes, in memory, in the archive's order (the paths as list_7z gives them):
+// for Sieve instructions that carry an archive as its contents ("Optimise Archive Formats").
+struct InMemory
+{
+    Unpacked entry;
+    std::vector<uint8_t> bytes; // a file's
+};
+std::vector<InMemory> read_7z(const std::vector<uint8_t>& archive);
+
 // Unpacks into `dest` (made if need be). Files already there are refused unless `force`.
 // `progress(done, total, path)` is told of each file as it is written. If `cancel` becomes true, or
 // anything fails, what was written so far is removed again, the folders made included; a cancel

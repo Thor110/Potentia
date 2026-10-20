@@ -3518,6 +3518,22 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   then unevenly spread bytes, cut within a block of where the text ends, smaller than v12 and xz,
   all three readers, refused when called v12).
 
+### `sieve-manifest-v14`: Optimise Archive Formats (20 October 2026)
+- **Edward asked** for one box, off by default (VOICES), and noted another for later: size and
+  decoding time as one setting, for `.sieve` files served on the internet (IDEAS §19.89).
+- **Built:** `--optimise-archives` and the File Locator's "Optimise Archive Formats" box (key A,
+  kept in `sieve-hallway.ini` `[locator] optimise_archives`). xz remade exactly (liblzma's
+  streaming encoder; the single-call one writes block sizes xz does not); 7z as its contents
+  (the installer's decoder, now also in `sieve_compare`, with `read_7z` reading into memory);
+  each only where clearly smaller. `pi6.txt.xz` 507,092 → 419,117; `pi6.7z` 507,182 → 419,128.
+- **The remake depends on the compressor:** instructions made by one build remake on another
+  only where its liblzma writes the same; installing checks it, and says so where not. A release
+  built with the fetched liblzma (`SIEVE_FETCH_COMPRESSION`) pins it.
+- **Not yet:** gzip (GNU gzip is not zlib), zip, multi-block xz.
+- **New file:** `tests/optimise_fixture.7z` (10,513 bytes), for CI: no 7z tool is assumed there.
+- **Checked here:** the full build, the unit suite, the hallway CI step whole (new: an xz remade,
+  the 7z as contents, nothing changed with the box off, sieve-install refusing, v13 refused).
+
 ### For the next session (17 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show

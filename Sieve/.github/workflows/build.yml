@@ -1273,6 +1273,51 @@ jobs:
           if build/sieve install mixed-as-v12.manifest --to mixed_bad > /dev/null 2>&1; then exit 1; fi
           if python reference/sieve_ref.py unpack mixed-as-v12.manifest --to mixed_bad > /dev/null 2>&1; then exit 1; fi
           test ! -e mixed_bad
+          # sieve-manifest-v14, "Optimise Archive Formats" (--optimise-archives; the File Locator's box):
+          # off by default, and then nothing changes. Ticked, an xz file is remade exactly from what it
+          # holds (liblzma, as the xz program writes it) and a 7z (tests/optimise_fixture.7z: 20 blocks
+          # of the pi-like table above, 22,222 bytes in 10,513) is carried as its contents, in a folder
+          # named after it, installing saying so; each only where clearly smaller. Sieve and the oracle
+          # give the same; sieve-install, which has no compressor, asks for Sieve; called v13, refused.
+          rm -rf arch arch_inst arch_oracle arch_si arch_bad && mkdir -p arch/x
+          cp tests/optimise_fixture.7z arch/digits.7z
+          python -c "
+          s = 314159
+          def r():
+              global s
+              s = (s * 1103515245 + 12345) % 2147483648
+              return (s >> 16) % 10
+          def table(blocks):
+              out = []
+              for block in range(blocks):
+                  for line in range(20):
+                      groups = [''.join(str(r()) for _ in range(10)) for _ in range(5)]
+                      out.append(' '.join(groups) + (' ' if line % 2 == 0 else ''))
+                  out.append('\x0c' if block % 10 == 9 else '')
+              return ('\n'.join(out) + '\n').encode()
+          open('arch-digits.txt', 'wb').write(table(20))
+          s = 271828
+          open('arch/x/table.txt', 'wb').write(table(60))
+          "
+          xz -9 arch/x/table.txt
+          build/sieve locate arch --installer arch_off.sieve --items | tr -d '\r' > arch_off.txt
+          if grep -q "sieve-manifest-v14\|^remade\|^unpacked" arch_off.txt; then exit 1; fi
+          build/sieve locate arch --installer arch.sieve --items --optimise-archives --manifest arch.manifest | tr -d '\r' > arch.txt
+          q "^remade    1 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v14)$" arch.txt
+          q "^unpacked  1 archive(s) carried as their contents, not as the archives (Optimise Archive Formats; sieve-manifest-v14)$" arch.txt
+          [ "$(wc -c < arch.sieve)" -lt "$(wc -c < arch_off.sieve)" ]
+          build/sieve install arch.sieve --to arch_inst | tr -d '\r' > arch_inst.txt
+          q "^note      digits.7z (7z, 10513 bytes) was carried as its contents (Optimise Archive Formats): digits holds them, not the archive itself$" arch_inst.txt
+          cmp arch/x/table.txt.xz arch_inst/x/table.txt.xz
+          cmp arch-digits.txt arch_inst/digits/digits.txt
+          test ! -e arch_inst/digits.7z
+          python reference/sieve_ref.py unpack arch.manifest --to arch_oracle | tr -d '\r' | q "^unpacked	7z	10513	digits.7z	digits$"
+          diff -r arch_inst arch_oracle
+          if build/sieve-install arch.sieve --to arch_si --yes > /dev/null 2>&1; then exit 1; fi
+          sed '1s/v14/v13/' arch.manifest > arch-as-v13.manifest
+          if build/sieve install arch-as-v13.manifest --to arch_bad > /dev/null 2>&1; then exit 1; fi
+          if python reference/sieve_ref.py unpack arch-as-v13.manifest --to arch_bad > /dev/null 2>&1; then exit 1; fi
+          test ! -e arch_bad
           # (each file is named by its item's title; the report says which file each degree gave)
           $H --no-menu --press "X,Tab,9,0,Return" --take --save-item p90.txt --screenshot degp.png > /dev/null
           cmp p90.txt "degrees/$(sed -n 's/^pages 090 //p' deg.txt)"

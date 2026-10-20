@@ -35,12 +35,12 @@ std::string u8(const fs::path& p)
 // A single file's Sieve instructions, from the bytes already read: as a folder holding just it,
 // packed, its items of Sieve's lines carried as their places where that makes it smaller, and the
 // file pulled tight by the rope (searched for `rope_seconds`, 0: no limit) where that does.
-cli::Manifest file_instructions(const fs::path& p, const std::vector<uint8_t>& bytes, const cli::Args& items, double rope_seconds)
+cli::Manifest file_instructions(const fs::path& p, const std::vector<uint8_t>& bytes, const cli::Args& items, double rope_seconds, bool archives)
 {
     cli::Manifest m = cli::manifest_of_file(p);
     m.contents = bytes;
     m.with_contents = true;
-    cli::add_packed_items(m, p.parent_path(), items, nullptr, 8, false, rope_seconds);
+    cli::add_packed_items(m, p.parent_path(), items, nullptr, 8, false, rope_seconds, 4, true, true, archives);
     return m;
 }
 
@@ -90,6 +90,17 @@ KeptSearch& kept_search()
     return k;
 }
 
+struct KeptArchives
+{
+    bool on = false;
+    std::function<void(bool)> changed;
+};
+KeptArchives& kept_archives()
+{
+    static KeptArchives k;
+    return k;
+}
+
 } // namespace
 
 void FileLocator::remember_search(double seconds, bool total, std::function<void(double, bool)> changed)
@@ -97,10 +108,15 @@ void FileLocator::remember_search(double seconds, bool total, std::function<void
     kept_search() = {seconds, total, std::move(changed)};
 }
 
+void FileLocator::remember_archives(bool on, std::function<void(bool)> changed) { kept_archives() = {on, std::move(changed)}; }
+
+void FileLocator::set_archives(bool on) { optimise_archives_ = on; }
+
 FileLocator::FileLocator(SDL_Window* window, SDL_Renderer* renderer, Host host) : window_(window), r_(renderer), host_(std::move(host))
 {
     (kept_search().total ? search_total_ : search_per_file_) = kept_search().seconds;
     search_by_total_ = kept_search().total;
+    optimise_archives_ = kept_archives().on;
     relink_search();
 }
 
@@ -188,7 +204,8 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
     // counted, once they are.
     const double per_file = search_per_file_, total = search_total_;
     const bool by_total = search_by_total_;
-    auto job = [this, path, tailor, per_file, total, by_total] {
+    const bool archives = optimise_archives_;
+    auto job = [this, path, tailor, per_file, total, by_total, archives] {
         Result r;
         r.path = path;
         try
@@ -209,7 +226,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 c.address_hex = a.is_zero() ? 0 : r.hex.size();
                 // Its Sieve instructions, as a folder's: its name, size and SHA-256, then its bytes.
                 r.manifest = cli::manifest_of_file(p);
-                const cli::Manifest fi = file_instructions(p, r.bytes, host_.item_args ? host_.item_args() : cli::Args{}, by_total ? total : per_file);
+                const cli::Manifest fi = file_instructions(p, r.bytes, host_.item_args ? host_.item_args() : cli::Args{}, by_total ? total : per_file, archives);
                 const std::vector<uint8_t> mb = fi.file();
                 c.packed = fi.packed;
                 c.version = fi.version();
@@ -244,7 +261,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                     size_t n = 0;
                     for (const auto& e : r.manifest.entries) n += e.dir ? 0 : 1;
                     cli::add_packed_items(with, p, host_.item_args ? host_.item_args() : cli::Args{}, nullptr, 8, false,
-                                          by_total ? cli::budget_per_file(total, n) : per_file);
+                                          by_total ? cli::budget_per_file(total, n) : per_file, 4, true, true, archives);
                 }
                 c.packed = with.packed;
                 c.version = with.version();
@@ -321,7 +338,8 @@ void FileLocator::save(const std::string& to)
     const int what = save_what_;
     const Result r = result_;
     const double rope_seconds = search_per_file_; // the rope's time for each file, as the search row sets it
-    worker_ = std::thread([this, what, r, to, rope_seconds] {
+    const bool archives = optimise_archives_;
+    worker_ = std::thread([this, what, r, to, rope_seconds, archives] {
         std::string done;
         try
         {
@@ -329,8 +347,8 @@ void FileLocator::save(const std::string& to)
             {
                 // A file's instructions are a folder's holding just it (file_instructions).
                 const cli::Args items = host_.item_args ? host_.item_args() : cli::Args{};
-                cli::Manifest with = r.kind == Result::File ? file_instructions(from_u8(r.path), r.bytes, items, rope_seconds) : r.manifest;
-                if (r.kind != Result::File) cli::add_packed_items(with, from_u8(r.path), items, nullptr, 8, false, rope_seconds);
+                cli::Manifest with = r.kind == Result::File ? file_instructions(from_u8(r.path), r.bytes, items, rope_seconds, archives) : r.manifest;
+                if (r.kind != Result::File) cli::add_packed_items(with, from_u8(r.path), items, nullptr, 8, false, rope_seconds, 4, true, true, archives);
                 const BigUint address = cli::binary_address(with.file());
                 // The installer on its own (for anyone with Sieve: sieve install, or sieve-install),
                 // or an installer program, sieve-install with it attached, one file for anyone.
@@ -408,6 +426,7 @@ void FileLocator::event(const SDL_Event& e)
         // The search's time: [ and ] a file, with Shift the run.
         case SDLK_LEFTBRACKET: pressed = (e.key.mod & SDL_KMOD_SHIFT) ? "search_run_less" : "search_file_less"; break;
         case SDLK_RIGHTBRACKET: pressed = (e.key.mod & SDL_KMOD_SHIFT) ? "search_run_more" : "search_file_more"; break;
+        case SDLK_A: pressed = "archives"; break; // Optimise Archive Formats, on or off
         case SDLK_RETURN:
         case SDLK_KP_ENTER: pressed = result_.kind == Result::File && in_world() ? "go" : ""; break;
         default: break;
@@ -424,6 +443,12 @@ void FileLocator::event(const SDL_Event& e)
     else if (pressed == "search_file_more") step_search(false, 1);
     else if (pressed == "search_run_less") step_search(true, -1);
     else if (pressed == "search_run_more") step_search(true, 1);
+    else if (pressed == "archives")
+    {
+        optimise_archives_ = !optimise_archives_;
+        kept_archives().on = optimise_archives_;
+        if (kept_archives().changed) kept_archives().changed(optimise_archives_);
+    }
     else if (pressed == "use_filters" && result_.tailored_filters)
     {
         // As Return on COST does: the settings saved, and a hallway built with them (in the world)
@@ -534,6 +559,10 @@ void FileLocator::draw(float W, float H)
         draw_text(r_, bx, row_y + 8, run, 1, white);
         bx += text_width(run, 1) + 12;
         button("search_run_more", "+", row_y);
+        // Optimise Archive Formats, under it: a box, off unless ticked (what installing gives back
+        // changes for an archive carried as its contents, so it is never on by itself).
+        bx = 20;
+        button("archives", std::string(optimise_archives_ ? "[x] " : "[ ] ") + tr("loc.archives"), row_y + 40);
     };
     if (!busy && r.kind == Result::None && r.error.empty())
     {
@@ -617,7 +646,7 @@ void FileLocator::draw(float W, float H)
         {
             search_row(y + 40);
             bx = 20;
-            button("tailor", tr("loc.tailor"), y + 80);
+            button("tailor", tr("loc.tailor"), y + 120);
         }
         else if (r.tailored_filters) button("use_filters", tr("loc.use_filters"), y + 40);
     }

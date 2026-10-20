@@ -948,6 +948,10 @@ const std::vector<Page>& pages()
                       "of the AI line as its weights' digits, not its file's floats. The pages are\n"
                       "--page-length characters of --alphabet; the AI line is --ai-layers, --ai-width,\n"
                       "--ai-heads and --ai-bits (Micro without them)."},
+          {"--optimise-archives", "With --items: Optimise Archive Formats (sieve-manifest-v14). An .xz is carried as what\n"
+                                  "it holds and remade exactly on installing; a .7z is carried as its contents, in a\n"
+                                  "folder named after it (installing says so: the archive itself is not given back);\n"
+                                  "each only where clearly smaller. Off unless given."},
           {"--v12", "With --items: as sieve-manifest-v12 at newest, no file cut into pieces."},
           {"--v11", "With --items: as sieve-manifest-v11 at newest, an empty stream's line kept and the files\n"
                     "always packed by LZMA2."},

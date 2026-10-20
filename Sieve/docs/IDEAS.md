@@ -1377,6 +1377,16 @@ fits. CHAT stays where it is, on the AI line, where the item in hand is the mode
 from any line can still be given to it there (the plus button, Ctrl+O). The rest of §19.80 stands:
 a tab with a use belongs on every line, as HELP now is.
 
+**17.3 Size and decoding time as one setting (Edward, 20 October 2026; deprecated for now).** The
+proposal (§19.89): a File Locator box that optimises a set of `.sieve` files for size and decoding
+time together, as one parameter, for use as a format for the internet; the ways differ in the time
+they take to undo (an item made again from its line, the rope's columns, LZMA2, a file carried as
+it is), so it would choose, file by file, the smallest way whose decoding stays within a time.
+Edward set it aside: as he recalls, decoding takes fractions of a second, while what takes seconds
+is loading and working in the hallway itself, which this would not touch; so there is little to
+trade. In the far future, he says, the deprecated ideas can be looked back over, to see whether any
+still stand out as worthwhile. (Not measured here: what each way takes to decode.)
+
 ## 18. Edward's ideas of 11 October 2026
 
 **18.1 Random maze generators as distortion filters.** Edward's words: random maze generators used
@@ -3873,7 +3883,7 @@ them be given less weight than his own messages, so it is left out here.
     bytes against LZMA2's 623,717; on a made sine, the sine's own period (a width of 2,639
     values, 21 cycles).
   - `sieve rope FILE` searches, codes and checks; `sieve-manifest-v8` carries a file so where it
-    is smaller than LZMA2 makes it; the oracle decodes both apart.
+    is smaller than LZMA2 makes it; the oracle, written apart from Sieve's code, decodes both.
   - Across all dimensions, as Edward asked: it takes any file's bytes, so it serves the binary
     line, and through it every file. *Not yet:* the other lines' places coded by it (a line's
     units are its digits, its width the line's own).
@@ -3905,15 +3915,14 @@ them be given less weight than his own messages, so it is left out here.
     and a line feed on the next, which counting by column cannot see; about 900 its blank lines
     and form feeds. *Proposed next:* a byte's context taken from the byte above it (the same
     column on the line before), which would see the alternation.
-- **Next (proposed):** take the propagating form further (more phases, a wave per line fitted to
-  more points, value lengths of 16 and 32 for sound and floats) on raw pictures and sound, the
-  files where it can win, and if it holds, make it a way to carry such a file in the
-  instructions. *The first step, as first proposed:* a measurement before a filter. On a handful of files of different
-  kinds (a WAV or MIDI, a mono picture, a text, a model), fit waves of a few simple families (a
-  constant, a line, a repeating wave pinned at four points) by value type and length, subtract,
-  and set the residuals' histogram-coded size, plus the wave's parameters, against the file's
-  own size and against LZMA2. If a family wins on some kind of file, it becomes a versioned filter
-  (`rope-wave-v1`) and a way to carry a file in the instructions; if not, the measurement says so.
+- **As first proposed (done since):** a measurement before a filter: on a handful of files of
+  different kinds, fit waves of a few simple families by value type and length, subtract, and set
+  the residuals' histogram-coded size, plus the wave's parameters, against the file's own size and
+  against LZMA2; if a family won on some kind of file, it would become a versioned filter and a way
+  to carry a file in the instructions. The measurements above are that step, and `rope-wave-v1` to
+  `v4` and `sieve-manifest-v8` to `v11` the filter and the way. *Still open:* more phases, a wave
+  fitted per line, value lengths of 16 and 32 for sound and floats, the byte above as a byte's
+  context (above), and the other lines' places coded by it.
 
 **19.88 Other compression schemes layered in, last (Edward, 19 October 2026).** His rule: the
 layering of other compression schemes and ways of saving takes a back seat, to be among the last
@@ -3949,7 +3958,7 @@ lost:
   headers and tables) and the rope how unevenly the bytes are spread, and 7z leaves what it cannot
   pack as it is, so the rope still finds that in the 7z. The two gains nearly add up (12,248 and
   17,194 against 26,995). A file's instructions could take both, LZMA2's matches and the rope's
-  coding together (not measured).
+  coding together: done the next day, below.
 - **Done, in Sieve's own ways (`sieve-manifest-v13`, 20 October 2026):** with his originals
   (uploaded in a zip) the split was plain: the first photo's metadata, 17,733 bytes, packs by
   LZMA2 to 4,678 and its picture, 4,121,949 bytes, not at all, while the rope's counts take the
@@ -3961,4 +3970,26 @@ lost:
   Formats"**, off by default (a command-line flag to match): an archive remade exactly where
   Sieve can, else carried as its contents, said plainly in the instructions and on installing.
   Off, every file comes back byte for byte as now. Testing against 7z and others stays a
-  measurement, never a part of Sieve. Not started.
+  measurement, never a part of Sieve. **Started 20 October 2026 (`sieve-manifest-v14`):**
+  - **xz, remade exactly:** what it holds carried (pulled tight as any file), and the file remade
+    on installing by liblzma's streaming encoder with the preset and check found (the first
+    block's dictionary narrows the presets to try). Measured: every file `xz` 5.4.5 made here at
+    -1, -6 and -9 came back byte for byte. `pi6.txt.xz` (507,092 bytes): 419,117.
+  - **7z, as its contents:** Sieve has 7-Zip's decoder (the installer's) but not its encoder, so a
+    7z is never remade; its contents go in a folder named after it, as `sieve-install` unpacks
+    one, a `u` line saying so and `sieve install` saying so too. A 7z of `pi6.txt` made here
+    (507,182 bytes): 419,128.
+  - **Only where clearly smaller** (64 bytes and 0.5% under the archive as it is, its contents
+    estimated by LZMA2 and, for one file, the rope): a small 7z, or an xz of text LZMA2 packs as
+    well, stays as it is.
+  - **Not yet:** gzip (GNU gzip's deflate is not zlib's: of three files here, the small one
+    matched zlib and the larger did not, so most would be carried as contents), zip (deflate,
+    each entry), tar inside them; an xz written in several blocks (`xz -T`).
+  - The versions compared: GNU gzip 1.12 against zlib 1.3, and the `xz` program 5.4.5 against the
+    liblzma Sieve was built with here.
+
+**19.89 ~~Sieve instructions for the internet: size and decoding time as one setting~~ (Edward, 20
+October 2026; deprecated for now, §17.3).** Another box: optimise for file size and decoding time
+together, as one parameter, to make a set of `.sieve` files fit to serve as a format for the
+internet. Set aside the same day: Edward recalls decoding as taking fractions of a second, so
+there is little time to trade for size.
