@@ -1,0 +1,83 @@
+sieve-metrics-v1
+date = 2026-10-20T17:00:26Z
+commit = 844829077af3+changes
+version = 0.13.25
+machine = Windows 10 AMD64
+machine_profile = edward-1
+cpu = 11th Gen Intel(R) Core(TM) i5-11400F @ 2.60GHz
+logical_processors = 12
+memory_gb = 32
+gpu = NVIDIA GeForce RTX 3060
+kind = release
+unit_seconds = 437.2
+unit_checks = 153210
+unit_builds = x64-Release
+vector_files = 37
+voices = 56
+ideas = 166
+spec_sections = 57
+commands = 20
+source_files = 237
+source_lines = 89247
+kept_log10_binary = -4.34
+kept_log10_image = -0.000020
+kept_log10_pages = -0.00062
+kept_log10_books = -0.0032
+kept_log10_audio = 0.00
+kept_log10_tracks = -0.00064
+kept_log10_video = -0.000020
+kept_log10_movies = -0.00072
+kept_log10_models = -21.47
+kept_log10_worlds = -85.90
+kept_log10_ai = -145.65
+hallway-metrics
+Sieve 0.13.25: how much of each line its filters remove
+Filters: reference-filters.ini (SHA-256 aa78cf12db868b23e0ff81d843da7cc28ef0ab2d5c3c9b8c2d9260b756ad7195)
+Filter memory: 3072 MB
+
+Binary : 99.9954%              ( Kept : 10^-4.34 )
+Image  : 0.0045%               ( Kept : 10^-0.000020 )
+Pages  : 0.1%                  ( Kept : 10^-0.00062 )
+Books  : 0.7%                  ( Kept : 10^-0.0032 )
+Audio  : 0.000000000000...%    ( Kept : 10^0.00 )
+Tracks : 0.1%                  ( Kept : 10^-0.00064 )
+Video  : 0.0045%               ( Kept : 10^-0.000020 )
+Movies : 0.1%                  ( Kept : 10^-0.00072 )
+Models : 99.999999999999...%   ( Kept : 10^-21.47 )
+Worlds : 99.999999999999...%   ( Kept : 10^-85.90 )
+AI     : 99.999999999999...%   ( Kept : 10^-145.65 )
+
+Shapes (the setup menu's settings):
+Binary : title*files<=32B = ~10^122.9
+Image  : title*2^100 = ~10^75.9
+Pages  : title*27^32 = ~10^91.6
+Books  : cov*pg^5 = ~10^259.1
+Audio  : cov*title*104^16 = ~10^108.2
+Tracks : cov*title*au^4 = ~10^205.0
+Video  : cov*title*2^200 = ~10^136.1
+Movies : cov*title*vid^4 = ~10^316.7
+Models : title*16^24*8^36 = ~10^107.2
+Worlds : cov*title*(model*12288)^4 = ~10^337.9
+AI     : (2^B)^(256H+16LH^2), B=4 L=1 H=16: 16^8192 = ~10^9864.2
+
+Orderings (bits an address saves against positional order):
+Positional and scrambled : 0 bits, on every line and for every unit (each numbers the whole line once)
+Binary : compact 14.41 bits off every survivor (of 408.2), under these filters
+Image  : compact 0.000066 bits off every survivor (of 252.2), under these filters
+Pages  : compact 0.002059 bits off every survivor (of 304.3), under these filters
+Books  : compact 0.01 bits off every survivor (of 860.8), under these filters
+Audio  : compact 0.000000 bits off every survivor (of 359.4), under these filters
+Tracks : compact 0.002126 bits off every survivor (of 681.0), under these filters
+Video  : compact 0.000066 bits off every survivor (of 452.2), under these filters
+Movies : compact 0.002391 bits off every survivor (of 1052.2), under these filters
+Models : compact 71.34 bits off every survivor (of 356.2), under these filters
+Worlds : compact 285.35 bits off every survivor (of 1122.5), under these filters
+AI     : compact 483.84 bits off every survivor (of 32768.0), under these filters
+Pages  : guided: no minimum. A page's address is 0.0 to 514.0 bits (positional 152.2): up to 152.1 bits shorter, or up to 361.8 longer
+Pages  : guided on reference-text.txt (SHA-256 eaab7a54b96e818a..., 29 pages): 63.2 bits a page on average, 88.9 shorter (1.98 bits a character, positional 4.75)
+
+Models trained by Sieve, against their files (bits):
+universalbibliothek (ai/L1/H16/A2/F64/B4/V256/key=sieve/aispace-v1; the line's id, which a reader must be given too, is 360 bits):
+  trained: address 32,768; file 272,576 (model.safetensors, as F saves it); deflate 58,256; LZMA2 44,608: the address is 12.0% of the file, 73.5% of LZMA2's
+  random : address 32,768; file 272,576 (model.safetensors, as F saves it); deflate 59,600; LZMA2 45,056: the address is 12.0% of the file, 72.7% of LZMA2's
+  every model of this line has an address of 32,768 bits, trained or not: the file keeps each 4-bit weight as a 32-bit float

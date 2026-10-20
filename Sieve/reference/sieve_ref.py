@@ -6117,7 +6117,7 @@ def v7_listing(data):
     import lzma
     version = data[:data.index(b"\n") + 1] if b"\n" in data[:24] else b""
     if version not in (b"sieve-manifest-v7\n", b"sieve-manifest-v8\n", b"sieve-manifest-v9\n", b"sieve-manifest-v10\n",
-                       b"sieve-manifest-v11\n") or \
+                       b"sieve-manifest-v11\n", b"sieve-manifest-v12\n") or \
             not data[len(version):].startswith(b"listing "):
         return data
     head = version + b"listing "
@@ -6141,17 +6141,23 @@ def cmd_unpack_v7(args, data):
     at, root = 1, None
     if lines[at].startswith("root "):
         root, at = lines[at][5:], at + 1
-    v11 = lines[0] == "sieve-manifest-v11"  # v10 whose rope ways may be rope-wave-v4's (columns sharing tables)
+    # v11 with no line for an empty items or rope stream, and the lzma2 stream perhaps carried as it is
+    v12 = lines[0] == "sieve-manifest-v12"
+    v11 = lines[0] == "sieve-manifest-v11" or v12  # v10 whose rope ways may be rope-wave-v4's (columns sharing tables)
     v10 = lines[0] == "sieve-manifest-v10" or v11  # v9 whose rope ways may be rope-wave-v3's (columns by line)
     v9 = lines[0] == "sieve-manifest-v9" or v10  # v8 whose rope ways may be rope-wave-v2's (columns)
     v8 = lines[0] == "sieve-manifest-v8" or v9  # v7 with files carried by rope-wave-v1, in a fourth stream
-    streams = {"x86": (0, 0, 0), "lzma2": (0, 0, 0), "rope": (0, 0, 0)}
+    streams = {"x86": (0, 0, 0), "lzma2": (0, 0, 0), "items": (0, 0, 0), "rope": (0, 0, 0)}
     for name in ("x86", "lzma2", "items", "rope"):
         if lines[at].startswith(f"stream {name} "):
             streams[name] = tuple(int(x) for x in lines[at].split(" ")[2:])
             at += 1
-        elif name == "items" or (name == "rope" and v8):
+        elif not v12 and (name == "items" or (name == "rope" and v8)):
             sys.exit(f"no {name} stream")
+    if streams["x86"][0] and streams["x86"][2] == 0:
+        sys.exit("the x86 stream is never carried as it is")
+    if streams["lzma2"][0] and streams["lzma2"][2] == 0 and (not v12 or streams["lzma2"][0] != streams["lzma2"][1]):
+        sys.exit("the lzma2 stream is carried as it is only in sieve-manifest-v12, and then at its own size")
     if streams["rope"][0] != streams["rope"][1] or streams["rope"][2] != 0:
         sys.exit("the rope stream is carried as it is")
     item_lines, widths, coded = [], [], []
@@ -6181,7 +6187,8 @@ def cmd_unpack_v7(args, data):
         return out
 
     x86 = decode(payload[:sx[0]], sx[1], sx[2], True)
-    plain = decode(payload[sx[0]:sx[0] + sl[0]], sl[1], sl[2], False)
+    # v12: the lzma2 stream carried as it is at dictionary 0.
+    plain = payload[sx[0]:sx[0] + sl[0]] if sl[0] and sl[2] == 0 else decode(payload[sx[0]:sx[0] + sl[0]], sl[1], sl[2], False)
     carried = payload[sx[0] + sl[0]:sx[0] + sl[0] + si[0]]
     ropes = payload[sx[0] + sl[0] + si[0]:]
     places = carried if si[2] == 0 else decode(carried, si[1], si[2], False)
@@ -6278,7 +6285,7 @@ def cmd_unpack(args):
     import lzma
     data = open(args.manifest, "rb").read()
     if data.startswith((b"sieve-manifest-v7\n", b"sieve-manifest-v8\n", b"sieve-manifest-v9\n", b"sieve-manifest-v10\n",
-                        b"sieve-manifest-v11\n")):
+                        b"sieve-manifest-v11\n", b"sieve-manifest-v12\n")):
         return cmd_unpack_v7(args, data)
     end = data.index(b"\nend\n") + len(b"\nend\n")
     lines = data[:end].decode("utf-8").split("\n")[:-1]

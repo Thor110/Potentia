@@ -55,6 +55,13 @@ std::vector<uint8_t> unpack_stream(std::span<const uint8_t> packed, const Packed
         if (!packed.empty() && !(packed.size() == 1 && packed[0] == 0)) throw std::runtime_error("the installer's packed files are damaged");
         return out;
     }
+    if (s.dictionary == 0)
+    {
+        // v12: carried as it is (only the lzma2 stream; the reader checks that).
+        if (x86 || packed.size() != out.size()) throw std::runtime_error("the installer's packed files are damaged");
+        std::copy(packed.begin(), packed.end(), out.begin());
+        return out;
+    }
     SizeT out_len = out.size(), in_len = packed.size();
     ELzmaStatus status;
     const SRes r = Lzma2Decode(out.data(), &out_len, packed.data(), &in_len, lzma2_property(s.dictionary), LZMA_FINISH_END, &status, &kLzmaAlloc);
@@ -277,7 +284,7 @@ std::string manifest_path(const fs::path& p, const fs::path& root)
 
 const char* Manifest::version() const
 {
-    return rope_groups ? kRopeGroupsManifestVersion : rope_lines ? kRopeLinesManifestVersion : rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
+    return trimmed ? kTrimmedManifestVersion : rope_groups ? kRopeGroupsManifestVersion : rope_lines ? kRopeLinesManifestVersion : rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
          : with_contents ? kInstallManifestVersion : with_addresses ? kAddressManifestVersion : kManifestVersion;
 }
 
@@ -325,7 +332,7 @@ std::string Manifest::text() const
         if (!one_file_root()) t += "root " + root + "\n";
         if (x86.packed) t += stream_line("x86", x86);
         if (lzma2.packed) t += stream_line("lzma2", lzma2);
-        t += stream_line("items", item_stream);
+        if (!trimmed || item_stream.packed || item_stream.bytes) t += stream_line("items", item_stream); // v12: none where empty
         if (roped) t += stream_line("rope", rope_stream);
         for (size_t k = 0; k < lines.size(); ++k)
             t += "line " + std::to_string(k) + " " + (line_codings.at(k).empty() ? std::to_string(line_widths.at(k)) : line_codings[k]) + " " + lines[k] + "\n";
@@ -565,7 +572,7 @@ Manifest Manifest::parse(std::string_view whole)
     // v7 with its listing carried as LZMA2: unpacked, and read as the text it is.
     // (v7, v8 and v9 alike: their first line, then "listing ...")
     std::string packed_version;
-    for (const char* v : {kCompactManifestVersion, kRopeManifestVersion, kRopeColumnsManifestVersion, kRopeLinesManifestVersion, kRopeGroupsManifestVersion})
+    for (const char* v : {kCompactManifestVersion, kRopeManifestVersion, kRopeColumnsManifestVersion, kRopeLinesManifestVersion, kRopeGroupsManifestVersion, kTrimmedManifestVersion})
         if (whole.substr(0, std::string(v).size() + 9) == std::string(v) + "\nlisting ") packed_version = v;
     if (!packed_version.empty())
     {
@@ -629,6 +636,8 @@ Manifest Manifest::parse(std::string_view whole)
         m.rope_lines = m.rope_columns = m.roped = m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] == kRopeGroupsManifestVersion)
         m.rope_groups = m.rope_lines = m.rope_columns = m.roped = m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
+    else if (lines[0] == kTrimmedManifestVersion)
+        m.trimmed = m.rope_groups = m.rope_lines = m.rope_columns = m.roped = m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] != kManifestVersion) throw std::runtime_error("not a sieve manifest (" + lines[0].substr(0, 40) + ")");
     if (m.packed) m.streams.assign(whole.begin() + std::ptrdiff_t(after), whole.end());
     else if (m.with_contents) m.contents.assign(whole.begin() + std::ptrdiff_t(after), whole.end());
@@ -651,9 +660,15 @@ Manifest Manifest::parse(std::string_view whole)
         if (root_given) m.root = lines[first++].substr(5);
         if (next_is("stream x86 ")) m.x86 = stream_of(lines[first++].substr(11), "x86");
         if (next_is("stream lzma2 ")) m.lzma2 = stream_of(lines[first++].substr(13), "lzma2");
-        m.item_stream = stream_of(field(lines.at(first++), "stream items"), "items");
+        // Only v12 carries the lzma2 stream as it is (dictionary 0); the x86 stream never is.
+        if ((m.x86.packed && m.x86.dictionary == 0) || (m.lzma2.packed && m.lzma2.dictionary == 0 && (!m.trimmed || m.lzma2.packed != m.lzma2.bytes)))
+            throw std::runtime_error("manifest: a stream carried as it is where its version has none");
+        // v12: no items line where there are no items.
+        if (m.trimmed && !next_is("stream items ")) m.item_stream = PackedStream{0, 0, 0};
+        else m.item_stream = stream_of(field(lines.at(first++), "stream items"), "items");
         if ((m.item_stream.dictionary == 0 && m.item_stream.packed != m.item_stream.bytes) || m.item_stream.packed > m.streams.size())
             throw std::runtime_error("manifest: its items stream's line does not fit what it carries");
+        if (m.trimmed && !next_is("stream rope ")) m.roped = false; // v12: no rope line where no file is pulled tight
         if (m.roped)
         {
             // v8: the rope stream, carried as it is (its codes are coded already).
@@ -700,6 +715,7 @@ Manifest Manifest::parse(std::string_view whole)
             char extra = 0;
             if (std::sscanf(v.c_str(), "%llu %llu %llu%c", &packed, &bytes, &dictionary, &extra) != 3 || dictionary > 0xFFFFFFFFull)
                 throw std::runtime_error(std::string("manifest: its ") + name + " stream's line is not three numbers");
+            if (packed && dictionary == 0) throw std::runtime_error(std::string("manifest: its ") + name + " stream is carried as it is, which only v12 does");
             *s = PackedStream{packed, bytes, uint32_t(dictionary)};
         }
         // v6: the items stream (its places, raw at dictionary 0, else LZMA2), the last of what

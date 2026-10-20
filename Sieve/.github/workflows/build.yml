@@ -1120,7 +1120,8 @@ jobs:
           # tables alone, the digits about log2(10) bits each. Smaller than LZMA2; the oracle decodes it
           # its own way; as instructions it is sieve-manifest-v9 (--v9), installed by all three readers.
           # rope-wave-v4: the search groups the columns (the digits' share one table): smaller again,
-          # sieve-manifest-v11, installed by all three readers.
+          # sieve-manifest-v12 (no items, so no items line), installed by all three readers; --v11 makes
+          # v11 again, a line longer.
           rm -rf digits digits_inst digits_oracle digits_si digits_inst9 digits_oracle9 digits_si9 && mkdir digits
           python -c "
           s = 271828
@@ -1142,13 +1143,17 @@ jobs:
           [ "$(wc -c < table.rope)" -lt "$(wc -c < table2.rope)" ]
           python reference/sieve_ref.py rope-unpack table2.rope --params "${tparams% G1}" --size 222000 --out table2.back > /dev/null
           cmp digits/table.txt table2.back
-          build/sieve locate digits --installer digits.sieve --items --manifest digits.manifest | tr -d '\r' | q "^rope      1 file(s) pulled tight by rope-wave-v1 to v4 (222000 bytes, carried in [0-9]*; sieve-manifest-v11)"
+          build/sieve locate digits --installer digits.sieve --items --manifest digits.manifest | tr -d '\r' | q "^rope      1 file(s) pulled tight by rope-wave-v1 to v4 (222000 bytes, carried in [0-9]*; sieve-manifest-v12)"
           build/sieve install digits.sieve --to digits_inst > /dev/null
           diff -r digits digits_inst
           python reference/sieve_ref.py unpack digits.manifest --to digits_oracle > /dev/null
           diff -r digits digits_oracle
           build/sieve-install digits.sieve --to digits_si --yes > /dev/null
           diff -r digits digits_si
+          build/sieve locate digits --installer digits11.sieve --items --v11 --manifest digits11.manifest | tr -d '\r' | q "; sieve-manifest-v11)"
+          [ "$(wc -c < digits.sieve)" -lt "$(wc -c < digits11.sieve)" ]
+          rm -rf digits_oracle11 && python reference/sieve_ref.py unpack digits11.manifest --to digits_oracle11 > /dev/null
+          diff -r digits digits_oracle11
           build/sieve locate digits --installer digits9.sieve --items --v9 --manifest digits9.manifest | tr -d '\r' | q "^rope      1 file(s) pulled tight by rope-wave-v1 and v2 (222000 bytes, carried in [0-9]*; sieve-manifest-v9)"
           [ "$(wc -c < digits.sieve)" -lt "$(wc -c < digits9.sieve)" ]
           build/sieve install digits9.sieve --to digits_inst9 > /dev/null
@@ -1161,7 +1166,8 @@ jobs:
           # 55 and 54 bytes, a blank line after every twenty and a form feed in every tenth, which shift
           # any fixed width. Counted by the column in each line, it is near the digits' floor (100,000
           # digits: 41,525 bytes) and below LZMA2; sieve-manifest-v10 (--v10); all three readers give it
-          # back. rope-wave-v4: the columns grouped, smaller again; sieve-manifest-v11, all three readers.
+          # back. rope-wave-v4: the columns grouped, smaller again; sieve-manifest-v12 (v11 with no items
+          # line), all three readers.
           rm -rf lines lines_inst lines_oracle lines_si lines_inst10 lines_oracle10 lines_si10 && mkdir lines
           python -c "
           s = 314159
@@ -1188,7 +1194,7 @@ jobs:
           [ "$(wc -c < lines3.rope)" -lt 45525 ] # the digits' floor, 41,525, and 4,000 for the columns' tables
           python reference/sieve_ref.py rope-unpack lines3.rope --params "L8 W56 S1 P0 K0 C2" --size "$(wc -c < lines/pi-like.txt)" --out lines3.back > /dev/null
           cmp lines/pi-like.txt lines3.back
-          build/sieve locate lines --installer lines.sieve --items --manifest lines.manifest | tr -d '\r' | q "; sieve-manifest-v11)"
+          build/sieve locate lines --installer lines.sieve --items --manifest lines.manifest | tr -d '\r' | q "; sieve-manifest-v12)"
           build/sieve install lines.sieve --to lines_inst > /dev/null
           diff -r lines lines_inst
           python reference/sieve_ref.py unpack lines.manifest --to lines_oracle > /dev/null
@@ -1203,6 +1209,36 @@ jobs:
           diff -r lines lines_oracle10
           build/sieve-install lines10.sieve --to lines_si10 --yes > /dev/null
           diff -r lines lines_si10
+          # sieve-manifest-v12: a file LZMA2 cannot make smaller (bytes from a fixed generator, as a
+          # PNG's or a JPEG's are, near enough) carried as it is, its stream "stream lzma2 B B 0"; the
+          # instructions are the file and 153 bytes (v11: 179, with LZMA2's framing and an items line).
+          rm -rf noisy noisy_inst noisy_oracle noisy_si && mkdir noisy
+          python -c "
+          s = 161803
+          out = bytearray()
+          for _ in range(50000):
+              s = (s * 6364136223846793005 + 1442695040888963407) % 2**64
+              out.append(s >> 56)
+          open('noisy/noise.bin', 'wb').write(bytes(out))
+          "
+          build/sieve locate noisy --installer noisy.sieve --items --manifest noisy.manifest | tr -d '\r' > noisy.txt
+          q "^as is     the files packed by LZMA2 carried as they are instead" noisy.txt
+          q "^items     none; sieve-manifest-v12$" noisy.txt
+          head -c 200 noisy.manifest | q -a "^stream lzma2 50000 50000 0$"
+          [ "$(wc -c < noisy.sieve)" -le 50160 ] # the file, its name, size and the tree's SHA-256
+          build/sieve locate noisy --installer noisy11.sieve --items --v11 > /dev/null
+          [ "$(wc -c < noisy.sieve)" -lt "$(wc -c < noisy11.sieve)" ]
+          build/sieve install noisy.sieve --to noisy_inst > /dev/null
+          diff -r noisy noisy_inst
+          python reference/sieve_ref.py unpack noisy.manifest --to noisy_oracle > /dev/null
+          diff -r noisy noisy_oracle
+          build/sieve-install noisy.sieve --to noisy_si --yes > /dev/null
+          diff -r noisy noisy_si
+          # The same instructions called v11, which has neither: refused by Sieve and by the oracle.
+          sed '1s/v12/v11/' noisy.manifest > noisy-as-v11.manifest
+          if build/sieve install noisy-as-v11.manifest --to noisy_bad > /dev/null 2>&1; then exit 1; fi
+          if python reference/sieve_ref.py unpack noisy-as-v11.manifest --to noisy_bad > /dev/null 2>&1; then exit 1; fi
+          test ! -e noisy_bad
           # (each file is named by its item's title; the report says which file each degree gave)
           $H --no-menu --press "X,Tab,9,0,Return" --take --save-item p90.txt --screenshot degp.png > /dev/null
           cmp p90.txt "degrees/$(sed -n 's/^pages 090 //p' deg.txt)"

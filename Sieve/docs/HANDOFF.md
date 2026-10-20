@@ -3485,6 +3485,23 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
     presses Right three times and expects five stages (`hand` still among them); the whole step
     passes here.
 
+### `sieve-manifest-v12`: less around a file's bytes (20 October 2026)
+- **Edward found** a PNG's `.sieve` larger than the PNG. Measured: a PNG at zlib's strongest has
+  nothing left for LZMA2 or the rope, and the instructions added 184 bytes (noise, 270,448) or
+  205 (a photo, 715,596): 168 of listing (19 an empty `stream items 0 0 0`) and 16 of LZMA2's
+  framing on bytes it could not shrink.
+- **`sieve-manifest-v12`:** no line for an empty items or rope stream; the lzma2 stream carried as
+  it is (`stream lzma2 B B 0`) where LZMA2 makes it no smaller. Made only where one applies;
+  `--v11` makes v11. Both PNGs now 145 bytes over the file; `pi6.txt` 419,096 (v11 419,115). The
+  rest is the version, the stream's line, the tree's SHA-256, the file's line and `end`.
+- **His two photos** (IDEAS §19.88): the 7z's `.sieve` beat the JPEG's on both, the two gains
+  nearly adding up; noted, not measured further.
+- **Also fixed:** a v4 to v11 reader now refuses a stream carried at dictionary 0 instead of
+  failing inside LZMA2.
+- **Checked here:** the full build, the unit suite, the hallway CI step whole (new: a file of
+  noise carried as it is, v12 against v11, all three readers, v12's lines refused when called
+  v11; v11 still made with `--v11`).
+
 ### For the next session (17 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show

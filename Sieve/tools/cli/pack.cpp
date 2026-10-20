@@ -112,7 +112,7 @@ std::vector<uint8_t> place_bytes_of(const std::string& hex, uint32_t width)
 } // namespace
 
 void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const ItemFinder* items, bool item_hashes, const PlaceCoder* coder,
-                double rope_seconds, uint32_t rope_newest)
+                double rope_seconds, uint32_t rope_newest, bool trim)
 {
     // Every file's bytes, checked against the walk: from the contents where a v3 manifest has them,
     // else read from the folder (the current one, for a file named without one).
@@ -393,7 +393,15 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     m.x86.packed = px.size();
     m.lzma2.packed = pp.size();
     m.streams = px;
-    m.streams.insert(m.streams.end(), pp.begin(), pp.end());
+    // v12: the files carried as they are where LZMA2 makes them no smaller (a PNG, a JPEG, a 7z).
+    bool lzma2_as_is = false;
+    if (trim && m.compact && !plain.empty() && pp.size() >= plain.size())
+    {
+        lzma2_as_is = true;
+        m.lzma2 = {plain.size(), plain.size(), 0};
+        m.streams.insert(m.streams.end(), plain.begin(), plain.end());
+    }
+    else m.streams.insert(m.streams.end(), pp.begin(), pp.end());
     m.contents.clear();
     for (const auto& b : bytes) m.contents.insert(m.contents.end(), b.begin(), b.end());
     m.packed = m.with_contents = true;
@@ -450,6 +458,11 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         if (m.compact && !item_hashes)
             for (ManifestEntry* f : files) f->sha256 = "-";
         m.tree = tree_sha256(m);
+        // v12, only where it differs from v11: no items line where there are no items, or the
+        // lzma2 stream carried as it is.
+        m.trimmed = trim && m.compact && (lzma2_as_is || (m.item_stream.packed == 0 && m.item_stream.bytes == 0));
+        r.trimmed = m.trimmed;
+        r.lzma2_as_is = lzma2_as_is;
     }
     else
     {
@@ -518,7 +531,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
     };
     if (r.compact)
     {
-        const char* version = r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
+        const char* version = r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
                             : r.roped ? kRopeManifestVersion : kCompactManifestVersion;
         if (r.items)
         {
@@ -530,6 +543,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         }
         else o << "items     none; " << version << "\n";
         if (r.listing_carried) o << "listing   " << r.listing << " bytes, carried as LZMA2 in " << r.listing_carried << "\n";
+        if (r.lzma2_as_is) o << "as is     the files packed by LZMA2 carried as they are instead: it made them no smaller (" << kTrimmedManifestVersion << ")\n";
         if (r.roped)
             o << "rope      " << r.roped << " file(s) pulled tight by " << (r.rope_groups ? "rope-wave-v1 to v4" : r.rope_lines ? "rope-wave-v1 to v3" : r.rope_columns ? "rope-wave-v1 and v2" : "rope-wave-v1") << " (" << r.rope_bytes << " bytes, carried in " << r.rope_carried
               << "; " << version << ")\n";

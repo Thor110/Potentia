@@ -3936,3 +3936,17 @@ lost:
     measure to set it against.
 - The same holds for other formats that are compressed already (PNG's deflate, MP3, MP4): each is
   a scheme to undo exactly and redo, and each is for later.
+- **PNGs (Edward, 20 October 2026):** he found a PNG's `.sieve` larger than the PNG. A PNG saved
+  at zlib's strongest leaves nothing for LZMA2 or the rope (`xz -9e` grows it too), so what the
+  instructions add is all that changes: 184 bytes on 270,448 of noise, 205 on a 715,596-byte
+  photo. `sieve-manifest-v12` cuts that to 145 (the file carried as it is, no empty items line);
+  the rest is its name, size and the SHA-256 that checks it, which no format of this kind can
+  leave out. What would make a PNG smaller is its pixels, under the deflate: undone and redone
+  exactly, as the JPEG above.
+- **Two photos (Edward, 20 October 2026), 3096 by 4128:** 4,139,682 bytes, 7z 4,127,434, `.sieve`
+  4,122,488, the 7z's `.sieve` 4,112,687; and 4,587,473, 7z 4,575,201, `.sieve` 4,569,484, the 7z's
+  `.sieve` 4,559,259. The 7z's instructions are the smallest: LZMA2 finds what repeats (its
+  headers and tables) and the rope how unevenly the bytes are spread, and 7z leaves what it cannot
+  pack as it is, so the rope still finds that in the 7z. The two gains nearly add up (12,248 and
+  17,194 against 26,995). A file's instructions could take both, LZMA2's matches and the rope's
+  coding together (not measured).
