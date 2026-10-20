@@ -912,7 +912,8 @@ const std::vector<Page>& pages()
          "rope's newer ones; v12 where there is less to write around the bytes (no line for an empty\n"
          "stream, and the files carried as they are where LZMA2 makes them no smaller); v13 where a\n"
          "file is cut into pieces, LZMA2 taking what repeats and the rope what is unevenly spread (a\n"
-         "phone's photo: its metadata and its picture). (--v12 down to --v5 make the older ones.)\n"
+         "phone's photo: its metadata and its picture); and v16 always now, the listing's head in\n"
+         "bytes rather than text. (--v15 down to --v5 make the older ones.)\n"
          "\n"
          "--weigh weighs every file against its own address: its number among the binary line's\n"
          "survivors, where the settings file's [binary] filters rank and it passes them; and, where\n"
@@ -953,6 +954,7 @@ const std::vector<Page>& pages()
                                   "it holds and remade exactly on installing; a .7z is carried as its contents, in a\n"
                                   "folder named after it (installing says so: the archive itself is not given back);\n"
                                   "each only where clearly smaller. Off unless given."},
+          {"--v15", "With --items: as sieve-manifest-v15 at newest, the listing's head as text (v16 writes it in bytes)."},
           {"--v14", "With --items: as sieve-manifest-v14 at newest, the rope's ways those of rope-wave-v4 and before."},
           {"--v13", "With --items: as --v14, and no archives optimised (sieve-manifest-v13 at newest)."},
           {"--v12", "With --items: as sieve-manifest-v12 at newest, no file cut into pieces."},

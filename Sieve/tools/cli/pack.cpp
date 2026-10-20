@@ -382,7 +382,7 @@ std::vector<uint8_t> place_bytes_of(const std::string& hex, uint32_t width)
 } // namespace
 
 void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const ItemFinder* items, bool item_hashes, const PlaceCoder* coder,
-                double rope_seconds, uint32_t rope_newest, bool trim, bool pieces, bool optimise_archives)
+                double rope_seconds, uint32_t rope_newest, bool trim, bool pieces, bool optimise_archives, bool binary)
 {
     // Every file's bytes, checked against the walk: from the contents where a v3 manifest has them,
     // else read from the folder (the current one, for a file named without one).
@@ -959,7 +959,25 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     m.listing_stream = {};
     m.listing_carried.clear();
     m.listing_of.clear();
-    if (m.compact)
+    // v16: the head in bytes, where everything v15 allows is allowed (never an older version asked for).
+    m.binary = binary && m.compact;
+    if (m.binary)
+    {
+        r.head_text = m.text().size();
+        const std::string body = listing_body(m);
+        const uint32_t dict = dictionary_for(body.size());
+        std::vector<uint8_t> packed = body.empty() ? std::vector<uint8_t>() : pack_stream(std::vector<uint8_t>(body.begin(), body.end()), dict, false);
+        if (!body.empty() && packed.size() + 12 < body.size())
+        {
+            m.listing_stream = {packed.size(), body.size(), dict};
+            m.listing_carried = std::move(packed);
+            m.listing_of = body;
+            r.listing = body.size();
+            r.listing_carried = m.listing_carried.size();
+        }
+        r.binary = true;
+    }
+    else if (m.compact)
     {
         const std::string t = m.text();
         const std::vector<uint8_t> listing(t.begin() + std::ptrdiff_t(t.find('\n') + 1), t.end());
@@ -977,6 +995,11 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     }
     // Read back before it is used: unpacked, every file as it was.
     const std::vector<uint8_t> whole = m.file();
+    if (m.binary)
+    {
+        const size_t carried = m.streams.size() + m.items_carried.size() + (m.roped ? m.rope_carried.size() : 0);
+        r.head_bytes = whole.size() - carried;
+    }
     const Manifest back = Manifest::parse(std::string_view(reinterpret_cast<const char*>(whole.data()), whole.size()));
     if (back.contents != m.contents) throw std::runtime_error("packing the installer did not give its files back (a fault in the packer)");
     if (report) *report = std::move(r);
@@ -997,7 +1020,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
     };
     if (r.compact)
     {
-        const char* version = r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
+        const char* version = r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
                             : r.roped ? kRopeManifestVersion : kCompactManifestVersion;
         if (r.items)
         {
@@ -1009,6 +1032,8 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         }
         else o << "items     none; " << version << "\n";
         if (r.listing_carried) o << "listing   " << r.listing << " bytes, carried as LZMA2 in " << r.listing_carried << "\n";
+        if (r.binary)
+            o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << kBinaryManifestVersion << ")\n";
         if (r.remade) o << "remade    " << r.remade << " archive(s) carried as what they hold, remade exactly on installing (" << kArchivesManifestVersion << ")\n";
         if (r.unpacked)
             o << "unpacked  " << r.unpacked << " archive(s) carried as their contents, not as the archives (Optimise Archive Formats; " << kArchivesManifestVersion

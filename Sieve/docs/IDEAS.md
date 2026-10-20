@@ -4001,3 +4001,13 @@ October 2026; deprecated for now, §17.3).** Another box: optimise for file size
 together, as one parameter, to make a set of `.sieve` files fit to serve as a format for the
 internet. Set aside the same day: Edward recalls decoding as taking fractions of a second, so
 there is little time to trade for size.
+
+**19.90 The listing in bytes (Edward, 20 October 2026; built 21 October).** His thought: what the
+instructions write to find a file could be packed into bitmasks rather than plain text. On a small
+file the listing was most of what Sieve added: a 1,597-byte script's was 142 bytes, 70 of them the
+tree's SHA-256 written as hex, and his own script's instructions came out 10 bytes over 7z's.
+`sieve-manifest-v16` writes the head in bytes (flags, varints, the SHA-256 as its 32 bytes) and
+keeps the rest, the entries, as the text they are, packed as before where that is smaller: that
+listing is now 67 bytes, `pi6.txt` 417,061, the trained model 4,185. *Still open:* the entries
+themselves in bytes (each way a code and its numbers), where a listing of many small files would
+gain most; measure first.

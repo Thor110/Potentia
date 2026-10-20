@@ -1,58 +1,53 @@
-# Changes: the weighing weighs every way; the byte above, `rope-wave-v5` (21 October 2026)
+# Changes: the listing's head in bytes, `sieve-manifest-v16` (21 October 2026)
 
-Copy `Sieve/` over the repository's `Sieve/`. No new files. Steps 1 and 2 of the five; steps 3 to 5
-follow in later zips.
+Copy `Sieve/` over the repository's `Sieve/`. No new files. Step 3 of the five.
 
-## 1. The weighing weighs every way the instructions use
+## What changed
 
-- **One shared function** now gives a file's three ways and their sizes: LZMA2 alone, the rope,
-  and the pieces. The packer carries the smallest; the weighing weighs all three. They can't
-  disagree again.
-- **The File Locator's table** shows `lzma2` and `pieces z… r… rope …` as ways, beside the rope.
-- **Your first photo:** it now weighs 4,111,435 bytes, against its instructions' 4,111,599. Before
-  this change it weighed 4,122,311.
-- **Not yet:** archives weighed as they'd be carried with the box ticked. Carried as its contents,
-  one archive becomes many files, which the table's one-row-per-file layout doesn't fit yet.
+The fixed part of the listing is now written as bytes instead of text:
 
-## 2. The byte above: `rope-wave-v5`
-
-- **Measured first.** Counted by its column and the byte above it, pi6.txt's entropy is 415,679
-  bytes, 438 over the floor. By its column alone it's 418,604.
-- **How it's coded.** Writing down all 566 combinations of column and byte above would cost more
-  than they save. Instead, each combination takes the next group number the first time it appears,
-  and those numbers are coded as a small stream of their own. Only 3 groups form. It works on any
-  text, with nothing tuned to digits.
-- **Results:**
-
-| file | before | now |
+| part | before, as text | now, as bytes |
 |---|---|---|
-| pi6.txt, rope code | 418,927 | **416,967** |
-| **pi6.txt as Sieve instructions** | 419,096 | **417,139** |
-| the CI's pi-like table (100,000 digits) | 42,083 | 41,790 |
+| version line | `sieve-manifest-v15` | 6 bytes |
+| which streams there are | their lines | 1 byte of flags |
+| stream sizes | decimal text | compact numbers |
+| the SHA-256 that checks the files | 64 hex characters | its 32 raw bytes |
+| `end` | a line | not needed |
 
-- pi6.txt is now **0.46% over the floor** of 415,241. What's left is mostly the blank lines, one
-  after every twenty lines, which the byte above can't count.
-- All three readers rebuild it byte for byte: `sieve install`, `sieve-install` and the oracle.
-- **Format:** `sieve-manifest-v15`, made only where a file uses v5. `--v14` and `--v13` make the
-  older forms.
+- The per-file lines are still the readable text they were, packed by LZMA2 where that's smaller.
+- Reading converts the head back into v15's text, so all the existing reading code is reused.
+- `--items` now makes v16. `--v15` keeps the text form.
 
-## Also
+## Measured here
 
-Two CI checks read `sieve locate`'s report from standard output without `--manifest`. Without it
-the report goes to standard error, so the checks couldn't see it. Both now pass `--manifest`.
+| | before (text) | now (v16) |
+|---|---|---|
+| a 1,597-byte script (its listing: 142 → 67 bytes) | 661 | **586** |
+| **pi6.txt** | 417,139 | **417,061** |
+| the trained model, as one file | 4,257 | **4,185** |
+| 64-character pages (CI) | 422 | **345** |
+
+Each one installs byte for byte with `sieve install` and `sieve-install`, and through the oracle.
+
+Your `control.py` came out 10 bytes over 7z; the listing just lost 75 bytes on a similar file, so it
+should now come in under 7z. I can't measure it without the file.
+
+## CI
+
+- The checks that read or relabel a listing's text (v7, v12, v13 and v14) now make it with `--v15`.
+- New checks: v16 on the degree sample and on the trained model, and a v16 head with an unknown
+  flag, refused by Sieve and the oracle.
+
+## Still open
+
+The per-file lines in bytes too, which would help most on folders of many small files. It's noted
+as IDEAS §19.90 (your idea of packing into bitmasks), to measure first.
 
 ## Checked here
 
 - The full build, with no warnings.
-- The unit suite: 153,230 checks, 0 failures. New checks cover A1 parsing, round trips, the search
-  choosing v5 (and v4 when limited), and refusals.
-- The hallway CI step, start to end. New in it:
-  - the weighing choosing pieces;
-  - v5 against v4 on the pi-like table, with the oracle decoding both;
-  - v15 installed by all three readers;
-  - `--v14` making the older form;
-  - v15 relabelled v14, refused.
+- The hallway CI step, start to end.
 
-I've sent pi6.txt as v15 instructions beside this zip.
+I've sent pi6.txt as v16 instructions beside this zip.
 
-**Docs:** SPECIFICATIONS §12.2, IDEAS §19.87, README, HANDOFF, help.
+**Docs:** SPECIFICATIONS §12.2, IDEAS §19.90, README, HANDOFF, help.

@@ -6154,6 +6154,69 @@ def v7_item(spec, place, code, path, items_from):
     return v5_item(spec, "%x" % place, path, items_from)
 
 
+def v16_text(data):
+    """sieve-manifest-v16 (SPECIFICATIONS §12.2): its head in bytes ("sieve", 16, flags, the root,
+    the streams' sizes and dictionaries' bytes, the tree's SHA-256 as 32 bytes, the body, packed or
+    not) read back into v15's text, followed by what follows it. Anything else is returned as it is."""
+    import lzma
+    if not data.startswith(b"sieve\x10"):
+        return data
+    at = [6]
+
+    def varint():
+        v, shift = 0, 0
+        while True:
+            b = data[at[0]]
+            at[0] += 1
+            v |= (b & 0x7F) << shift
+            shift += 7
+            if not b & 0x80:
+                return v
+
+    def take(n):
+        if n > len(data) - at[0]:
+            sys.exit("v16: its head ends early")
+        v = data[at[0]:at[0] + n]
+        at[0] += n
+        return v
+
+    def dictionary(p):
+        if p == 0xFF:
+            return 0
+        if p > 40:
+            sys.exit("v16: a dictionary byte out of range")
+        return 0xFFFFFFFF if p == 40 else (2 | (p & 1)) << (p // 2 + 11)
+
+    def stream():
+        packed, size = varint(), varint()
+        return packed, size, dictionary(take(1)[0])
+
+    flags = take(1)[0]
+    if flags & 0xC0:
+        sys.exit("v16: flags this reader does not know")
+    head = b"sieve-manifest-v15\n"
+    if flags & 1:
+        head += b"root " + take(varint()) + b"\n"
+    for bit, name in ((2, b"x86"), (4, b"lzma2"), (8, b"items")):
+        if flags & bit:
+            head += b"stream %s %d %d %d\n" % ((name,) + stream())
+    if flags & 16:
+        n = varint()
+        head += b"stream rope %d %d 0\n" % (n, n)
+    tree = take(32).hex().encode()
+    if flags & 32:
+        packed, size, d = stream()
+        body = lzma.decompress(take(packed), format=lzma.FORMAT_RAW, filters=[{"id": lzma.FILTER_LZMA2, "dict_size": d}])
+        if len(body) != size:
+            sys.exit("v16: its body unpacks to the wrong size")
+    else:
+        body = take(varint())
+    split = 0
+    while body.startswith(b"line ", split):
+        split = body.index(b"\n", split) + 1
+    return head + body[:split] + b"tree " + tree + b"\n" + body[split:] + b"end\n" + data[at[0]:]
+
+
 def v7_listing(data):
     """A v7 manifest's text, its listing unpacked where it is carried as LZMA2 ("listing <packed>
     <bytes> <dictionary>" after the first line): the text it is, then what follows."""
@@ -6389,7 +6452,7 @@ def cmd_unpack(args):
     lzma2 stream after every file carried as it is), and each file checked against its size and
     SHA-256. With --to DIR, the folders and files are written there. Prints the listing it unpacked."""
     import lzma
-    data = open(args.manifest, "rb").read()
+    data = v16_text(open(args.manifest, "rb").read())  # v16: its head in bytes, read as v15's text
     if data.startswith((b"sieve-manifest-v7\n", b"sieve-manifest-v8\n", b"sieve-manifest-v9\n", b"sieve-manifest-v10\n",
                         b"sieve-manifest-v11\n", b"sieve-manifest-v12\n", b"sieve-manifest-v13\n", b"sieve-manifest-v14\n",
                         b"sieve-manifest-v15\n")):

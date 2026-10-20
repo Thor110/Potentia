@@ -367,13 +367,51 @@ std::string manifest_path(const fs::path& p, const fs::path& root)
 
 const char* Manifest::version() const
 {
-    return rope_above ? kRopeAboveManifestVersion : archives ? kArchivesManifestVersion : pieces ? kPiecesManifestVersion : trimmed ? kTrimmedManifestVersion : rope_groups ? kRopeGroupsManifestVersion : rope_lines ? kRopeLinesManifestVersion : rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
+    return binary ? kBinaryManifestVersion : rope_above ? kRopeAboveManifestVersion : archives ? kArchivesManifestVersion : pieces ? kPiecesManifestVersion : trimmed ? kTrimmedManifestVersion : rope_groups ? kRopeGroupsManifestVersion : rope_lines ? kRopeLinesManifestVersion : rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
          : with_contents ? kInstallManifestVersion : with_addresses ? kAddressManifestVersion : kManifestVersion;
 }
 
 bool Manifest::one_file_root() const { return entries.size() == 1 && !entries[0].dir && entries[0].path == root; }
 
 namespace {
+
+// v16: a dictionary as LZMA2's one-byte property (0xFF: carried as it is, dictionary 0), and back.
+uint8_t dictionary_byte(uint32_t d)
+{
+    if (d == 0) return 0xFF;
+    for (uint32_t p = 0; p <= 40; ++p)
+        if ((p == 40 ? 0xFFFFFFFFu : (2u | (p & 1u)) << (p / 2 + 11)) == d) return uint8_t(p);
+    throw std::logic_error("a dictionary LZMA2's property cannot name");
+}
+
+uint32_t dictionary_of_byte(uint8_t p)
+{
+    if (p == 0xFF) return 0;
+    if (p > 40) throw std::runtime_error("manifest: a dictionary byte out of range");
+    return p == 40 ? 0xFFFFFFFFu : (2u | (p & 1u)) << (p / 2 + 11);
+}
+
+void put_varint_to(std::vector<uint8_t>& out, uint64_t v)
+{
+    while (v >= 0x80)
+    {
+        out.push_back(uint8_t(v | 0x80));
+        v >>= 7;
+    }
+    out.push_back(uint8_t(v));
+}
+
+uint64_t get_varint_from(std::string_view in, size_t& at)
+{
+    uint64_t v = 0;
+    for (int shift = 0;; shift += 7)
+    {
+        if (at >= in.size() || shift > 63) throw std::runtime_error("manifest: its head ends inside a number");
+        const uint8_t b = uint8_t(in[at++]);
+        v |= uint64_t(b & 0x7F) << shift;
+        if (!(b & 0x80)) return v;
+    }
+}
 
 std::string stream_line(const char* name, const PackedStream& s)
 {
@@ -532,11 +570,83 @@ std::vector<uint8_t> Manifest::items_stream() const
     return out;
 }
 
+std::string listing_body(const Manifest& m)
+{
+    // The text's lines after its first, its root's and its streams', the tree's left out, up to "end".
+    const std::string t = m.text();
+    std::string body;
+    size_t at = t.find('\n') + 1;
+    while (at < t.size())
+    {
+        const size_t nl = t.find('\n', at);
+        const std::string_view line(t.data() + at, nl - at);
+        at = nl + 1;
+        if (line == "end") break;
+        if (line.rfind("root ", 0) == 0 || line.rfind("stream ", 0) == 0 || line.rfind("tree ", 0) == 0) continue;
+        body.append(line);
+        body += '\n';
+    }
+    return body;
+}
+
+// v16: "sieve" and 16; flags (1 root, 2 x86, 4 lzma2, 8 items, 16 rope, 32 the body packed); the
+// root (a varint of its length, then it); each stream present, its packed size and size as varints
+// and its dictionary's byte (the rope's, its size alone: it is carried as it is); the tree's SHA-256
+// as 32 bytes; the body: packed, its packed size, size and dictionary's byte, then it as LZMA2; else
+// its size, then it.
+static std::vector<uint8_t> binary_head(const Manifest& m)
+{
+    std::vector<uint8_t> o = {'s', 'i', 'e', 'v', 'e', 16};
+    const bool root = !m.one_file_root(), items = !m.trimmed || m.item_stream.packed || m.item_stream.bytes;
+    const bool body_packed = m.listing_stream.packed != 0;
+    o.push_back(uint8_t((root ? 1 : 0) | (m.x86.packed ? 2 : 0) | (m.lzma2.packed ? 4 : 0) | (items ? 8 : 0) | (m.roped ? 16 : 0) |
+                        (body_packed ? 32 : 0)));
+    if (root)
+    {
+        put_varint_to(o, m.root.size());
+        o.insert(o.end(), m.root.begin(), m.root.end());
+    }
+    auto stream = [&](const PackedStream& s) {
+        put_varint_to(o, s.packed);
+        put_varint_to(o, s.bytes);
+        o.push_back(dictionary_byte(s.dictionary));
+    };
+    if (m.x86.packed) stream(m.x86);
+    if (m.lzma2.packed) stream(m.lzma2);
+    if (items) stream(m.item_stream);
+    if (m.roped) put_varint_to(o, m.rope_stream.packed);
+    if (m.tree.size() != 64) throw std::logic_error("a tree's SHA-256 that is not 64 hex digits");
+    for (size_t i = 0; i < 64; i += 2) o.push_back(uint8_t(std::stoul(m.tree.substr(i, 2), nullptr, 16)));
+    if (body_packed)
+    {
+        if (m.listing_of != listing_body(m)) throw std::logic_error("Sieve instructions changed after their listing was packed");
+        stream(m.listing_stream);
+        o.insert(o.end(), m.listing_carried.begin(), m.listing_carried.end());
+    }
+    else
+    {
+        const std::string body = listing_body(m);
+        put_varint_to(o, body.size());
+        o.insert(o.end(), body.begin(), body.end());
+    }
+    return o;
+}
+
 std::vector<uint8_t> Manifest::file() const
 {
     const std::string t = text();
     std::vector<uint8_t> out;
     out.reserve(t.size() + (packed ? streams.size() : contents.size()));
+    if (binary)
+    {
+        // v16: the head in bytes, then the body (its listing's lines after the streams', the tree's
+        // left out, "end" too), as carried.
+        out = binary_head(*this);
+        out.insert(out.end(), streams.begin(), streams.end());
+        out.insert(out.end(), items_carried.begin(), items_carried.end());
+        if (roped) out.insert(out.end(), rope_carried.begin(), rope_carried.end());
+        return out;
+    }
     if (compact && listing_stream.packed)
     {
         // v7: its first line, the listing's line, then the listing as carried.
@@ -656,6 +766,81 @@ void add_contents(Manifest& m, const std::filesystem::path& root_in)
 
 Manifest Manifest::parse(std::string_view whole)
 {
+    // v16: the head in bytes, read back into v15's text (its root's and streams' lines, its lines,
+    // the tree's, the rest of its body, "end"), followed by what follows it.
+    if (whole.size() >= 6 && whole.substr(0, 5) == "sieve" && uint8_t(whole[5]) == 16)
+    {
+        size_t at = 6;
+        if (at >= whole.size()) throw std::runtime_error("manifest: its head ends early");
+        const uint8_t flags = uint8_t(whole[at++]);
+        if (flags & 0xC0) throw std::runtime_error("manifest: its head has flags this Sieve does not know");
+        std::string text = std::string(kRopeAboveManifestVersion) + "\n";
+        auto take = [&](uint64_t n) {
+            if (n > whole.size() - at) throw std::runtime_error("manifest: its head ends early");
+            const std::string_view v = whole.substr(at, size_t(n));
+            at += size_t(n);
+            return v;
+        };
+        if (flags & 1)
+        {
+            const uint64_t n = get_varint_from(whole, at);
+            text += "root " + std::string(take(n)) + "\n";
+        }
+        auto stream = [&]() {
+            const uint64_t packed = get_varint_from(whole, at), bytes = get_varint_from(whole, at);
+            const uint32_t d = dictionary_of_byte(uint8_t(take(1)[0]));
+            return PackedStream{packed, bytes, d};
+        };
+        if (flags & 2) text += stream_line("x86", stream());
+        if (flags & 4) text += stream_line("lzma2", stream());
+        if (flags & 8) text += stream_line("items", stream());
+        if (flags & 16)
+        {
+            const uint64_t n = get_varint_from(whole, at);
+            text += stream_line("rope", PackedStream{n, n, 0});
+        }
+        const std::string_view tree = take(32);
+        static const char* hex = "0123456789abcdef";
+        std::string tree_hex;
+        for (const char c : tree)
+        {
+            tree_hex += hex[uint8_t(c) >> 4];
+            tree_hex += hex[uint8_t(c) & 15];
+        }
+        std::string body;
+        PackedStream ls{};
+        std::vector<uint8_t> carried;
+        if (flags & 32)
+        {
+            ls = stream();
+            if (ls.dictionary == 0 || ls.bytes > (uint64_t(1) << 32)) throw std::runtime_error("manifest: its listing's sizes do not fit");
+            const std::string_view c = take(ls.packed);
+            carried.assign(c.begin(), c.end());
+            const std::vector<uint8_t> b = unpack_stream(carried, ls, false);
+            body.assign(b.begin(), b.end());
+        }
+        else body = std::string(take(get_varint_from(whole, at)));
+        // The lines first, then the tree's, then the rest.
+        size_t split = 0;
+        while (split < body.size() && body.compare(split, 5, "line ") == 0)
+        {
+            const size_t nl = body.find('\n', split);
+            if (nl == std::string::npos) throw std::runtime_error("manifest: its body's last line has no line feed");
+            split = nl + 1;
+        }
+        if (!body.empty() && body.back() != '\n') throw std::runtime_error("manifest: its body's last line has no line feed");
+        text += body.substr(0, split) + "tree " + tree_hex + "\n" + body.substr(split) + "end\n";
+        text.append(whole.substr(at));
+        Manifest m = parse(text);
+        m.binary = true;
+        if (flags & 32)
+        {
+            m.listing_stream = ls;
+            m.listing_carried = std::move(carried);
+            m.listing_of = listing_body(m);
+        }
+        return m;
+    }
     // v7 with its listing carried as LZMA2: unpacked, and read as the text it is.
     // (v7, v8 and v9 alike: their first line, then "listing ...")
     std::string packed_version;

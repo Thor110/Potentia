@@ -121,6 +121,12 @@ inline constexpr const char* kArchivesManifestVersion = "sieve-manifest-v14";
 // v14 whose rope ways may be rope-wave-v5's (columns by line counted by the byte above too, " A1"):
 // made only where some file's is.
 inline constexpr const char* kRopeAboveManifestVersion = "sieve-manifest-v15";
+// v15 with its head in bytes rather than text (SPECIFICATIONS §12.2): "sieve" and a byte 16, a byte
+// of flags, the root, the streams' sizes as varints and their dictionaries as LZMA2's one-byte
+// property, the tree's SHA-256 as its 32 bytes, then the rest of the listing (its lines, its
+// archives' lines and its entries, as v15 writes them, without "end"), its length first, packed as
+// LZMA2 where that is smaller. Read, it is v15's text again.
+inline constexpr const char* kBinaryManifestVersion = "sieve-manifest-v16";
 
 std::vector<uint8_t> read_file_bytes(const std::filesystem::path& file);
 
@@ -192,6 +198,7 @@ struct Manifest
     bool pieces = false;       // v13: some file is cut into pieces (and trimmed is set too)
     bool archives = false;     // v14: some archive is remade or carried as its contents (and pieces is set too)
     bool rope_above = false;   // v15: some rope way is rope-wave-v5's
+    bool binary = false;       // v16: the head in bytes (and everything v15 allows)
     // v14: each archive carried as its contents: its format ("7z", "xz"), its size, its path, and the
     // folder (or file) its contents are in.
     struct UnpackedArchive
@@ -225,6 +232,10 @@ std::string tree_sha256(const Manifest& m);
 // manifest with items is refused with a word to open it with Sieve (the small installer has none).
 // v14: what remakes an archive exactly from what it holds ("xz 6 crc64 <size>"); the full Sieve sets
 // it (sieve-install has no compressor in it, and asks for Sieve, as it does for items).
+// v16: the body of a listing (its lines after the root's and the streams', the tree's line and "end"
+// left out), what a binary head is followed by, packed as LZMA2 where that is smaller.
+struct Manifest;
+std::string listing_body(const Manifest& m);
 using Remaker = std::function<std::vector<uint8_t>(const std::string& recipe, const std::vector<uint8_t>& inner)>;
 void set_remaker(Remaker remaker);
 using ItemMaker = std::function<std::vector<uint8_t>(const std::string& line, const std::string& address)>;

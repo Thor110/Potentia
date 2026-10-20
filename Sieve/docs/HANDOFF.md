@@ -3562,6 +3562,17 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
 - **Checked here:** the full build, the unit suite (153,230 checks, 0 failures; new: A1 parsing,
   round trips, the search choosing v5 and v4 under `newest` 4, refusals), the hallway CI step whole.
 
+### `sieve-manifest-v16`: the listing's head in bytes (21 October 2026)
+- **Built:** "sieve", 16, flags, the root, the streams (varints and LZMA2's dictionary byte), the
+  tree's SHA-256 as 32 bytes, then the body (v15's `line`, `u` and entry lines, packed as LZMA2
+  where smaller). Read back into v15's text, so every reader path is v15's. Made wherever `--items`
+  makes v7 or later; `--v15` keeps the text. Oracle: `v16_text`.
+- **Measured:** a 1,597-byte script 661 → 586 (head 142 → 67); `pi6.txt` 417,139 → 417,061; the
+  trained model 4,257 → 4,185 (folder 4,176); the 64-character pages 422 → 345.
+- **CI:** the v7, v12 and v13 checks that read or relabel a listing's text now make it with
+  `--v15`; new: v16 on the degree sample and the model, and a v16 head with an unknown flag refused.
+- **Still open:** the entries in bytes too (IDEAS §19.90).
+
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show
@@ -3584,8 +3595,8 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
 - **Open from the compression work (19 and 20 October 2026), measured where it says so:**
   - **The rope's last gap on `pi6.txt`** (IDEAS §19.87): the byte above is done (`rope-wave-v5`,
     417,139); what is left is mostly the blank lines, one after every twenty lines.
-  - **The listing in binary:** on a 1,597-byte script the listing is 142 bytes of the
-    instructions, 70 of them the SHA-256 as hex; Edward's `control.py` came out 10 bytes over 7z.
+  - **The listing in binary:** the head done (v16, 142 → 67 bytes on a small script); the
+    entries still text (IDEAS §19.90).
   - **The weighing** (`--weigh`, the File Locator's table): LZMA2 and v13's pieces weighed since
     21 October; v14's archives with the box ticked not yet (contents make one file many).
   - **Archives not yet optimised:** gzip (GNU gzip is not zlib), zip, multi-block xz.

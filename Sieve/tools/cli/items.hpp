@@ -65,7 +65,7 @@ void use_item_maker();
 // by `sieve locate --items` and the File Locator.
 void add_packed_items(Manifest& m, const std::filesystem::path& root, const Args& a, PackReport* report = nullptr, int version = 8,
                       bool item_hashes = false, double rope_seconds = 0, uint32_t rope_newest = 5, bool trim = true,
-                      bool pieces = true, bool optimise_archives = false);
+                      bool pieces = true, bool optimise_archives = false, bool binary = true);
 // v7: an AI model's place (hex) on `ai` coded by digit-histogram-v1, its tensors the segments, as
 // the fewest bytes that hold the number; and back.
 std::vector<uint8_t> ai_place_code(const AiSpace& ai, const std::string& place);
