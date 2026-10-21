@@ -3676,6 +3676,12 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   `$(wc -c < FILE)` as text; macOS's `wc` pads its count with spaces. The three such checks now
   compare numbers (`-eq`). The workflow's macOS steps have no other GNU-only tools (`stat -c`,
   `sed -i`, `sha256sum`, `timeout`, `\t` in `sed` and the like; checked).
+- **Round seven:** macOS reached the oracle step's line 270: the check copied Sieve's own
+  program into a folder and expected it in the x86 stream. Sieve puts ELF and PE programs there,
+  not a Mac's Mach-O (and GitHub's Macs are ARM). On macOS the check's program is now those bytes
+  behind an ELF's first four, so the x86 stream is still tried and read back there; Linux and
+  Windows use the program as before. Shown here with such a stand-in: one program in the x86
+  stream, and both readers give the folder back.
 
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s

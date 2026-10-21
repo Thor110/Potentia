@@ -2120,6 +2120,9 @@ jobs:
           # made from another's lines (a mask), packed; the oracle unpacks it with Python's own
           # lzma, nothing of Sieve's, and gives back the folder, as sieve install does.
           rm -rf v4fx && cp -r ../tests/manifest_fixture v4fx && cp $S v4fx/program
+          # A Mac's program is Mach-O, which Sieve does not put in the x86 stream (GitHub's Macs are
+          # ARM besides); there the program's bytes behind an ELF's first four stand in for one.
+          if [ "$(uname -s)" = Darwin ]; then { printf '\177ELF'; cat $S; } > v4fx/program; fi
           python -c "open('v4fx/all.txt', 'w').write(''.join(f'{i}\n' for i in range(1, 20001)))"
           python -c "open('v4fx/third.txt', 'w').write(''.join(f'{i}\n' for i in range(3, 20001, 3)))"
           out=$($S locate v4fx --manifest fixture4.manifest --installer fixture4.sieve | tr -d '\r')
