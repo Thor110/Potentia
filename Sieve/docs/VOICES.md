@@ -71,6 +71,7 @@ enumerated and stored later. Nothing is guaranteed (IDEAS §19.77).
 - **Edward** (21 October 2026, quote; on 137 JPEGs from his pictures folder, sieved one by one): 8/137 failed to decrease, really not bad at all. Some really peculiar ones, nothing particularly special about them.
 - **Edward** (21 October 2026, quote; IDEAS §19.92): I feel like for a preliminary test where the expected end result is html it would be worthwhile.
 - **Edward** (21 October 2026, quote; on Sieve against brotli on HTML): It isn't all that far off then.
+- **Edward** (21 October 2026, quote; IDEAS §19.92): Sieve uses SHA256 on the same web browser / plug in idea, this could provide a verifiable layer of security to the general purpose internet.
 
 ## Gemini
 

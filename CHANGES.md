@@ -1,7 +1,7 @@
-# Docs: Sieve for websites (21 October 2026)
+# Docs: the SHA-256 as a verifiable layer (21 October 2026)
 
-- **IDEAS §19.92:** the website idea, with the measured table (Sieve level with gzip, about 15 to 25% behind brotli on HTML), why brotli is ahead, the web dictionary that could close it, and the plugin routes for later.
-- **VOICES:** your two quotes.
-- **HANDOFF:** two open items (the web dictionary; 7-Zip's encoder as one more candidate).
+- **IDEAS §19.92:** a new point on the SHA-256 for the website idea: what it proves when the hash comes with the file (no damage on the way), what it proves when a link carries it (exactly the page the linking page meant), and what a signature would add (who made it; a new version).
+- **VOICES:** your quote.
+- **HANDOFF:** the open website item mentions it.
 
 To apply: copy `Sieve/` over the repository's top folder. Nothing but these three documents changed.

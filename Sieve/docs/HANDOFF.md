@@ -3669,7 +3669,8 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
     deflate not made by zlib remade exactly (the preflate route); IDEAS §19.88.
   - **The rope for the other lines' places**, and V5S2 above.
   - **Websites** (IDEAS §19.92): a shared web dictionary for LZMA2, measured against brotli on
-    pages from outside this site, before any plugin.
+    pages from outside this site, before any plugin; and the SHA-256 as a verifiable layer (a
+    link carrying its page's hash; signatures would be a new version).
   - **7-Zip's LZMA encoder** as one more candidate for each stream (three of Edward's JPEGs still
     3 to 204 bytes over 7z); measure first.
 - **How Edward works:**

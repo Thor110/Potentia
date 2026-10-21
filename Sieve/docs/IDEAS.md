@@ -4069,3 +4069,17 @@ folder) and shows the HTML they unpack to, as a first test where the result is k
   listing's reader) built as WebAssembly runs in the page or the extension, installs nothing and
   works everywhere, and is the route beyond a test. Any of them decodes files from strangers, so
   the decoder must treat every `.sieve` as hostile and never run what it unpacks.
+- *A verifiable layer, from the SHA-256 (Edward, 21 October 2026):* every set of instructions
+  carries the SHA-256 of what it unpacks to, and the reader checks it, so a plugin could show
+  whether a page arrived exactly as made. What that proves depends on where the hash comes from:
+  - *From the same file:* it proves the page was not damaged on the way, but not who made it.
+    Whoever can change the file can change its hash with it, and HTTPS already guards the
+    connection itself.
+  - *From somewhere else:* this is where it becomes security. A link that carries the hash of the
+    page it points to (as a `.sieve` address already names a file by its own bytes) lets the
+    reader refuse any page that is not exactly the one the linking page meant: a mirror, a cache
+    or a changed server cannot swap it unnoticed. The web has this for scripts and stylesheets
+    (Subresource Integrity, an `integrity="sha256-…"` attribute), and content-addressed networks
+    (IPFS) name everything this way; Sieve would bring it to whole pages and folders.
+  - *Who made it:* a signature over the hash (the maker's key, published once) would add that,
+    and would be a new version; nothing in Sieve signs today.
