@@ -436,6 +436,18 @@ if(SIEVE_BUILD_CLIENT)
         if(WIN32)
             set_property(TARGET sieve_sdl_small PROPERTY INTERFACE_LINK_LIBRARIES
                 kernel32 user32 gdi32 winmm imm32 ole32 oleaut32 version uuid advapi32 setupapi shell32)
+        elseif(APPLE)
+            # SDL's static library on a Mac is Objective-C on Apple's frameworks, and a static
+            # library cannot name them itself (SDL's own CMake target does; this one is made by
+            # hand). Each is part of every Mac; the ones nothing calls are dropped at link time
+            # (-dead_strip_dylibs, with the installer's other link options below).
+            set_property(TARGET sieve_sdl_small PROPERTY INTERFACE_LINK_LIBRARIES
+                objc iconv m Threads::Threads
+                "-framework Cocoa" "-framework Foundation" "-framework AppKit" "-framework CoreFoundation"
+                "-framework CoreGraphics" "-framework CoreServices" "-framework CoreVideo" "-framework IOKit"
+                "-framework Carbon" "-framework Metal" "-framework QuartzCore" "-framework UniformTypeIdentifiers"
+                "-framework ForceFeedback" "-framework GameController" "-framework CoreHaptics"
+                "-framework AudioToolbox" "-framework CoreAudio" "-framework AVFoundation" "-framework CoreMedia")
         else()
             set_property(TARGET sieve_sdl_small PROPERTY INTERFACE_LINK_LIBRARIES m ${CMAKE_DL_LIBS} Threads::Threads)
         endif()
@@ -450,7 +462,7 @@ if(SIEVE_BUILD_CLIENT)
                 target_compile_options(sieve-install PRIVATE -Os)
                 if(APPLE)
                     # Apple's linker has its own name for this, and strips with strip(1), not -s.
-                    target_link_options(sieve-install PRIVATE -Wl,-dead_strip)
+                    target_link_options(sieve-install PRIVATE -Wl,-dead_strip -Wl,-dead_strip_dylibs)
                 else()
                     target_link_options(sieve-install PRIVATE -Wl,--gc-sections -s)
                 endif()

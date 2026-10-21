@@ -4533,6 +4533,23 @@ def _wav_of(rate, ch, tag, bits, samples, extensible=False, stream=False):
         struct.pack("<I", len(fmt)) + fmt + b"LIST" + struct.pack("<I", 3) + b"abc\0" + b"data" + struct.pack("<I", size) + bytes(data)
 
 
+def _sin_exact(x):
+    """sin(x), correctly rounded to a double: the same bits on every platform (math.sin is the
+    platform's C library's, which may differ in its last bit; Windows' did, on one sample)."""
+    from decimal import Decimal, localcontext
+    with localcontext() as ctx:
+        ctx.prec = 80
+        d = Decimal(x)  # the double's exact value
+        term, total, k, sq = d, d, 1, d * d
+        while True:
+            term = -term * sq / ((2 * k) * (2 * k + 1))
+            if abs(term) < Decimal(10) ** -75:
+                break
+            total += term
+            k += 1
+        return float(total)  # one rounding, to nearest
+
+
 def _pcm_cases():
     seed = [12345]
 
@@ -4551,7 +4568,7 @@ def _pcm_cases():
     cases.append((_wav_of(11025, 1, 1, 24, ints(30, 24)), 22050, 12, 2, 40))     # rate up, channel repeated
     cases.append((_wav_of(48000, 3, 1, 32, ints(3 * 25, 32)), 32000, 31, 2, 9))  # first two channels, 31 bits
     cases.append((_wav_of(16000, 2, 3, 32, [((i * 37) % 200 - 100) / 64.0 for i in range(2 * 21)]), 7, 5, 2, 3))  # float, clipping, odd rate
-    cases.append((_wav_of(22050, 1, 3, 64, [math.sin(i / 3.0) for i in range(40)]), 22050, 16, 1, 40))  # double
+    cases.append((_wav_of(22050, 1, 3, 64, [_sin_exact(i / 3.0) for i in range(40)]), 22050, 16, 1, 40))  # double
     cases.append((_wav_of(8000, 2, 1, 16, ints(2 * 12, 16), extensible=True), 3, 1, 1, 2))  # extensible, 1-bit, 3 Hz
     cases.append((_wav_of(44100, 6, 1, 16, ints(6 * 9, 16), extensible=True, stream=True), 44100, 24, 6, 9))  # stream sizes, 6 ch
     cases.append((_wav_of(9600, 1, 1, 8, [0, 255, 128, 127, 1] * 4), 4800, 3, 1, 4))  # 8-bit extremes, halves

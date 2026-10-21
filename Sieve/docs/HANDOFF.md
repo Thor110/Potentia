@@ -3637,6 +3637,18 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   (the menu shows a time measured on each run, which a busy machine changes).
 - **Edward's photos stay out of the repository;** the eight JPEGs were only measured.
 
+### CI on GitHub: where the three systems stand (21 October 2026)
+- **Linux:** every step green, on every run since the second fixes.
+- **Windows:** green up to the oracle step, which stopped at its pcm vectors: the oracle made the
+  float WAV of `vectors_pcm_v1.tsv` from `math.sin`, the platform's C library's, and Windows' gave
+  one sample a different last bit. The oracle now computes that sine exactly (`_sin_exact`,
+  `Decimal`, one rounding), the same bits everywhere; glibc's were already correctly rounded on all
+  forty, so the committed vectors are unchanged. The rest of that step has not yet run on Windows.
+- **macOS:** the build stopped linking `sieve-install`: SDL's static library is Objective-C on
+  Apple's frameworks, which the hand-made `sieve_sdl_small` target did not name. It now names the
+  Objective-C runtime, iconv and the frameworks, and `-dead_strip_dylibs` drops the unused ones.
+  Not testable here (no Mac); the next run shows it.
+
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show
