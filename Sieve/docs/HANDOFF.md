@@ -3672,6 +3672,10 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   failures, and every workflow step (6 to 16) passes on it. Worth doing whenever macOS fails again:
   `CC=clang CXX=clang++ cmake … -DCMAKE_CXX_FLAGS=-stdlib=libc++ -DCMAKE_EXE_LINKER_FLAGS=-stdlib=libc++`
   (needs `libc++-dev`).
+- **Round six:** macOS reached the oracle step (Linux and Windows green). A check compared
+  `$(wc -c < FILE)` as text; macOS's `wc` pads its count with spaces. The three such checks now
+  compare numbers (`-eq`). The workflow's macOS steps have no other GNU-only tools (`stat -c`,
+  `sed -i`, `sha256sum`, `timeout`, `\t` in `sed` and the like; checked).
 
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s

@@ -878,7 +878,7 @@ jobs:
           rm -rf fx_gui
           $H --no-menu --install fx.sieve --install-to fx_gui --screenshot locinstall.png | q "saved locinstall.png"
           diff -r tests/manifest_fixture fx_gui
-          test "$(wc -c < fx-installer)" = "$(( $(wc -c < build/sieve-install) + $(wc -c < fx.sieve) + 24 ))"
+          test "$(wc -c < fx-installer)" -eq "$(( $(wc -c < build/sieve-install) + $(wc -c < fx.sieve) + 24 ))"
           rm -rf again && mkdir again && cp build/sieve again/ && cp fx-installer again/sieve-install
           again/sieve locate tests/manifest_fixture --program fx-again > /dev/null
           cmp fx-installer fx-again
@@ -2083,8 +2083,8 @@ jobs:
           python sieve_ref.py manifest ../tests/manifest_fixture --with-contents | cmp - fixture3.manifest
           # The installer is the manifest's address as raw bytes: exactly the manifest's size here,
           # which is the files' bytes and the listing, no more.
-          test "$(wc -c < fixture.sieve)" = "$(wc -c < fixture3.manifest)"
-          test "$(wc -c < fixture3.manifest)" = "$(( $(python sieve_ref.py manifest ../tests/manifest_fixture | wc -c) + $(awk '$1 == "bytes" {print $2}' fixture.manifest) ))"
+          test "$(wc -c < fixture.sieve)" -eq "$(wc -c < fixture3.manifest)"
+          test "$(wc -c < fixture3.manifest)" -eq "$(( $(python sieve_ref.py manifest ../tests/manifest_fixture | wc -c) + $(awk '$1 == "bytes" {print $2}' fixture.manifest) ))"
           rm -rf installed
           $S install fixture.sieve --to installed > /dev/null
           diff -r ../tests/manifest_fixture installed
