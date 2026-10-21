@@ -988,11 +988,12 @@ void Menu::find_limits()
     };
     const int pages = line_of(Media::Pages), image = line_of(Media::Image), audio = line_of(Media::Audio);
     const int video = line_of(Media::Video), tracks = line_of(Media::Tracks), movies = line_of(Media::Movies);
-    // Grows v, doubling then in steps, for as long as `ok` holds.
-    auto grow_while = [&](uint32_t& v, const std::function<bool()>& ok) {
+    // Grows v, doubling then in steps, for as long as `ok` holds and v is at most `most` (the
+    // line's own limit, where its format has one: a bigger machine must not pass it).
+    auto grow_while = [&](uint32_t& v, const std::function<bool()>& ok, uint32_t most = UINT32_MAX) {
         v = 1;
         if (!ok()) return; // even the smallest is too much on this machine
-        while (v < (UINT32_MAX >> 1))
+        while (v <= most / 2)
         {
             const uint32_t was = v;
             v *= 2;
@@ -1000,14 +1001,14 @@ void Menu::find_limits()
         }
         // Then a few linear steps, so the answer is not always a power of two.
         const uint32_t step = std::max(1u, v / 16);
-        while (v < UINT32_MAX - step)
+        while (v <= most - step)
         {
             const uint32_t was = v;
             v += step;
             if (!ok()) { v = was; break; }
         }
     };
-    auto grow = [&](uint32_t& v, int line) { grow_while(v, [&] { return fits(line); }); };
+    auto grow = [&](uint32_t& v, int line, uint32_t most = UINT32_MAX) { grow_while(v, [&] { return fits(line); }, most); };
     // The focus (GLOBAL): every line, or one of them, the rest left as they are. Each line is
     // judged on its own against the budget -- the memory bar is the largest line's cache, not
     // all of them added, and the time bar the slowest line -- so a line grown on its own reaches
@@ -1085,7 +1086,7 @@ void Menu::find_limits()
     // Worlds are made of models, as tracks of audio: as many models a world as what is left allows.
     if (on("models") || on("worlds")) s_.world_models = 1;
     if (on("worlds")) grow(s_.world_models, kWorldsLine);
-    if (on("ai")) grow(s_.ai_layers, kAiLine); // deeper, at its width and heads
+    if (on("ai")) grow(s_.ai_layers, kAiLine, 64); // deeper, at its width and heads, to aispace-v1's deepest
     if (on("binary")) grow(s_.binary_bytes, kBinaryLine);
     // And the model image cache: the rooms with pictures of their own (yours and the picture
     // distance either side) at the chosen size, or as many as the graphics memory has room for

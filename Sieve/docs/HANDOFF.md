@@ -3648,6 +3648,19 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   Apple's frameworks, which the hand-made `sieve_sdl_small` target did not name. It now names the
   Objective-C runtime, iconv and the frameworks, and `-dead_strip_dylibs` drops the unused ones.
   Not testable here (no Mac); the next run shows it.
+- **The run after (21 October 2026)** got further on all three, and found three more:
+  - *Linux:* the setup menu's Find my limits grew the AI line's layers past aispace-v1's 64 on
+    GitHub's larger machine, and the hallway refused its own settings ("layers from 1 to 64"). A
+    bug in the hallway, not the check: growing now stops at a line's own limit where its format has
+    one (the AI line's layers, 64). Shown here with a far larger budget (`--unit-time 60000
+    --item-memory 90`): 64, and no error. The check now also reads that the saved layers are 1 to 64.
+  - *macOS:* it builds now (the frameworks). The model step's hallway could not open a window:
+    on a Mac, SDL's offscreen driver still asks for OpenGL. That step uses SDL's dummy driver on
+    macOS (it draws in memory too; nothing there compares pictures), offscreen elsewhere.
+  - *Windows:* past the pcm vectors, it stopped at `sieve map fixture.map | cmp - fixture.map`:
+    printed to the console, Windows turned each line feed of the map into CR LF. `sieve map` now
+    prints the map's own bytes on every system. No other check compares Sieve's console output
+    byte for byte.
 
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s

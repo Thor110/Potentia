@@ -80,6 +80,11 @@
 #include <thread>
 #include <vector>
 
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
+
 
 using namespace sieve;
 using namespace sieve::cli;
@@ -2737,7 +2742,13 @@ int cmd_map(const Args& a)
     else if (!a.has("dot") && !a.has("graphml"))
     {
         const std::string text = m.text(); // the text part: held bytes are no use on a terminal
+        // The map's own bytes, on every system: Windows would make each line feed CR LF.
+        std::cout.flush();
+#ifdef _WIN32
+        _setmode(_fileno(stdout), _O_BINARY);
+#endif
         std::cout << text;
+        std::cout.flush();
         info = &std::cerr;
     }
     auto as_bytes = [](const std::string& t) { return std::vector<uint8_t>(t.begin(), t.end()); };
