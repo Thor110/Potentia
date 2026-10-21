@@ -37,13 +37,23 @@ uint32_t dictionary_for(uint64_t n)
     return uint32_t(64) << 20;
 }
 
-// Raw LZMA2 (after the x86 filter, with `x86`), at preset 9 extreme, with dictionary `dict`.
-std::vector<uint8_t> pack_stream(const std::vector<uint8_t>& data, uint32_t dict, bool x86, uint32_t preset = 9 | LZMA_PRESET_EXTREME)
+// Raw LZMA2 (after the x86 filter, with `x86`) at `preset`, with dictionary `dict`; `lclppb` its
+// literal and position settings (lc * 100 + lp * 10 + pb; -1: the preset's own, lc 3 lp 0 pb 2), and
+// `nice` its match length (0: the preset's own).
+std::vector<uint8_t> encode_lzma2(const std::vector<uint8_t>& data, uint32_t dict, bool x86, uint32_t preset, int lclppb = -1,
+                                  uint32_t nice = 0)
 {
     if (data.empty()) return {};
     lzma_options_lzma opt;
     if (lzma_lzma_preset(&opt, preset)) throw std::runtime_error("liblzma: no such preset");
     opt.dict_size = dict;
+    if (lclppb >= 0)
+    {
+        opt.lc = uint32_t(lclppb / 100);
+        opt.lp = uint32_t(lclppb / 10 % 10);
+        opt.pb = uint32_t(lclppb % 10);
+    }
+    if (nice) opt.nice_len = nice;
     const lzma_filter plain[] = {{LZMA_FILTER_LZMA2, &opt}, {LZMA_VLI_UNKNOWN, nullptr}};
     const lzma_filter branch[] = {{LZMA_FILTER_X86, nullptr}, {LZMA_FILTER_LZMA2, &opt}, {LZMA_VLI_UNKNOWN, nullptr}};
     std::vector<uint8_t> out(data.size() + data.size() / 16 + 4096);
@@ -52,6 +62,38 @@ std::vector<uint8_t> pack_stream(const std::vector<uint8_t>& data, uint32_t dict
     if (r != LZMA_OK) throw std::runtime_error("liblzma: could not compress (" + std::to_string(int(r)) + ")");
     out.resize(pos);
     return out;
+}
+
+// LZMA2's settings chosen for the stream (`tune`): its literal and position settings (lc, lp, pb)
+// tried on its first MiB at preset 6, a few that suit different kinds of bytes (text, bytes with no
+// alignment, 2- and 4-byte samples), and the best of them used on the whole stream at preset 9
+// extreme, with the preset's match length and a shorter one. The stream as the preset makes it is
+// one of the candidates, so a stream never comes out larger than without this. The reader needs
+// nothing new: LZMA2 writes lc, lp and pb into its own stream, and every reader takes them from
+// there (only the dictionary is in the instructions).
+std::vector<uint8_t> pack_stream(const std::vector<uint8_t>& data, uint32_t dict, bool x86, uint32_t preset = 9 | LZMA_PRESET_EXTREME,
+                                 bool tune = false)
+{
+    std::vector<uint8_t> best = encode_lzma2(data, dict, x86, preset);
+    if (!tune || data.empty()) return best;
+    constexpr size_t kSample = size_t(1) << 20;
+    const std::vector<uint8_t> sample(data.begin(), data.begin() + std::ptrdiff_t(std::min(data.size(), kSample)));
+    const uint32_t sample_dict = dictionary_for(sample.size());
+    int chosen = 302;
+    size_t chosen_size = encode_lzma2(sample, sample_dict, x86, 6, 302).size();
+    for (const int c : {0, 400, 200, 22, 402, 111})
+        if (const size_t n = encode_lzma2(sample, sample_dict, x86, 6, c).size(); n < chosen_size)
+        {
+            chosen = c;
+            chosen_size = n;
+        }
+    for (const uint32_t nice : {0u, 64u})
+    {
+        if (chosen == 302 && nice == 0) continue; // the preset's own: already made
+        std::vector<uint8_t> t = encode_lzma2(data, dict, x86, preset, chosen, nice);
+        if (t.size() < best.size()) best = std::move(t);
+    }
+    return best;
 }
 
 // What a stream of `data` packs to, quickly (preset 6): for choosing between two ways.
@@ -1086,7 +1128,10 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     m.rope_stream = {m.rope_carried.size(), m.rope_carried.size(), 0};
     m.x86 = {0, x86.size(), dictionary_for(x86.size())};
     m.lzma2 = {0, plain.size(), dictionary_for(plain.size())};
-    const std::vector<uint8_t> px = pack_stream(x86, m.x86.dictionary, true), pp = pack_stream(plain, m.lzma2.dictionary, false);
+    // v17's packing: LZMA2's settings chosen for each stream (older versions are made as they were).
+    const bool tune = gzip && binary;
+    const std::vector<uint8_t> px = pack_stream(x86, m.x86.dictionary, true, 9 | LZMA_PRESET_EXTREME, tune),
+                               pp = pack_stream(plain, m.lzma2.dictionary, false, 9 | LZMA_PRESET_EXTREME, tune);
     m.x86.packed = px.size();
     m.lzma2.packed = pp.size();
     m.streams = px;
@@ -1133,7 +1178,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             const std::vector<uint8_t> places = m.items_stream();
             r.item_places = places.size();
             const uint32_t dict = dictionary_for(places.size());
-            std::vector<uint8_t> packed = places.empty() ? std::vector<uint8_t>() : pack_stream(places, dict, false);
+            std::vector<uint8_t> packed = places.empty() ? std::vector<uint8_t>() : pack_stream(places, dict, false, 9 | LZMA_PRESET_EXTREME, tune);
             if (!places.empty() && packed.size() < places.size())
             {
                 m.item_stream = {packed.size(), places.size(), dict};
@@ -1208,7 +1253,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         r.head_text = m.text().size();
         const std::string body = listing_body(m);
         const uint32_t dict = dictionary_for(body.size());
-        std::vector<uint8_t> packed = body.empty() ? std::vector<uint8_t>() : pack_stream(std::vector<uint8_t>(body.begin(), body.end()), dict, false);
+        std::vector<uint8_t> packed = body.empty() ? std::vector<uint8_t>() : pack_stream(std::vector<uint8_t>(body.begin(), body.end()), dict, false, 9 | LZMA_PRESET_EXTREME, tune);
         if (!body.empty() && packed.size() + 12 < body.size())
         {
             m.listing_stream = {packed.size(), body.size(), dict};
@@ -1224,7 +1269,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         const std::string t = m.text();
         const std::vector<uint8_t> listing(t.begin() + std::ptrdiff_t(t.find('\n') + 1), t.end());
         const uint32_t dict = dictionary_for(listing.size());
-        std::vector<uint8_t> packed = pack_stream(listing, dict, false);
+        std::vector<uint8_t> packed = pack_stream(listing, dict, false, 9 | LZMA_PRESET_EXTREME, tune);
         const std::string line = "listing " + std::to_string(packed.size()) + " " + std::to_string(listing.size()) + " " + std::to_string(dict) + "\n";
         if (line.size() + packed.size() < listing.size())
         {

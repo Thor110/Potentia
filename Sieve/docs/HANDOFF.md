@@ -3617,6 +3617,26 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   - These steps had never run before: the workflow ran only once it moved to the repository root.
     Run here the way GitHub runs them (`bash -eo pipefail`, steps 6 to 16, Linux) before handing over.
 
+### LZMA2's settings chosen per stream (21 October 2026)
+- **Why:** Edward sieved 137 JPEGs from his pictures folder one by one; 21 came out larger than
+  7z's (by 15 to 393 bytes), all small (the largest 364 KB), none larger than the picture. Sieve's
+  LZMA2 always used preset 9 extreme's lc 3, pb 2 (made for text); a JPEG has no alignment, and
+  pb 0 with lc 0 or 4 was 113 to 614 bytes smaller on each of the eight he sent.
+- **Built:** v17's packing tries a few lc/lp/pb on each stream's first MiB, then the best of them
+  on the whole stream at two match lengths, and keeps the smallest (the old stream among them).
+  No new version: LZMA2 carries lc/lp/pb in its own stream, and every reader takes them from there.
+  `--v16` and older are made as they were. Measured on a varied set (SPECIFICATIONS §12.2): every
+  file smaller or the same; five of the eight JPEGs now smaller than 7z's. LZMA2's time about
+  triples.
+- **Still larger than 7z:** K2_00000 (3 bytes), K2_00001 (53), TheBigBus (204). 7-Zip's own LZMA
+  encoder parses better than liblzma's; the repository has only its decoders. Adding its encoder
+  (`LzmaEnc.c`, `Lzma2Enc.c`, `LzFind.c`) as another candidate is the next step there; measure
+  first.
+- **CI:** a check that the oracle's source as one file is smaller than `--v16` makes it, read back
+  by both readers. The setup menu's reset check now compares the saved settings, not screenshots
+  (the menu shows a time measured on each run, which a busy machine changes).
+- **Edward's photos stay out of the repository;** the eight JPEGs were only measured.
+
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show

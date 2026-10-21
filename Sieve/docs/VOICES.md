@@ -68,6 +68,7 @@ enumerated and stored later. Nothing is guaranteed (IDEAS §19.77).
 - **Edward** (20 October 2026, on archives): We definitely need to be sure that sieve focuses on its own architecture while providing a route to test against other forms of compression.
 - **Edward** (19 October 2026, on a benchmark script for the people testing Sieve): I feel like handing an automated script that tells them the right answer is the wrong move. I will just let them have at it.
 - **Edward** (21 October 2026, quote; IDEAS §19.91): There is opportunity to tailor filters to files, but they should be dynamic still in a sense. For example I keep wondering if there might be an inverse or opposite to a file that can be found amongst noise which would essentially cancel the file out to nothing that could be generated as noise to pull it back.
+- **Edward** (21 October 2026, quote; on 137 JPEGs from his pictures folder, sieved one by one): 8/137 failed to decrease, really not bad at all. Some really peculiar ones, nothing particularly special about them.
 
 ## Gemini
 

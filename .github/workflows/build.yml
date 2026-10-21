@@ -501,12 +501,16 @@ jobs:
           # Up from the first row wraps to the last, so three Ups land on find-my-limits whatever
           # else is in the list: the last three rows are always find-my-limits, reset, the way in.
           toend="Up,Up,Up"
-          $H --menu --press "$toend" --screenshot plain.png > /dev/null
-          $H --menu --press "$toend,Return" --screenshot lim.png > /dev/null
-          $H --menu --press "$toend,Return,Down,Return,Up" --screenshot res.png > /dev/null
-          # Finding the limits changes the shapes; resetting puts them back exactly as they were.
-          if cmp -s plain.png lim.png; then exit 1; fi
-          cmp -s plain.png res.png
+          # Finding the limits changes the shapes; resetting puts them back exactly as they were. The
+          # settings each run saves are compared, not screenshots: the menu also shows how long a
+          # unit took to open, measured each time, which a busy machine changes. (The window's size
+          # is saved too, once the hallway has opened.)
+          rm -f lim.ini res.ini dflt.ini
+          $H --write-settings dflt.ini > /dev/null
+          $H --menu --settings lim.ini --press "$toend,Return" --screenshot lim.png > /dev/null
+          $H --menu --settings res.ini --press "$toend,Return,Down,Return,Up" --screenshot res.png > /dev/null
+          if diff <(grep -v '^resolution =' dflt.ini) <(grep -v '^resolution =' lim.ini) > /dev/null; then exit 1; fi
+          diff <(grep -v '^resolution =' dflt.ini) <(grep -v '^resolution =' res.ini) > /dev/null
           # The setup menu's rows are numbered, and F on a row opens that line's filters, so the
           # mapping has to be pinned or a row inserted anywhere above silently opens the wrong
           # line's list. Each row here ticks a mode and the saved file says which line it was.
@@ -1111,12 +1115,24 @@ jobs:
           rm -rf pg64 pg64_inst pg64_oracle && mkdir pg64
           python -c "import random; random.seed(3); [open(f'pg64/p{i}.txt','w').write(''.join(random.choice('abcdefghijklmnopqrstuvwxyz ') for _ in range(64))) for i in range(5)]"
           build/sieve locate pg64 --installer pg64.sieve --items --page-length 64 --manifest pg64.manifest | tr -d '\r' | q "^items     5 file(s) carried as items of Sieve's lines (320 bytes, as 195 bytes of places"
-          [ "$(wc -c < pg64.sieve)" -eq 345 ] # v16 (v7, its listing as text: 422)
+          [ "$(wc -c < pg64.sieve)" -eq 339 ] # LZMA2's settings chosen for its listing (v16 345; v7, its listing as text: 422)
+          build/sieve locate pg64 --installer pg64-16.sieve --items --page-length 64 --v16 > /dev/null
+          [ "$(wc -c < pg64-16.sieve)" -eq 345 ]
           python -c "import sys; sys.argv = ['x']; sys.path.insert(0, 'reference'); import sieve_ref; sys.stdout.buffer.write(sieve_ref.v7_listing(sieve_ref.v16_text(open('pg64.manifest', 'rb').read())))" | q -a "^line 0 39 lower27/L64/key=sieve/feistel-sha256-v1 length=64 line=text$"
           build/sieve install pg64.sieve --to pg64_inst > /dev/null
           diff -r pg64 pg64_inst
           python reference/sieve_ref.py unpack pg64.manifest --to pg64_oracle > /dev/null
           diff -r pg64 pg64_oracle
+          # LZMA2's settings chosen per stream (v17's packing; the reader takes them from the stream):
+          # the oracle's own source as one file is smaller than v16 made it, and both read it back.
+          rm -rf tune tune_inst tune_oracle && mkdir tune && cp reference/sieve_ref.py tune/
+          build/sieve locate tune --installer tune.sieve --items --manifest tune.manifest > /dev/null
+          build/sieve locate tune --installer tune16.sieve --items --v16 > /dev/null
+          [ "$(wc -c < tune.sieve)" -lt "$(wc -c < tune16.sieve)" ]
+          build/sieve install tune.sieve --to tune_inst > /dev/null
+          diff -r tune tune_inst
+          python reference/sieve_ref.py unpack tune.manifest --to tune_oracle > /dev/null
+          diff -r tune tune_oracle
           # The tightened rope (rope-wave-v1, IDEAS 19.87): a smooth picture in lines and a noisy
           # sound, made here from a fixed generator. The search finds each one's wave, the code is
           # smaller than LZMA2's, and the oracle's own decoding gives the file back.
