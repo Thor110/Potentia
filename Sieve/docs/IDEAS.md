@@ -4044,3 +4044,28 @@ should stay dynamic.
   any one file, so better generators of that kind are the route the idea points to.
 - *A side note:* XOR with noise that only one side can make is a one-time pad, so the same idea is
   the Encryption Engine's rather than compression's when the seed is kept secret.
+
+**19.92 Sieve for websites (Edward, 21 October 2026; an idea, nothing built).** His thought: a
+quick browser plugin that hands the `.sieve` files it finds online to `sieve.exe` (through an input
+folder) and shows the HTML they unpack to, as a first test where the result is known to be HTML.
+- *The bar is brotli, not the raw page:* web servers already send pages compressed (gzip or
+  brotli), and every browser unpacks them with no plugin. Measured on this repository's own pages,
+  in bytes (the page, gzip -9, brotli at quality 11, Sieve's instructions as one file):
+  index.html 4,773 / 1,894 / 1,434 / 1,909; sieve.html 3,878 / 1,497 / 1,121 / 1,525; audio.html
+  6,345 / 2,451 / 1,840 / 2,452; quest.html 6,924 / 2,555 / 1,863 / 2,533; space.html 12,173 /
+  3,989 / 3,215 / 3,897; specs.html 15,512 / 5,503 / 4,581 / 5,359; metrics.html 19,084 / 6,703 /
+  5,577 / 6,461; release.html 29,841 / 9,707 / 8,147 / 9,273. Sieve is level with gzip and about
+  15 to 25% behind brotli.
+- *Why brotli is ahead:* it ships with a built-in dictionary of common web text, so even a small
+  page starts out knowing HTML; Sieve starts each file from nothing, and on a page this small its
+  name and SHA-256 (about 70 to 90 bytes) count.
+- *The route that could close it:* a shared web dictionary, as brotli has. LZMA2 takes a preset
+  dictionary, so Sieve could ship one made from HTML, CSS and JavaScript (a new version, refused
+  by older readers). Measure it first on pages from outside this site, so it is not fitted to
+  Edward's own HTML; a plugin is worth building only once it beats brotli.
+- *The plugin, when it is worth it:* an extension cannot start `sieve.exe` itself. An input folder
+  watched for downloads works for a test on one machine; native messaging is the browser's own way
+  to reach a local program, but each user installs a helper; the decoder (LZMA2, the rope, the
+  listing's reader) built as WebAssembly runs in the page or the extension, installs nothing and
+  works everywhere, and is the route beyond a test. Any of them decodes files from strangers, so
+  the decoder must treat every `.sieve` as hostile and never run what it unpacks.

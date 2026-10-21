@@ -3668,6 +3668,10 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   - **Archives not yet optimised:** multi-block xz, multi-member gzip, bzip2, zstd, cab, rar, and
     deflate not made by zlib remade exactly (the preflate route); IDEAS §19.88.
   - **The rope for the other lines' places**, and V5S2 above.
+  - **Websites** (IDEAS §19.92): a shared web dictionary for LZMA2, measured against brotli on
+    pages from outside this site, before any plugin.
+  - **7-Zip's LZMA encoder** as one more candidate for each stream (three of Edward's JPEGs still
+    3 to 204 bytes over 7z); measure first.
 - **How Edward works:**
   - Hand work over as a zip with `Sieve/` at its top (no `files/` folder) and `CHANGES.md` beside
     it (Edward, 17 October 2026); root website files go in, beside `Sieve/`, when they change.
