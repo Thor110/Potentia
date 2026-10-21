@@ -3600,6 +3600,22 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   lines with the corpus given CRLF); `.gitattributes` now protects all of `tests/`. A build with
   GCC's undefined-behaviour checker ran the whole suite with none found.
 - **Edward's IDEAS note on a file's opposite in noise** is §19.91 (an answer; nothing built).
+- **The second run on GitHub** got further and found four more, none of them in the packing:
+  - *macOS:* the installer's link options (`--gc-sections`, `-s`) are GNU's; Apple's linker takes
+    `-dead_strip`.
+  - *Windows:* `sieve world --read … --out FILE` built the path from `a.get("out").begin()` and
+    `a.get("out").end()`, two different copies of the string (undefined behaviour). GCC got away
+    with it; Microsoft's library threw "string too long". Now one string. No other line of that
+    form calls a function that returns a copy.
+  - *Every system:* GitHub runs a step with `bash -eo pipefail`, so the check that a reordered run
+    is "NOT reproduced" (which exits with an error, as it should) failed the step; it now tolerates
+    that exit. Two checks wrote the AI line's filters in the wrong order (Sieve lists them in its
+    registry's order). The model step starts the hallway, so it now has the hallway step's
+    no-screen settings (`SDL_VIDEO_DRIVER=offscreen`, `SDL_RENDER_DRIVER=software`).
+  - Every multi-line step now names the line it stopped at (`::error::the step stopped at its line
+    N`), so a failure on GitHub points to its command.
+  - These steps had never run before: the workflow ran only once it moved to the repository root.
+    Run here the way GitHub runs them (`bash -eo pipefail`, steps 6 to 16, Linux) before handing over.
 
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s

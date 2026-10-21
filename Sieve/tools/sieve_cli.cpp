@@ -1286,7 +1286,8 @@ int cmd_world(const Args& a)
         if (w.title) std::cout << "title        \"" << utf8_encode(w.title->text_of(p.title)) << "\"\n";
         if (a.has("out"))
         {
-            std::ofstream out(std::filesystem::path(std::u8string(a.get("out").begin(), a.get("out").end())), std::ios::binary);
+            const std::string out_name = a.get("out"); // one string: begin() and end() of two copies would not be one range
+            std::ofstream out(std::filesystem::path(std::u8string(out_name.begin(), out_name.end())), std::ios::binary);
             out << obj;
             if (!out) throw std::invalid_argument("cannot write " + a.get("out"));
             std::cout << "wrote        " << a.get("out") << " (" << obj.size() << " bytes, " << ws.slots() * ws.model_space().vertices() << " vertices, "

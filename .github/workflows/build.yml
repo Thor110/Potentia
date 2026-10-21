@@ -34,6 +34,7 @@ jobs:
       - name: Linux packages for SDL
         if: runner.os == 'Linux'
         run: |
+          trap 'echo "::error::the step stopped at its line $LINENO: $BASH_COMMAND" >&2' ERR # names the failing line
           sudo apt-get update
           sudo apt-get install -y libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev \
             libxss-dev libxtst-dev libxkbcommon-dev libgl1-mesa-dev libegl1-mesa-dev libasound2-dev libpulse-dev \
@@ -50,6 +51,7 @@ jobs:
 
       - name: Same addresses on every platform
         run: |
+          trap 'echo "::error::the step stopped at its line $LINENO: $BASH_COMMAND" >&2' ERR # names the failing line
           q() { grep -c "$@" > /dev/null; }
           exe=build/sieve
           [ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
@@ -96,6 +98,7 @@ jobs:
 
       - name: Filters judge, count and rank the same on every platform
         run: |
+          trap 'echo "::error::the step stopped at its line $LINENO: $BASH_COMMAND" >&2' ERR # names the failing line
           # q PATTERN: like grep -q, but reads all its input, so the command before it never
           # gets SIGPIPE (the steps run with pipefail).
           q() { grep -c "$@" > /dev/null; }
@@ -230,7 +233,12 @@ jobs:
           echo "$out" | q "^  tailored audio: none, "
 
       - name: A model is one object with an address on two lines
+        env:
+          # The hallway's checks here need no screen, as in the hallway's own step.
+          SDL_VIDEO_DRIVER: offscreen
+          SDL_RENDER_DRIVER: software
         run: |
+          trap 'echo "::error::the step stopped at its line $LINENO: $BASH_COMMAND" >&2' ERR # names the failing line
           q() { grep -c "$@" > /dev/null; }
           exe=build/sieve
           [ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
@@ -339,7 +347,8 @@ jobs:
           python reference/sieve_ref.py train-replay --run tiny-run | tr -d '\r' | cmp - tiny-run/result.txt
           $exe ai-train tiny-run.sieve --threads 1 --quiet | tr -d '\r' | q "^reproduced exactly"
           python -c "import sys; p='tiny-run/order.txt'; l=open(p).read().split('\n'); l[1],l[5]=l[5],l[1]; open(p,'w').write('\n'.join(l))"
-          $exe ai-train tiny-run --quiet | tr -d '\r' | q "^NOT reproduced"
+          # (It exits with an error, as it should; the step's shell fails a pipe on any error.)
+          { $exe ai-train tiny-run --quiet || true; } | tr -d '\r' | q "^NOT reproduced"
           $exe ai-train tests/training_run_v1 --quiet | tr -d '\r' | q "^reproduced exactly"
           python reference/sieve_ref.py train-replay --run tests/training_run_v1 | tr -d '\r' | cmp - tests/training_run_v1/result.txt
           $exe ai-train data/training/universalbibliothek.sieve --quiet | tr -d '\r' | q "^reproduced exactly"
@@ -410,10 +419,10 @@ jobs:
           printf '[ai]\nmode = compact\nfilters = near-model-v1, language-v1\n' > ai-run.ini
           printf '[ai]\nmode = compact\nfilters = near-model-v1\n' > ai-near.ini
           $exe filters --line ai --filters ai-near.ini --exact | tr -d '\r' | q "^survivors    2\^32.81 (exact; compact mode available): 7548948481$"
-          $exe ai --address-file ub.hex --filters ai-run.ini --temperature 0 | tr -d '\r' | tee ub-run.txt | q "near-model-v1 \[x\] pass, language-v1 \[x\] pass"
+          $exe ai --address-file ub.hex --filters ai-run.ini --temperature 0 | tr -d '\r' | tee ub-run.txt | q "language-v1 \[x\] pass, near-model-v1 \[x\] pass"
           q "^layer        0 (digits from the model universalbibliothek trained)" ub-run.txt
           q "^speaks       universalbibliothek (corpus/universalbibliothek.txt): 275.71 thousandths" ub-run.txt
-          $exe ai --bearing 180 --filters ai-run.ini --temperature 0 | tr -d '\r' | q "near-model-v1 \[x\] FAIL, language-v1 \[x\] FAIL"
+          $exe ai --bearing 180 --filters ai-run.ini --temperature 0 | tr -d '\r' | q "language-v1 \[x\] FAIL, near-model-v1 \[x\] FAIL"
           # And the same line in the hallway: a sixth door, the cube in hand, green on clay.
           H=build/hallway
           [ -f build/Release/hallway.exe ] && H=build/Release/hallway.exe
@@ -587,6 +596,7 @@ jobs:
       - name: BigUint's arithmetic also builds and passes without a 128-bit integer type
         if: runner.os == 'Linux'
         run: |
+          trap 'echo "::error::the step stopped at its line $LINENO: $BASH_COMMAND" >&2' ERR # names the failing line
           # Every limb operation has two implementations: one using the compiler's 128-bit
           # integer, and one built from 32-bit halves for compilers that have no such type.
           # The second is the one nothing would otherwise exercise, so it is built and run here
@@ -597,6 +607,7 @@ jobs:
 
       - name: A file is one unit of the bytes256 line, and its address is its own bytes
         run: |
+          trap 'echo "::error::the step stopped at its line $LINENO: $BASH_COMMAND" >&2' ERR # names the failing line
           q() { grep -c "$@" > /dev/null; }
           exe=build/sieve
           [ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
@@ -625,6 +636,7 @@ jobs:
 
       - name: Sound itself is a set of the audio line, and comes back as the same WAV
         run: |
+          trap 'echo "::error::the step stopped at its line $LINENO: $BASH_COMMAND" >&2' ERR # names the failing line
           q() { grep -c "$@" > /dev/null; }
           exe=build/sieve
           [ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
@@ -663,6 +675,7 @@ jobs:
 
       - name: Other picture and video formats come in through ffmpeg
         run: |
+          trap 'echo "::error::the step stopped at its line $LINENO: $BASH_COMMAND" >&2' ERR # names the failing line
           q() { grep -c "$@" > /dev/null; }
           exe=build/sieve
           [ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
@@ -703,6 +716,7 @@ jobs:
 
       - name: Books bind, unbind and keep their id in every ordering
         run: |
+          trap 'echo "::error::the step stopped at its line $LINENO: $BASH_COMMAND" >&2' ERR # names the failing line
           # q PATTERN: like grep -q, but reads all its input, so the command before it never
           # gets SIGPIPE (the steps run with pipefail).
           q() { grep -c "$@" > /dev/null; }
@@ -762,6 +776,7 @@ jobs:
           SDL_VIDEO_DRIVER: offscreen
           SDL_RENDER_DRIVER: software
         run: |
+          trap 'echo "::error::the step stopped at its line $LINENO: $BASH_COMMAND" >&2' ERR # names the failing line
           # q PATTERN: like grep -q, but reads all its input, so the command before it never
           # gets SIGPIPE (the steps run with pipefail).
           q() { grep -c "$@" > /dev/null; }
@@ -1821,6 +1836,7 @@ jobs:
 
       - name: Reference oracle reproduces the committed vectors
         run: |
+          trap 'echo "::error::the step stopped at its line $LINENO: $BASH_COMMAND" >&2' ERR # names the failing line
           cd reference
           python sieve_ref.py vectors       | diff - ../tests/vectors_v1.tsv
           python sieve_ref.py biguint-vectors | diff - ../tests/vectors_biguint_v1.tsv
@@ -2107,6 +2123,7 @@ jobs:
       - name: The pinned model rebuilds byte for byte from its corpus (Linux)
         if: runner.os == 'Linux'
         run: |
+          trap 'echo "::error::the step stopped at its line $LINENO: $BASH_COMMAND" >&2' ERR # names the failing line
           python tools/fetch_corpus.py
           pinned=$(awk -F'\t' '$1 == "gutenberg-lower27-o5" {print $5}' data/models/models.tsv)
           build/sieve train --out rebuilt.model
