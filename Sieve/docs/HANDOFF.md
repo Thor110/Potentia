@@ -3661,6 +3661,17 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
     printed to the console, Windows turned each line feed of the map into CR LF. `sieve map` now
     prints the map's own bytes on every system. No other check compares Sieve's console output
     byte for byte.
+- **Round five (21 October 2026):** Linux and Windows green on every step. macOS failed in the
+  filters step: "an instrument is a General MIDI program, 0 to 127" for a notes3 line. The cause,
+  a bug on every system: `make_notes3_set` filled the instruments with
+  `instruments.assign(voices, instruments[0])`, a reference into the vector it refills, which the
+  standard forbids for `assign`. GNU's library copes; Apple's (libc++) frees first and reads
+  garbage. Shown here with clang and libc++: `{0}` assigned that way reads 1,627,873,494. Now a
+  copy first. No other `assign` takes its own element (`push_back` and `insert` must cope, and do).
+- **A libc++ build here:** Sieve built with clang and libc++ (as on a Mac): unit suite 0
+  failures, and every workflow step (6 to 16) passes on it. Worth doing whenever macOS fails again:
+  `CC=clang CXX=clang++ cmake … -DCMAKE_CXX_FLAGS=-stdlib=libc++ -DCMAKE_EXE_LINKER_FLAGS=-stdlib=libc++`
+  (needs `libc++-dev`).
 
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s

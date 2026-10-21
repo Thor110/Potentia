@@ -103,7 +103,11 @@ Notes3Set make_notes3_set(uint32_t low, uint32_t high, uint32_t tpq, uint32_t lo
     if (voices < 1 || voices > kNotes3MaxVoices) throw std::invalid_argument("notes3 has 1 to 15 voices (a MIDI channel each, the drums' left out)");
     if (tempo < 1 || tempo > 1000) throw std::invalid_argument("notes3's tempo is 1 to 1000 quarter notes a minute");
     if (instruments.empty()) instruments = {0};
-    if (instruments.size() == 1) instruments.assign(voices, instruments[0]);
+    if (instruments.size() == 1)
+    {
+        const uint32_t one = instruments[0]; // a copy: assign() may free what instruments[0] refers to before reading it
+        instruments.assign(voices, one);
+    }
     if (instruments.size() != voices) throw std::invalid_argument("notes3 takes one instrument, or one a voice");
     for (uint32_t p : instruments)
         if (p > 127) throw std::invalid_argument("an instrument is a General MIDI program, 0 to 127");
