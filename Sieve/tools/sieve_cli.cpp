@@ -2770,14 +2770,20 @@ int cmd_install(const Args& a)
     if (a.positional.empty() || !a.has("to")) throw std::invalid_argument("install needs an address file and --to FOLDER (see: sieve help install)");
     const std::string in = a.positional[0], to = a.get("to");
     // An installer, an installer program, or an installer's manifest itself.
+    using clock = std::chrono::steady_clock;
+    const auto t0 = clock::now();
     const Manifest m = installable_manifest(fs::path(std::u8string(in.begin(), in.end())), a.has("hex"));
+    const auto t1 = clock::now();
     std::cout << "manifest  " << m.root << ": " << m.files << " files, " << m.bytes << " bytes\n";
     const fs::path dest(std::u8string(to.begin(), to.end()));
     install_tree(m, dest, a.has("force"), [&](int phase, size_t done, size_t total, const std::string& path) {
         if (phase == 1) std::cout << "  " << done << "/" << total << "  " << path << "\n";
     });
+    const auto t2 = clock::now();
     std::cout << "installed " << m.files << (m.files == 1 ? " file into " : " files into ") << to
               << (m.files == 1 ? ", checked against its SHA-256\n" : ", every one checked against its SHA-256\n");
+    std::cout << "time      " << install_times_text(std::chrono::duration<double>(t1 - t0).count(), std::chrono::duration<double>(t2 - t1).count())
+              << "\n";
     // v14: an archive carried as its contents is said so, never passed off as the archive.
     for (const auto& u : m.unpacked)
         std::cout << "note      " << u.archive << " (" << u.format << ", " << u.size << " bytes) was carried as its contents (Optimise Archive Formats): "

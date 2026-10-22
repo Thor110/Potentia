@@ -1374,6 +1374,16 @@ Manifest installable_manifest(const fs::path& file, bool hex)
     return manifest_of_installer(read_address_file(file, hex));
 }
 
+std::string install_times_text(double decode_seconds, double write_seconds)
+{
+    auto s = [](double v) {
+        char b[32];
+        std::snprintf(b, sizeof b, "%.3f s", v);
+        return std::string(b);
+    };
+    return "decoded in " + s(decode_seconds) + ", checked and written in " + s(write_seconds);
+}
+
 bool install_tree(const Manifest& m, const fs::path& dest, bool force, const InstallProgress& progress, const std::atomic<bool>* cancel)
 {
     auto cancelled = [cancel] { return cancel && cancel->load(); };

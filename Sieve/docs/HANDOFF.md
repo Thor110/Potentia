@@ -3683,16 +3683,36 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   Windows use the program as before. Shown here with such a stand-in: one program in the x86
   stream, and both readers give the folder back.
 
+### 7-Zip's encoder, install times, a web dictionary weighed, maps and instructions (22 October 2026)
+- **7-Zip's own LZMA2 encoder** (LZMA SDK, 7-Zip 26.03, as the decoders; `third_party/lzma`,
+  `LzmaEnc`, `Lzma2Enc`, `LzFind`, `LzFindOpt`, `LzHash.h`, single-threaded) is one more candidate
+  for each stream of the newest version, at the settings already chosen, kept where smaller
+  (SPECIFICATIONS §12.2). Its own library (`sieve_lzma_enc`), linked by the packer only, so the
+  installers are as before. Measured: the program 2,227 bytes smaller, a log 273, one JPEG 11; the
+  rest unchanged. 7-Zip's whole grid of settings was tried first: no better than this one pass, at
+  four times the time; its deeper match search (`mc`) gained 17 bytes on the program.
+- **Install times:** `sieve install` ends with `time      decoded in D s, checked and written in W s`;
+  the hallway's File Locator says the same after installing (`install_times_text`, locate.cpp).
+  A CI check reads the line.
+- **The web dictionary** (IDEAS §19.92) was measured and not built: level with brotli on pages
+  of 20 KB and more, behind on small pages. The pages were a 2014 snapshot (the websites were not
+  reachable from the session).
+- **Maps and instructions** (IDEAS §19.93): the 3D node graph stores nothing in a map (it lays one
+  out afresh), so a map could be a `.sieve` with a flagged graph part. A recommendation for Edward
+  to decide; nothing built.
+- **Edward's sync:** this session's git could not be reset or merged to Edward's `origin/main`
+  (refused as destructive); the code was the same, only his build metrics and root `CHANGES.md`
+  differed. Start the next session from his `main`.
+
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show
   yet.
-- **CI moved to the repository root (21 October 2026),** at Edward's word: `.github/workflows/build.yml`
-  beside `Sieve/`, its steps in `Sieve/` (`PROJECT_DIR`), so GitHub runs it on every push. Its first
-  runs on GitHub (Windows and macOS above all, which have never run it) may show what Linux here did
-  not. The file already set `defaults.run.working-directory` to `PROJECT_DIR`, so no path in it
-  changed. Edward's copy needs `Sieve/.github/workflows/build.yml` deleted by hand (copying a zip
-  over the folder does not remove it).
+- **CI is green on Linux, Windows and macOS (22 October 2026),** at the repository root
+  (`.github/workflows/build.yml`, its steps in `Sieve/`). The rounds that got it there are in the
+  entries above (21 October). When a run fails, the log names the step's line
+  (`::error::the step stopped at its line N`); for macOS, build here with clang and libc++ first
+  (the command is in "A libc++ build here" above).
 - **Still open, in IDEAS order:**
   - §19.79 is done, but voice in CHAT;
   - §19.80 (tabs on every line, CHAT left out for now: §17.2), §19.81 to §19.83 (models), §19.82

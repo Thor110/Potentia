@@ -315,6 +315,11 @@ using InstallProgress = std::function<void(int phase, size_t done, size_t total,
 bool install_tree(const Manifest& m, const std::filesystem::path& dest, bool force, const InstallProgress& progress,
                   const std::atomic<bool>* cancel = nullptr);
 
+// How long an install took, as `sieve install` and the hallway say it: "decoded in 0.042 s, checked
+// and written in 0.003 s" (decoding: reading the instructions and making every file's bytes from
+// them; then each checked against its SHA-256 and written).
+std::string install_times_text(double decode_seconds, double write_seconds);
+
 // A path, as a manifest writes it: relative to `root`, UTF-8, '/' between the parts.
 std::string manifest_path(const std::filesystem::path& p, const std::filesystem::path& root);
 

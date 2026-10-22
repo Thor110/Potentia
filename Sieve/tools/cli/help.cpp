@@ -1028,7 +1028,10 @@ const std::vector<Page>& pages()
          "installer program made with --program installs the same way, and so does an installer's\n"
          "manifest (v3) itself.\n"
          "Every file is checked against its size and SHA-256 before anything is written, so a bad\n"
-         "address leaves the folder untouched. Files already there are refused unless --force.",
+         "address leaves the folder untouched. Files already there are refused unless --force.\n"
+         "Last, it says how long decoding took (reading the instructions and making every file's\n"
+         "bytes from them) and how long checking and writing took; the hallway's File Locator\n"
+         "says the same after it installs.",
          {{"--to FOLDER", "Where to put the tree (required). Created if it is not there."},
           {"--force", "Replace files that are already there."},
           {"--hex", "The installer is written in hex rather than raw bytes."}},

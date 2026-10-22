@@ -9,6 +9,9 @@
 #include <lzma.h>
 #include <zlib.h>
 
+#include "Bra.h"
+#include "Lzma2Enc.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -64,13 +67,61 @@ std::vector<uint8_t> encode_lzma2(const std::vector<uint8_t>& data, uint32_t dic
     return out;
 }
 
+void* sdk_alloc(ISzAllocPtr, size_t size) { return size ? std::malloc(size) : nullptr; }
+void sdk_free(ISzAllocPtr, void* address) { std::free(address); }
+const ISzAlloc kSdkAlloc = {sdk_alloc, sdk_free};
+
+// The same raw LZMA2 by 7-Zip's own encoder (the LZMA SDK's, single-threaded): level 9, the
+// longest match (273), its literal and position settings `lclppb`, dictionary `dict`; for the x86
+// stream, after the same x86 filter (the SDK's, as liblzma's: start 0). Its stream is LZMA2 as
+// liblzma's is, read by the same readers; it parses differently, so it is sometimes the smaller.
+std::vector<uint8_t> encode_lzma2_sdk(const std::vector<uint8_t>& data, uint32_t dict, bool x86, int lclppb)
+{
+    if (data.empty()) return {};
+    std::vector<uint8_t> in = data;
+    if (x86)
+    {
+        UInt32 state = Z7_BRANCH_CONV_ST_X86_STATE_INIT_VAL;
+        z7_BranchConvSt_X86_Enc(in.data(), in.size(), 0, &state);
+    }
+    CLzma2EncHandle h = Lzma2Enc_Create(&kSdkAlloc, &kSdkAlloc);
+    if (!h) throw std::runtime_error("LZMA SDK: out of memory");
+    CLzma2EncProps p;
+    Lzma2EncProps_Init(&p);
+    p.lzmaProps.level = 9;
+    p.lzmaProps.dictSize = dict;
+    p.lzmaProps.lc = lclppb / 100;
+    p.lzmaProps.lp = lclppb / 10 % 10;
+    p.lzmaProps.pb = lclppb % 10;
+    p.lzmaProps.fb = 273;
+    p.lzmaProps.algo = 1;
+    p.lzmaProps.btMode = 1;
+    p.lzmaProps.numHashBytes = 4;
+    p.lzmaProps.numThreads = 1;
+    p.blockSize = LZMA2_ENC_PROPS_BLOCK_SIZE_SOLID;
+    p.numBlockThreads_Max = p.numBlockThreads_Reduced = p.numTotalThreads = 1;
+    Lzma2EncProps_Normalize(&p);
+    std::vector<uint8_t> out(in.size() + in.size() / 16 + 4096);
+    size_t n = out.size();
+    SRes r = Lzma2Enc_SetProps(h, &p);
+    if (r == SZ_OK)
+    {
+        Lzma2Enc_SetDataSize(h, in.size());
+        r = Lzma2Enc_Encode2(h, nullptr, out.data(), &n, nullptr, in.data(), in.size(), nullptr);
+    }
+    Lzma2Enc_Destroy(h);
+    if (r != SZ_OK) throw std::runtime_error("LZMA SDK: could not compress (" + std::to_string(int(r)) + ")");
+    out.resize(n);
+    return out;
+}
+
 // LZMA2's settings chosen for the stream (`tune`): its literal and position settings (lc, lp, pb)
 // tried on its first MiB at preset 6, a few that suit different kinds of bytes (text, bytes with no
 // alignment, 2- and 4-byte samples), and the best of them used on the whole stream at preset 9
-// extreme, with the preset's match length and a shorter one. The stream as the preset makes it is
-// one of the candidates, so a stream never comes out larger than without this. The reader needs
-// nothing new: LZMA2 writes lc, lp and pb into its own stream, and every reader takes them from
-// there (only the dictionary is in the instructions).
+// extreme, with the preset's match length and a shorter one, and by 7-Zip's own encoder too. The
+// stream as the preset makes it is one of the candidates, so a stream never comes out larger than
+// without this. The reader needs nothing new: LZMA2 writes lc, lp and pb into its own stream, and
+// every reader takes them from there (only the dictionary is in the instructions).
 std::vector<uint8_t> pack_stream(const std::vector<uint8_t>& data, uint32_t dict, bool x86, uint32_t preset = 9 | LZMA_PRESET_EXTREME,
                                  bool tune = false)
 {
@@ -93,6 +144,8 @@ std::vector<uint8_t> pack_stream(const std::vector<uint8_t>& data, uint32_t dict
         std::vector<uint8_t> t = encode_lzma2(data, dict, x86, preset, chosen, nice);
         if (t.size() < best.size()) best = std::move(t);
     }
+    // And 7-Zip's own encoder at the same settings (22 October 2026).
+    if (std::vector<uint8_t> t = encode_lzma2_sdk(data, dict, x86, chosen); t.size() < best.size()) best = std::move(t);
     return best;
 }
 

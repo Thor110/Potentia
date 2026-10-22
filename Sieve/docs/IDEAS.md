@@ -4083,3 +4083,44 @@ folder) and shows the HTML they unpack to, as a first test where the result is k
     (IPFS) name everything this way; Sieve would bring it to whole pages and folders.
   - *Who made it:* a signature over the hash (the maker's key, published once) would add that,
     and would be a new version; nothing in Sieve signs today.
+- *Measured (22 October 2026): a web dictionary.* Dictionaries of 32, 64 and 120 KB were learnt
+  (zstd's trainer, its output used as LZMA2's preset dictionary) from 155 saved real-world pages of
+  half of 90 sites (the npm package `htmlparser-benchmark`), and tried on 102 pages of the other
+  half, which it never saw, and on 7 of Edward's pages; every stream decoded back. In bytes, the
+  102 pages (10,144,997): gzip -9 2,095,915; brotli 1,654,224; LZMA2 1,832,710; with 32 KB
+  1,728,489, 64 KB 1,684,831, 120 KB 1,646,408 (10.2% below LZMA2 alone, 0.5% below brotli,
+  smaller than brotli on 66 of the 102). Edward's 7 pages (92,185): brotli 25,938; LZMA2 30,556;
+  with 120 KB 27,638 (6.6% over brotli, on none smaller), and Sieve's listing adds 70 to 90 bytes
+  a file besides. So a dictionary of brotli's size draws level on pages of 20 KB and more and
+  stays behind on small ones, where brotli's own modelling of its dictionary (words and their
+  transforms) is the stronger. *Verdict: not yet a new version;* the dictionary is the right
+  route, and small pages want more than a dictionary (brotli's context modelling, or the rope on
+  text). The websites were not reachable from the session, so the pages are a 2014 snapshot;
+  measure again on today's pages before building.
+
+**19.93 The `.map` format folded into `.sieve` (Edward, 22 October 2026; a recommendation,
+nothing built).** His thought: update the `.map` format, or replace it with `.sieve` and deprecate
+it, the differences once needed for the 3D node graph perhaps being redundant now.
+- *What a map has that instructions lack* (SPECIFICATIONS §12.3): files **named but not held**
+  (a size and SHA-256, a claim that the bytes exist somewhere), **edges** with a relation
+  (`contains`, `anchor`, any word), **metadata** on a node, a **seal**, and **held** files whose
+  bytes it carries as they are.
+- *What the node graph needs from it:* none of that is 3D. A map stores no position; the graph
+  lays it out afresh each time (force-directed, starting from each node's id), so nothing of the
+  3D view is in the file, and that difference is already gone.
+- *What instructions have that a map lacks:* every way of packing (LZMA2 as now chosen, the
+  x86 stream, the rope, pieces, items, archives remade), the binary head, and installing.
+- *Why it was set aside before (11 October 2026, §16.3):* every `.sieve` would have had to allow
+  for entries only maps need. Since v16 that no longer costs anything: the head's flags byte has
+  two bits free (64, 128), so a map's parts would be present only where a flag says so, and
+  ordinary instructions would be the same bytes as now.
+- *Recommended:* one format. A `.sieve` whose head may flag a **graph part** (named-only entries,
+  edges, metadata, a seal), its held files carried and packed as any instructions' files are; a
+  new manifest version, refused by older readers. The node graph opens `.sieve` files as maps;
+  `sieve install` puts back the held files and lists the named-only ones (it cannot make them);
+  `sieve map` writes `.sieve`. The `.map` formats (v1, v2) stay readable, with a conversion
+  (`sieve map OLD.map --to NEW.sieve`), and nothing writes them any more. The DOT and GraphML
+  exports stay. Held anchors gain what installers gain (§16.3: a map of texts or programs).
+- *To weigh first:* the release map is sealed and its SHA-256 published, so it would be
+  republished as a `.sieve` with a new hash; "This installation" is made fresh each time and
+  would simply be made as a `.sieve`. Edward to decide before it is built.

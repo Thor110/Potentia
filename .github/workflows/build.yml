@@ -1110,6 +1110,9 @@ jobs:
           build/sieve locate ub_one --installer ub-v16.sieve --items --manifest ub-v16.manifest > /dev/null
           [ "$(wc -c < ub-v16.sieve)" -eq 4176 ]
           build/sieve install ub-v16.sieve --to ub_inst16 > /dev/null
+          # It says how long decoding took, and checking and writing.
+          rm -rf ub_inst16t
+          build/sieve install ub-v16.sieve --to ub_inst16t | tr -d '\r' | q "^time      decoded in [0-9]*\.[0-9]\{3\} s, checked and written in [0-9]*\.[0-9]\{3\} s$"
           cmp ub_one/model.safetensors ub_inst16/model.safetensors
           python reference/sieve_ref.py unpack ub-v16.manifest --to ub_oracle16 > /dev/null
           cmp ub_one/model.safetensors ub_oracle16/model.safetensors

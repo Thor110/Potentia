@@ -205,6 +205,18 @@ if(MSVC)
     target_compile_options(sieve_lzma PRIVATE /W3)
 endif()
 
+# The LZMA SDK's LZMA2 encoder (third_party/lzma, public domain), single-threaded (Z7_ST): one more
+# way the packer tries for each stream beside liblzma's, keeping the smaller (tools/cli/pack.cpp).
+# A library of its own, so only the packer links it; the installers do not.
+add_library(sieve_lzma_enc STATIC
+    third_party/lzma/LzmaEnc.c third_party/lzma/Lzma2Enc.c third_party/lzma/LzFind.c third_party/lzma/LzFindOpt.c)
+target_include_directories(sieve_lzma_enc PUBLIC third_party/lzma)
+target_compile_definitions(sieve_lzma_enc PUBLIC Z7_ST)
+target_link_libraries(sieve_lzma_enc PUBLIC sieve_lzma)
+if(MSVC)
+    target_compile_options(sieve_lzma_enc PRIVATE /W3)
+endif()
+
 add_library(sieve_locate STATIC tools/cli/locate.cpp tools/cli/map.cpp tools/cli/vault.cpp tools/cli/vault_decode.cpp tools/cli/timings.cpp)
 target_include_directories(sieve_locate PUBLIC tools)
 # The vault checks pictures (PDQ), including files that are pictures, so it reads them (stb).
@@ -215,7 +227,7 @@ target_link_libraries(sieve_lines PUBLIC sieve_locate) # the lines check units a
 add_library(sieve_compare STATIC tools/cli/compare.cpp tools/cli/pack.cpp tools/cli/train.cpp tools/cli/diffusion_run.cpp tools/cli/model_folder.cpp
     client/unpack_7z.cpp)
 target_include_directories(sieve_compare PUBLIC tools PRIVATE client)
-target_link_libraries(sieve_compare PUBLIC sieve_core sieve_locate PRIVATE ${SIEVE_ZLIB} ${SIEVE_LZMA} sieve_lzma)
+target_link_libraries(sieve_compare PUBLIC sieve_core sieve_locate PRIVATE ${SIEVE_ZLIB} ${SIEVE_LZMA} sieve_lzma sieve_lzma_enc)
 if(SIEVE_LZMA_INCLUDE)
     target_include_directories(sieve_compare SYSTEM PRIVATE ${SIEVE_LZMA_INCLUDE})
 endif()

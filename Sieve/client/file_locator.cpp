@@ -13,6 +13,7 @@
 #include "cli/pack.hpp"
 #include "cli/timings.hpp"
 
+#include <chrono>
 #include <stdexcept>
 
 namespace hallway {
@@ -170,12 +171,17 @@ void FileLocator::install(const std::string& from, const std::string& to, bool s
         std::string done;
         try
         {
+            using clock = std::chrono::steady_clock;
+            const auto t0 = clock::now();
             const cli::Manifest m = cli::installable_manifest(from_u8(from), false);
+            const auto t1 = clock::now();
             cli::install_tree(m, from_u8(to), false, [this](int phase, size_t d, size_t t, const std::string& path) {
                 std::lock_guard<std::mutex> lock(mx_);
                 status_ = trf(phase == 0 ? "loc.install.checking" : "loc.install.writing", {std::to_string(d), std::to_string(t), path});
             });
-            done = m.files == 1 ? trf("loc.installed.one", {to}) : trf("loc.installed", {std::to_string(m.files), to});
+            const auto t2 = clock::now();
+            done = (m.files == 1 ? trf("loc.installed.one", {to}) : trf("loc.installed", {std::to_string(m.files), to})) + "; " +
+                   cli::install_times_text(std::chrono::duration<double>(t1 - t0).count(), std::chrono::duration<double>(t2 - t1).count());
         }
         catch (const std::exception& e)
         {

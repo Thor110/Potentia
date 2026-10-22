@@ -1,4 +1,4 @@
-LZMA SDK (the 7z decoder in third_party/lzma)
+LZMA SDK (the 7z decoder and the LZMA2 encoder in third_party/lzma)
 
 LZMA SDK is written and placed in the public domain by Igor Pavlov.
 
