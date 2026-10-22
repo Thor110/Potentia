@@ -1480,8 +1480,8 @@ jobs:
           if build/sieve vault --written vhex.txt > /dev/null; then exit 1; fi
           if build/sieve vault --written vb64.txt > /dev/null; then exit 1; fi
           build/sieve warp --line text --length 32 "sieve vault tests" | q "positional"
-          build/sieve map --new vt --out vt.map 2> /dev/null
-          if build/sieve map vt.map --add vt.txt --out vt.map > /dev/null 2>&1; then exit 1; fi
+          build/sieve map --new vt --out vt-map.sieve 2> /dev/null
+          if build/sieve map vt-map.sieve --add vt.txt --out vt-map.sieve > /dev/null 2>&1; then exit 1; fi
           python reference/sieve_ref.py manifest vt.txt --with-contents > vt.manifest
           python -c "b=open('vt.manifest','rb').read(); n=int.from_bytes(b,'big')+(256**len(b)-1)//255; open('vt.sieve','wb').write(n.to_bytes((n.bit_length()+7)//8,'big'))"
           rm -rf vti vti2
@@ -1598,21 +1598,21 @@ jobs:
           # (its bytes kept in the map), and V again takes it out; with metadata, the item page
           # gains a META tab; a held anchor can be walked to from the viewer, whose Delete removes
           # it; a sealed map will not take one.
-          rm -f build/maps/finds.map
-          $H --no-menu --binary-length 64 --new-map build/maps/finds.map --locate tests/manifest_fixture/a.txt --press "Return,V" --screenshot anchor.png | q "added a.txt to finds as a verified anchor (node 1)"
-          build/sieve map build/maps/finds.map 2>&1 | q "1 held"
-          $H --no-menu --binary-length 64 --map build/maps/finds.map --locate tests/manifest_fixture/a.txt --press "Return,V" --screenshot anchor2.png | q "removed a.txt from finds"
-          build/sieve map build/maps/finds.map 2>&1 | q "0 held"
-          build/sieve map build/maps/finds.map --add tests/manifest_fixture/a.txt --out build/maps/finds.map 2> /dev/null
-          build/sieve map build/maps/finds.map --meta "1:source=the fixture folder" --out build/maps/finds.map 2> /dev/null
-          $H --no-menu --binary-length 64 --map build/maps/finds.map --locate tests/manifest_fixture/a.txt --press "Return,C,C,C" --screenshot meta.png | q "saved meta.png"
-          $H --no-menu --binary-length 64 --map build/maps/finds.map --graph --press "Tab,Tab,Return" --screenshot anchorgo.png | tail -2 | sed -n 1p | q "^BINARY line.* TXT 34 bytes"
-          $H --no-menu --map build/maps/finds.map --graph --press "Tab,Tab,Delete" --screenshot anchordel.png | q "saved anchordel.png"
-          build/sieve map build/maps/finds.map 2>&1 | q "0 held"
-          rm -f build/maps/finds.map
-          build/sieve map --new sealed --seal --out build/maps/sealed.map 2> /dev/null
-          $H --no-menu --binary-length 64 --map build/maps/sealed.map --locate tests/manifest_fixture/a.txt --press "Return,V" --screenshot sealed.png | q "sealed is read-only"
-          rm -f build/maps/sealed.map
+          rm -f build/maps/finds.sieve
+          $H --no-menu --binary-length 64 --new-map build/maps/finds.sieve --locate tests/manifest_fixture/a.txt --press "Return,V" --screenshot anchor.png | q "added a.txt to finds as a verified anchor (node 1)"
+          build/sieve map build/maps/finds.sieve 2>&1 | q "1 held"
+          $H --no-menu --binary-length 64 --map build/maps/finds.sieve --locate tests/manifest_fixture/a.txt --press "Return,V" --screenshot anchor2.png | q "removed a.txt from finds"
+          build/sieve map build/maps/finds.sieve 2>&1 | q "0 held"
+          build/sieve map build/maps/finds.sieve --add tests/manifest_fixture/a.txt --out build/maps/finds.sieve 2> /dev/null
+          build/sieve map build/maps/finds.sieve --meta "1:source=the fixture folder" --out build/maps/finds.sieve 2> /dev/null
+          $H --no-menu --binary-length 64 --map build/maps/finds.sieve --locate tests/manifest_fixture/a.txt --press "Return,C,C,C" --screenshot meta.png | q "saved meta.png"
+          $H --no-menu --binary-length 64 --map build/maps/finds.sieve --graph --press "Tab,Tab,Return" --screenshot anchorgo.png | tail -2 | sed -n 1p | q "^BINARY line.* TXT 34 bytes"
+          $H --no-menu --map build/maps/finds.sieve --graph --press "Tab,Tab,Delete" --screenshot anchordel.png | q "saved anchordel.png"
+          build/sieve map build/maps/finds.sieve 2>&1 | q "0 held"
+          rm -f build/maps/finds.sieve
+          build/sieve map --new sealed --seal --out build/maps/sealed.sieve 2> /dev/null
+          $H --no-menu --binary-length 64 --map build/maps/sealed.sieve --locate tests/manifest_fixture/a.txt --press "Return,V" --screenshot sealed.png | q "sealed is read-only"
+          rm -f build/maps/sealed.sieve
           # The pause menu (Esc): its fourth row is the Navigation System, which opens the navigator.
           $H --warp "$W" --press "Escape,Escape,Down,Down,Down,Return,Escape" --screenshot pause.png | q "saved pause.png"
           # The Media Player (pause menu, sixth row): with --media-player a silent music player is
@@ -2048,34 +2048,62 @@ jobs:
           python sieve_ref.py manifest ../tests/manifest_fixture | cmp - fixture.manifest
           python sieve_ref.py manifest ../tests/manifest_fixture --addresses addr
           grep -q "7z (LZMA2" locate.out
-          # A map (sieve-map-v1) of the fixture is the oracle's to the byte, reads back to itself,
-          # and is written for other programs as DOT and as well-formed GraphML.
-          $S map ../tests/manifest_fixture --out fixture.map --dot fixture.dot --graphml fixture.graphml > /dev/null
-          python sieve_ref.py map ../tests/manifest_fixture | cmp - fixture.map
-          $S map fixture.map | cmp - fixture.map
+          # A map is Sieve instructions (sieve-manifest-v18): its text, the graph part, is the
+          # oracle's to the byte, read back by both; it is written for other programs as DOT and as
+          # well-formed GraphML. Nothing writes the older map files (sieve-map-v1, v2) any more.
+          $S map ../tests/manifest_fixture --out fixture.sieve --dot fixture.dot --graphml fixture.graphml > /dev/null
+          python sieve_ref.py map ../tests/manifest_fixture > fixture.txt
+          $S map fixture.sieve | cmp - fixture.txt
+          python sieve_ref.py graph fixture.sieve | cmp - fixture.txt
           grep -q '^digraph "manifest_fixture"' fixture.dot
           python -c "import xml.dom.minidom as m; m.parse('fixture.graphml')"
-          # Maps v2: a release map (files found beside it, sealed) and a map holding anchors (their
-          # bytes inside it) are the oracle's to the byte; removing an anchor leaves the oracle's
-          # map of the rest; a sealed map refuses to change.
+          if $S map ../tests/manifest_fixture --out fixture.map > /dev/null 2>&1; then exit 1; fi
+          # A release map (files found beside it, sealed) and a map holding anchors (their bytes its
+          # instructions' files) are the oracle's to the byte; the held files are put back by
+          # installing, and by the oracle; removing an anchor leaves the oracle's map of the rest; a
+          # sealed map refuses to change.
           F=../tests/manifest_fixture
-          $S map $F/a.txt $F/Zebra.txt --name release --seal --out rel.map 2> /dev/null
-          python sieve_ref.py map $F/a.txt $F/Zebra.txt --name release --seal | cmp - rel.map
-          if $S map rel.map --add $F/a.txt --out rel2.map 2> /dev/null; then exit 1; fi
-          $S map --new default --out empty.map 2> /dev/null
-          $S map empty.map --add "$F/sub dir/b.bin" --out held.map 2> /dev/null
-          $S map held.map --add $F/a.txt --out held.map 2> /dev/null
-          python sieve_ref.py map "$F/sub dir/b.bin" $F/a.txt --held --name default | cmp - held.map
-          if $S map held.map --add $F/a.txt --out held2.map 2> /dev/null; then exit 1; fi
-          $S map held.map --remove 1 --out held1.map 2> /dev/null
-          python sieve_ref.py map $F/a.txt --held --name default | cmp - held1.map
+          $S map $F/a.txt $F/Zebra.txt --name release --seal --out rel.sieve 2> /dev/null
+          python sieve_ref.py map $F/a.txt $F/Zebra.txt --name release --seal > rel.txt
+          $S map rel.sieve | cmp - rel.txt
+          if $S map rel.sieve --add $F/a.txt --out rel2.sieve 2> /dev/null; then exit 1; fi
+          $S map --new default --out empty.sieve 2> /dev/null
+          $S map empty.sieve --add "$F/sub dir/b.bin" --out held.sieve 2> /dev/null
+          $S map held.sieve --add $F/a.txt --out held.sieve 2> /dev/null
+          python sieve_ref.py map "$F/sub dir/b.bin" $F/a.txt --held --name default --text > held.txt
+          $S map held.sieve | cmp - held.txt
+          python sieve_ref.py graph held.sieve | cmp - held.txt
+          rm -rf held_in held_oracle
+          $S install held.sieve --to held_in > /dev/null
+          python sieve_ref.py unpack held.sieve --to held_oracle > /dev/null
+          cmp held_in/b.bin "$F/sub dir/b.bin"
+          cmp held_in/a.txt $F/a.txt
+          cmp held_oracle/b.bin "$F/sub dir/b.bin"
+          if $S map held.sieve --add $F/a.txt --out held2.sieve 2> /dev/null; then exit 1; fi
+          $S map held.sieve --remove 1 --out held1.sieve 2> /dev/null
+          python sieve_ref.py map $F/a.txt --held --name default --text > held1.txt
+          $S map held1.sieve | cmp - held1.txt
           # Metadata on a node, set and read back as the oracle writes it.
-          $S map held1.map --meta "1:source=the fixture folder" --out meta.map 2> /dev/null
-          $S map meta.map --meta "1:found=2026-09-27" --out meta.map 2> /dev/null
-          python sieve_ref.py map $F/a.txt --held --name default --meta "1:source=the fixture folder" --meta "1:found=2026-09-27" | cmp - meta.map
-          $S map --new sealed --seal --out sealed.map 2> /dev/null
-          $S map sealed.map 2>&1 | grep -c "sealed (sealed)" > /dev/null
-          if $S map sealed.map --add $F/a.txt --out sealed2.map 2> /dev/null; then exit 1; fi
+          $S map held1.sieve --meta "1:source=the fixture folder" --out meta.sieve 2> /dev/null
+          $S map meta.sieve --meta "1:found=2026-09-27" --out meta.sieve 2> /dev/null
+          python sieve_ref.py map $F/a.txt --held --name default --meta "1:source=the fixture folder" --meta "1:found=2026-09-27" --text > meta.txt
+          $S map meta.sieve | cmp - meta.txt
+          $S map --new sealed --seal --out sealed.sieve 2> /dev/null
+          $S map sealed.sieve 2>&1 | grep -c "sealed (sealed)" > /dev/null
+          if $S map sealed.sieve --add $F/a.txt --out sealed2.sieve 2> /dev/null; then exit 1; fi
+          # Any instructions read as a map: those without a graph part as the map of their tree.
+          $S locate $F --installer tree.sieve > /dev/null
+          $S map tree.sieve | grep -c "^root manifest_fixture$" > /dev/null
+          # An older map file (the oracle writes sieve-map-v2, held bytes and all) is still read, and
+          # becomes Sieve instructions with the same text.
+          python sieve_ref.py map $F/a.txt --held --name default --meta "1:source=the fixture folder" > old.map
+          python sieve_ref.py map $F/a.txt --held --name default --meta "1:source=the fixture folder" --text > old.txt
+          $S map old.map | cmp - old.txt
+          $S map old.map --out old.sieve 2> /dev/null
+          $S map old.sieve | cmp - old.txt
+          rm -rf old_in
+          $S install old.sieve --to old_in > /dev/null
+          cmp old_in/a.txt $F/a.txt
           # A v2 manifest (every file's address listed) is the oracle's to the byte.
           $S locate ../tests/manifest_fixture --manifest fixture2.manifest --with-addresses > /dev/null
           python sieve_ref.py manifest ../tests/manifest_fixture --with-addresses | cmp - fixture2.manifest

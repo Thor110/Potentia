@@ -6176,9 +6176,10 @@ def v16_text(data):
     the streams' sizes and dictionaries' bytes, the tree's SHA-256 as 32 bytes, the body, packed or
     not) read back into v15's text, followed by what follows it. Anything else is returned as it is."""
     import lzma
-    if not data.startswith((b"sieve\x10", b"sieve\x11")):
+    if not data.startswith((b"sieve\x10", b"sieve\x11", b"sieve\x12")):
         return data
     v17 = data[5] == 17  # v16 whose remade archives may be gzip files
+    v18 = data[5] == 18  # v17 with a graph part: a map (head flag 64)
     at = [6]
 
     def varint():
@@ -6210,9 +6211,11 @@ def v16_text(data):
         return packed, size, dictionary(take(1)[0])
 
     flags = take(1)[0]
-    if flags & 0xC0:
+    if flags & 0x80 or (flags & 0x40 and not v18):
         sys.exit("v16: flags this reader does not know")
-    head = b"sieve-manifest-v17\n" if v17 else b"sieve-manifest-v15\n"
+    if v18 and not flags & 0x40:
+        sys.exit("v18 without its graph part")
+    head = b"sieve-manifest-v18\n" if v18 else b"sieve-manifest-v17\n" if v17 else b"sieve-manifest-v15\n"
     if flags & 1:
         head += b"root " + take(varint()) + b"\n"
     for bit, name in ((2, b"x86"), (4, b"lzma2"), (8, b"items")):
@@ -6269,7 +6272,8 @@ def cmd_unpack_v7(args, data):
     # v11 with no line for an empty items or rope stream, and the lzma2 stream perhaps carried as it is
     # v13 with archives optimised: an xz file remade exactly from what it holds, or an archive carried
     # as its contents ("u" lines after the tree's)
-    v17 = lines[0] == "sieve-manifest-v17"  # v15 (in bytes, v16) with gzip files remade exactly
+    v18 = lines[0] == "sieve-manifest-v18"  # v17 with a graph part (a map), "g" lines after the entries
+    v17 = lines[0] == "sieve-manifest-v17" or v18  # v15 (in bytes, v16) with gzip files remade exactly
     v15 = lines[0] == "sieve-manifest-v15" or v17  # v14 whose rope ways may be rope-wave-v5's (the byte above)
     v14 = lines[0] == "sieve-manifest-v14" or v15
     # v12 whose files may be cut into pieces, LZMA2's and the rope's
@@ -6327,8 +6331,14 @@ def cmd_unpack_v7(args, data):
     if si[2] == 0 and si[0] != si[1]:
         sys.exit("a raw items stream is not its own size")
     entries, unpacked = [], []
+    graph = []
     for line in lines[at:-1]:
         f = line.split("\t")
+        if v18 and line.startswith("g\t"):
+            graph.append(line[2:])
+            continue
+        if graph:
+            sys.exit("a line after the graph part")
         if v14 and f[0] == "u" and len(f) == 5:
             unpacked.append(f[1:])
             continue
@@ -6340,6 +6350,8 @@ def cmd_unpack_v7(args, data):
             entries.append((f[3], int(f[1]), "-", f[2]))
         else:
             entries.append((f[4], int(f[1]), f[2], f[3]))
+    if v18 and not graph:
+        sys.exit("v18 without its graph part")
     files = [e for e in entries if len(e) == 4]
     if root is None and (len(entries) != 1 or len(files) != 1):
         sys.exit("no root, and not one file")
@@ -6482,6 +6494,24 @@ def cmd_unpack_v7(args, data):
         print(f"unpacked\t{fmt}\t{size}\t{archive}\t{folder}")
 
 
+def instructions_bytes(data):
+    """A manifest's bytes, or Sieve instructions as a .sieve holds them: their manifest's place on the
+    binary line as raw bytes (binary-v1, §12.1), read back here to the manifest (every shorter file
+    first: the count of files shorter than L bytes is (256**L - 1) / 255)."""
+    if data.startswith((b"sieve\x10", b"sieve\x11", b"sieve\x12", b"sieve-manifest-v")):
+        return data
+    v = int.from_bytes(data, "big")
+    length = max(0, len(data) - 1)
+    while (256 ** (length + 1) - 1) // 255 <= v:
+        length += 1
+    while length and (256 ** length - 1) // 255 > v:
+        length -= 1
+    rest = v - (256 ** length - 1) // 255
+    if rest >= 256 ** length:
+        sys.exit("not Sieve instructions")
+    return rest.to_bytes(length, "big")
+
+
 def cmd_unpack(args):
     """A packed installer's manifest (sieve-manifest-v4, SPECIFICATIONS §12.2) unpacked from its
     definition, with nothing of Sieve's own: its two streams decoded by Python's lzma (raw LZMA2 at
@@ -6490,10 +6520,10 @@ def cmd_unpack(args):
     lzma2 stream after every file carried as it is), and each file checked against its size and
     SHA-256. With --to DIR, the folders and files are written there. Prints the listing it unpacked."""
     import lzma
-    data = v16_text(open(args.manifest, "rb").read())  # v16: its head in bytes, read as v15's text
+    data = v16_text(instructions_bytes(open(args.manifest, "rb").read()))  # v16: its head in bytes, read as v15's text
     if data.startswith((b"sieve-manifest-v7\n", b"sieve-manifest-v8\n", b"sieve-manifest-v9\n", b"sieve-manifest-v10\n",
                         b"sieve-manifest-v11\n", b"sieve-manifest-v12\n", b"sieve-manifest-v13\n", b"sieve-manifest-v14\n",
-                        b"sieve-manifest-v15\n", b"sieve-manifest-v17\n")):
+                        b"sieve-manifest-v15\n", b"sieve-manifest-v17\n", b"sieve-manifest-v18\n")):
         return cmd_unpack_v7(args, data)
     end = data.index(b"\nend\n") + len(b"\nend\n")
     lines = data[:end].decode("utf-8").split("\n")[:-1]
@@ -6615,6 +6645,17 @@ def map_text(name, root, nodes, edges, sealed, held, meta=()):
     return ("\n".join(out) + "\n").encode("utf-8")
 
 
+def cmd_graph(args):
+    """The graph part of Sieve instructions that are a map (sieve-manifest-v18, SPECIFICATIONS §12.3):
+    the map's text, every line after its "g<TAB>", as it was written."""
+    data = v16_text(instructions_bytes(open(args.file, "rb").read()))
+    if not data.startswith(b"sieve-manifest-v18\n"):
+        sys.exit("not a map: no graph part")
+    end = data.index(b"\nend\n") + 1
+    out = b"".join(l[2:] + b"\n" for l in data[:end].split(b"\n") if l.startswith(b"g\t"))
+    sys.stdout.buffer.write(out)
+
+
 def cmd_map(args):
     """sieve-map-v1/v2 (SPECIFICATIONS §12.3), from its definition. One folder: its root node './',
     then every folder ('/' at the end) and file (size, SHA-256) by its path's bytes, links skipped;
@@ -6637,7 +6678,7 @@ def cmd_map(args):
             key, value = rest.split("=", 1)
             meta.append((int(node), key, value))
         sys.stdout.buffer.write(map_text(name, name, nodes, edges, args.seal, args.held, meta))
-        if args.held:
+        if args.held and not args.text:
             for _, d in datas:
                 sys.stdout.buffer.write(d)
         return
@@ -8983,6 +9024,9 @@ def main():
     s.add_argument("--seal", action="store_true")
     s.add_argument("--held", action="store_true")
     s.add_argument("--meta", action="append", default=[])
+    s.add_argument("--text", action="store_true", help="the text alone, without the held files' bytes (as sieve map prints a map)")
+    s = sub.add_parser("graph")
+    s.add_argument("file")
     sub.add_parser("book-filter-vectors")
     s = sub.add_parser("book-read")
     s.add_argument("book")
@@ -9100,6 +9144,8 @@ def main():
         cmd_unpack(args)
     elif args.cmd == "map":
         cmd_map(args)
+    elif args.cmd == "graph":
+        cmd_graph(args)
     elif args.cmd == "book-vectors":
         cmd_book_vectors(args)
     elif args.cmd == "book-filter-vectors":

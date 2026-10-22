@@ -367,7 +367,7 @@ std::string manifest_path(const fs::path& p, const fs::path& root)
 
 const char* Manifest::version() const
 {
-    return remake_gz ? kGzipManifestVersion : binary ? kBinaryManifestVersion : rope_above ? kRopeAboveManifestVersion : archives ? kArchivesManifestVersion : pieces ? kPiecesManifestVersion : trimmed ? kTrimmedManifestVersion : rope_groups ? kRopeGroupsManifestVersion : rope_lines ? kRopeLinesManifestVersion : rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
+    return !graph.empty() ? kGraphManifestVersion : remake_gz ? kGzipManifestVersion : binary ? kBinaryManifestVersion : rope_above ? kRopeAboveManifestVersion : archives ? kArchivesManifestVersion : pieces ? kPiecesManifestVersion : trimmed ? kTrimmedManifestVersion : rope_groups ? kRopeGroupsManifestVersion : rope_lines ? kRopeLinesManifestVersion : rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
          : with_contents ? kInstallManifestVersion : with_addresses ? kAddressManifestVersion : kManifestVersion;
 }
 
@@ -473,6 +473,14 @@ std::string Manifest::text() const
             }
             else if (e.sha256 == "-") t += "f\t" + std::to_string(e.size) + "\t" + e.way + "\t" + e.path + "\n";
             else t += "f\t" + std::to_string(e.size) + "\t" + e.sha256 + "\t" + e.way + "\t" + e.path + "\n"; // --file-hashes
+        }
+        // v18: the map's text, each of its lines after "g<TAB>" (so its own "end" is not the listing's).
+        for (size_t at = 0; at < graph.size();)
+        {
+            const size_t nl = graph.find('\n', at);
+            if (nl == std::string::npos) throw std::logic_error("a graph part whose last line has no line feed");
+            t += "g\t" + graph.substr(at, nl - at) + "\n";
+            at = nl + 1;
         }
         t += "end\n";
         return t;
@@ -589,18 +597,19 @@ std::string listing_body(const Manifest& m)
     return body;
 }
 
-// v16: "sieve" and 16; flags (1 root, 2 x86, 4 lzma2, 8 items, 16 rope, 32 the body packed); the
+// v16: "sieve" and 16 (17, 18: v17, v18); flags (1 root, 2 x86, 4 lzma2, 8 items, 16 rope, 32 the body packed,
+// 64 a graph part, v18 only); the
 // root (a varint of its length, then it); each stream present, its packed size and size as varints
 // and its dictionary's byte (the rope's, its size alone: it is carried as it is); the tree's SHA-256
 // as 32 bytes; the body: packed, its packed size, size and dictionary's byte, then it as LZMA2; else
 // its size, then it.
 static std::vector<uint8_t> binary_head(const Manifest& m)
 {
-    std::vector<uint8_t> o = {'s', 'i', 'e', 'v', 'e', uint8_t(m.remake_gz ? 17 : 16)};
+    std::vector<uint8_t> o = {'s', 'i', 'e', 'v', 'e', uint8_t(!m.graph.empty() ? 18 : m.remake_gz ? 17 : 16)};
     const bool root = !m.one_file_root(), items = !m.trimmed || m.item_stream.packed || m.item_stream.bytes;
     const bool body_packed = m.listing_stream.packed != 0;
     o.push_back(uint8_t((root ? 1 : 0) | (m.x86.packed ? 2 : 0) | (m.lzma2.packed ? 4 : 0) | (items ? 8 : 0) | (m.roped ? 16 : 0) |
-                        (body_packed ? 32 : 0)));
+                        (body_packed ? 32 : 0) | (m.graph.empty() ? 0 : 64))); // v18: 64, a graph part
     if (root)
     {
         put_varint_to(o, m.root.size());
@@ -768,15 +777,16 @@ Manifest Manifest::parse(std::string_view whole)
 {
     // v16: the head in bytes, read back into v15's text (its root's and streams' lines, its lines,
     // the tree's, the rest of its body, "end"), followed by what follows it.
-    if (whole.size() >= 6 && whole.substr(0, 5) == "sieve" && (uint8_t(whole[5]) == 16 || uint8_t(whole[5]) == 17))
+    if (whole.size() >= 6 && whole.substr(0, 5) == "sieve" && uint8_t(whole[5]) >= 16 && uint8_t(whole[5]) <= 18)
     {
-        const bool v17 = uint8_t(whole[5]) == 17;
+        const uint8_t v = uint8_t(whole[5]);
         size_t at = 6;
         if (at >= whole.size()) throw std::runtime_error("manifest: its head ends early");
         const uint8_t flags = uint8_t(whole[at++]);
-        if (flags & 0xC0) throw std::runtime_error("manifest: its head has flags this Sieve does not know");
-        // (v17's text is v15's with gzip remade allowed: its first line says so.)
-        std::string text = std::string(v17 ? kGzipManifestVersion : kRopeAboveManifestVersion) + "\n";
+        if ((flags & 0x80) || ((flags & 64) && v < 18)) throw std::runtime_error("manifest: its head has flags this Sieve does not know");
+        if (v == 18 && !(flags & 64)) throw std::runtime_error("manifest: v18 without its graph part");
+        // (v17's text is v15's with gzip remade allowed, v18's with a graph part too: its first line says so.)
+        std::string text = std::string(v == 18 ? kGraphManifestVersion : v == 17 ? kGzipManifestVersion : kRopeAboveManifestVersion) + "\n";
         auto take = [&](uint64_t n) {
             if (n > whole.size() - at) throw std::runtime_error("manifest: its head ends early");
             const std::string_view v = whole.substr(at, size_t(n));
@@ -910,7 +920,7 @@ Manifest Manifest::parse(std::string_view whole)
         m.rope_lines = m.rope_columns = m.roped = m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] == kRopeGroupsManifestVersion)
         m.rope_groups = m.rope_lines = m.rope_columns = m.roped = m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
-    else if (lines[0] == kGzipManifestVersion)
+    else if (lines[0] == kGzipManifestVersion || lines[0] == kGraphManifestVersion)
         m.remake_gz = m.binary = m.rope_above = m.archives = m.pieces = m.trimmed = m.rope_groups = m.rope_lines = m.rope_columns = m.roped = m.compact =
             m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] == kRopeAboveManifestVersion)
@@ -1038,8 +1048,17 @@ Manifest Manifest::parse(std::string_view whole)
         }
         if (m.items) m.tree = field(lines[first++], "tree");
     }
+    const bool graph_allowed = lines[0] == kGraphManifestVersion;
     for (size_t i = first; i + 1 < lines.size(); ++i)
     {
+        if (lines[i].rfind("g\t", 0) == 0)
+        {
+            // v18: the graph part, the last of the listing.
+            if (!graph_allowed) throw std::runtime_error("manifest: a graph part where its version has none");
+            m.graph += lines[i].substr(2) + "\n";
+            continue;
+        }
+        if (!m.graph.empty()) throw std::runtime_error("manifest: line " + std::to_string(i + 1) + " after its graph part");
         std::vector<std::string> f;
         for (size_t at = 0;;)
         {
@@ -1117,6 +1136,7 @@ Manifest Manifest::parse(std::string_view whole)
         if (bad) throw std::runtime_error("manifest: refused path " + e.path);
         m.entries.push_back(std::move(e));
     }
+    if (graph_allowed && m.graph.empty()) throw std::runtime_error("manifest: v18 without its graph part");
     if (m.minimal)
     {
         // v6: every item's place from the items stream, in the listing's order, back into its way

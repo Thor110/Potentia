@@ -4098,8 +4098,7 @@ folder) and shows the HTML they unpack to, as a first test where the result is k
   text). The websites were not reachable from the session, so the pages are a 2014 snapshot;
   measure again on today's pages before building.
 
-**19.93 The `.map` format folded into `.sieve` (Edward, 22 October 2026; a recommendation,
-nothing built).** His thought: update the `.map` format, or replace it with `.sieve` and deprecate
+**19.93 The `.map` format folded into `.sieve` (Edward, 22 October 2026; built the same day).** His thought: update the `.map` format, or replace it with `.sieve` and deprecate
 it, the differences once needed for the 3D node graph perhaps being redundant now.
 - *What a map has that instructions lack* (SPECIFICATIONS §12.3): files **named but not held**
   (a size and SHA-256, a claim that the bytes exist somewhere), **edges** with a relation
@@ -4124,3 +4123,16 @@ it, the differences once needed for the 3D node graph perhaps being redundant no
 - *To weigh first:* the release map is sealed and its SHA-256 published, so it would be
   republished as a `.sieve` with a new hash; "This installation" is made fresh each time and
   would simply be made as a `.sieve`. Edward to decide before it is built.
+- *Edward's decision (22 October 2026):* build it; the release's map becomes `source.sieve`
+  rather than `sieve.map`, and any `.sieve` opens as a node graph, perhaps without notes.
+- *Built (22 October 2026):* `sieve-manifest-v18` (SPECIFICATIONS §12.2, §12.3). The graph part
+  is the map's own text, every line behind `g<TAB>`, after the entries; head byte 18, flag 64.
+  The held files are the instructions' files, packed as any are; the named-only nodes are in the
+  text alone, and `sieve install` says how many it does not carry. `sieve map` writes `.sieve`
+  and refuses `--out NAME.map`; older `.map` files are read, and `--out NAME.sieve` converts one
+  (the conversion is `--out`, not the `--to` first suggested above). The hallway lists `.sieve`
+  and `.map` in `maps/`, saves every change as `.sieve`, and shows instructions without a graph
+  part as the map of their tree, read-only. `make_release` publishes `source.sieve`, checked by
+  installing the source back from it. The oracle reads v18 (`unpack`, `graph`). Measured: a map of
+  a 6-byte and a 3,000-byte file, named only, 271 bytes; the same two named and a 200,000-byte file
+  of noise held, sealed, 200,353 bytes.

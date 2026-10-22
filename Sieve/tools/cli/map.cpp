@@ -160,7 +160,7 @@ std::vector<uint8_t> Map::file() const
     return out;
 }
 
-Map Map::parse(std::string_view whole)
+Map Map::parse(std::string_view whole, bool held_bytes_follow)
 {
     // The text, line by line up to and including "end"; after it, a v2 map's held bytes.
     std::vector<std::string_view> lines;
@@ -245,6 +245,11 @@ Map Map::parse(std::string_view whole)
     // The held bytes: every held node's, in node order, exactly filling what is left, and each
     // checked against its SHA-256, so a held anchor is verified as it is read.
     size_t at = after;
+    if (!held_bytes_follow)
+    {
+        if (at != whole.size()) throw std::runtime_error("map: something after 'end' in a graph part");
+        return m;
+    }
     for (MapNode& node : m.nodes)
     {
         if (node.kind != MapNode::Held) continue;

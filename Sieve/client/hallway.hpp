@@ -1247,7 +1247,8 @@ private:
     struct GraphMap
     {
         std::string title;            // as the list shows it
-        std::filesystem::path file;   // the .map it was read from (empty: made here)
+        std::filesystem::path file;   // the .sieve (or older .map) it was read from (empty: made here)
+        bool tree_only = false;       // Sieve instructions without a graph part: the map of their tree, not changed here
         std::filesystem::path root;   // where its root folder is on this computer
         bool installation = false;    // "This installation": made from the program's own folder
         bool ready = false;           // loaded or made (a map being made is not yet)

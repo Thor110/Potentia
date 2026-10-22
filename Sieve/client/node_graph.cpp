@@ -4,7 +4,7 @@
 // and every edge a relation between two nodes ("contains", for a folder's contents). The viewer
 // (O, or the pause menu) shows one map at a time, chosen from a dropdown: "This installation",
 // the map of the program's own files, made when first chosen, so the executable you are running
-// is the first anchor; every .map in the maps folder beside the program; and any map opened or
+// is the first anchor; every map in the maps folder beside the program (a .sieve, or an older .map); and any map opened or
 // made while the program runs. It lays the map out as a 3D force-directed graph (Fruchterman and
 // Reingold's: every node pushes every other away, every edge pulls its two ends together, and the
 // moves shrink step by step until it settles), which you turn with the mouse like a model. A
@@ -25,6 +25,7 @@
 #include "dialogs.hpp"
 #include "cli/locate.hpp"
 #include "cli/map.hpp"
+#include "cli/map_sieve.hpp"
 
 namespace hallway::hall {
 
@@ -110,13 +111,6 @@ fs::path root_of_map_file(const fs::path& file, const cli::Map& m)
     std::error_code ec;
     if (fs::is_directory(dir / from_u8(m.root), ec)) return dir / from_u8(m.root);
     return dir;
-}
-
-std::optional<std::string> read_text(const fs::path& p)
-{
-    std::ifstream in(p, std::ios::binary);
-    if (!in) return std::nullopt;
-    return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
 }
 
 constexpr int kLayoutSteps = 300;
@@ -261,7 +255,7 @@ void Hallway::graph_list()
     std::vector<fs::path> files;
     std::error_code ec;
     for (const auto& e : fs::directory_iterator(program_dir() / "maps", ec))
-        if (e.is_regular_file() && e.path().extension() == ".map") files.push_back(e.path());
+        if (e.is_regular_file() && (e.path().extension() == ".sieve" || e.path().extension() == ".map")) files.push_back(e.path());
     std::sort(files.begin(), files.end());
     for (const fs::path& f : files)
     {
@@ -270,9 +264,9 @@ void Hallway::graph_list()
         g.title = u8(f.stem());
         try
         {
-            const auto text = read_text(f);
-            if (!text) throw std::runtime_error("cannot read it");
-            g.map = cli::Map::parse(*text);
+            bool is_map = false;
+            g.map = cli::read_map_file(f, &is_map);
+            g.tree_only = !is_map;
             g.root = root_of_map_file(f, g.map);
             g.ready = true;
             g.prepare();
@@ -287,16 +281,16 @@ void Hallway::graph_list()
     // with the viewer's Create new map, and chosen with the dropdown or [ ].
 }
 
-bool Hallway::GraphMap::read_only() const { return installation || map.sealed || !ready; }
+bool Hallway::GraphMap::read_only() const { return installation || tree_only || map.sealed || !ready; }
 
 // Writes a changed map back to its file.
 void Hallway::graph_save(GraphMap& g)
 {
-    if (g.file.empty()) g.file = program_dir() / "maps" / from_u8(g.title + ".map");
-    const auto bytes = g.map.file();
-    std::ofstream f(g.file, std::ios::binary);
-    f.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
-    if (!f) throw std::runtime_error("cannot write " + u8(g.file));
+    // As Sieve instructions (a map's held files packed, its text their graph part); an older .map
+    // changed is written beside itself as a .sieve, and read from there on (IDEAS §19.93).
+    if (g.file.empty()) g.file = program_dir() / "maps" / from_u8(g.title + ".sieve");
+    if (g.file.extension() == ".map") g.file.replace_extension(".sieve");
+    cli::write_map_instructions(g.map, g.file);
 }
 
 // V on an item: the file in hand added to the chosen map as a held anchor (its bytes kept in the
@@ -426,14 +420,31 @@ void Hallway::graph_make(const std::string& folder, bool sync)
                 const fs::path dir = program_dir() / "maps";
                 std::error_code ec;
                 fs::create_directories(dir, ec);
-                const auto bytes = g.map.file();
-                const std::string text(bytes.begin(), bytes.end());
-                fs::path out = dir / from_u8(g.title + ".map");
-                for (int k = 2; fs::exists(out, ec) && read_text(out).value_or("") != text; ++k)
-                    out = dir / from_u8(g.title + " (" + std::to_string(k) + ").map");
-                std::ofstream f(out, std::ios::binary);
-                f << text;
-                if (f)
+                // (A map already there with the same text is the same map, and is written again.)
+                const std::string text = g.map.text();
+                auto same_map = [&](const fs::path& f) {
+                    try
+                    {
+                        return cli::read_map_file(f).text() == text;
+                    }
+                    catch (const std::exception&)
+                    {
+                        return false;
+                    }
+                };
+                fs::path out = dir / from_u8(g.title + ".sieve");
+                for (int k = 2; fs::exists(out, ec) && !same_map(out); ++k)
+                    out = dir / from_u8(g.title + " (" + std::to_string(k) + ").sieve");
+                bool written = true;
+                try
+                {
+                    cli::write_map_instructions(g.map, out);
+                }
+                catch (const std::exception&)
+                {
+                    written = false;
+                }
+                if (written)
                 {
                     g.file = out;
                     status = trf("graph.saved_to", {u8(out)});
@@ -497,9 +508,9 @@ void Hallway::graph_poll()
         g.title = u8(g.file.stem());
         try
         {
-            const auto text = read_text(g.file);
-            if (!text) throw std::runtime_error("cannot read it");
-            g.map = cli::Map::parse(*text);
+            bool is_map = false;
+            g.map = cli::read_map_file(g.file, &is_map); // a map, or any Sieve instructions as the map of their tree
+            g.tree_only = !is_map;
             g.root = root_of_map_file(g.file, g.map);
             g.ready = true;
             g.prepare();
@@ -519,7 +530,7 @@ void Hallway::graph_poll()
         // Create new map: an empty map (only its root) under the name chosen, in the maps folder
         // unless the dialog chose elsewhere.
         fs::path p = from_u8(path);
-        if (p.extension() != ".map") p += ".map";
+        if (p.extension() != ".sieve") p += ".sieve";
         std::error_code ec;
         if (fs::exists(p, ec))
         {
@@ -555,8 +566,21 @@ void Hallway::graph_export(const std::string& to)
     if (!g || !g->ready) return;
     const fs::path p = from_u8(to);
     const std::string ext = u8(p.extension());
-    const auto file = g->map.file();
-    const std::string text = ext == ".dot" || ext == ".gv" ? g->map.dot() : ext == ".graphml" ? g->map.graphml() : std::string(file.begin(), file.end());
+    if (ext != ".dot" && ext != ".gv" && ext != ".graphml")
+    {
+        // As Sieve instructions, as maps are kept.
+        try
+        {
+            cli::write_map_instructions(g->map, ext == ".sieve" ? p : fs::path(p).concat(".sieve"));
+            graph_status_ = trf("graph.exported", {to});
+        }
+        catch (const std::exception& ex)
+        {
+            graph_status_ = trf("graph.failed", {ex.what()});
+        }
+        return;
+    }
+    const std::string text = ext == ".graphml" ? g->map.graphml() : g->map.dot();
     std::ofstream f(p, std::ios::binary);
     f << text;
     graph_status_ = f ? trf("graph.exported", {to}) : trf("graph.failed", {"cannot write " + to});
@@ -944,7 +968,7 @@ void Hallway::graph_event(const SDL_Event& e)
     else if (pressed == "make") open_folder_dialog(graph_dialog, &make_ctx, window_, nullptr, false);
     else if (pressed == "open")
     {
-        static const SDL_DialogFileFilter kMaps[] = {{"Sieve map", "map"}};
+        static const SDL_DialogFileFilter kMaps[] = {{"Sieve instructions and maps", "sieve;map"}};
         const std::string start = u8(program_dir() / "maps");
         open_file_dialog(graph_dialog, &open_ctx, window_, kMaps, 1, start.c_str(), false);
     }
@@ -952,7 +976,7 @@ void Hallway::graph_event(const SDL_Event& e)
     {
         GraphMap* g = graph_current();
         if (!g || !g->ready) return;
-        static const SDL_DialogFileFilter kOut[] = {{"GraphML (Gephi, yEd, Cytoscape)", "graphml"}, {"Graphviz DOT", "dot"}, {"Sieve map", "map"}};
+        static const SDL_DialogFileFilter kOut[] = {{"GraphML (Gephi, yEd, Cytoscape)", "graphml"}, {"Graphviz DOT", "dot"}, {"Sieve map (Sieve instructions)", "sieve"}};
         const std::string start = u8(fs::current_path() / from_u8(g->title + ".graphml"));
         save_file_dialog(graph_dialog, &export_ctx, window_, kOut, 3, start.c_str());
     }
@@ -960,10 +984,10 @@ void Hallway::graph_event(const SDL_Event& e)
     else if (pressed == "remove") graph_remove(graph_pick_);
     else if (pressed == "create")
     {
-        static const SDL_DialogFileFilter kMap[] = {{"Sieve map", "map"}};
+        static const SDL_DialogFileFilter kMap[] = {{"Sieve map (Sieve instructions)", "sieve"}};
         std::error_code ec;
         fs::create_directories(program_dir() / "maps", ec);
-        const std::string start = u8(program_dir() / "maps" / "new map.map");
+        const std::string start = u8(program_dir() / "maps" / "new map.sieve");
         save_file_dialog(graph_dialog, &create_ctx, window_, kMap, 1, start.c_str());
     }
 }

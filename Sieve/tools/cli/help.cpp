@@ -991,20 +991,26 @@ const std::vector<Page>& pages()
           {"sieve locate release --program release-setup.exe", "an installer program for it"}}},
 
         {"map", "A map: a node graph of verified anchors.",
-         "sieve map FOLDER|FILE...|MAP.map [--out OUT.map] [--add FILE [--as NAME]] [--remove ID]\n"
-         "  [--meta NODE:key=value] [--seal]\n"
-         "  sieve map --new NAME [--out NAME.map]\n"
+         "sieve map FOLDER|FILE...|MAP.sieve|OLD.map [--out OUT.sieve] [--add FILE [--as NAME]]\n"
+         "  [--remove ID] [--meta NODE:key=value] [--seal]\n"
+         "  sieve map --new NAME [--out NAME.sieve]\n"
          "  [--dot OUT.dot] [--graphml OUT.graphml] [--name NAME]",
          "A map links real files to one another. A FOLDER gives every file and folder in it as a\n"
          "node, each file named by its size and SHA-256, every folder linked to what is directly in\n"
          "it (\"contains\"); several FILEs give a map of just those, found beside the map (a\n"
-         "release's archives); a MAP file is read back. A node points at a file (found beside the\n"
-         "map) or holds it (its bytes kept in the map, sieve-map-v2), so a map can carry its anchors\n"
-         "with it. Where the file is here and matches, or held bytes match, the node is a verified\n"
-         "anchor, and the hallway's node graph (O) can walk to it on the binary line. A sealed map\n"
-         "is not changed by the tools (the release map is sealed). The text is canonical. A map can\n"
-         "also be written for other programs: Graphviz DOT, and GraphML (Gephi, yEd, Cytoscape).",
-         {{"--out FILE", "Write the map here (else its text to standard output)."},
+         "release's archives); a map is read back. A node points at a file (found beside the map)\n"
+         "or holds it, so a map can carry its anchors with it. Where the file is here and matches,\n"
+         "or held bytes match, the node is a verified anchor, and the hallway's node graph (O) can\n"
+         "walk to it on the binary line. A sealed map is not changed by the tools (the release map\n"
+         "is sealed). The text is canonical.\n"
+         "\n"
+         "A map is written as Sieve instructions (sieve-manifest-v18): its held files are their\n"
+         "files, put back by sieve install, and its text is their graph part. Any .sieve reads as a\n"
+         "map: one without a graph part as the map of the tree it carries. Older .map files\n"
+         "(sieve-map-v1, v2) are still read, and --out turns one into a .sieve; nothing writes .map\n"
+         "any more. A map can also be written for other programs: Graphviz DOT, and GraphML (Gephi,\n"
+         "yEd, Cytoscape).",
+         {{"--out FILE.sieve", "Write the map here (else its text to standard output)."},
           {"--add FILE", "Add a file as a held anchor (--as NAME: its name in the map)."},
           {"--remove ID", "Remove a node, its links and its metadata (not the root)."},
           {"--meta NODE:key=value", "Set a node's metadata (an empty value removes the key)."},
@@ -1013,11 +1019,12 @@ const std::vector<Page>& pages()
           {"--dot FILE", "Write it as Graphviz DOT."},
           {"--graphml FILE", "Write it as GraphML."},
           {"--name NAME", "The map's name (default: the folder's, or \"files\")."}},
-         {{"sieve map photos --out maps/photos.map", "a map of a folder, for the node graph"},
-          {"sieve map sieve.exe sieve.sieve --name sieve --seal --out sieve.map", "a release's map"},
-          {"sieve map --new finds --out maps/finds.map", "a new, empty map"},
-          {"sieve map maps/finds.map --add found.bin --out maps/finds.map", "add an anchor"},
-          {"sieve map maps/photos.map --graphml photos.graphml", "a map for Gephi or yEd"}}},
+         {{"sieve map photos --out maps/photos.sieve", "a map of a folder, for the node graph"},
+          {"sieve map sieve.exe sieve.sieve --name sieve --seal --out source.sieve", "a release's map"},
+          {"sieve map --new finds --out maps/finds.sieve", "a new, empty map"},
+          {"sieve map maps/finds.sieve --add found.bin --out maps/finds.sieve", "add an anchor"},
+          {"sieve map maps/finds.map --out maps/finds.sieve", "an older map as Sieve instructions"},
+          {"sieve map maps/photos.sieve --graphml photos.graphml", "a map for Gephi or yEd"}}},
 
         {"install", "Put a folder back from its installer: one address.",
          "sieve install INSTALLER.sieve|PROGRAM.exe|MANIFEST --to FOLDER [--force] [--hex]",

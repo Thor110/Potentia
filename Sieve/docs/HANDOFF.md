@@ -3698,11 +3698,37 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   of 20 KB and more, behind on small pages. The pages were a 2014 snapshot (the websites were not
   reachable from the session).
 - **Maps and instructions** (IDEAS §19.93): the 3D node graph stores nothing in a map (it lays one
-  out afresh), so a map could be a `.sieve` with a flagged graph part. A recommendation for Edward
-  to decide; nothing built.
+  out afresh), so a map could be a `.sieve` with a flagged graph part. Edward chose it; built the
+  same day (the entry below).
 - **Edward's sync:** this session's git could not be reset or merged to Edward's `origin/main`
   (refused as destructive); the code was the same, only his build metrics and root `CHANGES.md`
   differed. Start the next session from his `main`.
+
+### Maps as Sieve instructions, `sieve-manifest-v18` (22 October 2026)
+- **The format** (SPECIFICATIONS §12.2, §12.3): v17 with a graph part, the map's text as `g<TAB>`
+  lines after the entries; head byte 18 with flag 64, which only v18 may set and v18 must. The
+  held files are the instructions' own files; nodes that only name a file are text alone.
+- **Code:** `tools/cli/map_sieve.*` (new): `map_of_instructions`, `read_map_file`,
+  `is_old_map_file`, `write_map_instructions` (stages the held files in a temporary folder named
+  as the root, walks and packs it with the graph part set first). `Map::parse` can stop after the
+  text (`held_bytes_follow = false`). `locate.*` reads and writes the graph part.
+- **`sieve map`** writes `.sieve` only (`--out X.map` is refused, naming IDEAS 19.93), reads a
+  folder, files, a `.sieve` (with or without a graph part) or an older `.map`, and prints the
+  text. **`sieve install`** of a map puts back its held files and says how many it names that it
+  does not carry.
+- **The hallway** (`client/node_graph.cpp`): `maps/` lists `.sieve` and `.map`; a change is saved
+  as `.sieve` (an older `.map` is written beside it as `.sieve`, the `.map` left alone); New
+  map..., export and the open dialog use `.sieve`; instructions without a graph part are shown as
+  the map of their tree, read-only (`tree_only`).
+- **The release:** `make_release` publishes `source.sieve` (Edward's name) in place of
+  `sieve.map`, and checks it installs the source back. `--map-with` used an undefined `source`
+  and would have stopped with an error; it now holds the source again, as the published map does.
+- **The oracle:** `unpack` reads v18 and a `.sieve` file as it is (its address bytes turned back
+  into the manifest by the closed form); `graph FILE` prints the graph part; `map … --text`
+  prints a map's text alone. It still writes the older map files, for the check that they are read.
+- **CI:** the map checks now make `.sieve` and compare the text with the oracle's, install the
+  held files with both readers, read a `.sieve` without a graph part as a map, and convert an
+  older `.map` (the oracle's) to the same text. The hallway's anchor checks use `.sieve`.
 
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s

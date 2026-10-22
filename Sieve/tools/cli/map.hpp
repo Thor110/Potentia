@@ -86,7 +86,10 @@ struct Map
     bool needs_v2() const;
     std::string text() const;                    // the canonical text (for v2, without the held bytes)
     std::vector<uint8_t> file() const;           // the whole map as a file: the text, then the held bytes
-    static Map parse(std::string_view whole);    // v1 or v2; held bytes checked against their SHA-256
+    // v1 or v2; held bytes checked against their SHA-256. `held_bytes_follow` false: the text alone,
+    // a graph part of Sieve instructions (v18), whose held nodes' bytes are the instructions' files
+    // (left empty here, for the caller to fill and check).
+    static Map parse(std::string_view whole, bool held_bytes_follow = true);
     std::string dot() const;                     // Graphviz
     std::string graphml() const;                 // GraphML
     std::string label(size_t node) const;        // the root's is the root's name

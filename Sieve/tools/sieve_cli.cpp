@@ -28,6 +28,7 @@
 #include "cli/filter_config.hpp"
 #include "cli/lines.hpp"
 #include "cli/locate.hpp"
+#include "cli/map_sieve.hpp"
 #include "cli/media_decode.hpp"
 #include "cli/vault.hpp"
 #include "cli/vault_decode.hpp"
@@ -2664,11 +2665,9 @@ int cmd_map(const Args& a)
         const std::string name = a.get("new");
         Map empty = Map::empty(name);
         empty.sealed = a.has("seal");
-        const auto bytes = empty.file();
-        const std::string to = a.has("out") ? a.get("out") : name + ".map";
-        std::ofstream out(fs::path(std::u8string(to.begin(), to.end())), std::ios::binary);
-        out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
-        if (!out) throw std::runtime_error("cannot write " + to);
+        const std::string to = a.has("out") ? a.get("out") : name + ".sieve";
+        if (fs::path(to).extension() == ".map") throw std::invalid_argument("maps are written as Sieve instructions now: name it .sieve (IDEAS 19.93)");
+        write_map_instructions(empty, fs::path(std::u8string(to.begin(), to.end())));
         std::cerr << "map       " << name << (empty.sealed ? " (sealed)" : "") << ": empty, written to " << to << "\n";
         return 0;
     }
@@ -2680,19 +2679,13 @@ int cmd_map(const Args& a)
         const std::u8string u = r.filename().u8string();
         return std::string(u.begin(), u.end());
     };
-    auto is_map = [&](const fs::path& p) {
-        std::ifstream in(p, std::ios::binary);
-        char head[11] = {};
-        in.read(head, sizeof head);
-        return in.gcount() == 11 && std::string(head, 11) == "sieve-map-v";
-    };
     const fs::path first = path_of(a.positional[0]);
     Map m;
     if (a.positional.size() == 1 && fs::is_directory(first)) m = map_of_folder(first, a.has("name") ? a.get("name") : name_of(first));
-    else if (a.positional.size() == 1 && is_map(first))
+    else if (a.positional.size() == 1 && (is_old_map_file(first) || first.extension() == ".sieve"))
     {
-        const auto bytes = read_file_bytes(first);
-        m = Map::parse(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+        // A map: Sieve instructions (their graph part, or the tree they carry), or an older map file.
+        m = read_map_file(first);
         if (a.has("name")) m.name = a.get("name");
     }
     else
@@ -2730,7 +2723,6 @@ int cmd_map(const Args& a)
         out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
         if (!out) throw std::runtime_error("cannot write " + to);
     };
-    const std::vector<uint8_t> bytes = m.file();
     size_t files = 0, held = 0;
     for (const auto& n : m.nodes)
     {
@@ -2738,10 +2730,18 @@ int cmd_map(const Args& a)
         held += n.kind == MapNode::Held ? 1 : 0;
     }
     std::ostream* info = &std::cout;
-    if (a.has("out")) write(a.get("out"), bytes);
+    std::vector<uint8_t> written;
+    if (a.has("out"))
+    {
+        // Written as Sieve instructions (v18): its held files packed, its text their graph part.
+        const std::string to = a.get("out");
+        if (path_of(to).extension() == ".map") throw std::invalid_argument("maps are written as Sieve instructions now: name it .sieve (IDEAS 19.93)");
+        write_map_instructions(m, path_of(to));
+        written = read_file_bytes(path_of(to));
+    }
     else if (!a.has("dot") && !a.has("graphml"))
     {
-        const std::string text = m.text(); // the text part: held bytes are no use on a terminal
+        const std::string text = m.text(); // the text: held files' bytes are no use on a terminal
         // The map's own bytes, on every system: Windows would make each line feed CR LF.
         std::cout.flush();
 #ifdef _WIN32
@@ -2755,9 +2755,10 @@ int cmd_map(const Args& a)
     if (a.has("dot")) write(a.get("dot"), as_bytes(m.dot()));
     if (a.has("graphml")) write(a.get("graphml"), as_bytes(m.graphml()));
     *info << "map       " << m.name << (m.sealed ? " (sealed)" : "") << ": " << m.nodes.size() << " nodes (" << files << " files, " << held
-          << " held; " << m.nodes.size() - files << " folders), " << m.edges.size() << " edges, " << bytes.size() << " bytes\n"
-          << "sha256    " << sha256_hex(bytes) << "  (the map's identity)\n";
-    if (a.has("out")) *info << "wrote     " << a.get("out") << "\n";
+          << " held; " << m.nodes.size() - files << " folders), " << m.edges.size() << " edges\n";
+    if (!written.empty())
+        *info << "wrote     " << a.get("out") << ": Sieve instructions (" << kGraphManifestVersion << "), " << written.size() << " bytes\n"
+              << "sha256    " << sha256_hex(written) << "  (the map's identity)\n";
     if (a.has("dot")) *info << "wrote     " << a.get("dot") << " (Graphviz DOT)\n";
     if (a.has("graphml")) *info << "wrote     " << a.get("graphml") << " (GraphML)\n";
     return 0;
@@ -2784,6 +2785,16 @@ int cmd_install(const Args& a)
               << (m.files == 1 ? ", checked against its SHA-256\n" : ", every one checked against its SHA-256\n");
     std::cout << "time      " << install_times_text(std::chrono::duration<double>(t1 - t0).count(), std::chrono::duration<double>(t2 - t1).count())
               << "\n";
+    // v18: a map names files it does not carry; installing cannot make them, so it says so.
+    if (!m.graph.empty())
+    {
+        const Map g = Map::parse(m.graph, false);
+        size_t named = 0;
+        for (const MapNode& n : g.nodes) named += n.kind == MapNode::File ? 1 : 0;
+        std::cout << "map       " << g.name << (g.sealed ? " (sealed)" : "") << ": " << g.nodes.size() << " nodes";
+        if (named) std::cout << "; it names " << named << (named == 1 ? " file" : " files") << " it does not carry (sieve map " << in << " lists them)";
+        std::cout << "\n";
+    }
     // v14: an archive carried as its contents is said so, never passed off as the archive.
     for (const auto& u : m.unpacked)
         std::cout << "note      " << u.archive << " (" << u.format << ", " << u.size << " bytes) was carried as its contents (Optimise Archive Formats): "

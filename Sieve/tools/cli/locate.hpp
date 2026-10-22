@@ -131,6 +131,11 @@ inline constexpr const char* kBinaryManifestVersion = "sieve-manifest-v16";
 // <inner size> <way>", remade by zlib (SPECIFICATIONS §12.2); its head's byte 17. Made only where
 // some file's is.
 inline constexpr const char* kGzipManifestVersion = "sieve-manifest-v17";
+// v18 (22 October 2026): instructions that are also a map (SPECIFICATIONS §12.3): v17 with a
+// graph part, the map's own text (sieve-map-v1 or v2, its held files' bytes left out: they are the
+// instructions' files), each of its lines after a "g<TAB>", after the entries. Made only where a
+// map is written; any instructions without one read as a map of their tree.
+inline constexpr const char* kGraphManifestVersion = "sieve-manifest-v18";
 
 std::vector<uint8_t> read_file_bytes(const std::filesystem::path& file);
 
@@ -204,6 +209,7 @@ struct Manifest
     bool rope_above = false;   // v15: some rope way is rope-wave-v5's
     bool binary = false;       // v16: the head in bytes (and everything v15 allows)
     bool remake_gz = false;    // v17: some file is a gzip remade exactly (binary is set too)
+    std::string graph;         // v18: the map's text (see kGraphManifestVersion); empty for none
     // v14: each archive carried as its contents: its format ("7z", "xz"), its size, its path, and the
     // folder (or file) its contents are in.
     struct UnpackedArchive

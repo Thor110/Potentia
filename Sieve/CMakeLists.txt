@@ -101,6 +101,7 @@ add_library(sieve_lines STATIC
     tools/cli/filter_config.cpp
     tools/cli/items.cpp
     tools/cli/lines.cpp
+    tools/cli/map_sieve.cpp
     tools/cli/media_decode.cpp
     tools/cli/models.cpp
     tools/cli/plugins.cpp

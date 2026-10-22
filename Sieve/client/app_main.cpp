@@ -184,7 +184,7 @@ const char* kUsage =
     "  --install FILE --install-to DIR   the File Locator's install, at once\n"
     "  --harness           a picture of the AI Training Harness (--training-dir DIR: its runs; --script KEYS:\n"
     "                      keys and =typed text, each step waiting for a training to finish)\n"
-    "  --map PATH          choose a map for the node graph: a .map file, or a folder to map\n"
+    "  --map PATH          choose a map for the node graph: Sieve instructions (.sieve), an older .map, or a folder to map\n"
     "  --graph             open the node graph (on --map, or on this installation)\n"
     "  --new-map PATH      the node graph's New map..., at once\n"
     "  --thin              keep only the room you stand in (what going in past the budget does)\n"

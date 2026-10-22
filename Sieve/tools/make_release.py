@@ -20,12 +20,13 @@ order matters and is easy to get wrong by hand:
   6. The source: sieve-source.7z, the Sieve folder alone as the last Git commit has it (git
      archive), so it holds the committed source, this script included, and none of the build's
      clutter.
-  7. The published map: sealed, naming the installer and the instructions (found beside it) and
-     holding the source (its bytes inside the map), with its own SHA-256 printed, since a map
-     cannot name itself.
+  7. The published map, source.sieve: Sieve instructions that are a map (sieve-manifest-v18),
+     sealed, naming the installer and the instructions (found beside it) and holding the source
+     (its bytes the instructions' file, put back by installing them), with its own SHA-256
+     printed, since a map cannot name itself.
   8. Checks: each installer installed into a scratch folder and compared with the release folder
      (or, with --seven-zip, the archive), byte for byte; the map read back and every node verified
-     beside it.
+     beside it, and source.sieve installed back to the source.
   8b. metrics.txt: how much of each line the reference filters remove (data/metrics/
      reference-filters.ini), as the setup menu counts it, by the build's hallway (--metrics).
   8c. The build's record (IDEAS §19.50, §19.71): the build's unit suite run and timed, then
@@ -34,8 +35,9 @@ order matters and is easy to get wrong by hand:
      is measured on the record. --no-record leaves it out.
   9. SHA256SUMS.txt and a release-notes draft.
 
-Published (three files, Edward's naming): sieve.exe, sieve.sieve and sieve.map, the map naming the
-other two and holding sieve-source.7z. The version is
+Published (three files, Edward's naming): sieve.exe, sieve.sieve and source.sieve, the map naming the
+other two and holding sieve-source.7z. (Until 22 October 2026 the map was sieve.map, a sieve-map-v2
+file; any .sieve is a map now, IDEAS §19.93.) The version is
 in the release folder they install (Sieve-<version>) and in the notes, not in the names. GitHub adds
 the source zip of the tagged commit by itself.
 
@@ -193,12 +195,14 @@ def source_7z(dest, sz, work):
 def map_with(a, build):
     """The map again, after the release is published: GitHub makes the release's source zip itself,
     so its hash is only known once the release is out. Names the published installer and
-    instructions (already in the release folder) and FILE, copied beside them, found by name."""
+    instructions (already in the release folder) and FILE, copied beside them, found by name, and
+    holds the source again, as the published map does."""
     out = a.out.resolve()
     name = a.name
     program = out / (f"{name}{EXE}" if EXE else f"{name}-setup")
     instructions = out / f"{name}.sieve"
-    for f in (program, instructions):
+    source = out / f"{name}-source.7z"
+    for f in (program, instructions, source):
         if not f.exists():
             fail(f"{f.name} is not in {out}: make the release first")
     src = a.map_with.resolve()
@@ -211,15 +215,16 @@ def map_with(a, build):
     if not sieve.exists():
         fail(f"sieve{EXE} is not in {build}")
     step(f"the map again, with {src.name}")
-    mapfile = out / f"{name}.map"
-    run([sieve, "map", program, instructions, beside, "--name", name, "--seal", "--out", mapfile])
+    mapfile = out / "source.sieve"
+    run([sieve, "map", program, instructions, beside, "--name", name, "--out", mapfile])
+    run([sieve, "map", mapfile, "--add", source, "--seal", "--out", mapfile])
     text = subprocess.run([str(sieve), "map", str(mapfile)], capture_output=True, text=True, check=True).stdout
     for f in (program, instructions, beside):
         if sha256(f) not in text:
             fail(f"{mapfile.name} does not name {f.name}")
     if f"\theld\t{source.stat().st_size}\t{sha256(source)}\t{source.name}" not in text:
         fail(f"{mapfile.name} does not hold {source.name}")
-    print(f"   {mapfile.name}: sealed, names the installer and the instructions, holds the source, all by SHA-256")
+    print(f"   {mapfile.name}: sealed, names the installer, the instructions and {beside.name}, holds the source, all by SHA-256")
     files = [program, instructions, beside, mapfile]
     sums = "".join(f"{sha256(f)}  {f.name}\n" for f in files)
     (out / "SHA256SUMS.txt").write_text(sums, encoding="utf-8")
@@ -256,7 +261,7 @@ def main():
     ap.add_argument("--seven-zip", action="store_true", help="carry a solid 7z of the folder (as before v4), not the folder packed")
     ap.add_argument("--no-record", action="store_true", help="leave out step 8c, the build's record in metrics/")
     ap.add_argument("--map-with", type=Path, default=None, metavar="FILE",
-                    help="after publishing: make sieve.map again, naming the release's files and FILE too (GitHub's source zip)")
+                    help="after publishing: make source.sieve again, naming the release's files and FILE too (GitHub's source zip)")
     a = ap.parse_args()
 
     if not a.version:
@@ -338,11 +343,11 @@ def main():
     source = out / f"{name}-source.7z"
     source_7z(source, sz, out)
 
-    # 7. The published map: naming the installer and the instructions (found beside it), and
-    # holding the source (its bytes inside the map, checked against its SHA-256 whenever the map
-    # is read), then sealed.
-    step("the published map")
-    mapfile = out / f"{name}.map"
+    # 7. The published map, source.sieve: naming the installer and the instructions (found beside
+    # it), and holding the source (the instructions' one file, checked against its SHA-256 whenever
+    # the map is read), then sealed.
+    step("the published map: source.sieve")
+    mapfile = out / "source.sieve"
     run([sieve, "map", program, instructions, "--name", name, "--out", mapfile])
     run([sieve, "map", mapfile, "--add", source, "--seal", "--out", mapfile])
 
@@ -377,7 +382,13 @@ def main():
             fail(f"{mapfile.name} does not name {f.name}")
     if f"\theld\t{source.stat().st_size}\t{sha256(source)}\t{source.name}" not in text:
         fail(f"{mapfile.name} does not hold {source.name}")
-    print(f"   {mapfile.name}: sealed, names the installer and the instructions, holds the source, all by SHA-256")
+    with tempfile.TemporaryDirectory() as tmp:
+        dest = Path(tmp) / "source"
+        run([sieve, "install", mapfile, "--to", dest])
+        got = list(dest.rglob(source.name))
+        if len(got) != 1 or sha256(got[0]) != sha256(source):
+            fail(f"{mapfile.name} did not install {source.name} byte for byte")
+    print(f"   {mapfile.name}: sealed, names the installer and the instructions, holds the source, all by SHA-256; installs the source back")
 
     # 8b. The metrics list (IDEAS §19.12): how much of each line the reference filters remove, as
     # the setup menu counts it, written beside the installer. The build's hallway counts it (the

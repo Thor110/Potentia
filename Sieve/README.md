@@ -251,7 +251,7 @@ The rain only ever falls as characters the font can actually draw, so it never b
 
 **SORT, and maps.** A map (`sieve map FOLDER`, or the node graph's "Make a map from a folder...") links real files and folders, each file named by its SHA-256. It holds no file's bytes, so it is small and can be handed round or bundled with a release. On the SORT tab, a file on the binary line whose bytes a node of the chosen map names is that node, a verified anchor, drawn in its place among the rest; anything else is a lone point. Mouse or A/D turns the graph; [ and ] choose another map (on any tab).
 
-**Verified anchors: V.** Make a map with the node graph's **New map...** (O). Then, holding a file (an item on the binary line), press **V** on any tab to add it to the chosen map as a verified anchor, and V again to take it out; the item page shows which map is chosen and what V will do, and [ and ] change the map. Its bytes are kept inside the map (`sieve-map-v2`), so the map can always walk back to it, and can be sent as one file. The node graph's **Remove from map** (or Delete) takes an anchor out too. When an anchor has metadata in the map, its item page has a fourth tab, **META**. Sealed maps (such as a release's `sieve.map`) and "This installation" (the map chosen at the start, made fresh each time) cannot be changed.
+**Verified anchors: V.** Make a map with the node graph's **New map...** (O). Then, holding a file (an item on the binary line), press **V** on any tab to add it to the chosen map as a verified anchor, and V again to take it out; the item page shows which map is chosen and what V will do, and [ and ] change the map. Its bytes are kept inside the map (one of its files: a map is Sieve instructions, `sieve-manifest-v18`), so the map can always walk back to it, and can be sent as one file. The node graph's **Remove from map** (or Delete) takes an anchor out too. When an anchor has metadata in the map, its item page has a fourth tab, **META**. Sealed maps (such as a release's `source.sieve`) and "This installation" (the map chosen at the start, made fresh each time) cannot be changed.
 
 **The vault.** Sieve refuses to show, save or pass on files, pictures, melodies and models whose hash is in its vault (`docs/VAULT.md`), in any form it recognises, including written out as text (as it is, or in hex, base64 and other well-known encodings, decoded); text is never judged by what it says. Pictures are matched by PDQ, Meta's open perceptual hash, so resized, recompressed, recoloured, rotated or flipped copies are caught too, whether drawn in the hallway or found in a file. Files can also be listed by their content-defined chunks (`cdc-v1`), so a piece of one of a couple of kilobytes, cut out anywhere and put anywhere, is caught too. A withheld item keeps its address and place, so every count stays exact, but it is drawn blank, cannot be taken or saved, and never appears in the excluded view; files matching it are not located, installed or mapped. It cannot make an address secret (that is arithmetic); it makes sure Sieve is not what hands it over. It is not a filter and has no setting. `sieve vault` says what it holds (`--pdq` prints a picture's PDQ hash). The built-in entries are harmless tests: the 16 bytes "sieve vault test", a test picture of grey noise (`sieve vault --test-picture`), and a test file listed by its chunks (`sieve vault --test-file`).
 
@@ -841,19 +841,22 @@ A file that is not one of Sieve's own items keeps its own address: weighing does
 ### `map`: a node graph of verified anchors
 
 ```sh
-sieve map release --out maps/release.map          # a map of a folder, for the node graph
-sieve map maps/release.map --graphml release.graphml # the same map for Gephi, yEd or Cytoscape
+sieve map release --out maps/release.sieve          # a map of a folder, for the node graph
+sieve map maps/release.sieve --graphml release.graphml # the same map for Gephi, yEd or Cytoscape
 sieve map release --dot release.dot                  # or for Graphviz
 ```
 
 Every file and folder is a node, each file named by its size and SHA-256; every folder is linked to what is directly in it. Put a map in `maps/` beside the hallway and the node graph (O) lists it.
 
+A map is written as Sieve instructions (`sieve-manifest-v18`): the files it holds are the instructions' files, so `sieve install` puts them back, and its nodes, links, metadata and seal are their graph part. So any `.sieve` opens in the node graph: one made by `sieve locate` (no graph part) shows the tree it carries, read-only. Older `.map` files are still read, and `--out NAME.sieve` turns one into instructions; nothing writes `.map` any more.
+
 ```sh
-sieve map sieve.exe sieve.sieve --name sieve --seal --out sieve.map           # a release's map, beside the downloads
-sieve map --new finds --out maps/finds.map                                      # a new, empty map
-sieve map maps/finds.map --add found.bin --out maps/finds.map                   # add an anchor (held in the map)
-sieve map maps/finds.map --meta "1:source=a folder of old CDs" --out maps/finds.map   # give it metadata (META tab)
-sieve map maps/finds.map --remove 1 --out maps/finds.map                        # and take one out
+sieve map sieve.exe sieve.sieve --name sieve --seal --out source.sieve         # a release's map, beside the downloads
+sieve map --new finds --out maps/finds.sieve                                      # a new, empty map
+sieve map maps/finds.sieve --add found.bin --out maps/finds.sieve                 # add an anchor (held in the map)
+sieve map maps/finds.sieve --meta "1:source=a folder of old CDs" --out maps/finds.sieve   # give it metadata (META tab)
+sieve map maps/finds.sieve --remove 1 --out maps/finds.sieve                      # and take one out
+sieve map maps/finds.map --out maps/finds.sieve                                   # an older map, as Sieve instructions
 ```
 
 ### `install`: a folder from one address
