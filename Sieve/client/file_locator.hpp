@@ -61,7 +61,7 @@ public:
     };
 
     FileLocator(SDL_Window* window, SDL_Renderer* renderer, Host host);
-    ~FileLocator() { stop(); }
+    ~FileLocator();
     FileLocator(const FileLocator&) = delete;
     FileLocator& operator=(const FileLocator&) = delete;
 
@@ -149,7 +149,30 @@ private:
     std::chrono::steady_clock::time_point job_started_{};
     double job_estimate_ = -1;
     std::string job_estimate_text_;
-    void start_job();
+    void start_job(bool new_graph = true);
+    // The graph of the best so far: each new best of a step (its bytes as a share of what it
+    // packs), handed over by the worker (under mx_) and drawn onto graph_ as it comes, then let go,
+    // each step's line falling from the top (its first try) as it finds smaller. The texture keeps
+    // the lines; nothing keeps the values but each step's first. Past its time across, what is drawn
+    // is squeezed into the left half; past its depth, into the top half.
+    struct GraphPoint
+    {
+        double seconds, share, of;
+        std::string step;
+    };
+    std::vector<GraphPoint> graph_pending_;
+    bool graph_reset_ = false, graph_drawn_ = false;
+    SDL_Texture* graph_ = nullptr;
+    int graph_w_ = 0, graph_h_ = 0;
+    double graph_span_ = 10;       // seconds across
+    float graph_x_ = -1, graph_y_ = -1;
+    double graph_of_ = -1;
+    double graph_first_ = 1;    // the step's first try (a share), which its line starts from at the top
+    double graph_depth_ = 0.01; // how far below its first try the bottom is (1%, doubled as needed)
+    std::string graph_step_;
+    std::vector<std::string> graph_steps_; // the kinds of step seen, each its colour (a few)
+    void draw_graph(float x, float y, float w, float h, SDL_Color ink, SDL_Color grey);
+    void report(const std::string& what, double best, double of); // the worker's word, for the line and the graph
     std::string finish_job(); // "took X" (and the estimate), the job ended
     std::optional<std::string> pending_pick_, pending_save_;
     std::optional<std::pair<int, std::string>> pending_install_;

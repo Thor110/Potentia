@@ -1,37 +1,25 @@
-# Stop, and the best so far, in the File Locator (22 October 2026)
+# A graph of the best so far in the File Locator (22 October 2026)
 
 ## Built
-- **Stop (keep the best so far)**, a button and the S key, while the File Locator works. It ends
-  every step that isn't needed for a result, keeping the best found by then:
-  - LZMA2's trial settings and its further passes, and 7-Zip's encoder;
-  - cutting the file into pieces;
-  - the rope's search;
-  - the comparison with zip and 7z (shown as "not measured");
-  - tailoring and the weighing.
+- **A line graph of the best found along the way** (`Sieve/client/file_locator.*`). Each time a
+  step finds a new best, it's drawn at once onto a picture the File Locator keeps, and the value is
+  let go: nothing is stored but each step's first try. The steps graphed are LZMA2's passes (a
+  stream at a time) and the rope's search (a file at a time).
+  - Each step's line starts at the top, its first try, and falls as it finds something smaller.
+    The bottom starts 1% below, and doubles whenever a result goes deeper (what's drawn is
+    squeezed upwards).
+  - Time runs across to the estimate, or 10 s where there isn't one, and doubles the same way
+    (squeezed to the left).
+  - Each step has its own colour, named under the graph.
+  - It's large while the File Locator works, and stays beside the result afterwards.
+  - `graph-example.png`, beside this file, is `pi6.txt` read with the search at 20 s: the rope's
+    line drops about 15% in its first seconds, and LZMA2's stays at the top (its later passes gained
+    a fraction of a percent).
+- `sieve::progress(what, best, of)` in `sieve/stop.hpp` now carries the numbers with the words.
 
-  One LZMA2 pass is always finished, so whatever it stops with installs. The status says so while
-  it finishes that pass.
-- **What it's doing, and the best so far:** a line above the estimate, in forms such as "the lzma2
-  stream (S bytes): best so far B bytes; packing it with 7-Zip's encoder", "the rope's search: N
-  ways tried, best so far B bytes of S (L8 W1 S1 P1 K0)", and "cutting it into pieces: moving
-  boundary J of N".
-- **Saving writes what was made when the file was read**, with nothing packed again, so the result
-  you stopped at is the one saved. It only packs again if you changed the search's time or the
-  archives box since. This also takes several hours off saving a very large file.
-- Saving no longer copies the whole result in memory (it did, three copies of a 1 GB file).
-
-## Measured
-- The 40 MB tar, stopped after 90 s: finished at 180 s (the LZMA2 pass under way, and the
-  address), saved in 0.3 s, 27,868,382 bytes against 27,832,122 unstopped, installed byte for byte.
-
-## Also
-- `sieve/stop.hpp` (core): the stop flag and the progress line, for the thread doing the work.
-- Scripted runs: `--stop-after S`, `--locate-save FILE`. A CI check saves from the File Locator,
-  and saves a stopped run, and installs both.
-
-**Checked:** unit tests, every workflow step (6 to 16) locally, and a libc++ build.
+**Checked:** unit tests, and every workflow step (6 to 16) locally.
 
 **Docs:** IDEAS §19.97, README (File Locator), HANDOFF, VOICES.
 
-To apply: copy `.github/` and `Sieve/` over the repository's top folder. New files:
-`Sieve/core/include/sieve/stop.hpp`, `Sieve/core/src/stop.cpp`.
+To apply: copy `Sieve/` over the repository's `Sieve/` folder (the workflow is unchanged since the
+last zip). `graph-example.png` is only for you to look at; it isn't part of the repository.

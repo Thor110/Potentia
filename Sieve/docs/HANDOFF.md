@@ -3754,6 +3754,9 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   checked in `pack.cpp`, `rope_wave.cpp`, `compare.cpp`, `tailor.cpp`, `weigh.cpp`): the File
   Locator's Stop (S) keeps the best so far; saving writes the instructions made when read.
   Scripted `--stop-after S`, `--locate-save FILE`; a CI check installs a stopped result.
+- **The graph of the best so far** (`FileLocator::draw_graph`): `sieve::progress(what, best, of)`
+  carries a step's new best; the locator draws it onto a target texture as it comes (no values
+  kept but each step's first), squeezing left past its time and up past its depth.
 - **IDEAS §19.98** (recurring values, scale repeats, a locked random byte, the standing watch),
   **§19.99** (threads for the search and the packer).
 

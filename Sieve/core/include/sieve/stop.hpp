@@ -18,22 +18,26 @@ namespace sieve {
 bool stop_requested();
 
 // Says how the work on this thread is going ("the lzma2 stream: best so far ..."), where whoever
-// started it asked to hear; nothing otherwise.
-void progress(const std::string& what);
+// started it asked to hear; nothing otherwise. With `best` and `of` (bytes, both 0 or more), a
+// new best of a step: so many bytes for the `of` it packs, for a graph of the best so far.
+void progress(const std::string& what, double best = -1, double of = -1);
+
+// Where a thread's progress goes: what it is doing, and a new best (-1, -1 when there is none).
+using ProgressSink = std::function<void(const std::string& what, double best, double of)>;
 
 // For the length of a scope, this thread's flag to stop and where its progress goes (either may
 // be empty); the ones before are put back after.
 class StopScope
 {
 public:
-    StopScope(const std::atomic<bool>* stop, std::function<void(const std::string&)> report);
+    StopScope(const std::atomic<bool>* stop, ProgressSink report);
     ~StopScope();
     StopScope(const StopScope&) = delete;
     StopScope& operator=(const StopScope&) = delete;
 
 private:
     const std::atomic<bool>* old_stop_;
-    std::function<void(const std::string&)> old_report_;
+    ProgressSink old_report_;
 };
 
 } // namespace sieve

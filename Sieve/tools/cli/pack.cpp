@@ -131,7 +131,7 @@ std::vector<uint8_t> pack_stream(const std::vector<uint8_t>& data, uint32_t dict
     // How it goes, for whoever is watching (sieve/stop.hpp), and asked to stop: the best so far kept.
     const std::string what = std::string(x86 ? "the x86 stream (" : "the lzma2 stream (") + std::to_string(data.size()) + " bytes)";
     auto said = [&](const std::string& next) {
-        progress(what + ": best so far " + std::to_string(best.size()) + " bytes; " + next);
+        progress(what + ": best so far " + std::to_string(best.size()) + " bytes; " + next, double(best.size()), double(data.size()));
     };
     said("trying LZMA2's settings on its first MiB");
     if (stop_requested()) return best;

@@ -233,9 +233,20 @@ std::string FileLocator::status_text()
     return status_;
 }
 
-void FileLocator::start_job()
+FileLocator::~FileLocator()
+{
+    stop();
+    if (graph_) SDL_DestroyTexture(graph_);
+}
+
+void FileLocator::start_job(bool new_graph)
 {
     std::lock_guard<std::mutex> lock(mx_);
+    if (new_graph)
+    {
+        graph_reset_ = true;
+        graph_pending_.clear();
+    }
     job_started_ = Clock::now();
     job_estimate_ = -1;
     job_estimate_text_.clear();
@@ -332,10 +343,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
     auto job = [this, path, tailor, per_file, total, by_total, archives] {
         // Stop asks every search and every trial not needed for a result to end, the best so far
         // kept; what the work is doing, and its best so far, goes to the line under the status.
-        const StopScope scope(&stop_, [this](const std::string& what) {
-            std::lock_guard<std::mutex> lock(mx_);
-            progress_ = what;
-        });
+        const StopScope scope(&stop_, [this](const std::string& what, double best, double of) { report(what, best, of); });
         // A measure for the table, or kNotMeasured once asked to stop.
         auto measured = [](uint64_t (*f)(std::span<const uint8_t>), std::span<const uint8_t> b) { return stop_requested() ? cli::kNotMeasured : f(b); };
         auto plus = [](uint64_t a, uint64_t b) { return a == cli::kNotMeasured || b == cli::kNotMeasured ? cli::kNotMeasured : a + b; };
@@ -547,9 +555,10 @@ void FileLocator::save(const std::string& to)
     const Result& r = result_; // not changed while busy (nothing else starts), so read in place
     const double rope_seconds = search_per_file_; // the rope's time for each file, as the search row sets it
     const bool archives = optimise_archives_;
-    start_job();
-    // Made when it was read, with what is set now: written as it is, nothing packed again.
+    // Made when it was read, with what is set now: written as it is, nothing packed again (and the
+    // graph of how it was made is kept).
     const bool made = r.instructions && r.made_rope_seconds == rope_seconds && r.made_archives == archives;
+    start_job(!made);
     if (made)
     {
         std::lock_guard<std::mutex> lock(mx_);
@@ -568,10 +577,7 @@ void FileLocator::save(const std::string& to)
     }
     worker_ = std::thread([this, what, to, rope_seconds, archives, made] {
         const Result& r = result_;
-        const StopScope scope(&stop_, [this](const std::string& w) {
-            std::lock_guard<std::mutex> lock(mx_);
-            progress_ = w;
-        });
+        const StopScope scope(&stop_, [this](const std::string& what, double best, double of) { report(what, best, of); });
         std::string done;
         try
         {
@@ -788,6 +794,15 @@ void FileLocator::draw(float W, float H)
         status = status_;
     }
     const Result& r = result_;
+    // The graph of the best so far: large while it works, beside the result after.
+    bool waiting = false; // new bests not drawn yet (a scripted run draws nothing while it works)
+    {
+        std::lock_guard<std::mutex> lock(mx_);
+        waiting = !graph_pending_.empty();
+    }
+    const bool graph_beside = !busy && r.kind != Result::None && (graph_drawn_ || waiting);
+    if (busy) draw_graph(20, y + 24, W - 40, std::max(60.0f, std::min(220.0f, H - y - 160)), ink, grey);
+    else if (graph_beside) draw_graph(W * 0.62f, y, W * 0.38f - 20, 70, ink, grey);
     // How long the search for shorter addresses may take: a file, and the run, each moving the
     // other. Shown before anything is chosen too, so the first search can have its time.
     auto search_row = [&](float row_y) {
@@ -828,7 +843,7 @@ void FileLocator::draw(float W, float H)
     {
         auto line = [&](const std::string& label, const std::string& value) {
             draw_text(r_, 20, y, label, 1, grey);
-            draw_text(r_, 150, y, fit_text(value, W - 170, 1), 1, white);
+            draw_text(r_, 150, y, fit_text(value, (graph_beside ? W * 0.62f - 20 : W) - 170, 1), 1, white);
             y += 16;
         };
         if (r.kind == Result::File)
@@ -921,6 +936,144 @@ void FileLocator::draw(float W, float H)
         if (!now.empty()) draw_text(r_, 20, H - 74, fit_text(now, W - 40, 1), 1, ink);
     }
     draw_text(r_, 20, H - 26, fit_text(tr(in_world() ? "loc.keys" : "loc.keys.menu"), W - 40, 1), 1, grey);
+}
+
+// What the work says of itself (sieve/stop.hpp), on the worker: the line of what it is doing, and
+// a new best of a step for the graph.
+void FileLocator::report(const std::string& what, double best, double of)
+{
+    std::lock_guard<std::mutex> lock(mx_);
+    progress_ = what;
+    if (best < 0 || of <= 0 || job_started_ == Clock::time_point{}) return;
+    // The step's kind: its words before any count in brackets or the colon ("the lzma2 stream").
+    const size_t cut = std::min(what.find(" ("), what.find(':'));
+    if (graph_pending_.size() < 4096) graph_pending_.push_back({since(job_started_), best / of, of, what.substr(0, cut)});
+}
+
+void FileLocator::draw_graph(float x, float y, float w, float h, SDL_Color ink, SDL_Color grey)
+{
+    static const SDL_Color kColours[] = {{0, 255, 255, 255}, {255, 200, 80, 255}, {255, 110, 200, 255}, {120, 230, 120, 255}, {170, 170, 255, 255}};
+    const int tw = std::max(16, int(w)), th = std::max(16, int(h));
+    std::vector<GraphPoint> points;
+    bool reset = false;
+    double estimate = -1;
+    {
+        std::lock_guard<std::mutex> lock(mx_);
+        points.swap(graph_pending_);
+        reset = std::exchange(graph_reset_, false);
+        estimate = job_estimate_;
+    }
+    SDL_Texture* const before = SDL_GetRenderTarget(r_);
+    auto blank = [&](SDL_Texture* t) {
+        SDL_SetRenderTarget(r_, t);
+        SDL_SetRenderDrawColor(r_, 0, 0, 0, 0);
+        SDL_RenderClear(r_);
+    };
+    if (!graph_ || reset)
+    {
+        // A new job (or the first): a clean picture, its time across the estimate's, else 10 s, doubled as needed.
+        if (graph_ && (graph_w_ != tw || graph_h_ != th))
+        {
+            SDL_DestroyTexture(graph_);
+            graph_ = nullptr;
+        }
+        if (!graph_)
+        {
+            graph_ = SDL_CreateTexture(r_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, tw, th);
+            if (!graph_) return;
+            SDL_SetTextureBlendMode(graph_, SDL_BLENDMODE_BLEND);
+            graph_w_ = tw;
+            graph_h_ = th;
+        }
+        blank(graph_);
+        graph_span_ = 10;
+        graph_depth_ = 0.01;
+        graph_x_ = graph_y_ = -1;
+        graph_of_ = -1;
+        graph_step_.clear();
+        graph_steps_.clear();
+        graph_drawn_ = false;
+    }
+    for (const GraphPoint& p : points)
+    {
+        if (!graph_drawn_ && estimate > 0) graph_span_ = std::max(graph_span_, estimate * 1.1);
+        while (p.seconds > graph_span_)
+        {
+            // Out of room: what is drawn squeezed into the left half, the time across doubled.
+            SDL_Texture* half = SDL_CreateTexture(r_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, graph_w_, graph_h_);
+            if (!half) break;
+            SDL_SetTextureBlendMode(half, SDL_BLENDMODE_BLEND);
+            blank(half);
+            const SDL_FRect left{0, 0, graph_w_ / 2.0f, float(graph_h_)};
+            SDL_RenderTexture(r_, graph_, nullptr, &left);
+            SDL_DestroyTexture(graph_);
+            graph_ = half;
+            graph_span_ *= 2;
+            if (graph_x_ >= 0) graph_x_ /= 2;
+        }
+        size_t k = 0;
+        while (k < graph_steps_.size() && graph_steps_[k] != p.step) ++k;
+        if (k == graph_steps_.size()) graph_steps_.push_back(p.step);
+        const SDL_Color c = kColours[k % (sizeof kColours / sizeof kColours[0])];
+        // A step of the same kind on the same bytes goes on from its last best; another starts
+        // afresh, from the top, its first try.
+        const bool goes_on = graph_x_ >= 0 && p.step == graph_step_ && p.of == graph_of_;
+        if (!goes_on) graph_first_ = p.share > 0 ? p.share : 1;
+        const double smaller = std::max(0.0, 1.0 - p.share / graph_first_); // below its first try
+        while (smaller > graph_depth_)
+        {
+            // Deeper than the bottom: what is drawn squeezed into the top half, the depth doubled.
+            SDL_Texture* half = SDL_CreateTexture(r_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, graph_w_, graph_h_);
+            if (!half) break;
+            SDL_SetTextureBlendMode(half, SDL_BLENDMODE_BLEND);
+            blank(half);
+            const SDL_FRect top{0, 0, float(graph_w_), graph_h_ / 2.0f};
+            SDL_RenderTexture(r_, graph_, nullptr, &top);
+            SDL_DestroyTexture(graph_);
+            graph_ = half;
+            graph_depth_ *= 2;
+            if (graph_y_ >= 0) graph_y_ /= 2;
+        }
+        const float px = float(p.seconds / graph_span_) * float(graph_w_ - 1);
+        const float py = float(graph_h_ - 1) * float(smaller / graph_depth_);
+        SDL_SetRenderTarget(r_, graph_);
+        SDL_SetRenderDrawColor(r_, c.r, c.g, c.b, 255);
+        if (goes_on)
+        {
+            SDL_RenderLine(r_, graph_x_, graph_y_, px, graph_y_); // the best held until now
+            SDL_RenderLine(r_, px, graph_y_, px, py);
+        }
+        const SDL_FRect dot{px - 1, py - 1, 3, 3};
+        SDL_RenderFillRect(r_, &dot);
+        graph_x_ = px;
+        graph_y_ = py;
+        graph_step_ = p.step;
+        graph_of_ = p.of;
+        graph_drawn_ = true;
+    }
+    SDL_SetRenderTarget(r_, before);
+    // The frame, its quarters, the scales, and which colour is which step.
+    SDL_SetRenderDrawColor(r_, grey.r, grey.g, grey.b, 60);
+    for (int q = 1; q < 4; ++q) SDL_RenderLine(r_, x, y + h * float(q) / 4, x + w, y + h * float(q) / 4);
+    SDL_SetRenderDrawColor(r_, grey.r, grey.g, grey.b, 255);
+    const SDL_FRect frame{x - 1, y - 1, w + 2, h + 2};
+    SDL_RenderRect(r_, &frame);
+    const SDL_FRect at{x, y, w, h};
+    SDL_RenderTexture(r_, graph_, nullptr, &at);
+    draw_text(r_, x + 4, y + 3, tr("loc.graph.top"), 1, grey);
+    char depth[32];
+    std::snprintf(depth, sizeof depth, graph_depth_ < 0.1 ? "%.1f" : "%.0f", graph_depth_ * 100);
+    draw_text(r_, x + 4, y + h - 12, trf("loc.graph.bottom", {depth}), 1, grey);
+    const std::string across = duration_text(graph_span_);
+    draw_text(r_, x + w - text_width(across, 1) - 4, y + h + 4, across, 1, grey);
+    float lx = x;
+    for (size_t k = 0; k < graph_steps_.size() && lx < x + w - 140; ++k)
+    {
+        const SDL_Color c = kColours[k % (sizeof kColours / sizeof kColours[0])];
+        draw_text(r_, lx, y + h + 4, graph_steps_[k], 1, c);
+        lx += text_width(graph_steps_[k], 1) + 16;
+    }
+    (void)ink;
 }
 
 size_t FileLocator::files_counted() const

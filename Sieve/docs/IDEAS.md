@@ -4251,6 +4251,15 @@ allotted time".
   after 90 s: finished at 180 s (the pass under way, and the address), saved in 0.3 s, 27,868,382
   bytes against 27,832,122 unstopped, installed byte for byte. Scripted: `--stop-after S`,
   `--locate-save FILE`, and a CI check that a stopped result installs.
+- *A graph of the best so far (Edward, 22 October 2026: "a line graph display which showcases the
+  best found results along the way, instead of storing each value we can just draw the line graph
+  as we go"; built).* Each new best a step reports (LZMA2's passes, a stream at a time; the rope's
+  search, a file at a time) is drawn at once onto a picture the File Locator keeps, and let go:
+  each step's line starts at the top, its first try, and falls as it finds smaller, the bottom 1%
+  below at first and doubled whenever a best goes deeper (what is drawn squeezed into the top
+  half), the time across the estimate's, else 10 s, doubled the same way (squeezed into the left
+  half). Only each step's first try is kept, to measure from. Large while it works; beside the
+  result after. Seen on `pi6.txt`: the rope's line falls 16% within its first second.
 - *Still open:* the time the boundaries take grows with how many there are, and threads (§19.99)
   are the next step; the memory a very large file needs is not estimated yet (for 700 MB, about 4
   to 6 GB expected from how the address is made, not measured).

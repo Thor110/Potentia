@@ -803,7 +803,7 @@ RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds, u
             char t[160];
             std::snprintf(t, sizeof t, "the rope's search: %llu ways tried, best so far %.0f bytes of %llu (%s)", (unsigned long long)r.tried, e,
                           (unsigned long long)file.size(), p.text().c_str());
-            progress(t);
+            progress(t, e, double(file.size()));
         }
     };
     try_one(RopeParams{}); // no wave at all: the bytes' own histogram
