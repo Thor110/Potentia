@@ -4,6 +4,11 @@ Take everything that could ever exist as a file, place it on a line and then rep
 
 If you can find a filter that rotates the location of your file to an exact integer interval then you can provably reduce any file of any size to just four values.
 
+settings
+dimension
+rotation
+item
+
 The amount of time it might take to find that address? Irrelevant.
 
 There is also room for further reductions when the initial overhead instructions are eventually reduced by being packed down into a bitmask.
@@ -18,3 +23,5 @@ As well as a file that is somewhat representative of the information floor where
 welcome to the sieve.sieve the starting page (32 bytes) -> 162 bytes
 
 The overhead also includes a file hash for verification.
+
+A test installation of degrees.sieve on my computer installed 3960 files, every one checked against its SHA-256, decoded in 0.356s, checked and written in 1.461s.

@@ -1,24 +1,32 @@
-# Releases at the newest version, maps with a search limit (22 October 2026)
+# A time estimate in the File Locator, and pieces cut faster (22 October 2026)
 
-## Fixed
-- **The release was v4** (`Sieve/tools/make_release.py`). `sieve.sieve` and the installer program
-  were made without `--items`, so they came out as `sieve-manifest-v4`, without any of the packing
-  since. They are the newest version now. Measured on this release's folder (made here end to end
-  with `make_release`, 635 s): v4 7,939,263 bytes, now 7,819,304, 7z 8,414,101. The installer
-  program installs the folder byte for byte, and no release file is an item, so `sieve-install`
-  can install it.
-- **Maps were slow** (`Sieve/tools/cli/map_sieve.*`, `sieve_cli.cpp`, `help.cpp`). The rope's
-  search had no time limit, and spent 19.5 minutes on the source's 7z for nothing. Each held file
-  now gets 10 seconds; `sieve map --search-per-file S` changes it (0: no limit). The release's
-  `source.sieve` came to 47,779,886 bytes, against the 7z's 47,780,052, with the two downloads named.
+## Built
+- **A time estimate** (`Sieve/client/file_locator.*`, `Sieve/data/lang/en.txt`). For a file or
+  folder of 16 MiB or more, the File Locator first times the same work on 2 MiB of it, taken in
+  eight stretches from across the file (a folder's largest). It draws that out to the whole size,
+  adds the most the search can take, and shows the result under the status line with the time so
+  far. When it's done, it says "took X (estimated Y)". Saving gives its own estimate, from how long
+  the packing took when the file was read. With the search set to no limit, it says the search
+  can't be estimated.
+  - Measured, with the search at 5 s a file: 40 MB of a 7z, estimated 3 min 03 s, took 3 min 46 s;
+    a 40 MB tar of the source, estimated 38 min 34 s, took 45 min 11 s. So it runs 15–20% short
+    for now.
+- **Cutting a file into pieces is much faster on mixed files** (`Sieve/tools/cli/pack.cpp`). This
+  is what made large files take so long. Each boundary between pieces was moved in 64-byte steps,
+  and every step compressed the whole stretch beside it again, up to 1 MiB. Now each step looks at
+  a fixed window of 64 KiB.
+  - The output is byte for byte the same on all 16 files of the varied set and on the 40 MB tar.
+  - The tar packs in 21 minutes instead of 34, and the File Locator reads it in 45 minutes
+    instead of 68.
 
-## Measured, not built
-- **IDEAS §19.94, distance along the line and rotation together, and grids of 1 to 65,535.** The
-  saving is always eaten by naming the grid point; every file tried came out within a bit or so of
-  its own address.
-- **IDEAS §19.96, the degrees sample and the starting page as `.sieve`** (in the second zip).
+## Noted (IDEAS)
+- §19.97 the estimate and the pieces fix; §19.98 recurring values, scale repeats and the
+  locked random byte, measured, with your note to keep watching for them as more computing
+  becomes available; §19.99 threads for the search and the packer.
 
-**Docs:** IDEAS §19.94 to §19.96, README (map), HANDOFF, VOICES. **CI:** a check of
-`--search-per-file` for maps.
+**Checked:** unit tests, and every workflow step (6 to 16) locally.
 
-To apply: copy `.github/` and `Sieve/` over the repository's top folder.
+**Docs:** IDEAS §19.97 to §19.99, SPECIFICATIONS §12.2 (the pieces' window), README (File
+Locator), HANDOFF, VOICES.
+
+To apply: copy `Sieve/` over the repository's `Sieve/` folder (the workflow is unchanged).

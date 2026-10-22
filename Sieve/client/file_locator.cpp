@@ -14,6 +14,9 @@
 #include "cli/timings.hpp"
 
 #include <chrono>
+#include <cstdio>
+#include <fstream>
+#include <random>
 #include <stdexcept>
 
 namespace hallway {
@@ -43,6 +46,88 @@ cli::Manifest file_instructions(const fs::path& p, const std::vector<uint8_t>& b
     m.with_contents = true;
     cli::add_packed_items(m, p.parent_path(), items, nullptr, 8, false, rope_seconds, 5, true, true, archives);
     return m;
+}
+
+// The time estimate (IDEAS §19.97). Reading a file does much the same work on every byte (its
+// address, zip's and 7z's sizes, its instructions packed and compressed again, the weighing), and
+// some at every place its kind of bytes changes (where it is cut into pieces), so it is timed here
+// on 1 and 2 MiB taken in eight stretches evenly across the file (a folder's largest), with the
+// search as near none as the packer allows, and drawn as a straight line through the two to the
+// whole size; the most the search may take is added to it. Below 16 MiB the reading takes too
+// little to need one.
+constexpr size_t kSampleBytes = size_t(1) << 20;
+constexpr uint64_t kEstimateFrom = uint64_t(16) << 20;
+constexpr size_t kSlices = 8;      // the samples' stretches, evenly across the file
+constexpr double kNoSearch = 1e-3; // 0 would be no limit
+
+using Clock = std::chrono::steady_clock;
+
+double since(Clock::time_point t) { return std::chrono::duration<double>(Clock::now() - t).count(); }
+
+std::string duration_text(double s)
+{
+    char b[64];
+    if (s < 10) std::snprintf(b, sizeof b, "%.1f s", s);
+    else if (s < 60) std::snprintf(b, sizeof b, "%.0f s", s);
+    else if (s < 3600) std::snprintf(b, sizeof b, "%d min %02d s", int(s) / 60, int(s) % 60);
+    else std::snprintf(b, sizeof b, "%d h %02d min", int(s) / 3600, int(s) % 3600 / 60);
+    return b;
+}
+
+// The reading's work, timed on `sample` saved as a file named `name` in a folder of its own.
+double sample_seconds(const std::vector<uint8_t>& sample, const fs::path& name, const cli::Args& items, bool archives, const cli::WeighLines& wl)
+{
+    std::random_device rd;
+    const fs::path dir = fs::temp_directory_path() / ("sieve-estimate-" + std::to_string(rd()) + std::to_string(rd()));
+    struct Cleanup
+    {
+        fs::path p;
+        ~Cleanup()
+        {
+            std::error_code ec;
+            fs::remove_all(p, ec);
+        }
+    } cleanup{dir};
+    fs::create_directories(dir);
+    const fs::path f = dir / name.filename();
+    {
+        std::ofstream o(f, std::ios::binary);
+        o.write(reinterpret_cast<const char*>(sample.data()), std::streamsize(sample.size()));
+        if (!o) throw std::runtime_error("cannot write the sample");
+    }
+    const auto t0 = Clock::now();
+    const BigUint a = cli::binary_address(sample);
+    (void)a.to_hex();
+    (void)cli::sha256_hex(sample);
+    (void)cli::deflate_size(sample);
+    (void)cli::lzma2_size(sample);
+    const cli::Manifest fi = file_instructions(f, sample, items, kNoSearch, archives);
+    const std::vector<uint8_t> mb = fi.file();
+    const BigUint ma = cli::binary_address(mb);
+    (void)cli::deflate_size(mb);
+    (void)cli::lzma2_size(mb);
+    (void)ma.to_hex();
+    (void)cli::weigh_files(dir, {u8(f.filename())}, wl, false, nullptr, cli::WeighBudget{kNoSearch, kNoSearch});
+    return since(t0);
+}
+
+// `slices` stretches of `each` bytes taken evenly across a file of `size` bytes, joined: a sample
+// that meets the kinds of bytes the file holds as often as the whole does (where they change is
+// what cutting a file into pieces spends its time on).
+std::vector<uint8_t> spread_of(const fs::path& file, uint64_t size, size_t slices, size_t each)
+{
+    std::ifstream in(file, std::ios::binary);
+    std::vector<uint8_t> out;
+    std::vector<uint8_t> buf(each);
+    for (size_t k = 0; k < slices; ++k)
+    {
+        const uint64_t at = size > each ? (size - each) * k / std::max<size_t>(1, slices - 1) : 0;
+        in.clear();
+        in.seekg(std::streamoff(at));
+        in.read(reinterpret_cast<char*>(buf.data()), std::streamsize(each));
+        out.insert(out.end(), buf.begin(), buf.begin() + std::ptrdiff_t(in.gcount()));
+    }
+    return out;
 }
 
 std::string head_tail(const std::string& h, size_t each)
@@ -139,6 +224,31 @@ void FileLocator::say(const std::string& status)
     status_ = status;
 }
 
+std::string FileLocator::status_text()
+{
+    std::lock_guard<std::mutex> lock(mx_);
+    return status_;
+}
+
+void FileLocator::start_job()
+{
+    std::lock_guard<std::mutex> lock(mx_);
+    job_started_ = Clock::now();
+    job_estimate_ = -1;
+    job_estimate_text_.clear();
+}
+
+// Under mx_.
+std::string FileLocator::finish_job()
+{
+    const double took = since(job_started_);
+    std::string t = job_estimate_ >= 0 ? trf("loc.took.estimated", {duration_text(took), duration_text(job_estimate_)}) : trf("loc.took", {duration_text(took)});
+    job_estimate_ = -1;
+    job_estimate_text_.clear();
+    job_started_ = {};
+    return t;
+}
+
 // From the dialogs' callbacks, which may run on another thread: handed to the frame.
 void FileLocator::picked(const std::string& path)
 {
@@ -211,6 +321,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
     const double per_file = search_per_file_, total = search_total_;
     const bool by_total = search_by_total_;
     const bool archives = optimise_archives_;
+    start_job();
     auto job = [this, path, tailor, per_file, total, by_total, archives] {
         Result r;
         r.path = path;
@@ -218,9 +329,43 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
         {
             const fs::path p = from_u8(path);
             cli::Comparison c;
+            // The estimate: the reading timed on the start of the largest file and drawn out to
+            // the whole, and the most the search may take (packing, then weighing) on top.
+            auto estimate = [&](uint64_t bytes, const fs::path& largest, uint64_t largest_bytes, size_t files, size_t searched) {
+                const double each = by_total ? cli::budget_per_file(total, files) : per_file;
+                r.pack_search = 2 * each * double(searched); // the file whole, then its pieces (file_ways)
+                r.pack_search_unlimited = each <= 0;
+                if (bytes < kEstimateFrom || largest_bytes < 2 * kSampleBytes) return;
+                {
+                    std::lock_guard<std::mutex> lock(mx_);
+                    job_estimate_text_ = tr("loc.estimating");
+                }
+                const cli::Args items = host_.item_args ? host_.item_args() : cli::Args{};
+                const cli::WeighLines wl = host_.lines();
+                const std::vector<uint8_t> one = spread_of(largest, largest_bytes, kSlices, kSampleBytes / kSlices),
+                                           two = spread_of(largest, largest_bytes, kSlices, 2 * kSampleBytes / kSlices);
+                const double t1 = sample_seconds(one, largest, items, archives, wl);
+                const double t2 = sample_seconds(two, largest, items, archives, wl);
+                const double per_byte = (t2 - t1) / double(kSampleBytes);
+                const double reading = per_byte > 0 ? t1 + per_byte * double(bytes - kSampleBytes) : t2 * double(bytes) / double(2 * kSampleBytes);
+                const double weigh_search = by_total ? total : cli::budget_total(per_file, files);
+                std::lock_guard<std::mutex> lock(mx_);
+                if (r.pack_search_unlimited)
+                {
+                    job_estimate_ = reading;
+                    job_estimate_text_ = trf("loc.estimate.unlimited", {duration_text(reading)});
+                }
+                else
+                {
+                    job_estimate_ = reading + r.pack_search + weigh_search;
+                    job_estimate_text_ = trf("loc.estimate", {duration_text(job_estimate_), duration_text(reading), duration_text(r.pack_search + weigh_search)});
+                }
+            };
             if (fs::is_regular_file(p))
             {
                 r.kind = Result::File;
+                const uint64_t size = fs::file_size(p);
+                estimate(size, p, size, 1, size >= 512 ? 1 : 0);
                 r.bytes = cli::read_file_bytes(p);
                 const BigUint a = cli::binary_address(r.bytes);
                 r.hex = a.is_zero() ? "0" : a.to_hex();
@@ -232,7 +377,9 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 c.address_hex = a.is_zero() ? 0 : r.hex.size();
                 // Its Sieve instructions, as a folder's: its name, size and SHA-256, then its bytes.
                 r.manifest = cli::manifest_of_file(p);
+                const auto packing = Clock::now();
                 const cli::Manifest fi = file_instructions(p, r.bytes, host_.item_args ? host_.item_args() : cli::Args{}, by_total ? total : per_file, archives);
+                r.pack_seconds = since(packing);
                 const std::vector<uint8_t> mb = fi.file();
                 c.packed = fi.packed;
                 c.version = fi.version();
@@ -247,6 +394,19 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
             {
                 r.kind = Result::Folder;
                 r.manifest = cli::walk_folder(p);
+                {
+                    fs::path largest;
+                    uint64_t most = 0;
+                    size_t files = 0, searched = 0;
+                    for (const auto& e : r.manifest.entries)
+                    {
+                        if (e.dir) continue;
+                        ++files;
+                        searched += e.size >= 512 ? 1 : 0;
+                        if (e.size > most) most = e.size, largest = p / from_u8(e.path);
+                    }
+                    estimate(r.manifest.bytes, largest, most, files, searched);
+                }
                 std::vector<uint8_t> all;
                 for (const auto& e : r.manifest.entries)
                 {
@@ -266,8 +426,10 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                     // The rope's time for each file: the file's, or the run's shared among the files.
                     size_t n = 0;
                     for (const auto& e : r.manifest.entries) n += e.dir ? 0 : 1;
+                    const auto packing = Clock::now();
                     cli::add_packed_items(with, p, host_.item_args ? host_.item_args() : cli::Args{}, nullptr, 8, false,
                                           by_total ? cli::budget_per_file(total, n) : per_file, 5, true, true, archives);
+                    r.pack_seconds = since(packing);
                 }
                 c.packed = with.packed;
                 c.version = with.version();
@@ -327,7 +489,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
         std::lock_guard<std::mutex> lock(mx_);
         result_ = std::move(r);
         relink_search(); // the files counted may have changed
-        status_.clear();
+        status_ = finish_job();
         busy_ = false;
     };
     if (sync) job();
@@ -345,6 +507,18 @@ void FileLocator::save(const std::string& to)
     const Result r = result_;
     const double rope_seconds = search_per_file_; // the rope's time for each file, as the search row sets it
     const bool archives = optimise_archives_;
+    start_job();
+    if (r.pack_seconds >= 0)
+    {
+        // Saving packs it again, as reading it did: that time, measured, and the search's at most.
+        std::lock_guard<std::mutex> lock(mx_);
+        if (r.pack_search_unlimited) job_estimate_text_ = trf("loc.estimate.save.unlimited", {duration_text(r.pack_seconds)});
+        else
+        {
+            job_estimate_ = r.pack_seconds + r.pack_search;
+            job_estimate_text_ = trf("loc.estimate.save", {duration_text(job_estimate_), duration_text(r.pack_seconds), duration_text(r.pack_search)});
+        }
+    }
     worker_ = std::thread([this, what, r, to, rope_seconds, archives] {
         std::string done;
         try
@@ -378,7 +552,7 @@ void FileLocator::save(const std::string& to)
             done = trf("loc.save_failed", {e.what()});
         }
         std::lock_guard<std::mutex> lock(mx_);
-        status_ = done;
+        status_ = done + "; " + finish_job();
         busy_ = false;
     });
 }
@@ -657,6 +831,18 @@ void FileLocator::draw(float W, float H)
         else if (r.tailored_filters) button("use_filters", tr("loc.use_filters"), y + 40);
     }
     if (!status.empty()) draw_text(r_, 20, H - 58, fit_text(status, W - 40, 1), 1, busy ? white : ink);
+    if (busy)
+    {
+        // The job's estimate, and how long it has run.
+        std::string est;
+        {
+            std::lock_guard<std::mutex> lock(mx_);
+            if (job_started_ != Clock::time_point{})
+                est = job_estimate_text_.empty() ? trf("loc.elapsed", {duration_text(since(job_started_))})
+                                                 : trf("loc.estimate.so_far", {job_estimate_text_, duration_text(since(job_started_))});
+        }
+        if (!est.empty()) draw_text(r_, 20, H - 42, fit_text(est, W - 40, 1), 1, grey);
+    }
     draw_text(r_, 20, H - 26, fit_text(tr(in_world() ? "loc.keys" : "loc.keys.menu"), W - 40, 1), 1, grey);
 }
 

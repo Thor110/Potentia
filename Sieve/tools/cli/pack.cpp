@@ -213,8 +213,12 @@ Pieces pieces_of(const std::vector<uint8_t>& b)
     }
     if (runs.size() < 2) return out;
     // Each boundary moved, in steps of 64 bytes up to a block either way, to where the two ways
-    // cost least: the LZMA2 run packed again at each step (where it is no longer than 1 MiB), the
-    // rope's side counted over the two blocks around the boundary.
+    // cost least: the LZMA2 side packed again at each step (where its run is no longer than 1 MiB),
+    // over a window of at most 64 KiB beyond the steps, fixed while the boundary moves (so every
+    // step is weighed over the same bytes but its own; the whole run, packed at every step, made a
+    // file of many runs take hours: IDEAS §19.97), the rope's side counted over the two blocks
+    // around the boundary.
+    constexpr uint64_t kWindow = uint64_t(64) << 10;
     uint64_t start = 0;
     for (size_t j = 0; j + 1 < runs.size(); ++j)
     {
@@ -226,12 +230,13 @@ Pieces pieces_of(const std::vector<uint8_t>& b)
         {
             const uint64_t lo = std::max(start + 64, edge >= B ? edge - B : 0), hi = std::min(end - 64, edge + B);
             const uint64_t wlo = edge >= B ? edge - B : 0, whi = std::min(uint64_t(b.size()), edge + B);
+            const uint64_t zfrom = std::max(start, lo >= kWindow ? lo - kWindow : 0), zto = std::min(end, hi + kWindow);
             double best = -1;
             uint64_t best_e = edge;
             for (uint64_t e = lo + (edge - lo) % 64; e <= hi; e += 64)
             {
-                const double c = z_left ? lzma_cost(size_t(start), size_t(e)) + rope_cost(size_t(e), size_t(whi))
-                                        : lzma_cost(size_t(e), size_t(end)) + rope_cost(size_t(wlo), size_t(e));
+                const double c = z_left ? lzma_cost(size_t(zfrom), size_t(e)) + rope_cost(size_t(e), size_t(whi))
+                                        : lzma_cost(size_t(e), size_t(zto)) + rope_cost(size_t(wlo), size_t(e));
                 if (best < 0 || c < best)
                 {
                     best = c;

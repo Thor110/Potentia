@@ -81,6 +81,13 @@ enumerated and stored later. Nothing is guaranteed (IDEAS §19.77).
 - **Edward** (22 October 2026, quote; IDEAS §19.94): Still unlikely we will ever find a whole integer for a file of any real meaning, but it sort of doubles our chances.
 - **Edward** (22 October 2026, quote; IDEAS §19.94): In theory we could use a variable measuring system as well, perhaps line/1-65535.
 - **Edward** (22 October 2026, quote; IDEAS §19.96): Could you also create a sieve of the 0-360 across all dimensions, which should be tiny, the noise.
+- **Edward** (22 October 2026, quote; IDEAS §19.98): I just realised we could also create a filter that keeps an eye out for when recurring values might be able to be utilised to round up the rotation.
+- **Edward** (22 October 2026, quote; IDEAS §19.98): Best to have it as a single ending roll I think.
+- **Edward** (22 October 2026, quote; IDEAS §19.98): With filters already shifting the state spaces around isn't there more room than that?
+- **Edward** (22 October 2026, quote; IDEAS §19.98): Isn't every real file 'rare'?
+- **Edward** (22 October 2026, quote; IDEAS §19.98): Conceptually it feels like it could in theory provide a good result, if it chances across the perfect result.
+- **Edward** (22 October 2026, quote; IDEAS §19.99): We could look at multi-threading the filter analysis to improve performance.
+- **Edward** (22 October 2026, quote; IDEAS §19.98): I feel like through multi threading and parallelisation as well as possibly distributed processing in the future it could still be worth keeping an eye out for those reductions, presuming the current system wouldn't already find them.
 
 ## Gemini
 

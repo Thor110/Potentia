@@ -20,6 +20,7 @@
 #include <SDL3/SDL.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <mutex>
@@ -73,6 +74,8 @@ public:
     void stop(); // waits for the worker
     // A line under the buttons (e.g. "filters saved for the next hallway").
     void say(const std::string& status);
+    // That line as it stands (scripted runs print it).
+    std::string status_text();
 
     // Scripted runs: open on a file or folder, measured (and tailored) before the next frame; and
     // an install, at once.
@@ -107,6 +110,10 @@ private:
         std::string weighing;
         bool tailored = false;
         std::optional<sieve::cli::FilterConfig> tailored_filters;
+        // How long packing it took when it was read (seconds; -1 not measured), and the most the
+        // rope's search may take of that, for the save's estimate (it packs it again).
+        double pack_seconds = -1, pack_search = 0;
+        bool pack_search_unlimited = false;
     };
     bool in_world() const { return bool(host_.go); }
     // `tailor`: the weighing tailors each line's filters to the files that are its items.
@@ -124,6 +131,13 @@ private:
     std::mutex mx_;
     Result result_;
     std::string status_;
+    // The job under way (reading or saving): when it began, and its estimate (seconds; -1: none
+    // yet, or too small to need one), with what the estimate is made of; under mx_.
+    std::chrono::steady_clock::time_point job_started_{};
+    double job_estimate_ = -1;
+    std::string job_estimate_text_;
+    void start_job();
+    std::string finish_job(); // "took X" (and the estimate), the job ended
     std::optional<std::string> pending_pick_, pending_save_;
     std::optional<std::pair<int, std::string>> pending_install_;
     std::string install_src_; // the installer chosen, while its folder is being chosen

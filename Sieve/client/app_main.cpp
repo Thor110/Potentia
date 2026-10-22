@@ -447,6 +447,7 @@ bool run_locator(SDL_Window* window, SDL_Renderer* renderer, const Settings& set
         }
         std::cout << "file locator (main menu): " << (loc.is_open() ? "open" : "closed") << ", "
                   << (loc.offers_go() ? "Go to it offered" : "no Go to it") << "\n";
+        if (const std::string st = loc.status_text(); !st.empty()) std::cout << "file locator: " << st << "\n";
         frame();
         if (!save_render(renderer, screenshot)) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         loc.stop();

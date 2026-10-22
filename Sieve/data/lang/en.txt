@@ -555,6 +555,15 @@ loc.went_past = went to a file of {0} bytes: the binary line is that long now, p
 loc.too_long = the file is {0} bytes: set the BINARY length to at least that in the setup menu (it is {1})
 loc.keys = "F choose a file   D choose a folder   I install from Sieve instructions   Enter go to the file   [ ] search a file, Shift the run   A archives   Esc back"
 loc.keys.menu = "F choose a file   D choose a folder   I install from Sieve instructions   [ ] search a file, Shift the run   A archives   Esc back"
+loc.estimating = timing 2 MiB of it here, taken from across it, to estimate how long it takes...
+loc.estimate = estimated {0} on this machine: {1} for the reading (timed on 2 MiB of it) and the search {2} at most
+loc.estimate.unlimited = estimated {0} on this machine for the reading (timed on 2 MiB of it), then the search, which has no limit
+loc.estimate.save = estimated {0}: packing took {1} when it was read, and the search {2} at most
+loc.estimate.save.unlimited = packing took {0} when it was read, then the search, which has no limit
+loc.estimate.so_far = {0}; {1} so far
+loc.elapsed = {0} so far
+loc.took = took {0}
+loc.took.estimated = took {0} (estimated {1})
 loc.filters_kept = the tailored filters are saved: the next hallway built uses them
 loc.filters_not_saved = the tailored filters could not be saved ({0}): they are kept for this session
 

@@ -3742,6 +3742,17 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
 - **Next to measure:** BCJ2 for programs (7z beats Sieve on a folder that is mostly the program);
   the hallway's `--sample-degrees` at the newest version (its CI check compares against v4).
 
+### The File Locator's time estimate, pieces cut faster (22 October 2026)
+- **The estimate** (`client/file_locator.*`, IDEAS §19.97): 16 MiB and more, the reading's work
+  timed on 1 and 2 MiB taken in eight stretches across the file, drawn out to the size, the
+  search's most added; "took X (estimated Y)" after. Measured 15 to 20% short on two 40 MB files.
+  Scripted runs (`--main-menu --locate`) print the status line ("file locator: took ...").
+- **Pieces** (`tools/cli/pack.cpp`, `pieces_of`): the boundary steps weigh LZMA2 over a fixed
+  window of 64 KiB, not the whole run; the same instructions on all 16 files of the varied set and
+  on a 40 MB tar, the tar packed in 1,245 s (2,053 s).
+- **IDEAS §19.98** (recurring values, scale repeats, a locked random byte, the standing watch),
+  **§19.99** (threads for the search and the packer).
+
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show

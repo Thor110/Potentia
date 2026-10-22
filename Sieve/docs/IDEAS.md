@@ -4207,3 +4207,121 @@ installed back byte for byte:
   format.
 - The hallway's `--sample-degrees` still writes v4; the CI checks that the newest made from the
   sample is smaller than it, so changing it waits for a check of its own.
+
+**19.97 A time estimate in the File Locator, and cutting into pieces made cheaper (Edward, 22
+October 2026; built).** His ask: "We will want to show a time estimate for compressing files in
+the file locator", after a 700 MB file that "even with a limit set it never finished in the
+allotted time".
+- *What reading a file does:* its address, zip's and 7z's sizes, its instructions packed (and
+  compressed again for the table), and the weighing, which looks at its pieces and searches the
+  rope again; saving packs it once more. The search's limit covers the rope's search only.
+- *The estimate, as built:* for 16 MiB and more, the reading's work is timed here on 1 MiB and
+  then 2 MiB, each taken in eight stretches evenly across the file (a folder's largest), with the
+  search as near none as the packer allows; a straight line through the two is drawn out to the
+  whole size, and the most the search may take is added (packing: twice the time for a file, the
+  file whole and then its pieces, for each file of 512 bytes or more; the weighing: the run's
+  time). With no limit, it says so. While it works, the line under the status gives the estimate
+  and the time so far; when done, "took X (estimated Y)". Saving's estimate is the packing's time
+  as it was measured when the file was read, and the search's.
+- *What it found:* timed first on the file's first 2 MiB, a 40 MB tar of the source was estimated
+  at 4 min 33 s and took 1 h 08 min. The time went to cutting into pieces: each boundary between a
+  piece for LZMA2 and one for the rope was moved in steps of 64 bytes, up to a block either way,
+  and at every step the whole LZMA2 run beside it (up to 1 MiB) was packed again, so a file of
+  many runs spent minutes on each boundary, and the file's start, with few, said nothing of it.
+  Now each step is weighed over a window of at most 64 KiB beyond the steps, fixed while the
+  boundary moves (SPECIFICATIONS §12.2). Measured: the varied set (16 files, one of them cut into
+  pieces) byte for byte the same instructions, two JPEGs faster (12.8 s → 7.8 s, 10.2 s → 6.6 s);
+  the 40 MB tar packed in 1,245 s (2,053 s before), the same bytes.
+- *Measured, estimate against time taken, the search 5 s a file:* 40 MB of a 7z (already packed),
+  3 min 03 s against 3 min 46 s; the 40 MB tar, 38 min 34 s against 45 min 11 s (68 min before the
+  window). Both 15 to 20% short; why is not yet measured (the likely parts: the whole file's
+  address worked out in memory as hex, and LZMA2's dictionary, which grows with the file to 64
+  MiB, against the sample's 2 MiB).
+- *Still open:* the time the boundaries take grows with how many there are, and threads (§19.99)
+  are the next step; the memory a very large file needs is not estimated yet (for 700 MB, about 4
+  to 6 GB expected from how the address is made, not measured).
+
+**19.98 Recurring values, scale repeats and a randomly locked byte (Edward, 22 October 2026;
+measured or answered, nothing built).**
+- *Recurring values:* "a filter that keeps an eye out for when recurring values might be able to be
+  utilised to round up the rotation, ie: 0.3..., 0.0000004...", stored as "number of decimal places
+  + the recurring digit", with a fallback recording in case another filter "shoots past it on the
+  next pass". A value with some places and then a recurring block is a fraction whose denominator
+  is 10^k (10^p − 1), so the strongest form writes a file's place as the nearest fraction with a
+  small denominator and the offset from it. *Measured (Claude):* every denominator up to 2^64
+  tried (the continued fraction's), paying for its size, the fraction and the offset: no gain on
+  "hi", "Sieve", the README's first 64 bytes, IDEAS.md's first 1,024 bytes, `a.txt`, the starting
+  page, a MIDI and a mesh; 2 bits on 2,048 bytes of noise (chance); and a page of the degrees sample
+  ("rfb rfb rfb ...", §19.96), placed on a recurring value by construction, 256 → 78 bits. It finds
+  what was put there, as the grids did (§19.94).
+- *Scale repeats* (0.123456789 against 0.000000123456789): the same digits shifted, naming the
+  shift costing what it saves. *Leading zeros and a mask of recurrence types* ("10 0's, then maybe
+  bitmasking the type of recurrence"): leading zeros are dropped already (the shortest route,
+  SPECIFICATIONS §3.6), and a mask of T types costs log2 T bits, within what the test charged. On
+  the binary line a file's place is its own bytes read as a number, so a pattern in the digits is a
+  pattern in the file, and describing it is compressing the file, which LZMA2 and the rope do
+  already, more generally.
+- *One ending roll:* Edward's own conclusion, agreed: the total is what counts (the place and every
+  step recorded to reach it), a rounding made midway is undone by the next shift, so a describer of
+  the number belongs at the end, as one more way of writing the address. Keeping the greatest
+  reduction so far is enough where it is scored on that total; trying orders back and forth spends
+  time, not bits.
+- *"With filters already shifting the state spaces around, isn't there more room?"* Filters do
+  not move the line: all 32 built pass or fail a unit, and the ones that count number their
+  survivors in the line's own order. The line is reordered only by its ordering (positional,
+  scrambled, guided), and only the guided one, built on a model of text, shortens what it moves.
+  A filter gains by removing (fewer survivors), and only for files it keeps, because it knows
+  something about real files ("welcome to the sieve": 152 bits, 138.8 under its tailored stack
+  with the stack paid for).
+- *A random byte locked in* (his note): "try picking a random byte in the file, locking it in as a
+  requirement for the file in the state space, then try another/all bytes randomly ... the filter
+  would store the offset and the byte recorded." §16 and §19.87 again: a locked byte keeps 1 file
+  in 256 (8 bits saved) and costs its 8 bits and its offset (log2 of the file's size), whichever
+  byte it is, so no byte is a better pick than another and the order they are tried in cannot
+  matter; offsets from a generator agreed in advance (a seed) leave it break-even. §19.87 measured
+  kept bytes with a wave drawn through them: worse than no wave on every file. What won was each
+  byte predicted from its neighbours, the tightened rope. "Isn't every real file rare?" Yes, among
+  all files of its length, and that is what compression uses; but it is rare in a structured way,
+  which a model can learn (words, smooth pictures, repeats), not rare among its own bytes.
+- *Keep watching for them (Edward, 22 October 2026):* "Through multi threading and parallelisation
+  as well as possibly distributed processing in the future it could still be worth keeping an eye
+  out for those reductions, presuming the current system wouldn't already find them." Recorded as
+  a standing watch:
+  - *What finds them now:* a file whose bytes recur (a recurring value on the binary line is its
+    bytes repeating) is found by LZMA2 and the rope, which is why the degrees sample is 8,784 bytes.
+    The weighing's shortest route drops leading zeros and tries a bearing and a walk; it does not
+    try a fraction or a grid. So a place that is a short fraction on a line other than the binary
+    line, or under a filter's survivor numbering, would go unseen today.
+  - *The watch:* a fraction route (the continued fraction of the place, every denominator to
+    2^64, as measured above) added to the shortest route, run on every place the search produces.
+    It takes microseconds a place, costs nothing in the instructions where it does not win (the
+    route is chosen, and paid for, only where it is shorter), and so can sit under every search
+    as more trials become affordable.
+  - *What more trials buy:* a candidate lands n bits better than even with odds of about 1 in 2^n,
+    so 2^k candidates tried bring the best of them about k bits nearer, and naming which of 2^k
+    equally likely candidates it was costs k bits, however they are agreed. Threads and
+    distributed search (§19.99) make k larger, so they find the lucky few bits sooner; they gain
+    on average only where the candidates are not equally likely (a list agreed in advance whose
+    first entries suit real files, §16's search vectors). The watch is cheap enough to run
+    regardless, so a lucky file is never missed.
+
+**19.99 Threads for the filters' search and the packer (Edward, 22 October 2026; an idea, nothing
+built).** "We could look at multi-threading the filter analysis to improve performance." Threads
+are used today by training (`training.cpp`), the language model (`llm.cpp`), the exhaustive counts
+of `sieve sift` (`sieve.cpp`), the hallway's faces, items and vault, and the menu's survivor counts.
+Single-threaded, and each made of separate trials whose results are compared:
+- the tailoring search (COST's K, the File Locator's Tailor): each filter and setting tried is a
+  count of survivors on its own;
+- the weighing, file by file (`weigh.cpp`);
+- the packer: LZMA2's settings tried on a stream's first MiB (seven), the full passes (liblzma at
+  two match lengths, 7-Zip's), and cutting into pieces, where each 4 KiB block's LZMA2 and each
+  step of a boundary are separate (§19.97: the boundaries were where a 40 MB tar spent its time);
+- the rope's search over its ways.
+The rule for all of them: the result must not depend on the number of threads, so each trial is
+scored as now and the best taken by the same order, ties going to the earlier, exactly as one
+thread takes them; the trials run at once, not in a different way. A search with a time limit is
+the exception already (it depends on the machine's speed), and with threads it gets further in the
+same time. Memory is the limit to watch: each LZMA2 pass at preset 9 takes its dictionary's worth
+several times over (64 MiB at the most, about ten times that to encode), so a thread count from the
+cores and from the memory free, as the menu's filter memory is given. First to measure: the pieces'
+blocks and boundaries, and LZMA2's three full passes, on the 40 MB tar and the release folder.
