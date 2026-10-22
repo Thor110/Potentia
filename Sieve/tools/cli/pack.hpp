@@ -106,6 +106,7 @@ struct FileWays
     RopeParams pieces_rope;
     uint64_t pieces_bytes = 0;      // LZMA2's estimate of z, the code, its length and the way's longer text
     size_t tried = 0;               // waves tried
+    bool forced = false;            // a force stop came first: only `lzma2` and `tried` are set
 };
 FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest = 5, bool pieces = true);
 

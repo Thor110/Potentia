@@ -77,7 +77,8 @@ std::string duration_text(double s)
 }
 
 // The reading's work, timed on `sample` saved as a file named `name` in a folder of its own.
-double sample_seconds(const std::vector<uint8_t>& sample, const fs::path& name, const cli::Args& items, bool archives, const cli::WeighLines& wl)
+double sample_seconds(const std::vector<uint8_t>& sample, const fs::path& name, const cli::Args& items, bool archives, const cli::WeighLines& wl,
+                      const std::atomic<int>* stop)
 {
     std::random_device rd;
     const fs::path dir = fs::temp_directory_path() / ("sieve-estimate-" + std::to_string(rd()) + std::to_string(rd()));
@@ -90,7 +91,7 @@ double sample_seconds(const std::vector<uint8_t>& sample, const fs::path& name, 
             fs::remove_all(p, ec);
         }
     } cleanup{dir};
-    const StopScope quiet(nullptr, {}); // the sample is timed whole, and says nothing of itself
+    const StopScope quiet(stop, {}); // the sample says nothing of itself, and Stop ends it too (no estimate then)
     fs::create_directories(dir);
     const fs::path f = dir / name.filename();
     {
@@ -251,7 +252,7 @@ void FileLocator::start_job(bool new_graph)
     job_estimate_ = -1;
     job_estimate_text_.clear();
     progress_.clear();
-    stop_ = false;
+    stop_ = 0;
 }
 
 // Under mx_.
@@ -263,7 +264,8 @@ std::string FileLocator::finish_job()
     job_estimate_text_.clear();
     job_started_ = {};
     progress_.clear();
-    if (stop_) t = tr("loc.stopped") + "; " + t;
+    if (stop_ >= kForce) t = tr("loc.forced") + "; " + t;
+    else if (stop_ >= kStop) t = tr("loc.stopped") + "; " + t;
     return t;
 }
 
@@ -368,8 +370,14 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 const cli::WeighLines wl = host_.lines();
                 const std::vector<uint8_t> one = spread_of(largest, largest_bytes, kSlices, kSampleBytes / kSlices),
                                            two = spread_of(largest, largest_bytes, kSlices, 2 * kSampleBytes / kSlices);
-                const double t1 = sample_seconds(one, largest, items, archives, wl);
-                const double t2 = sample_seconds(two, largest, items, archives, wl);
+                const double t1 = sample_seconds(one, largest, items, archives, wl, &stop_);
+                const double t2 = stop_requested() ? 0 : sample_seconds(two, largest, items, archives, wl, &stop_);
+                if (stop_requested()) // stopped while timing it: no estimate
+                {
+                    std::lock_guard<std::mutex> lock(mx_);
+                    job_estimate_text_.clear();
+                    return;
+                }
                 const double per_byte = (t2 - t1) / double(kSampleBytes);
                 const double reading = per_byte > 0 ? t1 + per_byte * double(bytes - kSampleBytes) : t2 * double(bytes) / double(2 * kSampleBytes);
                 const double weigh_search = by_total ? total : cli::budget_total(per_file, files);
@@ -533,7 +541,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
             r.kind = Result::None;
             r.error = e.what();
         }
-        r.stopped = stop_;
+        r.stopped = stop_ != 0;
         std::lock_guard<std::mutex> lock(mx_);
         result_ = std::move(r);
         relink_search(); // the files counted may have changed
@@ -682,11 +690,12 @@ void FileLocator::event(const SDL_Event& e)
     if (pressed != "go") go_armed_ = false; // "again" means the very next press
     if (pressed == "stop")
     {
-        if (busy_ && !stop_)
+        // Once: stop, the pass under way finished. Again: force, that pass abandoned too.
+        if (busy_ && stop_ < kForce)
         {
-            stop_ = true;
+            stop_ = stop_ + 1;
             std::lock_guard<std::mutex> lock(mx_);
-            status_ = tr("loc.stopping");
+            status_ = tr(stop_ >= kForce ? "loc.forcing" : "loc.stopping");
         }
     }
     else if (pressed == "close") close();
@@ -786,7 +795,12 @@ void FileLocator::draw(float W, float H)
     button("file", tr("loc.choose_file"), 76, !busy);
     button("folder", tr("loc.choose_folder"), 76, !busy);
     button("install", tr("loc.install"), 76, !busy);
-    if (busy) button("stop", tr(stop_ ? "loc.stop.pressed" : "loc.stop"), 76, !stop_); // the job's best so far kept
+    if (busy)
+    {
+        // Stop, on a row of its own under the others (greyed while it works), so it always fits.
+        bx = 20;
+        button("stop", tr(stop_ == 0 ? "loc.stop" : stop_ == kStop ? "loc.force" : "loc.stop.pressed"), 116, stop_ < kForce); // the best so far kept
+    }
     float y = 126;
     std::string status;
     {
@@ -801,8 +815,8 @@ void FileLocator::draw(float W, float H)
         waiting = !graph_pending_.empty();
     }
     const bool graph_beside = !busy && r.kind != Result::None && (graph_drawn_ || waiting);
-    if (busy) draw_graph(20, y + 24, W - 40, std::max(60.0f, std::min(220.0f, H - y - 160)), ink, grey);
-    else if (graph_beside) draw_graph(W * 0.62f, y, W * 0.38f - 20, 70, ink, grey);
+    if (busy) draw_graph(20, y + 50, W - 40, std::max(60.0f, std::min(220.0f, H - y - 190)), ink, grey);
+    else if (graph_beside) draw_graph(W * 0.62f, y + 13, W * 0.38f - 20, 60, ink, grey);
     // How long the search for shorter addresses may take: a file, and the run, each moving the
     // other. Shown before anything is chosen too, so the first search can have its time.
     auto search_row = [&](float row_y) {
@@ -1027,15 +1041,19 @@ void FileLocator::draw_graph(float x, float y, float w, float h, SDL_Color ink, 
             if (!half) break;
             SDL_SetTextureBlendMode(half, SDL_BLENDMODE_BLEND);
             blank(half);
-            const SDL_FRect top{0, 0, float(graph_w_), graph_h_ / 2.0f};
+            // (The top margin stays where it is: what is below it is what halves.)
+            const SDL_FRect top{0, 0, float(graph_w_), 4 + (graph_h_ - 4) / 2.0f};
             SDL_RenderTexture(r_, graph_, nullptr, &top);
             SDL_DestroyTexture(graph_);
             graph_ = half;
             graph_depth_ *= 2;
-            if (graph_y_ >= 0) graph_y_ /= 2;
+            if (graph_y_ >= 0) graph_y_ = 4 + (graph_y_ - 4) / 2;
         }
+        // A few pixels in from the top and the bottom, so that a step with nothing smaller yet (a
+        // packed file's) shows as a line, not lost under the frame.
+        constexpr float kMargin = 4;
         const float px = float(p.seconds / graph_span_) * float(graph_w_ - 1);
-        const float py = float(graph_h_ - 1) * float(smaller / graph_depth_);
+        const float py = kMargin + (float(graph_h_ - 1) - 2 * kMargin) * float(smaller / graph_depth_);
         SDL_SetRenderTarget(r_, graph_);
         SDL_SetRenderDrawColor(r_, c.r, c.g, c.b, 255);
         if (goes_on)
@@ -1060,14 +1078,17 @@ void FileLocator::draw_graph(float x, float y, float w, float h, SDL_Color ink, 
     SDL_RenderRect(r_, &frame);
     const SDL_FRect at{x, y, w, h};
     SDL_RenderTexture(r_, graph_, nullptr, &at);
-    draw_text(r_, x + 4, y + 3, tr("loc.graph.top"), 1, grey);
+    // Its words outside it, so that nothing covers a line: what it shows above, and under it the
+    // depth of its bottom, which colour is which step, and the time across.
+    draw_text(r_, x, y - 13, fit_text(tr("loc.graph.top"), w, 1), 1, grey);
     char depth[32];
     std::snprintf(depth, sizeof depth, graph_depth_ < 0.1 ? "%.1f" : "%.0f", graph_depth_ * 100);
-    draw_text(r_, x + 4, y + h - 12, trf("loc.graph.bottom", {depth}), 1, grey);
+    const std::string bottom = trf("loc.graph.bottom", {depth});
+    draw_text(r_, x, y + h + 4, bottom, 1, grey);
     const std::string across = duration_text(graph_span_);
-    draw_text(r_, x + w - text_width(across, 1) - 4, y + h + 4, across, 1, grey);
-    float lx = x;
-    for (size_t k = 0; k < graph_steps_.size() && lx < x + w - 140; ++k)
+    draw_text(r_, x + w - text_width(across, 1), y + h + 4, across, 1, grey);
+    float lx = x + text_width(bottom, 1) + 16;
+    for (size_t k = 0; k < graph_steps_.size() && lx + text_width(graph_steps_[k], 1) < x + w - text_width(across, 1) - 16; ++k)
     {
         const SDL_Color c = kColours[k % (sizeof kColours / sizeof kColours[0])];
         draw_text(r_, lx, y + h + 4, graph_steps_[k], 1, c);
@@ -1142,6 +1163,8 @@ struct Scripted
 {
     double stop_after = 0;
     std::string save_to;
+    double shot_after = 0;  // the picture taken while it works, so many seconds in
+    double force_after = 0; // and Stop pressed again, so many seconds in
 };
 Scripted& scripted()
 {
@@ -1150,7 +1173,10 @@ Scripted& scripted()
 }
 } // namespace
 
-void FileLocator::script(double stop_after, const std::string& save_to) { scripted() = {stop_after, save_to}; }
+void FileLocator::script(double stop_after, const std::string& save_to, double shot_after, double force_after)
+{
+    scripted() = {stop_after, save_to, shot_after, force_after};
+}
 
 // For scripted runs (--locate PATH): open the locator on it, measured before the next frame; with
 // --stop-after, Stop pressed after so many seconds; with --locate-save, the instructions saved.
@@ -1158,13 +1184,23 @@ void FileLocator::locate_now(const std::string& path, bool tailor)
 {
     open();
     const Scripted s = scripted();
+    if (s.shot_after > 0)
+    {
+        // Left working, and the picture taken so many seconds in (the caller draws it, then waits).
+        analyse(path, false, tailor);
+        const auto t0 = Clock::now();
+        while (busy_ && since(t0) < s.shot_after) std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        return;
+    }
     std::atomic<bool> done{false};
     std::thread timer;
-    if (s.stop_after > 0)
+    if (s.stop_after > 0 || s.force_after > 0)
         timer = std::thread([this, &done, s] {
             const auto t0 = Clock::now();
-            while (!done && since(t0) < s.stop_after) std::this_thread::sleep_for(std::chrono::milliseconds(20));
-            if (!done) stop_ = true;
+            while (!done && since(t0) < (s.stop_after > 0 ? s.stop_after : s.force_after)) std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            if (!done) stop_ = std::max<int>(stop_, kStop);
+            while (s.force_after > 0 && !done && since(t0) < s.force_after) std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            if (s.force_after > 0 && !done) stop_ = kForce;
         });
     analyse(path, true, tailor);
     done = true;

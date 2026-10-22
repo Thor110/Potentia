@@ -4251,6 +4251,18 @@ allotted time".
   after 90 s: finished at 180 s (the pass under way, and the address), saved in 0.3 s, 27,868,382
   bytes against 27,832,122 unstopped, installed byte for byte. Scripted: `--stop-after S`,
   `--locate-save FILE`, and a CI check that a stopped result installs.
+- *Force stop (Edward, 22 October 2026: "change the stop button over to a force stop to take the
+  previous result rather than finish the current pass after pressing stop once"; built).* Pressed
+  again, Stop becomes **Force stop (the last finished result)**: the pass under way is abandoned
+  too. LZMA2 is fed a MiB at a time so that it can be (liblzma's streaming encoder, the same
+  bytes), 7-Zip's encoder is broken off through its progress callback, and the file being pulled
+  tight or cut into pieces is left as it is. Where a stream's first pass was abandoned, the lzma2
+  stream is carried as it is (v12's way) and the x86 stream, which never is, packed at LZMA2's
+  quickest preset; the listing and the items stream, small, are always finished. The estimate's
+  timing of its sample stops too (then there is no estimate): it had been the longest wait, over a
+  minute on a tar, taken across the file where its kinds of bytes change often. Measured, Stop at
+  20 s and Force at 25 s: the 40 MB tar done at 27 s (stored as it is, 40,000,074 bytes); the
+  source's 7z (47.8 MB) at 27 s; both installed byte for byte. Scripted: `--force-after S`.
 - *A graph of the best so far (Edward, 22 October 2026: "a line graph display which showcases the
   best found results along the way, instead of storing each value we can just draw the line graph
   as we go"; built).* Each new best a step reports (LZMA2's passes, a stream at a time; the rope's
@@ -4259,7 +4271,13 @@ allotted time".
   below at first and doubled whenever a best goes deeper (what is drawn squeezed into the top
   half), the time across the estimate's, else 10 s, doubled the same way (squeezed into the left
   half). Only each step's first try is kept, to measure from. Large while it works; beside the
-  result after. Seen on `pi6.txt`: the rope's line falls 16% within its first second.
+  result after. Seen on `pi6.txt`: the rope's line falls 16% within its first second. On a file
+  already packed (Edward's 60.8 MB 7z, and 20 MB of the source's 7z here) nothing beats its first
+  try, so every line runs flat along the top: drawn a few pixels inside the frame, with the words
+  outside it, since at first such a line lay under the frame's edge and the title and looked
+  missing (Edward, 22 October 2026: "I am only seeing a small line at the top during a search").
+  While it works, Stop has a row of its own. `--shot-after S` takes a scripted picture while it
+  works.
 - *Still open:* the time the boundaries take grows with how many there are, and threads (§19.99)
   are the next step; the memory a very large file needs is not estimated yet (for 700 MB, about 4
   to 6 GB expected from how the address is made, not measured).

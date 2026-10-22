@@ -3,7 +3,8 @@
 // Long work (packing a file's Sieve instructions, the rope's search, tailoring, the weighing) runs on
 // one thread, and is made of trials, each kept where it is the best so far. Whoever starts the work
 // (the File Locator) may give the thread a flag to stop: every trial that is not needed for a result
-// checks it, and the work ends with the best it has found, as a search's time running out ends it.
+// checks it, and the work ends with the best it has found, as a search's time running out ends it;
+// at its second level (force) the trial under way is abandoned too.
 // It may also give the thread somewhere to say how it is going (what is being tried, the best so
 // far). Both belong to the thread that set them (StopScope), so other threads are not touched.
 #pragma once
@@ -14,8 +15,12 @@
 
 namespace sieve {
 
-// Whether this thread's work has been asked to stop (false when nobody asked, or gave no flag).
-bool stop_requested();
+// How far this thread's work has been asked to stop: 0 not at all (or no flag given); 1 stop, the
+// trial under way finished and the best kept (a result needs one finished pass of each stream);
+// 2 force, the trial under way abandoned too, and the last finished kept.
+inline constexpr int kStop = 1, kForce = 2;
+bool stop_requested();  // 1 or more
+bool force_requested(); // 2
 
 // Says how the work on this thread is going ("the lzma2 stream: best so far ..."), where whoever
 // started it asked to hear; nothing otherwise. With `best` and `of` (bytes, both 0 or more), a
@@ -30,13 +35,13 @@ using ProgressSink = std::function<void(const std::string& what, double best, do
 class StopScope
 {
 public:
-    StopScope(const std::atomic<bool>* stop, ProgressSink report);
+    StopScope(const std::atomic<int>* stop, ProgressSink report);
     ~StopScope();
     StopScope(const StopScope&) = delete;
     StopScope& operator=(const StopScope&) = delete;
 
 private:
-    const std::atomic<bool>* old_stop_;
+    const std::atomic<int>* old_stop_;
     ProgressSink old_report_;
 };
 

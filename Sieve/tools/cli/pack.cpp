@@ -45,7 +45,7 @@ uint32_t dictionary_for(uint64_t n)
 // literal and position settings (lc * 100 + lp * 10 + pb; -1: the preset's own, lc 3 lp 0 pb 2), and
 // `nice` its match length (0: the preset's own).
 std::vector<uint8_t> encode_lzma2(const std::vector<uint8_t>& data, uint32_t dict, bool x86, uint32_t preset, int lclppb = -1,
-                                  uint32_t nice = 0)
+                                  uint32_t nice = 0, bool abortable = true)
 {
     if (data.empty()) return {};
     lzma_options_lzma opt;
@@ -60,11 +60,47 @@ std::vector<uint8_t> encode_lzma2(const std::vector<uint8_t>& data, uint32_t dic
     if (nice) opt.nice_len = nice;
     const lzma_filter plain[] = {{LZMA_FILTER_LZMA2, &opt}, {LZMA_VLI_UNKNOWN, nullptr}};
     const lzma_filter branch[] = {{LZMA_FILTER_X86, nullptr}, {LZMA_FILTER_LZMA2, &opt}, {LZMA_VLI_UNKNOWN, nullptr}};
+    // Fed a MiB at a time (the same stream as at once), so that a force stop (sieve/stop.hpp)
+    // abandons it within one: then nothing is returned for non-empty data (Abandoned).
+    lzma_stream z = LZMA_STREAM_INIT;
+    if (lzma_raw_encoder(&z, x86 ? branch : plain) != LZMA_OK) throw std::runtime_error("liblzma: cannot start");
     std::vector<uint8_t> out(data.size() + data.size() / 16 + 4096);
-    size_t pos = 0;
-    const lzma_ret r = lzma_raw_buffer_encode(x86 ? branch : plain, nullptr, data.data(), data.size(), out.data(), &pos, out.size());
-    if (r != LZMA_OK) throw std::runtime_error("liblzma: could not compress (" + std::to_string(int(r)) + ")");
-    out.resize(pos);
+    constexpr size_t kPiece = size_t(1) << 20;
+    size_t at = 0;
+    z.next_out = out.data();
+    z.avail_out = out.size();
+    lzma_ret r = LZMA_OK;
+    while (r != LZMA_STREAM_END)
+    {
+        if (abortable && force_requested())
+        {
+            lzma_end(&z);
+            return {};
+        }
+        const size_t n = std::min(kPiece, data.size() - at);
+        z.next_in = data.data() + at;
+        z.avail_in = n;
+        at += n;
+        const lzma_action action = at == data.size() ? LZMA_FINISH : LZMA_RUN;
+        do
+        {
+            if (z.avail_out == 0)
+            {
+                const size_t done = out.size();
+                out.resize(out.size() * 2);
+                z.next_out = out.data() + done;
+                z.avail_out = out.size() - done;
+            }
+            r = lzma_code(&z, action);
+            if (r != LZMA_OK && r != LZMA_STREAM_END)
+            {
+                lzma_end(&z);
+                throw std::runtime_error("liblzma: could not compress (" + std::to_string(int(r)) + ")");
+            }
+        } while (z.avail_in > 0 || z.avail_out == 0 || (action == LZMA_FINISH && r != LZMA_STREAM_END));
+    }
+    out.resize(size_t(z.total_out));
+    lzma_end(&z);
     return out;
 }
 
@@ -108,9 +144,14 @@ std::vector<uint8_t> encode_lzma2_sdk(const std::vector<uint8_t>& data, uint32_t
     if (r == SZ_OK)
     {
         Lzma2Enc_SetDataSize(h, in.size());
-        r = Lzma2Enc_Encode2(h, nullptr, out.data(), &n, nullptr, in.data(), in.size(), nullptr);
+        // A force stop (sieve/stop.hpp) breaks it off at its next word of progress.
+        static const ICompressProgress kForceStop = {[](ICompressProgressPtr, UInt64, UInt64) -> SRes {
+            return force_requested() ? SZ_ERROR_PROGRESS : SZ_OK;
+        }};
+        r = Lzma2Enc_Encode2(h, nullptr, out.data(), &n, nullptr, in.data(), in.size(), &kForceStop);
     }
     Lzma2Enc_Destroy(h);
+    if (r == SZ_ERROR_PROGRESS) return {}; // abandoned
     if (r != SZ_OK) throw std::runtime_error("LZMA SDK: could not compress (" + std::to_string(int(r)) + ")");
     out.resize(n);
     return out;
@@ -123,11 +164,13 @@ std::vector<uint8_t> encode_lzma2_sdk(const std::vector<uint8_t>& data, uint32_t
 // stream as the preset makes it is one of the candidates, so a stream never comes out larger than
 // without this. The reader needs nothing new: LZMA2 writes lc, lp and pb into its own stream, and
 // every reader takes them from there (only the dictionary is in the instructions).
+// `abortable`: a force stop may abandon its first pass too, and then nothing is returned (the
+// caller has a way round it); every later pass may always be abandoned, the best before it kept.
 std::vector<uint8_t> pack_stream(const std::vector<uint8_t>& data, uint32_t dict, bool x86, uint32_t preset = 9 | LZMA_PRESET_EXTREME,
-                                 bool tune = false)
+                                 bool tune = false, bool abortable = false)
 {
-    std::vector<uint8_t> best = encode_lzma2(data, dict, x86, preset);
-    if (!tune || data.empty()) return best;
+    std::vector<uint8_t> best = encode_lzma2(data, dict, x86, preset, -1, 0, abortable);
+    if (!tune || data.empty() || best.empty()) return best; // (empty for data: abandoned by a force stop)
     // How it goes, for whoever is watching (sieve/stop.hpp), and asked to stop: the best so far kept.
     const std::string what = std::string(x86 ? "the x86 stream (" : "the lzma2 stream (") + std::to_string(data.size()) + " bytes)";
     auto said = [&](const std::string& next) {
@@ -142,7 +185,7 @@ std::vector<uint8_t> pack_stream(const std::vector<uint8_t>& data, uint32_t dict
     size_t chosen_size = encode_lzma2(sample, sample_dict, x86, 6, 302).size();
     for (const int c : {0, 400, 200, 22, 402, 111})
         if (stop_requested()) return best;
-        else if (const size_t n = encode_lzma2(sample, sample_dict, x86, 6, c).size(); n < chosen_size)
+        else if (const size_t n = encode_lzma2(sample, sample_dict, x86, 6, c).size(); n && n < chosen_size)
         {
             chosen = c;
             chosen_size = n;
@@ -154,18 +197,19 @@ std::vector<uint8_t> pack_stream(const std::vector<uint8_t>& data, uint32_t dict
         said("packing it at lc" + std::to_string(chosen / 100) + " lp" + std::to_string(chosen / 10 % 10) + " pb" + std::to_string(chosen % 10) +
              (nice ? ", match length 64" : ""));
         std::vector<uint8_t> t = encode_lzma2(data, dict, x86, preset, chosen, nice);
-        if (t.size() < best.size()) best = std::move(t);
+        if (!t.empty() && t.size() < best.size()) best = std::move(t); // (empty: abandoned, the best before kept)
     }
     // And 7-Zip's own encoder at the same settings (22 October 2026).
     if (stop_requested()) return best;
     said("packing it with 7-Zip's encoder");
-    if (std::vector<uint8_t> t = encode_lzma2_sdk(data, dict, x86, chosen); t.size() < best.size()) best = std::move(t);
+    if (std::vector<uint8_t> t = encode_lzma2_sdk(data, dict, x86, chosen); !t.empty() && t.size() < best.size()) best = std::move(t);
     said("done");
     return best;
 }
 
 // What a stream of `data` packs to, quickly (preset 6): for choosing between two ways.
-uint64_t estimate(const std::vector<uint8_t>& data) { return data.empty() ? 0 : pack_stream(data, dictionary_for(data.size()), false, 6).size(); }
+// (Abandoned by a force stop, it gives 0: whoever asked checks force_requested() before using it.)
+uint64_t estimate(const std::vector<uint8_t>& data) { return data.empty() ? 0 : pack_stream(data, dictionary_for(data.size()), false, 6, false, true).size(); }
 
 // v13: a file cut into pieces, each coded by the way that suits it: LZMA2 (z, carried in the lzma2
 // stream) where its bytes repeat, the rope (r, all of them joined and coded as one) where they do
@@ -196,7 +240,7 @@ Pieces pieces_of(const std::vector<uint8_t>& b)
     };
     auto lzma_cost = [&](size_t from, size_t to) {
         const std::vector<uint8_t> part(b.begin() + std::ptrdiff_t(from), b.begin() + std::ptrdiff_t(to));
-        return double(pack_stream(part, dictionary_for(part.size()), false, 6).size());
+        return double(pack_stream(part, dictionary_for(part.size()), false, 6, false, true).size());
     };
     const size_t blocks = (b.size() + B - 1) / B;
     std::vector<char> kind(blocks);
@@ -646,11 +690,21 @@ FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint3
     const RopeSearch found = rope_search(bytes, rope_seconds, rope_newest);
     w.tried += found.tried;
     w.rope = found.best;
+    if (force_requested()) // abandoned: no way but LZMA2's (the caller leaves the file as it is)
+    {
+        w.forced = true;
+        return w;
+    }
     w.rope_code = rope_code(bytes, found.best);
     w.rope_bytes = w.rope_code.size() + varint_of(w.rope_code.size());
     if (pieces && !stop_requested())
     {
         Pieces p = pieces_of(bytes);
+        if (force_requested()) // its costs may be from passes abandoned part way: not used
+        {
+            w.forced = true;
+            return w;
+        }
         if (!p.list.empty())
         {
             const RopeSearch pr = rope_search(p.r, rope_seconds, rope_newest);
@@ -1125,6 +1179,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             // The smallest of LZMA2 alone, the rope, and (v13) the file in pieces (file_ways).
             FileWays fw = file_ways(bytes[i], rope_seconds, rope_newest, pieces);
             r.rope_tried += fw.tried;
+            if (fw.forced || force_requested()) break; // force stop: this file and the rest as they are
             std::string way;
             std::vector<uint8_t> code;
             RopeParams params;
@@ -1213,14 +1268,24 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     m.lzma2 = {0, plain.size(), dictionary_for(plain.size())};
     // v17's packing: LZMA2's settings chosen for each stream (older versions are made as they were).
     const bool tune = gzip && binary;
-    const std::vector<uint8_t> px = pack_stream(x86, m.x86.dictionary, true, 9 | LZMA_PRESET_EXTREME, tune),
-                               pp = pack_stream(plain, m.lzma2.dictionary, false, 9 | LZMA_PRESET_EXTREME, tune);
+    std::vector<uint8_t> px = pack_stream(x86, m.x86.dictionary, true, 9 | LZMA_PRESET_EXTREME, tune, true),
+                         pp = pack_stream(plain, m.lzma2.dictionary, false, 9 | LZMA_PRESET_EXTREME, tune, true);
+    // A force stop before a stream's first pass was done: the x86 stream (never carried as it is)
+    // packed at LZMA2's quickest preset, which is not broken off; the lzma2 stream carried as it is
+    // where the version allows (below), else the same.
+    if (px.empty() && !x86.empty())
+    {
+        progress("force stopped: the programs packed at LZMA2's quickest");
+        px = encode_lzma2(x86, m.x86.dictionary, true, 0, -1, 0, false);
+    }
+    const bool pp_abandoned = pp.empty() && !plain.empty();
+    if (pp_abandoned && !(trim && m.compact)) pp = encode_lzma2(plain, m.lzma2.dictionary, false, 0, -1, 0, false);
     m.x86.packed = px.size();
     m.lzma2.packed = pp.size();
     m.streams = px;
     // v12: the files carried as they are where LZMA2 makes them no smaller (a PNG, a JPEG, a 7z).
     bool lzma2_as_is = false;
-    if (trim && m.compact && !plain.empty() && pp.size() >= plain.size())
+    if (trim && m.compact && !plain.empty() && (pp_abandoned || pp.size() >= plain.size()))
     {
         lzma2_as_is = true;
         m.lzma2 = {plain.size(), plain.size(), 0};

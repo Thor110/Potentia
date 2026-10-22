@@ -3754,6 +3754,10 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   checked in `pack.cpp`, `rope_wave.cpp`, `compare.cpp`, `tailor.cpp`, `weigh.cpp`): the File
   Locator's Stop (S) keeps the best so far; saving writes the instructions made when read.
   Scripted `--stop-after S`, `--locate-save FILE`; a CI check installs a stopped result.
+- **Force stop:** the stop flag is an `atomic<int>` (1 stop, 2 force; `force_requested()`);
+  `encode_lzma2` streams a MiB at a time and returns nothing when forced (`abortable`), the SDK
+  encoder breaks off through `ICompressProgress`, `pack_stream`'s first pass is abortable only for
+  the x86 and lzma2 streams and the quick estimates, with the fallbacks in `add_packed`.
 - **The graph of the best so far** (`FileLocator::draw_graph`): `sieve::progress(what, best, of)`
   carries a step's new best; the locator draws it onto a target texture as it comes (no values
   kept but each step's first), squeezing left past its time and up past its depth.

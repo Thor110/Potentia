@@ -178,6 +178,8 @@ const char* kUsage =
     "                      made into Sieve instructions (--sample-out FILE, else DIR.sieve)\n"
     "  --stop-after S      with --locate: press Stop after S seconds (the best found by then kept)\n"
     "  --locate-save FILE  with --locate: save its Sieve instructions to FILE once it is read\n"
+    "  --shot-after S      with --locate and --screenshot: the picture taken S seconds in, while it works\n"
+    "  --force-after S     with --locate: press Stop again (force) S seconds in: the pass under way abandoned\n"
     "  --locate PATH       open the File Locator on a file or folder (--tailored: and tailor the filters to its files;\n"
     "                      with --main-menu: the main menu's, with no world to walk to)\n"
     "  --search-per-file S, --search-total S   the File Locator's search for shorter addresses: seconds a\n"
@@ -562,7 +564,8 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
     if (const auto search = locator_search_of(a)) hall->locator_search(search->first, search->second);
     if (a.has("locate"))
     {
-        FileLocator::script(a.has("stop-after") ? std::stod(a.get("stop-after")) : 0, a.get("locate-save", ""));
+        FileLocator::script(a.has("stop-after") ? std::stod(a.get("stop-after")) : 0, a.get("locate-save", ""),
+                            a.has("shot-after") ? std::stod(a.get("shot-after")) : 0, a.has("force-after") ? std::stod(a.get("force-after")) : 0);
         hall->locate_now(a.get("locate"), a.has("tailored"));
     }
     if (a.has("install") && a.has("install-to")) hall->install_now(a.get("install"), a.get("install-to"));
@@ -935,7 +938,8 @@ int run(const Args& a)
     }
     if (shot && a.has("main-menu") && a.has("locate"))
     {
-        FileLocator::script(a.has("stop-after") ? std::stod(a.get("stop-after")) : 0, a.get("locate-save", ""));
+        FileLocator::script(a.has("stop-after") ? std::stod(a.get("stop-after")) : 0, a.get("locate-save", ""),
+                            a.has("shot-after") ? std::stod(a.get("shot-after")) : 0, a.has("force-after") ? std::stod(a.get("force-after")) : 0);
         // A picture of the File Locator opened from the main menu, on a file or folder (--tailored:
         // and its filters tailored): no world, so no Go to it.
         std::optional<LocatedGo> go; // offered as from the main menu (the screenshot does not go)

@@ -82,7 +82,8 @@ public:
     void locate_now(const std::string& path, bool tailor = false);
     // For scripted runs, before locate_now: Stop pressed so many seconds after it starts (0: never),
     // and the instructions saved to this file once it is read (empty: not), as the buttons do.
-    static void script(double stop_after, const std::string& save_to);
+    // With shot_after, it is left working and the picture taken so many seconds in.
+    static void script(double stop_after, const std::string& save_to, double shot_after = 0, double force_after = 0);
     void install_now(const std::string& from, const std::string& to);
     // The search's time for tailoring, before a scripted run (--search-per-file, --search-total):
     // seconds a file, or for the run (`total`); the other follows, the files counted.
@@ -144,7 +145,9 @@ private:
     std::string status_;
     // The job under way (reading or saving): when it began, and its estimate (seconds; -1: none
     // yet, or too small to need one), with what the estimate is made of; under mx_.
-    std::atomic<bool> stop_{false}; // Stop pressed: the job ends with what it has found
+    // Stop pressed: once (sieve::kStop), the job ends with the best it has, the pass under way
+    // finished; twice (kForce), the pass under way abandoned too, the last finished kept.
+    std::atomic<int> stop_{0};
     std::string progress_;          // what the job is doing now, and the best so far (under mx_)
     std::chrono::steady_clock::time_point job_started_{};
     double job_estimate_ = -1;
