@@ -77,6 +77,10 @@ enumerated and stored later. Nothing is guaranteed (IDEAS §19.77).
 - **Edward** (22 October 2026, quote; IDEAS §19.93): I was also wondering if we might not want to update or perhaps even replace and deprecate the .map format with the .sieve format, I do recall there needing to be some differences because of the 3D node graph though I don't recall exactly what they were and have a feeling they might be redundant now.
 - **Edward** (22 October 2026, rule): Providing me with .zip's is always preferable to merging as I like to look the changes over and test them myself each time.
 - **Edward** (22 October 2026, quote; IDEAS §19.93): When we deprecate the .map format we can just rename the created file with the build to source.sieve rather than sieve.map. This way any sieve can also be loaded as a node graph as well though it might lack the flag for notes but that wouldn't be an issue I think.
+- **Edward** (22 October 2026, quote; IDEAS §19.94): We could be analysing the distance along the line 0-100 and the rotation in degrees 0-359 in order to increase our chances of landing on a whole integer or higher rounding for a shorter address.
+- **Edward** (22 October 2026, quote; IDEAS §19.94): Still unlikely we will ever find a whole integer for a file of any real meaning, but it sort of doubles our chances.
+- **Edward** (22 October 2026, quote; IDEAS §19.94): In theory we could use a variable measuring system as well, perhaps line/1-65535.
+- **Edward** (22 October 2026, quote; IDEAS §19.96): Could you also create a sieve of the 0-360 across all dimensions, which should be tiny, the noise.
 
 ## Gemini
 

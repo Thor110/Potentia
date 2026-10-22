@@ -4098,8 +4098,9 @@ folder) and shows the HTML they unpack to, as a first test where the result is k
   text). The websites were not reachable from the session, so the pages are a 2014 snapshot;
   measure again on today's pages before building.
 
-**19.93 The `.map` format folded into `.sieve` (Edward, 22 October 2026; built the same day).** His thought: update the `.map` format, or replace it with `.sieve` and deprecate
-it, the differences once needed for the 3D node graph perhaps being redundant now.
+**19.93 The `.map` format folded into `.sieve` (Edward, 22 October 2026; built the same day).**
+His thought: update the `.map` format, or replace it with `.sieve` and deprecate it, the
+differences once needed for the 3D node graph perhaps being redundant now.
 - *What a map has that instructions lack* (SPECIFICATIONS §12.3): files **named but not held**
   (a size and SHA-256, a claim that the bytes exist somewhere), **edges** with a relation
   (`contains`, `anchor`, any word), **metadata** on a node, a **seal**, and **held** files whose
@@ -4136,3 +4137,73 @@ it, the differences once needed for the 3D node graph perhaps being redundant no
   installing the source back from it. The oracle reads v18 (`unpack`, `graph`). Measured: a map of
   a 6-byte and a 3,000-byte file, named only, 271 bytes; the same two named and a 200,000-byte file
   of noise held, sealed, 200,353 bytes.
+
+**19.94 Distance along the line and rotation together, and grids of any size (Edward, 22 October
+2026; measured, nothing built).** His thought: "we already track percentage along the line, but
+we are using rotation as the primary search space for the shorter addresses. We could be
+analysing the distance along the line 0-100 and the rotation in degrees 0-359 in order to
+increase our chances of landing on a whole integer or higher rounding for a shorter address.
+Still unlikely we will ever find a whole integer for a file of any real meaning, but it sort of
+doubles our chances. In theory we could use a variable measuring system as well, perhaps
+line/1-65535."
+- *What it is:* a file's place written as the nearest point of a grid laid along the line (N
+  equal steps), which point (k, below N), and the offset from it to the file.
+- *Percent and degrees together:* the two grids share every point at a multiple of 5% (18°), 20
+  of them, so together they have 440 points, not 720: about 1.2 times the degrees' 360, and saying
+  which grid costs a bit.
+- *Measured (Claude):* each file's place among the files of its length, every grid from N = 1 to
+  65,535 tried and the best kept, paying 16 bits for N, k's bits and the offset's with its sign;
+  against the file's own address (8 bits a byte):
+
+  | File | Bytes | Best grid | Percent or degrees |
+  |---|---|---|---|
+  | "hi" | 2 | +10 bits | 0 |
+  | "Sieve" | 5 | +1 | +1 |
+  | the README's first 64 bytes | 64 | 0 | +1 |
+  | IDEAS.md's first 1,024 bytes | 1,024 | +1 | +1 |
+  | 2,048 bytes of noise | 2,048 | +1 | 0 |
+  | the test fixture's `a.txt` | 34 | −1 | +1 |
+
+- *Why (the counting argument, §16):* a grid of N points lands within about 1/N of the line of a
+  file, so the offset is log2 N bits shorter, and naming the point costs log2 N bits. Choosing the
+  best of 65,535 grids gains at most about 16 bits, which is what naming the grid costs. Every
+  file above is within a bit or so of even, as that predicts.
+- *Where it can win:* a grid taken from the file itself, as the rope's wave is (a prediction
+  from its own values, §19.87), not a ruler laid over the line. *Verdict: not built;* noted so the
+  measurement is not repeated.
+
+**19.95 The release's own downloads were v4 (22 October 2026; fixed).** Edward found
+`source.sieve` larger than the source's 7z, and asked whether `make_release` used an old version.
+It did, for the instructions and the installer program: `sieve locate --installer` without
+`--items` makes `sieve-manifest-v4`, and the script left `--items` out. `source.sieve`, a map, was
+always the newest. Measured on this release's folder (Sieve 0.13.25, 127 files, 39,172,603 bytes, made
+by `make_release` here on Linux): v4 7,939,263 bytes, the newest (v16) 7,819,304, 7z 8,414,101; the
+installer program installs it byte for byte, and no file of the release is an item, so
+`sieve-install` needs nothing it lacks. On a smaller folder (the `sieve` program and the docs, 8.4
+MB) 7z still wins (2,836,214 against 2,949,958), its x86 filter being BCJ2 (calls and jumps in
+streams of their own) against Sieve's BCJ: a lead to measure next.
+`source.sieve` holds the 7z as it is, so it is the 7z and the map's text, a few hundred bytes either
+way (here 47,779,761 against the 7z's 47,780,051; holding the source as a tar instead,
+47,594,737). Making it took 19.5 minutes, nearly all the rope's search with no limit on a file it
+cannot shorten; maps now give each held file 10 seconds (`sieve map --search-per-file`, 0 for no
+limit), and `make_release` passes `--items`; the release's map, so made, came to 47,779,886 bytes
+(naming the two downloads and holding the 7z of 47,780,052), the whole release in 635 seconds.
+
+**19.96 Every dimension at every degree, and the starting page, as `.sieve` (Edward, 22 October
+2026; measured).** His ask: the sample of every dimension at each whole degree (§16.9,
+`hallway --sample-degrees`), "which should be tiny", and "welcome to the sieve" ("1 - 0 - 112",
+§9) as `.sieve` files. Made here with the newest version (`sieve locate … --items`), each
+installed back byte for byte:
+- *The sample* (3,960 files, 13,321,756 bytes): 8,784 bytes (the hallway's own, v4, 482,495; 7z
+  22,961). 1,368 files are items, their places 1,492,272 bytes carried in 1,293: a whole degree's
+  place is a fraction of the line with a short repeating expansion, so the places repeat, and
+  LZMA2 takes the repeats. Each dimension alone, its `.sieve` against its 7z: AI 1,531 / 6,756;
+  audio 755 / 1,326; binary 1,044 / 1,548; books 993 / 1,649; image 811 / 3,144; models 1,123 /
+  1,591; movies 1,216 / 2,758; pages 893 / 1,378; tracks 801 / 1,400; video 661 / 2,314; worlds
+  910 / 3,366.
+- *The starting page* (32 bytes as the file the hallway saves): 162 bytes (v4 196), the page an
+  item of the pages line, its place 20 bytes; the rest is the instructions' head, the tree's
+  SHA-256 (32 bytes) and the file's name. "1 - 0 - 112" is the idealised form (§9) and is not a
+  format.
+- The hallway's `--sample-degrees` still writes v4; the CI checks that the newest made from the
+  sample is smaller than it, so changing it waits for a check of its own.

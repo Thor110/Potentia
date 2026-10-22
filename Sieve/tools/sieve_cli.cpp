@@ -2736,7 +2736,22 @@ int cmd_map(const Args& a)
         // Written as Sieve instructions (v18): its held files packed, its text their graph part.
         const std::string to = a.get("out");
         if (path_of(to).extension() == ".map") throw std::invalid_argument("maps are written as Sieve instructions now: name it .sieve (IDEAS 19.93)");
-        write_map_instructions(m, path_of(to));
+        double search = kMapSearchSeconds;
+        if (a.has("search-per-file"))
+        {
+            const std::string v = a.get("search-per-file");
+            size_t used = 0;
+            try
+            {
+                search = std::stod(v, &used);
+            }
+            catch (const std::exception&)
+            {
+                used = 0;
+            }
+            if (used != v.size() || !(search >= 0)) throw std::invalid_argument("--search-per-file: seconds, 0 or more (0: no limit): " + v);
+        }
+        write_map_instructions(m, path_of(to), search);
         written = read_file_bytes(path_of(to));
     }
     else if (!a.has("dot") && !a.has("graphml"))

@@ -26,8 +26,14 @@ Map read_map_file(const std::filesystem::path& file, bool* is_map = nullptr);
 // Whether a file is an older map file (it begins "sieve-map-v").
 bool is_old_map_file(const std::filesystem::path& file);
 
+// The time the rope's search may take for each held file when a map is written, unless told
+// otherwise: a held file is often already packed (a release's source archive), where an unlimited
+// search spends minutes and finds nothing (IDEAS §19.94).
+inline constexpr double kMapSearchSeconds = 10;
+
 // Writes a map as Sieve instructions (v18) to `out`: its held files packed (the newest version, as
-// `sieve locate --items` packs, the rope's search unlimited), its text the graph part.
-void write_map_instructions(const Map& map, const std::filesystem::path& out);
+// `sieve locate --items` packs), the rope's search taking `search_per_file` seconds for each (0: no
+// limit), its text the graph part.
+void write_map_instructions(const Map& map, const std::filesystem::path& out, double search_per_file = kMapSearchSeconds);
 
 } // namespace sieve::cli

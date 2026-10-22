@@ -1015,6 +1015,8 @@ const std::vector<Page>& pages()
           {"--remove ID", "Remove a node, its links and its metadata (not the root)."},
           {"--meta NODE:key=value", "Set a node's metadata (an empty value removes the key)."},
           {"--seal", "Seal the map: the tools will not change it again."},
+          {"--search-per-file S", "With --out: seconds the rope's search may take for each held file (10;\n"
+                                  "0: no limit, the smallest, and far slower on large files)."},
           {"--new NAME", "An empty map (only its root), to add anchors to."},
           {"--dot FILE", "Write it as Graphviz DOT."},
           {"--graphml FILE", "Write it as GraphML."},

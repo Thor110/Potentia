@@ -848,7 +848,7 @@ sieve map release --dot release.dot                  # or for Graphviz
 
 Every file and folder is a node, each file named by its size and SHA-256; every folder is linked to what is directly in it. Put a map in `maps/` beside the hallway and the node graph (O) lists it.
 
-A map is written as Sieve instructions (`sieve-manifest-v18`): the files it holds are the instructions' files, so `sieve install` puts them back, and its nodes, links, metadata and seal are their graph part. So any `.sieve` opens in the node graph: one made by `sieve locate` (no graph part) shows the tree it carries, read-only. Older `.map` files are still read, and `--out NAME.sieve` turns one into instructions; nothing writes `.map` any more.
+A map is written as Sieve instructions (`sieve-manifest-v18`): the files it holds are the instructions' files, so `sieve install` puts them back, and its nodes, links, metadata and seal are their graph part. So any `.sieve` opens in the node graph: one made by `sieve locate` (no graph part) shows the tree it carries, read-only. Older `.map` files are still read, and `--out NAME.sieve` turns one into instructions; nothing writes `.map` any more. Writing one gives the rope's search 10 seconds for each held file (`--search-per-file S`, 0 for no limit): a held archive is already packed, and an unlimited search spends minutes finding nothing.
 
 ```sh
 sieve map sieve.exe sieve.sieve --name sieve --seal --out source.sieve         # a release's map, beside the downloads

@@ -2080,6 +2080,11 @@ jobs:
           cmp held_in/a.txt $F/a.txt
           cmp held_oracle/b.bin "$F/sub dir/b.bin"
           if $S map held.sieve --add $F/a.txt --out held2.sieve 2> /dev/null; then exit 1; fi
+          # The rope's search for each held file: 10 seconds unless given; the fixture's files are
+          # too small for it, so no limit gives the same bytes; a time that is not one is refused.
+          $S map held.sieve --search-per-file 0 --out held0.sieve 2> /dev/null
+          cmp held.sieve held0.sieve
+          if $S map held.sieve --search-per-file soon --out held0.sieve 2> /dev/null; then exit 1; fi
           $S map held.sieve --remove 1 --out held1.sieve 2> /dev/null
           python sieve_ref.py map $F/a.txt --held --name default --text > held1.txt
           $S map held1.sieve | cmp - held1.txt

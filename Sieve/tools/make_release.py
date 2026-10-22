@@ -336,7 +336,8 @@ def main():
     step("Sieve instructions and the installer program")
     instructions = out / f"{name}.sieve"
     program = out / (f"{name}{EXE}" if EXE else f"{name}-setup")  # sieve.exe; elsewhere not the release folder's name
-    run([sieve, "locate", carried, "--installer", instructions, "--program", program, "--compare"])
+    # --items: the newest version (until 22 October 2026 this was left out, so releases were v4).
+    run([sieve, "locate", carried, "--installer", instructions, "--program", program, "--compare", "--items"])
 
     # 6. The source, as Git has it at the last commit: the Sieve folder alone, 7-zipped.
     step("the source: sieve-source.7z")

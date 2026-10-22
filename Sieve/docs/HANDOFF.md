@@ -3730,6 +3730,18 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   held files with both readers, read a `.sieve` without a graph part as a map, and convert an
   older `.map` (the oracle's) to the same text. The hallway's anchor checks use `.sieve`.
 
+### Releases at the newest version, maps with a search limit (22 October 2026)
+- **`make_release` made v4** for `sieve.sieve` and the installer program (no `--items`); it
+  passes `--items` now. This release's folder: v4 7,939,263 bytes, newest 7,819,304, 7z
+  8,414,101. Run here end to end (635 s): `sieve-setup` installs the folder byte for byte, no
+  release file is an item.
+- **Maps** give the rope 10 s for each held file (`kMapSearchSeconds`, `sieve map
+  --search-per-file`, 0: none). The source's 7z took 19.5 minutes before, for nothing.
+- **IDEAS §19.94** (grids along the line: measured, break-even), **§19.95** (this), **§19.96**
+  (the degrees sample 8,784 bytes, the starting page 162, as `.sieve`).
+- **Next to measure:** BCJ2 for programs (7z beats Sieve on a folder that is mostly the program);
+  the hallway's `--sample-degrees` at the newest version (its CI check compares against v4).
+
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show
