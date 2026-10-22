@@ -1004,6 +1004,16 @@ jobs:
           # keys that move them: [ and ] a file, Shift the run.
           $H --main-menu --locate tests/manifest_fixture --tailored --search-total 2 --screenshot locate-search.png | q "file locator (main menu)"
           $H --main-menu --locate tests/manifest_fixture --press "],Shift+]" --screenshot locate-search-keys.png | q "file locator (main menu)"
+          # Saved from the File Locator: the instructions made when it was read, written as they
+          # are; and Stop pressed while it reads, which keeps the best found by then: either way
+          # they install to the same files.
+          $H --main-menu --locate tests/manifest_fixture/a.txt --locate-save located.sieve --screenshot locate-save.png | q "wrote Sieve instructions to located.sieve"
+          rm -rf located_in located_stop
+          build/sieve install located.sieve --to located_in > /dev/null
+          cmp located_in/a.txt tests/manifest_fixture/a.txt
+          $H --main-menu --locate tests/manifest_fixture --stop-after 0.01 --locate-save located-stop.sieve --screenshot locate-stop.png | q "wrote Sieve instructions to located-stop.sieve"
+          build/sieve install located-stop.sieve --to located_stop > /dev/null
+          diff -r tests/manifest_fixture located_stop
           # The demonstration (IDEAS 16.9): every dimension's item at each whole degree, as one
           # .sieve, the same on every machine; installing it gives every file back, and a bearing
           # typed in the navigator (X, Tab) is the same item again.

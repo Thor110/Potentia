@@ -1,5 +1,6 @@
 // Sieve CLI -- a line's filters tailored to the items that must keep their places (tailor.hpp).
 #include "cli/tailor.hpp"
+#include "sieve/stop.hpp"
 
 #include "cli/dictionaries.hpp"
 #include "sieve/corridor.hpp"
@@ -176,7 +177,7 @@ TailorResult tailor_filters(const FilterLine& line, const std::vector<std::vecto
     auto time_at = [&](double share) { return start + std::chrono::duration_cast<steady::duration>(std::chrono::duration<double>(options.seconds * share)); };
     steady::time_point limit = time_at(0.7);
     bool out_of_time = false;
-    auto stopped = [&] { return progress && progress->cancel.load(); };
+    auto stopped = [&] { return (progress && progress->cancel.load()) || stop_requested(); }; // K, or the File Locator's Stop
     auto cancelled = [&] {
         if (stopped()) return true;
         if (timed && steady::now() >= limit) out_of_time = true;

@@ -3750,6 +3750,10 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
 - **Pieces** (`tools/cli/pack.cpp`, `pieces_of`): the boundary steps weigh LZMA2 over a fixed
   window of 64 KiB, not the whole run; the same instructions on all 16 files of the varied set and
   on a 40 MB tar, the tar packed in 1,245 s (2,053 s).
+- **Stop and the best so far** (`core sieve/stop.hpp`, a thread-local flag and progress sink;
+  checked in `pack.cpp`, `rope_wave.cpp`, `compare.cpp`, `tailor.cpp`, `weigh.cpp`): the File
+  Locator's Stop (S) keeps the best so far; saving writes the instructions made when read.
+  Scripted `--stop-after S`, `--locate-save FILE`; a CI check installs a stopped result.
 - **IDEAS §19.98** (recurring values, scale repeats, a locked random byte, the standing watch),
   **§19.99** (threads for the search and the packer).
 

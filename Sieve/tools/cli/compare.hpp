@@ -24,6 +24,9 @@
 
 namespace sieve::cli {
 
+// Each in pieces of 1 MiB, so that work asked to stop (sieve/stop.hpp) stops within one: then
+// kNotMeasured, which the table shows as not measured.
+inline constexpr uint64_t kNotMeasured = UINT64_MAX;
 uint64_t deflate_size(std::span<const uint8_t> data);
 uint64_t lzma2_size(std::span<const uint8_t> data);
 

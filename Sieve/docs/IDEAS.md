@@ -4237,6 +4237,20 @@ allotted time".
   window). Both 15 to 20% short; why is not yet measured (the likely parts: the whole file's
   address worked out in memory as hex, and LZMA2's dictionary, which grows with the file to 64
   MiB, against the sample's 2 MiB).
+- *Stop, and the best so far (Edward, 22 October 2026: "lets add a stop button so that we can
+  choose what result to use", "ensuring the current timing message traces the best result found
+  so far"; built).* While it works, the File Locator has **Stop (keep the best so far)**, and S.
+  Every trial not needed for a result ends when asked (`sieve/stop.hpp`, a flag for the thread
+  doing the work): LZMA2's settings and its further passes, 7-Zip's encoder, cutting into pieces
+  (the boundaries stay where the blocks put them, or the file is not cut), the rope's search (its
+  best kept, and not cached as a finished one), the comparison's zip and 7z (in pieces of a MiB,
+  shown as not measured), tailoring and the weighing. One LZMA2 pass of each stream is always made,
+  so what is stopped installs. Above the estimate, a line says what it is doing and the best so far
+  ("the lzma2 stream (S bytes): best so far B bytes; packing it with 7-Zip's encoder"). Saving writes the instructions made when it was read where the settings are the same,
+  with nothing packed again, so a stopped result is the one saved. Measured, the 40 MB tar stopped
+  after 90 s: finished at 180 s (the pass under way, and the address), saved in 0.3 s, 27,868,382
+  bytes against 27,832,122 unstopped, installed byte for byte. Scripted: `--stop-after S`,
+  `--locate-save FILE`, and a CI check that a stopped result installs.
 - *Still open:* the time the boundaries take grows with how many there are, and threads (§19.99)
   are the next step; the memory a very large file needs is not estimated yet (for 700 MB, about 4
   to 6 GB expected from how the address is made, not measured).

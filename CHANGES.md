@@ -1,32 +1,37 @@
-# A time estimate in the File Locator, and pieces cut faster (22 October 2026)
+# Stop, and the best so far, in the File Locator (22 October 2026)
 
 ## Built
-- **A time estimate** (`Sieve/client/file_locator.*`, `Sieve/data/lang/en.txt`). For a file or
-  folder of 16 MiB or more, the File Locator first times the same work on 2 MiB of it, taken in
-  eight stretches from across the file (a folder's largest). It draws that out to the whole size,
-  adds the most the search can take, and shows the result under the status line with the time so
-  far. When it's done, it says "took X (estimated Y)". Saving gives its own estimate, from how long
-  the packing took when the file was read. With the search set to no limit, it says the search
-  can't be estimated.
-  - Measured, with the search at 5 s a file: 40 MB of a 7z, estimated 3 min 03 s, took 3 min 46 s;
-    a 40 MB tar of the source, estimated 38 min 34 s, took 45 min 11 s. So it runs 15–20% short
-    for now.
-- **Cutting a file into pieces is much faster on mixed files** (`Sieve/tools/cli/pack.cpp`). This
-  is what made large files take so long. Each boundary between pieces was moved in 64-byte steps,
-  and every step compressed the whole stretch beside it again, up to 1 MiB. Now each step looks at
-  a fixed window of 64 KiB.
-  - The output is byte for byte the same on all 16 files of the varied set and on the 40 MB tar.
-  - The tar packs in 21 minutes instead of 34, and the File Locator reads it in 45 minutes
-    instead of 68.
+- **Stop (keep the best so far)**, a button and the S key, while the File Locator works. It ends
+  every step that isn't needed for a result, keeping the best found by then:
+  - LZMA2's trial settings and its further passes, and 7-Zip's encoder;
+  - cutting the file into pieces;
+  - the rope's search;
+  - the comparison with zip and 7z (shown as "not measured");
+  - tailoring and the weighing.
 
-## Noted (IDEAS)
-- §19.97 the estimate and the pieces fix; §19.98 recurring values, scale repeats and the
-  locked random byte, measured, with your note to keep watching for them as more computing
-  becomes available; §19.99 threads for the search and the packer.
+  One LZMA2 pass is always finished, so whatever it stops with installs. The status says so while
+  it finishes that pass.
+- **What it's doing, and the best so far:** a line above the estimate, in forms such as "the lzma2
+  stream (S bytes): best so far B bytes; packing it with 7-Zip's encoder", "the rope's search: N
+  ways tried, best so far B bytes of S (L8 W1 S1 P1 K0)", and "cutting it into pieces: moving
+  boundary J of N".
+- **Saving writes what was made when the file was read**, with nothing packed again, so the result
+  you stopped at is the one saved. It only packs again if you changed the search's time or the
+  archives box since. This also takes several hours off saving a very large file.
+- Saving no longer copies the whole result in memory (it did, three copies of a 1 GB file).
 
-**Checked:** unit tests, and every workflow step (6 to 16) locally.
+## Measured
+- The 40 MB tar, stopped after 90 s: finished at 180 s (the LZMA2 pass under way, and the
+  address), saved in 0.3 s, 27,868,382 bytes against 27,832,122 unstopped, installed byte for byte.
 
-**Docs:** IDEAS §19.97 to §19.99, SPECIFICATIONS §12.2 (the pieces' window), README (File
-Locator), HANDOFF, VOICES.
+## Also
+- `sieve/stop.hpp` (core): the stop flag and the progress line, for the thread doing the work.
+- Scripted runs: `--stop-after S`, `--locate-save FILE`. A CI check saves from the File Locator,
+  and saves a stopped run, and installs both.
 
-To apply: copy `Sieve/` over the repository's `Sieve/` folder (the workflow is unchanged).
+**Checked:** unit tests, every workflow step (6 to 16) locally, and a libc++ build.
+
+**Docs:** IDEAS §19.97, README (File Locator), HANDOFF, VOICES.
+
+To apply: copy `.github/` and `Sieve/` over the repository's top folder. New files:
+`Sieve/core/include/sieve/stop.hpp`, `Sieve/core/src/stop.cpp`.

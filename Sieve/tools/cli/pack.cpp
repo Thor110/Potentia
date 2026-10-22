@@ -4,6 +4,7 @@
 
 #include "sieve/filekind.hpp"
 #include "sieve/rope_wave.hpp"
+#include "sieve/stop.hpp"
 #include "unpack_7z.hpp"
 
 #include <lzma.h>
@@ -127,13 +128,21 @@ std::vector<uint8_t> pack_stream(const std::vector<uint8_t>& data, uint32_t dict
 {
     std::vector<uint8_t> best = encode_lzma2(data, dict, x86, preset);
     if (!tune || data.empty()) return best;
+    // How it goes, for whoever is watching (sieve/stop.hpp), and asked to stop: the best so far kept.
+    const std::string what = std::string(x86 ? "the x86 stream (" : "the lzma2 stream (") + std::to_string(data.size()) + " bytes)";
+    auto said = [&](const std::string& next) {
+        progress(what + ": best so far " + std::to_string(best.size()) + " bytes; " + next);
+    };
+    said("trying LZMA2's settings on its first MiB");
+    if (stop_requested()) return best;
     constexpr size_t kSample = size_t(1) << 20;
     const std::vector<uint8_t> sample(data.begin(), data.begin() + std::ptrdiff_t(std::min(data.size(), kSample)));
     const uint32_t sample_dict = dictionary_for(sample.size());
     int chosen = 302;
     size_t chosen_size = encode_lzma2(sample, sample_dict, x86, 6, 302).size();
     for (const int c : {0, 400, 200, 22, 402, 111})
-        if (const size_t n = encode_lzma2(sample, sample_dict, x86, 6, c).size(); n < chosen_size)
+        if (stop_requested()) return best;
+        else if (const size_t n = encode_lzma2(sample, sample_dict, x86, 6, c).size(); n < chosen_size)
         {
             chosen = c;
             chosen_size = n;
@@ -141,11 +150,17 @@ std::vector<uint8_t> pack_stream(const std::vector<uint8_t>& data, uint32_t dict
     for (const uint32_t nice : {0u, 64u})
     {
         if (chosen == 302 && nice == 0) continue; // the preset's own: already made
+        if (stop_requested()) return best;
+        said("packing it at lc" + std::to_string(chosen / 100) + " lp" + std::to_string(chosen / 10 % 10) + " pb" + std::to_string(chosen % 10) +
+             (nice ? ", match length 64" : ""));
         std::vector<uint8_t> t = encode_lzma2(data, dict, x86, preset, chosen, nice);
         if (t.size() < best.size()) best = std::move(t);
     }
     // And 7-Zip's own encoder at the same settings (22 October 2026).
+    if (stop_requested()) return best;
+    said("packing it with 7-Zip's encoder");
     if (std::vector<uint8_t> t = encode_lzma2_sdk(data, dict, x86, chosen); t.size() < best.size()) best = std::move(t);
+    said("done");
     return best;
 }
 
@@ -188,6 +203,8 @@ Pieces pieces_of(const std::vector<uint8_t>& b)
     std::vector<double> gain(blocks); // what LZMA2 saves over the rope on the block (negative: it costs)
     for (size_t k = 0; k < blocks; ++k)
     {
+        if (stop_requested()) return out; // asked to stop: not cut (the file whole is still a way)
+        if (k % 1024 == 0) progress("cutting it into pieces: block " + std::to_string(k) + " of " + std::to_string(blocks));
         const size_t from = k * B, to = std::min(b.size(), from + B);
         gain[k] = rope_cost(from, to) - lzma_cost(from, to);
         kind[k] = gain[k] > 0 ? 'z' : 'r';
@@ -225,6 +242,12 @@ Pieces pieces_of(const std::vector<uint8_t>& b)
         const uint64_t edge = start + runs[j].second, end = edge + runs[j + 1].second;
         const bool z_left = runs[j].first == 'z';
         const uint64_t zlen = z_left ? runs[j].second : runs[j + 1].second;
+        if (j % 16 == 0) progress("cutting it into pieces: moving boundary " + std::to_string(j + 1) + " of " + std::to_string(runs.size() - 1));
+        if (stop_requested()) // asked to stop: this boundary and the rest stay where the blocks put them
+        {
+            start += runs[j].second;
+            continue;
+        }
         const uint64_t lo0 = std::max(start + 64, edge >= B ? edge - B : 0), hi0 = std::min(end - 64, edge + B);
         if (zlen <= (uint64_t(1) << 20) && lo0 <= edge && edge <= hi0)
         {
@@ -625,7 +648,7 @@ FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint3
     w.rope = found.best;
     w.rope_code = rope_code(bytes, found.best);
     w.rope_bytes = w.rope_code.size() + varint_of(w.rope_code.size());
-    if (pieces)
+    if (pieces && !stop_requested())
     {
         Pieces p = pieces_of(bytes);
         if (!p.list.empty())
@@ -1097,6 +1120,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         for (size_t i = 0; i < files.size(); ++i)
         {
             if (files[i]->way != "raw" || bytes[i].size() < 512 || copies[sha256_hex(bytes[i])] > 1) continue;
+            if (stop_requested()) break; // asked to stop: the rest carried as they are, by LZMA2
+            progress("file " + std::to_string(i + 1) + " of " + std::to_string(files.size()) + ": " + files[i]->path + ", the rope and pieces");
             // The smallest of LZMA2 alone, the rope, and (v13) the file in pieces (file_ways).
             FileWays fw = file_ways(bytes[i], rope_seconds, rope_newest, pieces);
             r.rope_tried += fw.tried;

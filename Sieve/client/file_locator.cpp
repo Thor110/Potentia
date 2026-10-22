@@ -12,12 +12,14 @@
 #include "cli/locate.hpp"
 #include "cli/pack.hpp"
 #include "cli/timings.hpp"
+#include "sieve/stop.hpp"
 
 #include <chrono>
 #include <cstdio>
 #include <fstream>
 #include <random>
 #include <stdexcept>
+#include <thread>
 
 namespace hallway {
 
@@ -88,6 +90,7 @@ double sample_seconds(const std::vector<uint8_t>& sample, const fs::path& name, 
             fs::remove_all(p, ec);
         }
     } cleanup{dir};
+    const StopScope quiet(nullptr, {}); // the sample is timed whole, and says nothing of itself
     fs::create_directories(dir);
     const fs::path f = dir / name.filename();
     {
@@ -236,6 +239,8 @@ void FileLocator::start_job()
     job_started_ = Clock::now();
     job_estimate_ = -1;
     job_estimate_text_.clear();
+    progress_.clear();
+    stop_ = false;
 }
 
 // Under mx_.
@@ -246,6 +251,8 @@ std::string FileLocator::finish_job()
     job_estimate_ = -1;
     job_estimate_text_.clear();
     job_started_ = {};
+    progress_.clear();
+    if (stop_) t = tr("loc.stopped") + "; " + t;
     return t;
 }
 
@@ -323,6 +330,15 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
     const bool archives = optimise_archives_;
     start_job();
     auto job = [this, path, tailor, per_file, total, by_total, archives] {
+        // Stop asks every search and every trial not needed for a result to end, the best so far
+        // kept; what the work is doing, and its best so far, goes to the line under the status.
+        const StopScope scope(&stop_, [this](const std::string& what) {
+            std::lock_guard<std::mutex> lock(mx_);
+            progress_ = what;
+        });
+        // A measure for the table, or kNotMeasured once asked to stop.
+        auto measured = [](uint64_t (*f)(std::span<const uint8_t>), std::span<const uint8_t> b) { return stop_requested() ? cli::kNotMeasured : f(b); };
+        auto plus = [](uint64_t a, uint64_t b) { return a == cli::kNotMeasured || b == cli::kNotMeasured ? cli::kNotMeasured : a + b; };
         Result r;
         r.path = path;
         try
@@ -366,29 +382,39 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 r.kind = Result::File;
                 const uint64_t size = fs::file_size(p);
                 estimate(size, p, size, 1, size >= 512 ? 1 : 0);
+                progress("reading it, its address and its SHA-256");
                 r.bytes = cli::read_file_bytes(p);
                 const BigUint a = cli::binary_address(r.bytes);
                 r.hex = a.is_zero() ? "0" : a.to_hex();
                 r.sha256 = cli::sha256_hex(r.bytes);
                 c.original = r.bytes.size();
-                c.deflate = cli::deflate_size(r.bytes);
-                c.lzma2 = cli::lzma2_size(r.bytes);
+                progress("what zip makes of it (deflate, level 9)");
+                c.deflate = measured(cli::deflate_size, r.bytes);
+                progress("what 7z makes of it (LZMA2, preset 9 extreme)");
+                c.lzma2 = measured(cli::lzma2_size, r.bytes);
                 c.address_bytes = (a.bit_length() + 7) / 8;
                 c.address_hex = a.is_zero() ? 0 : r.hex.size();
                 // Its Sieve instructions, as a folder's: its name, size and SHA-256, then its bytes.
                 r.manifest = cli::manifest_of_file(p);
+                progress("packing its Sieve instructions");
                 const auto packing = Clock::now();
-                const cli::Manifest fi = file_instructions(p, r.bytes, host_.item_args ? host_.item_args() : cli::Args{}, by_total ? total : per_file, archives);
+                cli::Manifest fi = file_instructions(p, r.bytes, host_.item_args ? host_.item_args() : cli::Args{}, by_total ? total : per_file, archives);
                 r.pack_seconds = since(packing);
                 const std::vector<uint8_t> mb = fi.file();
                 c.packed = fi.packed;
                 c.version = fi.version();
-                const BigUint ma = cli::binary_address(mb);
+                progress("the instructions' address");
+                BigUint ma = cli::binary_address(mb);
                 c.manifest = mb.size();
-                c.manifest_deflate = cli::deflate_size(mb);
-                c.manifest_lzma2 = cli::lzma2_size(mb);
+                progress("Sieve instructions of " + std::to_string((ma.bit_length() + 7) / 8) + " bytes; what zip and 7z make of them");
+                c.manifest_deflate = measured(cli::deflate_size, mb);
+                c.manifest_lzma2 = measured(cli::lzma2_size, mb);
                 c.installer_hex = ma.is_zero() ? 1 : ma.to_hex().size();
                 c.installer_raw = (ma.bit_length() + 7) / 8;
+                r.instructions = std::move(fi);
+                r.instructions_address = std::move(ma);
+                r.made_rope_seconds = by_total ? total : per_file;
+                r.made_archives = archives;
             }
             else if (fs::is_directory(p))
             {
@@ -408,46 +434,59 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                     estimate(r.manifest.bytes, largest, most, files, searched);
                 }
                 std::vector<uint8_t> all;
+                progress("reading its files, their addresses, and what zip makes of each");
                 for (const auto& e : r.manifest.entries)
                 {
                     if (e.dir) continue;
                     const auto bytes = cli::read_file_bytes(p / from_u8(e.path));
                     const BigUint a = cli::binary_address(bytes);
                     c.original += bytes.size();
-                    c.deflate += cli::deflate_size(bytes);
+                    c.deflate = plus(c.deflate, measured(cli::deflate_size, bytes));
                     c.address_bytes += (a.bit_length() + 7) / 8;
                     c.address_hex += a.is_zero() ? 0 : a.to_hex().size();
                     all.insert(all.end(), bytes.begin(), bytes.end());
                 }
-                c.lzma2 = cli::lzma2_size(all);
+                progress("what 7z makes of them (LZMA2, preset 9 extreme, as one stream)");
+                c.lzma2 = measured(cli::lzma2_size, all);
                 // The installer's manifest (v4: every file packed after it), compressed, and the installer.
                 cli::Manifest with = r.manifest;
                 {
                     // The rope's time for each file: the file's, or the run's shared among the files.
                     size_t n = 0;
                     for (const auto& e : r.manifest.entries) n += e.dir ? 0 : 1;
+                    progress("packing its Sieve instructions");
                     const auto packing = Clock::now();
-                    cli::add_packed_items(with, p, host_.item_args ? host_.item_args() : cli::Args{}, nullptr, 8, false,
-                                          by_total ? cli::budget_per_file(total, n) : per_file, 5, true, true, archives);
+                    r.made_rope_seconds = by_total ? cli::budget_per_file(total, n) : per_file;
+                    cli::add_packed_items(with, p, host_.item_args ? host_.item_args() : cli::Args{}, nullptr, 8, false, r.made_rope_seconds, 5, true,
+                                          true, archives);
                     r.pack_seconds = since(packing);
                 }
                 c.packed = with.packed;
                 c.version = with.version();
                 const std::vector<uint8_t> mb = with.file();
-                const BigUint ma = cli::binary_address(mb);
+                progress("the instructions' address");
+                BigUint ma = cli::binary_address(mb);
                 c.manifest = mb.size();
-                c.manifest_deflate = cli::deflate_size(mb);
-                c.manifest_lzma2 = cli::lzma2_size(mb);
+                progress("Sieve instructions of " + std::to_string((ma.bit_length() + 7) / 8) + " bytes; what zip and 7z make of them");
+                c.manifest_deflate = measured(cli::deflate_size, mb);
+                c.manifest_lzma2 = measured(cli::lzma2_size, mb);
                 c.installer_hex = ma.is_zero() ? 1 : ma.to_hex().size();
                 c.installer_raw = (ma.bit_length() + 7) / 8;
+                r.instructions = std::move(with);
+                r.instructions_address = std::move(ma);
+                r.made_archives = archives;
                 const std::string plain = r.manifest.text(); // the tree's identity is its v1 manifest's
                 r.sha256 = cli::sha256_hex(std::vector<uint8_t>(plain.begin(), plain.end()));
             }
             else throw std::runtime_error(tr("loc.neither"));
             r.table = cli::comparison_table(c);
             // Every file weighed against its own address, under this hallway's lines and filters
-            // (the pages, image, audio and video lines' units, and the binary line's filters).
+            // (the pages, image, audio and video lines' units, and the binary line's filters);
+            // not where it was stopped first.
+            if (stop_requested()) r.weighing = tr("loc.weighing.stopped") + "\n";
+            else
             {
+                progress("weighing it against its own address");
                 const cli::WeighLines wl = host_.lines();
                 std::vector<std::string> files;
                 fs::path root;
@@ -486,6 +525,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
             r.kind = Result::None;
             r.error = e.what();
         }
+        r.stopped = stop_;
         std::lock_guard<std::mutex> lock(mx_);
         result_ = std::move(r);
         relink_search(); // the files counted may have changed
@@ -504,11 +544,18 @@ void FileLocator::save(const std::string& to)
     if (worker_.joinable()) worker_.join();
     busy_ = true;
     const int what = save_what_;
-    const Result r = result_;
+    const Result& r = result_; // not changed while busy (nothing else starts), so read in place
     const double rope_seconds = search_per_file_; // the rope's time for each file, as the search row sets it
     const bool archives = optimise_archives_;
     start_job();
-    if (r.pack_seconds >= 0)
+    // Made when it was read, with what is set now: written as it is, nothing packed again.
+    const bool made = r.instructions && r.made_rope_seconds == rope_seconds && r.made_archives == archives;
+    if (made)
+    {
+        std::lock_guard<std::mutex> lock(mx_);
+        job_estimate_text_ = tr(r.stopped ? "loc.save.made.stopped" : "loc.save.made");
+    }
+    else if (r.pack_seconds >= 0)
     {
         // Saving packs it again, as reading it did: that time, measured, and the search's at most.
         std::lock_guard<std::mutex> lock(mx_);
@@ -519,17 +566,29 @@ void FileLocator::save(const std::string& to)
             job_estimate_text_ = trf("loc.estimate.save", {duration_text(job_estimate_), duration_text(r.pack_seconds), duration_text(r.pack_search)});
         }
     }
-    worker_ = std::thread([this, what, r, to, rope_seconds, archives] {
+    worker_ = std::thread([this, what, to, rope_seconds, archives, made] {
+        const Result& r = result_;
+        const StopScope scope(&stop_, [this](const std::string& w) {
+            std::lock_guard<std::mutex> lock(mx_);
+            progress_ = w;
+        });
         std::string done;
         try
         {
             const fs::path out = from_u8(to);
             {
-                // A file's instructions are a folder's holding just it (file_instructions).
-                const cli::Args items = host_.item_args ? host_.item_args() : cli::Args{};
-                cli::Manifest with = r.kind == Result::File ? file_instructions(from_u8(r.path), r.bytes, items, rope_seconds, archives) : r.manifest;
-                if (r.kind != Result::File) cli::add_packed_items(with, from_u8(r.path), items, nullptr, 8, false, rope_seconds, 5, true, true, archives);
-                const BigUint address = cli::binary_address(with.file());
+                BigUint address;
+                if (made) address = r.instructions_address;
+                else
+                {
+                    // A file's instructions are a folder's holding just it (file_instructions).
+                    const cli::Args items = host_.item_args ? host_.item_args() : cli::Args{};
+                    cli::Manifest with = r.kind == Result::File ? file_instructions(from_u8(r.path), r.bytes, items, rope_seconds, archives) : r.manifest;
+                    if (r.kind != Result::File) cli::add_packed_items(with, from_u8(r.path), items, nullptr, 8, false, rope_seconds, 5, true, true, archives);
+                    progress("the instructions' address");
+                    address = cli::binary_address(with.file());
+                }
+                progress("writing them");
                 // The installer on its own (for anyone with Sieve: sieve install, or sieve-install),
                 // or an installer program, sieve-install with it attached, one file for anyone.
                 if (what == 4)
@@ -607,14 +666,24 @@ void FileLocator::event(const SDL_Event& e)
         case SDLK_LEFTBRACKET: pressed = (e.key.mod & SDL_KMOD_SHIFT) ? "search_run_less" : "search_file_less"; break;
         case SDLK_RIGHTBRACKET: pressed = (e.key.mod & SDL_KMOD_SHIFT) ? "search_run_more" : "search_file_more"; break;
         case SDLK_A: pressed = "archives"; break; // Optimise Archive Formats, on or off
+        case SDLK_S: pressed = busy_ ? "stop" : ""; break; // Stop: the best found so far kept
         case SDLK_RETURN:
         case SDLK_KP_ENTER: pressed = result_.kind == Result::File && in_world() ? "go" : ""; break;
         default: break;
         }
     }
-    if (pressed.empty() || (busy_ && pressed != "close")) return;
+    if (pressed.empty() || (busy_ && pressed != "close" && pressed != "stop")) return;
     if (pressed != "go") go_armed_ = false; // "again" means the very next press
-    if (pressed == "close") close();
+    if (pressed == "stop")
+    {
+        if (busy_ && !stop_)
+        {
+            stop_ = true;
+            std::lock_guard<std::mutex> lock(mx_);
+            status_ = tr("loc.stopping");
+        }
+    }
+    else if (pressed == "close") close();
     else if (pressed == "file") open_file_dialog(on_picked, this, window_, nullptr, 0, nullptr, false);
     else if (pressed == "folder") open_folder_dialog(on_picked, this, window_, nullptr, false);
     else if (pressed == "go") go();
@@ -711,6 +780,7 @@ void FileLocator::draw(float W, float H)
     button("file", tr("loc.choose_file"), 76, !busy);
     button("folder", tr("loc.choose_folder"), 76, !busy);
     button("install", tr("loc.install"), 76, !busy);
+    if (busy) button("stop", tr(stop_ ? "loc.stop.pressed" : "loc.stop"), 76, !stop_); // the job's best so far kept
     float y = 126;
     std::string status;
     {
@@ -842,6 +912,13 @@ void FileLocator::draw(float W, float H)
                                                  : trf("loc.estimate.so_far", {job_estimate_text_, duration_text(since(job_started_))});
         }
         if (!est.empty()) draw_text(r_, 20, H - 42, fit_text(est, W - 40, 1), 1, grey);
+        // What it is doing now, and the best found so far.
+        std::string now;
+        {
+            std::lock_guard<std::mutex> lock(mx_);
+            now = progress_;
+        }
+        if (!now.empty()) draw_text(r_, 20, H - 74, fit_text(now, W - 40, 1), 1, ink);
     }
     draw_text(r_, 20, H - 26, fit_text(tr(in_world() ? "loc.keys" : "loc.keys.menu"), W - 40, 1), 1, grey);
 }
@@ -907,11 +984,44 @@ void FileLocator::set_search(double seconds, bool total)
     relink_search();
 }
 
-// For scripted runs (--locate PATH): open the locator on it, measured before the next frame.
+namespace {
+struct Scripted
+{
+    double stop_after = 0;
+    std::string save_to;
+};
+Scripted& scripted()
+{
+    static Scripted s;
+    return s;
+}
+} // namespace
+
+void FileLocator::script(double stop_after, const std::string& save_to) { scripted() = {stop_after, save_to}; }
+
+// For scripted runs (--locate PATH): open the locator on it, measured before the next frame; with
+// --stop-after, Stop pressed after so many seconds; with --locate-save, the instructions saved.
 void FileLocator::locate_now(const std::string& path, bool tailor)
 {
     open();
+    const Scripted s = scripted();
+    std::atomic<bool> done{false};
+    std::thread timer;
+    if (s.stop_after > 0)
+        timer = std::thread([this, &done, s] {
+            const auto t0 = Clock::now();
+            while (!done && since(t0) < s.stop_after) std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            if (!done) stop_ = true;
+        });
     analyse(path, true, tailor);
+    done = true;
+    if (timer.joinable()) timer.join();
+    if (!s.save_to.empty() && result_.kind != Result::None)
+    {
+        save_what_ = 4;
+        save(s.save_to);
+        stop();
+    }
 }
 
 void FileLocator::install_now(const std::string& from, const std::string& to)

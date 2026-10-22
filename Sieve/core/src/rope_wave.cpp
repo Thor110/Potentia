@@ -1,5 +1,6 @@
 // Sieve — the tightened rope, rope-wave-v1 (see rope_wave.hpp).
 #include "sieve/rope_wave.hpp"
+#include "sieve/stop.hpp"
 
 #include "sieve/sha256.hpp"
 #include "sieve/weights.hpp"
@@ -775,6 +776,7 @@ RopeSearch rope_search(std::span<const uint8_t> file, double seconds, uint32_t n
         if (auto it = g_cache.find(key); it != g_cache.end()) return it->second;
     }
     RopeSearch r = rope_search_uncached(file, seconds, newest);
+    if (stop_requested()) return r; // a search cut short is not the answer to keep for next time
     std::lock_guard<std::mutex> lock(g_cache_mx);
     if (g_cache.size() >= 4096) g_cache.clear();
     g_cache.emplace(key, r);
@@ -787,7 +789,8 @@ RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds, u
 {
     using steady = std::chrono::steady_clock;
     const auto start = steady::now();
-    auto out_of_time = [&] { return seconds > 0 && std::chrono::duration<double>(steady::now() - start).count() >= seconds; };
+    // Out of time, or asked to stop (sieve/stop.hpp): either way the best found so far is kept.
+    auto out_of_time = [&] { return stop_requested() || (seconds > 0 && std::chrono::duration<double>(steady::now() - start).count() >= seconds); };
     RopeSearch r;
     r.estimate = -1;
     auto try_one = [&](const RopeParams& p) {
@@ -797,6 +800,10 @@ RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds, u
         {
             r.estimate = e;
             r.best = p;
+            char t[160];
+            std::snprintf(t, sizeof t, "the rope's search: %llu ways tried, best so far %.0f bytes of %llu (%s)", (unsigned long long)r.tried, e,
+                          (unsigned long long)file.size(), p.text().c_str());
+            progress(t);
         }
     };
     try_one(RopeParams{}); // no wave at all: the bytes' own histogram

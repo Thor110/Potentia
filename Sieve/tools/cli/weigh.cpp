@@ -1,5 +1,6 @@
 // Sieve CLI -- files weighed (weigh.hpp).
 #include "cli/weigh.hpp"
+#include "sieve/stop.hpp"
 
 #include "cli/locate.hpp"
 #include "cli/pack.hpp"
@@ -177,7 +178,7 @@ Weighing weigh_files(const fs::path& root, const std::vector<std::string>& files
                 const double left = budget.total - rope_spent;
                 rope_seconds = left <= 0 ? -1 : rope_seconds > 0 ? std::min(rope_seconds, left) : left;
             }
-            if (!bytes.empty() && rope_seconds >= 0)
+            if (!bytes.empty() && rope_seconds >= 0 && !stop_requested())
             {
                 // Each with what decoding it needs written beside it: the file's size (a varint)
                 // and, for the rope, the wave's parameters as the text they are; the pieces' way
@@ -256,6 +257,11 @@ Weighing weigh_files(const fs::path& root, const std::vector<std::string>& files
                     continue;
                 }
                 seconds = seconds > 0 ? std::min(seconds, left) : left;
+            }
+            if (stop_requested())
+            {
+                stopped[int(li)] = "stopped before its search began"; // it keeps its filters
+                continue;
             }
             opt.seconds = seconds;
             TailorResult r = tailor_filters(w.fl, anchors, w.filters, nullptr, opt);

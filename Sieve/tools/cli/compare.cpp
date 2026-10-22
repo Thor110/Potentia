@@ -2,9 +2,12 @@
 
 #include "cli/compare.hpp"
 
+#include "sieve/stop.hpp"
+
 #include <lzma.h>
 #include <zlib.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <stdexcept>
 
@@ -12,19 +15,39 @@ namespace sieve::cli {
 
 uint64_t deflate_size(std::span<const uint8_t> data)
 {
-    // Raw deflate (windowBits -15: no zlib header or checksum), as a zip archive holds it.
+    // Raw deflate (windowBits -15: no zlib header or checksum), as a zip archive holds it; fed a MiB
+    // at a time (the same stream as at once), the output counted and let go.
     z_stream z{};
     if (deflateInit2(&z, 9, Z_DEFLATED, -15, 9, Z_DEFAULT_STRATEGY) != Z_OK) throw std::runtime_error("zlib: cannot start");
-    std::vector<uint8_t> out(deflateBound(&z, uLong(data.size())) + 64);
-    z.next_in = const_cast<Bytef*>(data.data());
-    z.avail_in = uInt(data.size());
-    z.next_out = out.data();
-    z.avail_out = uInt(out.size());
-    const int r = deflate(&z, Z_FINISH);
-    const uint64_t n = z.total_out;
+    std::vector<uint8_t> out(size_t(1) << 20);
+    constexpr size_t kPiece = size_t(1) << 20;
+    size_t at = 0;
+    int r = Z_OK;
+    while (r != Z_STREAM_END)
+    {
+        if (stop_requested())
+        {
+            deflateEnd(&z);
+            return kNotMeasured;
+        }
+        const size_t n = std::min(kPiece, data.size() - at);
+        z.next_in = const_cast<Bytef*>(data.data() + at);
+        z.avail_in = uInt(n);
+        at += n;
+        const int flush = at == data.size() ? Z_FINISH : Z_NO_FLUSH;
+        do
+        {
+            z.next_out = out.data();
+            z.avail_out = uInt(out.size());
+            r = deflate(&z, flush);
+            if (r == Z_STREAM_ERROR) break;
+        } while (z.avail_out == 0 || (flush == Z_FINISH && r != Z_STREAM_END));
+        if (r == Z_STREAM_ERROR) break;
+    }
+    const uint64_t total = z.total_out;
     deflateEnd(&z);
-    if (r != Z_STREAM_END) throw std::runtime_error("zlib: the data did not compress in one pass");
-    return n;
+    if (r != Z_STREAM_END) throw std::runtime_error("zlib: the data did not compress");
+    return total;
 }
 
 uint64_t lzma2_size(std::span<const uint8_t> data)
@@ -32,16 +55,51 @@ uint64_t lzma2_size(std::span<const uint8_t> data)
     lzma_options_lzma opt;
     if (lzma_lzma_preset(&opt, 9 | LZMA_PRESET_EXTREME)) throw std::runtime_error("liblzma: no preset 9");
     const lzma_filter filters[] = {{LZMA_FILTER_LZMA2, &opt}, {LZMA_VLI_UNKNOWN, nullptr}};
-    std::vector<uint8_t> out(data.size() + data.size() / 16 + 4096);
-    size_t pos = 0;
-    const lzma_ret r = lzma_raw_buffer_encode(filters, nullptr, data.data(), data.size(), out.data(), &pos, out.size());
-    if (r != LZMA_OK) throw std::runtime_error("liblzma: could not compress (" + std::to_string(int(r)) + ")");
-    return pos;
+    // The same raw LZMA2 as one call makes, fed a MiB at a time, the output counted and let go.
+    lzma_stream z = LZMA_STREAM_INIT;
+    if (lzma_raw_encoder(&z, filters) != LZMA_OK) throw std::runtime_error("liblzma: cannot start");
+    std::vector<uint8_t> out(size_t(1) << 20);
+    constexpr size_t kPiece = size_t(1) << 20;
+    size_t at = 0;
+    lzma_ret r = LZMA_OK;
+    while (r != LZMA_STREAM_END)
+    {
+        if (stop_requested())
+        {
+            lzma_end(&z);
+            return kNotMeasured;
+        }
+        const size_t n = std::min(kPiece, data.size() - at);
+        z.next_in = data.data() + at;
+        z.avail_in = n;
+        at += n;
+        const lzma_action action = at == data.size() ? LZMA_FINISH : LZMA_RUN;
+        do
+        {
+            z.next_out = out.data();
+            z.avail_out = out.size();
+            r = lzma_code(&z, action);
+            if (r != LZMA_OK && r != LZMA_STREAM_END)
+            {
+                lzma_end(&z);
+                throw std::runtime_error("liblzma: could not compress (" + std::to_string(int(r)) + ")");
+            }
+        } while (z.avail_in > 0 || (action == LZMA_FINISH && r != LZMA_STREAM_END));
+    }
+    const uint64_t total = z.total_out;
+    lzma_end(&z);
+    return total;
 }
 
 std::string comparison_table(const Comparison& c)
 {
     auto row = [&](const char* name, uint64_t v, const char* note) {
+        if (v == kNotMeasured)
+        {
+            char line[256];
+            std::snprintf(line, sizeof line, "  %-24s %22s %10s   %s\n", name, "not measured", "", "stopped before it was");
+            return std::string(line);
+        }
         char pct[32];
         if (c.original == 0) std::snprintf(pct, sizeof pct, "%10s", "-");
         else std::snprintf(pct, sizeof pct, "%9.2f%%", 100.0 * double(v) / double(c.original));

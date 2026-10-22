@@ -51,6 +51,7 @@ add_library(sieve_core STATIC
     core/src/aispace.cpp
     core/src/digit_histogram.cpp
     core/src/rope_wave.cpp
+    core/src/stop.cpp
     core/src/training.cpp
     core/src/diffusion.cpp
     core/src/filters/models.cpp

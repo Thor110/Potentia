@@ -87,6 +87,8 @@ enumerated and stored later. Nothing is guaranteed (IDEAS §19.77).
 - **Edward** (22 October 2026, quote; IDEAS §19.98): Isn't every real file 'rare'?
 - **Edward** (22 October 2026, quote; IDEAS §19.98): Conceptually it feels like it could in theory provide a good result, if it chances across the perfect result.
 - **Edward** (22 October 2026, quote; IDEAS §19.99): We could look at multi-threading the filter analysis to improve performance.
+- **Edward** (22 October 2026, quote; IDEAS §19.97): Lets add a stop button so that we can choose what result to use.
+- **Edward** (22 October 2026, quote; IDEAS §19.97): It would also be worthwhile ensuring the current timing message traces the best result found so far.
 - **Edward** (22 October 2026, quote; IDEAS §19.98): I feel like through multi threading and parallelisation as well as possibly distributed processing in the future it could still be worth keeping an eye out for those reductions, presuming the current system wouldn't already find them.
 
 ## Gemini

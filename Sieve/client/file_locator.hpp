@@ -80,6 +80,9 @@ public:
     // Scripted runs: open on a file or folder, measured (and tailored) before the next frame; and
     // an install, at once.
     void locate_now(const std::string& path, bool tailor = false);
+    // For scripted runs, before locate_now: Stop pressed so many seconds after it starts (0: never),
+    // and the instructions saved to this file once it is read (empty: not), as the buttons do.
+    static void script(double stop_after, const std::string& save_to);
     void install_now(const std::string& from, const std::string& to);
     // The search's time for tailoring, before a scripted run (--search-per-file, --search-total):
     // seconds a file, or for the run (`total`); the other follows, the files counted.
@@ -114,6 +117,14 @@ private:
         // rope's search may take of that, for the save's estimate (it packs it again).
         double pack_seconds = -1, pack_search = 0;
         bool pack_search_unlimited = false;
+        // Stopped (Stop, or S): what was found by then is what it holds.
+        bool stopped = false;
+        // Its Sieve instructions as made when it was read, their address, and what they were made
+        // with: saving writes these where nothing has changed since, rather than packing again.
+        std::optional<sieve::cli::Manifest> instructions;
+        sieve::BigUint instructions_address;
+        double made_rope_seconds = 0;
+        bool made_archives = false;
     };
     bool in_world() const { return bool(host_.go); }
     // `tailor`: the weighing tailors each line's filters to the files that are its items.
@@ -133,6 +144,8 @@ private:
     std::string status_;
     // The job under way (reading or saving): when it began, and its estimate (seconds; -1: none
     // yet, or too small to need one), with what the estimate is made of; under mx_.
+    std::atomic<bool> stop_{false}; // Stop pressed: the job ends with what it has found
+    std::string progress_;          // what the job is doing now, and the best so far (under mx_)
     std::chrono::steady_clock::time_point job_started_{};
     double job_estimate_ = -1;
     std::string job_estimate_text_;

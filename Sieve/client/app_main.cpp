@@ -176,6 +176,8 @@ const char* kUsage =
     "  --sample-degrees DIR   every dimension's item at each whole degree 0-359, saved into DIR as its\n"
     "                      file named by its title (pictures one pixel a pixel, as J reads them), and DIR\n"
     "                      made into Sieve instructions (--sample-out FILE, else DIR.sieve)\n"
+    "  --stop-after S      with --locate: press Stop after S seconds (the best found by then kept)\n"
+    "  --locate-save FILE  with --locate: save its Sieve instructions to FILE once it is read\n"
     "  --locate PATH       open the File Locator on a file or folder (--tailored: and tailor the filters to its files;\n"
     "                      with --main-menu: the main menu's, with no world to walk to)\n"
     "  --search-per-file S, --search-total S   the File Locator's search for shorter addresses: seconds a\n"
@@ -558,7 +560,11 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
 
     if (a.has("zoom")) hall->zoom_to(a.get_positive("zoom", 20));
     if (const auto search = locator_search_of(a)) hall->locator_search(search->first, search->second);
-    if (a.has("locate")) hall->locate_now(a.get("locate"), a.has("tailored"));
+    if (a.has("locate"))
+    {
+        FileLocator::script(a.has("stop-after") ? std::stod(a.get("stop-after")) : 0, a.get("locate-save", ""));
+        hall->locate_now(a.get("locate"), a.has("tailored"));
+    }
     if (a.has("install") && a.has("install-to")) hall->install_now(a.get("install"), a.get("install-to"));
     if (a.has("new-map")) hall->graph_picked(4, a.get("new-map")); // the viewer's New map..., at once
     if (a.has("map") || a.has("graph")) hall->graph_map_now(a.has("map") ? a.get("map") : "", a.has("graph"));
@@ -929,6 +935,7 @@ int run(const Args& a)
     }
     if (shot && a.has("main-menu") && a.has("locate"))
     {
+        FileLocator::script(a.has("stop-after") ? std::stod(a.get("stop-after")) : 0, a.get("locate-save", ""));
         // A picture of the File Locator opened from the main menu, on a file or folder (--tailored:
         // and its filters tailored): no world, so no Go to it.
         std::optional<LocatedGo> go; // offered as from the main menu (the screenshot does not go)
