@@ -4,8 +4,6 @@
 // .sieve opens the extension's viewer, which does the same for a page.
 
 (() => {
-  // A mark a page can look for, to tell its reader whether the extension is running.
-  document.documentElement.dataset.sieveExtension = "on";
   const isSieve = (url) => /\.sieve(?:[?#].*)?$/i.test(url || "");
   const viewer = chrome.runtime.getURL("viewer.html");
 
@@ -40,7 +38,9 @@
       if (!r || !r.ok) return refuse(img, r ? r.error : "no answer");
       const blob = new Blob([bytesOf(r.data)], { type: r.type });
       img.dataset.sieve = "shown";
-      img.title = (img.title ? img.title + " - " : "") + "checked by Sieve: " + r.name + ", SHA-256 " + r.sha256;
+      const t = r.times || {};
+      img.title = (img.title ? img.title + " - " : "") + "checked by Sieve: " + r.name + ", decoded in " + (t.decoded || 0).toFixed(3) + " s (" +
+        (t.total || 0).toFixed(3) + " s in all), SHA-256 " + r.sha256;
       img.src = URL.createObjectURL(blob);
     });
   }

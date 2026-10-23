@@ -97,11 +97,18 @@ length, in this machine's byte order, then that many bytes of JSON.
 | Request | Answer |
 |---|---|
 | `{"id": N, "op": "hello"}` | `{"id": N, "ok": true, "sieve": "0.13.75"}` |
-| `{"id": N, "op": "decode", "sha256": "sha256-...", "name": "...", "data": "<the .sieve, base64>"}` | `{"id": N, "ok": true, "name", "type", "size", "sha256", "parts": K}`, then K messages `{"id": N, "part": i, "data": "<base64>"}` |
+| `{"id": N, "op": "decode", "sha256": "sha256-...", "name": "...", "data": "<the .sieve, base64>"}` | `{"id": N, "ok": true, "name", "type", "size", "sha256", "seconds", "parts": K}`, then K messages `{"id": N, "part": i, "data": "<base64>"}` |
 | either, refused | `{"id": N, "ok": false, "error": "<why>"}` |
 
 A message to the browser is at most 1 MB, so a file comes back in parts of 699,999 bytes (whole
-groups of three, so the parts' base64 join as one). `web/host/check_host.py SIEVE FILE.sieve ...`
+groups of three, so the parts' base64 join as one). `seconds` is how long checking and decoding it took in Sieve;
+the viewer's bar gives it, with how long fetching the `.sieve` and checking its hash took, the
+whole hand-over to Sieve and back, and (for a page) its own `.sieve` pictures. A picture's tooltip
+gives its times too.
+
+A page can tell whether the extension is running: `mark.js` marks every page as it starts
+(`<html data-sieve-extension="on">`), before the page's own scripts look. The test site's pages
+look once they have loaded, so a slow connection is not taken for a missing extension. `web/host/check_host.py SIEVE FILE.sieve ...`
 talks to it as Chrome does, without a browser; the CI runs it.
 
 ## Next

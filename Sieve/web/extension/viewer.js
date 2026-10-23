@@ -42,6 +42,8 @@ function refuse(why) {
 // A decoded page, made ready for its frame: its address for its relative links, every link
 // leaving the frame, its .sieve pictures checked and put in as data, its .sieve links through
 // the viewer.
+let pictures = 0, picturesSeconds = 0; // the page's own .sieve pictures, and the time they took
+
 async function preparePage(html) {
   const doc = new DOMParser().parseFromString(html, "text/html");
   for (const s of doc.querySelectorAll("script")) s.remove(); // the frame runs none anyway
@@ -55,7 +57,10 @@ async function preparePage(html) {
   for (const img of doc.querySelectorAll("img[src]")) {
     const src = img.getAttribute("src");
     if (!isSieve(src)) continue;
+    const before = performance.now();
     const r = await decode(new URL(src, url).toString(), img.getAttribute("integrity"));
+    pictures += 1;
+    picturesSeconds += (performance.now() - before) / 1000;
     if (r.ok) {
       img.setAttribute("src", "data:" + r.type + ";base64," + r.data);
       img.setAttribute("title", "checked by Sieve: " + r.name + ", SHA-256 " + r.sha256);
@@ -83,13 +88,22 @@ async function show() {
   document.title = "Sieve - " + decodeURIComponent(new URL(url).pathname.split("/").pop());
   const r = await decode(url, integrity);
   if (!r.ok) return refuse(r.error);
-  what.textContent = r.name + " (" + r.type + ", " + r.size + " bytes): its .sieve checked against the hash its link states; SHA-256 " + r.sha256;
+  const t = r.times || {};
+  const s = (v) => (v || 0).toFixed(3) + " s";
+  what.textContent = r.name + " (" + r.type + ", " + r.size + " bytes, from a .sieve of " + r.sieveBytes + "): checked against the hash its link states" +
+    "; fetched and checked in " + s(t.fetched) + ", decoded by Sieve in " + s(t.decoded) + " (" + s(t.sieve) + " with the hand-over), " + s(t.total) + " in all" +
+    "; SHA-256 " + r.sha256;
+  what.title = what.textContent;
   if (r.type === "text/html") {
     const frame = document.createElement("iframe");
     // No scripts, no forms, no access to this page: only its links, which leave the viewer.
     frame.setAttribute("sandbox", "allow-top-navigation-by-user-activation allow-popups");
     frame.srcdoc = await preparePage(textOf(r.data));
     shown.replaceChildren(frame);
+    if (pictures) {
+      what.textContent += "; and its " + pictures + " .sieve picture" + (pictures === 1 ? "" : "s") + " in " + picturesSeconds.toFixed(3) + " s";
+      what.title = what.textContent;
+    }
     return;
   }
   const blobUrl = URL.createObjectURL(new Blob([bytesOf(r.data)], { type: r.type }));

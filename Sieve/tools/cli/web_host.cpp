@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <istream>
 #include <map>
@@ -202,7 +204,11 @@ int run_web_host(std::istream& in, std::ostream& out, const std::string& version
             }
             if (op != "decode") throw std::runtime_error("no such request: " + op);
             const json::Value* h = req.find("sha256");
-            const WebDecoded d = web_decode(bytes_of_base64(req.at("data").string()), h ? h->string() : std::string(), max_bytes);
+            const std::vector<uint8_t> given = bytes_of_base64(req.at("data").string());
+            const auto t0 = std::chrono::steady_clock::now();
+            const WebDecoded d = web_decode(given, h ? h->string() : std::string(), max_bytes);
+            char seconds[32]; // how long checking and decoding took here, for the viewer's readout
+            std::snprintf(seconds, sizeof seconds, "%.3f", std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
             const size_t parts = (d.bytes.size() + kPart - 1) / kPart;
             write_message(out, json::Value::make_object({{"id", id},
                                                          {"ok", json::Value::make_bool(true)},
@@ -210,6 +216,7 @@ int run_web_host(std::istream& in, std::ostream& out, const std::string& version
                                                          {"type", json::Value::make_string(d.type)},
                                                          {"size", num(d.bytes.size())},
                                                          {"sha256", json::Value::make_string(d.sha256)},
+                                                         {"seconds", json::Value::make_number(seconds)},
                                                          {"parts", num(parts)}}));
             for (size_t k = 0; k < parts; ++k)
             {

@@ -23,7 +23,8 @@
 //   {"id": N, "op": "decode", "sha256": "<hex, or sha256-<base64> as an integrity attribute>",
 //    "name": "<the .sieve's name, for messages>", "data": "<the .sieve, base64>"}
 //       -> {"id": N, "ok": true, "name": "<the file's name>", "type": "<its media type>",
-//           "size": <bytes>, "sha256": "<its SHA-256, hex>", "parts": K}
+//           "size": <bytes>, "sha256": "<its SHA-256, hex>", "seconds": <checking and decoding
+//           it here took>, "parts": K}
 //          then K messages {"id": N, "part": i, "data": "<base64>"}, i from 0;
 //       or {"id": N, "ok": false, "error": "<why it was refused>"}.
 #pragma once

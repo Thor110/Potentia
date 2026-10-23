@@ -3791,6 +3791,12 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   and its plain pages say when the extension is not running (the content script marks
   `<html data-sieve-extension>`). Tested in Chromium served from the repository's top folder.
 - **`web/test-site/serve_site.bat`:** step 4 in a double-click (finds Python as `make_release.bat`).
+- **Edward's live test (23 October 2026):** the pages said the extension was not running while
+  showing its pictures; the mark came from the content script at `document_idle`, after the page's
+  1.5 s look on a slow connection. Now `mark.js` marks at `document_start`, and the pages look
+  after `load` (and take the note away if the mark comes later); shown with every request held 2 s.
+  The viewer's bar gives the times (fetched and checked, Sieve's own decoding from the host's
+  `seconds`, the hand-over, in all, and a page's own pictures).
 
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s

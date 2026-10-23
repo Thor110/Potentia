@@ -66,15 +66,21 @@ function base64Of(bytes) {
 async function decode(url, integrity) {
   const stated = statedSha256(integrity);
   if (!stated) throw new Error("its link states no hash (an integrity=\"sha256-...\" attribute), so it is refused");
+  const started = performance.now();
   const response = await fetch(url, { credentials: "omit", cache: "no-cache" });
   if (!response.ok) throw new Error("it could not be fetched (" + response.status + ")");
   const bytes = new Uint8Array(await response.arrayBuffer());
   // The link's hash first: a file that is not the one the page meant never reaches the decoder.
   const own = base64Of(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)));
   if (own !== stated) throw new Error("its SHA-256 is not the one its link states: refused");
+  const checked = performance.now();
   const name = decodeURIComponent(new URL(url).pathname.split("/").pop());
   const { head, data } = await ask({ op: "decode", name, sha256: "sha256-" + stated, data: base64Of(bytes) });
-  return { name: head.name, type: head.type, size: head.size, sha256: head.sha256, sieveSha256: stated, data };
+  const done = performance.now();
+  // The times, in seconds: fetching it and checking its hash here; Sieve's own checking and
+  // decoding; and the whole round trip to Sieve (the decoding, and handing the bytes both ways).
+  const times = { fetched: (checked - started) / 1000, decoded: Number(head.seconds || 0), sieve: (done - checked) / 1000, total: (done - started) / 1000 };
+  return { name: head.name, type: head.type, size: head.size, sha256: head.sha256, sieveSha256: stated, sieveBytes: bytes.length, times, data };
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {

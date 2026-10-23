@@ -36,7 +36,12 @@
   document.getElementById("next").onclick = () => show(at + 1);
   show(0);
   // The extension marks every page it runs in; without it, say so rather than show broken pictures.
-  setTimeout(() => { if (!document.documentElement.dataset.sieveExtension) document.getElementById("missing").style.display = "block"; }, 1500);
+  // (mark.js marks the page as it starts; looked for once the page has loaded, and the note taken
+  // away again if the mark comes after all.)
+  const missing = document.getElementById("missing");
+  const marked = () => document.documentElement.hasAttribute("data-sieve-extension");
+  window.addEventListener("load", () => setTimeout(() => { if (!marked()) missing.style.display = "block"; }, 500));
+  new MutationObserver(() => { if (marked()) missing.style.display = "none"; }).observe(document.documentElement, { attributes: true });
 })();
 </script>
 </body>

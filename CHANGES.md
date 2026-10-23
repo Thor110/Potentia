@@ -1,37 +1,31 @@
-# Sieve Secure on the website (23 October 2026)
+# The web plugin: no false "not running", and the decode times (23 October 2026)
 
-## Built
-- **`Pages/secure.html` (Sieve Secure)**, in the website's style, with the AI disclosure at the top:
-  - what the extension does, and why the link states the hash rather than the file;
-  - the setup in four steps: build Sieve, run `install_host.bat`, load the extension, and open the
-    live test site (or run `serve_site.bat` for your own copy);
-  - what you should see, and what comes next.
+## Fixed
+- **"The Sieve extension is not running" while it was.** I couldn't reproduce it, but the likely
+  cause is timing. The extension marked the page only once the page had settled, and the page gave
+  up waiting after 1.5 seconds, which a real connection to GitHub Pages can take longer than.
+  - A tiny script (`web/extension/mark.js`) now marks every page the moment it starts loading.
+  - The test pages wait until they've fully loaded before checking, and take the note away again
+    if the mark arrives later anyway.
+  - Tested with every request held back 2 seconds: the note stays hidden.
 
-  Its buttons go to the live test site, to the source on GitHub, and back to Core Architecture.
-- **`index.html`:** a new button under Sieve State Space, "Sieve Secure (Test The Extension)".
-- **`Pages/secure/`:** the test site, built and ready for GitHub Pages to serve (600 KB). GitHub
-  Pages serves `.sieve` files like any others, and the extension needs nothing else from the server.
-  To rebuild it after changing the site, from the repository's top folder:
-  `python Sieve\web\test-site\make_site.py out\build\x64-Release\sieve.exe --out Pages\secure --home ../secure.html`
-- **The test site** (`Sieve/web/test-site/src`) is now styled as the website: Courier New, the dark
-  boxes and the bordered buttons. Its gallery and home page now say plainly when the extension
-  isn't running in the browser, instead of showing broken pictures. The extension marks the pages
-  it runs in so they can tell.
-- **The many-file `.sieve`** is now the pages' own sources (3 KB) rather than all the pictures
-  (600 KB). The Vitruvian JPEG is smaller too (116 KB, was 265 KB), to keep the site light.
-- The extension's refusal box and viewer bar use the same font.
+## Added
+- **The decode times, in the viewer's bar after decoding:** how long fetching the `.sieve` and
+  checking its hash took, how long Sieve itself took to decode it, the hand-over to Sieve and back,
+  and the total. For a page, it also gives the time for the page's own `.sieve` pictures. On About
+  here: "fetched and checked in 0.004 s, decoded by Sieve in 0.000 s (0.001 s with the hand-over),
+  0.004 s in all ... and its 1 .sieve picture in 0.018 s" (screenshot beside this file).
+- A picture's tooltip gives its times too.
+- `sieve web-host` reports how long its checking and decoding took (`seconds` in its reply).
+- The waiting text reads "fetching it, checking its hash, and having Sieve decode it...".
 
-## Tested here
-In Chromium, with the repository's top folder served as GitHub Pages would serve it:
-- the new button leads to Sieve Secure, and its Live Test Site button to the test pages;
-- six pictures were shown and the tampered one refused;
-- About opened with its picture, and the many-file `.sieve` was refused;
-- the link back returns to Sieve Secure;
-- without the extension, the gallery says it isn't running.
+If About still takes a moment on your machine, the bar will now show where the time goes: Sieve's
+own decoding, or Chrome starting `sieve.exe` for the first request.
 
-Screenshots are beside this file (not part of the repository).
+**After applying:** rebuild Sieve (the host changed), and press Reload on the Sieve extension in
+`chrome://extensions` (it has a new file). `Pages/secure` is rebuilt with the new pages.
 
-**Docs:** `Sieve/web/README.md`, IDEAS §19.92, HANDOFF, VOICES.
+**Checked:** the oracle step of the CI (the web host and the site), the host as Chrome talks to it,
+and the whole site in Chromium.
 
-To apply: copy `index.html`, `Pages/` and `Sieve/` over the repository's top folder (in `Sieve/`,
-only `web/` and `docs/` changed).
+To apply: copy `Pages/` and `Sieve/` over the repository's top folder.
