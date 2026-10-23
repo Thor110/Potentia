@@ -2691,9 +2691,12 @@ int cmd_site(const Args& a)
             }
         }
         if (a.has("search-per-file")) o.search_per_file = std::stod(a.get("search-per-file"));
+        o.keep_originals = a.has("keep-originals");
+        o.progress = [](size_t k, size_t n, const std::string& f) { std::cerr << "making    " << k << " of " << n << ": " << f << "\n"; };
         const auto t0 = std::chrono::steady_clock::now();
         const SiteReport r = build_site(path_of(a.positional[1]), path_of(a.get("out")), o);
         const double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        for (const std::string& note : r.notes) std::cerr << "note      " << note << "\n";
         auto n = [](size_t k, const char* one, const char* many) { return std::to_string(k) + " " + (k == 1 ? one : many); };
         std::cerr << "site      " << n(r.files, "file", "files") << ", " << r.made << " made into .sieve files (" << r.pages_made << " of them pages), "
                   << n(r.links, "link", "links") << (r.links == 1 ? " given its hash" : " given their hashes") << ", in " << std::fixed << std::setprecision(1) << s << " s\n";

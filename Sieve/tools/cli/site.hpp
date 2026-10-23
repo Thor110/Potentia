@@ -5,22 +5,29 @@
 //                         made into `.sieve` files, and every link and picture that names one given
 //                         that file's hash, as the web writes one (`integrity="sha256-<base64>"`), so
 //                         the Sieve extension shows it only if it is exactly that file. A page is
-//                         made after every page it names; two pages that would name each other
-//                         cannot both state the other's hash, and are refused, naming them. Last, a
+//                         made after every page it names; pages that link in a loop cannot each
+//                         state the next one's hash, and are refused before anything is made, with
+//                         the loop and a set of pages to keep plain that would break every loop. Last, a
 //                         map of every file of the site, each named by its SHA-256 (`site.sieve`,
 //                         sieve-manifest-v18): its own hash is the one to trust for the whole site.
 //   check DIR             Every hash the site's pages state (its plain pages, and the pages held in
 //                         its `.sieve` files) checked against the file it names, and every file
 //                         against the site's map; what does not match is listed.
 //
-// What it reads in a page: the `src` of `img` and `source`, and the `href` of `a`, relative to the
-// page (a link with a scheme, from the server's root, or to an anchor alone is left as it is). A
-// tag with `data-sieve-keep` is left exactly as written, and not checked (the test site's deliberately
-// wrong links).
-// Links in CSS and scripts are not read.
+// What it reads in a page (HTML, or PHP, which is always kept as it is): the `src` of `img` and
+// `source`, and the `href` of `a`, relative to the page (a link with a scheme, from the server's
+// root, or to an anchor alone is left as it is). Only a file one of those names is made into a
+// `.sieve`, and never a page with a script (the extension's viewer runs none). A tag with `data-sieve-keep` is left exactly as written, and not checked (the test
+// site's deliberately wrong links).
+//
+// What it cannot follow, nor can the extension: a file named in CSS, a script, PHP's code, or any
+// other attribute (srcset, style, <link>, <video>...). Such a file is kept as it is as well, beside
+// its `.sieve` (a page: kept plain), so nothing that names it is broken. It is found by its name, so
+// a name a script puts together from parts is not found: `keep_originals` keeps every one.
 #pragma once
 
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -33,6 +40,9 @@ struct SiteOptions
     bool pages = false;              // the pages (html, htm) too, but for those kept plain
     std::vector<std::string> plain;  // pages kept as they are (paths in the site); every index.html always is
     double search_per_file = 1;      // the rope's search for each file (seconds; 0: no limit)
+    bool keep_originals = false;     // every picture made kept as it is too, beside its .sieve
+    // Told before each file is made: how many so far and of how many, and which.
+    std::function<void(size_t, size_t, const std::string&)> progress;
 };
 
 struct SiteReport

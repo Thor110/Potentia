@@ -78,6 +78,7 @@ def main():
         alone = Path(tmp) / "alone"
         alone.mkdir()
         shutil.copy2(SRC / "pictures" / "vitruvian.jpg", alone / "vitruvian.jpg")
+        (alone / "index.html").write_text('<img src="vitruvian.jpg">\n', encoding="utf-8")   # only what a page names is made
         run(sieve, "site", "build", alone, "--out", Path(tmp) / "alone-built")
         good = Path(tmp) / "alone-built" / "vitruvian.sieve"
         bad = bytearray(good.read_bytes())

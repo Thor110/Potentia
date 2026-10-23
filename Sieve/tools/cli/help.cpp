@@ -1004,19 +1004,23 @@ const std::vector<Page>& pages()
 
         {"site", "A website of .sieve files, each link stating the hash of the file it names.",
          "sieve site build SRC --out OUT [--sieve-pages] [--plain a.html,b.html] [--sieve jpg,png,...]\n"
-         "  [--search-per-file S]\n"
+         "  [--keep-originals] [--search-per-file S]\n"
          "  sieve site check DIR",
-         "build copies the site in SRC to OUT, its pictures made into .sieve files (with --sieve-pages,\n"
-         "its pages too, but for every index.html and those given to --plain), and gives every\n"
-         "<img src>, <source src> and <a href> that names one the integrity attribute of that file\n"
-         "(sha256- and its base64), so the Sieve extension shows it only if it is exactly that file.\n"
-         "A page is made after the pages it names; pages that name each other are refused, naming\n"
-         "them (keep one plain). Last it writes site.sieve, a map of every file by its SHA-256, and\n"
-         "prints that map's own SHA-256: the one hash to trust for the whole site. A tag with\n"
-         "data-sieve-keep is left as written. check reads a built site as the extension would and\n"
-         "lists every stated hash, and every file of the map, that does not match.",
+         "build copies the site in SRC to OUT. A picture an <img>, <source> or <a> names is made into a\n"
+         ".sieve, and with --sieve-pages so is a page an <a> names (but every index.html, those given to\n"
+         "--plain, and any with a script, which the viewer does not run); each such tag is given that\n"
+         "file's integrity attribute (sha256- and its base64), so the Sieve extension shows it only if it\n"
+         "is exactly that file. PHP pages are read for their links and kept as they are. A file named\n"
+         "where the extension cannot follow (CSS, scripts, PHP's code, srcset, style and other\n"
+         "attributes) is kept as it is too, beside its .sieve. Pages that link in a loop are refused\n"
+         "before anything is made, with the loop and the pages to keep plain. Last it writes site.sieve,\n"
+         "a map of every file by its SHA-256, and prints that map's own SHA-256: the one hash to trust\n"
+         "for the whole site. A tag with data-sieve-keep is left as written. check reads a built site as\n"
+         "the extension would and lists every stated hash, and every file of the map, that does not\n"
+         "match.",
          {{"--out OUT", "Where to build it (not inside SRC; replaced if empty or built before)."},
           {"--sieve-pages", "Make the pages into .sieve files too."},
+          {"--keep-originals", "Keep every picture made as it is too, beside its .sieve (for scripts that put names together)."},
           {"--plain LIST", "With --sieve-pages: pages (paths in the site, commas between) kept as they are."},
           {"--sieve LIST", "The extensions made into .sieve files (jpg,jpeg,png,gif,webp,bmp,svg)."},
           {"--search-per-file S", "The rope's search for each file, in seconds (1; 0: no limit)."}},

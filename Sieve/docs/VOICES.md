@@ -98,6 +98,7 @@ enumerated and stored later. Nothing is guaranteed (IDEAS §19.77).
 - **Edward** (23 October 2026, quote): Could we add the decode time to the readout displayed after decoding as well.
 - **Edward** (23 October 2026, quote; IDEAS §19.92): Could we add a page to the github pages site in the main repository ... from there it can link to a built version for people to test live online.
 - **Edward** (23 October 2026, quote; IDEAS §19.92): I presume that script and src folder could be repurposed in the future for any website? I ask as I notice vitruvian man reference hardcoded in the py script that makes it
+- **Edward** (23 October 2026, quote; IDEAS §19.92): I am also wondering how this will perform with php, javascript and other web languages as they have their own syntax and can open links as well.
 - **Edward** (22 October 2026, quote; IDEAS §19.97): Might we also be able to change the stop button over to a force stop to take the previous result rather than finish the current pass after pressing stop once?
 - **Edward** (22 October 2026, quote; IDEAS §19.97): We should add a line graph display which showcases the best found results along the way, instead of storing each value we can just draw the line graph as we go.
 - **Edward** (22 October 2026, quote; IDEAS §19.98): I feel like through multi threading and parallelisation as well as possibly distributed processing in the future it could still be worth keeping an eye out for those reductions, presuming the current system wouldn't already find them.

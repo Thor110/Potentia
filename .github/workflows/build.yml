@@ -2144,9 +2144,27 @@ jobs:
           grep -c "site.sieve: style.css is not the file it names" site-check.txt > /dev/null
           rm -rf cyc && mkdir cyc && echo '<a href="b.html">b</a>' > cyc/a.html && echo '<a href="a.html">a</a>' > cyc/b.html
           if $S site build cyc --out cyc-site --sieve-pages 2> cyc.txt; then exit 1; fi
-          grep -c "these pages name each other" cyc.txt > /dev/null
+          grep -c "these pages link in a loop: a.html -> b.html -> a.html.*--plain a.html" cyc.txt > /dev/null
+          [ ! -e cyc-site ]
           $S site build cyc --out cyc-site --sieve-pages --plain b.html > /dev/null
           $S site check cyc-site
+          # What it cannot follow is kept as it is: a picture CSS names (beside its .sieve), one no
+          # tag names (not made), a page with a script (plain), and PHP's code (untouched; the HTML
+          # around it rewritten).
+          rm -rf mix && mkdir -p mix/p && cp ../web/test-site/src/pictures/door.jpg ../web/test-site/src/pictures/book.jpg ../web/test-site/src/pictures/audio.jpg mix/p/
+          printf '<link rel="stylesheet" href="s.css"><img src="p/door.jpg"><a href="run.html">run</a><a href="b.html">b</a>\n' > mix/index.html
+          printf 'body{background:url("p/door.jpg")}\n' > mix/s.css
+          printf '<img src="p/book.jpg"><script>let n = 1;</script>\n' > mix/run.html
+          printf '<a href="p/book.jpg">book</a>\n' > mix/b.html
+          printf '<?php $x = "<img src=\x27p/book.jpg\x27>"; ?>\n<img src="p/book.jpg">\n' > mix/shop.php
+          $S site build mix --out mix-site --sieve-pages --search-per-file 0.2 2> mix.txt > /dev/null
+          ls mix-site/p/door.jpg mix-site/p/door.sieve mix-site/p/audio.jpg mix-site/run.html mix-site/b.sieve > /dev/null
+          [ ! -e mix-site/p/audio.sieve ] && [ ! -e mix-site/run.sieve ]
+          grep -c "kept plain: run.html (it has a script" mix.txt > /dev/null
+          grep -c "1 picture no page names" mix.txt > /dev/null
+          grep -c "<?php \$x = \"<img src='p/book.jpg'>\"; ?>" mix-site/shop.php > /dev/null
+          grep -c '<img src="p/book.sieve" integrity="sha256-' mix-site/shop.php > /dev/null
+          $S site check mix-site
           python -c "import json; json.load(open('../web/extension/manifest.json'))"
           for js in ../web/extension/*.js; do node --check "$js"; done
           # A v2 manifest (every file's address listed) is the oracle's to the byte.

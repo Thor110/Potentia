@@ -85,20 +85,45 @@ sieve site build my-site --out my-site-built --sieve-pages --plain gallery.html
 sieve site check my-site-built
 ```
 
-- **build** copies the site, makes its pictures into `.sieve` files (jpg, jpeg, png, gif, webp,
-  bmp and svg; `--sieve` names others), and with `--sieve-pages` its pages too, but for every
-  `index.html` and those given to `--plain` (a page with a script of its own, like the slideshow,
-  stays plain: the viewer runs no scripts).
-  - Each `<img src>`, `<source src>` and `<a href>` that names one is changed to the `.sieve` and
-    given its `integrity`; a link to a `.sieve` already in the site is given its hash too. Nothing
-    else in a page is changed.
-  - A page is made after the pages it names. Pages that name one another are refused, with their
-    names: keep one plain.
+- **build** copies the site.
+  - A picture (jpg, jpeg, png, gif, webp, bmp and svg; `--sieve` names others) that an `<img
+    src>`, `<source src>` or `<a href>` names is made into a `.sieve`, and that tag is changed to
+    it and given its `integrity`. A picture no such tag names is copied as it is. A link to a
+    `.sieve` already in the site is given its hash too. Nothing else in a page is changed.
+  - With `--sieve-pages`, a page an `<a>` names is made into a `.sieve` too, but not every
+    `index.html`, those given to `--plain`, or a page with a script (the viewer runs none).
+  - A page is made after the pages it names. Pages that link in a loop are refused before
+    anything is made, with the loop and a `--plain` list that would break every loop.
   - Last it writes `site.sieve` and prints its SHA-256.
   - A tag with `data-sieve-keep` is left as written (the test site's links meant to be wrong).
+  - A build that fails leaves nothing behind, and `--out` is replaced only if it is empty or was
+    built before.
 - **check** reads a built site as the extension would, and lists every stated hash, and every file
   of `site.sieve`, that does not match; it ends in an error if any does not.
-- **Not read yet:** links in CSS and scripts, `srcset`, and links from the server's root (`/a.jpg`).
+
+### PHP, scripts and CSS
+
+Only the tags above can be checked: the extension sees them and swaps in the checked file. Every
+other way of naming a file goes past it, so `build` keeps such a file as it is, beside its
+`.sieve`, and the page that names it still works (unchecked) with or without the extension:
+- **PHP:** a `.php` page is read for its tags and kept a `.php`, since its server must run it. Its
+  plain HTML is rewritten as any page's; its code (`<?php ... ?>`) is never touched, and a file it
+  names is kept as it is too. What PHP writes when it runs cannot be seen beforehand: build the
+  pages PHP serves (saved from the running site) instead, or have PHP write each link's
+  `integrity` from `site.sieve`.
+- **Scripts:** a file a script names (`fetch("a.png")`, `img.src = "a.png"`) is kept as it is
+  too. It is found by its name, so a name a script puts together from parts (`"pic" + n +
+  ".png"`) is not: `--keep-originals` keeps every picture as it is beside its `.sieve`.
+- **CSS, `srcset`, `style` and other attributes** (`url(a.png)`, `<link>`, `<video>`,
+  `<meta content>`): the same, kept as they are. A picture with a `srcset` or in a `<picture>`
+  would show those files instead of its `src`, so the extension takes them away when it shows the
+  checked `.sieve`.
+- **Links from the server's root** (`/a.png`) and to other sites are left as they are.
+
+The Potentia website itself (its top `index.html`, `Pages`, `Images` and `Art`), built with
+`--sieve-pages` on 23 October 2026: 101 files, its 3 pages with no script made into `.sieve` files
+in 2.9 s, its 5 pages with scripts kept plain, and its 90 pictures copied as they are, since no
+page of it shows one yet; checked, none wrong.
 
 `make_site.py` adds only what is the test's own before calling it: the link home, the many-file
 `pages.sieve`, and the tampered picture with its hash.
@@ -144,6 +169,8 @@ talks to it as Chrome does, without a browser; the CI runs it.
 
 ## Next
 
+- **Pages PHP writes:** `integrity` from `site.sieve` at run time (a small PHP helper), or the
+  served pages saved and built.
 - **The extension reading `site.sieve`:** a site's pages that link to one another, checked against
   its one list of hashes.
 - **A crawler:** `sieve site check` against a server instead of a folder.

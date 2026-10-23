@@ -3820,6 +3820,14 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
 - **The CI** checks the test site with `sieve site check` (3 kept as written), a file changed after
   the build caught, two pages naming each other refused, and the same two built with one plain.
 - **`Pages/secure`** rebuilt with it.
+- **Tried on the Potentia website, and made careful (23 October 2026; Edward asked how it does
+  with PHP and scripts):** only a file a read tag names is made; a file named elsewhere (CSS,
+  scripts, PHP's code, other attributes, by its whole name) is kept beside its `.sieve`
+  (`--keep-originals` keeps all); pages with a script stay plain; `.php` pages are read and kept,
+  their code untouched; loops are found first and shown with a `--plain` list; a failed build
+  leaves nothing; progress per file. The extension (`content.js`, `viewer.js`) takes away
+  `srcset` and `<picture>` sources, which showed the unchecked file. CI: a mixed site (CSS, a
+  script, PHP, an unlinked picture).
 
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s

@@ -9,11 +9,13 @@
 #include <algorithm>
 #include <cctype>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <optional>
 #include <random>
 #include <set>
 #include <stdexcept>
+#include <string_view>
 
 namespace sieve::cli {
 
@@ -43,6 +45,8 @@ std::string ext_of(const std::string& rel)
 }
 
 bool is_html(const std::string& rel) { return ext_of(rel) == "html" || ext_of(rel) == "htm"; }
+// A page read for its links: HTML, and PHP (always kept as it is: its server runs it).
+bool is_page(const std::string& rel) { return is_html(rel) || ext_of(rel) == "php"; }
 
 std::string dir_of(const std::string& rel)
 {
@@ -93,7 +97,8 @@ struct Tag
     }
 };
 
-std::vector<Tag> tags_of(const std::string& h)
+// `raw`, if given, gets what is not HTML: the insides of scripts, styles and PHP's <?...?>.
+std::vector<Tag> tags_of(const std::string& h, std::vector<std::string_view>* raw = nullptr)
 {
     std::vector<Tag> tags;
     size_t i = 0;
@@ -106,6 +111,13 @@ std::vector<Tag> tags_of(const std::string& h)
         if (h.compare(i, 4, "<!--") == 0)
         {
             skip_to("-->");
+            continue;
+        }
+        if (h.compare(i, 2, "<?") == 0) // PHP (or an XML declaration): code, never rewritten
+        {
+            const size_t from = i;
+            skip_to("?>");
+            if (raw) raw->push_back(std::string_view(h).substr(from, i - from));
             continue;
         }
         if (i + 1 >= h.size() || !std::isalpha(static_cast<unsigned char>(h[i + 1])))
@@ -172,7 +184,9 @@ std::vector<Tag> tags_of(const std::string& h)
         if (n == "script" || n == "style")
         {
             const size_t at = lower(h.substr(i)).find("</" + n);
-            i = at == std::string::npos ? h.size() : i + at;
+            const size_t end = at == std::string::npos ? h.size() : i + at;
+            if (raw) raw->push_back(std::string_view(h).substr(i, end - i));
+            i = end;
         }
     }
     return tags;
@@ -276,6 +290,52 @@ std::string integrity_of(const std::vector<uint8_t>& bytes)
     return "sha256-" + base64_of(raw.data(), raw.size());
 }
 
+namespace {
+
+// Whether `text` names the file called `name` (its last part), as a whole name: not inside a longer
+// one ("a.png" is not named by "data.png").
+bool names(std::string_view text, const std::string& name)
+{
+    auto part = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-' || c == '.'; };
+    for (size_t at = text.find(name); at != std::string_view::npos; at = text.find(name, at + 1))
+    {
+        const bool before = at == 0 || !part(text[at - 1]);
+        const bool after = at + name.size() == text.size() || !part(text[at + name.size()]);
+        if (before && after) return true;
+    }
+    return false;
+}
+
+// A loop among the pages, each needing the next: the pages in it, the first again at the end.
+std::vector<std::string> loop_of(const std::vector<std::string>& pages, const std::map<std::string, std::set<std::string>>& needs)
+{
+    std::map<std::string, int> state; // 0 not seen, 1 on the path, 2 done
+    std::vector<std::string> path, found;
+    std::function<bool(const std::string&)> walk = [&](const std::string& p) {
+        state[p] = 1;
+        path.push_back(p);
+        if (const auto it = needs.find(p); it != needs.end())
+            for (const std::string& n : it->second)
+            {
+                if (state[n] == 1)
+                {
+                    found.assign(std::find(path.begin(), path.end(), n), path.end());
+                    found.push_back(n);
+                    return true;
+                }
+                if (state[n] == 0 && walk(n)) return true;
+            }
+        path.pop_back();
+        state[p] = 2;
+        return false;
+    };
+    for (const std::string& p : pages)
+        if (state[p] == 0 && walk(p)) return found;
+    return {};
+}
+
+} // namespace
+
 SiteReport build_site(const fs::path& src_in, const fs::path& out_in, const SiteOptions& o)
 {
     const fs::path src = fs::weakly_canonical(src_in), out = fs::weakly_canonical(out_in);
@@ -285,20 +345,87 @@ SiteReport build_site(const fs::path& src_in, const fs::path& out_in, const Site
     SiteReport rep;
     const std::vector<std::string> files = files_of(src);
     const std::set<std::string> present(files.begin(), files.end());
-    std::set<std::string> plain(o.plain.begin(), o.plain.end());
+    const std::set<std::string> plain(o.plain.begin(), o.plain.end());
+    for (const std::string& p : plain)
+        if (!present.count(p)) throw std::invalid_argument("--plain names " + p + ", which the site does not have");
 
-    // What becomes a .sieve, and its name: NAME.sieve, or the whole name and .sieve where that is
-    // taken (by a file of the site, or by two of them in one folder).
+    // Every page read, for the links its tags give (what is made into .sieve files and given hashes)
+    // and for what names a file where the extension cannot follow: CSS, scripts, PHP, and every other
+    // attribute (srcset, style, <link>, <video>...). A file named there is kept as it is as well.
+    std::map<std::string, std::string> html; // every page: its text
+    std::set<std::string> linked;            // files a page's <img>, <source> or <a> names
+    std::set<std::string> scripted;          // pages with a script (a <script>, or an on... attribute)
+    std::vector<std::pair<std::string, std::string>> code; // where (a file), and text naming files there
+    for (const std::string& f : files)
+    {
+        const std::string e = ext_of(f);
+        if (is_page(f))
+        {
+            const std::string& h = html[f] = text_of(src / path_of(f));
+            std::vector<std::string_view> raw;
+            for (const Tag& tag : tags_of(h, &raw))
+            {
+                const Attr* link = link_of(tag);
+                if (tag.name == "script") scripted.insert(f);
+                for (const Attr& a : tag.attrs)
+                {
+                    if (a.name.size() > 2 && a.name.rfind("on", 0) == 0) scripted.insert(f);
+                    if (!a.has_value || a.name == "integrity" || a.name == "data-sieve-keep") continue;
+                    const std::string value = h.substr(a.value_begin, a.value_end - a.value_begin);
+                    if (&a == link && !tag.attr("data-sieve-keep"))
+                    {
+                        if (const auto target = target_of(f, value); target && present.count(*target)) linked.insert(*target);
+                    }
+                    else if (&a != link) code.push_back({f, value});
+                }
+            }
+            for (const std::string_view r : raw) code.push_back({f, std::string(r)});
+        }
+        else if (e == "css" || e == "js" || e == "mjs" || e == "json" || e == "xml" || e == "svg" || e == "webmanifest")
+            code.push_back({f, text_of(src / path_of(f))});
+    }
+    auto named_where = [&](const std::string& f) -> std::string {
+        const std::string n = name_of(f);
+        for (const auto& [where, text] : code)
+            if (where != f && names(text, n)) return where;
+        return "";
+    };
+
+    // What becomes a .sieve: a picture or the like that a tag names, and with `pages`, a page a tag
+    // names (but every index.html, those kept plain, and any named where the extension cannot follow).
     std::map<std::string, std::string> made; // its path in the site -> its .sieve's
+    std::set<std::string> originals_too;     // made, and kept as it is as well
     std::vector<std::string> sieve_pages;
+    size_t unlinked = 0;
     {
         std::map<std::string, std::vector<std::string>> wanted; // a .sieve's path -> the files that want it
         for (const std::string& f : files)
         {
             const std::string e = ext_of(f);
             const bool page = is_html(f) && o.pages && name_of(f) != "index.html" && !plain.count(f);
-            const bool asset = !is_html(f) && std::find(o.sieve_kinds.begin(), o.sieve_kinds.end(), e) != o.sieve_kinds.end();
+            const bool asset = !is_page(f) && std::find(o.sieve_kinds.begin(), o.sieve_kinds.end(), e) != o.sieve_kinds.end();
             if (!page && !asset) continue;
+            if (!linked.count(f))
+            {
+                if (asset) unlinked += 1;
+                continue;
+            }
+            if (page && scripted.count(f))
+            {
+                rep.notes.push_back("kept plain: " + f + " (it has a script, which the extension's viewer does not run)");
+                continue;
+            }
+            const std::string where = named_where(f);
+            if (page && !where.empty())
+            {
+                rep.notes.push_back("kept plain: " + f + " (" + where + " names it, where the extension cannot follow)");
+                continue;
+            }
+            if (asset && (!where.empty() || o.keep_originals))
+            {
+                originals_too.insert(f);
+                if (!where.empty()) rep.notes.push_back("kept as it is too, beside its .sieve: " + f + " (" + where + " names it, where the extension cannot follow)");
+            }
             wanted[f.substr(0, f.size() - e.size() - 1) + ".sieve"].push_back(f);
             if (page) sieve_pages.push_back(f);
         }
@@ -307,27 +434,86 @@ SiteReport build_site(const fs::path& src_in, const fs::path& out_in, const Site
         for (const auto& [f, m] : made)
             if (present.count(m)) throw std::runtime_error(f + " would be made " + m + ", which the site has already");
     }
+    if (unlinked)
+        rep.notes.insert(rep.notes.begin(), std::to_string(unlinked) + " picture" + (unlinked == 1 ? "" : "s") +
+                                                " no page names in an <img>, <source> or <a>: kept as " + (unlinked == 1 ? "it is" : "they are"));
+
+    // The pages made into .sieve files, each after those it names, so the hash it states is final:
+    // pages that name one another cannot be, and are refused before anything is made, with a set of
+    // pages to keep plain that would let the rest be made.
+    std::map<std::string, std::set<std::string>> needs;
+    for (const std::string& p : sieve_pages)
+        for (const Tag& tag : tags_of(html[p]))
+            if (const Attr* link = link_of(tag); link && link->has_value && !tag.attr("data-sieve-keep"))
+                if (const auto target = target_of(p, html[p].substr(link->value_begin, link->value_end - link->value_begin));
+                    target && *target != p && made.count(*target) && is_html(*target))
+                    needs[p].insert(*target);
+    if (const std::vector<std::string> loop = loop_of(sieve_pages, needs); !loop.empty())
+    {
+        // Pages to keep plain: from each loop left, the page the most others name, until none is left.
+        auto left = needs;
+        std::vector<std::string> pages = sieve_pages, keep;
+        for (std::vector<std::string> l = loop; !l.empty(); l = loop_of(pages, left))
+        {
+            std::string best = l[0];
+            size_t most = 0;
+            for (size_t k = 0; k + 1 < l.size(); ++k)
+            {
+                size_t n = 0;
+                for (const auto& [p, ns] : left) n += ns.count(l[k]);
+                if (n > most) most = n, best = l[k];
+            }
+            keep.push_back(best);
+            pages.erase(std::find(pages.begin(), pages.end(), best));
+            left.erase(best);
+            for (auto& [p, ns] : left) ns.erase(best);
+        }
+        std::string shown, list;
+        for (const std::string& p : loop) shown += (shown.empty() ? "" : " -> ") + p;
+        for (const std::string& p : plain) list += (list.empty() ? "" : ",") + p;
+        for (const std::string& p : keep) list += (list.empty() ? "" : ",") + p;
+        throw std::runtime_error("these pages link in a loop: " + shown + ". A page can state the hash of a page it links to, but pages that link to "
+                                 "one another cannot each state the other's (changing one would change the other). Kept plain, these would let "
+                                 "the rest be made: --plain " + list);
+    }
 
     // Replaced only if empty, or a site this built (its site.sieve there): never a folder named by mistake.
     if (fs::exists(out) && (!fs::is_directory(out) || (!fs::is_empty(out) && !fs::exists(out / "site.sieve"))))
         throw std::invalid_argument(rel_of(out) + " is there and is not a site sieve site build made (no site.sieve): remove it, or name another");
     fs::remove_all(out);
     fs::create_directories(out);
+    std::random_device rd;
+    const fs::path tmp = fs::temp_directory_path() / ("sieve-site-" + std::to_string(rd()) + std::to_string(rd()));
+    struct Cleanup
+    {
+        fs::path tmp, out;
+        bool done = false;
+        ~Cleanup()
+        {
+            std::error_code ec;
+            fs::remove_all(tmp, ec);
+            if (!done) fs::remove_all(out, ec); // a build that failed leaves nothing half made
+        }
+    } cleanup{tmp, out};
+
+    const size_t to_make = made.size();
+    auto making = [&](const std::string& f) {
+        if (o.progress) o.progress(rep.made + 1, to_make, f);
+    };
     // Everything else as it is (the pages after); the pictures and the like made.
     for (const std::string& f : files)
     {
         rep.files += 1;
-        if (is_html(f)) continue;
+        if (is_page(f)) continue;
         if (const auto it = made.find(f); it != made.end())
         {
+            making(f);
             make_sieve(src / path_of(f), out / path_of(it->second), o.search_per_file);
             rep.made += 1;
+            if (!originals_too.count(f)) continue;
         }
-        else
-        {
-            fs::create_directories((out / path_of(f)).parent_path());
-            fs::copy_file(src / path_of(f), out / path_of(f));
-        }
+        fs::create_directories((out / path_of(f)).parent_path());
+        fs::copy_file(src / path_of(f), out / path_of(f));
     }
 
     std::map<std::string, std::string> integrity; // a .sieve made or kept -> what links to it state
@@ -337,18 +523,18 @@ SiteReport build_site(const fs::path& src_in, const fs::path& out_in, const Site
         return it->second;
     };
     // A page with each link to a .sieve (made, or the site's own) given that file's hash.
-    auto rewrite = [&](const std::string& page, const std::string& html) {
+    auto rewrite = [&](const std::string& page, const std::string& text) {
         struct Edit
         {
             size_t at, len;
             std::string with;
         };
         std::vector<Edit> edits;
-        for (const Tag& tag : tags_of(html))
+        for (const Tag& tag : tags_of(text))
         {
             const Attr* link = link_of(tag);
             if (!link || !link->has_value || tag.attr("data-sieve-keep")) continue;
-            const std::string value = html.substr(link->value_begin, link->value_end - link->value_begin);
+            const std::string value = text.substr(link->value_begin, link->value_end - link->value_begin);
             const auto target = target_of(page, value);
             if (!target) continue;
             std::string sieve_path;
@@ -372,58 +558,25 @@ SiteReport build_site(const fs::path& src_in, const fs::path& out_in, const Site
             rep.links += 1;
         }
         std::sort(edits.begin(), edits.end(), [](const Edit& a, const Edit& b) { return a.at > b.at; });
-        std::string h = html;
+        std::string h = text;
         for (const Edit& e : edits) h.replace(e.at, e.len, e.with);
         return h;
     };
 
-    // The pages made into .sieve files, each after those it names, so the hash it states is final.
-    std::map<std::string, std::string> html;
-    for (const std::string& f : files)
-        if (is_html(f)) html[f] = text_of(src / path_of(f));
-    std::map<std::string, std::set<std::string>> needs;
-    for (const std::string& p : sieve_pages)
-        for (const Tag& tag : tags_of(html[p]))
-            if (const Attr* link = link_of(tag); link && link->has_value && !tag.attr("data-sieve-keep"))
-                if (const auto target = target_of(p, html[p].substr(link->value_begin, link->value_end - link->value_begin));
-                    target && *target != p && made.count(*target) && is_html(*target))
-                    needs[p].insert(*target);
     std::set<std::string> done;
-    std::random_device rd;
-    const fs::path tmp = fs::temp_directory_path() / ("sieve-site-" + std::to_string(rd()) + std::to_string(rd()));
-    struct Cleanup
-    {
-        fs::path p;
-        ~Cleanup()
-        {
-            std::error_code ec;
-            fs::remove_all(p, ec);
-        }
-    } cleanup{tmp};
     while (done.size() < sieve_pages.size())
-    {
-        bool any = false;
         for (const std::string& p : sieve_pages)
         {
             if (done.count(p)) continue;
             if (!std::all_of(needs[p].begin(), needs[p].end(), [&](const std::string& n) { return done.count(n) != 0; })) continue;
             const fs::path page = tmp / path_of(std::to_string(done.size())) / path_of(name_of(p)); // its own name, for its .sieve
             write_text(page, rewrite(p, html[p]));
+            making(p);
             make_sieve(page, out / path_of(made[p]), o.search_per_file);
             done.insert(p);
             rep.made += 1;
             rep.pages_made += 1;
-            any = true;
         }
-        if (!any)
-        {
-            std::string left;
-            for (const std::string& p : sieve_pages)
-                if (!done.count(p)) left += (left.empty() ? "" : ", ") + p;
-            throw std::runtime_error("these pages name each other, so none of them can state the others' hashes (changing one would change the "
-                                     "others): " + left + ". Keep one of them plain (--plain), so the others name it by name only.");
-        }
-    }
     // The plain pages, last: they may name any of them.
     for (const auto& [f, text] : html)
         if (!made.count(f)) write_text(out / path_of(f), rewrite(f, text));
@@ -433,6 +586,7 @@ SiteReport build_site(const fs::path& src_in, const fs::path& out_in, const Site
     map.name = name_of(rel_of(src));
     write_map_instructions(map, out / "site.sieve", 0);
     rep.map_sha256 = sha256_hex(read_file_bytes(out / "site.sieve"));
+    cleanup.done = true;
     return rep;
 }
 
@@ -476,7 +630,7 @@ SiteCheck check_site(const fs::path& dir)
     };
     for (const std::string& f : files)
     {
-        if (is_html(f)) check_page(f, f, text_of(dir / path_of(f)));
+        if (is_page(f)) check_page(f, f, text_of(dir / path_of(f)));
         else if (ext_of(f) == "sieve" && f != "site.sieve")
         {
             // A page held in a .sieve: read as the extension reads it (one file, nothing but

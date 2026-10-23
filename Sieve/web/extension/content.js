@@ -33,9 +33,19 @@
     img.replaceWith(box);
   }
 
+  // A picture's other sources (srcset, and a <picture>'s <source>s) win over its src, so they would
+  // show a file nothing checked: taken away, leaving only the .sieve.
+  function onlyTheSieve(img) {
+    img.removeAttribute("srcset");
+    img.removeAttribute("sizes");
+    if (img.parentElement && img.parentElement.tagName === "PICTURE")
+      for (const s of img.parentElement.querySelectorAll("source")) s.remove();
+  }
+
   function showPicture(img) {
     if (img.dataset.sieve) return;
     img.dataset.sieve = "checking";
+    onlyTheSieve(img);
     chrome.runtime.sendMessage({ op: "decode", url: img.src, integrity: img.getAttribute("integrity") }, (r) => {
       if (chrome.runtime.lastError) return refuse(img, chrome.runtime.lastError.message);
       if (!r || !r.ok) return refuse(img, r ? r.error : "no answer");

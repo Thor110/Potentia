@@ -57,6 +57,10 @@ async function preparePage(html) {
   for (const img of doc.querySelectorAll("img[src]")) {
     const src = img.getAttribute("src");
     if (!isSieve(src)) continue;
+    // Its other sources (srcset, a <picture>'s <source>s) would win over the checked file: taken away.
+    img.removeAttribute("srcset");
+    img.removeAttribute("sizes");
+    if (img.parentElement && img.parentElement.tagName === "PICTURE") for (const s of img.parentElement.querySelectorAll("source")) s.remove();
     const before = performance.now();
     const r = await decode(new URL(src, url).toString(), img.getAttribute("integrity"));
     pictures += 1;

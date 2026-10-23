@@ -4218,8 +4218,30 @@ folder) and shows the HTML they unpack to, as a first test where the result is k
     `site.sieve` 863 bytes; checked 24, none wrong, 3 kept as written. Built twice, every file came
     out the same. Shown again in Chromium 141: the same six pictures shown and the tampered one,
     the wrong hash, the missing hash and the many files refused.
-  - *Not read yet:* links in CSS (`url(...)`) and scripts, `srcset`, and links from the server's
-    root (`/a.jpg`); the extension does not read `site.sieve` yet.
+  - *Tried on the Potentia website, and PHP and scripts (Edward, 23 October 2026: "I am also
+    wondering how this will perform with php, javascript and other web languages as they have
+    their own syntax and can open links as well"):* the first build made 90 pictures into
+    `.sieve` files that no page links to, so anything else naming them (a script, CSS) would have
+    named files no longer there; it found the pages' loop only after 3.5 minutes of making
+    pictures, and left that half-made folder behind, which then blocked the next build. Now:
+    - only a file a tag the extension reads names is made; a file named anywhere else (CSS, a
+      script, PHP's code, `srcset`, `style`, any other attribute; found by its name, as a whole
+      name) is kept as it is too, beside its `.sieve`, and `--keep-originals` keeps every one, for
+      scripts that put names together;
+    - a page with a script stays plain (the viewer runs none), and a `.php` page is read for its
+      tags, its HTML rewritten and its `<?php ... ?>` left untouched (`php -l` passes);
+    - loops are found before anything is made, shown (`a.html -> b.html -> a.html`), with a
+      `--plain` list that breaks every one (from each loop, the page most others name); a failed
+      build leaves nothing; it says which file it is making;
+    - the extension takes away a picture's `srcset` and its `<picture>`'s `<source>`s before
+      showing the `.sieve`: those win over `src`, and showed the unchecked file (seen in Chromium,
+      fixed and shown: five pictures, all from checked files).
+    The website with `--sieve-pages`: 101 files, its 3 pages with no script made in 2.9 s, its 5
+    with scripts kept plain, its 90 pictures copied as they are (no page shows one yet).
+  - *What PHP writes when it runs* cannot be seen beforehand: build the pages it serves (saved
+    from the running site), or have it write each link's `integrity` from `site.sieve` (a small
+    PHP helper, not built). Links from the server's root (`/a.jpg`) are not read yet; the
+    extension does not read `site.sieve` yet.
 
 **19.93 The `.map` format folded into `.sieve` (Edward, 22 October 2026; built the same day).**
 His thought: update the `.map` format, or replace it with `.sieve` and deprecate it, the
