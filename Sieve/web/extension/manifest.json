@@ -3,6 +3,12 @@
   "name": "Sieve",
   "version": "0.13.75",
   "description": "Shows the .sieve files a page links to, each checked against the hash its link states, decoded by Sieve on this computer.",
+  "icons": {
+    "16": "icon16.png",
+    "32": "icon32.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvhzgvdIgyARGocLc1zUw8spQ3Wi1yJhh154qOYq44JpQ4aGIXvj5Pf82AQ7hv9VqF84Ir8C+szGi9dyyjHut1qeuXx3aVwYib56swYlymvSkv4WvksEZGLKoI4bvD4AjyJ+87C1qdXzgDLTfrTmwAQ16zJSnFoKH9JFvCCZ3e879jOOr0uLJ0+vyv0k8AC3qshHkic9PI/RaYaXonjyWaEOyVCIKlIVscyXglwTDmVVRhGonBuS6CrLLwNCgNPbwFE/bC75piPTW7CyAp4mx4fSgfCmUVkjt7Ql10QN/7NWmJHmmE7sH+gQn+uP1/gWkTtOI0ZE6FrDLcyNyB4PbNQIDAQAB",
   "permissions": [
     "nativeMessaging"
