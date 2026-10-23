@@ -2417,7 +2417,9 @@ void print_weighing(const Args& a, const std::filesystem::path& root, const std:
 // (--v14: no rope-wave-v5; --v13: and no archives optimised; --v12: no pieces, v13's; --v11: no trimming, v12's; --v10, --v9, --v8: the rope's ways those versions have, rope-wave-v3, v2, v1; --v7: no rope; --v6: as v6 wrote them; --v5: as v5 did, in hex, without the AI line; cli/items.hpp).
 void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackReport& rep)
 {
-    if (!a.has("items"))
+    // The newest instructions unless --v4 asks for the plain installer (every file packed by LZMA2,
+    // no items, no rope); --items is the default, kept so older command lines still work.
+    if (a.has("v4"))
     {
         add_packed(m, root, &rep);
         return;

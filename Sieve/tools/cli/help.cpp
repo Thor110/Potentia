@@ -966,9 +966,9 @@ const std::vector<Page>& pages()
           {"--addresses DIR", "A folder: write every file's address as DIR/<its path>.hex."},
           {"--with-addresses", "A folder: a v2 manifest, every file's address in it, in hex."},
           {"--installer OUT.sieve", "A folder (or a file): write the installer, the address of its manifest\n"
-                                    "as raw bytes (--hex: as hex). On its own, sieve-manifest-v4 (the listing,\n"
-                                    "then every file packed by LZMA2); with --items the newest (v16, or v17\n"
-                                    "where a gzip is remade), as the hallway's File Locator makes; with --v3\n"
+                                    "as raw bytes (--hex: as hex): the newest (v16, or v17 where a gzip is\n"
+                                    "remade), as the hallway's File Locator makes; with --v4 the plain\n"
+                                    "installer (the listing, then every file packed by LZMA2); with --v3\n"
                                     "every file's bytes as they are. --manifest then writes that manifest as\n"
                                     "text. --compare also compresses it. sieve install and sieve-install open\n"
                                     "it (sieve-install asks for Sieve where it carries items)."},
@@ -977,7 +977,8 @@ const std::vector<Page>& pages()
                                 "its end. Run, it installs the folder."},
           {"--hex", "Write the installer in hex rather than raw bytes."},
           {"--v3", "Make the older installer: every file's bytes as they are, not packed (sieve-manifest-v3)."},
-          {"--items", "Carry the files that are items of the pages, image, video, audio and AI lines as\n"
+          {"--v4", "Make the plain installer: every file packed by LZMA2, no items and no rope (sieve-manifest-v4)."},
+          {"--items", "(The default now; kept so older command lines work.) Carry the files that are items of the pages, image, video, audio and AI lines as\n"
                       "their lines and places there (sieve-manifest-v7): each place as raw bytes, or, for\n"
                       "the AI line, coded by its tensors' digit histograms where that is smaller; a model\n"
                       "of the AI line as its weights' digits, not its file's floats. The pages are\n"
@@ -988,20 +989,20 @@ const std::vector<Page>& pages()
                                   ".gz as what it holds; a .7z or .zip as its contents, in a folder named after it\n"
                                   "(installing says so: the archive itself is not given back); each only where clearly\n"
                                   "smaller. Off unless given."},
-          {"--v16", "With --items: as sieve-manifest-v16 at newest, no gzip remade (carried as what it holds)."},
-          {"--v15", "With --items: as sieve-manifest-v15 at newest, the listing's head as text (v16 writes it in bytes)."},
-          {"--v14", "With --items: as sieve-manifest-v14 at newest, the rope's ways those of rope-wave-v4 and before."},
-          {"--v13", "With --items: as --v14, and no archives optimised (sieve-manifest-v13 at newest)."},
-          {"--v12", "With --items: as sieve-manifest-v12 at newest, no file cut into pieces."},
-          {"--v11", "With --items: as sieve-manifest-v11 at newest, an empty stream's line kept and the files\n"
+          {"--v16", "As sieve-manifest-v16 at newest, no gzip remade (carried as what it holds)."},
+          {"--v15", "As sieve-manifest-v15 at newest, the listing's head as text (v16 writes it in bytes)."},
+          {"--v14", "As sieve-manifest-v14 at newest, the rope's ways those of rope-wave-v4 and before."},
+          {"--v13", "As --v14, and no archives optimised (sieve-manifest-v13 at newest)."},
+          {"--v12", "As sieve-manifest-v12 at newest, no file cut into pieces."},
+          {"--v11", "As sieve-manifest-v11 at newest, an empty stream's line kept and the files\n"
                     "always packed by LZMA2."},
-          {"--v10", "With --items: as sieve-manifest-v10 at newest, the rope's ways those of rope-wave-v3 and before\n"
+          {"--v10", "As sieve-manifest-v10 at newest, the rope's ways those of rope-wave-v3 and before\n"
                     "(no columns sharing tables)."},
-          {"--v9", "With --items: as sieve-manifest-v9 at newest, the rope's ways those of rope-wave-v2 and before."},
-          {"--v8", "With --items: as sieve-manifest-v8, the rope's ways those of rope-wave-v1."},
-          {"--v7", "With --items: as sieve-manifest-v7, no file pulled tight by the rope."},
-          {"--v6", "With --items: as sieve-manifest-v6, every place as raw bytes and the listing in full."},
-          {"--v5", "With --items: as sieve-manifest-v5, each place in hex in the listing, and no AI line."},
+          {"--v9", "As sieve-manifest-v9 at newest, the rope's ways those of rope-wave-v2 and before."},
+          {"--v8", "As sieve-manifest-v8, the rope's ways those of rope-wave-v1."},
+          {"--v7", "As sieve-manifest-v7, no file pulled tight by the rope."},
+          {"--v6", "As sieve-manifest-v6, every place as raw bytes and the listing in full."},
+          {"--v5", "As sieve-manifest-v5, each place in hex in the listing, and no AI line."},
           {"--item-hashes", "With --items: keep each item's own SHA-256 in the listing as well as the tree's (v7:\n"
                             "every file's own, as --file-hashes)."},
           {"--file-hashes", "With --items: keep every file's own SHA-256 in the listing as well as the tree's (v7\n"

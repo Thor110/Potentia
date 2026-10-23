@@ -833,7 +833,7 @@ jobs:
           # sieve-install, unattended: the fixture put back from its installer (v4, packed),
           # identical; a second time over it is refused (exit 1), as is a damaged installer. Then
           # the fixture with a program and a list made from another's lines in it, packed, too.
-          build/sieve locate tests/manifest_fixture --installer fx.sieve > /dev/null
+          build/sieve locate tests/manifest_fixture --installer fx.sieve --v4 > /dev/null
           rm -rf fx_installed
           build/sieve-install fx.sieve --to fx_installed --yes --screenshot installer.bmp
           diff -r tests/manifest_fixture fx_installed
@@ -844,13 +844,13 @@ jobs:
           test ! -e fx_broken
           rm -rf fx4 fx4_installed && cp -r tests/manifest_fixture fx4 && cp build/sieve fx4/program
           seq 1 20000 > fx4/all.txt && awk 'NR % 3 == 0' fx4/all.txt > fx4/third.txt
-          build/sieve locate fx4 --installer fx4.sieve 2>&1 | grep -c "1 derived from another's lines" > /dev/null
+          build/sieve locate fx4 --installer fx4.sieve --v4 2>&1 | grep -c "1 derived from another's lines" > /dev/null
           build/sieve-install fx4.sieve --to fx4_installed --yes
           diff -r fx4 fx4_installed
           # An installer carrying one 7z: sieve-install unpacks it into a folder named after the file,
           # its one top folder left out, so the fixture comes back as it was; the locator's own
           # install gives back the archive itself, byte for byte.
-          build/sieve locate tests/manifest_fixture.7z --installer fx7.sieve > /dev/null
+          build/sieve locate tests/manifest_fixture.7z --installer fx7.sieve --v4 > /dev/null
           rm -rf fx7 fx7raw
           build/sieve-install fx7.sieve --to fx7 --yes
           diff -r tests/manifest_fixture fx7
@@ -863,12 +863,12 @@ jobs:
           cp build/sieve build/sieve-install layout/tools/ && cp -r build/dictionaries build/models layout/
           (cd layout/tools && ./sieve dicts | grep -q "layout/dictionaries/dictionaries.tsv")
           (cd layout/tools && ./sieve models | grep -q "layout/models/models.tsv")
-          layout/tools/sieve locate tests/manifest_fixture --program layout-installer > /dev/null
+          layout/tools/sieve locate tests/manifest_fixture --program layout-installer --v4 > /dev/null
           rm -rf fx_layout && ./layout-installer --to fx_layout --yes && diff -r tests/manifest_fixture fx_layout
           # An installer program: sieve-install with the installer attached, run on its own, and
           # read by sieve install; exactly the program, the installer and a 24-byte trailer; and
           # made from a program that already has one attached, the old one replaced, not added to.
-          build/sieve locate tests/manifest_fixture --program fx-installer > /dev/null
+          build/sieve locate tests/manifest_fixture --program fx-installer --v4 > /dev/null
           rm -rf fx_prog fx_prog2
           ./fx-installer --to fx_prog --yes
           diff -r tests/manifest_fixture fx_prog
@@ -880,7 +880,7 @@ jobs:
           diff -r tests/manifest_fixture fx_gui
           test "$(wc -c < fx-installer)" -eq "$(( $(wc -c < build/sieve-install) + $(wc -c < fx.sieve) + 24 ))"
           rm -rf again && mkdir again && cp build/sieve again/ && cp fx-installer again/sieve-install
-          again/sieve locate tests/manifest_fixture --program fx-again > /dev/null
+          again/sieve locate tests/manifest_fixture --program fx-again --v4 > /dev/null
           cmp fx-installer fx-again
           # The File Locator (pause menu): a folder measured, and a file walked to on the binary line.
           $H --no-menu --locate tests/manifest_fixture --screenshot locate.png | q "saved locate.png"
@@ -1091,7 +1091,7 @@ jobs:
           grep '^final ' ub_run/result.txt | cut -d' ' -f2 > ub_final.hex
           build/sieve ai --address-file ub_final.hex --out ub_model > /dev/null
           cp ub_model/model.safetensors ub_one/
-          build/sieve locate ub_one --installer ub-v4.sieve > /dev/null
+          build/sieve locate ub_one --installer ub-v4.sieve --v4 > /dev/null
           build/sieve locate ub_one --installer ub-v6.sieve --items --v6 --manifest ub-v6.manifest | tr -d '\r' | q "^items     1 file(s) carried as items of Sieve's lines (34072 bytes, as 4096 bytes of places"
           [ "$(wc -c < ub-v6.sieve)" -lt "$(wc -c < ub-v4.sieve)" ]
           build/sieve install ub-v6.sieve --to ub_inst > /dev/null
@@ -2113,7 +2113,7 @@ jobs:
           $S map sealed.sieve 2>&1 | grep -c "sealed (sealed)" > /dev/null
           if $S map sealed.sieve --add $F/a.txt --out sealed2.sieve 2> /dev/null; then exit 1; fi
           # Any instructions read as a map: those without a graph part as the map of their tree.
-          $S locate $F --installer tree.sieve > /dev/null
+          $S locate $F --installer tree.sieve --v4 > /dev/null
           $S map tree.sieve | grep -c "^root manifest_fixture$" > /dev/null
           # An older map file (the oracle writes sieve-map-v2, held bytes and all) is still read, and
           # becomes Sieve instructions with the same text.
@@ -2221,7 +2221,7 @@ jobs:
           if [ "$(uname -s)" = Darwin ]; then { printf '\177ELF'; cat $S; } > v4fx/program; fi
           python -c "open('v4fx/all.txt', 'w').write(''.join(f'{i}\n' for i in range(1, 20001)))"
           python -c "open('v4fx/third.txt', 'w').write(''.join(f'{i}\n' for i in range(3, 20001, 3)))"
-          out=$($S locate v4fx --manifest fixture4.manifest --installer fixture4.sieve | tr -d '\r')
+          out=$($S locate v4fx --manifest fixture4.manifest --installer fixture4.sieve --v4 | tr -d '\r')
           echo "$out" | grep -v "^[df]	"
           echo "$out" | grep -c "1 program(s) in the x86 stream" > /dev/null
           echo "$out" | grep -c "third.txt: lines of all.txt" > /dev/null

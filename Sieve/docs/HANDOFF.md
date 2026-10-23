@@ -3854,6 +3854,9 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
 - **The repository's README:** eleven lines, version 0.13.75, recorded training and the web
   extension among what is built.
 - **Edward's next step:** new screenshots for the README (he is moving the old ones out).
+- **`sieve locate --installer` and `--program` make the newest by default** (Edward, 23 October 2026);
+  `--v4` makes the plain installer, `--items` is accepted and changes nothing. CI lines that
+  expect v4 pass `--v4`. Not yet tested (Edward's usage limit): build, run the CI.
 
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s

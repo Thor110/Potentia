@@ -2,8 +2,8 @@
 
 This page covers making an installer for a folder, handing it to someone, and installing from it.
 Installers **pack their files themselves**, so there is no separate compressing step. The plain
-installer is `sieve-manifest-v4`, described first below; the hallway's File Locator and
-`sieve locate --items` make the newest (`sieve-manifest-v16`, or v17 where a gzip is remade), which
+installer is `sieve-manifest-v4` (`--v4`), described first below; the hallway's File Locator and
+`sieve locate --installer` make the newest (`sieve-manifest-v16`, or v17 where a gzip is remade), which
 also pull files tight with the rope, cut them into pieces, and carry items of Sieve's lines by their
 places (*The formats, as they grew*, below; every version in full: SPECIFICATIONS §12.2). Every
 option: `sieve help locate`, `sieve help install`, `sieve-install --help`.
@@ -75,7 +75,7 @@ From the command line:
 sieve locate RELEASE --program "Release installer.exe"   # an installer program: one file to hand out
 sieve locate RELEASE --installer release.sieve           # the installer on its own
 sieve locate RELEASE --installer release.sieve --compare # and the sizes beside zip and 7z
-sieve locate RELEASE --installer release.sieve --items --search-per-file 10   # the newest, as the File Locator makes
+sieve locate RELEASE --installer release.sieve --v4      # the plain installer: every file packed by LZMA2
 sieve locate RELEASE --installer release.sieve --v3      # the older installer: every file as it is
 sieve locate notes.txt --installer notes.sieve           # a single file works the same way
 ```
