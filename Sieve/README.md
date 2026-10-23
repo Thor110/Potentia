@@ -16,7 +16,11 @@ Special thanks to Claude Opus 5.5 for helping to build out the Sieve system base
 | :--- | :--- |
 | `core/` | Dependency-free C++20 library: alphabets, palettes, notes, exact big integers, SHA-256, address map, canonicalisation, sieve, guided coder, the filtration stack (`core/src/filters/`) |
 | `tools/sieve_cli.cpp`, `tools/cli/` | The `sieve` command-line tool |
-| `client/` | The `hallway`: a 3D wireframe walk along the lines: image, pages, books, audio, tracks, video, movies, models and binary (SDL3) |
+| `client/` | The `hallway`: a 3D wireframe walk along the lines: image, pages, books, audio, tracks, video, movies, models, worlds, AI and binary (SDL3); and `sieve-install`, the small installer |
+| `web/` | Sieve on the web: the Chrome extension (`extension/`), its native host's registration (`host/`), and the test site (`test-site/`, built by `sieve site`); [web/README.md](web/README.md) |
+| `tools/make_release.py`, `tools/make_release.bat` | Makes a Sieve release (docs/SIEVE-INSTALL-USAGE.md, "Making a Sieve release") |
+| `tools/run_tests.bat`, `tools/check_vectors.py` | Every test on Windows; every conformance vector through the oracle |
+| `tools/check_help.py` | Checks that `sieve help` and `hallway --help` name every option the programs read (the CI runs it) |
 | `tools/plot_sieve.py` | Plots sieve results (needs matplotlib) |
 | `tools/build_dictionary.py` | Rebuilds the English dictionaries from SCOWL |
 | `data/filters/` | The reference filter plugins (`.sfilter`), and the tagged lists the grammar plugins read (the Moby part-of-speech list, its inflections and names; `moby-pos-v1.md`) |
@@ -42,6 +46,10 @@ Special thanks to Claude Opus 5.5 for helping to build out the Sieve system base
 | `docs/SYSTEM-PROMPT.md` | `sieve-system-v1`, what a language model is told about where it is and what it is: pinned, versioned, never edited |
 | `docs/REVIEW.md` | The last code review: what it fixed, and what it found and left |
 | `docs/IDEAS.md` | What is not built yet: defects, filters, open questions, and what to be careful of |
+| `docs/SIEVE-INSTALL-USAGE.md` | Making installers, handing them out, installing, and making a release |
+| `docs/FILTER-PLUGINS.md`, `docs/FILTERS-CONFLICTS.md`, `docs/TRANSFORM-FILTERS.md` | Filter plugins (`.sfilter`); filters that cannot be counted together; compressed and encrypted copies as filters |
+| `docs/VAULT.md` | The vault: what Sieve refuses to show, and how it recognises it |
+| `docs/GAME.md` | *State Space: Near Zero*, the design for Sieve as a game |
 | `docs/images/` | Hallway screenshots |
 
 ## Build
@@ -94,7 +102,7 @@ Sieve\
 
 ## Key terms
 
-- **Line:** a kind of content. There are four: `text`, `image`, `audio` and `video`.
+- **Line:** a kind of content: `text` (pages), `image`, `audio`, `video`, and those built from them or beside them (`books`, `tracks`, `movies`, `models`, `worlds`, `ai`, `binary`). `sieve help lines` lists them.
 - **Unit:** one "book" on a line's shelf. Its shape is fixed: exactly `--length` characters, or a WxH picture, or N notes.
 - **Space:** every possible unit of one line with one set of options.
 - **Address:** a unit's position in the space, written in hex. Every unit has exactly one address, and every address in range holds exactly one unit.
@@ -107,7 +115,7 @@ Getting help from the tool itself:
 ```sh
 sieve                     # commands and a quick start
 sieve help warp        # full explanation and examples for one command (or: sieve warp --help)
-sieve help lines       # the four lines and all of their options
+sieve help lines       # the lines and all of their options
 ```
 
 ## Lines
@@ -155,9 +163,9 @@ Size of each space with the default options:
 hallway [options]          (hallway --help for the full list)
 ```
 
-All five lines (the four unit lines and books) share **one endless corridor** lined with bookcases. **Every book is one unit**, and the address increases as you walk forward:
-- Each tile of corridor holds **128 book slots** (4 shelves of 16 on each wall): the left wall first, then the right wall.
-- 128 is a power of two, and the code refuses to build if it isn't (`sieve/corridor.hpp`).
+Every line shares **one endless corridor** lined with bookcases. **Every book is one unit**, and the address increases as you walk forward:
+- Each tile of corridor holds **128 book slots** unless set otherwise (4 shelves of 16 on each wall): the left wall first, then the right wall. The setup menu's items per wall, or `--items-per-wall N`, sets it: a power of two from 2 to 4096, changing no address, only the tile and slot that name a place.
+- It must be a power of two, and the code refuses to build if it isn't (`sieve/corridor.hpp`).
 - On each wall the books run shelf by shelf from the top, and along each shelf in the direction you are walking.
 - One tile of geometry is built once and repeated forever.
 
@@ -480,7 +488,7 @@ The wheel scrolls down, **Shift** and the wheel across, **Ctrl** and the wheel z
 
 The **Media Player** (pause menu, or main menu) has three columns. On the left are the last ten melodies the player chose, each with where it played (`WORLD [BINARY]`, `MENUS`) and when; melodies you play yourself are not listed. In the middle are the controls: one form, with MODE switching between the menus' settings and the world's. They cover the music on or off, volume, where melodies come from (the audio line or the tracks line, and the units a track), length, tempo, voice, echo, the quiet between melodies, a new melody now, and the mode's filters with their settings (apart from the setup menu's). On the right are the favourites. The actions act on the highlighted melody of the list used last: play it, go to it (on the audio line, or the tracks line for a track, in hand; one of another length, note set or number of units than this hallway's builds the hallway again with it), save it as MIDI, add it to the favourites or take it off. Favourites are kept as Sieve instructions, `sieve-favourites.sieve` (each a MIDI file, and an index of their notes), which `sieve install` unpacks like any other. The settings and the recent list are kept in `sieve-music.ini`, both beside the hallway's settings. `--no-music` keeps the app silent.
 
-**Options.** The hallway takes the same line options as `sieve`, renamed per line because all four lines are open at once:
+**Options.** The hallway takes the same line options as `sieve`, renamed per line because every line is open at once:
 
 | Line | Options |
 | :--- | :--- |
@@ -520,6 +528,10 @@ On a machine without a display, set `SDL_VIDEO_DRIVER=offscreen` and `SDL_RENDER
 
 Doors work the same in guided order. At zoom *d* the guided loop is 2^*d* books long, and the lines without a model (image, audio, video) keep their raw ordering.
 
+**The File Locator** (from the main menu, or Esc in the hallway) weighs every file it reads as `sieve locate --weigh` does (`sieve help locate`), under the hallway's own lines and filters, with **Tailor the filters to these files** (above it, **Search for shorter addresses**: how long a file, and how long the whole run, each with − and + or the keys `[` and `]`, Shift for the run; moving one moves the other, through the files counted, and the first step down is no limit; the row is there before anything is chosen, so the first search can have its time, and the time is kept in `sieve-hallway.ini` under `[locator]`, `search_seconds` and `search_for`, for the next run; it is also how long the tightened rope searches each file). Reading 16 MiB or more, it first times the same work on 2 MiB taken from across the file and shows an estimate of the whole, and the time so far; when it is done it says how long it took against the estimate. While it works, a line above the estimate says what it is doing and the best found so far, and **Stop (keep the best so far)**, or S, ends it with that best: one LZMA2 pass is always made, so what it ends with installs; pressed again, it is **Force stop (the last finished result)**, which abandons the pass under way as well (a stream with no pass finished is carried as it is). Above it, a graph draws each step's best so far as it is found (LZMA2's passes, the rope's search), each step's line falling from its first try as it finds smaller; it stays beside the result afterwards. Saving writes the instructions made when it was read, with nothing packed again, unless the search's time or the archives box changed since, and then **Use the tailored filters**, which builds the hallway again with them and saves them, as Return on COST does. Opened from the main menu, it weighs under the lines the setup menu's settings would build, and **Use the tailored filters** saves them for the next hallway.
+
+**A demonstration: every dimension at every degree.** `hallway --no-menu --sample-degrees DIR --screenshot x.png` saves, for every dimension and every whole degree from 0 to 359, the item that bearing names (the first unit at or past it, as the navigator's bearing field goes), into `DIR/<dimension>/` as its file named by its title (pictures one pixel a pixel, as J reads them; a binary file as its bytes; a cover is not saved), says which file each degree gave, and makes the folder into Sieve instructions (`DIR.sieve`, or `--sample-out FILE`). At the default shapes, eleven dimensions, that is 3,960 items, 13,321,756 bytes (most of them the AI line's models, 131,072 bytes of weights each), in a `.sieve` of 482,495 bytes. Installing it gives every file back, each checked against its SHA-256, and typing the same bearing in the navigator (X, Tab) lands on the same item again.
+
 ## The filter survey
 
 `tools/survey/survey.py` counts, for a grid of settings on every line, what each filter keeps on its own and what stacks of them keep together. It runs the `sieve` tool itself, so the figures are the engine's own. Each row gives:
@@ -547,43 +559,31 @@ python tools/survey/survey.py --only image,audio --dry-run
 
 ## Commands
 
-### `info`: how big is a space?
-
-```
-sieve info [--line LINE] [line options] [--key K]
-```
+Every command's options, defaults and examples are in the program itself, kept with the code
+that reads them:
 
 ```sh
-sieve info --length 1000                              # paragraph-scale text
-sieve info --line image --palette rgb24               # every 10x10 full-colour image
-sieve info --line video                               # every 8-frame 5x5 animation
+sieve help                 # every command, by what it is for
+sieve help warp            # one command in full (or: sieve warp --help)
+sieve help lines           # the lines and their options
+hallway --help             # the hallway's options
+sieve-install --help       # the installer's
 ```
 
-### `warp`: give some content, get its address
-
-```
-sieve warp [--line LINE] [line options] [--key K] [--mode MODE] [--short] (TEXT... | --file PATH)
-```
-
-Fits the input to the line with fixed, versioned rules (see *Canonicalisation* below) and reports every change it made. It then prints each unit's address, how far along the line it sits, and a preview. Images and video are drawn as ASCII art.
-
-| Option | Meaning |
-| :--- | :--- |
-| `--mode MODE` | `positional`, `scrambled`, `guided` or `all` (default: every ordering the line has; `both` also works). |
-| `--model ID\|PATH\|none` | Text: the model for guided addresses. Default: the alphabet's default model (see `models`). |
-| `--short` | Abbreviate long addresses as `start...end (N digits)`. |
-| `--file PATH` | Read the input from a file. |
+A quick start:
 
 ```sh
-sieve warp --length 32 "It was the best of times"
-sieve warp --length 1000 --file chapter1.txt
-sieve warp --line image --file sprite.png
-sieve warp --line image --palette ega16 --width 16 --height 16 --file sprite.png
-sieve warp --line audio "E4q D4q C4q D4q E4q E4q E4h"
-sieve warp --line video --file walk.gif --short
+sieve warp --length 32 "It was the best of times"                 # its address in every ordering
+sieve read --length 32 --mode scrambled 007b30165818bf0311497600aa52996f9395e27
+sieve browse --line image --count 3                                # random pictures: noise
+sieve browse --length 64 --mode guided                             # random points on the guided line: text-like
+sieve locate release --installer release.sieve --items --compare  # a folder as one address
+sieve install release.sieve --to C:/Programs/Sieve                 # and back
 ```
 
-Example output:
+`warp` fits the input to the line with fixed, versioned rules (see *Canonicalisation* below),
+reports every change it made, and prints each unit's address, how far along the line it sits,
+and a preview:
 
 ```
 line         text
@@ -601,479 +601,21 @@ unit 1/1  "it was the best of times        "
               58 bits: 1.81 bits/symbol (raw 4.75), at 56.4730431890% along the guided line
 ```
 
-### `read`: give an address, get the content
-
-```
-sieve read [--line LINE] [line options] [--key K] --mode MODE [--out PATH] [--scale S] ADDRESS
-```
-
-This is the reverse of `warp`. Every option that shaped the address must match; otherwise you'll read a different unit, because every address in range holds *something*.
-
-| Option | Meaning |
+| Group | Commands |
 | :--- | :--- |
-| `--mode MODE` | **Required.** `positional`, `scrambled` or `guided`. A guided address is any hex fraction (`8` is halfway): it reads the unit whose stretch of the line contains that point. |
-| `--out PATH` | Also save the unit: `.png` for images and video (frames side by side), `.mid` for audio, a text file for text. |
-| `--scale S` | Enlarge each pixel to S×S in the saved PNG. Default 16. |
-| `--around N` | Also show the N units on either side: what the hallway shows around this shelf. The line loops, so the last address is followed by the first. |
-| `--zoom D` | Guided `--around` and `--at`: the books are `2^-D` of the line apart. Default (for `--around`): the length of the unit's own address. |
-| `--at TILE:SLOT` | Instead of an address: the book at that place on the hallway's shared corridor (the tile number the hallway shows, and slot 0–127). |
-
-```sh
-sieve read --length 32 --mode scrambled 007b30165818bf0311497600aa52996f9395e27   # "it was the best of times"
-sieve read --line image --mode scrambled <address> --out found.png
-sieve read --line audio --mode scrambled <address> --out tune.mid
-sieve read --length 12 --mode positional --around 3 <address>
-sieve read --length 32 --mode guided 90922c700685e28                    # "it was the best of times"
-sieve read --length 32 --mode guided --around 4 --zoom 20 90922         # a zoomed-out guided shelf
-sieve read --line image --mode positional --at 4627:0                    # what the hallway shows at tile 4627, slot 0
-```
-
-With `--around`, positional order shows that neighbours differ only at the end. Scrambled order shows that they are unrelated:
-
-```
-      -1  "hello worlcz"  0a1fe3967f0accb
->     +0  "hello world "  0a1fe3967f0accc
-      +1  "hello worlda"  0a1fe3967f0accd
-```
-
-### `browse`: pull random units off the shelves
-
-```
-sieve browse [--line LINE] [line options] [--key K] [--mode scrambled|guided] [--count N] [--seed S] [--short]
-```
-
-```sh
-sieve browse --length 32
-sieve browse --length 64 --mode guided        # random points on the guided line
-sieve browse --line image --count 3
-sieve browse --line audio
-```
-
-A random scrambled address is a uniformly random unit, so it is noise. A random *guided* point is a sample from the model, so it reads like text: `"great piedro had lifted on that in had made no come are and the "`. That is what the guided line is built to do, and it is why fluency is never evidence that a text is real.
-
-### `sift`: how much of the text space survives each noise filter (M1)
-
-(`sieve sieve` still works as an alias.)
-
-```
-sieve sift [--dict ID|PATH] [--lengths SPEC] [--brute-max N] [--pruned-max N] [--threads T] [--csv PATH]
-```
-
-For each unit length, counts **exactly** how many `lower27` units pass three filters, each stricter than the last:
-
-| Filter | A unit passes if... |
-| :--- | :--- |
-| `clean` | it has no double spaces and at least one letter |
-| `window` | it could be a snippet cut from English text: whole words inside, a word *ending* at the left edge, a word *beginning* at the right edge |
-| `words` | every token is a complete dictionary word |
-
-| Option | Meaning |
-| :--- | :--- |
-| `--dict ID\|PATH` | A registered dictionary (see `dicts` below): `scowl-en-35`, `scowl-en-60` or `scowl-en-80`, or the same sizes with proper names, `scowl-en-35-names`, `scowl-en-60-names` (default) and `scowl-en-80-names`; `35`, `60` and `80` also work (the lists without names). Its SHA-256 is checked before use. A value containing `/` or `\` or ending in `.txt` is read as a file path instead, unchecked. |
-| `--lengths SPEC` | Numbers and ranges, e.g. `1-32,64,100,1000`. Default `1-12`. |
-| `--brute-max N` | Also check up to length N by visiting every unit. Default 5. On 2 cores, N=6 takes ~30 s and N=7 ~10–15 min. |
-| `--pruned-max N` | Also check up to length N by pruned tree walk. Default 6. On 2 cores, N=7 takes ~15 s and N=8 ~2 min. |
-| `--threads T` | Worker threads. Default: all cores. |
-| `--csv PATH` | Write results to a file instead of the screen. |
-
-```sh
-sieve sift
-sieve sift --lengths 1-64,100,1000 --csv results/sieve.csv
-sieve sift --dict scowl-en-35 --lengths 1-20
-python3 tools/plot_sieve.py results/sieve.csv results/sieve.png "SCOWL size 60"
-```
-
-CSV columns:
-
-| Column | Meaning |
-| :--- | :--- |
-| `length` | Unit length |
-| `log10_units` | log10 of 27^L |
-| `clean`, `window`, `words` | Exact survivor counts |
-| `log10_frac_*` | log10 of the fraction of the space that survives |
-| `verified_by` | Which methods agreed |
-| `pruned_window_states` | Prefix-tree nodes visited by the pruned walk |
-| `log10_frac_prefix_tree_explored` | The fraction of the prefix tree that represents |
-
-### `filters`, `check`: the filtration stack
-
-```
-sieve filters [--line LINE] [line options] [--filters PATH]
-sieve check   [--line LINE] [line options] [--filters PATH] (TEXT... | --file PATH | --book FILE)
-sieve tailor  [--line LINE] [line options] [--filters PATH] [--unit N] [--out PATH] (TEXT... | --file PATH)
-```
-
-`sieve tailor` is the item page's K (above): the filters, and their settings, that keep the input's unit (or every unit, `--unit all`, under one stack) and write its address with the cleanest digits. It prints each filter with the settings found and its score alone, ticked where it was used and otherwise why not; the routes unfiltered and under the stack found; what writing the stack down costs (with `--describe` the search pays for that too, as a stack that travels with its addresses must); and each unit's survivor number and route. `--out` writes the settings file with that line's filters replaced, in compact mode. Here the description costs more than the filters save, so with `--describe` it finds nothing worth it: a stack for one melody pays only where it is shared.
-
-```sh
-sieve tailor --line audio --length 8 --out tailored.ini "A4q C5q D5q E5q G5q A4q C5q E5q"
-#   [x] key-data-v2             44.0 bits alone  scale=major-pentatonic
-#   [x] melody-lengths-v2       40.0 bits alone  longest=q  shortest=E
-#   ...
-#   address      56.0 bits (the shortest route on the line, unfiltered)
-#   tailored     16.0 bits of route, 28.6% of the address
-#   description  65.5 bits to write the stack down (not counted; --describe)
-#   total        81.5 bits with the description, against 56.0 bits
-#   compact      17.6 bits wide (every survivor's fixed-width address)
-#   survivor     46327 of 204994, route b4f7
-```
-
-`sieve filters --line books` lists the books line's three stacks (cover, title and pages) and counts the surviving books, and `sieve check --book FILE` judges a whole book record. `filters` lists every filter a line offers: which are ticked, their descriptions and parameters, and what each implies. It ends with the stack's provenance and id, and either the exact survivor count or why compact is unavailable. `check` fits content to the line as `warp` does. For each unit it shows every filter's verdict, whether the unit passes the ticked stack, and, if the stack can rank, its **survivor number**: its place on compact shelves. `read --survivor K` goes the other way. `--compact` on `warp`, `read` and `browse` works in the compact orderings: `warp --compact` adds a survivor's compact addresses, `read --compact` reads one, and `browse --compact` picks uniformly random survivors, or with `--mode guided` samples the model restricted to survivors:
-
-```sh
-sieve filters --filters words2.ini
-#   survivors    3037669199976796308182197712 (exact; compact mode available)
-sieve check --length 32 --filters words2.ini "It was the best of times"
-#   [ ] words-v1                FAIL
-#   [x] words-v2                pass
-#   stack: passes, survivor number 1533066303779775957571202953 of 3037669199976796308182197712
-sieve read --length 32 --mode positional --filters words2.ini --survivor 1533066303779775957571202953
-#   it was the best of times
-sieve warp --length 32 --filters words2.ini --compact "It was the best of times"
-#   compact     survivor number 1533066303779775957571202953 of 3037669199976796308182197712
-#     positional  4f41f6adb2a88bdbd07ef89
-#     scrambled   2afad38e8cb58c79243f9f6
-#     guided      90b25da06c4d36a  (59 bits: 1.84 bits/symbol)
-sieve browse --length 32 --filters words2.ini --compact --count 1 --seed 1
-#   "most moot nam been fer vats dusk"
-```
-
-### `dicts`: the dictionary registry
-
-```
-sieve dicts [--hash FILE]
-```
-
-Dictionaries are registered in `data/dictionaries/dictionaries.tsv`, one per line, with these fields: id, file, language, default, SHA-256 and description. Every command that takes `--dict ID` looks the id up there. If a file's hash no longer matches, the command refuses to use it, so a result recorded with a dictionary id can always be reproduced with exactly the same words. `sieve dicts` lists every entry, marks the default and checks each file.
-
-To add a dictionary:
-
-1. Put the word list (one word per line) in `data/dictionaries/`.
-2. Run `sieve dicts --hash data/dictionaries/FILE`. It prints the word count, the SHA-256 and a ready-made registry line.
-3. Paste that line into `dictionaries.tsv` with your own id and description. To make it the default, set its `default` column to `yes` and the old default's to `no`.
-4. Rebuild, so the copy next to the executable is updated.
-
-Never edit an existing entry's file or hash. A changed list gets a new id, so older results stay reproducible.
-
-```
-registry  data/dictionaries/dictionaries.tsv
-
-  scowl-en-35   en  40201 words, hash ok
-    SCOWL 2020.12.07 size 35: common English words, British and American spellings
-  scowl-en-60   en  79645 words, hash ok
-    SCOWL 2020.12.07 size 60: SCOWL's recommended spell-check size
-  scowl-en-80   en  251174 words, hash ok
-    SCOWL 2020.12.07 size 80: large, includes rare words
-  scowl-en-35-names  en  40326 words, hash ok
-    SCOWL 2020.12.07 size 35 with capitalised words and proper names (case kept)
-* scowl-en-60-names  en  88986 words, hash ok
-    SCOWL 2020.12.07 size 60 with capitalised words and proper names (case kept): England, Dickens
-  scowl-en-80-names  en  281180 words, hash ok
-    SCOWL 2020.12.07 size 80 with capitalised words and proper names (case kept)
-```
-
-The `-names` lists keep SCOWL's capitals (`England`); the lower-case alphabets read them as lower case, so one list serves every alphabet. They are the default because real books name people and places. They also bring in abbreviations and symbols SCOWL lists in capitals (`Zn`, `Pt`, `Gs`), so short gibberish tokens pass a little more often than with the plain lists.
-
-### `models`, `train`, `measure`: the models behind guided addresses (M3)
-
-```
-sieve models
-sieve train   --out FILE [--corpus MANIFEST] [--texts DIR] [--alphabet A] [--order K] [--min-count M]
-sieve measure [--model ID|PATH] [--length L] [FILE... | --corpus MANIFEST --texts DIR [--role test|train|all]]
-```
-
-Models are registered in `data/models/models.tsv` and pinned by SHA-256, like dictionaries. Every guided address depends on every count in the model, so a changed file is refused. `sieve models` lists and checks them.
-
-`sieve train` rebuilds a model from a corpus manifest, which lists each file with its encoding, role (`train` or `test`) and SHA-256. The same corpus and options always give the same file, byte for byte:
-
-```sh
-python3 tools/fetch_corpus.py                                   # the 18 Project Gutenberg books
-sieve train --out /tmp/check.model                              # sha256 dff72d8a... = the pinned model
-sieve measure                                                   # bits per character on the held-out books
-```
-
-`sieve measure` reports two figures in bits per character:
-- `stream`: the model's information content, coding the text as one long history.
-- `guided`: the real cost of guided addresses when the text is cut into units.
-
-With no files, it measures the three books held out of training:
-
-```
-text                            symbols   stream   guided    vs raw
-carroll-alice.txt                134371    1.929    1.934     2.46x
-chesterton-thursday.txt          307403    1.944    1.950     2.44x
-shakespeare-macbeth.txt           93070    2.478    2.482     1.92x
-all                              534844    2.033    2.039     2.33x
-```
-
-### `locate`: where a file is, and a folder's manifest
-
-```sh
-sieve locate sieve.exe --compare                     # its place on the binary line, and zip / 7z beside it
-sieve locate sieve.exe --out sieve.hex               # the whole address, in hex
-sieve locate release --manifest release.manifest     # a folder walked and listed (sieve-manifest-v1)
-sieve locate release --manifest release.manifest --addresses release.addresses --compare
-```
-
-A file's place on the binary line is its hex dump plus `0101...01`, one `01` per byte, whatever the line's length setting: the file's name in the space, with its SHA-256 as a short identity. A folder is walked to the bottom and written as a manifest: every folder and file, each file's size and SHA-256, sorted by path, in one canonical text, so the same tree always gives the same manifest and the manifest's SHA-256 names the whole tree. `--compare` sets the original size beside zip's deflate and 7z's LZMA2 (at their strongest, without the archives' headers) and the address, as shares of the original. The address is always 100% of the file, since addressing is not compression; the compressors' figures are upper bounds on how far the data can be reduced.
-
-**Weighing files: `--weigh`.** Every file found is weighed against its own address (its place on the binary line, as long as the file), under the lines and filters you have:
-
-- its number among the binary line's survivors, where the `[binary]` filters rank and it passes them;
-- where it is exactly an item of the pages, image, audio or video line, byte for byte (a page of the line's length, a picture or film as its PNG at one pixel a pixel, a melody as its MIDI file: what F saves), its place on that line, and its number among that line's survivors where its filters rank and it passes them.
-
-Each number is weighed as its **shortest route**: the cleanest digits there are for it, leading zeros dropped or a bearing and a walk. A way other than a file's own address needs whoever reads it to know the line's shape (its symbols and length) and, where filters are used, the stack; each is paid once for all the files that use it, and a line or a stack that costs more to write down than it saves is not used. `--tailored` tailors each line's filters to the files that are its items (as K does for one, the description paid for) and weighs again; `--out-filters` writes the settings file with what it found. `--search-per-file S` and `--search-total S` give that search a time in seconds, a file and the whole run: give one and the other is worked out (the run's is the file's times the files), give both and each bounds it. A search stopped by its time keeps the best found by then, and the table says so; the `search:` line says what was given and what it took. The pages line is `--page-length` characters (32), `--length` being the audio line's.
-
-```sh
-sieve locate items --weigh --tailored --length 8 --width 8 --height 8 --palette mono
-#   weighing (bits)              own address   best way   how
-#     note.txt                             200        200   its own address
-#     pic.png                              624          4   image 3
-#     tune1.mid                            864         36   audio, tailored 1e5230293
-#     tune2.mid                            800         32   audio, tailored a4572bc2
-#     shared: image, 1 file(s): shape 144 bits
-#     shared: audio, 2 file(s): shape 88 bits, filters 26 bits
-#     total: own addresses 2488 bits; best ways 272 + shared 258 = 530 bits (21.3% of the own addresses)
-```
-
-A file that is not one of Sieve's own items keeps its own address: weighing does not compress, it finds the files a line already names shorter. The installer still holds every file's bytes; the weighing says what a listing that named files these ways would come to (IDEAS §12). The File Locator in the hallway weighs every file it reads the same way, under the hallway's own lines and filters, with **Tailor the filters to these files** (above it, **Search for shorter addresses**: how long a file, and how long the whole run, each with − and + or the keys `[` and `]`, Shift for the run; moving one moves the other, through the files counted, and the first step down is no limit; the row is there before anything is chosen, so the first search can have its time, and the time is kept in `sieve-hallway.ini` under `[locator]`, `search_seconds` and `search_for`, for the next run; it is also how long the tightened rope searches each file). Reading 16 MiB or more, it first times the same work on 2 MiB taken from across the file and shows an estimate of the whole, and the time so far; when it is done it says how long it took against the estimate. While it works, a line above the estimate says what it is doing and the best found so far, and **Stop (keep the best so far)**, or S, ends it with that best: one LZMA2 pass is always made, so what it ends with installs; pressed again, it is **Force stop (the last finished result)**, which abandons the pass under way as well (a stream with no pass finished is carried as it is). Above it, a graph draws each step's best so far as it is found (LZMA2's passes, the rope's search), each step's line falling from its first try as it finds smaller; it stays beside the result afterwards. Saving writes the instructions made when it was read, with nothing packed again, unless the search's time or the archives box changed since, and then **Use the tailored filters**, which builds the hallway again with them and saves them, as Return on COST does. Opened from the main menu, it weighs under the lines the setup menu's settings would build, and **Use the tailored filters** saves them for the next hallway.
-
-### `map`: a node graph of verified anchors
-
-```sh
-sieve map release --out maps/release.sieve          # a map of a folder, for the node graph
-sieve map maps/release.sieve --graphml release.graphml # the same map for Gephi, yEd or Cytoscape
-sieve map release --dot release.dot                  # or for Graphviz
-```
-
-Every file and folder is a node, each file named by its size and SHA-256; every folder is linked to what is directly in it. Put a map in `maps/` beside the hallway and the node graph (O) lists it.
-
-A map is written as Sieve instructions (`sieve-manifest-v18`): the files it holds are the instructions' files, so `sieve install` puts them back, and its nodes, links, metadata and seal are their graph part. So any `.sieve` opens in the node graph: one made by `sieve locate` (no graph part) shows the tree it carries, read-only. Older `.map` files are still read, and `--out NAME.sieve` turns one into instructions; nothing writes `.map` any more. Writing one gives the rope's search 10 seconds for each held file (`--search-per-file S`, 0 for no limit): a held archive is already packed, and an unlimited search spends minutes finding nothing.
-
-```sh
-sieve map sieve.exe sieve.sieve --name sieve --seal --out source.sieve         # a release's map, beside the downloads
-sieve map --new finds --out maps/finds.sieve                                      # a new, empty map
-sieve map maps/finds.sieve --add found.bin --out maps/finds.sieve                 # add an anchor (held in the map)
-sieve map maps/finds.sieve --meta "1:source=a folder of old CDs" --out maps/finds.sieve   # give it metadata (META tab)
-sieve map maps/finds.sieve --remove 1 --out maps/finds.sieve                      # and take one out
-sieve map maps/finds.map --out maps/finds.sieve                                   # an older map, as Sieve instructions
-```
-
-### `install`: a folder from one address
-
-```sh
-sieve locate release --installer release.sieve --compare   # the installer: one address
-sieve install release.sieve --to C:/Programs/Sieve            # the folder put back from it
-```
-
-An installer's manifest (`sieve-manifest-v4`) is the folder structure followed by every file **packed**: programs through the x86 filter, a text made of some of another file's lines as a mask of them (each SCOWL list but the largest), all of it LZMA2 at its strongest, so a release-shaped folder comes to 20% of its size, below one LZMA2 stream of it (21%); its own address is the installer. Unpacking gives every file back exactly, checked against its SHA-256. (`--v3` makes the older installer, every file's raw bytes; it is chosen anyway where packing would not be smaller.) (`--with-addresses` writes `sieve-manifest-v2` instead, a listing with every file's address in hex; installers made from v2 before still install.) `install` reads it back, checks every file against its size and SHA-256 before writing any, and will not replace files without `--force`. With `--compare`, `locate` also shows the installer's manifest compressed. **`--items`** makes `sieve-manifest-v5`: a file that is exactly an item of the pages, image, video or audio line (a page as its text, a picture or film as its PNG, a melody as its MIDI file) is carried as its line and its place there instead of its bytes, made again on installing, with one SHA-256 over the whole tree checking every file. `sieve install` and the hallway install it; the small `sieve-install`, which cannot make items, says to use them instead. **`--items --v6`** makes `sieve-manifest-v6`: each item's place written as raw bytes, the fewest its line's places need, all of them one stream carried raw or as LZMA2, whichever is smaller; a line's items carried as places only where that is smaller than its files packed, and otherwise as files; and a model of the AI line (one `sieve ai --out` writes) carried as its digits. **`--items` now makes `sieve-manifest-v7`**: v6 with nothing written that the rest already gives (the file and byte counts, empty streams, a single file's root, a line's options its id already fixes, and every file's own SHA-256, which the tree's covers: `--file-hashes` keeps them; an item listed as `i K path`), the whole listing carried as LZMA2 where that is smaller, and the AI line's places coded by **digit-histogram-v1** where that is smaller: each tensor's histogram of digits, then the model's rank among the models with those histograms, so a trained model, whose digits are less evenly spread than chance spreads them, has a shorter number. Measured on the degree sample (below): v4 482,496 bytes, v5 443,973, v6 391,033, **v7 9,618** (its listing packs from 203,395 bytes to 6,110). For comparison: `tar` with `xz -9e`, 28,152 bytes; 7z's LZMA2 stream of the files' bytes alone, with no names, 9,226. A model trained by Sieve alone (universalbibliothek, 34,072 bytes as `sieve-ai-16432c2a3953.safetensors`): v4 5,818 bytes (the same as v5, which has no AI line), v6 4,486, **v7 4,257**, its 4,096 bytes of digits coded in 4,020; 7z's LZMA2 of the file, 5,576. The File Locator makes v7 too, with the AI line's shape from the setup menu's settings. **Since 19 October 2026 `--items` makes `sieve-manifest-v8`** where it helps: a file that **the tightened rope** (`rope-wave-v1`, Edward's filter: a wave through the file's values, each predicted from those before it, and what the wave leaves coded by how often each byte occurs) codes smaller than LZMA2 packs it is carried so, its wave searched for `--search-per-file` seconds (the File Locator's time for a file). It wins on smooth data: the Vitruvian picture as raw grey pixels, 832,146 bytes against LZMA2's 865,400, and in colour 468,078 against 623,717; not on prose. Its version 2 (`rope-wave-v2`, `C1`) counts each column of a fixed-width line apart, so a table's separators cost almost nothing: a million digits of pi laid out in lines comes to 420,025 bytes against LZMA2's 486,077, the digits' own floor being 415,241 (instructions with it are `sieve-manifest-v9`). Version 3 (`rope-wave-v3`, `C2`) counts each byte's column from the start of its line, for text whose lines vary or break: Edward's `pi6.txt` (pi to a million digits, 1,111,103 bytes, with blank lines and page breaks) comes to 421,491 bytes as Sieve instructions, against 7z's 512,745 (`sieve-manifest-v10`). Version 4 (`rope-wave-v4`, `G1`) lets columns that hold alike share one table and one stream: `pi6.txt` comes to 419,115 bytes as Sieve instructions (`sieve-manifest-v11`). Version 5 (`rope-wave-v5`, `A1`) counts each byte by the byte above it too, so a column whose bytes take turns line by line costs almost nothing: `pi6.txt` comes to 417,139 bytes (`sieve-manifest-v15`), against the digits' floor of 415,241. `sieve-manifest-v16` writes the listing's head in bytes rather than text (the streams' sizes as varints, the tree's SHA-256 as its 32 bytes): a small file's listing goes from 142 bytes to 67, `pi6.txt` to 417,061 and the trained model to 4,185. `sieve-manifest-v12` writes less around a file's bytes where it can: no line for an empty stream, and a file LZMA2 cannot make smaller (a PNG, a JPEG) carried as it is, so a compressed file's instructions are its bytes and about 145 more; `pi6.txt` is 419,096. `sieve-manifest-v13` cuts a file into pieces where that is smaller, LZMA2 taking what repeats and the rope what is unevenly spread: Edward's phone photos (4,139,682 and 4,587,473 bytes) come to 4,111,592 and 4,558,132, against 7z's 4,127,434 and 4,575,201. **Optimise Archive Formats** (`--optimise-archives`, a box in the File Locator, off unless ticked; `sieve-manifest-v14`): an `.xz` is carried as what it holds and remade exactly on installing, and a `.7z` is carried as its contents, in a folder named after it (said so on installing), each only where clearly smaller: `pi6.txt` as an xz (507,092 bytes) comes to 419,117, as a 7z (507,182) to 419,128. Since 21 October a `.gz` is remade exactly where zlib made it (else carried as what it holds) and a `.zip` is carried as its contents (`sieve-manifest-v17`): `pi6.txt` as a gzip (546,741 bytes) comes to 417,128, as a zip (546,827) to 417,107. v8 needs no line, so `sieve-install` installs it unless it carries items. `sieve rope FILE` shows the wave a file pulls tight to and its code beside LZMA2 (`sieve help rope`), and the weighing (`--weigh`, the File Locator's table) weighs every file's rope code as a way to name it: its code, its wave's parameters and its size, the rope's name paid once.
-
-### `web-host`: `.sieve` files in the browser (a first test)
-
-A Chrome extension (`web/extension`) shows the `.sieve` files a page links to, each checked against the hash its link states (an `integrity="sha256-..."` attribute) and decoded by Sieve on this computer, which the browser starts as `sieve web-host` through native messaging. A picture whose source is a `.sieve` shows as the file it holds; a link to one opens the extension's viewer, a page in a frame that runs no scripts. It refuses a `.sieve` whose link states no hash or another one (before decoding it), one of more than one file, and one that carries items, a remade archive or a map. Setting it up (register the host once, load the extension, build and serve the test site) is in [web/README.md](web/README.md).
-
-### `sieve-install`: the installer
-
-The full guide, with what the installer's packing does and what it measures to, is [docs/SIEVE-INSTALL-USAGE.md](docs/SIEVE-INSTALL-USAGE.md). A Sieve release itself is made with `tools/make_release.py` (the same guide, "Making a Sieve release").
-
-`sieve locate FOLDER --installer NAME.sieve` makes the installer: one number, stored as raw bytes. `sieve-install` is the program that installs it, a window with the usual steps: what it installs, where (Browse, or type a path), Install, a progress bar, Finish. Put `NAME.sieve` beside `sieve-install` and run it, or drop the file on its window. Every file is checked against its SHA-256 before anything is written, and Cancel removes whatever was written. It needs nothing else: no data files, only the program and the `.sieve` file. When what it carries is one 7z archive (a release's `sieve.7z`), it unpacks it into a folder named after the file (`C:\TEST\sieve\...`), leaving out the archive's one top folder; see `docs/SIEVE-INSTALL-USAGE.md`. Only the installer does this: `sieve install` and the File Locator give back the archive itself.
-
-To hand someone **one file**, make an installer program: `sieve locate FOLDER --program "NAME installer.exe"`, or the File Locator's "Make an installer..." (it makes a program unless you name the file `.sieve`). That is a copy of `sieve-install` with the installer attached to its end; run it and it installs, and `sieve install` reads it too. It is the program plus the installer plus 24 bytes. `sieve-install` is built on a trimmed SDL of its own (static, optimised for size, with no sound, controllers or GPU), which the first build compiles once, so every installer program carries as little as it can: about 1.5 MB on Linux. (`-DSIEVE_SMALL_INSTALLER=OFF` links the hallway's SDL instead; if that is a shared SDL, the program then needs `SDL3.dll` beside it.)
-
-**A demonstration: every dimension at every degree.** `hallway --no-menu --sample-degrees DIR --screenshot x.png` saves, for every dimension and every whole degree from 0 to 359, the item that bearing names (the first unit at or past it, as the navigator's bearing field goes), into `DIR/<dimension>/` as its file named by its title (pictures one pixel a pixel, as J reads them; a binary file as its bytes; a cover is not saved), says which file each degree gave, and makes the folder into Sieve instructions (`DIR.sieve`, or `--sample-out FILE`). At the default shapes, eleven dimensions, that is 3,960 items, 13,321,756 bytes (most of them the AI line's models, 131,072 bytes of weights each), in a `.sieve` of 482,495 bytes. Installing it gives every file back, each checked against its SHA-256, and typing the same bearing in the navigator (X, Tab) lands on the same item again.
-
-### `bind`, `unbind`: books
-
-```
-sieve bind --out FILE.book [--title TEXT] [--cover PICTURE] [--pages FILE] [--length N] [--mode positional|scrambled|guided] [--key K]
-sieve unbind BOOK [--pages OUT.txt] [--cover OUT.png]
-```
-
-A **book** is composed from the lines, the way the project first imagined books of pages:
-- **Sections:** the book is an ordered list of labelled sections. The **title** is a page on the text line, the **cover** is a picture on the image line, and the **pages** are the body text cut into pages of `--length` characters.
-- **The record:** `sieve-book-v1` is plain text. For each section it gives its line and shape, how its addresses are written, and one address per unit.
-- **Identity:** the book's **id** is the SHA-256 of its content alone. The same book written positionally, scrambled or guided, with any key, has the same id.
-- **Checking:** `unbind` recomputes every unit from its address and refuses a book whose content no longer matches its id.
-
-```sh
-sieve bind --title "A Tale of Two Cities" --cover cover.png --pages tale.txt --length 400 --mode guided --out tale.book
-#   book         fc6e6146640e5b02a8779cac3d2eb49d7a8dce02133fd5d9738cf610a0a48268
-#     title      1 unit(s) on lower27/L400/key=sieve/feistel-sha256-v1, guided
-#     cover      1 unit(s) on image/mono/10x10/L100/key=sieve/feistel-sha256-v1, scrambled
-#     pages      3 unit(s) on lower27/L400/key=sieve/feistel-sha256-v1, guided
-#   record       1026 bytes -> tale.book
-sieve unbind tale.book
-#   a tale of two cities
-#   it was the best of times it was the worst of times ...
-```
-
-In guided order the pages cost about **1.8 bits per character**: the three pages of that example take 416 hex digits, against 1,428 scrambled. So a guided record of real text is smaller than the text itself. The cover has no guided ordering, so a guided book writes it scrambled. The text comes back canonical: lower case, with the punctuation and line breaks gone, which is exactly what the book holds.
-
-`tests/example_book_v1.book` is a committed example. CI unbinds it, rebinds its source to the identical record, and has the Python oracle read it independently to the same id and text.
-
-### `tensors`: a model file taken apart
-
-```
-sieve tensors FILE.safetensors [--config config.json] [--stats | --tsv] [--start-out FILE]
-sieve tensors --config config.json [--start-out FILE]
-sieve tensors FILE.safetensors --pack OUT.sieve-weights
-sieve tensors --unpack FILE.sieve-weights --out FILE.safetensors
-```
-
-The first step towards the AI dimension (IDEAS §15). A model file in the safetensors format is its **start** (an 8-byte length and a JSON table naming each tensor, its type, shape and place) and its **weights** (the tensors' bytes, end to end); the tokenizer and `config.json` are files of their own. This prints the file's size and SHA-256 and the two parts, and says whether the start is the one `safetensors-layout-v1` writes (SPECIFICATIONS §12.0a): if it is, the start need not be kept, because it is rebuilt from the tensors' names, types and shapes. With a Llama model's `config.json` it checks that the config names exactly the file's tensors, so the start is rebuilt from the config alone.
-
-| Option | Meaning |
-| :--- | :--- |
-| `--config FILE` | A Llama model's `config.json`. With a model file: check its tensors against the file's. Alone: build the start a model of that shape has. |
-| `--stats` | Weigh the weights (BF16 and F16 tensors) by kind of tensor: bits a value when each tensor's values are coded by how often they occur, and of their high and low bytes; and the whole so coded. |
-| `--tsv` | The statistics a tensor a line (the oracle's `tensors --tsv` prints the same). |
-| `--start-out FILE` | Write the rebuilt start, to compare with the file's first bytes. |
-| `--pack OUT` | Code the file under a prior over its weights (`sieve-weights-v1`, SPECIFICATIONS §12.0b): each kind of tensor's values under one table of how often each occurs, losslessly; the packed file is read back and checked. |
-| `--unpack FILE --out OUT` | Rebuild the model file from a packed one, refused unless its SHA-256 is the original's. |
-
-```sh
-sieve tensors model.safetensors --config config.json   # the parts, and whether config.json rebuilds the start
-sieve tensors model.safetensors --stats                # how much the weights carry, by kind of tensor
-```
-
-For SmolLM2-360M-Instruct (Hugging Face, `HuggingFaceTB/SmolLM2-360M-Instruct`, commit `a10cc15`, 723,674,912 bytes) the start (32,672 bytes) is rebuilt from `config.json`, and the weights, coded by frequency, come to 475.9 MB of 723.6 MB (65.8%); the whole run takes a few seconds. `--pack` writes the whole file in 476.7 MB (65.9%, against 512.9 MB for xz), and `--unpack` rebuilds it byte for byte. The model is not part of Sieve: download it yourself to try this.
-
-### `chat`: talk to a language model, run by Sieve itself
-
-```
-sieve chat --model FOLDER [--prompt TEXT] [--raw] [--system TEXT] [--max-tokens N] [--temperature T] [--top-p P] [--seed S]
-sieve chat --model FOLDER --encode TEXT | --logits TEXT
-```
-
-The engine of the coming AI dimension (IDEAS §15). FOLDER is a Llama model as it is published (`config.json`, `model.safetensors`, `tokenizer.json`), such as SmolLM2-360M-Instruct from Hugging Face (`HuggingFaceTB/SmolLM2-360M-Instruct`). Sieve reads the tokenizer and runs the model itself, on the processor, with no other runtime: its tokens are those of Hugging Face's own tokenizer, and its predictions agree with the model's official ONNX export to within a few hundred-thousandths (SPECIFICATIONS §12.0c). With `--prompt` it answers once; without, it is a conversation, a message a line, until an empty line. On four cores SmolLM2-360M writes about 9 tokens a second. The model is not part of Sieve: download it to use it.
-
-| Option | Meaning |
-| :--- | :--- |
-| `--prompt TEXT` | One message: print the reply and stop. |
-| `--system TEXT` | The system line (default: the model's own). |
-| `--max-tokens N` | The longest reply (512). |
-| `--temperature T`, `--top-p P`, `--top-k K`, `--repeat-penalty R` | How it chooses each token (0.2 and 0.9 by default, as SmolLM2's makers suggest; temperature 0: always the likeliest). |
-| `--seed S` | The same seed gives the same reply. |
-| `--raw` | No chat format: the model continues the text as it is (for the AI line's models, which know no chat). |
-| `--threads N` | Threads for the model; the result does not change. |
-| `--encode TEXT` | How the tokenizer reads a text: its tokens. |
-| `--logits TEXT` | The five likeliest next tokens after a text (`--logits-out FILE` writes them all). |
-
-```sh
-sieve chat --model SmolLM2-360M-Instruct --prompt "Write a haiku about libraries"
-```
-
-### `ai`: the AI line, every language model of one shape
-
-```
-sieve ai [--ai-layers L] [--ai-width H] [--ai-heads A] [--ai-bits B] [--key K] [--mode MODE]
-         [--read ADDR | --address-file FILE | --bearing DEG | --browse N [--seed S]] [--prompt TEXT] [--max-tokens N] [--temperature T] [--out FOLDER]
-sieve ai --warp FOLDER|FILE.safetensors [--address-out FILE] [--out FOLDER]
-         (any of these with [--canonical] [--filters PATH])
-```
-
-The AI line from the command line (SPECIFICATIONS §12.0d). With no address it says how big the line is. With an address, a bearing or `--browse`, it runs each model on Sieve's own engine and prints what it says after `--prompt` (a newline unless given; 64 bytes at temperature 0.8 by default); `--out` writes the model's `config.json`, `model.safetensors` and `tokenizer.json`. `--warp` takes such a file back to its address, if it is a model of the line's shape whose every weight is one of the line's values. The shape options are the hallway's. Every model shown is judged by the line's filters (`[ai]` in `sieve-filters.ini`, listed by `sieve filters --line ai`), each one's verdict printed, and where the ticked stack ranks and the model passes, its compact addresses too. `--canonical` puts the model's class's canonical form in its place (`canonical-model-v1`, SPECIFICATIONS §12.0f): the same model, its weights reordered, negated and turned, saying the same.
-
-| Option | Meaning |
-| :--- | :--- |
-| `--ai-layers L`, `--ai-width H`, `--ai-heads A`, `--ai-bits B` | The shape: layers (1), width (16, the feed-forward four times it), heads (2, of an even size), bits a weight (4). |
-| `--read ADDR` | The model at an address, in `--mode`'s ordering. |
-| `--address-file FILE` | The same, its address read from a file (a wide model's address is longer than a command line takes). |
-| `--bearing DEG` | The model at a bearing of whole degrees, as the navigator goes. |
-| `--browse N` | N models at random (`--seed S` to repeat a run). |
-| `--prompt TEXT`, `--max-tokens N`, `--temperature T`, `--seed S` | What it continues, and how. |
-| `--out FOLDER` | Write the model's files. |
-| `--warp PATH` | A model's file or folder back to its address. |
-| `--address-out FILE` | Write the model's address there (with `--canonical`, its canonical form's). |
-| `--canonical` | The model's class's canonical form in its place (`canonical-model-v1`). |
-| `--filters PATH` | The filter settings whose `[ai]` section judges each model; with `language-v1` ticked it also says how well the model speaks its run's text, and with `near-model-v1` its layer (how many digits from the run's model). |
-
-```sh
-sieve ai --bearing 246                                  # the model at 246 degrees, and what it says
-sieve ai --bearing 137 --mode scrambled --out m137      # another, its files kept
-sieve chat --model m137 --raw --prompt "Hello"          # and talked to
-sieve ai --warp m137 --mode scrambled                   # back to its address
-sieve ai --warp m137 --canonical --out m137c            # its canonical form, which says the same
-sieve filters --line ai                                 # the line's filters, and what each keeps
-```
-
-### `ai-train`: train a model of the AI line, on the record
-
-```
-sieve ai-train --record FOLDER --out FOLDER [--ai-layers L] [--ai-width H] [--ai-heads A] [--ai-bits B] [--start ADDR] [--mode MODE]
-               [--learning-rate X] [--momentum X] [--loss-scale-bits K] [--batch N] [--window N] [--epochs N] [--seed S] [--reading MODE]
-               [--file-order FILE] [--checkpoint-every N] [--checkpoint-addresses] [--write-order]
-               [--sieve FILE.sieve] [--model-out FOLDER] [--address-out FILE] [--threads N] [--quiet]
-sieve ai-train RUN [--resume] [--stop-after N] [--threads N] [--model-out FOLDER] [--address-out FILE] [--result-out FILE] [--quiet]
-```
-
-The AI Training Harness from the command line (SPECIFICATIONS §12.0e). `--record` makes a run from a folder, every file under it (copied into the run's `corpus/`), read in path order unless `--file-order` says otherwise, cut into windows that overlap by one byte, and read each epoch as `--reading` says; says what it will take (weights, steps, memory, the result's size); trains it; and writes its `result.txt`. Naming a run (a folder, or a `.sieve`) trains it again: for a run with a result, it says **reproduced exactly** or the first line that differs (and exits 1); a folder never trained gets its `result.txt`. Between checkpoints it prints how many bits a byte the model still needs. (`sieve train` is another command: it builds the guided ordering's models.)
-
-| Option | Meaning |
-| :--- | :--- |
-| `--ai-layers L`, `--ai-width H`, `--ai-heads A`, `--ai-bits B` | The model's shape, as the AI line's (1, 16, 2, 4). |
-| `--start ADDR`, `--mode MODE` | Where it starts on the AI line (scrambled 0, whose weights are spread evenly). |
-| `--learning-rate X`, `--momentum X`, `--batch N` | How it learns: by default the rate suggested for the shape (below), momentum 0.9, 4 windows a step (at most 32). |
-| `--window N`, `--epochs N`, `--seed S` | Bytes a window (65, at most 513), times through the corpus (30), the shuffle's seed (1). |
-| `--reading MODE` | `in-order` (file by file, each from its start), `shuffled-within-files`, or `shuffled` (all the windows together; the default). |
-| `--file-order FILE` | The files to read first, in this order, a line each as the corpus names them; the rest follow by path. |
-| `--checkpoint-every N` | Steps between the checkpoints `result.txt` lists (100), each by its hash. |
-| `--loss-scale-bits K` | training-v2's loss scale, 2^K (0 to 7; by default as suggested for the shape). `--training-v1` records the first runs' version. |
-| `--resume`, `--stop-after N` | Keep the run's state beside it (`RUN.resume`) and carry on from it; stop after N steps (for scripts). |
-| `--checkpoint-addresses` | List each checkpoint's address too (a path to walk on the AI line without training again; 4 KB or more each). |
-| `--write-order` | Write every window out in `order.txt`, rather than have the recipe's lines make the order. |
-| `--sieve FILE` | Also pack the run folder as Sieve instructions. |
-| `--model-out FOLDER`, `--address-out FILE`, `--result-out FILE` | The final model's files (for `sieve chat --raw`), its address, the result. |
-| `--threads N` | Threads; the result does not change. |
-
-```sh
-sieve ai-train --record texts --out ub --sieve ub.sieve           # record a run from a folder, train it, pack it
-sieve ai-train ub.sieve                                                     # train again from the .sieve: reproduced exactly
-sieve ai-train ub --model-out ub-model && sieve chat --model ub-model --raw  # and talk to what it became
-```
-
-### `cipher`: the Encryption Engine, stage 1
-
-```
-sieve cipher --encrypt|--decrypt (--recipe "LAYER; LAYER" | --recipe-file PATH) (--in FILE | --text TEXT | --in-hex HEX) [--out FILE]
-sieve cipher --break (--in FILE | --text TEXT | --in-hex HEX) [--top N] [--max-key K]
-sieve cipher --catalogue [--depth D] [--key-bytes K]
-```
-
-A recipe of layers on bytes (`cipher-v1`, SPECIFICATIONS §12.0i): `reverse`, `caesar N`, `xor HEX`, `vigenere TEXT` and `feistel TEXT`, the last being the binary line's own keyed scramble, so n bytes become n bytes. Decrypting undoes the layers in reverse. `--break` tries every caesar shift and one-byte XOR, and repeating XOR and Vigenère keys up to K bytes fitted column by column, and ranks what they give by how English it reads. The weak ciphers fall, and a feistel layer does not. `--catalogue` counts the recipes exactly. These are for study, not for keeping secrets.
-
-```sh
-sieve cipher --encrypt --recipe "vigenere lemon; feistel my key" --text "attack at dawn"
-sieve cipher --decrypt --recipe "vigenere lemon; feistel my key" --in-hex HEX      # "attack at dawn" again
-sieve cipher --break --in secret.bin                                               # guess 1 is the recipe, if it was a weak one
-sieve cipher --catalogue --depth 2                                                 # 130 bits name a layer with keys of up to 16 bytes
-```
-
-### `diffuse`: a model that makes pictures and melodies
-
-```
-sieve diffuse --record FOLDER [--line image|audio] [line options] [--filters PATH] [--figures N] [--pictures FILE] [--ai-layers L] [--ai-width H]
-              [--levels S] [--steps N] [--batch N] [--learning-rate X] [--loss-scale-bits K] [--seed S] [--quiet]
-sieve diffuse RUN [--quiet]
-sieve diffuse --make RUN [--count N] [--seed S] [--noise ADDR] [--show-levels] [--judge PATH]
-```
-
-A **diffusion model** of the AI line (`diffusion-v1`, SPECIFICATIONS §12.0g): it learns to undo noise on pictures of the image line, a level at a time, and then makes pictures from noise. `--record` draws its training pictures at random from the image line's stack in the filters file (`figure-v1` and `row-runs-v1` for figures) or reads them from a file, writes the run's recipe and pictures, and trains it in the integer arithmetic of `ai-train`, so naming the run trains it again and says **reproduced exactly**. `--make` makes pictures with its model, each with its address on the image line, and the noise's: a picture is a function of the model, the noise and the seed. A model of 40,960 weights trained for five minutes on figures makes one shape clear of the edges about one time in ten. With `--line audio` the units are melodies (notes104, or a notes2 set), one row of the note set's symbols, trained the same way; `data/training/melodies-2x64` is one, and every melody it makes is in key and ends on the tonic. `--make --judge FILTERS` counts how many of the units made, and of the noises they came from, each filter keeps.
-
-```sh
-sieve diffuse --record figs --filters figures.ini --ai-layers 2 --ai-width 32 --steps 15000   # train a model of figures
-sieve diffuse figs                                                                     # train it again: reproduced exactly
-sieve diffuse --make figs --count 5 --show-levels                                      # and make pictures with it
-sieve diffuse --make figs --count 300 --judge figures.ini                              # and count what the filters keep
-```
-
-### `version`: what produced a result
-
-```
-sieve version        (or: sieve --version)
-```
-
-Prints the tool version, the scramble construction, every canonicalisation rule version, the alphabets and palettes, the guided coder and model format, and the default dictionary and model with their SHA-256. Record this alongside any result you publish, so it can be reproduced exactly.
+| Addresses | `info` (how big a space is), `warp` (content to its address), `read` (an address to its content), `browse` (random units) |
+| Filters | `sift` (the M1 survey), `filters` (a line's filters and stack), `check` (which filters a unit passes), `tailor` (the stack that writes items' addresses shortest) |
+| Guided text | `dicts`, `models`, `train`, `measure` (the dictionaries and models behind guided addresses), `alphabets` |
+| Files | `locate` (a file's place, a folder's manifest, installers), `install`, `map` (node graphs of verified anchors), `vault`, `site` (a website of `.sieve` files), `web-host` (the browser extension's host: [web/README.md](web/README.md)) |
+| Books | `bind`, `unbind` |
+| Other lines | `mesh`, `world`, `ai`, `ai-train`, `diffuse` |
+| Tools | `rope` (the tightened rope), `tensors`, `chat`, `cipher`, `version` |
+
+`sieve-install`, the small installer, is described in
+[docs/SIEVE-INSTALL-USAGE.md](docs/SIEVE-INSTALL-USAGE.md), with how a release is made
+(`tools/make_release.py`). `tests/example_book_v1.book` is a committed book record: the CI
+unbinds it, binds its source again to the identical record, and has the Python oracle read it
+to the same id and text.
 
 ## Canonicalisation
 
@@ -1260,6 +802,20 @@ What the results show:
 - **The model does the job the dictionary could not.** Word salad that passes the M1 sieve still carries 2.69 bits per character. The model gets real English to 1.93, which removes another ~230 orders of magnitude at paragraph scale.
 - **Address length is information.** A guided address is never shorter than the unit's information content and never more than 2 bits longer, so short addresses always mean probable text.
 - **Most of the rest is model quality, not addressing.** The coder is exact, and a better model plugs into the same format. The remaining gap to Shannon's estimate is what a larger (for example neural) model would close.
+
+`sieve measure` reports two figures in bits per character:
+- `stream`: the model's information content, coding the text as one long history.
+- `guided`: the real cost of guided addresses when the text is cut into units.
+
+With no files, it measures the three books held out of training:
+
+```
+text                            symbols   stream   guided    vs raw
+carroll-alice.txt                134371    1.929    1.934     2.46x
+chesterton-thursday.txt          307403    1.944    1.950     2.44x
+shakespeare-macbeth.txt           93070    2.478    2.482     1.92x
+all                              534844    2.033    2.039     2.33x
+```
 
 ## Next
 

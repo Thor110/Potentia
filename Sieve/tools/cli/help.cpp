@@ -1,5 +1,6 @@
 #include "help.hpp"
 
+#include <algorithm>
 #include <iostream>
 #include <sstream>
 #include <utility>
@@ -219,12 +220,16 @@ const std::vector<Page>& pages()
          "(pruned). Output is CSV: one row per length, with counts and log10 surviving fractions.",
          {{"--dict ID|PATH",
            "Word list to use. An ID picks a registered dictionary (list them with `sieve dicts`):\n"
-           "  scowl-en-35  common English words (40,201)\n"
-           "  scowl-en-60  SCOWL's recommended spell-check size (79,645) - the default\n"
-           "  scowl-en-80  large, includes rare words (251,174)\n"
-           "35, 60 and 80 are accepted as short forms. A registered dictionary is checked against\n"
-           "its SHA-256 before use. A value containing / or \\ or ending in .txt is read as a file\n"
-           "path instead (one word per line, not checked). The CSV header records the id and hash."},
+           "  scowl-en-35        common English words (40,201)\n"
+           "  scowl-en-60        SCOWL's recommended spell-check size (79,645)\n"
+           "  scowl-en-80        large, includes rare words (251,174)\n"
+           "  scowl-en-35-names  the same sizes with capitalised words and proper names kept\n"
+           "  scowl-en-60-names  (England, Dickens): 40,326, 88,986 (the default) and 281,180\n"
+           "  scowl-en-80-names\n"
+           "35, 60 and 80 are accepted as short forms of the lists without names. A registered\n"
+           "dictionary is checked against its SHA-256 before use. A value containing / or \\ or\n"
+           "ending in .txt is read as a file path instead (one word per line, not checked). The\n"
+           "CSV header records the id and hash."},
           {"--lengths SPEC", "Unit lengths to count: numbers and ranges, comma-separated. Default: 1-12.\n"
                              "Example: 1-32,64,100,1000"},
           {"--brute-max N", "Also check lengths up to N by visiting every unit. Default 5. Cost grows 27x per\n"
@@ -233,7 +238,12 @@ const std::vector<Page>& pages()
           {"--pruned-max N", "Also check lengths up to N by pruned tree walk. Default 6. On 2 cores N=7 takes\n"
                              "~15 s, N=8 ~2 minutes."},
           {"--threads T", "Worker threads for the checks. Default: all cores."},
-          {"--csv PATH", "Write the CSV to a file instead of the screen."}},
+          {"--csv PATH", "Write the CSV to a file instead of the screen. Its columns: length (the unit\n"
+                         "length); log10_units (log10 of 27^L); clean, window, words (the exact survivor\n"
+                         "counts); log10_frac_* (log10 of the share of the space that survives each);\n"
+                         "verified_by (which methods agreed); pruned_window_states (prefix-tree nodes the\n"
+                         "pruned walk visited) and log10_frac_prefix_tree_explored (the share of the tree\n"
+                         "that is)."}},
          {{"sieve sift", "lengths 1-12 with the default dictionary"},
           {"sieve sift --lengths 1-64,100,1000 --csv sieve.csv", "out to paragraph scale, saved to a file"},
           {"sieve sift --dict scowl-en-35 --lengths 1-20", "the same with the smaller, common-words dictionary"},
@@ -308,7 +318,8 @@ const std::vector<Page>& pages()
           {"--filters PATH", "With --warp: the settings file whose [models] stack judges the model (its survivor\n"
                              "number and compact addresses when it passes). Default: sieve-filters.ini."},
           {"--mode MODE", "positional or scrambled, for --read and --browse (positional)."},
-          {"--out FILE", "With --read, write the .obj there instead of to the screen."}},
+          {"--out FILE", "With --read, write the .obj there instead of to the screen."},
+          kShort},
          {{"sieve mesh", "how big the default models line is"},
           {"sieve mesh --vertices 24 --faces 44 --coords 64", "a bigger shape"},
           {"sieve mesh --warp cube.obj", "the address of a cube"},
@@ -344,11 +355,12 @@ const std::vector<Page>& pages()
           {"--cover PICTURE", "With --compose: the world's cover, fitted to the image line."},
           {"--read ADDR", "The world at an address, as one .obj (--out FILE to save it; --compact for a\n"
                           "compact address under [worlds])."},
-          {"--mode MODE", "positional or scrambled, for --read (positional)."}},
+          {"--mode MODE", "positional or scrambled, for --read (positional)."},
+          kShort},
          {{"sieve world", "how big the default worlds line is"},
           {"sieve world --world-models 2 --compose \"0:0.0.0.0|1:7.7.7.5\"", "two models in opposite corners, one turned"},
           {"sieve world --read ADDR --out world.obj", "save the world at an address"}}},
-        {"rope", "A file pulled tight by the tightened rope (rope-wave-v1): a wave through its values.",
+        {"rope", "A file pulled tight by the tightened rope (rope-wave-v1 to v5): a wave through its values.",
          "sieve rope FILE [--params \"L8 W949 S1 P3 K0\"] [--seconds S] [--out CODE]\n"
          "  sieve rope --decode CODE --params \"L8 W949 S1 P3 K0\" --size N --out FILE",
          "Edward's filter (IDEAS §19.87): a wave runs through the file's values, each value predicted\n"
@@ -383,7 +395,12 @@ const std::vector<Page>& pages()
          "whether the start is the one safetensors-layout-v1 writes for those tensors: if it is, the\n"
          "start need not be kept, as it is rebuilt from the names, types and shapes. With a Llama model's\n"
          "config.json, it checks that the config names exactly the file's tensors, so that the start is\n"
-         "rebuilt from the config alone. The tokenizer and the config are files of their own.",
+         "rebuilt from the config alone. The tokenizer and the config are files of their own.\n"
+         "Measured on SmolLM2-360M-Instruct (Hugging Face, HuggingFaceTB/SmolLM2-360M-Instruct, commit\n"
+         "a10cc15, 723,674,912 bytes): the start (32,672 bytes) is rebuilt from config.json; the\n"
+         "weights coded by how often each value occurs come to 475.9 MB of 723.6 MB (65.8%); --pack\n"
+         "writes the whole file in 476.7 MB (65.9%, against 512.9 MB for xz), and --unpack rebuilds\n"
+         "it byte for byte. The model is not part of Sieve: download it yourself to try this.",
          {{"--config FILE", "A Llama model's config.json: its tensors are checked against the file's. Without a\n"
                             "model file, the start a model of that shape has is built from it (metadata\n"
                             "format=pt, as PyTorch saves)."},
@@ -415,7 +432,10 @@ const std::vector<Page>& pages()
          "tokenizer.json (byte-level BPE) and runs the model on the processor in 32-bit floats, in the chat\n"
          "format the model was trained on (ChatML). With --prompt it answers once; without, each line you type\n"
          "is a message, and an empty line ends the conversation. How long it read and wrote is said on\n"
-         "standard error.",
+         "standard error.\n"
+         "Its tokens are those of Hugging Face's own tokenizer, and its predictions agree with the\n"
+         "model's official ONNX export to within a few hundred-thousandths (SPECIFICATIONS\n"
+         "12.0c). Measured: on four cores SmolLM2-360M writes about 9 tokens a second.",
          {{"--model FOLDER", "The model's folder: config.json, model.safetensors, tokenizer.json."},
           {"--prompt TEXT", "One message; print the reply and stop."},
           {"--system TEXT", "The system line (default: the one the model's own template writes)."},
@@ -553,7 +573,9 @@ const std::vector<Page>& pages()
          "The first four are the historical weak ciphers, which --break recognises and undoes: every caesar\n"
          "shift, every one-byte XOR, and repeating XOR and Vigenere keys found column by column, ranked by how\n"
          "English the result is. None of these is a reviewed cipher for protecting secrets; they are for study\n"
-         "and play. --catalogue counts the recipes there are, to show that, layered, they reach every file.",
+         "and play. --catalogue counts the recipes there are, to show that, layered, they reach every file.\n"
+         "Measured: --catalogue --depth 2 counts 2^130 layers with keys of up to 16 bytes, so 130 bits\n"
+         "name one layer and 260 bits any recipe of up to two.",
          {{"--encrypt, --decrypt", "Apply the recipe, or undo it."},
           {"--recipe \"LAYER; LAYER\"", "The layers, in order, apart by ';' (a key then cannot hold ';')."},
           {"--recipe-file PATH", "The layers from a file: \"sieve-cipher-v1\", then a layer a line."},
@@ -629,7 +651,12 @@ const std::vector<Page>& pages()
          "  3. Add that line to dictionaries.tsv with your own id and description. To make it the\n"
          "     default, set its default column to yes and the old default's to no.\n"
          "  4. Rebuild (or copy the folder) so the executable's copy is updated.\n"
-         "Never change an existing entry's file or hash; register a changed list under a new id.",
+         "Never change an existing entry's file or hash; register a changed list under a new id.\n"
+         "The -names lists keep SCOWL's capitals (England); the lower-case alphabets read them as\n"
+         "lower case, so one list serves every alphabet. They are the default because real books\n"
+         "name people and places. They also bring in abbreviations and symbols SCOWL lists in\n"
+         "capitals (Zn, Pt, Gs), so short gibberish passes a little more often than with the plain\n"
+         "lists.",
          {{"--hash FILE", "Print a word list's word count and SHA-256, plus a registry line to paste."}},
          {{"sieve dicts", "list dictionaries, check their files and hashes, and show the default"},
           {"sieve dicts --hash data/dictionaries/my-words.txt", "prepare a new dictionary for the registry"},
@@ -853,7 +880,9 @@ const std::vector<Page>& pages()
          "unit. Its id is the SHA-256 of the content alone, so the same book written in any\n"
          "ordering or key has the same id. Every address is read back before the file is\n"
          "written. In guided order the pages take about 2 bits per character, so the record is\n"
-         "smaller than the text; the cover, which has no guided ordering, is then scrambled.",
+         "smaller than the text; the cover, which has no guided ordering, is then scrambled.\n"
+         "Measured: three pages of 400 characters of A Tale of Two Cities take 416 hex digits\n"
+         "guided (about 1.8 bits a character), against 1,428 scrambled.",
          {{"--out FILE", "The record to write (required)."},
           {"--title TEXT", "The title, as a page of --title-length characters (default: the page length)."},
           {"--cover PICTURE", "A picture file (PNG, JPEG, BMP, GIF, TGA), as an image of --cover-width x\n"
@@ -912,8 +941,9 @@ const std::vector<Page>& pages()
          "rope's newer ones; v12 where there is less to write around the bytes (no line for an empty\n"
          "stream, and the files carried as they are where LZMA2 makes them no smaller); v13 where a\n"
          "file is cut into pieces, LZMA2 taking what repeats and the rope what is unevenly spread (a\n"
-         "phone's photo: its metadata and its picture); and v16 always now, the listing's head in\n"
-         "bytes rather than text. (--v15 down to --v5 make the older ones.)\n"
+         "phone's photo: its metadata and its picture); v14 and v17 where archives are optimised\n"
+         "(--optimise-archives); and v16 at least now, the listing's head in bytes rather than\n"
+         "text. (--v16 down to --v5 make the older ones; v18, a map, is made by sieve map.)\n"
          "\n"
          "--weigh weighs every file against its own address: its number among the binary line's\n"
          "survivors, where the settings file's [binary] filters rank and it passes them; and, where\n"
@@ -935,10 +965,13 @@ const std::vector<Page>& pages()
           {"--manifest FILE", "A folder: write the manifest here (else to standard output)."},
           {"--addresses DIR", "A folder: write every file's address as DIR/<its path>.hex."},
           {"--with-addresses", "A folder: a v2 manifest, every file's address in it, in hex."},
-          {"--installer OUT.sieve", "A folder: write the installer, the address of its v3 manifest (the\n"
-                                    "listing, then every file's bytes) as raw bytes (--hex: as hex);\n"
-                                    "--manifest then writes that v3 manifest. --compare also compresses\n"
-                                    "it. sieve-install opens it."},
+          {"--installer OUT.sieve", "A folder (or a file): write the installer, the address of its manifest\n"
+                                    "as raw bytes (--hex: as hex). On its own, sieve-manifest-v4 (the listing,\n"
+                                    "then every file packed by LZMA2); with --items the newest (v16, or v17\n"
+                                    "where a gzip is remade), as the hallway's File Locator makes; with --v3\n"
+                                    "every file's bytes as they are. --manifest then writes that manifest as\n"
+                                    "text. --compare also compresses it. sieve install and sieve-install open\n"
+                                    "it (sieve-install asks for Sieve where it carries items)."},
           {"--program OUT.exe", "A folder: an installer program, one file to hand to someone: a copy of\n"
                                 "sieve-install (it must be beside sieve) with the installer attached to\n"
                                 "its end. Run, it installs the folder."},
@@ -1067,12 +1100,15 @@ const std::vector<Page>& pages()
 
         {"install", "Put a folder back from its installer: one address.",
          "sieve install INSTALLER.sieve|PROGRAM.exe|MANIFEST --to FOLDER [--force] [--hex]",
-         "The command-line form of sieve-install. Reads the installer (the address of a\n"
-         "sieve-manifest-v3 as raw bytes, made with sieve locate --installer; --hex for one written\n"
-         "in hex) back into the manifest, and cuts every file from the bytes after its listing.\n"
-         "(An older installer, of a v2 manifest, reads every file back from its address.) An\n"
-         "installer program made with --program installs the same way, and so does an installer's\n"
-         "manifest (v3) itself.\n"
+         "The command-line form of sieve-install. Reads the installer (the address of a manifest as\n"
+         "raw bytes, made with sieve locate --installer or the hallway's File Locator; --hex for\n"
+         "one written in hex) back into its instructions, and makes every file from them: any\n"
+         "version from sieve-manifest-v2 (every file read back from its address) to the newest,\n"
+         "files packed by LZMA2, pulled tight by the rope, cut into pieces, or carried as items of\n"
+         "Sieve's lines (made again from their places, which the small sieve-install cannot do),\n"
+         "and archives remade or given back as their contents (it says so). A map (v18) installs\n"
+         "the files it holds and says how many it only names. An installer program made with\n"
+         "--program installs the same way, and so does an installer's manifest itself.\n"
          "Every file is checked against its size and SHA-256 before anything is written, so a bad\n"
          "address leaves the folder untouched. Files already there are refused unless --force.\n"
          "Last, it says how long decoding took (reading the instructions and making every file's\n"
@@ -1143,10 +1179,14 @@ const std::vector<Page>& pages()
          {},
          {{"sieve version", "print everything that determines an address"}}},
 
-        {"lines", "The four lines (kinds of content) and their options.",
-         "sieve <command> --line text|image|audio|video [line options]",
-         "Every line is a shelf of units of one fixed shape. The same address machinery serves all\n"
-         "four; only the shape of a unit and the rules for fitting input to it differ.\n"
+        {"lines", "The lines (kinds of content) and their options.",
+         "sieve <command> --line text|image|audio|video|tracks|movies [line options]",
+         "Every line is a shelf of units of one fixed shape. The same address machinery serves them\n"
+         "all; only the shape of a unit and the rules for fitting input to it differ. info, warp,\n"
+         "read and browse take the lines below (text is also called pages, as the hallway calls\n"
+         "it). Other lines have commands of their own: books (bind, unbind), the binary line\n"
+         "(locate), the models and worlds lines (mesh, world), the AI line (ai, ai-train); filters\n"
+         "also takes --line books, binary, models and ai, and check --line binary (and --book).\n"
          "\n"
          "TEXT (default)\n"
          "  A unit is --length characters.\n"
@@ -1154,6 +1194,9 @@ const std::vector<Page>& pages()
          "  --alphabet ID      lower27  space + a-z (default)\n"
          "                     babel29  space + a-z + comma + period (libraryofbabel.info)\n"
          "                     ascii95  every printable ASCII character, case kept\n"
+         "                     ascii96  line feed + printable ASCII (text that can hold a file)\n"
+         "                     bytes256 one symbol per byte value, so any file is a unit\n"
+         "                     or Unicode blocks, alone or stacked with '+' (sieve alphabets)\n"
          "  --canon v2|v1      Rules for fitting pasted text. v2 (default): accents folded\n"
          "                     (cafe), apostrophes removed (didnt), other punctuation becomes a\n"
          "                     space (well known). v1: all punctuation removed (wellknown).\n"
@@ -1244,15 +1287,57 @@ void print_usage()
                  "Every possible unit of content of a fixed shape (a line of text, a small picture, a\n"
                  "short melody) has exactly one address, and every address holds exactly one unit.\n"
                  "These commands move between the two.\n\n"
-                 "Commands:\n";
-    for (const auto& p : pages())
-    {
-        if (p.name == "lines") continue;
+                 "Commands (sieve help COMMAND gives each one's options in full):\n";
+    // The commands by what they are for; a page in none of the groups is listed last, so a new
+    // command is never left out.
+    const std::vector<std::pair<std::string, std::vector<std::string>>> groups = {
+        {"Addresses", {"info", "warp", "read", "browse"}},
+        {"Filters", {"sift", "filters", "check", "tailor"}},
+        {"Guided text: dictionaries and models", {"dicts", "models", "train", "measure", "alphabets"}},
+        {"Files: places, installers, maps and the web", {"locate", "install", "map", "vault", "site", "web-host"}},
+        {"Books", {"bind", "unbind"}},
+        {"Other lines", {"mesh", "world", "ai", "ai-train", "diffuse"}},
+        {"Tools", {"rope", "tensors", "chat", "cipher", "version"}},
+    };
+    std::vector<std::string> shown;
+    auto show = [&](const Page& p) {
         std::string name = p.name;
         name.resize(11, ' ');
-        std::cout << "  " << name << p.summary << "\n";
+        // The summary wrapped at 96 columns, under itself.
+        std::string line = "  " + name;
+        std::istringstream words(p.summary);
+        std::string w;
+        bool first = true;
+        while (words >> w)
+        {
+            if (!first && line.size() + 1 + w.size() > 96)
+            {
+                std::cout << line << "\n";
+                line = std::string(13, ' ') + w;
+            }
+            else line += (first ? "" : " ") + w;
+            first = false;
+        }
+        std::cout << line << "\n";
+        shown.push_back(p.name);
+    };
+    for (const auto& [title, names] : groups)
+    {
+        std::cout << " " << title << "\n";
+        for (const std::string& n : names)
+            for (const auto& p : pages())
+                if (p.name == n) show(p);
     }
-    std::cout << "\nLines (choose with --line): text (default), image, audio, video.\n"
+    bool other = false;
+    for (const auto& p : pages())
+        if (p.name != "lines" && std::find(shown.begin(), shown.end(), p.name) == shown.end())
+        {
+            if (!other) std::cout << " Other\n";
+            other = true;
+            show(p);
+        }
+    std::cout << "\nLines (choose with --line): text (default), image, audio, video, tracks, movies;\n"
+                 "books, binary, models, worlds and ai have commands of their own (sieve help lines).\n"
                  "\nOn any command, --timings writes how long each phase took (runs, total, mean,\n"
                  "slowest, in ms) to standard error at exit, for finding what is slow and benchmarking.\n"
                  "--filter-memory MB sets what one count of the filters' survivors may take for its\n"
@@ -1264,7 +1349,7 @@ void print_usage()
                  "ffmpeg beside sieve, then the first on the PATH. PNG, JPEG, BMP, GIF and TGA never need it.\n"
                  "\nDetailed help and examples:\n"
                  "  sieve help warp        (or: sieve warp --help)\n"
-                 "  sieve help lines       the four lines and their options\n\n"
+                 "  sieve help lines       the lines and their options\n\n"
                  "Quick start:\n"
                  "  sieve warp --length 32 \"It was the best of times\"\n"
                  "  sieve read --length 32 --mode scrambled <address printed above>\n"

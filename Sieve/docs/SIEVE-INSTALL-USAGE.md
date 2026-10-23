@@ -1,8 +1,12 @@
 # Using sieve-install
 
 This page covers making an installer for a folder, handing it to someone, and installing from it.
-Installers **pack their files themselves** now (`sieve-manifest-v4`), so there is no longer a
-separate compressing step.
+Installers **pack their files themselves**, so there is no separate compressing step. The plain
+installer is `sieve-manifest-v4`, described first below; the hallway's File Locator and
+`sieve locate --items` make the newest (`sieve-manifest-v16`, or v17 where a gzip is remade), which
+also pull files tight with the rope, cut them into pieces, and carry items of Sieve's lines by their
+places (*The formats, as they grew*, below; every version in full: SPECIFICATIONS §12.2). Every
+option: `sieve help locate`, `sieve help install`, `sieve-install --help`.
 
 ## What an installer is
 
@@ -59,6 +63,10 @@ Compressing first is no longer needed, and no longer helps: a folder holding one
 as it is, since an archive does not pack further. (An installer carrying one 7z archive still
 unpacks it; see below.)
 
+## The formats, as they grew
+
+An installer's manifest (`sieve-manifest-v4`) is the folder structure followed by every file **packed**: programs through the x86 filter, a text made of some of another file's lines as a mask of them (each SCOWL list but the largest), all of it LZMA2 at its strongest, so a release-shaped folder comes to 20% of its size, below one LZMA2 stream of it (21%); its own address is the installer. Unpacking gives every file back exactly, checked against its SHA-256. (`--v3` makes the older installer, every file's raw bytes; it is chosen anyway where packing would not be smaller.) (`--with-addresses` writes `sieve-manifest-v2` instead, a listing with every file's address in hex; installers made from v2 before still install.) `install` reads it back, checks every file against its size and SHA-256 before writing any, and will not replace files without `--force`. With `--compare`, `locate` also shows the installer's manifest compressed. **`--items`** makes `sieve-manifest-v5`: a file that is exactly an item of the pages, image, video or audio line (a page as its text, a picture or film as its PNG, a melody as its MIDI file) is carried as its line and its place there instead of its bytes, made again on installing, with one SHA-256 over the whole tree checking every file. `sieve install` and the hallway install it; the small `sieve-install`, which cannot make items, says to use them instead. **`--items --v6`** makes `sieve-manifest-v6`: each item's place written as raw bytes, the fewest its line's places need, all of them one stream carried raw or as LZMA2, whichever is smaller; a line's items carried as places only where that is smaller than its files packed, and otherwise as files; and a model of the AI line (one `sieve ai --out` writes) carried as its digits. **`--items` now makes `sieve-manifest-v7`**: v6 with nothing written that the rest already gives (the file and byte counts, empty streams, a single file's root, a line's options its id already fixes, and every file's own SHA-256, which the tree's covers: `--file-hashes` keeps them; an item listed as `i K path`), the whole listing carried as LZMA2 where that is smaller, and the AI line's places coded by **digit-histogram-v1** where that is smaller: each tensor's histogram of digits, then the model's rank among the models with those histograms, so a trained model, whose digits are less evenly spread than chance spreads them, has a shorter number. Measured on the degree sample (every dimension at every degree: the README's hallway section): v4 482,496 bytes, v5 443,973, v6 391,033, **v7 9,618** (its listing packs from 203,395 bytes to 6,110). For comparison: `tar` with `xz -9e`, 28,152 bytes; 7z's LZMA2 stream of the files' bytes alone, with no names, 9,226. A model trained by Sieve alone (universalbibliothek, 34,072 bytes as `sieve-ai-16432c2a3953.safetensors`): v4 5,818 bytes (the same as v5, which has no AI line), v6 4,486, **v7 4,257**, its 4,096 bytes of digits coded in 4,020; 7z's LZMA2 of the file, 5,576. The File Locator makes v7 too, with the AI line's shape from the setup menu's settings. **Since 19 October 2026 `--items` makes `sieve-manifest-v8`** where it helps: a file that **the tightened rope** (`rope-wave-v1`, Edward's filter: a wave through the file's values, each predicted from those before it, and what the wave leaves coded by how often each byte occurs) codes smaller than LZMA2 packs it is carried so, its wave searched for `--search-per-file` seconds (the File Locator's time for a file). It wins on smooth data: the Vitruvian picture as raw grey pixels, 832,146 bytes against LZMA2's 865,400, and in colour 468,078 against 623,717; not on prose. Its version 2 (`rope-wave-v2`, `C1`) counts each column of a fixed-width line apart, so a table's separators cost almost nothing: a million digits of pi laid out in lines comes to 420,025 bytes against LZMA2's 486,077, the digits' own floor being 415,241 (instructions with it are `sieve-manifest-v9`). Version 3 (`rope-wave-v3`, `C2`) counts each byte's column from the start of its line, for text whose lines vary or break: Edward's `pi6.txt` (pi to a million digits, 1,111,103 bytes, with blank lines and page breaks) comes to 421,491 bytes as Sieve instructions, against 7z's 512,745 (`sieve-manifest-v10`). Version 4 (`rope-wave-v4`, `G1`) lets columns that hold alike share one table and one stream: `pi6.txt` comes to 419,115 bytes as Sieve instructions (`sieve-manifest-v11`). Version 5 (`rope-wave-v5`, `A1`) counts each byte by the byte above it too, so a column whose bytes take turns line by line costs almost nothing: `pi6.txt` comes to 417,139 bytes (`sieve-manifest-v15`), against the digits' floor of 415,241. `sieve-manifest-v16` writes the listing's head in bytes rather than text (the streams' sizes as varints, the tree's SHA-256 as its 32 bytes): a small file's listing goes from 142 bytes to 67, `pi6.txt` to 417,061 and the trained model to 4,185. `sieve-manifest-v12` writes less around a file's bytes where it can: no line for an empty stream, and a file LZMA2 cannot make smaller (a PNG, a JPEG) carried as it is, so a compressed file's instructions are its bytes and about 145 more; `pi6.txt` is 419,096. `sieve-manifest-v13` cuts a file into pieces where that is smaller, LZMA2 taking what repeats and the rope what is unevenly spread: Edward's phone photos (4,139,682 and 4,587,473 bytes) come to 4,111,592 and 4,558,132, against 7z's 4,127,434 and 4,575,201. **Optimise Archive Formats** (`--optimise-archives`, a box in the File Locator, off unless ticked; `sieve-manifest-v14`): an `.xz` is carried as what it holds and remade exactly on installing, and a `.7z` is carried as its contents, in a folder named after it (said so on installing), each only where clearly smaller: `pi6.txt` as an xz (507,092 bytes) comes to 419,117, as a 7z (507,182) to 419,128. Since 21 October a `.gz` is remade exactly where zlib made it (else carried as what it holds) and a `.zip` is carried as its contents (`sieve-manifest-v17`): `pi6.txt` as a gzip (546,741 bytes) comes to 417,128, as a zip (546,827) to 417,107. v8 needs no line, so `sieve-install` installs it unless it carries items. `sieve rope FILE` shows the wave a file pulls tight to and its code beside LZMA2 (`sieve help rope`), and the weighing (`--weigh`, the File Locator's table) weighs every file's rope code as a way to name it: its code, its wave's parameters and its size, the rope's name paid once.
+
 ## Making an installer
 
 From the command line:
@@ -67,6 +75,7 @@ From the command line:
 sieve locate RELEASE --program "Release installer.exe"   # an installer program: one file to hand out
 sieve locate RELEASE --installer release.sieve           # the installer on its own
 sieve locate RELEASE --installer release.sieve --compare # and the sizes beside zip and 7z
+sieve locate RELEASE --installer release.sieve --items --search-per-file 10   # the newest, as the File Locator makes
 sieve locate RELEASE --installer release.sieve --v3      # the older installer: every file as it is
 sieve locate notes.txt --installer notes.sieve           # a single file works the same way
 ```
@@ -91,7 +100,7 @@ instructions and is for the tools. The command line still writes it (`sieve loca
 | Send | Size | They need |
 |---|---|---|
 | an installer program | sieve-install + the folder packed + its listing | nothing |
-| Sieve instructions (`.sieve`) | the folder packed + its listing | Sieve (`sieve`, `sieve-install` or the hallway) |
+| Sieve instructions (`.sieve`) | the folder packed + its listing | Sieve (`sieve`, `sieve-install` or the hallway; instructions that carry items of Sieve's lines or remake an archive need `sieve` or the hallway, and `sieve-install` says so) |
 
 ## Installing
 
@@ -100,7 +109,7 @@ instructions and is for the tools. The command line still writes it (`sieve loca
 - **A `.sieve` file:** put it beside `sieve-install` and run that (it opens the one `.sieve` beside
   it), drop the file on its window, or open the file with it.
 - **From the command line:** `sieve install NAME.sieve --to FOLDER`, which also accepts an
-  installer program, or an installer's manifest (`sieve-manifest-v4` or `-v3`) itself. Add `--force` to
+  installer program, or an installer's manifest itself (any version, v2 to v18). Add `--force` to
   replace files that are already there.
 - **In the hallway:** the File Locator's **Install from Sieve instructions...** (or I) takes a
   `.sieve` or an installer program, then asks for the folder to put it in.

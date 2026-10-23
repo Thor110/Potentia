@@ -61,6 +61,16 @@
 #include "sieve/image.hpp"
 #include "sieve/modelspace.hpp"
 #include "sieve/worldspace.hpp"
+#include "sieve/aispace.hpp"
+#include "sieve/binaryspace.hpp"
+#include "sieve/bookspace.hpp"
+#include "sieve/cipher.hpp"
+#include "sieve/diffusion.hpp"
+#include "sieve/digit_histogram.hpp"
+#include "sieve/notes3.hpp"
+#include "sieve/rope_wave.hpp"
+#include "sieve/sound.hpp"
+#include "sieve/training.hpp"
 #include "sieve/sha256.hpp"
 #include "sieve/sieve.hpp"
 #include "sieve/utf8.hpp"
@@ -963,7 +973,9 @@ int cmd_version()
               << "  address scramble        " << kScrambleVersion << " (" << kScrambleRounds << " rounds)\n"
               << "  text canonicalisation   " << to_string(kDefaultCanon) << " (default), canon-text-v1\n"
               << "  image canonicalisation  " << kImageCanonVersion2 << " (default, --fit levels), " << kImageCanonVersion << " (--fit average)\n"
-              << "  note canonicalisation   " << kNotesCanonVersion << " (notes104), " << kNotes2CanonVersion << " (notes2)\n"
+              << "  note canonicalisation   " << kNotesCanonVersion << " (notes104), " << kNotes2CanonVersion << " (notes2), " << kNotes3CanonVersion
+              << " (notes3)\n"
+              << "  sound canonicalisation  " << kPcmCanonVersion << " (pcm)\n"
               << "  alphabets               ";
     for (const auto& id : alphabet_ids()) std::cout << id << " ";
     std::cout << "\n  palettes                ";
@@ -974,7 +986,16 @@ int cmd_version()
               << "  compact orderings       " << kShuffleVersion << " (scrambled), " << kSieveRestrictVersion << " (guided)\n"
               << "  filters                 ";
     for (const auto& f : filter_registry()) std::cout << f.name() << " ";
-    std::cout << "\n";
+    std::cout << "\n  other lines             " << kCompositionVersion << " (tracks, movies), " << kBookSpaceVersion << " (books), " << kBinarySpaceVersion
+              << " (binary)\n                          " << kModelSpaceVersion << " (models), " << kWorldSpaceVersion << " (worlds), " << kAiSpaceVersion << " (ai, "
+              << kCanonicalModelVersion << ")\n"
+              << "  instructions (.sieve)   " << kGraphManifestVersion << " newest (maps); installers " << kBinaryManifestVersion << ", or "
+              << kGzipManifestVersion << " where a gzip is remade\n"
+              << "  packing                 " << kRopeWaveAboveVersion << " (the tightened rope), " << kDigitHistogramVersion << ", " << kFileKindsVersion << "\n"
+              << "  records                 " << kBookFormat2 << " (books), " << kMapVersion2 << " (maps, read)\n"
+              << "  vault                   " << vault::kVersion << ", " << vault::kDecoders << ", " << cdc::kVersion << ", " << vault::kChunkMatch << ", "
+              << vault::kPdqMatch << "\n"
+              << "  training                " << training::kTrainingVersion2 << " (ai-train), " << diffusion::kDiffusionVersion << " (diffuse), " << cipher::kCipherVersion << " (cipher)\n";
     try
     {
         const ModelRegistry mr = load_model_registry();

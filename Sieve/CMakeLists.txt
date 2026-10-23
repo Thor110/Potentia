@@ -399,7 +399,7 @@ if(SIEVE_BUILD_CLIENT)
     # the installer attached. SDL is linked statically where a static SDL is to be had, so that
     # program is one file; with only a shared SDL it also needs SDL3.dll beside it (sieve locate
     # --program says so). On Windows it is a windowed program, without a console.
-    add_executable(sieve-install WIN32 client/installer_main.cpp client/unpack_7z.cpp client/window_front.cpp ${SIEVE_ICON_RC})
+    add_executable(sieve-install WIN32 client/installer_main.cpp client/unpack_7z.cpp client/window_front.cpp client/win_console.cpp ${SIEVE_ICON_RC})
     target_link_libraries(sieve-install PRIVATE sieve_lzma)
     if(SIEVE_SMALL_INSTALLER)
         # Its own SDL, built once from the same source (or fetched, when SDL came from vcpkg or

@@ -3829,6 +3829,32 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   `srcset` and `<picture>` sources, which showed the unchecked file. CI: a mixed site (CSS, a
   script, PHP, an unlinked picture).
 
+### The documentation brought up to date (23 October 2026)
+- **Edward:** the full readout of every command and option belongs in `sieve` itself, and the
+  README points to `sieve help`. Checked against the code: `sieve help` already named every option
+  every command reads; what was out of date was facts, now fixed:
+  - `sift`'s default dictionary (scowl-en-60-names, with the -names lists), and its CSV columns;
+  - `locate --installer` writes v4 on its own, the newest (v16, v17) with `--items`, v3 with `--v3`;
+  - `install` reads every version from v2 to v18; `lines` lists every line and alphabet; the
+    overview groups the commands by what they are for, and says every line;
+  - `version` prints every pinned rule (the pcm and notes3 rules, the other lines, the instructions,
+    the rope, records, the vault, training), from the code's own constants;
+  - `mesh` and `world` name `--short`; `dicts`, `bind`, `tensors`, `chat` and `cipher` carry the
+    README's measurements.
+- **The hallway's `--help`** names `--vertices`, `--faces`, `--coords` and `--limits-focus`, every
+  line, and the tile size as a setting. **`sieve-install --help`** is new (`client/win_console.cpp`
+  now linked into it, for the console).
+- **`tools/check_help.py`** (in the CI): every option the code reads is on its command's help page,
+  every command has one, and every hallway option is in its usage text.
+- **README:** the Commands section is a quick start, `warp`'s output and a table of the commands,
+  pointing to `sieve help`. What it held beyond options moved: the File Locator and the
+  every-degree demonstration to the hallway section, the installer formats' history to
+  `docs/SIEVE-INSTALL-USAGE.md` (*The formats, as they grew*), `measure`'s figures to M3 results.
+  Layout, key terms and the corridor's tile size brought up to date; SPECIFICATIONS' corridor too.
+- **The repository's README:** eleven lines, version 0.13.75, recorded training and the web
+  extension among what is built.
+- **Edward's next step:** new screenshots for the README (he is moving the old ones out).
+
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show

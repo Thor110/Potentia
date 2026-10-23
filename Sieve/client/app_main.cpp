@@ -50,11 +50,11 @@ bool save_render(SDL_Renderer* r, const std::string& path)
 // ---------------------------------------------------------------- options
 
 const char* kUsage =
-    "hallway - walk the Sieve's five lines in 3D\n\n"
+    "hallway - walk the Sieve's lines in 3D\n\n"
     "Usage: hallway [options]\n\n"
     "Lines (the same meaning as in the sieve tool):\n"
     "  --line LINE         the line to start in: image, pages (default), books, audio, tracks,\n"
-    "                      video, movies, models, worlds or binary\n"
+    "                      video, movies, models, worlds, ai or binary\n"
     "  --length L          text: characters per book (default 32)\n"
     "  --alphabet ID       text: lower27 (default), babel29, ascii95\n"
     "  --canon v2|v1       text: warp rules (default v2)\n"
@@ -81,6 +81,10 @@ const char* kUsage =
     "  --world-models N    worlds: models per world (default 4); a world is a cover, a title and N\n"
     "                      models of the models line, each in a cell of the grid with one of 24 turns\n"
     "  --world-grid G      worlds: cells along each axis of a world (default 8; worldspace-v1)\n"
+    "  --vertices V  --faces F  --coords C\n"
+    "                      models: the shape of every mesh of the models line (default 8 vertices,\n"
+    "                      12 triangles, a grid of 16 steps a coordinate; modelspace-v1), as sieve mesh\n"
+    "                      takes them\n"
     "  --ai-layers L  --ai-width H  --ai-heads A  --ai-bits B\n"
     "                      AI: every language model of this shape (default 1 layer, width 16, 2 heads, 4 bits a\n"
     "                      weight; aispace-v1), numbered by its weights: take one and talk to it (Enter)\n"
@@ -111,6 +115,7 @@ const char* kUsage =
     "                      every setting there is, the setup menu's among them; the options win over it\n"
     "  --write-settings OUT  write the settings (--settings PATH's, else the defaults) to OUT, and stop\n"
     "  --language CODE     menu language for this run (a file in the lang folder, e.g. en)\n"
+    "  --limits-focus LINE the line the setup menu's FIND MY LIMITS grows (default all: every line)\n"
     "  --menu              with --screenshot: a picture of the setup menu (--press keys go to it)\n"
     "                      (--busy: while the dimensions are still being calculated, if that is caught)\n"
     "  --main-menu         with --screenshot: a picture of the main menu (--press keys go to it)\n"
@@ -168,7 +173,8 @@ const char* kUsage =
     "  --close-up PX       the displays nearest you are drawn again up to this wide (0: off;\n"
     "                      \"screen\", the default, for the screen's width rounded up to a power of\n"
     "                      two; or a power of two from 256 to the renderer's widest texture)\n"
-    "  --items-per-wall N  units on one tile of the corridor (128 or 256; changes no address,\n"
+    "  --items-per-wall N  units on one tile of the corridor (a power of two, 2 to 4096; 128 unless\n"
+    "                      given; changes no address,\n"
     "                      only the tile and slot that name a unit's place in the corridor)\n"
     "  --fps-counter       show the FPS counter\n"
     "  --bench N           before the screenshot, time N frames and print the frame rate\n"
@@ -209,7 +215,7 @@ const char* kUsage =
     "wheel/PgUp/PgDn/[ ] jump 1/1000/1000000 tiles, Home to corridor tile 0 (every line's start line),\n"
     "N/B next/previous unit of a warped trail (or page of a book in hand), P play an audio book, F save the item in hand as a file, F1 the setup menu, Tab free the mouse,\n"
     "Esc close or free the mouse, Ctrl+Q quit.\n\n"
-    "All five lines share one corridor, 128 books per tile. Each line repeats along it; a\n"
+    "Every line shares one corridor, 128 books a tile unless --items-per-wall. Each line repeats along it; a\n"
     "checkered start line marks where each repeat begins. Black doors lead to the next line\n"
     "(left wall) or the previous line (right wall) at the same corridor position.\n";
 

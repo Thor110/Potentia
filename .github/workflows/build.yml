@@ -2167,6 +2167,8 @@ jobs:
           $S site check mix-site
           python -c "import json; json.load(open('../web/extension/manifest.json'))"
           for js in ../web/extension/*.js; do node --check "$js"; done
+          # The programs' own help names every option they read (sieve help, hallway --help).
+          python ../tools/check_help.py
           # A v2 manifest (every file's address listed) is the oracle's to the byte.
           $S locate ../tests/manifest_fixture --manifest fixture2.manifest --with-addresses > /dev/null
           python sieve_ref.py manifest ../tests/manifest_fixture --with-addresses | cmp - fixture2.manifest

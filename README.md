@@ -57,7 +57,7 @@ The fourth model (Llama 3.2) achieved a higher refusal rate on the fictitious en
 
 Sieve is the search-space engine behind Potentia's Gallery of Babel, and its hallway.
 
-Implementation of [SPECIFICATIONS.md](./Sieve/docs/SPECIFICATIONS.md) (v2.0). This covers **M1** (the exhaustive sieve), **M2** (raw addressing and warp), **M3** for text (entropy-ordered "guided" addresses from a pinned model), and the first version of all seven lines: **pages, image, audio and video**, **books** composed from them, **models** (3D meshes) and **binary** (every file), with maps of verified anchors across them.
+Implementation of [SPECIFICATIONS.md](./Sieve/docs/SPECIFICATIONS.md) (v2.0). This covers **M1** (the exhaustive sieve), **M2** (raw addressing and warp), **M3** for text (entropy-ordered "guided" addresses from a pinned model), and the first version of all eleven lines: **pages, image, audio and video**, **books**, **tracks** and **movies** composed from them, **models** (3D meshes), **worlds** composed of models, **AI** (language models) and **binary** (every file), with maps of verified anchors across them.
 
 **Concept and architecture by Edward James Gordon.**
 
@@ -126,7 +126,7 @@ Potentia aims to create:
 
 Potentia is part archive, part alignment sandbox, and part digital civilisational backup.
 
-Status: the search-space engine, **Sieve**, is built and released (v0.13.1): exact addressing, versioned filters, maps of verified anchors and a walkable hallway. The preservation environment and the Museum itself remain at the design stage.
+Status: the search-space engine, **Sieve**, is built and released (this repository: version 0.13.75): exact addressing, versioned filters, maps of verified anchors and a walkable hallway. The preservation environment and the Museum itself remain at the design stage.
 
 <p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
@@ -210,11 +210,13 @@ This mitigates alignment drift and provides a safe boundary between known conten
 ## 🚧 Features
 
 **Built (Sieve):**
-- Universal coordinate system: exact, bijective addresses for text, images, audio, video, books, 3D models and files
+- Universal coordinate system: exact, bijective addresses for text, images, audio, video, books, tracks, movies, 3D models, worlds, language models and files
 - Deterministic filtration stack: versioned filters, exact survivor counts, and compact addressing of survivors only
 - Maps of verified anchors, the foundation of the Museum
 - A walkable 3D hallway through every line, with a node graph viewer for maps
 - Sieve instructions (`.sieve`): any file or folder stored as its own address and installed back, checked byte for byte
+- Recorded, replayable training: a language model of the AI line trained on the record (what it read, in what order), so it can be trained again exactly (`sieve ai-train`), and diffusion models of pictures and melodies (`sieve diffuse`)
+- Sieve on the web: a browser extension that shows a site's `.sieve` files only when each is exactly the file its link's hash names, and `sieve site`, which builds such a site ([Sieve Secure](Pages/secure.html))
 
 **Planned:**
 - Persistent digital environment
@@ -222,7 +224,6 @@ This mitigates alignment drift and provides a safe boundary between known conten
 - User-accessible museum interface
 - Reconstruction tools for lost media
 - Agent training and monitoring systems
-- Recorded, replayable training trajectories
 - Full versioning and preservation of AI models
 
 <p align="right"><a href="#-index">⬆️ Return to Index</a></p>

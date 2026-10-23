@@ -2,7 +2,7 @@
 // behind it.
 //
 // An installer made with `sieve locate FOLDER --installer NAME.sieve` is the address of the
-// folder's installer manifest (sieve-manifest-v4), stored as raw bytes: one number, which read
+// folder's installer manifest (sieve-manifest-v4, or with --items the newest), stored as raw bytes: one number, which read
 // back is the manifest, which holds the folder structure and then every file packed (programs
 // through the x86 filter, texts made from other texts' lines as masks, all of it LZMA2), unpacked
 // by the LZMA SDK's decoder in the locator's code (cli/locate.hpp). Older installers (v3: every
@@ -27,6 +27,7 @@
 #include "cli/locate.hpp"
 #include "unpack_7z.hpp"
 #include "window_icon.hpp"
+#include "win_console.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -272,6 +273,31 @@ void save_bmp(SDL_Renderer* r, const std::string& path)
 
 } // namespace
 
+namespace {
+
+const char* kInstallerUsage =
+    "sieve-install - the installer: puts a folder back from its .sieve\n"
+    "\n"
+    "Usage:\n"
+    "  sieve-install [INSTALLER.sieve] [--to FOLDER] [--yes] [--screenshot FILE.bmp]\n"
+    "\n"
+    "Opens the installer given, else the one attached to this program's own end (an installer\n"
+    "program, made with sieve locate --program or the hallway's File Locator), else a .sieve\n"
+    "dropped on its window or lying beside it. It says what it will install and where; Install\n"
+    "checks every file against its SHA-256 before writing any, and Cancel part way removes what\n"
+    "was written. It installs every file packed, pulled tight by the rope or cut into pieces,\n"
+    "archives given back as their contents, and the files a map holds; for instructions that\n"
+    "carry items of Sieve's lines or remake an archive, it asks for Sieve (sieve install, or\n"
+    "the hallway's File Locator).\n"
+    "\n"
+    "Options (for testing without a person):\n"
+    "  --to FOLDER          where to install (else it asks)\n"
+    "  --yes                install at once and exit: 0 on success\n"
+    "  --screenshot FILE    write the window, as it stands just before exiting, as a BMP\n"
+    "  --help               this text\n";
+
+} // namespace
+
 int main(int argc, char** argv)
 {
     // Options for testing (see the top); anything else is the installer to open.
@@ -280,6 +306,13 @@ int main(int argc, char** argv)
     for (int i = 1; i < argc; ++i)
     {
         const std::string a = argv[i];
+        if (a == "--help" || a == "-h")
+        {
+            hallway::attach_parent_console();
+            std::fputs(kInstallerUsage, stdout);
+            std::fflush(stdout);
+            return 0;
+        }
         if (a == "--to" && i + 1 < argc) to_arg = argv[++i];
         else if (a == "--screenshot" && i + 1 < argc) shot = argv[++i];
         else if (a == "--yes") yes = true;
