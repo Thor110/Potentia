@@ -29,6 +29,7 @@
 #include "cli/lines.hpp"
 #include "cli/locate.hpp"
 #include "cli/map_sieve.hpp"
+#include "cli/site.hpp"
 #include "cli/web_host.hpp"
 #include "cli/media_decode.hpp"
 #include "cli/vault.hpp"
@@ -2657,6 +2658,59 @@ int cmd_locate(const Args& a)
 // map: a folder's map (node graph of verified anchors), a map of some files (a release's), or a
 // map read back; changed an anchor at a time (--add, --remove) or sealed; written as the map
 // itself, as DOT or as GraphML.
+int cmd_site(const Args& a)
+{
+    namespace fs = std::filesystem;
+    auto path_of = [](const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); };
+    auto list_of = [](const std::string& s) {
+        std::vector<std::string> out;
+        size_t at = 0;
+        while (at <= s.size())
+        {
+            const size_t end = std::min(s.find(',', at), s.size());
+            if (end > at) out.push_back(s.substr(at, end - at));
+            at = end + 1;
+        }
+        return out;
+    };
+    const std::string what = a.positional.empty() ? "" : a.positional[0];
+    if (what == "build")
+    {
+        if (a.positional.size() != 2 || !a.has("out")) throw std::invalid_argument("site build needs a SRC folder and --out OUT");
+        SiteOptions o;
+        o.pages = a.has("sieve-pages");
+        if (a.has("plain")) o.plain = list_of(a.get("plain"));
+        if (a.has("sieve"))
+        {
+            o.sieve_kinds.clear();
+            for (std::string e : list_of(a.get("sieve")))
+            {
+                if (!e.empty() && e[0] == '.') e = e.substr(1);
+                for (char& c : e) c = char(std::tolower(static_cast<unsigned char>(c)));
+                o.sieve_kinds.push_back(e);
+            }
+        }
+        if (a.has("search-per-file")) o.search_per_file = std::stod(a.get("search-per-file"));
+        const auto t0 = std::chrono::steady_clock::now();
+        const SiteReport r = build_site(path_of(a.positional[1]), path_of(a.get("out")), o);
+        const double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        auto n = [](size_t k, const char* one, const char* many) { return std::to_string(k) + " " + (k == 1 ? one : many); };
+        std::cerr << "site      " << n(r.files, "file", "files") << ", " << r.made << " made into .sieve files (" << r.pages_made << " of them pages), "
+                  << n(r.links, "link", "links") << (r.links == 1 ? " given its hash" : " given their hashes") << ", in " << std::fixed << std::setprecision(1) << s << " s\n";
+        std::cout << "site.sieve sha256 " << r.map_sha256 << "\n";
+        return 0;
+    }
+    if (what == "check")
+    {
+        if (a.positional.size() != 2) throw std::invalid_argument("site check needs a DIR");
+        const SiteCheck c = check_site(path_of(a.positional[1]));
+        for (const std::string& m : c.mismatches) std::cout << "mismatch  " << m << "\n";
+        std::cerr << "site      " << c.checked << " checked, " << c.mismatches.size() << " not as stated" << (c.kept ? ", " + std::to_string(c.kept) + " kept as written (not checked)" : "") << "\n";
+        return c.mismatches.empty() ? 0 : 1;
+    }
+    throw std::invalid_argument("site needs build or check (see: sieve help site)");
+}
+
 int cmd_map(const Args& a)
 {
     namespace fs = std::filesystem;
@@ -2969,7 +3023,7 @@ bool is_command(const std::string& name)
 {
     return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" || name == "world" || name == "tensors" || name == "rope" || name == "chat" || name == "ai" || name == "ai-train" || name == "diffuse" || name == "cipher" ||
            name == "version" || name == "models" || name == "train" || name == "measure" ||
-           name == "filters" || name == "check" || name == "tailor" || name == "bind" || name == "unbind";
+           name == "filters" || name == "check" || name == "tailor" || name == "bind" || name == "unbind" || name == "site";
 }
 
 } // namespace
@@ -3078,6 +3132,7 @@ int main(int argc, char** argv)
         if (a.command == "locate") return cmd_locate(a);
         if (a.command == "install") return cmd_install(a);
         if (a.command == "map") return cmd_map(a);
+        if (a.command == "site") return cmd_site(a);
         if (a.command == "vault") return cmd_vault(a);
         std::cerr << "unknown command '" << a.command << "'\n\n";
         print_usage();

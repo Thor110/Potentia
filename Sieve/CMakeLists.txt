@@ -245,6 +245,7 @@ add_executable(sieve
     tools/cli/train_cmd.cpp
     tools/cli/diffuse.cpp
     tools/cli/cipher_cmd.cpp
+    tools/cli/site.cpp
     ${SIEVE_ICON_RC})
 target_link_libraries(sieve PRIVATE sieve_lines sieve_locate sieve_compare)
 if(WIN32)

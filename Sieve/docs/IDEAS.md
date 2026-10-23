@@ -4193,6 +4193,33 @@ folder) and shows the HTML they unpack to, as a first test where the result is k
     possible, from there it can link to a built version for people to test live online"):*
     `Pages/secure.html`, with the test site built into `Pages/secure` and served by GitHub Pages
     like any other file; the extension needs nothing of the server beyond the files.
+- *The site harness, `sieve site` (Edward, 23 October 2026: "I presume that script and src folder
+  could be repurposed in the future for any website? I ask as I notice vitruvian man reference
+  hardcoded in the py script that makes it"; built the same day, `tools/cli/site.*`):*
+  - `sieve site build SRC --out OUT [--sieve-pages] [--plain LIST] [--sieve LIST]` takes any site's
+    folder as it is, with plain links (`<img src="pictures/door.jpg">`, `<a href="notes.html">`),
+    and writes it with its pictures (and, with `--sieve-pages`, its pages but for every `index.html` and
+    those kept plain) made into `.sieve` files, each link and picture that names one changed to
+    the `.sieve` and given that file's `integrity`. Nothing else in a page changes: only those
+    attributes are edited, in the page's own text.
+  - A page is made after the pages it names, so the hash it states is final; pages that name one
+    another are refused, naming them, with the answer (keep one plain, so the others name it by
+    name only). Last it writes `site.sieve`, the global list: a map (`sieve-manifest-v18`) of every
+    file by its SHA-256, and prints that map's own SHA-256, the one hash to trust for the site.
+  - `sieve site check DIR` reads a built site as the extension would (the `.sieve` pages decoded
+    as the host decodes them, against their own hash) and lists every stated hash and every map
+    entry that does not match, and every file the map does not name; it is the crawler's first
+    half, on a folder instead of a server.
+  - A tag with `data-sieve-keep` is left exactly as written and not checked: the test site's links
+    meant to be wrong. The test site's own `make_site.py` now only adds what is the test's (the link
+    home, the many-file `pages.sieve`, the tampered picture and its hash) and calls `sieve site`.
+  - Measured here (23 October 2026): the test site, 13 files, 8 made into `.sieve` files (2 of them
+    pages), 11 links given their hashes, built in 14.6 s with the default second of search a file;
+    `site.sieve` 863 bytes; checked 24, none wrong, 3 kept as written. Built twice, every file came
+    out the same. Shown again in Chromium 141: the same six pictures shown and the tampered one,
+    the wrong hash, the missing hash and the many files refused.
+  - *Not read yet:* links in CSS (`url(...)`) and scripts, `srcset`, and links from the server's
+    root (`/a.jpg`); the extension does not read `site.sieve` yet.
 
 **19.93 The `.map` format folded into `.sieve` (Edward, 22 October 2026; built the same day).**
 His thought: update the `.map` format, or replace it with `.sieve` and deprecate it, the

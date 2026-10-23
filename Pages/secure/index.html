@@ -17,19 +17,19 @@
 <div class="box">
 <ul>
 <li><a href="gallery.html">The gallery</a>: a slideshow of <code>.sieve</code> pictures, one of them tampered with.</li>
-<li><a href="about.sieve" integrity="sha256-qrSXUHknK6mVuTkfwWQemQLBiFzOFaWzrvY1B/hDHqc=">About</a>: a page held in a <code>.sieve</code>, with a <code>.sieve</code> picture of its own.</li>
-<li><a href="notes.sieve" integrity="sha256-KwAyimfZb86YVEkFO5OJJZUp7rp5YNmUIZqb0MfZMME=">Notes</a>: another, which links back here.</li>
+<li><a href="about.sieve" integrity="sha256-ww0tJRngJ4vRVUxeKTWdjk8rpP8agB70XZETM1k/9Hc=">About</a>: a page held in a <code>.sieve</code>, with a <code>.sieve</code> picture of its own.</li>
+<li><a href="notes.sieve" integrity="sha256-xjKK/b6ayhoJzqUn19+uLta1LvJ/0Wda0KCgyPf3JKw=">Notes</a>: another, which links back here.</li>
 </ul>
 </div>
 <h2>Links That Should Be Refused</h2>
 <div class="box">
 <ul>
-<li><a href="notes.sieve" integrity="sha256-qrSXUHknK6mVuTkfwWQemQLBiFzOFaWzrvY1B/hDHqc=">Notes, with the wrong hash</a>: the link states About's hash.</li>
-<li><a href="notes.sieve">Notes, with no hash</a>: the link states none, so nothing vouches for the file.</li>
-<li><a href="pages.sieve" integrity="sha256-qx03WBIbX4SMH+z7A4Jz7OjpBfNfLF1ukoaBGmf6fmY=">Every page in one <code>.sieve</code></a>: the right hash, but it holds many files, and the extension shows one file a link names.</li>
+<li><a href="notes.sieve" integrity="sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=" data-sieve-keep>Notes, with the wrong hash</a>: the link states the hash of an empty file.</li>
+<li><a href="notes.sieve" data-sieve-keep>Notes, with no hash</a>: the link states none, so nothing vouches for the file.</li>
+<li><a href="pages.sieve" integrity="sha256-myUh13LOqtWXq9dcN0J9cAauIM3cyRqcqY1+iA3HLF0=">Every page in one <code>.sieve</code></a>: the right hash, but it holds many files, and the extension shows one file a link names.</li>
 </ul>
 </div>
-<p class="note">Each link names a file below it by its hash, and the pages it opens link back here by name only. Two pages cannot each hold the other's hash: changing either would change both, without end. A site's pages that link to one another are checked against one list of every page's hash instead, which is the next step.</p>
+<p class="note">Each link names a file below it by its hash, and the pages it opens link back here by name only. Two pages cannot each hold the other's hash: changing either would change both, without end. Instead the site has one list of every file's hash, <code>site.sieve</code>, whose own hash is the one to trust for all of it; the extension does not read it yet.</p>
 <script>
   // The extension marks every page it runs in; without it, say so rather than show broken pictures.
   // (mark.js marks the page as it starts; looked for once the page has loaded, and the note taken

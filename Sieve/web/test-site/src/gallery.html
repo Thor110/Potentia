@@ -14,13 +14,13 @@
 <p>Each picture is a <code>.sieve</code> in <code>images/</code>, beside this page, which states each one's hash. The fourth has had one byte changed since its hash was written into this page, so the extension refuses it in place.</p>
 </div>
 <div class="slideshow" id="show">
-<figure><img src="images/door.sieve" integrity="{{sri:images/door.sieve}}" alt="A door in the hallway"><figcaption>1. A door in the hallway</figcaption></figure>
-<figure><img src="images/book.sieve" integrity="{{sri:images/book.sieve}}" alt="A book on a shelf"><figcaption>2. A book on a shelf</figcaption></figure>
-<figure><img src="images/audio.sieve" integrity="{{sri:images/audio.sieve}}" alt="The audio line"><figcaption>3. The audio line</figcaption></figure>
-<figure><img src="images/tampered.sieve" integrity="{{sri:images/vitruvian.sieve}}" alt="Tampered with"><figcaption>4. Tampered with: one byte changed after its hash was written, so it should be refused</figcaption></figure>
-<figure><img src="images/picture-in-hand.sieve" integrity="{{sri:images/picture-in-hand.sieve}}" alt="A picture in hand"><figcaption>5. A picture in hand</figcaption></figure>
-<figure><img src="images/filters.sieve" integrity="{{sri:images/filters.sieve}}" alt="The filters"><figcaption>6. The filters</figcaption></figure>
-<figure><img src="images/vitruvian.sieve" integrity="{{sri:images/vitruvian.sieve}}" alt="Vitruvian Man"><figcaption>7. Vitruvian Man (public domain), the file the fourth was made from</figcaption></figure>
+<figure><img src="pictures/door.jpg" alt="A door in the hallway"><figcaption>1. A door in the hallway</figcaption></figure>
+<figure><img src="pictures/book.jpg" alt="A book on a shelf"><figcaption>2. A book on a shelf</figcaption></figure>
+<figure><img src="pictures/audio.jpg" alt="The audio line"><figcaption>3. The audio line</figcaption></figure>
+<figure><img id="tampered" src="pictures/tampered.sieve" integrity="{{tampered}}" data-sieve-keep alt="Tampered with"><figcaption>4. Tampered with: one byte changed after its hash was written, so it should be refused</figcaption></figure>
+<figure><img src="pictures/picture-in-hand.jpg" alt="A picture in hand"><figcaption>5. A picture in hand</figcaption></figure>
+<figure><img src="pictures/filters.jpg" alt="The filters"><figcaption>6. The filters</figcaption></figure>
+<figure><img src="pictures/vitruvian.jpg" alt="Vitruvian Man"><figcaption>7. Vitruvian Man (public domain), the file the fourth was made from</figcaption></figure>
 <div class="controls"><button id="prev">Previous</button> <span id="count"></span> <button id="next">Next</button></div>
 </div>
 <script>

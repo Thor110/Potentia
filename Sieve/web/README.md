@@ -61,16 +61,47 @@ JSON in that folder's `NativeMessagingHosts` instead.
 ## The test site
 
 - **`index.html`**: the links that should open (About, Notes) and those that should be refused: a
-  wrong hash, no hash, and every page in one `.sieve`.
-- **`gallery.html`**: a slideshow of seven `.sieve` pictures. The fourth had one byte changed after
-  its hash was written into the page, and is refused in the slideshow itself.
+  wrong hash (an empty file's), no hash, and every page in one `.sieve`.
+- **`gallery.html`**: a slideshow of seven `.sieve` pictures. The fourth is Vitruvian Man's with one
+  byte changed after its hash was written into the page, and is refused in the slideshow itself.
 - **`about.sieve`**, **`notes.sieve`**: pages held in `.sieve` files. About has a `.sieve` picture
   of its own.
 
+- **`site.sieve`**: the map of every file of the site by its SHA-256.
+
 Every link with a hash names a file made before the page that links to it, so the pages link back
 up by name only: two pages cannot each state the other's hash, since changing either would change
-both, without end. Pages that link to one another are checked against one list of every page's
-hash instead, which is the next step.
+both, without end. `site.sieve` holds every file's hash instead, and its own hash is the one to
+trust for all of it (the extension does not read it yet).
+
+## Any site: `sieve site`
+
+The test site is built by `sieve site build`, which builds any site the same way (`sieve help
+site`, `tools/cli/site.*`). Write the site with plain links, as for any server:
+`<img src="pictures/door.jpg">`, `<a href="notes.html">`. Then
+
+```bat
+sieve site build my-site --out my-site-built --sieve-pages --plain gallery.html
+sieve site check my-site-built
+```
+
+- **build** copies the site, makes its pictures into `.sieve` files (jpg, jpeg, png, gif, webp,
+  bmp and svg; `--sieve` names others), and with `--sieve-pages` its pages too, but for every
+  `index.html` and those given to `--plain` (a page with a script of its own, like the slideshow,
+  stays plain: the viewer runs no scripts).
+  - Each `<img src>`, `<source src>` and `<a href>` that names one is changed to the `.sieve` and
+    given its `integrity`; a link to a `.sieve` already in the site is given its hash too. Nothing
+    else in a page is changed.
+  - A page is made after the pages it names. Pages that name one another are refused, with their
+    names: keep one plain.
+  - Last it writes `site.sieve` and prints its SHA-256.
+  - A tag with `data-sieve-keep` is left as written (the test site's links meant to be wrong).
+- **check** reads a built site as the extension would, and lists every stated hash, and every file
+  of `site.sieve`, that does not match; it ends in an error if any does not.
+- **Not read yet:** links in CSS and scripts, `srcset`, and links from the server's root (`/a.jpg`).
+
+`make_site.py` adds only what is the test's own before calling it: the link home, the many-file
+`pages.sieve`, and the tampered picture with its hash.
 
 The pictures are the hallway's screenshots from `docs/images` and the public-domain Vitruvian Man
 from `data/anchors/public-domain`, as JPEGs (`test-site/src/pictures`). The pages are styled as the
@@ -113,9 +144,9 @@ talks to it as Chrome does, without a browser; the CI runs it.
 
 ## Next
 
-- **Pages that link to one another:** one list of every page's hash, a map (`sieve-manifest-v18`),
-  whose own hash is the one to trust; a harness that writes a site's link hashes and its map
-  together; a crawler that checks a site's links against them.
+- **The extension reading `site.sieve`:** a site's pages that link to one another, checked against
+  its one list of hashes.
+- **A crawler:** `sieve site check` against a server instead of a folder.
 - **A `.sieve` of many files:** shown as a listing of its folders and files.
 - **WebAssembly:** the decoder in the extension itself, so nothing is installed and every browser
   can use it.

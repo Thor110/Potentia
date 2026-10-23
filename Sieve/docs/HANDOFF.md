@@ -3782,8 +3782,9 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
 - **Tested** in Chromium here (Playwright, headless, the host's JSON in the profile's own
   `NativeMessagingHosts`, which a profile folder of its own needs on Linux). The CI runs
   `check_host.py`, `make_site.py` and `node --check`.
-- **Next:** the site's map of every page's hash and the harness that writes links' hashes with it;
-  the crawler; a `.sieve` of many files as a listing; WebAssembly.
+- **Next:** the site's map of every page's hash and the harness that writes links' hashes with it
+  (built since: `sieve site`, below); the crawler; a `.sieve` of many files as a listing;
+  WebAssembly.
 - **On the website (23 October 2026):** `Pages/secure.html` (Sieve Secure, a button on
   `index.html`) gives the setup in four steps and links to the test site built into
   `Pages/secure` (`make_site.py --out Pages/secure --home ../secure.html`, 600 KB). The test site
@@ -3802,6 +3803,23 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   "before any other DOM is constructed"; headless Chromium here had one). `mark.js` now waits for
   it, and `content.js` marks again; shown with a `mark.js` that marks nothing and every request
   held 1 s: the note stays hidden on both pages. Not confirmed on Edward's Chrome yet.
+- **Confirmed by Edward (23 October 2026):** everything works as expected.
+
+### The site harness, `sieve site` (23 October 2026)
+- **`tools/cli/site.*`, `cmd_site` in `sieve_cli.cpp`** (IDEAS §19.92): `build SRC --out OUT
+  [--sieve-pages] [--plain LIST] [--sieve LIST] [--search-per-file S]` and `check DIR`. Any site with
+  plain links; pictures (and pages) made into `.sieve` files (the newest version, no items), links
+  changed to them with their `integrity`, pages made after those they name (pages naming each other
+  refused, named), `site.sieve` (a v18 map of every file) written last and its SHA-256 printed.
+  `data-sieve-keep` leaves a tag as written and unchecked.
+- **The test site:** `src/` has plain links now (`pictures/*.jpg`, `about.html`, `notes.html`);
+  `make_site.py` stages it (`{{home}}`, `pages.sieve`, the tampered picture made as the build makes
+  Vitruvian Man, `{{tampered}}`), runs `sieve site build ... --sieve-pages --plain gallery.html`, then
+  `sieve site check`. The built pictures moved from `images/` to `pictures/`. The wrong-hash link
+  states an empty file's hash now (it named About's, which the source cannot know before the build).
+- **The CI** checks the test site with `sieve site check` (3 kept as written), a file changed after
+  the build caught, two pages naming each other refused, and the same two built with one plain.
+- **`Pages/secure`** rebuilt with it.
 
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s

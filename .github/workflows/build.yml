@@ -2128,14 +2128,25 @@ jobs:
           # The web plugin's host (web/README.md), talked to as Chrome does (native messaging: a
           # length, then JSON): a single file's .sieve decoded to the same bytes, its hash stated as
           # an integrity attribute; refused with a wrong hash, and a .sieve of many files refused
-          # with its own; the test site built (its pages after the files they state hashes of); the
-          # extension's scripts and manifest well formed.
+          # with its own; the test site built by sieve site build (its pages after the files they
+          # state hashes of) and checked by sieve site check; a site changed after it was built is
+          # caught, and pages naming each other refused; the extension's scripts and manifest well
+          # formed.
           $S locate $F/a.txt --installer web-a.sieve --items > /dev/null
           python ../web/host/check_host.py $S web-a.sieve $F/a.txt | grep -c "^decoded: a.txt, text/plain, 34 bytes in 1 part" > /dev/null
           python ../web/host/check_host.py $S web-a.sieve --refused | grep -c "not the 0000" > /dev/null
           python ../web/host/check_host.py $S tree.sieve --refused-as-is | grep -c "the plugin shows one file a link names" > /dev/null
-          python ../web/test-site/make_site.py $S --out web-site | grep -c "^images/tampered.sieve" > /dev/null
+          python ../web/test-site/make_site.py $S --out web-site | grep -c "^pictures/tampered.sieve" > /dev/null
           [ "$(grep -o 'integrity="sha256-' web-site/gallery.html | wc -l)" -eq 7 ]
+          $S site check web-site 2>&1 | grep -c "0 not as stated, 3 kept as written" > /dev/null
+          printf x >> web-site/style.css
+          if $S site check web-site > site-check.txt; then exit 1; fi
+          grep -c "site.sieve: style.css is not the file it names" site-check.txt > /dev/null
+          rm -rf cyc && mkdir cyc && echo '<a href="b.html">b</a>' > cyc/a.html && echo '<a href="a.html">a</a>' > cyc/b.html
+          if $S site build cyc --out cyc-site --sieve-pages 2> cyc.txt; then exit 1; fi
+          grep -c "these pages name each other" cyc.txt > /dev/null
+          $S site build cyc --out cyc-site --sieve-pages --plain b.html > /dev/null
+          $S site check cyc-site
           python -c "import json; json.load(open('../web/extension/manifest.json'))"
           for js in ../web/extension/*.js; do node --check "$js"; done
           # A v2 manifest (every file's address listed) is the oracle's to the byte.

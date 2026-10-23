@@ -1002,6 +1002,27 @@ const std::vector<Page>& pages()
          {},
          {{"sieve web-host", "talk to it by hand (the messages are binary: a length, then JSON)"}}},
 
+        {"site", "A website of .sieve files, each link stating the hash of the file it names.",
+         "sieve site build SRC --out OUT [--sieve-pages] [--plain a.html,b.html] [--sieve jpg,png,...]\n"
+         "  [--search-per-file S]\n"
+         "  sieve site check DIR",
+         "build copies the site in SRC to OUT, its pictures made into .sieve files (with --sieve-pages,\n"
+         "its pages too, but for every index.html and those given to --plain), and gives every\n"
+         "<img src>, <source src> and <a href> that names one the integrity attribute of that file\n"
+         "(sha256- and its base64), so the Sieve extension shows it only if it is exactly that file.\n"
+         "A page is made after the pages it names; pages that name each other are refused, naming\n"
+         "them (keep one plain). Last it writes site.sieve, a map of every file by its SHA-256, and\n"
+         "prints that map's own SHA-256: the one hash to trust for the whole site. A tag with\n"
+         "data-sieve-keep is left as written. check reads a built site as the extension would and\n"
+         "lists every stated hash, and every file of the map, that does not match.",
+         {{"--out OUT", "Where to build it (not inside SRC; replaced if empty or built before)."},
+          {"--sieve-pages", "Make the pages into .sieve files too."},
+          {"--plain LIST", "With --sieve-pages: pages (paths in the site, commas between) kept as they are."},
+          {"--sieve LIST", "The extensions made into .sieve files (jpg,jpeg,png,gif,webp,bmp,svg)."},
+          {"--search-per-file S", "The rope's search for each file, in seconds (1; 0: no limit)."}},
+         {{"sieve site build web/test-site/src --out site --sieve-pages", "the test site"},
+          {"sieve site check site", "every hash it states, checked"}}},
+
         {"map", "A map: a node graph of verified anchors.",
          "sieve map FOLDER|FILE...|MAP.sieve|OLD.map [--out OUT.sieve] [--add FILE [--as NAME]]\n"
          "  [--remove ID] [--meta NODE:key=value] [--seal]\n"
