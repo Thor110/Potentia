@@ -61,7 +61,7 @@ JSON in that folder's `NativeMessagingHosts` instead.
 ## The test site
 
 - **`index.html`**: the links that should open (About, Notes) and those that should be refused: a
-  wrong hash, no hash, and every picture in one `.sieve`.
+  wrong hash, no hash, and every page in one `.sieve`.
 - **`gallery.html`**: a slideshow of seven `.sieve` pictures. The fourth had one byte changed after
   its hash was written into the page, and is refused in the slideshow itself.
 - **`about.sieve`**, **`notes.sieve`**: pages held in `.sieve` files. About has a `.sieve` picture
@@ -73,7 +73,20 @@ both, without end. Pages that link to one another are checked against one list o
 hash instead, which is the next step.
 
 The pictures are the hallway's screenshots from `docs/images` and the public-domain Vitruvian Man
-from `data/anchors/public-domain`, as JPEGs (`test-site/src/pictures`).
+from `data/anchors/public-domain`, as JPEGs (`test-site/src/pictures`). The pages are styled as the
+Potentia website is, and say so when the extension is not running, rather than show broken
+pictures.
+
+**On the website:** `Pages/secure.html` (Sieve Secure) explains the setup in four steps and links to
+a built copy of the test site in `Pages/secure`, which GitHub Pages serves as it serves any file.
+Build it again after changing the site, from the repository's top folder:
+
+```bat
+python Sieve\web\test-site\make_site.py out\build\x64-Release\sieve.exe --out Pages\secure --home ../secure.html
+```
+
+(`--home` adds a link back to the Sieve Secure page; the `.sieve` files are read the same by any
+build of Sieve, so the copy need not be made by yours.)
 
 ## How the extension and Sieve talk
 

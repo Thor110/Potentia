@@ -3784,6 +3784,13 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   `check_host.py`, `make_site.py` and `node --check`.
 - **Next:** the site's map of every page's hash and the harness that writes links' hashes with it;
   the crawler; a `.sieve` of many files as a listing; WebAssembly.
+- **On the website (23 October 2026):** `Pages/secure.html` (Sieve Secure, a button on
+  `index.html`) gives the setup in four steps and links to the test site built into
+  `Pages/secure` (`make_site.py --out Pages/secure --home ../secure.html`, 600 KB). The test site
+  is styled as the website, its many-file `.sieve` is the pages' sources (3 KB, not the pictures),
+  and its plain pages say when the extension is not running (the content script marks
+  `<html data-sieve-extension>`). Tested in Chromium served from the repository's top folder.
+- **`web/test-site/serve_site.bat`:** step 4 in a double-click (finds Python as `make_release.bat`).
 
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s

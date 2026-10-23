@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Potentia // Sieve Secure</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    background:#0a0a0f;
+    color:#e0ddd8;
+    font-family:'Courier New',monospace;
+    font-size: 16px;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content: center;
+    padding:32px;
+  }
+  h1{font-size:16px;letter-spacing:0.3em;text-transform:uppercase;color:#666;margin-bottom:12px;text-align:center;white-space:nowrap;}
+  .sub{font-size:16px;color:#444;margin-bottom:20px;letter-spacing:0.15em;text-align:center;max-width:2000px;line-height:1.6;}
+  
+  .manifesto-line {
+    font-size: 16px;
+    color: #666;
+    margin-bottom: 16px;
+    letter-spacing: 0.1em;
+    text-align: center;
+    max-width: 2000px;
+    line-height: 1.5;
+  }
+  
+  /* Counter block matching the mechanical aesthetic */
+  .counter-box {
+    width: 100%;
+    max-width: 600px;
+    border: 1px solid #2a2a3a;
+    background: #0d0d14;
+    padding: 20px;
+    margin-bottom: 24px;
+    text-align: center;
+  }
+  .counter-title {
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: #666;
+    margin-bottom: 8px;
+    white-space: nowrap;
+  }
+  .counter-value {
+    font-size: 16px;
+    color: #e0ddd8;
+    letter-spacing: 0.1em;
+    font-weight: bold;
+    white-space: nowrap;
+  }
+
+  .section-label {
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: #444;
+    margin-bottom: 16px;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .nav-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    max-width: 600px;
+    margin-bottom: 24px;
+  }
+
+  /* Matching the viewfinder button style exactly */
+  .btn-link {
+    display: block;
+    text-decoration: none;
+    background: transparent;
+    border: 1px solid #2a2a3a;
+    color: #888;
+    padding: 14px 20px;
+    font-family: 'Courier New',monospace;
+    font-size: 16px;
+    letter-spacing: 0.15em;
+    cursor: pointer;
+    text-transform: uppercase;
+    text-align: center;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+
+  .btn-link:hover {
+    border-color: #555;
+    color: #ccc;
+    background: #111;
+  }
+
+  .footer {
+    margin-top: 16px;
+    font-size: 16px;
+    color: #222;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    text-align: center;
+    white-space: nowrap;
+  }
+</style>
+<style>
+  .steps {
+    width: 100%;
+    max-width: 700px;
+    border: 1px solid #2a2a3a;
+    background: #0d0d14;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+    color: #b0aca5;
+    line-height: 1.6;
+  }
+  .steps ol, .steps ul { margin-left: 24px; }
+  .steps li { margin-bottom: 8px; }
+  .steps a { color: #ccc; }
+  .steps code { color: #e0ddd8; }
+  .nav-group { max-width: 700px; }
+  @media (max-width: 720px) {
+    h1, .section-label, .btn-link, .footer { white-space: normal; }
+    .steps li { overflow-wrap: anywhere; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Sieve Secure // Pages That Prove Themselves</h1>
+<div class="sub">
+  Links that name the exact file they point to, checked before it is opened.
+</div>
+
+
+<div class="steps" style="color:#777;font-size:14px;text-align:center;">
+  <div style="text-transform:uppercase;letter-spacing:0.2em;color:#666;margin-bottom:8px;">AI Disclosure</div>
+  Sieve is Edward's (Thor110's) work, grown from theory and ideas he has developed over the past few years. Google's Gemini has helped him theorise and conceptualise, and helped write parts of this website. Anthropic's Claude has written much of Sieve's code and documentation with him, including this page and the extension it describes. Transparency fosters trust.
+</div>
+
+<div class="manifesto-line">A <code>.sieve</code> file names its contents by their SHA-256, but so could anyone who made one: a file's own hashes only show it was not damaged. Here the link names the hash instead. The page that links to a <code>.sieve</code> states that file's own SHA-256, and the Sieve extension checks it before a byte of the file is opened, refusing anything that does not match.</div>
+<div class="manifesto-line">This is a first test, for Chrome (or Edge) on Windows: the extension hands each checked file to Sieve on your own computer, which unpacks it for the browser.</div>
+
+<div class="section-label">Set It Up (Four Steps)</div>
+<div class="steps">
+  <ol>
+    <li>Build Sieve from <a href="https://github.com/Thor110/Potentia" target="_blank">the repository</a>, as on the <a href="release.html">Build or Buy</a> page (x64 Release).</li>
+    <li>Double-click <code>Sieve\web\host\install_host.bat</code>, once. It tells Chrome and Edge where your <code>sieve.exe</code> is, for your user only (<code>uninstall_host.bat</code> undoes it).</li>
+    <li>Open <code>chrome://extensions</code>, turn on Developer mode, choose Load unpacked, and pick the <code>Sieve\web\extension</code> folder.</li>
+    <li>Open the <a href="secure/index.html">live test site</a> below, or build your own copy and serve it on your computer by double-clicking <code>Sieve\web\test-site\serve_site.bat</code>.</li>
+  </ol>
+  The full guide, for Linux and Mac too, is <a href="https://github.com/Thor110/Potentia/blob/main/Sieve/web/README.md" target="_blank">Sieve/web/README.md</a>.
+</div>
+
+<div class="section-label">What You Should See</div>
+<div class="steps">
+  <ul>
+    <li><b>The gallery:</b> a slideshow of seven pictures, each a <code>.sieve</code> checked against the hash the page states for it. The fourth had one byte changed after its hash was written, and is refused in the slideshow itself.</li>
+    <li><b>About and Notes:</b> pages held in <code>.sieve</code> files, opened in a frame that runs no scripts, so nothing in a page from a stranger gets the extension's powers. About has a checked <code>.sieve</code> picture of its own.</li>
+    <li><b>Three links that should be refused:</b> one stating the wrong hash, one stating none, and one to a <code>.sieve</code> that holds many files (the extension shows one file a link names).</li>
+    <li>Without the extension, the test pages say so instead of showing broken pictures.</li>
+  </ul>
+</div>
+
+<div class="section-label">What Comes Next</div>
+<div class="steps">
+  <ul>
+    <li>One list of every page's hash for a whole site, so pages that link to one another are covered too (two pages cannot each state the other's hash: changing either would change both).</li>
+    <li>A crawler that routinely checks a site's links against their hashes.</li>
+    <li>The decoder built into the extension itself, so nothing needs installing, in any browser.</li>
+  </ul>
+</div>
+
+<div class="nav-group">
+  <a href="secure/index.html" class="btn-link">Live Test Site</a>
+  <a href="https://github.com/Thor110/Potentia/tree/main/Sieve/web" target="_blank" class="btn-link">The Extension And Its Host (Source)</a>
+  <a href="../index.html" class="btn-link">Return to Core Architecture</a>
+</div>
+
+<div class="footer">
+  Deterministic Sieve · Civilisational Backup v1.0
+</div>
+
+</body>
+</html>

@@ -1,16 +1,18 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<title>Sieve web test: gallery</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Potentia // Sieve Secure Test // Gallery</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<h1>GALLERY</h1>
-<nav><a href="index.html">Home</a><a href="gallery.html">Gallery</a></nav>
-<p>Each picture is a <code>.sieve</code> in <code>images/</code>, beside this page, which states each
-one's hash. The fourth has had one byte changed since its hash was written into this page, so the
-extension refuses it in place.</p>
+<h1>Potentia // Sieve Secure Test // Gallery</h1>
+<nav>{{home}}<a href="index.html">Home</a><a href="gallery.html">Gallery</a></nav>
+<div class="box missing" id="missing">The Sieve extension is not running in this browser, so these pictures cannot be shown. The steps to set it up are on the Sieve Secure page.</div>
+<div class="box">
+<p>Each picture is a <code>.sieve</code> in <code>images/</code>, beside this page, which states each one's hash. The fourth has had one byte changed since its hash was written into this page, so the extension refuses it in place.</p>
+</div>
 <div class="slideshow" id="show">
 <figure><img src="images/door.sieve" integrity="{{sri:images/door.sieve}}" alt="A door in the hallway"><figcaption>1. A door in the hallway</figcaption></figure>
 <figure><img src="images/book.sieve" integrity="{{sri:images/book.sieve}}" alt="A book on a shelf"><figcaption>2. A book on a shelf</figcaption></figure>
@@ -33,6 +35,8 @@ extension refuses it in place.</p>
   document.getElementById("prev").onclick = () => show(at - 1);
   document.getElementById("next").onclick = () => show(at + 1);
   show(0);
+  // The extension marks every page it runs in; without it, say so rather than show broken pictures.
+  setTimeout(() => { if (!document.documentElement.dataset.sieveExtension) document.getElementById("missing").style.display = "block"; }, 1500);
 })();
 </script>
 </body>

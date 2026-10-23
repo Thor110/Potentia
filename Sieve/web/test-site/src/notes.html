@@ -1,20 +1,20 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<title>Sieve web test: notes</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Potentia // Sieve Secure Test // Notes</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<h1>NOTES</h1>
+<h1>Potentia // Sieve Secure Test // Notes</h1>
 <nav><a href="index.html">Home</a><a href="gallery.html">Gallery</a></nav>
-<p>A second page held in a <code>.sieve</code>. It links back to the pages above it by name only:
-a page can state the hash of a page it points to, but two pages cannot state each other's.</p>
+<div class="box">
+<p>A second page held in a <code>.sieve</code>. It links back to the pages above it by name only: a page can state the hash of a page it points to, but two pages cannot state each other's.</p>
 <ul>
-<li>Every <code>.sieve</code> on this site was made by Sieve from the files in <code>src/</code>
-(<code>make_site.py</code>), and its hash written into the pages that link to it.</li>
-<li>The extension refuses a <code>.sieve</code> whose link states no hash, or the wrong one, or that
-holds more than one file.</li>
+<li>Every <code>.sieve</code> on this site was made by Sieve from the files in <code>src/</code> (<code>make_site.py</code>), and its hash written into the pages that link to it.</li>
+<li>The extension refuses a <code>.sieve</code> whose link states no hash, or the wrong one, or that holds more than one file.</li>
 </ul>
+</div>
 </body>
 </html>

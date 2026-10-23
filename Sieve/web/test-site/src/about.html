@@ -1,19 +1,19 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<title>Sieve web test: about</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Potentia // Sieve Secure Test // About</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<h1>ABOUT</h1>
+<h1>Potentia // Sieve Secure Test // About</h1>
 <nav><a href="index.html">Home</a><a href="gallery.html">Gallery</a><a href="notes.sieve" integrity="{{sri:notes.sieve}}">Notes</a></nav>
-<p>This page came to the browser as <code>about.sieve</code>. The extension checked that file's
-SHA-256 against the one the link to it states before decoding it, and shows it in a frame that
-runs no scripts, so nothing in a page from a stranger gets the extension's powers.</p>
-<p>The picture below is a <code>.sieve</code> too, checked the same way against the hash this page
-states for it.</p>
-<p><img src="images/door.sieve" integrity="{{sri:images/door.sieve}}" alt="A door in the hallway" width="400"></p>
-<p>Its link to Notes states Notes' hash; Notes links back here by name only (see Home).</p>
+<div class="box">
+<p>This page came to the browser as <code>about.sieve</code>. The extension checked that file's SHA-256 against the one the link to it states before decoding it, and shows it in a frame that runs no scripts, so nothing in a page from a stranger gets the extension's powers.</p>
+<p>The picture below is a <code>.sieve</code> too, checked the same way against the hash this page states for it.</p>
+</div>
+<p style="text-align:center"><img src="images/door.sieve" integrity="{{sri:images/door.sieve}}" alt="A door in the hallway" width="400" style="border:1px solid #2a2a3a"></p>
+<p class="note" style="text-align:center;margin-top:16px">Its link to Notes states Notes' hash; Notes links back here by name only (see Home).</p>
 </body>
 </html>

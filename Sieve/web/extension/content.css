@@ -11,7 +11,7 @@
   border: 2px solid #c03030;
   background: #2a0d0d;
   color: #ffb0b0;
-  font: 14px/1.4 sans-serif;
+  font: 14px/1.5 'Courier New', monospace;
   text-align: center;
 }
 .sieve-refused strong {

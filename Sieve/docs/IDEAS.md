@@ -4188,6 +4188,11 @@ folder) and shows the HTML they unpack to, as a first test where the result is k
     own `.sieve` picture; the wrong hash, no hash and the six files refused with their reasons. The
     CI checks the host as Chrome talks to it (`web/host/check_host.py`), builds the site, and checks
     the extension's scripts parse.
+  - *On the website (Edward, 23 October 2026: "add a page to the github pages site ... secure.html
+    which will explain how to set the test website up from the repository in as few steps as
+    possible, from there it can link to a built version for people to test live online"):*
+    `Pages/secure.html`, with the test site built into `Pages/secure` and served by GitHub Pages
+    like any other file; the extension needs nothing of the server beyond the files.
 
 **19.93 The `.map` format folded into `.sieve` (Edward, 22 October 2026; built the same day).**
 His thought: update the `.map` format, or replace it with `.sieve` and deprecate it, the

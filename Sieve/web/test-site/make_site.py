@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 r"""Builds the web test site (web/README.md) from src/, with the Sieve given, into site/:
 
-  - every picture in src/pictures as images/<name>.sieve, and all of them as one pictures.sieve
-    (many files, which the extension refuses to show);
+  - every picture in src/pictures as images/<name>.sieve;
+  - the four pages' sources and style.css as one pages.sieve (many files, which the extension
+    refuses to show);
   - about.html and notes.html as about.sieve and notes.sieve, pages held in .sieve files;
   - index.html and gallery.html as plain pages, with style.css;
   - images/tampered.sieve: images/vitruvian.sieve with one byte changed after its hash was taken.
@@ -14,6 +15,9 @@ that named each other's could not be made at all, and are refused.
   web\test-site\serve_site.bat           (Windows: builds it, serves it, opens it in the browser)
   python web/test-site/make_site.py out\build\x64-Release\sieve.exe
   python -m http.server 8000 --directory web/test-site/site      (then http://localhost:8000/)
+
+For the website (GitHub Pages), beside Pages/secure.html, with a link back to it:
+  python Sieve/web/test-site/make_site.py SIEVE --out Pages/secure --home ../secure.html
 """
 
 import argparse
@@ -49,6 +53,7 @@ def main():
     ap = argparse.ArgumentParser(description="Build the web test site.")
     ap.add_argument("sieve", type=Path, help="the sieve program (sieve.exe)")
     ap.add_argument("--out", type=Path, default=HERE / "site")
+    ap.add_argument("--home", default="", help="a link back from the plain pages (the website's Pages/secure.html: ../secure.html)")
     a = ap.parse_args()
     sieve, out = a.sieve.resolve(), a.out.resolve()
     if not sieve.exists():
@@ -60,7 +65,12 @@ def main():
     # The pictures, one by one and all together, and one tampered with.
     for pic in sorted((SRC / "pictures").glob("*.jpg")):
         sieve_of(sieve, pic, out / "images" / (pic.stem + ".sieve"))
-    sieve_of(sieve, SRC / "pictures", out / "pictures.sieve")
+    with tempfile.TemporaryDirectory() as tmp:
+        pages = Path(tmp) / "pages"
+        pages.mkdir()
+        for name in PAGES_AS_SIEVE + PAGES_PLAIN + ["style.css"]:
+            shutil.copy2(SRC / name, pages / name)
+        sieve_of(sieve, pages, out / "pages.sieve")
     good = (out / "images" / "vitruvian.sieve").read_bytes()
     bad = bytearray(good)
     bad[len(bad) // 2] ^= 0x01
@@ -76,6 +86,7 @@ def main():
                 sys.exit("these pages name each other's hashes, which cannot be (each would change the other's): " + ", ".join(sorted(left)))
             for name in ready:
                 text = SLOT.sub(lambda m: sri(out / m.group(1)), left.pop(name))
+                text = text.replace("{{home}}", f'<a href="{a.home}">Sieve Secure</a>' if a.home else "")
                 if name in PAGES_AS_SIEVE:
                     page = Path(tmp) / name
                     page.write_text(text, encoding="utf-8", newline="\n")

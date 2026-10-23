@@ -4,6 +4,8 @@
 // .sieve opens the extension's viewer, which does the same for a page.
 
 (() => {
+  // A mark a page can look for, to tell its reader whether the extension is running.
+  document.documentElement.dataset.sieveExtension = "on";
   const isSieve = (url) => /\.sieve(?:[?#].*)?$/i.test(url || "");
   const viewer = chrome.runtime.getURL("viewer.html");
 

@@ -1,9 +1,9 @@
 html, body {
   margin: 0;
   height: 100%;
-  background: #101014;
-  color: #e8e8e8;
-  font: 14px/1.4 sans-serif;
+  background: #0a0a0f;
+  color: #e0ddd8;
+  font: 14px/1.4 'Courier New', monospace;
 }
 body {
   display: flex;
@@ -11,9 +11,10 @@ body {
 }
 #bar {
   padding: 6px 12px;
-  background: #0b2b2b;
-  border-bottom: 1px solid #1f6f6f;
-  color: #9ff;
+  background: #0d0d14;
+  border-bottom: 1px solid #2a2a3a;
+  color: #888;
+  letter-spacing: 0.05em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -66,5 +67,5 @@ body {
 #shown .download {
   margin: auto;
   font-size: 16px;
-  color: #9ff;
+  color: #ccc;
 }
