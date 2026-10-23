@@ -4,6 +4,9 @@
 // .sieve opens the extension's viewer, which does the same for a page.
 
 (() => {
+  // The page marked as one the extension runs in (mark.js marks it as it starts; again here, in
+  // case the page had no <html> element yet then).
+  document.documentElement.setAttribute("data-sieve-extension", "on");
   const isSieve = (url) => /\.sieve(?:[?#].*)?$/i.test(url || "");
   const viewer = chrome.runtime.getURL("viewer.html");
 

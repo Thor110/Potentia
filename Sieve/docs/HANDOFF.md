@@ -3797,6 +3797,11 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   after `load` (and take the note away if the mark comes later); shown with every request held 2 s.
   The viewer's bar gives the times (fetched and checked, Sieve's own decoding from the host's
   `seconds`, the hand-over, in all, and a page's own pictures).
+- **Still shown for Edward after that:** the pictures decoded (content.js running) but the page was
+  never marked, which fits `mark.js` finding no `<html>` element yet at `document_start` (Chrome:
+  "before any other DOM is constructed"; headless Chromium here had one). `mark.js` now waits for
+  it, and `content.js` marks again; shown with a `mark.js` that marks nothing and every request
+  held 1 s: the note stays hidden on both pages. Not confirmed on Edward's Chrome yet.
 
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
