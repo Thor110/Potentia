@@ -4097,6 +4097,97 @@ folder) and shows the HTML they unpack to, as a first test where the result is k
   route, and small pages want more than a dictionary (brotli's context modelling, or the rope on
   text). The websites were not reachable from the session, so the pages are a 2014 snapshot;
   measure again on today's pages before building.
+- *The decoder plugin, planned (Edward, 22 October 2026).* His notes, kept in his words where they
+  are quoted:
+  - *A first plugin for Chrome, tested locally,* pointing at `sieve.exe`: "from there it is pretty
+    much just check hash and hand over the file to the browser, that way we don't have to worry
+    about the type of file, image, page, etc." It decodes a `.sieve` "to its original format and
+    pass it to the browser for now like it would a normal file."
+  - *Test pages* that link to one another, one with a slideshow of the `.sieve` files in an images
+    folder beside it, "refusing them if the hash doesn't match within the display itself."
+  - *Links that name hashes:* "with the use of hashes and the potential for pages to point to the
+    hashes of any links in the page we could create an automated pass through mechanism to
+    routinely check websites for mismatches among the hashes. If a hash mismatch occurs the plugin
+    should just refuse the .sieve file altogether." This needs "a custom plugin or utilising an
+    existing html system to have links point to hashes."
+  - *Why the link, not the file:* "files carrying their own hashes is a vulnerability in and of
+    itself; an attacker would just create their own sieve file with their own hash. But, if we
+    utilise an automated harness for updating html pages or entire websites, so that links also
+    point to hashes for the .sieves themselves, each and every page becomes an immutable link in a
+    chain of hashes."
+  - *Single files only?* "I think that the web plugin decoder should only accept single file
+    .sieve's and not multi file .sieve files though I am not sure."
+- *What follows from them (Claude, 22 October 2026).*
+  - *Reaching `sieve.exe`:* an extension cannot start a program itself; Chrome's own way is native
+    messaging. The program is registered once (a small JSON file naming it and the extension
+    allowed to call it, and on Windows a registry key under
+    `HKCU\Software\Google\Chrome\NativeMessagingHosts`), and Chrome starts it with the
+    extension's origin as its argument and talks to it over standard input and output, each
+    message a 4-byte length and JSON. A message from the program to the browser is at most 1 MB,
+    so a decoded file comes back in pieces. An unpacked extension's id depends on its folder
+    unless its manifest carries a key, so the test extension carries one, to be named in the
+    program's JSON. WebAssembly (the decoder built into the extension) remains the route beyond a
+    test: nothing to install, and every browser.
+  - *Which hash a link names:* the `.sieve` file's own SHA-256, checked before a byte of it is
+    decoded, so a file that is not the one the page meant never reaches the decoder. The page can
+    say so with the attribute the web already has for this, Subresource Integrity
+    (`integrity="sha256-<base64>"`, which browsers enforce on scripts and stylesheets and leave
+    alone on images), so the tools that write it already exist.
+  - *A chain of hashes cannot go round in a circle:* if page A holds B's hash and B holds A's,
+    changing either changes both, without end. Hashes held in links make a tree (a page holds its
+    images' and its children's), not a web of pages that link back. For a whole site, one file
+    holds every page's hash, and every page is checked against it: that file is a map
+    (`sieve-manifest-v18`, §19.93, which already names files by SHA-256), and its own hash is the
+    one root to trust, pinned in the plugin or published apart from the site, and later signed.
+    The harness that rewrites a site writes the links' hashes and the map together; the checker
+    that routinely walks a site compares what it fetches with the map.
+  - *Single files:* agreed, for showing. A link names one thing, so a single-file `.sieve` stands
+    for it in an `img`, a link or a page. A `.sieve` of many files has no one thing to show; it is
+    offered as a download, or (later) served file by file to the page that holds it, never
+    unpacked onto the disk by the plugin.
+  - *Hostile files:* whatever the plugin decodes comes from strangers. Limits on the decoded size
+    and the time, no items of Sieve's lines (they ask for lines and models) and no remade archives
+    in the browser for now, and a decoded page shown in a sandboxed frame, so its scripts get none
+    of the extension's powers.
+- *Edward's answer (22 October 2026):* "A global list of hashes for the .sieve's themselves is a
+  good idea. I still think each link should state the hash of the sieve page it points to though.
+  Eventually a crawler could be created to routinely check hashes across links for servers. In
+  theory a multi-sieve file could unpack to a basic directory tree listing, that might be
+  beneficial in the future, make note of it for now." So: every link to a `.sieve` states its hash,
+  the global list (the site's map) comes with the site harness, the crawler after it, and a `.sieve`
+  of many files is shown one day as a listing of its folders and files (noted, not built).
+- *Links that go round, stated anyway (Claude, a way to weigh later):* a page can state the hash of
+  a page that states its own only if a page's hash is taken with the hashes in its links left out
+  (blanked before hashing). Then each link's hash checks the page it names, but nothing checks the
+  hashes a page states, so the site's list must hold every page's full hash as well; that list is
+  what makes it sound.
+- *Built, phase 1 (23 October 2026):* `web/README.md`.
+  - `sieve web-host` (`tools/cli/web_host.*`): native messaging over standard input and output,
+    started by Chrome with the extension's origin as its argument; `hello`, and `decode` of a
+    `.sieve` given as base64 with the hash its link states. It checks that hash before decoding,
+    accepts one file only (no items, remade archives, archives carried as contents or maps; at
+    most 256 MiB), checks the file against its listing (its own SHA-256, or v7's tree), and answers
+    with its name, media type, size and SHA-256, then the bytes in parts of 699,999 (base64 under
+    native messaging's 1 MB).
+  - The extension (`web/extension`, Manifest V3, its id fixed by the public key in its manifest,
+    `bnigebolckfoapimidlcmbilcbhjbmjg`): its background fetches a `.sieve`, checks its SHA-256
+    against the link's `integrity` before anything else, and asks Sieve to decode it; the content
+    script puts decoded pictures in place, or a red refusal; links to `.sieve` files open the
+    viewer, which shows a page in a frame sandboxed with no scripts (its `.sieve` pictures put in
+    as data, its `.sieve` links back through the viewer), and a picture, sound, film or text as
+    itself.
+  - Registering the host: `web/host/install_host.bat` (Chrome and Edge, this user's registry) and
+    `install_host.sh` (Linux and Mac); `uninstall_host.bat`.
+  - The test site (`web/test-site`, built by `make_site.py` with the `sieve` given): two plain
+    pages, two `.sieve` pages, a slideshow of seven `.sieve` pictures with one byte changed in one,
+    and links with a wrong hash, no hash, and a `.sieve` of all six pictures; the pictures are the
+    hallway's screenshots and the public-domain Vitruvian Man, as JPEGs.
+  - Tested here in Chromium 141 (headless, the extension loaded, the host registered): six pictures
+    of the slideshow decoded and shown (800 by 450, and 800 by 1,096), the changed one refused in
+    the slideshow ("its SHA-256 is not the one its link states"); About shown in its frame with its
+    own `.sieve` picture; the wrong hash, no hash and the six files refused with their reasons. The
+    CI checks the host as Chrome talks to it (`web/host/check_host.py`), builds the site, and checks
+    the extension's scripts parse.
 
 **19.93 The `.map` format folded into `.sieve` (Edward, 22 October 2026; built the same day).**
 His thought: update the `.map` format, or replace it with `.sieve` and deprecate it, the

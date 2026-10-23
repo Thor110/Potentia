@@ -45,14 +45,14 @@ Usage (from the repository root, on the machine the release is for):
 
   tools\make_release.bat                            # Windows: double-click it; everything by default
   python tools/make_release.py                      # the version from CMakeLists.txt, into release/
-  python tools/make_release.py --version 0.13.25 --build-dir out/build/x64-Release --out release
-  python tools/make_release.py --version 0.13.25 --skip-build      # the build is already made
-  python tools/make_release.py --version 0.13.25 --seven-zip       # 7z first, as before v4, to compare
+  python tools/make_release.py --version 0.13.75 --build-dir out/build/x64-Release --out release
+  python tools/make_release.py --version 0.13.75 --skip-build      # the build is already made
+  python tools/make_release.py --version 0.13.75 --seven-zip       # 7z first, as before v4, to compare
 
 After publishing, make the map again to name GitHub's source zip as well (GitHub makes it only
 once the release is out, so its hash cannot be known before):
 
-  tools\make_release.bat --map-with "C:\Users\...\Downloads\Potentia-0.13.25.zip"
+  tools\make_release.bat --map-with "C:\Users\...\Downloads\Potentia-0.13.75.zip"
 
 The instructions and the program carry the release folder packed (sieve-manifest-v4: the programs
 through the x86 filter, each SCOWL list but the largest as a mask over it, everything LZMA2 at its
@@ -253,7 +253,7 @@ def newer_sources(build):
 
 def main():
     ap = argparse.ArgumentParser(description="Make Sieve's release files, in order, and check them.")
-    ap.add_argument("--version", default=None, help="the release's version (default: CMakeLists.txt's, e.g. 0.13.25)")
+    ap.add_argument("--version", default=None, help="the release's version (default: CMakeLists.txt's, e.g. 0.13.75)")
     ap.add_argument("--build-dir", type=Path, default=None, help="the CMake build folder (default: the Release preset's)")
     ap.add_argument("--out", type=Path, default=ROOT / "release", help="where the release files go (default: release/)")
     ap.add_argument("--name", default="sieve", help="the published files' base name (default: sieve)")

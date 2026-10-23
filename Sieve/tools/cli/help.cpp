@@ -990,6 +990,18 @@ const std::vector<Page>& pages()
           {"sieve locate release --installer release.sieve --compare", "an installer for it, and its sizes"},
           {"sieve locate release --program release-setup.exe", "an installer program for it"}}},
 
+        {"web-host", "The web plugin's host: decodes .sieve files for the browser.",
+         "sieve web-host   (or started by the browser, which names the extension)",
+         "The Sieve extension for Chrome reaches Sieve through native messaging: the browser starts\n"
+         "sieve with the extension's origin and talks to it over standard input and output, each\n"
+         "message a 4-byte length and JSON. It decodes a .sieve a page links to and hands back the\n"
+         "file, refusing any whose own SHA-256 is not the one the link states (its integrity\n"
+         "attribute), any of more than one file, and any that carries items, a remade archive or a\n"
+         "map. Registered once with web/host/install_host.bat (Windows) or install_host.sh. See\n"
+         "web/README.md.",
+         {},
+         {{"sieve web-host", "talk to it by hand (the messages are binary: a length, then JSON)"}}},
+
         {"map", "A map: a node graph of verified anchors.",
          "sieve map FOLDER|FILE...|MAP.sieve|OLD.map [--out OUT.sieve] [--add FILE [--as NAME]]\n"
          "  [--remove ID] [--meta NODE:key=value] [--seal]\n"

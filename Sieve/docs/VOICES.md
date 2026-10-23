@@ -89,6 +89,12 @@ enumerated and stored later. Nothing is guaranteed (IDEAS §19.77).
 - **Edward** (22 October 2026, quote; IDEAS §19.99): We could look at multi-threading the filter analysis to improve performance.
 - **Edward** (22 October 2026, quote; IDEAS §19.97): Lets add a stop button so that we can choose what result to use.
 - **Edward** (22 October 2026, quote; IDEAS §19.97): It would also be worthwhile ensuring the current timing message traces the best result found so far.
+- **Edward** (22 October 2026, quote; IDEAS §19.92): Files carrying their own hashes is a vulnerability in and of itself, an attacker would just create their own sieve file with their own hash.
+- **Edward** (22 October 2026, quote; IDEAS §19.92): If we utilise an automated harness for updating html pages or entire websites, so that links also point to hashes for the .sieves themselves, each and every page becomes an immutable link in a chain of hashes.
+- **Edward** (22 October 2026, quote; IDEAS §19.92): If a hash mismatch occurs the plugin should just refuse the .sieve file altogether.
+- **Edward** (22 October 2026, quote; IDEAS §19.92): A global list of hashes for the .sieve's themselves is a good idea. I still think each link should state the hash of the sieve page it points to though.
+- **Edward** (22 October 2026, quote; IDEAS §19.92): Eventually a crawler could be created to routinely check hashes across links for servers.
+- **Edward** (22 October 2026, quote; IDEAS §19.92): In theory a multi-sieve file could unpack to a basic directory tree listing, that might be beneficial in the future.
 - **Edward** (22 October 2026, quote; IDEAS §19.97): Might we also be able to change the stop button over to a force stop to take the previous result rather than finish the current pass after pressing stop once?
 - **Edward** (22 October 2026, quote; IDEAS §19.97): We should add a line graph display which showcases the best found results along the way, instead of storing each value we can just draw the line graph as we go.
 - **Edward** (22 October 2026, quote; IDEAS §19.98): I feel like through multi threading and parallelisation as well as possibly distributed processing in the future it could still be worth keeping an eye out for those reductions, presuming the current system wouldn't already find them.

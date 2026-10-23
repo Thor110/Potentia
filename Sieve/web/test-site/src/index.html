@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sieve web test</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<h1>SIEVE WEB TEST</h1>
+<nav><a href="index.html">Home</a><a href="gallery.html">Gallery</a></nav>
+<p>A small site for the Sieve extension. The pages linked below are <code>.sieve</code> files: the
+extension fetches each, checks it against the SHA-256 its link states (an
+<code>integrity="sha256-..."</code> attribute), has Sieve on this computer decode it, and shows the
+page it holds. Anything that does not match is refused.</p>
+<h2>Pages that should open</h2>
+<ul>
+<li><a href="gallery.html">The gallery</a>: a slideshow of <code>.sieve</code> pictures, one of them tampered with.</li>
+<li><a href="about.sieve" integrity="{{sri:about.sieve}}">About</a>: a page held in a <code>.sieve</code>, with a <code>.sieve</code> picture of its own.</li>
+<li><a href="notes.sieve" integrity="{{sri:notes.sieve}}">Notes</a>: another, which links back here.</li>
+</ul>
+<h2>Links that should be refused</h2>
+<ul>
+<li><a href="notes.sieve" integrity="{{sri:about.sieve}}">Notes, with the wrong hash</a>: the link states About's hash.</li>
+<li><a href="notes.sieve">Notes, with no hash</a>: the link states none, so nothing vouches for the file.</li>
+<li><a href="pictures.sieve" integrity="{{sri:pictures.sieve}}">Every picture in one <code>.sieve</code></a>: the right hash, but it holds many files, and the extension shows one file a link names.</li>
+</ul>
+<p class="note">Each link names a file below it by its hash, and the pages it opens link back here
+by name only. Two pages cannot each hold the other's hash: changing either would change both,
+without end. A site's pages that link to one another are checked against one list of every page's
+hash instead, which is the next step (IDEAS 19.92).</p>
+</body>
+</html>

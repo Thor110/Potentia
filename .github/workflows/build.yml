@@ -2125,6 +2125,19 @@ jobs:
           rm -rf old_in
           $S install old.sieve --to old_in > /dev/null
           cmp old_in/a.txt $F/a.txt
+          # The web plugin's host (web/README.md), talked to as Chrome does (native messaging: a
+          # length, then JSON): a single file's .sieve decoded to the same bytes, its hash stated as
+          # an integrity attribute; refused with a wrong hash, and a .sieve of many files refused
+          # with its own; the test site built (its pages after the files they state hashes of); the
+          # extension's scripts and manifest well formed.
+          $S locate $F/a.txt --installer web-a.sieve --items > /dev/null
+          python ../web/host/check_host.py $S web-a.sieve $F/a.txt | grep -c "^decoded: a.txt, text/plain, 34 bytes in 1 part" > /dev/null
+          python ../web/host/check_host.py $S web-a.sieve --refused | grep -c "not the 0000" > /dev/null
+          python ../web/host/check_host.py $S tree.sieve --refused-as-is | grep -c "the plugin shows one file a link names" > /dev/null
+          python ../web/test-site/make_site.py $S --out web-site | grep -c "^images/tampered.sieve" > /dev/null
+          [ "$(grep -o 'integrity="sha256-' web-site/gallery.html | wc -l)" -eq 7 ]
+          python -c "import json; json.load(open('../web/extension/manifest.json'))"
+          for js in ../web/extension/*.js; do node --check "$js"; done
           # A v2 manifest (every file's address listed) is the oracle's to the byte.
           $S locate ../tests/manifest_fixture --manifest fixture2.manifest --with-addresses > /dev/null
           python sieve_ref.py manifest ../tests/manifest_fixture --with-addresses | cmp - fixture2.manifest

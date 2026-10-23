@@ -3764,6 +3764,27 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
 - **IDEAS §19.98** (recurring values, scale repeats, a locked random byte, the standing watch),
   **§19.99** (threads for the search and the packer).
 
+### 0.13.75 (22 October 2026)
+- **The version is 0.13.75** (Edward: 0.13.25 was manifest v7's): `CMakeLists.txt`, `vcpkg.json`,
+  and the release tool's examples (`make_release.py`, `SIEVE-INSTALL-USAGE.md`).
+- **The web decoder plugin** is planned in IDEAS §19.92 (Edward's notes, and what follows from
+  them: native messaging, the `.sieve`'s own hash in an `integrity` attribute, a site map as the
+  root of a site's hashes since links that go round cannot hold each other's, single files shown).
+
+### The web plugin, phase 1 (23 October 2026)
+- **`sieve web-host`** (`tools/cli/web_host.*`; `sieve_cli.cpp` starts it for an argument
+  `chrome-extension://...`): native messaging; refuses before decoding unless the `.sieve`'s
+  SHA-256 is the link's; one file only, no items, remakes, archives as contents, or maps.
+- **`web/`**: `extension/` (Manifest V3; background, content script, viewer; id
+  `bnigebolckfoapimidlcmbilcbhjbmjg`, fixed by the public key in `manifest.json`, whose private
+  half was not kept: an unpacked extension needs none), `host/` (install scripts, `check_host.py`),
+  `test-site/` (`make_site.py` builds `site/`, which is not committed), `README.md`.
+- **Tested** in Chromium here (Playwright, headless, the host's JSON in the profile's own
+  `NativeMessagingHosts`, which a profile folder of its own needs on Linux). The CI runs
+  `check_host.py`, `make_site.py` and `node --check`.
+- **Next:** the site's map of every page's hash and the harness that writes links' hashes with it;
+  the crawler; a `.sieve` of many files as a listing; WebAssembly.
+
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show

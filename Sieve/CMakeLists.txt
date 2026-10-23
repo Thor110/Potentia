@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(Sieve VERSION 0.13.25 LANGUAGES CXX)
+project(Sieve VERSION 0.13.75 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -103,6 +103,7 @@ add_library(sieve_lines STATIC
     tools/cli/items.cpp
     tools/cli/lines.cpp
     tools/cli/map_sieve.cpp
+    tools/cli/web_host.cpp
     tools/cli/media_decode.cpp
     tools/cli/models.cpp
     tools/cli/plugins.cpp

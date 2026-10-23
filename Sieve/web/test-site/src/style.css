@@ -1,0 +1,13 @@
+body { margin: 0 auto; max-width: 52em; padding: 1.5em; background: #101014; color: #e8e8e8; font: 16px/1.5 sans-serif; }
+a { color: #6ff; }
+h1 { color: #6ff; font-weight: normal; letter-spacing: 0.08em; }
+code { color: #ffd27a; }
+nav { margin-bottom: 1.5em; }
+nav a { margin-right: 1em; }
+.note { color: #aaa; font-size: 14px; }
+.slideshow figure { display: none; margin: 0; text-align: center; }
+.slideshow figure.shown { display: block; }
+.slideshow img, .slideshow .sieve-refused { max-width: 100%; min-height: 12em; }
+.slideshow figcaption { margin-top: 0.5em; color: #aaa; }
+.slideshow .controls { margin-top: 1em; text-align: center; }
+.slideshow button { background: #0b2b2b; color: #6ff; border: 1px solid #1f6f6f; padding: 0.4em 1.2em; font: inherit; cursor: pointer; }

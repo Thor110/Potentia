@@ -29,6 +29,7 @@
 #include "cli/lines.hpp"
 #include "cli/locate.hpp"
 #include "cli/map_sieve.hpp"
+#include "cli/web_host.hpp"
 #include "cli/media_decode.hpp"
 #include "cli/vault.hpp"
 #include "cli/vault_decode.hpp"
@@ -2985,6 +2986,17 @@ int main(int argc, char** argv)
         }
         const std::string first = argv[1];
         if (first == "--version") return cmd_version();
+        // Started by a browser through native messaging (the web plugin, IDEAS §19.92): its first
+        // argument is the extension's origin, and it talks over standard input and output.
+        if (first.rfind("chrome-extension://", 0) == 0 || first.rfind("moz-extension://", 0) == 0 || first == "web-host")
+        {
+#ifdef _WIN32
+            _setmode(_fileno(stdin), _O_BINARY);
+            _setmode(_fileno(stdout), _O_BINARY);
+#endif
+            std::ios::sync_with_stdio(false);
+            return run_web_host(std::cin, std::cout, SIEVE_VERSION);
+        }
         if (first == "help" || first == "--help" || first == "-h")
         {
             if (argc >= 3)

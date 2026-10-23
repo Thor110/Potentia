@@ -1,0 +1,20 @@
+/* A picture Sieve refused, in its place. */
+.sieve-refused {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.4em;
+  box-sizing: border-box;
+  min-width: 12em;
+  min-height: 6em;
+  padding: 1em;
+  border: 2px solid #c03030;
+  background: #2a0d0d;
+  color: #ffb0b0;
+  font: 14px/1.4 sans-serif;
+  text-align: center;
+}
+.sieve-refused strong {
+  color: #ff6060;
+  font-size: 16px;
+}
