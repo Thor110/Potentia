@@ -4533,6 +4533,16 @@ blocks and boundaries, and LZMA2's three full passes, on the 40 MB tar and the r
   prose 2.80 → 1.75, the word list 12.23 → 6.39, the program 11.36 → 5.29, the tar 17.94 → 9.90,
   the mesh 3.16 → 1.91, the PNG 3.70 → 2.64; the recording 941 → 351 (cutting 676 → 176), the same
   36,568,587 bytes.
+- *On Edward's machine (Windows, 24 October 2026, `bench_make.bat`), seconds:* prose 1.34, code
+  1.14, the oracle 1.46, the table 0.48, the word list 3.66, the rope text 0.12, the PNG 1.76,
+  Vitruvian Man 2.16, the door 1.07, the mesh 1.41, the MIDI 0.01, the film 2.26, the WAV 1.60,
+  the program 2.92, the tar 5.46. Every file the same size as here, but the two whose source
+  differed (his IDEAS.md was newer: 345,569 bytes, and the tar holds it), so the instructions are the
+  same across machines and systems as well as thread counts. The large files two to three times
+  faster than here (the word list 3.66 against 6.74, the program 2.92 against 5.66); the rope's
+  search, a second a file (two for a file cut into pieces), is now the floor on most files.
+- *Next to measure there:* when the rope's search finds its best (10 s found nothing smaller than
+  1 s on any file), so that it can stop once it stops finding better, rather than at its time.
 - *Still single:* the rope's search (its time limit makes the result depend on how far it got, so
   threads would need it split into trials taken in order); the weighing; the tailoring search.
 - *Next:* the File Locator's estimate measured against the time taken on this set (it was 15 to 20%

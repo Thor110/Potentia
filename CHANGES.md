@@ -1,12 +1,5 @@
-# The benchmark as a double-click (24 October 2026)
+# Your benchmark figures, recorded (24 October 2026)
 
-`Sieve\tools\bench\bench_make.bat` finds Python the way `make_release.bat` does: the py launcher first, then python. It runs the benchmark with the Release build's `sieve.exe`, and keeps the window open at the end.
+IDEAS 19.99 now has your figures beside mine. Every file came out the same size on both machines (apart from the two whose source differed), and the next thing to measure is noted: when the rope's search finds its best.
 
-- Double-click it: the quick set, 1 s of search a file.
-- `bench_make.bat --set full`: adds the 52 MB recording (about 6 minutes more here).
-- `bench_make.bat --search 1,10`: several search times.
-- `bench_make.bat C:\Sieve\tools\sieve.exe --set full`: another `sieve.exe`.
-
-The tables go to `Sieve\results` (`bench-make-*.md` and `.tsv`).
-
-To apply: copy `Sieve/` over. Not run here: there is no Windows machine in this session.
+Documents only. To apply, copy `Sieve/` over.
