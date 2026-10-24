@@ -400,7 +400,10 @@ if(SIEVE_BUILD_CLIENT)
     # program is one file; with only a shared SDL it also needs SDL3.dll beside it (sieve locate
     # --program says so). On Windows it is a windowed program, without a console.
     add_executable(sieve-install WIN32 client/installer_main.cpp client/unpack_7z.cpp client/window_front.cpp client/win_console.cpp ${SIEVE_ICON_RC})
-    target_link_libraries(sieve-install PRIVATE sieve_lzma)
+    # The full installer: it makes again the files carried as items of Sieve's lines and remakes
+    # archives exactly, as sieve install does (cli/items.cpp, use_item_maker), so an installer
+    # program, or a .sieve opened from the right-click menu, installs anything Sieve makes.
+    target_link_libraries(sieve-install PRIVATE sieve_lzma sieve_lines sieve_compare)
     if(SIEVE_SMALL_INSTALLER)
         # Its own SDL, built once from the same source (or fetched, when SDL came from vcpkg or
         # the system), static, optimised for size, and without what the installer never uses:

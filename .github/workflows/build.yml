@@ -1030,15 +1030,15 @@ jobs:
           diff -r degrees deg_inst
           # The same as sieve-manifest-v5 (--items): the pages, pictures, films and melodies carried as
           # their lines and places, made again on installing, every file the same; smaller than v4;
-          # and the small sieve-install, which cannot make them, asks for Sieve instead.
+          # and sieve-install, the full installer, makes them again too.
           build/sieve locate degrees --installer degrees-v5.sieve --items --v5 --manifest degrees-v5.manifest | tr -d '\r' | q "^items     1368 file(s) carried as items"
           python reference/sieve_ref.py unpack degrees-v5.manifest --items-from degrees --to deg_oracle5 > /dev/null
           diff -r degrees deg_oracle5
           [ "$(wc -c < degrees-v5.sieve)" -lt "$(wc -c < degrees2.sieve)" ]
           build/sieve install degrees-v5.sieve --to deg_inst5 > /dev/null
           diff -r degrees deg_inst5
-          if build/sieve-install degrees-v5.sieve --to deg_inst5b --yes > si.txt 2>&1; then exit 1; fi
-          q "open them with Sieve" si.txt
+          build/sieve-install degrees-v5.sieve --to deg_inst5b --yes
+          diff -r degrees deg_inst5b
           # sieve-manifest-v6 (--items --v6): each item's place as raw bytes, the places carried raw or as
           # LZMA2, whichever is smaller, and a line's items carried as places only where that is smaller
           # than its files packed (the sample's 360 near-identical models' places pack to almost nothing
@@ -1050,13 +1050,12 @@ jobs:
           diff -r degrees deg_inst6
           python reference/sieve_ref.py unpack degrees-v6.manifest --items-from degrees --to deg_oracle6 > /dev/null
           diff -r degrees deg_oracle6
-          if build/sieve-install degrees-v6.sieve --to deg_inst6b --yes > si6.txt 2>&1; then exit 1; fi
-          q "open them with Sieve" si6.txt
+          build/sieve-install degrees-v6.sieve --to deg_inst6b --yes
+          diff -r degrees deg_inst6b
           # sieve-manifest-v7 (--items now): v6 with what the rest gives left out (every file's own
           # SHA-256 among it, the tree's covering them all), items listed "i K path", and the listing
           # carried as LZMA2 where that is smaller (the sample's paths repeat themselves). Far smaller
-          # than v6; every file back, by sieve install and by the oracle; refused by sieve-install as
-          # v5 and v6 are. --file-hashes keeps every file's own SHA-256, and installs the same.
+          # than v6; every file back, by sieve install, sieve-install and the oracle. --file-hashes keeps every file's own SHA-256, and installs the same.
           build/sieve locate degrees --installer degrees-v7.sieve --items --v15 --manifest degrees-v7.manifest | tr -d '\r' > d7.txt
           q "^items     1368 file(s) carried as items of Sieve's lines (.* sieve-manifest-v7" d7.txt
           q "^listing   [0-9]* bytes, carried as LZMA2 in " d7.txt
@@ -1065,8 +1064,8 @@ jobs:
           diff -r degrees deg_inst7
           python reference/sieve_ref.py unpack degrees-v7.manifest --items-from degrees --to deg_oracle7 > /dev/null
           diff -r degrees deg_oracle7
-          if build/sieve-install degrees-v7.sieve --to deg_inst7b --yes > si7.txt 2>&1; then exit 1; fi
-          q "open them with Sieve" si7.txt
+          build/sieve-install degrees-v7.sieve --to deg_inst7b --yes
+          diff -r degrees deg_inst7b
           # sieve-manifest-v16 (--items now): v7's listing with its head in bytes (the streams' sizes,
           # the tree's SHA-256 as 32 bytes), the rest of it packed as before: smaller; every file back.
           build/sieve locate degrees --installer degrees-v16.sieve --items --manifest degrees-v16.manifest | tr -d '\r' > d16.txt
@@ -1385,7 +1384,7 @@ jobs:
           # holds (liblzma, as the xz program writes it) and a 7z (tests/optimise_fixture.7z: 20 blocks
           # of the pi-like table above, 22,222 bytes in 10,513) is carried as its contents, in a folder
           # named after it, installing saying so; each only where clearly smaller. Sieve and the oracle
-          # give the same; sieve-install, which has no compressor, asks for Sieve; called v13, refused.
+          # give the same, and so does sieve-install (the full installer); called v13, refused.
           rm -rf arch arch_inst arch_oracle arch_si arch_bad arch_bad16 && mkdir -p arch/x
           cp tests/optimise_fixture.7z arch/digits.7z
           python -c "
@@ -1438,7 +1437,8 @@ jobs:
           test ! -e arch_inst/digits.7z
           python reference/sieve_ref.py unpack arch.manifest --to arch_oracle | tr -d '\r' | q "^unpacked	7z	10513	digits.7z	digits$"
           diff -r arch_inst arch_oracle
-          if build/sieve-install arch.sieve --to arch_si --yes > /dev/null 2>&1; then exit 1; fi
+          build/sieve-install arch.sieve --to arch_si --yes
+          diff -r arch_inst arch_si
           build/sieve locate arch --installer arch15.sieve --items --optimise-archives --v15 --manifest arch15.manifest > /dev/null
           sed '1s/v1[45]$/v13/' arch15.manifest > arch-as-v13.manifest
           if build/sieve install arch-as-v13.manifest --to arch_bad > /dev/null 2>&1; then exit 1; fi

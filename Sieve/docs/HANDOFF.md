@@ -3858,6 +3858,25 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   `--v4` makes the plain installer, `--items` is accepted and changes nothing. CI lines that
   expect v4 pass `--v4`. Not yet tested (Edward's usage limit): build, run the CI.
 
+### The right-click menu (24 October 2026)
+- **`context/`** (Edward: "the same way I can right click a 7zip and extract here or extract to a
+  folder of the files name"): `install_context.bat [sieve-install.exe]` adds a Sieve submenu to
+  `.sieve` files for this user (`HKCU\Software\Classes\SystemFileAssociations\.sieve\shell\Sieve`,
+  `SubCommands`, two verbs), `uninstall_context.bat` removes it, `README.md`.
+- **`sieve-install --extract-here` / `--extract-folder`:** the destination from the file's own
+  place (its folder, or a folder of its stem); the window opens ready, so it shows the progress
+  and Replace can be ticked. Shown here with `--yes`: both put the files where they should be.
+- **Noted, not built:** a "Sieve File/s" entry on any file or folder to make `.sieve` files
+  (command line or a window of its own: not decided).
+- **Not yet:** tried in Explorer (Windows); the release does not ship `context/` yet.
+- **`sieve-install` is the full installer** (Edward, 24 October 2026: "the self extracting
+  installers should carry the full capabilities of sieve.exe"): linked with `sieve_lines` and
+  `sieve_compare`, it calls `use_item_maker()`, so items of Sieve's lines are made again and
+  archives remade exactly, for installer programs and the right-click menu alike. Linux Release:
+  2,227,000 → 5,209,160 bytes. Shown: a picture item and a remade gzip, by `sieve-install --yes`
+  and by an installer program, byte for byte. The CI's four "sieve-install refuses" checks now
+  check that it installs every file. Not yet run: the full CI.
+
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show

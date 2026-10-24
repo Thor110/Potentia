@@ -934,8 +934,8 @@ const std::vector<Page>& pages()
          "its place there, not its bytes, and made again on installing; one SHA-256 over the whole\n"
          "tree checks every file. The listing says nothing the rest already gives, and is carried\n"
          "as LZMA2 where that is smaller; the AI line's places are coded by their tensors' digit\n"
-         "histograms where that is smaller. sieve install and the hallway install it; the small\n"
-         "sieve-install asks for Sieve to be used instead. A file the tightened rope codes smaller\n"
+         "histograms where that is smaller. sieve install, sieve-install and the hallway install\n"
+         "it. A file the tightened rope codes smaller\n"
          "than LZMA2 packs it (sieve help rope) is carried so, its search taking --search-per-file\n"
          "seconds (no limit without it): sieve-manifest-v8, or v9 to v11 where its way is one of the\n"
          "rope's newer ones; v12 where there is less to write around the bytes (no line for an empty\n"
@@ -971,7 +971,7 @@ const std::vector<Page>& pages()
                                     "installer (the listing, then every file packed by LZMA2); with --v3\n"
                                     "every file's bytes as they are. --manifest then writes that manifest as\n"
                                     "text. --compare also compresses it. sieve install and sieve-install open\n"
-                                    "it (sieve-install asks for Sieve where it carries items)."},
+                                    "it."},
           {"--program OUT.exe", "A folder: an installer program, one file to hand to someone: a copy of\n"
                                 "sieve-install (it must be beside sieve) with the installer attached to\n"
                                 "its end. Run, it installs the folder."},
@@ -1106,7 +1106,7 @@ const std::vector<Page>& pages()
          "one written in hex) back into its instructions, and makes every file from them: any\n"
          "version from sieve-manifest-v2 (every file read back from its address) to the newest,\n"
          "files packed by LZMA2, pulled tight by the rope, cut into pieces, or carried as items of\n"
-         "Sieve's lines (made again from their places, which the small sieve-install cannot do),\n"
+         "Sieve's lines (made again from their places, as sieve-install does too),\n"
          "and archives remade or given back as their contents (it says so). A map (v18) installs\n"
          "the files it holds and says how many it only names. An installer program made with\n"
          "--program installs the same way, and so does an installer's manifest itself.\n"

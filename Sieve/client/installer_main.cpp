@@ -11,8 +11,9 @@
 // on the window, or the one lying beside the program), says what it will install
 // and where, and on Install reads every file back and checks each against its SHA-256 before it
 // writes any, so a damaged installer leaves nothing behind; Cancel part way removes what was
-// written. It carries the core's addressing and the manifest code and nothing else: no
-// dictionaries, models, fonts or pictures, which is what makes it the trimmed build of the tool.
+// written. It is the full installer: it makes again the files carried as items of Sieve's lines
+// and remakes archives exactly (cli/items.cpp), as sieve install does, so anything Sieve makes
+// installs with it. It needs no data files: no dictionaries, models, fonts or pictures.
 //
 // When what it carries is one 7z archive (as releases did before v4 packed their files itself),
 // it unpacks the archive instead of writing it: into a folder named after the file (sieve.7z ->
@@ -25,6 +26,7 @@
 
 #include "dialogs.hpp"
 #include "cli/locate.hpp"
+#include "cli/items.hpp"
 #include "unpack_7z.hpp"
 #include "window_icon.hpp"
 #include "win_console.hpp"
@@ -285,13 +287,14 @@ const char* kInstallerUsage =
     "program, made with sieve locate --program or the hallway's File Locator), else a .sieve\n"
     "dropped on its window or lying beside it. It says what it will install and where; Install\n"
     "checks every file against its SHA-256 before writing any, and Cancel part way removes what\n"
-    "was written. It installs every file packed, pulled tight by the rope or cut into pieces,\n"
-    "archives given back as their contents, and the files a map holds; for instructions that\n"
-    "carry items of Sieve's lines or remake an archive, it asks for Sieve (sieve install, or\n"
-    "the hallway's File Locator).\n"
+    "was written. It installs anything Sieve makes, as sieve install does: files packed, pulled\n"
+    "tight by the rope or cut into pieces, items of Sieve's lines made again, archives remade\n"
+    "exactly or given back as their contents, and the files a map holds.\n"
     "\n"
-    "Options (for testing without a person):\n"
+    "Options:\n"
     "  --to FOLDER          where to install (else it asks)\n"
+    "  --extract-here       install beside the .sieve (the context menu's Extract here)\n"
+    "  --extract-folder     install into a folder named after the .sieve (Extract to NAME\\)\n"
     "  --yes                install at once and exit: 0 on success\n"
     "  --screenshot FILE    write the window, as it stands just before exiting, as a BMP\n"
     "  --help               this text\n";
@@ -303,6 +306,7 @@ int main(int argc, char** argv)
     // Options for testing (see the top); anything else is the installer to open.
     std::string file_arg, to_arg, shot;
     bool yes = false;
+    int extract = 0; // 1: beside the file; 2: in a folder named after it
     for (int i = 1; i < argc; ++i)
     {
         const std::string a = argv[i];
@@ -316,8 +320,23 @@ int main(int argc, char** argv)
         if (a == "--to" && i + 1 < argc) to_arg = argv[++i];
         else if (a == "--screenshot" && i + 1 < argc) shot = argv[++i];
         else if (a == "--yes") yes = true;
+        else if (a == "--extract-here") extract = 1;
+        else if (a == "--extract-folder") extract = 2;
         else file_arg = a;
     }
+    // From the context menu (context/install_context.bat): where to put it, from the file's own
+    // place, as an archiver's "Extract here" and "Extract to NAME\" do.
+    if (extract && !file_arg.empty() && to_arg.empty())
+    {
+        namespace fs = std::filesystem;
+        const fs::path f = fs::absolute(fs::path(std::u8string(file_arg.begin(), file_arg.end())));
+        const fs::path where = extract == 1 ? f.parent_path() : f.parent_path() / f.stem();
+        const std::u8string u = where.u8string();
+        to_arg.assign(u.begin(), u.end());
+    }
+    // Every file Sieve's instructions can carry: items of Sieve's lines made again, archives
+    // remade exactly (as sieve install and the hallway do).
+    sieve::cli::use_item_maker();
     if (!SDL_Init(SDL_INIT_VIDEO))
     {
         SDL_Log("sieve-install: %s", SDL_GetError());

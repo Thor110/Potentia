@@ -18,6 +18,7 @@ Special thanks to Claude Opus 5.5 for helping to build out the Sieve system base
 | `tools/sieve_cli.cpp`, `tools/cli/` | The `sieve` command-line tool |
 | `client/` | The `hallway`: a 3D wireframe walk along the lines: image, pages, books, audio, tracks, video, movies, models, worlds, AI and binary (SDL3); and `sieve-install`, the small installer |
 | `web/` | Sieve on the web: the Chrome extension (`extension/`), its native host's registration (`host/`), and the test site (`test-site/`, built by `sieve site`); [web/README.md](web/README.md) |
+| `context/` | Sieve in Windows' right-click menu for `.sieve` files (Extract here, Extract to a folder of its name), by `sieve-install`; [context/README.md](context/README.md) |
 | `tools/make_release.py`, `tools/make_release.bat` | Makes a Sieve release (docs/SIEVE-INSTALL-USAGE.md, "Making a Sieve release") |
 | `tools/run_tests.bat`, `tools/check_vectors.py` | Every test on Windows; every conformance vector through the oracle |
 | `tools/check_help.py` | Checks that `sieve help` and `hallway --help` name every option the programs read (the CI runs it) |

@@ -100,7 +100,7 @@ instructions and is for the tools. The command line still writes it (`sieve loca
 | Send | Size | They need |
 |---|---|---|
 | an installer program | sieve-install + the folder packed + its listing | nothing |
-| Sieve instructions (`.sieve`) | the folder packed + its listing | Sieve (`sieve`, `sieve-install` or the hallway; instructions that carry items of Sieve's lines or remake an archive need `sieve` or the hallway, and `sieve-install` says so) |
+| Sieve instructions (`.sieve`) | the folder packed + its listing | Sieve (`sieve`, `sieve-install` or the hallway) |
 
 ## Installing
 
@@ -113,6 +113,9 @@ instructions and is for the tools. The command line still writes it (`sieve loca
   replace files that are already there.
 - **In the hallway:** the File Locator's **Install from Sieve instructions...** (or I) takes a
   `.sieve` or an installer program, then asks for the folder to put it in.
+- **From the right-click menu (Windows):** `context\install_context.bat` adds **Sieve > Extract
+  here** and **Extract to a folder of its name** to every `.sieve` file, each opening
+  `sieve-install` on it (`--extract-here`, `--extract-folder`); `context\README.md`.
 - **Unattended:** `sieve-install NAME.sieve --to FOLDER --yes` installs and exits, returning 0 on
   success.
 
@@ -141,9 +144,11 @@ it; the oracle (`reference/sieve_ref.py unpack`) unpacks v4 with Python's own lz
 
 ## Sizes to expect
 
-- `sieve-install` is built on a trimmed SDL of its own (`SIEVE_SMALL_INSTALLER`, on by default):
-  about 1.5 MB on Linux and about 4.9 MB on Windows. That is the fixed cost of every installer
-  program.
+- `sieve-install` is built on a trimmed SDL of its own (`SIEVE_SMALL_INSTALLER`, on by default).
+  Since 24 October 2026 it is the full installer, carrying the lines' code and the compressors so
+  that it installs anything Sieve makes: measured on Linux (Release), 2,227,000 bytes before and
+  5,209,160 after; Windows not measured yet (about 4.9 MB before). That is the fixed cost of every
+  installer program.
 - For a small folder, that fixed cost is most of the program. Hand out the `.sieve` file on its
   own instead, when the other person already has `sieve-install`.
 - For a large release, the fixed cost is small beside the files, and the packing is what counts.
@@ -201,9 +206,8 @@ without it.
 
 - An icon for `sieve-install` and for the hallway, before the first release.
 - Code signing. Windows SmartScreen warns about unsigned programs downloaded from the internet.
-- More ways for v4 to carry a file: a Sieve item as its place on its line (what `sieve locate
-  --weigh` measures), which needs the lines in `sieve-install`; and other "made from another file"
-  ways than lines (a file that is another with a few bytes changed: a delta).
+- Other "made from another file" ways than lines (a file that is another with a few bytes changed:
+  a delta).
 
 ## In the future: platform installer APIs
 
