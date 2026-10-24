@@ -293,8 +293,9 @@ const char* kInstallerUsage =
     "\n"
     "Options:\n"
     "  --to FOLDER          where to install (else it asks)\n"
-    "  --extract-here       install beside the .sieve (the context menu's Extract here)\n"
-    "  --extract-folder     install into a folder named after the .sieve (Extract to NAME\\)\n"
+    "  --extract-here       install beside the .sieve at once, and close when done (the right-click\n"
+    "                       menu's Extract here); a failure stays open, to say why\n"
+    "  --extract-folder     the same, into a folder named after the .sieve (Extract to NAME\\)\n"
     "  --yes                install at once and exit: 0 on success\n"
     "  --screenshot FILE    write the window, as it stands just before exiting, as a BMP\n"
     "  --help               this text\n";
@@ -371,7 +372,10 @@ int main(int argc, char** argv)
     else if (auto beside = installer_beside_me()) in.open(*beside);
     else in.error = "no installer: drop a .sieve file on this window, or open one with this program";
     if (!to_arg.empty()) in.dest = to_arg;
-    if (yes && in.screen == Screen::Ready) in.start();
+    // The right-click menu's extract options work as an archiver's do: at once, and the window
+    // closes when it is done; only a failure stays open, to say why (Back, then Replace).
+    const bool quick = extract != 0;
+    if ((yes || quick) && in.screen == Screen::Ready) in.start();
 
     bool quit = false;
     float mx = -1, my = -1;
@@ -381,6 +385,7 @@ int main(int argc, char** argv)
     {
         in.poll();
         if (yes && in.screen != Screen::Installing) quit = true; // unattended: the result is the exit code
+        if (quick && (in.screen == Screen::Done || in.screen == Screen::Cancelled)) quit = true;
         {
             std::lock_guard<std::mutex> lock(in.dialog_mx);
             if (in.chosen && in.manifest)
@@ -439,6 +444,11 @@ int main(int argc, char** argv)
                 hallway::open_folder_dialog(folder_chosen, &in, window, start.empty() ? nullptr : start.c_str(), false);
             }
             else if (pressed == "Cancel" && in.screen == Screen::Installing) in.cancel = true;
+            else if (pressed == "Back" && in.screen == Screen::Failed)
+            {
+                in.screen = Screen::Ready; // to tick Replace, or choose another folder, and Install again
+                in.error.clear();
+            }
             else if (pressed == "Cancel" || pressed == "Close" || pressed == "Finish") quit = true;
         }
 
@@ -550,6 +560,7 @@ int main(int argc, char** argv)
                     text(r, 24, 196, "Not installed.", 2, kRed);
                     text(r, 24, 228, tail(in.error, 90), 1, kInk);
                     text(r, 24, 246, "Nothing was left behind.", 1, kDim);
+                    buttons.push_back({{W - 320, H - 60, 140, 40}, "Back"});
                     buttons.push_back({{W - 164, H - 60, 140, 40}, "Close"});
                 }
             }

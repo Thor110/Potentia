@@ -6,9 +6,11 @@ Right-click any `.sieve` file and choose **Sieve**:
 - **Extract to a folder of its name**: into a folder named after it (`photos.sieve` into
   `photos\`).
 
-Either opens `sieve-install`, which shows what it will install and where. Choose Install and it
-shows the progress. Every file is checked against its SHA-256 before any is written, files
-already there are refused unless you tick Replace, and Cancel removes what was written.
+Either starts at once, as an archiver's extract does: `sieve-install`'s window shows the
+progress and closes when it is done. Every file is checked against its SHA-256 before any is
+written. If it cannot (files already there, say), the window stays open and says why: **Back**
+returns to its first screen, where you can tick Replace or choose another folder and Install
+again; Cancel part way removes what was written.
 
 ## Setting it up
 

@@ -3876,6 +3876,10 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   2,227,000 → 5,209,160 bytes. Shown: a picture item and a remade gzip, by `sieve-install --yes`
   and by an installer program, byte for byte. The CI's four "sieve-install refuses" checks now
   check that it installs every file. Not yet run: the full CI.
+- **Extract works as an archiver's (Edward, 24 October 2026):** `--extract-here` and
+  `--extract-folder` start at once and close the window when done (or cancelled); a failure stays
+  open, saying why, with **Back** to the first screen (Replace, another folder). Shown: the first
+  extract closes by itself, a second into the same folder stays open.
 
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
