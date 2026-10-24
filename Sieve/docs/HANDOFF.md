@@ -3923,9 +3923,9 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   stack are unchanged; v1 says "replaced by" v2. Oracle (`f_symbol_entropy_v2`,
   `f_model_information_v2`), 288 verdict vectors and 24 black-and-white ranks; unit tests.
 - **`scowl-en-{35,60,80}-names-v2`** (data/dictionaries, `build_dictionary.py --names-v2`): without
-  all-caps entries and one- or two-letter entries the plain list lacks (but a, I). Registered, not
-  default. **Open for Edward:** make `scowl-en-60-names-v2` the default (changes every result made
-  with the default; `function-words-v1` names the old list's hash).
+  all-caps entries and one- or two-letter entries the plain list lacks (but a, I). The default
+  since 24 October 2026 (Edward's choice), with **`function-words-v2`** (data/filters, by
+  `build_text_plugins.py`, which writes v1 unchanged beside it; CI compares it with the oracle).
 - Figures in IDEAS §2.1 to §2.3.
 
 ### Step 7 of the plan: the CI in parts (Edward, 24 October 2026)

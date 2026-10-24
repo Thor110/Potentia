@@ -2000,6 +2000,10 @@ jobs:
           python sieve_ref.py plugin ../data/filters/function-words-v1.sfilter --length 6 --lazy --judge ../tests/plugins/moby-sentences.txt | grep -v "^states" > plugin.oracle
           $S filters --plugin ../data/filters/function-words-v1.sfilter --length 6 --judge ../tests/plugins/moby-sentences.txt | tr -d '\r' | grep -v "^states" > plugin.engine
           diff plugin.oracle plugin.engine
+          # function-words-v2: the same from scowl-en-60-names-v2 (IDEAS §2.3).
+          python sieve_ref.py plugin ../data/filters/function-words-v2.sfilter --length 6 --lazy --judge ../tests/plugins/moby-sentences.txt | grep -v "^states" > plugin.oracle
+          $S filters --plugin ../data/filters/function-words-v2.sfilter --length 6 --judge ../tests/plugins/moby-sentences.txt | tr -d '\r' | grep -v "^states" > plugin.engine
+          diff plugin.oracle plugin.engine
           # Anchor plugins (tools/build_anchor_plugins.py): near one anchor, near several, and fragments.
           for spec in "near-example-v1:" "near-example-v1:distance=0" "near-example-v1:distance=7" "near-many-example-v1:" "contains-example-v1:"; do
             f=${spec%%:*}; p=${spec#*:}

@@ -262,7 +262,7 @@ every length checked, and the same verdict on every unit.
 | `key-data-v2` | `key-v1`, every scale | table, v2 (a choice parameter) |
 | `melody-leap-v1`, `melody-lengths-v1`, `melody-rests-v1`, `melody-ending-v1`, `melody-range-v1` | (new: melody shape) | table, v2 |
 | `melody-metre-v1`, `melody-ambitus-v1`, `melody-gapfill-v1` | (new: bars, span, leaps filled; §19) | table, v2 |
-| `letter-pairs-v1`, `letter-triples-v1`, `word-cost-v1`, `function-words-v1`, `sentence-shape-v1`, `babel-punctuation-v1` | (new: generated from the pinned lists by `tools/build_text_plugins.py`; §19) | table, v2 (function-words: tokens) |
+| `letter-pairs-v1`, `letter-triples-v1`, `word-cost-v1`, `function-words-v1` and `-v2`, `sentence-shape-v1`, `babel-punctuation-v1` | (new: generated from the pinned lists by `tools/build_text_plugins.py`; §19) | table, v2 (function-words: tokens) |
 
 They are new filters with new ids (the built-ins keep theirs); a built-in and its port agreeing is
 a conformance check, not a replacement.
@@ -961,6 +961,7 @@ which it checks against the registry's SHA-256; `--check` (CI) fails if a file w
 | `letter-triples-v1` | lower27 | the same for three letters, a word's start and end counting as letters (about 9,300 triples occur) | 10^-5.23 |
 | `word-cost-v1` | lower27 | no stretch of a word costs more than `rate` per letter plus `slack` under a letter-pair model of the list, in quarter-bits (a leaky bucket: e = max(0, e + cost - rate) never passes slack) | 10^-5.83 |
 | `function-words-v1` | lower27 | every token a word of scowl-en-60-names; no function word twice in a row ("the the"); after an article neither an article, a preposition nor a conjunction ("a the", "the of"); no two conjunctions ("and or") | 10^-18.33 |
+| `function-words-v2` | lower27 | the same rules, every token a word of scowl-en-60-names-v2 (the default list since 24 October 2026: without SCOWL's symbols and acronyms, IDEAS §2.3); the same verdict as v1 on each of the 100 held-out sentences and their 100 shuffles (159 of the 200 pass) | 10^-19.08 |
 | `sentence-shape-v1` | ascii95 | punctuation follows a word and is followed by a SPACE; . ! ? up to three; a capital starts a word or follows a capital; with `capitals`, a sentence's first word starts with one; # $ % and the like only with `others` | 10^-10.57 |
 | `babel-punctuation-v1` | babel29 | commas and full stops follow a letter and are followed by a SPACE; up to three full stops | 10^-0.49 |
 

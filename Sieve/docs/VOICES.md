@@ -103,6 +103,7 @@ enumerated and stored later. Nothing is guaranteed (IDEAS §19.77).
 - **Edward** (24 October 2026, quote): We should create some scripts to add this to the context menu
 - **Edward** (24 October 2026, quote): the self extracting installers should carry the full capabilities of sieve.exe
 - **Edward** (24 October 2026, quote; IDEAS §19.100): I was thinking about adding create .sieve to the context menu, but that brings with it a barrel of issues, such as needing the full file locator and the potential amount of time it might take to sieve a file.
+- **Edward** (24 October 2026, quote; IDEAS §2.3): We should probably just make a function-words-v2 so as to maintain the backwards compatibility we have built in so far, presuming that is workable
 - **Edward** (24 October 2026, quote; HANDOFF, step 7 of the plan): It would be worth splitting the CI tests up in future, ie : making a script and folder for each step so that we can run them individually as and when we need them, as we should know which ones need testing depending on what has changed.
 - **Edward** (22 October 2026, quote; IDEAS §19.97): Might we also be able to change the stop button over to a force stop to take the previous result rather than finish the current pass after pressing stop once?
 - **Edward** (22 October 2026, quote; IDEAS §19.97): We should add a line graph display which showcases the best found results along the way, instead of storing each value we can just draw the line graph as we go.

@@ -120,10 +120,13 @@ that keeps proper names and drops short all-caps tokens.
   beside the old lists, which are unchanged. With scowl-en-60-names-v2, `sieve sift` counts 28
   times fewer pages of 64 letters that are all words (10^-38.49 of the space against 10^-37.03),
   and at 2 letters the plain list's 73 (134 before). In Don Quixote, no whole word was lost (only
-  pieces of accented words split by the counting: "Señor" as "se"). Not yet the default: making
-  it so changes every result made with the default dictionary (stack ids record its hash, and the
-  figures in these documents measured with it), and `function-words-v1` names the old list's
-  hash, so it waits for Edward.
+  pieces of accented words split by the counting: "Señor" as "se"). Made the default the same
+  day (Edward: "We should probably just make a function-words-v2 so as to maintain the backwards
+  compatibility we have built in so far"): `scowl-en-60-names` stays registered, so a stack made
+  with it reproduces by naming it, and `function-words-v1` keeps its own copy of that list;
+  `function-words-v2` is the same rules from the new list, so it implies `words-v2` with the
+  default again. Measured: 10^-19.08 of the pages of 32 letters against v1's 10^-18.33, and the
+  same verdict on each of the 100 held-out sentences and their 100 shuffles.
 
 **2.4 No colour-blindness pass.** Nine lines, filter verdicts and the map all encode meaning in
 hue, with no non-colour fallback and no simulation check. First when work turns to the game (above). The pair most
