@@ -4601,7 +4601,22 @@ blocks and boundaries, and LZMA2's three full passes, on the 40 MB tar and the r
   than `sieve locate` on the whole (zip's and 7z's sizes, the weighing: the recording takes about 6
   minutes there, 11.5 here); which part the samples undercount is the next thing to measure, phase
   by phase (`--timings` with the hallway's `--locate`), before the estimate is changed.
-- *Next:* that measurement, and the boundaries made cheaper still (most of the recording's time).
+- *Measured step by step (24 October 2026; Edward: "continue with the list"):* the File Locator now
+  times each step of its samples and of the whole (`--timings`: `estimate.*` beside `locator.*`).
+  On the 52 MB recording (`hallway --no-menu --locate FILE --search-total 1 --timings`), of 703 s:
+  - the cut into pieces was made twice, by the instructions and again by the weighing, 170 s each
+    (the rope's search already kept its answer for the second; the cut did not). It is kept now, by
+    the file's SHA-256 (at most four, 1 GiB in all, none a stop ended): the weighing 257 s → 79 s,
+    the run 11 min 43 s → 8 min 28 s, every file of the quick set the same bytes;
+  - against the line the samples draw: the instructions took 1.4 times it, the weighing 1.75, the
+    7z comparison 1.7 (LZMA2 over 50 MB with its 64 MiB dictionary). Packing the samples with the
+    whole's dictionary brings it nearer (on the recording 7 min 15 s → 8 min 01 s estimated, against
+    11.5 min taken; on the repeated text it changed nothing), so it is back in.
+  The estimate is still a third low (5 min 37 s against 8 min 28 s): the time grows faster than in
+  proportion on a large file, by an amount two small samples cannot show.
+- *Next:* the estimate refined as the work goes: once the instructions are made (about two thirds
+  of the time), the ratio of their time to the samples' line, applied to what is left; and the
+  boundaries made cheaper still.
 
 **19.100 "Create .sieve" in the right-click menu (Edward, 24 October 2026; noted, not to be built
 yet).** "I was thinking about adding create .sieve to the context menu, but that brings with it a

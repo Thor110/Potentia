@@ -5,6 +5,7 @@
 
 #include "sieve/filekind.hpp"
 #include "sieve/rope_wave.hpp"
+#include "sieve/sha256.hpp"
 #include "sieve/stop.hpp"
 #include "unpack_7z.hpp"
 
@@ -20,6 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <optional>
@@ -335,6 +337,8 @@ std::vector<uint8_t> pack_stream(const std::vector<uint8_t>& data, uint32_t dict
 
 // What a stream of `data` packs to, quickly (preset 6): for choosing between two ways.
 // (Abandoned by a force stop, it gives 0: whoever asked checks force_requested() before using it.)
+std::atomic<uint32_t> g_sample_floor{0};
+
 uint64_t estimate(const std::vector<uint8_t>& data) { return data.empty() ? 0 : pack_stream(data, dictionary_for(data.size()), false, 6, false, true).size(); }
 
 // v13: a file cut into pieces, each coded by the way that suits it: LZMA2 (z, carried in the lzma2
@@ -347,7 +351,39 @@ struct Pieces
     std::vector<uint8_t> z, r;
 };
 
+Pieces pieces_of_uncached(const std::vector<uint8_t>& b);
+
+// The cuts made in this run, by the file's SHA-256: the File Locator packs a file and weighs it, and
+// both cut it into pieces; on a 52 MB film each cut took 170 s (IDEAS §19.97). At most four kept, and
+// at most 1 GiB of them; a cut a stop ended is not kept.
+std::mutex g_pieces_mx;
+std::vector<std::pair<std::string, std::shared_ptr<const Pieces>>> g_pieces;
+
 Pieces pieces_of(const std::vector<uint8_t>& b)
+{
+    Sha256 h;
+    h.update(std::span<const uint8_t>(b.data(), b.size()));
+    const std::string key = Sha256::hex(h.finish());
+    {
+        std::lock_guard<std::mutex> lock(g_pieces_mx);
+        for (const auto& [k, p] : g_pieces)
+            if (k == key) return *p;
+    }
+    Pieces p = pieces_of_uncached(b);
+    if (stop_requested()) return p;
+    std::lock_guard<std::mutex> lock(g_pieces_mx);
+    uint64_t held = b.size();
+    for (const auto& [k, q] : g_pieces) held += q->z.size() + q->r.size();
+    while (!g_pieces.empty() && (g_pieces.size() >= 4 || held > (uint64_t(1) << 30)))
+    {
+        held -= g_pieces.front().second->z.size() + g_pieces.front().second->r.size();
+        g_pieces.erase(g_pieces.begin());
+    }
+    if (held <= (uint64_t(1) << 30)) g_pieces.emplace_back(key, std::make_shared<const Pieces>(p));
+    return p;
+}
+
+Pieces pieces_of_uncached(const std::vector<uint8_t>& b)
 {
     constexpr size_t B = 4096;
     Pieces out;
@@ -810,6 +846,9 @@ std::string contents_name(const std::string& path, const char* ext)
 }
 
 } // namespace
+
+SampleAsWhole::SampleAsWhole(uint64_t whole_bytes) { g_sample_floor = dictionary_for(whole_bytes); }
+SampleAsWhole::~SampleAsWhole() { g_sample_floor = 0; }
 
 FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest, bool pieces)
 {
@@ -1408,8 +1447,12 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     r.rope_lines = m.rope_lines;
     r.rope_groups = m.rope_groups;
     m.rope_stream = {m.rope_carried.size(), m.rope_carried.size(), 0};
-    m.x86 = {0, x86.size(), dictionary_for(x86.size())};
-    m.lzma2 = {0, plain.size(), dictionary_for(plain.size())};
+    // (While a sample is timed for the File Locator's estimate, the dictionary of the whole it stands
+    // for: LZMA2 takes longer a byte with a larger one. On the 52 MB recording the estimate came to
+    // 8 min 01 s with it, 7 min 15 s without, the run taking 11.5 min; IDEAS §19.97.)
+    const uint32_t floor = g_sample_floor.load(std::memory_order_relaxed);
+    m.x86 = {0, x86.size(), std::max(dictionary_for(x86.size()), x86.empty() ? 0 : floor)};
+    m.lzma2 = {0, plain.size(), std::max(dictionary_for(plain.size()), plain.empty() ? 0 : floor)};
     // v17's packing: LZMA2's settings chosen for each stream (older versions are made as they were).
     const bool tune = gzip && binary;
     std::vector<uint8_t> px = pack_stream(x86, m.x86.dictionary, true, 9 | LZMA_PRESET_EXTREME, tune, true),

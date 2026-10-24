@@ -99,19 +99,45 @@ double sample_seconds(const std::vector<uint8_t>& sample, const fs::path& name, 
         o.write(reinterpret_cast<const char*>(sample.data()), std::streamsize(sample.size()));
         if (!o) throw std::runtime_error("cannot write the sample");
     }
+    // Each step timed as the whole's is (--timings: "estimate.*" beside "locator.*"), to see which the
+    // samples undercount (IDEAS §19.97).
+    using T = cli::timings::Scope;
     const auto t0 = Clock::now();
-    const BigUint a = cli::binary_address(sample);
-    (void)a.to_hex();
-    (void)cli::sha256_hex(sample);
-    (void)cli::deflate_size(sample);
-    (void)cli::lzma2_size(sample);
-    const cli::Manifest fi = file_instructions(f, sample, items, kNoSearch, archives);
-    const std::vector<uint8_t> mb = fi.file();
-    const BigUint ma = cli::binary_address(mb);
-    (void)cli::deflate_size(mb);
-    (void)cli::lzma2_size(mb);
-    (void)ma.to_hex();
-    (void)cli::weigh_files(dir, {u8(f.filename())}, wl, false, nullptr, cli::WeighBudget{kNoSearch, kNoSearch});
+    BigUint a;
+    {
+        const T t("estimate.address");
+        a = cli::binary_address(sample);
+        (void)a.to_hex();
+    }
+    {
+        const T t("estimate.sha256");
+        (void)cli::sha256_hex(sample);
+    }
+    {
+        const T t("estimate.zip");
+        (void)cli::deflate_size(sample);
+    }
+    {
+        const T t("estimate.7z");
+        (void)cli::lzma2_size(sample);
+    }
+    cli::Manifest fi;
+    {
+        const T t("estimate.instructions");
+        fi = file_instructions(f, sample, items, kNoSearch, archives);
+    }
+    {
+        const T t("estimate.instructions-compared");
+        const std::vector<uint8_t> mb = fi.file();
+        const BigUint ma = cli::binary_address(mb);
+        (void)cli::deflate_size(mb);
+        (void)cli::lzma2_size(mb);
+        (void)ma.to_hex();
+    }
+    {
+        const T t("estimate.weigh");
+        (void)cli::weigh_files(dir, {u8(f.filename())}, wl, false, nullptr, cli::WeighBudget{kNoSearch, kNoSearch});
+    }
     return since(t0);
 }
 
@@ -370,6 +396,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 const cli::WeighLines wl = host_.lines();
                 const std::vector<uint8_t> one = spread_of(largest, largest_bytes, kSlices, kSampleBytes / kSlices),
                                            two = spread_of(largest, largest_bytes, kSlices, 2 * kSampleBytes / kSlices);
+                const cli::SampleAsWhole as_whole(largest_bytes); // its samples packed with the whole's dictionary
                 const double t1 = sample_seconds(one, largest, items, archives, wl, &stop_);
                 const double t2 = stop_requested() ? 0 : sample_seconds(two, largest, items, archives, wl, &stop_);
                 if (stop_requested()) // stopped while timing it: no estimate
@@ -399,23 +426,41 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 const uint64_t size = fs::file_size(p);
                 estimate(size, p, size, 1, size >= 512 ? 1 : 0);
                 progress("reading it, its address and its SHA-256");
+                using T = cli::timings::Scope; // each step as the estimate times it ("estimate.*")
                 r.bytes = cli::read_file_bytes(p);
-                const BigUint a = cli::binary_address(r.bytes);
-                r.hex = a.is_zero() ? "0" : a.to_hex();
-                r.sha256 = cli::sha256_hex(r.bytes);
+                BigUint a;
+                {
+                    const T t("locator.address");
+                    a = cli::binary_address(r.bytes);
+                    r.hex = a.is_zero() ? "0" : a.to_hex();
+                }
+                {
+                    const T t("locator.sha256");
+                    r.sha256 = cli::sha256_hex(r.bytes);
+                }
                 c.original = r.bytes.size();
                 progress("what zip makes of it (deflate, level 9)");
-                c.deflate = measured(cli::deflate_size, r.bytes);
+                {
+                    const T t("locator.zip");
+                    c.deflate = measured(cli::deflate_size, r.bytes);
+                }
                 progress("what 7z makes of it (LZMA2, preset 9 extreme)");
-                c.lzma2 = measured(cli::lzma2_size, r.bytes);
+                {
+                    const T t("locator.7z");
+                    c.lzma2 = measured(cli::lzma2_size, r.bytes);
+                }
                 c.address_bytes = (a.bit_length() + 7) / 8;
                 c.address_hex = a.is_zero() ? 0 : r.hex.size();
                 // Its Sieve instructions, as a folder's: its name, size and SHA-256, then its bytes.
                 r.manifest = cli::manifest_of_file(p);
                 progress("packing its Sieve instructions");
                 const auto packing = Clock::now();
-                cli::Manifest fi = file_instructions(p, r.bytes, host_.item_args ? host_.item_args() : cli::Args{}, by_total ? total : per_file, archives);
+                cli::Manifest fi = [&] {
+                    const T t("locator.instructions");
+                    return file_instructions(p, r.bytes, host_.item_args ? host_.item_args() : cli::Args{}, by_total ? total : per_file, archives);
+                }();
                 r.pack_seconds = since(packing);
+                const T tc("locator.instructions-compared");
                 const std::vector<uint8_t> mb = fi.file();
                 c.packed = fi.packed;
                 c.version = fi.version();
@@ -516,7 +561,10 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 cli::WeighBudget budget;
                 if (by_total) budget = {cli::budget_per_file(total, files.size()), total};
                 else budget = {per_file, cli::budget_total(per_file, files.size())};
-                const cli::Weighing w = cli::weigh_files(root, files, wl, tailor, nullptr, budget);
+                const cli::Weighing w = [&] {
+                    const cli::timings::Scope t("locator.weigh");
+                    return cli::weigh_files(root, files, wl, tailor, nullptr, budget);
+                }();
                 r.weighing = cli::weighing_table(w, 12);
                 r.tailored = tailor;
                 if (tailor)

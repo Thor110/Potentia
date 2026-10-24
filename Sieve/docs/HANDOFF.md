@@ -3897,6 +3897,10 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   `best_at`, `best_trial` and `took`; `sieve rope` prints them. Quick set at 1 s: 67.0 → 30.5 s, the
   word list 10.86% smaller, nothing larger. The estimate measured (30% low on the recording); not
   changed yet.
+- **The File Locator, step by step** (IDEAS §19.97): `estimate.*` and `locator.*` timings; the cut
+  into pieces kept by SHA-256 (`pieces_of` in pack.cpp), so weighing does not cut again (the 52 MB
+  recording 11 min 43 s → 8 min 28 s); samples packed with the whole's dictionary (`SampleAsWhole`).
+  The estimate still a third low; next, refine it once the instructions are made.
 - **A text's search ends after its own waves** (IDEAS §19.99): measured on 127 files, the same bytes
   as every wave on all of them, 3.8 times faster with no limit; the texts of the quick set about
   twice as fast at 1 s. Fixed-width lines also try their columns at that width.

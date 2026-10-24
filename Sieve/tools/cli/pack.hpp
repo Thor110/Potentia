@@ -84,6 +84,18 @@ using PlaceCoder = std::function<std::optional<std::vector<uint8_t>>(size_t line
 // coded by `coder` where that is smaller than their raw bytes. With rope_seconds 0 or more (0: no
 // limit), v8 where it helps: a file carried by rope-wave-v1, searched for that long, where its code
 // is smaller than the file packed alone.
+// For the length of a scope (the File Locator's estimate, timing a sample of a large file), the
+// main streams are packed with the dictionary a stream of `whole_bytes` would have, as the whole
+// will be, so the sample takes nearer as long a byte as the whole does. Its instructions are for
+// timing only. One at a time, for the whole program.
+struct SampleAsWhole
+{
+    explicit SampleAsWhole(uint64_t whole_bytes);
+    ~SampleAsWhole();
+    SampleAsWhole(const SampleAsWhole&) = delete;
+    SampleAsWhole& operator=(const SampleAsWhole&) = delete;
+};
+
 void add_packed(Manifest& m, const std::filesystem::path& root, PackReport* report = nullptr, const ItemFinder* items = nullptr,
                 bool item_hashes = false, const PlaceCoder* coder = nullptr, double rope_seconds = -1, uint32_t rope_newest = 5,
                 bool trim = false, bool pieces = false, bool optimise_archives = false, bool binary = false,
