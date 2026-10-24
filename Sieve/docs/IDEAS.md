@@ -4579,6 +4579,20 @@ blocks and boundaries, and LZMA2's three full passes, on the 40 MB tar and the r
   waves found the best within 0.2 s and nothing after them won; ending a text's search after them
   would bring those to about 0.4 s, once checked on texts where a table's fixed-width wave (C1)
   might win (digits laid out in lines).
+- *A text's search ended after its own waves (24 October 2026; Edward: "yes make a start on that"):*
+  measured first on 127 files (this repository's docs, code, tables, word lists, meshes, filter
+  plugins and test files; pi's digits; a log; and two made: 200,000 digits in lines of 50 and a
+  fixed-width CSV), every wave, no limit: of the 118 that are text by the rule, 117 were won by a
+  wave the early group already tries (the bytes' counts, the value before, a line wave), and the
+  one other, the digits in lines of 50, by the columns at that width (`C1 G1`, 83,153 bytes) by 5
+  bytes over the best line wave (83,158). So a text's early group now also tries, where every line
+  is the same length, the columns at that width (one or two waves), and then its search ends
+  (`--search-every-wave` goes on). Every wave against the default, no limit, the 127: the same
+  3,026,562 bytes in all, file for file, in 29.3 s against 110.9. At 1 s a file, the quick set's
+  texts the same bytes as every wave, in about half the time: prose 1.82 → 0.84 s, code 1.39 →
+  0.42, the oracle 2.00 → 1.06, the mesh 1.96 → 0.95, the rope text 0.46 → 0.06
+  (results/bench-make-quick-2026-10-24-text.md). The tar is not text by the rule (lines of 4,096),
+  so it is unchanged.
 - *The File Locator's estimate, measured (24 October 2026):* the 52 MB recording took 11 min 30 s
   against 8 min 01 s estimated (30% low); a 20 MB text (the word list seven times over) took 5 min
   36 s against 1 min 35 s (its repetition, 2.9 MB apart, slows LZMA2's matching on the whole, and no

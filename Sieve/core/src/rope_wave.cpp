@@ -826,7 +826,7 @@ RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds, u
     // 2026: on every text measured it was the best, and as the last tried a short search never reached
     // it; IDEAS §19.99); for any other, last, as before (on a mostly binary file each of these waves is
     // long, and one under way is not cut short by the time).
-    uint64_t longest = 0, text_bytes = 0;
+    uint64_t longest = 0, text_bytes = 0, shortest = UINT64_MAX;
     bool lines = false;
     {
         uint64_t c = 0;
@@ -837,6 +837,7 @@ RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds, u
             {
                 lines = true;
                 longest = std::max(longest, c + 1);
+                shortest = std::min(shortest, c + 1);
                 c = 0;
             }
             else ++c;
@@ -860,7 +861,19 @@ RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds, u
     // (And lines of at most 1,024 bytes: the texts measured had 59 to 452; a tar of texts and
     // pictures, at 4,096, took 17 s for one of these waves.)
     const bool textlike = !file.empty() && double(text_bytes) >= 0.95 * double(file.size()) && longest <= 1024;
-    if (textlike) try_lines();
+    if (textlike)
+    {
+        try_lines();
+        // Lines all of one length (a table of fixed width): its columns counted apart too, at that
+        // width (rope-wave-v2 and v4), where they can be a little better than by line.
+        if (lines && shortest == longest && longest >= 2 && longest <= file.size() / 4)
+            for (const bool grouped : {false, true})
+                if (newest >= (grouped ? 4u : 2u) && !out_of_time()) try_one(RopeParams{8, uint32_t(longest), 1, 0, false, 1, grouped});
+        // Then a text's search ends: on 118 texts measured (24 October 2026: this repository's docs,
+        // code, tables, word lists, meshes and pi's digits) the best was always one tried by now, or
+        // within 5 bytes of it; the waves after found nothing better. --search-every-wave goes on.
+        if (!g_every_wave.load(std::memory_order_relaxed)) goto keep;
+    }
     // Bytes that nothing so far makes even 2% smaller (a JPEG, a PNG, a film: already packed) are
     // not searched further: no wave has ever helped them, and the search would take its whole time
     // for nothing. rope_search_every_wave(true) searches on regardless.

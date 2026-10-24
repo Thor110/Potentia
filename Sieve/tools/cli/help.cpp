@@ -1013,10 +1013,11 @@ const std::vector<Page>& pages()
           {"--weigh", "Weigh every file: its best way to be named against its own address."},
           {"--tailored", "With --weigh: tailor each line's filters to the files that are its items."},
           {"--out-filters PATH", "With --tailored: write the settings file with the filters found."},
-          {"--search-every-wave", "The rope's search tries every wave, up to --search-per-file, even on bytes its\n"
-                                  "first waves make no smaller (a JPEG, a PNG, a film: already packed), where it\n"
-                                  "stops otherwise: no later wave has helped such a file. Any command that makes\n"
-                                  "instructions takes it (locate, site, map, rope)."},
+          {"--search-every-wave", "The rope's search tries every wave, up to --search-per-file. Otherwise it stops\n"
+                                  "early where no later wave has been found to help: on bytes its first waves make\n"
+                                  "no smaller (a JPEG, a PNG, a film: already packed), and on text once its own\n"
+                                  "waves (by line, and by column where its lines are all one length) are tried.\n"
+                                  "Any command that makes instructions takes it (locate, site, map, rope)."},
           {"SIEVE_PACK_THREADS=N", "(Not an option: in the environment.) The packer uses every core (cutting into pieces, LZMA2's passes), and the\n"
                                                "instructions are the same at any count; the environment variable\n"
                                                "SIEVE_PACK_THREADS sets how many (1: one)."},

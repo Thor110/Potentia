@@ -28,9 +28,13 @@ Then reproduced under Sieve architecture
 - Video		- The Roundhay Garden Scene (1888) is widely considered the most historically significant public domain video as the oldest surviving film in existence.
 Movies		- 
 https://archive.org/details/roundhay-garden-scene-1888_202409
-- Books		- Kurd Lasswitz’s "The Universal Library" (1901): This is the German science fiction short story ("Die Universalbibliothek") that directly inspired Borges' take on the concept. Because Lasswitz died in 1910, his work is safely and fully in the public domain globally.
-https://www.math.tugraz.at/~prodinger/universalbibliothek.pdf
-Extracted to plain text
+- Books		-
+	- German
+Kurd Lasswitz’s "The Universal Library" (1901): This is the German science fiction short story ("Die Universalbibliothek") that directly inspired Borges' take on the concept. Because Lasswitz died in 1910, his work is safely and fully in the public domain globally.
+https://www.math.tugraz.at/~prodinger/universalbibliothek.pdf - Extracted to plain text
+	- English
+Don Quixote by Miguel de Cervantes Saavedra
+https://www.gutenberg.org/ebooks/996 - plain text
 - Models	- Utah Teapot
 https://graphics.cs.utah.edu/teapot/
 resolution 8, 1975 version, y-up
