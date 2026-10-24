@@ -3905,6 +3905,10 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   file_locator.*): per-step lines from the samples; after each step the rest rescaled by the done
   steps' ratio. The recording: 7:38 first, 8:01 refined, 8:14 taken; the repeated text 1:54, 5:06,
   4:48. `loc.estimate.refined`, `loc.took.refined` in data/lang/en.txt.
+- **The pieces' boundaries, a twelfth of the time** (`pieces_of_uncached` in pack.cpp, IDEAS
+  §19.99): steps of 512 bytes then 64 near the best, over 16 KiB (was every 64 over 64 KiB); the same
+  bytes on every file measured; the recording's boundaries 164 s → 13 s. `pack.pieces.blocks` and
+  `pack.pieces.boundaries` in `--timings` and in bench_make's table.
 - **A text's search ends after its own waves** (IDEAS §19.99): measured on 127 files, the same bytes
   as every wave on all of them, 3.8 times faster with no limit; the texts of the quick set about
   twice as fast at 1 s. Fixed-width lines also try their columns at that width.

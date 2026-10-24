@@ -32,10 +32,10 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-STAGES = ["pack.rope.search", "pack.pieces.rope", "pack.pieces.cut", "pack.rope.code", "pack.lzma2.quick",
+STAGES = ["pack.rope.search", "pack.pieces.rope", "pack.pieces.cut", "pack.pieces.blocks", "pack.pieces.boundaries", "pack.rope.code", "pack.lzma2.quick",
           "pack.lzma2.settings-trial", "pack.lzma2.first-pass", "pack.lzma2.tuned-pass", "pack.lzma2.7zip-pass",
           "pack.archives.recipe"]
-SHORT = {"pack.rope.search": "rope search", "pack.pieces.rope": "pieces' rope", "pack.pieces.cut": "cutting",
+SHORT = {"pack.rope.search": "rope search", "pack.pieces.rope": "pieces' rope", "pack.pieces.cut": "cutting", "pack.pieces.blocks": "blocks", "pack.pieces.boundaries": "boundaries",
          "pack.rope.code": "rope code", "pack.lzma2.quick": "LZMA2 quick", "pack.lzma2.settings-trial": "LZMA2 trial",
          "pack.lzma2.first-pass": "LZMA2 pass 1", "pack.lzma2.tuned-pass": "LZMA2 tuned", "pack.lzma2.7zip-pass": "7-Zip pass",
          "pack.archives.recipe": "archives"}
@@ -160,7 +160,7 @@ def main():
     with open(stem.with_suffix(".md"), "w", encoding="utf-8", newline="\n") as m:
         m.write(f"# Making Sieve instructions: time by stage ({date})\n\n{machine()}. `sieve locate FILE --installer` "
                 "(the newest instructions), each file alone; seconds, from `--timings`. Stages nest in the total, and the "
-                "pieces' rope includes its own search.\n")
+                "pieces' rope includes its own search; cutting includes the blocks and the boundaries.\n")
         for search in searches:
             m.write(f"\n## Search {search:g} s a file\n\n| File | Kind | Bytes | Made | s | MB/s | " + " | ".join(SHORT[s] for s in STAGES) + " |\n")
             m.write("| :--- | :--- | ---: | ---: | ---: | ---: | " + " | ".join("---:" for _ in STAGES) + " |\n")

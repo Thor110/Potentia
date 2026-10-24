@@ -4625,7 +4625,17 @@ blocks and boundaries, and LZMA2's three full passes, on the 40 MB tar and the r
   8 min 01 s as it went)" on the 52 MB recording, where it had been a third low; on the 20 MB
   repeated text "took 4 min 48 s (estimated 1 min 54 s at first, 5 min 06 s as it went)", where
   no sample can see the repetition. Estimates still begin at 16 MiB.
-- *Next:* the boundaries made cheaper still (most of the recording's time).
+- *The boundaries made cheaper (24 October 2026; Edward: "continue"):* timed apart
+  (`pack.pieces.blocks`, `pack.pieces.boundaries`), the 52 MB recording's cut was almost all
+  boundaries: 584 of them, 68,825 steps, each LZMA2 over up to 64 KiB, 164 s, against 2 s for its
+  12,815 blocks. Tried: steps of 512 bytes and then of 64 within 448 of the best (14,598 steps), and
+  a window of 16 KiB in place of 64, each alone and both. Every one made the same instructions,
+  byte for byte, on the recording, on all fifteen files of the quick set, and on 10.6 MB of the
+  repository's pictures, films and sounds joined end to end (38 boundaries). Both together are kept:
+  the recording's boundaries 164 s → 13 s, `sieve locate` on it 318 s → 170 s; the joined media's
+  6.8 s → 0.64 s. Not moving the boundaries at all was tried too: Vitruvian Man 41 bytes larger, so
+  they stay. (A tar of the source, and the same files joined with text, were not cut at all: LZMA2
+  wins every block.) Most of the recording's time is now LZMA2's full passes and the rope's search.
 
 **19.100 "Create .sieve" in the right-click menu (Edward, 24 October 2026; noted, not to be built
 yet).** "I was thinking about adding create .sieve to the context menu, but that brings with it a

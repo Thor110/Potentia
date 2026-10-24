@@ -408,12 +408,14 @@ Pieces pieces_of_uncached(const std::vector<uint8_t>& b)
     std::vector<char> kind(blocks);
     std::vector<double> gain(blocks); // what LZMA2 saves over the rope on the block (negative: it costs)
     progress("cutting it into pieces: weighing its " + std::to_string(blocks) + " blocks");
+    std::optional<timings::Scope> t_blocks(std::in_place, "pack.pieces.blocks");
     for_each_index(blocks, pack_threads(), [&](size_t k) { // each block on its own: the same at any thread count
         if (stop_requested()) return;
         const size_t from = k * B, to = std::min(b.size(), from + B);
         gain[k] = rope_cost(from, to) - lzma_cost(from, to);
         kind[k] = gain[k] > 0 ? 'z' : 'r';
     });
+    t_blocks.reset();
     if (stop_requested()) return out; // asked to stop: not cut (the file whole is still a way)
     // Runs: one that saves less than 64 bytes over the other way goes to its neighbours' way.
     for (int pass = 0; pass < 2; ++pass)
@@ -435,13 +437,15 @@ Pieces pieces_of_uncached(const std::vector<uint8_t>& b)
         else runs.emplace_back(kind[k], len);
     }
     if (runs.size() < 2) return out;
-    // Each boundary moved, in steps of 64 bytes up to a block either way, to where the two ways
-    // cost least: the LZMA2 side packed again at each step (where its run is no longer than 1 MiB),
-    // over a window of at most 64 KiB beyond the steps, fixed while the boundary moves (so every
-    // step is weighed over the same bytes but its own; the whole run, packed at every step, made a
-    // file of many runs take hours: IDEAS §19.97), the rope's side counted over the two blocks
-    // around the boundary.
-    constexpr uint64_t kWindow = uint64_t(64) << 10;
+    // Each boundary moved, up to a block either way, to where the two ways cost least: the LZMA2
+    // side packed again at each step (where its run is no longer than 1 MiB), over a window of at
+    // most 16 KiB beyond the steps, fixed while the boundary moves (so every step is weighed over
+    // the same bytes but its own; the whole run, packed at every step, made a file of many runs take
+    // hours: IDEAS §19.97), the rope's side counted over the two blocks around the boundary. The
+    // steps are 512 bytes first, then 64 within 448 of the best of those (IDEAS §19.99: on every
+    // file measured, the same places as every 64 bytes over 64 KiB, in a twelfth of the time).
+    const timings::Scope t_bounds("pack.pieces.boundaries");
+    constexpr uint64_t kWindow = uint64_t(16) << 10;
     uint64_t start = 0;
     for (size_t j = 0; j + 1 < runs.size(); ++j)
     {
@@ -461,22 +465,27 @@ Pieces pieces_of_uncached(const std::vector<uint8_t>& b)
             const uint64_t wlo = edge >= B ? edge - B : 0, whi = std::min(uint64_t(b.size()), edge + B);
             const uint64_t zfrom = std::max(start, lo >= kWindow ? lo - kWindow : 0), zto = std::min(end, hi + kWindow);
             // Every step weighed at once, then the cheapest taken in order (ties to the earlier).
+            auto weigh = [&](uint64_t first, uint64_t last, uint64_t step, uint64_t& best_e) {
+                const size_t steps = size_t((last - first) / step + 1);
+                std::vector<double> cost(steps);
+                for_each_index(steps, pack_threads(), [&](size_t k) {
+                    const uint64_t e = first + step * uint64_t(k);
+                    cost[k] = z_left ? lzma_cost(size_t(zfrom), size_t(e)) + rope_cost(size_t(e), size_t(whi))
+                                     : lzma_cost(size_t(e), size_t(zto)) + rope_cost(size_t(wlo), size_t(e));
+                });
+                double best = -1;
+                for (size_t k = 0; k < steps; ++k)
+                    if (best < 0 || cost[k] < best)
+                    {
+                        best = cost[k];
+                        best_e = first + step * uint64_t(k);
+                    }
+            };
             const uint64_t first = lo + (edge - lo) % 64;
-            const size_t steps = size_t((hi - first) / 64 + 1);
-            std::vector<double> cost(steps);
-            for_each_index(steps, pack_threads(), [&](size_t k) {
-                const uint64_t e = first + 64 * uint64_t(k);
-                cost[k] = z_left ? lzma_cost(size_t(zfrom), size_t(e)) + rope_cost(size_t(e), size_t(whi))
-                                 : lzma_cost(size_t(e), size_t(zto)) + rope_cost(size_t(wlo), size_t(e));
-            });
-            double best = -1;
+            const uint64_t last = first + (hi - first) / 64 * 64;
             uint64_t best_e = edge;
-            for (size_t k = 0; k < steps; ++k)
-                if (best < 0 || cost[k] < best)
-                {
-                    best = cost[k];
-                    best_e = first + 64 * uint64_t(k);
-                }
+            weigh(first, last, 512, best_e);
+            weigh(std::max(first, best_e >= 448 ? best_e - 448 : 0), std::min(last, best_e + 448), 64, best_e);
             runs[j].second = best_e - start;
             runs[j + 1].second = end - best_e;
         }
