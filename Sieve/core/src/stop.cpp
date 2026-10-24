@@ -15,6 +15,8 @@ bool stop_requested() { return t_stop && t_stop->load(std::memory_order_relaxed)
 
 bool force_requested() { return t_stop && t_stop->load(std::memory_order_relaxed) >= kForce; }
 
+const std::atomic<int>* current_stop() { return t_stop; }
+
 void progress(const std::string& what, double best, double of)
 {
     if (t_report) t_report(what, best, of);

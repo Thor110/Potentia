@@ -3881,6 +3881,20 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   open, saying why, with **Back** to the first screen (Replace, another folder). Shown: the first
   extract closes by itself, a second into the same folder stays open.
 
+### Step 1 begun: making `.sieve` measured, and threads (24 October 2026)
+- **`tools/bench/bench_make.py SIEVE [--set full] [--search S,...] [--only NAME,...]`:** a fixed set
+  from the repository's own files, timed by the packer's stages (`--timings` names them now:
+  `pack.*` in `tools/cli/pack.cpp`); writes results/bench-make-<set>-<date>.tsv and .md (a row at a
+  time). results/ holds the first runs (quick set, and the 52 MB recording).
+- **Threads in the packer** (`for_each_index`, `pack_threads`, `passes_at_once` in pack.cpp;
+  `sieve::current_stop()` so workers take on the caller's Stop): cutting into pieces (blocks,
+  boundary steps), LZMA2's trial and passes. The same instructions at any count (shown on every
+  file of the quick set; the CI compares 1 and 4 threads on Vitruvian Man). `SIEVE_PACK_THREADS`.
+  Figures in IDEAS §19.99. Not yet: the File Locator's estimate checked against this.
+- **`tools/bench/bench_make.bat`** (Edward: his `python` and `py` fail at a prompt but work from
+  `make_release.bat`): finds Python as that does, passes the Release `sieve.exe` (or the `.exe`
+  named first), and keeps the window open.
+
 ### The plan from here (24 October 2026)
 Edward asked for the next most important steps, from the documents. In order:
 1. **Making `.sieve` files, measured and made faster** (IDEAS §19.97, §19.99, §19.100). Everything

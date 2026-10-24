@@ -1,6 +1,7 @@
 // Sieve CLI -- an installer's files packed (pack.hpp).
 
 #include "cli/pack.hpp"
+#include "cli/timings.hpp"
 
 #include "sieve/filekind.hpp"
 #include "sieve/rope_wave.hpp"
@@ -14,8 +15,13 @@
 #include "Lzma2Enc.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <exception>
+#include <mutex>
+#include <thread>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -23,11 +29,97 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#elif defined(__linux__)
+#include <unistd.h>
+#endif
+
 namespace sieve::cli {
 
 namespace {
 
 namespace fs = std::filesystem;
+
+// ---- threads (IDEAS §19.99): work made of separate trials runs them at once, each scored as one
+// thread scores it and the best taken in the same order (ties to the earlier), so the instructions
+// are the same at any thread count. SIEVE_PACK_THREADS sets how many (1: one, as before); unless
+// given, every core.
+unsigned pack_threads()
+{
+    static const unsigned n = [] {
+        if (const char* e = std::getenv("SIEVE_PACK_THREADS"))
+            if (const int v = std::atoi(e); v >= 1) return unsigned(v);
+        return std::max(1u, std::thread::hardware_concurrency());
+    }();
+    return n;
+}
+
+// Memory free now, in bytes, or 0 where it cannot be known.
+uint64_t memory_free()
+{
+#if defined(_WIN32)
+    MEMORYSTATUSEX m{};
+    m.dwLength = sizeof m;
+    return GlobalMemoryStatusEx(&m) ? uint64_t(m.ullAvailPhys) : 0;
+#elif defined(__linux__) && defined(_SC_AVPHYS_PAGES)
+    const long pages = sysconf(_SC_AVPHYS_PAGES), size = sysconf(_SC_PAGESIZE);
+    return pages > 0 && size > 0 ? uint64_t(pages) * uint64_t(size) : 0;
+#else
+    return 0;
+#endif
+}
+
+// How many LZMA2 passes of dictionary `dict` may run at once: the threads, and no more than half
+// the memory free holds (a pass at preset 9 takes about twelve times its dictionary); where the
+// memory free cannot be known, two for a dictionary above 16 MiB.
+unsigned passes_at_once(uint32_t dict)
+{
+    const unsigned t = pack_threads();
+    const uint64_t each = uint64_t(dict) * 12 + (uint64_t(16) << 20), free = memory_free();
+    if (free == 0) return dict > (16u << 20) ? std::min(t, 2u) : t;
+    return unsigned(std::clamp<uint64_t>(free / 2 / each, 1, t));
+}
+
+// f(i) for every i below n, on up to `threads` threads (this one among them), each taking the next
+// index there is; the threads take on this thread's flag to stop.
+template <class F>
+void for_each_index(size_t n, unsigned threads, F&& f)
+{
+    threads = unsigned(std::min<size_t>(std::max(1u, threads), n));
+    if (threads <= 1)
+    {
+        for (size_t i = 0; i < n; ++i) f(i);
+        return;
+    }
+    std::atomic<size_t> next{0};
+    std::exception_ptr failed;
+    std::mutex failed_mx;
+    const std::atomic<int>* stop = current_stop();
+    auto work = [&] {
+        try
+        {
+            for (size_t i; (i = next.fetch_add(1)) < n;) f(i);
+        }
+        catch (...)
+        {
+            std::lock_guard<std::mutex> lock(failed_mx);
+            if (!failed) failed = std::current_exception();
+            next = n; // the rest left undone
+        }
+    };
+    std::vector<std::thread> pool;
+    for (unsigned k = 1; k < threads; ++k)
+        pool.emplace_back([&, stop] {
+            const StopScope scope(stop, {});
+            work();
+        });
+    work();
+    for (std::thread& t : pool) t.join();
+    if (failed) std::rethrow_exception(failed);
+}
 
 // The smallest LZMA2 dictionary size that holds `n` bytes: 2 or 3 times a power of two, at least
 // 4 KiB, at most 64 MiB (preset 9's).
@@ -169,40 +261,74 @@ std::vector<uint8_t> encode_lzma2_sdk(const std::vector<uint8_t>& data, uint32_t
 std::vector<uint8_t> pack_stream(const std::vector<uint8_t>& data, uint32_t dict, bool x86, uint32_t preset = 9 | LZMA_PRESET_EXTREME,
                                  bool tune = false, bool abortable = false)
 {
-    std::vector<uint8_t> best = encode_lzma2(data, dict, x86, preset, -1, 0, abortable);
-    if (!tune || data.empty() || best.empty()) return best; // (empty for data: abandoned by a force stop)
+    if (!tune || data.empty())
+    {
+        const timings::Scope t("pack.lzma2.quick");
+        return encode_lzma2(data, dict, x86, preset, -1, 0, abortable); // (empty for data: abandoned by a force stop)
+    }
     // How it goes, for whoever is watching (sieve/stop.hpp), and asked to stop: the best so far kept.
     const std::string what = std::string(x86 ? "the x86 stream (" : "the lzma2 stream (") + std::to_string(data.size()) + " bytes)";
+    std::vector<uint8_t> best;
     auto said = [&](const std::string& next) {
         progress(what + ": best so far " + std::to_string(best.size()) + " bytes; " + next, double(best.size()), double(data.size()));
     };
-    said("trying LZMA2's settings on its first MiB");
-    if (stop_requested()) return best;
+    // The preset's own pass, and LZMA2's settings tried on the first MiB at preset 6, at once.
+    progress(what + ": packing it, and trying LZMA2's settings on its first MiB");
     constexpr size_t kSample = size_t(1) << 20;
     const std::vector<uint8_t> sample(data.begin(), data.begin() + std::ptrdiff_t(std::min(data.size(), kSample)));
     const uint32_t sample_dict = dictionary_for(sample.size());
     int chosen = 302;
-    size_t chosen_size = encode_lzma2(sample, sample_dict, x86, 6, 302).size();
-    for (const int c : {0, 400, 200, 22, 402, 111})
-        if (stop_requested()) return best;
-        else if (const size_t n = encode_lzma2(sample, sample_dict, x86, 6, c).size(); n && n < chosen_size)
+    for_each_index(2, passes_at_once(dict), [&](size_t task) {
+        if (task == 0)
         {
-            chosen = c;
-            chosen_size = n;
+            const timings::Scope t("pack.lzma2.first-pass");
+            best = encode_lzma2(data, dict, x86, preset, -1, 0, abortable);
+            return;
         }
-    for (const uint32_t nice : {0u, 64u})
+        const timings::Scope ts("pack.lzma2.settings-trial");
+        const std::vector<int> tried = {302, 0, 400, 200, 22, 402, 111};
+        std::vector<size_t> sizes(tried.size(), 0);
+        for_each_index(tried.size(), pack_threads(), [&](size_t k) {
+            if (!stop_requested()) sizes[k] = encode_lzma2(sample, sample_dict, x86, 6, tried[k]).size();
+        });
+        size_t chosen_size = sizes[0];
+        for (size_t k = 1; k < tried.size(); ++k)
+            if (sizes[k] && sizes[k] < chosen_size) // in order, ties to the earlier: as one thread chose
+            {
+                chosen = tried[k];
+                chosen_size = sizes[k];
+            }
+    });
+    if (best.empty() || stop_requested()) return best; // (empty: the first pass abandoned by a force stop)
+    // Then the stream at the settings chosen, at the preset's match length and at 64, and by
+    // 7-Zip's own encoder (22 October 2026), at once; each kept where it is smaller, in that order.
+    said("packing it at lc" + std::to_string(chosen / 100) + " lp" + std::to_string(chosen / 10 % 10) + " pb" + std::to_string(chosen % 10) +
+         ", at two match lengths and with 7-Zip's encoder");
+    struct Pass
     {
-        if (chosen == 302 && nice == 0) continue; // the preset's own: already made
-        if (stop_requested()) return best;
-        said("packing it at lc" + std::to_string(chosen / 100) + " lp" + std::to_string(chosen / 10 % 10) + " pb" + std::to_string(chosen % 10) +
-             (nice ? ", match length 64" : ""));
-        std::vector<uint8_t> t = encode_lzma2(data, dict, x86, preset, chosen, nice);
-        if (!t.empty() && t.size() < best.size()) best = std::move(t); // (empty: abandoned, the best before kept)
-    }
-    // And 7-Zip's own encoder at the same settings (22 October 2026).
-    if (stop_requested()) return best;
-    said("packing it with 7-Zip's encoder");
-    if (std::vector<uint8_t> t = encode_lzma2_sdk(data, dict, x86, chosen); !t.empty() && t.size() < best.size()) best = std::move(t);
+        uint32_t nice;
+        bool sdk;
+    };
+    std::vector<Pass> passes;
+    for (const uint32_t nice : {0u, 64u})
+        if (!(chosen == 302 && nice == 0)) passes.push_back({nice, false}); // the preset's own: already made
+    passes.push_back({0, true});
+    std::vector<std::vector<uint8_t>> made(passes.size());
+    for_each_index(passes.size(), passes_at_once(dict), [&](size_t k) {
+        if (stop_requested()) return;
+        if (passes[k].sdk)
+        {
+            const timings::Scope tk("pack.lzma2.7zip-pass");
+            made[k] = encode_lzma2_sdk(data, dict, x86, chosen);
+        }
+        else
+        {
+            const timings::Scope tp("pack.lzma2.tuned-pass");
+            made[k] = encode_lzma2(data, dict, x86, preset, chosen, passes[k].nice); // (empty: abandoned)
+        }
+    });
+    for (std::vector<uint8_t>& t : made)
+        if (!t.empty() && t.size() < best.size()) best = std::move(t);
     said("done");
     return best;
 }
@@ -245,14 +371,14 @@ Pieces pieces_of(const std::vector<uint8_t>& b)
     const size_t blocks = (b.size() + B - 1) / B;
     std::vector<char> kind(blocks);
     std::vector<double> gain(blocks); // what LZMA2 saves over the rope on the block (negative: it costs)
-    for (size_t k = 0; k < blocks; ++k)
-    {
-        if (stop_requested()) return out; // asked to stop: not cut (the file whole is still a way)
-        if (k % 1024 == 0) progress("cutting it into pieces: block " + std::to_string(k) + " of " + std::to_string(blocks));
+    progress("cutting it into pieces: weighing its " + std::to_string(blocks) + " blocks");
+    for_each_index(blocks, pack_threads(), [&](size_t k) { // each block on its own: the same at any thread count
+        if (stop_requested()) return;
         const size_t from = k * B, to = std::min(b.size(), from + B);
         gain[k] = rope_cost(from, to) - lzma_cost(from, to);
         kind[k] = gain[k] > 0 ? 'z' : 'r';
-    }
+    });
+    if (stop_requested()) return out; // asked to stop: not cut (the file whole is still a way)
     // Runs: one that saves less than 64 bytes over the other way goes to its neighbours' way.
     for (int pass = 0; pass < 2; ++pass)
         for (size_t a = 0; a < blocks;)
@@ -298,18 +424,23 @@ Pieces pieces_of(const std::vector<uint8_t>& b)
             const uint64_t lo = std::max(start + 64, edge >= B ? edge - B : 0), hi = std::min(end - 64, edge + B);
             const uint64_t wlo = edge >= B ? edge - B : 0, whi = std::min(uint64_t(b.size()), edge + B);
             const uint64_t zfrom = std::max(start, lo >= kWindow ? lo - kWindow : 0), zto = std::min(end, hi + kWindow);
+            // Every step weighed at once, then the cheapest taken in order (ties to the earlier).
+            const uint64_t first = lo + (edge - lo) % 64;
+            const size_t steps = size_t((hi - first) / 64 + 1);
+            std::vector<double> cost(steps);
+            for_each_index(steps, pack_threads(), [&](size_t k) {
+                const uint64_t e = first + 64 * uint64_t(k);
+                cost[k] = z_left ? lzma_cost(size_t(zfrom), size_t(e)) + rope_cost(size_t(e), size_t(whi))
+                                 : lzma_cost(size_t(e), size_t(zto)) + rope_cost(size_t(wlo), size_t(e));
+            });
             double best = -1;
             uint64_t best_e = edge;
-            for (uint64_t e = lo + (edge - lo) % 64; e <= hi; e += 64)
-            {
-                const double c = z_left ? lzma_cost(size_t(zfrom), size_t(e)) + rope_cost(size_t(e), size_t(whi))
-                                        : lzma_cost(size_t(e), size_t(zto)) + rope_cost(size_t(wlo), size_t(e));
-                if (best < 0 || c < best)
+            for (size_t k = 0; k < steps; ++k)
+                if (best < 0 || cost[k] < best)
                 {
-                    best = c;
-                    best_e = e;
+                    best = cost[k];
+                    best_e = first + 64 * uint64_t(k);
                 }
-            }
             runs[j].second = best_e - start;
             runs[j + 1].second = end - best_e;
         }
@@ -611,6 +742,7 @@ namespace {
 // the presets whose dictionary is the one its first block names, each with and without extreme.
 std::string xz_recipe(const std::vector<uint8_t>& b, const std::vector<uint8_t>& inner)
 {
+    const timings::Scope t("pack.archives.recipe");
     const char* check = xz_check_name(b[7]);
     if (b[6] != 0 || !check) return "";
     // The first block's header: its filters, the last LZMA2's dictionary byte.
@@ -658,6 +790,7 @@ std::string xz_recipe(const std::vector<uint8_t>& b, const std::vector<uint8_t>&
 // again and its CRC and length after it.
 std::string gzip_recipe(const std::vector<uint8_t>& b, const std::vector<uint8_t>& inner)
 {
+    const timings::Scope t("pack.archives.recipe");
     const size_t h = gzip_header_size(b);
     if (!h) return "";
     const std::vector<uint8_t> stream(b.begin() + std::ptrdiff_t(h), b.end() - 8);
@@ -687,7 +820,10 @@ FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint3
     };
     FileWays w;
     w.lzma2 = estimate(bytes);
-    const RopeSearch found = rope_search(bytes, rope_seconds, rope_newest);
+    const RopeSearch found = [&] {
+        const timings::Scope t("pack.rope.search");
+        return rope_search(bytes, rope_seconds, rope_newest);
+    }();
     w.tried += found.tried;
     w.rope = found.best;
     if (force_requested()) // abandoned: no way but LZMA2's (the caller leaves the file as it is)
@@ -695,11 +831,17 @@ FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint3
         w.forced = true;
         return w;
     }
-    w.rope_code = rope_code(bytes, found.best);
+    {
+        const timings::Scope t("pack.rope.code");
+        w.rope_code = rope_code(bytes, found.best);
+    }
     w.rope_bytes = w.rope_code.size() + varint_of(w.rope_code.size());
     if (pieces && !stop_requested())
     {
-        Pieces p = pieces_of(bytes);
+        Pieces p = [&] {
+            const timings::Scope t("pack.pieces.cut");
+            return pieces_of(bytes);
+        }();
         if (force_requested()) // its costs may be from passes abandoned part way: not used
         {
             w.forced = true;
@@ -707,6 +849,7 @@ FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint3
         }
         if (!p.list.empty())
         {
+            const timings::Scope t("pack.pieces.rope");
             const RopeSearch pr = rope_search(p.r, rope_seconds, rope_newest);
             w.tried += pr.tried;
             w.has_pieces = true;
@@ -782,6 +925,7 @@ std::vector<uint8_t> place_bytes_of(const std::string& hex, uint32_t width)
 void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const ItemFinder* items, bool item_hashes, const PlaceCoder* coder,
                 double rope_seconds, uint32_t rope_newest, bool trim, bool pieces, bool optimise_archives, bool binary, bool gzip)
 {
+    const timings::Scope t_all("pack.all");
     // Every file's bytes, checked against the walk: from the contents where a v3 manifest has them,
     // else read from the folder (the current one, for a file named without one).
     std::vector<ManifestEntry*> files;

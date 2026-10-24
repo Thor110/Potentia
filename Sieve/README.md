@@ -21,6 +21,7 @@ Special thanks to Claude Opus 5.5 for helping to build out the Sieve system base
 | `context/` | Sieve in Windows' right-click menu for `.sieve` files (Extract here, Extract to a folder of its name), by `sieve-install`; [context/README.md](context/README.md) |
 | `tools/make_release.py`, `tools/make_release.bat` | Makes a Sieve release (docs/SIEVE-INSTALL-USAGE.md, "Making a Sieve release") |
 | `tools/run_tests.bat`, `tools/check_vectors.py` | Every test on Windows; every conformance vector through the oracle |
+| `tools/bench/bench_make.py`, `bench_make.bat` | How long making Sieve instructions takes, by stage and by kind of file, on a fixed set from this repository (results/bench-make-*) |
 | `tools/check_help.py` | Checks that `sieve help` and `hallway --help` name every option the programs read (the CI runs it) |
 | `tools/plot_sieve.py` | Plots sieve results (needs matplotlib) |
 | `tools/build_dictionary.py` | Rebuilds the English dictionaries from SCOWL |

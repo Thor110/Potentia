@@ -1011,6 +1011,9 @@ const std::vector<Page>& pages()
           {"--weigh", "Weigh every file: its best way to be named against its own address."},
           {"--tailored", "With --weigh: tailor each line's filters to the files that are its items."},
           {"--out-filters PATH", "With --tailored: write the settings file with the filters found."},
+          {"SIEVE_PACK_THREADS=N", "(Not an option: in the environment.) The packer uses every core (cutting into pieces, LZMA2's passes), and the\n"
+                                               "instructions are the same at any count; the environment variable\n"
+                                               "SIEVE_PACK_THREADS sets how many (1: one)."},
           {"--search-per-file S", "With --tailored: seconds the search for shorter addresses may take for each file (a\n"
                                   "line's search gets that times its files); 0, the default, no limit. Out of time, a\n"
                                   "line keeps the best filters it found by then. With --items: the seconds the\n"

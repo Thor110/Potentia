@@ -2169,6 +2169,12 @@ jobs:
           for js in ../web/extension/*.js; do node --check "$js"; done
           # The programs' own help names every option they read (sieve help, hallway --help).
           python ../tools/check_help.py
+          # The packer's threads change nothing: Vitruvian Man cut into pieces (its rope's search
+          # without a time limit, so the same everywhere), made on one thread and on four, the same.
+          SIEVE_PACK_THREADS=1 $S locate ../data/anchors/public-domain/Vitruvian.jpg --installer thr1.sieve --search-per-file 0 > thr1.txt
+          SIEVE_PACK_THREADS=4 $S locate ../data/anchors/public-domain/Vitruvian.jpg --installer thr4.sieve --search-per-file 0 > /dev/null
+          grep -c "1 file(s) cut into pieces" thr1.txt > /dev/null
+          cmp thr1.sieve thr4.sieve
           # A v2 manifest (every file's address listed) is the oracle's to the byte.
           $S locate ../tests/manifest_fixture --manifest fixture2.manifest --with-addresses > /dev/null
           python sieve_ref.py manifest ../tests/manifest_fixture --with-addresses | cmp - fixture2.manifest

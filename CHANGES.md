@@ -1,7 +1,12 @@
-# Notes: Create .sieve, and the plan (24 October 2026)
+# The benchmark as a double-click (24 October 2026)
 
-- IDEAS 19.100: Create .sieve in the right-click menu, noted and not to be built yet, with what it waits on.
-- HANDOFF: "The plan from here", the next steps in order.
-- VOICES: your words on it.
+`Sieve\tools\bench\bench_make.bat` finds Python the way `make_release.bat` does: the py launcher first, then python. It runs the benchmark with the Release build's `sieve.exe`, and keeps the window open at the end.
 
-Documents only. To apply, copy `Sieve/` over.
+- Double-click it: the quick set, 1 s of search a file.
+- `bench_make.bat --set full`: adds the 52 MB recording (about 6 minutes more here).
+- `bench_make.bat --search 1,10`: several search times.
+- `bench_make.bat C:\Sieve\tools\sieve.exe --set full`: another `sieve.exe`.
+
+The tables go to `Sieve\results` (`bench-make-*.md` and `.tsv`).
+
+To apply: copy `Sieve/` over. Not run here: there is no Windows machine in this session.

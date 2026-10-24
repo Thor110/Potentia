@@ -4511,6 +4511,32 @@ same time. Memory is the limit to watch: each LZMA2 pass at preset 9 takes its d
 several times over (64 MiB at the most, about ten times that to encode), so a thread count from the
 cores and from the memory free, as the menu's filter memory is given. First to measure: the pieces'
 blocks and boundaries, and LZMA2's three full passes, on the 40 MB tar and the release folder.
+- *Measured, then built (24 October 2026; Edward: "make a start on step 1"):* `tools/bench/bench_make.py
+  SIEVE` builds a fixed set from this repository's own files (prose, code, a table, a word list, a
+  PNG, JPEGs, a mesh, a MIDI, an MP4, a WAV made by the script, a Windows program, a tar of them;
+  `--set full` adds the 52 MB screen recording) and times `sieve locate FILE --installer` by the
+  packer's stages, which `--timings` now names (`pack.rope.search`, `pack.pieces.cut`,
+  `pack.lzma2.first-pass`, `.tuned-pass`, `.7zip-pass`, ...); results/bench-make-*.md. On this
+  machine (Xeon at 2.80 GHz, 4 threads), before threads:
+  - the rope's search took its whole second on almost every file, and 10 s found nothing smaller
+    on any of the fifteen (every file the same size at 1 s and at 10 s);
+  - on the large files LZMA2's four full passes were most of the time (the program: 9.5 of 12.9 s);
+  - the 52 MB recording took 941 s, 676 of them cutting into pieces (each boundary weighed at up
+    to 129 steps, LZMA2 at each).
+- *Threads, the same instructions at any count:* the blocks' costs and each boundary's steps when
+  cutting into pieces, LZMA2's settings tried on the first MiB, its first pass beside that trial,
+  and the tuned passes beside 7-Zip's, each scored as one thread scores it and the best taken in
+  the same order; as many passes at once as half the memory free holds (about twelve times the
+  dictionary each). `SIEVE_PACK_THREADS` sets the count (1: one). Shown: every file of the quick
+  set the same, byte for byte, before and after; the CI makes Vitruvian Man (cut into pieces, its
+  search without a limit) on one thread and on four and compares them. Before → after, seconds:
+  prose 2.80 → 1.75, the word list 12.23 → 6.39, the program 11.36 → 5.29, the tar 17.94 → 9.90,
+  the mesh 3.16 → 1.91, the PNG 3.70 → 2.64; the recording 941 → 351 (cutting 676 → 176), the same
+  36,568,587 bytes.
+- *Still single:* the rope's search (its time limit makes the result depend on how far it got, so
+  threads would need it split into trials taken in order); the weighing; the tailoring search.
+- *Next:* the File Locator's estimate measured against the time taken on this set (it was 15 to 20%
+  low), and the boundaries made cheaper still (most of the recording's time).
 
 **19.100 "Create .sieve" in the right-click menu (Edward, 24 October 2026; noted, not to be built
 yet).** "I was thinking about adding create .sieve to the context menu, but that brings with it a

@@ -22,6 +22,10 @@ inline constexpr int kStop = 1, kForce = 2;
 bool stop_requested();  // 1 or more
 bool force_requested(); // 2
 
+// This thread's flag (or none), for the threads it starts to take on as their own (StopScope), so
+// that a stop reaches the work they do for it too.
+const std::atomic<int>* current_stop();
+
 // Says how the work on this thread is going ("the lzma2 stream: best so far ..."), where whoever
 // started it asked to hear; nothing otherwise. With `best` and `of` (bytes, both 0 or more), a
 // new best of a step: so many bytes for the `of` it packs, for a graph of the best so far.
