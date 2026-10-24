@@ -19,6 +19,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -152,6 +153,14 @@ private:
     std::chrono::steady_clock::time_point job_started_{};
     double job_estimate_ = -1;
     std::string job_estimate_text_;
+    // The estimate step by step (IDEAS §19.97): what the samples predict for each step of the
+    // reading (seconds, without the search's time), refined as each is done by how long the done
+    // ones took against their prediction; the first estimate kept, to say beside the time taken.
+    std::array<double, 6> est_steps_{}; // address and SHA-256, zip, 7z, the instructions, compared, the weighing
+    bool est_on_ = false;
+    double est_first_ = -1, est_pack_search_ = 0, est_weigh_search_ = 0;
+    std::chrono::steady_clock::time_point est_work_start_{};
+    void refine_estimate(size_t steps_done); // after step steps_done - 1 is done; under no lock
     void start_job(bool new_graph = true);
     // The graph of the best so far: each new best of a step (its bytes as a share of what it
     // packs), handed over by the worker (under mx_) and drawn onto graph_ as it comes, then let go,

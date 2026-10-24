@@ -4614,9 +4614,18 @@ blocks and boundaries, and LZMA2's three full passes, on the 40 MB tar and the r
     11.5 min taken; on the repeated text it changed nothing), so it is back in.
   The estimate is still a third low (5 min 37 s against 8 min 28 s): the time grows faster than in
   proportion on a large file, by an amount two small samples cannot show.
-- *Next:* the estimate refined as the work goes: once the instructions are made (about two thirds
-  of the time), the ratio of their time to the samples' line, applied to what is left; and the
-  boundaries made cheaper still.
+- *A quarter more, and refined as it goes (24 October 2026; Edward: "we could just add 25% to the
+  initial estimate and clearly state that it is an estimate ... correcting it as it goes is also
+  practical"):* the samples now give each step its own line (address and SHA-256, zip, 7z, the
+  instructions, compared, the weighing), the first estimate is their sum and a quarter more, and
+  after each step is done the estimate is made again: the time so far, and what is left as the
+  samples predict it, times how long the done steps took against their prediction (the search's
+  time taken out; the ratio kept between 0.5 and 4). The screen says so ("refined as it goes:
+  about ... left"), and at the end gives both: "took 8 min 14 s (estimated 7 min 38 s at first,
+  8 min 01 s as it went)" on the 52 MB recording, where it had been a third low; on the 20 MB
+  repeated text "took 4 min 48 s (estimated 1 min 54 s at first, 5 min 06 s as it went)", where
+  no sample can see the repetition. Estimates still begin at 16 MiB.
+- *Next:* the boundaries made cheaper still (most of the recording's time).
 
 **19.100 "Create .sieve" in the right-click menu (Edward, 24 October 2026; noted, not to be built
 yet).** "I was thinking about adding create .sieve to the context menu, but that brings with it a

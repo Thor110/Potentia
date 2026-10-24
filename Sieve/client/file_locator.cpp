@@ -61,6 +61,7 @@ constexpr size_t kSampleBytes = size_t(1) << 20;
 constexpr uint64_t kEstimateFrom = uint64_t(16) << 20;
 constexpr size_t kSlices = 8;      // the samples' stretches, evenly across the file
 constexpr double kNoSearch = 1e-3; // 0 would be no limit
+constexpr double kEstimateMargin = 1.25; // the first estimate's margin (IDEAS §19.97)
 
 using Clock = std::chrono::steady_clock;
 
@@ -76,8 +77,12 @@ std::string duration_text(double s)
     return b;
 }
 
-// The reading's work, timed on `sample` saved as a file named `name` in a folder of its own.
-double sample_seconds(const std::vector<uint8_t>& sample, const fs::path& name, const cli::Args& items, bool archives, const cli::WeighLines& wl,
+// The reading's work, timed on `sample` saved as a file named `name` in a folder of its own: each
+// step's seconds, in the order the whole does them (address and SHA-256, zip, 7z, the instructions,
+// compared, the weighing).
+using Steps = std::array<double, 6>;
+
+Steps sample_seconds(const std::vector<uint8_t>& sample, const fs::path& name, const cli::Args& items, bool archives, const cli::WeighLines& wl,
                       const std::atomic<int>* stop)
 {
     std::random_device rd;
@@ -102,7 +107,12 @@ double sample_seconds(const std::vector<uint8_t>& sample, const fs::path& name, 
     // Each step timed as the whole's is (--timings: "estimate.*" beside "locator.*"), to see which the
     // samples undercount (IDEAS §19.97).
     using T = cli::timings::Scope;
-    const auto t0 = Clock::now();
+    Steps out{};
+    auto t0 = Clock::now();
+    auto next = [&](size_t k) {
+        out[k] += since(t0);
+        t0 = Clock::now();
+    };
     BigUint a;
     {
         const T t("estimate.address");
@@ -113,19 +123,23 @@ double sample_seconds(const std::vector<uint8_t>& sample, const fs::path& name, 
         const T t("estimate.sha256");
         (void)cli::sha256_hex(sample);
     }
+    next(0);
     {
         const T t("estimate.zip");
         (void)cli::deflate_size(sample);
     }
+    next(1);
     {
         const T t("estimate.7z");
         (void)cli::lzma2_size(sample);
     }
+    next(2);
     cli::Manifest fi;
     {
         const T t("estimate.instructions");
         fi = file_instructions(f, sample, items, kNoSearch, archives);
     }
+    next(3);
     {
         const T t("estimate.instructions-compared");
         const std::vector<uint8_t> mb = fi.file();
@@ -134,11 +148,13 @@ double sample_seconds(const std::vector<uint8_t>& sample, const fs::path& name, 
         (void)cli::lzma2_size(mb);
         (void)ma.to_hex();
     }
+    next(4);
     {
         const T t("estimate.weigh");
         (void)cli::weigh_files(dir, {u8(f.filename())}, wl, false, nullptr, cli::WeighBudget{kNoSearch, kNoSearch});
     }
-    return since(t0);
+    next(5);
+    return out;
 }
 
 // `slices` stretches of `each` bytes taken evenly across a file of `size` bytes, joined: a sample
@@ -281,12 +297,36 @@ void FileLocator::start_job(bool new_graph)
     stop_ = 0;
 }
 
+// After the reading's first `steps_done` steps (est_steps_), the estimate again: the time so far,
+// and what is left as the samples predict it, times how long the done steps took against their
+// prediction (the search's time taken out, as far as it can have been spent), with the searches'
+// time still to come. Locks mx_ itself.
+void FileLocator::refine_estimate(size_t steps_done)
+{
+    std::lock_guard<std::mutex> lock(mx_);
+    if (!est_on_ || steps_done == 0 || steps_done > est_steps_.size()) return;
+    double predicted = 0, left = 0;
+    for (size_t k = 0; k < est_steps_.size(); ++k) (k < steps_done ? predicted : left) += est_steps_[k];
+    double worked = since(est_work_start_);
+    if (steps_done >= 4) worked = std::max(worked - est_pack_search_, 0.5 * worked); // the instructions' search
+    if (predicted < 1) return; // too little done to tell anything
+    const double ratio = std::clamp(worked / predicted, 0.5, 4.0);
+    const double remaining = left * ratio + est_weigh_search_ + (steps_done < 4 ? est_pack_search_ : 0);
+    job_estimate_ = since(job_started_) + remaining;
+    job_estimate_text_ = trf("loc.estimate.refined", {duration_text(job_estimate_), duration_text(remaining)});
+}
+
 // Under mx_.
 std::string FileLocator::finish_job()
 {
     const double took = since(job_started_);
-    std::string t = job_estimate_ >= 0 ? trf("loc.took.estimated", {duration_text(took), duration_text(job_estimate_)}) : trf("loc.took", {duration_text(took)});
+    std::string t = job_estimate_ < 0 ? trf("loc.took", {duration_text(took)})
+                    : est_first_ >= 0 && std::abs(est_first_ - job_estimate_) >= 1
+                        ? trf("loc.took.refined", {duration_text(took), duration_text(est_first_), duration_text(job_estimate_)})
+                        : trf("loc.took.estimated", {duration_text(took), duration_text(job_estimate_)});
     job_estimate_ = -1;
+    est_on_ = false;
+    est_first_ = -1;
     job_estimate_text_.clear();
     job_started_ = {};
     progress_.clear();
@@ -397,18 +437,34 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 const std::vector<uint8_t> one = spread_of(largest, largest_bytes, kSlices, kSampleBytes / kSlices),
                                            two = spread_of(largest, largest_bytes, kSlices, 2 * kSampleBytes / kSlices);
                 const cli::SampleAsWhole as_whole(largest_bytes); // its samples packed with the whole's dictionary
-                const double t1 = sample_seconds(one, largest, items, archives, wl, &stop_);
-                const double t2 = stop_requested() ? 0 : sample_seconds(two, largest, items, archives, wl, &stop_);
+                const Steps t1 = sample_seconds(one, largest, items, archives, wl, &stop_);
+                const Steps t2 = stop_requested() ? Steps{} : sample_seconds(two, largest, items, archives, wl, &stop_);
                 if (stop_requested()) // stopped while timing it: no estimate
                 {
                     std::lock_guard<std::mutex> lock(mx_);
                     job_estimate_text_.clear();
                     return;
                 }
-                const double per_byte = (t2 - t1) / double(kSampleBytes);
-                const double reading = per_byte > 0 ? t1 + per_byte * double(bytes - kSampleBytes) : t2 * double(bytes) / double(2 * kSampleBytes);
+                // Each step drawn out as a straight line through its two samples to the whole size.
+                Steps steps{};
+                double line = 0;
+                for (size_t k = 0; k < steps.size(); ++k)
+                {
+                    const double per_byte = (t2[k] - t1[k]) / double(kSampleBytes);
+                    steps[k] = per_byte > 0 ? t1[k] + per_byte * double(bytes - kSampleBytes) : t2[k] * double(bytes) / double(2 * kSampleBytes);
+                    line += steps[k];
+                }
+                // A quarter more: on a large file the work grows faster than in proportion, by an
+                // amount two small samples cannot show (the 52 MB recording took 1.4 to 1.75 times
+                // the line, step by step; IDEAS §19.97); refined as the steps are done.
+                const double reading = line * kEstimateMargin;
                 const double weigh_search = by_total ? total : cli::budget_total(per_file, files);
                 std::lock_guard<std::mutex> lock(mx_);
+                est_steps_ = steps;
+                est_on_ = true;
+                est_pack_search_ = r.pack_search_unlimited ? 0 : r.pack_search;
+                est_weigh_search_ = r.pack_search_unlimited ? 0 : weigh_search;
+                est_work_start_ = Clock::now();
                 if (r.pack_search_unlimited)
                 {
                     job_estimate_ = reading;
@@ -419,6 +475,8 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                     job_estimate_ = reading + r.pack_search + weigh_search;
                     job_estimate_text_ = trf("loc.estimate", {duration_text(job_estimate_), duration_text(reading), duration_text(r.pack_search + weigh_search)});
                 }
+                job_estimate_ += since(job_started_); // from the job's start, the samples' time in it
+                est_first_ = job_estimate_;
             };
             if (fs::is_regular_file(p))
             {
@@ -438,17 +496,20 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                     const T t("locator.sha256");
                     r.sha256 = cli::sha256_hex(r.bytes);
                 }
+                refine_estimate(1);
                 c.original = r.bytes.size();
                 progress("what zip makes of it (deflate, level 9)");
                 {
                     const T t("locator.zip");
                     c.deflate = measured(cli::deflate_size, r.bytes);
                 }
+                refine_estimate(2);
                 progress("what 7z makes of it (LZMA2, preset 9 extreme)");
                 {
                     const T t("locator.7z");
                     c.lzma2 = measured(cli::lzma2_size, r.bytes);
                 }
+                refine_estimate(3);
                 c.address_bytes = (a.bit_length() + 7) / 8;
                 c.address_hex = a.is_zero() ? 0 : r.hex.size();
                 // Its Sieve instructions, as a folder's: its name, size and SHA-256, then its bytes.
@@ -460,6 +521,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                     return file_instructions(p, r.bytes, host_.item_args ? host_.item_args() : cli::Args{}, by_total ? total : per_file, archives);
                 }();
                 r.pack_seconds = since(packing);
+                refine_estimate(4);
                 const T tc("locator.instructions-compared");
                 const std::vector<uint8_t> mb = fi.file();
                 c.packed = fi.packed;
@@ -476,6 +538,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 r.instructions_address = std::move(ma);
                 r.made_rope_seconds = by_total ? total : per_file;
                 r.made_archives = archives;
+                refine_estimate(5);
             }
             else if (fs::is_directory(p))
             {
@@ -507,8 +570,10 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                     c.address_hex += a.is_zero() ? 0 : a.to_hex().size();
                     all.insert(all.end(), bytes.begin(), bytes.end());
                 }
+                refine_estimate(2);
                 progress("what 7z makes of them (LZMA2, preset 9 extreme, as one stream)");
                 c.lzma2 = measured(cli::lzma2_size, all);
+                refine_estimate(3);
                 // The installer's manifest (v4: every file packed after it), compressed, and the installer.
                 cli::Manifest with = r.manifest;
                 {
@@ -522,6 +587,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                                           true, archives);
                     r.pack_seconds = since(packing);
                 }
+                refine_estimate(4);
                 c.packed = with.packed;
                 c.version = with.version();
                 const std::vector<uint8_t> mb = with.file();
@@ -538,6 +604,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 r.made_archives = archives;
                 const std::string plain = r.manifest.text(); // the tree's identity is its v1 manifest's
                 r.sha256 = cli::sha256_hex(std::vector<uint8_t>(plain.begin(), plain.end()));
+                refine_estimate(5);
             }
             else throw std::runtime_error(tr("loc.neither"));
             r.table = cli::comparison_table(c);

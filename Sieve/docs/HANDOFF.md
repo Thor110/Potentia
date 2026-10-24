@@ -3901,6 +3901,10 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   into pieces kept by SHA-256 (`pieces_of` in pack.cpp), so weighing does not cut again (the 52 MB
   recording 11 min 43 s → 8 min 28 s); samples packed with the whole's dictionary (`SampleAsWhole`).
   The estimate still a third low; next, refine it once the instructions are made.
+- **The estimate, a quarter more and refined as it goes** (`refine_estimate`, `est_steps_` in
+  file_locator.*): per-step lines from the samples; after each step the rest rescaled by the done
+  steps' ratio. The recording: 7:38 first, 8:01 refined, 8:14 taken; the repeated text 1:54, 5:06,
+  4:48. `loc.estimate.refined`, `loc.took.refined` in data/lang/en.txt.
 - **A text's search ends after its own waves** (IDEAS §19.99): measured on 127 files, the same bytes
   as every wave on all of them, 3.8 times faster with no limit; the texts of the quick set about
   twice as fast at 1 s. Fixed-width lines also try their columns at that width.
