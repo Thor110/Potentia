@@ -13,11 +13,16 @@ machine: Chrome reaches `sieve.exe` through native messaging, which is registere
   - a page is shown in a frame that runs no scripts, with its own `.sieve` pictures checked and put
     in, and its `.sieve` links leading back to the viewer;
   - a picture, sound, film or text is shown as itself;
+  - a `.sieve` of many files is shown as a listing of its folders and files, each with its size and
+    SHA-256; a file opens from it by its path, decoded on its own (nothing is written to the disk).
+    A page among them takes its pictures, and its links to the others, from the same `.sieve`,
+    checked against the same hash; a picture it names that the `.sieve` does not hold is refused,
+    saying so (24 October 2026);
   - anything else is offered to save.
 - **Refused:**
   - a `.sieve` whose link states no hash;
   - one whose own SHA-256 is not the one stated (checked before a byte of it is decoded);
-  - one that holds more than one file;
+  - as a picture (`<img>`), one that holds more than one file: a picture names one;
   - one that carries items of Sieve's lines, a remade archive, or a map;
   - one over 256 MiB unpacked.
 
@@ -119,7 +124,12 @@ other way of naming a file goes past it, so `build` keeps such a file as it is, 
   `<meta content>`): the same, kept as they are. A picture with a `srcset` or in a `<picture>`
   would show those files instead of its `src`, so the extension takes them away when it shows the
   checked `.sieve`.
-- **Links from the server's root** (`/a.png`) and to other sites are left as they are.
+- **Links from the server's root** (`/a.png`): left as they are, unless the site says where it is
+  served from, `--served-at /` at the server's root or `--served-at /Potentia/` in a folder (give
+  `check` the same). Then a link under that path is the site's own, made and checked as a relative
+  one is, and kept from the root as written (`/pictures/a.sieve`). `check` without it counts those
+  it could not read ("3 from the server's root not read"). Links to other servers (`//host/...`,
+  `https://...`) are always left as they are.
 
 The Potentia website itself (its top `index.html`, `Pages`, `Images` and `Art`), built with
 `--sieve-pages` on 23 October 2026: 101 files, its 3 pages with no script made into `.sieve` files
@@ -154,7 +164,8 @@ length, in this machine's byte order, then that many bytes of JSON.
 | Request | Answer |
 |---|---|
 | `{"id": N, "op": "hello"}` | `{"id": N, "ok": true, "sieve": "0.13.75"}` |
-| `{"id": N, "op": "decode", "sha256": "sha256-...", "name": "...", "data": "<the .sieve, base64>"}` | `{"id": N, "ok": true, "name", "type", "size", "sha256", "seconds", "parts": K}`, then K messages `{"id": N, "part": i, "data": "<base64>"}` |
+| `{"id": N, "op": "decode", "sha256": "sha256-...", "name": "...", "data": "<the .sieve, base64>"}`, and `"path"` for one file of many | `{"id": N, "ok": true, "name", "type", "size", "sha256", "seconds", "parts": K}`, then K messages `{"id": N, "part": i, "data": "<base64>"}` |
+| a decode of a `.sieve` of many files, no `"path"` | `{"id": N, "ok": true, "listing": true, "name", "files": [{"path", "size", "sha256"}, ...], "folders": ["a/", ...], "size", "seconds", "parts": 0}` |
 | either, refused | `{"id": N, "ok": false, "error": "<why>"}` |
 
 A message to the browser is at most 1 MB, so a file comes back in parts of 699,999 bytes (whole
@@ -175,6 +186,5 @@ talks to it as Chrome does, without a browser; the CI runs it.
 - **The extension reading `site.sieve`:** a site's pages that link to one another, checked against
   its one list of hashes.
 - **A crawler:** `sieve site check` against a server instead of a folder.
-- **A `.sieve` of many files:** shown as a listing of its folders and files.
 - **WebAssembly:** the decoder in the extension itself, so nothing is installed and every browser
   can use it.

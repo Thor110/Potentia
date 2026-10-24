@@ -69,3 +69,21 @@ body {
   font-size: 16px;
   color: #ccc;
 }
+/* A .sieve of many files: its folders and files. */
+.listing {
+  margin: 0;
+  padding: 16px 24px;
+  overflow: auto;
+  flex: 1;
+}
+.listing .folder {
+  color: #c8a24a;
+}
+.listing .file a {
+  color: #8fc4ff;
+}
+.listing .about {
+  margin-left: 1.5em;
+  color: #777;
+  font-size: 12px;
+}

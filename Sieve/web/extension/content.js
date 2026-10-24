@@ -49,6 +49,7 @@
     chrome.runtime.sendMessage({ op: "decode", url: img.src, integrity: img.getAttribute("integrity") }, (r) => {
       if (chrome.runtime.lastError) return refuse(img, chrome.runtime.lastError.message);
       if (!r || !r.ok) return refuse(img, r ? r.error : "no answer");
+      if (r.listing) return refuse(img, "it holds " + r.files.length + " files, and a picture names one");
       const blob = new Blob([bytesOf(r.data)], { type: r.type });
       img.dataset.sieve = "shown";
       const t = r.times || {};

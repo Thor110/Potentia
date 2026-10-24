@@ -1,31 +1,59 @@
-# function-words-v2, and scowl-en-60-names-v2 as the default (24 October 2026)
+# Step 4, the web's phase 2: the first two parts (24 October 2026)
 
-As you suggested: v1 is kept as it is, and v2 is made beside it.
+## 1. Links from the server's root (`/pictures/a.png`)
+- **`sieve site build|check --served-at PATH`:** PATH is where the site is served from: `/` at the
+  server's root, or `/Potentia/` in a folder, as on GitHub Pages. A link under that path is read
+  as the site's own. It's made into a `.sieve` and checked like a relative link, and written from
+  the root as before (`/Potentia/pictures/door.sieve`).
+- **Without it, nothing changes:** such links are left alone, as before. `check` now says how many
+  it couldn't read ("3 from the server's root not read (give --served-at)").
+- Links to other servers (`//host/...`, `https://...`) are always left as they are.
+- **CI:** one site built both ways, plus the check with and without the option.
 
-## What changed
-- **`function-words-v2`** (`data/filters/function-words-v2.sfilter` and `.tsv`): v1's rules, with
-  every token a word of `scowl-en-60-names-v2`, the list without SCOWL's symbols and acronyms. So it
-  implies `words-v2` with the default list again. `tools/build_text_plugins.py` writes it, and
-  writes v1's files unchanged beside it (`--check` passes).
-- **The default dictionary is now `scowl-en-60-names-v2`** (`dictionaries.tsv`). `scowl-en-60-names`
-  stays registered, so a stack made with it still reproduces by naming it. `function-words-v1` keeps
-  its own copy of that list in its `.tsv`, so it judges exactly as before.
-- **CI:** a new line compares `function-words-v2` with the oracle, as v1 is compared.
-- **Docs:** SPECIFICATIONS (dictionaries), FILTER-PLUGINS (the generated plugins' table),
-  `sieve help sift` and `dicts`, the dictionaries' README (which still called `scowl-en-60` the
-  default), IDEAS §2.3, HANDOFF and VOICES.
-
-## Measured here
-| | `function-words-v1` | `function-words-v2` |
-| :--- | ---: | ---: |
-| Pages of 32 letters kept | 2.95 × 10^27 (10^-18.33, as documented) | 5.25 × 10^26 (10^-19.08) |
-| The 100 held-out sentences and their 100 shuffles | 159 of 200 pass | the same 159, verdict for verdict |
+## 2. A `.sieve` of many files, shown as a listing
+- **`sieve web-host`:** a `decode` of a `.sieve` with many files now answers with its listing
+  (paths, sizes, SHA-256s, folders) instead of refusing it. A `decode` that names a `path` gives
+  that one file: cut from the checked contents and checked against its own SHA-256. Nothing is
+  written to the disk.
+- **The viewer:** shows the listing as a tree, and each file opens by its path (screenshots
+  included). A page among them takes its pictures, and its links to the other files, from the same
+  `.sieve`, checked against the same hash. A picture it names that the `.sieve` doesn't hold is
+  refused, saying so ("pages.sieve holds no file pictures/door.jpg").
+- **Pictures:** an `<img>` whose `.sieve` holds many files is still refused, since a picture names
+  one file.
+- **`check_host.py`:** has `--listing` and `--path P FILE`. The CI checks the fixture's listing, a
+  file by its path, and a path it doesn't hold. The CI line that expected such a `.sieve` to be
+  refused is replaced.
+- **Seen in Chromium** (headless, the extension loaded, the test site served):
+  - "Every page in one" lists its 5 files;
+  - About opens from the listing, and its Home, Gallery and Notes links lead to those files by path;
+  - the gallery's deliberately tampered picture is still refused.
 
 ## Tested here
-- Unit tests: 0 failures.
+- Unit tests: 77,033 checks, 0 failures.
 - `check_help.py`: 0 missing.
-- `sieve dicts`: the new default's hash checks.
-- The new CI line: the engine and the oracle agree.
+- The new CI lines, run by hand, including under `bash -eo pipefail`.
+- Not run: the full CI.
+
+## Left in step 4: two questions for you
+1. **The extension reading `site.sieve`.** As agreed in IDEAS §19.92, its hash is the one root to
+   trust, pinned in the extension or published apart from the site. My suggestion:
+   - a small options page in the extension, where you paste a site's address and the `site.sieve`
+     hash that `sieve site build` prints;
+   - on that site's pages, the extension checks the page itself, and any file it links to without
+     a hash, against `site.sieve`'s list;
+   - a bar then says "checked against site.sieve", or what didn't match.
+
+   Shall I build it like that?
+2. **The crawler (`site check` against a server).** Sieve has no HTTP client. The simplest way,
+   with nothing new to build into Sieve:
+   - a Python script fetches `site.sieve` from the server, then every file it names, into a
+     temporary folder;
+   - it runs `sieve site check` there.
+
+   The other way is an HTTP library built into `sieve` (HTTPS would need OpenSSL on Linux and
+   macOS). I'd recommend the Python script.
 
 ## To apply
-Copy `Sieve/` and `.github/` over, and rebuild.
+Copy `Sieve/` and `.github/` over, and rebuild. To test, reload the extension in
+`chrome://extensions`.

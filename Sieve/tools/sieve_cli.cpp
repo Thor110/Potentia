@@ -2715,6 +2715,7 @@ int cmd_site(const Args& a)
         }
         if (a.has("search-per-file")) o.search_per_file = std::stod(a.get("search-per-file"));
         o.keep_originals = a.has("keep-originals");
+        if (a.has("served-at")) o.served_at = a.get("served-at");
         o.progress = [](size_t k, size_t n, const std::string& f) { std::cerr << "making    " << k << " of " << n << ": " << f << "\n"; };
         const auto t0 = std::chrono::steady_clock::now();
         const SiteReport r = build_site(path_of(a.positional[1]), path_of(a.get("out")), o);
@@ -2729,9 +2730,10 @@ int cmd_site(const Args& a)
     if (what == "check")
     {
         if (a.positional.size() != 2) throw std::invalid_argument("site check needs a DIR");
-        const SiteCheck c = check_site(path_of(a.positional[1]));
+        const SiteCheck c = check_site(path_of(a.positional[1]), a.has("served-at") ? a.get("served-at") : std::string());
         for (const std::string& m : c.mismatches) std::cout << "mismatch  " << m << "\n";
-        std::cerr << "site      " << c.checked << " checked, " << c.mismatches.size() << " not as stated" << (c.kept ? ", " + std::to_string(c.kept) + " kept as written (not checked)" : "") << "\n";
+        std::cerr << "site      " << c.checked << " checked, " << c.mismatches.size() << " not as stated" << (c.kept ? ", " + std::to_string(c.kept) + " kept as written (not checked)" : "")
+                  << (c.unread ? ", " + std::to_string(c.unread) + " from the server's root not read (give --served-at)" : "") << "\n";
         return c.mismatches.empty() ? 0 : 1;
     }
     throw std::invalid_argument("site needs build or check (see: sieve help site)");

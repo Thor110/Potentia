@@ -15,8 +15,9 @@
 //                         against the site's map; what does not match is listed.
 //
 // What it reads in a page (HTML, or PHP, which is always kept as it is): the `src` of `img` and
-// `source`, and the `href` of `a`, relative to the page (a link with a scheme, from the server's
-// root, or to an anchor alone is left as it is). Only a file one of those names is made into a
+// `source`, and the `href` of `a`, relative to the page, or from the server's root where the site is
+// served from a path it starts with (`served_at`; a link with a scheme, to another server, or to an
+// anchor alone is left as it is). Only a file one of those names is made into a
 // `.sieve`, and never a page with a script (the extension's viewer runs none). A tag with `data-sieve-keep` is left exactly as written, and not checked (the test
 // site's deliberately wrong links).
 //
@@ -41,6 +42,10 @@ struct SiteOptions
     std::vector<std::string> plain;  // pages kept as they are (paths in the site); every index.html always is
     double search_per_file = 1;      // the rope's search for each file (seconds; 0: no limit)
     bool keep_originals = false;     // every picture made kept as it is too, beside its .sieve
+    // Where the site is served from ("/" at the server's root, "/Potentia/" in a folder): a link
+    // from the server's root under it ("/pictures/a.png") is read as the site's own. Empty: such
+    // links are left alone.
+    std::string served_at;
     // Told before each file is made: how many so far and of how many, and which.
     std::function<void(size_t, size_t, const std::string&)> progress;
 };
@@ -60,11 +65,12 @@ struct SiteCheck
 {
     size_t checked = 0;                  // stated hashes checked, and map entries
     size_t kept = 0;                     // links with data-sieve-keep: left as written, not checked
+    size_t unread = 0;                   // links from the server's root stating a hash, not under --served-at
     std::vector<std::string> mismatches; // "page: what" for each that did not match
 };
 
-// Checks a built site (as above).
-SiteCheck check_site(const std::filesystem::path& dir);
+// Checks a built site (as above); `served_at` as SiteOptions'.
+SiteCheck check_site(const std::filesystem::path& dir, const std::string& served_at = "");
 
 // What a page's link states, as written ("sha256-" and the base64 of the SHA-256), for bytes.
 std::string integrity_of(const std::vector<uint8_t>& bytes);

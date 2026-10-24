@@ -6,8 +6,9 @@
 //   - only instructions whose own SHA-256 is the one the link states (the page's `integrity`
 //     attribute): checked before a byte of them is decoded, so a file that is not the one the page
 //     meant never reaches the decoder (a file's own hashes prove nothing about who made it);
-//   - only one file: a link names one thing (a `.sieve` of many files is saved and installed with
-//     Sieve instead);
+//   - one file at a time: a link names one thing, so a `.sieve` of many files is answered with its
+//     listing (its folders and files, each with its size and SHA-256), and any one of them is
+//     decoded when it is asked for by its path (24 October 2026; never written to the disk);
 //   - nothing that asks for more than decoding: no items of Sieve's lines, no remade archives, no
 //     map's graph part;
 //   - at most `max_bytes` decoded (256 MiB unless given).
@@ -26,7 +27,11 @@
 //           "size": <bytes>, "sha256": "<its SHA-256, hex>", "seconds": <checking and decoding
 //           it here took>, "parts": K}
 //          then K messages {"id": N, "part": i, "data": "<base64>"}, i from 0;
+//       or, for a .sieve of many files and no "path": {"id": N, "ok": true, "listing": true,
+//           "name": "<the .sieve's own name>", "files": [{"path", "size", "sha256"}, ...],
+//           "folders": ["<path>/", ...], "size": <every file's bytes>, "seconds", "parts": 0};
 //       or {"id": N, "ok": false, "error": "<why it was refused>"}.
+//   A decode may name "path": the file of that path in the .sieve (as its listing gives it).
 #pragma once
 
 #include <cstdint>
@@ -45,6 +50,25 @@ struct WebDecoded
 };
 
 inline constexpr uint64_t kWebMaxBytes = uint64_t(256) << 20;
+
+struct WebFile
+{
+    std::string path, sha256; // as the listing gives it; its own SHA-256, hex
+    uint64_t size = 0;
+};
+
+// What a `.sieve` is, checked as above: one file decoded (`path`, or its only file), or for a
+// `.sieve` of many files and no `path`, its listing.
+struct WebOpened
+{
+    bool listing = false;
+    std::vector<WebFile> files;        // the listing (listing only)
+    std::vector<std::string> folders;  // its folders, "a/b/" (listing only)
+    uint64_t total = 0;                // every file's bytes
+    WebDecoded file;                   // the file (not a listing)
+};
+WebOpened web_open(const std::vector<uint8_t>& sieve, const std::string& expected, const std::string& path = "",
+                   uint64_t max_bytes = kWebMaxBytes);
 
 // The one file a `.sieve` holds, refused (std::runtime_error, saying why) unless the instructions'
 // own SHA-256 is `expected` (hex, or "sha256-" and base64) and they are as above.

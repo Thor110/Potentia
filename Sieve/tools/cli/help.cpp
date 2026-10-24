@@ -1057,8 +1057,8 @@ const std::vector<Page>& pages()
 
         {"site", "A website of .sieve files, each link stating the hash of the file it names.",
          "sieve site build SRC --out OUT [--sieve-pages] [--plain a.html,b.html] [--sieve jpg,png,...]\n"
-         "  [--keep-originals] [--search-per-file S]\n"
-         "  sieve site check DIR",
+         "  [--keep-originals] [--search-per-file S] [--served-at PATH]\n"
+         "  sieve site check DIR [--served-at PATH]",
          "build copies the site in SRC to OUT. A picture an <img>, <source> or <a> names is made into a\n"
          ".sieve, and with --sieve-pages so is a page an <a> names (but every index.html, those given to\n"
          "--plain, and any with a script, which the viewer does not run); each such tag is given that\n"
@@ -1076,8 +1076,13 @@ const std::vector<Page>& pages()
           {"--keep-originals", "Keep every picture made as it is too, beside its .sieve (for scripts that put names together)."},
           {"--plain LIST", "With --sieve-pages: pages (paths in the site, commas between) kept as they are."},
           {"--sieve LIST", "The extensions made into .sieve files (jpg,jpeg,png,gif,webp,bmp,svg)."},
-          {"--search-per-file S", "The rope's search for each file, in seconds (1; 0: no limit)."}},
+          {"--search-per-file S", "The rope's search for each file, in seconds (1; 0: no limit)."},
+          {"--served-at PATH", "Where the site is served from: / at the server's root, /Potentia/ in a folder. A link\n"
+                               "from the server's root under it (/pictures/a.png) is then read as the site's own, made\n"
+                               "and checked as a relative one is, and kept from the root as written. Without it, such\n"
+                               "links are left alone. Give check the same."}},
          {{"sieve site build web/test-site/src --out site --sieve-pages", "the test site"},
+          {"sieve site build my-site --out built --served-at /", "a site at the server's root, with links from it"},
           {"sieve site check site", "every hash it states, checked"}}},
 
         {"map", "A map: a node graph of verified anchors.",

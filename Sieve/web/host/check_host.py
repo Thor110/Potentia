@@ -5,6 +5,8 @@ check it without a browser (web/README.md; the CI runs it).
   python web/host/check_host.py SIEVE FILE.sieve EXPECTED_FILE   # decoded, the same bytes
   python web/host/check_host.py SIEVE FILE.sieve --refused        # refused (a wrong hash is given)
   python web/host/check_host.py SIEVE FILE.sieve --refused-as-is  # refused with its own hash
+  python web/host/check_host.py SIEVE FILE.sieve --listing        # a .sieve of many files: its listing
+  python web/host/check_host.py SIEVE FILE.sieve --path P EXPECTED_FILE   # its file P, the same bytes
 
 Prints what the host answered; exits non-zero if it is not what was asked for.
 """
@@ -41,6 +43,9 @@ def main():
     data = open(file, "rb").read()
     own = hashlib.sha256(data).hexdigest()
     mode = sys.argv[3]
+    path = None
+    if mode == "--path":
+        path, mode = sys.argv[4], sys.argv[5]
     if mode == "--refused":
         sha = "0" * 64
     elif mode == "--refused-as-is":
@@ -48,7 +53,10 @@ def main():
     else:
         # As a page states it: an integrity attribute.
         sha = "sha256-" + base64.b64encode(hashlib.sha256(data).digest()).decode()
-    replies = talk(sieve, [{"id": 1, "op": "hello"}, {"id": 2, "op": "decode", "name": file, "sha256": sha, "data": base64.b64encode(data).decode()}])
+    request = {"id": 2, "op": "decode", "name": file, "sha256": sha, "data": base64.b64encode(data).decode()}
+    if path is not None:
+        request["path"] = path
+    replies = talk(sieve, [{"id": 1, "op": "hello"}, request])
     hello, head = replies[0], replies[1]
     print("hello:", hello)
     print("reply:", {k: v for k, v in head.items() if k != "data"})
@@ -60,6 +68,15 @@ def main():
         return
     if not head.get("ok"):
         sys.exit("refused: " + head.get("error", ""))
+    if mode == "--listing":
+        if not head.get("listing") or not head.get("files"):
+            sys.exit("no listing")
+        for f in head["files"]:
+            print(f"listed: {f['path']}  {f['size']} bytes  {f['sha256']}")
+        print(f"listing: {len(head['files'])} files, {len(head['folders'])} folders, {head['size']} bytes")
+        return
+    if head.get("listing"):
+        sys.exit("a listing, not a file")
     parts = replies[2:]
     if len(parts) != head["parts"]:
         sys.exit(f"{len(parts)} parts, not {head['parts']}")

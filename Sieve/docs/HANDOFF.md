@@ -3928,6 +3928,17 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   `build_text_plugins.py`, which writes v1 unchanged beside it; CI compares it with the oracle).
 - Figures in IDEAS §2.1 to §2.3.
 
+### Step 4: the web, phase 2, begun (24 October 2026)
+- **`--served-at PATH`** (`SiteOptions::served_at`, `served_path`/`target_of` in tools/cli/site.cpp;
+  `SiteCheck::unread`): links from the server's root read as the site's own under PATH.
+- **Listings** (`web_open`, `WebOpened`, `WebFile` in tools/cli/web_host.*; `web_decode` is
+  `web_open` with no path, and still refuses many files, as `site check` expects): decode answers
+  a listing, or one file by `path`. Extension: background passes `path`; viewer `showListing`,
+  `viewerFor`, `pathIn`; content.js refuses a listing as a picture. `check_host.py --listing`,
+  `--path P FILE`.
+- Figures and what was seen in IDEAS §19.92 ("Phase 2 begun"). Left: `site.sieve` in the
+  extension, the crawler.
+
 ### Step 7 of the plan: the CI in parts (Edward, 24 October 2026)
 "It would be worth splitting the CI tests up in future, ie : making a script and folder for each
 step so that we can run them individually as and when we need them, as we should know which ones

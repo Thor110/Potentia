@@ -117,7 +117,7 @@ std::string media_type_of(const std::string& name)
     return it == kTypes.end() ? "application/octet-stream" : it->second;
 }
 
-WebDecoded web_decode(const std::vector<uint8_t>& sieve, const std::string& expected, uint64_t max_bytes)
+WebOpened web_open(const std::vector<uint8_t>& sieve, const std::string& expected, const std::string& path, uint64_t max_bytes)
 {
     // 1. The link's hash, against the instructions as they came: nothing else is looked at first.
     const std::string want = expected_hex(expected);
@@ -128,32 +128,73 @@ WebDecoded web_decode(const std::vector<uint8_t>& sieve, const std::string& expe
     if (!m.graph.empty()) throw std::runtime_error("it is a map (a graph part): open it in the hallway's node graph, not the browser");
     if (!m.lines.empty()) throw std::runtime_error("it carries items of Sieve's lines: install it with Sieve");
     if (!m.unpacked.empty()) throw std::runtime_error("it carries an archive as what it holds, not as the archive: install it with Sieve");
-    const ManifestEntry* file = nullptr;
-    size_t files = 0;
+    std::vector<const ManifestEntry*> files;
+    std::vector<std::string> folders;
+    uint64_t total = 0;
     for (const ManifestEntry& e : m.entries)
     {
-        if (e.dir) continue;
-        ++files;
-        file = &e;
+        if (e.dir)
+        {
+            folders.push_back(e.path);
+            continue;
+        }
         if (!e.remake.empty()) throw std::runtime_error("it remakes an archive (" + e.remake + "): install it with Sieve");
         if (e.way.rfind("item", 0) == 0) throw std::runtime_error("it carries items of Sieve's lines: install it with Sieve");
+        files.push_back(&e);
+        total += e.size;
     }
-    if (files != 1 || !file)
-        throw std::runtime_error("it holds " + std::to_string(files) + " files: the plugin shows one file a link names (install the rest with Sieve)");
-    if (file->size > max_bytes)
-        throw std::runtime_error("it holds " + std::to_string(file->size) + " bytes, more than the " + std::to_string(max_bytes) + " the plugin unpacks");
-    if (!m.with_contents || m.contents.size() != file->size) throw std::runtime_error("its contents are not the size its listing gives");
-    WebDecoded d;
-    d.bytes = m.contents;
-    d.sha256 = sha256_hex(d.bytes);
-    // Its listing names the file by its SHA-256, or (v7 on, "-") leaves that to the tree's, which
-    // reading the instructions has checked already; either way, checked once more here.
-    if (m.items ? tree_sha256(m) != m.tree : (file->sha256.empty() || file->sha256 == "-" || lower(file->sha256) != d.sha256))
-        throw std::runtime_error("its file is not the one its listing names: refused");
-    const size_t slash = file->path.rfind('/');
-    d.name = slash == std::string::npos ? file->path : file->path.substr(slash + 1);
-    d.type = media_type_of(d.name);
-    return d;
+    if (files.empty()) throw std::runtime_error("it holds no files");
+    if (total > max_bytes)
+        throw std::runtime_error("it holds " + std::to_string(total) + " bytes, more than the " + std::to_string(max_bytes) + " the plugin unpacks");
+    if (!m.with_contents || m.contents.size() != total) throw std::runtime_error("its contents are not the size its listing gives");
+    if (m.items && tree_sha256(m) != m.tree) throw std::runtime_error("its files are not the ones its listing names: refused");
+    // 3. Each file is its stretch of the contents, in the listing's order, named by its SHA-256 and
+    // checked against it here (where the listing gives "-", an items listing's, the tree's above).
+    auto bytes_of = [&](size_t k) {
+        uint64_t at = 0;
+        for (size_t i = 0; i < k; ++i) at += files[i]->size;
+        std::vector<uint8_t> b(m.contents.begin() + std::ptrdiff_t(at), m.contents.begin() + std::ptrdiff_t(at + files[k]->size));
+        const std::string sha = sha256_hex(b);
+        const std::string& named = files[k]->sha256;
+        if (!m.items && (named.empty() || named == "-" || lower(named) != sha))
+            throw std::runtime_error("its file " + files[k]->path + " is not the one its listing names: refused");
+        return std::make_pair(std::move(b), sha);
+    };
+    WebOpened o;
+    o.total = total;
+    if (path.empty() && files.size() > 1)
+    {
+        o.listing = true;
+        o.folders = folders;
+        for (size_t k = 0; k < files.size(); ++k)
+        {
+            const auto [b, sha] = bytes_of(k);
+            o.files.push_back({files[k]->path, sha, files[k]->size});
+        }
+        return o;
+    }
+    size_t k = 0;
+    if (!path.empty())
+    {
+        while (k < files.size() && files[k]->path != path) ++k;
+        if (k == files.size()) throw std::runtime_error("it holds no file " + path);
+    }
+    auto [b, sha] = bytes_of(k);
+    const std::string& p = files[k]->path;
+    const size_t slash = p.rfind('/');
+    o.file.name = slash == std::string::npos ? p : p.substr(slash + 1);
+    o.file.type = media_type_of(o.file.name);
+    o.file.sha256 = sha;
+    o.file.bytes = std::move(b);
+    return o;
+}
+
+WebDecoded web_decode(const std::vector<uint8_t>& sieve, const std::string& expected, uint64_t max_bytes)
+{
+    WebOpened o = web_open(sieve, expected, "", max_bytes);
+    if (o.listing)
+        throw std::runtime_error("it holds " + std::to_string(o.files.size()) + " files: a link names one (ask for one by its path)");
+    return std::move(o.file);
 }
 
 namespace {
@@ -204,11 +245,33 @@ int run_web_host(std::istream& in, std::ostream& out, const std::string& version
             }
             if (op != "decode") throw std::runtime_error("no such request: " + op);
             const json::Value* h = req.find("sha256");
+            const json::Value* want = req.find("path");
             const std::vector<uint8_t> given = bytes_of_base64(req.at("data").string());
             const auto t0 = std::chrono::steady_clock::now();
-            const WebDecoded d = web_decode(given, h ? h->string() : std::string(), max_bytes);
+            const WebOpened o = web_open(given, h ? h->string() : std::string(), want ? want->string() : std::string(), max_bytes);
             char seconds[32]; // how long checking and decoding took here, for the viewer's readout
             std::snprintf(seconds, sizeof seconds, "%.3f", std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
+            if (o.listing)
+            {
+                std::vector<json::Value> files, folders;
+                for (const WebFile& f : o.files)
+                    files.push_back(json::Value::make_object({{"path", json::Value::make_string(f.path)},
+                                                              {"size", num(f.size)},
+                                                              {"sha256", json::Value::make_string(f.sha256)}}));
+                for (const std::string& d : o.folders) folders.push_back(json::Value::make_string(d));
+                const json::Value* n = req.find("name");
+                write_message(out, json::Value::make_object({{"id", id},
+                                                             {"ok", json::Value::make_bool(true)},
+                                                             {"listing", json::Value::make_bool(true)},
+                                                             {"name", json::Value::make_string(n ? n->string() : std::string())},
+                                                             {"files", json::Value::make_array(std::move(files))},
+                                                             {"folders", json::Value::make_array(std::move(folders))},
+                                                             {"size", num(o.total)},
+                                                             {"seconds", json::Value::make_number(seconds)},
+                                                             {"parts", num(0)}}));
+                continue;
+            }
+            const WebDecoded& d = o.file;
             const size_t parts = (d.bytes.size() + kPart - 1) / kPart;
             write_message(out, json::Value::make_object({{"id", id},
                                                          {"ok", json::Value::make_bool(true)},

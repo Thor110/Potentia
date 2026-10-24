@@ -213,16 +213,30 @@ std::string url_decode(const std::string& s)
     return out;
 }
 
-// Where a link in a page (at `page`, a path in the site) leads, as a path in the site; nothing for a
-// link with a scheme, from the server's root, to an anchor alone, or out of the site.
-std::optional<std::string> target_of(const std::string& page, const std::string& value)
+// Where the site is served from ("/", or "/Potentia/"), with a "/" at each end; empty: not given.
+std::string served_path(std::string p)
 {
-    if (value.empty() || value[0] == '#' || value[0] == '/' || value[0] == '?') return std::nullopt;
+    if (p.empty()) return p;
+    if (p.front() != '/') p = "/" + p;
+    if (p.back() != '/') p += "/";
+    return p;
+}
+
+// Where a link in a page (at `page`, a path in the site) leads, as a path in the site; nothing for a
+// link with a scheme, to an anchor alone, or out of the site. A link from the server's root ("/a.png")
+// is the site's when the site is served from a path it starts with (`served`, as served_path gives
+// it: "/" for a site at the server's root); else, or with none given, it is left alone.
+std::optional<std::string> target_of(const std::string& page, const std::string& value, const std::string& served)
+{
+    if (value.empty() || value[0] == '#' || value[0] == '?') return std::nullopt;
+    if (value.rfind("//", 0) == 0) return std::nullopt; // another server ("//host/a.png")
+    const bool rooted = value[0] == '/';
+    if (rooted && (served.empty() || value.rfind(served, 0) != 0)) return std::nullopt;
     const size_t colon = value.find(':'), slash = value.find('/');
-    if (colon != std::string::npos && (slash == std::string::npos || colon < slash)) return std::nullopt; // a scheme
-    const std::string path = url_decode(value.substr(0, value.find_first_of("?#")));
+    if (!rooted && colon != std::string::npos && (slash == std::string::npos || colon < slash)) return std::nullopt; // a scheme
+    const std::string path = url_decode(value.substr(rooted ? served.size() : 0, value.find_first_of("?#") - (rooted ? served.size() : 0)));
     std::vector<std::string> parts;
-    const std::string whole = dir_of(page) + path;
+    const std::string whole = rooted ? path : dir_of(page) + path;
     size_t at = 0;
     while (at <= whole.size())
     {
@@ -343,6 +357,7 @@ SiteReport build_site(const fs::path& src_in, const fs::path& out_in, const Site
     const std::string s = rel_of(src) + "/", t = rel_of(out) + "/";
     if (t.rfind(s, 0) == 0 || s.rfind(t, 0) == 0) throw std::invalid_argument("the site and where it is built must not be inside one another");
     SiteReport rep;
+    const std::string served = served_path(o.served_at);
     const std::vector<std::string> files = files_of(src);
     const std::set<std::string> present(files.begin(), files.end());
     const std::set<std::string> plain(o.plain.begin(), o.plain.end());
@@ -374,7 +389,7 @@ SiteReport build_site(const fs::path& src_in, const fs::path& out_in, const Site
                     const std::string value = h.substr(a.value_begin, a.value_end - a.value_begin);
                     if (&a == link && !tag.attr("data-sieve-keep"))
                     {
-                        if (const auto target = target_of(f, value); target && present.count(*target)) linked.insert(*target);
+                        if (const auto target = target_of(f, value, served); target && present.count(*target)) linked.insert(*target);
                     }
                     else if (&a != link) code.push_back({f, value});
                 }
@@ -445,7 +460,7 @@ SiteReport build_site(const fs::path& src_in, const fs::path& out_in, const Site
     for (const std::string& p : sieve_pages)
         for (const Tag& tag : tags_of(html[p]))
             if (const Attr* link = link_of(tag); link && link->has_value && !tag.attr("data-sieve-keep"))
-                if (const auto target = target_of(p, html[p].substr(link->value_begin, link->value_end - link->value_begin));
+                if (const auto target = target_of(p, html[p].substr(link->value_begin, link->value_end - link->value_begin), served);
                     target && *target != p && made.count(*target) && is_html(*target))
                     needs[p].insert(*target);
     if (const std::vector<std::string> loop = loop_of(sieve_pages, needs); !loop.empty())
@@ -535,7 +550,7 @@ SiteReport build_site(const fs::path& src_in, const fs::path& out_in, const Site
             const Attr* link = link_of(tag);
             if (!link || !link->has_value || tag.attr("data-sieve-keep")) continue;
             const std::string value = text.substr(link->value_begin, link->value_end - link->value_begin);
-            const auto target = target_of(page, value);
+            const auto target = target_of(page, value, served);
             if (!target) continue;
             std::string sieve_path;
             if (const auto it = made.find(*target); it != made.end())
@@ -590,9 +605,10 @@ SiteReport build_site(const fs::path& src_in, const fs::path& out_in, const Site
     return rep;
 }
 
-SiteCheck check_site(const fs::path& dir)
+SiteCheck check_site(const fs::path& dir, const std::string& served_at)
 {
     SiteCheck c;
+    const std::string served = served_path(served_at);
     const std::vector<std::string> files = files_of(dir);
     const std::set<std::string> present(files.begin(), files.end());
     std::map<std::string, std::string> own; // a file's integrity, as links state it
@@ -607,8 +623,15 @@ SiteCheck check_site(const fs::path& dir)
         {
             const Attr* link = link_of(tag);
             if (!link || !link->has_value) continue;
-            const auto target = target_of(page, h.substr(link->value_begin, link->value_end - link->value_begin));
-            if (!target) continue;
+            const std::string value = h.substr(link->value_begin, link->value_end - link->value_begin);
+            const auto target = target_of(page, value, served);
+            if (!target)
+            {
+                // A link from the server's root that states a hash, not read: the site is served
+                // from somewhere --served-at did not say (or it was not given).
+                if (value.size() > 1 && value[0] == '/' && value[1] != '/' && tag.attr("integrity")) c.unread += 1;
+                continue;
+            }
             if (tag.attr("data-sieve-keep"))
             {
                 c.kept += 1; // left as written, on purpose

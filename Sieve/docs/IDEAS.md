@@ -4269,6 +4269,23 @@ folder) and shows the HTML they unpack to, as a first test where the result is k
     from the running site), or have it write each link's `integrity` from `site.sieve` (a small
     PHP helper, not built). Links from the server's root (`/a.jpg`) are not read yet; the
     extension does not read `site.sieve` yet.
+- *Phase 2 begun (24 October 2026; step 4 of the plan):*
+  - *Links from the server's root:* `sieve site build|check --served-at PATH` (`/`, or `/Potentia/`
+    for a site in a folder): a link under that path is the site's own, made and checked as a
+    relative one is, written from the root as before (`/Potentia/p/door.sieve`); without it they
+    are left alone as before, and `check` says how many it could not read. Another server's
+    (`//host/...`) never. CI: a site with both, built each way.
+  - *A `.sieve` of many files, as a listing:* `sieve web-host` answers a decode of one with its
+    listing (paths, sizes, SHA-256s, folders), and a decode naming `path` with that one file, cut
+    from the checked contents and checked against its own SHA-256; nothing is written to the disk.
+    The viewer shows the listing as a tree, each file opening by its path; a page among them takes
+    its pictures and its links to the others from the same `.sieve` (and a picture it does not hold
+    is refused, saying so). A picture (`<img>`) of one is still refused: a picture names one file.
+    Seen in Chromium with the test site's "Every page in one" (5 files: listed, About opened from
+    it, its links leading to the others by path). CI: the fixture's listing, a file by its path, a
+    path it does not hold.
+  - *Still to do:* the extension reading `site.sieve` (its hash pinned in the extension, as agreed
+    above), and the crawler (`site check` against a server: Sieve has no HTTP client yet).
 
 **19.93 The `.map` format folded into `.sieve` (Edward, 22 October 2026; built the same day).**
 His thought: update the `.map` format, or replace it with `.sieve` and deprecate it, the
