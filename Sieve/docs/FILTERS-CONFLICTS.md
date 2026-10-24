@@ -22,7 +22,7 @@ counts (`FilterSpec::counts_as`):
 | own ranker | `clean-v1`, `window-v1`, `words-v1`, `clean-v2`, `window-v2`, `words-v2`, `title-v1`, `title-data-v1` (all but the last retired), `neighbour-agreement-v1`, `key-v1`, `utf8-valid-v1`, on a large palette (rgb24) `palette-size-v1`, `row-runs-v1` and `figure-v1`, and `sound-peak-v1` past 24 bits | only a filter it implies, or that implies it |
 | arithmetic | `not-a-file-v1`, `not-a-pattern-v1` | nothing |
 | model rule | `distinct-vertices-v1`, `distinct-indices-v1`, `every-vertex-used-v1`, `canonical-mesh-v1` | each other (canonical-mesh implies the first two and counts with every-vertex-used) |
-| judges only | `symbol-entropy-v1`, `model-information-v1`; on the binary line `binary-kind-v1` and `not-an-item-v1` | not part of this rule (see below) |
+| judges only | `symbol-entropy-v1` and `-v2`, `model-information-v1` and `-v2`; on the binary line `binary-kind-v1` and `not-an-item-v1` | not part of this rule (see below) |
 
 A filter never conflicts with one it implies, or that implies it: `words-v1` implies `clean-v1`
 and `window-v1`, `window-v1` implies `clean-v1`, the v2 versions the same, and `title-v1` implies
@@ -105,8 +105,10 @@ These are not auto-unticked: they are the next thing to discuss.
 A retired filter stays loadable (earlier stacks reproduce), on a third tab of the filters window,
 and is ticked only by hand (or by Z on that tab). There are two reasons to retire one.
 
-**It judges only.** `symbol-entropy-v1` and `model-information-v1`: a line with one ticked cannot
-compact. If a countable way to express them is found, they come back as new versions.
+**It judges only.** `symbol-entropy-v1` and `model-information-v1`, and their v2s (24 October 2026:
+padding not counted, the entropy against each alphabet's own most; v1 lists "replaced by" them):
+a line with one ticked cannot compact. If a countable way to express them is found, they come back
+as new versions.
 
 **An automaton does the same** (`FilterSpec::replaced_by`, shown in the list and by `sieve
 filters`). The built-ins below count with their own machinery, so they clash with every automaton;

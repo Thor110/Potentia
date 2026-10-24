@@ -19,6 +19,20 @@ English word lists for the `lower27` line, built from **SCOWL** (Spell Checker O
 - anything that isn't entirely a–z (apostrophes, accents, hyphens)
 - single letters other than "a" and "i"
 
+**The `-names` lists** (`scowl-en-35-names`, `-60-names`, the default, and `-80-names`) add SCOWL's
+capitalised words and proper names, case kept (England, Dickens). Read in lower case, they also let
+through SCOWL's chemical symbols, units and acronyms ("Zn" as "zn", "Tb", "pH", "IBM"), so short
+gibberish passes (IDEAS §2.3). **The `-names-v2` lists** leave out of each, from its pinned file,
+every entry of two or more letters written all in capitals and every entry of one or two letters
+whose lower case is not in the plain list of the same size, but "a" and "I"
+(`tools/build_dictionary.py --names-v2 NAMES --plain PLAIN --out FILE`):
+
+| Id | Entries | Left out | Words read in lower case |
+| :--- | ---: | ---: | ---: |
+| `scowl-en-35-names-v2` | 40,338 | 3 (OK, Es, Os) | 40,323 |
+| `scowl-en-60-names-v2` | 90,142 | 104 (45 all capitals, 59 short) | 88,886 |
+| `scowl-en-80-names-v2` | 287,760 | 100 (45 all capitals, 55 short) | 281,089 |
+
 Every sieve result records the SHA-256 of the dictionary it used. Changing a list changes its hash, so results remain traceable.
 
 ## Rebuilding

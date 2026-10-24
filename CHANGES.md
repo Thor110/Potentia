@@ -1,36 +1,63 @@
-# Step 2: the release carries the web extension and the right-click menu (24 October 2026)
+# Step 3: the long-open filter defects, IDEAS §2.1 to §2.3 (24 October 2026)
 
-## What changed
-- **`tools/make_release.py`:** the release folder now holds, beside the programs:
-  - `context\`: `install_context.bat`, `uninstall_context.bat` and their README;
-  - `web\extension\`: the extension, to load unpacked;
-  - `web\host\`: `install_host.bat`, `uninstall_host.bat` and `install_host.sh`;
-  - `web\README.txt`: a short guide written for an installation (the repository's
-    `web/README.md` is about the test site and the build).
+## §2.3: short gibberish through the -names lists
+The default list, `scowl-en-60-names`, lets SCOWL's chemical symbols, units and acronyms through
+when it's read in lower case: "zn", "tb", "hz", "ph", "ibm". SCOWL writes the symbols in mixed
+case ("Zn"), so dropping all-caps tokens alone (the fix IDEAS proposed) would have missed them.
 
-  The test site stays in the repository: it's built from the repository's pictures, with Python.
-  The release notes' "Getting started" now names both, with how to set each up.
-- **The scripts find the installed programs by themselves:**
-  - `install_context.bat` tries `..\tools\sieve-install.exe` first;
-  - `install_host.bat` and `install_host.sh` try `..\..\tools\sieve(.exe)` first;
-  - then each falls back to the Release build, as before. A path given still wins.
-- **The node graph's "This installation"** now maps `context` and `web`. It also maps `prompts`,
-  which releases carried but the list had left out.
-- **Docs:** Sieve's README (the installed folder's layout, which now lists every folder a release
-  has), `context/README.md`, `web/README.md` and HANDOFF.
+**New lists, `scowl-en-35-names-v2`, `-60-names-v2` and `-80-names-v2`**, are made from each
+pinned `-names` file. Each leaves out:
+- every entry of two or more letters written all in capitals: OK, IBM, NASCAR (45 in the 60 list);
+- every entry of one or two letters whose lower case isn't in the plain list of the same size: Zn,
+  Tb, Hz, pH, Ed, Jo (59 in the 60 list);
+- but never "a" or "I".
 
-## Measured here (Linux, `make_release.py --skip-build`)
-- Every check of the release passed: both installers installed back to the release folder, byte
-  for byte, and the map verified.
-- The two folders add 44,895 bytes to `sieve.sieve` (8,164,254 → 8,209,149), for 64,098 bytes of
-  files.
-- `web/host/install_host.sh`, run from inside the release folder, registered the release's own
-  `tools/sieve`. `check_host.py` then decoded a `.sieve` through it.
+Names of three letters or more stay (Amy, Dickens). The old lists are unchanged.
+`tools/build_dictionary.py --names-v2 NAMES --plain PLAIN --out FILE` makes them, with no SCOWL
+needed.
 
-## Not tested
-- The `.bat` scripts (Windows only). The change is one line in each: try `tools\` first.
-- The full CI. Only the build and the release run above.
+Measured with `sieve sift`:
+| Pages of | `scowl-en-60-names` | `-names-v2` | `scowl-en-60` (no names) |
+| ---: | ---: | ---: | ---: |
+| 2 letters, all words | 134 | 73 | 73 |
+| 64 letters, all words | 10^-37.03 of the space | 10^-38.49 (28 times fewer) | 10^-39.39 |
+
+In Don Quixote (`pg996.txt`), no whole word was lost. The only tokens lost were pieces of accented
+words split up by my quick count ("Señor" counted as "se"), not words Sieve would see.
+
+**A decision for you:** they're registered, but not the default. Making `scowl-en-60-names-v2` the
+default would change every result made with the default dictionary (stack ids record its hash,
+and the docs' figures were measured with it). `function-words-v1` also names the old list's hash.
+Shall I switch it?
+
+## §2.1 and §2.2: `symbol-entropy-v2` and `model-information-v2`
+- **The entropy against each alphabet's own most:** v2's bounds are thousandths of the most a unit
+  of the line can have, log2 min(symbols, length). v1's millibits only suited 27 letters. Measured
+  on Don Quixote in lower27 pages of 1,000 letters:
+  - English: 826 to 877 (median 851);
+  - random letters: 992 to 996;
+  - on pages of 100: 700 to 885 and 920 to 960.
+
+  The default top, 925, lies between English and random letters at both lengths.
+- **Padding not counted (both filters):** a unit that ends in two or more SPACEs is judged on what
+  comes before them, as `words-v2` does, and padding alone fails. Six letters of noise padded to 32
+  with SPACEs passed `model-information-v1`. It fails v2.
+- Both v1 and v2 are retired (judge only), as v1 was. So tailoring and every existing stack are
+  unchanged. v1 now says "replaced by" v2.
+- **Checked:** both are in the oracle, with 288 new verdict vectors and 24 black-and-white ranks.
+  C++ agrees with the oracle on all of them. There are new unit tests, and the black-and-white
+  ranker is checked exhaustively.
+
+## Also
+- Step 7 is added to the plan in HANDOFF: the CI in parts. Your words are in VOICES.
+- Docs: SPECIFICATIONS, FILTERS-CONFLICTS, README, the dictionaries' README, `sieve help dicts` and
+  `sift`, IDEAS §2.1 to §2.3.
+
+## Tested here
+- Unit tests: 77,033 checks, 0 failures.
+- `check_help.py`: 0 missing.
+- Not run: the full CI. The two vector files were made by the oracle, so step 15 should reproduce
+  them.
 
 ## To apply
-1. Copy `Sieve/` over and rebuild (`client/node_graph.cpp` changed).
-2. `tools\make_release.bat` makes a release with them, whenever you want one.
+Copy `Sieve/` over and rebuild. The build copies the new dictionaries next to the programs.

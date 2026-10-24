@@ -387,6 +387,7 @@ The word filters above (`clean`, `window`, `words`, v1 and v2) and `title-v1` ar
 | `max-run-v1` | text | no letter repeated more than `max_run` times in a row (3) | |
 | `symbol-entropy-v1` | all | the unit's own Shannon entropy per symbol lies within [min, max] | in black and white |
 | `model-information-v1` | text | information under the pinned frequency model is at most `max` bits per symbol (5) | |
+| `symbol-entropy-v2`, `model-information-v2` | as v1 | v1's rules with trailing SPACE padding not counted; the entropy in thousandths of the most a unit of the line can have, so one setting suits every alphabet (IDEAS §2.1, §2.2) | as v1 |
 | `neighbour-agreement-v1` | image, video | enough neighbouring pixels (and frames) share a colour | while colours^width is small (video: colours^(width×height)) |
 | `key-v1` | audio | every note is in one key (tonic C…B; major, minor, harmonic minor, major or minor pentatonic, blues); rests always pass | yes |
 | `palette-size-v1` | image, video | at most so many distinct colours (or in each frame) | yes, on every palette, rgb24 included; on small palettes an automaton that merges with the others |

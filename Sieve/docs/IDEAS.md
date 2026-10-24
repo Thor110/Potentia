@@ -93,13 +93,37 @@ parameter changes the output, which changes the address, which makes it a differ
 symbol count, but the alphabet is user-chosen and runs from 27 symbols to the whole of Unicode. A
 page drawn from `lower27` judged against a 21-bit code point space gives a meaningless reading.
 Every alphabet needs its own entropy baseline. A correctness bug, not a feature.
+- *Fixed, 24 October 2026 (step 3 of the plan):* `symbol-entropy-v2` takes its bounds in
+  thousandths of the most a unit of the line can have, log2 min(symbols, length), so one setting
+  means the same on every alphabet. Measured on Don Quixote (`pg996.txt`) in lower27 pages of
+  1,000: English 826 to 877 thousandths (median 851), random letters 992 to 996; pages of 100,
+  700 to 885 and 920 to 960. The default top, 925, lies between them at both lengths. v1 stays,
+  retired as before, and says it is replaced by v2.
 
 **2.2 Padding is counted as content.** `model-information` and `symbol-entropy` count trailing
 padding spaces as real characters, so a padded page scores as *more* text-like than its text alone.
+- *Fixed, 24 October 2026:* `symbol-entropy-v2` and `model-information-v2` judge a unit that ends
+  in two or more SPACEs on what comes before them, as `words-v2` does; a unit of padding alone
+  fails. A page of six letters of noise padded to 32 with SPACEs passed `model-information-v1`
+  and fails v2 (unit tests). Both are in the oracle, with 288 verdict vectors and 24 ranks (v2 in
+  black and white).
 
 **2.3 The cased dictionary lets short gibberish through.** Folding one cased list to lower case
 also folds SCOWL's abbreviations and chemical symbols, so "zn" and "tb" now pass. Fix: a version
 that keeps proper names and drops short all-caps tokens.
+- *Fixed, 24 October 2026:* SCOWL writes the symbols in mixed case ("Zn", "Tb", "pH"), so dropping
+  all-caps tokens alone would miss them. The `-names-v2` lists (`scowl-en-35-names-v2`, `-60-`,
+  `-80-`) leave out, from each pinned `-names` file, every entry of two or more letters written all
+  in capitals (OK, IBM, NASCAR: 45 in the 60 list) and every entry of one or two letters whose
+  lower case is not in the plain list of its size (Zn, Tb, Hz, pH, Ed, Jo: 59), but "a" and "I";
+  names of three letters or more stay. Made by `tools/build_dictionary.py --names-v2`, registered
+  beside the old lists, which are unchanged. With scowl-en-60-names-v2, `sieve sift` counts 28
+  times fewer pages of 64 letters that are all words (10^-38.49 of the space against 10^-37.03),
+  and at 2 letters the plain list's 73 (134 before). In Don Quixote, no whole word was lost (only
+  pieces of accented words split by the counting: "Señor" as "se"). Not yet the default: making
+  it so changes every result made with the default dictionary (stack ids record its hash, and the
+  figures in these documents measured with it), and `function-words-v1` names the old list's
+  hash, so it waits for Edward.
 
 **2.4 No colour-blindness pass.** Nine lines, filter verdicts and the map all encode meaning in
 hue, with no non-colour fallback and no simulation check. First when work turns to the game (above). The pair most

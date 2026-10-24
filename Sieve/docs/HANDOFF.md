@@ -3916,6 +3916,27 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   `make_release.bat`): finds Python as that does, passes the Release `sieve.exe` (or the `.exe`
   named first), and keeps the window open.
 
+### Step 3: the long-open filter defects, IDEAS §2.1 to §2.3 (24 October 2026)
+- **`symbol-entropy-v2`, `model-information-v2`** (core/src/filters/statistics.cpp): bounds in
+  thousandths of log2 min(symbols, n); a unit ending in two or more SPACEs judged on what comes
+  before them (padding alone fails). Retired as v1 (judge only), so tailoring and every existing
+  stack are unchanged; v1 says "replaced by" v2. Oracle (`f_symbol_entropy_v2`,
+  `f_model_information_v2`), 288 verdict vectors and 24 black-and-white ranks; unit tests.
+- **`scowl-en-{35,60,80}-names-v2`** (data/dictionaries, `build_dictionary.py --names-v2`): without
+  all-caps entries and one- or two-letter entries the plain list lacks (but a, I). Registered, not
+  default. **Open for Edward:** make `scowl-en-60-names-v2` the default (changes every result made
+  with the default; `function-words-v1` names the old list's hash).
+- Figures in IDEAS §2.1 to §2.3.
+
+### Step 7 of the plan: the CI in parts (Edward, 24 October 2026)
+"It would be worth splitting the CI tests up in future, ie : making a script and folder for each
+step so that we can run them individually as and when we need them, as we should know which ones
+need testing depending on what has changed. as well as keeping the full CI scripts for when we
+decide to double check everything at once". Today the steps of `.github/workflows/build.yml` share
+one working folder, and later steps use what earlier ones made (the hallway step needs a mesh an
+earlier step writes), so one cannot be run alone. Edward runs the CI himself, so it is run here
+less: only the checks a change touches.
+
 ### Step 2: the release carries the web extension and the right-click menu (24 October 2026)
 - **`tools/make_release.py`** (`EXTRAS`, `WEB_NOTE`): the release folder gets `context\` (its README
   and the two scripts) and `web\extension`, `web\host\install_host.bat`, `uninstall_host.bat`,
@@ -3952,6 +3973,8 @@ Edward asked for the next most important steps, from the documents. In order:
 6. **Then, from the open list below:** the listing's entries in binary (§19.90), the rope's last
    gap on `pi6.txt` (§19.87), archives not yet optimised (§19.88), larger models (§19.86), the
    Encryption Engine's stage 2 (§19.76), and the WebAssembly decoder (§19.92).
+7. **The CI in parts** (Edward, 24 October 2026): a script and folder for each step, so each can
+   be run alone, as a change needs it, and the full CI kept for checking everything at once.
 
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s

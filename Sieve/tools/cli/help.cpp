@@ -226,6 +226,9 @@ const std::vector<Page>& pages()
            "  scowl-en-35-names  the same sizes with capitalised words and proper names kept\n"
            "  scowl-en-60-names  (England, Dickens): 40,326, 88,986 (the default) and 281,180\n"
            "  scowl-en-80-names\n"
+           "  scowl-en-35-names-v2  the -names lists without SCOWL's symbols and acronyms (Zn, pH,\n"
+           "  scowl-en-60-names-v2  IBM): 40,323, 88,886 and 281,089 (sieve help dicts)\n"
+           "  scowl-en-80-names-v2\n"
            "35, 60 and 80 are accepted as short forms of the lists without names. A registered\n"
            "dictionary is checked against its SHA-256 before use. A value containing / or \\ or\n"
            "ending in .txt is read as a file path instead (one word per line, not checked). The\n"
@@ -657,8 +660,12 @@ const std::vector<Page>& pages()
          "The -names lists keep SCOWL's capitals (England); the lower-case alphabets read them as\n"
          "lower case, so one list serves every alphabet. They are the default because real books\n"
          "name people and places. They also bring in abbreviations and symbols SCOWL lists in\n"
-         "capitals (Zn, Pt, Gs), so short gibberish passes a little more often than with the plain\n"
-         "lists.",
+         "capitals (Zn, Pt, Gs), so short gibberish passes more often than with the plain lists.\n"
+         "The -names-v2 lists (24 October 2026) leave those out: every entry written all in\n"
+         "capitals (OK, IBM) and every one- or two-letter entry the plain list lacks (Zn, Tb, pH,\n"
+         "Ed), but a and I. With scowl-en-60-names-v2, 28 times fewer pages of 64 letters are all\n"
+         "words (sieve sift: 10^-38.49 of the space against 10^-37.03); at 2 letters, the plain\n"
+         "list's 73. Made from the pinned lists by tools/build_dictionary.py --names-v2.",
          {{"--hash FILE", "Print a word list's word count and SHA-256, plus a registry line to paste."}},
          {{"sieve dicts", "list dictionaries, check their files and hashes, and show the default"},
           {"sieve dicts --hash data/dictionaries/my-words.txt", "prepare a new dictionary for the registry"},

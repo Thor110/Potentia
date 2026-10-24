@@ -27,6 +27,16 @@ proper-names, e.g. "England", "Dickens") and keeps every word's case as SCOWL wr
         --out data/dictionaries/scowl-2020.12.07-en-60-names.txt
 Sieve reads such a list folded to lower case for the lower-case alphabets ("England" matches
 "england"), and the capitals stay in the file for filters that respect case.
+
+Folded, a -names list also lets through SCOWL's chemical symbols, units and acronyms ("Zn" as
+"zn", "Tb", "pH", "IBM"): short gibberish passes (IDEAS §2.3). Version 2 of each -names list
+leaves out, from the version 1 file beside it, every entry of two or more letters written all in
+capitals (OK, BP, IBM, NASCAR) and every entry of one or two letters whose lower case is not in
+the plain list of the same size (Zn, Tb, Hz, pH, Ed, Jo), but "a" and "I". Names of three
+letters or more stay (Amy, Dickens). Made from the pinned files, so it needs no SCOWL:
+    python3 tools/build_dictionary.py --names-v2 data/dictionaries/scowl-2020.12.07-en-60-names.txt \
+        --plain data/dictionaries/scowl-2020.12.07-en-60.txt \
+        --out data/dictionaries/scowl-2020.12.07-en-60-names-v2.txt
 """
 import argparse
 import hashlib
@@ -40,11 +50,24 @@ LEVELS = (10, 20, 35, 40, 50, 55, 60, 70, 80, 95)
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--scowl", required=True, help="path to SCOWL's built 'final' directory")
-    p.add_argument("--size", type=int, required=True, choices=LEVELS, help="largest SCOWL size level to include")
+    p.add_argument("--scowl", help="path to SCOWL's built 'final' directory")
+    p.add_argument("--size", type=int, choices=LEVELS, help="largest SCOWL size level to include")
     p.add_argument("--out", required=True, help="output word list (one word per line)")
     p.add_argument("--names", action="store_true", help="also capitalised words and proper names, case kept")
+    p.add_argument("--names-v2", metavar="NAMES", help="version 2 of a -names list, from its version 1 file (and --plain)")
+    p.add_argument("--plain", metavar="PLAIN", help="with --names-v2: the plain list of the same size")
     args = p.parse_args()
+    if args.names_v2:
+        if not args.plain:
+            sys.exit("--names-v2 needs --plain, the plain list of the same size")
+        plain = set(open(args.plain, encoding="ascii").read().split())
+        names = open(args.names_v2, encoding="ascii").read().split()
+        kept = [w for w in names if w in ("a", "I") or
+                (not (len(w) >= 2 and w.isupper()) and not (len(w) <= 2 and w.lower() not in plain))]
+        write(args.out, kept, f"{len(names) - len(kept)} entries left out of {len(names)}")
+        return
+    if not args.scowl or not args.size:
+        sys.exit("--scowl and --size are needed (or --names-v2 and --plain)")
 
     words, files_used = set(), 0
     kinds = ("words", "upper", "proper-names") if args.names else ("words",)
@@ -66,11 +89,15 @@ def main():
     if not files_used:
         sys.exit(f"no SCOWL word files found in {args.scowl}")
 
-    data = "".join(w + "\n" for w in sorted(words)).encode("ascii")
-    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
-    with open(args.out, "wb") as f:
+    write(args.out, words, f"from {files_used} files")
+
+
+def write(out, words, note):
+    data = "".join(w + "\n" for w in sorted(set(words))).encode("ascii")
+    os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
+    with open(out, "wb") as f:
         f.write(data)
-    print(f"{args.out}: {len(words)} words from {files_used} files, sha256 {hashlib.sha256(data).hexdigest()}")
+    print(f"{out}: {len(set(words))} words ({note}), sha256 {hashlib.sha256(data).hexdigest()}")
 
 
 if __name__ == "__main__":

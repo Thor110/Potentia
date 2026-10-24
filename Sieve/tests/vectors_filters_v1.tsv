@@ -1,5 +1,6 @@
 # sieve filter conformance vectors v1 (clean-v1 window-v1 words-v1 clean-v2 words-v2 window-v2 title-v1 max-run-v1 symbol-entropy-v1
-#   model-information-v1 neighbour-agreement-v1), dictionary scowl-en-35, model gutenberg-lower27-o5
+#   model-information-v1 neighbour-agreement-v1 symbol-entropy-v2 model-information-v2), dictionary scowl-en-35,
+#   model gutenberg-lower27-o5
 # dictionary scowl-2020.12.07-en-35.txt
 # log2 <x> <floor(log2(x)*65536)>
 log2	1	0
@@ -36,6 +37,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	it was t	0
 verdict	model-information-v1	max_millibits=2500	8	it was t	1
 verdict	model-information-v1	max_millibits=5000	8	it was t	1
 verdict	model-information-v1	max_millibits=9000	8	it was t	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	8	it was t	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	8	it was t	1
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	8	it was t	0
+verdict	model-information-v2	max_millibits=2500	8	it was t	1
+verdict	model-information-v2	max_millibits=5000	8	it was t	1
+verdict	model-information-v2	max_millibits=9000	8	it was t	1
 verdict	clean-v1	dictionary=scowl-en-35	8	the quic	1
 verdict	window-v1	dictionary=scowl-en-35	8	the quic	1
 verdict	words-v1	dictionary=scowl-en-35	8	the quic	0
@@ -53,6 +60,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	the quic	0
 verdict	model-information-v1	max_millibits=2500	8	the quic	1
 verdict	model-information-v1	max_millibits=5000	8	the quic	1
 verdict	model-information-v1	max_millibits=9000	8	the quic	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	8	the quic	0
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	8	the quic	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	8	the quic	1
+verdict	model-information-v2	max_millibits=2500	8	the quic	1
+verdict	model-information-v2	max_millibits=5000	8	the quic	1
+verdict	model-information-v2	max_millibits=9000	8	the quic	1
 verdict	clean-v1	dictionary=scowl-en-35	8	qzxj vvk	1
 verdict	window-v1	dictionary=scowl-en-35	8	qzxj vvk	0
 verdict	words-v1	dictionary=scowl-en-35	8	qzxj vvk	0
@@ -70,6 +83,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	qzxj vvk	0
 verdict	model-information-v1	max_millibits=2500	8	qzxj vvk	0
 verdict	model-information-v1	max_millibits=5000	8	qzxj vvk	0
 verdict	model-information-v1	max_millibits=9000	8	qzxj vvk	0
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	8	qzxj vvk	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	8	qzxj vvk	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	8	qzxj vvk	1
+verdict	model-information-v2	max_millibits=2500	8	qzxj vvk	0
+verdict	model-information-v2	max_millibits=5000	8	qzxj vvk	0
+verdict	model-information-v2	max_millibits=9000	8	qzxj vvk	0
 verdict	clean-v1	dictionary=scowl-en-35	8	a b     	0
 verdict	window-v1	dictionary=scowl-en-35	8	a b     	0
 verdict	words-v1	dictionary=scowl-en-35	8	a b     	0
@@ -87,6 +106,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	a b     	0
 verdict	model-information-v1	max_millibits=2500	8	a b     	0
 verdict	model-information-v1	max_millibits=5000	8	a b     	0
 verdict	model-information-v1	max_millibits=9000	8	a b     	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	8	a b     	0
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	8	a b     	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	8	a b     	1
+verdict	model-information-v2	max_millibits=2500	8	a b     	0
+verdict	model-information-v2	max_millibits=5000	8	a b     	1
+verdict	model-information-v2	max_millibits=9000	8	a b     	1
 verdict	clean-v1	dictionary=scowl-en-35	8	an ant  	0
 verdict	window-v1	dictionary=scowl-en-35	8	an ant  	0
 verdict	words-v1	dictionary=scowl-en-35	8	an ant  	0
@@ -104,6 +129,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	an ant  	0
 verdict	model-information-v1	max_millibits=2500	8	an ant  	0
 verdict	model-information-v1	max_millibits=5000	8	an ant  	1
 verdict	model-information-v1	max_millibits=9000	8	an ant  	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	8	an ant  	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	8	an ant  	1
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	8	an ant  	0
+verdict	model-information-v2	max_millibits=2500	8	an ant  	0
+verdict	model-information-v2	max_millibits=5000	8	an ant  	1
+verdict	model-information-v2	max_millibits=9000	8	an ant  	1
 verdict	clean-v1	dictionary=scowl-en-35	8	aaaa bbb	1
 verdict	window-v1	dictionary=scowl-en-35	8	aaaa bbb	0
 verdict	words-v1	dictionary=scowl-en-35	8	aaaa bbb	0
@@ -121,6 +152,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	aaaa bbb	0
 verdict	model-information-v1	max_millibits=2500	8	aaaa bbb	0
 verdict	model-information-v1	max_millibits=5000	8	aaaa bbb	0
 verdict	model-information-v1	max_millibits=9000	8	aaaa bbb	0
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	8	aaaa bbb	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	8	aaaa bbb	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	8	aaaa bbb	0
+verdict	model-information-v2	max_millibits=2500	8	aaaa bbb	0
+verdict	model-information-v2	max_millibits=5000	8	aaaa bbb	0
+verdict	model-information-v2	max_millibits=9000	8	aaaa bbb	0
 verdict	clean-v1	dictionary=scowl-en-35	8	zzz     	0
 verdict	window-v1	dictionary=scowl-en-35	8	zzz     	0
 verdict	words-v1	dictionary=scowl-en-35	8	zzz     	0
@@ -138,6 +175,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	zzz     	0
 verdict	model-information-v1	max_millibits=2500	8	zzz     	0
 verdict	model-information-v1	max_millibits=5000	8	zzz     	0
 verdict	model-information-v1	max_millibits=9000	8	zzz     	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	8	zzz     	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	8	zzz     	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	8	zzz     	0
+verdict	model-information-v2	max_millibits=2500	8	zzz     	0
+verdict	model-information-v2	max_millibits=5000	8	zzz     	0
+verdict	model-information-v2	max_millibits=9000	8	zzz     	1
 verdict	clean-v1	dictionary=scowl-en-35	8	call me 	1
 verdict	window-v1	dictionary=scowl-en-35	8	call me 	1
 verdict	words-v1	dictionary=scowl-en-35	8	call me 	1
@@ -155,6 +198,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	call me 	0
 verdict	model-information-v1	max_millibits=2500	8	call me 	0
 verdict	model-information-v1	max_millibits=5000	8	call me 	1
 verdict	model-information-v1	max_millibits=9000	8	call me 	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	8	call me 	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	8	call me 	1
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	8	call me 	0
+verdict	model-information-v2	max_millibits=2500	8	call me 	0
+verdict	model-information-v2	max_millibits=5000	8	call me 	1
+verdict	model-information-v2	max_millibits=9000	8	call me 	1
 verdict	clean-v1	dictionary=scowl-en-35	8	xylophon	1
 verdict	window-v1	dictionary=scowl-en-35	8	xylophon	1
 verdict	words-v1	dictionary=scowl-en-35	8	xylophon	0
@@ -172,6 +221,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	xylophon	0
 verdict	model-information-v1	max_millibits=2500	8	xylophon	0
 verdict	model-information-v1	max_millibits=5000	8	xylophon	0
 verdict	model-information-v1	max_millibits=9000	8	xylophon	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	8	xylophon	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	8	xylophon	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	8	xylophon	1
+verdict	model-information-v2	max_millibits=2500	8	xylophon	0
+verdict	model-information-v2	max_millibits=5000	8	xylophon	0
+verdict	model-information-v2	max_millibits=9000	8	xylophon	1
 verdict	clean-v1	dictionary=scowl-en-35	8	tan tan 	1
 verdict	window-v1	dictionary=scowl-en-35	8	tan tan 	1
 verdict	words-v1	dictionary=scowl-en-35	8	tan tan 	1
@@ -189,6 +244,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	tan tan 	0
 verdict	model-information-v1	max_millibits=2500	8	tan tan 	0
 verdict	model-information-v1	max_millibits=5000	8	tan tan 	1
 verdict	model-information-v1	max_millibits=9000	8	tan tan 	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	8	tan tan 	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	8	tan tan 	1
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	8	tan tan 	0
+verdict	model-information-v2	max_millibits=2500	8	tan tan 	0
+verdict	model-information-v2	max_millibits=5000	8	tan tan 	1
+verdict	model-information-v2	max_millibits=9000	8	tan tan 	1
 verdict	clean-v1	dictionary=scowl-en-35	8	hello wo	1
 verdict	window-v1	dictionary=scowl-en-35	8	hello wo	1
 verdict	words-v1	dictionary=scowl-en-35	8	hello wo	0
@@ -206,6 +267,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	hello wo	0
 verdict	model-information-v1	max_millibits=2500	8	hello wo	0
 verdict	model-information-v1	max_millibits=5000	8	hello wo	1
 verdict	model-information-v1	max_millibits=9000	8	hello wo	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	8	hello wo	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	8	hello wo	1
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	8	hello wo	0
+verdict	model-information-v2	max_millibits=2500	8	hello wo	0
+verdict	model-information-v2	max_millibits=5000	8	hello wo	1
+verdict	model-information-v2	max_millibits=9000	8	hello wo	1
 verdict	clean-v1	dictionary=scowl-en-35	8	lorem ip	1
 verdict	window-v1	dictionary=scowl-en-35	8	lorem ip	0
 verdict	words-v1	dictionary=scowl-en-35	8	lorem ip	0
@@ -223,6 +290,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	lorem ip	0
 verdict	model-information-v1	max_millibits=2500	8	lorem ip	0
 verdict	model-information-v1	max_millibits=5000	8	lorem ip	0
 verdict	model-information-v1	max_millibits=9000	8	lorem ip	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	8	lorem ip	0
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	8	lorem ip	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	8	lorem ip	1
+verdict	model-information-v2	max_millibits=2500	8	lorem ip	0
+verdict	model-information-v2	max_millibits=5000	8	lorem ip	0
+verdict	model-information-v2	max_millibits=9000	8	lorem ip	1
 verdict	clean-v1	dictionary=scowl-en-35	8	hgdctca 	1
 verdict	window-v1	dictionary=scowl-en-35	8	hgdctca 	0
 verdict	words-v1	dictionary=scowl-en-35	8	hgdctca 	0
@@ -240,6 +313,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	hgdctca 	0
 verdict	model-information-v1	max_millibits=2500	8	hgdctca 	0
 verdict	model-information-v1	max_millibits=5000	8	hgdctca 	0
 verdict	model-information-v1	max_millibits=9000	8	hgdctca 	0
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	8	hgdctca 	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	8	hgdctca 	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	8	hgdctca 	1
+verdict	model-information-v2	max_millibits=2500	8	hgdctca 	0
+verdict	model-information-v2	max_millibits=5000	8	hgdctca 	0
+verdict	model-information-v2	max_millibits=9000	8	hgdctca 	0
 verdict	clean-v1	dictionary=scowl-en-35	8	qgafnkmy	1
 verdict	window-v1	dictionary=scowl-en-35	8	qgafnkmy	0
 verdict	words-v1	dictionary=scowl-en-35	8	qgafnkmy	0
@@ -257,6 +336,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	qgafnkmy	0
 verdict	model-information-v1	max_millibits=2500	8	qgafnkmy	0
 verdict	model-information-v1	max_millibits=5000	8	qgafnkmy	0
 verdict	model-information-v1	max_millibits=9000	8	qgafnkmy	0
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	8	qgafnkmy	0
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	8	qgafnkmy	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	8	qgafnkmy	1
+verdict	model-information-v2	max_millibits=2500	8	qgafnkmy	0
+verdict	model-information-v2	max_millibits=5000	8	qgafnkmy	0
+verdict	model-information-v2	max_millibits=9000	8	qgafnkmy	0
 verdict	clean-v1	dictionary=scowl-en-35	8	zbfdicas	1
 verdict	window-v1	dictionary=scowl-en-35	8	zbfdicas	0
 verdict	words-v1	dictionary=scowl-en-35	8	zbfdicas	0
@@ -274,6 +359,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	zbfdicas	0
 verdict	model-information-v1	max_millibits=2500	8	zbfdicas	0
 verdict	model-information-v1	max_millibits=5000	8	zbfdicas	0
 verdict	model-information-v1	max_millibits=9000	8	zbfdicas	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	8	zbfdicas	0
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	8	zbfdicas	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	8	zbfdicas	1
+verdict	model-information-v2	max_millibits=2500	8	zbfdicas	0
+verdict	model-information-v2	max_millibits=5000	8	zbfdicas	0
+verdict	model-information-v2	max_millibits=9000	8	zbfdicas	1
 verdict	clean-v1	dictionary=scowl-en-35	8	lsjakgg 	1
 verdict	window-v1	dictionary=scowl-en-35	8	lsjakgg 	0
 verdict	words-v1	dictionary=scowl-en-35	8	lsjakgg 	0
@@ -291,6 +382,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	lsjakgg 	0
 verdict	model-information-v1	max_millibits=2500	8	lsjakgg 	0
 verdict	model-information-v1	max_millibits=5000	8	lsjakgg 	0
 verdict	model-information-v1	max_millibits=9000	8	lsjakgg 	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	8	lsjakgg 	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	8	lsjakgg 	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	8	lsjakgg 	1
+verdict	model-information-v2	max_millibits=2500	8	lsjakgg 	0
+verdict	model-information-v2	max_millibits=5000	8	lsjakgg 	0
+verdict	model-information-v2	max_millibits=9000	8	lsjakgg 	1
 verdict	clean-v1	dictionary=scowl-en-35	8	ndfm hr 	1
 verdict	window-v1	dictionary=scowl-en-35	8	ndfm hr 	0
 verdict	words-v1	dictionary=scowl-en-35	8	ndfm hr 	0
@@ -308,6 +405,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	ndfm hr 	0
 verdict	model-information-v1	max_millibits=2500	8	ndfm hr 	0
 verdict	model-information-v1	max_millibits=5000	8	ndfm hr 	0
 verdict	model-information-v1	max_millibits=9000	8	ndfm hr 	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	8	ndfm hr 	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	8	ndfm hr 	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	8	ndfm hr 	1
+verdict	model-information-v2	max_millibits=2500	8	ndfm hr 	0
+verdict	model-information-v2	max_millibits=5000	8	ndfm hr 	0
+verdict	model-information-v2	max_millibits=9000	8	ndfm hr 	1
 verdict	clean-v1	dictionary=scowl-en-35	8	ryqjpdpk	1
 verdict	window-v1	dictionary=scowl-en-35	8	ryqjpdpk	0
 verdict	words-v1	dictionary=scowl-en-35	8	ryqjpdpk	0
@@ -325,6 +428,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	ryqjpdpk	0
 verdict	model-information-v1	max_millibits=2500	8	ryqjpdpk	0
 verdict	model-information-v1	max_millibits=5000	8	ryqjpdpk	0
 verdict	model-information-v1	max_millibits=9000	8	ryqjpdpk	0
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	8	ryqjpdpk	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	8	ryqjpdpk	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	8	ryqjpdpk	1
+verdict	model-information-v2	max_millibits=2500	8	ryqjpdpk	0
+verdict	model-information-v2	max_millibits=5000	8	ryqjpdpk	0
+verdict	model-information-v2	max_millibits=9000	8	ryqjpdpk	0
 verdict	clean-v1	dictionary=scowl-en-35	8	        	0
 verdict	window-v1	dictionary=scowl-en-35	8	        	0
 verdict	words-v1	dictionary=scowl-en-35	8	        	0
@@ -342,6 +451,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	        	0
 verdict	model-information-v1	max_millibits=2500	8	        	1
 verdict	model-information-v1	max_millibits=5000	8	        	1
 verdict	model-information-v1	max_millibits=9000	8	        	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	8	        	0
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	8	        	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	8	        	0
+verdict	model-information-v2	max_millibits=2500	8	        	0
+verdict	model-information-v2	max_millibits=5000	8	        	0
+verdict	model-information-v2	max_millibits=9000	8	        	0
 verdict	clean-v1	dictionary=scowl-en-35	8	ant     	0
 verdict	window-v1	dictionary=scowl-en-35	8	ant     	0
 verdict	words-v1	dictionary=scowl-en-35	8	ant     	0
@@ -359,6 +474,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	ant     	0
 verdict	model-information-v1	max_millibits=2500	8	ant     	0
 verdict	model-information-v1	max_millibits=5000	8	ant     	1
 verdict	model-information-v1	max_millibits=9000	8	ant     	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	8	ant     	0
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	8	ant     	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	8	ant     	1
+verdict	model-information-v2	max_millibits=2500	8	ant     	0
+verdict	model-information-v2	max_millibits=5000	8	ant     	1
+verdict	model-information-v2	max_millibits=9000	8	ant     	1
 verdict	clean-v1	dictionary=scowl-en-35	8	 an     	0
 verdict	window-v1	dictionary=scowl-en-35	8	 an     	0
 verdict	words-v1	dictionary=scowl-en-35	8	 an     	0
@@ -376,6 +497,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	 an     	0
 verdict	model-information-v1	max_millibits=2500	8	 an     	0
 verdict	model-information-v1	max_millibits=5000	8	 an     	1
 verdict	model-information-v1	max_millibits=9000	8	 an     	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	8	 an     	0
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	8	 an     	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	8	 an     	1
+verdict	model-information-v2	max_millibits=2500	8	 an     	1
+verdict	model-information-v2	max_millibits=5000	8	 an     	1
+verdict	model-information-v2	max_millibits=9000	8	 an     	1
 verdict	clean-v1	dictionary=scowl-en-35	8	tan  x  	0
 verdict	window-v1	dictionary=scowl-en-35	8	tan  x  	0
 verdict	words-v1	dictionary=scowl-en-35	8	tan  x  	0
@@ -393,6 +520,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	tan  x  	0
 verdict	model-information-v1	max_millibits=2500	8	tan  x  	0
 verdict	model-information-v1	max_millibits=5000	8	tan  x  	0
 verdict	model-information-v1	max_millibits=9000	8	tan  x  	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	8	tan  x  	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	8	tan  x  	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	8	tan  x  	1
+verdict	model-information-v2	max_millibits=2500	8	tan  x  	0
+verdict	model-information-v2	max_millibits=5000	8	tan  x  	0
+verdict	model-information-v2	max_millibits=9000	8	tan  x  	1
 verdict	clean-v1	dictionary=scowl-en-35	8	i       	0
 verdict	window-v1	dictionary=scowl-en-35	8	i       	0
 verdict	words-v1	dictionary=scowl-en-35	8	i       	0
@@ -410,6 +543,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	i       	0
 verdict	model-information-v1	max_millibits=2500	8	i       	0
 verdict	model-information-v1	max_millibits=5000	8	i       	1
 verdict	model-information-v1	max_millibits=9000	8	i       	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	8	i       	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	8	i       	1
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	8	i       	1
+verdict	model-information-v2	max_millibits=2500	8	i       	0
+verdict	model-information-v2	max_millibits=5000	8	i       	1
+verdict	model-information-v2	max_millibits=9000	8	i       	1
 verdict	clean-v1	dictionary=scowl-en-35	8	xqz     	0
 verdict	window-v1	dictionary=scowl-en-35	8	xqz     	0
 verdict	words-v1	dictionary=scowl-en-35	8	xqz     	0
@@ -427,6 +566,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	8	xqz     	0
 verdict	model-information-v1	max_millibits=2500	8	xqz     	0
 verdict	model-information-v1	max_millibits=5000	8	xqz     	0
 verdict	model-information-v1	max_millibits=9000	8	xqz     	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	8	xqz     	0
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	8	xqz     	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	8	xqz     	1
+verdict	model-information-v2	max_millibits=2500	8	xqz     	0
+verdict	model-information-v2	max_millibits=5000	8	xqz     	0
+verdict	model-information-v2	max_millibits=9000	8	xqz     	0
 verdict	clean-v1	dictionary=scowl-en-35	32	it was the best of times        	0
 verdict	window-v1	dictionary=scowl-en-35	32	it was the best of times        	0
 verdict	words-v1	dictionary=scowl-en-35	32	it was the best of times        	0
@@ -444,6 +589,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	it was the b
 verdict	model-information-v1	max_millibits=2500	32	it was the best of times        	1
 verdict	model-information-v1	max_millibits=5000	32	it was the best of times        	1
 verdict	model-information-v1	max_millibits=9000	32	it was the best of times        	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	32	it was the best of times        	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	32	it was the best of times        	1
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	32	it was the best of times        	0
+verdict	model-information-v2	max_millibits=2500	32	it was the best of times        	1
+verdict	model-information-v2	max_millibits=5000	32	it was the best of times        	1
+verdict	model-information-v2	max_millibits=9000	32	it was the best of times        	1
 verdict	clean-v1	dictionary=scowl-en-35	32	the quick brown fox             	0
 verdict	window-v1	dictionary=scowl-en-35	32	the quick brown fox             	0
 verdict	words-v1	dictionary=scowl-en-35	32	the quick brown fox             	0
@@ -461,6 +612,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	the quick br
 verdict	model-information-v1	max_millibits=2500	32	the quick brown fox             	1
 verdict	model-information-v1	max_millibits=5000	32	the quick brown fox             	1
 verdict	model-information-v1	max_millibits=9000	32	the quick brown fox             	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	32	the quick brown fox             	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	32	the quick brown fox             	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	32	the quick brown fox             	1
+verdict	model-information-v2	max_millibits=2500	32	the quick brown fox             	0
+verdict	model-information-v2	max_millibits=5000	32	the quick brown fox             	1
+verdict	model-information-v2	max_millibits=9000	32	the quick brown fox             	1
 verdict	clean-v1	dictionary=scowl-en-35	32	qzxj vvkw pqpq zzzz             	0
 verdict	window-v1	dictionary=scowl-en-35	32	qzxj vvkw pqpq zzzz             	0
 verdict	words-v1	dictionary=scowl-en-35	32	qzxj vvkw pqpq zzzz             	0
@@ -478,6 +635,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	qzxj vvkw pq
 verdict	model-information-v1	max_millibits=2500	32	qzxj vvkw pqpq zzzz             	0
 verdict	model-information-v1	max_millibits=5000	32	qzxj vvkw pqpq zzzz             	0
 verdict	model-information-v1	max_millibits=9000	32	qzxj vvkw pqpq zzzz             	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	32	qzxj vvkw pqpq zzzz             	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	32	qzxj vvkw pqpq zzzz             	1
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	32	qzxj vvkw pqpq zzzz             	0
+verdict	model-information-v2	max_millibits=2500	32	qzxj vvkw pqpq zzzz             	0
+verdict	model-information-v2	max_millibits=5000	32	qzxj vvkw pqpq zzzz             	0
+verdict	model-information-v2	max_millibits=9000	32	qzxj vvkw pqpq zzzz             	0
 verdict	clean-v1	dictionary=scowl-en-35	32	a b                             	0
 verdict	window-v1	dictionary=scowl-en-35	32	a b                             	0
 verdict	words-v1	dictionary=scowl-en-35	32	a b                             	0
@@ -495,6 +658,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	a b         
 verdict	model-information-v1	max_millibits=2500	32	a b                             	1
 verdict	model-information-v1	max_millibits=5000	32	a b                             	1
 verdict	model-information-v1	max_millibits=9000	32	a b                             	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	32	a b                             	0
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	32	a b                             	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	32	a b                             	1
+verdict	model-information-v2	max_millibits=2500	32	a b                             	0
+verdict	model-information-v2	max_millibits=5000	32	a b                             	1
+verdict	model-information-v2	max_millibits=9000	32	a b                             	1
 verdict	clean-v1	dictionary=scowl-en-35	32	an ant                          	0
 verdict	window-v1	dictionary=scowl-en-35	32	an ant                          	0
 verdict	words-v1	dictionary=scowl-en-35	32	an ant                          	0
@@ -512,6 +681,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	an ant      
 verdict	model-information-v1	max_millibits=2500	32	an ant                          	1
 verdict	model-information-v1	max_millibits=5000	32	an ant                          	1
 verdict	model-information-v1	max_millibits=9000	32	an ant                          	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	32	an ant                          	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	32	an ant                          	1
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	32	an ant                          	0
+verdict	model-information-v2	max_millibits=2500	32	an ant                          	0
+verdict	model-information-v2	max_millibits=5000	32	an ant                          	1
+verdict	model-information-v2	max_millibits=9000	32	an ant                          	1
 verdict	clean-v1	dictionary=scowl-en-35	32	aaaa bbb                        	0
 verdict	window-v1	dictionary=scowl-en-35	32	aaaa bbb                        	0
 verdict	words-v1	dictionary=scowl-en-35	32	aaaa bbb                        	0
@@ -529,6 +704,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	aaaa bbb    
 verdict	model-information-v1	max_millibits=2500	32	aaaa bbb                        	0
 verdict	model-information-v1	max_millibits=5000	32	aaaa bbb                        	1
 verdict	model-information-v1	max_millibits=9000	32	aaaa bbb                        	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	32	aaaa bbb                        	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	32	aaaa bbb                        	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	32	aaaa bbb                        	0
+verdict	model-information-v2	max_millibits=2500	32	aaaa bbb                        	0
+verdict	model-information-v2	max_millibits=5000	32	aaaa bbb                        	0
+verdict	model-information-v2	max_millibits=9000	32	aaaa bbb                        	0
 verdict	clean-v1	dictionary=scowl-en-35	32	zzz                             	0
 verdict	window-v1	dictionary=scowl-en-35	32	zzz                             	0
 verdict	words-v1	dictionary=scowl-en-35	32	zzz                             	0
@@ -546,6 +727,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	zzz         
 verdict	model-information-v1	max_millibits=2500	32	zzz                             	1
 verdict	model-information-v1	max_millibits=5000	32	zzz                             	1
 verdict	model-information-v1	max_millibits=9000	32	zzz                             	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	32	zzz                             	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	32	zzz                             	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	32	zzz                             	0
+verdict	model-information-v2	max_millibits=2500	32	zzz                             	0
+verdict	model-information-v2	max_millibits=5000	32	zzz                             	0
+verdict	model-information-v2	max_millibits=9000	32	zzz                             	1
 verdict	clean-v1	dictionary=scowl-en-35	32	call me ishmael                 	0
 verdict	window-v1	dictionary=scowl-en-35	32	call me ishmael                 	0
 verdict	words-v1	dictionary=scowl-en-35	32	call me ishmael                 	0
@@ -563,6 +750,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	call me ishm
 verdict	model-information-v1	max_millibits=2500	32	call me ishmael                 	1
 verdict	model-information-v1	max_millibits=5000	32	call me ishmael                 	1
 verdict	model-information-v1	max_millibits=9000	32	call me ishmael                 	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	32	call me ishmael                 	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	32	call me ishmael                 	1
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	32	call me ishmael                 	0
+verdict	model-information-v2	max_millibits=2500	32	call me ishmael                 	1
+verdict	model-information-v2	max_millibits=5000	32	call me ishmael                 	1
+verdict	model-information-v2	max_millibits=9000	32	call me ishmael                 	1
 verdict	clean-v1	dictionary=scowl-en-35	32	xylophone                       	0
 verdict	window-v1	dictionary=scowl-en-35	32	xylophone                       	0
 verdict	words-v1	dictionary=scowl-en-35	32	xylophone                       	0
@@ -580,6 +773,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	xylophone   
 verdict	model-information-v1	max_millibits=2500	32	xylophone                       	0
 verdict	model-information-v1	max_millibits=5000	32	xylophone                       	1
 verdict	model-information-v1	max_millibits=9000	32	xylophone                       	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	32	xylophone                       	0
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	32	xylophone                       	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	32	xylophone                       	1
+verdict	model-information-v2	max_millibits=2500	32	xylophone                       	0
+verdict	model-information-v2	max_millibits=5000	32	xylophone                       	0
+verdict	model-information-v2	max_millibits=9000	32	xylophone                       	1
 verdict	clean-v1	dictionary=scowl-en-35	32	tan tan tan                     	0
 verdict	window-v1	dictionary=scowl-en-35	32	tan tan tan                     	0
 verdict	words-v1	dictionary=scowl-en-35	32	tan tan tan                     	0
@@ -597,6 +796,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	tan tan tan 
 verdict	model-information-v1	max_millibits=2500	32	tan tan tan                     	1
 verdict	model-information-v1	max_millibits=5000	32	tan tan tan                     	1
 verdict	model-information-v1	max_millibits=9000	32	tan tan tan                     	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	32	tan tan tan                     	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	32	tan tan tan                     	1
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	32	tan tan tan                     	0
+verdict	model-information-v2	max_millibits=2500	32	tan tan tan                     	0
+verdict	model-information-v2	max_millibits=5000	32	tan tan tan                     	1
+verdict	model-information-v2	max_millibits=9000	32	tan tan tan                     	1
 verdict	clean-v1	dictionary=scowl-en-35	32	hello world                     	0
 verdict	window-v1	dictionary=scowl-en-35	32	hello world                     	0
 verdict	words-v1	dictionary=scowl-en-35	32	hello world                     	0
@@ -614,6 +819,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	hello world 
 verdict	model-information-v1	max_millibits=2500	32	hello world                     	1
 verdict	model-information-v1	max_millibits=5000	32	hello world                     	1
 verdict	model-information-v1	max_millibits=9000	32	hello world                     	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	32	hello world                     	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	32	hello world                     	1
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	32	hello world                     	0
+verdict	model-information-v2	max_millibits=2500	32	hello world                     	0
+verdict	model-information-v2	max_millibits=5000	32	hello world                     	1
+verdict	model-information-v2	max_millibits=9000	32	hello world                     	1
 verdict	clean-v1	dictionary=scowl-en-35	32	lorem ipsum dolor               	0
 verdict	window-v1	dictionary=scowl-en-35	32	lorem ipsum dolor               	0
 verdict	words-v1	dictionary=scowl-en-35	32	lorem ipsum dolor               	0
@@ -631,6 +842,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	lorem ipsum 
 verdict	model-information-v1	max_millibits=2500	32	lorem ipsum dolor               	0
 verdict	model-information-v1	max_millibits=5000	32	lorem ipsum dolor               	1
 verdict	model-information-v1	max_millibits=9000	32	lorem ipsum dolor               	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	32	lorem ipsum dolor               	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	32	lorem ipsum dolor               	1
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	32	lorem ipsum dolor               	0
+verdict	model-information-v2	max_millibits=2500	32	lorem ipsum dolor               	0
+verdict	model-information-v2	max_millibits=5000	32	lorem ipsum dolor               	0
+verdict	model-information-v2	max_millibits=9000	32	lorem ipsum dolor               	1
 verdict	clean-v1	dictionary=scowl-en-35	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	1
 verdict	window-v1	dictionary=scowl-en-35	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	0
 verdict	words-v1	dictionary=scowl-en-35	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	0
@@ -648,6 +865,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	vliblcygkkbt
 verdict	model-information-v1	max_millibits=2500	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	0
 verdict	model-information-v1	max_millibits=5000	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	0
 verdict	model-information-v1	max_millibits=9000	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	0
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	1
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	0
+verdict	model-information-v2	max_millibits=2500	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	0
+verdict	model-information-v2	max_millibits=5000	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	0
+verdict	model-information-v2	max_millibits=9000	32	vliblcygkkbtiopnaaztbvvvdsvbqlot	0
 verdict	clean-v1	dictionary=scowl-en-35	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	1
 verdict	window-v1	dictionary=scowl-en-35	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	0
 verdict	words-v1	dictionary=scowl-en-35	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	0
@@ -665,6 +888,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	xrfqbrivhjpn
 verdict	model-information-v1	max_millibits=2500	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	0
 verdict	model-information-v1	max_millibits=5000	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	0
 verdict	model-information-v1	max_millibits=9000	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	0
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	1
+verdict	model-information-v2	max_millibits=2500	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	0
+verdict	model-information-v2	max_millibits=5000	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	0
+verdict	model-information-v2	max_millibits=9000	32	xrfqbrivhjpnrvel uapbmvpzjrmucdd	0
 verdict	clean-v1	dictionary=scowl-en-35	32	sbururkrhhytogl orjraiengirtul x	1
 verdict	window-v1	dictionary=scowl-en-35	32	sbururkrhhytogl orjraiengirtul x	0
 verdict	words-v1	dictionary=scowl-en-35	32	sbururkrhhytogl orjraiengirtul x	0
@@ -682,6 +911,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	sbururkrhhyt
 verdict	model-information-v1	max_millibits=2500	32	sbururkrhhytogl orjraiengirtul x	0
 verdict	model-information-v1	max_millibits=5000	32	sbururkrhhytogl orjraiengirtul x	0
 verdict	model-information-v1	max_millibits=9000	32	sbururkrhhytogl orjraiengirtul x	0
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	32	sbururkrhhytogl orjraiengirtul x	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	32	sbururkrhhytogl orjraiengirtul x	1
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	32	sbururkrhhytogl orjraiengirtul x	0
+verdict	model-information-v2	max_millibits=2500	32	sbururkrhhytogl orjraiengirtul x	0
+verdict	model-information-v2	max_millibits=5000	32	sbururkrhhytogl orjraiengirtul x	0
+verdict	model-information-v2	max_millibits=9000	32	sbururkrhhytogl orjraiengirtul x	0
 verdict	clean-v1	dictionary=scowl-en-35	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
 verdict	window-v1	dictionary=scowl-en-35	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
 verdict	words-v1	dictionary=scowl-en-35	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
@@ -699,6 +934,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	cnxvjdtxqupo
 verdict	model-information-v1	max_millibits=2500	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
 verdict	model-information-v1	max_millibits=5000	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
 verdict	model-information-v1	max_millibits=9000	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	1
+verdict	model-information-v2	max_millibits=2500	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
+verdict	model-information-v2	max_millibits=5000	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
+verdict	model-information-v2	max_millibits=9000	32	cnxvjdtxqupoiekmppe  pqaylvczmsd	0
 verdict	clean-v1	dictionary=scowl-en-35	32	ttomsryknypp gevazvtjpvirrswwstb	1
 verdict	window-v1	dictionary=scowl-en-35	32	ttomsryknypp gevazvtjpvirrswwstb	0
 verdict	words-v1	dictionary=scowl-en-35	32	ttomsryknypp gevazvtjpvirrswwstb	0
@@ -716,6 +957,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	ttomsryknypp
 verdict	model-information-v1	max_millibits=2500	32	ttomsryknypp gevazvtjpvirrswwstb	0
 verdict	model-information-v1	max_millibits=5000	32	ttomsryknypp gevazvtjpvirrswwstb	0
 verdict	model-information-v1	max_millibits=9000	32	ttomsryknypp gevazvtjpvirrswwstb	0
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	32	ttomsryknypp gevazvtjpvirrswwstb	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	32	ttomsryknypp gevazvtjpvirrswwstb	1
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	32	ttomsryknypp gevazvtjpvirrswwstb	0
+verdict	model-information-v2	max_millibits=2500	32	ttomsryknypp gevazvtjpvirrswwstb	0
+verdict	model-information-v2	max_millibits=5000	32	ttomsryknypp gevazvtjpvirrswwstb	0
+verdict	model-information-v2	max_millibits=9000	32	ttomsryknypp gevazvtjpvirrswwstb	0
 verdict	clean-v1	dictionary=scowl-en-35	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	1
 verdict	window-v1	dictionary=scowl-en-35	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	0
 verdict	words-v1	dictionary=scowl-en-35	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	0
@@ -733,6 +980,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	lfxjotfdmwth
 verdict	model-information-v1	max_millibits=2500	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	0
 verdict	model-information-v1	max_millibits=5000	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	0
 verdict	model-information-v1	max_millibits=9000	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	0
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	1
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	0
+verdict	model-information-v2	max_millibits=2500	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	0
+verdict	model-information-v2	max_millibits=5000	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	0
+verdict	model-information-v2	max_millibits=9000	32	lfxjotfdmwthwhpbgdrbhvfthglybjyc	0
 verdict	clean-v1	dictionary=scowl-en-35	32	                                	0
 verdict	window-v1	dictionary=scowl-en-35	32	                                	0
 verdict	words-v1	dictionary=scowl-en-35	32	                                	0
@@ -750,6 +1003,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	            
 verdict	model-information-v1	max_millibits=2500	32	                                	1
 verdict	model-information-v1	max_millibits=5000	32	                                	1
 verdict	model-information-v1	max_millibits=9000	32	                                	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	32	                                	0
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	32	                                	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	32	                                	0
+verdict	model-information-v2	max_millibits=2500	32	                                	0
+verdict	model-information-v2	max_millibits=5000	32	                                	0
+verdict	model-information-v2	max_millibits=9000	32	                                	0
 verdict	clean-v1	dictionary=scowl-en-35	32	ant                             	0
 verdict	window-v1	dictionary=scowl-en-35	32	ant                             	0
 verdict	words-v1	dictionary=scowl-en-35	32	ant                             	0
@@ -767,6 +1026,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	ant         
 verdict	model-information-v1	max_millibits=2500	32	ant                             	1
 verdict	model-information-v1	max_millibits=5000	32	ant                             	1
 verdict	model-information-v1	max_millibits=9000	32	ant                             	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	32	ant                             	0
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	32	ant                             	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	32	ant                             	1
+verdict	model-information-v2	max_millibits=2500	32	ant                             	0
+verdict	model-information-v2	max_millibits=5000	32	ant                             	1
+verdict	model-information-v2	max_millibits=9000	32	ant                             	1
 verdict	clean-v1	dictionary=scowl-en-35	32	 an                             	0
 verdict	window-v1	dictionary=scowl-en-35	32	 an                             	0
 verdict	words-v1	dictionary=scowl-en-35	32	 an                             	0
@@ -784,6 +1049,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	 an         
 verdict	model-information-v1	max_millibits=2500	32	 an                             	1
 verdict	model-information-v1	max_millibits=5000	32	 an                             	1
 verdict	model-information-v1	max_millibits=9000	32	 an                             	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	32	 an                             	0
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	32	 an                             	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	32	 an                             	1
+verdict	model-information-v2	max_millibits=2500	32	 an                             	1
+verdict	model-information-v2	max_millibits=5000	32	 an                             	1
+verdict	model-information-v2	max_millibits=9000	32	 an                             	1
 verdict	clean-v1	dictionary=scowl-en-35	32	tan  x                          	0
 verdict	window-v1	dictionary=scowl-en-35	32	tan  x                          	0
 verdict	words-v1	dictionary=scowl-en-35	32	tan  x                          	0
@@ -801,6 +1072,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	tan  x      
 verdict	model-information-v1	max_millibits=2500	32	tan  x                          	1
 verdict	model-information-v1	max_millibits=5000	32	tan  x                          	1
 verdict	model-information-v1	max_millibits=9000	32	tan  x                          	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	32	tan  x                          	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	32	tan  x                          	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	32	tan  x                          	1
+verdict	model-information-v2	max_millibits=2500	32	tan  x                          	0
+verdict	model-information-v2	max_millibits=5000	32	tan  x                          	0
+verdict	model-information-v2	max_millibits=9000	32	tan  x                          	1
 verdict	clean-v1	dictionary=scowl-en-35	32	i                               	0
 verdict	window-v1	dictionary=scowl-en-35	32	i                               	0
 verdict	words-v1	dictionary=scowl-en-35	32	i                               	0
@@ -818,6 +1095,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	i           
 verdict	model-information-v1	max_millibits=2500	32	i                               	1
 verdict	model-information-v1	max_millibits=5000	32	i                               	1
 verdict	model-information-v1	max_millibits=9000	32	i                               	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	32	i                               	1
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	32	i                               	1
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	32	i                               	1
+verdict	model-information-v2	max_millibits=2500	32	i                               	0
+verdict	model-information-v2	max_millibits=5000	32	i                               	1
+verdict	model-information-v2	max_millibits=9000	32	i                               	1
 verdict	clean-v1	dictionary=scowl-en-35	32	xqz                             	0
 verdict	window-v1	dictionary=scowl-en-35	32	xqz                             	0
 verdict	words-v1	dictionary=scowl-en-35	32	xqz                             	0
@@ -835,6 +1118,12 @@ verdict	symbol-entropy-v1	min_millibits=3500,max_millibits=32000	32	xqz         
 verdict	model-information-v1	max_millibits=2500	32	xqz                             	1
 verdict	model-information-v1	max_millibits=5000	32	xqz                             	1
 verdict	model-information-v1	max_millibits=9000	32	xqz                             	1
+verdict	symbol-entropy-v2	min_permille=0,max_permille=925	32	xqz                             	0
+verdict	symbol-entropy-v2	min_permille=500,max_permille=850	32	xqz                             	0
+verdict	symbol-entropy-v2	min_permille=850,max_permille=1000	32	xqz                             	1
+verdict	model-information-v2	max_millibits=2500	32	xqz                             	0
+verdict	model-information-v2	max_millibits=5000	32	xqz                             	0
+verdict	model-information-v2	max_millibits=9000	32	xqz                             	0
 # image <w> <h> <frames> <min_permille> <pixels> <1|0>
 image	10	10	1	500	0100000100101101010010100001101010101111010100100011001110010111111010100111110101010100010101111110	0
 image	10	10	1	600	0100000100101101010010100001101010101111010100100011001110010111111010100111110101010100010101111110	0

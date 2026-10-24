@@ -79,19 +79,40 @@ std::optional<Dfa> max_run_dfa(uint32_t base, int64_t max_run, int64_t space)
 // bits per symbol. Exact form: with lg = log2_q16,
 //   HL = L lg(L) - sum_c c lg(c)            (H * L in 1/65536 bits; at least 0)
 //   passes iff  min * L * 65536 <= 1000 * HL <= max * L * 65536   (min, max in millibits)
+//
+// Version 2 (IDEAS §2.1, §2.2): min and max are thousandths of the most a unit of the line can
+// have, log2 min(base, n), so one setting means the same on every alphabet (v1's millibits suit
+// 27 letters only: random letters there have about 4.7 bits, and a page of the whole of Unicode
+// may have 10); and on a line with a SPACE, a unit that ends in two or more SPACEs is judged on
+// what comes before them, n its length (as words-v2's padding), so padding is not counted as
+// text. A unit of padding alone fails.
+//   passes iff  min * n * lg(min(base, n)) <= 1000 * HL <= max * n * lg(min(base, n))
 class SymbolEntropy : public Filter
 {
 public:
-    SymbolEntropy(int64_t min_mb, int64_t max_mb, uint32_t base, uint32_t length) : min_(min_mb), max_(max_mb)
+    SymbolEntropy(int64_t min_mb, int64_t max_mb, uint32_t base, uint32_t length) : SymbolEntropy(min_mb, max_mb, base, length, false, -1) {}
+    SymbolEntropy(int64_t min_v, int64_t max_v, uint32_t base, uint32_t length, bool relative, int64_t space)
+        : min_(min_v), max_(max_v), base_(base), relative_(relative), space_(space)
     {
-        provenance_ = "min_millibits=" + std::to_string(min_mb) + " max_millibits=" + std::to_string(max_mb);
-        if (base != 2) return;
+        provenance_ = relative ? "min_permille=" + std::to_string(min_v) + " max_permille=" + std::to_string(max_v)
+                               : "min_millibits=" + std::to_string(min_v) + " max_millibits=" + std::to_string(max_v);
+        if (base != 2 || space >= 0) return; // (with padding, the count of 1s alone does not decide)
         set_table_bytes(binary_rank_bytes(length));
         if (length <= binary_rank_limit() && table_bytes() <= filter_memory()) ranker_ = std::make_unique<BinaryRanker>(*this, length);
     }
     bool passes(std::span<const uint32_t> u) const override
     {
         if (u.empty()) return true;
+        if (relative_ && space_ >= 0)
+        {
+            size_t n = u.size();
+            while (n > 0 && int64_t(u[n - 1]) == space_) --n;
+            if (u.size() - n >= 2)
+            {
+                if (n == 0) return false;
+                u = u.first(n);
+            }
+        }
         std::map<uint32_t, uint64_t> counts;
         for (uint32_t s : u) ++counts[s];
         std::vector<uint64_t> c;
@@ -117,8 +138,9 @@ public:
         }
         BigUint lhs = hl;
         lhs.mul_small(1000);
-        BigUint lo = mul(mul(BigUint(L), uint64_t(kLogOne)), uint64_t(min_));
-        BigUint hi = mul(mul(BigUint(L), uint64_t(kLogOne)), uint64_t(max_));
+        const uint64_t scale = relative_ ? uint64_t(log2_q16(std::min<uint64_t>(base_, L))) : uint64_t(kLogOne);
+        BigUint lo = mul(mul(BigUint(L), scale), uint64_t(min_));
+        BigUint hi = mul(mul(BigUint(L), scale), uint64_t(max_));
         return lo <= lhs && lhs <= hi;
     }
 
@@ -317,6 +339,9 @@ private:
         return lo;
     }
     int64_t min_, max_;
+    uint32_t base_ = 2;
+    bool relative_ = false;
+    int64_t space_ = -1;
     std::unique_ptr<Ranker> ranker_;
 };
 
@@ -325,11 +350,16 @@ private:
 // The unit's information under the pinned model: the sum over its symbols of
 // 16 - log2(f / 2^16) bits, each term taken as 16*65536 - lg(f) in 1/65536 bits.
 //   passes iff  1000 * cost <= max * L * 65536   (max in millibits per symbol)
+//
+// Version 2 (IDEAS §2.2): a unit that ends in two or more SPACEs is judged on what comes before
+// them, n its length, as words-v2's padding: SPACEs cost little under the model, so v1 judged a
+// padded page more text-like than its text. A unit of padding alone fails.
+//   passes iff  1000 * cost(first n) <= max * n * 65536
 class ModelInformation : public Filter
 {
 public:
-    ModelInformation(std::shared_ptr<const CharModel> m, int64_t max_mb, const std::string& id)
-        : m_(std::move(m)), max_(max_mb)
+    ModelInformation(std::shared_ptr<const CharModel> m, int64_t max_mb, const std::string& id, int64_t space = -1)
+        : m_(std::move(m)), max_(max_mb), space_(space)
     {
         provenance_ = "model=" + id + " sha256=" + m_->sha256() + " max_millibits=" + std::to_string(max_mb);
     }
@@ -341,6 +371,16 @@ public:
             return t;
         }();
         const uint64_t full = uint64_t(kModelTotalBits) << kLogFractionBits;
+        if (space_ >= 0)
+        {
+            size_t n = u.size();
+            while (n > 0 && int64_t(u[n - 1]) == space_) --n;
+            if (u.size() - n >= 2)
+            {
+                if (n == 0) return false;
+                u = u.first(n);
+            }
+        }
         uint64_t cost = 0;
         for (size_t i = 0; i < u.size(); ++i)
         {
@@ -353,7 +393,7 @@ public:
 
 private:
     std::shared_ptr<const CharModel> m_;
-    int64_t max_;
+    int64_t max_, space_;
 };
 
 bool is_text(const FilterLine& l) { return l.kind == "text" && l.alphabet != nullptr; }
@@ -392,7 +432,29 @@ void add_statistics_filters(std::vector<FilterSpec>& out)
         const FilterSpec& s = *find_filter("symbol-entropy-v1");
         return std::make_unique<SymbolEntropy>(param_int(s, v, "min_millibits"), param_int(s, v, "max_millibits"), l.base, l.length);
     };
+    ent.replaced_by = "symbol-entropy-v2";
     out.push_back(ent);
+
+    // Version 2 (IDEAS §2.1, §2.2): against each alphabet's own most, and padding not counted.
+    // Retired as v1 is (it judges only, but in black and white), so nothing ticks it unasked.
+    FilterSpec ent2 = ent;
+    ent2.version = 2;
+    ent2.replaced_by.clear();
+    ent2.description = "Shannon entropy of the unit's own symbol frequencies, within [min, max] thousandths of the most "
+                       "a unit of this line can have, log2 min(symbols, length), so one setting means the same on every "
+                       "alphabet. On text, trailing SPACE padding (two or more) is not counted. On lower27 pages of 1000, "
+                       "English 826 to 877 (Don Quixote), random letters 992 or more; of 100, 700 to 885 and 920 or more. "
+                       "In black and white, can rank (compact).";
+    ent2.params = {{"min_permille", "lowest entropy allowed, in thousandths of the line's most", FilterParam::Kind::Integer, "0", 0, 1000, 10, {}},
+                   {"max_permille", "highest entropy allowed, in thousandths of the line's most", FilterParam::Kind::Integer, "925", 0, 1000, 10, {}}};
+    ent2.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) {
+        const FilterSpec& s = *find_filter("symbol-entropy-v2");
+        std::optional<uint32_t> space;
+        if (l.alphabet) space = l.alphabet->digit_of(U' ');
+        return std::make_unique<SymbolEntropy>(param_int(s, v, "min_permille"), param_int(s, v, "max_permille"), l.base, l.length, true,
+                                               space ? int64_t(*space) : -1);
+    };
+    out.push_back(ent2);
 
     FilterSpec info;
     info.id = "model-information";
@@ -411,7 +473,25 @@ void add_statistics_filters(std::vector<FilterSpec>& out)
                                                             " symbols, the line has " + std::to_string(l.base));
         return std::make_unique<ModelInformation>(m, param_int(s, v, "max_millibits"), id.empty() ? "default" : id);
     };
+    info.replaced_by = "model-information-v2";
     out.push_back(info);
+
+    // Version 2 (IDEAS §2.2): trailing SPACE padding not counted. Retired as v1 is (judges only).
+    FilterSpec info2 = info;
+    info2.version = 2;
+    info2.replaced_by.clear();
+    info2.description = "Information content under the pinned frequency model, at most max bits per symbol; trailing "
+                        "SPACE padding (two or more) is not counted. English ~1.9-4.1, random letters 9 or more.";
+    info2.make = [](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
+        const FilterSpec& s = *find_filter("model-information-v2");
+        const std::string id = param_value(s, v, "model");
+        auto m = r.model(id, l.symbols_id);
+        if (m->base() != l.base) throw std::invalid_argument("model-information: the model has " + std::to_string(m->base()) +
+                                                            " symbols, the line has " + std::to_string(l.base));
+        const auto space = l.alphabet->digit_of(U' ');
+        return std::make_unique<ModelInformation>(m, param_int(s, v, "max_millibits"), id.empty() ? "default" : id, space ? int64_t(*space) : -1);
+    };
+    out.push_back(info2);
 }
 
 } // namespace sieve

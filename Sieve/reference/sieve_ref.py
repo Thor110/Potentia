@@ -1247,6 +1247,39 @@ def f_symbol_entropy(u, lo, hi):
     return lo * L * 65536 <= 1000 * hl <= hi * L * 65536
 
 
+def unpadded(u, space):
+    """A unit that ends in two or more SPACEs, as what comes before them (words-v2's padding);
+    None for padding alone; the unit itself otherwise (or where the line has no SPACE)."""
+    if space is None:
+        return u
+    n = len(u)
+    while n and u[n - 1] == space:
+        n -= 1
+    if len(u) - n < 2:
+        return u
+    return u[:n] if n else None
+
+
+def f_symbol_entropy_v2(u, lo, hi, base, space):
+    """IDEAS 2.1, 2.2: thousandths of the line's most, log2 min(base, n), padding not counted."""
+    from collections import Counter
+    u = unpadded(u, space)
+    if u is None:
+        return False
+    L = len(u)
+    if L == 0:
+        return True
+    hl = max(0, L * log2_q16(L) - sum(c * log2_q16(c) for c in Counter(u).values()))
+    scale = log2_q16(min(base, L))
+    return lo * L * scale <= 1000 * hl <= hi * L * scale
+
+
+def f_model_information_v2(u, model, max_mb, space):
+    """IDEAS 2.2: as v1, on the unit less its padding."""
+    u = unpadded(u, space)
+    return False if u is None else f_model_information(u, model, max_mb)
+
+
 def f_model_information(u, model, max_mb):
     cost = 0
     for i, s in enumerate(u):
@@ -1430,7 +1463,8 @@ def cmd_filter_vectors(_args):
     d = load_dict(f"{here}/dictionaries/{dict_file}")
     sym = ALPHABETS["lower27"]
     print("# sieve filter conformance vectors v1 (clean-v1 window-v1 words-v1 clean-v2 words-v2 window-v2 title-v1 max-run-v1 symbol-entropy-v1")
-    print("#   model-information-v1 neighbour-agreement-v1), dictionary scowl-en-35, model gutenberg-lower27-o5")
+    print("#   model-information-v1 neighbour-agreement-v1 symbol-entropy-v2 model-information-v2), dictionary scowl-en-35,")
+    print("#   model gutenberg-lower27-o5")
     print(f"# dictionary {dict_file}")
     print("# log2 <x> <floor(log2(x)*65536)>")
     for x in [1, 2, 3, 5, 7, 10, 27, 100, 1000, 65535, 65536, 65537, 10 ** 9, 2 ** 40 + 12345, 2 ** 63, 2 ** 64 - 1]:
@@ -1458,6 +1492,12 @@ def cmd_filter_vectors(_args):
                 print(f"verdict\tsymbol-entropy-v1\tmin_millibits={lo},max_millibits={hi}\t{L}\t{u}\t{int(f_symbol_entropy(digits, lo, hi))}")
             for mx in (2500, 5000, 9000):
                 print(f"verdict\tmodel-information-v1\tmax_millibits={mx}\t{L}\t{u}\t{int(f_model_information(digits, model, mx))}")
+            space = sym.index(" ")
+            for lo, hi in ((0, 925), (500, 850), (850, 1000)):
+                print(f"verdict\tsymbol-entropy-v2\tmin_permille={lo},max_permille={hi}\t{L}\t{u}\t"
+                      f"{int(f_symbol_entropy_v2(digits, lo, hi, 27, space))}")
+            for mx in (2500, 5000, 9000):
+                print(f"verdict\tmodel-information-v2\tmax_millibits={mx}\t{L}\t{u}\t{int(f_model_information_v2(digits, model, mx, space))}")
     print("# image <w> <h> <frames> <min_permille> <pixels> <1|0>")
     for w, h, fr in ((10, 10, 1), (5, 5, 8), (3, 4, 2)):
         for k in range(5):
@@ -1498,14 +1538,15 @@ def cmd_filter_vectors(_args):
 
 # -- compact orderings (SPECIFICATIONS 8.5, 9): rankers on the other lines, the survivor shuffle,
 #    and the sieved guided line, each written from its definition.
-def entropy_allowed(L, lo, hi):
-    """Two symbols: the numbers of 1s whose units pass symbol-entropy-v1."""
-    return [k for k in range(L + 1) if f_symbol_entropy([1] * k + [0] * (L - k), lo, hi)]
+def entropy_allowed(L, lo, hi, v2=False):
+    """Two symbols: the numbers of 1s whose units pass symbol-entropy-v1 (or v2: no SPACE, so no padding)."""
+    ok = (lambda u: f_symbol_entropy_v2(u, lo, hi, 2, None)) if v2 else (lambda u: f_symbol_entropy(u, lo, hi))
+    return [k for k in range(L + 1) if ok([1] * k + [0] * (L - k))]
 
 
 class BinaryEntropyRank:
-    def __init__(self, L, lo, hi):
-        self.L, self.allowed = L, set(entropy_allowed(L, lo, hi))
+    def __init__(self, L, lo, hi, v2=False):
+        self.L, self.allowed = L, set(entropy_allowed(L, lo, hi, v2))
 
     def after(self, ones, r):
         return sum(math.comb(r, k - ones) for k in self.allowed if ones <= k <= ones + r)
@@ -1691,7 +1732,7 @@ def cmd_compact_vectors(_args):
     """Rankers for the other lines, the survivor shuffle, and the sieved guided line."""
     here = "../data"
     print("# sieve compact conformance vectors v1 (shuffle-sha256-v1, sieve-restrict-v1 over guided-ac-v1,")
-    print("#   symbol-entropy-v1 on two symbols, key-v1), dictionary scowl-en-35, model gutenberg-lower27-o5")
+    print("#   symbol-entropy-v1 and -v2 on two symbols, key-v1), dictionary scowl-en-35, model gutenberg-lower27-o5")
     print("# shuffle <n> <key> <domain> <k> <forward(k)>")
     g = stream("shuffle")
     for n in [1, 2, 3, 5, 17, 256, 257, 1000, 27 ** 5, 2 ** 64 + 13, 27 ** 40 - 7]:
@@ -1710,6 +1751,14 @@ def cmd_compact_vectors(_args):
             u = rk.unrank(k)
             assert f_symbol_entropy(u, lo, hi)
             print(f"rank\tsymbol-entropy-v1\tmin_millibits={lo},max_millibits={hi}\t{L}\t{total}\t{k}\t{','.join(map(str, u))}")
+    for L, lo, hi in ((25, 0, 700), (100, 600, 1000), (200, 0, 900)):  # v2: thousandths of 1 bit
+        rk = BinaryEntropyRank(L, lo, hi, v2=True)
+        total = rk.total()
+        g2 = stream(f"entropy-v2/{L}/{lo}/{hi}")
+        for k in [0, 1, total // 2, total - 1] + [int.from_bytes(bytes(next(g2) for _ in range(32)), "little") % total for _ in range(4)]:
+            u = rk.unrank(k)
+            assert f_symbol_entropy_v2(u, lo, hi, 2, None)
+            print(f"rank\tsymbol-entropy-v2\tmin_permille={lo},max_permille={hi}\t{L}\t{total}\t{k}\t{','.join(map(str, u))}")
     for L, tonic, scale in ((16, "C", "major"), (16, "D", "blues"), (40, "A#", "harmonic-minor")):
         allowed = key_allowed(tonic, scale)
         total = len(allowed) ** L

@@ -2394,10 +2394,11 @@ void test_filters(const std::string& dir)
     CHECK(clash("not-a-file-v1", "words-v2") == "conflict");
     CHECK(clash("not-a-pattern-v1", "not-other-line-v1") == "conflict");
     CHECK(clash("not-a-file-v1", "distinct-vertices-v1") == "conflict");
-    CHECK(filters_for(text_line(8)).size() == 14); // not-written-v1, not-a-file-v1, not-other-line-v1 and not-a-pattern-v1 joined the ten
+    CHECK(filters_for(text_line(8)).size() == 16); // not-written-v1, not-a-file-v1, not-other-line-v1 and not-a-pattern-v1 joined the ten;
+                                                    // symbol-entropy-v2 and model-information-v2 (IDEAS §2.1, §2.2) joined those
     const FilterLine image{"image", "image/mono/10x10", 2, 100, nullptr, 10, 10, 1};
-    CHECK(filters_for(image).size() == 8); // symbol-entropy, neighbour-agreement, not-a-file, not-packed, not-a-pattern,
-                                           // palette-size, row-runs, figure
+    CHECK(filters_for(image).size() == 9); // symbol-entropy (v1 and v2), neighbour-agreement, not-a-file, not-packed,
+                                           // not-a-pattern, palette-size, row-runs, figure
     CHECK(clash("palette-size-v1", "row-runs-v1") == "merge");
     CHECK(clash("palette-size-v1", "not-a-pattern-v1") == "conflict");
 
@@ -2602,6 +2603,33 @@ void test_filters(const std::string& dir)
         const FilterStack ent2(text_line(4), {{find_filter("symbol-entropy-v1"), {{"max_millibits", "1999"}}}}, res);
         CHECK(!ent2.passes(digits27("abcd")));
     }
+    // Version 2 (IDEAS §2.1, §2.2): against the line's own most, log2 min(base, n), and trailing
+    // padding (two or more SPACEs) not counted.
+    {
+        auto ent = [&](uint32_t L, const char* lo, const char* hi) {
+            return FilterStack(text_line(L), {{find_filter("symbol-entropy-v2"), {{"min_permille", lo}, {"max_permille", hi}}}}, res);
+        };
+        CHECK(ent(4, "500", "500").passes(digits27("abab")));  // 1 bit of log2 4 = 2
+        CHECK(!ent(4, "501", "1000").passes(digits27("abab")));
+        CHECK(ent(4, "1000", "1000").passes(digits27("abcd"))); // the most there is: bounds inclusive
+        CHECK(!ent(4, "1", "1000").passes(digits27("aaaa")));
+        // "ab  " is "ab": 1 bit of log2 2 = 1, so 1000; v1 counts the SPACEs (1.5 bits)
+        CHECK(ent(4, "1000", "1000").passes(digits27("ab  ")));
+        CHECK(!ent(4, "0", "999").passes(digits27("ab  ")));
+        const FilterStack v1(text_line(4), {{find_filter("symbol-entropy-v1"), {{"min_millibits", "1500"}, {"max_millibits", "1500"}}}}, res);
+        CHECK(v1.passes(digits27("ab  ")));
+        CHECK(!ent(4, "0", "1000").passes(digits27("    "))); // padding alone
+        // one SPACE at the end is not padding: "abc " is judged whole (log2 4 of log2 4)
+        CHECK(ent(4, "1000", "1000").passes(digits27("abc ")));
+        // model-information: noise padded out with SPACEs passed v1 (SPACEs are cheap), not v2
+        const auto padded = digits27("qzxvjk                          ");
+        const FilterStack info1(text_line(32), {{find_filter("model-information-v1"), {}}}, res);
+        const FilterStack info2(text_line(32), {{find_filter("model-information-v2"), {}}}, res);
+        CHECK(info1.passes(padded));
+        CHECK(!info2.passes(padded));
+        CHECK(info2.passes(digits27("it was the best of times        ")));
+        CHECK(!info2.passes(digits27("                                ")));
+    }
     {
         const FilterStack n(image, {{find_filter("neighbour-agreement-v1"), {}}}, res);
         std::vector<uint32_t> flat(100, 1), checker(100);
@@ -2645,6 +2673,15 @@ void test_compact(const std::string& dir)
         {
             const FilterLine img{"image", "image/mono/" + std::to_string(L) + "x1", 2, L, nullptr, L, 1, 1};
             const FilterStack st(img, {{find_filter("symbol-entropy-v1"), {{"min_millibits", std::to_string(lo)}, {"max_millibits", std::to_string(hi)}}}}, none);
+            bool ok = true;
+            check_ranker_exhaustive(st, 2, L, ok);
+            CHECK(ok);
+        }
+    for (uint32_t L : {1u, 2u, 5u, 9u, 12u}) // v2: thousandths of 1 bit, the most in black and white
+        for (auto [lo, hi] : {std::pair<int, int>{0, 500}, {0, 900}, {600, 1000}, {950, 1000}})
+        {
+            const FilterLine img{"image", "image/mono/" + std::to_string(L) + "x1", 2, L, nullptr, L, 1, 1};
+            const FilterStack st(img, {{find_filter("symbol-entropy-v2"), {{"min_permille", std::to_string(lo)}, {"max_permille", std::to_string(hi)}}}}, none);
             bool ok = true;
             check_ranker_exhaustive(st, 2, L, ok);
             CHECK(ok);
@@ -2889,7 +2926,7 @@ void test_compact_vectors(const std::string& dir)
         else CHECK(false);
     }
     std::cout << "compact vectors checked: " << n << "\n";
-    CHECK(n == 246); // a truncated or emptied vector file must fail, not pass quietly
+    CHECK(n == 270); // a truncated or emptied vector file must fail, not pass quietly
 }
 
 // The books line: every book of a tiny shape, in both orderings, is a bijection with [0, N).
@@ -4498,7 +4535,7 @@ void test_filter_vectors(const std::string& dir)
         else { CHECK(false); }
     }
     std::cout << "filter vectors checked: " << n << "\n";
-    CHECK(n == 997); // a truncated or emptied vector file must fail, not pass quietly
+    CHECK(n == 1285); // a truncated or emptied vector file must fail, not pass quietly
 }
 
 
