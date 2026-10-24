@@ -4571,6 +4571,14 @@ blocks and boundaries, and LZMA2's three full passes, on the 40 MB tar and the r
   list 3.07 against 12.45). results/bench-make-quick-2026-10-24-rope.md.
 - *Still single:* the rope's search (its time limit makes the result depend on how far it got, so
   threads would need it split into trials taken in order); the weighing; the tailoring search.
+- *On Edward's machine after it (24 October 2026; results/bench-make-quick-2026-10-24.md, 12
+  threads, Windows 10), seconds, before → after:* the word list 3.66 → 2.16 (633,244 → 564,462
+  bytes), the PNG 1.76 → 0.29, Vitruvian Man 2.16 → 0.15, the door 1.07 → 0.06, the film 2.26 →
+  0.19; the rest within a few hundredths; the fifteen 26.9 → 18.9. Left: the rope's search takes
+  its whole second on prose, code, the oracle and the mesh, though on every text measured the line
+  waves found the best within 0.2 s and nothing after them won; ending a text's search after them
+  would bring those to about 0.4 s, once checked on texts where a table's fixed-width wave (C1)
+  might win (digits laid out in lines).
 - *The File Locator's estimate, measured (24 October 2026):* the 52 MB recording took 11 min 30 s
   against 8 min 01 s estimated (30% low); a 20 MB text (the word list seven times over) took 5 min
   36 s against 1 min 35 s (its repetition, 2.9 MB apart, slows LZMA2's matching on the whole, and no
