@@ -11,6 +11,7 @@
 #include "harness.hpp"
 #include "cli/items.hpp"
 #include "cli/dictionaries.hpp" // executable_dir (--metrics-text)
+#include "sieve/rope_wave.hpp" // the rope's search through every wave
 #include "cli/locate.hpp" // read_file_bytes (--cipher-in)
 #include "sieve/llm.hpp"
 #include "cli/timings.hpp"
@@ -116,6 +117,8 @@ const char* kUsage =
     "  --write-settings OUT  write the settings (--settings PATH's, else the defaults) to OUT, and stop\n"
     "  --language CODE     menu language for this run (a file in the lang folder, e.g. en)\n"
     "  --limits-focus LINE the line the setup menu's FIND MY LIMITS grows (default all: every line)\n"
+    "  --search-every-wave the File Locator's rope search tries every wave, even on bytes its first\n"
+    "                      waves make no smaller (a JPEG, a film), up to its time ([locator] search_every_wave)\n"
     "  --menu              with --screenshot: a picture of the setup menu (--press keys go to it)\n"
     "                      (--busy: while the dimensions are still being calculated, if that is caught)\n"
     "  --main-menu         with --screenshot: a picture of the main menu (--press keys go to it)\n"
@@ -681,6 +684,10 @@ int run(const Args& a)
     // The filter memory (the setup menu's FILTER MEMORY): what one count's tables may take.
     if (a.has("filter-memory")) app.filter_memory_mb = std::clamp(int(a.get_positive("filter-memory", 512)), 64, 1048576);
     sieve::set_filter_memory(double(app.filter_memory_mb) * 1024 * 1024);
+    // The rope's search through every wave, even where its first make the bytes no smaller
+    // ([locator] search_every_wave; --search-every-wave for this run).
+    if (a.has("search-every-wave")) app.locator_every_wave = true;
+    sieve::set_rope_search_every_wave(app.locator_every_wave);
     // How a model given as a file keeps its weights ([models] widen_weights; --widen-weights for this run).
     if (a.has("widen-weights")) app.widen_weights = true;
     sieve::llm::set_widen_weights(app.widen_weights);

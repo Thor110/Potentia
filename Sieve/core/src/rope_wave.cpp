@@ -6,6 +6,7 @@
 #include "sieve/weights.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -756,6 +757,9 @@ namespace {
 
 RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds, uint32_t newest);
 
+// Whether a search goes on through every wave where nothing so far helps (off: it stops there).
+std::atomic<bool> g_every_wave{false};
+
 // The searches done in this run, by the file's SHA-256 and the time given: the File Locator weighs
 // a file and then makes its instructions, and both pull it tight; the second is the first's answer.
 std::mutex g_cache_mx;
@@ -763,11 +767,14 @@ std::map<std::string, RopeSearch> g_cache;
 
 } // namespace
 
+void set_rope_search_every_wave(bool every) { g_every_wave = every; }
+bool rope_search_every_wave() { return g_every_wave.load(std::memory_order_relaxed); }
+
 RopeSearch rope_search(std::span<const uint8_t> file, double seconds, uint32_t newest)
 {
     if (newest < 1 || newest > 5) bad("the newest version searched is 1 to 5");
     char t[48];
-    std::snprintf(t, sizeof t, "|%.6f|%u", seconds, newest);
+    std::snprintf(t, sizeof t, "|%.6f|%u|%d", seconds, newest, int(rope_search_every_wave()));
     Sha256 h;
     h.update(file);
     const std::string key = Sha256::hex(h.finish()) + t;
@@ -800,6 +807,8 @@ RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds, u
         {
             r.estimate = e;
             r.best = p;
+            r.best_at = std::chrono::duration<double>(steady::now() - start).count();
+            r.best_trial = r.tried;
             char t[160];
             std::snprintf(t, sizeof t, "the rope's search: %llu ways tried, best so far %.0f bytes of %llu (%s)", (unsigned long long)r.tried, e,
                           (unsigned long long)file.size(), p.text().c_str());
@@ -811,6 +820,51 @@ RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds, u
     // so that a short search still finds it.
     for (const uint32_t bits : {8u, 16u, 32u})
         if (file.size() / (bits / 8) >= 2 && !out_of_time()) try_one(RopeParams{bits, 1, 1, 2, false});
+    // A text's own way: columns counted from each line's start (rope-wave-v3 to v5). For a file that
+    // is text (at least 95% of its bytes printable, white space or UTF-8, in lines of at most 1,024)
+    // it is tried early (24 October
+    // 2026: on every text measured it was the best, and as the last tried a short search never reached
+    // it; IDEAS §19.99); for any other, last, as before (on a mostly binary file each of these waves is
+    // long, and one under way is not cut short by the time).
+    uint64_t longest = 0, text_bytes = 0;
+    bool lines = false;
+    {
+        uint64_t c = 0;
+        for (const uint8_t b : file)
+        {
+            text_bytes += (b >= 32 && b != 127) || b == 9 || b == 10 || b == 13;
+            if (b == 10)
+            {
+                lines = true;
+                longest = std::max(longest, c + 1);
+                c = 0;
+            }
+            else ++c;
+        }
+        longest = std::max(longest, c + 1);
+    }
+    auto try_lines = [&] {
+        // rope-wave-v3: columns counted from each line's start, for a file of lines (text, tables);
+        // as many columns as its longest line, up to 4,096.
+        if (newest >= 3 && !out_of_time())
+        {
+            if (lines && longest >= 2)
+            {
+                const uint32_t w = uint32_t(std::min<uint64_t>(longest, 4096));
+                try_one(RopeParams{8, w, 1, 0, false, 2});
+                if (newest >= 4 && !out_of_time()) try_one(RopeParams{8, w, 1, 0, false, 2, true}); // rope-wave-v4
+                if (newest >= 5 && !out_of_time()) try_one(RopeParams{8, w, 1, 0, false, 2, true, true}); // rope-wave-v5
+            }
+        }
+    };
+    // (And lines of at most 1,024 bytes: the texts measured had 59 to 452; a tar of texts and
+    // pictures, at 4,096, took 17 s for one of these waves.)
+    const bool textlike = !file.empty() && double(text_bytes) >= 0.95 * double(file.size()) && longest <= 1024;
+    if (textlike) try_lines();
+    // Bytes that nothing so far makes even 2% smaller (a JPEG, a PNG, a film: already packed) are
+    // not searched further: no wave has ever helped them, and the search would take its whole time
+    // for nothing. rope_search_every_wave(true) searches on regardless.
+    if (!g_every_wave.load(std::memory_order_relaxed) && r.estimate >= 0.98 * double(file.size())) goto keep;
     for (const uint32_t bits : {8u, 16u, 32u})
     {
         const uint32_t vb = bits / 8;
@@ -910,31 +964,7 @@ RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds, u
                 if (newest >= 4 && !out_of_time()) try_one(RopeParams{bits, w, 1, phases, false, 1, true});
             }
     }
-    // rope-wave-v3: columns counted from each line's start, for a file of lines (text, tables);
-    // as many columns as its longest line, up to 4,096.
-    if (newest >= 3 && !out_of_time())
-    {
-        uint64_t longest = 0, c = 0;
-        bool lines = false;
-        for (const uint8_t b : file)
-        {
-            if (b == 10)
-            {
-                lines = true;
-                longest = std::max(longest, c + 1);
-                c = 0;
-            }
-            else ++c;
-        }
-        longest = std::max(longest, c + 1);
-        if (lines && longest >= 2)
-        {
-            const uint32_t w = uint32_t(std::min<uint64_t>(longest, 4096));
-            try_one(RopeParams{8, w, 1, 0, false, 2});
-            if (newest >= 4 && !out_of_time()) try_one(RopeParams{8, w, 1, 0, false, 2, true}); // rope-wave-v4
-            if (newest >= 5 && !out_of_time()) try_one(RopeParams{8, w, 1, 0, false, 2, true, true}); // rope-wave-v5
-        }
-    }
+    if (!textlike) try_lines();
 keep:
     if (!out_of_time())
     {
@@ -943,6 +973,7 @@ keep:
         if (k.columns != 2) try_one(k); // columns by line keep nothing
     }
     else r.timed_out = true;
+    r.took = std::chrono::duration<double>(steady::now() - start).count();
     return r;
 }
 

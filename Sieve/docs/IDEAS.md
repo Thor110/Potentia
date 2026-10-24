@@ -4541,12 +4541,45 @@ blocks and boundaries, and LZMA2's three full passes, on the 40 MB tar and the r
   same across machines and systems as well as thread counts. The large files two to three times
   faster than here (the word list 3.66 against 6.74, the program 2.92 against 5.66); the rope's
   search, a second a file (two for a file cut into pieces), is now the floor on most files.
-- *Next to measure there:* when the rope's search finds its best (10 s found nothing smaller than
-  1 s on any file), so that it can stop once it stops finding better, rather than at its time.
+- *When the rope's search finds its best (measured 24 October 2026; Edward: "make sure that people
+  can search longer if they choose to", and "apply this globally / dynamically in a way that will
+  apply to all files"):* `sieve rope FILE --seconds 0` now says which wave was the best and when it
+  was found. With no limit, every file of the quick set:
+  - *text* (prose, code, the oracle, the word list, the mesh): the best was the last wave of all
+    (the 247th of 247 for prose), always the line wave `C2 G1 A1` (rope-wave-v5), which the order
+    tried last, so a short search never reached it; on the word list it codes 564,366 bytes, found
+    after 15.5 s, against the 633,244 a 1-second search made (LZMA2's). (So "10 s found nothing" was
+    the search not reaching it.)
+  - *bytes already packed* (the JPEGs, the PNG, the MP4, the table, the short text): the best was
+    the first wave, the bytes' own counts; the 160 to 230 waves after it found nothing.
+  - *the rest* (the WAV, the MIDI, the program, the tar) found theirs part way.
+- *So, for every file, in the search itself (`core/src/rope_wave.cpp`, so every caller has it: the
+  File Locator, `sieve locate`, `site`, `map`):*
+  - a text (95% of its bytes printable, white space or UTF-8, in lines of at most 1,024 bytes) has
+    its line waves tried straight after the first quick waves; any other file, last, as before (a
+    tar of texts and pictures counts as text but has lines of 4,096, where one of these waves took
+    17 s and is not cut short by the time);
+  - bytes that the first waves make no smaller by 2% are searched no further: no later wave has
+    helped such a file;
+  - `--search-every-wave` (every command; the File Locator's `[locator] search_every_wave`, and the
+    hallway's option) searches every wave up to the time given, as before; the time itself is the
+    user's to lengthen as ever.
+  With no limit and every wave, the best is the same as before on every file (only the order
+  changed). At 1 s a file, against the build before this: every file the same size or smaller (the
+  word list 633,244 → 564,462, 10.86%), and the quick set made in 30.5 s against 67.0 s (the JPEGs
+  0.15 to 0.31 s against 1.2 to 2.3, the PNG 0.56 against 3.60, the film 0.42 against 2.73, the word
+  list 3.07 against 12.45). results/bench-make-quick-2026-10-24-rope.md.
 - *Still single:* the rope's search (its time limit makes the result depend on how far it got, so
   threads would need it split into trials taken in order); the weighing; the tailoring search.
-- *Next:* the File Locator's estimate measured against the time taken on this set (it was 15 to 20%
-  low), and the boundaries made cheaper still (most of the recording's time).
+- *The File Locator's estimate, measured (24 October 2026):* the 52 MB recording took 11 min 30 s
+  against 8 min 01 s estimated (30% low); a 20 MB text (the word list seven times over) took 5 min
+  36 s against 1 min 35 s (its repetition, 2.9 MB apart, slows LZMA2's matching on the whole, and no
+  sample of 1 or 2 MiB holds it). Packing the samples with the whole's dictionary was tried and
+  changed nothing measurable (1 min 32 s → 1 min 35 s), so it was left out. The locator does more
+  than `sieve locate` on the whole (zip's and 7z's sizes, the weighing: the recording takes about 6
+  minutes there, 11.5 here); which part the samples undercount is the next thing to measure, phase
+  by phase (`--timings` with the hallway's `--locate`), before the estimate is changed.
+- *Next:* that measurement, and the boundaries made cheaper still (most of the recording's time).
 
 **19.100 "Create .sieve" in the right-click menu (Edward, 24 October 2026; noted, not to be built
 yet).** "I was thinking about adding create .sieve to the context menu, but that brings with it a

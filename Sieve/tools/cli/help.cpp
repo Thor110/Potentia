@@ -380,6 +380,8 @@ const std::vector<Page>& pages()
          "best matches itself a line later. The code is read back and checked; LZMA2 is shown beside it.",
          {{"--params P", "Use these parameters rather than searching."},
           {"--seconds S", "How long the search may take (0, the default: no limit); the best found by then."},
+          {"--search-every-wave", "Search every wave, even on bytes the first waves make no smaller (already packed),\n"
+                                  "where the search stops otherwise."},
           {"--out CODE", "Write the code here."},
           {"--decode CODE", "The file back from its code, with --params, --size and --out."},
           {"--size N", "With --decode: the file's size in bytes."}},
@@ -1011,6 +1013,10 @@ const std::vector<Page>& pages()
           {"--weigh", "Weigh every file: its best way to be named against its own address."},
           {"--tailored", "With --weigh: tailor each line's filters to the files that are its items."},
           {"--out-filters PATH", "With --tailored: write the settings file with the filters found."},
+          {"--search-every-wave", "The rope's search tries every wave, up to --search-per-file, even on bytes its\n"
+                                  "first waves make no smaller (a JPEG, a PNG, a film: already packed), where it\n"
+                                  "stops otherwise: no later wave has helped such a file. Any command that makes\n"
+                                  "instructions takes it (locate, site, map, rope)."},
           {"SIEVE_PACK_THREADS=N", "(Not an option: in the environment.) The packer uses every core (cutting into pieces, LZMA2's passes), and the\n"
                                                "instructions are the same at any count; the environment variable\n"
                                                "SIEVE_PACK_THREADS sets how many (1: one)."},

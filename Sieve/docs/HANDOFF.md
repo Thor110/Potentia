@@ -3891,6 +3891,12 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   boundary steps), LZMA2's trial and passes. The same instructions at any count (shown on every
   file of the quick set; the CI compares 1 and 4 threads on Vitruvian Man). `SIEVE_PACK_THREADS`.
   Figures in IDEAS §19.99. Not yet: the File Locator's estimate checked against this.
+- **The rope's search, ordered by the file (24 October 2026; IDEAS §19.99):** text has its line
+  waves early; bytes the first waves cannot shrink by 2% are searched no further;
+  `--search-every-wave` / `[locator] search_every_wave` searches every wave. `RopeSearch` records
+  `best_at`, `best_trial` and `took`; `sieve rope` prints them. Quick set at 1 s: 67.0 → 30.5 s, the
+  word list 10.86% smaller, nothing larger. The estimate measured (30% low on the recording); not
+  changed yet.
 - **`tools/bench/bench_make.bat`** (Edward: his `python` and `py` fail at a prompt but work from
   `make_release.bat`): finds Python as that does, passes the Release `sieve.exe` (or the `.exe`
   named first), and keeps the window open.

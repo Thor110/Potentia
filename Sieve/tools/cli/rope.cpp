@@ -83,6 +83,8 @@ int cmd_rope(const Args& a)
         std::snprintf(b, sizeof b, "%.2f s", took);
         std::cout << "search    " << s.tried << " waves tried in " << b << (s.timed_out ? ", stopped at its time: the best found by then" : "")
                   << "\n";
+        std::snprintf(b, sizeof b, "%.3f s", s.best_at);
+        std::cout << "best at   wave " << s.best_trial << " of " << s.tried << ", " << b << " into the search\n";
         p = s.best;
     }
     const std::vector<uint8_t> code = rope_code(file, p);

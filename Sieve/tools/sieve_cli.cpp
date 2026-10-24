@@ -3093,6 +3093,7 @@ int main(int argc, char** argv)
         if (a.help && print_help(a.command == "sieve" ? "sift" : a.command)) return 0;
         // --timings, on any command: how long each phase took, to standard error at exit.
         if (a.has("timings")) timings::enable();
+        if (a.has("search-every-wave")) set_rope_search_every_wave(true); // the rope's search through every wave
         // --filter-memory MB, on any command: what one count's tables may take (the setup menu's
         // FILTER MEMORY; 512 MB unless given).
         if (a.has("filter-memory")) set_filter_memory(double(a.get_positive("filter-memory", 512)) * 1024 * 1024);

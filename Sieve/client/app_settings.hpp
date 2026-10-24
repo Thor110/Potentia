@@ -120,6 +120,7 @@ struct AppSettings
     // files counted. Kept so that the first search of the next run has it too.
     double locator_search = 0;
     bool locator_search_run = false;
+    bool locator_every_wave = false; // the rope's search through every wave, even on packed bytes
     // "Optimise Archive Formats" ([locator] optimise_archives): off unless ticked.
     bool locator_archives = false;
     // The setup menu's settings ([setup]): every line's shape and the GLOBAL settings, as they

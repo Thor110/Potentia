@@ -90,7 +90,16 @@ struct RopeSearch
     double estimate = 0; // bytes
     size_t tried = 0;
     bool timed_out = false;
+    // When the best was found (seconds from the start, and which trial, counting from 1), and how
+    // long the search took: for measuring how soon a search stops finding better (IDEAS §19.99).
+    double best_at = 0, took = 0;
+    size_t best_trial = 0;
 };
 RopeSearch rope_search(std::span<const uint8_t> file, double seconds = 0, uint32_t newest = 5);
+// The search stops early on bytes that its first waves make no smaller (already packed: a JPEG, a
+// film), as no later wave has helped such a file; true searches every wave regardless, until its
+// time (--search-every-wave, the File Locator's [locator] search_every_wave). For the whole run.
+void set_rope_search_every_wave(bool every);
+bool rope_search_every_wave();
 
 } // namespace sieve

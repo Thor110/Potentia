@@ -1,0 +1,17 @@
+# sieve bench-make, 2026-10-24, Intel(R) Xeon(R) Processor @ 2.80GHz, 4 threads, Linux 6.18.44-fc-v153, sieve
+search	name	kind	bytes	sieve_bytes	version	seconds	mb_per_s	pack.rope.search	pack.pieces.rope	pack.pieces.cut	pack.rope.code	pack.lzma2.quick	pack.lzma2.settings-trial	pack.lzma2.first-pass	pack.lzma2.tuned-pass	pack.lzma2.7zip-pass	pack.archives.recipe
+1.000	prose.md	prose	343246	111476	sieve-manifest-v16	1.722	0.199	1.026	0.000	0.022	0.008	0.207	0.332	0.127	0.288	0.116	0.000
+1.000	code.cpp	code	161519	34453	sieve-manifest-v16	1.324	0.122	1.055	0.000	0.016	0.005	0.108	0.130	0.059	0.087	0.046	0.000
+1.000	oracle.py	code	399245	95144	sieve-manifest-v16	1.811	0.220	1.002	0.000	0.029	0.014	0.262	0.367	0.167	0.370	0.132	0.000
+1.000	table.csv	table	17831	7739	sieve-manifest-v16	1.066	0.017	0.862	0.084	0.086	0.001	0.343	0.016	0.005	0.008	0.003	0.000
+1.000	words.txt	word list	2921105	633244	sieve-manifest-v16	6.741	0.433	1.061	0.000	0.153	0.120	2.047	1.009	1.819	3.485	1.427	0.000
+1.000	rope.txt	prose	11440	4609	sieve-manifest-v16	0.436	0.026	0.403	0.000	0.000	0.001	0.004	0.019	0.004	0.006	0.004	0.000
+1.000	screenshot.png	picture (PNG)	92628	80512	sieve-manifest-v16	2.674	0.035	1.031	1.017	0.424	0.004	1.700	0.057	0.021	0.049	0.012	0.000
+1.000	vitruvian.jpg	picture (JPEG)	207500	206966	sieve-manifest-v16	2.237	0.093	1.005	1.020	0.036	0.005	0.181	0.003	0.000	0.001	0.001	0.000
+1.000	door.jpg	picture (JPEG)	69298	63866	sieve-manifest-v16	1.104	0.063	1.001	0.000	0.007	0.002	0.040	0.036	0.013	0.022	0.008	0.000
+1.000	spitfire.obj	mesh	469717	69054	sieve-manifest-v16	2.005	0.234	1.005	0.000	0.037	0.016	0.323	0.517	0.271	0.360	0.189	0.000
+1.000	hymn.mid	melody (MIDI)	1377	236	sieve-manifest-v16	0.021	0.067	0.008	0.000	0.000	0.001	0.001	0.007	0.001	0.001	0.001	0.000
+1.000	film.mp4	video (MP4)	234633	233874	sieve-manifest-v16	2.439	0.096	1.020	1.063	0.047	0.006	0.232	0.143	0.057	0.138	0.043	0.000
+1.000	sound.wav	sound (WAV)	88244	3742	sieve-manifest-v16	2.230	0.040	1.712	0.186	0.281	0.003	1.074	0.013	0.006	0.010	0.014	0.000
+1.000	program.exe	program (Windows)	5337607	4275368	sieve-manifest-v16	5.663	0.943	0.000	0.000	0.000	0.000	0.000	1.094	2.686	4.622	1.972	0.000
+1.000	folder.tar	tar	5038080	1539811	sieve-manifest-v16	10.626	0.474	1.049	0.000	0.267	0.253	3.601	1.291	2.949	5.779	2.415	0.000

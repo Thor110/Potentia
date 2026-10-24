@@ -218,6 +218,7 @@ AppSettings AppSettings::load(const fs::path& path)
             }
             else if (key == "search_for") s.locator_search_run = value == "run";
             else if (key == "optimise_archives") s.locator_archives = value == "1";
+            else if (key == "search_every_wave") s.locator_every_wave = value == "1";
         }
         else if (section == "setup") s.setup.set_entry(key, value); // a value it cannot have is left out
         else if (section == "paths")
@@ -278,6 +279,7 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"locator", "search_seconds", seconds_text(locator_search), "the File Locator's search for shorter addresses: seconds, 0 for no limit"},
         {"locator", "search_for", locator_search_run ? "run" : "file", "file: those seconds for each file; run: for the whole run, shared among its files"},
         {"locator", "optimise_archives", locator_archives ? "1" : "0", "1: Optimise Archive Formats ticked (an archive remade exactly, else carried as its contents, where smaller); 0: off"},
+        {"locator", "search_every_wave", locator_every_wave ? "1" : "0", "1: the rope's search tries every wave, even on bytes its first waves make no smaller (a JPEG, a film); 0: it stops there"},
     };
     for (const Settings::Entry& e : setup.entries()) r.push_back({"setup", e.key, e.value, e.note});
     r.push_back({"paths", "ffmpeg", ffmpeg, "the ffmpeg program; empty: SIEVE_FFMPEG, then one beside Sieve, then the PATH"});
