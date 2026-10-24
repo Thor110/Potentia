@@ -4511,3 +4511,20 @@ same time. Memory is the limit to watch: each LZMA2 pass at preset 9 takes its d
 several times over (64 MiB at the most, about ten times that to encode), so a thread count from the
 cores and from the memory free, as the menu's filter memory is given. First to measure: the pieces'
 blocks and boundaries, and LZMA2's three full passes, on the 40 MB tar and the release folder.
+
+**19.100 "Create .sieve" in the right-click menu (Edward, 24 October 2026; noted, not to be built
+yet).** "I was thinking about adding create .sieve to the context menu, but that brings with it a
+barrel of issues, such as needing the full file locator and the potential amount of time it might
+take to sieve a file." Extracting is quick and its time is known (decoding is measured on every
+install); making is neither: the rope's search, LZMA2's passes and cutting into pieces take from
+seconds to many minutes (a 40 MB tar: §19.97), and the File Locator is what shows that time, its
+estimate, the best so far, and Stop and Force stop. So it waits until making is understood and
+faster:
+- *Measured first:* how long making takes, per stage and per kind of file, on a fixed set of files
+  (the varied set, the 40 MB tar, the release folder, Edward's JPEGs), and how far the estimate is
+  from the time taken (15 to 20% low when last measured: §19.97).
+- *Made faster:* threads (§19.99), with results that do not depend on how many.
+- *Then the entry itself:* likely a small window of the File Locator's (progress, estimate, best
+  so far, Stop) rather than the command line, with a time budget chosen beforehand, as the
+  locator's search time is; one file or a selection, made beside them as `NAME.sieve`.
+

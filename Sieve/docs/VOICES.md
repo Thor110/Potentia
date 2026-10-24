@@ -102,6 +102,7 @@ enumerated and stored later. Nothing is guaranteed (IDEAS §19.77).
 - **Edward** (23 October 2026, quote): I feel like it would be best within sieve.exe and then Sieves README.md can just point to the help command.
 - **Edward** (24 October 2026, quote): We should create some scripts to add this to the context menu
 - **Edward** (24 October 2026, quote): the self extracting installers should carry the full capabilities of sieve.exe
+- **Edward** (24 October 2026, quote; IDEAS §19.100): I was thinking about adding create .sieve to the context menu, but that brings with it a barrel of issues, such as needing the full file locator and the potential amount of time it might take to sieve a file.
 - **Edward** (22 October 2026, quote; IDEAS §19.97): Might we also be able to change the stop button over to a force stop to take the previous result rather than finish the current pass after pressing stop once?
 - **Edward** (22 October 2026, quote; IDEAS §19.97): We should add a line graph display which showcases the best found results along the way, instead of storing each value we can just draw the line graph as we go.
 - **Edward** (22 October 2026, quote; IDEAS §19.98): I feel like through multi threading and parallelisation as well as possibly distributed processing in the future it could still be worth keeping an eye out for those reductions, presuming the current system wouldn't already find them.

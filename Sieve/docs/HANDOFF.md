@@ -3881,6 +3881,28 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   open, saying why, with **Back** to the first screen (Replace, another folder). Shown: the first
   extract closes by itself, a second into the same folder stays open.
 
+### The plan from here (24 October 2026)
+Edward asked for the next most important steps, from the documents. In order:
+1. **Making `.sieve` files, measured and made faster** (IDEAS §19.97, §19.99, §19.100). Everything
+   that makes instructions (the File Locator, `sieve locate`, `sieve site`, a future Create .sieve)
+   waits on how long it takes. A fixed benchmark set and a table of seconds per stage and per kind
+   of file; the estimate's bias (15 to 20% low) corrected from it; then threads for the pieces'
+   blocks and boundaries, LZMA2's full passes and the rope's ways, the result the same at any
+   thread count, the count from the cores and the memory free.
+2. **A release** with what has been built since 0.13.75 was set (the full installer, the
+   right-click menu, `sieve site`, the extension, the newest installers by default): `context/` and
+   `web/` in the release, `sieve-install`'s size measured on Windows, and the release notes.
+3. **The long-open correctness defects** (IDEAS §2.1 to §2.3): entropy against each alphabet's own
+   baseline, padding not counted as content, short all-caps tokens kept out of the cased
+   dictionary. Each a new filter version, the old kept.
+4. **The web, phase 2** (web/README.md, Next): the extension reading `site.sieve`, so pages that
+   link to one another are checked against one hash; `sieve site check` against a server (the
+   crawler); a `.sieve` of many files shown as a listing; links from the server's root.
+5. **The README's screenshots** (Edward's, with the old pictures moved out).
+6. **Then, from the open list below:** the listing's entries in binary (§19.90), the rope's last
+   gap on `pi6.txt` (§19.87), archives not yet optimised (§19.88), larger models (§19.86), the
+   Encryption Engine's stage 2 (§19.76), and the WebAssembly decoder (§19.92).
+
 ### For the next session (20 October 2026)
 - **The website gallery (IDEAS §19.84) waits.** Edward moved every picture out of `Images/Sieve`'s
   top level on purpose and will sort them later, so the Build or Buy preview has nothing to show
