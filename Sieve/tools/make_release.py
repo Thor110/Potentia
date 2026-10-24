@@ -7,7 +7,9 @@ order matters and is easy to get wrong by hand:
   1. (Nothing: the source's own step is 6, now that the published map holds it.)
   2. The build (Release), with potentia-license.txt beside the programs.
   3. The release folder: only what the program uses (the programs, their data folders, an empty
-     maps folder, the licences), staged by name, never the build folder's own clutter. The hallway
+     maps folder, the licences), staged by name, never the build folder's own clutter, and from
+     the source the right-click menu (context\) and the web extension with its host's scripts
+     (web\), whose scripts find the programs in tools\. The hallway
      is the one program at the top; sieve and sieve-install go in tools\, with a note saying what
      they are, so nobody starts the wrong program first. (A build folder keeps them together; the
      programs look in both places.) No map is
@@ -95,6 +97,28 @@ Both find the installation's data folders (dictionaries, models) in the folder a
 """
 FOLDERS = ["dictionaries", "models", "lang", "prompts", "fonts", "meshes", "vault", "filters", "training", "third_party_licenses"]
 FILES = ["potentia-license.txt"]
+# From the source folder, beside the programs (24 October 2026): the right-click menu for .sieve
+# files and the web extension with its host's scripts. Their scripts find tools\sieve-install and
+# tools\sieve in the folder above them, so nothing needs a path given. The test site stays in the
+# repository (it is built from the repository's pictures, with Python).
+EXTRAS = ["context/README.md", "context/install_context.bat", "context/uninstall_context.bat",
+          "web/extension", "web/host/install_host.bat", "web/host/uninstall_host.bat", "web/host/install_host.sh"]
+WEB_NOTE = """Sieve on the web: the extension
+
+A Chrome extension that shows the .sieve files a page links to, each checked against
+the hash its link states (integrity="sha256-..."), and decoded by Sieve on this computer.
+
+Setting it up, once, for your user only:
+
+  1. Register Sieve as the extension's host: run host\\install_host.bat (it finds
+     tools\\sieve{exe} in the installation). host\\uninstall_host.bat undoes it.
+     On Linux or a Mac: host/install_host.sh.
+  2. Load the extension: open chrome://extensions, turn on Developer mode,
+     choose Load unpacked, and pick the extension folder beside this file.
+
+Making a site's pictures and pages into .sieve files: tools\\sieve{exe} site build (sieve help
+site). The full guide, and the test site, are in the repository: Sieve/web/README.md.
+"""
 
 
 def fail(msg):
@@ -320,6 +344,17 @@ def main():
         if (build / d).is_dir():
             shutil.copytree(build / d, stage / d)
     (stage / "maps").mkdir()  # the node graph's maps folder, empty: never a person's own maps
+    for rel in EXTRAS:
+        src, dst = ROOT / rel, stage / rel
+        if not src.exists():
+            fail(f"{rel} is not in {ROOT}")
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if src.is_dir():
+            shutil.copytree(src, dst, ignore=shutil.ignore_patterns("__pycache__"))
+        else:
+            shutil.copy2(src, dst)
+    web_note = WEB_NOTE.format(exe=EXE)
+    (stage / "web" / "README.txt").write_bytes((web_note.replace("\n", "\r\n") if os.name == "nt" else web_note).encode("utf-8"))
     for f in FILES:
         if not (build / f).exists():
             fail(f"{f} is not in {build}")
@@ -471,6 +506,10 @@ the hard filters that count together), counted as the setup menu counts them.
 ## Getting started
 
 Start `hallway{EXE}` in the installed folder. `tools\\` holds the command-line tool (`sieve{EXE}`: open a command prompt there and run `sieve help`) and the installer the hallway uses to make installer programs. Esc opens the pause menu (the File Locator, the node graph, the navigator); the full guide is the README in the repository.
+
+Two things to set up if you want them, each for your user only and undone by its uninstall script:
+- **The right-click menu:** `context\\install_context.bat` adds a Sieve submenu to every `.sieve` file, with Extract here and Extract to a folder of its name (`context\\README.md`).
+- **The web extension:** `web\\host\\install_host.bat`, then load `web\\extension` in `chrome://extensions` (Developer mode, Load unpacked): pages' `.sieve` pictures and links, checked against the hash each link states (`web\\README.txt`).
 
 To check a download, compare its SHA-256 with the table above: in PowerShell, `Get-FileHash {program.name}`; elsewhere, `sha256sum`.
 

@@ -4,10 +4,12 @@ rem a Sieve submenu with "Extract here" and "Extract to NAME\", as 7-Zip's are. 
 rem sieve-install, which shows what it will install and where, and its progress while it works.
 rem Nothing else on the machine is changed; uninstall_context.bat takes it away again.
 rem
-rem   install_context.bat                              sieve-install from the Release build
-rem   install_context.bat C:\Sieve\tools\sieve-install.exe   that one (an installation's tools\)
+rem   install_context.bat                              sieve-install from this installation's
+rem                                                    tools\, else from the Release build
+rem   install_context.bat C:\Sieve\tools\sieve-install.exe   that one
 setlocal
 set "INSTALLER=%~1"
+if "%INSTALLER%"=="" if exist "%~dp0..\tools\sieve-install.exe" set "INSTALLER=%~dp0..\tools\sieve-install.exe"
 if "%INSTALLER%"=="" set "INSTALLER=%~dp0..\out\build\x64-Release\sieve-install.exe"
 for %%F in ("%INSTALLER%") do set "INSTALLER=%%~fF"
 if not exist "%INSTALLER%" goto missing

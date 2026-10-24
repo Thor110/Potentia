@@ -33,8 +33,9 @@ stated by the link that names the file is what makes it the one the page meant.
    ```bat
    web\host\install_host.bat
    ```
-   - On its own, it finds `out\build\x64-Release\sieve.exe`. Give another path if yours is
-     elsewhere: `web\host\install_host.bat C:\Sieve\tools\sieve.exe`.
+   - On its own, it finds an installation's `tools\sieve.exe` (a release carries `web\extension` and
+     `web\host` beside the programs), else `out\build\x64-Release\sieve.exe`. Give another path if
+     yours is elsewhere: `web\host\install_host.bat C:\Sieve\tools\sieve.exe`.
    - It writes `%LOCALAPPDATA%\Sieve\com.potentia.sieve.json` and points Chrome and Edge at it
      (registry: `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.potentia.sieve`, and Edge's).
    - `web\host\uninstall_host.bat` undoes all of it.

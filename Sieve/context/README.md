@@ -15,10 +15,13 @@ again; Cancel part way removes what was written.
 ## Setting it up
 
 ```bat
-context\install_context.bat                                  rem sieve-install from out\build\x64-Release
-context\install_context.bat C:\Sieve\tools\sieve-install.exe rem or that one (an installation's)
+context\install_context.bat                                  rem sieve-install from tools\, else out\build\x64-Release
+context\install_context.bat C:\Sieve\tools\sieve-install.exe rem or that one
 context\uninstall_context.bat                                rem takes it away again
 ```
+
+A release carries this folder beside the programs. There, `install_context.bat` finds
+`tools\sieve-install.exe` in the installation by itself; in the repository, the Release build's.
 
 It is for your user only (`HKCU\Software\Classes\SystemFileAssociations\.sieve\shell\Sieve`);
 nothing else on the machine is changed. On Windows 11 the entry is under **Show more options**

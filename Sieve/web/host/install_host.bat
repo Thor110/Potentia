@@ -3,10 +3,12 @@ rem Registers Sieve as the web plugin's host (IDEAS 19.92, web\README.md), for t
 rem writes com.potentia.sieve.json, naming sieve.exe and the extension allowed to start it, and
 rem points Chrome and Edge at it. Nothing else on the machine is changed.
 rem
-rem   install_host.bat                      sieve.exe from the Release build (out\build\x64-Release)
-rem   install_host.bat C:\path\to\sieve.exe  that sieve.exe (an installation's tools\sieve.exe)
+rem   install_host.bat                      sieve.exe from this installation's tools\, else
+rem                                         from the Release build (out\build\x64-Release)
+rem   install_host.bat C:\path\to\sieve.exe  that sieve.exe
 setlocal
 set "SIEVE=%~1"
+if "%SIEVE%"=="" if exist "%~dp0..\..\tools\sieve.exe" set "SIEVE=%~dp0..\..\tools\sieve.exe"
 if "%SIEVE%"=="" set "SIEVE=%~dp0..\..\out\build\x64-Release\sieve.exe"
 for %%F in ("%SIEVE%") do set "SIEVE=%%~fF"
 if not exist "%SIEVE%" (

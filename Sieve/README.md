@@ -88,13 +88,18 @@ The build is warning-free at `/W4` and `-Wall -Wextra -Wpedantic`, and it copies
 ```
 Sieve\
   hallway.exe                 the program: start this
-  dictionaries\ models\ lang\ fonts\ meshes\ maps\
+  dictionaries\ models\ lang\ prompts\ fonts\ meshes\ maps\ vault\ filters\ training\
   third_party_licenses\  potentia-license.txt
   tools\
     sieve.exe                 the command-line tool (sieve help)
     sieve-install.exe         the installer, which the File Locator copies to make installer programs
     README.txt                what these two are
+  context\                    the right-click menu for .sieve files: install_context.bat (context/README.md)
+  web\                        the browser extension (extension\) and its host's scripts (host\); README.txt
 ```
+
+The scripts in `context\` and `web\host\` find the programs in `tools\`, so in an installed copy
+they need no path given; in the repository they find the Release build.
 
 **On Windows `hallway.exe` is a windowed program:** started from Explorer, it opens no console window behind it. Started from a command prompt, it writes to that prompt (which does not wait for it, so the output comes after the prompt returns); with its output redirected or piped, it writes there, as scripted runs need. After any file or folder dialog closes, the hallway's window is brought back to the front.
 

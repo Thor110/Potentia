@@ -3,11 +3,14 @@
 # writes com.potentia.sieve.json, naming sieve and the extension allowed to start it, where Chrome,
 # Chromium and Edge look for it. Nothing else is changed.
 #
-#   web/host/install_host.sh                 sieve from build/
+#   web/host/install_host.sh                 sieve from this installation's tools/, else build/
 #   web/host/install_host.sh /path/to/sieve  that sieve
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
-sieve=${1:-$here/../../build/sieve}
+if [ -n "$1" ]; then sieve=$1
+elif [ -x "$here/../../tools/sieve" ]; then sieve=$here/../../tools/sieve
+else sieve=$here/../../build/sieve
+fi
 [ -x "$sieve" ] || { echo "sieve is not at $sieve: give its path"; exit 1; }
 sieve=$(cd "$(dirname "$sieve")" && pwd)/$(basename "$sieve")
 case "$(uname)" in

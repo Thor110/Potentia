@@ -3916,6 +3916,21 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   `make_release.bat`): finds Python as that does, passes the Release `sieve.exe` (or the `.exe`
   named first), and keeps the window open.
 
+### Step 2: the release carries the web extension and the right-click menu (24 October 2026)
+- **`tools/make_release.py`** (`EXTRAS`, `WEB_NOTE`): the release folder gets `context\` (its README
+  and the two scripts) and `web\extension`, `web\host\install_host.bat`, `uninstall_host.bat`,
+  `install_host.sh`, and a `web\README.txt` written for an installation (the repository's
+  web/README.md is about the test site and the build). The test site stays in the repository. The
+  release notes' Getting started names both.
+- **The scripts find the installation's programs:** `install_context.bat` tries `..\tools\sieve-install.exe`
+  first, `install_host.bat` and `install_host.sh` `..\..\tools\sieve(.exe)`; then the build, as before.
+- **"This installation"** (`kInstalled`, client/node_graph.cpp) maps `context` and `web`, and
+  `prompts`, which releases carried but it had left out.
+- Measured on Linux (`make_release.py --skip-build`): every check passed; the extras add 44,895 bytes
+  to sieve.sieve (8,164,254 → 8,209,149) for 64,098 bytes of files; `install_host.sh` from inside the
+  release registered its `tools/sieve`, and `check_host.py` decoded through it. Not yet: the same on
+  Windows (Edward), and an actual release (Edward: once the plan is done).
+
 ### The plan from here (24 October 2026)
 Edward asked for the next most important steps, from the documents. In order:
 1. **Making `.sieve` files, measured and made faster** (IDEAS §19.97, §19.99, §19.100). Everything

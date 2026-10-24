@@ -59,10 +59,12 @@ fs::path program_dir()
 
 // What "This installation" maps: the programs and the folders the build puts beside them, as far
 // as they are there, and nothing else (a build folder holds much more than the program uses). In
-// a release, sieve and sieve-install are in tools\; in a build folder, beside the hallway.
-const char* const kInstalled[] = {"hallway",        "hallway.exe", "sieve",  "sieve.exe", "sieve-install", "sieve-install.exe",
-                                  "tools",          "dictionaries", "models", "lang",     "fonts",         "meshes",
-                                  "maps",           "vault",        "filters",      "training",     "third_party_licenses", "potentia-license.txt"};
+// a release, sieve and sieve-install are in tools\; in a build folder, beside the hallway. The same
+// list as tools/make_release.py's (FOLDERS, and context and web, which a release has beside them).
+const char* const kInstalled[] = {"hallway",  "hallway.exe", "sieve",   "sieve.exe", "sieve-install",        "sieve-install.exe",
+                                  "tools",    "dictionaries", "models", "lang",      "prompts",              "fonts",
+                                  "meshes",   "maps",         "vault",  "filters",   "training",             "third_party_licenses",
+                                  "context",  "web",          "potentia-license.txt"};
 
 cli::Map installation_map()
 {
