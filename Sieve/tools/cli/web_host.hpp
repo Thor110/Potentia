@@ -32,6 +32,9 @@
 //           "folders": ["<path>/", ...], "size": <every file's bytes>, "seconds", "parts": 0};
 //       or {"id": N, "ok": false, "error": "<why it was refused>"}.
 //   A decode may name "path": the file of that path in the .sieve (as its listing gives it).
+//   {"id": N, "op": "table", "sha256": "<as for decode>", "data": "<a site's index.sieve, base64>"}
+//       -> {"id": N, "ok": true, "files": [{"path", "sha256"}, ...]}: a site's table (a map, as
+//          `sieve site build` writes it), every file it names by its SHA-256 (25 October 2026).
 #pragma once
 
 #include <cstdint>
@@ -67,6 +70,10 @@ struct WebOpened
     uint64_t total = 0;                // every file's bytes
     WebDecoded file;                   // the file (not a listing)
 };
+// A site's table (index.sieve: a map), checked against `expected` as above: its files, each named
+// by its SHA-256.
+std::vector<WebFile> web_table(const std::vector<uint8_t>& sieve, const std::string& expected);
+
 WebOpened web_open(const std::vector<uint8_t>& sieve, const std::string& expected, const std::string& path = "",
                    uint64_t max_bytes = kWebMaxBytes);
 

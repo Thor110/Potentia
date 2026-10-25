@@ -2145,11 +2145,32 @@ jobs:
           if python ../web/host/check_host.py $S tree.sieve --path nothing.txt $F/a.txt > nothing.txt 2>&1; then exit 1; fi
           grep -c "it holds no file nothing.txt" nothing.txt > /dev/null
           python ../web/test-site/make_site.py $S --out web-site | grep -c "^pictures/tampered.sieve" > /dev/null
-          [ "$(grep -o 'integrity="sha256-' web-site/gallery.html | wc -l)" -eq 7 ]
+          [ "$(grep -o 'integrity="sha256-' web-site/gallery.html | wc -l)" -eq 8 ] # 7 pictures, and its stylesheet
           $S site check web-site 2>&1 | grep -c "0 not as stated, 3 kept as written" > /dev/null
+          # The site's table (index.sieve), named by every plain page, read by the host as the
+          # extension reads it; and the crawler (web/crawl_site.py) against the site served here:
+          # all as kept, then a stylesheet changed on the server, and a table that is not the one kept.
+          grep -c '<link rel="sieve-table" href="index.sieve">' web-site/index.html > /dev/null
+          python ../web/host/check_host.py $S web-site/index.sieve --table | grep -c "^table: 13 files" > /dev/null
+          table=$(python -c "import hashlib; print(hashlib.sha256(open('web-site/index.sieve', 'rb').read()).hexdigest())")
+          python -m http.server 8799 --bind 127.0.0.1 --directory web-site > /dev/null 2>&1 &
+          server=$!
+          python -c "import time, urllib.request
+          for _ in range(50):
+              try:
+                  urllib.request.urlopen('http://127.0.0.1:8799/index.sieve'); break
+              except Exception:
+                  time.sleep(0.2)"
+          python ../web/crawl_site.py http://127.0.0.1:8799/ --table $table --sieve $S | grep -c "table as kept, 13 files fetched; 28 checked, 0 not as stated" > /dev/null
           printf x >> web-site/style.css
+          if python ../web/crawl_site.py http://127.0.0.1:8799/ --table $table --sieve $S > crawl.txt; then exit 1; fi
+          grep -c "MISMATCH  index.html: the hash it states for style.css is not that file's" crawl.txt > /dev/null
+          if python ../web/crawl_site.py http://127.0.0.1:8799/ --table 0000000000000000000000000000000000000000000000000000000000000000 --sieve $S > crawl.txt; then exit 1; fi
+          grep -c "MISMATCH  the site's table" crawl.txt > /dev/null
+          kill $server
           if $S site check web-site > site-check.txt; then exit 1; fi
-          grep -c "site.sieve: style.css is not the file it names" site-check.txt > /dev/null
+          grep -c "index.sieve: style.css is not the file it names" site-check.txt > /dev/null
+          grep -c "index.html: the hash it states for style.css is not that file's" site-check.txt > /dev/null
           rm -rf cyc && mkdir cyc && echo '<a href="b.html">b</a>' > cyc/a.html && echo '<a href="a.html">a</a>' > cyc/b.html
           if $S site build cyc --out cyc-site --sieve-pages 2> cyc.txt; then exit 1; fi
           grep -c "these pages link in a loop: a.html -> b.html -> a.html.*--plain a.html" cyc.txt > /dev/null

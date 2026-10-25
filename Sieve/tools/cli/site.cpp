@@ -200,6 +200,28 @@ const Attr* link_of(const Tag& t)
     return nullptr;
 }
 
+// A script or stylesheet a page loads (`<script src>`, `<link rel=stylesheet|modulepreload|preload
+// href>`): given its file's `integrity`, which browsers enforce on these themselves, so a script or
+// stylesheet swapped on the server is not run (Edward, 25 October 2026: "unless the pages that load
+// them also point to their hashes").
+const Attr* resource_of(const Tag& t, const std::string& h)
+{
+    if (t.name == "script") return t.attr("src");
+    if (t.name != "link") return nullptr;
+    const Attr* rel = t.attr("rel");
+    if (!rel || !rel->has_value) return nullptr;
+    const std::string r = " " + lower(h.substr(rel->value_begin, rel->value_end - rel->value_begin)) + " ";
+    if (r.find(" stylesheet ") == std::string::npos && r.find(" modulepreload ") == std::string::npos && r.find(" preload ") == std::string::npos)
+        return nullptr;
+    return t.attr("href");
+}
+
+// The site's table: every file named by its SHA-256 (sieve-manifest-v18), at the site's top as
+// index.sieve, so the extension and a crawler know where to look (25 October 2026; site.sieve
+// before, which check still reads).
+constexpr const char* kTable = "index.sieve";
+constexpr const char* kOldTable = "site.sieve";
+
 std::string url_decode(const std::string& s)
 {
     std::string out;
@@ -363,6 +385,8 @@ SiteReport build_site(const fs::path& src_in, const fs::path& out_in, const Site
     const std::set<std::string> plain(o.plain.begin(), o.plain.end());
     for (const std::string& p : plain)
         if (!present.count(p)) throw std::invalid_argument("--plain names " + p + ", which the site does not have");
+    for (const char* t : {kTable, kOldTable})
+        if (present.count(t)) throw std::invalid_argument(std::string("the site has a file ") + t + " at its top, the name of the table the build writes there");
 
     // Every page read, for the links its tags give (what is made into .sieve files and given hashes)
     // and for what names a file where the extension cannot follow: CSS, scripts, PHP, and every other
@@ -445,7 +469,7 @@ SiteReport build_site(const fs::path& src_in, const fs::path& out_in, const Site
             if (page) sieve_pages.push_back(f);
         }
         for (const auto& [name, who] : wanted)
-            for (const std::string& f : who) made[f] = who.size() == 1 && !present.count(name) ? name : f + ".sieve";
+            for (const std::string& f : who) made[f] = who.size() == 1 && !present.count(name) && name != kTable ? name : f + ".sieve";
         for (const auto& [f, m] : made)
             if (present.count(m)) throw std::runtime_error(f + " would be made " + m + ", which the site has already");
     }
@@ -492,9 +516,9 @@ SiteReport build_site(const fs::path& src_in, const fs::path& out_in, const Site
                                  "the rest be made: --plain " + list);
     }
 
-    // Replaced only if empty, or a site this built (its site.sieve there): never a folder named by mistake.
-    if (fs::exists(out) && (!fs::is_directory(out) || (!fs::is_empty(out) && !fs::exists(out / "site.sieve"))))
-        throw std::invalid_argument(rel_of(out) + " is there and is not a site sieve site build made (no site.sieve): remove it, or name another");
+    // Replaced only if empty, or a site this built (its table there): never a folder named by mistake.
+    if (fs::exists(out) && (!fs::is_directory(out) || (!fs::is_empty(out) && !fs::exists(out / kTable) && !fs::exists(out / kOldTable))))
+        throw std::invalid_argument(rel_of(out) + " is there and is not a site sieve site build made (no index.sieve): remove it, or name another");
     fs::remove_all(out);
     fs::create_directories(out);
     std::random_device rd;
@@ -547,6 +571,19 @@ SiteReport build_site(const fs::path& src_in, const fs::path& out_in, const Site
         std::vector<Edit> edits;
         for (const Tag& tag : tags_of(text))
         {
+            if (const Attr* res = resource_of(tag, text); res && res->has_value && !tag.attr("data-sieve-keep"))
+            {
+                const auto target = target_of(page, text.substr(res->value_begin, res->value_end - res->value_begin), served);
+                if (target && present.count(*target) && !made.count(*target))
+                {
+                    const std::string with = integrity_of(read_file_bytes(src / path_of(*target)));
+                    if (const Attr* old = tag.attr("integrity"); old && old->has_value)
+                        edits.push_back({old->value_begin, old->value_end - old->value_begin, with});
+                    else edits.push_back({tag.close, 0, " integrity=\"" + with + "\""});
+                    rep.resources += 1;
+                }
+                continue;
+            }
             const Attr* link = link_of(tag);
             if (!link || !link->has_value || tag.attr("data-sieve-keep")) continue;
             const std::string value = text.substr(link->value_begin, link->value_end - link->value_begin);
@@ -592,15 +629,36 @@ SiteReport build_site(const fs::path& src_in, const fs::path& out_in, const Site
             rep.made += 1;
             rep.pages_made += 1;
         }
-    // The plain pages, last: they may name any of them.
+    // The plain pages, last: they may name any of them. An HTML page (not PHP, whose server writes
+    // what it serves) is told where the site's table is, `<link rel="sieve-table">`, so the
+    // extension finds it there and checks the page against it before showing it.
     for (const auto& [f, text] : html)
-        if (!made.count(f)) write_text(out / path_of(f), rewrite(f, text));
+    {
+        if (made.count(f)) continue;
+        std::string h = rewrite(f, text);
+        if (is_html(f))
+        {
+            std::string up;
+            for (const char c : f)
+                if (c == '/') up += "../";
+            const std::string tag = "<link rel=\"sieve-table\" href=\"" + up + kTable + "\">";
+            size_t at = 0; // after <head>, else after <html>, else first
+            for (const Tag& t : tags_of(h))
+                if (t.name == "head" || (t.name == "html" && !at))
+                {
+                    at = t.close + 1;
+                    if (t.name == "head") break;
+                }
+            h.insert(at, at ? "\n" + tag : tag + "\n");
+        }
+        write_text(out / path_of(f), h);
+    }
 
     // The site's map: every file, named by its SHA-256 (sieve-manifest-v18); its own hash is the root.
     Map map = map_of_folder(out, name_of(rel_of(src)));
     map.name = name_of(rel_of(src));
-    write_map_instructions(map, out / "site.sieve", 0);
-    rep.map_sha256 = sha256_hex(read_file_bytes(out / "site.sieve"));
+    write_map_instructions(map, out / kTable, 0);
+    rep.map_sha256 = sha256_hex(read_file_bytes(out / kTable));
     cleanup.done = true;
     return rep;
 }
@@ -621,7 +679,8 @@ SiteCheck check_site(const fs::path& dir, const std::string& served_at)
     auto check_page = [&](const std::string& page, const std::string& shown_as, const std::string& h) {
         for (const Tag& tag : tags_of(h))
         {
-            const Attr* link = link_of(tag);
+            const Attr* res = resource_of(tag, h);
+            const Attr* link = res ? res : link_of(tag);
             if (!link || !link->has_value) continue;
             const std::string value = h.substr(link->value_begin, link->value_end - link->value_begin);
             const auto target = target_of(page, value, served);
@@ -641,7 +700,7 @@ SiteCheck check_site(const fs::path& dir, const std::string& served_at)
             const bool sieve = ext_of(*target) == "sieve";
             if (!given || !given->has_value)
             {
-                if (sieve) c.mismatches.push_back(shown_as + ": links to " + *target + " with no hash");
+                if (sieve && !res) c.mismatches.push_back(shown_as + ": links to " + *target + " with no hash");
                 continue;
             }
             c.checked += 1;
@@ -654,7 +713,7 @@ SiteCheck check_site(const fs::path& dir, const std::string& served_at)
     for (const std::string& f : files)
     {
         if (is_page(f)) check_page(f, f, text_of(dir / path_of(f)));
-        else if (ext_of(f) == "sieve" && f != "site.sieve")
+        else if (ext_of(f) == "sieve" && f != kTable && f != kOldTable)
         {
             // A page held in a .sieve: read as the extension reads it (one file, nothing but
             // decoding), and its links checked from where the .sieve is.
@@ -669,23 +728,24 @@ SiteCheck check_site(const fs::path& dir, const std::string& served_at)
             }
         }
     }
-    // The site's map: every file it names is here and is the same, and every file is in it.
-    if (present.count("site.sieve"))
+    // The site's table: every file it names is here and is the same, and every file is in it.
+    const std::string table = present.count(kTable) ? kTable : kOldTable;
+    if (present.count(table))
     {
-        const Map map = read_map_file(dir / "site.sieve");
+        const Map map = read_map_file(dir / path_of(table));
         std::set<std::string> named;
         for (const MapNode& n : map.nodes)
         {
             if (n.folder() || n.kind == MapNode::Held) continue;
             named.insert(n.path);
             c.checked += 1;
-            if (!present.count(n.path)) c.mismatches.push_back("site.sieve: names " + n.path + ", which is not there");
-            else if (sha256_hex(read_file_bytes(dir / path_of(n.path))) != n.sha256) c.mismatches.push_back("site.sieve: " + n.path + " is not the file it names");
+            if (!present.count(n.path)) c.mismatches.push_back(table + ": names " + n.path + ", which is not there");
+            else if (sha256_hex(read_file_bytes(dir / path_of(n.path))) != n.sha256) c.mismatches.push_back(table + ": " + n.path + " is not the file it names");
         }
         for (const std::string& f : files)
-            if (f != "site.sieve" && !named.count(f)) c.mismatches.push_back("site.sieve: does not name " + f);
+            if (f != table && !named.count(f)) c.mismatches.push_back(table + ": does not name " + f);
     }
-    else c.mismatches.push_back("no site.sieve (the site's map)");
+    else c.mismatches.push_back("no index.sieve (the site's table)");
     return c;
 }
 

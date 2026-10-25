@@ -4284,8 +4284,24 @@ folder) and shows the HTML they unpack to, as a first test where the result is k
     Seen in Chromium with the test site's "Every page in one" (5 files: listed, About opened from
     it, its links leading to the others by path). CI: the fixture's listing, a file by its path, a
     path it does not hold.
-  - *Still to do:* the extension reading `site.sieve` (its hash pinned in the extension, as agreed
-    above), and the crawler (`site check` against a server: Sieve has no HTTP client yet).
+  - *The site's table, in the extension, and the crawler (25 October 2026).* Edward weighed it:
+    "A hash table makes it a single point of failure that could make swapping out pages easy, which
+    is the opposite of what we want", then "I meant index.sieve would be the full table ... a
+    crawler can check all hashes against the table regularly, meaning that if any page or the table
+    mismatches, we would know instantly", and on scripts: "the scripts themselves can still be
+    hashed into the table, but that still makes the table and a web script the single point of
+    failure unless the pages that load them also point to their hashes". Built:
+    - the table is `index.sieve` at the site's top (`site.sieve` before; `check` reads either), and
+      every plain HTML page names it (`<link rel="sieve-table">`);
+    - scripts and stylesheets are given their files' `integrity`, which browsers enforce;
+    - the extension remembers a site's table at the first visit (or saved by hand on its settings
+      page), holds each page of a remembered site hidden until it matches, and stops it with a
+      notice if not (refused; the table changed: trust it or leave; not in the table: show anyway);
+    - `web/crawl_site.py URL --table SHA256 [--every M]`: the table against the hash kept, then every
+      file it names fetched and `sieve site check`ed.
+    The table can still be swapped on the server, but the crawler, holding the hash the build
+    printed, says so at its next run, and a visitor's extension stops at a table it does not
+    remember. Seen in Chromium and run in the CI (web/README.md, "A site's table").
 
 **19.93 The `.map` format folded into `.sieve` (Edward, 22 October 2026; built the same day).**
 His thought: update the `.map` format, or replace it with `.sieve` and deprecate it, the

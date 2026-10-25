@@ -73,12 +73,52 @@ JSON in that folder's `NativeMessagingHosts` instead.
 - **`about.sieve`**, **`notes.sieve`**: pages held in `.sieve` files. About has a `.sieve` picture
   of its own.
 
-- **`site.sieve`**: the map of every file of the site by its SHA-256.
+- **`index.sieve`**: the site's table, every file of the site by its SHA-256.
 
 Every link with a hash names a file made before the page that links to it, so the pages link back
 up by name only: two pages cannot each state the other's hash, since changing either would change
-both, without end. `site.sieve` holds every file's hash instead, and its own hash is the one to
-trust for all of it (the extension does not read it yet).
+both, without end. The table holds every file's hash instead, the plain pages (`index.html`,
+`gallery.html`) included, and its own hash is the one to trust for all of it.
+
+## A site's table (`index.sieve`)
+
+Edward, 25 October 2026: "index.sieve would be the full table ... a crawler can check all hashes
+against the table regularly, meaning that if any page or the table mismatches, we would know
+instantly". What `sieve site build` writes, and what checks it:
+- **The table**, `index.sieve` at the site's top: every file of the site by its SHA-256
+  (sieve-manifest-v18, a map). `sieve site build` prints its own SHA-256: keep it.
+- **Every plain HTML page** names the table, `<link rel="sieve-table" href="index.sieve">` (the
+  path up to the site's top from where the page is).
+- **Scripts and stylesheets** the site loads (`<script src>`, `<link rel="stylesheet|modulepreload|preload">`)
+  are given their files' `integrity`, which browsers enforce themselves: a script changed on the
+  server is not run, by the page that loads it, as well as being caught by the table (Edward: "unless
+  the pages that load them also point to their hashes").
+- **The extension** remembers a site's table the first time one of its pages names it, and from
+  then on holds every page of that site hidden from its start until its bytes are the ones the
+  table names (`guard.js`, which Chrome runs only on the sites remembered; `chrome.scripting`).
+  A small mark in the corner says it was checked. Otherwise the page is stopped and a notice put
+  in its place:
+  - **refused:** the page is not the one the table names (its hash and the table's are shown);
+  - **the table has changed:** the table is not the one remembered. If the site's owner updated it,
+    **Trust the new table**; if not, leave;
+  - **not in the table:** a page the table does not name, which can be shown anyway, unchecked, in
+    that tab.
+  Its settings page (right-click the icon, Options) lists the sites remembered, forgets one, or
+  saves a site's table hash by hand before the first visit, so not even that is taken on trust.
+- **The crawler**, `web/crawl_site.py` (or `crawl_site.bat`):
+  `python web/crawl_site.py https://example.com/ --table SHA256 [--every MINUTES]`. It fetches the
+  table and compares it with the hash you kept, then fetches every file it names and runs
+  `sieve site check` on them: any page, script or the table changed on the server is reported
+  (exit 1). Run it on a schedule (Task Scheduler, cron), or with `--every`.
+- **What it cannot cover yet:** pages a server writes as it serves them (PHP and the like) cannot be
+  named by a fixed hash, so they show as not matching. A page's own scripts may start before the
+  extension's check ends (the page is hidden, not paused); a page that fails is stopped. Signing
+  the table, so an update needs no new trust, is for later.
+- **Seen in Chromium** (25 October 2026, the test site served): the first visit remembered the
+  table; later visits checked (the folder's address as its `index.html`); `gallery.html` changed
+  on the server, refused; a page not in the table, offered and shown anyway; the site rebuilt with a
+  new table, asked about, trusted, then checked; the settings page listing it. The crawler: all as
+  kept (exit 0), a page changed (exit 1), a table not the one kept (exit 1); the CI runs it.
 
 ## Any site: `sieve site`
 
@@ -100,12 +140,14 @@ sieve site check my-site-built
     `index.html`, those given to `--plain`, or a page with a script (the viewer runs none).
   - A page is made after the pages it names. Pages that link in a loop are refused before
     anything is made, with the loop and a `--plain` list that would break every loop.
-  - Last it writes `site.sieve` and prints its SHA-256.
+  - A local script or stylesheet is given its file's `integrity`, and every plain HTML page names
+    the site's table.
+  - Last it writes the table, `index.sieve`, and prints its SHA-256 (above).
   - A tag with `data-sieve-keep` is left as written (the test site's links meant to be wrong).
   - A build that fails leaves nothing behind, and `--out` is replaced only if it is empty or was
     built before.
 - **check** reads a built site as the extension would, and lists every stated hash, and every file
-  of `site.sieve`, that does not match; it ends in an error if any does not.
+  of the table, that does not match; it ends in an error if any does not.
 
 ### PHP, scripts and CSS
 
@@ -116,7 +158,7 @@ other way of naming a file goes past it, so `build` keeps such a file as it is, 
   plain HTML is rewritten as any page's; its code (`<?php ... ?>`) is never touched, and a file it
   names is kept as it is too. What PHP writes when it runs cannot be seen beforehand: build the
   pages PHP serves (saved from the running site) instead, or have PHP write each link's
-  `integrity` from `site.sieve`.
+  `integrity` from the table.
 - **Scripts:** a file a script names (`fetch("a.png")`, `img.src = "a.png"`) is kept as it is
   too. It is found by its name, so a name a script puts together from parts (`"pic" + n +
   ".png"`) is not: `--keep-originals` keeps every picture as it is beside its `.sieve`.
@@ -181,10 +223,10 @@ talks to it as Chrome does, without a browser; the CI runs it.
 
 ## Next
 
-- **Pages PHP writes:** `integrity` from `site.sieve` at run time (a small PHP helper), or the
+- **Pages PHP writes:** `integrity` from the table at run time (a small PHP helper), or the
   served pages saved and built.
-- **The extension reading `site.sieve`:** a site's pages that link to one another, checked against
-  its one list of hashes.
-- **A crawler:** `sieve site check` against a server instead of a folder.
+- **Signing the table:** the site's owner signs each new table, and the extension remembers the
+  owner's key, not one table's hash, so an update needs no new trust.
+- **Scripts that load other files** (and PHP's output): what they fetch, checked as well.
 - **WebAssembly:** the decoder in the extension itself, so nothing is installed and every browser
   can use it.

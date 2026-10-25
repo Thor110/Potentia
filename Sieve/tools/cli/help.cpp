@@ -1066,11 +1066,15 @@ const std::vector<Page>& pages()
          "is exactly that file. PHP pages are read for their links and kept as they are. A file named\n"
          "where the extension cannot follow (CSS, scripts, PHP's code, srcset, style and other\n"
          "attributes) is kept as it is too, beside its .sieve. Pages that link in a loop are refused\n"
-         "before anything is made, with the loop and the pages to keep plain. Last it writes site.sieve,\n"
-         "a map of every file by its SHA-256, and prints that map's own SHA-256: the one hash to trust\n"
-         "for the whole site. A tag with data-sieve-keep is left as written. check reads a built site as\n"
-         "the extension would and lists every stated hash, and every file of the map, that does not\n"
-         "match.",
+         "before anything is made, with the loop and the pages to keep plain. A local <script src> or\n"
+         "stylesheet <link> is given its file's integrity, which browsers enforce themselves, and every\n"
+         "plain HTML page names the site's table (<link rel=\"sieve-table\">). Last it writes that table,\n"
+         "index.sieve at the site's top: every file by its SHA-256. It prints the table's own SHA-256:\n"
+         "keep it. The extension remembers it from your first visit (or from its settings page) and\n"
+         "shows a page of the site only once it is the one the table names; web/crawl_site.py checks the\n"
+         "site on its server against it. A tag with data-sieve-keep is left as written. check reads a\n"
+         "built site as the extension would and lists every stated hash, and every file of the table\n"
+         "(index.sieve, or site.sieve as it was called before), that does not match.",
          {{"--out OUT", "Where to build it (not inside SRC; replaced if empty or built before)."},
           {"--sieve-pages", "Make the pages into .sieve files too."},
           {"--keep-originals", "Keep every picture made as it is too, beside its .sieve (for scripts that put names together)."},

@@ -29,7 +29,7 @@
 <li><a href="pages.sieve">Every page in one <code>.sieve</code></a>: the right hash, but it holds many files, and the extension shows one file a link names.</li>
 </ul>
 </div>
-<p class="note">Each link names a file below it by its hash, and the pages it opens link back here by name only. Two pages cannot each hold the other's hash: changing either would change both, without end. Instead the site has one list of every file's hash, <code>site.sieve</code>, whose own hash is the one to trust for all of it; the extension does not read it yet.</p>
+<p class="note">Each link names a file below it by its hash, and the pages it opens link back here by name only. Two pages cannot each hold the other's hash: changing either would change both, without end. Instead the site has one table of every file's hash, <code>index.sieve</code>, whose own hash is the one to trust for all of it: the extension remembers it on your first visit, and shows this page and the gallery only once they are the ones it names.</p>
 <script>
   // The extension marks every page it runs in; without it, say so rather than show broken pictures.
   // (mark.js marks the page as it starts; looked for once the page has loaded, and the note taken

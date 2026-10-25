@@ -18,3 +18,57 @@
   color: #ff6060;
   font-size: 16px;
 }
+
+/* A page checked against its site's table: a small mark, quieter after a moment. */
+.sieve-badge {
+  position: fixed;
+  right: 10px;
+  bottom: 10px;
+  z-index: 2147483647;
+  max-width: 40em;
+  padding: 6px 10px;
+  border: 1px solid #2f6f3a;
+  background: #0d1f12;
+  color: #9fe0a8;
+  font: 12px/1.4 'Courier New', monospace;
+  opacity: 0.95;
+  transition: opacity 1s;
+  pointer-events: none;
+}
+.sieve-badge.sieve-badge-quiet {
+  opacity: 0.35;
+}
+
+/* A page stopped: why, and what can be done. */
+.sieve-notice-page {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0a0a0f;
+}
+.sieve-notice {
+  max-width: 42em;
+  padding: 1.5em 2em;
+  border: 2px solid #c03030;
+  background: #2a0d0d;
+  color: #ffb0b0;
+  font: 14px/1.5 'Courier New', monospace;
+  word-break: break-word;
+}
+.sieve-notice strong {
+  display: block;
+  margin-bottom: 0.6em;
+  color: #ff6060;
+  font-size: 18px;
+}
+.sieve-notice button {
+  margin: 0.6em 0.6em 0 0;
+  padding: 0.4em 1em;
+  border: 1px solid #c03030;
+  background: #1a0808;
+  color: #ffd0d0;
+  font: inherit;
+  cursor: pointer;
+}

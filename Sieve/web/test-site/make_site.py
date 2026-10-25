@@ -3,7 +3,7 @@ r"""Builds the web test site (web/README.md) from src/, with the Sieve given, in
 
 The work is Sieve's own, `sieve site build`, which builds any site the same way (sieve help site):
 every picture made into a .sieve, the pages too but for index.html and gallery.html, every link to
-one given that file's hash, and site.sieve, the map of every file. What this adds is the test's
+one given that file's hash, and index.sieve, the table of every file. What this adds is the test's
 own: before the build, in a copy of src/,
 
   - {{home}} becomes a link back to the website's Sieve Secure page (--home), or nothing;

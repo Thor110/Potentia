@@ -3936,8 +3936,15 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   a listing, or one file by `path`. Extension: background passes `path`; viewer `showListing`,
   `viewerFor`, `pathIn`; content.js refuses a listing as a picture. `check_host.py --listing`,
   `--path P FILE`.
-- Figures and what was seen in IDEAS §19.92 ("Phase 2 begun"). Left: `site.sieve` in the
-  extension, the crawler.
+- Figures and what was seen in IDEAS §19.92 ("Phase 2 begun").
+- **The site's table** (25 October 2026, Edward's design): `index.sieve` (`kTable` in site.cpp;
+  `site.sieve` still read), `<link rel="sieve-table">` in plain pages, `resource_of` (scripts and
+  stylesheets given `integrity`); host op `table` (`web_table`); extension `guard.js`, `guard.css`,
+  `notice.js`, `options.*`, background `guard`/`trust`/`forget`/`sites` and `registerGuard`
+  (permissions `storage`, `scripting`); also a fix: a host reply with no `parts` (hello, table)
+  never resolved. **`web/crawl_site.py`/`.bat`**. CI: the table, the host's reading of it, and the
+  crawler against the test site served locally. Left: signing the table; PHP and scripts' own
+  fetches.
 
 ### Step 7 of the plan: the CI in parts (Edward, 24 October 2026)
 "It would be worth splitting the CI tests up in future, ie : making a script and folder for each

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sieve - sites</title>
+<link rel="stylesheet" href="viewer.css">
+<style>
+  body { display: block; padding: 16px 24px; overflow: auto; }
+  h1 { font-size: 18px; color: #c8a24a; letter-spacing: 0.05em; }
+  p { max-width: 60em; color: #aaa; }
+  table { border-collapse: collapse; margin: 1em 0; }
+  td, th { padding: 4px 10px; border-bottom: 1px solid #2a2a3a; text-align: left; font-size: 12px; }
+  th { color: #888; }
+  input { width: 40em; background: #0d0d14; color: #e0ddd8; border: 1px solid #2a2a3a; padding: 4px; font: inherit; }
+  button { background: #14141f; color: #e0ddd8; border: 1px solid #2a2a3a; padding: 4px 10px; font: inherit; cursor: pointer; }
+  #said { color: #9fe0a8; }
+</style>
+</head>
+<body>
+<h1>Sieve: sites checked against their tables</h1>
+<p>A site built by <code>sieve site build</code> has a table, <code>index.sieve</code>: every file of the site by its SHA-256.
+The extension remembers each site's table the first time one of its pages leads to it, and from then on shows a page of that
+site only once it is the one the table names. If the table ever changes, it asks you first. <code>sieve site build</code> prints the
+table's SHA-256: save it here before you first visit, and not even the first visit is taken on trust.</p>
+<table id="sites"><thead><tr><th>Site</th><th>Its table's SHA-256</th><th>Since</th><th>How</th><th></th></tr></thead><tbody></tbody></table>
+<h1>Save a site's table</h1>
+<p><input id="prefix" placeholder="the site's address: https://example.com/ or https://example.github.io/Potentia/"></p>
+<p><input id="sha" placeholder="its table's SHA-256 (64 hex digits, as sieve site build prints it)"></p>
+<p><button id="save">Save</button> <span id="said"></span></p>
+<script src="options.js"></script>
+</body>
+</html>

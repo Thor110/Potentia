@@ -7,9 +7,13 @@
 //                         the Sieve extension shows it only if it is exactly that file. A page is
 //                         made after every page it names; pages that link in a loop cannot each
 //                         state the next one's hash, and are refused before anything is made, with
-//                         the loop and a set of pages to keep plain that would break every loop. Last, a
-//                         map of every file of the site, each named by its SHA-256 (`site.sieve`,
-//                         sieve-manifest-v18): its own hash is the one to trust for the whole site.
+//                         the loop and a set of pages to keep plain that would break every loop. A
+//                         local script or stylesheet is given its file's `integrity` (browsers
+//                         enforce it), and every plain HTML page names the site's table
+//                         (`<link rel="sieve-table">`). Last, the table: every file of the site, each
+//                         named by its SHA-256 (`index.sieve` at the site's top, sieve-manifest-v18;
+//                         `site.sieve` until 25 October 2026): its own hash is the one to trust for the
+//                         whole site, remembered by the extension and kept for the crawler.
 //   check DIR             Every hash the site's pages state (its plain pages, and the pages held in
 //                         its `.sieve` files) checked against the file it names, and every file
 //                         against the site's map; what does not match is listed.
@@ -53,7 +57,8 @@ struct SiteOptions
 struct SiteReport
 {
     size_t files = 0, made = 0, pages_made = 0, links = 0;
-    std::string map_sha256; // the site's map's own SHA-256: the site's root hash
+    size_t resources = 0;   // scripts and stylesheets given their files' integrity
+    std::string map_sha256; // the site's table's (index.sieve's) own SHA-256: the site's root hash
     std::vector<std::string> notes; // what was left alone, and why
 };
 

@@ -73,6 +73,15 @@
     for (const a of root.querySelectorAll("a[href]")) if (isSieve(a.getAttribute("href"))) viaViewer(a);
   }
 
+  // A page of a site with a table (index.sieve), not yet remembered: it says where its table is
+  // (<link rel="sieve-table">, written by sieve site build). The table is remembered from now on,
+  // and the page checked against it (a remembered site's pages are checked by guard.js, from
+  // their start, before they are shown).
+  const table = document.querySelector('link[rel="sieve-table"][href]');
+  if (table && !globalThis.sieveGuarded)
+    chrome.runtime.sendMessage({ op: "guard", url: location.href, table: table.href }, (r) =>
+      sieveNotice.tell(chrome.runtime.lastError ? { ok: false, error: chrome.runtime.lastError.message } : r || { ok: false, error: "no answer" }));
+
   scan(document);
   new MutationObserver((changes) => {
     for (const c of changes) for (const n of c.addedNodes) if (n.nodeType === 1) scan(n.parentNode || n);

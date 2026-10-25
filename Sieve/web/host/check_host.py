@@ -7,6 +7,7 @@ check it without a browser (web/README.md; the CI runs it).
   python web/host/check_host.py SIEVE FILE.sieve --refused-as-is  # refused with its own hash
   python web/host/check_host.py SIEVE FILE.sieve --listing        # a .sieve of many files: its listing
   python web/host/check_host.py SIEVE FILE.sieve --path P EXPECTED_FILE   # its file P, the same bytes
+  python web/host/check_host.py SIEVE index.sieve --table          # a site's table: its files and hashes
 
 Prints what the host answered; exits non-zero if it is not what was asked for.
 """
@@ -53,7 +54,7 @@ def main():
     else:
         # As a page states it: an integrity attribute.
         sha = "sha256-" + base64.b64encode(hashlib.sha256(data).digest()).decode()
-    request = {"id": 2, "op": "decode", "name": file, "sha256": sha, "data": base64.b64encode(data).decode()}
+    request = {"id": 2, "op": "table" if mode == "--table" else "decode", "name": file, "sha256": sha, "data": base64.b64encode(data).decode()}
     if path is not None:
         request["path"] = path
     replies = talk(sieve, [{"id": 1, "op": "hello"}, request])
@@ -68,6 +69,11 @@ def main():
         return
     if not head.get("ok"):
         sys.exit("refused: " + head.get("error", ""))
+    if mode == "--table":
+        for f in head.get("files", []):
+            print(f"table: {f['path']}  {f['sha256']}")
+        print(f"table: {len(head.get('files', []))} files")
+        return
     if mode == "--listing":
         if not head.get("listing") or not head.get("files"):
             sys.exit("no listing")

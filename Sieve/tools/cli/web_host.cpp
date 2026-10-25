@@ -1,6 +1,8 @@
 #include "cli/web_host.hpp"
 
 #include "cli/locate.hpp"
+#include "cli/map.hpp"
+#include "cli/map_sieve.hpp"
 #include "sieve/json.hpp"
 
 #include <algorithm>
@@ -189,6 +191,20 @@ WebOpened web_open(const std::vector<uint8_t>& sieve, const std::string& expecte
     return o;
 }
 
+std::vector<WebFile> web_table(const std::vector<uint8_t>& sieve, const std::string& expected)
+{
+    const std::string want = expected_hex(expected);
+    const std::string got = sha256_hex(sieve);
+    if (got != want) throw std::runtime_error("the table's SHA-256 is " + got + ", not the " + want + " expected: refused");
+    const Manifest m = manifest_of_installer(address_of_raw(sieve));
+    if (m.graph.empty()) throw std::runtime_error("it is not a site's table (it has no graph part)");
+    const Map map = map_of_instructions(m, "table");
+    std::vector<WebFile> files;
+    for (const MapNode& n : map.nodes)
+        if (!n.folder() && n.kind != MapNode::Held) files.push_back({n.path, lower(n.sha256), n.size});
+    return files;
+}
+
 WebDecoded web_decode(const std::vector<uint8_t>& sieve, const std::string& expected, uint64_t max_bytes)
 {
     WebOpened o = web_open(sieve, expected, "", max_bytes);
@@ -241,6 +257,15 @@ int run_web_host(std::istream& in, std::ostream& out, const std::string& version
             if (op == "hello")
             {
                 write_message(out, json::Value::make_object({{"id", id}, {"ok", json::Value::make_bool(true)}, {"sieve", json::Value::make_string(version)}}));
+                continue;
+            }
+            if (op == "table")
+            {
+                const json::Value* h = req.find("sha256");
+                std::vector<json::Value> files;
+                for (const WebFile& f : web_table(bytes_of_base64(req.at("data").string()), h ? h->string() : std::string()))
+                    files.push_back(json::Value::make_object({{"path", json::Value::make_string(f.path)}, {"sha256", json::Value::make_string(f.sha256)}}));
+                write_message(out, json::Value::make_object({{"id", id}, {"ok", json::Value::make_bool(true)}, {"files", json::Value::make_array(std::move(files))}}));
                 continue;
             }
             if (op != "decode") throw std::runtime_error("no such request: " + op);

@@ -102,7 +102,8 @@ FILES = ["potentia-license.txt"]
 # tools\sieve in the folder above them, so nothing needs a path given. The test site stays in the
 # repository (it is built from the repository's pictures, with Python).
 EXTRAS = ["context/README.md", "context/install_context.bat", "context/uninstall_context.bat",
-          "web/extension", "web/host/install_host.bat", "web/host/uninstall_host.bat", "web/host/install_host.sh"]
+          "web/extension", "web/host/install_host.bat", "web/host/uninstall_host.bat", "web/host/install_host.sh",
+          "web/crawl_site.py", "web/crawl_site.bat"]
 WEB_NOTE = """Sieve on the web: the extension
 
 A Chrome extension that shows the .sieve files a page links to, each checked against
@@ -115,6 +116,11 @@ Setting it up, once, for your user only:
      On Linux or a Mac: host/install_host.sh.
   2. Load the extension: open chrome://extensions, turn on Developer mode,
      choose Load unpacked, and pick the extension folder beside this file.
+
+A site built by tools\\sieve{exe} site build has a table, index.sieve: the extension remembers
+it on your first visit and shows a page of that site only once it is the one the table names (its
+settings page lists the sites; right-click the extension's icon, Options). crawl_site.bat checks a
+site on its server against its table, now and then or on a schedule.
 
 Making a site's pictures and pages into .sieve files: tools\\sieve{exe} site build (sieve help
 site). The full guide, and the test site, are in the repository: Sieve/web/README.md.

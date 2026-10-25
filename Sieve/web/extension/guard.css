@@ -1,0 +1,5 @@
+/* A page of a site whose table the extension remembers is held hidden until guard.js has checked
+   it against that table (web/README.md). */
+html:not([data-sieve-checked]) {
+  visibility: hidden !important;
+}

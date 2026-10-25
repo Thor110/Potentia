@@ -2723,8 +2723,10 @@ int cmd_site(const Args& a)
         for (const std::string& note : r.notes) std::cerr << "note      " << note << "\n";
         auto n = [](size_t k, const char* one, const char* many) { return std::to_string(k) + " " + (k == 1 ? one : many); };
         std::cerr << "site      " << n(r.files, "file", "files") << ", " << r.made << " made into .sieve files (" << r.pages_made << " of them pages), "
-                  << n(r.links, "link", "links") << (r.links == 1 ? " given its hash" : " given their hashes") << ", in " << std::fixed << std::setprecision(1) << s << " s\n";
-        std::cout << "site.sieve sha256 " << r.map_sha256 << "\n";
+                  << n(r.links, "link", "links") << (r.links == 1 ? " given its hash" : " given their hashes")
+                  << (r.resources ? ", " + n(r.resources, "script or stylesheet", "scripts and stylesheets") + " given " + (r.resources == 1 ? "its" : "their") + " integrity" : "")
+                  << ", in " << std::fixed << std::setprecision(1) << s << " s\n";
+        std::cout << "index.sieve sha256 " << r.map_sha256 << "   (the site's table: keep this, for the crawler and to check it)\n";
         return 0;
     }
     if (what == "check")
