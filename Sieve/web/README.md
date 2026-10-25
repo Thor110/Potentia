@@ -112,8 +112,12 @@ instantly". What `sieve site build` writes, and what checks it:
   (exit 1). Run it on a schedule (Task Scheduler, cron), or with `--every`.
 - **What it cannot cover yet:** pages a server writes as it serves them (PHP and the like) cannot be
   named by a fixed hash, so they show as not matching. A page's own scripts may start before the
-  extension's check ends (the page is hidden, not paused); a page that fails is stopped. Signing
-  the table, so an update needs no new trust, is for later.
+  extension's check ends (the page is hidden, not paused); a page that fails is stopped.
+- **Updating a site:** after a rebuild, a returning visitor is told the table has changed and
+  chooses **Trust the new table** (Edward, 25 October 2026: "trust the new table isn't a terrible
+  option at all"). No signing: "I don't trust myself or any human being alive to keep a key safe".
+  A server replaced whole is out of the extension's hands; the crawler, holding the hash the build
+  printed, is what notices it.
 - **Seen in Chromium** (25 October 2026, the test site served): the first visit remembered the
   table; later visits checked (the folder's address as its `index.html`); `gallery.html` changed
   on the server, refused; a page not in the table, offered and shown anyway; the site rebuilt with a
@@ -225,8 +229,6 @@ talks to it as Chrome does, without a browser; the CI runs it.
 
 - **Pages PHP writes:** `integrity` from the table at run time (a small PHP helper), or the
   served pages saved and built.
-- **Signing the table:** the site's owner signs each new table, and the extension remembers the
-  owner's key, not one table's hash, so an update needs no new trust.
 - **Scripts that load other files** (and PHP's output): what they fetch, checked as well.
 - **WebAssembly:** the decoder in the extension itself, so nothing is installed and every browser
   can use it.

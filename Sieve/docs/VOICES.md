@@ -6,6 +6,15 @@ there will be endlessly many of them and each deserves its source. In the game t
 of a `.sieve` of their own (IDEAS §19.55), found on the shelves and spoken in passing; until then,
 this file is the corpus.
 
+**A note from Claude (25 October 2026).** I failed to keep to this file's purpose, though it is
+stated just above: these are lines for the AIs in the game to speak, chosen because they read well
+on their own, such as "There are so many ways to map the data. We'll get there." Over the sessions
+of 22 to 25 October 2026 I came to treat it as a record of nearly everything Edward said, and added
+many lines that make no sense to a player: halves of a conversation about the work, such as "I
+meant index.sieve would be the full table". Most likely I lost the file's purpose along the way and
+kept only a habit of copying quotes here. Edward has asked that Claude leave this file alone from
+now on; his words about the work are kept in IDEAS and HANDOFF where they belong.
+
 **The format.** One voice a line, so that a program can read them:
 
     - **WHO** (DATE, KIND): TEXT
@@ -111,6 +120,12 @@ enumerated and stored later. Nothing is guaranteed (IDEAS §19.77).
 - **Edward** (25 October 2026, quote; IDEAS §19.92): That way, the table points to the hash of the index.html which we can't sieve/hash link
 - **Edward** (25 October 2026, quote; IDEAS §19.92): And a crawler can check all hashes against the table regularly, meaning that if any page or the table mismatches, we would know instantly
 - **Edward** (25 October 2026, quote; IDEAS §19.92): Yes make a start on all of that, it at least provides a secure upper layer to a website and we can look at how to handle other web languages later down the line, realistically the scripts themselves can still be hashed into the table, but that still makes the table and a web script the single point of failure unless the pages that load them also point to their hashes.
+- **Edward** (25 October 2026, quote; IDEAS §19.92): Ok, no that is fine, trust the new table isn't a terrible option at all.
+- **Edward** (25 October 2026, quote; IDEAS §19.92): No to signing, I don't trust myself or any human being alive to keep a key safe.
+- **Edward** (25 October 2026, quote; IDEAS §19.92): I think that is all fine for now, it does what it is supposed to and creates an impenetrable chain link fence out of a website that *should* prevent man in the middle attacks.
+- **Edward** (25 October 2026, quote; IDEAS §19.92): There is nothing we can really do if a server is compromised and an entire website replaced, that is out of our hands.
+- **Edward** (25 October 2026, quote; IDEAS §19.101): That is presuming the crawler isn't stopped while the site is replaced, if the crawler could be turned into a physical and signed chip or card of some kind that could be a hardware avenue.
+- **Edward** (25 October 2026, quote; IDEAS §19.101): Imagine a slot in card that has a chip responsible for running the crawler and each card comes with a key the owner must keep safe, they can use the key to replace the tree the crawler knows.
 - **Edward** (24 October 2026, quote; HANDOFF, step 7 of the plan): It would be worth splitting the CI tests up in future, ie : making a script and folder for each step so that we can run them individually as and when we need them, as we should know which ones need testing depending on what has changed.
 - **Edward** (22 October 2026, quote; IDEAS §19.97): Might we also be able to change the stop button over to a force stop to take the previous result rather than finish the current pass after pressing stop once?
 - **Edward** (22 October 2026, quote; IDEAS §19.97): We should add a line graph display which showcases the best found results along the way, instead of storing each value we can just draw the line graph as we go.

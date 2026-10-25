@@ -3950,6 +3950,13 @@ them be given less weight than his own messages, so it is left out here.
     0.46% over the floor of 415,241. What is left is mostly the blank lines (one after every
     twenty lines, which the byte above cannot count) and the tables. Classing the byte above by
     hand (digit, space) did as well on pi but would be tuned to it; the pairs serve any text.
+  - **What is left, measured (25 October 2026, step 6 of the plan):** counted by its column and the
+    byte above, `pi6.txt`'s entropy is 415,676 bytes, 435 (0.10%) over the floor of 415,241; the code
+    is 416,967, so 1,291 of the 1,726 bytes over the floor are the code's own tables and streams,
+    not what it models. Adding the byte 21 lines above (the blank line's period) brings the count
+    below the floor (410,513, with 6,107 contexts), a sign that the tables would then cost more than
+    they save. Not built: a new rope-wave version and manifest for at most 0.3% on one file. The
+    blank lines and form feeds are what the model misses; the tables are what the code pays.
 - **As first proposed (done since):** a measurement before a filter: on a handful of files of
   different kinds, fit waves of a few simple families by value type and length, subtract, and set
   the residuals' histogram-coded size, plus the wave's parameters, against the file's own size and
@@ -4049,6 +4056,16 @@ keeps the rest, the entries, as the text they are, packed as before where that i
 listing is now 67 bytes, `pi6.txt` 417,061, the trained model 4,185. *Still open:* the entries
 themselves in bytes (each way a code and its numbers), where a listing of many small files would
 gain most; measure first.
+- *Measured (25 October 2026, step 6 of the plan):* the entries are a small part of what is made,
+  once packed. The release folder (146 files, 30 folders, 8,209,149 bytes as `.sieve`): its listing
+  is 6,814 bytes as text, 1,710 once packed; written in bytes (a way's code, sizes as varints, each
+  path as what it shares with the one before and the rest) and packed the same way, 1,598 against
+  1,706 for the text: 108 bytes, 0.001% of the file. Folders of the repository: the extension's 17
+  files' listing packs to 196 bytes of 47,925, the docs' 30 to 412 of 1,050,839, the filters' 47 to
+  502 of 1,226,883. A single small file's entry (`f 743 raw mark.js`) is 19 bytes as text and about
+  12 in bytes: 7 bytes of `mark.js`'s 474 (1.5%). Not built: a new manifest version, its reader, the
+  oracle and the vectors for at most 7 bytes a file. The head's 32-byte SHA-256, which every install
+  checks, is the larger part of a small file's overhead, and stays.
 
 **19.91 A file's opposite found in noise (Edward, 21 October 2026; an answer, nothing built).** His
 thought: there might be an inverse of a file, found amongst noise, that cancels it to nothing, so
@@ -4302,6 +4319,10 @@ folder) and shows the HTML they unpack to, as a first test where the result is k
     The table can still be swapped on the server, but the crawler, holding the hash the build
     printed, says so at its next run, and a visitor's extension stops at a table it does not
     remember. Seen in Chromium and run in the CI (web/README.md, "A site's table").
+  - *Decided (Edward, 25 October 2026):* the remembered table stays, an update asked about with
+    "Trust the new table" ("trust the new table isn't a terrible option at all"); and no signing:
+    "I don't trust myself or any human being alive to keep a key safe". "There is nothing we can
+    really do if a server is compromised and an entire website replaced, that is out of our hands."
 
 **19.93 The `.map` format folded into `.sieve` (Edward, 22 October 2026; built the same day).**
 His thought: update the `.map` format, or replace it with `.sieve` and deprecate it, the
@@ -4713,3 +4734,15 @@ faster:
   so far, Stop) rather than the command line, with a time budget chosen beforehand, as the
   locator's search time is; one file or a selection, made beside them as `NAME.sieve`.
 
+
+**19.101 The crawler as a card: a hardware layer for a site's table (Edward, 25 October 2026;
+noted, not for even the near future).** "If the crawler could be turned into a physical and signed
+chip or card of some kind that could be a hardware avenue. Imagine a slot in card that has a chip
+responsible for running the crawler and each card comes with a key the owner must keep safe, they
+can use the key to replace the tree the crawler knows." So: the crawler of §19.92 (`crawl_site.py`)
+on a chip of its own, slotted into the server or beside it, holding the site's table hash where the
+server cannot change it. It checks the site against that table on its own, so stopping the crawler
+while the site is replaced would mean getting at the card. Only the card's key, kept by the owner,
+lets a new table in after an update. It answers the case §19.92 leaves open (a server replaced whole,
+and the software crawler stopped with it). Whether it could also refuse to serve a page that fails,
+rather than only report it, is for when it is thought about. A thought only; nothing to work on.

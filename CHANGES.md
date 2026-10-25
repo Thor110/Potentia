@@ -1,70 +1,67 @@
-# The site's table, checked by the extension and by a crawler (25 October 2026)
+# Step 7 (the CI in parts), the first two items of step 6, and notes (25 October 2026)
 
-As you described it: `index.sieve` is the site's full table, the extension checks pages against it,
-and a crawler checks the whole site against it regularly. This also includes the notes from
-yesterday's questions (VOICES and HANDOFF: the crawler, and your words on the table).
+## A correction first
+The last zip's CHANGES.md said the extension's remembering of a site's table was "as you described
+it". It wasn't: that was my suggestion. You've since decided to keep it, with "Trust the new
+table", and no signing. That's recorded in IDEAS §19.92, HANDOFF and `web/README.md`.
 
-## `sieve site build`
-- **The table is now `index.sieve`,** at the site's top: every file by its SHA-256. It was
-  `site.sieve`, which `check` still reads.
-- **It prints the table's hash.** Keep it, for the crawler (and for the extension's settings, if
-  you like):
-  `index.sieve sha256 ...   (the site's table: keep this, for the crawler and to check it)`.
-- **Every plain HTML page names the table:** `<link rel="sieve-table" href="index.sieve">`.
-- **Scripts and stylesheets** (`<script src>`, `<link rel="stylesheet">` and the like, for the
-  site's own files) are given their file's `integrity`. Browsers enforce it themselves, so a
-  script changed on the server isn't run, which covers your point that the pages that load scripts
-  should point to their hashes too. `check` checks these hashes as well.
+## Step 7: the CI in parts
+- **`Sieve/ci/steps/`:** one script a step, from `01-unit-tests` to `12-pinned-model`. They were
+  moved word for word out of `.github/workflows/build.yml`, which now just calls them (95 lines,
+  from 2,299). GitHub runs the same checks, in the same order, as before.
+- **`ci/run.sh`** (and **`ci/run.bat`**, which uses Git for Windows' bash):
+  - `ci\run.bat` alone runs every step (it skips the Linux-only ones on Windows);
+  - `ci\run.bat 03 10` or `ci\run.bat web oracle` picks steps, by number or by a word of the name;
+  - `ci\run.bat --list` lists the steps.
 
-## The extension
-- **First visit:** a page that names a table makes the extension remember that table's hash for
-  the site, and check the page against it.
-- **Later visits:** every page of a remembered site is held hidden from its start until its bytes
-  match the table. A small green mark then says it was checked. Otherwise the page is stopped and a
-  notice put in its place (screenshots included):
-  - **refused:** the page isn't the one the table names (both hashes are shown);
-  - **the table has changed:** **Trust the new table** (after your own update) or **Leave**;
-  - **not in the table:** **Show it anyway** (unchecked, for that tab only) or **Leave**.
-- **A settings page** (right-click the extension's icon, Options) lists the remembered sites. It
-  can forget one, or save a site's table hash by hand before the first visit.
-- **Permissions:** the extension now asks for `storage` and `scripting`. The guard script runs only
-  on the sites it remembers. Every other site is untouched.
-- **A fix:** the extension never received a reply from Sieve that came in no parts. That affected
-  the new table request, and also `hello`, though nothing used `hello` until now.
+  It works in a fresh copy of the Sieve folder, with `out\build\x64-Release` copied in (or
+  `--build DIR`). Each step gets a log; a failed step shows its last lines, and its copy is kept.
+  Python is `python` where that works, else `py -3`.
+- **`ci/README.md`:** which step to run for which change.
+- **Every step runs alone:** I ran each one alone, in its own copy. The only one that needed an
+  earlier step's file (10, needing 04's `cube.obj`) now makes it itself.
 
-## The crawler: `web/crawl_site.py` (and `crawl_site.bat`)
-`crawl_site.bat https://example.com/ --table SHA256 [--every 60]`
-1. Fetches `index.sieve` and compares it with the hash you kept.
-2. Fetches every file it names.
-3. Runs `sieve site check` on that copy.
+## What running the steps alone found: the CI was failing
+Steps 03, 09 and 10 were failing since the default dictionary changed (24 October): their figures
+were the old list's. I hadn't run the full CI after that change. As you said, the checks now test
+the new default, and name `scowl-en-60-names-v2` explicitly, so a later default can't move them
+unseen. The new figures were checked:
+- **Step 03:** the count at 32 letters (543,295,627,560,114,847,147,360,598), the survivor number of
+  "it was the best of times", and survivor 1,000,000 ("a a a ... sat ya"). The Python oracle's own
+  ranker computed all three, with the same results.
+- **Step 09:** the book count is exactly 2^100 (the cover) × the title's count × the pages' count,
+  each from that ranker. The oracle itself ran out of memory counting 1,200 letters of 88,886
+  words, so this one isn't the oracle's.
+- **Steps 03, 09, 10:** the addresses that depend on the stack's id (scrambled) and the guided zoom
+  (58, as step 03's 58 bits) were taken from the engine. The steps read the addresses back.
 
-Any page, script or table changed on the server is printed as a `MISMATCH`, with exit 1. Run it on
-a schedule (Task Scheduler), or with `--every MINUTES`. The `.bat` finds Python as
-`bench_make.bat` does, and the release carries both files.
+All three pass now, run alone here.
 
-## Seen and tested here
-- **Chromium,** with the extension loaded and the test site served:
-  - the first visit remembered the table;
-  - the second visit, and the folder's own address, were checked;
-  - `gallery.html` changed on the server: refused;
-  - a page not in the table: offered, then shown anyway;
-  - the site rebuilt with a new table: the change was flagged, then trusted, then checked;
-  - the settings page listed the site.
-- **The crawler:** a site as built, exit 0; a page changed on the server, exit 1; a table that isn't
-  the one kept, exit 1.
-- **CI:** the table, the host reading it, and the crawler against the test site served locally.
-  That block passes when run here.
-- **Unit tests:** 0 failures. `check_help.py`: 0 missing.
+## Step 6: the first two items, measured and not built
+- **The listing's entries in bytes (IDEAS §19.90):**
+  - the release folder (146 files): the listing packs to 1,706 bytes as text and 1,598 in bytes,
+    so 108 bytes saved of 8.2 MB;
+  - a single small file would gain about 7 bytes.
 
-## What it doesn't cover yet
-- **Pages a server writes as it serves them** (PHP and the like) can't have a fixed hash. They show
-  as not matching, and they're for when we look at the other web languages.
-- **A page's own scripts may start** before the check ends: the page is hidden, not paused. A page
-  that fails is stopped and replaced.
-- **Signing:** so that an update needs no new trust, later.
+  Not worth a new manifest version.
+- **The rope's last gap on `pi6.txt` (IDEAS §19.87):** counted by column and the byte above, the
+  model is only 435 bytes (0.10%) over the floor. 1,291 of the 1,726 bytes over the floor are the
+  code's own tables. Nothing worth a new rope version.
+- **Next in step 6, archives (bzip2, zstd, and xz and gzip in several parts):** these need
+  third-party decoders, a new manifest version and oracle support. I'd like your go-ahead on the
+  dependencies first.
+
+## Notes
+- **IDEAS §19.101:** the crawler as a card, a hardware layer, noted for the far future.
+- **VOICES.md:** a note at the top says I lost sight of its purpose, and that I'll leave the file
+  alone. HANDOFF says so too, and that which lines to keep is yours to decide.
+- **HANDOFF:** step 5 is yours. It also records your view on backwards compatibility: keep it until
+  the system is near perfect.
+
+## Tested here
+- Every CI step alone: 01 to 04 and 06 to 11 pass. 05 and 12 weren't run here: 05 builds a second
+  copy, and 12 downloads its corpus.
+- Not run as one full CI, as you run that.
 
 ## To apply
-1. Copy `Sieve/` and `.github/` over, and rebuild.
-2. Reload the extension in `chrome://extensions`. It asks for its two new permissions.
-3. The website's `Pages/secure` copy of the test site still has `site.sieve`. Build it again with
-   the command in `web/README.md` to get `index.sieve` and the table check.
+Copy `Sieve/` and `.github/` over. Nothing to rebuild for the CI itself.

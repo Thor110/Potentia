@@ -3943,17 +3943,39 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   `notice.js`, `options.*`, background `guard`/`trust`/`forget`/`sites` and `registerGuard`
   (permissions `storage`, `scripting`); also a fix: a host reply with no `parts` (hello, table)
   never resolved. **`web/crawl_site.py`/`.bat`**. CI: the table, the host's reading of it, and the
-  crawler against the test site served locally. Left: signing the table; PHP and scripts' own
-  fetches.
+  crawler against the test site served locally. Left: PHP and scripts' own fetches. Decided
+  (Edward): the remembered table and "Trust the new table" stay; no signing, ever ("I don't trust
+  myself or any human being alive to keep a key safe").
 
-### Step 7 of the plan: the CI in parts (Edward, 24 October 2026)
-"It would be worth splitting the CI tests up in future, ie : making a script and folder for each
-step so that we can run them individually as and when we need them, as we should know which ones
-need testing depending on what has changed. as well as keeping the full CI scripts for when we
-decide to double check everything at once". Today the steps of `.github/workflows/build.yml` share
-one working folder, and later steps use what earlier ones made (the hallway step needs a mesh an
-earlier step writes), so one cannot be run alone. Edward runs the CI himself, so it is run here
-less: only the checks a change touches.
+### VOICES.md: leave it alone (Edward, 25 October 2026)
+`docs/VOICES.md` is the corpus of lines for the game's AIs to speak, not a record of what Edward
+says about the work. Claude had been adding nearly all of Edward's messages there (22 to 25 October);
+Edward has asked that Claude no longer change it at all. Quotes about the work go into IDEAS and
+HANDOFF only. A note at the top of VOICES.md says so. Which of the lines added since then to keep,
+Edward decides himself, when he has time (some fit, such as the "living web of ranges and states"
+one): nothing is to be removed or tidied there by Claude.
+
+### Step 7 of the plan: the CI in parts (Edward, 24 October 2026; built 25 October)
+- **`ci/steps/NN-name.sh`**, one a step (01 unit tests to 12 the pinned model), moved word for word
+  out of `.github/workflows/build.yml`, which now calls them (95 lines, from 2,299). `ci/lib.sh`:
+  `python` falls back to `py -3`; `sieve_ci_no_display` for the hallway's steps.
+- **`ci/run.sh [STEP...]`** (and `ci/run.bat`, through Git's bash): the steps asked for, in a fresh
+  copy of the Sieve folder with the build copied in as `build/`; a log each, a failure's last lines
+  shown and its copy kept. `--list`, `--build DIR`, `--keep`. `ci/README.md` says which step to run
+  for which change. Run here only the steps a change touches (Edward runs the full CI himself).
+- **Every step runs alone:** each was run alone, in its own copy; the one that needed an earlier
+  step's file (10, `cube.obj` from 04) now makes it itself.
+- **Found by it:** the default dictionary's change (24 October) had broken 03, 09 and 10, whose
+  figures were the old list's. Edward: "checks should check the new default, old defaults have
+  been technically been checked". They now name `scowl-en-60-names-v2` (so a later default cannot
+  move them unseen), with the new list's figures: 03's count, survivor number and survivor
+  1,000,000 recomputed by the oracle's `WordsRank` and the same; 09's book count is exactly 2^100
+  (the cover) × the title's count (words at 64) × the pages' (words at 1,200), each from the same
+  ranker (the oracle runs out of memory counting 1,200 letters of 88,886 words, so not by it).
+- **Backwards compatibility (Edward, 25 October 2026):** "maintaining backwards compatibility
+  until that point is ideal", the point being a system near perfect; most of it will be thrown away
+  later ("when we get to making an OS, all the old work will be thrown away I would imagine"), and
+  the application has no users yet that he knows of.
 
 ### Step 2: the release carries the web extension and the right-click menu (24 October 2026)
 - **`tools/make_release.py`** (`EXTRAS`, `WEB_NOTE`): the release folder gets `context\` (its README
@@ -3987,7 +4009,8 @@ Edward asked for the next most important steps, from the documents. In order:
 4. **The web, phase 2** (web/README.md, Next): the extension reading `site.sieve`, so pages that
    link to one another are checked against one hash; `sieve site check` against a server (the
    crawler); a `.sieve` of many files shown as a listing; links from the server's root.
-5. **The README's screenshots** (Edward's, with the old pictures moved out).
+5. **The README's screenshots** (Edward's, with the old pictures moved out; Edward, 25 October 2026:
+   "Leave step5 to me, I need to take some time to do that and present it myself").
 6. **Then, from the open list below:** the listing's entries in binary (§19.90), the rope's last
    gap on `pi6.txt` (§19.87), archives not yet optimised (§19.88), larger models (§19.86), the
    Encryption Engine's stage 2 (§19.76), and the WebAssembly decoder (§19.92).
