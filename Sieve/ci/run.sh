@@ -11,7 +11,8 @@
 #
 # The steps write files where they run, so they run in a fresh copy of the Sieve folder (made
 # once for all the steps asked for), with the build copied in as build/. Each step's output goes to
-# a log; a failed step's last lines are shown, with where its log is.
+# a log; a failed step's last lines are shown, with where its log is. Each step's commands go to
+# a .trace beside its log as they start, so the last line of one says where a step is.
 set -o pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 build="" keep=0 list=0 asked=()
@@ -64,17 +65,23 @@ echo "copying   the Sieve folder and $build to $work"
 mkdir -p "$work/Sieve/build" "$work/logs"
 for e in "$build"/* "$build"/.[!.]*; do
     [ -e "$e" ] || continue
-    case "$(basename "$e")" in CMakeFiles|_deps|Testing|*.dir|x64|Win32|.ninja*|build.ninja|Makefile|*.vcxproj*|*.sln) continue ;; esac
+    # Nor what the programs saved there while you used them (the hallway's settings and filters,
+    # the music room's, the chat logs): the steps run from the defaults, as on GitHub's runners.
+    case "$(basename "$e")" in CMakeFiles|_deps|Testing|*.dir|x64|Win32|.ninja*|build.ninja|Makefile|*.vcxproj*|*.sln|sieve-hallway.ini|sieve-filters.ini|sieve-music.ini|sieve-favourites.sieve|chat-logs) continue ;; esac
     cp -R "$e" "$work/Sieve/build/"
 done
 failed=()
 for n in "${chosen[@]}"; do
     start=$(date +%s)
-    if (cd "$work/Sieve" && bash "ci/steps/$n.sh") > "$work/logs/$n.log" 2>&1; then
+    echo "running   $n (log: $work/logs/$n.log)"
+    # Each command the step runs, as it starts, goes to its .trace (on its own descriptor, so no
+    # check's output changes): when a step seems stuck, the trace's last line is where.
+    if (cd "$work/Sieve" && BASH_XTRACEFD=9 SIEVE_CI_TRACE=1 bash -x "ci/steps/$n.sh" 9> "$work/logs/$n.trace") < /dev/null > "$work/logs/$n.log" 2>&1; then
         echo "ok        $n ($(( $(date +%s) - start )) s)"
     else
         echo "FAILED    $n ($(( $(date +%s) - start )) s): its last lines, from $work/logs/$n.log"
         tail -8 "$work/logs/$n.log" | sed 's/^/          /'
+        echo "          the last command it ran: $(grep -v '::error::' "$work/logs/$n.trace" 2>/dev/null | tail -n 1)"
         failed+=("$n")
     fi
 done

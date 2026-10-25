@@ -13,10 +13,12 @@ set "BASH="
 for %%B in ("%ProgramFiles%\Git\bin\bash.exe" "%ProgramFiles(x86)%\Git\bin\bash.exe" "%LocalAppData%\Programs\Git\bin\bash.exe") do (
     if not defined BASH if exist %%B set "BASH=%%~B"
 )
-if not defined BASH (
-    echo Git's bash was not found. Install Git for Windows (git-scm.com), which brings it.
-    goto done
-)
+rem No brackets inside a bracketed block: cmd reads a ")" in an echo there as the block's end,
+rem stops at once and closes the window.
+if defined BASH goto run
+echo Git's bash was not found. Install Git for Windows from git-scm.com, which brings it.
+goto done
+:run
 "%BASH%" "%~dp0run.sh" %*
 :done
 echo.

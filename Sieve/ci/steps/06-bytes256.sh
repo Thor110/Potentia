@@ -22,7 +22,9 @@ echo "$out" | q "deadbeef"
 $exe read --alphabet bytes256 --length 4 --mode positional deadbeef --out back.bin > /dev/null
 cmp four.bin back.bin
 # A file-sized address is far too long for a command line, so it can come from a file.
-python -c "d=open('$exe','rb').read()[:20000]; open('big.bin','wb').write(d); open('big.hex','w').write(d.hex())"
+# (Python opens the file itself, so on Windows it needs the name with .exe; bash finds it alone.)
+file=$exe; [ -f "$exe.exe" ] && file=$exe.exe
+python -c "d=open('$file','rb').read()[:20000]; open('big.bin','wb').write(d); open('big.hex','w').write(d.hex())"
 $exe read --alphabet bytes256 --length 20000 --mode positional --address-file big.hex --out back2.bin > /dev/null
 cmp big.bin back2.bin
 # Nothing is folded away: a file of every byte value comes back unchanged.

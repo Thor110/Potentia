@@ -55,6 +55,8 @@ def main():
     ap.add_argument("--home", default="", help="a link back from the pages (the website's Pages/secure.html: ../secure.html)")
     a = ap.parse_args()
     sieve, out = a.sieve.resolve(), a.out.resolve()
+    if not sieve.exists() and sieve.with_name(sieve.name + ".exe").exists():
+        sieve = sieve.with_name(sieve.name + ".exe")   # named as bash names it, without .exe (Windows)
     if not sieve.exists():
         sys.exit(f"{sieve} is not there")
     if out.exists():

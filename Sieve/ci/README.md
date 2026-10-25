@@ -31,6 +31,10 @@ ci/run.sh --build out/build/linux-release 01
 
 On Windows: `ci\run.bat` (double-click it, or give it the same options), which runs `run.sh` with
 the bash that comes with Git for Windows, and the Release build in `out\build\x64-Release`.
+Each step that runs on Windows also has its own `.bat` beside it in `steps\` (`01-unit-tests.bat`
+and so on): double-click one to run that step alone, as `ci\run.bat 01` does. Double-clicking
+a step's `.sh` does not work: a step expects the fresh copy `run.sh` makes, with the build in
+`build\`. A new step that runs on Windows gets a `.bat` of the same shape.
 
 The steps write files where they run, so `run.sh` makes a fresh copy of the Sieve folder (less its
 build folders) for each run, copies the build's programs and data folders in as `build/`, and runs

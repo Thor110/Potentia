@@ -4055,18 +4055,24 @@ lost:
     brotli, cab, lzip, and RAR (its decoder's licence forbids using it to make a RAR compressor;
     whether carrying a RAR as its contents is allowed is to check).
   - **Permanent or temporary (Edward, 25 October 2026; not built).** Two choices in place of one
-    box: **optimise archives (permanent)**, the contents kept as `.sieve` and the archive not given
-    back (today's `u` lines: 7z, zip, and a bzip2 or zstd that cannot be remade); and **optimise
-    archives (temporary)**, the contents carried with a flag naming the format to repack them into
-    on installing, so the program that wants the archive (a game's own pack format, say) still
-    finds one. Where Sieve has the very encoder, temporary already exists and is exact (the `xz`,
-    `gz`, `bz2` and `zst` ways, checked by the tree's SHA-256). What is new is a repack that is
-    only *equivalent*: the same files in the same format, but not the same bytes, so the tree's
-    hash cannot check it; the contents' hashes would be checked instead, and installing would say
-    the archive is a new one. Its use is mostly proprietary formats (games' pack files), as a
-    middle ground until `.sieve` replaces them; many such formats are stored or zlib inside, and
-    may well remake exactly. Later, a bitmask of formats, each off, permanent or temporary, with
-    a line in the File Locator saying why each is which. A new manifest version, with the next one.
+    box. **Optimise archives (permanent):** an archive (a game's `.pak`, say) unpacked and kept as
+    `.sieve` for good; installing gives back its files, not the archive (today's `u` lines, as a 7z
+    or zip is now). **Optimise archives (temporary):** the same unpacking, with a note of the format
+    to repack the files into on installing, so the program that wants the archive still finds it.
+    Edward: "We wouldn't unpack archives we can't repack properly, until we can": temporary is
+    only for a format Sieve can repack exactly, byte for byte, checked by the tree's SHA-256 (as
+    the `xz`, `gz`, `bz2` and `zst` ways are now). Its use is mostly proprietary formats (games'
+    pack files), a middle ground until `.sieve` outperforms them; many are stored or zlib inside.
+    For now a little text per file; later only the format's number.
+  - **The format as a number, not a bitmask (discussed 25 October 2026).** A file has one format,
+    so what names it is a choice from a list, and a number serves it best: 16 bits name 65,536
+    formats, a 16-bit mask only 16. Written as a varint it costs 1 byte for the first 128 formats
+    and 2 up to 16,384, so it need not be a fixed 2 bytes (the listing in bytes, §19.90, would
+    write it so). A bitmask is for a *set*: the settings (which formats are optimised, and which of
+    those permanently or temporarily: two masks, or 2 bits per format) and a head flag saying the
+    instructions hold any temporary archive at all. Beside the number, an exact repack needs the
+    archive's own settings (a level, a block size, a pack file's order and padding), so the number
+    names the format and its recipe follows. A new manifest version, with the next one.
   - The versions compared: GNU gzip 1.12 against zlib 1.3, and the `xz` program 5.4.5 against the
     liblzma Sieve was built with here.
 
