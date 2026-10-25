@@ -1,18 +1,29 @@
-# Windows fixes for v21 (25 October 2026)
+# Extract any archive from the right-click menu; WoW notes in engine/ (25 October 2026)
 
-Unzip over the repository root. Commit 0802d38 locally (not pushed), on top of sieve-v21.zip.
+Unzip over the repository root. Commit 222fbcd locally (not pushed), on top of sieve-v21-windows.zip.
 
-## "archive_static links to ZLIB::ZLIBSTATIC but the target was not found"
-- **What happened:** the first configure worked. Any later one, which happens whenever CMakeLists.txt changes, failed. The cache entries left for libarchive (zlib as the target `ZLIB::ZLIBSTATIC`) were taken by Sieve's own zlib search for a system zlib, so zlib wasn't fetched and the target never existed.
-- **The fix:** those entries are now forgotten before Sieve looks for zlib.
-- **Reproduced and checked here:** a build with the system's libraries hidden from CMake, as on Windows. Before the fix it failed on the second configure with your error. After it, three configures in a row work and it builds. Clearing your cache would only have got one build through.
+## Sieve > Extract on every archive Sieve reads
+- **What it does:** right-click a `.zip`, `.7z`, `.rar`, `.tar`, `.gz`, `.xz`, `.cab`, `.iso` and so on, and the Sieve submenu's Extract here and Extract to a folder of its name extract it with `sieve-install`, as 7-Zip does. It opens one layer at a time: a `.tar.gz` gives its `.tar`. A `.sieve` is unchanged and gives back exactly what it holds, a `.tar` included.
+- **Kinds:**
+  - 7z, zip, xz, gzip, bzip2, zstd, lz4, lzip;
+  - lzma and brotli, recognised by name;
+  - through libarchive: RAR 4 and 5, cab, ISO, LHA, cpio, ar (`.deb` too), WARC and tar.
+  - The table of all of them is in `docs/SIEVE-INSTALL-USAGE.md`, so it doubles as the list of formats to compare against later.
+- **Future kinds:** they all come from one table in the code (`archive_kinds()` in `tools/cli/pack.cpp`). `install_context.bat` now asks `sieve-install --archive-extensions` which file types to add the menu to. So a kind added to the table reaches the menu the next time you run the script. `uninstall_context.bat` removes Sieve from every file type it's on, whatever the list was.
+- **How it behaves:**
+  - Extract here keeps the archive's folders.
+  - Extract to a folder of its name leaves out a single top folder, so you don't get `photos\photos\`.
+  - Files already there are refused unless you tick Replace.
+  - A damaged or encrypted archive is refused before anything is written.
+  - Links inside a tar are left out, and the window says so.
+  - Every file passes the vault check.
+- **Checked here:** a new check, `ci/extract_check.py`, runs in step 10. It makes each kind from the repository's own files and libarchive's test archives, extracts it unattended and compares the result. Steps 10 and 11 pass. Not tested on Windows: the `.bat` registration and Explorer's menu. lz4 is checked only where Python's `lz4` module is installed.
 
-## preflate under MSVC (task_pool.h: `result_of` is not a member of `std`)
-- **The cause:** preflate's headers use `std::result_of`, which C++20 removed and MSVC enforces. GCC still allows it, which is why it built here.
-- **The fix:** preflate is built as C++17. The rest of Sieve reaches it through `tools/cli/preflate_glue.hpp`, two functions in a header that includes nothing of preflate's. Its files are still unchanged.
-- **Checked here:** builds, and step 11's v21 block passes. Not checked under MSVC.
+## WoW
+- `engine/README.md` and `engine/wow.md` hold the notes: both layouts, FFUH, and the measurements. They point towards the far-future game engine. Nothing of the game is in the repository, and Sieve does nothing with `.WoW` files.
 
-## Notes, as you asked (IDEAS §19.88)
-- **RAR:** `rar` reads every older RAR, but packing again gives the same bytes only with the same version and settings that made it. RAR is listed as read and carried as its contents; it's rebuilt only by the same `rar` that made it, and nothing more is built for now.
-- **Headers kept as they are:** a per-format header model (rebuilt from the files and a few settings, keeping only what differs, as preflate does for deflate) would carry less. Headers are small and LZMA2 already packs their repeats, so it waits.
-- **Your view:** optimising archives is a pleasantry, not core. The far aim is to replace them with `.sieve`, reading them meanwhile so what they hold reaches the future.
+## RAR made again by rar.exe (your warning): not built yet
+It needs the RAR rebuild itself first, which doesn't exist yet. Here's what I propose:
+- **Packing:** where `rar.exe` is found, the packer unpacks the RAR, packs it again with the switches its headers show, and keeps the recipe only if the result is byte for byte the original. That recipe needs the rar version, the switches, and each file's times to the nanosecond, which is new data to carry, so a new manifest version (v22). Otherwise the RAR is carried as its contents, as now.
+- **Installing:** with the same `rar` version, the RAR is rebuilt and checked. Without `rar.exe`, or with another version, its files are extracted into a folder named after it, with a warning in the hallway, `sieve-install` and `sieve install`: "x.rar was not made again: rar.exe was not found; its files are in x\".
+- **Testing:** I can't run rar in this session (it isn't installed and rarlab.com is refused). CI would test the plumbing and the warning with a stand-in `rar` script. Whether real rar.exe gives the same bytes back would be checked on your machine.

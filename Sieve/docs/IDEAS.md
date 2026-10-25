@@ -941,6 +941,9 @@ as written down:
   compiled. The first test: Sieve itself.
 - **Translation layers, in the far future:** layers that reduce every game to its smallest
   footprint and store it in the library.
+- **`engine/` (Edward, 25 October 2026):** what is learned about games' own formats is kept in
+  `engine/`, out of the main architecture, for this; the first is the `.WoW` archives of *The War of
+  the Worlds* (1998), measured (`engine/wow.md`).
 
 *Evaluation:*
 - **Ghost mode** is near: a world's mesh is built already (`WorldSpace::mesh_of`). Entering it

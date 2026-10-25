@@ -21,12 +21,17 @@
 // archive is checked against its SHA-256 first, and 7z checks each file's CRC as it unpacks. Only
 // this program does that; the locator gives back exactly the file it located.
 //
+// Any other archive Sieve reads (a .zip, .rar, .tar.gz ... : cli/pack.hpp's archive_kinds) is
+// extracted as an archiver extracts it, one layer only (a .tar.gz gives its .tar): the right-click
+// menu's Extract on those files (context/install_context.bat).
+//
 // For testing without a person: --to FOLDER sets where, --yes installs at once and exits (0 on
 // success), and --screenshot FILE.bmp writes the window as it stands just before exiting.
 
 #include "dialogs.hpp"
 #include "cli/locate.hpp"
 #include "cli/items.hpp"
+#include "cli/pack.hpp"
 #include "unpack_7z.hpp"
 #include "window_icon.hpp"
 #include "win_console.hpp"
@@ -38,8 +43,11 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -116,6 +124,10 @@ struct Installer
     std::optional<Manifest> manifest;
     // One 7z archive: unpacked into a folder named after it, rather than written as it is.
     std::optional<install::SevenZip> archive;
+    // Not Sieve's: an archive of another kind, extracted (read_any_archive).
+    std::optional<AnyArchive> any;
+    bool keep_top = false;      // Extract here: its top folder kept, as an archiver's is
+    bool top_left_out = false;  // its top folder already left out
     std::string error;          // why the installer could not be read, or the install failed
     std::string dest;           // where, as UTF-8, editable
     bool replace = false;       // replace files that are already there
@@ -138,7 +150,32 @@ struct Installer
         source = file;
         manifest.reset();
         archive.reset();
+        any.reset();
+        top_left_out = false;
         error.clear();
+        // An archive of another kind, by its name (a .sieve, or a program with one attached, is
+        // Sieve's own, below).
+        if (is_other_archive(file))
+        {
+            try
+            {
+                std::ifstream f(file, std::ios::binary);
+                if (!f) throw std::runtime_error("cannot read " + u8(file));
+                const std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+                any = read_any_archive(bytes, u8(file.filename()));
+                if (!any) throw std::runtime_error(u8(file.filename()) + " is not an archive this can extract");
+                screen = Screen::Ready;
+                const char* docs = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
+                dest = where_in(docs ? from_u8(docs) : fs::current_path());
+            }
+            catch (const std::exception& e)
+            {
+                any.reset();
+                error = u8(file.filename()) + ": " + e.what();
+                screen = Screen::NoInstaller;
+            }
+            return;
+        }
         try
         {
             manifest = installable_manifest(file, false); // an installer, a program, or a v3 or v4 manifest
@@ -162,6 +199,23 @@ struct Installer
         }
     }
 
+    // A file whose name is one of archive_kinds()'s (case aside), and not a .sieve.
+    static bool is_other_archive(const fs::path& file)
+    {
+        std::string name = u8(file.filename());
+        for (char& c : name) c = char(std::tolower(static_cast<unsigned char>(c)));
+        for (const ArchiveKind& k : archive_kinds())
+            for (const char* ext : k.extensions)
+            {
+                const std::string e(ext);
+                if (name.size() > e.size() && name.compare(name.size() - e.size(), e.size(), e) == 0) return true;
+            }
+        return false;
+    }
+
+    // What it is, for the window: "Installs", or "Unpacks" for an archive.
+    std::string root_name() const { return any ? u8(source.filename()) : manifest->root; }
+
     // A single file (Sieve instructions for one file).
     bool one_file() const
     {
@@ -173,6 +227,7 @@ struct Installer
     // folder; a 7z archive into a folder named after the file (sieve.7z -> sieve).
     std::string where_in(const fs::path& base) const
     {
+        if (any) return u8(base / source.stem());
         if (archive) return u8(base / from_u8(manifest->root).stem());
         if (one_file()) return u8(base);
         return u8(base / from_u8(manifest->root));
@@ -180,15 +235,35 @@ struct Installer
 
     void start()
     {
-        if (!manifest || dest.empty()) return;
+        if ((!manifest && !any) || dest.empty()) return;
         screen = Screen::Installing;
         cancel = false;
         finished = false;
         done = 0;
-        total = archive ? size_t(archive->files) : size_t(manifest->files);
+        // (Into a folder of its own: its one top folder left out, so NAME\NAME\ is not made.)
+        if (any && !keep_top && !top_left_out)
+        {
+            leave_out_top_folder(*any);
+            top_left_out = true; // once: Back, then Install again, must not take a second folder off
+        }
+        total = any ? size_t(any->files) : archive ? size_t(archive->files) : size_t(manifest->files);
         worker = std::thread([this] {
             try
             {
+                if (any)
+                {
+                    phase = 1;
+                    ok = unpack_archive(*any, from_u8(dest), replace,
+                                        [this](size_t d, size_t t, const std::string& path) {
+                                            done = d;
+                                            total = t;
+                                            std::lock_guard<std::mutex> lock(mx);
+                                            current = path;
+                                        },
+                                        &cancel);
+                    finished = true;
+                    return;
+                }
                 if (archive)
                 {
                     phase = 1; // checked already: the archive's SHA-256 when it was opened
@@ -289,7 +364,9 @@ const char* kInstallerUsage =
     "checks every file against its SHA-256 before writing any, and Cancel part way removes what\n"
     "was written. It installs anything Sieve makes, as sieve install does: files packed, pulled\n"
     "tight by the rope or cut into pieces, items of Sieve's lines made again, archives remade\n"
-    "exactly or given back as their contents, and the files a map holds.\n"
+    "exactly or given back as their contents, and the files a map holds. Any other archive Sieve\n"
+    "reads (7z, zip, RAR, tar, gzip, xz and the rest) it extracts, as an archiver does, one layer\n"
+    "at a time: a .tar.gz gives its .tar.\n"
     "\n"
     "Options:\n"
     "  --to FOLDER          where to install (else it asks)\n"
@@ -297,6 +374,8 @@ const char* kInstallerUsage =
     "                       menu's Extract here); a failure stays open, to say why\n"
     "  --extract-folder     the same, into a folder named after the .sieve (Extract to NAME\\)\n"
     "  --yes                install at once and exit: 0 on success\n"
+    "  --archive-extensions the names of the other archives it extracts (a .zip, .rar, .tar.gz ...),\n"
+    "                       one a line: what context\\install_context.bat adds the menu to\n"
     "  --screenshot FILE    write the window, as it stands just before exiting, as a BMP\n"
     "  --help               this text\n";
 
@@ -315,6 +394,14 @@ int main(int argc, char** argv)
         {
             hallway::attach_parent_console();
             std::fputs(kInstallerUsage, stdout);
+            std::fflush(stdout);
+            return 0;
+        }
+        if (a == "--archive-extensions")
+        {
+            hallway::attach_parent_console();
+            for (const ArchiveKind& k : archive_kinds())
+                for (const char* ext : k.extensions) std::printf("%s\n", ext);
             std::fflush(stdout);
             return 0;
         }
@@ -372,6 +459,7 @@ int main(int argc, char** argv)
     else if (auto beside = installer_beside_me()) in.open(*beside);
     else in.error = "no installer: drop a .sieve file on this window, or open one with this program";
     if (!to_arg.empty()) in.dest = to_arg;
+    in.keep_top = extract == 1; // Extract here: as an archiver's, the top folder kept
     // The right-click menu's extract options work as an archiver's do: at once, and the window
     // closes when it is done; only a failure stays open, to say why (Back, then Replace).
     const bool quick = extract != 0;
@@ -388,7 +476,7 @@ int main(int argc, char** argv)
         if (quick && (in.screen == Screen::Done || in.screen == Screen::Cancelled)) quit = true;
         {
             std::lock_guard<std::mutex> lock(in.dialog_mx);
-            if (in.chosen && in.manifest)
+            if (in.chosen && (in.manifest || in.any))
             {
                 in.dest = in.where_in(from_u8(*in.chosen));
                 in.chosen.reset();
@@ -470,15 +558,22 @@ int main(int argc, char** argv)
         }
         else
         {
-            const Manifest& m = *in.manifest;
-            if (in.archive)
+            if (in.any)
             {
+                row(80, "Unpacks", u8(in.source.filename()) + " (" + in.any->format + ")");
+                row(104, "Contents", files_n(in.any->files) + ", " + human_bytes(in.any->bytes) +
+                                         (in.any->links_left_out ? ", " + std::to_string(in.any->links_left_out) + " link(s) left out" : ""));
+            }
+            else if (in.archive)
+            {
+                const Manifest& m = *in.manifest;
                 row(80, "Unpacks", m.root + " (7z, " + human_bytes(m.bytes) + ")");
                 row(104, "Contents", files_n(in.archive->files) + ", " + human_bytes(in.archive->bytes) +
                                          (in.archive->top.empty() ? "" : ", from " + in.archive->top));
             }
             else
             {
+                const Manifest& m = *in.manifest;
                 row(80, "Installs", m.root);
                 row(104, "Contents", files_n(m.files) + ", " + human_bytes(m.bytes));
             }
@@ -504,7 +599,12 @@ int main(int argc, char** argv)
                     SDL_RenderFillRect(r, &in_tick);
                 }
                 text(r, 52, 247, "Replace files that are already there", 1.5f, kInk);
-                if (in.archive)
+                if (in.any)
+                {
+                    text(r, 24, 290, "Each file is read from the archive (checked against its CRC, where it keeps one)", 1, kDim);
+                    text(r, 24, 304, "and written as it is. Cancel removes whatever was written.", 1, kDim);
+                }
+                else if (in.archive)
                 {
                     text(r, 24, 290, "The archive was read back from its address and checked against its SHA-256;", 1, kDim);
                     text(r, 24, 304, "each file's CRC is checked as it unpacks. Cancel removes whatever was written.", 1, kDim);
@@ -524,9 +624,9 @@ int main(int argc, char** argv)
                 if (in.screen == Screen::Installing)
                 {
                     const bool writing = in.phase == 1;
-                    text(r, 24, 196, in.archive ? "Unpacking" : writing ? "Writing" : "Checking", 2, kInk);
+                    text(r, 24, 196, in.archive || in.any ? "Unpacking" : writing ? "Writing" : "Checking", 2, kInk);
                     // Checking is the first half of the bar, writing the second (unpacking, the whole).
-                    const float f = in.archive ? float(d) / float(t) : (float(d) / float(t) + (writing ? 1.0f : 0.0f)) / 2.0f;
+                    const float f = in.archive || in.any ? float(d) / float(t) : (float(d) / float(t) + (writing ? 1.0f : 0.0f)) / 2.0f;
                     const SDL_FRect bar{24, 228, W - 48, 22}, fill{26, 230, (W - 52) * f, 18};
                     SDL_SetRenderDrawColor(r, 110, 110, 110, 255);
                     SDL_RenderRect(r, &bar);
@@ -543,7 +643,9 @@ int main(int argc, char** argv)
                 else if (in.screen == Screen::Done)
                 {
                     text(r, 24, 196, "Installed.", 2, kAccent);
-                    if (in.archive)
+                    if (in.any)
+                        text(r, 24, 228, files_n(in.any->files) + " unpacked from " + u8(in.source.filename()) + ".", 1.5f, kInk);
+                    else if (in.archive)
                         text(r, 24, 228, files_n(in.archive->files) + " unpacked from " + in.manifest->root + ", every one checked.", 1.5f, kInk);
                     else
                         text(r, 24, 228, files_n(in.manifest->files) + (in.manifest->files == 1 ? ", checked against its SHA-256." : ", every one checked against its SHA-256."), 1.5f, kInk);

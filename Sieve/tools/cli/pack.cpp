@@ -8,6 +8,7 @@
 #include "sieve/sha256.hpp"
 #include "sieve/stop.hpp"
 #include "unpack_7z.hpp"
+#include "cli/vault.hpp"
 
 // bzlib.h includes <windows.h> on Windows: without these first, its min and max macros break
 // std::min and std::max throughout this file.
@@ -43,7 +44,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cctype>
 #include <exception>
+#include <fstream>
+#include <initializer_list>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -675,7 +679,7 @@ std::string hex_of(const uint8_t* p, size_t n)
 // A zip's entries, read into memory: stored and deflated ones, each checked against its CRC; the
 // one top folder left out as a 7z's is. Nothing where any entry is encrypted, in another method,
 // zip64, or named so it could leave its folder.
-std::optional<std::vector<sieve::install::InMemory>> zip_entries(const std::vector<uint8_t>& b)
+std::optional<std::vector<sieve::install::InMemory>> zip_entries(const std::vector<uint8_t>& b, bool leave_out_top = true)
 {
     auto u16 = [&](size_t at) { return uint32_t(b[at]) | uint32_t(b[at + 1]) << 8; };
     auto u32 = [&](size_t at) { return u16(at) | u16(at + 2) << 16; };
@@ -737,7 +741,7 @@ std::optional<std::vector<sieve::install::InMemory>> zip_entries(const std::vect
         out.push_back(std::move(m));
     }
     // One top folder: every entry is it or inside it, at least one inside: left out.
-    if (!out.empty())
+    if (!out.empty() && leave_out_top)
     {
         const std::string top = out[0].entry.path.substr(0, out[0].entry.path.find('/'));
         bool one = true, inside = false;
@@ -767,8 +771,32 @@ std::optional<std::vector<sieve::install::InMemory>> zip_entries(const std::vect
 // of their encoders). Nothing where an entry is a link, a device, encrypted, named twice, or named so
 // it could leave its folder; or where libarchive cannot read every entry. Its format's name, the "u"
 // line's, in `format`.
-std::optional<std::vector<sieve::install::InMemory>> libarchive_entries(const std::vector<uint8_t>& b, std::string& format)
+// Whether a name is well-formed UTF-8 (no overlong forms, surrogates or values past U+10FFFF).
+bool valid_utf8(std::string_view s)
 {
+    for (size_t i = 0; i < s.size();)
+    {
+        const unsigned char c = static_cast<unsigned char>(s[i]);
+        const size_t n = c < 0x80 ? 1 : (c >> 5) == 6 ? 2 : (c >> 4) == 14 ? 3 : (c >> 3) == 30 ? 4 : 0;
+        if (!n || i + n > s.size()) return false;
+        uint32_t v = n == 1 ? c : n == 2 ? c & 31 : n == 3 ? c & 15 : c & 7;
+        for (size_t k = 1; k < n; ++k)
+        {
+            const unsigned char d = static_cast<unsigned char>(s[i + k]);
+            if ((d >> 6) != 2) return false;
+            v = v << 6 | (d & 63);
+        }
+        if ((n == 2 && v < 0x80) || (n == 3 && v < 0x800) || (n == 4 && v < 0x10000) || v > 0x10FFFF || (v >= 0xD800 && v < 0xE000)) return false;
+        i += n;
+    }
+    return true;
+}
+
+std::optional<std::vector<sieve::install::InMemory>> libarchive_entries(const std::vector<uint8_t>& b, std::string& format, size_t* links_left_out = nullptr)
+{
+    // Extracting (links_left_out given: read_any_archive): tar and zip too, a link left out rather
+    // than the archive refused, and the top folder kept, as an archiver's Extract does.
+    const bool extract = links_left_out != nullptr;
     struct archive* a = archive_read_new();
     if (!a) return std::nullopt;
     archive_read_support_format_rar(a);
@@ -779,6 +807,11 @@ std::optional<std::vector<sieve::install::InMemory>> libarchive_entries(const st
     archive_read_support_format_cpio(a);
     archive_read_support_format_ar(a);
     archive_read_support_format_warc(a);
+    if (extract)
+    {
+        archive_read_support_format_tar(a);
+        archive_read_support_format_zip(a);
+    }
     std::vector<sieve::install::InMemory> out;
     std::unordered_set<std::string> names;
     bool ok = archive_read_open_memory(a, b.data(), b.size()) == ARCHIVE_OK;
@@ -787,15 +820,26 @@ std::optional<std::vector<sieve::install::InMemory>> libarchive_entries(const st
     {
         const int r = archive_read_next_header(a, &en);
         if (r == ARCHIVE_EOF) break;
-        if (r != ARCHIVE_OK) { ok = false; break; }
+        // (A warning, extracting, is a name it could not convert: taken as held, below.)
+        if (r != ARCHIVE_OK && !(extract && r == ARCHIVE_WARN)) { ok = false; break; }
         // (A name libarchive cannot give as UTF-8, one in a code page, is refused: the listing's names are UTF-8.)
         const char* raw = archive_entry_pathname_utf8(en);
         std::string name = raw ? raw : "";
+        // Extracting: where libarchive cannot convert a name (a tar's, in the "C" locale this runs
+        // in), the name as the archive holds it, where that is UTF-8 already, as a tar's nearly
+        // always is.
+        if (!raw && extract)
+            if (const char* as_held = archive_entry_pathname(en); as_held && valid_utf8(as_held)) name = as_held;
         while (name.size() > 2 && name.compare(0, 2, "./") == 0) name.erase(0, 2);
         const auto type = archive_entry_filetype(en); // (auto: libarchive's own mode type, mode_t having none on Windows)
         const bool dir = type == AE_IFDIR;
         if (dir && (name == "." || name == "./")) continue; // the root's own entry (an ISO's)
         if (dir && !name.empty() && name.back() == '/') name.pop_back();
+        if (extract && (type == AE_IFLNK || archive_entry_hardlink(en)))
+        {
+            ++*links_left_out;
+            continue;
+        }
         if ((type != AE_IFREG && !dir) || archive_entry_hardlink(en) || archive_entry_is_encrypted(en) || name.empty() || name[0] == '/' ||
             name.find('\\') != std::string::npos || name.find(':') != std::string::npos)
         {
@@ -832,8 +876,10 @@ std::optional<std::vector<sieve::install::InMemory>> libarchive_entries(const st
     archive_read_free(a);
     if (!ok || out.empty()) return std::nullopt;
     format = fmt == ARCHIVE_FORMAT_RAR || fmt == ARCHIVE_FORMAT_RAR_V5 ? "rar" : fmt == ARCHIVE_FORMAT_CAB ? "cab" : fmt == ARCHIVE_FORMAT_ISO9660 ? "iso" :
-             fmt == ARCHIVE_FORMAT_LHA ? "lha" : fmt == ARCHIVE_FORMAT_CPIO ? "cpio" : fmt == ARCHIVE_FORMAT_AR ? "ar" : fmt == ARCHIVE_FORMAT_WARC ? "warc" : "";
+             fmt == ARCHIVE_FORMAT_LHA ? "lha" : fmt == ARCHIVE_FORMAT_CPIO ? "cpio" : fmt == ARCHIVE_FORMAT_AR ? "ar" : fmt == ARCHIVE_FORMAT_WARC ? "warc" :
+             extract && fmt == ARCHIVE_FORMAT_TAR ? "tar" : extract && fmt == ARCHIVE_FORMAT_ZIP ? "zip" : "";
     if (format.empty()) return std::nullopt;
+    if (extract) return out;
     // One top folder: every entry is it or inside it, at least one inside: left out (as a zip's).
     const std::string top = out[0].entry.path.substr(0, out[0].entry.path.find('/'));
     bool one = true, inside = false;
@@ -2876,6 +2922,223 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
       << " derived from another's lines (" << r.derived_bytes << " bytes, as " << r.mask_bytes << " bytes of masks)\n";
     for (const auto& [d, b] : r.derivations) o << "          " << d << ": lines of " << b << "\n";
     return o.str();
+}
+
+// ---- Any archive Sieve reads, extracted (25 October 2026): the right-click menu's Extract on an
+// archive, as an archiver's. One layer only, as 7-Zip's: a .tar.gz gives its .tar.
+
+namespace {
+
+bool name_ends(const std::string& name, const char* tail)
+{
+    const size_t n = std::strlen(tail);
+    if (name.size() <= n) return false;
+    for (size_t i = 0; i < n; ++i)
+        if (std::tolower(static_cast<unsigned char>(name[name.size() - n + i])) != tail[i]) return false;
+    return true;
+}
+
+// The one file a compressed stream holds: its name without the extension (a .tgz's, .tar), else the
+// name with ".out".
+std::string stream_inner_name(const std::string& name, std::initializer_list<const char*> exts, std::initializer_list<const char*> tar_exts)
+{
+    for (const char* t : tar_exts)
+        if (name_ends(name, t)) return name.substr(0, name.size() - std::strlen(t)) + ".tar";
+    for (const char* t : exts)
+        if (name_ends(name, t)) return name.substr(0, name.size() - std::strlen(t));
+    return name + ".out";
+}
+
+} // namespace
+
+// Every kind extracted, and the names its files go by: the one list, which the right-click menu is
+// made from (sieve-install --archive-extensions; context/install_context.bat). A kind added to
+// read_any_archive is added here, and the menu takes it up the next time it is set up.
+const std::vector<ArchiveKind>& archive_kinds()
+{
+    static const std::vector<ArchiveKind> kinds = {
+        {"7z", {".7z"}},
+        {"zip", {".zip", ".zipx"}},
+        {"xz", {".xz", ".txz"}},
+        {"gz", {".gz", ".tgz"}},
+        {"bz2", {".bz2", ".tbz2", ".tbz"}},
+        {"zst", {".zst", ".tzst"}},
+        {"lz4", {".lz4", ".tlz4"}},
+        {"lz", {".lz", ".tlz"}},
+        {"lzma", {".lzma"}},
+        {"br", {".br"}},
+        {"rar", {".rar"}},
+        {"cab", {".cab"}},
+        {"iso", {".iso"}},
+        {"lha", {".lzh", ".lha"}},
+        {"cpio", {".cpio"}},
+        {"ar", {".ar", ".deb"}},
+        {"warc", {".warc"}},
+        {"tar", {".tar"}},
+    };
+    return kinds;
+}
+
+std::optional<AnyArchive> read_any_archive(const std::vector<uint8_t>& b, const std::string& file_name)
+{
+    std::string name = file_name;
+    const size_t slash = name.find_last_of("/\\");
+    if (slash != std::string::npos) name = name.substr(slash + 1);
+    AnyArchive a;
+    auto take = [&](std::vector<sieve::install::InMemory>&& all) {
+        for (auto& m : all) a.entries.push_back({std::move(m.entry.path), m.entry.dir, std::move(m.bytes)});
+    };
+    auto one = [&](const char* format, std::optional<std::vector<uint8_t>>&& inner, std::string inner_name) {
+        if (!inner) throw std::runtime_error(std::string("it is a damaged ") + format + " stream, or one this cannot read");
+        a.format = format;
+        a.entries.push_back({std::move(inner_name), false, std::move(*inner)});
+    };
+    if (sieve::install::is_7z(b))
+    {
+        a.format = "7z";
+        // (read_7z leaves out a top folder; put back, as an archiver's Extract keeps it.)
+        const std::string top = sieve::install::list_7z(b).top;
+        auto all = sieve::install::read_7z(b);
+        if (!top.empty())
+        {
+            a.entries.push_back({top, true, {}});
+            for (auto& m : all) m.entry.path = top + "/" + m.entry.path;
+        }
+        take(std::move(all));
+    }
+    else if (b.size() >= 4 && b[0] == 'P' && b[1] == 'K' && ((b[2] == 3 && b[3] == 4) || (b[2] == 5 && b[3] == 6)))
+    {
+        a.format = "zip";
+        if (auto all = zip_entries(b, false)) take(std::move(*all));
+        else
+        {
+            std::string format;
+            auto more = libarchive_entries(b, format, &a.links_left_out); // zip64, other methods
+            if (!more) throw std::runtime_error("it is a zip this cannot read (encrypted, damaged, or in a method it does not know)");
+            take(std::move(*more));
+        }
+    }
+    else if (is_xz(b)) one("xz", xz_inner(b), stream_inner_name(name, {".xz"}, {".txz"}));
+    else if (is_gzip(b)) one("gz", gzip_inner(b), stream_inner_name(name, {".gz", ".z"}, {".tgz"}));
+    else if (is_bz2(b)) one("bz2", bz2_inner(b), stream_inner_name(name, {".bz2"}, {".tbz2", ".tbz"}));
+    else if (is_zstd(b)) one("zst", zstd_inner(b), stream_inner_name(name, {".zst"}, {".tzst"}));
+    else if (is_lz4(b)) one("lz4", lz4_inner(b), stream_inner_name(name, {".lz4"}, {".tlz4"}));
+    else if (is_lzip(b)) one("lz", liblzma_inner(b, true), stream_inner_name(name, {".lz"}, {".tlz"}));
+    else if (name_ends(name, ".lzma") && is_lzma_alone(b)) one("lzma", liblzma_inner(b, false), stream_inner_name(name, {".lzma"}, {}));
+    else if (name_ends(name, ".br")) one("br", brotli_inner(b), stream_inner_name(name, {".br"}, {}));
+    else
+    {
+        std::string format;
+        auto all = libarchive_entries(b, format, &a.links_left_out);
+        if (!all) return std::nullopt;
+        a.format = format;
+        take(std::move(*all));
+    }
+    for (const auto& e : a.entries)
+        if (!e.dir)
+        {
+            ++a.files;
+            a.bytes += e.bytes.size();
+        }
+    return a;
+}
+
+void leave_out_top_folder(AnyArchive& a, std::string* top_out)
+{
+    if (a.entries.empty()) return;
+    const std::string top = a.entries[0].path.substr(0, a.entries[0].path.find('/'));
+    bool one = true, inside = false;
+    for (const auto& e : a.entries)
+    {
+        if (e.path.substr(0, e.path.find('/')) != top || (e.path == top && !e.dir)) one = false;
+        if (e.path.size() > top.size()) inside = true;
+    }
+    if (!one || !inside) return;
+    std::vector<AnyArchive::Entry> kept;
+    for (auto& e : a.entries)
+        if (e.path != top)
+        {
+            e.path = e.path.substr(top.size() + 1);
+            kept.push_back(std::move(e));
+        }
+    a.entries = std::move(kept);
+    if (top_out) *top_out = top;
+}
+
+bool unpack_archive(const AnyArchive& a, const std::filesystem::path& dest, bool force,
+                    const std::function<void(size_t, size_t, const std::string&)>& progress, const std::atomic<bool>* cancel)
+{
+    namespace fs = std::filesystem;
+    auto path_of = [&](const std::string& p) {
+        // (Every reader has refused a name that could leave its folder; checked again here.)
+        if (p.empty() || p[0] == '/' || p.find('\\') != std::string::npos || p.find(':') != std::string::npos)
+            throw std::runtime_error("the archive has a name that leaves its folder: " + p);
+        for (size_t at = 0; at <= p.size();)
+        {
+            size_t s = p.find('/', at);
+            if (s == std::string::npos) s = p.size();
+            if (p.compare(at, s - at, "..") == 0 && s - at == 2) throw std::runtime_error("the archive has a name that leaves its folder: " + p);
+            at = s + 1;
+        }
+        return dest / fs::path(std::u8string(p.begin(), p.end()));
+    };
+    if (!force)
+        for (const auto& e : a.entries)
+            if (!e.dir && fs::exists(path_of(e.path))) throw std::runtime_error("already there (tick Replace to write over it): " + e.path);
+    std::vector<fs::path> made_dirs, written;
+    auto make_dirs = [&](const fs::path& d) {
+        std::vector<fs::path> missing;
+        for (fs::path p = d; !p.empty() && !fs::exists(p); p = p.parent_path())
+        {
+            missing.push_back(p);
+            if (p == p.parent_path()) break;
+        }
+        for (auto it = missing.rbegin(); it != missing.rend(); ++it)
+        {
+            fs::create_directory(*it);
+            made_dirs.push_back(*it);
+        }
+    };
+    auto undo = [&] {
+        std::error_code ec;
+        for (const fs::path& f : written) fs::remove(f, ec);
+        for (auto it = made_dirs.rbegin(); it != made_dirs.rend(); ++it) fs::remove(*it, ec); // only if empty
+    };
+    size_t done = 0;
+    try
+    {
+        make_dirs(dest);
+        for (const auto& e : a.entries)
+        {
+            if (cancel && *cancel)
+            {
+                undo();
+                return false;
+            }
+            const fs::path to = path_of(e.path);
+            if (e.dir)
+            {
+                make_dirs(to);
+                continue;
+            }
+            make_dirs(to.parent_path());
+            vault::check_bytes(e.bytes, e.path); // nothing the vault withholds is written, whatever it arrives in
+            std::ofstream f(to, std::ios::binary | std::ios::trunc);
+            if (!f) throw std::runtime_error("cannot write " + e.path);
+            written.push_back(to);
+            if (!e.bytes.empty()) f.write(reinterpret_cast<const char*>(e.bytes.data()), std::streamsize(e.bytes.size()));
+            f.close();
+            if (!f) throw std::runtime_error("cannot write " + e.path);
+            ++done;
+            if (progress) progress(done, size_t(a.files), e.path);
+        }
+    }
+    catch (...)
+    {
+        undo();
+        throw;
+    }
+    return true;
 }
 
 } // namespace sieve::cli

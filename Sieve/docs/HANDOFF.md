@@ -3947,6 +3947,31 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   (Edward): the remembered table and "Trust the new table" stay; no signing, ever ("I don't trust
   myself or any human being alive to keep a key safe").
 
+### Extract any archive, from the right-click menu (25 October 2026)
+
+- **What:** `sieve-install` extracts every archive kind Sieve reads, not only `.sieve` files: 7z,
+  zip, xz, gzip, bzip2, zstd, lz4, lzip, lzma, brotli, and through libarchive RAR 4 and 5, cab, ISO,
+  LHA, cpio, ar, WARC and tar. One layer at a time, as 7-Zip's (Edward: a `.tar.gz` gives its
+  `.tar`; a `.sieve` is never changed by this). Extract here keeps the archive's folders; Extract
+  to a folder of its name leaves out its one top folder. Links in a tar are left out and said so.
+- **One list (Edward: "dynamically access archive file formats that we add to the list in the
+  future"):** `archive_kinds()` in `tools/cli/pack.cpp`; `sieve-install --archive-extensions`
+  prints its names; `context/install_context.bat` registers the Sieve submenu on each of them, so a
+  kind added to the table (and to `read_any_archive`) reaches the menu when the script is run
+  again. `uninstall_context.bat` removes Sieve from every kind of file it is on.
+- **Code:** `read_any_archive`, `leave_out_top_folder`, `unpack_archive` (pack.hpp/.cpp; the
+  writer refuses files already there, checks each with the vault and removes what it wrote on a
+  cancel or failure); `zip_entries` and `libarchive_entries` gained an extract mode (top folder
+  kept; tar and zip through libarchive; a name libarchive cannot convert in the "C" locale taken as
+  held where it is UTF-8). The packer's own use of them is unchanged.
+- **CI:** `ci/extract_check.py` (step 10): every kind made from the repository's own files and
+  libarchive's test archives, extracted unattended and compared.
+- **The WoW work** is notes only, in `engine/` (Edward: out of the main architecture; nothing of
+  the game's kept).
+- **Next (waiting on Edward):** RAR made again by the machine's own `rar.exe`, and where it is
+  missing, the files extracted with a warning in the hallway and `sieve-install`. Not buildable
+  here: no `rar` in the container, and rarlab.com is refused.
+
 ### 7z, zip and gzip made again exactly: `sieve-manifest-v21` (25 October 2026)
 Edward: "we should delay the filter ideas until we deal with 7z, zip and rar exactly".
 - **preflate** (Apache 2.0, pinned to commit 609eefa, its last; `third_party_licenses/preflate`) for

@@ -81,6 +81,9 @@ build/sieve-install fx7.sieve --to fx7 --yes
 diff -r tests/manifest_fixture fx7
 build/sieve install fx7.sieve --to fx7raw > /dev/null
 cmp tests/manifest_fixture.7z fx7raw/manifest_fixture.7z
+# Archives of other kinds, extracted as an archiver extracts them (the right-click menu's Extract on
+# a .zip, .rar, .tar.gz ...), one layer at a time; each made from the repository's own files.
+python ci/extract_check.py build/sieve-install extract_check
 # A release's layout: sieve and sieve-install in tools/ below the data folders. sieve there
 # finds the dictionaries and models in the folder above, and still makes installer
 # programs from the sieve-install beside it.

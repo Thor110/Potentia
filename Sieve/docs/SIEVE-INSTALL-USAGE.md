@@ -114,14 +114,42 @@ instructions and is for the tools. The command line still writes it (`sieve loca
 - **In the hallway:** the File Locator's **Install from Sieve instructions...** (or I) takes a
   `.sieve` or an installer program, then asks for the folder to put it in.
 - **From the right-click menu (Windows):** `context\install_context.bat` adds **Sieve > Extract
-  here** and **Extract to a folder of its name** to every `.sieve` file, each opening
-  `sieve-install` on it (`--extract-here`, `--extract-folder`); `context\README.md`.
+  here** and **Extract to a folder of its name** to every `.sieve` file, and to every other archive
+  Sieve reads (below), each opening `sieve-install` on it (`--extract-here`, `--extract-folder`);
+  `context\README.md`.
 - **Unattended:** `sieve-install NAME.sieve --to FOLDER --yes` installs and exits, returning 0 on
   success.
 
 Every file is checked against its size and SHA-256 before anything is written, so a damaged
 installer leaves the destination as it was. Files already there are refused unless you choose to
 replace them. Cancel part way removes whatever was written, including the folders it made.
+
+**Other archives are extracted, as an archiver extracts them (25 October 2026).** Open a `.zip`,
+`.rar`, `.tar.gz` or any kind below with `sieve-install` (or right-click it: Sieve > Extract) and it
+is unpacked, **one layer at a time**, as 7-Zip does: a `.tar.gz` gives its `.tar`, a `.zip` its
+files. A `.sieve` is never changed by this: it gives back exactly what it holds, a `.tar` in it
+included. **Extract here** keeps the archive's folders as they are; **Extract to a folder of its
+name** (and opening it in the window) puts its contents into a folder named after it, the one top
+folder it may have left out (`photos.zip` holding `photos\...` gives `photos\...`, not
+`photos\photos\...`). A file already there is refused unless Replace is ticked, a damaged or
+encrypted archive is refused before anything is written, and a link in a tar is left out (said so).
+Each file is checked by the vault, as everything an installer writes is. The whole archive is read
+into memory first.
+
+| Kind | Names | Read by |
+| :--- | :--- | :--- |
+| 7z | `.7z` | the LZMA SDK (LZMA, LZMA2, PPMd, BCJ, BCJ2, ARM, Delta) |
+| zip | `.zip`, `.zipx` | Sieve (stored, deflate), else libarchive |
+| xz, gzip, bzip2, zstd, lz4, lzip | `.xz` `.txz`, `.gz` `.tgz`, `.bz2` `.tbz2` `.tbz`, `.zst` `.tzst`, `.lz4` `.tlz4`, `.lz` `.tlz` | liblzma, zlib, libbzip2, libzstd, lz4, liblzma |
+| lzma, brotli (by name: no mark of their own) | `.lzma`, `.br` | liblzma, brotli |
+| RAR 4 and 5 | `.rar` | libarchive (read only: no free RAR compressor exists) |
+| cab, ISO 9660, LHA, cpio, ar, WARC, tar | `.cab`, `.iso`, `.lzh` `.lha`, `.cpio`, `.ar` `.deb`, `.warc`, `.tar` | libarchive |
+
+The list is one table in the code (`archive_kinds`, `tools/cli/pack.cpp`); `sieve-install
+--archive-extensions` prints its names, which is what the right-click menu is made from, so a kind
+added there reaches the menu when `install_context.bat` is run again. (Optimise Archive Formats,
+which carries archives inside `.sieve` files, is another thing: what it does with each kind is in
+`sieve help locate` and SPECIFICATIONS §12.2.)
 
 **7z archives are unpacked, by the installer only.** When what an installer carries is one 7z
 archive (as releases did before v4: `sieve.7z`), `sieve-install` unpacks it automatically into a folder

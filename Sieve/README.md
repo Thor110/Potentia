@@ -18,7 +18,8 @@ Special thanks to Claude Opus 5.5 for helping to build out the Sieve system base
 | `tools/sieve_cli.cpp`, `tools/cli/` | The `sieve` command-line tool |
 | `client/` | The `hallway`: a 3D wireframe walk along the lines: image, pages, books, audio, tracks, video, movies, models, worlds, AI and binary (SDL3); and `sieve-install`, the small installer |
 | `web/` | Sieve on the web: the Chrome extension (`extension/`), its native host's registration (`host/`), and the test site (`test-site/`, built by `sieve site`); [web/README.md](web/README.md) |
-| `context/` | Sieve in Windows' right-click menu for `.sieve` files (Extract here, Extract to a folder of its name), by `sieve-install`; [context/README.md](context/README.md) |
+| `context/` | Sieve in Windows' right-click menu for `.sieve` files and every other archive Sieve reads (Extract here, Extract to a folder of its name), by `sieve-install`; [context/README.md](context/README.md) |
+| `engine/` | Notes towards a Sieve game engine (far future): games' own formats, kept out of the main architecture; [engine/README.md](engine/README.md) |
 | `tools/make_release.py`, `tools/make_release.bat` | Makes a Sieve release (docs/SIEVE-INSTALL-USAGE.md, "Making a Sieve release") |
 | `tools/run_tests.bat`, `tools/check_vectors.py` | Every test on Windows; every conformance vector through the oracle |
 | `tools/bench/bench_make.py`, `bench_make.bat` | How long making Sieve instructions takes, by stage and by kind of file, on a fixed set from this repository (results/bench-make-*) |
@@ -94,7 +95,7 @@ Sieve\
     sieve.exe                 the command-line tool (sieve help)
     sieve-install.exe         the installer, which the File Locator copies to make installer programs
     README.txt                what these two are
-  context\                    the right-click menu for .sieve files: install_context.bat (context/README.md)
+  context\                    the right-click menu for .sieve files and archives: install_context.bat (context/README.md)
   web\                        the browser extension (extension\) and its host's scripts (host\); README.txt
 ```
 

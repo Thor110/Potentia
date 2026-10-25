@@ -20,6 +20,8 @@
 #include "cli/locate.hpp"
 #include "sieve/rope_wave.hpp"
 
+#include <atomic>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <optional>
@@ -131,5 +133,42 @@ std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector
 
 // The report as lines, for the tool and the File Locator.
 std::string pack_report_text(const PackReport& r, uint64_t original);
+
+// ---- Any archive Sieve reads, extracted (the right-click menu's Extract on an archive, as an
+// archiver's; sieve-install). One layer only, as 7-Zip's: a .tar.gz gives its .tar, a .zip its files.
+// The kinds: 7z, zip, xz, gzip, bzip2, zstd, lz4, lzip, and by their names lzma (.lzma) and brotli
+// (.br); and through libarchive RAR 4 and 5, cab, ISO 9660, LHA, cpio, ar, WARC and tar.
+struct AnyArchive
+{
+    struct Entry
+    {
+        std::string path; // relative, '/' between parts, as the archive names it (its top folder kept)
+        bool dir = false;
+        std::vector<uint8_t> bytes;
+    };
+    std::string format;   // "7z", "zip", "gz", "rar", "tar" ...
+    std::vector<Entry> entries;
+    size_t links_left_out = 0; // links in a tar (or another archive) are not written
+    uint64_t files = 0, bytes = 0;
+};
+struct ArchiveKind
+{
+    const char* format;                     // as AnyArchive's
+    std::vector<const char*> extensions;    // lower case, with the dot
+};
+// Every kind read_any_archive extracts: the one list the right-click menu is made from.
+const std::vector<ArchiveKind>& archive_kinds();
+// Nothing where it is none of them; throws where it is one this cannot read (encrypted, damaged),
+// saying why. `file_name` gives a compressed stream's one file its name (notes.txt.gz: notes.txt),
+// and names brotli and lzma, which have no mark of their own.
+std::optional<AnyArchive> read_any_archive(const std::vector<uint8_t>& bytes, const std::string& file_name);
+// The one folder every entry is in, where there is one, left out (Extract to NAME\ puts its
+// contents straight into NAME\); its name in `top`.
+void leave_out_top_folder(AnyArchive& a, std::string* top = nullptr);
+// Writes it into `dest` (made if need be): files already there refused unless `force`, each file
+// checked by the vault, and on a cancel (false) or a failure (throws) what was written removed again.
+bool unpack_archive(const AnyArchive& a, const std::filesystem::path& dest, bool force,
+                    const std::function<void(size_t done, size_t total, const std::string& path)>& progress,
+                    const std::atomic<bool>* cancel = nullptr);
 
 } // namespace sieve::cli
