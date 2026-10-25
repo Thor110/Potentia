@@ -419,3 +419,57 @@ d = bytearray(open('fixture4.manifest', 'rb').read()); d[-40] ^= 0xFF
 open('broken4.manifest', 'wb').write(bytes(d))"
 if $S install broken4.manifest --to broken4 2> /dev/null; then exit 1; fi
 test ! -e broken4
+# v20 (25 October 2026): lz4, brotli and lzma remade exactly (by the modules the oracle remakes them
+# with: liblz4, brotli 1.2.1, liblzma), two gzip members carried as what they hold, and the listing's
+# body in bytes; installed, by the oracle and by sieve-install alike.
+python -m pip install --quiet "lz4==4.4.5" "brotli==1.2.1"
+rm -rf a20 a20_inst a20_oracle a20_si && mkdir -p a20
+python -c "
+import lz4.frame, brotli, lzma, gzip
+t = open('sieve_ref.py', 'rb').read()
+open('a20/r.py.lz4', 'wb').write(lz4.frame.compress(t, compression_level=9, block_size=lz4.frame.BLOCKSIZE_MAX4MB))
+open('a20/r.py.br', 'wb').write(brotli.compress(t, quality=5, lgwin=19))
+open('a20/r.py.lzma', 'wb').write(lzma.compress(t, format=lzma.FORMAT_ALONE, preset=0))
+open('a20/two.gz', 'wb').write(gzip.compress(t[:1000]) + gzip.compress(t[1000:]))"
+$S locate a20 --installer a20.sieve --items --optimise-archives --manifest a20.manifest | tr -d '\r' > a20.txt
+grep -c "^remade    3 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v20)$" a20.txt > /dev/null
+grep -c "^unpacked  1 archive(s) carried as their contents" a20.txt > /dev/null
+grep -c "^items     none; sieve-manifest-v20$" a20.txt > /dev/null
+python -c "d = open('a20.manifest', 'rb').read(); assert d[:6] == b'sieve\x14', d[:6]"
+$S install a20.sieve --to a20_inst > /dev/null
+for f in r.py.lz4 r.py.br r.py.lzma; do cmp a20/$f a20_inst/$f; done
+cmp sieve_ref.py a20_inst/two
+python sieve_ref.py unpack a20.manifest --to a20_oracle > /dev/null
+diff -r a20_inst a20_oracle
+sieve_ci_no_display # (sieve-install opens SDL; with no screen, its offscreen driver)
+SI=../build/sieve-install
+[ -f ../build/Release/sieve-install.exe ] && SI=../build/Release/sieve-install.exe
+$SI a20.sieve --to a20_si --yes > /dev/null
+diff -r a20_inst a20_si
+# --v19 makes v19 at the newest (its body as text; here v16, there being no gzip, bzip2 or zstd file
+# in it), never v20; v20 read as v19 is refused (its body is not text).
+$S locate a20 --installer a20-v19.sieve --items --v19 --manifest a20-v19.manifest > /dev/null
+python -c "d = open('a20-v19.manifest', 'rb').read(); assert d[:5] == b'sieve' and 16 <= d[5] <= 19, d[:6]"
+python -c "d = bytearray(open('a20.manifest', 'rb').read()); d[5] = 19; open('a20-as-v19.manifest', 'wb').write(d)"
+if $S install a20-as-v19.manifest --to a20_bad > /dev/null 2>&1; then exit 1; fi
+# libarchive's: a cab (MSZIP, zlib's deflate; and LZX), RAR 4 and 5 and LHA, from libarchive's own tests
+# (tests/archives), each carried as its contents (SIEVE_ARCHIVES_ALWAYS: they are too small to be
+# worth it otherwise), the files they hold checked by their SHA-256 as bsdtar extracts them.
+for pair in "test_read_format_cab_1.cab cab dir1/file1=d0c504f06bbd64d183524eb35e5482ee5d966d456b905a24147165b2904d301b,dir2/file2=60f47caf717b06cf21b3bbb7775e49269a1b5cd6b94bba62da29a2ecb048ccf2,empty=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" \
+            "test_read_format_cab_2.cab cab zero=8ec8d677b0280efeddd04d0b25d8b80fa50a9825382fa93a17d61c4ca002b1ad,dir1/file1=d0c504f06bbd64d183524eb35e5482ee5d966d456b905a24147165b2904d301b" \
+            "test_read_format_rar_noeof.rar rar test.txt=5a5f16e01faf8adf92eb4499a2d3e93010c4b41dbb7f698f4a8466d9f58e6dd2" \
+            "test_read_format_rar5_compressed.rar rar test.bin=588870a2dade35c2650fbb7898c9a9c7f21fce7c281198604e8d0c9737f2c375" \
+            "test_read_format_lha_header3.lzh lha file1=d0c504f06bbd64d183524eb35e5482ee5d966d456b905a24147165b2904d301b,file2=60f47caf717b06cf21b3bbb7775e49269a1b5cd6b94bba62da29a2ecb048ccf2"; do
+  set -- $pair
+  rm -rf la_inst la_oracle
+  SIEVE_ARCHIVES_ALWAYS=1 $S locate ../tests/archives/$1 --installer la.sieve --items --optimise-archives | tr -d '\r' > la.txt
+  grep -c "^unpacked  1 archive(s) carried as their contents" la.txt > /dev/null
+  $S install la.sieve --to la_inst | tr -d '\r' | grep -c "^note      $1 ($2, [0-9]* bytes) was carried as its contents" > /dev/null
+  python -c "
+import hashlib, sys
+for kv in sys.argv[1].split(','):
+    p, h = kv.split('=')
+    assert hashlib.sha256(open('la_inst/' + p, 'rb').read()).hexdigest() == h, p" "$3"
+  python sieve_ref.py unpack la.sieve --to la_oracle > /dev/null
+  diff -r la_inst la_oracle
+done

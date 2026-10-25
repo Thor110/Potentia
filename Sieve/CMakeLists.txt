@@ -200,6 +200,85 @@ FetchContent_Declare(zstd
 FetchContent_MakeAvailable(zstd)
 set(SIEVE_ZSTD libzstd_static)
 set(SIEVE_ZSTD_INCLUDE ${zstd_SOURCE_DIR}/lib)
+# lz4 1.10.0 (BSD 2-clause, third_party_licenses/lz4; the library's own licence, its lib folder's:
+# the lz4 programs are GPLv2 and are not built): its library's C files, built here. Its output was
+# the same as 1.9.4's on every file and level measured, but it stays pinned as the others are.
+FetchContent_Declare(lz4
+    GIT_REPOSITORY https://github.com/lz4/lz4.git
+    GIT_TAG v1.10.0
+    GIT_SHALLOW TRUE
+    SOURCE_SUBDIR lib) # (no CMakeLists.txt there: fetched, not built by its own CMake)
+FetchContent_MakeAvailable(lz4)
+add_library(sieve_lz4 STATIC ${lz4_SOURCE_DIR}/lib/lz4.c ${lz4_SOURCE_DIR}/lib/lz4hc.c ${lz4_SOURCE_DIR}/lib/lz4frame.c
+    ${lz4_SOURCE_DIR}/lib/xxhash.c)
+target_include_directories(sieve_lz4 SYSTEM PUBLIC ${lz4_SOURCE_DIR}/lib)
+# brotli 1.2.1 (MIT, third_party_licenses/brotli): its encoder's, decoder's and common C files,
+# built here.
+FetchContent_Declare(brotli
+    GIT_REPOSITORY https://github.com/google/brotli.git
+    GIT_TAG v1.2.1
+    GIT_SHALLOW TRUE
+    SOURCE_SUBDIR c/include) # (as lz4: fetched, not built by its own CMake)
+FetchContent_MakeAvailable(brotli)
+file(GLOB SIEVE_BROTLI_SOURCES ${brotli_SOURCE_DIR}/c/common/*.c ${brotli_SOURCE_DIR}/c/dec/*.c ${brotli_SOURCE_DIR}/c/enc/*.c)
+add_library(sieve_brotli STATIC ${SIEVE_BROTLI_SOURCES})
+target_include_directories(sieve_brotli SYSTEM PUBLIC ${brotli_SOURCE_DIR}/c/include)
+# libarchive 3.8.10 (BSD 2-clause, third_party_licenses/libarchive): the archives Sieve has no reader
+# of its own for (RAR, cab, ISO 9660, LHA, cpio, ar, WARC), carried as their contents and never
+# remade. Its library alone, static, with none of its programs, tests, crypto or the compression
+# libraries Sieve already reads itself; zlib, for cab's MSZIP, is Sieve's own.
+set(SIEVE_SAVED_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
+set(BUILD_SHARED_LIBS OFF)
+foreach(o ENABLE_MBEDTLS ENABLE_NETTLE ENABLE_OPENSSL ENABLE_MD ENABLE_LIBB2 ENABLE_LZ4 ENABLE_LZO ENABLE_LZMA ENABLE_ZSTD ENABLE_BZip2
+          ENABLE_LIBXML2 ENABLE_BSDXML ENABLE_EXPAT ENABLE_WIN32_XMLLITE ENABLE_PCREPOSIX ENABLE_PCRE2POSIX ENABLE_LIBGCC ENABLE_CNG
+          ENABLE_TAR ENABLE_CPIO ENABLE_CAT ENABLE_UNZIP ENABLE_XATTR ENABLE_ACL ENABLE_ICONV ENABLE_TEST ENABLE_INSTALL)
+    set(${o} OFF CACHE BOOL "" FORCE)
+endforeach()
+set(ENABLE_ZLIB ON CACHE BOOL "" FORCE)
+if(TARGET ZLIB::ZLIBSTATIC)
+    # The zlib fetched above: libarchive finds it by its header (copied with the zconf.h its build
+    # wrote, as FindZLIB reads the version from it) and links the target.
+    set(SIEVE_ZLIB_HEADERS ${CMAKE_BINARY_DIR}/sieve-zlib-include)
+    file(MAKE_DIRECTORY ${SIEVE_ZLIB_HEADERS})
+    file(COPY ${zlib_SOURCE_DIR}/zlib.h DESTINATION ${SIEVE_ZLIB_HEADERS})
+    if(EXISTS ${zlib_BINARY_DIR}/zconf.h)
+        file(COPY ${zlib_BINARY_DIR}/zconf.h DESTINATION ${SIEVE_ZLIB_HEADERS})
+    else()
+        file(COPY ${zlib_SOURCE_DIR}/zconf.h DESTINATION ${SIEVE_ZLIB_HEADERS})
+    endif()
+    set(ZLIB_INCLUDE_DIR ${SIEVE_ZLIB_HEADERS} CACHE PATH "" FORCE)
+    set(ZLIB_LIBRARY ZLIB::ZLIBSTATIC CACHE STRING "" FORCE)
+    # (And as plain variables: where the system has a zlib of its own, the search above left these
+    # pointing at it, hiding the cache's.)
+    set(ZLIB_INCLUDE_DIR ${SIEVE_ZLIB_HEADERS})
+    set(ZLIB_LIBRARY ZLIB::ZLIBSTATIC)
+    set(ZLIB_LIBRARIES ZLIB::ZLIBSTATIC)
+    # On Windows, libarchive tests whether zlib needs ZLIB_WINAPI or ZLIB_DLL by building and running
+    # a program against it, which cannot be done before zlib is built. The answers for the static
+    # zlib built here (neither) are given beforehand, with the library they are for, so the tests are
+    # skipped (they run only where the answer is not already known for that library).
+    foreach(v ZLIB_WINAPI ZLIB_DLL)
+        set(${v} 0 CACHE INTERNAL "" FORCE)
+        set(${v}_WITH_LIB ZLIB::ZLIBSTATIC CACHE INTERNAL "" FORCE)
+    endforeach()
+    set(WITHOUT_ZLIB_DLL 1 CACHE INTERNAL "" FORCE)
+    set(WITHOUT_ZLIB_DLL_WITH_LIB ZLIB::ZLIBSTATIC CACHE INTERNAL "" FORCE)
+endif()
+FetchContent_Declare(libarchive
+    GIT_REPOSITORY https://github.com/libarchive/libarchive.git
+    GIT_TAG v3.8.10
+    GIT_SHALLOW TRUE)
+FetchContent_MakeAvailable(libarchive)
+set(BUILD_SHARED_LIBS ${SIEVE_SAVED_BUILD_SHARED_LIBS})
+set(SIEVE_ARCHIVE archive_static)
+set(SIEVE_ARCHIVE_INCLUDE ${libarchive_SOURCE_DIR}/libarchive)
+foreach(t sieve_lz4 sieve_brotli)
+    if(MSVC)
+        target_compile_options(${t} PRIVATE /w)
+    else()
+        target_compile_options(${t} PRIVATE -w)
+    endif()
+endforeach()
 
 # The locator and the installer's code (decoders only, the LZMA SDK's: sieve-install links this
 # alone), and the comparison and the packer, which alone need the compressors.
@@ -269,8 +348,9 @@ target_link_libraries(sieve_lines PUBLIC sieve_locate) # the lines check units a
 add_library(sieve_compare STATIC tools/cli/compare.cpp tools/cli/pack.cpp tools/cli/train.cpp tools/cli/diffusion_run.cpp tools/cli/model_folder.cpp
     client/unpack_7z.cpp)
 target_include_directories(sieve_compare PUBLIC tools PRIVATE client)
-target_link_libraries(sieve_compare PUBLIC sieve_core sieve_locate PRIVATE ${SIEVE_ZLIB} ${SIEVE_LZMA} sieve_lzma sieve_lzma_enc sieve_bzip2 ${SIEVE_ZSTD})
-target_include_directories(sieve_compare SYSTEM PRIVATE ${SIEVE_ZSTD_INCLUDE})
+target_link_libraries(sieve_compare PUBLIC sieve_core sieve_locate PRIVATE ${SIEVE_ZLIB} ${SIEVE_LZMA} sieve_lzma sieve_lzma_enc sieve_bzip2 ${SIEVE_ZSTD} sieve_lz4 sieve_brotli ${SIEVE_ARCHIVE})
+target_include_directories(sieve_compare SYSTEM PRIVATE ${SIEVE_ZSTD_INCLUDE} ${SIEVE_ARCHIVE_INCLUDE})
+target_compile_definitions(sieve_compare PRIVATE LIBARCHIVE_STATIC)
 if(SIEVE_LZMA_INCLUDE)
     target_include_directories(sieve_compare SYSTEM PRIVATE ${SIEVE_LZMA_INCLUDE})
 endif()

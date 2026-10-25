@@ -1,0 +1,713 @@
+libarchive 3.8.10: the copyright notices and licence texts in the source files Sieve's build
+compiles (libarchive/*.c, *.h), gathered from their comments so they are kept with the programs.
+COPYING beside this file is libarchive's own summary; the files' own statements are controlling.
+
+Copyright lines:
+
+  Copyright (C) 2012-2014, Yann Collet.
+  Copyright (C) The XZ Embedded authors and contributors
+  Copyright (C) The XZ Utils authors and contributors
+  Copyright (c) 1985, 1986, 1992, 1993
+  Copyright (c) 1989, 1993, 1994
+  Copyright (c) 1993
+  Copyright (c) 1996, David Mazieres <dm@uun.org>
+  Copyright (c) 1998, 2001 The NetBSD Foundation, Inc.
+  Copyright (c) 2001 The NetBSD Foundation, Inc.
+  Copyright (c) 2002 Thomas Moestl <tmm@FreeBSD.org>
+  Copyright (c) 2003-2006 Tim Kientzle
+  Copyright (c) 2003-2007 Kees Zeelenberg
+  Copyright (c) 2003-2007 Tim Kientzle
+  Copyright (c) 2003-2008 Tim Kientzle
+  Copyright (c) 2003-2008 Tim Kientzle and Miklos Vajna
+  Copyright (c) 2003-2009 Tim Kientzle
+  Copyright (c) 2003-2010 Tim Kientzle
+  Copyright (c) 2003-2011 Tim Kientzle
+  Copyright (c) 2003-2012 Tim Kientzle
+  Copyright (c) 2003-2023 Tim Kientzle
+  Copyright (c) 2004-2013 Tim Kientzle
+  Copyright (c) 2006 Rudolf Marek SYSGO s.r.o.
+  Copyright (c) 2007 Joerg Sonnenberger
+  Copyright (c) 2007 Kai Wang
+  Copyright (c) 2007 Tim Kientzle
+  Copyright (c) 2008 Anselm Strauss
+  Copyright (c) 2008 Joerg Sonnenberger
+  Copyright (c) 2008, Damien Miller <djm@openbsd.org>
+  Copyright (c) 2008-2014 Michihiro NAKAJIMA
+  Copyright (c) 2009 Andreas Henriksson <andreas@fatal.se>
+  Copyright (c) 2009 Joerg Sonnenberger
+  Copyright (c) 2009 Michihiro NAKAJIMA
+  Copyright (c) 2009-2011 Michihiro NAKAJIMA
+  Copyright (c) 2009-2011 Sean Purcell
+  Copyright (c) 2009-2012 Michihiro NAKAJIMA
+  Copyright (c) 2009-2012,2014 Michihiro NAKAJIMA
+  Copyright (c) 2010 Nokia Corporation and/or its subsidiary(-ies).
+  Copyright (c) 2010-2011 Michihiro NAKAJIMA
+  Copyright (c) 2010-2012 Michihiro NAKAJIMA
+  Copyright (c) 2011 Andres Mejia
+  Copyright (c) 2011 Michihiro NAKAJIMA
+  Copyright (c) 2011 Tim Kientzle
+  Copyright (c) 2011-2012 Michihiro NAKAJIMA
+  Copyright (c) 2011-2012 libarchive Project
+  Copyright (c) 2011-2012,2014 Michihiro NAKAJIMA
+  Copyright (c) 2012 Michihiro NAKAJIMA
+  Copyright (c) 2012 Ondrej Holy
+  Copyright (c) 2013 Konrad Kleine
+  Copyright (c) 2013 Marek Kubica
+  Copyright (c) 2014 Michihiro NAKAJIMA
+  Copyright (c) 2014 Sebastian Freundt
+  Copyright (c) 2015 Okhotnikov Kirill
+  Copyright (c) 2016 Martin Matuska
+  Copyright (c) 2017 Martin Matuska
+  Copyright (c) 2017 Sean Purcell
+  Copyright (c) 2018 Grzegorz Antoniak (http://antoniak.org)
+  Copyright (c) 2020 Martin Matuska
+  Copyright (c) 2023-2024 Klara, Inc.
+  Copyright (c) 2025 Tobias Stoeckmann
+  Copyright (c) 2026 Tobias Stoeckmann
+  Copyright 2012, Samuel Neves <sneves@dei.uc.pt>.  You may use this under the
+
+The licence texts, each once, with the files that carry it:
+
+------------------------------------------------------------------------
+Files: archive.h, archive_acl.c, archive_acl_private.h, archive_check_magic.c, archive_cmdline.c, archive_cmdline_private.h, archive_crc32.c, archive_cryptor.c, archive_cryptor_private.h, archive_digest.c, archive_digest_private.h, archive_disk_acl_darwin.c and 128 more
+
+-
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR(S) ``AS IS'' AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+IN NO EVENT SHALL THE AUTHOR(S) BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+------------------------------------------------------------------------
+Files: archive_blake2.h, archive_blake2_impl.h, archive_blake2s_ref.c, archive_blake2sp_ref.c
+
+BLAKE2 reference source code package - reference C implementations
+
+terms of the CC0, the OpenSSL Licence, or the Apache Public License 2.0, at
+your option.  The terms of these licenses can be found at:
+
+- CC0 1.0 Universal : http://creativecommons.org/publicdomain/zero/1.0
+- OpenSSL license   : https://www.openssl.org/source/license.html
+- Apache 2.0        : http://www.apache.org/licenses/LICENSE-2.0
+
+More information about the BLAKE2 hash function can be found at
+https://blake2.net.
+
+------------------------------------------------------------------------
+Files: archive_endian.h
+
+-
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGE.
+
+Borrowed from FreeBSD's <sys/endian.h>
+
+------------------------------------------------------------------------
+Files: archive_entry.c
+
+-
+The Regents of the University of California.  All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+4. Neither the name of the University nor the names of its contributors
+   may be used to endorse or promote products derived from this software
+   without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGE.
+
+------------------------------------------------------------------------
+Files: archive_integer.h
+
+-
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGE.
+
+------------------------------------------------------------------------
+Files: archive_pack_dev.c, archive_pack_dev.h
+
+-
+All rights reserved.
+
+This code is derived from software contributed to The NetBSD Foundation
+by Charles M. Hannum.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+------------------------------------------------------------------------
+Files: archive_parse_date.c
+
+This code is in the public domain and has no copyright.
+
+This is a plain C recursive-descent translation of an old
+public-domain YACC grammar that has been used for parsing dates in
+very many open-source projects.
+
+Since the original authors were generous enough to donate their
+work to the public domain, I feel compelled to match their
+generosity.
+
+Tim Kientzle, February 2009.
+
+------------------------------------------------------------------------
+Files: archive_parse_date.c
+
+*  Originally written by Steven M. Bellovin <smb@research.att.com> while
+*  at the University of North Carolina at Chapel Hill.  Later tweaked by
+*  a couple of people on Usenet.  Completely overhauled by Rich $alz
+*  <rsalz@bbn.com> and Jim Berets <jberets@bbn.com> in August, 1990;
+*
+*  This grammar has 10 shift/reduce conflicts.
+*
+*  This code is in the public domain and has no copyright.
+
+------------------------------------------------------------------------
+Files: archive_pathmatch.c, archive_pathmatch.h, archive_read_disk_posix.c, archive_read_disk_private.h, archive_read_disk_windows.c, archive_read_support_format_ar.c, archive_windows.h, archive_write_disk_posix.c, archive_write_disk_private.h, archive_write_disk_windows.c, archive_write_set_format_ar.c
+
+-
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer
+   in this position and unchanged.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR(S) ``AS IS'' AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+IN NO EVENT SHALL THE AUTHOR(S) BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+------------------------------------------------------------------------
+Files: archive_platform_stat.h
+
+-
+SPDX-License-Identifier: BSD-2-Clause
+
+All rights reserved.
+
+------------------------------------------------------------------------
+Files: archive_ppmd7.c
+
+Ppmd7.c -- PPMdH codec
+2010-03-12 : Igor Pavlov : Public domain
+This code is based on PPMd var.H (2001): Dmitry Shkarin : Public domain
+
+------------------------------------------------------------------------
+Files: archive_ppmd7_private.h
+
+Ppmd7.h -- PPMdH compression codec
+2010-03-12 : Igor Pavlov : Public domain
+This code is based on PPMd var.H (2001): Dmitry Shkarin : Public domain
+
+------------------------------------------------------------------------
+Files: archive_ppmd8.c
+
+Ppmd8.c -- PPMdI codec
+2016-05-21 : Igor Pavlov : Public domain
+This code is based on PPMd var.I (2002): Dmitry Shkarin : Public domain
+
+------------------------------------------------------------------------
+Files: archive_ppmd8.c
+
+Ppmd8Dec.c -- PPMdI Decoder
+2010-04-16 : Igor Pavlov : Public domain
+This code is based on:
+PPMd var.I (2002): Dmitry Shkarin : Public domain
+Carryless rangecoder (1999): Dmitry Subbotin : Public domain
+
+------------------------------------------------------------------------
+Files: archive_ppmd8_private.h
+
+Ppmd8.h -- PPMdI codec
+2011-01-27 : Igor Pavlov : Public domain
+This code is based on:
+PPMd var.I (2002): Dmitry Shkarin : Public domain
+Carryless rangecoder (1999): Dmitry Subbotin : Public domain
+
+------------------------------------------------------------------------
+Files: archive_ppmd_private.h
+
+Ppmd.h -- PPMD codec common code
+2010-03-12 : Igor Pavlov : Public domain
+This code is based on PPMd var.H (2001): Dmitry Shkarin : Public domain
+
+------------------------------------------------------------------------
+Files: archive_random.c
+
+Permission to use, copy, modify, and distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+------------------------------------------------------------------------
+Files: archive_rb.c
+
+-
+All rights reserved.
+
+This code is derived from software contributed to The NetBSD Foundation
+by Matt Thomas <matt@3am-software.com>.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+Based on: NetBSD: rb.c,v 1.6 2010/04/30 13:58:09 joerg Exp
+
+------------------------------------------------------------------------
+Files: archive_rb.h
+
+-
+All rights reserved.
+
+This code is derived from software contributed to The NetBSD Foundation
+by Matt Thomas <matt@3am-software.com>.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+Based on NetBSD: rb.h,v 1.13 2009/08/16 10:57:01 yamt Exp
+
+------------------------------------------------------------------------
+Files: archive_read_support_filter_compress.c
+
+-
+The Regents of the University of California.  All rights reserved.
+
+This code is derived from software contributed to Berkeley by
+Diomidis Spinellis and James A. Woods, derived from original
+work by Spencer Thomas and Joseph Orost.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+4. Neither the name of the University nor the names of its contributors
+   may be used to endorse or promote products derived from this software
+   without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGE.
+
+------------------------------------------------------------------------
+Files: archive_read_support_format_7zip.c
+
+Brought from LZMA SDK.
+
+Bra86.c -- Converter for x86 code (BCJ)
+2008-10-04 : Igor Pavlov : Public domain
+
+------------------------------------------------------------------------
+Files: archive_read_support_format_7zip.c
+
+Branch/Call/Jump (BCJ) filter decoders
+
+Authors: Lasse Collin <lasse.collin@tukaani.org>
+         Igor Pavlov <https://7-zip.org/>
+
+This file has been put into the public domain.
+You can do whatever you want with this file.
+
+------------------------------------------------------------------------
+Files: archive_read_support_format_7zip.c
+
+Branch/Call/Jump (BCJ) filter decoders
+
+Authors: Lasse Collin <lasse.collin@tukaani.org>
+         Igor Pavlov <https://7-zip.org/>
+
+
+Permission to use, copy, modify, and/or distribute this
+software for any purpose with or without fee is hereby granted.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
+WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL
+THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR
+CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT,
+NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+------------------------------------------------------------------------
+Files: archive_read_support_format_7zip.c
+
+Filter for PowerPC (big endian) binaries
+
+Authors: Igor Pavlov
+         Lasse Collin
+
+
+Permission to use, copy, modify, and/or distribute this
+software for any purpose with or without fee is hereby granted.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
+WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL
+THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR
+CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT,
+NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+------------------------------------------------------------------------
+Files: archive_read_support_format_7zip.c
+
+Brought from LZMA SDK.
+
+Bcj2.c -- Converter for x86 code (BCJ2)
+2008-10-04 : Igor Pavlov : Public domain
+
+------------------------------------------------------------------------
+Files: archive_umask.c, archive_umask_private.h
+
+-
+SPDX-License-Identifier: BSD-3-Clause
+
+The Regents of the University of California.  All rights reserved.
+
+This code is derived from software contributed to Berkeley by
+Dave Borman at Cray Research, Inc.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+3. Neither the name of the University nor the names of its contributors
+   may be used to endorse or promote products derived from this software
+   without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGE.
+
+------------------------------------------------------------------------
+Files: archive_windows.c
+
+-------------------------------------------------------------------------
+
+win32error.c
+  Map win32 error codes to errno values
+
+Portions Copyright (c) 1996-2008, PostgreSQL Global Development Group
+
+IDENTIFICATION
+  $PostgreSQL: pgsql/src/port/win32error.c,v 1.4 2008/01/01 19:46:00 momjian Exp $
+
+-------------------------------------------------------------------------
+
+------------------------------------------------------------------------
+Files: archive_windows.c
+
+PostgreSQL Database Management System
+(formerly known as Postgres, then as Postgres95)
+
+Portions Copyright (c) 1996-2008, PostgreSQL Global Development Group
+
+Portions Copyright (c) 1994, The Regents of the University of California
+
+Permission to use, copy, modify, and distribute this software and its
+documentation for any purpose, without fee, and without a written agreement
+is hereby granted, provided that the above copyright notice and this
+paragraph and the following two paragraphs appear in all copies.
+
+IN NO EVENT SHALL THE UNIVERSITY OF CALIFORNIA BE LIABLE TO ANY PARTY FOR
+DIRECT, INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL DAMAGES, INCLUDING
+LOST PROFITS, ARISING OUT OF THE USE OF THIS SOFTWARE AND ITS
+DOCUMENTATION, EVEN IF THE UNIVERSITY OF CALIFORNIA HAS BEEN ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+THE UNIVERSITY OF CALIFORNIA SPECIFICALLY DISCLAIMS ANY WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS FOR A PARTICULAR PURPOSE.  THE SOFTWARE PROVIDED HEREUNDER IS
+ON AN "AS IS" BASIS, AND THE UNIVERSITY OF CALIFORNIA HAS NO OBLIGATIONS TO
+PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
+
+------------------------------------------------------------------------
+Files: archive_write_add_filter_compress.c
+
+-
+The Regents of the University of California.  All rights reserved.
+
+This code is derived from software contributed to Berkeley by
+Diomidis Spinellis and James A. Woods, derived from original
+work by Spencer Thomas and Joseph Orost.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+3. Neither the name of the University nor the names of its contributors
+   may be used to endorse or promote products derived from this software
+   without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGE.
+
+------------------------------------------------------------------------
+Files: archive_write_set_format_gnutar.c
+
+-
+Author: Jonas Gastal <jgastal@profusion.mobi>
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR(S) ``AS IS'' AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+IN NO EVENT SHALL THE AUTHOR(S) BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+------------------------------------------------------------------------
+Files: archive_write_set_format_warc.c
+
+-
+Author: Sebastian Freundt  <devel@fresse.org>
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR(S) ``AS IS'' AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+IN NO EVENT SHALL THE AUTHOR(S) BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+------------------------------------------------------------------------
+Files: xxhash.c
+
+xxHash - Fast Hash algorithm
+BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+Redistributions in binary form must reproduce the above
+in the documentation and/or other materials provided with the
+distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+You can contact the author at :
+- xxHash source repository : http://code.google.com/p/xxhash/

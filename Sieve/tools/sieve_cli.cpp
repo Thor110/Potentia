@@ -989,8 +989,9 @@ int cmd_version()
     std::cout << "\n  other lines             " << kCompositionVersion << " (tracks, movies), " << kBookSpaceVersion << " (books), " << kBinarySpaceVersion
               << " (binary)\n                          " << kModelSpaceVersion << " (models), " << kWorldSpaceVersion << " (worlds), " << kAiSpaceVersion << " (ai, "
               << kCanonicalModelVersion << ")\n"
-              << "  instructions (.sieve)   " << kGraphManifestVersion << " newest (maps); installers " << kBinaryManifestVersion << ", or "
-              << kGzipManifestVersion << " where a gzip is remade, " << kMoreArchivesManifestVersion << " where a bzip2 or zstd file is\n"
+              << "  instructions (.sieve)   " << kGraphManifestVersion << " (maps); installers " << kBinaryManifestVersion << ", or "
+              << kGzipManifestVersion << " where a gzip is remade, " << kMoreArchivesManifestVersion << " where a bzip2 or zstd file is; "
+              << kNewestArchivesManifestVersion << " newest (the listing in bytes)\n"
               << "  packing                 " << kRopeWaveAboveVersion << " (the tightened rope), " << kDigitHistogramVersion << ", " << kFileKindsVersion << "\n"
               << "  records                 " << kBookFormat2 << " (books), " << kMapVersion2 << " (maps, read)\n"
               << "  vault                   " << vault::kVersion << ", " << vault::kDecoders << ", " << cdc::kVersion << ", " << vault::kChunkMatch << ", "
@@ -2443,7 +2444,8 @@ void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackRepor
                      rope_seconds, a.has("v8") ? 1 : a.has("v9") ? 2 : a.has("v10") ? 3 : a.has("v11") || a.has("v12") || a.has("v13") || a.has("v14") ? 4 : 5,
                      !(a.has("v8") || a.has("v9") || a.has("v10") || a.has("v11")),
                      !(a.has("v8") || a.has("v9") || a.has("v10") || a.has("v11") || a.has("v12")),
-                     a.has("optimise-archives") && !a.has("v13"), !a.has("v15"), !a.has("v16"));
+                     a.has("optimise-archives") && !a.has("v13"), !a.has("v15"), !a.has("v16"),
+                     !a.has("v19"));
 }
 
 int cmd_locate(const Args& a)
@@ -2631,6 +2633,8 @@ int cmd_locate(const Args& a)
         const std::string o = a.get("installer");
         write_address_file(fs::path(std::u8string(o.begin(), o.end())), iaddr, a.has("hex"));
         *info << "installer " << o << ": the address of the installer's manifest (" << (!(m.with_contents ? m.packed : inst.packed) ? "v3: the listing, then every file's bytes"
+                                    : (m.with_contents ? m.v20 : inst.v20) ? "v20: as v19, the listing's body in bytes, and lz4, brotli, lzma, lzip and libarchive's archives optimised"
+                                    : (m.with_contents ? m.more_archives : inst.more_archives) ? "v19: as v17, and a bzip2 or zstd file remade exactly or carried as its contents"
                                     : (m.with_contents ? m.remake_gz : inst.remake_gz) ? "v17: as v16, and a gzip file remade exactly from what it holds"
                                     : (m.with_contents ? m.binary : inst.binary) ? "v16: as v15, its head in bytes (its streams' sizes, the tree's SHA-256) rather than text"
                                     : (m.with_contents ? m.rope_above : inst.rope_above) ? "v15: as v14, and the rope's columns by line counted by the byte above as well"

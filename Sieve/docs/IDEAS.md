@@ -3957,6 +3957,11 @@ them be given less weight than his own messages, so it is left out here.
     below the floor (410,513, with 6,107 contexts), a sign that the tables would then cost more than
     they save. Not built: a new rope-wave version and manifest for at most 0.3% on one file. The
     blank lines and form feeds are what the model misses; the tables are what the code pays.
+  - **The tables counted (25 October 2026, for v20):** the code's tables are 76 bytes (4 of them,
+    18 symbols in all); its streams 416,880. So the 1,291 bytes are not the tables: they are the
+    grouping, the code's 4 shared tables standing in for every column-and-byte-above context the
+    count of 415,676 kept apart, and the streams' own few bytes. A cheaper table would save at most
+    76 bytes; none was built. (I had said the tables were most of it; they are not.)
 - **As first proposed (done since):** a measurement before a filter: on a handful of files of
   different kinds, fit waves of a few simple families by value type and length, subtract, and set
   the residuals' histogram-coded size, plus the wave's parameters, against the file's own size and
@@ -4049,6 +4054,24 @@ lost:
     1.5.7's at the same level; 1.5.7 against itself matched 15 of 16 files tried), so a `zst` way
     names its version and is refused by another. A bzip2 word list (766,439 bytes) became 469,671,
     remade. Several bzip2 streams or zstd frames are carried as what they hold.
+  - **And more (25 October 2026, `sieve-manifest-v20`):** Edward: "We should aim to go all out in
+    the long run and try to include every archive format we can get our hands on." lz4 1.10.0 (its
+    library BSD; the lz4 programs, GPLv2, not built) and brotli 1.2.1 (MIT), fetched and pinned;
+    `.lzma` and lzip read by the liblzma Sieve has; and libarchive 3.8.10 (BSD 2-clause, with a few
+    files under other BSD-style licences or in the public domain: `NOTICES.txt` gathers them) for RAR
+    4 and 5 (its own reader, not unRAR's, whose licence is not compatible with Sieve's), cab, ISO
+    9660, LHA, cpio, ar and WARC. Measured before building: liblz4's frame matched the `lz4` program
+    20 times out of 20 (5 files, 4 levels, and 1.9.4 against 1.10.0 alike); brotli's library the
+    `brotli` program 15 out of 15 at the program's own window; liblzma's alone encoder the `lzma`
+    program 35 out of 35. So those are remade exactly; lzip, whose encoder is its own, and
+    libarchive's formats, whose encoders Sieve has none of, are carried as their contents. Several
+    gzip members and xz streams one after another are carried as what they hold too (no new
+    version). Not unpacked where unpacking makes nothing smaller: brotli at quality 11 beat xz on
+    IDEAS.md (115,161 against 118,900), and cpio, ar, ISO and tar hold their files as they are, so
+    their contents pack to the same size.
+  - **Still to look at:** 7-Zip's and others' encoders to remake 7z exactly; zip and gzip deflate made
+    by other than zlib (preflate's route); multi-volume archives; and the temporary and permanent
+    choice (below).
   - **The rule for every decoder taken (Edward, 25 October 2026):** its licence, and any notice or
     readme its licence asks for, go in `third_party_licenses/` with a row in the README there,
     copied beside the programs by the build. Next to look at, licences to read first: lz4 and
@@ -4101,6 +4124,14 @@ gain most; measure first.
   12 in bytes: 7 bytes of `mark.js`'s 474 (1.5%). Not built: a new manifest version, its reader, the
   oracle and the vectors for at most 7 bytes a file. The head's 32-byte SHA-256, which every install
   checks, is the larger part of a small file's overhead, and stays.
+- *Built (25 October 2026, `sieve-manifest-v20`, SPECIFICATIONS §12.2):* Edward: "every step forward
+  is a step in the right direction and even the small savings will add up". It joined v20 with the
+  archives, so it cost no version of its own. Each line of the body is a record: paths as what they
+  share with the one before, sizes as varints, ways as a code, an archive's format as a number
+  (Edward's idea of the same day: a number from a list of every archive format, and whether it is
+  repacked on the way out, a remade archive's way, or kept as its contents, a `u` record). Measured
+  against v19: the extension's folder 12 bytes smaller, the docs 8, the filters 15, `tools/cli` 36,
+  one script 6, the trained model's file 3, `pi6.txt` 9.
 
 **19.91 A file's opposite found in noise (Edward, 21 October 2026; an answer, nothing built).** His
 thought: there might be an inverse of a file, found amongst noise, that cancels it to nothing, so

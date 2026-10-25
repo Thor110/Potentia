@@ -140,9 +140,21 @@ inline constexpr const char* kGraphManifestVersion = "sieve-manifest-v18";
 // size> <inner size>", libbzip2 1.0.8; "zst <libzstd version> <level> <checksum 0|1> <content size
 // 0|1> <inner size>", only by that version) or carried as their contents ("u" lines "bz2", "zst");
 // its head's byte 19, a graph part allowed as in v18. Made only where some file is one of these.
-// (The next manifest's other changes, the listing's entries in bytes and the rope's tables, wait
-// to join it: HANDOFF.)
 inline constexpr const char* kMoreArchivesManifestVersion = "sieve-manifest-v19";
+// v20 (25 October 2026): v19 whose archives may also be lz4, brotli or lzma files, remade exactly
+// ("lz4 <level> <block size> <linked> <block checksum> <content checksum> <content size> <inner
+// size>", liblz4 1.10.0; "br <quality> <window> <inner size>", brotli 1.2.1; "lzma <preset>[e]
+// <inner size>", liblzma), or carried as their contents, as may an lzip file and the formats read by
+// libarchive ("u" lines: is_v20_format); its head's byte 20, a graph part allowed. Made only where
+// some file is one of these.
+inline constexpr const char* kNewestArchivesManifestVersion = "sieve-manifest-v20";
+
+// The "u" lines' formats v20 adds (an archive carried as its contents).
+inline bool is_v20_format(const std::string& f)
+{
+    return f == "lz4" || f == "br" || f == "lzma" || f == "lz" || f == "rar" || f == "cab" || f == "iso" || f == "lha" || f == "cpio" || f == "ar" ||
+           f == "warc";
+}
 
 std::vector<uint8_t> read_file_bytes(const std::filesystem::path& file);
 
@@ -218,6 +230,8 @@ struct Manifest
     bool remake_gz = false;    // v17: some file is a gzip remade exactly (binary is set too)
     std::string graph;         // v18: the map's text (see kGraphManifestVersion); empty for none
     bool more_archives = false; // v19: some archive is bzip2 or zstd (remake_gz and binary are set too)
+    bool v20 = false; // v20: some archive is lz4, brotli, lzma, lzip or libarchive's (more_archives is set too)
+    bool body_text = false; // v20: its body as text after all (the head's flag 128), where that came out smaller
     // v14: each archive carried as its contents: its format ("7z", "xz"), its size, its path, and the
     // folder (or file) its contents are in.
     struct UnpackedArchive
@@ -255,6 +269,11 @@ std::string tree_sha256(const Manifest& m);
 // left out), what a binary head is followed by, packed as LZMA2 where that is smaller.
 struct Manifest;
 std::string listing_body(const Manifest& m);
+// v20: the body in bytes, and back (locate.cpp says how); and the archives' formats by number.
+std::vector<uint8_t> listing_to_bytes(const std::string& body);
+std::string listing_from_bytes(std::string_view bytes);
+int archive_format_number(const std::string& name);
+std::string archive_format_name(int number);
 using Remaker = std::function<std::vector<uint8_t>(const std::string& recipe, const std::vector<uint8_t>& inner)>;
 void set_remaker(Remaker remaker);
 using ItemMaker = std::function<std::vector<uint8_t>(const std::string& line, const std::string& address)>;

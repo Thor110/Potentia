@@ -952,10 +952,10 @@ const std::vector<Page>& pages()
          "rope's newer ones; v12 where there is less to write around the bytes (no line for an empty\n"
          "stream, and the files carried as they are where LZMA2 makes them no smaller); v13 where a\n"
          "file is cut into pieces, LZMA2 taking what repeats and the rope what is unevenly spread (a\n"
-         "phone's photo: its metadata and its picture); v14, v17 and v19 (bzip2, zstd) where\n"
-         "archives are optimised (--optimise-archives); and v16 at least now, the listing's head\n"
-         "in bytes rather than text. (--v16 down to --v5 make the older ones; v18, a map, is made\n"
-         "by sieve map.)\n"
+         "phone's photo: its metadata and its picture); v14, v17, v19 and v20 where archives are\n"
+         "optimised (--optimise-archives); and v20 at the newest, the listing's head and body in\n"
+         "bytes rather than text. (--v19 down to --v5 make the older ones; v18, a map, is made by\n"
+         "sieve map.)\n"
          "\n"
          "--weigh weighs every file against its own address: its number among the binary line's\n"
          "survivors, where the settings file's [binary] filters rank and it passes them; and, where\n"
@@ -978,8 +978,8 @@ const std::vector<Page>& pages()
           {"--addresses DIR", "A folder: write every file's address as DIR/<its path>.hex."},
           {"--with-addresses", "A folder: a v2 manifest, every file's address in it, in hex."},
           {"--installer OUT.sieve", "A folder (or a file): write the installer, the address of its manifest\n"
-                                    "as raw bytes (--hex: as hex): the newest (v16, or v17 where a gzip is\n"
-                                    "remade), as the hallway's File Locator makes; with --v4 the plain\n"
+                                    "as raw bytes (--hex: as hex): the newest (v20), as the hallway's File\n"
+                                    "Locator makes; with --v4 the plain\n"
                                     "installer (the listing, then every file packed by LZMA2); with --v3\n"
                                     "every file's bytes as they are. --manifest then writes that manifest as\n"
                                     "text. --compare also compresses it. sieve install and sieve-install open\n"
@@ -996,12 +996,14 @@ const std::vector<Page>& pages()
                       "of the AI line as its weights' digits, not its file's floats. The pages are\n"
                       "--page-length characters of --alphabet; the AI line is --ai-layers, --ai-width,\n"
                       "--ai-heads and --ai-bits (Micro without them)."},
-          {"--optimise-archives", "With --items: Optimise Archive Formats (sieve-manifest-v14, v17, v19). An .xz, a\n"
-                                  ".gz zlib made, a .bz2, and a .zst libzstd 1.5.7 made, is carried as what it holds\n"
-                                  "and remade exactly on installing; another .gz, .bz2 or .zst as what it holds; a\n"
-                                  ".7z or .zip as its contents, in a folder named after it (installing says so: the\n"
-                                  "archive itself is not given back); each only where clearly smaller. Off unless\n"
-                                  "given."},
+          {"--optimise-archives", "With --items: Optimise Archive Formats (sieve-manifest-v14, v17, v19, v20). An .xz,\n"
+                                  "a .gz zlib made, a .bz2, a .zst libzstd 1.5.7 made, an .lz4, a .br and an .lzma is\n"
+                                  "carried as what it holds and remade exactly on installing; another of those, and\n"
+                                  "an .lz (lzip), as what it holds; a .7z, .zip, RAR, cab, ISO, LHA, cpio, ar or WARC\n"
+                                  "as its contents, in a folder named after it (installing says so: the archive\n"
+                                  "itself is not given back); each only where clearly smaller. Off unless given."},
+          {"--v19", "As sieve-manifest-v19 at newest: the listing's body as text (v20 writes it in bytes), and\n"
+                    "no lz4, brotli, lzma, lzip or libarchive archive optimised."},
           {"--v16", "As sieve-manifest-v16 at newest, no gzip remade (carried as what it holds), and a\n"
                     ".bz2 or .zst carried as it is."},
           {"--v15", "As sieve-manifest-v15 at newest, the listing's head as text (v16 writes it in bytes)."},
@@ -1033,6 +1035,9 @@ const std::vector<Page>& pages()
           {"SIEVE_PACK_THREADS=N", "(Not an option: in the environment.) The packer uses every core (cutting into pieces, LZMA2's passes), and the\n"
                                                "instructions are the same at any count; the environment variable\n"
                                                "SIEVE_PACK_THREADS sets how many (1: one)."},
+          {"SIEVE_ARCHIVES_ALWAYS=1", "(Not an option: in the environment, for testing.) With --optimise-archives, every\n"
+                                      "archive Sieve can read is remade or carried as its contents whether or not that is\n"
+                                      "smaller, so each reader can be checked on small archives."},
           {"--search-per-file S", "With --tailored: seconds the search for shorter addresses may take for each file (a\n"
                                   "line's search gets that times its files); 0, the default, no limit. Out of time, a\n"
                                   "line keeps the best filters it found by then. With --items: the seconds the\n"

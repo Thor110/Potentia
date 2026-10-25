@@ -24,6 +24,11 @@
 #include <zlib.h>
 #define ZSTD_STATIC_LINKING_ONLY // its frame header's reader (zstd is linked statically, at a pinned version)
 #include <zstd.h>
+#include <brotli/decode.h>
+#include <brotli/encode.h>
+#include <lz4frame.h>
+#include <archive.h>
+#include <archive_entry.h>
 
 #include "Bra.h"
 #include "Lzma2Enc.h"
@@ -538,7 +543,9 @@ bool is_xz(const std::vector<uint8_t>& b)
 std::optional<std::vector<uint8_t>> xz_inner(const std::vector<uint8_t>& b)
 {
     lzma_stream z = LZMA_STREAM_INIT;
-    if (lzma_stream_decoder(&z, UINT64_MAX, 0) != LZMA_OK) return std::nullopt;
+    // (Concatenated: streams one after another, as `cat a.xz b.xz` makes, are read as one; such a
+    // file is never remade, the recipe being for one stream, and is carried as what it holds.)
+    if (lzma_stream_decoder(&z, UINT64_MAX, LZMA_CONCATENATED) != LZMA_OK) return std::nullopt;
     std::vector<uint8_t> out;
     std::vector<uint8_t> buf(1 << 20);
     z.next_in = b.data();
@@ -561,13 +568,13 @@ std::optional<std::vector<uint8_t>> xz_inner(const std::vector<uint8_t>& b)
 
 bool is_gzip(const std::vector<uint8_t>& b) { return b.size() >= 18 && b[0] == 0x1F && b[1] == 0x8B && b[2] == 8; }
 
-// One gzip member: its header's length (to the deflate), or 0 if it is not one this reads.
-size_t gzip_header_size(const std::vector<uint8_t>& b)
+// One gzip member at `start`: its header's length (to the deflate), or 0 if it is not one this reads.
+size_t gzip_header_size(const std::vector<uint8_t>& b, size_t start = 0)
 {
-    if (!is_gzip(b)) return 0;
-    const uint8_t flg = b[3];
+    if (b.size() < start + 18 || b[start] != 0x1F || b[start + 1] != 0x8B || b[start + 2] != 8) return 0;
+    const uint8_t flg = b[start + 3];
     if (flg & 0xE0) return 0;
-    size_t at = 10;
+    size_t at = start + 10;
     if (flg & 4)
     {
         if (at + 2 > b.size()) return 0;
@@ -580,7 +587,7 @@ size_t gzip_header_size(const std::vector<uint8_t>& b)
             ++at;
         }
     if (flg & 2) at += 2;
-    return at < b.size() ? at : 0;
+    return at < b.size() ? at - start : 0;
 }
 
 // Raw deflate undone (zlib), all of it, with how much input it took; nothing if it is not whole.
@@ -609,19 +616,30 @@ std::optional<std::vector<uint8_t>> inflate_raw(const uint8_t* in, size_t n, siz
     return out;
 }
 
-// What a gzip file holds: one member, its CRC and length checked, nothing after it.
-std::optional<std::vector<uint8_t>> gzip_inner(const std::vector<uint8_t>& b)
+// What a gzip file holds: every member of it (pigz -i and `cat a.gz b.gz` make several), each one's
+// CRC and length checked, nothing after the last; and how many members.
+std::optional<std::vector<uint8_t>> gzip_inner(const std::vector<uint8_t>& b, size_t* members = nullptr)
 {
-    const size_t h = gzip_header_size(b);
-    if (!h || b.size() < h + 8) return std::nullopt;
-    size_t used = 0;
-    auto out = inflate_raw(b.data() + h, b.size() - h - 8, &used);
-    if (!out || h + used + 8 != b.size()) return std::nullopt;
-    const uint8_t* t = b.data() + h + used;
-    const uint32_t crc = uint32_t(t[0]) | uint32_t(t[1]) << 8 | uint32_t(t[2]) << 16 | uint32_t(t[3]) << 24;
-    const uint32_t len = uint32_t(t[4]) | uint32_t(t[5]) << 8 | uint32_t(t[6]) << 16 | uint32_t(t[7]) << 24;
-    if (crc32(0, out->data(), uInt(out->size())) != crc || uint32_t(out->size()) != len) return std::nullopt;
-    return out;
+    std::vector<uint8_t> all;
+    size_t at = 0, n = 0;
+    while (at < b.size())
+    {
+        const size_t h = gzip_header_size(b, at);
+        if (!h || b.size() < at + h + 8) return std::nullopt;
+        size_t used = 0;
+        auto out = inflate_raw(b.data() + at + h, b.size() - at - h, &used);
+        if (!out || at + h + used + 8 > b.size()) return std::nullopt;
+        const uint8_t* t = b.data() + at + h + used;
+        const uint32_t crc = uint32_t(t[0]) | uint32_t(t[1]) << 8 | uint32_t(t[2]) << 16 | uint32_t(t[3]) << 24;
+        const uint32_t len = uint32_t(t[4]) | uint32_t(t[5]) << 8 | uint32_t(t[6]) << 16 | uint32_t(t[7]) << 24;
+        if (crc32(0, out->data(), uInt(out->size())) != crc || uint32_t(out->size()) != len) return std::nullopt;
+        if (all.empty()) all = std::move(*out);
+        else all.insert(all.end(), out->begin(), out->end());
+        at += h + used + 8;
+        ++n;
+    }
+    if (members) *members = n;
+    return all;
 }
 
 std::vector<uint8_t> deflate_raw(const std::vector<uint8_t>& in, int level, int mem)
@@ -735,6 +753,101 @@ std::optional<std::vector<sieve::install::InMemory>> zip_entries(const std::vect
                 }
             out = std::move(kept);
         }
+    }
+    return out;
+}
+
+// ---- The archives libarchive reads (v20): RAR (4 and 5), cab, ISO 9660, LHA, cpio, ar and WARC,
+// read whole into memory, as zip's are, and carried as their contents (never remade: Sieve has none
+// of their encoders). Nothing where an entry is a link, a device, encrypted, named twice, or named so
+// it could leave its folder; or where libarchive cannot read every entry. Its format's name, the "u"
+// line's, in `format`.
+std::optional<std::vector<sieve::install::InMemory>> libarchive_entries(const std::vector<uint8_t>& b, std::string& format)
+{
+    struct archive* a = archive_read_new();
+    if (!a) return std::nullopt;
+    archive_read_support_format_rar(a);
+    archive_read_support_format_rar5(a);
+    archive_read_support_format_cab(a);
+    archive_read_support_format_iso9660(a);
+    archive_read_support_format_lha(a);
+    archive_read_support_format_cpio(a);
+    archive_read_support_format_ar(a);
+    archive_read_support_format_warc(a);
+    std::vector<sieve::install::InMemory> out;
+    std::unordered_set<std::string> names;
+    bool ok = archive_read_open_memory(a, b.data(), b.size()) == ARCHIVE_OK;
+    struct archive_entry* en = nullptr;
+    while (ok)
+    {
+        const int r = archive_read_next_header(a, &en);
+        if (r == ARCHIVE_EOF) break;
+        if (r != ARCHIVE_OK) { ok = false; break; }
+        // (A name libarchive cannot give as UTF-8, one in a code page, is refused: the listing's names are UTF-8.)
+        const char* raw = archive_entry_pathname_utf8(en);
+        std::string name = raw ? raw : "";
+        while (name.size() > 2 && name.compare(0, 2, "./") == 0) name.erase(0, 2);
+        const mode_t type = archive_entry_filetype(en);
+        const bool dir = type == AE_IFDIR;
+        if (dir && (name == "." || name == "./")) continue; // the root's own entry (an ISO's)
+        if (dir && !name.empty() && name.back() == '/') name.pop_back();
+        if ((type != AE_IFREG && !dir) || archive_entry_hardlink(en) || archive_entry_is_encrypted(en) || name.empty() || name[0] == '/' ||
+            name.find('\\') != std::string::npos || name.find(':') != std::string::npos)
+        {
+            ok = false;
+            break;
+        }
+        for (size_t p = 0; ok && p <= name.size();)
+        {
+            size_t slash = name.find('/', p);
+            if (slash == std::string::npos) slash = name.size();
+            const std::string part = name.substr(p, slash - p);
+            if (part.empty() || part == "." || part == "..") ok = false;
+            p = slash + 1;
+        }
+        if (!ok || !names.insert(name).second) { ok = false; break; }
+        sieve::install::InMemory m;
+        m.entry.dir = dir;
+        m.entry.path = name;
+        if (!dir)
+        {
+            std::vector<uint8_t> buf(size_t(1) << 20);
+            for (;;)
+            {
+                const la_ssize_t n = archive_read_data(a, buf.data(), buf.size());
+                if (n < 0) { ok = false; break; }
+                if (n == 0) break;
+                m.bytes.insert(m.bytes.end(), buf.data(), buf.data() + n);
+            }
+            if (ok && archive_entry_size_is_set(en) && uint64_t(archive_entry_size(en)) != m.bytes.size()) ok = false;
+        }
+        if (ok) out.push_back(std::move(m));
+    }
+    const int fmt = archive_format(a) & ARCHIVE_FORMAT_BASE_MASK;
+    archive_read_free(a);
+    if (!ok || out.empty()) return std::nullopt;
+    format = fmt == ARCHIVE_FORMAT_RAR || fmt == ARCHIVE_FORMAT_RAR_V5 ? "rar" : fmt == ARCHIVE_FORMAT_CAB ? "cab" : fmt == ARCHIVE_FORMAT_ISO9660 ? "iso" :
+             fmt == ARCHIVE_FORMAT_LHA ? "lha" : fmt == ARCHIVE_FORMAT_CPIO ? "cpio" : fmt == ARCHIVE_FORMAT_AR ? "ar" : fmt == ARCHIVE_FORMAT_WARC ? "warc" : "";
+    if (format.empty()) return std::nullopt;
+    // One top folder: every entry is it or inside it, at least one inside: left out (as a zip's).
+    const std::string top = out[0].entry.path.substr(0, out[0].entry.path.find('/'));
+    bool one = true, inside = false;
+    for (const auto& m : out)
+    {
+        const std::string& p = m.entry.path;
+        if (p.substr(0, p.find('/')) != top || (p == top && !m.entry.dir)) one = false;
+        if (p.size() > top.size()) inside = true;
+    }
+    if (one && inside)
+    {
+        std::vector<sieve::install::InMemory> kept;
+        for (auto& m : out)
+            if (m.entry.path != top)
+            {
+                m.entry.path = m.entry.path.substr(top.size() + 1);
+                kept.push_back(std::move(m));
+            }
+        out = std::move(kept);
     }
     return out;
 }
@@ -882,10 +995,229 @@ std::vector<uint8_t> zstd_pack(const std::vector<uint8_t>& in, int level, bool c
     return out;
 }
 
+// ---- lz4, brotli, lzma and lzip (v20, 25 October 2026): lz4 1.10.0 and brotli 1.2.1 pinned in
+// CMakeLists.txt, lzma and lzip read by liblzma. lz4, brotli and lzma files are remade exactly where
+// the library gives them back (measured: the lz4, brotli and lzma programs' files, every one tried);
+// lzip's own encoder is not liblzma's, so an lzip file is carried as what it holds.
+
+bool is_lz4(const std::vector<uint8_t>& b) { return b.size() >= 11 && b[0] == 0x04 && b[1] == 0x22 && b[2] == 0x4D && b[3] == 0x18; }
+
+// What an lz4 file holds, every frame of it (skippable frames passed over), and how many frames;
+// nothing if liblz4 cannot read it whole.
+std::optional<std::vector<uint8_t>> lz4_inner(const std::vector<uint8_t>& b, size_t* frames = nullptr)
+{
+    LZ4F_dctx* d = nullptr;
+    if (LZ4F_isError(LZ4F_createDecompressionContext(&d, LZ4F_VERSION))) return std::nullopt;
+    std::vector<uint8_t> out, buf(size_t(4) << 20);
+    size_t at = 0, n = 0, hint = 1;
+    bool ok = true;
+    while (at < b.size())
+    {
+        size_t src = b.size() - at, dst = buf.size();
+        hint = LZ4F_decompress(d, buf.data(), &dst, b.data() + at, &src, nullptr);
+        if (LZ4F_isError(hint)) { ok = false; break; }
+        out.insert(out.end(), buf.data(), buf.data() + dst);
+        at += src;
+        if (hint == 0) ++n; // a frame ended
+        if (src == 0 && dst == 0) { ok = false; break; }
+    }
+    // (Output still held when the input ran out.)
+    while (ok && hint != 0)
+    {
+        size_t src = 0, dst = buf.size();
+        hint = LZ4F_decompress(d, buf.data(), &dst, nullptr, &src, nullptr);
+        if (LZ4F_isError(hint) || dst == 0) { ok = false; break; }
+        out.insert(out.end(), buf.data(), buf.data() + dst);
+        if (hint == 0) ++n;
+    }
+    LZ4F_freeDecompressionContext(d);
+    if (!ok || hint != 0 || n == 0) return std::nullopt;
+    if (frames) *frames = n;
+    return out;
+}
+
+// One lz4 frame as liblz4 makes it, as the lz4 program does: its level (above 2, LZ4 HC; 0 to 2,
+// the fast coder; below 0, faster still), the largest block (4: 64 KiB to 7: 4 MiB), blocks linked
+// or not, and the three checks/sizes written or not.
+std::vector<uint8_t> lz4_pack(const std::vector<uint8_t>& in, int level, int block, bool linked, bool block_sum, bool content_sum, bool size_flag)
+{
+    LZ4F_preferences_t p{};
+    p.frameInfo.blockSizeID = LZ4F_blockSizeID_t(block);
+    p.frameInfo.blockMode = linked ? LZ4F_blockLinked : LZ4F_blockIndependent;
+    p.frameInfo.contentChecksumFlag = content_sum ? LZ4F_contentChecksumEnabled : LZ4F_noContentChecksum;
+    p.frameInfo.blockChecksumFlag = block_sum ? LZ4F_blockChecksumEnabled : LZ4F_noBlockChecksum;
+    p.frameInfo.contentSize = size_flag ? in.size() : 0;
+    p.compressionLevel = level;
+    std::vector<uint8_t> out(LZ4F_compressFrameBound(in.size(), &p));
+    const size_t n = LZ4F_compressFrame(out.data(), out.size(), in.data(), in.size(), &p);
+    if (LZ4F_isError(n)) throw std::runtime_error(std::string("liblz4 could not pack: ") + LZ4F_getErrorName(n));
+    out.resize(n);
+    return out;
+}
+
+// What a brotli file holds; nothing if it is not one stream that ends where the file does. (Brotli
+// has no mark of its own: only a file named .br is tried.)
+std::optional<std::vector<uint8_t>> brotli_inner(const std::vector<uint8_t>& b)
+{
+    BrotliDecoderState* d = BrotliDecoderCreateInstance(nullptr, nullptr, nullptr);
+    if (!d) return std::nullopt;
+    std::vector<uint8_t> out, buf(size_t(1) << 20);
+    const uint8_t* next_in = b.data();
+    size_t avail_in = b.size();
+    BrotliDecoderResult r = BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT;
+    while (r == BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT)
+    {
+        uint8_t* next_out = buf.data();
+        size_t avail_out = buf.size();
+        r = BrotliDecoderDecompressStream(d, &avail_in, &next_in, &avail_out, &next_out, nullptr);
+        out.insert(out.end(), buf.data(), next_out);
+    }
+    BrotliDecoderDestroyInstance(d);
+    if (r != BROTLI_DECODER_RESULT_SUCCESS || avail_in != 0) return std::nullopt;
+    return out;
+}
+
+// A brotli stream's window, from its first bits (10 to 24); 0 for the large window or none.
+int brotli_window(const std::vector<uint8_t>& b)
+{
+    if (b.empty()) return 0;
+    const uint32_t v = b[0] | (b.size() > 1 ? uint32_t(b[1]) << 8 : 0);
+    if (!(v & 1)) return 16;
+    const uint32_t n = (v >> 1) & 7;
+    if (n) return int(17 + n);
+    const uint32_t m = (v >> 4) & 7;
+    if (m == 1) return 0; // the large window (an extension the brotli program does not write by default)
+    return m ? int(8 + m) : 17;
+}
+
+// Brotli as its library makes it, as the brotli program does: one stream at a quality (0 to 11) and
+// window (10 to 24), the generic mode, the input's size given beforehand. `against`: stop, and return
+// what was made so far, at the first byte that is not that file's (a quality is ruled out quickly).
+std::vector<uint8_t> brotli_pack(const std::vector<uint8_t>& in, int quality, int window, const std::vector<uint8_t>* against = nullptr)
+{
+    BrotliEncoderState* e = BrotliEncoderCreateInstance(nullptr, nullptr, nullptr);
+    if (!e) throw std::runtime_error("brotli could not start");
+    BrotliEncoderSetParameter(e, BROTLI_PARAM_QUALITY, uint32_t(quality));
+    BrotliEncoderSetParameter(e, BROTLI_PARAM_LGWIN, uint32_t(window));
+    BrotliEncoderSetParameter(e, BROTLI_PARAM_MODE, BROTLI_MODE_GENERIC);
+    BrotliEncoderSetParameter(e, BROTLI_PARAM_SIZE_HINT, uint32_t(std::min<size_t>(in.size(), 1u << 30)));
+    std::vector<uint8_t> out;
+    const uint8_t* next_in = in.data();
+    size_t avail_in = in.size();
+    bool ok = true;
+    for (;;)
+    {
+        size_t avail_out = 0;
+        if (!BrotliEncoderCompressStream(e, BROTLI_OPERATION_FINISH, &avail_in, &next_in, &avail_out, nullptr, nullptr)) { ok = false; break; }
+        size_t got = 0;
+        const uint8_t* o = BrotliEncoderTakeOutput(e, &got);
+        out.insert(out.end(), o, o + got);
+        if (against && (out.size() > against->size() || !std::equal(out.begin(), out.end(), against->begin()))) break;
+        if (BrotliEncoderIsFinished(e) && !BrotliEncoderHasMoreOutput(e)) break;
+    }
+    BrotliEncoderDestroyInstance(e);
+    if (!ok) throw std::runtime_error("brotli could not pack");
+    return out;
+}
+
+// An .lzma file (LZMA_Alone, as the lzma program writes): its properties byte and dictionary, then
+// its size (all ones: not given, the stream marking its own end).
+bool is_lzma_alone(const std::vector<uint8_t>& b) { return b.size() >= 14 && b[0] < 225 && b[1] == 0 && b[2] < 0x80; }
+
+std::optional<std::vector<uint8_t>> liblzma_inner(const std::vector<uint8_t>& b, bool lzip)
+{
+    lzma_stream z = LZMA_STREAM_INIT;
+    if ((lzip ? lzma_lzip_decoder(&z, UINT64_MAX, LZMA_CONCATENATED) : lzma_alone_decoder(&z, UINT64_MAX)) != LZMA_OK) return std::nullopt;
+    std::vector<uint8_t> out, buf(size_t(1) << 20);
+    z.next_in = b.data();
+    z.avail_in = b.size();
+    lzma_ret r = LZMA_OK;
+    while (r == LZMA_OK)
+    {
+        z.next_out = buf.data();
+        z.avail_out = buf.size();
+        r = lzma_code(&z, LZMA_FINISH);
+        out.insert(out.end(), buf.data(), buf.data() + (buf.size() - z.avail_out));
+    }
+    const bool whole = r == LZMA_STREAM_END && z.avail_in == 0;
+    lzma_end(&z);
+    if (!whole) return std::nullopt;
+    return out;
+}
+
+bool is_lzip(const std::vector<uint8_t>& b) { return b.size() >= 26 && b[0] == 'L' && b[1] == 'Z' && b[2] == 'I' && b[3] == 'P' && b[4] == 1; }
+
+// An .lzma file as liblzma makes it, as the lzma program does, at a preset.
+std::vector<uint8_t> lzma_alone_pack(const std::vector<uint8_t>& in, uint32_t preset)
+{
+    lzma_options_lzma opt{};
+    if (lzma_lzma_preset(&opt, preset)) throw std::runtime_error("liblzma has no such preset");
+    lzma_stream z = LZMA_STREAM_INIT;
+    if (lzma_alone_encoder(&z, &opt) != LZMA_OK) throw std::runtime_error("liblzma could not start");
+    std::vector<uint8_t> out(in.size() + in.size() / 2 + 4096);
+    z.next_in = in.data();
+    z.avail_in = in.size();
+    z.next_out = out.data();
+    z.avail_out = out.size();
+    lzma_ret r = LZMA_OK;
+    while (r == LZMA_OK)
+    {
+        if (z.avail_out == 0)
+        {
+            const size_t had = out.size();
+            out.resize(had * 2);
+            z.next_out = out.data() + had;
+            z.avail_out = out.size() - had;
+        }
+        r = lzma_code(&z, LZMA_FINISH);
+    }
+    const size_t pos = size_t(z.next_out - out.data());
+    lzma_end(&z);
+    if (r != LZMA_STREAM_END) throw std::runtime_error("liblzma could not pack");
+    out.resize(pos);
+    return out;
+}
+
 } // namespace
 
 std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector<uint8_t>& inner)
 {
+    if (recipe.rfind("lz4 ", 0) == 0)
+    {
+        // "lz4 <level> <block size 4-7> <linked 0|1> <block checksum 0|1> <content checksum 0|1>
+        // <content size 0|1> <inner size>" (v20): one frame, as the lz4 program writes it.
+        int level = 0, block = 0, linked = 0, bsum = 0, csum = 0, sflag = 0;
+        unsigned long long size = 0;
+        char extra = 0;
+        if (std::sscanf(recipe.c_str(), "lz4 %d %d %d %d %d %d %llu%c", &level, &block, &linked, &bsum, &csum, &sflag, &size, &extra) != 7 ||
+            level < -65537 || level > 12 || block < 4 || block > 7 || (linked | bsum | csum | sflag) & ~1 || size != inner.size())
+            throw std::runtime_error("an lz4 recipe this Sieve does not know: " + recipe);
+        return lz4_pack(inner, level, block, linked != 0, bsum != 0, csum != 0, sflag != 0);
+    }
+    if (recipe.rfind("br ", 0) == 0)
+    {
+        // "br <quality 0-11> <window 10-24> <inner size>" (v20): brotli 1.2.1, as the brotli program writes.
+        int quality = 0, window = 0;
+        unsigned long long size = 0;
+        char extra = 0;
+        if (std::sscanf(recipe.c_str(), "br %d %d %llu%c", &quality, &window, &size, &extra) != 3 || quality < 0 || quality > 11 || window < 10 ||
+            window > 24 || size != inner.size())
+            throw std::runtime_error("a brotli recipe this Sieve does not know: " + recipe);
+        return brotli_pack(inner, quality, window);
+    }
+    if (recipe.rfind("lzma ", 0) == 0)
+    {
+        // "lzma <preset>[e] <inner size>" (v20): liblzma's LZMA_Alone encoder, as the lzma program writes.
+        char preset[8] = {0};
+        unsigned long long size = 0;
+        char extra = 0;
+        if (std::sscanf(recipe.c_str(), "lzma %7s %llu%c", preset, &size, &extra) != 2 || size != inner.size())
+            throw std::runtime_error("an lzma recipe this Sieve does not know: " + recipe);
+        const std::string ps(preset);
+        if (ps.empty() || ps[0] < '0' || ps[0] > '9' || ps.size() > 2 || (ps.size() == 2 && ps[1] != 'e'))
+            throw std::runtime_error("an lzma preset this Sieve does not know: " + recipe);
+        return lzma_alone_pack(inner, uint32_t(ps[0] - '0') | (ps.size() == 2 ? LZMA_PRESET_EXTREME : 0));
+    }
     if (recipe.rfind("bz2 ", 0) == 0)
     {
         // "bz2 <block size> <inner size>" (v19): libbzip2 1.0.8, as the bzip2 program writes one stream.
@@ -1071,11 +1403,77 @@ std::string zstd_recipe(const std::vector<uint8_t>& b, const std::vector<uint8_t
     return "";
 }
 
+// The recipe that remakes an lz4 file exactly ("lz4 1 7 0 0 1 0 <size>"), or "" if no level of
+// liblz4 gives it back: one frame, its settings as its header says, each level tried first on the
+// frame's first block, and in full only where that matches.
+std::string lz4_recipe(const std::vector<uint8_t>& b, const std::vector<uint8_t>& inner, size_t frames)
+{
+    const timings::Scope t("pack.archives.recipe");
+    if (frames != 1 || b.size() < 7) return "";
+    const uint8_t flg = b[4], bd = b[5];
+    if ((flg >> 6) != 1 || (flg & 0x03) || (bd & 0x8F)) return ""; // version 01, no dictionary, reserved bits clear
+    const int block = (bd >> 4) & 7;
+    if (block < 4) return "";
+    const bool linked = !(flg & 0x20), bsum = (flg & 0x10) != 0, sflag = (flg & 0x08) != 0, csum = (flg & 0x04) != 0;
+    const size_t head = sflag ? 15 : 7;
+    if (b.size() < head + 4) return "";
+    // The first block: its 4-byte size (the top bit: stored as it is) and its bytes.
+    const uint32_t first = (uint32_t(b[head]) | uint32_t(b[head + 1]) << 8 | uint32_t(b[head + 2]) << 16 | uint32_t(b[head + 3]) << 24) & 0x7FFFFFFFu;
+    const size_t block_bytes = size_t(64) << (2 * (block - 4)) << 10;
+    std::vector<int> levels = {1, 9, 12, 3, 4, 5, 6, 7, 8, 10, 11};
+    for (int l = -1; l >= -16; --l) levels.push_back(l);
+    for (const int level : levels)
+    {
+        if (inner.size() > block_bytes && first > 0 && head + 4 + first <= b.size())
+        {
+            const std::vector<uint8_t> part(inner.begin(), inner.begin() + std::ptrdiff_t(block_bytes));
+            const std::vector<uint8_t> f = lz4_pack(part, level, block, linked, false, false, false);
+            if (f.size() < 7 + 4 + first || !std::equal(f.begin() + 7, f.begin() + 7 + 4 + std::ptrdiff_t(first), b.begin() + std::ptrdiff_t(head))) continue;
+        }
+        if (lz4_pack(inner, level, block, linked, bsum, csum, sflag) == b)
+            return "lz4 " + std::to_string(level) + " " + std::to_string(block) + " " + (linked ? "1" : "0") + " " + (bsum ? "1" : "0") + " " +
+                   (csum ? "1" : "0") + " " + (sflag ? "1" : "0") + " " + std::to_string(inner.size());
+    }
+    return "";
+}
+
+// The recipe that remakes a brotli file exactly ("br 11 22 <size>"), or "" if no quality gives it
+// back: its window from its first bits, each quality stopped at its first byte that differs.
+std::string brotli_recipe(const std::vector<uint8_t>& b, const std::vector<uint8_t>& inner)
+{
+    const timings::Scope t("pack.archives.recipe");
+    const int window = brotli_window(b);
+    if (window < 10 || window > 24) return "";
+    for (const int q : {11, 9, 5, 6, 4, 10, 7, 8, 3, 2, 1, 0})
+        if (brotli_pack(inner, q, window, &b) == b) return "br " + std::to_string(q) + " " + std::to_string(window) + " " + std::to_string(inner.size());
+    return "";
+}
+
+// The recipe that remakes an .lzma file exactly ("lzma 6 <size>"), or "" if no preset of liblzma
+// does: the presets whose dictionary is the one its header names, each with and without extreme.
+std::string lzma_recipe(const std::vector<uint8_t>& b, const std::vector<uint8_t>& inner)
+{
+    const timings::Scope t("pack.archives.recipe");
+    if (b.size() < 13 || b[0] != 0x5D) return ""; // lc 3, lp 0, pb 2: every preset's
+    const uint32_t dict = uint32_t(b[1]) | uint32_t(b[2]) << 8 | uint32_t(b[3]) << 16 | uint32_t(b[4]) << 24;
+    for (int k = 5; k < 13; ++k)
+        if (b[size_t(k)] != 0xFF) return ""; // the lzma program writes no size
+    static const uint32_t preset_dict[10] = {1u << 18, 1u << 20, 1u << 21, 1u << 22, 1u << 22, 1u << 23, 1u << 23, 1u << 24, 1u << 25, 1u << 26};
+    for (const int level : {6, 9, 5, 7, 8, 4, 3, 2, 1, 0})
+        for (const bool extreme : {false, true})
+        {
+            if (preset_dict[level] != dict) continue;
+            if (lzma_alone_pack(inner, uint32_t(level) | (extreme ? LZMA_PRESET_EXTREME : 0)) == b)
+                return "lzma " + std::to_string(level) + (extreme ? "e" : "") + " " + std::to_string(inner.size());
+        }
+    return "";
+}
+
 // An archive's contents' folder (or file): its name without the extension, else with ".contents".
 std::string contents_name(const std::string& path, const char* ext)
 {
     const std::string e(ext);
-    if (path.size() > e.size() && path.compare(path.size() - e.size(), e.size(), e) == 0) return path.substr(0, path.size() - e.size());
+    if (!e.empty() && path.size() > e.size() && path.compare(path.size() - e.size(), e.size(), e) == 0) return path.substr(0, path.size() - e.size());
     return path + ".contents";
 }
 
@@ -1196,7 +1594,8 @@ std::vector<uint8_t> place_bytes_of(const std::string& hex, uint32_t width)
 } // namespace
 
 void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const ItemFinder* items, bool item_hashes, const PlaceCoder* coder,
-                double rope_seconds, uint32_t rope_newest, bool trim, bool pieces, bool optimise_archives, bool binary, bool gzip)
+                double rope_seconds, uint32_t rope_newest, bool trim, bool pieces, bool optimise_archives, bool binary, bool gzip,
+                bool v20_on)
 {
     const timings::Scope t_all("pack.all");
     // Every file's bytes, checked against the walk: from the contents where a v3 manifest has them,
@@ -1229,8 +1628,14 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     m.archives = false;
     const bool gzip_remake = binary && gzip; // v17's (a binary head's): gzip remade exactly
     const bool newer_archives = gzip_remake;  // v19's, with the newest (bzip2 and zstd)
+    const bool v20 = gzip_remake && v20_on; // v20's (lz4, brotli, lzma, lzip, libarchive's)
     m.remake_gz = false;
     m.more_archives = false;
+    m.v20 = false;
+    // (SIEVE_ARCHIVES_ALWAYS=1 in the environment: every archive Sieve can read is carried as its contents
+    // or remade, smaller or not, so the CI can test each reader on the small archives it has.)
+    const char* always_env = std::getenv("SIEVE_ARCHIVES_ALWAYS");
+    const bool archives_always = always_env && std::string(always_env) == "1";
     if (optimise_archives && m.compact)
     {
         std::unordered_set<std::string> taken;
@@ -1276,6 +1681,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             // remembered, so packing it later does not search again), its names and recipe counted.
             const uint64_t as_is = std::min<uint64_t>(b.size(), estimate(b));
             auto worth = [&](const std::vector<uint8_t>& inner, uint64_t extra, bool one_file = true) {
+                if (archives_always) return true; // SIEVE_ARCHIVES_ALWAYS: every archive read, for testing the readers
                 uint64_t cost = estimate(inner);
                 if (one_file && rope_seconds >= 0 && inner.size() >= 512) cost = std::min<uint64_t>(cost, uint64_t(rope_search(inner, rope_seconds, rope_newest).estimate));
                 // By a clear margin (64 bytes and 0.5%): the estimate is LZMA2 at preset 6, the stream
@@ -1346,8 +1752,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             }
             if (is_gzip(b))
             {
-                auto inner = gzip_inner(b);
-                const std::string recipe = inner && gzip_remake ? gzip_recipe(b, *inner) : std::string();
+                size_t members = 0;
+                auto inner = gzip_inner(b, &members);
+                const std::string recipe = inner && gzip_remake && members == 1 ? gzip_recipe(b, *inner) : std::string();
                 std::string name = contents_name(e.path, ".gz");
                 if (e.path.size() > 4 && e.path.compare(e.path.size() - 4, 4, ".tgz") == 0) name = e.path.substr(0, e.path.size() - 4) + ".tar";
                 if (single("gz", std::move(inner), recipe, name, 40 + 2 * gzip_header_size(b))) continue;
@@ -1372,6 +1779,36 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 if (e.path.size() > 5 && e.path.compare(e.path.size() - 5, 5, ".tzst") == 0) name = e.path.substr(0, e.path.size() - 5) + ".tar";
                 if (single("zst", std::move(inner), recipe, name, 48)) continue;
             }
+            // v20's: lz4, brotli (a file named .br: brotli has no mark), lzma and lzip.
+            auto ends = [&](const char* t) {
+                const size_t n = std::strlen(t);
+                return e.path.size() > n && e.path.compare(e.path.size() - n, n, t) == 0;
+            };
+            auto renamed = [&](const char* ext, const char* tar_ext) {
+                if (tar_ext && ends(tar_ext)) return e.path.substr(0, e.path.size() - std::strlen(tar_ext)) + ".tar";
+                return contents_name(e.path, ext);
+            };
+            if (v20 && is_lz4(b))
+            {
+                size_t frames = 0;
+                auto inner = lz4_inner(b, &frames);
+                const std::string recipe = inner ? lz4_recipe(b, *inner, frames) : std::string();
+                if (single("lz4", std::move(inner), recipe, renamed(".lz4", ".tlz4"), 56)) continue;
+            }
+            if (v20 && ends(".br"))
+            {
+                auto inner = brotli_inner(b);
+                const std::string recipe = inner ? brotli_recipe(b, *inner) : std::string();
+                if (single("br", std::move(inner), recipe, renamed(".br", nullptr), 40)) continue;
+            }
+            if (v20 && ends(".lzma") && is_lzma_alone(b))
+            {
+                auto inner = liblzma_inner(b, false);
+                const std::string recipe = inner ? lzma_recipe(b, *inner) : std::string();
+                if (single("lzma", std::move(inner), recipe, renamed(".lzma", nullptr), 40)) continue;
+            }
+            if (v20 && is_lzip(b))
+                if (single("lz", liblzma_inner(b, true), std::string(), renamed(".lz", ".tlz"), 40)) continue;
             if (sieve::install::is_7z(b))
             {
                 std::vector<sieve::install::InMemory> all;
@@ -1387,6 +1824,17 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             }
             if (auto all = zip_entries(b))
                 if (contents("zip", std::move(*all), ".zip")) continue;
+            if (v20)
+            {
+                std::string format;
+                if (auto all = libarchive_entries(b, format))
+                {
+                    // Its folder: the name without its extension, whatever that is (.rar, .cab, .iso ...).
+                    const size_t dot = e.path.find_last_of('.'), slash = e.path.find_last_of('/');
+                    const std::string ext = dot != std::string::npos && (slash == std::string::npos || dot > slash) ? e.path.substr(dot) : std::string();
+                    if (contents(format.c_str(), std::move(*all), ext.c_str())) continue;
+                }
+            }
             add_file(e, std::move(b), {});
         }
         if (!m.unpacked.empty() || std::any_of(entries.begin(), entries.end(), [](const ManifestEntry& x) { return !x.remake.empty(); }))
@@ -1396,6 +1844,12 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             // v19: some bzip2 or zstd remade, or carried as its contents.
             m.more_archives = std::any_of(entries.begin(), entries.end(), [](const ManifestEntry& x) { return x.remake.rfind("bz2 ", 0) == 0 || x.remake.rfind("zst ", 0) == 0; }) ||
                               std::any_of(m.unpacked.begin(), m.unpacked.end(), [](const Manifest::UnpackedArchive& u) { return u.format == "bz2" || u.format == "zst"; });
+            // v20: some lz4, brotli or lzma remade, or one of those or an lzip carried as its contents.
+            m.v20 =
+                std::any_of(entries.begin(), entries.end(),
+                            [](const ManifestEntry& x) { return x.remake.rfind("lz4 ", 0) == 0 || x.remake.rfind("br ", 0) == 0 || x.remake.rfind("lzma ", 0) == 0; }) ||
+                std::any_of(m.unpacked.begin(), m.unpacked.end(), [](const Manifest::UnpackedArchive& u) { return is_v20_format(u.format); });
+            if (m.v20) m.more_archives = true; // v20 is v19 and more
             if (m.more_archives) m.remake_gz = true; // v19 is v17 and more
             m.entries.clear();
             bytes.clear();
@@ -1809,6 +2263,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         r.archives_made = m.archives;
         r.remake_gz = m.remake_gz;
         r.more_archives = m.more_archives;
+        r.v20 = m.v20;
         r.rope_above = m.rope_above;
         r.trimmed = m.trimmed;
         r.lzma2_as_is = lzma2_as_is;
@@ -1844,17 +2299,36 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     m.listing_of.clear();
     // v16: the head in bytes, where everything v15 allows is allowed (never an older version asked for).
     m.binary = binary && m.compact;
+    // v20: wherever the head is in bytes at the newest, the body is too (and v20's archives allowed).
+    m.v20 = m.v20 || (m.binary && gzip && v20_on);
+    if (m.v20) m.more_archives = m.remake_gz = true;
+    r.v20 = m.v20;
     if (m.binary)
     {
         r.head_text = m.text().size();
-        const std::string body = listing_body(m);
+        const std::string text = listing_body(m);
+        // v20: the body in bytes, or as text where that comes out smaller after all (head flag 128),
+        // each packed by LZMA2 where that is smaller; the smallest kept.
+        std::string body = text;
+        if (m.v20)
+        {
+            const std::vector<uint8_t> bytes = listing_to_bytes(text);
+            auto carried = [&](const std::string& b) {
+                if (b.empty()) return size_t(1);
+                const std::vector<uint8_t> p = pack_stream(std::vector<uint8_t>(b.begin(), b.end()), dictionary_for(b.size()), false, 9 | LZMA_PRESET_EXTREME, tune);
+                return std::min(b.size() + 3, p.size() + 12);
+            };
+            const std::string as_bytes(bytes.begin(), bytes.end());
+            m.body_text = carried(text) < carried(as_bytes);
+            if (!m.body_text) body = as_bytes;
+        }
         const uint32_t dict = dictionary_for(body.size());
         std::vector<uint8_t> packed = body.empty() ? std::vector<uint8_t>() : pack_stream(std::vector<uint8_t>(body.begin(), body.end()), dict, false, 9 | LZMA_PRESET_EXTREME, tune);
         if (!body.empty() && packed.size() + 12 < body.size())
         {
             m.listing_stream = {packed.size(), body.size(), dict};
             m.listing_carried = std::move(packed);
-            m.listing_of = body;
+            m.listing_of = text;
             r.listing = body.size();
             r.listing_carried = m.listing_carried.size();
         }
@@ -1903,7 +2377,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
     };
     if (r.compact)
     {
-        const char* version = r.more_archives ? kMoreArchivesManifestVersion : r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
+        const char* version = r.v20 ? kNewestArchivesManifestVersion : r.more_archives ? kMoreArchivesManifestVersion : r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
                             : r.roped ? kRopeManifestVersion : kCompactManifestVersion;
         if (r.items)
         {
@@ -1916,7 +2390,8 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         else o << "items     none; " << version << "\n";
         if (r.listing_carried) o << "listing   " << r.listing << " bytes, carried as LZMA2 in " << r.listing_carried << "\n";
         if (r.binary)
-            o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << kBinaryManifestVersion << ")\n";
+            o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << (r.v20 ? kNewestArchivesManifestVersion : kBinaryManifestVersion)
+              << (r.v20 ? "; its body in bytes too" : "") << ")\n";
         if (r.remade) o << "remade    " << r.remade << " archive(s) carried as what they hold, remade exactly on installing (" << version << ")\n";
         if (r.unpacked)
             o << "unpacked  " << r.unpacked << " archive(s) carried as their contents, not as the archives (Optimise Archive Formats; " << version

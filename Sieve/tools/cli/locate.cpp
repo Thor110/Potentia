@@ -1,6 +1,8 @@
 // The file locator and the manifest creator (locate.hpp).
 
 #include "cli/locate.hpp"
+
+#include <functional>
 #include "cli/vault.hpp"
 
 #include "sieve/rope_wave.hpp"
@@ -367,7 +369,7 @@ std::string manifest_path(const fs::path& p, const fs::path& root)
 
 const char* Manifest::version() const
 {
-    return more_archives ? kMoreArchivesManifestVersion : !graph.empty() ? kGraphManifestVersion : remake_gz ? kGzipManifestVersion : binary ? kBinaryManifestVersion : rope_above ? kRopeAboveManifestVersion : archives ? kArchivesManifestVersion : pieces ? kPiecesManifestVersion : trimmed ? kTrimmedManifestVersion : rope_groups ? kRopeGroupsManifestVersion : rope_lines ? kRopeLinesManifestVersion : rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
+    return v20 ? kNewestArchivesManifestVersion : more_archives ? kMoreArchivesManifestVersion : !graph.empty() ? kGraphManifestVersion : remake_gz ? kGzipManifestVersion : binary ? kBinaryManifestVersion : rope_above ? kRopeAboveManifestVersion : archives ? kArchivesManifestVersion : pieces ? kPiecesManifestVersion : trimmed ? kTrimmedManifestVersion : rope_groups ? kRopeGroupsManifestVersion : rope_lines ? kRopeLinesManifestVersion : rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
          : with_contents ? kInstallManifestVersion : with_addresses ? kAddressManifestVersion : kManifestVersion;
 }
 
@@ -597,6 +599,218 @@ std::string listing_body(const Manifest& m)
     return body;
 }
 
+// ---- v20: the listing's body in bytes (IDEAS §19.90). Each of its text lines is one record, read
+// back into that same line, so everything after the reading is the text's as before.
+//   1  a folder:  its path (as below)
+//   2  a file:    its size (a varint), its way (as below), its path
+//   3  any other line as it is: a varint of its length, then it ("line" lines, a map's "g" lines)
+//   4  an archive carried as its contents ("u"): its format (as below), its size, the archive's path
+//      and the folder's, each a varint of its length and then it
+//   5  a "line" line: what follows "line ", then a line feed
+// A path: a varint of how much of it is the last path's (a folder's or a file's) and of the rest's
+// length, then the rest. A way: a byte, 1 "raw"; 3 "rope", 4 "pieces", each then a varint of the
+// rest's length and the rest; 2 an archive remade on installing, its format, then the rest of its
+// recipe as text (a varint of its length, then it) and its inner way; 0 any other, as text. A format:
+// a varint of its number in kArchiveFormats, 0 for one not there, then its name as text.
+
+static const char* const kArchiveFormats[] = {nullptr, "xz", "gz", "bz2", "zst", "lz4", "br", "lzma", "lz", "7z", "zip", "rar", "cab", "iso", "lha", "cpio", "ar", "warc"};
+
+int archive_format_number(const std::string& name)
+{
+    for (int i = 1; i < int(std::size(kArchiveFormats)); ++i)
+        if (name == kArchiveFormats[i]) return i;
+    return 0;
+}
+
+std::string archive_format_name(int number)
+{
+    return number > 0 && number < int(std::size(kArchiveFormats)) ? std::string(kArchiveFormats[number]) : std::string();
+}
+
+// A remade archive's recipe: its words before the inner way (with the kind), by kind; 0 for none.
+static int recipe_words(std::string_view way)
+{
+    const std::string_view kind = way.substr(0, way.find(' '));
+    return kind == "xz" ? 4 : kind == "gz" ? 5 : kind == "bz2" ? 3 : kind == "zst" ? 6 : kind == "lz4" ? 8 : kind == "br" ? 4 : kind == "lzma" ? 3 : 0;
+}
+
+static void put_text(std::vector<uint8_t>& o, std::string_view t)
+{
+    put_varint_to(o, t.size());
+    o.insert(o.end(), t.begin(), t.end());
+}
+
+static void put_way(std::vector<uint8_t>& o, std::string_view way)
+{
+    if (way == "raw") return o.push_back(1);
+    if (const int w = recipe_words(way); w > 0)
+    {
+        size_t at = 0;
+        for (int k = 0; k < w && at != std::string_view::npos; ++k) at = way.find(' ', at + 1);
+        const std::string kind(way.substr(0, way.find(' ')));
+        if (at != std::string_view::npos && archive_format_number(kind) > 0)
+        {
+            o.push_back(2);
+            put_varint_to(o, uint64_t(archive_format_number(kind)));
+            put_text(o, way.substr(kind.size() + 1, at - kind.size() - 1));
+            return put_way(o, way.substr(at + 1));
+        }
+    }
+    for (const auto& [code, word] : {std::pair<uint8_t, std::string_view>{3, "rope "}, {4, "pieces "}})
+        if (way.substr(0, word.size()) == word)
+        {
+            o.push_back(code);
+            return put_text(o, way.substr(word.size()));
+        }
+    o.push_back(0);
+    put_text(o, way);
+}
+
+static bool decimal(std::string_view t) { return !t.empty() && t.size() <= 19 && t.find_first_not_of("0123456789") == std::string_view::npos && (t.size() == 1 || t[0] != '0'); }
+
+std::vector<uint8_t> listing_to_bytes(const std::string& body)
+{
+    std::vector<uint8_t> o;
+    std::string last; // the last path written
+    auto put_path = [&](std::string_view p) {
+        size_t same = 0;
+        while (same < p.size() && same < last.size() && p[same] == last[same]) ++same;
+        put_varint_to(o, same);
+        put_text(o, p.substr(same));
+        last.assign(p);
+    };
+    for (size_t at = 0; at < body.size();)
+    {
+        const size_t nl = body.find('\n', at);
+        if (nl == std::string::npos) throw std::logic_error("a listing whose last line has no line feed");
+        const std::string_view line(body.data() + at, nl - at);
+        at = nl + 1;
+        std::vector<std::string_view> f;
+        for (size_t p = 0;;)
+        {
+            const size_t tab = line.find('\t', p);
+            f.push_back(line.substr(p, tab == std::string_view::npos ? std::string_view::npos : tab - p));
+            if (tab == std::string_view::npos) break;
+            p = tab + 1;
+        }
+        if (f.size() == 2 && f[0] == "d")
+        {
+            o.push_back(1);
+            put_path(f[1]);
+        }
+        else if (f.size() == 4 && f[0] == "f" && decimal(f[1]))
+        {
+            o.push_back(2);
+            put_varint_to(o, std::stoull(std::string(f[1])));
+            put_way(o, f[2]);
+            put_path(f[3]);
+        }
+        else if (f.size() == 5 && f[0] == "u" && decimal(f[2]))
+        {
+            o.push_back(4);
+            const int n = archive_format_number(std::string(f[1]));
+            put_varint_to(o, uint64_t(n));
+            if (!n) put_text(o, f[1]);
+            put_varint_to(o, std::stoull(std::string(f[2])));
+            put_text(o, f[3]);
+            put_text(o, f[4]);
+        }
+        else if (line.substr(0, 5) == "line " && line.find('\n') == std::string_view::npos)
+        {
+            o.push_back(5);
+            o.insert(o.end(), line.begin() + 5, line.end());
+            o.push_back('\n');
+        }
+        else
+        {
+            o.push_back(3);
+            put_text(o, line);
+        }
+    }
+    if (listing_from_bytes(std::string_view(reinterpret_cast<const char*>(o.data()), o.size())) != body)
+        throw std::logic_error("a listing in bytes that does not read back as its text");
+    return o;
+}
+
+std::string listing_from_bytes(std::string_view b)
+{
+    size_t at = 0;
+    auto byte = [&]() {
+        if (at >= b.size()) throw std::runtime_error("manifest: its listing ends early");
+        return uint8_t(b[at++]);
+    };
+    // (A line kept as it is may hold tabs, a "g" line's or a "line" line's; anything else, neither.)
+    auto text = [&](bool tabs = false) {
+        const uint64_t n = get_varint_from(b, at);
+        if (n > b.size() - at) throw std::runtime_error("manifest: its listing ends early");
+        const std::string_view t = b.substr(at, size_t(n));
+        at += size_t(n);
+        if (t.find_first_of(tabs ? "\n" : "\t\n") != std::string_view::npos)
+            throw std::runtime_error("manifest: its listing has a tab or a line feed where it may not");
+        return std::string(t);
+    };
+    std::string last, out;
+    auto path = [&]() {
+        const uint64_t same = get_varint_from(b, at);
+        if (same > last.size()) throw std::runtime_error("manifest: its listing shares more of a path than the last had");
+        last = last.substr(0, size_t(same)) + text();
+        return last;
+    };
+    std::function<std::string(int)> way = [&](int depth) -> std::string {
+        if (depth > 4) throw std::runtime_error("manifest: its listing's way is nested too deeply");
+        switch (byte())
+        {
+        case 0: return text();
+        case 1: return "raw";
+        case 2:
+        {
+            const std::string kind = archive_format_name(int(get_varint_from(b, at)));
+            if (kind.empty() || !recipe_words(kind + " ")) throw std::runtime_error("manifest: its listing names an archive's kind this Sieve does not know");
+            const std::string rest = text();
+            return kind + " " + rest + " " + way(depth + 1);
+        }
+        case 3: return "rope " + text();
+        case 4: return "pieces " + text();
+        default: throw std::runtime_error("manifest: its listing has a way this Sieve does not know");
+        }
+    };
+    while (at < b.size())
+    {
+        switch (byte())
+        {
+        case 1: out += "d\t" + path() + "\n"; break;
+        case 2:
+        {
+            const uint64_t size = get_varint_from(b, at);
+            const std::string w = way(0);
+            out += "f\t" + std::to_string(size) + "\t" + w + "\t" + path() + "\n";
+            break;
+        }
+        case 3: out += text(true) + "\n"; break;
+        case 5:
+        {
+            const size_t nl = b.find('\n', at);
+            if (nl == std::string_view::npos) throw std::runtime_error("manifest: its listing ends early");
+            out += "line " + std::string(b.substr(at, nl - at)) + "\n";
+            at = nl + 1;
+            break;
+        }
+        case 4:
+        {
+            const int n = int(get_varint_from(b, at));
+            const std::string name = n ? archive_format_name(n) : text();
+            if (name.empty()) throw std::runtime_error("manifest: its listing names an archive's format this Sieve does not know");
+            const uint64_t size = get_varint_from(b, at);
+            const std::string archive = text(), folder = text();
+            out += "u\t" + name + "\t" + std::to_string(size) + "\t" + archive + "\t" + folder + "\n";
+            break;
+        }
+        default: throw std::runtime_error("manifest: its listing has a record this Sieve does not know");
+        }
+    }
+    return out;
+}
+
 // v16: "sieve" and 16 (17, 18: v17, v18); flags (1 root, 2 x86, 4 lzma2, 8 items, 16 rope, 32 the body packed,
 // 64 a graph part, v18 only); the
 // root (a varint of its length, then it); each stream present, its packed size and size as varints
@@ -605,11 +819,11 @@ std::string listing_body(const Manifest& m)
 // its size, then it.
 static std::vector<uint8_t> binary_head(const Manifest& m)
 {
-    std::vector<uint8_t> o = {'s', 'i', 'e', 'v', 'e', uint8_t(m.more_archives ? 19 : !m.graph.empty() ? 18 : m.remake_gz ? 17 : 16)};
+    std::vector<uint8_t> o = {'s', 'i', 'e', 'v', 'e', uint8_t(m.v20 ? 20 : m.more_archives ? 19 : !m.graph.empty() ? 18 : m.remake_gz ? 17 : 16)};
     const bool root = !m.one_file_root(), items = !m.trimmed || m.item_stream.packed || m.item_stream.bytes;
     const bool body_packed = m.listing_stream.packed != 0;
     o.push_back(uint8_t((root ? 1 : 0) | (m.x86.packed ? 2 : 0) | (m.lzma2.packed ? 4 : 0) | (items ? 8 : 0) | (m.roped ? 16 : 0) |
-                        (body_packed ? 32 : 0) | (m.graph.empty() ? 0 : 64))); // v18: 64, a graph part
+                        (body_packed ? 32 : 0) | (m.graph.empty() ? 0 : 64) | (m.v20 && m.body_text ? 128 : 0))); // v18: 64, a graph part; v20: 128, the body as text
     if (root)
     {
         put_varint_to(o, m.root.size());
@@ -634,7 +848,9 @@ static std::vector<uint8_t> binary_head(const Manifest& m)
     }
     else
     {
-        const std::string body = listing_body(m);
+        // (v20: the body in bytes; before it, as text.)
+        const std::string text = listing_body(m);
+        const std::vector<uint8_t> body = m.v20 && !m.body_text ? listing_to_bytes(text) : std::vector<uint8_t>(text.begin(), text.end());
         put_varint_to(o, body.size());
         o.insert(o.end(), body.begin(), body.end());
     }
@@ -777,18 +993,18 @@ Manifest Manifest::parse(std::string_view whole)
 {
     // v16: the head in bytes, read back into v15's text (its root's and streams' lines, its lines,
     // the tree's, the rest of its body, "end"), followed by what follows it.
-    if (whole.size() >= 6 && whole.substr(0, 5) == "sieve" && uint8_t(whole[5]) >= 16 && uint8_t(whole[5]) <= 19)
+    if (whole.size() >= 6 && whole.substr(0, 5) == "sieve" && uint8_t(whole[5]) >= 16 && uint8_t(whole[5]) <= 20)
     {
         const uint8_t v = uint8_t(whole[5]);
         size_t at = 6;
         if (at >= whole.size()) throw std::runtime_error("manifest: its head ends early");
         const uint8_t flags = uint8_t(whole[at++]);
-        if ((flags & 0x80) || ((flags & 64) && v < 18)) throw std::runtime_error("manifest: its head has flags this Sieve does not know");
+        if (((flags & 0x80) && v < 20) || ((flags & 64) && v < 18)) throw std::runtime_error("manifest: its head has flags this Sieve does not know");
         if (v == 18 && !(flags & 64)) throw std::runtime_error("manifest: v18 without its graph part");
         // (v17's text is v15's with gzip remade allowed, v18's with a graph part too, v19's with bzip2
         // and zstd as well: its first line says so.)
         std::string text =
-            std::string(v == 19 ? kMoreArchivesManifestVersion : v == 18 ? kGraphManifestVersion : v == 17 ? kGzipManifestVersion : kRopeAboveManifestVersion) + "\n";
+            std::string(v == 20 ? kNewestArchivesManifestVersion : v == 19 ? kMoreArchivesManifestVersion : v == 18 ? kGraphManifestVersion : v == 17 ? kGzipManifestVersion : kRopeAboveManifestVersion) + "\n";
         auto take = [&](uint64_t n) {
             if (n > whole.size() - at) throw std::runtime_error("manifest: its head ends early");
             const std::string_view v = whole.substr(at, size_t(n));
@@ -834,6 +1050,7 @@ Manifest Manifest::parse(std::string_view whole)
             body.assign(b.begin(), b.end());
         }
         else body = std::string(take(get_varint_from(whole, at)));
+        if (v == 20 && !(flags & 0x80)) body = listing_from_bytes(body); // v20: the body in bytes (unless flag 128), read back as its text
         // The lines first, then the tree's, then the rest.
         size_t split = 0;
         while (split < body.size() && body.compare(split, 5, "line ") == 0)
@@ -847,6 +1064,7 @@ Manifest Manifest::parse(std::string_view whole)
         text.append(whole.substr(at));
         Manifest m = parse(text);
         m.binary = true;
+        m.body_text = v == 20 && (flags & 0x80);
         if (flags & 32)
         {
             m.listing_stream = ls;
@@ -922,8 +1140,10 @@ Manifest Manifest::parse(std::string_view whole)
         m.rope_lines = m.rope_columns = m.roped = m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] == kRopeGroupsManifestVersion)
         m.rope_groups = m.rope_lines = m.rope_columns = m.roped = m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
-    else if (lines[0] == kGzipManifestVersion || lines[0] == kGraphManifestVersion || lines[0] == kMoreArchivesManifestVersion)
-        m.more_archives = lines[0] == kMoreArchivesManifestVersion, m.remake_gz = m.binary = m.rope_above = m.archives = m.pieces = m.trimmed = m.rope_groups = m.rope_lines = m.rope_columns = m.roped = m.compact =
+    else if (lines[0] == kGzipManifestVersion || lines[0] == kGraphManifestVersion || lines[0] == kMoreArchivesManifestVersion ||
+             lines[0] == kNewestArchivesManifestVersion)
+        m.v20 = lines[0] == kNewestArchivesManifestVersion,
+        m.more_archives = lines[0] == kMoreArchivesManifestVersion || m.v20, m.remake_gz = m.binary = m.rope_above = m.archives = m.pieces = m.trimmed = m.rope_groups = m.rope_lines = m.rope_columns = m.roped = m.compact =
             m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] == kRopeAboveManifestVersion)
         m.rope_above = m.archives = m.pieces = m.trimmed = m.rope_groups = m.rope_lines = m.rope_columns = m.roped = m.compact = m.minimal = m.items =
@@ -1050,7 +1270,7 @@ Manifest Manifest::parse(std::string_view whole)
         }
         if (m.items) m.tree = field(lines[first++], "tree");
     }
-    const bool graph_allowed = lines[0] == kGraphManifestVersion || lines[0] == kMoreArchivesManifestVersion;
+    const bool graph_allowed = lines[0] == kGraphManifestVersion || lines[0] == kMoreArchivesManifestVersion || lines[0] == kNewestArchivesManifestVersion;
     const bool graph_needed = lines[0] == kGraphManifestVersion; // (v19's is allowed, not needed)
     for (size_t i = first; i + 1 < lines.size(); ++i)
     {
@@ -1106,13 +1326,18 @@ Manifest Manifest::parse(std::string_view whole)
             e.path = f[3];
             const bool gz = m.remake_gz && e.way.rfind("gz ", 0) == 0;
             const bool bz2 = m.more_archives && e.way.rfind("bz2 ", 0) == 0, zst = m.more_archives && e.way.rfind("zst ", 0) == 0;
-            if ((m.archives && e.way.rfind("xz ", 0) == 0) || gz || bz2 || zst)
+            const bool lz4 = m.v20 && e.way.rfind("lz4 ", 0) == 0, br = m.v20 && e.way.rfind("br ", 0) == 0,
+                       lzma = m.v20 && e.way.rfind("lzma ", 0) == 0;
+            if ((m.archives && e.way.rfind("xz ", 0) == 0) || gz || bz2 || zst || lz4 || br || lzma)
             {
                 // v14: "xz <preset> <check> <inner size> <way>"; v17: "gz <level> <memory level>
                 // <header> <inner size> <way>"; v19: "bz2 <block size> <inner size> <way>", "zst
                 // <version> <level> <checksum> <content size> <inner size> <way>": the recipe, then
                 // the inner way.
-                const int words = gz ? 5 : bz2 ? 3 : zst ? 6 : 4;
+                // v20: "lz4 <level> <block size> <linked> <block checksum> <content checksum> <content
+                // size> <inner size> <way>", "br <quality> <window> <inner size> <way>", "lzma <preset>
+                // <inner size> <way>".
+                const int words = gz ? 5 : bz2 ? 3 : zst ? 6 : lz4 ? 8 : br ? 4 : lzma ? 3 : 4;
                 size_t at = 0;
                 for (int k = 0; k < words && at != std::string::npos; ++k) at = e.way.find(' ', at + 1);
                 if (at == std::string::npos) throw std::runtime_error("manifest: " + e.path + "'s way has no inner way");

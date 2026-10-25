@@ -293,7 +293,7 @@ build/sieve-install degrees-v7.sieve --to deg_inst7b --yes
 diff -r degrees deg_inst7b
 # sieve-manifest-v16 (--items now): v7's listing with its head in bytes (the streams' sizes,
 # the tree's SHA-256 as 32 bytes), the rest of it packed as before: smaller; every file back.
-build/sieve locate degrees --installer degrees-v16.sieve --items --manifest degrees-v16.manifest | tr -d '\r' > d16.txt
+build/sieve locate degrees --installer degrees-v16.sieve --items --v19 --manifest degrees-v16.manifest | tr -d '\r' > d16.txt
 q "^items     1368 file(s) carried as items of Sieve's lines (.* sieve-manifest-v16" d16.txt
 q "^head      [0-9]* bytes in bytes, the listing [0-9]* as text (sieve-manifest-v16)$" d16.txt
 [ "$(wc -c < degrees-v16.sieve)" -lt "$(wc -c < degrees-v7.sieve)" ]
@@ -301,6 +301,16 @@ build/sieve install degrees-v16.sieve --to deg_inst16 > /dev/null
 diff -r degrees deg_inst16
 python reference/sieve_ref.py unpack degrees-v16.manifest --items-from degrees --to deg_oracle16 > /dev/null
 diff -r degrees deg_oracle16
+# sieve-manifest-v20 (the newest): the body in bytes too, its "line" lines (which hold tabs) kept as
+# they are; no larger than v16, and every file back, by sieve install, the oracle and sieve-install.
+build/sieve locate degrees --installer degrees-v20.sieve --items --manifest degrees-v20.manifest | tr -d '\r' > d20.txt
+q "^head      [0-9]* bytes in bytes, the listing [0-9]* as text (sieve-manifest-v20; its body in bytes too)$" d20.txt
+python -c "d = open('degrees-v20.manifest', 'rb').read(); assert d[:6] == b'sieve\x14', d[:6]"
+[ "$(wc -c < degrees-v20.sieve)" -le "$(wc -c < degrees-v16.sieve)" ]
+build/sieve install degrees-v20.sieve --to deg_inst20 > /dev/null
+diff -r degrees deg_inst20
+python reference/sieve_ref.py unpack degrees-v20.manifest --items-from degrees --to deg_oracle20 > /dev/null
+diff -r degrees deg_oracle20
 build/sieve locate degrees --installer degrees-v7h.sieve --items --v15 --file-hashes --manifest degrees-v7h.manifest > /dev/null
 [ "$(wc -c < degrees-v7h.sieve)" -gt "$(wc -c < degrees-v7.sieve)" ]
 build/sieve install degrees-v7h.sieve --to deg_inst7h > /dev/null
@@ -343,11 +353,16 @@ build/sieve install ub-file.sieve --to ub_named_inst > /dev/null
 cmp ub_one/model.safetensors ub_named_inst/sieve-ai-16432c2a3953.safetensors
 # v16 (--items now): the same, its head in bytes: 4,185 bytes (the folder's, 4,176).
 rm -rf ub_named16 ub_inst16 ub_oracle16
-build/sieve locate ub_named/sieve-ai-16432c2a3953.safetensors --installer ub-file16.sieve --items > /dev/null
+build/sieve locate ub_named/sieve-ai-16432c2a3953.safetensors --installer ub-file16.sieve --items --v19 > /dev/null
 [ "$(wc -c < ub-file16.sieve)" -eq 4185 ]
+# v20 (the newest): its body in bytes, 4,182 (its "line" lines four bytes shorter each, its entry too).
+build/sieve locate ub_named/sieve-ai-16432c2a3953.safetensors --installer ub-file20.sieve --items > /dev/null
+[ "$(wc -c < ub-file20.sieve)" -eq 4182 ]
+rm -rf ub_named20 && build/sieve install ub-file20.sieve --to ub_named20 > /dev/null
+cmp ub_one/model.safetensors ub_named20/sieve-ai-16432c2a3953.safetensors
 build/sieve install ub-file16.sieve --to ub_named16 > /dev/null
 cmp ub_one/model.safetensors ub_named16/sieve-ai-16432c2a3953.safetensors
-build/sieve locate ub_one --installer ub-v16.sieve --items --manifest ub-v16.manifest > /dev/null
+build/sieve locate ub_one --installer ub-v16.sieve --items --v19 --manifest ub-v16.manifest > /dev/null
 [ "$(wc -c < ub-v16.sieve)" -eq 4176 ]
 build/sieve install ub-v16.sieve --to ub_inst16 > /dev/null
 # It says how long decoding took, and checking and writing.
@@ -362,6 +377,8 @@ rm -rf pg64 pg64_inst pg64_oracle && mkdir pg64
 python -c "import random; random.seed(3); [open(f'pg64/p{i}.txt','w').write(''.join(random.choice('abcdefghijklmnopqrstuvwxyz ') for _ in range(64))) for i in range(5)]"
 build/sieve locate pg64 --installer pg64.sieve --items --page-length 64 --manifest pg64.manifest | tr -d '\r' | q "^items     5 file(s) carried as items of Sieve's lines (320 bytes, as 195 bytes of places"
 [ "$(wc -c < pg64.sieve)" -eq 339 ] # LZMA2's settings chosen for its listing (v16 345; v7, its listing as text: 422)
+# (v20, its body as text after all, the head's flag 128: five near-alike lines pack smaller as text.)
+python -c "d = open('pg64.manifest', 'rb').read(); assert d[:6] == b'sieve\x14' and d[6] & 128, d[:7]"
 build/sieve locate pg64 --installer pg64-16.sieve --items --page-length 64 --v16 > /dev/null
 [ "$(wc -c < pg64-16.sieve)" -eq 345 ]
 python -c "import sys; sys.argv = ['x']; sys.path.insert(0, 'reference'); import sieve_ref; sys.stdout.buffer.write(sieve_ref.v7_listing(sieve_ref.v16_text(open('pg64.manifest', 'rb').read())))" | q -a "^line 0 39 lower27/L64/key=sieve/feistel-sha256-v1 length=64 line=text$"
@@ -452,7 +469,7 @@ build/sieve rope digits/table.txt --params "${tparams% G1}" --out table2.rope | 
 [ "$(wc -c < table.rope)" -lt "$(wc -c < table2.rope)" ]
 python reference/sieve_ref.py rope-unpack table2.rope --params "${tparams% G1}" --size 222000 --out table2.back > /dev/null
 cmp digits/table.txt table2.back
-build/sieve locate digits --installer digits.sieve --items --manifest digits.manifest | tr -d '\r' | q "^rope      1 file(s) pulled tight by rope-wave-v1 to v4 (222000 bytes, carried in [0-9]*; sieve-manifest-v16)"
+build/sieve locate digits --installer digits.sieve --items --v19 --manifest digits.manifest | tr -d '\r' | q "^rope      1 file(s) pulled tight by rope-wave-v1 to v4 (222000 bytes, carried in [0-9]*; sieve-manifest-v16)"
 build/sieve install digits.sieve --to digits_inst > /dev/null
 diff -r digits digits_inst
 python reference/sieve_ref.py unpack digits.manifest --to digits_oracle > /dev/null
@@ -509,7 +526,7 @@ build/sieve rope lines/pi-like.txt --params "L8 W56 S1 P0 K0 C2" --out lines3.ro
 [ "$(wc -c < lines3.rope)" -lt 45525 ] # the digits' floor, 41,525, and 4,000 for the columns' tables
 python reference/sieve_ref.py rope-unpack lines3.rope --params "L8 W56 S1 P0 K0 C2" --size "$(wc -c < lines/pi-like.txt)" --out lines3.back > /dev/null
 cmp lines/pi-like.txt lines3.back
-build/sieve locate lines --installer lines.sieve --items --manifest lines.manifest | tr -d '\r' | q "; sieve-manifest-v16)"
+build/sieve locate lines --installer lines.sieve --items --v19 --manifest lines.manifest | tr -d '\r' | q "; sieve-manifest-v16)"
 build/sieve install lines.sieve --to lines_inst > /dev/null
 diff -r lines lines_inst
 python reference/sieve_ref.py unpack lines.manifest --to lines_oracle > /dev/null
@@ -545,7 +562,7 @@ for _ in range(50000):
     out.append(s >> 56)
 open('noisy/noise.bin', 'wb').write(bytes(out))
 "
-build/sieve locate noisy --installer noisy.sieve --items --manifest noisy.manifest | tr -d '\r' > noisy.txt
+build/sieve locate noisy --installer noisy.sieve --items --v19 --manifest noisy.manifest | tr -d '\r' > noisy.txt
 q "^as is     the files packed by LZMA2 carried as they are instead" noisy.txt
 q "^items     none; sieve-manifest-v16$" noisy.txt
 build/sieve locate noisy --installer noisy15.sieve --items --v15 --manifest noisy15.manifest | tr -d '\r' | q "^items     none; sieve-manifest-v12$"
@@ -643,10 +660,10 @@ with zipfile.ZipFile('arch/w.zip', 'w', zipfile.ZIP_DEFLATED) as z:
     z.writestr('w/two.txt', b'hello\n')
 "
 xz -9 arch/x/table.txt
-build/sieve locate arch --installer arch_off.sieve --items --manifest arch_off.manifest | tr -d '\r' > arch_off.txt
+build/sieve locate arch --installer arch_off.sieve --items --v19 --manifest arch_off.manifest | tr -d '\r' > arch_off.txt
 q "^items     none; sieve-manifest-v1[2-6]$" arch_off.txt
 if grep -q "sieve-manifest-v14\|^remade\|^unpacked" arch_off.txt; then exit 1; fi
-build/sieve locate arch --installer arch.sieve --items --optimise-archives --manifest arch.manifest | tr -d '\r' > arch.txt
+build/sieve locate arch --installer arch.sieve --items --optimise-archives --v19 --manifest arch.manifest | tr -d '\r' > arch.txt
 q "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v17)$" arch.txt
 q "^unpacked  2 archive(s) carried as their contents, not as the archives (Optimise Archive Formats; sieve-manifest-v17)$" arch.txt
 q "^items     none; sieve-manifest-v17$" arch.txt
@@ -691,7 +708,7 @@ c = zstandard.ZstdCompressor(level=3)
 open('arch19/two.zst', 'wb').write(c.compress(d[:len(d) // 2]) + c.compress(d[len(d) // 2:]))
 open('arch19-two.txt', 'wb').write(d)
 "
-build/sieve locate arch19 --installer arch19.sieve --items --optimise-archives --manifest arch19.manifest | tr -d '\r' > arch19.txt
+build/sieve locate arch19 --installer arch19.sieve --items --optimise-archives --v19 --manifest arch19.manifest | tr -d '\r' > arch19.txt
 q "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v19)$" arch19.txt
 q "^unpacked  1 archive(s) carried as their contents, not as the archives (Optimise Archive Formats; sieve-manifest-v19)$" arch19.txt
 q "^items     none; sieve-manifest-v19$" arch19.txt

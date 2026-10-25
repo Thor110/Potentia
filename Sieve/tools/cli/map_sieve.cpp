@@ -103,7 +103,8 @@ void write_map_instructions(const Map& map, const fs::path& out, double search_p
     }
     Manifest m = walk_folder(dir);
     m.graph = map.text(); // before packing: the listing packed is the one with the graph part
-    add_packed_items(m, dir, Args{}, nullptr, 8, false, search_per_file);
+    // (A map stays v18: its listing as text, not v20's in bytes.)
+    add_packed_items(m, dir, Args{}, nullptr, 8, false, search_per_file, 5, true, true, false, true, true, false);
     write_address_file(out, binary_address(m.file()), false);
 }
 

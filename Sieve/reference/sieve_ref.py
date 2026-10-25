@@ -6220,13 +6220,112 @@ def v7_item(spec, place, code, path, items_from):
     return v5_item(spec, "%x" % place, path, items_from)
 
 
+ARCHIVE_FORMATS = [None, "xz", "gz", "bz2", "zst", "lz4", "br", "lzma", "lz", "7z", "zip", "rar", "cab", "iso", "lha", "cpio", "ar",
+                   "warc"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
+RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3}
+
+
+def listing_from_bytes(b):
+    """sieve-manifest-v20's body in bytes read back into its text lines (SPECIFICATIONS §12.2): each
+    record a line, 1 a folder, 2 a file, 3 any other line as it is, 4 an archive carried as its
+    contents, 5 a "line" line; paths as how much they share with the last and the rest; ways as a code."""
+    at = [0]
+
+    def byte():
+        if at[0] >= len(b):
+            sys.exit("v20: its listing ends early")
+        at[0] += 1
+        return b[at[0] - 1]
+
+    def varint():
+        v, shift = 0, 0
+        while True:
+            c = byte()
+            v |= (c & 0x7F) << shift
+            shift += 7
+            if not c & 0x80:
+                return v
+
+    def text(tabs=False):  # (a line kept as it is may hold tabs; anything else, neither)
+        n = varint()
+        if n > len(b) - at[0]:
+            sys.exit("v20: its listing ends early")
+        t = b[at[0]:at[0] + n]
+        at[0] += n
+        if (b"\t" in t and not tabs) or b"\n" in t:
+            sys.exit("v20: a tab or a line feed where there may be none")
+        return t
+
+    last = [b""]
+
+    def path():
+        same = varint()
+        if same > len(last[0]):
+            sys.exit("v20: a path that shares more than the last had")
+        last[0] = last[0][:same] + text()
+        return last[0]
+
+    def format_name(n):
+        if not 0 < n < len(ARCHIVE_FORMATS):
+            sys.exit("v20: an archive's format this reader does not know")
+        return ARCHIVE_FORMATS[n].encode()
+
+    def way(depth=0):
+        if depth > 4:
+            sys.exit("v20: a way nested too deeply")
+        k = byte()
+        if k == 0:
+            return text()
+        if k == 1:
+            return b"raw"
+        if k == 2:
+            kind = format_name(varint())
+            if kind.decode() not in RECIPE_WORDS:
+                sys.exit("v20: an archive that is not remade")
+            rest = text()
+            return kind + b" " + rest + b" " + way(depth + 1)
+        if k == 3:
+            return b"rope " + text()
+        if k == 4:
+            return b"pieces " + text()
+        sys.exit("v20: a way this reader does not know")
+
+    out = b""
+    while at[0] < len(b):
+        r = byte()
+        if r == 1:
+            out += b"d\t" + path() + b"\n"
+        elif r == 2:
+            size = varint()
+            w = way()
+            out += b"f\t%d\t" % size + w + b"\t" + path() + b"\n"
+        elif r == 3:
+            out += text(True) + b"\n"
+        elif r == 5:  # a "line" line: what follows "line ", to a line feed
+            nl = b.find(b"\n", at[0])
+            if nl < 0:
+                sys.exit("v20: its listing ends early")
+            out += b"line " + b[at[0]:nl] + b"\n"
+            at[0] = nl + 1
+        elif r == 4:
+            n = varint()
+            name = format_name(n) if n else text()
+            size = varint()
+            archive, folder = text(), text()
+            out += b"u\t" + name + b"\t%d\t" % size + archive + b"\t" + folder + b"\n"
+        else:
+            sys.exit("v20: a record this reader does not know")
+    return out
+
+
 def v16_text(data):
     """sieve-manifest-v16 (SPECIFICATIONS §12.2): its head in bytes ("sieve", 16, flags, the root,
     the streams' sizes and dictionaries' bytes, the tree's SHA-256 as 32 bytes, the body, packed or
     not) read back into v15's text, followed by what follows it. Anything else is returned as it is."""
     import lzma
-    if not data.startswith((b"sieve\x10", b"sieve\x11", b"sieve\x12", b"sieve\x13")):
+    if not data.startswith((b"sieve\x10", b"sieve\x11", b"sieve\x12", b"sieve\x13", b"sieve\x14")):
         return data
+    v20 = data[5] == 20  # v19 whose body is in bytes (listing_from_bytes), lz4, brotli and lzma remade too
     v17 = data[5] == 17  # v16 whose remade archives may be gzip files
     v18 = data[5] == 18  # v17 with a graph part: a map (head flag 64)
     v19 = data[5] == 19  # v18 whose archives may be bzip2 or zstd files, a graph part allowed
@@ -6261,11 +6360,11 @@ def v16_text(data):
         return packed, size, dictionary(take(1)[0])
 
     flags = take(1)[0]
-    if flags & 0x80 or (flags & 0x40 and not (v18 or v19)):
+    if (flags & 0x80 and not v20) or (flags & 0x40 and not (v18 or v19 or v20)):
         sys.exit("v16: flags this reader does not know")
     if v18 and not flags & 0x40:
         sys.exit("v18 without its graph part")
-    head = b"sieve-manifest-v19\n" if v19 else b"sieve-manifest-v18\n" if v18 else b"sieve-manifest-v17\n" if v17 else b"sieve-manifest-v15\n"
+    head = b"sieve-manifest-v20\n" if v20 else b"sieve-manifest-v19\n" if v19 else b"sieve-manifest-v18\n" if v18 else b"sieve-manifest-v17\n" if v17 else b"sieve-manifest-v15\n"
     if flags & 1:
         head += b"root " + take(varint()) + b"\n"
     for bit, name in ((2, b"x86"), (4, b"lzma2"), (8, b"items")):
@@ -6282,6 +6381,8 @@ def v16_text(data):
             sys.exit("v16: its body unpacks to the wrong size")
     else:
         body = take(varint())
+    if v20 and not flags & 0x80:  # (v20's flag 128: its body as text after all)
+        body = listing_from_bytes(body)
     split = 0
     while body.startswith(b"line ", split):
         split = body.index(b"\n", split) + 1
@@ -6322,7 +6423,8 @@ def cmd_unpack_v7(args, data):
     # v11 with no line for an empty items or rope stream, and the lzma2 stream perhaps carried as it is
     # v13 with archives optimised: an xz file remade exactly from what it holds, or an archive carried
     # as its contents ("u" lines after the tree's)
-    v19 = lines[0] == "sieve-manifest-v19"  # v18 whose archives may be bzip2 or zstd files; a graph part allowed
+    v20 = lines[0] == "sieve-manifest-v20"  # v19 whose archives may also be lz4, brotli or lzma files (its body in bytes)
+    v19 = lines[0] == "sieve-manifest-v19" or v20  # v18 whose archives may be bzip2 or zstd files; a graph part allowed
     v18 = lines[0] == "sieve-manifest-v18"  # v17 with a graph part (a map), "g" lines after the entries
     v17 = lines[0] == "sieve-manifest-v17" or v18 or v19  # v15 (in bytes, v16) with gzip files remade exactly
     v15 = lines[0] == "sieve-manifest-v15" or v17  # v14 whose rope ways may be rope-wave-v5's (the byte above)
@@ -6409,6 +6511,31 @@ def cmd_unpack_v7(args, data):
     got, xa, pa, ia, ra = [None] * len(files), 0, 0, 0, 0
     remakes = {}
     for i, (path, size, sha, way) in enumerate(files):
+        if v20 and way.startswith("lz4 "):
+            # "lz4 <level> <block size 4-7> <linked> <block checksum> <content checksum> <content size>
+            # <inner size> <way>": one frame, as the lz4 program writes it.
+            _, level, block, linked, bsum, csum, sflag, n, way = way.split(" ", 8)
+            if not re.fullmatch(r"-?[0-9]+", level) or block not in ("4", "5", "6", "7") or \
+                    any(x not in ("0", "1") for x in (linked, bsum, csum, sflag)) or \
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ")):
+                sys.exit(f"{path}: an lz4 recipe Sieve does not write")
+            remakes[i] = ("lz4", int(level), int(block), linked == "1", bsum == "1", csum == "1", sflag == "1", size)
+            size = int(n)
+        if v20 and way.startswith("br "):
+            # "br <quality> <window> <inner size> <way>": brotli, as the brotli program writes.
+            _, quality, window, n, way = way.split(" ", 4)
+            if not re.fullmatch(r"[0-9]|1[01]", quality) or not re.fullmatch(r"1[0-9]|2[0-4]", window) or \
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ")):
+                sys.exit(f"{path}: a brotli recipe Sieve does not write")
+            remakes[i] = ("br", int(quality), int(window), size)
+            size = int(n)
+        if v20 and way.startswith("lzma "):
+            # "lzma <preset>[e] <inner size> <way>": LZMA_Alone, as the lzma program writes.
+            _, preset, n, way = way.split(" ", 3)
+            if not re.fullmatch(r"[0-9]e?", preset) or not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ")):
+                sys.exit(f"{path}: an lzma recipe Sieve does not write")
+            remakes[i] = ("lzma", int(preset[0]) | (lzma.PRESET_EXTREME if preset.endswith("e") else 0), size)
+            size = int(n)
         if v19 and way.startswith("bz2 "):
             # "bz2 <block size> <inner size> <way>": libbzip2, as the bzip2 program writes one stream.
             _, level, n, way = way.split(" ", 3)
@@ -6529,6 +6656,18 @@ def cmd_unpack_v7(args, data):
         if r[0] == "xz":
             _, preset, check, size = r
             got[i] = lzma.compress(got[i], format=lzma.FORMAT_XZ, check=check, preset=preset)
+        elif r[0] == "lz4":  # v20: liblz4, by the lz4 module
+            import lz4.frame
+            _, level, block, linked, bsum, csum, sflag, size = r
+            got[i] = lz4.frame.compress(got[i], compression_level=level, block_size=block, block_linked=linked,
+                                        content_checksum=csum, block_checksum=bsum, store_size=sflag)
+        elif r[0] == "br":  # v20: brotli, by the brotli module
+            import brotli
+            _, quality, window, size = r
+            got[i] = brotli.compress(got[i], quality=quality, lgwin=window)
+        elif r[0] == "lzma":  # v20: LZMA_Alone, by Python's lzma
+            _, preset, size = r
+            got[i] = lzma.compress(got[i], format=lzma.FORMAT_ALONE, preset=preset)
         elif r[0] == "bz2":  # v19: libbzip2, by Python's bz2
             import bz2
             _, level, size = r
@@ -6576,7 +6715,7 @@ def instructions_bytes(data):
     """A manifest's bytes, or Sieve instructions as a .sieve holds them: their manifest's place on the
     binary line as raw bytes (binary-v1, §12.1), read back here to the manifest (every shorter file
     first: the count of files shorter than L bytes is (256**L - 1) / 255)."""
-    if data.startswith((b"sieve\x10", b"sieve\x11", b"sieve\x12", b"sieve\x13", b"sieve-manifest-v")):
+    if data.startswith((b"sieve\x10", b"sieve\x11", b"sieve\x12", b"sieve\x13", b"sieve\x14", b"sieve-manifest-v")):
         return data
     v = int.from_bytes(data, "big")
     length = max(0, len(data) - 1)
@@ -6601,7 +6740,8 @@ def cmd_unpack(args):
     data = v16_text(instructions_bytes(open(args.manifest, "rb").read()))  # v16: its head in bytes, read as v15's text
     if data.startswith((b"sieve-manifest-v7\n", b"sieve-manifest-v8\n", b"sieve-manifest-v9\n", b"sieve-manifest-v10\n",
                         b"sieve-manifest-v11\n", b"sieve-manifest-v12\n", b"sieve-manifest-v13\n", b"sieve-manifest-v14\n",
-                        b"sieve-manifest-v15\n", b"sieve-manifest-v17\n", b"sieve-manifest-v18\n", b"sieve-manifest-v19\n")):
+                        b"sieve-manifest-v15\n", b"sieve-manifest-v17\n", b"sieve-manifest-v18\n", b"sieve-manifest-v19\n",
+                                b"sieve-manifest-v20\n")):
         return cmd_unpack_v7(args, data)
     end = data.index(b"\nend\n") + len(b"\nend\n")
     lines = data[:end].decode("utf-8").split("\n")[:-1]
@@ -6727,7 +6867,7 @@ def cmd_graph(args):
     """The graph part of Sieve instructions that are a map (sieve-manifest-v18, SPECIFICATIONS §12.3):
     the map's text, every line after its "g<TAB>", as it was written."""
     data = v16_text(instructions_bytes(open(args.file, "rb").read()))
-    if not data.startswith((b"sieve-manifest-v18\n", b"sieve-manifest-v19\n")) or b"\ng\t" not in data:
+    if not data.startswith((b"sieve-manifest-v18\n", b"sieve-manifest-v19\n", b"sieve-manifest-v20\n")) or b"\ng\t" not in data:
         sys.exit("not a map: no graph part")
     end = data.index(b"\nend\n") + 1
     out = b"".join(l[2:] + b"\n" for l in data[:end].split(b"\n") if l.startswith(b"g\t"))

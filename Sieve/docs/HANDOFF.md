@@ -3947,6 +3947,33 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   (Edward): the remembered table and "Trust the new table" stay; no signing, ever ("I don't trust
   myself or any human being alive to keep a key safe").
 
+### Every archive format we can read: `sieve-manifest-v20` (25 October 2026)
+Edward: "all of the above for now, every step forward is a step in the right direction and even the
+small savings will add up".
+- **New libraries, each with its licence in `third_party_licenses/`:** lz4 1.10.0 and brotli 1.2.1
+  (built from their C files, as bzip2), and libarchive 3.8.10 (its own CMake, nothing but the
+  library, zlib its only dependency: Sieve's own, the fetched one on Windows, found through a copy
+  of its header). libarchive's `COPYING` and a `NOTICES.txt` of every notice in the files built.
+- **Remade exactly:** lz4, brotli (a file named `.br`) and `.lzma` files. **As their contents:** lzip;
+  RAR 4 and 5, cab, ISO, LHA, cpio, ar, WARC (libarchive); several lz4 frames, gzip members or xz
+  streams. Links, encrypted entries, names in a code page and multi-volume sets are refused.
+- **The body in bytes** (IDEAS §19.90), with Edward's format numbers: v20 is the newest wherever the
+  head is in bytes; `--v19` makes the older; maps stay v18.
+- **Never larger than v19:** the first measurement found the body in bytes 1 or 2 bytes larger on
+  listings of near-alike lines (the trained model's file, 4,187 against 4,185; 64-character pages,
+  340 against 339). Two changes: a fifth record for `line` lines (four bytes shorter each than as
+  text), and the head's flag 128, the body as text after all, the packer keeping whichever is
+  smaller. Now 4,182 and 339. The CI checks both, and that the oracle reads them.
+- **`SIEVE_ARCHIVES_ALWAYS=1`** (environment, for testing): every archive read is carried as its
+  contents whether or not that is smaller, so CI step 11 checks each reader on libarchive's own small
+  test archives (`tests/archives`, BSD, with a README).
+- **A fetched-zlib build checked here** (`-DSIEVE_FETCH_COMPRESSION=ON`, as Windows builds): libarchive
+  found `ZLIB::ZLIBSTATIC`, and an MSZIP cab read.
+- **Corrected:** I had said the rope's remaining gap on `pi6.txt` was mostly its tables; they are 76
+  bytes. The gap is the shared tables' grouping (IDEAS §19.87).
+- **Not yet:** encoders to remake 7z, zip and RAR; deflate by other than zlib; the temporary and
+  permanent choice for game formats (IDEAS §19.88).
+
 ### Third-party archive decoders: bzip2 and zstd, `sieve-manifest-v19` (25 October 2026)
 Edward: "make a start on including third party archive format decoders, making sure we always
 include any licenses or readmes that might be necessary for them".
@@ -3966,8 +3993,8 @@ include any licenses or readmes that might be necessary for them".
 - **CI fix found on the way:** `ci/lib.sh` now sets `set -E`, so a failure inside a function such as
   `q` stops the step; before it the v17 block's expected lines (wrongly `v14`) failed silently.
 - **Small format savings wait for the next manifest version** (Edward, 25 October 2026): the
-  listing's entries in bytes (§19.90) and the rope's table costs were not added to v19, which
-  came first; they join the next one, with the new filters.
+  listing's entries in bytes (§19.90) was not added to v19, which came first; it joined v20. (The
+  rope's tables, measured since, are 76 bytes on `pi6.txt`: nothing to build; IDEAS §19.87.)
 - **Run:** CI steps 10 and 01 alone here; the full CI is Edward's.
 
 ### VOICES.md: leave it alone (Edward, 25 October 2026)
@@ -4067,7 +4094,7 @@ Edward asked for the next most important steps, from the documents. In order:
     entries still text (IDEAS §19.90).
   - **The weighing** (`--weigh`, the File Locator's table): LZMA2 and v13's pieces weighed since
     21 October; v14's archives with the box ticked not yet (contents make one file many).
-  - **Archives not yet optimised:** multi-block xz, multi-member gzip, cab, rar, lz4, brotli, and
+  - **Archives not yet optimised:** 7z, zip and RAR remade exactly (Sieve has no encoders for them), multi-volume sets, and
     deflate not made by zlib remade exactly (the preflate route); IDEAS §19.88.
   - **The rope for the other lines' places**, and V5S2 above.
   - **Websites** (IDEAS §19.92): a shared web dictionary for LZMA2, measured against brotli on
