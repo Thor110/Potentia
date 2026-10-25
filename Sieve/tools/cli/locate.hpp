@@ -136,6 +136,13 @@ inline constexpr const char* kGzipManifestVersion = "sieve-manifest-v17";
 // instructions' files), each of its lines after a "g<TAB>", after the entries. Made only where a
 // map is written; any instructions without one read as a map of their tree.
 inline constexpr const char* kGraphManifestVersion = "sieve-manifest-v18";
+// v19 (25 October 2026): v18 whose archives may be bzip2 or zstd files, remade exactly ("bz2 <block
+// size> <inner size>", libbzip2 1.0.8; "zst <libzstd version> <level> <checksum 0|1> <content size
+// 0|1> <inner size>", only by that version) or carried as their contents ("u" lines "bz2", "zst");
+// its head's byte 19, a graph part allowed as in v18. Made only where some file is one of these.
+// (The next manifest's other changes, the listing's entries in bytes and the rope's tables, wait
+// to join it: HANDOFF.)
+inline constexpr const char* kMoreArchivesManifestVersion = "sieve-manifest-v19";
 
 std::vector<uint8_t> read_file_bytes(const std::filesystem::path& file);
 
@@ -210,6 +217,7 @@ struct Manifest
     bool binary = false;       // v16: the head in bytes (and everything v15 allows)
     bool remake_gz = false;    // v17: some file is a gzip remade exactly (binary is set too)
     std::string graph;         // v18: the map's text (see kGraphManifestVersion); empty for none
+    bool more_archives = false; // v19: some archive is bzip2 or zstd (remake_gz and binary are set too)
     // v14: each archive carried as its contents: its format ("7z", "xz"), its size, its path, and the
     // folder (or file) its contents are in.
     struct UnpackedArchive

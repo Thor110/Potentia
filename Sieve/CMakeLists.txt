@@ -162,6 +162,45 @@ else()
     set(SIEVE_LZMA LibLZMA::LibLZMA)
 endif()
 
+# bzip2 and zstd, for archives of those kinds (pack.cpp: read, carried as their contents, and remade
+# exactly where the same library makes the same bytes; IDEAS §19.88). Always fetched at the version
+# pinned here, never a system copy: a zstd file is remade only by the version that made it, so every
+# build of Sieve must have the same one. Static, and only the tools link them, never the core.
+include(FetchContent)
+# bzip2 1.0.8 (BSD-style licence, third_party_licenses/bzip2): its library's seven C files, built
+# here (its release has no CMake build).
+FetchContent_Declare(bzip2
+    GIT_REPOSITORY https://gitlab.com/bzip2/bzip2.git
+    GIT_TAG bzip2-1.0.8
+    GIT_SHALLOW TRUE)
+FetchContent_MakeAvailable(bzip2)
+add_library(sieve_bzip2 STATIC
+    ${bzip2_SOURCE_DIR}/blocksort.c ${bzip2_SOURCE_DIR}/huffman.c ${bzip2_SOURCE_DIR}/crctable.c ${bzip2_SOURCE_DIR}/randtable.c
+    ${bzip2_SOURCE_DIR}/compress.c ${bzip2_SOURCE_DIR}/decompress.c ${bzip2_SOURCE_DIR}/bzlib.c)
+target_include_directories(sieve_bzip2 SYSTEM PUBLIC ${bzip2_SOURCE_DIR})
+if(MSVC)
+    target_compile_options(sieve_bzip2 PRIVATE /w)
+else()
+    target_compile_options(sieve_bzip2 PRIVATE -w)
+endif()
+# zstd 1.5.7 (BSD licence, third_party_licenses/zstd; also offered under GPLv2, not taken): its
+# library alone, static, single-threaded.
+set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_STATIC ON CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_CONTRIB OFF CACHE BOOL "" FORCE)
+set(ZSTD_LEGACY_SUPPORT OFF CACHE BOOL "" FORCE)
+set(ZSTD_MULTITHREAD_SUPPORT OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(zstd
+    GIT_REPOSITORY https://github.com/facebook/zstd.git
+    GIT_TAG v1.5.7
+    GIT_SHALLOW TRUE
+    SOURCE_SUBDIR build/cmake)
+FetchContent_MakeAvailable(zstd)
+set(SIEVE_ZSTD libzstd_static)
+set(SIEVE_ZSTD_INCLUDE ${zstd_SOURCE_DIR}/lib)
+
 # The locator and the installer's code (decoders only, the LZMA SDK's: sieve-install links this
 # alone), and the comparison and the packer, which alone need the compressors.
 # Sieve's icon as a Windows resource (data/icons, made by tools/make_icon.py), for every program.
@@ -230,7 +269,8 @@ target_link_libraries(sieve_lines PUBLIC sieve_locate) # the lines check units a
 add_library(sieve_compare STATIC tools/cli/compare.cpp tools/cli/pack.cpp tools/cli/train.cpp tools/cli/diffusion_run.cpp tools/cli/model_folder.cpp
     client/unpack_7z.cpp)
 target_include_directories(sieve_compare PUBLIC tools PRIVATE client)
-target_link_libraries(sieve_compare PUBLIC sieve_core sieve_locate PRIVATE ${SIEVE_ZLIB} ${SIEVE_LZMA} sieve_lzma sieve_lzma_enc)
+target_link_libraries(sieve_compare PUBLIC sieve_core sieve_locate PRIVATE ${SIEVE_ZLIB} ${SIEVE_LZMA} sieve_lzma sieve_lzma_enc sieve_bzip2 ${SIEVE_ZSTD})
+target_include_directories(sieve_compare SYSTEM PRIVATE ${SIEVE_ZSTD_INCLUDE})
 if(SIEVE_LZMA_INCLUDE)
     target_include_directories(sieve_compare SYSTEM PRIVATE ${SIEVE_LZMA_INCLUDE})
 endif()

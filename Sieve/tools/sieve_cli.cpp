@@ -990,7 +990,7 @@ int cmd_version()
               << " (binary)\n                          " << kModelSpaceVersion << " (models), " << kWorldSpaceVersion << " (worlds), " << kAiSpaceVersion << " (ai, "
               << kCanonicalModelVersion << ")\n"
               << "  instructions (.sieve)   " << kGraphManifestVersion << " newest (maps); installers " << kBinaryManifestVersion << ", or "
-              << kGzipManifestVersion << " where a gzip is remade\n"
+              << kGzipManifestVersion << " where a gzip is remade, " << kMoreArchivesManifestVersion << " where a bzip2 or zstd file is\n"
               << "  packing                 " << kRopeWaveAboveVersion << " (the tightened rope), " << kDigitHistogramVersion << ", " << kFileKindsVersion << "\n"
               << "  records                 " << kBookFormat2 << " (books), " << kMapVersion2 << " (maps, read)\n"
               << "  vault                   " << vault::kVersion << ", " << vault::kDecoders << ", " << cdc::kVersion << ", " << vault::kChunkMatch << ", "

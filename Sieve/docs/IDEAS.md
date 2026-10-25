@@ -4038,6 +4038,35 @@ lost:
     PNG alike), the small differences from Sieve's own deflate recorded, so any deflate is remade
     exactly (as preflate does), the largest piece.
   - **Not yet:** an xz written in several blocks (`xz -T`); a gzip of several members.
+  - **bzip2 and zstd built (25 October 2026, `sieve-manifest-v19`, SPECIFICATIONS §12.2).** Edward:
+    "make a start on including third party archive format decoders, making sure we always include
+    any licenses or readmes that might be necessary for them". libbzip2 1.0.8 and libzstd 1.5.7,
+    both always fetched by CMake at those tags (never the system's, so the remade bytes do not
+    change with the machine), their licences in `third_party_licenses/bzip2` and `zstd` as upstream
+    wrote them and a row each in its README. Measured here before building: libbzip2 gives back
+    the `bzip2` program's files exactly at every block size (the program is the library); libzstd
+    remakes a file only at its own version (the `zstd` program 1.5.5's output differs from library
+    1.5.7's at the same level; 1.5.7 against itself matched 15 of 16 files tried), so a `zst` way
+    names its version and is refused by another. A bzip2 word list (766,439 bytes) became 469,671,
+    remade. Several bzip2 streams or zstd frames are carried as what they hold.
+  - **The rule for every decoder taken (Edward, 25 October 2026):** its licence, and any notice or
+    readme its licence asks for, go in `third_party_licenses/` with a row in the README there,
+    copied beside the programs by the build. Next to look at, licences to read first: lz4 and
+    brotli, cab, lzip, and RAR (its decoder's licence forbids using it to make a RAR compressor;
+    whether carrying a RAR as its contents is allowed is to check).
+  - **Permanent or temporary (Edward, 25 October 2026; not built).** Two choices in place of one
+    box: **optimise archives (permanent)**, the contents kept as `.sieve` and the archive not given
+    back (today's `u` lines: 7z, zip, and a bzip2 or zstd that cannot be remade); and **optimise
+    archives (temporary)**, the contents carried with a flag naming the format to repack them into
+    on installing, so the program that wants the archive (a game's own pack format, say) still
+    finds one. Where Sieve has the very encoder, temporary already exists and is exact (the `xz`,
+    `gz`, `bz2` and `zst` ways, checked by the tree's SHA-256). What is new is a repack that is
+    only *equivalent*: the same files in the same format, but not the same bytes, so the tree's
+    hash cannot check it; the contents' hashes would be checked instead, and installing would say
+    the archive is a new one. Its use is mostly proprietary formats (games' pack files), as a
+    middle ground until `.sieve` replaces them; many such formats are stored or zlib inside, and
+    may well remake exactly. Later, a bitmask of formats, each off, permanent or temporary, with
+    a line in the File Locator saying why each is which. A new manifest version, with the next one.
   - The versions compared: GNU gzip 1.12 against zlib 1.3, and the `xz` program 5.4.5 against the
     liblzma Sieve was built with here.
 

@@ -647,8 +647,8 @@ build/sieve locate arch --installer arch_off.sieve --items --manifest arch_off.m
 q "^items     none; sieve-manifest-v1[2-6]$" arch_off.txt
 if grep -q "sieve-manifest-v14\|^remade\|^unpacked" arch_off.txt; then exit 1; fi
 build/sieve locate arch --installer arch.sieve --items --optimise-archives --manifest arch.manifest | tr -d '\r' > arch.txt
-q "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v14)$" arch.txt
-q "^unpacked  2 archive(s) carried as their contents, not as the archives (Optimise Archive Formats; sieve-manifest-v14)$" arch.txt
+q "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v17)$" arch.txt
+q "^unpacked  2 archive(s) carried as their contents, not as the archives (Optimise Archive Formats; sieve-manifest-v17)$" arch.txt
 q "^items     none; sieve-manifest-v17$" arch.txt
 [ "$(wc -c < arch.sieve)" -lt "$(wc -c < arch_off.sieve)" ]
 build/sieve install arch.sieve --to arch_inst | tr -d '\r' > arch_inst.txt
@@ -674,6 +674,40 @@ python -c "d = bytearray(open('arch.manifest', 'rb').read()); assert d[:6] == b'
 if build/sieve install arch-as-v16.manifest --to arch_bad16 > /dev/null 2>&1; then exit 1; fi
 if python reference/sieve_ref.py unpack arch-as-v16.manifest --to arch_bad16 > /dev/null 2>&1; then exit 1; fi
 test ! -e arch_bad16
+# v19 (25 October 2026): bzip2 and zstd. A bzip2 file (Python's bz2: libbzip2) and a zstd file
+# written by libzstd 1.5.7 (the zstandard module's, the version Sieve is built with) are remade
+# exactly; a zstd file of two frames is carried as its contents. Sieve, the oracle and
+# sieve-install give the same; called v18, refused.
+python -m pip install --quiet "zstandard==0.25.0"
+rm -rf arch19 arch19_inst arch19_oracle arch19_si arch19_bad && mkdir -p arch19
+python -c "
+import bz2, zstandard
+t = open('arch-y.txt', 'rb').read()
+assert '.'.join(map(str, zstandard.ZSTD_VERSION)) == '1.5.7'
+open('arch19/y.txt.bz2', 'wb').write(bz2.compress(t, 9))
+open('arch19/y.txt.zst', 'wb').write(zstandard.ZstdCompressor(level=7, write_checksum=True).compress(t))
+d = open('arch-digits.txt', 'rb').read()
+c = zstandard.ZstdCompressor(level=3)
+open('arch19/two.zst', 'wb').write(c.compress(d[:len(d) // 2]) + c.compress(d[len(d) // 2:]))
+open('arch19-two.txt', 'wb').write(d)
+"
+build/sieve locate arch19 --installer arch19.sieve --items --optimise-archives --manifest arch19.manifest | tr -d '\r' > arch19.txt
+q "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v19)$" arch19.txt
+q "^unpacked  1 archive(s) carried as their contents, not as the archives (Optimise Archive Formats; sieve-manifest-v19)$" arch19.txt
+q "^items     none; sieve-manifest-v19$" arch19.txt
+build/sieve install arch19.sieve --to arch19_inst | tr -d '\r' > arch19_inst.txt
+cmp arch19/y.txt.bz2 arch19_inst/y.txt.bz2
+cmp arch19/y.txt.zst arch19_inst/y.txt.zst
+cmp arch19-two.txt arch19_inst/two
+q "^note      two.zst (zst, [0-9]* bytes) was carried as its contents (Optimise Archive Formats): two holds them, not the archive itself$" arch19_inst.txt
+python reference/sieve_ref.py unpack arch19.manifest --to arch19_oracle > /dev/null
+diff -r arch19_inst arch19_oracle
+build/sieve-install arch19.sieve --to arch19_si --yes
+diff -r arch19_inst arch19_si
+python -c "d = bytearray(open('arch19.manifest', 'rb').read()); assert d[:6] == b'sieve\x13'; d[5] = 18; open('arch19-as-v18.manifest', 'wb').write(d)"
+if build/sieve install arch19-as-v18.manifest --to arch19_bad > /dev/null 2>&1; then exit 1; fi
+if python reference/sieve_ref.py unpack arch19-as-v18.manifest --to arch19_bad > /dev/null 2>&1; then exit 1; fi
+test ! -e arch19_bad
 # sieve-manifest-v16's head: a flag this Sieve does not know is refused, by Sieve and the oracle.
 python -c "d = bytearray(open('noisy.manifest', 'rb').read()); assert d[:6] == b'sieve\x10'; d[6] |= 0x40; open('noisy-flag.manifest', 'wb').write(d)"
 if build/sieve install noisy-flag.manifest --to noisy_flag > /dev/null 2>&1; then exit 1; fi

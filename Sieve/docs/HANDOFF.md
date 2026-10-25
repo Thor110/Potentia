@@ -3947,6 +3947,29 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   (Edward): the remembered table and "Trust the new table" stay; no signing, ever ("I don't trust
   myself or any human being alive to keep a key safe").
 
+### Third-party archive decoders: bzip2 and zstd, `sieve-manifest-v19` (25 October 2026)
+Edward: "make a start on including third party archive format decoders, making sure we always
+include any licenses or readmes that might be necessary for them".
+- **Built:** libbzip2 1.0.8 and libzstd 1.5.7, fetched by CMake at those tags (never the system's),
+  linked into `sieve_compare`. With Optimise Archive Formats, a `.bz2` and a `.zst` are remade
+  exactly where they can be (`bz2` and `zst` ways) or carried as what they hold (`u` formats `bz2`,
+  `zst`), written as `sieve-manifest-v19` (head byte 19), only where some file needs it.
+  SPECIFICATIONS §12.2, IDEAS §19.88.
+- **zstd remakes only at its own version:** a `zst` way names libzstd's version, and a Sieve with
+  another refuses it and says which it needs. Moving to a newer zstd means files made before can no
+  longer be remade by the newer build; keep 1.5.7 pinned unless that is weighed.
+- **Licences:** `third_party_licenses/bzip2/LICENSE` and `zstd/LICENSE`, verbatim, rows in its
+  README (zstd taken under BSD, not GPLv2). The rule from now on: every decoder taken brings its
+  licence and any notice or readme it asks for.
+- **Oracle:** remakes with Python's `bz2` and `zstandard` 0.25.0 (libzstd 1.5.7); CI step 10
+  installs it with pip and checks a v19 three ways (installed, oracle, `sieve-install`).
+- **CI fix found on the way:** `ci/lib.sh` now sets `set -E`, so a failure inside a function such as
+  `q` stops the step; before it the v17 block's expected lines (wrongly `v14`) failed silently.
+- **Small format savings wait for the next manifest version** (Edward, 25 October 2026): the
+  listing's entries in bytes (§19.90) and the rope's table costs were not added to v19, which
+  came first; they join the next one, with the new filters.
+- **Run:** CI steps 10 and 01 alone here; the full CI is Edward's.
+
 ### VOICES.md: leave it alone (Edward, 25 October 2026)
 `docs/VOICES.md` is the corpus of lines for the game's AIs to speak, not a record of what Edward
 says about the work. Claude had been adding nearly all of Edward's messages there (22 to 25 October);
@@ -4044,7 +4067,7 @@ Edward asked for the next most important steps, from the documents. In order:
     entries still text (IDEAS §19.90).
   - **The weighing** (`--weigh`, the File Locator's table): LZMA2 and v13's pieces weighed since
     21 October; v14's archives with the box ticked not yet (contents make one file many).
-  - **Archives not yet optimised:** multi-block xz, multi-member gzip, bzip2, zstd, cab, rar, and
+  - **Archives not yet optimised:** multi-block xz, multi-member gzip, cab, rar, lz4, brotli, and
     deflate not made by zlib remade exactly (the preflate route); IDEAS §19.88.
   - **The rope for the other lines' places**, and V5S2 above.
   - **Websites** (IDEAS §19.92): a shared web dictionary for LZMA2, measured against brotli on

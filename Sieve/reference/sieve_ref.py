@@ -6225,10 +6225,11 @@ def v16_text(data):
     the streams' sizes and dictionaries' bytes, the tree's SHA-256 as 32 bytes, the body, packed or
     not) read back into v15's text, followed by what follows it. Anything else is returned as it is."""
     import lzma
-    if not data.startswith((b"sieve\x10", b"sieve\x11", b"sieve\x12")):
+    if not data.startswith((b"sieve\x10", b"sieve\x11", b"sieve\x12", b"sieve\x13")):
         return data
     v17 = data[5] == 17  # v16 whose remade archives may be gzip files
     v18 = data[5] == 18  # v17 with a graph part: a map (head flag 64)
+    v19 = data[5] == 19  # v18 whose archives may be bzip2 or zstd files, a graph part allowed
     at = [6]
 
     def varint():
@@ -6260,11 +6261,11 @@ def v16_text(data):
         return packed, size, dictionary(take(1)[0])
 
     flags = take(1)[0]
-    if flags & 0x80 or (flags & 0x40 and not v18):
+    if flags & 0x80 or (flags & 0x40 and not (v18 or v19)):
         sys.exit("v16: flags this reader does not know")
     if v18 and not flags & 0x40:
         sys.exit("v18 without its graph part")
-    head = b"sieve-manifest-v18\n" if v18 else b"sieve-manifest-v17\n" if v17 else b"sieve-manifest-v15\n"
+    head = b"sieve-manifest-v19\n" if v19 else b"sieve-manifest-v18\n" if v18 else b"sieve-manifest-v17\n" if v17 else b"sieve-manifest-v15\n"
     if flags & 1:
         head += b"root " + take(varint()) + b"\n"
     for bit, name in ((2, b"x86"), (4, b"lzma2"), (8, b"items")):
@@ -6321,8 +6322,9 @@ def cmd_unpack_v7(args, data):
     # v11 with no line for an empty items or rope stream, and the lzma2 stream perhaps carried as it is
     # v13 with archives optimised: an xz file remade exactly from what it holds, or an archive carried
     # as its contents ("u" lines after the tree's)
+    v19 = lines[0] == "sieve-manifest-v19"  # v18 whose archives may be bzip2 or zstd files; a graph part allowed
     v18 = lines[0] == "sieve-manifest-v18"  # v17 with a graph part (a map), "g" lines after the entries
-    v17 = lines[0] == "sieve-manifest-v17" or v18  # v15 (in bytes, v16) with gzip files remade exactly
+    v17 = lines[0] == "sieve-manifest-v17" or v18 or v19  # v15 (in bytes, v16) with gzip files remade exactly
     v15 = lines[0] == "sieve-manifest-v15" or v17  # v14 whose rope ways may be rope-wave-v5's (the byte above)
     v14 = lines[0] == "sieve-manifest-v14" or v15
     # v12 whose files may be cut into pieces, LZMA2's and the rope's
@@ -6383,7 +6385,7 @@ def cmd_unpack_v7(args, data):
     graph = []
     for line in lines[at:-1]:
         f = line.split("\t")
-        if v18 and line.startswith("g\t"):
+        if (v18 or v19) and line.startswith("g\t"):
             graph.append(line[2:])
             continue
         if graph:
@@ -6400,13 +6402,29 @@ def cmd_unpack_v7(args, data):
         else:
             entries.append((f[4], int(f[1]), f[2], f[3]))
     if v18 and not graph:
-        sys.exit("v18 without its graph part")
+        sys.exit("v18 without its graph part")  # (v19's is allowed, not needed)
     files = [e for e in entries if len(e) == 4]
     if root is None and (len(entries) != 1 or len(files) != 1):
         sys.exit("no root, and not one file")
     got, xa, pa, ia, ra = [None] * len(files), 0, 0, 0, 0
     remakes = {}
     for i, (path, size, sha, way) in enumerate(files):
+        if v19 and way.startswith("bz2 "):
+            # "bz2 <block size> <inner size> <way>": libbzip2, as the bzip2 program writes one stream.
+            _, level, n, way = way.split(" ", 3)
+            if not re.fullmatch(r"[1-9]", level) or not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ")):
+                sys.exit(f"{path}: a bzip2 recipe Sieve does not write")
+            remakes[i] = ("bz2", int(level), size)
+            size = int(n)
+        if v19 and way.startswith("zst "):
+            # "zst <libzstd version> <level> <checksum> <content size> <inner size> <way>": remade only
+            # by that version of libzstd (the zstandard module's, here).
+            _, version, level, checksum, size_flag, n, way = way.split(" ", 6)
+            if not re.fullmatch(r"-?[0-9]+", level) or checksum not in ("0", "1") or size_flag not in ("0", "1") or \
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ")):
+                sys.exit(f"{path}: a zstd recipe Sieve does not write")
+            remakes[i] = ("zst", version, int(level), checksum == "1", size_flag == "1", size)
+            size = int(n)
         if v17 and way.startswith("gz "):
             # "gz <level> <memory level> <header in hex> <inner size> <way>": the header as it is,
             # the deflate made again by zlib, then the CRC-32 and length (little-endian).
@@ -6511,6 +6529,17 @@ def cmd_unpack_v7(args, data):
         if r[0] == "xz":
             _, preset, check, size = r
             got[i] = lzma.compress(got[i], format=lzma.FORMAT_XZ, check=check, preset=preset)
+        elif r[0] == "bz2":  # v19: libbzip2, by Python's bz2
+            import bz2
+            _, level, size = r
+            got[i] = bz2.compress(got[i], level)
+        elif r[0] == "zst":  # v19: libzstd, by the zstandard module, the same version only
+            import zstandard
+            _, version, level, checksum, size_flag, size = r
+            have = ".".join(map(str, zstandard.ZSTD_VERSION))
+            if have != version:
+                sys.exit(f"{files[i][0]}: made with libzstd {version}, which only that version remakes; the zstandard module has {have}")
+            got[i] = zstandard.ZstdCompressor(level=level, write_checksum=checksum, write_content_size=size_flag).compress(got[i])
         else:
             _, level, mem, header, size = r
             c = zlib.compressobj(level, zlib.DEFLATED, -15, mem)
@@ -6547,7 +6576,7 @@ def instructions_bytes(data):
     """A manifest's bytes, or Sieve instructions as a .sieve holds them: their manifest's place on the
     binary line as raw bytes (binary-v1, §12.1), read back here to the manifest (every shorter file
     first: the count of files shorter than L bytes is (256**L - 1) / 255)."""
-    if data.startswith((b"sieve\x10", b"sieve\x11", b"sieve\x12", b"sieve-manifest-v")):
+    if data.startswith((b"sieve\x10", b"sieve\x11", b"sieve\x12", b"sieve\x13", b"sieve-manifest-v")):
         return data
     v = int.from_bytes(data, "big")
     length = max(0, len(data) - 1)
@@ -6572,7 +6601,7 @@ def cmd_unpack(args):
     data = v16_text(instructions_bytes(open(args.manifest, "rb").read()))  # v16: its head in bytes, read as v15's text
     if data.startswith((b"sieve-manifest-v7\n", b"sieve-manifest-v8\n", b"sieve-manifest-v9\n", b"sieve-manifest-v10\n",
                         b"sieve-manifest-v11\n", b"sieve-manifest-v12\n", b"sieve-manifest-v13\n", b"sieve-manifest-v14\n",
-                        b"sieve-manifest-v15\n", b"sieve-manifest-v17\n", b"sieve-manifest-v18\n")):
+                        b"sieve-manifest-v15\n", b"sieve-manifest-v17\n", b"sieve-manifest-v18\n", b"sieve-manifest-v19\n")):
         return cmd_unpack_v7(args, data)
     end = data.index(b"\nend\n") + len(b"\nend\n")
     lines = data[:end].decode("utf-8").split("\n")[:-1]
@@ -6698,7 +6727,7 @@ def cmd_graph(args):
     """The graph part of Sieve instructions that are a map (sieve-manifest-v18, SPECIFICATIONS §12.3):
     the map's text, every line after its "g<TAB>", as it was written."""
     data = v16_text(instructions_bytes(open(args.file, "rb").read()))
-    if not data.startswith(b"sieve-manifest-v18\n"):
+    if not data.startswith((b"sieve-manifest-v18\n", b"sieve-manifest-v19\n")) or b"\ng\t" not in data:
         sys.exit("not a map: no graph part")
     end = data.index(b"\nend\n") + 1
     out = b"".join(l[2:] + b"\n" for l in data[:end].split(b"\n") if l.startswith(b"g\t"))

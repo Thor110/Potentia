@@ -952,9 +952,10 @@ const std::vector<Page>& pages()
          "rope's newer ones; v12 where there is less to write around the bytes (no line for an empty\n"
          "stream, and the files carried as they are where LZMA2 makes them no smaller); v13 where a\n"
          "file is cut into pieces, LZMA2 taking what repeats and the rope what is unevenly spread (a\n"
-         "phone's photo: its metadata and its picture); v14 and v17 where archives are optimised\n"
-         "(--optimise-archives); and v16 at least now, the listing's head in bytes rather than\n"
-         "text. (--v16 down to --v5 make the older ones; v18, a map, is made by sieve map.)\n"
+         "phone's photo: its metadata and its picture); v14, v17 and v19 (bzip2, zstd) where\n"
+         "archives are optimised (--optimise-archives); and v16 at least now, the listing's head\n"
+         "in bytes rather than text. (--v16 down to --v5 make the older ones; v18, a map, is made\n"
+         "by sieve map.)\n"
          "\n"
          "--weigh weighs every file against its own address: its number among the binary line's\n"
          "survivors, where the settings file's [binary] filters rank and it passes them; and, where\n"
@@ -995,12 +996,14 @@ const std::vector<Page>& pages()
                       "of the AI line as its weights' digits, not its file's floats. The pages are\n"
                       "--page-length characters of --alphabet; the AI line is --ai-layers, --ai-width,\n"
                       "--ai-heads and --ai-bits (Micro without them)."},
-          {"--optimise-archives", "With --items: Optimise Archive Formats (sieve-manifest-v14, v17). An .xz, and a .gz\n"
-                                  "zlib made, is carried as what it holds and remade exactly on installing; another\n"
-                                  ".gz as what it holds; a .7z or .zip as its contents, in a folder named after it\n"
-                                  "(installing says so: the archive itself is not given back); each only where clearly\n"
-                                  "smaller. Off unless given."},
-          {"--v16", "As sieve-manifest-v16 at newest, no gzip remade (carried as what it holds)."},
+          {"--optimise-archives", "With --items: Optimise Archive Formats (sieve-manifest-v14, v17, v19). An .xz, a\n"
+                                  ".gz zlib made, a .bz2, and a .zst libzstd 1.5.7 made, is carried as what it holds\n"
+                                  "and remade exactly on installing; another .gz, .bz2 or .zst as what it holds; a\n"
+                                  ".7z or .zip as its contents, in a folder named after it (installing says so: the\n"
+                                  "archive itself is not given back); each only where clearly smaller. Off unless\n"
+                                  "given."},
+          {"--v16", "As sieve-manifest-v16 at newest, no gzip remade (carried as what it holds), and a\n"
+                    ".bz2 or .zst carried as it is."},
           {"--v15", "As sieve-manifest-v15 at newest, the listing's head as text (v16 writes it in bytes)."},
           {"--v14", "As sieve-manifest-v14 at newest, the rope's ways those of rope-wave-v4 and before."},
           {"--v13", "As --v14, and no archives optimised (sieve-manifest-v13 at newest)."},

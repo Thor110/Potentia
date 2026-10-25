@@ -9,8 +9,21 @@
 #include "sieve/stop.hpp"
 #include "unpack_7z.hpp"
 
+// bzlib.h includes <windows.h> on Windows: without these first, its min and max macros break
+// std::min and std::max throughout this file.
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#endif
+#include <bzlib.h>
 #include <lzma.h>
 #include <zlib.h>
+#define ZSTD_STATIC_LINKING_ONLY // its frame header's reader (zstd is linked statically, at a pinned version)
+#include <zstd.h>
 
 #include "Bra.h"
 #include "Lzma2Enc.h"
@@ -20,6 +33,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <exception>
 #include <memory>
 #include <mutex>
@@ -32,8 +46,12 @@
 #include <unordered_set>
 
 #if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #elif defined(__linux__)
 #include <unistd.h>
@@ -723,10 +741,177 @@ std::optional<std::vector<sieve::install::InMemory>> zip_entries(const std::vect
 
 const char* xz_check_name(int id) { return id == 0 ? "none" : id == 1 ? "crc32" : id == 4 ? "crc64" : id == 10 ? "sha256" : nullptr; }
 
+// ---- bzip2 and zstd (v19, 25 October 2026): read with their own libraries (bzip2 1.0.8, zstd
+// 1.5.7, pinned in CMakeLists.txt), carried as their contents, and remade exactly where the same
+// library makes the same bytes.
+
+bool is_bz2(const std::vector<uint8_t>& b) { return b.size() >= 14 && b[0] == 'B' && b[1] == 'Z' && b[2] == 'h' && b[3] >= '1' && b[3] <= '9'; }
+
+// What a bzip2 file holds, every stream of it (pbzip2 writes one a block), and how many streams;
+// nothing if libbzip2 cannot read it whole.
+std::optional<std::vector<uint8_t>> bz2_inner(const std::vector<uint8_t>& b, size_t* streams = nullptr)
+{
+    std::vector<uint8_t> out;
+    std::vector<char> buf(1 << 20);
+    size_t at = 0, n = 0;
+    while (at < b.size())
+    {
+        if (b.size() - at < 14 || b[at] != 'B' || b[at + 1] != 'Z' || b[at + 2] != 'h') return std::nullopt; // not another stream
+        bz_stream z{};
+        if (BZ2_bzDecompressInit(&z, 0, 0) != BZ_OK) return std::nullopt;
+        int r = BZ_OK;
+        size_t fed = at;
+        while (r == BZ_OK)
+        {
+            if (z.avail_in == 0 && fed < b.size())
+            {
+                const size_t take = std::min<size_t>(b.size() - fed, size_t(1) << 30);
+                z.next_in = const_cast<char*>(reinterpret_cast<const char*>(b.data() + fed));
+                z.avail_in = unsigned(take);
+                fed += take;
+            }
+            z.next_out = buf.data();
+            z.avail_out = unsigned(buf.size());
+            r = BZ2_bzDecompress(&z);
+            out.insert(out.end(), buf.data(), buf.data() + (buf.size() - z.avail_out));
+            if (r == BZ_OK && z.avail_in == 0 && fed >= b.size() && z.avail_out == buf.size()) r = BZ_UNEXPECTED_EOF;
+        }
+        at = fed - z.avail_in;
+        BZ2_bzDecompressEnd(&z);
+        if (r != BZ_STREAM_END) return std::nullopt;
+        ++n;
+    }
+    if (streams) *streams = n;
+    return out;
+}
+
+// libbzip2's compressor at a block size (1 to 9), as the bzip2 program uses it.
+std::vector<uint8_t> bz2_pack(const std::vector<uint8_t>& in, int level)
+{
+    bz_stream z{};
+    if (BZ2_bzCompressInit(&z, level, 0, 30) != BZ_OK) throw std::runtime_error("libbzip2 could not start");
+    std::vector<uint8_t> out;
+    std::vector<char> buf(1 << 20);
+    size_t fed = 0;
+    int r = BZ_RUN_OK;
+    for (;;)
+    {
+        if (z.avail_in == 0 && fed < in.size())
+        {
+            const size_t take = std::min<size_t>(in.size() - fed, size_t(1) << 30);
+            z.next_in = const_cast<char*>(reinterpret_cast<const char*>(in.data() + fed));
+            z.avail_in = unsigned(take);
+            fed += take;
+        }
+        z.next_out = buf.data();
+        z.avail_out = unsigned(buf.size());
+        r = BZ2_bzCompress(&z, fed >= in.size() ? BZ_FINISH : BZ_RUN);
+        out.insert(out.end(), buf.data(), buf.data() + (buf.size() - z.avail_out));
+        if (r == BZ_STREAM_END) break;
+        if (r != BZ_RUN_OK && r != BZ_FINISH_OK) break;
+    }
+    BZ2_bzCompressEnd(&z);
+    if (r != BZ_STREAM_END) throw std::runtime_error("libbzip2 could not pack");
+    return out;
+}
+
+bool is_zstd(const std::vector<uint8_t>& b) { return b.size() >= 9 && b[0] == 0x28 && b[1] == 0xB5 && b[2] == 0x2F && b[3] == 0xFD; }
+
+// What a zstd file holds, every frame of it, and how many frames; nothing if libzstd cannot read
+// it whole (windows up to 2 GiB are allowed, as zstd --long=31 makes).
+std::optional<std::vector<uint8_t>> zstd_inner(const std::vector<uint8_t>& b, size_t* frames = nullptr)
+{
+    size_t n = 0;
+    for (size_t at = 0; at < b.size();)
+    {
+        const size_t f = ZSTD_findFrameCompressedSize(b.data() + at, b.size() - at);
+        if (ZSTD_isError(f) || f == 0) return std::nullopt;
+        at += f;
+        ++n;
+    }
+    ZSTD_DCtx* d = ZSTD_createDCtx();
+    if (!d) return std::nullopt;
+    ZSTD_DCtx_setParameter(d, ZSTD_d_windowLogMax, 31);
+    std::vector<uint8_t> out, buf(ZSTD_DStreamOutSize());
+    ZSTD_inBuffer in{b.data(), b.size(), 0};
+    size_t r = 1;
+    while (in.pos < in.size)
+    {
+        ZSTD_outBuffer o{buf.data(), buf.size(), 0};
+        r = ZSTD_decompressStream(d, &o, &in);
+        if (ZSTD_isError(r)) break;
+        out.insert(out.end(), buf.data(), buf.data() + o.pos);
+        if (o.pos == 0 && in.pos == in.size) break;
+    }
+    // (Its last output, if the output buffer was full when the input ran out.)
+    for (; !ZSTD_isError(r) && r != 0;)
+    {
+        ZSTD_outBuffer o{buf.data(), buf.size(), 0};
+        r = ZSTD_decompressStream(d, &o, &in);
+        if (ZSTD_isError(r) || o.pos == 0) break;
+        out.insert(out.end(), buf.data(), buf.data() + o.pos);
+    }
+    ZSTD_freeDCtx(d);
+    if (ZSTD_isError(r) || r != 0) return std::nullopt;
+    if (frames) *frames = n;
+    return out;
+}
+
+// libzstd's compressor at a level, with the checksum and the content size written or not, as the
+// zstd program (single-threaded) writes a frame; `prefix`: only that much of the input, but the frame
+// as for the whole (its header and its first blocks), to test a level quickly.
+std::vector<uint8_t> zstd_pack(const std::vector<uint8_t>& in, int level, bool checksum, bool size_flag, size_t prefix = SIZE_MAX)
+{
+    ZSTD_CCtx* c = ZSTD_createCCtx();
+    if (!c) throw std::runtime_error("libzstd could not start");
+    ZSTD_CCtx_setParameter(c, ZSTD_c_compressionLevel, level);
+    ZSTD_CCtx_setParameter(c, ZSTD_c_checksumFlag, checksum ? 1 : 0);
+    ZSTD_CCtx_setParameter(c, ZSTD_c_contentSizeFlag, size_flag ? 1 : 0);
+    ZSTD_CCtx_setPledgedSrcSize(c, in.size());
+    const size_t n = std::min(prefix, in.size());
+    std::vector<uint8_t> out(ZSTD_compressBound(in.size()) + 64);
+    ZSTD_inBuffer i{in.data(), n, 0};
+    ZSTD_outBuffer o{out.data(), out.size(), 0};
+    size_t r = 0;
+    do
+        r = ZSTD_compressStream2(c, &o, &i, n == in.size() ? ZSTD_e_end : ZSTD_e_flush);
+    while (!ZSTD_isError(r) && r != 0);
+    ZSTD_freeCCtx(c);
+    if (ZSTD_isError(r)) throw std::runtime_error(std::string("libzstd could not pack: ") + ZSTD_getErrorName(r));
+    out.resize(o.pos);
+    return out;
+}
+
 } // namespace
 
 std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector<uint8_t>& inner)
 {
+    if (recipe.rfind("bz2 ", 0) == 0)
+    {
+        // "bz2 <block size> <inner size>" (v19): libbzip2 1.0.8, as the bzip2 program writes one stream.
+        int level = 0;
+        unsigned long long size = 0;
+        char extra = 0;
+        if (std::sscanf(recipe.c_str(), "bz2 %d %llu%c", &level, &size, &extra) != 2 || level < 1 || level > 9 || size != inner.size())
+            throw std::runtime_error("a bzip2 recipe this Sieve does not know: " + recipe);
+        return bz2_pack(inner, level);
+    }
+    if (recipe.rfind("zst ", 0) == 0)
+    {
+        // "zst <libzstd version> <level> <checksum 0|1> <content size 0|1> <inner size>" (v19): remade
+        // only by the version that made it, the one this Sieve was built with.
+        char version[32] = {0};
+        int level = 0, checksum = 0, size_flag = 0;
+        unsigned long long size = 0;
+        char extra = 0;
+        if (std::sscanf(recipe.c_str(), "zst %31s %d %d %d %llu%c", version, &level, &checksum, &size_flag, &size, &extra) != 5 ||
+            level < ZSTD_minCLevel() || level > ZSTD_maxCLevel() || checksum < 0 || checksum > 1 || size_flag < 0 || size_flag > 1 || size != inner.size())
+            throw std::runtime_error("a zstd recipe this Sieve does not know: " + recipe);
+        if (std::string(version) != ZSTD_versionString())
+            throw std::runtime_error(std::string("a zstd file made with libzstd ") + version + ", which only that version remakes exactly; this Sieve has " +
+                                     ZSTD_versionString());
+        return zstd_pack(inner, level, checksum != 0, size_flag != 0);
+    }
     if (recipe.rfind("gz ", 0) == 0)
     {
         // "gz <level> <memory level> <header in hex> <inner size>" (v17): the header as it was, the
@@ -843,6 +1028,46 @@ std::string gzip_recipe(const std::vector<uint8_t>& b, const std::vector<uint8_t
         for (const int mem : {8, 9})
             if (deflate_raw(inner, level, mem) == stream)
                 return "gz " + std::to_string(level) + " " + std::to_string(mem) + " " + hex_of(b.data(), h) + " " + std::to_string(inner.size());
+    return "";
+}
+
+// The recipe that remakes a bzip2 file exactly ("bz2 9 <size>"), or "" if libbzip2 does not give it
+// back: one stream, at the block size its header names.
+std::string bz2_recipe(const std::vector<uint8_t>& b, const std::vector<uint8_t>& inner, size_t streams)
+{
+    const timings::Scope t("pack.archives.recipe");
+    if (streams != 1) return "";
+    const int level = b[3] - '0';
+    if (bz2_pack(inner, level) != b) return "";
+    return "bz2 " + std::to_string(level) + " " + std::to_string(inner.size());
+}
+
+// The recipe that remakes a zstd file exactly ("zst 1.5.7 3 1 1 <size>"), or "" if no level of this
+// libzstd gives it back: one frame, its checksum and content size as its header says, each level
+// tried first on the frame's start (its header and first 128 KiB), and in full only where that
+// matches.
+std::string zstd_recipe(const std::vector<uint8_t>& b, const std::vector<uint8_t>& inner, size_t frames)
+{
+    const timings::Scope t("pack.archives.recipe");
+    if (frames != 1) return "";
+    ZSTD_frameHeader h{};
+    if (ZSTD_getFrameHeader(&h, b.data(), b.size()) != 0 || h.frameType != ZSTD_frame || h.dictID != 0) return "";
+    const bool checksum = h.checksumFlag != 0, size_flag = h.frameContentSize != ZSTD_CONTENTSIZE_UNKNOWN;
+    if (size_flag && h.frameContentSize != inner.size()) return "";
+    std::vector<int> levels = {3, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
+    for (int l = -1; l >= -7; --l) levels.push_back(l);
+    constexpr size_t kStart = size_t(128) << 10;
+    for (const int level : levels)
+    {
+        if (inner.size() > kStart)
+        {
+            const std::vector<uint8_t> start = zstd_pack(inner, level, checksum, size_flag, kStart);
+            if (start.size() > b.size() || !std::equal(start.begin(), start.end(), b.begin())) continue;
+        }
+        if (zstd_pack(inner, level, checksum, size_flag) == b)
+            return std::string("zst ") + ZSTD_versionString() + " " + std::to_string(level) + " " + (checksum ? "1" : "0") + " " + (size_flag ? "1" : "0") +
+                   " " + std::to_string(inner.size());
+    }
     return "";
 }
 
@@ -1003,7 +1228,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     m.unpacked.clear();
     m.archives = false;
     const bool gzip_remake = binary && gzip; // v17's (a binary head's): gzip remade exactly
+    const bool newer_archives = gzip_remake;  // v19's, with the newest (bzip2 and zstd)
     m.remake_gz = false;
+    m.more_archives = false;
     if (optimise_archives && m.compact)
     {
         std::unordered_set<std::string> taken;
@@ -1125,6 +1352,26 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 if (e.path.size() > 4 && e.path.compare(e.path.size() - 4, 4, ".tgz") == 0) name = e.path.substr(0, e.path.size() - 4) + ".tar";
                 if (single("gz", std::move(inner), recipe, name, 40 + 2 * gzip_header_size(b))) continue;
             }
+            if (newer_archives && is_bz2(b))
+            {
+                size_t streams = 0;
+                auto inner = bz2_inner(b, &streams);
+                const std::string recipe = inner ? bz2_recipe(b, *inner, streams) : std::string();
+                std::string name = contents_name(e.path, ".bz2");
+                for (const char* t : {".tbz2", ".tbz"})
+                    if (e.path.size() > std::strlen(t) && e.path.compare(e.path.size() - std::strlen(t), std::strlen(t), t) == 0)
+                        name = e.path.substr(0, e.path.size() - std::strlen(t)) + ".tar";
+                if (single("bz2", std::move(inner), recipe, name, 40)) continue;
+            }
+            if (newer_archives && is_zstd(b))
+            {
+                size_t frames = 0;
+                auto inner = zstd_inner(b, &frames);
+                const std::string recipe = inner ? zstd_recipe(b, *inner, frames) : std::string();
+                std::string name = contents_name(e.path, ".zst");
+                if (e.path.size() > 5 && e.path.compare(e.path.size() - 5, 5, ".tzst") == 0) name = e.path.substr(0, e.path.size() - 5) + ".tar";
+                if (single("zst", std::move(inner), recipe, name, 48)) continue;
+            }
             if (sieve::install::is_7z(b))
             {
                 std::vector<sieve::install::InMemory> all;
@@ -1146,6 +1393,10 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         {
             m.archives = true;
             m.remake_gz = std::any_of(entries.begin(), entries.end(), [](const ManifestEntry& x) { return x.remake.rfind("gz ", 0) == 0; });
+            // v19: some bzip2 or zstd remade, or carried as its contents.
+            m.more_archives = std::any_of(entries.begin(), entries.end(), [](const ManifestEntry& x) { return x.remake.rfind("bz2 ", 0) == 0 || x.remake.rfind("zst ", 0) == 0; }) ||
+                              std::any_of(m.unpacked.begin(), m.unpacked.end(), [](const Manifest::UnpackedArchive& u) { return u.format == "bz2" || u.format == "zst"; });
+            if (m.more_archives) m.remake_gz = true; // v19 is v17 and more
             m.entries.clear();
             bytes.clear();
             original.clear();
@@ -1557,6 +1808,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         r.pieces_made = m.pieces;
         r.archives_made = m.archives;
         r.remake_gz = m.remake_gz;
+        r.more_archives = m.more_archives;
         r.rope_above = m.rope_above;
         r.trimmed = m.trimmed;
         r.lzma2_as_is = lzma2_as_is;
@@ -1651,7 +1903,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
     };
     if (r.compact)
     {
-        const char* version = r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
+        const char* version = r.more_archives ? kMoreArchivesManifestVersion : r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
                             : r.roped ? kRopeManifestVersion : kCompactManifestVersion;
         if (r.items)
         {
@@ -1665,9 +1917,9 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         if (r.listing_carried) o << "listing   " << r.listing << " bytes, carried as LZMA2 in " << r.listing_carried << "\n";
         if (r.binary)
             o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << kBinaryManifestVersion << ")\n";
-        if (r.remade) o << "remade    " << r.remade << " archive(s) carried as what they hold, remade exactly on installing (" << kArchivesManifestVersion << ")\n";
+        if (r.remade) o << "remade    " << r.remade << " archive(s) carried as what they hold, remade exactly on installing (" << version << ")\n";
         if (r.unpacked)
-            o << "unpacked  " << r.unpacked << " archive(s) carried as their contents, not as the archives (Optimise Archive Formats; " << kArchivesManifestVersion
+            o << "unpacked  " << r.unpacked << " archive(s) carried as their contents, not as the archives (Optimise Archive Formats; " << version
               << ")\n";
         if (r.pieces)
             o << "pieces    " << r.pieces << " file(s) cut into pieces: " << r.pieces_lzma2 << " bytes packed by LZMA2, " << r.pieces_rope

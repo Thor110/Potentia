@@ -59,6 +59,7 @@ struct PackReport
     bool rope_above = false;                         // v15: some of them rope-wave-v5's
     bool binary = false;                             // v16: the head in bytes
     bool remake_gz = false;                          // v17: some gzip remade exactly
+    bool more_archives = false;                      // v19: some bzip2 or zstd remade, or carried as its contents
     uint64_t head_text = 0, head_bytes = 0;          // v16: the listing as v15's text, and as carried
 };
 
