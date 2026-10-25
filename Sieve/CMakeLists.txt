@@ -118,6 +118,15 @@ target_link_libraries(sieve_lines PUBLIC sieve_core sieve_image_io)
 # compressors themselves: zlib (zip's deflate) and liblzma (7z's LZMA2). An installed copy is used
 # if there is one; otherwise each is fetched from its own repository at a pinned release and built
 # here as a static library, as SDL3 is below. Only the tools link them, never the core.
+# (The cache entries set further down, for libarchive to find the zlib fetched here, are not a
+# system's zlib: forgotten before looking, so a second configure fetches it again rather than
+# taking them for one.)
+if(ZLIB_LIBRARY STREQUAL "ZLIB::ZLIBSTATIC")
+    unset(ZLIB_LIBRARY CACHE)
+    unset(ZLIB_INCLUDE_DIR CACHE)
+    unset(ZLIB_LIBRARY_RELEASE CACHE)
+    unset(ZLIB_LIBRARY_DEBUG CACHE)
+endif()
 find_package(ZLIB QUIET)
 find_package(LibLZMA QUIET)
 if(NOT ZLIB_FOUND OR SIEVE_FETCH_COMPRESSION)
@@ -282,6 +291,38 @@ set(CMAKE_BUILD_TYPE "${SIEVE_SAVED_BUILD_TYPE}")
 set(BUILD_SHARED_LIBS ${SIEVE_SAVED_BUILD_SHARED_LIBS})
 set(SIEVE_ARCHIVE archive_static)
 set(SIEVE_ARCHIVE_INCLUDE ${libarchive_SOURCE_DIR}/libarchive)
+# preflate (Apache 2.0, third_party_licenses/preflate), Dirk Steinke's: any deflate stream (a zip's,
+# a gzip's, whoever made it) split into what it holds and a small difference from its own deflate,
+# and made again exactly from the two. Pinned to its last commit (it has no releases), its library's
+# files built here unchanged; two headers its files assume are given them on the command line, as
+# newer compilers no longer bring them in.
+FetchContent_Declare(preflate
+    GIT_REPOSITORY https://github.com/deus-libri/preflate.git
+    GIT_TAG 609eefaa96ac6c51d7b1a3fb29e0ed94d0f3623e
+    SOURCE_SUBDIR support) # (no CMakeLists.txt there: fetched, not built by its own CMake)
+FetchContent_MakeAvailable(preflate)
+set(SIEVE_PREFLATE_SOURCES)
+foreach(f block_decoder block_reencoder block_trees complevel_estimator constants decoder hash_chain info parameter_estimator
+          parser_config predictor_state reencoder seq_chain statistical_codec statistical_model token token_predictor tree_predictor)
+    list(APPEND SIEVE_PREFLATE_SOURCES ${preflate_SOURCE_DIR}/preflate_${f}.cpp)
+endforeach()
+foreach(f arithmetic_coder array_helper bit_helper bitstream const_division huffman_decoder huffman_encoder huffman_helper memstream
+          outputcachestream task_pool)
+    list(APPEND SIEVE_PREFLATE_SOURCES ${preflate_SOURCE_DIR}/support/${f}.cpp)
+endforeach()
+# (C++17, and seen by the rest of Sieve only through tools/cli/preflate_glue.hpp: its headers use
+# std::result_of, which C++20 removed.)
+add_library(sieve_preflate STATIC ${SIEVE_PREFLATE_SOURCES} tools/cli/preflate_glue.cpp)
+set_target_properties(sieve_preflate PROPERTIES CXX_STANDARD 17)
+target_include_directories(sieve_preflate SYSTEM PRIVATE ${preflate_SOURCE_DIR})
+target_include_directories(sieve_preflate PRIVATE tools)
+find_package(Threads REQUIRED)
+target_link_libraries(sieve_preflate PUBLIC Threads::Threads)
+if(MSVC)
+    target_compile_options(sieve_preflate PRIVATE /w /FIcstdint /FIcstring /FIcstdio)
+else()
+    target_compile_options(sieve_preflate PRIVATE -w "SHELL:-include cstdint" "SHELL:-include cstring" "SHELL:-include cstdio")
+endif()
 foreach(t sieve_lz4 sieve_brotli)
     if(MSVC)
         target_compile_options(${t} PRIVATE /w)
@@ -358,7 +399,7 @@ target_link_libraries(sieve_lines PUBLIC sieve_locate) # the lines check units a
 add_library(sieve_compare STATIC tools/cli/compare.cpp tools/cli/pack.cpp tools/cli/train.cpp tools/cli/diffusion_run.cpp tools/cli/model_folder.cpp
     client/unpack_7z.cpp)
 target_include_directories(sieve_compare PUBLIC tools PRIVATE client)
-target_link_libraries(sieve_compare PUBLIC sieve_core sieve_locate PRIVATE ${SIEVE_ZLIB} ${SIEVE_LZMA} sieve_lzma sieve_lzma_enc sieve_bzip2 ${SIEVE_ZSTD} sieve_lz4 sieve_brotli ${SIEVE_ARCHIVE})
+target_link_libraries(sieve_compare PUBLIC sieve_core sieve_locate PRIVATE ${SIEVE_ZLIB} ${SIEVE_LZMA} sieve_lzma sieve_lzma_enc sieve_bzip2 ${SIEVE_ZSTD} sieve_lz4 sieve_brotli ${SIEVE_ARCHIVE} sieve_preflate)
 target_include_directories(sieve_compare SYSTEM PRIVATE ${SIEVE_ZSTD_INCLUDE} ${SIEVE_ARCHIVE_INCLUDE})
 target_compile_definitions(sieve_compare PRIVATE LIBARCHIVE_STATIC)
 if(SIEVE_LZMA_INCLUDE)

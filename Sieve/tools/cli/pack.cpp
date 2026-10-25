@@ -27,11 +27,15 @@
 #include <brotli/decode.h>
 #include <brotli/encode.h>
 #include <lz4frame.h>
+#include "cli/preflate_glue.hpp"
 #include <archive.h>
 #include <archive_entry.h>
 
 #include "Bra.h"
 #include "Lzma2Enc.h"
+#include "LzmaEnc.h"
+#include "7z.h"
+#include "7zCrc.h"
 
 #include <algorithm>
 #include <atomic>
@@ -44,6 +48,7 @@
 #include <mutex>
 #include <thread>
 #include <optional>
+#include <span>
 #include <sstream>
 #include <stdexcept>
 #include <string_view>
@@ -852,6 +857,400 @@ std::optional<std::vector<sieve::install::InMemory>> libarchive_entries(const st
     return out;
 }
 
+// ---- Deflate made again exactly, whoever made it (v21, 25 October 2026): preflate (pinned in
+// CMakeLists.txt) splits a deflate stream into what it holds and its difference from preflate's own
+// deflate, a few bytes where zlib made it, about a tenth of the stream where 7-Zip did; and makes the
+// stream again from the two. A file holding deflate streams (a gzip, a zip) is carried as a skeleton
+// and the data it holds: the skeleton a varint of its segments' count, then each segment, a byte and
+// its numbers: 0 bytes as they are (a varint of how many, then them); 1 data stored (a varint of how
+// much of the data); 2 a deflate stream (a varint of how much of the data it holds, a varint of its
+// difference's length, then the difference). The data is what follows the skeleton, taken in order.
+
+// LZMA2's dictionary from its byte (0 to 40).
+uint32_t lzma2_dict(uint8_t b) { return b >= 40 ? 0xFFFFFFFFu : (2u | (b & 1u)) << (b / 2 + 11); }
+
+// The block size 7-Zip's LZMA2 uses when it encodes in blocks (its threads': Lzma2EncProps_Normalize).
+uint64_t lzma2_auto_block(uint8_t dict_byte)
+{
+    const uint64_t dict = lzma2_dict(dict_byte);
+    uint64_t bs = dict << 2;
+    bs = std::clamp<uint64_t>(bs, uint64_t(1) << 20, uint64_t(1) << 28);
+    if (bs < dict) bs = dict;
+    bs += (uint64_t(1) << 20) - 1;
+    bs &= ~((uint64_t(1) << 20) - 1);
+    return bs;
+}
+
+// An LZMA2 (dictionary byte `props[0]`) or LZMA (`props` its 5 bytes: lc/lp/pb and dictionary) stream
+// by the LZMA SDK at `level`, single-threaded, in blocks of `block` bytes (0: solid), after the x86
+// filter where `x86`: as 7-Zip writes a 7z's (LZMA with no end mark, its size known).
+std::vector<uint8_t> sdk_stream(std::vector<uint8_t> in, bool lzma2, const uint8_t* props, int level, uint64_t block, bool x86)
+{
+    if (x86)
+    {
+        UInt32 state = Z7_BRANCH_CONV_ST_X86_STATE_INIT_VAL;
+        z7_BranchConvSt_X86_Enc(in.data(), in.size(), 0, &state);
+    }
+    std::vector<uint8_t> out(in.size() + in.size() / 2 + 65536);
+    size_t n = out.size();
+    SRes r;
+    if (lzma2)
+    {
+        CLzma2EncHandle h = Lzma2Enc_Create(&kSdkAlloc, &kSdkAlloc);
+        if (!h) throw std::runtime_error("LZMA SDK: out of memory");
+        CLzma2EncProps p;
+        Lzma2EncProps_Init(&p);
+        p.lzmaProps.level = level;
+        p.lzmaProps.dictSize = lzma2_dict(props[0]);
+        p.lzmaProps.numThreads = 1;
+        p.blockSize = block ? block : LZMA2_ENC_PROPS_BLOCK_SIZE_SOLID;
+        r = Lzma2Enc_SetProps(h, &p);
+        if (r == SZ_OK)
+        {
+            Lzma2Enc_SetDataSize(h, in.size());
+            r = Lzma2Enc_Encode2(h, nullptr, out.data(), &n, nullptr, in.data(), in.size(), nullptr);
+        }
+        Lzma2Enc_Destroy(h);
+    }
+    else
+    {
+        CLzmaEncProps p;
+        LzmaEncProps_Init(&p);
+        p.level = level;
+        p.dictSize = uint32_t(props[1]) | uint32_t(props[2]) << 8 | uint32_t(props[3]) << 16 | uint32_t(props[4]) << 24;
+        p.lc = props[0] % 9;
+        p.lp = props[0] / 9 % 5;
+        p.pb = props[0] / 45;
+        p.numThreads = 1;
+        Byte pr[5];
+        SizeT ps = 5, on = n;
+        r = props[0] < 225 ? LzmaEncode(out.data(), &on, in.data(), in.size(), &p, pr, &ps, 0, nullptr, &kSdkAlloc, &kSdkAlloc) : SZ_ERROR_PARAM;
+        n = on;
+    }
+    if (r != SZ_OK) throw std::runtime_error("LZMA SDK: could not compress (" + std::to_string(int(r)) + ")");
+    out.resize(n);
+    return out;
+}
+
+void sk_put_varint(std::vector<uint8_t>& out, uint64_t v)
+{
+    for (; v >= 0x80; v >>= 7) out.push_back(uint8_t(v | 0x80));
+    out.push_back(uint8_t(v));
+}
+
+uint64_t sk_get_varint(std::span<const uint8_t> in, size_t& at)
+{
+    uint64_t v = 0;
+    for (int shift = 0; shift < 64; shift += 7)
+    {
+        if (at >= in.size()) throw std::runtime_error("a deflate skeleton ends early");
+        const uint8_t c = in[at++];
+        v |= uint64_t(c & 0x7F) << shift;
+        if (!(c & 0x80)) return v;
+    }
+    throw std::runtime_error("a deflate skeleton's number is too long");
+}
+
+struct DeflateSkeleton
+{
+    std::vector<uint8_t> head; // the segments, without their count
+    std::vector<uint8_t> data;
+    uint64_t segments = 0;
+    void literal(const uint8_t* p, size_t n)
+    {
+        if (!n) return;
+        head.push_back(0);
+        sk_put_varint(head, n);
+        head.insert(head.end(), p, p + n);
+        ++segments;
+    }
+    void stored(const uint8_t* p, size_t n)
+    {
+        head.push_back(1);
+        sk_put_varint(head, n);
+        data.insert(data.end(), p, p + n);
+        ++segments;
+    }
+    bool deflated(const uint8_t* p, size_t n)
+    {
+        const std::vector<uint8_t> raw(p, p + n);
+        std::vector<uint8_t> un, diff;
+        if (!preflate_split(raw, un, diff)) return false;
+        head.push_back(2);
+        sk_put_varint(head, un.size());
+        sk_put_varint(head, diff.size());
+        head.insert(head.end(), diff.begin(), diff.end());
+        data.insert(data.end(), un.begin(), un.end());
+        ++segments;
+        return true;
+    }
+    // An LZMA2 (kind 3) or LZMA (kind 4) stream, as 7-Zip writes them in a 7z, made again by the LZMA
+    // SDK's encoder: `un` what it holds (before any x86 filter), its settings as the 7z names them, the
+    // level found by trying (each first on its first MiB, where it is longer); false if none gives it
+    // back.
+    bool lzma_stream(const uint8_t* p, size_t n, const std::vector<uint8_t>& un, bool lzma2, const uint8_t* props, bool x86)
+    {
+        for (const int level : {5, 7, 9, 0, 1, 3, 6, 4, 2, 8})
+            for (const uint64_t block : {uint64_t(0), uint64_t(1)})
+            {
+                if (!lzma2 && block) continue;
+                const uint64_t bs = block ? lzma2_auto_block(props[0]) : 0;
+                if (un.size() > (size_t(2) << 20))
+                {
+                    const std::vector<uint8_t> part(un.begin(), un.begin() + (std::ptrdiff_t(1) << 20));
+                    const std::vector<uint8_t> f = sdk_stream(part, lzma2, props, level, bs, x86);
+                    const size_t k = std::min<size_t>(f.size(), 16384) / 2;
+                    if (k == 0 || k > n || !std::equal(f.begin(), f.begin() + std::ptrdiff_t(k), p)) continue;
+                }
+                const std::vector<uint8_t> f = sdk_stream(un, lzma2, props, level, bs, x86);
+                if (f.size() != n || !std::equal(f.begin(), f.end(), p)) continue;
+                head.push_back(lzma2 ? 3 : 4);
+                sk_put_varint(head, un.size());
+                head.insert(head.end(), props, props + (lzma2 ? 1 : 5));
+                head.push_back(uint8_t(level));
+                head.push_back(uint8_t((block ? 1 : 0) | (x86 ? 2 : 0)));
+                data.insert(data.end(), un.begin(), un.end());
+                ++segments;
+                return true;
+            }
+        return false;
+    }
+    // The inner bytes: the segments' count, the segments, then the data; and how long the skeleton is.
+    std::vector<uint8_t> inner(size_t& skeleton) const
+    {
+        std::vector<uint8_t> out;
+        sk_put_varint(out, segments);
+        out.insert(out.end(), head.begin(), head.end());
+        skeleton = out.size();
+        out.insert(out.end(), data.begin(), data.end());
+        return out;
+    }
+};
+
+// A file made again from its skeleton and data (inner: the skeleton's `skeleton` bytes, then the data).
+std::vector<uint8_t> deflate_skeleton_remake(const std::vector<uint8_t>& inner, size_t skeleton)
+{
+    if (skeleton > inner.size()) throw std::runtime_error("a deflate skeleton longer than what holds it");
+    size_t at = 0, data = skeleton;
+    const std::span<const uint8_t> sk(inner.data(), skeleton);
+    auto take_data = [&](uint64_t n) {
+        if (n > inner.size() - data) throw std::runtime_error("a deflate skeleton asks for more data than there is");
+        const size_t from = data;
+        data += size_t(n);
+        return from;
+    };
+    std::vector<uint8_t> out;
+    const uint64_t count = sk_get_varint(sk, at);
+    for (uint64_t k = 0; k < count; ++k)
+    {
+        if (at >= sk.size()) throw std::runtime_error("a deflate skeleton ends early");
+        const uint8_t kind = sk[at++];
+        const uint64_t n = sk_get_varint(sk, at);
+        if (kind == 0)
+        {
+            if (n > sk.size() - at) throw std::runtime_error("a deflate skeleton ends early");
+            out.insert(out.end(), sk.begin() + std::ptrdiff_t(at), sk.begin() + std::ptrdiff_t(at + n));
+            at += size_t(n);
+        }
+        else if (kind == 1)
+        {
+            const size_t from = take_data(n);
+            out.insert(out.end(), inner.begin() + std::ptrdiff_t(from), inner.begin() + std::ptrdiff_t(from + n));
+        }
+        else if (kind == 2)
+        {
+            const uint64_t d = sk_get_varint(sk, at);
+            if (d > sk.size() - at) throw std::runtime_error("a deflate skeleton ends early");
+            const std::vector<uint8_t> diff(sk.begin() + std::ptrdiff_t(at), sk.begin() + std::ptrdiff_t(at + d));
+            at += size_t(d);
+            const size_t from = take_data(n);
+            const std::vector<uint8_t> un(inner.begin() + std::ptrdiff_t(from), inner.begin() + std::ptrdiff_t(from + n));
+            std::vector<uint8_t> raw;
+            if (!preflate_join(un, diff, raw)) throw std::runtime_error("preflate could not make a deflate stream again");
+            out.insert(out.end(), raw.begin(), raw.end());
+        }
+        else if (kind == 3 || kind == 4)
+        {
+            const size_t np = kind == 3 ? 1 : 5;
+            if (np + 2 > sk.size() - at) throw std::runtime_error("a skeleton ends early");
+            const uint8_t* props = sk.data() + at;
+            const int level = sk[at + np];
+            const uint8_t flags = sk[at + np + 1];
+            at += np + 2;
+            if (level > 9 || (flags & ~3) || (kind == 4 && (flags & 1)) || (kind == 3 && props[0] > 40))
+                throw std::runtime_error("a skeleton's LZMA settings this Sieve does not know");
+            const size_t from = take_data(n);
+            const std::vector<uint8_t> un(inner.begin() + std::ptrdiff_t(from), inner.begin() + std::ptrdiff_t(from + n));
+            const std::vector<uint8_t> f = sdk_stream(un, kind == 3, props, level, (flags & 1) ? lzma2_auto_block(props[0]) : 0, (flags & 2) != 0);
+            out.insert(out.end(), f.begin(), f.end());
+        }
+        else throw std::runtime_error("a deflate skeleton's segment this Sieve does not know");
+    }
+    if (at != sk.size() || data != inner.size()) throw std::runtime_error("a deflate skeleton that does not use all it is given");
+    return out;
+}
+
+// A gzip of one member or more as a skeleton: each member's header and trailer as they are, its
+// deflate made again by preflate. Nothing where a member is not one this reads.
+std::optional<DeflateSkeleton> gzip_skeleton(const std::vector<uint8_t>& b)
+{
+    DeflateSkeleton s;
+    size_t at = 0;
+    while (at < b.size())
+    {
+        const size_t h = gzip_header_size(b, at);
+        if (!h || b.size() < at + h + 8) return std::nullopt;
+        size_t used = 0;
+        if (!inflate_raw(b.data() + at + h, b.size() - at - h, &used) || at + h + used + 8 > b.size()) return std::nullopt;
+        s.literal(b.data() + at, h);
+        if (!s.deflated(b.data() + at + h, used)) return std::nullopt;
+        s.literal(b.data() + at + h + used, 8);
+        at += h + used + 8;
+    }
+    return s;
+}
+
+// A 7z as a skeleton: its start header, its compressed header and any block of data it cannot make
+// again as they are; each block of one LZMA or LZMA2 coder (or that after 7-Zip's x86 filter) made
+// again by the LZMA SDK. Nothing where the LZMA SDK cannot read it or makes no block of it again.
+std::optional<DeflateSkeleton> sevenz_skeleton(const std::vector<uint8_t>& b)
+{
+    struct Mem
+    {
+        ISeekInStream vt;
+        const std::vector<uint8_t>* d;
+        size_t at;
+    } mem{};
+    mem.d = &b;
+    mem.vt.Read = [](ISeekInStreamPtr pp, void* buf, size_t* size) -> SRes {
+        Mem* m = (Mem*)pp;
+        const size_t k = std::min(*size, m->d->size() - m->at);
+        std::memcpy(buf, m->d->data() + m->at, k);
+        m->at += k;
+        *size = k;
+        return SZ_OK;
+    };
+    mem.vt.Seek = [](ISeekInStreamPtr pp, Int64* pos, ESzSeek origin) -> SRes {
+        Mem* m = (Mem*)pp;
+        Int64 base = origin == SZ_SEEK_SET ? 0 : origin == SZ_SEEK_CUR ? Int64(m->at) : Int64(m->d->size());
+        base += *pos;
+        if (base < 0 || uint64_t(base) > m->d->size()) return SZ_ERROR_READ;
+        m->at = size_t(base);
+        *pos = base;
+        return SZ_OK;
+    };
+    static const bool crc_ready = (CrcGenerateTable(), true);
+    (void)crc_ready;
+    std::vector<Byte> look_buf(size_t(1) << 18);
+    CLookToRead2 look;
+    LookToRead2_CreateVTable(&look, False);
+    look.buf = look_buf.data();
+    look.bufSize = look_buf.size();
+    look.realStream = &mem.vt;
+    LookToRead2_INIT(&look);
+    CSzArEx db;
+    SzArEx_Init(&db);
+    struct Free
+    {
+        CSzArEx* db;
+        ~Free() { SzArEx_Free(db, &kSdkAlloc); }
+    } free_db{&db};
+    if (SzArEx_Open(&db, &look.vt, &kSdkAlloc, &kSdkAlloc) != SZ_OK) return std::nullopt;
+    struct Block
+    {
+        uint64_t pos, size;
+        uint32_t folder;
+    };
+    std::vector<Block> blocks;
+    for (uint32_t i = 0; i < db.db.NumFolders; ++i)
+    {
+        const uint32_t ps = db.db.FoStartPackStreamIndex[i];
+        if (db.db.FoStartPackStreamIndex[i + 1] != ps + 1) return std::nullopt; // several packed streams (BCJ2)
+        blocks.push_back({db.dataPos + db.db.PackPositions[ps], db.db.PackPositions[ps + 1] - db.db.PackPositions[ps], i});
+    }
+    std::sort(blocks.begin(), blocks.end(), [](const Block& x, const Block& y) { return x.pos < y.pos; });
+    DeflateSkeleton s;
+    uint64_t cur = 0;
+    size_t remade = 0;
+    for (const Block& k : blocks)
+    {
+        if (k.pos < cur || k.pos + k.size > b.size()) return std::nullopt;
+        s.literal(b.data() + cur, size_t(k.pos - cur));
+        cur = k.pos + k.size;
+        CSzFolder fo;
+        CSzData sd;
+        sd.Data = db.db.CodersData + db.db.FoCodersOffsets[k.folder];
+        sd.Size = db.db.FoCodersOffsets[k.folder + 1] - db.db.FoCodersOffsets[k.folder];
+        bool done = false;
+        if (SzGetNextFolderItem(&fo, &sd) == SZ_OK && (fo.NumCoders == 1 || fo.NumCoders == 2))
+        {
+            const CSzCoderInfo& c = fo.Coders[0];
+            const bool x86 = fo.NumCoders == 2 && fo.Coders[1].MethodID == 0x03030103 && fo.Coders[1].PropsSize == 0;
+            const bool lzma2 = c.MethodID == 0x21 && c.PropsSize == 1, lzma = c.MethodID == 0x030101 && c.PropsSize == 5;
+            const uint64_t un_size = SzAr_GetFolderUnpackSize(&db.db, k.folder);
+            if ((lzma2 || lzma) && (fo.NumCoders == 1 || x86) && un_size <= (uint64_t(1) << 32))
+            {
+                std::vector<uint8_t> un = std::vector<uint8_t>(size_t(un_size));
+                if (SzAr_DecodeFolder(&db.db, k.folder, &look.vt, db.dataPos, un.data(), un.size(), &kSdkAlloc) == SZ_OK)
+                    done = s.lzma_stream(b.data() + k.pos, size_t(k.size), un, lzma2, db.db.CodersData + db.db.FoCodersOffsets[k.folder] + c.PropsOffset, x86);
+            }
+        }
+        if (done) ++remade;
+        else s.literal(b.data() + k.pos, size_t(k.size));
+    }
+    if (!remade) return std::nullopt;
+    s.literal(b.data() + cur, size_t(b.size() - cur));
+    return s;
+}
+
+// A zip as a skeleton: everything but its entries' data as it is (local headers, data descriptors,
+// the central directory, the end record), each entry's data stored or, where deflated, made again by
+// preflate; an entry in any other method kept as it is too. Nothing for an encrypted entry, zip64,
+// entries that overlap, or a deflate preflate cannot read.
+std::optional<DeflateSkeleton> zip_skeleton(const std::vector<uint8_t>& b)
+{
+    auto u16 = [&](size_t at) { return uint32_t(b[at]) | uint32_t(b[at + 1]) << 8; };
+    auto u32 = [&](size_t at) { return u16(at) | u16(at + 2) << 16; };
+    if (b.size() < 22 || u32(0) != 0x04034b50) return std::nullopt;
+    size_t eocd = std::string::npos;
+    for (size_t at = b.size() - 22 + 1; at-- > 0 && b.size() - at <= 22 + 65535;)
+        if (u32(at) == 0x06054b50) { eocd = at; break; }
+    if (eocd == std::string::npos) return std::nullopt;
+    const uint32_t count = u16(eocd + 10), cd_size = u32(eocd + 12), cd_at = u32(eocd + 16);
+    if (count == 0xFFFF || cd_at == 0xFFFFFFFFu || size_t(cd_at) + cd_size > eocd) return std::nullopt;
+    struct Entry { size_t data, csize; uint32_t method; };
+    std::vector<Entry> es;
+    for (size_t at = cd_at, k = 0; k < count; ++k)
+    {
+        if (at + 46 > b.size() || u32(at) != 0x02014b50) return std::nullopt;
+        const uint32_t flags = u16(at + 8), method = u16(at + 10), csize = u32(at + 20), nlen = u16(at + 28), xlen = u16(at + 30), clen = u16(at + 32);
+        const uint32_t local = u32(at + 42);
+        if ((flags & 1) || csize == 0xFFFFFFFFu || local == 0xFFFFFFFFu) return std::nullopt;
+        if (size_t(local) + 30 > b.size() || u32(local) != 0x04034b50) return std::nullopt;
+        const size_t data = size_t(local) + 30 + u16(local + 26) + u16(local + 28);
+        if (data + csize > b.size()) return std::nullopt;
+        es.push_back({data, csize, method});
+        at += 46 + nlen + xlen + clen;
+    }
+    std::sort(es.begin(), es.end(), [](const Entry& x, const Entry& y) { return x.data < y.data; });
+    DeflateSkeleton s;
+    size_t cur = 0;
+    for (const Entry& e : es)
+    {
+        if (e.data < cur) return std::nullopt; // overlapping entries
+        s.literal(b.data() + cur, e.data - cur);
+        if (e.method == 8 && e.csize > 0)
+        {
+            if (!s.deflated(b.data() + e.data, e.csize)) return std::nullopt;
+        }
+        else if (e.method == 0) s.stored(b.data() + e.data, e.csize);
+        else s.literal(b.data() + e.data, e.csize);
+        cur = e.data + e.csize;
+    }
+    s.literal(b.data() + cur, b.size() - cur);
+    return s;
+}
+
 const char* xz_check_name(int id) { return id == 0 ? "none" : id == 1 ? "crc32" : id == 4 ? "crc64" : id == 10 ? "sha256" : nullptr; }
 
 // ---- bzip2 and zstd (v19, 25 October 2026): read with their own libraries (bzip2 1.0.8, zstd
@@ -1182,6 +1581,16 @@ std::vector<uint8_t> lzma_alone_pack(const std::vector<uint8_t>& in, uint32_t pr
 
 std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector<uint8_t>& inner)
 {
+    if (recipe.rfind("sk ", 0) == 0)
+    {
+        // "sk <skeleton size> <inner size>" (v21): a gzip, zip or 7z made again from its skeleton and the
+        // data it holds, its deflate streams by preflate.
+        unsigned long long skeleton = 0, size = 0;
+        char extra = 0;
+        if (std::sscanf(recipe.c_str(), "sk %llu %llu%c", &skeleton, &size, &extra) != 2 || size != inner.size() || skeleton > size)
+            throw std::runtime_error("a deflate recipe this Sieve does not know: " + recipe);
+        return deflate_skeleton_remake(inner, size_t(skeleton));
+    }
     if (recipe.rfind("lz4 ", 0) == 0)
     {
         // "lz4 <level> <block size 4-7> <linked 0|1> <block checksum 0|1> <content checksum 0|1>
@@ -1595,7 +2004,7 @@ std::vector<uint8_t> place_bytes_of(const std::string& hex, uint32_t width)
 
 void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const ItemFinder* items, bool item_hashes, const PlaceCoder* coder,
                 double rope_seconds, uint32_t rope_newest, bool trim, bool pieces, bool optimise_archives, bool binary, bool gzip,
-                bool v20_on)
+                bool v20_on, bool v21_on)
 {
     const timings::Scope t_all("pack.all");
     // Every file's bytes, checked against the walk: from the contents where a v3 manifest has them,
@@ -1629,9 +2038,11 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const bool gzip_remake = binary && gzip; // v17's (a binary head's): gzip remade exactly
     const bool newer_archives = gzip_remake;  // v19's, with the newest (bzip2 and zstd)
     const bool v20 = gzip_remake && v20_on; // v20's (lz4, brotli, lzma, lzip, libarchive's)
+    const bool v21 = v20 && v21_on;         // v21's (gzip, zip and 7z made again from a skeleton)
     m.remake_gz = false;
     m.more_archives = false;
     m.v20 = false;
+    m.v21 = false;
     // (SIEVE_ARCHIVES_ALWAYS=1 in the environment: every archive Sieve can read is carried as its contents
     // or remade, smaller or not, so the CI can test each reader on the small archives it has.)
     const char* always_env = std::getenv("SIEVE_ARCHIVES_ALWAYS");
@@ -1757,6 +2168,15 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 const std::string recipe = inner && gzip_remake && members == 1 ? gzip_recipe(b, *inner) : std::string();
                 std::string name = contents_name(e.path, ".gz");
                 if (e.path.size() > 4 && e.path.compare(e.path.size() - 4, 4, ".tgz") == 0) name = e.path.substr(0, e.path.size() - 4) + ".tar";
+                // v21: else made again by preflate from its skeleton, where that gives it back.
+                if (recipe.empty() && v21 && inner)
+                    if (auto sk = gzip_skeleton(b))
+                    {
+                        size_t skeleton = 0;
+                        std::vector<uint8_t> whole = sk->inner(skeleton);
+                        const std::string r = "sk " + std::to_string(skeleton) + " " + std::to_string(whole.size());
+                        if (deflate_skeleton_remake(whole, skeleton) == b && single("gz", std::move(whole), r, name, 40)) continue;
+                    }
                 if (single("gz", std::move(inner), recipe, name, 40 + 2 * gzip_header_size(b))) continue;
             }
             if (newer_archives && is_bz2(b))
@@ -1809,6 +2229,31 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             }
             if (v20 && is_lzip(b))
                 if (single("lz", liblzma_inner(b, true), std::string(), renamed(".lz", ".tlz"), 40)) continue;
+            // v21: a 7z made again exactly from its skeleton and the data it holds; else, as before, its contents.
+            // (Its contents weighed first, as cheaply as that is done for them: where they would come out
+            // no smaller, the search for the levels that make its blocks again is not worth starting.)
+            bool sevenz_worth = false;
+            if (v21 && sieve::install::is_7z(b))
+            {
+                try
+                {
+                    std::vector<uint8_t> joined;
+                    for (const auto& in : sieve::install::read_7z(b)) joined.insert(joined.end(), in.bytes.begin(), in.bytes.end());
+                    sevenz_worth = !joined.empty() && worth(joined, 40, false);
+                }
+                catch (const std::exception&)
+                {
+                    sevenz_worth = false;
+                }
+            }
+            if (sevenz_worth)
+                if (auto sk = sevenz_skeleton(b))
+                {
+                    size_t skeleton = 0;
+                    std::vector<uint8_t> whole = sk->inner(skeleton);
+                    const std::string r = "sk " + std::to_string(skeleton) + " " + std::to_string(whole.size());
+                    if (deflate_skeleton_remake(whole, skeleton) == b && single("7z", std::move(whole), r, contents_name(e.path, ".7z"), 40)) continue;
+                }
             if (sieve::install::is_7z(b))
             {
                 std::vector<sieve::install::InMemory> all;
@@ -1822,6 +2267,15 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 }
                 if (contents("7z", std::move(all), ".7z")) continue;
             }
+            // v21: a zip made again exactly from its skeleton and the data it holds; else, as before, its contents.
+            if (v21 && b.size() >= 4 && b[0] == 'P' && b[1] == 'K' && b[2] == 3 && b[3] == 4)
+                if (auto sk = zip_skeleton(b))
+                {
+                    size_t skeleton = 0;
+                    std::vector<uint8_t> whole = sk->inner(skeleton);
+                    const std::string r = "sk " + std::to_string(skeleton) + " " + std::to_string(whole.size());
+                    if (deflate_skeleton_remake(whole, skeleton) == b && single("zip", std::move(whole), r, contents_name(e.path, ".zip"), 40)) continue;
+                }
             if (auto all = zip_entries(b))
                 if (contents("zip", std::move(*all), ".zip")) continue;
             if (v20)
@@ -1849,6 +2303,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 std::any_of(entries.begin(), entries.end(),
                             [](const ManifestEntry& x) { return x.remake.rfind("lz4 ", 0) == 0 || x.remake.rfind("br ", 0) == 0 || x.remake.rfind("lzma ", 0) == 0; }) ||
                 std::any_of(m.unpacked.begin(), m.unpacked.end(), [](const Manifest::UnpackedArchive& u) { return is_v20_format(u.format); });
+            // v21: some gzip or zip made again by preflate.
+            m.v21 = std::any_of(entries.begin(), entries.end(), [](const ManifestEntry& x) { return x.remake.rfind("sk ", 0) == 0; });
+            if (m.v21) m.v20 = true; // v21 is v20 and more
             if (m.v20) m.more_archives = true; // v20 is v19 and more
             if (m.more_archives) m.remake_gz = true; // v19 is v17 and more
             m.entries.clear();
@@ -2300,9 +2757,12 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // v16: the head in bytes, where everything v15 allows is allowed (never an older version asked for).
     m.binary = binary && m.compact;
     // v20: wherever the head is in bytes at the newest, the body is too (and v20's archives allowed).
+    const bool had_v21 = m.v21;
     m.v20 = m.v20 || (m.binary && gzip && v20_on);
+    m.v21 = had_v21 && m.binary; // (v21 only in bytes, where a deflate is made again)
     if (m.v20) m.more_archives = m.remake_gz = true;
     r.v20 = m.v20;
+    r.v21 = m.v21;
     if (m.binary)
     {
         r.head_text = m.text().size();
@@ -2377,7 +2837,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
     };
     if (r.compact)
     {
-        const char* version = r.v20 ? kNewestArchivesManifestVersion : r.more_archives ? kMoreArchivesManifestVersion : r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
+        const char* version = r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : r.more_archives ? kMoreArchivesManifestVersion : r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
                             : r.roped ? kRopeManifestVersion : kCompactManifestVersion;
         if (r.items)
         {
@@ -2390,7 +2850,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         else o << "items     none; " << version << "\n";
         if (r.listing_carried) o << "listing   " << r.listing << " bytes, carried as LZMA2 in " << r.listing_carried << "\n";
         if (r.binary)
-            o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << (r.v20 ? kNewestArchivesManifestVersion : kBinaryManifestVersion)
+            o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << (r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : kBinaryManifestVersion)
               << (r.v20 ? "; its body in bytes too" : "") << ")\n";
         if (r.remade) o << "remade    " << r.remade << " archive(s) carried as what they hold, remade exactly on installing (" << version << ")\n";
         if (r.unpacked)

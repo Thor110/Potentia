@@ -3947,6 +3947,27 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   (Edward): the remembered table and "Trust the new table" stay; no signing, ever ("I don't trust
   myself or any human being alive to keep a key safe").
 
+### 7z, zip and gzip made again exactly: `sieve-manifest-v21` (25 October 2026)
+Edward: "we should delay the filter ideas until we deal with 7z, zip and rar exactly".
+- **preflate** (Apache 2.0, pinned to commit 609eefa, its last; `third_party_licenses/preflate`) for
+  deflate whoever made it; **the LZMA SDK's encoder** (already in `third_party/lzma`) for 7-Zip's
+  LZMA and LZMA2, and its x86 filter. One recipe, `sk`: a skeleton (bytes kept as they are, and
+  where each stream goes) then the data; SPECIFICATIONS §12.2.
+- **Windows builds** (first time, 25 October 2026, fixed the same day): libarchive's zlib checks
+  answered beforehand, its regex search off, an empty build type given one, and `mode_t` (POSIX)
+  replaced; Edward's Debug and Release builds and full CI then passed.
+- **The oracle** cannot make preflate's or the SDK's streams again: it reads each skeleton whole, makes
+  again those of bytes and stored data alone, names the rest, and then leaves the tree unchecked.
+- **CI step 11:** a gzip zlib's levels do not give back, a zip of zlib's deflate and one stored, and
+  three small archives 7-Zip made (`tests/archives`: LZMA2, LZMA, 7-Zip's deflate); `--v20` now keeps
+  the v20 block's two-member gzip as contents.
+- **RAR:** measured, not built (IDEAS §19.88): the machine's own `rar` gives an archive back only
+  where it is the same version, with the same switches, order and nanosecond times. Edward: note it
+  and move on; archive optimising is a pleasantry, not core.
+- **Windows, the same day:** a second configure took the cache entries left for libarchive as a
+  system zlib (now forgotten before Sieve looks); and preflate's headers use `std::result_of`, which
+  C++20 removed and MSVC enforces, so preflate is built as C++17 behind `tools/cli/preflate_glue.*`.
+
 ### Every archive format we can read: `sieve-manifest-v20` (25 October 2026)
 Edward: "all of the above for now, every step forward is a step in the right direction and even the
 small savings will add up".

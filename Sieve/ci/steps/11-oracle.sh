@@ -431,7 +431,7 @@ open('a20/r.py.lz4', 'wb').write(lz4.frame.compress(t, compression_level=9, bloc
 open('a20/r.py.br', 'wb').write(brotli.compress(t, quality=5, lgwin=19))
 open('a20/r.py.lzma', 'wb').write(lzma.compress(t, format=lzma.FORMAT_ALONE, preset=0))
 open('a20/two.gz', 'wb').write(gzip.compress(t[:1000]) + gzip.compress(t[1000:]))"
-$S locate a20 --installer a20.sieve --items --optimise-archives --manifest a20.manifest | tr -d '\r' > a20.txt
+$S locate a20 --installer a20.sieve --items --optimise-archives --v20 --manifest a20.manifest | tr -d '\r' > a20.txt
 grep -c "^remade    3 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v20)$" a20.txt > /dev/null
 grep -c "^unpacked  1 archive(s) carried as their contents" a20.txt > /dev/null
 grep -c "^items     none; sieve-manifest-v20$" a20.txt > /dev/null
@@ -473,3 +473,31 @@ for kv in sys.argv[1].split(','):
   python sieve_ref.py unpack la.sieve --to la_oracle > /dev/null
   diff -r la_inst la_oracle
 done
+# v21 (25 October 2026): a gzip and a zip made again exactly, whoever made them, from a skeleton and
+# what they hold (their deflate by preflate): a gzip of zlib's Huffman-only deflate (which no level
+# of zlib gives back, so v17's way cannot), a zip of zlib's deflate and one of stored entries; and
+# 7-Zip's own LZMA2, LZMA and deflate (tests/archives), by the LZMA SDK's encoder and preflate.
+rm -rf a21 a21_inst a21_oracle && mkdir -p a21
+python -c "
+import zlib, zipfile, struct
+t = open('sieve_ref.py', 'rb').read()
+c = zlib.compressobj(9, zlib.DEFLATED, -15, 9, zlib.Z_HUFFMAN_ONLY)
+d = c.compress(t) + c.flush()
+open('a21/huff.gz', 'wb').write(b'\x1f\x8b\x08\x00\x00\x00\x00\x00\x02\xff' + d + struct.pack('<II', zlib.crc32(t), len(t)))
+with zipfile.ZipFile('a21/py.zip', 'w', zipfile.ZIP_DEFLATED) as z:
+    z.writestr(zipfile.ZipInfo('sieve_ref.py', (2026, 10, 25, 12, 0, 0)), t, compress_type=zipfile.ZIP_DEFLATED)
+with zipfile.ZipFile('a21/stored.zip', 'w', zipfile.ZIP_STORED) as z:
+    z.writestr(zipfile.ZipInfo('sieve_ref.py', (2026, 10, 25, 12, 0, 0)), t)"
+cp ../tests/archives/sieve-7zip-lzma2.7z ../tests/archives/sieve-7zip-lzma.7z ../tests/archives/sieve-7zip-deflate.zip a21/
+SIEVE_ARCHIVES_ALWAYS=1 $S locate a21 --installer a21.sieve --items --optimise-archives --manifest a21.manifest | tr -d '\r' > a21.txt
+grep -c "^remade    6 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v21)$" a21.txt > /dev/null
+python -c "d = open('a21.manifest', 'rb').read(); assert d[:6] == b'sieve\x15', d[:6]"
+$S install a21.sieve --to a21_inst > /dev/null
+for f in huff.gz py.zip stored.zip sieve-7zip-lzma2.7z sieve-7zip-lzma.7z sieve-7zip-deflate.zip; do cmp a21/$f a21_inst/$f; done
+# The oracle reads every skeleton whole and makes the stored zip again; the others, made by preflate
+# or the LZMA SDK (which it has not), it names as not made again, and so leaves the tree unchecked.
+python sieve_ref.py unpack a21.manifest --to a21_oracle | tr -d '\r' > a21_oracle.txt
+cmp a21/stored.zip a21_oracle/stored.zip
+[ "$(grep -c "^not made again by the oracle (preflate or the LZMA SDK): " a21_oracle.txt)" -eq 5 ]
+$SI a21.sieve --to a21_si --yes > /dev/null
+diff -r a21_inst a21_si

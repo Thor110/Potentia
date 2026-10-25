@@ -4069,9 +4069,44 @@ lost:
     version). Not unpacked where unpacking makes nothing smaller: brotli at quality 11 beat xz on
     IDEAS.md (115,161 against 118,900), and cpio, ar, ISO and tar hold their files as they are, so
     their contents pack to the same size.
-  - **Still to look at:** 7-Zip's and others' encoders to remake 7z exactly; zip and gzip deflate made
-    by other than zlib (preflate's route); multi-volume archives; and the temporary and permanent
-    choice (below).
+  - **7z, zip and gzip made again exactly (25 October 2026, `sieve-manifest-v21`):** Edward: "we
+    should delay the filter ideas until we deal with 7z, zip and rar exactly". One way serves all
+    three: a skeleton of the file (what is kept as it is, and where each stream goes) and the data it
+    holds. Deflate by preflate (Apache 2.0, pinned to its last commit), which made again every stream
+    tried, its difference a few bytes where zlib's kind made it and about a tenth where 7-Zip's did;
+    LZMA and LZMA2 by the LZMA SDK's own encoder, which made again every block 7-Zip 23.01 wrote at
+    one level or another (its default, -mx9, -mx1 in blocks, LZMA, and LZMA2 after the x86 filter).
+    A zip by 7-Zip at -mx5 405,437 → 389,755; a 7z at -mx1 329,861 → 280,971; the `sieve` program in a
+    7z at -mx1 3,381,897 → 3,144,066. A 7z at 7-Zip's default levels is left as it is: LZMA2 is already
+    what Sieve would use, so its contents come out no smaller. The oracle has neither preflate nor
+    the SDK's encoder: it checks each skeleton whole and names the files it cannot make again.
+  - **RAR, measured (25 October 2026; not built):** no free RAR compressor exists, and unRAR's
+    licence forbids writing one, so the only way is the machine's own `rar` program, run as ffmpeg
+    is. Measured with RAR 7.00: three files extracted by `rar` itself (their times to the
+    nanosecond) and added again with the same command came out byte for byte the same archive;
+    extracted by bsdtar, with the times to the second, 48 bytes different. So it can work where the
+    same version of `rar`, the same switches, the same order and the times to the nanosecond are
+    all known; the switches (level, dictionary, solid, recovery record) and the host system recorded
+    in the archive would have to be read from its headers, and an archive made by another version,
+    or on another system, would not come back. Waiting on Edward: whether that is worth building.
+  - **Why rar.exe alone is not enough (Edward asked, 25 October 2026):** `rar` reads every older RAR,
+    so unpacking is never the trouble. Packing again gives a valid RAR with the same files in it, but
+    the same bytes only where the version and its settings are those that made it: each version's
+    compressor may choose its matches differently, and RAR 7 cannot write RAR 4 at all. A RAR made
+    years ago, packed again by today's `rar`, is a different file, and the tree's SHA-256 says so.
+    So RAR goes in the list of formats as **read, carried as its contents; made again only by the
+    same `rar` that made it**, and nothing more is built for now.
+  - **Headers kept as they are (Edward's thought, 25 October 2026; a note):** a skeleton keeps an
+    archive's headers byte for byte, which is mostly redundant: a zip's local header repeats its
+    central directory's entry; offsets, sizes and CRCs follow from the files. A model of each
+    format's headers (made again from the files and a few settings, with only what differs kept, as
+    preflate does for deflate) would carry less. Measured, the headers are small and LZMA2 already
+    packs their repeats, so it waits.
+  - **Edward's view of all this (25 October 2026):** optimising archives is a pleasantry, not part of
+    Sieve's core. The far aim is to replace every archive format with `.sieve`; until then, reading
+    them, and keeping them backwards compatible, is how what is in them reaches the future.
+  - **Still to look at:** BCJ2 and other filters in a 7z; PNG's deflate (the same skeleton);
+    multi-volume archives; header models (above); and the temporary and permanent choice (below).
   - **The rule for every decoder taken (Edward, 25 October 2026):** its licence, and any notice or
     readme its licence asks for, go in `third_party_licenses/` with a row in the README there,
     copied beside the programs by the build. Next to look at, licences to read first: lz4 and

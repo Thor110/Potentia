@@ -996,12 +996,15 @@ const std::vector<Page>& pages()
                       "of the AI line as its weights' digits, not its file's floats. The pages are\n"
                       "--page-length characters of --alphabet; the AI line is --ai-layers, --ai-width,\n"
                       "--ai-heads and --ai-bits (Micro without them)."},
-          {"--optimise-archives", "With --items: Optimise Archive Formats (sieve-manifest-v14, v17, v19, v20). An .xz,\n"
-                                  "a .gz zlib made, a .bz2, a .zst libzstd 1.5.7 made, an .lz4, a .br and an .lzma is\n"
-                                  "carried as what it holds and remade exactly on installing; another of those, and\n"
-                                  "an .lz (lzip), as what it holds; a .7z, .zip, RAR, cab, ISO, LHA, cpio, ar or WARC\n"
-                                  "as its contents, in a folder named after it (installing says so: the archive\n"
-                                  "itself is not given back); each only where clearly smaller. Off unless given."},
+          {"--optimise-archives", "With --items: Optimise Archive Formats (sieve-manifest-v14, v17, v19, v20, v21).\n"
+                                  "An .xz, a .bz2, a .zst libzstd 1.5.7 made, an .lz4, a .br and an .lzma is carried\n"
+                                  "as what it holds and remade exactly on installing; so is a .gz or .zip whoever made\n"
+                                  "it (its deflate by preflate) and a .7z whose blocks are 7-Zip's LZMA or LZMA2\n"
+                                  "(v21); another of those, and an .lz (lzip), as what it holds; a RAR, cab, ISO, LHA,\n"
+                                  "cpio, ar or WARC, or a .7z or .zip not made again, as its contents, in a folder named\n"
+                                  "after it (installing says so: the archive itself is not given back); each only\n"
+                                  "where clearly smaller. Off unless given."},
+          {"--v20", "As sieve-manifest-v20 at newest: no gzip, zip or 7z made again from a skeleton (v21)."},
           {"--v19", "As sieve-manifest-v19 at newest: the listing's body as text (v20 writes it in bytes), and\n"
                     "no lz4, brotli, lzma, lzip or libarchive archive optimised."},
           {"--v16", "As sieve-manifest-v16 at newest, no gzip remade (carried as what it holds), and a\n"

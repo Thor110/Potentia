@@ -149,6 +149,12 @@ inline constexpr const char* kMoreArchivesManifestVersion = "sieve-manifest-v19"
 // some file is one of these.
 inline constexpr const char* kNewestArchivesManifestVersion = "sieve-manifest-v20";
 
+// v21 (25 October 2026): v20 whose gzip, zip and 7z files may be made again exactly whoever made them
+// ("sk <skeleton size> <inner size>": the inner bytes a skeleton and the data it holds; deflate made
+// again by preflate, LZMA and LZMA2 by the LZMA SDK's encoder, both pinned). Its head's byte 21, in
+// bytes only. Made only where some file is one of these.
+inline constexpr const char* kDeflateManifestVersion = "sieve-manifest-v21";
+
 // The "u" lines' formats v20 adds (an archive carried as its contents).
 inline bool is_v20_format(const std::string& f)
 {
@@ -231,6 +237,7 @@ struct Manifest
     std::string graph;         // v18: the map's text (see kGraphManifestVersion); empty for none
     bool more_archives = false; // v19: some archive is bzip2 or zstd (remake_gz and binary are set too)
     bool v20 = false; // v20: some archive is lz4, brotli, lzma, lzip or libarchive's (more_archives is set too)
+    bool v21 = false; // v21: some gzip or zip made again by preflate (v20 is set too)
     bool body_text = false; // v20: its body as text after all (the head's flag 128), where that came out smaller
     // v14: each archive carried as its contents: its format ("7z", "xz"), its size, its path, and the
     // folder (or file) its contents are in.

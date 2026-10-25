@@ -38,7 +38,7 @@ Special thanks to Claude Opus 5.5 for helping to build out the Sieve system base
 | `results/` | M1 sieve output (CSV and chart) |
 | `third_party/stb/` | stb_image and stb_image_write (public domain or MIT), used to read and write image files |
 | `tools/cli/media_decode.*` | Every other picture and video format, read by an ffmpeg program if there is one (not linked or shipped) |
-| `third_party_licenses/` | The licence of every third-party component (SDL3 and the parts of it with their own notices, stb, SCOWL, Moby, font8x8, zlib, liblzma, the LZMA SDK, PDQ, bzip2, zstd, lz4, brotli, libarchive), with an inventory in its README; copied next to the executables when you build |
+| `third_party_licenses/` | The licence of every third-party component (SDL3 and the parts of it with their own notices, stb, SCOWL, Moby, font8x8, zlib, liblzma, the LZMA SDK, PDQ, bzip2, zstd, lz4, brotli, libarchive, preflate), with an inventory in its README; copied next to the executables when you build |
 | `data/lang/`, `data/fonts/`, `data/meshes/` | Menu languages, bitmap fonts, and the Real Graphics models (templates in `data/meshes/templates/`) |
 | `../.github/workflows/build.yml` | Builds and tests on Windows, Linux and macOS on every push (at the repository's root) |
 | `docs/SPECIFICATIONS.md` | The specification |

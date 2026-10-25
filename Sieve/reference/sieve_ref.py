@@ -6221,8 +6221,8 @@ def v7_item(spec, place, code, path, items_from):
 
 
 ARCHIVE_FORMATS = [None, "xz", "gz", "bz2", "zst", "lz4", "br", "lzma", "lz", "7z", "zip", "rar", "cab", "iso", "lha", "cpio", "ar",
-                   "warc"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
-RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3}
+                   "warc", "sk"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
+RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3, "sk": 3}
 
 
 def listing_from_bytes(b):
@@ -6323,9 +6323,10 @@ def v16_text(data):
     the streams' sizes and dictionaries' bytes, the tree's SHA-256 as 32 bytes, the body, packed or
     not) read back into v15's text, followed by what follows it. Anything else is returned as it is."""
     import lzma
-    if not data.startswith((b"sieve\x10", b"sieve\x11", b"sieve\x12", b"sieve\x13", b"sieve\x14")):
+    if not data.startswith((b"sieve\x10", b"sieve\x11", b"sieve\x12", b"sieve\x13", b"sieve\x14", b"sieve\x15")):
         return data
-    v20 = data[5] == 20  # v19 whose body is in bytes (listing_from_bytes), lz4, brotli and lzma remade too
+    v21 = data[5] == 21  # v20 whose gzip, zip and 7z files may be made again from a skeleton
+    v20 = data[5] == 20 or v21  # v19 whose body is in bytes (listing_from_bytes), lz4, brotli and lzma remade too
     v17 = data[5] == 17  # v16 whose remade archives may be gzip files
     v18 = data[5] == 18  # v17 with a graph part: a map (head flag 64)
     v19 = data[5] == 19  # v18 whose archives may be bzip2 or zstd files, a graph part allowed
@@ -6364,7 +6365,7 @@ def v16_text(data):
         sys.exit("v16: flags this reader does not know")
     if v18 and not flags & 0x40:
         sys.exit("v18 without its graph part")
-    head = b"sieve-manifest-v20\n" if v20 else b"sieve-manifest-v19\n" if v19 else b"sieve-manifest-v18\n" if v18 else b"sieve-manifest-v17\n" if v17 else b"sieve-manifest-v15\n"
+    head = b"sieve-manifest-v21\n" if v21 else b"sieve-manifest-v20\n" if v20 else b"sieve-manifest-v19\n" if v19 else b"sieve-manifest-v18\n" if v18 else b"sieve-manifest-v17\n" if v17 else b"sieve-manifest-v15\n"
     if flags & 1:
         head += b"root " + take(varint()) + b"\n"
     for bit, name in ((2, b"x86"), (4, b"lzma2"), (8, b"items")):
@@ -6423,7 +6424,8 @@ def cmd_unpack_v7(args, data):
     # v11 with no line for an empty items or rope stream, and the lzma2 stream perhaps carried as it is
     # v13 with archives optimised: an xz file remade exactly from what it holds, or an archive carried
     # as its contents ("u" lines after the tree's)
-    v20 = lines[0] == "sieve-manifest-v20"  # v19 whose archives may also be lz4, brotli or lzma files (its body in bytes)
+    v21 = lines[0] == "sieve-manifest-v21"  # v20 whose gzip, zip and 7z files may be made again from a skeleton
+    v20 = lines[0] == "sieve-manifest-v20" or v21  # v19 whose archives may also be lz4, brotli or lzma files (its body in bytes)
     v19 = lines[0] == "sieve-manifest-v19" or v20  # v18 whose archives may be bzip2 or zstd files; a graph part allowed
     v18 = lines[0] == "sieve-manifest-v18"  # v17 with a graph part (a map), "g" lines after the entries
     v17 = lines[0] == "sieve-manifest-v17" or v18 or v19  # v15 (in bytes, v16) with gzip files remade exactly
@@ -6511,6 +6513,14 @@ def cmd_unpack_v7(args, data):
     got, xa, pa, ia, ra = [None] * len(files), 0, 0, 0, 0
     remakes = {}
     for i, (path, size, sha, way) in enumerate(files):
+        if v21 and way.startswith("sk "):
+            # "sk <skeleton size> <inner size> <way>": a gzip, zip or 7z as a skeleton and the data it holds.
+            _, skel, n, way = way.split(" ", 3)
+            if not (skel.isdigit() and n.isdigit() and int(skel) <= int(n)) or \
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ")):
+                sys.exit(f"{path}: a skeleton recipe Sieve does not write")
+            remakes[i] = ("sk", int(skel), size)
+            size = int(n)
         if v20 and way.startswith("lz4 "):
             # "lz4 <level> <block size 4-7> <linked> <block checksum> <content checksum> <content size>
             # <inner size> <way>": one frame, as the lz4 program writes it.
@@ -6652,8 +6662,16 @@ def cmd_unpack_v7(args, data):
             mask, pa = plain[pa:pa + n], pa + n
             got[i] = b"\n".join(l for j, l in enumerate(base) if mask[j // 8] >> (j % 8) & 1)
     import zlib
+    unchecked = set()  # v21: files made again by preflate or the LZMA SDK, which the oracle has not
     for i, r in remakes.items():  # v14: xz remade by Python's lzma, as the xz program writes; v17: gzip by zlib
-        if r[0] == "xz":
+        if r[0] == "sk":  # v21: the skeleton read and checked; made again where it is bytes and data alone
+            _, skel, size = r
+            made = skeleton_remake(got[i], skel, files[i][0])
+            if made is None:
+                unchecked.add(i)
+                continue
+            got[i] = made
+        elif r[0] == "xz":
             _, preset, check, size = r
             got[i] = lzma.compress(got[i], format=lzma.FORMAT_XZ, check=check, preset=preset)
         elif r[0] == "lz4":  # v20: liblz4, by the lz4 module
@@ -6685,37 +6703,112 @@ def cmd_unpack_v7(args, data):
             inner = got[i]
             got[i] = header + c.compress(inner) + c.flush() + struct.pack("<II", zlib.crc32(inner) & 0xFFFFFFFF,
                                                                            len(inner) & 0xFFFFFFFF)
-        if len(got[i]) != size:
+        if i not in unchecked and len(got[i]) != size:
             sys.exit(f"{files[i][0]}: not remade at its size")
     if xa != len(x86) or pa != len(plain) or ia != len(places) or ra != len(ropes):
         sys.exit("the streams hold more than the files")
-    for (path, size, sha, way), b in zip(files, got):
+    for k, ((path, size, sha, way), b) in enumerate(zip(files, got)):
+        if k in unchecked:
+            continue
         if (size is not None and len(b) != size) or (sha != "-" and hashlib.sha256(b).hexdigest() != sha):
             sys.exit(f"{path} does not unpack to its size and SHA-256")
-    h = hashlib.sha256()
-    for (path, size, sha, way), b in zip(files, got):
-        h.update((path + "\n" + hashlib.sha256(b).hexdigest() + "\n").encode("utf-8"))
-    if h.hexdigest() != tree:
-        sys.exit("the tree's SHA-256 differs")
+    if unchecked:
+        # Their bytes are made by preflate or the LZMA SDK's encoder, neither of which the oracle has:
+        # their skeletons and data were read and checked, but not the files themselves, nor the tree.
+        for k in sorted(unchecked):
+            print(f"not made again by the oracle (preflate or the LZMA SDK): {files[k][0]}; the tree's SHA-256 not checked")
+    else:
+        h = hashlib.sha256()
+        for (path, size, sha, way), b in zip(files, got):
+            h.update((path + "\n" + hashlib.sha256(b).hexdigest() + "\n").encode("utf-8"))
+        if h.hexdigest() != tree:
+            sys.exit("the tree's SHA-256 differs")
     if args.to:
         for e in entries:
             if len(e) == 1:
                 os.makedirs(os.path.join(args.to, e[0]), exist_ok=True)
-        for (path, size, sha, way), b in zip(files, got):
+        for k, ((path, size, sha, way), b) in enumerate(zip(files, got)):
+            if k in unchecked:
+                continue
             target = os.path.join(args.to, path)
             os.makedirs(os.path.dirname(target) or ".", exist_ok=True)
             open(target, "wb").write(b)
-    for (path, size, sha, way), b in zip(files, got):
-        print(f"{way.split(' ')[0] if way.startswith('item ') else way}\t{len(b)}\t{path}")
+    for k, ((path, size, sha, way), b) in enumerate(zip(files, got)):
+        if k not in unchecked:
+            print(f"{way.split(' ')[0] if way.startswith('item ') else way}\t{len(b)}\t{path}")
     for fmt, size, archive, folder in unpacked:
         print(f"unpacked\t{fmt}\t{size}\t{archive}\t{folder}")
+
+
+def skeleton_remake(inner, skel, path):
+    """v21's skeleton (SPECIFICATIONS §12.2) read from the inner bytes and checked whole: a varint of
+    its segments' count, each segment 0 bytes as they are, 1 data stored, 2 a deflate (preflate's
+    difference after it), 3 LZMA2 or 4 LZMA (their settings after it), the data after the skeleton
+    taken in order and used to its end. The file made again where its segments are only bytes and data
+    stored; None where it holds a deflate or an LZMA stream (made by preflate or the LZMA SDK)."""
+    at, data, out, whole = [0], [skel], b"", True
+    sk = inner[:skel]
+
+    def varint():
+        v, shift = 0, 0
+        while True:
+            if at[0] >= len(sk):
+                sys.exit(f"{path}: its skeleton ends early")
+            c = sk[at[0]]
+            at[0] += 1
+            v |= (c & 0x7F) << shift
+            shift += 7
+            if not c & 0x80:
+                return v
+
+    def take_data(n):
+        if n > len(inner) - data[0]:
+            sys.exit(f"{path}: its skeleton asks for more data than there is")
+        data[0] += n
+        return inner[data[0] - n:data[0]]
+
+    for _ in range(varint()):
+        if at[0] >= len(sk):
+            sys.exit(f"{path}: its skeleton ends early")
+        kind = sk[at[0]]
+        at[0] += 1
+        n = varint()
+        if kind == 0:
+            if n > len(sk) - at[0]:
+                sys.exit(f"{path}: its skeleton ends early")
+            out += sk[at[0]:at[0] + n]
+            at[0] += n
+        elif kind == 1:
+            out += take_data(n)
+        elif kind == 2:
+            d = varint()
+            if d > len(sk) - at[0]:
+                sys.exit(f"{path}: its skeleton ends early")
+            at[0] += d
+            take_data(n)
+            whole = False
+        elif kind in (3, 4):
+            props = 1 if kind == 3 else 5
+            if props + 2 > len(sk) - at[0]:
+                sys.exit(f"{path}: its skeleton ends early")
+            level, flags = sk[at[0] + props], sk[at[0] + props + 1]
+            if level > 9 or flags & ~3 or (kind == 4 and flags & 1) or (kind == 3 and sk[at[0]] > 40):
+                sys.exit(f"{path}: LZMA settings Sieve does not write")
+            at[0] += props + 2
+            take_data(n)
+            whole = False
+        else:
+            sys.exit(f"{path}: a skeleton's segment Sieve does not write")
+    if at[0] != len(sk) or data[0] != len(inner):
+        sys.exit(f"{path}: a skeleton that does not use all it is given")
+    return out if whole else None
 
 
 def instructions_bytes(data):
     """A manifest's bytes, or Sieve instructions as a .sieve holds them: their manifest's place on the
     binary line as raw bytes (binary-v1, §12.1), read back here to the manifest (every shorter file
     first: the count of files shorter than L bytes is (256**L - 1) / 255)."""
-    if data.startswith((b"sieve\x10", b"sieve\x11", b"sieve\x12", b"sieve\x13", b"sieve\x14", b"sieve-manifest-v")):
+    if data.startswith((b"sieve\x10", b"sieve\x11", b"sieve\x12", b"sieve\x13", b"sieve\x14", b"sieve\x15", b"sieve-manifest-v")):
         return data
     v = int.from_bytes(data, "big")
     length = max(0, len(data) - 1)
@@ -6741,7 +6834,7 @@ def cmd_unpack(args):
     if data.startswith((b"sieve-manifest-v7\n", b"sieve-manifest-v8\n", b"sieve-manifest-v9\n", b"sieve-manifest-v10\n",
                         b"sieve-manifest-v11\n", b"sieve-manifest-v12\n", b"sieve-manifest-v13\n", b"sieve-manifest-v14\n",
                         b"sieve-manifest-v15\n", b"sieve-manifest-v17\n", b"sieve-manifest-v18\n", b"sieve-manifest-v19\n",
-                                b"sieve-manifest-v20\n")):
+                                b"sieve-manifest-v20\n", b"sieve-manifest-v21\n")):
         return cmd_unpack_v7(args, data)
     end = data.index(b"\nend\n") + len(b"\nend\n")
     lines = data[:end].decode("utf-8").split("\n")[:-1]
@@ -6867,7 +6960,7 @@ def cmd_graph(args):
     """The graph part of Sieve instructions that are a map (sieve-manifest-v18, SPECIFICATIONS §12.3):
     the map's text, every line after its "g<TAB>", as it was written."""
     data = v16_text(instructions_bytes(open(args.file, "rb").read()))
-    if not data.startswith((b"sieve-manifest-v18\n", b"sieve-manifest-v19\n", b"sieve-manifest-v20\n")) or b"\ng\t" not in data:
+    if not data.startswith((b"sieve-manifest-v18\n", b"sieve-manifest-v19\n", b"sieve-manifest-v20\n", b"sieve-manifest-v21\n")) or b"\ng\t" not in data:
         sys.exit("not a map: no graph part")
     end = data.index(b"\nend\n") + 1
     out = b"".join(l[2:] + b"\n" for l in data[:end].split(b"\n") if l.startswith(b"g\t"))
