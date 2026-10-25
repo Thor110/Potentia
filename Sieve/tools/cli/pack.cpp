@@ -787,7 +787,7 @@ std::optional<std::vector<sieve::install::InMemory>> libarchive_entries(const st
         const char* raw = archive_entry_pathname_utf8(en);
         std::string name = raw ? raw : "";
         while (name.size() > 2 && name.compare(0, 2, "./") == 0) name.erase(0, 2);
-        const mode_t type = archive_entry_filetype(en);
+        const auto type = archive_entry_filetype(en); // (auto: libarchive's own mode type, mode_t having none on Windows)
         const bool dir = type == AE_IFDIR;
         if (dir && (name == "." || name == "./")) continue; // the root's own entry (an ISO's)
         if (dir && !name.empty() && name.back() == '/') name.pop_back();

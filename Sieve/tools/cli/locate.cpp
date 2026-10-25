@@ -3,6 +3,7 @@
 #include "cli/locate.hpp"
 
 #include <functional>
+#include <iterator>
 #include "cli/vault.hpp"
 
 #include "sieve/rope_wave.hpp"

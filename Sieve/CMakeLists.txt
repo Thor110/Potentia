@@ -235,6 +235,9 @@ foreach(o ENABLE_MBEDTLS ENABLE_NETTLE ENABLE_OPENSSL ENABLE_MD ENABLE_LIBB2 ENA
     set(${o} OFF CACHE BOOL "" FORCE)
 endforeach()
 set(ENABLE_ZLIB ON CACHE BOOL "" FORCE)
+# No POSIX regex either (only libarchive's programs and its pattern options use it, none here): on
+# Windows, where there is none, libarchive would look for PCRE and stop at libgcc otherwise.
+set(POSIX_REGEX_LIB NONE CACHE STRING "" FORCE)
 if(TARGET ZLIB::ZLIBSTATIC)
     # The zlib fetched above: libarchive finds it by its header (copied with the zconf.h its build
     # wrote, as FindZLIB reads the version from it) and links the target.
@@ -268,7 +271,14 @@ FetchContent_Declare(libarchive
     GIT_REPOSITORY https://github.com/libarchive/libarchive.git
     GIT_TAG v3.8.10
     GIT_SHALLOW TRUE)
+# (libarchive refuses an empty build type, which a multi-config generator such as Visual Studio's
+# leaves: it is given one for its own configuring, then put back.)
+set(SIEVE_SAVED_BUILD_TYPE "${CMAKE_BUILD_TYPE}")
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
 FetchContent_MakeAvailable(libarchive)
+set(CMAKE_BUILD_TYPE "${SIEVE_SAVED_BUILD_TYPE}")
 set(BUILD_SHARED_LIBS ${SIEVE_SAVED_BUILD_SHARED_LIBS})
 set(SIEVE_ARCHIVE archive_static)
 set(SIEVE_ARCHIVE_INCLUDE ${libarchive_SOURCE_DIR}/libarchive)
