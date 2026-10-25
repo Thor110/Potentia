@@ -333,11 +333,13 @@ printf '<img src="/Potentia/p/door.jpg"><a href="/Potentia/sub/n.html">n</a><img
 printf '<img src="/Potentia/p/door.jpg?v=1">\n' > rooted/sub/n.html
 $S site build rooted --out rooted-plain --sieve-pages > /dev/null 2>&1
 grep -c '<img src="/Potentia/p/door.jpg">' rooted-plain/index.html > /dev/null
-$S site build rooted --out rooted-site --sieve-pages --served-at /Potentia/ --search-per-file 0.2 > /dev/null 2>&1
+# (MSYS_NO_PATHCONV: Git for Windows' bash turns an argument such as /Potentia/ into a path
+# under its own folder when it starts a Windows program; this keeps it as written.)
+MSYS_NO_PATHCONV=1 $S site build rooted --out rooted-site --sieve-pages --served-at /Potentia/ --search-per-file 0.2 > /dev/null 2>&1
 grep -c '<img src="/Potentia/p/door.sieve" integrity="sha256-' rooted-site/index.html > /dev/null
 grep -c '<a href="/Potentia/sub/n.sieve" integrity="sha256-' rooted-site/index.html > /dev/null
 grep -c '<img src="//example.com/x.jpg">' rooted-site/index.html > /dev/null
-$S site check rooted-site --served-at /Potentia/
+MSYS_NO_PATHCONV=1 $S site check rooted-site --served-at /Potentia/
 $S site check rooted-site 2>&1 | grep -c "3 from the server's root not read" > /dev/null
 python -c "import json; json.load(open('../web/extension/manifest.json'))"
 for js in ../web/extension/*.js; do node --check "$js"; done

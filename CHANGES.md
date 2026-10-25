@@ -1,9 +1,8 @@
-# CI step 11 on a Windows Ninja build (25 October 2026)
+# CI step 11: --served-at on Windows (25 October 2026)
 
-Unzip over the repository root. Commit 947305a locally (not pushed); it goes on top of sieve-ci-bats.zip.
+Unzip over the repository root. Commit b654226 locally (not pushed), on top of your "sieve ci fixes current".
 
-- **The cause:** the same as step 06's. Step 11 gives `web/test-site/make_site.py` the program as `build/sieve`. The script checks the file exists before starting it, and on your build only `build/sieve.exe` is there.
-- **The fix:** `make_site.py` now takes the `.exe` beside the name when that is what exists. The fix is in the script, not the CI, because people run it directly too.
-- **The other Python scripts:** `check_host.py` only starts the program, and Windows adds the `.exe` itself, so it needs nothing.
-- **Checked here:** given `sieve` where only `sieve.exe` existed, it built the whole test site.
-- **Not yet run on Windows:** the rest of step 11 after this line. Run it with `ci\steps\11-oracle.bat`.
+- **The cause:** when Git for Windows' bash starts a Windows program, it rewrites any argument that looks like a Unix path. `--served-at /Potentia/` reached `sieve.exe` as a folder under Git's own install, so no links from the server's root were made and line 337 found none.
+- **Not your machine alone:** GitHub's Windows job failed on the same line, in run 43 ("sieve bzip2 zstd"). The Linux and macOS jobs passed.
+- **The fix:** the two `--served-at` commands run with `MSYS_NO_PATHCONV=1`, which keeps the argument as written. On Linux and macOS it does nothing.
+- **Checked:** no other step hands a Windows program an argument starting with `/` (step 10 does, but it runs on Linux only). Step 11 passes here (1,015 s).
