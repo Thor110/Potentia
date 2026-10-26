@@ -121,6 +121,7 @@ struct AppSettings
     double locator_search = 0;
     bool locator_search_run = false;
     bool locator_every_wave = false; // the rope's search through every wave, even on packed bytes
+    bool locator_decoding = false;   // Prioritise Decoding Speed: no file mixed
     // "Optimise Compressed Formats" ([locator] optimise_archives, the key's old name kept): off unless ticked.
     bool locator_archives = false;
     // The setup menu's settings ([setup]): every line's shape and the GLOBAL settings, as they

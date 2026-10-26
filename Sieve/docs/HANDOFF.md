@@ -3947,6 +3947,63 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   (Edward): the remembered table and "Trust the new table" stay; no signing, ever ("I don't trust
   myself or any human being alive to keep a key safe").
 
+### mix-v3: a word list as a model (Edward's grammar), `sieve-manifest-v27` (27 October 2026)
+
+Edward's "grammar as a model", measured three ways in a scratchpad copy of mix-v2 (environment
+switches), every file decoded back:
+- **Grammar as contexts, not taken:** Moby's parts of speech (`moby-pos-v1.tsv`) of the last two
+  words with the word so far; the last word's with the byte before; the last word with the word so
+  far. 0.15% to 0.55% on Don Quixote, and larger on small texts (the orders already see it).
+- **The word list as a prediction, taken (mix-v3):** from the word so far, the letters SCOWL has
+  next (and the end), each by its count of words, give each bit a probability: an input of its own,
+  and its place in the word a context. Don Quixote's first 800 KB 191,190 to 187,650; a 3 KB text
+  1,303 to 1,212; a word list 41,770 to 27,138; a PDF 0.45% larger, so the packer codes a text's
+  start both ways and keeps the smaller. Sizes 35, 60 and 80 within 0.2%: 60 (`scowl-en-60`).
+- **Core:** `MixDictionary` (a trie with each node's counts summed in byte order, so a bit's counts
+  are two look-ups, the same numbers as summing each letter), `Mix3Params` (`B22 D60`),
+  `mix3_code`/`mix3_file`; mix-v2's model with the list given (one context more, one input more).
+  mix-v1's and mix-v2's codes unchanged (their pins).
+- **Where the list comes from:** a hook (`set_mix_words`, `mix_words()` in `locate.hpp`), set by
+  `use_item_maker()` (sieve, the hallway and sieve-install all call it) to `mix_word_list`
+  (`items.cpp`): the registry's file, its SHA-256 checked, made ready once a run. A reader without
+  it says to use Sieve.
+- **v27:** a way `mix3 B<bits> D60`; `rope_newest` 10 (`--v26` for 9; the File Locator passes 10).
+  `sieve mix --words 60`. Report: `mix-v3 (with a word list)`, or how many by each version.
+- **Measured as instructions:** Don Quixote 527,837 bytes (v26 532,501); a folder of a word list,
+  two texts, the teapot and Don Quixote's start, 72,692 (v26 88,341).
+- **Oracle:** its own trie and mix-v3 (`mix-unpack --words 60`), counting letter by letter; matched
+  on its first run, and reads v27. **Unit test:** `test_mix3` (a small list made in the test), one
+  code pinned. **CI:** step 11's v26 block pins `--v26` for its text; a v27 block (Sieve, the
+  oracle, sieve-install).
+- **Mixing's 4 KiB limit:** a text under it is not mixed, though mix-v3 is much smaller there (a 3 KB
+  text 1,212 bytes; LZMA2 about 1,500). See CHANGES for the measurement and Edward's call.
+
+### Prioritise Decoding Speed, and decoding faster (27 October 2026)
+
+Edward: a box for decoding speed over footprint (for comparisons, measuring and recording, and where
+install time matters), and decoding made faster where it can be.
+- **The box** (File Locator, key P; `[locator] prioritise_decoding`; `--prioritise-decoding` for
+  sieve and the hallway): the packer tries no mixing (`sieve::prioritise_decoding()`, in
+  `core/mix.*`, beside the rope's every-wave switch). Measured decoding: the rope 15 to 20 MB/s,
+  LZMA2 faster, mixing 0.3 to 1 MB/s. The ten PNGs: 247,692 bytes installed in 0.6 s (v26, mixing:
+  210,046 in 28 s). The report's line: `decoding  prioritised: mixing not tried on N file(s)`.
+  No format change. The File Locator remakes cached instructions when either newer box changes.
+- **The boxes wrap** to a second row where the window is too narrow (`search_row` returns the last
+  row's y; Tailor goes under it). Screenshots at 1920 by 1080 (Edward's size) fit on one row.
+- **Installing decodes files at once:** the rope's and mixing's files are deferred while the
+  listing is read, then decoded on `pack_threads()` threads (SIEVE_PACK_THREADS; now declared in
+  `pack.hpp` with `memory_free()`), no more begun while those under way hold half the memory free;
+  remakes after, in order; a failure reported as the first file's. The same bytes at any count. The
+  ten PNGs: 28.3 s to 9.1 s on 4 cores.
+- **Mixing faster, the same codes** (the pinned SHA-256s unchanged): counters moved by a reciprocal
+  multiplication in place of a division (checked exact for every pair it meets), the tables aligned
+  to 64 bytes a slot and each slot prefetched, and the SSE stages' rows prefetched before mixing
+  (their contexts are known then): decoding best of five, Don Quixote's first 800 KB 2.35 to 2.16 s,
+  the Vitruvian picture 3.97 to 3.27 s, the screenshot unchanged. Measured and not kept: a fixed
+  input count of 18 (a picture's 15 padded): no faster, and the screenshot 20% slower.
+- **Where the rest of the time is:** without the SSE stages mixing runs about 40% faster (they cost
+  0.07% on the Vitruvian, about 1.7% on text): a format change, for a later version if wanted.
+
 ### mix-v2: mixing existing methods in a new way, `sieve-manifest-v26` (27 October 2026)
 
 Edward's IDEAS §19.102, its "Next" taken up. Every part measured on the repository's own files

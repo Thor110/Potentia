@@ -103,6 +103,10 @@ public:
     // on a file's start). It can only make the instructions smaller, never larger; it takes longer.
     // Its state is the packer's own (sieve::rope_search_every_wave). Set once, at start.
     static void remember_every(std::function<void(bool)> changed);
+    // "Prioritise Decoding Speed" ([locator] prioritise_decoding), kept between runs: no file carried
+    // by mixing (0.3 to 1 MB/s to decode, 15 to 60 times slower than the other ways), so the
+    // instructions install quickly; larger. Its state is the packer's own (sieve::prioritise_decoding).
+    static void remember_decoding(std::function<void(bool)> changed);
 
     // From the system dialogs' callbacks (any thread): what was chosen, handed to the next frame.
     void picked(const std::string& path);
@@ -133,6 +137,8 @@ private:
         sieve::BigUint instructions_address;
         double made_rope_seconds = 0;
         bool made_archives = false;
+        bool made_every = false;    // Try every way, as it was when they were made
+        bool made_decoding = false; // Prioritise Decoding Speed, as it was
     };
     bool in_world() const { return bool(host_.go); }
     // `tailor`: the weighing tailors each line's filters to the files that are its items.

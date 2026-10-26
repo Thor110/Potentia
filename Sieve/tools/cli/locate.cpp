@@ -1,6 +1,7 @@
 // The file locator and the manifest creator (locate.hpp).
 
 #include "cli/locate.hpp"
+#include "cli/pack.hpp" // pack_threads, memory_free: files decoded at once
 
 #include <functional>
 #include <iterator>
@@ -14,6 +15,10 @@
 #include "Lzma2Dec.h"
 
 #include <algorithm>
+#include <condition_variable>
+#include <exception>
+#include <mutex>
+#include <thread>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -106,6 +111,76 @@ Remaker& remaker()
     return f;
 }
 
+namespace {
+
+// A file whose decoding waits, so that such files are decoded at once (the rope's and mixing's: each
+// on its own, its code a part of the rope stream). Its memory: roughly what decoding it holds.
+struct Deferred
+{
+    size_t i = 0;
+    std::string path;
+    std::function<std::vector<uint8_t>()> decode;
+    uint64_t memory = 0;
+};
+
+// Every deferred file decoded into bytes[i], on up to pack_threads() threads at once, with no more
+// begun while those under way hold half the memory free (2 GB where that cannot be known); one at a
+// time at the least. The bytes are the same at any thread count (each file is decoded alone); a
+// failure is reported as the first file's in order, as one at a time reports it.
+void decode_deferred(const std::vector<Deferred>& jobs, std::vector<std::vector<uint8_t>>& bytes)
+{
+    if (jobs.empty()) return;
+    const uint64_t free = memory_free(), budget = free ? free / 2 : (uint64_t(2) << 30);
+    const unsigned threads = unsigned(std::min<size_t>(std::max(1u, pack_threads()), jobs.size()));
+    std::vector<std::exception_ptr> failed(jobs.size());
+    std::mutex mx;
+    std::condition_variable cv;
+    size_t next = 0;
+    uint64_t in_use = 0;
+    auto work = [&] {
+        for (;;)
+        {
+            size_t j = 0;
+            {
+                std::unique_lock<std::mutex> lock(mx);
+                if (next >= jobs.size()) return;
+                j = next++;
+                cv.wait(lock, [&] { return in_use == 0 || in_use + jobs[j].memory <= budget; });
+                in_use += jobs[j].memory;
+            }
+            try
+            {
+                bytes[jobs[j].i] = jobs[j].decode();
+            }
+            catch (...)
+            {
+                failed[j] = std::current_exception();
+            }
+            {
+                std::lock_guard<std::mutex> lock(mx);
+                in_use -= jobs[j].memory;
+            }
+            cv.notify_all();
+        }
+    };
+    std::vector<std::thread> pool;
+    for (unsigned t = 1; t < threads; ++t) pool.emplace_back(work);
+    work();
+    for (auto& t : pool) t.join();
+    for (size_t j = 0; j < jobs.size(); ++j)
+        if (failed[j])
+            try
+            {
+                std::rethrow_exception(failed[j]);
+            }
+            catch (const std::invalid_argument& x)
+            {
+                throw std::runtime_error("manifest: " + jobs[j].path + ": " + x.what());
+            }
+}
+
+} // namespace
+
 std::vector<uint8_t> unpack_v4(Manifest& m)
 {
     if (m.streams.size() != m.x86.packed + m.lzma2.packed) throw std::runtime_error("manifest: its streams are not the size its lines say");
@@ -118,6 +193,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
     std::vector<std::vector<uint8_t>> bytes(files.size());
     std::vector<std::pair<size_t, std::vector<uint8_t>>> masks(files.size()); // derived: its base, its mask
     size_t xa = 0, pa = 0, ra = 0;
+    std::vector<Deferred> deferred; // the rope's and mixing's files, decoded at once after the listing is read
     auto take = [](const std::vector<uint8_t>& from, size_t& at, uint64_t n, const std::string& path) {
         if (from.size() - at < n) throw std::runtime_error("the installer ends before " + path);
         std::vector<uint8_t> out(from.begin() + std::ptrdiff_t(at), from.begin() + std::ptrdiff_t(at + n));
@@ -134,7 +210,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
         {
             const std::string inner = e.remake.substr(e.remake.rfind(' ') + 1);
             if (inner.empty() || inner.size() > 19 || inner.find_first_not_of("0123456789") != std::string::npos ||
-                (e.way != "raw" && e.way.rfind("rope ", 0) != 0 && e.way.rfind("pieces ", 0) != 0 && e.way.rfind("mix ", 0) != 0 && e.way.rfind("mix2 ", 0) != 0))
+                (e.way != "raw" && e.way.rfind("rope ", 0) != 0 && e.way.rfind("pieces ", 0) != 0 && e.way.rfind("mix ", 0) != 0 && e.way.rfind("mix2 ", 0) != 0 && e.way.rfind("mix3 ", 0) != 0))
                 throw std::runtime_error("manifest: " + e.path + " is remade from what no way gives");
             e.size = std::stoull(inner);
         }
@@ -235,7 +311,9 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
                     throw std::invalid_argument("a rope-wave-v5 way (the byte above) in " + std::string(m.version()) + ", which has none");
                 if (rope_v6(rp) && !m.v23)
                     throw std::invalid_argument("a rope-wave-v6 way (the triangle) in " + std::string(m.version()) + ", which has none");
-                bytes[i] = rope_file(std::span<const uint8_t>(m.rope_carried.data() + ra, size_t(len)), rp, e.size);
+                const std::span<const uint8_t> code(m.rope_carried.data() + ra, size_t(len));
+                const uint64_t size = e.size;
+                deferred.push_back({i, e.path, [code, rp, size] { return rope_file(code, rp, size); }, size * 24 + code.size()});
             }
             catch (const std::invalid_argument& x)
             {
@@ -243,7 +321,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
             }
             ra += size_t(len);
         }
-        else if (m.roped && (m.v24 && e.way.rfind("mix ", 0) == 0 || m.v26 && e.way.rfind("mix2 ", 0) == 0))
+        else if (m.roped && (m.v24 && e.way.rfind("mix ", 0) == 0 || m.v26 && e.way.rfind("mix2 ", 0) == 0 || m.v27 && e.way.rfind("mix3 ", 0) == 0))
         {
             // v24: made again by mixing, from its code, next in the rope stream (a varint of its length first).
             // v26: "mix2 B22" (mix-v2), or a picture's "mix2 B22 I949x1", the same way.
@@ -259,8 +337,30 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
             try
             {
                 const std::span<const uint8_t> code(m.rope_carried.data() + ra, size_t(len));
-                bytes[i] = e.way.rfind("mix2 ", 0) == 0 ? mix2_file(code, Mix2Params::parse(e.way.substr(5)), e.size)
-                                                       : mix_file(code, MixParams::parse(e.way.substr(4)), e.size);
+                const uint64_t size = e.size;
+                if (e.way.rfind("mix3 ", 0) == 0)
+                {
+                    // v27: mix-v3, with a word list (made ready here, once, before the files are decoded at once).
+                    const Mix3Params mp = Mix3Params::parse(e.way.substr(5));
+                    if (!mix_words())
+                        throw std::runtime_error("these Sieve instructions carry a file mixed with a word list (" + e.path +
+                                                 "): open them with Sieve (sieve install, or the hallway's File Locator), which has it");
+                    const MixDictionary* words = &mix_words()(mp.dictionary);
+                    const uint64_t memory = (uint64_t(16) << mp.table_bits) * 4 + (uint64_t(16) << 20) + (uint64_t(9) << 20) + size;
+                    deferred.push_back({i, e.path, [code, mp, words, size] { return mix3_file(code, mp, *words, size); }, memory});
+                }
+                else if (e.way.rfind("mix2 ", 0) == 0)
+                {
+                    const Mix2Params mp = Mix2Params::parse(e.way.substr(5));
+                    // (15 tables of 2^B counters of 4 bytes, the match's table, the SSE stages, the file)
+                    const uint64_t memory = (uint64_t(15) << mp.table_bits) * 4 + (uint64_t(16) << 20) + (uint64_t(9) << 20) + size;
+                    deferred.push_back({i, e.path, [code, mp, size] { return mix2_file(code, mp, size); }, memory});
+                }
+                else
+                {
+                    const MixParams mp = MixParams::parse(e.way.substr(4));
+                    deferred.push_back({i, e.path, [code, mp, size] { return mix_file(code, mp, size); }, (uint64_t(8) << mp.table_bits) * 4 + size});
+                }
             }
             catch (const std::invalid_argument& x)
             {
@@ -269,7 +369,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
             ra += size_t(len);
         }
         else if (e.way.rfind("lines ", 0) != 0) throw std::runtime_error("manifest: " + e.path + " has no way to be carried (its way: \"" + e.way + "\")");
-        if (!e.remake.empty())
+        if (!e.remake.empty() && !(!deferred.empty() && deferred.back().i == i)) // (a deferred file's, once it is decoded)
         {
             if (!remaker())
                 throw std::runtime_error("these Sieve instructions remake an archive from what it holds (" + e.path +
@@ -281,13 +381,27 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
         }
     }
     if (ra != m.rope_carried.size()) throw std::runtime_error("manifest: its rope stream holds more than its files");
+    // The deferred files decoded, at once; then those remade from them, in order.
+    decode_deferred(deferred, bytes);
+    for (const Deferred& d : deferred)
+    {
+        const ManifestEntry& e = *files[d.i];
+        if (e.remake.empty()) continue;
+        if (!remaker())
+            throw std::runtime_error("these Sieve instructions remake an archive from what it holds (" + e.path +
+                                     "): open them with Sieve (sieve install, or the hallway's File Locator), which remakes it");
+        bytes[d.i] = remaker()(e.remake, bytes[d.i]);
+        if (bytes[d.i].size() != e.size)
+            throw std::runtime_error(e.path + " was not remade as it was (" + std::to_string(bytes[d.i].size()) + " bytes, not " +
+                                     std::to_string(e.size) + "): this Sieve's compressor writes differently from the one that made the instructions");
+    }
     for (size_t i = 0; i < files.size(); ++i)
     {
         const ManifestEntry& e = *files[i];
         if (e.way.rfind("lines ", 0) != 0) continue;
         const size_t k = size_t(std::stoull(e.way.substr(6)));
         if (k >= files.size() || (files[k]->way != "x86" && files[k]->way != "raw" && files[k]->way.rfind("item ", 0) != 0 &&
-                                  files[k]->way.rfind("rope ", 0) != 0 && files[k]->way.rfind("pieces ", 0) != 0 && files[k]->way.rfind("mix ", 0) != 0 && files[k]->way.rfind("mix2 ", 0) != 0))
+                                  files[k]->way.rfind("rope ", 0) != 0 && files[k]->way.rfind("pieces ", 0) != 0 && files[k]->way.rfind("mix ", 0) != 0 && files[k]->way.rfind("mix2 ", 0) != 0 && files[k]->way.rfind("mix3 ", 0) != 0))
             throw std::runtime_error("manifest: " + e.path + " is derived from a file that is not carried");
         const auto lines = lines_of(bytes[k]);
         masks[i] = {k, take(plain, pa, (lines.size() + 7) / 8, e.path)};
@@ -400,7 +514,7 @@ std::string manifest_path(const fs::path& p, const fs::path& root)
 
 const char* Manifest::version() const
 {
-    return v26 ? kMix2ManifestVersion : v25 ? kPngManifestVersion : v24 ? kMixManifestVersion : v23 ? kRopeTriangleManifestVersion : v22 ? kRarManifestVersion : v21 ? kDeflateManifestVersion : v20 ? kNewestArchivesManifestVersion : more_archives ? kMoreArchivesManifestVersion : !graph.empty() ? kGraphManifestVersion : remake_gz ? kGzipManifestVersion : binary ? kBinaryManifestVersion : rope_above ? kRopeAboveManifestVersion : archives ? kArchivesManifestVersion : pieces ? kPiecesManifestVersion : trimmed ? kTrimmedManifestVersion : rope_groups ? kRopeGroupsManifestVersion : rope_lines ? kRopeLinesManifestVersion : rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
+    return v27 ? kMix3ManifestVersion : v26 ? kMix2ManifestVersion : v25 ? kPngManifestVersion : v24 ? kMixManifestVersion : v23 ? kRopeTriangleManifestVersion : v22 ? kRarManifestVersion : v21 ? kDeflateManifestVersion : v20 ? kNewestArchivesManifestVersion : more_archives ? kMoreArchivesManifestVersion : !graph.empty() ? kGraphManifestVersion : remake_gz ? kGzipManifestVersion : binary ? kBinaryManifestVersion : rope_above ? kRopeAboveManifestVersion : archives ? kArchivesManifestVersion : pieces ? kPiecesManifestVersion : trimmed ? kTrimmedManifestVersion : rope_groups ? kRopeGroupsManifestVersion : rope_lines ? kRopeLinesManifestVersion : rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
          : with_contents ? kInstallManifestVersion : with_addresses ? kAddressManifestVersion : kManifestVersion;
 }
 
@@ -862,7 +976,7 @@ std::string listing_from_bytes(std::string_view b)
 // its size, then it.
 static std::vector<uint8_t> binary_head(const Manifest& m)
 {
-    std::vector<uint8_t> o = {'s', 'i', 'e', 'v', 'e', uint8_t(m.v26 ? 26 : m.v25 ? 25 : m.v24 ? 24 : m.v23 ? 23 : m.v22 ? 22 : m.v21 ? 21 : m.v20 ? 20 : m.more_archives ? 19 : !m.graph.empty() ? 18 : m.remake_gz ? 17 : 16)};
+    std::vector<uint8_t> o = {'s', 'i', 'e', 'v', 'e', uint8_t(m.v27 ? 27 : m.v26 ? 26 : m.v25 ? 25 : m.v24 ? 24 : m.v23 ? 23 : m.v22 ? 22 : m.v21 ? 21 : m.v20 ? 20 : m.more_archives ? 19 : !m.graph.empty() ? 18 : m.remake_gz ? 17 : 16)};
     const bool root = !m.one_file_root(), items = !m.trimmed || m.item_stream.packed || m.item_stream.bytes;
     const bool body_packed = m.listing_stream.packed != 0;
     o.push_back(uint8_t((root ? 1 : 0) | (m.x86.packed ? 2 : 0) | (m.lzma2.packed ? 4 : 0) | (items ? 8 : 0) | (m.roped ? 16 : 0) |
@@ -1036,7 +1150,7 @@ Manifest Manifest::parse(std::string_view whole)
 {
     // v16: the head in bytes, read back into v15's text (its root's and streams' lines, its lines,
     // the tree's, the rest of its body, "end"), followed by what follows it.
-    if (whole.size() >= 6 && whole.substr(0, 5) == "sieve" && uint8_t(whole[5]) >= 16 && uint8_t(whole[5]) <= 26)
+    if (whole.size() >= 6 && whole.substr(0, 5) == "sieve" && uint8_t(whole[5]) >= 16 && uint8_t(whole[5]) <= 27)
     {
         const uint8_t v = uint8_t(whole[5]);
         size_t at = 6;
@@ -1047,7 +1161,7 @@ Manifest Manifest::parse(std::string_view whole)
         // (v17's text is v15's with gzip remade allowed, v18's with a graph part too, v19's with bzip2
         // and zstd as well: its first line says so.)
         std::string text =
-            std::string(v == 26 ? kMix2ManifestVersion : v == 25 ? kPngManifestVersion : v == 24 ? kMixManifestVersion : v == 23 ? kRopeTriangleManifestVersion : v == 22 ? kRarManifestVersion : v == 21 ? kDeflateManifestVersion : v == 20 ? kNewestArchivesManifestVersion : v == 19 ? kMoreArchivesManifestVersion : v == 18 ? kGraphManifestVersion : v == 17 ? kGzipManifestVersion : kRopeAboveManifestVersion) + "\n";
+            std::string(v == 27 ? kMix3ManifestVersion : v == 26 ? kMix2ManifestVersion : v == 25 ? kPngManifestVersion : v == 24 ? kMixManifestVersion : v == 23 ? kRopeTriangleManifestVersion : v == 22 ? kRarManifestVersion : v == 21 ? kDeflateManifestVersion : v == 20 ? kNewestArchivesManifestVersion : v == 19 ? kMoreArchivesManifestVersion : v == 18 ? kGraphManifestVersion : v == 17 ? kGzipManifestVersion : kRopeAboveManifestVersion) + "\n";
         auto take = [&](uint64_t n) {
             if (n > whole.size() - at) throw std::runtime_error("manifest: its head ends early");
             const std::string_view v = whole.substr(at, size_t(n));
@@ -1184,8 +1298,8 @@ Manifest Manifest::parse(std::string_view whole)
     else if (lines[0] == kRopeGroupsManifestVersion)
         m.rope_groups = m.rope_lines = m.rope_columns = m.roped = m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] == kGzipManifestVersion || lines[0] == kGraphManifestVersion || lines[0] == kMoreArchivesManifestVersion ||
-             lines[0] == kNewestArchivesManifestVersion || lines[0] == kDeflateManifestVersion || lines[0] == kRarManifestVersion || lines[0] == kRopeTriangleManifestVersion || lines[0] == kMixManifestVersion || lines[0] == kPngManifestVersion || lines[0] == kMix2ManifestVersion)
-        m.v26 = lines[0] == kMix2ManifestVersion, m.v25 = lines[0] == kPngManifestVersion || m.v26, m.v24 = lines[0] == kMixManifestVersion || m.v25, m.v23 = lines[0] == kRopeTriangleManifestVersion || m.v24, m.v22 = lines[0] == kRarManifestVersion || m.v23, m.v21 = lines[0] == kDeflateManifestVersion || m.v22, m.v20 = lines[0] == kNewestArchivesManifestVersion || m.v21,
+             lines[0] == kNewestArchivesManifestVersion || lines[0] == kDeflateManifestVersion || lines[0] == kRarManifestVersion || lines[0] == kRopeTriangleManifestVersion || lines[0] == kMixManifestVersion || lines[0] == kPngManifestVersion || lines[0] == kMix2ManifestVersion || lines[0] == kMix3ManifestVersion)
+        m.v27 = lines[0] == kMix3ManifestVersion, m.v26 = lines[0] == kMix2ManifestVersion || m.v27, m.v25 = lines[0] == kPngManifestVersion || m.v26, m.v24 = lines[0] == kMixManifestVersion || m.v25, m.v23 = lines[0] == kRopeTriangleManifestVersion || m.v24, m.v22 = lines[0] == kRarManifestVersion || m.v23, m.v21 = lines[0] == kDeflateManifestVersion || m.v22, m.v20 = lines[0] == kNewestArchivesManifestVersion || m.v21,
         m.more_archives = lines[0] == kMoreArchivesManifestVersion || m.v20, m.remake_gz = m.binary = m.rope_above = m.archives = m.pieces = m.trimmed = m.rope_groups = m.rope_lines = m.rope_columns = m.roped = m.compact =
             m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] == kRopeAboveManifestVersion)
@@ -1314,7 +1428,7 @@ Manifest Manifest::parse(std::string_view whole)
         if (m.items) m.tree = field(lines[first++], "tree");
     }
     const bool graph_allowed = lines[0] == kGraphManifestVersion || lines[0] == kMoreArchivesManifestVersion || lines[0] == kNewestArchivesManifestVersion ||
-                               lines[0] == kDeflateManifestVersion || lines[0] == kRarManifestVersion || lines[0] == kRopeTriangleManifestVersion || lines[0] == kMixManifestVersion || lines[0] == kPngManifestVersion || lines[0] == kMix2ManifestVersion;
+                               lines[0] == kDeflateManifestVersion || lines[0] == kRarManifestVersion || lines[0] == kRopeTriangleManifestVersion || lines[0] == kMixManifestVersion || lines[0] == kPngManifestVersion || lines[0] == kMix2ManifestVersion || lines[0] == kMix3ManifestVersion;
     const bool graph_needed = lines[0] == kGraphManifestVersion; // (v19's is allowed, not needed)
     for (size_t i = first; i + 1 < lines.size(); ++i)
     {
@@ -1549,6 +1663,14 @@ std::string tree_sha256(const Manifest& m)
 
 void set_item_maker(ItemMaker maker) { item_maker() = std::move(maker); }
 void set_remaker(Remaker r) { remaker() = std::move(r); }
+
+MixWords& mix_words_hook()
+{
+    static MixWords f;
+    return f;
+}
+void set_mix_words(MixWords words) { mix_words_hook() = std::move(words); }
+const MixWords& mix_words() { return mix_words_hook(); }
 bool has_item_maker() { return bool(item_maker()); }
 
 BigUint read_address_file(const fs::path& file, bool hex)

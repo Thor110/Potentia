@@ -11,6 +11,7 @@
 #include "harness.hpp"
 #include "cli/items.hpp"
 #include "cli/dictionaries.hpp" // executable_dir (--metrics-text)
+#include "sieve/mix.hpp"       // Prioritise Decoding Speed
 #include "sieve/rope_wave.hpp" // the rope's search through every wave
 #include "cli/locate.hpp" // read_file_bytes (--cipher-in)
 #include "sieve/llm.hpp"
@@ -119,6 +120,8 @@ const char* kUsage =
     "  --limits-focus LINE the line the setup menu's FIND MY LIMITS grows (default all: every line)\n"
     "  --search-every-wave the File Locator's Try every way ticked, for this run: the search's\n"
     "                      shortcuts off, up to its time ([locator] search_every_wave)\n"
+    "  --prioritise-decoding  the File Locator's Prioritise Decoding Speed ticked, for this run:\n"
+    "                      no file mixed, so its instructions install quickly ([locator] prioritise_decoding)\n"
     "  --menu              with --screenshot: a picture of the setup menu (--press keys go to it)\n"
     "                      (--busy: while the dimensions are still being calculated, if that is caught)\n"
     "  --main-menu         with --screenshot: a picture of the main menu (--press keys go to it)\n"
@@ -689,6 +692,9 @@ int run(const Args& a)
     // ([locator] search_every_wave; --search-every-wave for this run).
     if (a.has("search-every-wave")) app.locator_every_wave = true;
     sieve::set_rope_search_every_wave(app.locator_every_wave);
+    // No file mixed ([locator] prioritise_decoding; --prioritise-decoding for this run).
+    if (a.has("prioritise-decoding")) app.locator_decoding = true;
+    sieve::set_prioritise_decoding(app.locator_decoding);
     // How a model given as a file keeps its weights ([models] widen_weights; --widen-weights for this run).
     if (a.has("widen-weights")) app.widen_weights = true;
     sieve::llm::set_widen_weights(app.widen_weights);
@@ -766,6 +772,10 @@ int run(const Args& a)
     });
     FileLocator::remember_every(shot ? std::function<void(bool)>() : [&app, app_path](bool on) {
         app.locator_every_wave = on;
+        app.save(app_path);
+    });
+    FileLocator::remember_decoding(shot ? std::function<void(bool)>() : [&app, app_path](bool on) {
+        app.locator_decoding = on;
         app.save(app_path);
     });
     FileLocator::remember_archives(app.locator_archives || a.has("optimise-archives") || a.has("optimise-compressed"), shot ? std::function<void(bool)>() : [&app, app_path](bool on) {

@@ -2,6 +2,7 @@
 #include "cli/rope.hpp"
 
 #include "cli/compare.hpp"
+#include "cli/items.hpp" // use_item_maker: mix-v3's word lists
 #include "cli/locate.hpp"
 #include "sieve/rope_wave.hpp"
 #include "sieve/mix.hpp"
@@ -106,13 +107,27 @@ int cmd_rope(const Args& a)
 int cmd_mix(const Args& a)
 {
     // mix-v2 unless --v1 is given. Parameters: mix-v1's "B22"; mix-v2's "B22", or a picture's "B22 I949x1".
-    const bool v1 = a.has("v1");
+    const bool v1 = a.has("v1"), v3 = a.has("words");
     if (v1 && a.has("picture")) throw std::invalid_argument("mix --picture is mix-v2's (not with --v1)");
+    if (v3 && (v1 || a.has("picture"))) throw std::invalid_argument("mix --words is mix-v3's, for text (not with --v1 or --picture)");
+    // mix-v3's word list: the registered one of that size, made ready once.
+    uint32_t list = 0;
+    if (v3)
+    {
+        const std::string w = a.get("words");
+        if (w != "35" && w != "60" && w != "80") throw std::invalid_argument("mix --words is 35, 60 or 80 (scowl-en-35, 60 or 80): " + w);
+        list = uint32_t(std::stoul(w));
+        if (!mix_words()) use_item_maker();
+    }
     auto code_of = [&](std::span<const uint8_t> f, const std::string& params) {
-        return v1 ? mix_code(f, MixParams::parse(params)) : mix2_code(f, Mix2Params::parse(params));
+        return v1 ? mix_code(f, MixParams::parse(params))
+               : v3 ? mix3_code(f, Mix3Params::parse(params), mix_words()(list))
+                    : mix2_code(f, Mix2Params::parse(params));
     };
     auto file_of = [&](std::span<const uint8_t> c, const std::string& params, uint64_t size) {
-        return v1 ? mix_file(c, MixParams::parse(params), size) : mix2_file(c, Mix2Params::parse(params), size);
+        return v1 ? mix_file(c, MixParams::parse(params), size)
+               : v3 ? mix3_file(c, Mix3Params::parse(params), mix_words()(list), size)
+                    : mix2_file(c, Mix2Params::parse(params), size);
     };
     if (a.has("decode"))
     {
@@ -130,6 +145,7 @@ int cmd_mix(const Args& a)
     std::string params;
     if (a.has("params")) params = a.get("params");
     else if (v1) params = MixParams::for_size(file.size()).text();
+    else if (v3) params = Mix3Params::for_size(file.size(), list).text();
     else
     {
         unsigned w = 0, c = 1;
@@ -142,19 +158,19 @@ int cmd_mix(const Args& a)
     const auto t0 = clk::now();
     const std::vector<uint8_t> code = code_of(file, params);
     const auto t1 = clk::now();
-    if (file_of(code, params, file.size()) != file) throw std::logic_error(std::string(v1 ? kMixVersion : kMix2Version) + " did not give the file back (a fault in the coder)");
+    if (file_of(code, params, file.size()) != file) throw std::logic_error(std::string(v1 ? kMixVersion : v3 ? kMix3Version : kMix2Version) + " did not give the file back (a fault in the coder)");
     const auto t2 = clk::now();
     const uint64_t lz = lzma2_size(file);
     char sp[96];
     std::snprintf(sp, sizeof sp, "coded in %.2f s, read back in %.2f s", std::chrono::duration<double>(t1 - t0).count(),
                   std::chrono::duration<double>(t2 - t1).count());
-    std::cout << "mix       " << params << " (" << (v1 ? kMixVersion : kMix2Version) << ")\n"
+    std::cout << "mix       " << params << " (" << (v1 ? kMixVersion : v3 ? kMix3Version : kMix2Version) << ")\n"
               << "code      " << code.size() << " bytes, " << pct(code.size(), file.size()) << " of the file; read back and checked (" << sp << ")\n"
               << "LZMA2     " << lz << " bytes, " << pct(lz, file.size()) << " (7z's, one stream, no container)\n";
     if (a.has("out"))
     {
         write_bytes(a.get("out"), code);
-        std::cout << "written   " << a.get("out") << " (decode it with: sieve mix --decode " << a.get("out") << (v1 ? " --v1" : "") << " --params \"" << params
+        std::cout << "written   " << a.get("out") << " (decode it with: sieve mix --decode " << a.get("out") << (v1 ? " --v1" : v3 ? " --words " + std::to_string(list) : std::string()) << " --params \"" << params
                   << "\" --size " << file.size() << " --out FILE)\n";
     }
     return 0;

@@ -69,8 +69,11 @@ struct PackReport
     bool v24 = false;                    // v24: some file carried by mixing (mix-v1)
     bool v25 = false;                    // v25: some PNG made again from its skeleton
     bool v26 = false;                    // v26: some file carried by mix-v2
+    bool v27 = false;                    // v27: some file carried by mix-v3
+    size_t mixed3 = 0;                   // v27: files carried by mix-v3
     size_t mixed2 = 0;                   // v26: files carried by mix-v2 (of `mixed`), as pictures
     size_t mixed2_pictures = 0;
+    size_t decoding_first = 0;           // files mixing was not tried on: Prioritise Decoding Speed
     size_t mixed = 0;                    // v24: files carried by mixing
     bool rope_v6 = false;                // v23: some rope way rope-wave-v6's
     uint64_t mix_bytes = 0, mix_carried = 0; // v24: their bytes, and their codes
@@ -138,6 +141,11 @@ struct FileWays
     bool forced = false;            // a force stop came first: only `lzma2` and `tried` are set
 };
 FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest = 6, bool pieces = true);
+
+// Threads for work made of separate parts (SIEVE_PACK_THREADS, else every core), and the memory free
+// now in bytes (0 where it cannot be known): the packer's, and installing's (files decoded at once).
+unsigned pack_threads();
+uint64_t memory_free();
 
 // v14: an archive remade from what it holds, by its recipe ("xz 6 crc64 <size>"): what installing
 // does (set as the manifest's remaker).

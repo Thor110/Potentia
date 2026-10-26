@@ -68,6 +68,7 @@
 
 #include "cli/rar_remake.hpp"
 
+#include "sieve/mix.hpp" // MixDictionary (v27)
 #include "sieve/biguint.hpp"
 
 #include <atomic>
@@ -183,6 +184,9 @@ inline constexpr const char* kPngManifestVersion = "sieve-manifest-v25";
 // sieve/mix.hpp): a way "mix2 B<bits>", or a picture's "mix2 B<bits> I<width>x<bytes a pixel>", its
 // code next in the rope stream as v24's is.
 inline constexpr const char* kMix2ManifestVersion = "sieve-manifest-v26";
+// v27 (27 October 2026): v26 whose files may be carried by mix-v3 (mix-v2 with a word list's model,
+// sieve/mix.hpp): a way "mix3 B<bits> D<list>", carried as v24's "mix" is.
+inline constexpr const char* kMix3ManifestVersion = "sieve-manifest-v27";
 
 // The "u" lines' formats v20 adds (an archive carried as its contents).
 inline bool is_v20_format(const std::string& f)
@@ -272,6 +276,7 @@ struct Manifest
     bool v24 = false; // v24: some file is carried by mixing (v23 is set too)
     bool v25 = false; // v25: some skeleton holds a run of chunks: a PNG (v24 is set too)
     bool v26 = false; // v26: some file is carried by mix-v2 (v25 is set too)
+    bool v27 = false; // v27: some file is carried by mix-v3 (v26 is set too)
     bool body_text = false; // v20: its body as text after all (the head's flag 128), where that came out smaller
     // v14: each archive carried as its contents: its format ("7z", "xz"), its size, its path, and the
     // folder (or file) its contents are in.
@@ -324,6 +329,12 @@ void set_remaker(Remaker remaker);
 using ItemMaker = std::function<std::vector<uint8_t>(const std::string& line, const std::string& address)>;
 void set_item_maker(ItemMaker maker);
 bool has_item_maker();
+// v27: a word list for mix-v3 (D35, D60, D80: scowl-en-35, 60, 80), checked against its SHA-256 and
+// made ready once; set where the dictionaries are (use_item_maker), else a reader says to use Sieve.
+// Throws std::runtime_error where the list cannot be had.
+using MixWords = std::function<const MixDictionary&(uint32_t list)>;
+void set_mix_words(MixWords words);
+const MixWords& mix_words();
 
 // Every file's address put into the manifest, making it v2. Reads every file again.
 void add_addresses(Manifest& m, const std::filesystem::path& root);

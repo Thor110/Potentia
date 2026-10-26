@@ -6001,6 +6001,57 @@ void test_mix2()
     CHECK(pinned_picture == "cc0a6fe8d16932d05fcd967de60566e9c025605383fec73144d2c72dd0446251");
 }
 
+// mix-v3: a word list made ready (its lines, a carriage return left out, case folded, lines of
+// anything but letters left out); the parameters; every shape of file given back; mix-v2's code
+// when the list knows nothing of the text; the code of one text pinned by its SHA-256.
+void test_mix3()
+{
+    const std::string list_text = "the\r\nrope\nTriangle\npulls\ntight\nthrough\nevery\nvalue\nSieve\nmixes\nit's\n\n1990s\nthen\n";
+    const MixDictionary words(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(list_text.data()), list_text.size()));
+    CHECK(words.words() == 11); // (it's, 1990s and the empty line left out)
+    const MixDictionary::Node& root = words.nodes()[0];
+    CHECK(root.pre[27] == 11);                                   // every word goes on from the root by a letter
+    CHECK(root.pre['t' - 'a' + 2] - root.pre['t' - 'a' + 1] == 5); // the, triangle, tight, through, then
+    CHECK(Mix3Params::parse("B22 D60").dictionary == 60 && Mix3Params::parse("B16 D35").text() == "B16 D35");
+    CHECK(throws([] { Mix3Params::parse("B22"); }));
+    CHECK(throws([] { Mix3Params::parse("B22 D61"); }));
+    CHECK(throws([] { Mix3Params::parse("B22 D060"); }));
+    CHECK(throws([] { Mix3Params::parse("B15 D60"); }));
+    CHECK(Mix3Params::for_size(1u << 20).text() == "B21 D60");
+    std::mt19937 rng(11);
+    std::vector<uint8_t> noise(3000), all(256), text;
+    for (auto& b : noise) b = uint8_t(rng());
+    for (int i = 0; i < 256; ++i) all[size_t(i)] = uint8_t(i);
+    const char* said[] = {"the", "rope", "triangle", "pulls", "tight", "through", "every", "value", "Sieve", "mixes", "TIGHTER", "ropes"};
+    for (int i = 0; i < 2000; ++i)
+    {
+        const std::string w = said[rng() % 12];
+        text.insert(text.end(), w.begin(), w.end());
+        text.push_back(rng() % 7 ? ' ' : (rng() % 2 ? '\n' : '.'));
+    }
+    const std::vector<std::vector<uint8_t>> files{{}, {0}, {'a'}, std::vector<uint8_t>(5000, 'e'), noise, all, text};
+    bool back = true;
+    for (const auto& f : files)
+        for (const char* params : {"B16 D60", "B17 D80"})
+        {
+            const Mix3Params p = Mix3Params::parse(params);
+            back = back && mix3_file(mix3_code(f, p, words), p, words, f.size()) == f;
+        }
+    CHECK(back);
+    const Mix3Params p = Mix3Params::parse("B16 D60");
+    const std::vector<uint8_t> c = mix3_code(text, p, words);
+    // Its start, before mixing has learnt the words: smaller with the list, which knows them.
+    const std::vector<uint8_t> start(text.begin(), text.begin() + 200);
+    CHECK(mix3_code(start, p, words).size() < mix2_code(start, Mix2Params::parse("B16")).size());
+    std::vector<uint8_t> more = c;
+    more.insert(more.end(), {1, 2, 3, 4, 5, 6}); // (the reader reads four bytes ahead: fewer read as the code's own)
+    CHECK(throws([&] { mix3_file(more, p, words, text.size()); }));
+    CHECK(throws([&] { mix3_file(std::span<const uint8_t>(c.data(), c.size() / 2), p, words, text.size()); }));
+    const std::string pinned = Sha256::hex(Sha256::hash(std::string(c.begin(), c.end())));
+    std::cout << "mix-v3: a text of " << text.size() << " bytes in " << c.size() << ", sha256 " << pinned << "\n";
+    CHECK(pinned == "21fe39717297673e2bdc3a9644a9a3e9c3bc26830cb2378b328899589fc915c3");
+}
+
 void test_rope_wave()
 {
     // The parameters as written, and refused when written otherwise or out of range.
@@ -6400,6 +6451,7 @@ void run_all(int argc, char** argv)
         test_rope_wave();
         test_mix();
         test_mix2();
+        test_mix3();
     }
 }
 

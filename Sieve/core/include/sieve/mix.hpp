@@ -68,6 +68,56 @@ struct Mix2Params
     bool operator==(const Mix2Params&) const = default;
 };
 
+// mix-v3 (27 October 2026, IDEAS §19.102, SPECIFICATIONS §12.2): mix-v2 for text with one model
+// more, a word list's: from the word so far, the letters the list has next (and the word's end), each
+// by how many of its words go on so, give every bit a probability; it is an input of its own and its
+// place in the word a context. Edward's grammar as a prediction, not a rule: a word not in the list
+// costs a little, never fails. The list is one of Sieve's registered dictionaries, pinned by its
+// SHA-256 (D60: scowl-en-60), which every reader has. Measured (27 October 2026): Don Quixote's first
+// 800 KB 187,650 bytes (mix-v2 191,190), a 3 KB text 1,212 (1,303), a word list 27,138 (41,770); on a
+// PDF 0.45% larger, so the packer weighs both.
+inline constexpr const char* kMix3Version = "mix-v3";
+
+// A word list made ready: its lines (a carriage return at the end left out), A to Z folded to a to z,
+// those of letters only, as a trie with each node's count of words going on by each letter or ending.
+class MixDictionary
+{
+public:
+    explicit MixDictionary(std::span<const uint8_t> list);
+    struct Node
+    {
+        int32_t child[26];
+        uint32_t pre[28]; // the counts summed in byte order: the end (as a space, 0x20), then a to z
+    };
+    const std::vector<Node>& nodes() const { return nodes_; }
+    uint64_t words() const { return words_; }
+
+private:
+    std::vector<Node> nodes_;
+    uint64_t words_ = 0;
+};
+
+struct Mix3Params
+{
+    uint32_t table_bits = 22; // B: 16 to 22
+    uint32_t dictionary = 60; // D: the registered SCOWL list of this size, 35, 60 or 80
+    void check() const;
+    std::string text() const; // "B22 D60"
+    static Mix3Params parse(std::string_view text);
+    static Mix3Params for_size(uint64_t bytes, uint32_t dictionary = 60);
+    bool operator==(const Mix3Params&) const = default;
+};
+
+std::vector<uint8_t> mix3_code(std::span<const uint8_t> file, const Mix3Params& p, const MixDictionary& words);
+std::vector<uint8_t> mix3_file(std::span<const uint8_t> code, const Mix3Params& p, const MixDictionary& words, uint64_t size);
+
+// Prioritise Decoding Speed (--prioritise-decoding, the File Locator's box, [locator]
+// prioritise_decoding): the packer carries no file by mixing, whose decoding (0.3 to 1 MB/s,
+// measured 27 October 2026) is 15 to 60 times slower than the rope's (15 to 20 MB/s) or LZMA2's;
+// of the other ways, the smallest. For the whole run.
+void set_prioritise_decoding(bool on);
+bool prioritise_decoding();
+
 std::vector<uint8_t> mix2_code(std::span<const uint8_t> file, const Mix2Params& p);
 std::vector<uint8_t> mix2_file(std::span<const uint8_t> code, const Mix2Params& p, uint64_t size);
 

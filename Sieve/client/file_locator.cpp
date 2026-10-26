@@ -12,6 +12,7 @@
 #include "cli/locate.hpp"
 #include "cli/pack.hpp"
 #include "cli/timings.hpp"
+#include "sieve/mix.hpp" // Prioritise Decoding Speed
 #include "sieve/rope_wave.hpp"
 #include "sieve/stop.hpp"
 
@@ -47,7 +48,7 @@ cli::Manifest file_instructions(const fs::path& p, const std::vector<uint8_t>& b
     cli::Manifest m = cli::manifest_of_file(p);
     m.contents = bytes;
     m.with_contents = true;
-    cli::add_packed_items(m, p.parent_path(), items, nullptr, 8, false, rope_seconds, 9, true, true, archives);
+    cli::add_packed_items(m, p.parent_path(), items, nullptr, 8, false, rope_seconds, 10, true, true, archives);
     return m;
 }
 
@@ -252,6 +253,16 @@ std::function<void(bool)>& kept_every()
 } // namespace
 
 void FileLocator::remember_every(std::function<void(bool)> changed) { kept_every() = std::move(changed); }
+
+namespace {
+std::function<void(bool)>& kept_decoding()
+{
+    static std::function<void(bool)> k;
+    return k;
+}
+} // namespace
+
+void FileLocator::remember_decoding(std::function<void(bool)> changed) { kept_decoding() = std::move(changed); }
 
 void FileLocator::set_archives(bool on) { optimise_archives_ = on; }
 
@@ -565,6 +576,8 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 r.instructions_address = std::move(ma);
                 r.made_rope_seconds = by_total ? total : per_file;
                 r.made_archives = archives;
+                r.made_every = sieve::rope_search_every_wave();
+                r.made_decoding = sieve::prioritise_decoding();
                 refine_estimate(5);
             }
             else if (fs::is_directory(p))
@@ -610,7 +623,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                     progress("packing its Sieve instructions");
                     const auto packing = Clock::now();
                     r.made_rope_seconds = by_total ? cli::budget_per_file(total, n) : per_file;
-                    cli::add_packed_items(with, p, host_.item_args ? host_.item_args() : cli::Args{}, nullptr, 8, false, r.made_rope_seconds, 9, true,
+                    cli::add_packed_items(with, p, host_.item_args ? host_.item_args() : cli::Args{}, nullptr, 8, false, r.made_rope_seconds, 10, true,
                                           true, archives);
                     r.pack_seconds = since(packing);
                 }
@@ -629,6 +642,8 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 r.instructions = std::move(with);
                 r.instructions_address = std::move(ma);
                 r.made_archives = archives;
+                r.made_every = sieve::rope_search_every_wave();
+                r.made_decoding = sieve::prioritise_decoding();
                 const std::string plain = r.manifest.text(); // the tree's identity is its v1 manifest's
                 r.sha256 = cli::sha256_hex(std::vector<uint8_t>(plain.begin(), plain.end()));
                 refine_estimate(5);
@@ -707,7 +722,8 @@ void FileLocator::save(const std::string& to)
     const bool archives = optimise_archives_;
     // Made when it was read, with what is set now: written as it is, nothing packed again (and the
     // graph of how it was made is kept).
-    const bool made = r.instructions && r.made_rope_seconds == rope_seconds && r.made_archives == archives;
+    const bool made = r.instructions && r.made_rope_seconds == rope_seconds && r.made_archives == archives &&
+                      r.made_every == sieve::rope_search_every_wave() && r.made_decoding == sieve::prioritise_decoding();
     start_job(!made);
     if (made)
     {
@@ -740,7 +756,7 @@ void FileLocator::save(const std::string& to)
                     // A file's instructions are a folder's holding just it (file_instructions).
                     const cli::Args items = host_.item_args ? host_.item_args() : cli::Args{};
                     cli::Manifest with = r.kind == Result::File ? file_instructions(from_u8(r.path), r.bytes, items, rope_seconds, archives) : r.manifest;
-                    if (r.kind != Result::File) cli::add_packed_items(with, from_u8(r.path), items, nullptr, 8, false, rope_seconds, 9, true, true, archives);
+                    if (r.kind != Result::File) cli::add_packed_items(with, from_u8(r.path), items, nullptr, 8, false, rope_seconds, 10, true, true, archives);
                     progress("the instructions' address");
                     address = cli::binary_address(with.file());
                 }
@@ -823,6 +839,7 @@ void FileLocator::event(const SDL_Event& e)
         case SDLK_RIGHTBRACKET: pressed = (e.key.mod & SDL_KMOD_SHIFT) ? "search_run_more" : "search_file_more"; break;
         case SDLK_A: pressed = "archives"; break; // Optimise Compressed Formats, on or off
         case SDLK_E: pressed = "every"; break;    // Try every way, on or off
+        case SDLK_P: pressed = "decoding"; break; // Prioritise Decoding Speed, on or off
         case SDLK_S: pressed = busy_ ? "stop" : ""; break; // Stop: the best found so far kept
         case SDLK_RETURN:
         case SDLK_KP_ENTER: pressed = result_.kind == Result::File && in_world() ? "go" : ""; break;
@@ -855,6 +872,12 @@ void FileLocator::event(const SDL_Event& e)
         const bool on = !sieve::rope_search_every_wave();
         sieve::set_rope_search_every_wave(on);
         if (kept_every()) kept_every()(on);
+    }
+    else if (pressed == "decoding")
+    {
+        const bool on = !sieve::prioritise_decoding();
+        sieve::set_prioritise_decoding(on);
+        if (kept_decoding()) kept_decoding()(on);
     }
     else if (pressed == "archives")
     {
@@ -998,10 +1021,24 @@ void FileLocator::draw(float W, float H)
         button("search_run_more", "+", row_y);
         // Optimise Compressed Formats, under it: a box, off unless ticked (what installing gives back
         // changes for an archive carried as its contents, so it is never on by itself). Beside it,
-        // Try every way: the search's shortcuts off (slower; never larger).
+        // Try every way: the search's shortcuts off (slower; never larger); and Prioritise Decoding
+        // Speed: no file mixed (quicker to install; larger). A box that does not fit goes to the next
+        // row, as the filter settings' do. The last row's y, for what goes under it.
         bx = 20;
-        button("archives", std::string(optimise_archives_ ? "[x] " : "[ ] ") + tr("loc.archives"), row_y + 40);
-        button("every", std::string(sieve::rope_search_every_wave() ? "[x] " : "[ ] ") + tr("loc.every"), row_y + 40);
+        float box_y = row_y + 40;
+        auto box = [&](const std::string& id, bool on, const std::string& label) {
+            const std::string text = std::string(on ? "[x] " : "[ ] ") + label;
+            if (bx > 20 && bx + text_width(text, 2) + 24 > W - 20)
+            {
+                bx = 20;
+                box_y += 40;
+            }
+            button(id, text, box_y);
+        };
+        box("archives", optimise_archives_, tr("loc.archives"));
+        box("every", sieve::rope_search_every_wave(), tr("loc.every"));
+        box("decoding", sieve::prioritise_decoding(), tr("loc.decoding"));
+        return box_y;
     };
     if (!busy && r.kind == Result::None && r.error.empty())
     {
@@ -1083,9 +1120,9 @@ void FileLocator::draw(float W, float H)
         bx = 20;
         if (!r.tailored)
         {
-            search_row(y + 40);
+            const float last = search_row(y + 40);
             bx = 20;
-            button("tailor", tr("loc.tailor"), y + 120);
+            button("tailor", tr("loc.tailor"), last + 40);
         }
         else if (r.tailored_filters) button("use_filters", tr("loc.use_filters"), y + 40);
     }

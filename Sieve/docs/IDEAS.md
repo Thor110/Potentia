@@ -4914,7 +4914,21 @@ measured on this repository's own files.
   worse on a 3 KB text); a fast-moving second probability in every counter, or inputs scaled by how
   often their context was seen (each better on one file, worse on most); tables of 2^23 (under 1%,
   twice the memory).
-- *Next:* mixing's speed (about 0.3 to 1 MB/s, both ways: the ten PNGs' 24.8 MB of pixels take
-  28 s to install, where v25's rope and LZMA2 took 0.75 s); a grammar as a model (Edward's rulesets as predictions); and more
-  generators as they turn up (zlib's PNGs remade by zlib itself where it can, without preflate's
-  difference).
+- **Grammar as a model: built as a word list's prediction, mix-v3 (27 October 2026,
+  `sieve-manifest-v27`).** Edward's rulesets taken as predictions, three ways measured. The parts of
+  speech of the words before (Moby's tags) as contexts: 0.15% to 0.55% on Don Quixote and worse on
+  small texts, not taken (the orders see the same). A dictionary as a model every reader has: from
+  the word so far, the letters SCOWL has next (and the word's end), each by its count of words, as
+  a probability for each bit, mixed with the rest: Don Quixote's first 800 KB 191,190 bytes to
+  187,650 (1.9%), a 3 KB text 1,303 to 1,212 (7%), a word list 41,770 to 27,138; as Sieve
+  instructions Don Quixote 527,837 (v26 532,501). Where a text is not words (a PDF, a table of
+  numbers) it costs a little, so the packer weighs both. A word missing from the list costs a few
+  bits; it never fails, as a hard filter would.
+- **Decoding speed (27 October 2026):** Prioritise Decoding Speed (no mixing: the ten PNGs in 0.6 s,
+  247,692 bytes, against 28 s and 210,046); files decoded at once when installing (28.3 s to 9.1 s
+  on 4 cores); mixing itself faster with the same codes (the SSE rows and the counters' slots
+  fetched before they are needed: 8% to 18%).
+- *Next:* the SSE stages are about 40% of mixing's time and 0.07% to 1.7% of its size: dropping or
+  shrinking them is a format change worth weighing; a word list with how often each word is used
+  (SCOWL has none; a frequency list would be a new pinned file); and more generators as they turn
+  up (zlib's PNGs remade by zlib itself where it can, without preflate's difference).

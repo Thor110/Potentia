@@ -393,9 +393,9 @@ const std::vector<Page>& pages()
           {"--size N", "With --decode: the file's size in bytes."}},
          {{"sieve rope picture.bmp", "the best wave for a picture, and its code's size beside LZMA2's"},
           {"sieve rope sound.wav --params \"L16 W1 S1 P2 K0\" --out sound.rope", "a sound by a wave chosen, written out"}}},
-        {"mix", "A file coded by mixing (mix-v2, or mix-v1): every bit predicted by several models, mixed.",
-         "sieve mix FILE [--picture WxC] [--params B22] [--v1] [--out CODE]\n"
-         "  sieve mix --decode CODE [--v1] --params B22 --size N --out FILE",
+        {"mix", "A file coded by mixing (mix-v2, mix-v3 with a word list, or mix-v1): every bit predicted by several models, mixed.",
+         "sieve mix FILE [--picture WxC | --words 60] [--params B22] [--v1] [--out CODE]\n"
+         "  sieve mix --decode CODE [--v1 | --words 60] --params B22 --size N --out FILE",
          "Codes a file by mixing (IDEAS §19.102): every bit predicted by several models at once, the\n"
          "predictions mixed by weights that learn as the file goes, and the mixed prediction coded\n"
          "exactly by a binary arithmetic coder, in integers only. mix-v2 (the default): the bytes before\n"
@@ -409,6 +409,9 @@ const std::vector<Page>& pages()
           {"--params B", "The tables' size, 2^B counters each, B16 to B22 (else chosen by the file's size);\n"
                          "mix-v2's for a picture with its shape, \"B22 I949x1\"."},
           {"--v1", "mix-v1 (sieve-manifest-v24's), not mix-v2."},
+          {"--words N", "mix-v3 (sieve-manifest-v27's): mix-v2 for text with a word list's model, the registered\n"
+                        "SCOWL list of size N (35, 60 or 80; scowl-en-N, its SHA-256 checked): from the word so far,\n"
+                        "the letters the list has next give each bit a probability. Its parameters \"B22 D60\"."},
           {"--out CODE", "Write the code here."},
           {"--decode CODE", "The file back from its code, with --params, --size and --out (and --v1 for mix-v1's)."},
           {"--size N", "With --decode: the file's size in bytes."}},
@@ -1035,6 +1038,7 @@ const std::vector<Page>& pages()
                                   "(v25): one stb_image_write made (as the hallway's screenshots are) as its\n"
                                   "pixels, made again by it; any other from its skeleton, its deflate by preflate\n"
                                   "and its chunks' CRCs worked out again. Off unless given."},
+          {"--v26", "As sieve-manifest-v26 at newest: no text mixed with a word list (mix-v3, v27)."},
           {"--v25", "As sieve-manifest-v25 at newest: mixing by mix-v1, not mix-v2 (v26)."},
           {"--v24", "As sieve-manifest-v24 at newest: no PNG made again from its skeleton (v25)."},
           {"--optimise-archives", "The old name of --optimise-compressed (once Optimise Archive Formats); the same."},
@@ -1073,6 +1077,10 @@ const std::vector<Page>& pages()
                                   "no smaller (a JPEG, a PNG, a film: already packed), and on text once its own\n"
                                   "waves (by line, and by column where its lines are all one length) are tried.\n"
                                   "Any command that makes instructions takes it (locate, site, map, rope)."},
+          {"--prioritise-decoding", "Prioritise Decoding Speed (the File Locator's box): no file carried by mixing, whose\n"
+                                    "decoding (0.3 to 1 MB/s) is 15 to 60 times slower than the rope's or LZMA2's; of\n"
+                                    "the other ways, the smallest. Quicker to install, larger. The report says how many\n"
+                                    "files mixing was not tried on. Any command that makes instructions takes it."},
           {"SIEVE_PACK_THREADS=N", "(Not an option: in the environment.) The packer uses every core (cutting into pieces, LZMA2's passes), and the\n"
                                                "instructions are the same at any count; the environment variable\n"
                                                "SIEVE_PACK_THREADS sets how many (1: one)."},

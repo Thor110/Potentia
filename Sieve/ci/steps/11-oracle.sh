@@ -490,8 +490,8 @@ with zipfile.ZipFile('a21/stored.zip', 'w', zipfile.ZIP_STORED) as z:
     z.writestr(zipfile.ZipInfo('sieve_ref.py', (2026, 10, 25, 12, 0, 0)), t)"
 cp ../tests/archives/sieve-7zip-lzma2.7z ../tests/archives/sieve-7zip-lzma.7z ../tests/archives/sieve-7zip-deflate.zip a21/
 SIEVE_ARCHIVES_ALWAYS=1 $S locate a21 --installer a21.sieve --items --optimise-archives --manifest a21.manifest | tr -d '\r' > a21.txt
-grep -c "^remade    6 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v2[1-6])$" a21.txt > /dev/null
-python -c "d = open('a21.manifest', 'rb').read(); assert d[:5] == b'sieve' and 21 <= d[5] <= 26, d[:6]"
+grep -c "^remade    6 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v2[1-7])$" a21.txt > /dev/null
+python -c "d = open('a21.manifest', 'rb').read(); assert d[:5] == b'sieve' and 21 <= d[5] <= 27, d[:6]"
 $S install a21.sieve --to a21_inst > /dev/null
 for f in huff.gz py.zip stored.zip sieve-7zip-lzma2.7z sieve-7zip-lzma.7z sieve-7zip-deflate.zip; do cmp a21/$f a21_inst/$f; done
 # The oracle reads every skeleton whole and makes the stored zip again; the others, made by preflate
@@ -529,7 +529,7 @@ if [ "$(uname -s)" = Linux ] || [ "$(uname -s)" = Darwin ]; then
   cmp r22/made.rar r22_si/made.rar
   # In a folder: the archive given back in its place, the folder's other files as they were.
   cp r22/made.rar r22/folder/ && cp ../tests/manifest_fixture/a.txt r22/folder/
-  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/folder --installer r22f.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^unpacked .*sieve-manifest-v2[2-6]" > /dev/null
+  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/folder --installer r22f.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^unpacked .*sieve-manifest-v2[2-7]" > /dev/null
   rm -rf r22f_inst && SIEVE_RAR="$RAR" $S install r22f.sieve --to r22f_inst > /dev/null
   diff -r r22/folder r22f_inst
   # --v21: as before, its contents alone.
@@ -586,7 +586,7 @@ cmp dq.txt dq_oracle/dq.txt
 # chunks, their deflate by preflate and their CRCs worked out again. Installed exactly; the oracle
 # reads both and names them (it has neither stb_image_write nor preflate); --v24 makes neither.
 rm -rf png25 && mkdir png25 && cp ../docs/images/hallway-audio.png ../web/extension/icon128.png png25/
-$S locate png25 --installer png25.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v2[56])$" > /dev/null
+$S locate png25 --installer png25.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v2[5-7])$" > /dev/null
 [ "$(wc -c < png25.sieve)" -lt 50000 ]
 rm -rf png25_inst png25_oracle
 $S install png25.sieve --to png25_inst > /dev/null
@@ -599,13 +599,14 @@ $S locate png25 --installer png24.sieve --items --optimise-archives --v24 2>&1 |
 # The same 40,000 bytes of Don Quixote: smaller than mix-v1's code, and the instructions smaller than
 # v25's; the top 64 rows of the Vitruvian centre (16,384 grey bytes) carried as a picture, its shape
 # guessed from its bytes (I256x1), smaller than v25's instructions. Sieve and the oracle (its own
-# mix-v2) give both back, from the codes and from the instructions; --v25 makes no mix-v2.
+# mix-v2) give both back, from the codes and from the instructions; --v25 makes no mix-v2. (--v26 for
+# the text: v27's mix-v3 takes it otherwise.)
 $S mix dq.txt --out dq2.mix | tr -d '\r' > dqmix2.txt
 grep -c "^mix       B17 (mix-v2)" dqmix2.txt > /dev/null
 [ "$(wc -c < dq2.mix)" -lt "$(wc -c < dq.mix)" ]
 python sieve_ref.py mix-unpack dq2.mix --v2 --params B17 --size 40000 --out dq2.back > /dev/null
 cmp dq.txt dq2.back
-$S locate dq.txt --installer dq26.sieve --items | tr -d '\r' | grep -c "^mix       1 file(s) carried by mixing, mix-v2 (40000 bytes, carried in [0-9]*; sieve-manifest-v26)" > /dev/null
+$S locate dq.txt --installer dq26.sieve --items --v26 | tr -d '\r' | grep -c "^mix       1 file(s) carried by mixing, mix-v2 (40000 bytes, carried in [0-9]*; sieve-manifest-v26)" > /dev/null
 [ "$(wc -c < dq26.sieve)" -lt "$(wc -c < dq.sieve)" ]
 rm -rf dq26_inst dq26_oracle
 $S install dq26.sieve --to dq26_inst > /dev/null
@@ -626,3 +627,35 @@ $S install top26.sieve --to top26_inst > /dev/null
 cmp top.raw top26_inst/top.raw
 python sieve_ref.py unpack top26.sieve --to top26_oracle | tr -d '\r' | grep -c "^mix2 B16 I256x1	16384	top.raw" > /dev/null
 cmp top.raw top26_oracle/top.raw
+# v27 (27 October 2026): mix-v3, mix-v2 for text with a word list's model (the registered
+# scowl-en-60, its SHA-256 checked). The same 40,000 bytes: smaller than mix-v2's code, the
+# instructions v27 and smaller than v26's; Sieve, the oracle (its own mix-v3 and trie) and
+# sieve-install give it back; --v26 makes no mix-v3.
+$S mix dq.txt --words 60 --out dq3.mix | tr -d '\r' > dqmix3.txt
+grep -c "^mix       B17 D60 (mix-v3)" dqmix3.txt > /dev/null
+[ "$(wc -c < dq3.mix)" -lt "$(wc -c < dq2.mix)" ]
+python sieve_ref.py mix-unpack dq3.mix --words 60 --params "B17 D60" --size 40000 --out dq3.back > /dev/null
+cmp dq.txt dq3.back
+$S locate dq.txt --installer dq27.sieve --items | tr -d '\r' | grep -c "^mix       1 file(s) carried by mixing, mix-v3 (with a word list) (40000 bytes, carried in [0-9]*; sieve-manifest-v27)" > /dev/null
+[ "$(wc -c < dq27.sieve)" -lt "$(wc -c < dq26.sieve)" ]
+$S locate dq.txt --installer dq26b.sieve --items --v26 | tr -d '\r' > dq26b.txt
+! grep -q "mix-v3\|sieve-manifest-v27\|not an option" dq26b.txt
+rm -rf dq27_inst dq27_oracle dq27_si
+$S install dq27.sieve --to dq27_inst > /dev/null
+cmp dq.txt dq27_inst/dq.txt
+python sieve_ref.py unpack dq27.sieve --to dq27_oracle > /dev/null
+cmp dq.txt dq27_oracle/dq.txt
+$SI dq27.sieve --to dq27_si --yes > /dev/null
+cmp dq.txt dq27_si/dq.txt
+# Prioritise Decoding Speed (27 October 2026; --prioritise-decoding, the File Locator's box): no
+# file mixed, so the instructions install quickly: Don Quixote's start carried by the rope or
+# LZMA2 instead, larger than with mixing, the report saying so; installed by Sieve and the oracle.
+$S locate dq.txt --installer dqfast.sieve --items --prioritise-decoding | tr -d '\r' > dqfast.txt
+grep -c "^decoding  prioritised: mixing not tried on 1 file(s) (Prioritise Decoding Speed)$" dqfast.txt > /dev/null
+! grep -q "^mix " dqfast.txt
+[ "$(wc -c < dqfast.sieve)" -gt "$(wc -c < dq26.sieve)" ]
+rm -rf dqfast_inst dqfast_oracle
+$S install dqfast.sieve --to dqfast_inst > /dev/null
+cmp dq.txt dqfast_inst/dq.txt
+python sieve_ref.py unpack dqfast.sieve --to dqfast_oracle > /dev/null
+cmp dq.txt dqfast_oracle/dq.txt

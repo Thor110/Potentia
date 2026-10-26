@@ -1,70 +1,68 @@
-# Mixing existing methods in a new way: mix-v2, `sieve-manifest-v26` (27 October 2026)
+# Decoding speed, and grammar as a model: `sieve-manifest-v27` (27 October 2026)
 
-Unzip over the repository root. Committed locally (not pushed), on top of your 66ddf7a. This is a new instructions version, and every older one reads as before. Details are in IDEAS §19.102, SPECIFICATIONS §12.2 (mix-v2 and v26) and HANDOFF.
+Unzip over the repository root. Two commits, local only (not pushed), on top of your f155116. One new instructions version (v27); every older one reads as before, and mix-v1's and mix-v2's codes are unchanged (their pinned SHA-256s still match).
 
-## What it is
-IDEAS §19.102: your filters, each made a model inside mixing, weighed bit by bit. I measured every part first on the repository's own files and took it only where it paid. mix-v2 is mix-v1 with:
-- **A match model:** the longest earlier stretch the last six bytes repeat. This is what LZ does, and mix-v1 lacked it, which is why LZMA2 beat it on the teapot and the screenshots.
-- **The column (your rope's "byte above") and the field,** for tables and word lists.
-- **Sparse contexts, two mixers, and two final correction stages (SSE).**
-- **Your triangle inside mixing:** for a picture, the triangle's prediction and its neighbours become models. The picture's shape comes from the rope's search, or is guessed from the bytes when the search misses it (it does on small pictures).
+## 1. Prioritise Decoding Speed (your box)
+- **Where:** a third box in the File Locator (key P), `--prioritise-decoding` for `sieve` and the hallway, and `[locator] prioritise_decoding` in the ini.
+- **What it does:** the packer mixes no file, and keeps the smallest of the other ways. I measured decoding speeds to set this rule: the rope 15 to 20 MB/s, LZMA2 faster still, mixing 0.3 to 1 MB/s.
+- **The ten PNGs:** 247,692 bytes installed in 0.6 s with it, against 210,046 bytes in 28 s without.
+- **The report says so:** `decoding  prioritised: mixing not tried on N file(s)`.
+- **Cached instructions:** the File Locator now makes them again when Try every way or this box changes. Before, it only checked the time and the compressed-formats box.
+- **The boxes wrap to a second row** when the window is too narrow, as the filter settings do. At 1920 × 1080 all three fit on one row.
 
-It runs at about the same speed as mix-v1, despite twice the models, because the counters sit together in memory (two places a byte instead of eight). It takes about 240 MB while coding or decoding (mix-v1: 128 MB).
+## 2. Decoding faster, the same bytes
+- **Installing decodes files at once:** the rope's and mixing's files are decoded in parallel, up to SIEVE_PACK_THREADS (else every core), with no new one started while those under way hold half the free memory. The ten PNGs went from 28.3 s to 9.1 s on 4 cores; your 12 threads should do better still.
+- **Mixing itself is faster, with the same codes:**
+  - A counter's division is now a multiply by a reciprocal, checked exact for every pair it can meet.
+  - The counter tables are aligned to cache lines, and each slot is fetched early.
+  - The SSE stages' rows are fetched before mixing, since their contexts are known by then.
+  - Decoding, best of five runs: Don Quixote's first 800 KB 2.35 s → 2.16 s; the Vitruvian picture 3.97 s → 3.27 s; the screenshot about the same.
+- **Where the rest of the time is:** the two SSE stages are about 40% of mixing's time, for 0.07% (pictures) to 1.7% (text) of its size. Dropping them would be a format change; I've left that for you to weigh.
 
-## Measured (bytes)
+## 3. Grammar as a model: mix-v3 and v27
+I measured your grammar idea three ways:
 
-| File (all from the repository) | LZMA2 | mix-v1 | mix-v2 |
-| :--- | ---: | ---: | ---: |
-| Don Quixote | 685,794 | 565,596 | 532,168 |
-| IDEAS.md | 122,303 | 102,129 | 95,289 |
-| test_core.cpp | 64,735 | 64,777 | 53,002 |
-| Utah teapot (.obj) | 34,380 | 53,595 | 24,720 |
-| moby-pos table (1 MB) | 261,365 | 236,321 | 158,706 |
-| SCOWL word list | 84,882 | 84,763 | 41,010 |
-| Vitruvian, raw grey (rope-wave-v6: 762,766) | 865,400 | 802,822 | 727,842 |
-| A hallway screenshot's pixels | 93,936 | 105,134 | 62,925 |
-
-As Sieve instructions:
-- **Don Quixote:** 532,501 bytes (v25: 565,664).
-- **The ten PNGs from v25's measurement:** 210,046 bytes (v25: 247,692).
-
-## Measured and not taken
-- **LOCO-I's bias correction for the rope:** 0.4% on the Vitruvian, and the screenshot came out twice as large. Mixing with the triangle does 4.6% better anyway.
-- **A dictionary (SCOWL) read first,** as a model every reader already has: 2% better on Don Quixote, but worse on a 3 KB text (1,316 bytes against 1,279).
-- **Two-rate counters, or inputs weighted by how often their context was seen:** each helped one file and hurt most.
-- **Tables twice as large (2^23):** under 1% smaller, for twice the memory.
-
-## Using it
-- **`sieve mix FILE`** now makes mix-v2. `--picture 1280x3` treats the file as a picture's pixels; `--v1` gives mix-v1.
-- **`sieve locate --items`** and the File Locator make v26 where it's smaller. `--v25` makes no mix-v2.
-- **The oracle has its own mix-v2,** written from the specification. It matched Sieve on its first run (text, grey and RGB pictures). Its commands are `mix-unpack --v2` and `unpack` for v26.
-
-## Worth knowing: install time
-| | v25 | v26 |
+| Way | Don Quixote (800 KB) | 3 KB text |
 | :--- | ---: | ---: |
-| Don Quixote installs in | 11.7 s | 8.4 s |
-| The ten PNGs install in | 0.75 s | 28.3 s |
+| mix-v2 | 191,190 | 1,303 |
+| Parts of speech of the words before (Moby) as contexts | −0.15% to −0.55% | larger |
+| **The word list as a prediction (taken)** | **187,650 (−1.9%)** | **1,212 (−7%)** |
 
-- **Text gets both smaller and quicker,** because mix-v2 decodes faster than mix-v1.
-- **Pictures are the trade-off:** 15% smaller, but much slower to install. In v25 they were carried by the rope and LZMA2, which decode almost instantly. Now mixing decodes their 24.8 MB of pixels at about 1 MB/s.
-- **Packing takes about the same time:** 271 s against 262 s for the PNGs; Don Quixote in 19 s.
-- **I've left it choosing the smallest,** as Sieve always has. If you'd rather it weighed install time too (say, not mixing a picture unless it saves more than some share), that's a small change in the packer. Your call.
+- **How the word list works:** from the word so far, SCOWL gives the letters that can come next (and the word's end), each weighted by how many words go on that way. That becomes a probability for each bit, mixed in with the rest.
+- **Rules as predictions:** a word missing from the list costs a few bits and never fails, as a hard filter would.
+- **Other gains:** `IDEAS.md` −1.5%, a 20 KB text −3.5%, a word list −35%, the parts-of-speech table −5%.
+- **Where it costs:** a PDF +0.45%, a table of numbers +0.16%. So the packer codes a text's start both with and without it and keeps the smaller.
+- **Which list:** sizes 35, 60 and 80 came within 0.2% of each other, so I used 60 (`scowl-en-60`, the registered file, SHA-256 checked).
+- **As Sieve instructions:**
+  - Don Quixote 527,837 bytes (v26: 532,501), installed in 7.7 s (v26: 7.1 s).
+  - A small mixed folder: 72,692 bytes (v26: 88,341).
+- **The format:** a way `mix3 B22 D60`. `sieve mix --words 60` makes one. `--v26` makes v26 or older.
+- **Who can read it:** `sieve`, the hallway and `sieve-install` all get the list from Sieve's data folder. A copy of `sieve-install` without that folder says to use Sieve.
+- **The oracle:** it has its own trie and mix-v3, written from the specification, and matched on its first run.
 
-## Worth knowing: other things
-- **Two codes' SHA-256 are pinned** in the unit tests (`test_mix2`: a text and a 60 × 40 RGB picture). Windows and macOS must make the same bytes, so please check step 01 there.
-- **Decoding speed:** mixing still decodes at about 0.3 MB/s. Large raw pictures (a PNG's pixels, say) take a while to install. Speed is first on the "Next" list.
-- **A small finding:** on random words, where nothing ever repeats, mix-v2 is a little larger than mix-v1. Its counters settle faster, which costs on perfectly steady data. Every real file measured came out smaller.
+## 4. A finding and a suggestion
+Mixing is only tried on files of 4 KiB or more. I checked whether that limit should come down now that small texts mix so much better:
+
+| 294 small texts from the repository (512 B to 4 KiB, 628,320 bytes) | Bytes |
+| :--- | ---: |
+| Each mixed alone (mix-v3) | 228,502 |
+| All together, LZMA2 (what Sieve does now) | 110,835 |
+| All together, mixed | 95,425 |
+
+- **The limit is right:** small files share so much that packing them together beats mixing each alone, two to one.
+- **But mixing the shared stream would save another 14%.** That's the stream every file carried as it is goes into, coded by mixing instead of LZMA2. It's a format change (a v28), and I'd suggest it as the next step.
 
 ## Checks run here
-- The build passes, and so do the unit tests (77,079 checks, 0 failures) and `check_help` (599 options, none missing).
-- CI steps 10 and 11 pass. Step 11 took 2,284 s here against 1,372 s before. Part of that is my timing runs alongside it; part is the oracle decoding mix-v2 in Python, which is slow.
-- I didn't run the other steps; they don't touch this change.
+- The build passes, as do the unit tests (77,093 checks, 0 failures; mix-v1's and mix-v2's pins unchanged, mix-v3's new) and `check_help` (602 options, none missing).
+- CI steps 10 and 11 pass (step 11 in 2,237 s here).
+- Screenshots at 1920 × 1080 and in a narrow window show the boxes and the wrap.
 
 ## Files
 - `Sieve/core/`: include/sieve/mix.hpp, src/mix.cpp
-- `Sieve/tools/`: cli/pack.cpp, pack.hpp, locate.cpp, locate.hpp, rope.cpp, help.cpp, args.hpp, items.hpp; sieve_cli.cpp; check_help.py
-- `Sieve/client/file_locator.cpp`
+- `Sieve/tools/`: cli/pack.cpp, pack.hpp, locate.cpp, locate.hpp, items.cpp, items.hpp, rope.cpp, help.cpp, args.hpp; sieve_cli.cpp
+- `Sieve/client/`: file_locator.cpp, file_locator.hpp, app_main.cpp, app_settings.cpp, app_settings.hpp
+- `Sieve/data/lang/en.txt`
 - `Sieve/reference/sieve_ref.py`
 - `Sieve/tests/test_core.cpp`
-- `Sieve/ci/steps/`: 10-hallway.sh, 11-oracle.sh
-- `Sieve/docs/`: SPECIFICATIONS.md, IDEAS.md, HANDOFF.md, SIEVE-INSTALL-USAGE.md
+- `Sieve/ci/steps/11-oracle.sh`
+- `Sieve/docs/`: SPECIFICATIONS.md, IDEAS.md, HANDOFF.md; `Sieve/README.md`

@@ -1,6 +1,7 @@
 // Sieve CLI -- files carried as items of Sieve's lines (see items.hpp).
 #include "cli/items.hpp"
 
+#include "cli/dictionaries.hpp" // v27: mix-v3's word lists
 #include "cli/filter_config.hpp"
 #include "cli/locate.hpp"
 #include "sieve/digit_histogram.hpp"
@@ -240,9 +241,24 @@ void add_packed_items(Manifest& m, const std::filesystem::path& root, const Args
                version >= 8 && trim && pieces && rope_newest >= 5 && binary, gzip, gzip && v20, gzip && v20 && v21, gzip && v20 && v21 && v22);
 }
 
+const MixDictionary& mix_word_list(uint32_t list)
+{
+    // v27: a SCOWL list from the dictionary registry, its SHA-256 checked, made ready once a run.
+    static std::mutex mx;
+    static std::map<uint32_t, std::unique_ptr<const MixDictionary>> made;
+    std::lock_guard<std::mutex> lock(mx);
+    if (auto it = made.find(list); it != made.end()) return *it->second;
+    const ResolvedDictionary d = resolve_dictionary(std::to_string(list));
+    const std::vector<uint8_t> bytes = read_file_bytes(d.path);
+    if (!d.expected_sha256.empty() && sha256_hex(bytes) != d.expected_sha256)
+        throw std::runtime_error("the word list " + d.id + " (" + d.path + ") is not the one registered: its SHA-256 differs");
+    return *made.emplace(list, std::make_unique<const MixDictionary>(bytes)).first->second;
+}
+
 void use_item_maker()
 {
     set_remaker(remake_archive); // v14: archives remade exactly from what they hold
+    set_mix_words(mix_word_list); // v27: mix-v3's word lists, from the dictionary registry
     // A line made from a listing's options: one of the CLI's lines, or the AI line.
     struct MadeLine
     {
