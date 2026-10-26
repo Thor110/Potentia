@@ -996,14 +996,20 @@ const std::vector<Page>& pages()
                       "of the AI line as its weights' digits, not its file's floats. The pages are\n"
                       "--page-length characters of --alphabet; the AI line is --ai-layers, --ai-width,\n"
                       "--ai-heads and --ai-bits (Micro without them)."},
-          {"--optimise-archives", "With --items: Optimise Archive Formats (sieve-manifest-v14, v17, v19, v20, v21).\n"
+          {"--optimise-archives", "With --items: Optimise Archive Formats (sieve-manifest-v14, v17, v19, v20, v21, v22).\n"
                                   "An .xz, a .bz2, a .zst libzstd 1.5.7 made, an .lz4, a .br and an .lzma is carried\n"
                                   "as what it holds and remade exactly on installing; so is a .gz or .zip whoever made\n"
                                   "it (its deflate by preflate) and a .7z whose blocks are 7-Zip's LZMA or LZMA2\n"
                                   "(v21); another of those, and an .lz (lzip), as what it holds; a RAR, cab, ISO, LHA,\n"
                                   "cpio, ar or WARC, or a .7z or .zip not made again, as its contents, in a folder named\n"
                                   "after it (installing says so: the archive itself is not given back); each only\n"
-                                  "where clearly smaller. Off unless given."},
+                                  "where clearly smaller. A RAR 5 the machine's own rar makes again byte for byte\n"
+                                  "from its files (with their times) is carried as its contents with that recipe\n"
+                                  "(v22): installing gives the RAR back where the same rar is found, else its\n"
+                                  "contents, with a warning. Which rar: SIEVE_RAR, else one beside Sieve, on the\n"
+                                  "PATH, or (Windows) in WinRAR's folder; SIEVE_RAR_TRACE=1 shows each try. Off\n"
+                                  "unless given."},
+          {"--v21", "As sieve-manifest-v21 at newest: no RAR made again by rar (v22)."},
           {"--v20", "As sieve-manifest-v20 at newest: no gzip, zip or 7z made again from a skeleton (v21)."},
           {"--v19", "As sieve-manifest-v19 at newest: the listing's body as text (v20 writes it in bytes), and\n"
                     "no lz4, brotli, lzma, lzip or libarchive archive optimised."},

@@ -389,7 +389,8 @@ if(MSVC)
     target_compile_options(sieve_lzma_enc PRIVATE /W3)
 endif()
 
-add_library(sieve_locate STATIC tools/cli/locate.cpp tools/cli/map.cpp tools/cli/vault.cpp tools/cli/vault_decode.cpp tools/cli/timings.cpp)
+add_library(sieve_locate STATIC tools/cli/locate.cpp tools/cli/map.cpp tools/cli/vault.cpp tools/cli/vault_decode.cpp tools/cli/timings.cpp
+    tools/cli/rar_remake.cpp)
 target_include_directories(sieve_locate PUBLIC tools)
 # The vault checks pictures (PDQ), including files that are pictures, so it reads them (stb).
 target_link_libraries(sieve_locate PUBLIC sieve_core PRIVATE sieve_pdq sieve_image_io sieve_lzma)

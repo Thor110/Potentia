@@ -3947,6 +3947,27 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   (Edward): the remembered table and "Trust the new table" stay; no signing, ever ("I don't trust
   myself or any human being alive to keep a key safe").
 
+### A RAR made again by the machine's own rar: `sieve-manifest-v22` (25 October 2026)
+
+- **What:** with Optimise Archive Formats, a RAR 5 that the packing machine's `rar` gives back byte
+  for byte is carried as its contents with a recipe: `ur` (version, SHA-256, how, switches) and one
+  `um` line a member (attributes, times in ns, path) after its `u` line. Installing makes it again
+  where the same `rar` is found and checks it; else its contents and a **warning**.
+- **Notes from one place (Edward: "if the CLI is the one reporting errors or warnings, hallway can
+  always detect and present them"):** `install_tree` returns `InstallNote`s; `sieve install` prints
+  them (`note` / `warning`), `sieve-install` shows them on its last screen and pops warnings up
+  (`SDL_ShowSimpleMessageBox`; to the error output with `--yes`), the File Locator adds them to its
+  status and pops warnings up on the next frame. The v14 "carried as its contents" note moved there.
+- **Code:** `tools/cli/rar_remake.hpp/.cpp` (RAR 5 headers read after RARLAB's published
+  description, the switches they give, finding `rar` and its version, setting times and
+  attributes, running it in a folder); the packer's RAR branch in `pack.cpp` (before libarchive's
+  contents); `finish_archives` in `locate.cpp`; `--v21`.
+- **Tested:** `ci/stand_in_rar.py`, a RAR 5 writer of stored files, plays `rar` in step 11 (Linux
+  and macOS): alone and in a folder, with and without a `rar`, by `sieve-install` and the oracle,
+  and `--v21`. **Not measured:** the real `rar` (none in the cloud session: rarlab.com refused).
+  Edward to try: `set SIEVE_RAR_TRACE=1`, then `sieve locate X.rar --installer x.sieve --items
+  --optimise-archives`; each try is shown with how many of its first bytes came out the same.
+
 ### Extract any archive, from the right-click menu (25 October 2026)
 
 - **What:** `sieve-install` extracts every archive kind Sieve reads, not only `.sieve` files: 7z,
@@ -3968,9 +3989,7 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   libarchive's test archives, extracted unattended and compared.
 - **The WoW work** is notes only, in `engine/` (Edward: out of the main architecture; nothing of
   the game's kept).
-- **Next (waiting on Edward):** RAR made again by the machine's own `rar.exe`, and where it is
-  missing, the files extracted with a warning in the hallway and `sieve-install`. Not buildable
-  here: no `rar` in the container, and rarlab.com is refused.
+- **Then:** RAR made again by the machine's own `rar.exe` (`sieve-manifest-v22`, below).
 
 ### 7z, zip and gzip made again exactly: `sieve-manifest-v21` (25 October 2026)
 Edward: "we should delay the filter ideas until we deal with 7z, zip and rar exactly".

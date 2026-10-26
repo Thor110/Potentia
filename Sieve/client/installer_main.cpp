@@ -140,6 +140,10 @@ struct Installer
     std::atomic<size_t> done{0}, total{0};
     std::mutex mx;
     std::string current, worker_error;
+    // What the install had to say (install_tree's notes: an archive given as its contents, a RAR
+    // made again or not): shown when it is done, a warning in a box of its own as well.
+    std::vector<InstallNote> notes;
+    bool warned = false;
     // A folder chosen in the system's dialog, handed over from its callback.
     std::mutex dialog_mx;
     std::optional<std::string> chosen;
@@ -240,6 +244,8 @@ struct Installer
         cancel = false;
         finished = false;
         done = 0;
+        notes.clear();
+        warned = false;
         // (Into a folder of its own: its one top folder left out, so NAME\NAME\ is not made.)
         if (any && !keep_top && !top_left_out)
         {
@@ -286,7 +292,7 @@ struct Installer
                                                     std::lock_guard<std::mutex> lock(mx);
                                                     current = path;
                                                 },
-                                                &cancel);
+                                                &cancel, &notes);
                 ok = whole;
             }
             catch (const std::exception& e)
@@ -473,6 +479,17 @@ int main(int argc, char** argv)
     {
         in.poll();
         if (yes && in.screen != Screen::Installing) quit = true; // unattended: the result is the exit code
+        // A warning (a RAR its contents only, its rar not found) pops up once the install is done,
+        // before the window closes; unattended, it goes to the error output instead.
+        if (in.screen == Screen::Done && !in.warned)
+        {
+            in.warned = true;
+            std::string w;
+            for (const InstallNote& n : in.notes)
+                if (n.warning) w += (w.empty() ? "" : "\n\n") + n.text;
+            for (const InstallNote& n : in.notes) std::fprintf(n.warning ? stderr : stdout, "%s%s\n", n.warning ? "warning: " : "note: ", n.text.c_str());
+            if (!w.empty() && !yes) SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "Sieve Installer", w.c_str(), window);
+        }
         if (quick && (in.screen == Screen::Done || in.screen == Screen::Cancelled)) quit = true;
         {
             std::lock_guard<std::mutex> lock(in.dialog_mx);
@@ -649,6 +666,10 @@ int main(int argc, char** argv)
                         text(r, 24, 228, files_n(in.archive->files) + " unpacked from " + in.manifest->root + ", every one checked.", 1.5f, kInk);
                     else
                         text(r, 24, 228, files_n(in.manifest->files) + (in.manifest->files == 1 ? ", checked against its SHA-256." : ", every one checked against its SHA-256."), 1.5f, kInk);
+                    float y = 262;
+                    for (const InstallNote& n : in.notes)
+                        for (size_t at = 0; at < n.text.size() && y < H - 80; at += 88, y += 14)
+                            text(r, 24, y, n.text.substr(at, 88), 1, n.warning ? SDL_Color{255, 190, 60, 255} : kDim);
                     buttons.push_back({{W - 164, H - 60, 140, 40}, "Finish"});
                 }
                 else if (in.screen == Screen::Cancelled)

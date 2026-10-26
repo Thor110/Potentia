@@ -6323,9 +6323,10 @@ def v16_text(data):
     the streams' sizes and dictionaries' bytes, the tree's SHA-256 as 32 bytes, the body, packed or
     not) read back into v15's text, followed by what follows it. Anything else is returned as it is."""
     import lzma
-    if not data.startswith((b"sieve\x10", b"sieve\x11", b"sieve\x12", b"sieve\x13", b"sieve\x14", b"sieve\x15")):
+    if not data.startswith((b"sieve\x10", b"sieve\x11", b"sieve\x12", b"sieve\x13", b"sieve\x14", b"sieve\x15", b"sieve\x16")):
         return data
-    v21 = data[5] == 21  # v20 whose gzip, zip and 7z files may be made again from a skeleton
+    v22 = data[5] == 22  # v21 whose RARs may be made again by the machine's own rar ("ur" and "um" lines)
+    v21 = data[5] == 21 or v22  # v20 whose gzip, zip and 7z files may be made again from a skeleton
     v20 = data[5] == 20 or v21  # v19 whose body is in bytes (listing_from_bytes), lz4, brotli and lzma remade too
     v17 = data[5] == 17  # v16 whose remade archives may be gzip files
     v18 = data[5] == 18  # v17 with a graph part: a map (head flag 64)
@@ -6365,7 +6366,7 @@ def v16_text(data):
         sys.exit("v16: flags this reader does not know")
     if v18 and not flags & 0x40:
         sys.exit("v18 without its graph part")
-    head = b"sieve-manifest-v21\n" if v21 else b"sieve-manifest-v20\n" if v20 else b"sieve-manifest-v19\n" if v19 else b"sieve-manifest-v18\n" if v18 else b"sieve-manifest-v17\n" if v17 else b"sieve-manifest-v15\n"
+    head = b"sieve-manifest-v22\n" if v22 else b"sieve-manifest-v21\n" if v21 else b"sieve-manifest-v20\n" if v20 else b"sieve-manifest-v19\n" if v19 else b"sieve-manifest-v18\n" if v18 else b"sieve-manifest-v17\n" if v17 else b"sieve-manifest-v15\n"
     if flags & 1:
         head += b"root " + take(varint()) + b"\n"
     for bit, name in ((2, b"x86"), (4, b"lzma2"), (8, b"items")):
@@ -6424,7 +6425,8 @@ def cmd_unpack_v7(args, data):
     # v11 with no line for an empty items or rope stream, and the lzma2 stream perhaps carried as it is
     # v13 with archives optimised: an xz file remade exactly from what it holds, or an archive carried
     # as its contents ("u" lines after the tree's)
-    v21 = lines[0] == "sieve-manifest-v21"  # v20 whose gzip, zip and 7z files may be made again from a skeleton
+    v22 = lines[0] == "sieve-manifest-v22"  # v21 whose RARs may be made again by the machine's own rar
+    v21 = lines[0] == "sieve-manifest-v21" or v22  # v20 whose gzip, zip and 7z files may be made again from a skeleton
     v20 = lines[0] == "sieve-manifest-v20" or v21  # v19 whose archives may also be lz4, brotli or lzma files (its body in bytes)
     v19 = lines[0] == "sieve-manifest-v19" or v20  # v18 whose archives may be bzip2 or zstd files; a graph part allowed
     v18 = lines[0] == "sieve-manifest-v18"  # v17 with a graph part (a map), "g" lines after the entries
@@ -6485,7 +6487,7 @@ def cmd_unpack_v7(args, data):
     places = carried if si[2] == 0 else decode(carried, si[1], si[2], False)
     if si[2] == 0 and si[0] != si[1]:
         sys.exit("a raw items stream is not its own size")
-    entries, unpacked = [], []
+    entries, unpacked, rar_recipes = [], [], {}
     graph = []
     for line in lines[at:-1]:
         f = line.split("\t")
@@ -6496,6 +6498,21 @@ def cmd_unpack_v7(args, data):
             sys.exit("a line after the graph part")
         if v14 and f[0] == "u" and len(f) == 5:
             unpacked.append(f[1:])
+            continue
+        # v22: a RAR's recipe (the program, its version, the archive's SHA-256, how, its switches) and
+        # its members (a file or a folder, attributes, times in nanoseconds or "-", the path). The
+        # oracle runs no rar: it gives the contents, as Sieve does where no rar is found.
+        if v22 and f[0] == "ur" and len(f) == 6:
+            if not unpacked or unpacked[-1][0] != "rar" or f[1] != "rar" or f[4] not in ("top", "list") or len(f[3]) != 64 or rar_recipes.get(len(unpacked) - 1):
+                sys.exit("a RAR's recipe that is not one")
+            rar_recipes[len(unpacked) - 1] = f[1:]
+            continue
+        if v22 and f[0] == "um" and len(f) == 7:
+            if not rar_recipes.get(len(unpacked) - 1) or f[1] not in ("f", "d") or not f[6]:
+                sys.exit("a RAR's member that is not one")
+            for t in f[2:6]:
+                if t != "-" and not t.lstrip("-").isdigit():
+                    sys.exit("a RAR's member with a number that is not one")
             continue
         if f[0] == "d":
             entries.append((f[1],))
@@ -6736,8 +6753,10 @@ def cmd_unpack_v7(args, data):
     for k, ((path, size, sha, way), b) in enumerate(zip(files, got)):
         if k not in unchecked:
             print(f"{way.split(' ')[0] if way.startswith('item ') else way}\t{len(b)}\t{path}")
-    for fmt, size, archive, folder in unpacked:
+    for k, (fmt, size, archive, folder) in enumerate(unpacked):
         print(f"unpacked\t{fmt}\t{size}\t{archive}\t{folder}")
+        if k in rar_recipes:  # v22
+            print(f"rar\t{archive}: made again by {rar_recipes[k][1]} where it is found; here, its contents")
 
 
 def skeleton_remake(inner, skel, path):
@@ -6834,7 +6853,7 @@ def cmd_unpack(args):
     if data.startswith((b"sieve-manifest-v7\n", b"sieve-manifest-v8\n", b"sieve-manifest-v9\n", b"sieve-manifest-v10\n",
                         b"sieve-manifest-v11\n", b"sieve-manifest-v12\n", b"sieve-manifest-v13\n", b"sieve-manifest-v14\n",
                         b"sieve-manifest-v15\n", b"sieve-manifest-v17\n", b"sieve-manifest-v18\n", b"sieve-manifest-v19\n",
-                                b"sieve-manifest-v20\n", b"sieve-manifest-v21\n")):
+                                b"sieve-manifest-v20\n", b"sieve-manifest-v21\n", b"sieve-manifest-v22\n")):
         return cmd_unpack_v7(args, data)
     end = data.index(b"\nend\n") + len(b"\nend\n")
     lines = data[:end].decode("utf-8").split("\n")[:-1]
@@ -6960,7 +6979,7 @@ def cmd_graph(args):
     """The graph part of Sieve instructions that are a map (sieve-manifest-v18, SPECIFICATIONS §12.3):
     the map's text, every line after its "g<TAB>", as it was written."""
     data = v16_text(instructions_bytes(open(args.file, "rb").read()))
-    if not data.startswith((b"sieve-manifest-v18\n", b"sieve-manifest-v19\n", b"sieve-manifest-v20\n", b"sieve-manifest-v21\n")) or b"\ng\t" not in data:
+    if not data.startswith((b"sieve-manifest-v18\n", b"sieve-manifest-v19\n", b"sieve-manifest-v20\n", b"sieve-manifest-v21\n", b"sieve-manifest-v22\n")) or b"\ng\t" not in data:
         sys.exit("not a map: no graph part")
     end = data.index(b"\nend\n") + 1
     out = b"".join(l[2:] + b"\n" for l in data[:end].split(b"\n") if l.startswith(b"g\t"))

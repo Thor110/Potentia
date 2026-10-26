@@ -144,6 +144,9 @@ private:
     std::mutex mx_;
     Result result_;
     std::string status_;
+    // A warning an install gave (install_tree's notes: a RAR given as its contents only, its rar not
+    // found), popped up in a box of its own on the next frame; under mx_.
+    std::string pending_warning_;
     // The job under way (reading or saving): when it began, and its estimate (seconds; -1: none
     // yet, or too small to need one), with what the estimate is made of; under mx_.
     // Stop pressed: once (sieve::kStop), the job ends with the best it has, the pass under way

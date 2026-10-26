@@ -52,6 +52,8 @@
 #include <mutex>
 #include <thread>
 #include <optional>
+#include <random>
+#include <set>
 #include <span>
 #include <sstream>
 #include <stdexcept>
@@ -2050,7 +2052,7 @@ std::vector<uint8_t> place_bytes_of(const std::string& hex, uint32_t width)
 
 void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const ItemFinder* items, bool item_hashes, const PlaceCoder* coder,
                 double rope_seconds, uint32_t rope_newest, bool trim, bool pieces, bool optimise_archives, bool binary, bool gzip,
-                bool v20_on, bool v21_on)
+                bool v20_on, bool v21_on, bool v22_on)
 {
     const timings::Scope t_all("pack.all");
     // Every file's bytes, checked against the walk: from the contents where a v3 manifest has them,
@@ -2085,10 +2087,13 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const bool newer_archives = gzip_remake;  // v19's, with the newest (bzip2 and zstd)
     const bool v20 = gzip_remake && v20_on; // v20's (lz4, brotli, lzma, lzip, libarchive's)
     const bool v21 = v20 && v21_on;         // v21's (gzip, zip and 7z made again from a skeleton)
+    const bool v22 = v21 && v22_on;         // v22's (a RAR made again by the machine's own rar)
     m.remake_gz = false;
     m.more_archives = false;
     m.v20 = false;
     m.v21 = false;
+    m.v22 = false;
+    std::vector<std::string> rar_said; // v22: what came of each RAR tried
     // (SIEVE_ARCHIVES_ALWAYS=1 in the environment: every archive Sieve can read is carried as its contents
     // or remade, smaller or not, so the CI can test each reader on the small archives it has.)
     const char* always_env = std::getenv("SIEVE_ARCHIVES_ALWAYS");
@@ -2324,6 +2329,146 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 }
             if (auto all = zip_entries(b))
                 if (contents("zip", std::move(*all), ".zip")) continue;
+            // v22: a RAR 5 made again by the machine's own rar, where it gives the archive back byte for
+            // byte from its files with their times; carried as its contents, with the recipe. Else, as
+            // before, its contents alone.
+            if (v22 && b.size() >= 8 && std::memcmp(b.data(), "Rar!\x1A\x07\x01\x00", 8) == 0)
+            {
+                std::string why, version, how, switches;
+                std::optional<std::filesystem::path> program;
+                const auto hdr = rar::read_headers(b);
+#ifdef _WIN32
+                const int here = 0;
+#else
+                const int here = 1;
+#endif
+                std::string fmt;
+                size_t links = 0;
+                std::optional<std::vector<sieve::install::InMemory>> all;
+                const std::string folder = contents_name(e.path, ".rar");
+                if (!hdr) why = "its headers could not be read";
+                else if (!hdr->refused.empty()) why = hdr->refused;
+                else if (hdr->host != here) why = std::string("it was made on ") + (hdr->host == 0 ? "Windows" : "a Unix system") + ", and rar here would write another";
+                else if (taken.count(folder)) why = folder + " is taken";
+                else if (!(all = libarchive_entries(b, fmt, &links)) || links) why = "libarchive cannot read it whole";
+                else
+                {
+                    std::set<std::string> held, listed;
+                    for (const auto& in : *all) held.insert(in.entry.path);
+                    for (const rar::Member& mb : hdr->members) listed.insert(mb.path);
+                    std::vector<uint8_t> joined;
+                    uint64_t names = 0;
+                    for (const auto& in : *all)
+                    {
+                        joined.insert(joined.end(), in.bytes.begin(), in.bytes.end());
+                        names += folder.size() + in.entry.path.size() + 40;
+                    }
+                    if (held != listed || held.size() != hdr->members.size()) why = "its headers and libarchive do not list the same files";
+                    else if (!worth(joined, names, all->size() == 1)) why.clear(); // not worth it: its contents are not either
+                    else if (!(program = rar::find_program())) why = "rar was not found (" + rar::looked() + ")";
+                    else if ((version = rar::program_version(*program)).empty()) why = "the rar found gives no version";
+                    else
+                    {
+                        // Its files written out with their times, and rar run on them, each way to try in turn.
+                        std::random_device rd;
+                        const fs::path tmp = fs::temp_directory_path() / ("sieve-rar-" + std::to_string(rd()) + std::to_string(rd()));
+                        std::error_code ec;
+                        try
+                        {
+                            fs::create_directories(tmp);
+                            for (const auto& in : *all)
+                            {
+                                const fs::path p = tmp / fs::path(std::u8string(in.entry.path.begin(), in.entry.path.end()));
+                                if (in.entry.dir) fs::create_directories(p);
+                                else
+                                {
+                                    fs::create_directories(p.parent_path());
+                                    std::ofstream f(p, std::ios::binary | std::ios::trunc);
+                                    f.write(reinterpret_cast<const char*>(in.bytes.data()), std::streamsize(in.bytes.size()));
+                                }
+                            }
+                            std::string t_why;
+                            if (!rar::set_times(tmp, hdr->members, t_why)) why = t_why;
+                            else
+                            {
+                                const bool any_dir = std::any_of(hdr->members.begin(), hdr->members.end(), [](const rar::Member& x) { return x.dir; });
+                                std::vector<std::string> hows = any_dir ? std::vector<std::string>{"top"} : std::vector<std::string>{"list", "top"};
+                                std::vector<std::string> tries{hdr->switches};
+                                tries.insert(tries.end(), hdr->alternatives.begin(), hdr->alternatives.end());
+                                const fs::path out = tmp.string() + ".rar";
+                                size_t best = 0;
+                                const bool trace = std::getenv("SIEVE_RAR_TRACE") != nullptr;
+                                for (const std::string& h : hows)
+                                {
+                                    for (const std::string& sw : tries)
+                                    {
+                                        std::string said;
+                                        const int st = rar::make(*program, tmp, hdr->members, h, sw, out, &said);
+                                        std::vector<uint8_t> made;
+                                        {
+                                            std::ifstream f(out, std::ios::binary);
+                                            if (f) made.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+                                        }
+                                        size_t same = 0;
+                                        while (same < made.size() && same < b.size() && made[same] == b[same]) ++same;
+                                        best = std::max(best, same);
+                                        if (trace)
+                                            std::fprintf(stderr, "rar: %s %s, %s: exit %d, %zu bytes of %zu, the same for %zu\n", e.path.c_str(), h.c_str(), sw.c_str(), st,
+                                                         made.size(), b.size(), same);
+                                        if (st == 0 && made == b)
+                                        {
+                                            how = h;
+                                            switches = sw;
+                                            break;
+                                        }
+                                    }
+                                    if (!how.empty()) break;
+                                }
+                                fs::remove(out, ec);
+                                if (how.empty())
+                                    why = version + " did not make it again byte for byte (at best the same for its first " + std::to_string(best) + " bytes of " +
+                                          std::to_string(b.size()) + ")";
+                            }
+                        }
+                        catch (const std::exception& ex)
+                        {
+                            why = ex.what();
+                        }
+                        fs::remove_all(tmp, ec);
+                    }
+                }
+                if (!how.empty())
+                {
+                    taken.insert(folder);
+                    Manifest::UnpackedArchive u{"rar", e.path, folder, e.size};
+                    u.program = "rar";
+                    u.program_version = version;
+                    u.sha256 = e.sha256;
+                    u.how = how;
+                    u.switches = switches;
+                    u.members = hdr->members;
+                    m.unpacked.push_back(std::move(u));
+                    const std::string prefix = one ? std::string() : folder + "/";
+                    if (!one) add_dirs(prefix);
+                    for (auto& in : *all)
+                    {
+                        const std::string path = prefix + in.entry.path;
+                        add_dirs(path);
+                        if (in.entry.dir)
+                        {
+                            add_dir(path + "/");
+                            continue;
+                        }
+                        ManifestEntry fe;
+                        fe.path = path;
+                        add_file(fe, std::move(in.bytes), {});
+                    }
+                    if (one) m.root = folder;
+                    rar_said.push_back(e.path + ": made again by " + version + " (" + how + ", " + switches + "); carried as its contents, with that recipe");
+                    continue;
+                }
+                if (!why.empty()) rar_said.push_back(e.path + ": not made again by rar: " + why);
+            }
             if (v20)
             {
                 std::string format;
@@ -2351,6 +2496,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 std::any_of(m.unpacked.begin(), m.unpacked.end(), [](const Manifest::UnpackedArchive& u) { return is_v20_format(u.format); });
             // v21: some gzip or zip made again by preflate.
             m.v21 = std::any_of(entries.begin(), entries.end(), [](const ManifestEntry& x) { return x.remake.rfind("sk ", 0) == 0; });
+            // v22: some RAR to be made again by rar.
+            m.v22 = std::any_of(m.unpacked.begin(), m.unpacked.end(), [](const Manifest::UnpackedArchive& u) { return !u.program.empty(); });
+            if (m.v22) m.v21 = true; // v22 is v21 and more
             if (m.v21) m.v20 = true; // v21 is v20 and more
             if (m.v20) m.more_archives = true; // v20 is v19 and more
             if (m.more_archives) m.remake_gz = true; // v19 is v17 and more
@@ -2803,12 +2951,16 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // v16: the head in bytes, where everything v15 allows is allowed (never an older version asked for).
     m.binary = binary && m.compact;
     // v20: wherever the head is in bytes at the newest, the body is too (and v20's archives allowed).
-    const bool had_v21 = m.v21;
+    const bool had_v21 = m.v21, had_v22 = m.v22;
     m.v20 = m.v20 || (m.binary && gzip && v20_on);
     m.v21 = had_v21 && m.binary; // (v21 only in bytes, where a deflate is made again)
+    m.v22 = had_v22 && m.binary; // (v22 too, where a RAR is to be made again by rar)
     if (m.v20) m.more_archives = m.remake_gz = true;
     r.v20 = m.v20;
     r.v21 = m.v21;
+    r.v22 = m.v22;
+    r.rar_said = rar_said;
+    for (const auto& u : m.unpacked) r.rar_remade += !u.program.empty();
     if (m.binary)
     {
         r.head_text = m.text().size();
@@ -2883,7 +3035,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
     };
     if (r.compact)
     {
-        const char* version = r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : r.more_archives ? kMoreArchivesManifestVersion : r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
+        const char* version = r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : r.more_archives ? kMoreArchivesManifestVersion : r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
                             : r.roped ? kRopeManifestVersion : kCompactManifestVersion;
         if (r.items)
         {
@@ -2896,12 +3048,14 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         else o << "items     none; " << version << "\n";
         if (r.listing_carried) o << "listing   " << r.listing << " bytes, carried as LZMA2 in " << r.listing_carried << "\n";
         if (r.binary)
-            o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << (r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : kBinaryManifestVersion)
+            o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << (r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : kBinaryManifestVersion)
               << (r.v20 ? "; its body in bytes too" : "") << ")\n";
         if (r.remade) o << "remade    " << r.remade << " archive(s) carried as what they hold, remade exactly on installing (" << version << ")\n";
         if (r.unpacked)
             o << "unpacked  " << r.unpacked << " archive(s) carried as their contents, not as the archives (Optimise Archive Formats; " << version
               << ")\n";
+        // v22: each RAR the machine's rar was tried on, and what came of it.
+        for (const std::string& t : r.rar_said) o << "rar       " << t << "\n";
         if (r.pieces)
             o << "pieces    " << r.pieces << " file(s) cut into pieces: " << r.pieces_lzma2 << " bytes packed by LZMA2, " << r.pieces_rope
               << " pulled tight by the rope (" << kPiecesManifestVersion << ")\n";

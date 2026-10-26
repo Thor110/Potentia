@@ -142,7 +142,7 @@ into memory first.
 | zip | `.zip`, `.zipx` | Sieve (stored, deflate), else libarchive |
 | xz, gzip, bzip2, zstd, lz4, lzip | `.xz` `.txz`, `.gz` `.tgz`, `.bz2` `.tbz2` `.tbz`, `.zst` `.tzst`, `.lz4` `.tlz4`, `.lz` `.tlz` | liblzma, zlib, libbzip2, libzstd, lz4, liblzma |
 | lzma, brotli (by name: no mark of their own) | `.lzma`, `.br` | liblzma, brotli |
-| RAR 4 and 5 | `.rar` | libarchive (read only: no free RAR compressor exists) |
+| RAR 4 and 5 | `.rar` | libarchive (read only: no free RAR compressor exists; inside a `.sieve`, a RAR 5 may be made again by your own `rar`, below) |
 | cab, ISO 9660, LHA, cpio, ar, WARC, tar | `.cab`, `.iso`, `.lzh` `.lha`, `.cpio`, `.ar` `.deb`, `.warc`, `.tar` | libarchive |
 
 The list is one table in the code (`archive_kinds`, `tools/cli/pack.cpp`); `sieve-install
@@ -150,6 +150,16 @@ The list is one table in the code (`archive_kinds`, `tools/cli/pack.cpp`); `siev
 added there reaches the menu when `install_context.bat` is run again. (Optimise Archive Formats,
 which carries archives inside `.sieve` files, is another thing: what it does with each kind is in
 `sieve help locate` and SPECIFICATIONS §12.2.)
+
+**A RAR made again by your own `rar` (sieve-manifest-v22, 25 October 2026).** With Optimise
+Archive Formats, a RAR 5 that the packing machine's own `rar` (`rar.exe`, WinRAR's) makes again byte
+for byte from its files is carried as its contents with that recipe. Installing it (`sieve-install`,
+`sieve install`, the hallway) gives the RAR back where the same version of `rar` is found, checked
+against its SHA-256. Where none is found, or another version, the files are given in a folder named
+after it instead, and a **warning** says so: `sieve-install` and the hallway pop it up in a box of
+its own, `sieve install` prints it (`warning   x.rar was not made again as a RAR: rar was not found
+...`). Sieve looks for `rar` in `SIEVE_RAR`, beside its own programs, on the `PATH`, and in WinRAR's
+folder in Program Files. Every program that installs shows the same notes, from the same code.
 
 **7z archives are unpacked, by the installer only.** When what an installer carries is one 7z
 archive (as releases did before v4: `sieve.7z`), `sieve-install` unpacks it automatically into a folder

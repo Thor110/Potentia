@@ -370,7 +370,7 @@ std::string manifest_path(const fs::path& p, const fs::path& root)
 
 const char* Manifest::version() const
 {
-    return v21 ? kDeflateManifestVersion : v20 ? kNewestArchivesManifestVersion : more_archives ? kMoreArchivesManifestVersion : !graph.empty() ? kGraphManifestVersion : remake_gz ? kGzipManifestVersion : binary ? kBinaryManifestVersion : rope_above ? kRopeAboveManifestVersion : archives ? kArchivesManifestVersion : pieces ? kPiecesManifestVersion : trimmed ? kTrimmedManifestVersion : rope_groups ? kRopeGroupsManifestVersion : rope_lines ? kRopeLinesManifestVersion : rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
+    return v22 ? kRarManifestVersion : v21 ? kDeflateManifestVersion : v20 ? kNewestArchivesManifestVersion : more_archives ? kMoreArchivesManifestVersion : !graph.empty() ? kGraphManifestVersion : remake_gz ? kGzipManifestVersion : binary ? kBinaryManifestVersion : rope_above ? kRopeAboveManifestVersion : archives ? kArchivesManifestVersion : pieces ? kPiecesManifestVersion : trimmed ? kTrimmedManifestVersion : rope_groups ? kRopeGroupsManifestVersion : rope_lines ? kRopeLinesManifestVersion : rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
          : with_contents ? kInstallManifestVersion : with_addresses ? kAddressManifestVersion : kManifestVersion;
 }
 
@@ -462,7 +462,16 @@ std::string Manifest::text() const
             t += "line " + std::to_string(k) + " " + (line_codings.at(k).empty() ? std::to_string(line_widths.at(k)) : line_codings[k]) + " " + lines[k] + "\n";
         t += "tree " + tree + "\n";
         for (const UnpackedArchive& u : unpacked) // v14
+        {
             t += "u\t" + u.format + "\t" + std::to_string(u.size) + "\t" + u.archive + "\t" + u.folder + "\n";
+            if (u.program.empty()) continue;
+            // v22: its recipe, and its members.
+            auto num = [](const std::optional<int64_t>& v) { return v ? std::to_string(*v) : std::string("-"); };
+            t += "ur\t" + u.program + "\t" + u.program_version + "\t" + u.sha256 + "\t" + u.how + "\t" + u.switches + "\n";
+            for (const rar::Member& mb : u.members)
+                t += std::string("um\t") + (mb.dir ? "d" : "f") + "\t" + std::to_string(mb.attributes) + "\t" + num(mb.mtime) + "\t" + num(mb.ctime) + "\t" +
+                     num(mb.atime) + "\t" + mb.path + "\n";
+        }
         for (const ManifestEntry& e0 : entries)
         {
             ManifestEntry e = e0;
@@ -822,7 +831,7 @@ std::string listing_from_bytes(std::string_view b)
 // its size, then it.
 static std::vector<uint8_t> binary_head(const Manifest& m)
 {
-    std::vector<uint8_t> o = {'s', 'i', 'e', 'v', 'e', uint8_t(m.v21 ? 21 : m.v20 ? 20 : m.more_archives ? 19 : !m.graph.empty() ? 18 : m.remake_gz ? 17 : 16)};
+    std::vector<uint8_t> o = {'s', 'i', 'e', 'v', 'e', uint8_t(m.v22 ? 22 : m.v21 ? 21 : m.v20 ? 20 : m.more_archives ? 19 : !m.graph.empty() ? 18 : m.remake_gz ? 17 : 16)};
     const bool root = !m.one_file_root(), items = !m.trimmed || m.item_stream.packed || m.item_stream.bytes;
     const bool body_packed = m.listing_stream.packed != 0;
     o.push_back(uint8_t((root ? 1 : 0) | (m.x86.packed ? 2 : 0) | (m.lzma2.packed ? 4 : 0) | (items ? 8 : 0) | (m.roped ? 16 : 0) |
@@ -996,7 +1005,7 @@ Manifest Manifest::parse(std::string_view whole)
 {
     // v16: the head in bytes, read back into v15's text (its root's and streams' lines, its lines,
     // the tree's, the rest of its body, "end"), followed by what follows it.
-    if (whole.size() >= 6 && whole.substr(0, 5) == "sieve" && uint8_t(whole[5]) >= 16 && uint8_t(whole[5]) <= 21)
+    if (whole.size() >= 6 && whole.substr(0, 5) == "sieve" && uint8_t(whole[5]) >= 16 && uint8_t(whole[5]) <= 22)
     {
         const uint8_t v = uint8_t(whole[5]);
         size_t at = 6;
@@ -1007,7 +1016,7 @@ Manifest Manifest::parse(std::string_view whole)
         // (v17's text is v15's with gzip remade allowed, v18's with a graph part too, v19's with bzip2
         // and zstd as well: its first line says so.)
         std::string text =
-            std::string(v == 21 ? kDeflateManifestVersion : v == 20 ? kNewestArchivesManifestVersion : v == 19 ? kMoreArchivesManifestVersion : v == 18 ? kGraphManifestVersion : v == 17 ? kGzipManifestVersion : kRopeAboveManifestVersion) + "\n";
+            std::string(v == 22 ? kRarManifestVersion : v == 21 ? kDeflateManifestVersion : v == 20 ? kNewestArchivesManifestVersion : v == 19 ? kMoreArchivesManifestVersion : v == 18 ? kGraphManifestVersion : v == 17 ? kGzipManifestVersion : kRopeAboveManifestVersion) + "\n";
         auto take = [&](uint64_t n) {
             if (n > whole.size() - at) throw std::runtime_error("manifest: its head ends early");
             const std::string_view v = whole.substr(at, size_t(n));
@@ -1144,8 +1153,8 @@ Manifest Manifest::parse(std::string_view whole)
     else if (lines[0] == kRopeGroupsManifestVersion)
         m.rope_groups = m.rope_lines = m.rope_columns = m.roped = m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] == kGzipManifestVersion || lines[0] == kGraphManifestVersion || lines[0] == kMoreArchivesManifestVersion ||
-             lines[0] == kNewestArchivesManifestVersion || lines[0] == kDeflateManifestVersion)
-        m.v21 = lines[0] == kDeflateManifestVersion, m.v20 = lines[0] == kNewestArchivesManifestVersion || m.v21,
+             lines[0] == kNewestArchivesManifestVersion || lines[0] == kDeflateManifestVersion || lines[0] == kRarManifestVersion)
+        m.v22 = lines[0] == kRarManifestVersion, m.v21 = lines[0] == kDeflateManifestVersion || m.v22, m.v20 = lines[0] == kNewestArchivesManifestVersion || m.v21,
         m.more_archives = lines[0] == kMoreArchivesManifestVersion || m.v20, m.remake_gz = m.binary = m.rope_above = m.archives = m.pieces = m.trimmed = m.rope_groups = m.rope_lines = m.rope_columns = m.roped = m.compact =
             m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] == kRopeAboveManifestVersion)
@@ -1274,7 +1283,7 @@ Manifest Manifest::parse(std::string_view whole)
         if (m.items) m.tree = field(lines[first++], "tree");
     }
     const bool graph_allowed = lines[0] == kGraphManifestVersion || lines[0] == kMoreArchivesManifestVersion || lines[0] == kNewestArchivesManifestVersion ||
-                               lines[0] == kDeflateManifestVersion;
+                               lines[0] == kDeflateManifestVersion || lines[0] == kRarManifestVersion;
     const bool graph_needed = lines[0] == kGraphManifestVersion; // (v19's is allowed, not needed)
     for (size_t i = first; i + 1 < lines.size(); ++i)
     {
@@ -1305,6 +1314,44 @@ Manifest Manifest::parse(std::string_view whole)
             u.archive = f[3];
             u.folder = f[4];
             m.unpacked.push_back(u);
+            continue;
+        }
+        // v22: how the RAR just named is made again, and its members.
+        auto number = [&](const std::string& t) -> std::optional<int64_t> {
+            if (t == "-") return std::nullopt;
+            const bool neg = !t.empty() && t[0] == '-';
+            const std::string d = neg ? t.substr(1) : t;
+            if (d.empty() || d.size() > 19 || d.find_first_not_of("0123456789") != std::string::npos || (d.size() == 19 && d > "9223372036854775807"))
+                throw std::runtime_error("manifest: line " + std::to_string(i + 1) + " has a number that is not one");
+            return neg ? -std::stoll(d) : std::stoll(d);
+        };
+        if (m.v22 && f.size() == 6 && f[0] == "ur")
+        {
+            if (m.unpacked.empty() || !m.unpacked.back().program.empty() || m.unpacked.back().format != "rar" || f[1] != "rar" ||
+                (f[4] != "top" && f[4] != "list") || f[3].size() != 64)
+                throw std::runtime_error("manifest: line " + std::to_string(i + 1) + " is not a RAR's recipe");
+            Manifest::UnpackedArchive& u = m.unpacked.back();
+            u.program = f[1];
+            u.program_version = f[2];
+            u.sha256 = f[3];
+            u.how = f[4];
+            u.switches = f[5];
+            continue;
+        }
+        if (m.v22 && f.size() == 7 && f[0] == "um")
+        {
+            if (m.unpacked.empty() || m.unpacked.back().program.empty() || (f[1] != "f" && f[1] != "d") || f[6].empty())
+                throw std::runtime_error("manifest: line " + std::to_string(i + 1) + " is not a RAR's member");
+            rar::Member mb;
+            mb.dir = f[1] == "d";
+            const auto attr = number(f[2]);
+            if (!attr || *attr < 0) throw std::runtime_error("manifest: line " + std::to_string(i + 1) + " has no attributes");
+            mb.attributes = uint64_t(*attr);
+            mb.mtime = number(f[3]);
+            mb.ctime = number(f[4]);
+            mb.atime = number(f[5]);
+            mb.path = f[6];
+            m.unpacked.back().members.push_back(std::move(mb));
             continue;
         }
         ManifestEntry e;
@@ -1642,7 +1689,99 @@ std::string install_times_text(double decode_seconds, double write_seconds)
     return "decoded in " + s(decode_seconds) + ", checked and written in " + s(write_seconds);
 }
 
-bool install_tree(const Manifest& m, const fs::path& dest, bool force, const InstallProgress& progress, const std::atomic<bool>* cancel)
+// After the files: each archive given as its contents said so, and (v22) each RAR made again by the
+// same rar, checked against its SHA-256 and put in its contents' place; where it cannot be, its
+// contents left as they are and a warning saying why.
+static void finish_archives(const Manifest& m, const fs::path& dest, bool force, std::vector<InstallNote>* notes)
+{
+    auto note = [&](const std::string& t, bool warning) {
+        if (notes) notes->push_back({t, warning});
+    };
+    auto p8 = [](const std::string& p) { return fs::path(std::u8string(p.begin(), p.end())); };
+    for (const Manifest::UnpackedArchive& u : m.unpacked)
+    {
+        if (u.program.empty())
+        {
+            note(u.archive + " (" + u.format + ", " + std::to_string(u.size) + " bytes) was carried as its contents (Optimise Archive Formats): " + u.folder +
+                     " holds them, not the archive itself",
+                 false);
+            continue;
+        }
+        // One archive located alone: its contents are the whole install, straight into dest.
+        const std::string under = u.folder + "/";
+        const bool alone = std::none_of(m.entries.begin(), m.entries.end(), [&](const ManifestEntry& e) { return e.path.rfind(under, 0) == 0; });
+        // (Absolute: rar runs in the folder.)
+        const fs::path at = fs::absolute(dest);
+        const fs::path folder = alone ? at : at / p8(u.folder), archive = at / p8(u.archive);
+        const std::string where = alone ? "the folder installed to" : u.folder;
+        auto fail = [&](const std::string& why) { note(u.archive + " was not made again as a RAR: " + why + "; its files are in " + where, true); };
+        try
+        {
+            const auto program = rar::find_program();
+            if (!program)
+            {
+                fail("rar was not found (" + rar::looked() + ")");
+                continue;
+            }
+            const std::string version = rar::program_version(*program);
+            if (version != u.program_version)
+            {
+                fail("the rar found is " + (version.empty() ? std::string("one that gives no version") : version) + ", and it was made by " + u.program_version);
+                continue;
+            }
+            std::error_code ec;
+            if (fs::exists(archive, ec) && !force)
+            {
+                fail(u.archive + " is already there");
+                continue;
+            }
+            std::string why;
+            if (!rar::set_times(folder, u.members, why))
+            {
+                fail(why);
+                continue;
+            }
+            fs::path made = archive;
+            made += ".sieve-making.rar";
+            std::string said;
+            const int status = rar::make(*program, folder, u.members, u.how, u.switches, made, &said);
+            std::vector<uint8_t> bytes;
+            {
+                std::ifstream f(made, std::ios::binary);
+                if (f) bytes.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+            }
+            if (status != 0 || bytes.size() != u.size || sha256_hex(bytes) != u.sha256)
+            {
+                fs::remove(made, ec);
+                fail(status != 0 ? version + " failed (exit status " + std::to_string(status) + ")" : version + " did not make it again byte for byte");
+                continue;
+            }
+            fs::remove(archive, ec);
+            fs::rename(made, archive);
+            // Its contents taken away again: its files, then its folders (the deepest first, each only if empty).
+            for (const rar::Member& mb : u.members)
+                if (!mb.dir) fs::remove(folder / p8(mb.path), ec);
+            std::vector<std::string> dirs;
+            for (const rar::Member& mb : u.members)
+            {
+                const std::string& p = mb.path;
+                for (size_t at = p.find('/'); at != std::string::npos; at = p.find('/', at + 1)) dirs.push_back(p.substr(0, at));
+                if (mb.dir) dirs.push_back(p);
+            }
+            std::sort(dirs.begin(), dirs.end(), [](const std::string& x, const std::string& y) { return x.size() > y.size(); });
+            for (const std::string& d : dirs) fs::remove(folder / p8(d), ec); // (only an empty folder goes)
+            if (!alone) fs::remove(folder, ec);
+            note(u.archive + " made again by " + version + ", checked against its SHA-256", false);
+        }
+        catch (const std::exception& e)
+        {
+            fail(e.what()); // (its files are written: an install that went this far is not undone for it)
+        }
+    }
+}
+
+bool install_tree(const Manifest& m, const fs::path& dest, bool force, const InstallProgress& progress, const std::atomic<bool>* cancel,
+                  std::vector<InstallNote>* notes)
 {
     auto cancelled = [cancel] { return cancel && cancel->load(); };
     auto path_of = [&](const std::string& p) { return dest / fs::path(std::u8string(p.begin(), p.end())); };
@@ -1719,6 +1858,7 @@ bool install_tree(const Manifest& m, const fs::path& dest, bool force, const Ins
         undo();
         throw;
     }
+    finish_archives(m, dest, force, notes);
     return true;
 }
 

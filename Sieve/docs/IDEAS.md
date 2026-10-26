@@ -4099,6 +4099,14 @@ lost:
     years ago, packed again by today's `rar`, is a different file, and the tree's SHA-256 says so.
     So RAR goes in the list of formats as **read, carried as its contents; made again only by the
     same `rar` that made it**, and nothing more is built for now.
+  - **Built (Edward, 25 October 2026: "get that started"; `sieve-manifest-v22`):** a RAR 5 the
+    machine's own `rar` makes again byte for byte from its files, their times and attributes set as
+    its headers hold them, is carried as its contents with the recipe (the version, the switches its
+    headers give, each member's times); installing makes it again where the same `rar` is found, and
+    otherwise gives the files with a warning in the hallway, `sieve-install` and `sieve install`
+    (Edward: the warning comes from the code they share, so a later one needs nothing more of
+    them). Tested with a stand-in `rar` (`ci/stand_in_rar.py`); the real `rar` not yet measured,
+    as none can be had in the cloud session. RAR 4 still only its contents.
   - **Headers kept as they are (Edward's thought, 25 October 2026; a note):** a skeleton keeps an
     archive's headers byte for byte, which is mostly redundant: a zip's local header repeats its
     central directory's entry; offsets, sizes and CRCs follow from the files. A model of each

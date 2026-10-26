@@ -501,3 +501,38 @@ cmp a21/stored.zip a21_oracle/stored.zip
 [ "$(grep -c "^not made again by the oracle (preflate or the LZMA SDK): " a21_oracle.txt)" -eq 5 ]
 $SI a21.sieve --to a21_si --yes > /dev/null
 diff -r a21_inst a21_si
+# v22 (25 October 2026): a RAR made again by the machine's own rar, where it gives the archive back
+# byte for byte; else its contents, with a warning. No rar can be had here (it is not free), so a
+# stand-in (ci/stand_in_rar.py: a RAR 5 writer of stored files, as RARLAB describes the format)
+# plays it; whether the real rar gives a RAR back is for a machine that has it. Not on Windows,
+# where a Python script cannot be run as a program.
+if [ "$(uname -s)" = Linux ] || [ "$(uname -s)" = Darwin ]; then
+  rm -rf r22 && mkdir -p r22/src r22/folder
+  cp ../ci/stand_in_rar.py r22/rar && chmod +x r22/rar
+  RAR="$PWD/r22/rar"
+  cp -r ../tests/manifest_fixture r22/src/pack && seq 1 30000 > r22/src/pack/numbers.txt
+  (cd r22/src && "$RAR" a -cfg- -idq -y -m0 -qo- -r -- ../made.rar pack)
+  # Alone: made again from its contents, then given back as the archive itself.
+  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/made.rar --installer r22.sieve --items --optimise-archives | tr -d '\r' > r22.txt
+  grep -c "^rar       made.rar: made again by RAR 0.01 sieve-stand-in (top, -m0 -qo-)" r22.txt > /dev/null
+  python -c "assert open('r22.sieve', 'rb').read()[:0] == b''"
+  rm -rf r22_inst r22_none r22_oracle r22_si
+  SIEVE_RAR="$RAR" $S install r22.sieve --to r22_inst | tr -d '\r' | grep -c "^note      made.rar made again by RAR 0.01 sieve-stand-in, checked against its SHA-256" > /dev/null
+  cmp r22/made.rar r22_inst/made.rar
+  [ "$(ls -A r22_inst)" = made.rar ]
+  # With no rar: its contents, and a warning saying why.
+  SIEVE_RAR=/nowhere/rar $S install r22.sieve --to r22_none | tr -d '\r' | grep -c "^warning   made.rar was not made again as a RAR: rar was not found" > /dev/null
+  diff -r r22/src r22_none
+  python sieve_ref.py unpack r22.sieve --to r22_oracle | tr -d '\r' | grep -c "^rar	made.rar: made again by RAR 0.01 sieve-stand-in where it is found" > /dev/null
+  diff -r r22_none r22_oracle
+  SIEVE_RAR="$RAR" $SI r22.sieve --to r22_si --yes > /dev/null
+  cmp r22/made.rar r22_si/made.rar
+  # In a folder: the archive given back in its place, the folder's other files as they were.
+  cp r22/made.rar r22/folder/ && cp ../tests/manifest_fixture/a.txt r22/folder/
+  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/folder --installer r22f.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^unpacked .*sieve-manifest-v22" > /dev/null
+  rm -rf r22f_inst && SIEVE_RAR="$RAR" $S install r22f.sieve --to r22f_inst > /dev/null
+  diff -r r22/folder r22f_inst
+  # --v21: as before, its contents alone.
+  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/made.rar --installer r21.sieve --items --optimise-archives --v21 | tr -d '\r' | grep -c "sieve-manifest-v21\|sieve-manifest-v20" > /dev/null
+  rm -rf r21_inst && $S install r21.sieve --to r21_inst | tr -d '\r' | grep -c "^note      made.rar (rar, [0-9]* bytes) was carried as its contents" > /dev/null
+fi

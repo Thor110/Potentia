@@ -66,6 +66,8 @@
 // manifest's address still installs: its files come from their addresses.)
 #pragma once
 
+#include "cli/rar_remake.hpp"
+
 #include "sieve/biguint.hpp"
 
 #include <atomic>
@@ -155,6 +157,14 @@ inline constexpr const char* kNewestArchivesManifestVersion = "sieve-manifest-v2
 // bytes only. Made only where some file is one of these.
 inline constexpr const char* kDeflateManifestVersion = "sieve-manifest-v21";
 
+// v22 (25 October 2026): v21 whose RAR archives, carried as their contents, may be made again by the
+// machine's own rar program (rar_remake.hpp): after a RAR's "u" line, a "ur" line (the program, its
+// version, the archive's SHA-256, how it was run and its switches) and a "um" line for each member
+// in the archive's order (whether a file or a folder, its attributes, its times, its path in the
+// folder). Installing gives the contents, then the archive in their place where the same rar is
+// found and makes it again exactly; else the contents, said so. Its head's byte 22, in bytes only.
+inline constexpr const char* kRarManifestVersion = "sieve-manifest-v22";
+
 // The "u" lines' formats v20 adds (an archive carried as its contents).
 inline bool is_v20_format(const std::string& f)
 {
@@ -238,6 +248,7 @@ struct Manifest
     bool more_archives = false; // v19: some archive is bzip2 or zstd (remake_gz and binary are set too)
     bool v20 = false; // v20: some archive is lz4, brotli, lzma, lzip or libarchive's (more_archives is set too)
     bool v21 = false; // v21: some gzip or zip made again by preflate (v20 is set too)
+    bool v22 = false; // v22: some RAR to be made again by rar (v21 is set too)
     bool body_text = false; // v20: its body as text after all (the head's flag 128), where that came out smaller
     // v14: each archive carried as its contents: its format ("7z", "xz"), its size, its path, and the
     // folder (or file) its contents are in.
@@ -245,6 +256,10 @@ struct Manifest
     {
         std::string format, archive, folder;
         uint64_t size = 0;
+        // v22: made again by this program ("rar"), where its version is this, giving this SHA-256;
+        // run so ("top" or "list") with these switches on these members (rar_remake.hpp).
+        std::string program, program_version, sha256, how, switches;
+        std::vector<rar::Member> members;
     };
     std::vector<UnpackedArchive> unpacked;
     PackedStream rope_stream;
@@ -352,8 +367,17 @@ Manifest installable_manifest(const std::filesystem::path& file, bool hex);
 // is checked (phase 0) and written (phase 1). If `cancel` becomes true, what was written so far is
 // removed again, the folders it made included, and the call returns false. Throws on errors.
 using InstallProgress = std::function<void(int phase, size_t done, size_t total, const std::string& path)>;
+// What an install has to say beyond its files: an archive given as its contents, made again by
+// another program, or not made again and why. Every program that installs shows them (sieve
+// install, sieve-install, the hallway), so a note added here needs nothing more of them; a warning
+// is something not done that was asked for (a RAR its contents only, its rar missing).
+struct InstallNote
+{
+    std::string text;
+    bool warning = false;
+};
 bool install_tree(const Manifest& m, const std::filesystem::path& dest, bool force, const InstallProgress& progress,
-                  const std::atomic<bool>* cancel = nullptr);
+                  const std::atomic<bool>* cancel = nullptr, std::vector<InstallNote>* notes = nullptr);
 
 // How long an install took, as `sieve install` and the hallway say it: "decoded in 0.042 s, checked
 // and written in 0.003 s" (decoding: reading the instructions and making every file's bytes from

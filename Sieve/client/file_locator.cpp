@@ -371,13 +371,29 @@ void FileLocator::install(const std::string& from, const std::string& to, bool s
             const auto t0 = clock::now();
             const cli::Manifest m = cli::installable_manifest(from_u8(from), false);
             const auto t1 = clock::now();
-            cli::install_tree(m, from_u8(to), false, [this](int phase, size_t d, size_t t, const std::string& path) {
-                std::lock_guard<std::mutex> lock(mx_);
-                status_ = trf(phase == 0 ? "loc.install.checking" : "loc.install.writing", {std::to_string(d), std::to_string(t), path});
-            });
+            std::vector<cli::InstallNote> notes;
+            cli::install_tree(
+                m, from_u8(to), false,
+                [this](int phase, size_t d, size_t t, const std::string& path) {
+                    std::lock_guard<std::mutex> lock(mx_);
+                    status_ = trf(phase == 0 ? "loc.install.checking" : "loc.install.writing", {std::to_string(d), std::to_string(t), path});
+                },
+                nullptr, &notes);
             const auto t2 = clock::now();
             done = (m.files == 1 ? trf("loc.installed.one", {to}) : trf("loc.installed", {std::to_string(m.files), to})) + "; " +
                    cli::install_times_text(std::chrono::duration<double>(t1 - t0).count(), std::chrono::duration<double>(t2 - t1).count());
+            // What the install had to say, as every program that installs shows it; a warning pops up too.
+            std::string warn;
+            for (const cli::InstallNote& n : notes)
+            {
+                done += (n.warning ? "; warning: " : "; ") + n.text;
+                if (n.warning) warn += (warn.empty() ? "" : "\n\n") + n.text;
+            }
+            if (!warn.empty())
+            {
+                std::lock_guard<std::mutex> lock(mx_);
+                pending_warning_ = warn;
+            }
         }
         catch (const std::exception& e)
         {
@@ -863,6 +879,15 @@ void FileLocator::event(const SDL_Event& e)
 
 void FileLocator::draw(float W, float H)
 {
+    // An install's warning, in a box of its own (on this thread: SDL's message boxes want the main one).
+    {
+        std::string warn;
+        {
+            std::lock_guard<std::mutex> lock(mx_);
+            warn.swap(pending_warning_);
+        }
+        if (!warn.empty()) SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "Sieve", warn.c_str(), nullptr);
+    }
     // Hand over whatever the dialogs chose since the last frame.
     {
         std::optional<std::string> pick, to;

@@ -2445,7 +2445,7 @@ void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackRepor
                      !(a.has("v8") || a.has("v9") || a.has("v10") || a.has("v11")),
                      !(a.has("v8") || a.has("v9") || a.has("v10") || a.has("v11") || a.has("v12")),
                      a.has("optimise-archives") && !a.has("v13"), !a.has("v15"), !a.has("v16"),
-                     !a.has("v19"), !a.has("v20") && !a.has("v19"));
+                     !a.has("v19"), !a.has("v20") && !a.has("v19"), !a.has("v21") && !a.has("v20") && !a.has("v19"));
 }
 
 int cmd_locate(const Args& a)
@@ -2633,6 +2633,8 @@ int cmd_locate(const Args& a)
         const std::string o = a.get("installer");
         write_address_file(fs::path(std::u8string(o.begin(), o.end())), iaddr, a.has("hex"));
         *info << "installer " << o << ": the address of the installer's manifest (" << (!(m.with_contents ? m.packed : inst.packed) ? "v3: the listing, then every file's bytes"
+                                    : (m.with_contents ? m.v22 : inst.v22) ? "v22: as v21, and a RAR made again by the machine's own rar where it is found"
+                                    : (m.with_contents ? m.v21 : inst.v21) ? "v21: as v20, and gzip, zip and 7z files made again from a skeleton"
                                     : (m.with_contents ? m.v20 : inst.v20) ? "v20: as v19, the listing's body in bytes, and lz4, brotli, lzma, lzip and libarchive's archives optimised"
                                     : (m.with_contents ? m.more_archives : inst.more_archives) ? "v19: as v17, and a bzip2 or zstd file remade exactly or carried as its contents"
                                     : (m.with_contents ? m.remake_gz : inst.remake_gz) ? "v17: as v16, and a gzip file remade exactly from what it holds"
@@ -2881,9 +2883,13 @@ int cmd_install(const Args& a)
     const auto t1 = clock::now();
     std::cout << "manifest  " << m.root << ": " << m.files << " files, " << m.bytes << " bytes\n";
     const fs::path dest(std::u8string(to.begin(), to.end()));
-    install_tree(m, dest, a.has("force"), [&](int phase, size_t done, size_t total, const std::string& path) {
-        if (phase == 1) std::cout << "  " << done << "/" << total << "  " << path << "\n";
-    });
+    std::vector<InstallNote> notes;
+    install_tree(
+        m, dest, a.has("force"),
+        [&](int phase, size_t done, size_t total, const std::string& path) {
+            if (phase == 1) std::cout << "  " << done << "/" << total << "  " << path << "\n";
+        },
+        nullptr, &notes);
     const auto t2 = clock::now();
     std::cout << "installed " << m.files << (m.files == 1 ? " file into " : " files into ") << to
               << (m.files == 1 ? ", checked against its SHA-256\n" : ", every one checked against its SHA-256\n");
@@ -2899,10 +2905,9 @@ int cmd_install(const Args& a)
         if (named) std::cout << "; it names " << named << (named == 1 ? " file" : " files") << " it does not carry (sieve map " << in << " lists them)";
         std::cout << "\n";
     }
-    // v14: an archive carried as its contents is said so, never passed off as the archive.
-    for (const auto& u : m.unpacked)
-        std::cout << "note      " << u.archive << " (" << u.format << ", " << u.size << " bytes) was carried as its contents (Optimise Archive Formats): "
-                  << u.folder << " holds them, not the archive itself\n";
+    // What the install has to say (an archive given as its contents, a RAR made again or not, and
+    // why): install_tree's notes, as every program that installs shows them.
+    for (const InstallNote& n : notes) std::cout << (n.warning ? "warning   " : "note      ") << n.text << "\n";
     return 0;
 }
 
