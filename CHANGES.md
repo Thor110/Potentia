@@ -1,5 +1,7 @@
 # The roadmap: the triangle (v23), mixing (v24), PNGs (v25) (26 October 2026)
 
+Note : Commit misname this morning.
+
 Unzip over the repository root. Commit 866ba4e locally (not pushed), on top of your bd1df0d. Each item is a new instructions version, and the older ones read as before. Details are in IDEAS §19.102 and SPECIFICATIONS §12.2.
 
 ## 1. Your triangle: rope-wave-v6, `sieve-manifest-v23`
