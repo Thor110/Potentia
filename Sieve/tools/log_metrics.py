@@ -147,6 +147,14 @@ def machine_profile(cpu):
     return ""
 
 
+def command_count(help_cpp):
+    """The commands of the sieve tool: the pages of sieve help, but for "lines" (a page on the lines,
+    not a command). (Counted from README.md's headings until 26 October 2026, which stopped working
+    when the commands' details moved into sieve help: those builds read 0, and were counted again
+    from their own commits' help.cpp.)"""
+    return len([n for n in re.findall(r'^        \{"([a-z][a-z-]*)", "', help_cpp, re.M) if n != "lines"])
+
+
 def repository_counts():
     """What the repository itself holds: each a count anyone can repeat on the same commit."""
     counts = {}
@@ -156,7 +164,9 @@ def repository_counts():
     counts["voices"] = len(re.findall(r"^- \*\*[^*]+\*\* \([^,)]+, [^)]+\): ", read(os.path.join(ROOT, "docs", "VOICES.md")), re.M))
     counts["ideas"] = len(set(re.findall(r"^\*\*(\d+\.\d+)[a-z]? ", read(os.path.join(ROOT, "docs", "IDEAS.md")), re.M)))
     counts["spec_sections"] = len(re.findall(r"^#{2,4} ", read(os.path.join(ROOT, "docs", "SPECIFICATIONS.md")), re.M))
-    counts["commands"] = len(re.findall(r"^### `", read(os.path.join(ROOT, "README.md")), re.M))
+    counts["commands"] = command_count(read(os.path.join(ROOT, "tools", "cli", "help.cpp")))
+    if counts["commands"] == 0:  # (a count that has stopped finding anything, not no commands)
+        sys.exit("log_metrics: no commands found in tools/cli/help.cpp; has its layout changed?")
     files = lines = 0
     for d in SOURCE_DIRS:
         for top, dirs, names in os.walk(os.path.join(ROOT, d)):
