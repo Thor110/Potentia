@@ -16,6 +16,10 @@
 //           of them, that one;
 //        3  with both and the diagonal between them (W + S back): value before + line before -
 //           diagonal, held within 0 .. 2^L - 1; else as 2.
+//        4  (rope-wave-v6) the triangle (Edward's: a value and its neighbours before, above and on
+//           the diagonal; the median edge detector of LOCO-I, JPEG-LS): with a = the value before,
+//           b = the line before, c = the diagonal, min(a, b) where c >= max(a, b), max(a, b) where
+//           c <= min(a, b), else a + b - c; else as 2.
 //      A value with no neighbour in its phase is predicted by the rope.
 //   K  keep (0 or 1): the kept values, at the start, a third, the centre (an odd count only: an even
 //      count's centre is a gap between two values), two thirds and the end, the points rounded
@@ -47,6 +51,7 @@ inline constexpr const char* kRopeWaveColumnsVersion = "rope-wave-v2"; // v1 wit
 inline constexpr const char* kRopeWaveLinesVersion = "rope-wave-v3";   // v2 with columns by line (C2)
 inline constexpr const char* kRopeWaveGroupsVersion = "rope-wave-v4";  // v3 with columns sharing tables (G1)
 inline constexpr const char* kRopeWaveAboveVersion = "rope-wave-v5";   // v4 with the byte above as context (A1)
+inline constexpr const char* kRopeWaveTriangleVersion = "rope-wave-v6"; // v5 with the triangle (P4) and its contexts (T1)
 
 struct RopeParams
 {
@@ -65,6 +70,11 @@ struct RopeParams
     // above it (the same column of the line before, or none where that line is shorter), each
     // such pair given its group the first time it is met (SPECIFICATIONS §12.2).
     bool above = false;
+    // rope-wave-v6 (" T1" after K, with P3 or P4 and no columns): what is left coded by how busy
+    // its triangle is: |a - c| + |b - c| (shifted down by L - 8 bits) into buckets 0 to 7 by the
+    // bounds 2, 4, 8, 16, 32, 64, 128, and bucket 8 for a value with no triangle (the first line,
+    // the first S of each); for each plane, each bucket's count and segment (SPECIFICATIONS §12.2).
+    bool triangle = false;
     void check() const; // throws std::invalid_argument for parameters out of range
     std::string text() const; // "L8 W949 S1 P3 K0"
     static RopeParams parse(std::string_view text);
@@ -83,7 +93,7 @@ double rope_estimate(std::span<const uint8_t> file, const RopeParams& p);
 // Pulling tight: the parameters that give the shortest code, searched over every value length,
 // phase and step, keep or not, and the widths at which the file best matches itself shifted by a
 // line, within `seconds` (0: no limit); the best found by then on a timeout. `newest`: the newest
-// rope-wave version tried (1 to 5), for instructions that an older reader must read.
+// rope-wave version tried (1 to 6), for instructions that an older reader must read.
 struct RopeSearch
 {
     RopeParams best;
@@ -95,7 +105,9 @@ struct RopeSearch
     double best_at = 0, took = 0;
     size_t best_trial = 0;
 };
-RopeSearch rope_search(std::span<const uint8_t> file, double seconds = 0, uint32_t newest = 5);
+RopeSearch rope_search(std::span<const uint8_t> file, double seconds = 0, uint32_t newest = 6);
+// Whether parameters need rope-wave-v6 (P4, or T1).
+inline bool rope_v6(const RopeParams& p) { return p.phases == 4 || p.triangle; }
 // The search stops early on bytes that its first waves make no smaller (already packed: a JPEG, a
 // film), as no later wave has helped such a file; true searches every wave regardless, until its
 // time (--search-every-wave, the File Locator's [locator] search_every_wave). For the whole run.

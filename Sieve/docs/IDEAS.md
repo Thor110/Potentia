@@ -4858,3 +4858,43 @@ while the site is replaced would mean getting at the card. Only the card's key, 
 lets a new table in after an update. It answers the case §19.92 leaves open (a server replaced whole,
 and the software crawler stopped with it). Whether it could also refuse to serve a page that fails,
 rather than only report it, is for when it is thought about. A thought only; nothing to work on.
+
+**19.102 Towards the minimum address: the triangle, mixing and generators (Edward, 26 October 2026;
+the three built).** Edward asked for filters aimed at the shortest address a real file can have, even
+if the true minimum is out of reach. Any address is two parts: the model the reader must already
+have, and where the file falls among what that model allows; a filter is a model, and a better one
+makes the second part shorter. Two limits stay in view: there are fewer short numbers than files
+(only a file with structure can have a short address), and the true minimum cannot be computed in
+general, only approached from above. So each idea was judged by how much shorter it makes that part,
+measured on this repository's own files.
+- **Grammars, dictionaries and rulesets (Edward's).** Models, and good ones for text; but as
+  predictions rather than hard rules: a hard filter loses any file that breaks one rule (a name, a
+  typo), a prediction only pays a few bits for it. They belong as models inside mixing (below).
+- **The triangle (Edward's: a byte, its neighbour before, the one above and the corner, at varying
+  row lengths): built, rope-wave-v6.** It is the median edge detector of LOCO-I (JPEG-LS): `P4`, and
+  `T1`, what is left coded by how busy the triangle is. The Vitruvian Man as raw grey pixels (949 by
+  1300): 762,766 bytes, against the rope's best before 831,022 and LZMA2's 865,400. The row length is
+  found from the bytes alone: of every width from 2 to 2,048 the true one (949) cost about 10% less
+  than any other. Where noise outweighs edges the plain average (`P2`) still wins; the search weighs
+  them all. (`sieve-manifest-v23`.)
+- **Mixing (Claude's): built, mix-v1.** Every predictor at once, bit by bit: orders 0 to 6 and the
+  word so far, their predictions mixed by weights that learn as the file goes, coded exactly by an
+  arithmetic coder, in integers only (the same code on every machine; CI pins one). Don Quixote
+  (2,391,678 bytes): 565,596, against LZMA2's 685,794 (17.5% smaller); the rope, made for tables and
+  pictures, 1,324,573. Its cost is time: about 0.4 MB/s, decoding as slow as coding, so it is tried
+  on a file's start first. (`sieve-manifest-v24`; `sieve mix`.) A Python sketch had found 30,424
+  bytes on the book's first 100,000 (xz 35,696); in C++ with integers, 29,301.
+- **Generators (Edward's Minecraft seed): built for PNGs.** A file a small known program made has
+  that program and its input as its true address. Sieve's own files had one: nine of ten PNGs
+  measured are exactly what stb_image_write writes at its level 8, so they are carried as their
+  pixels and made again by it; the others (zlib's) from a skeleton, their deflate by preflate. Ten
+  PNGs, 657,221 bytes: 247,695 (`sieve-manifest-v25`). The same holds for the archives remade since
+  v14. Where the program is not known (a photograph, prose) there is no seed to find.
+- *Measured and not taken:* the triangle on these screenshots (flat interface colours suit LZ's
+  long repeats: their filtered rows by xz 274,588 in all, their pixels by the rope 582,870, by mixing
+  344,626); preflate on stb_image_write's PNGs (its difference about 28 KB on a 44 KB screenshot:
+  larger than the PNG).
+- *Next:* the triangle as a model inside mixing (pictures by mixing); mixing's speed, then more
+  models (a dictionary's words, a grammar, the column and the line above for tables); bias
+  cancellation for the triangle (LOCO-I's); and more generators as they turn up (zlib's PNGs remade
+  by zlib itself where it can, without preflate's difference).

@@ -5,9 +5,11 @@
 
 #include "sieve/filekind.hpp"
 #include "sieve/rope_wave.hpp"
+#include "sieve/mix.hpp"
 #include "sieve/sha256.hpp"
 #include "sieve/stop.hpp"
 #include "unpack_7z.hpp"
+#include "cli/image_io.hpp"
 #include "cli/vault.hpp"
 
 // bzlib.h includes <windows.h> on Windows: without these first, its min and max macros break
@@ -46,6 +48,7 @@
 #include <cstring>
 #include <cctype>
 #include <exception>
+#include <functional>
 #include <fstream>
 #include <initializer_list>
 #include <memory>
@@ -1063,6 +1066,19 @@ struct DeflateSkeleton
             }
         return false;
     }
+    // v25 (kind 5): a run of chunks (a PNG's IDATs): the chunks' data lengths, then the segments that
+    // make their data joined (`sub`'s), which installing cuts back into chunks, each with its length
+    // before it, its name ("IDAT") and its CRC-32 after it, worked out again.
+    void chunked(const std::vector<uint32_t>& lengths, const DeflateSkeleton& sub)
+    {
+        head.push_back(5);
+        sk_put_varint(head, lengths.size());
+        for (const uint32_t l : lengths) sk_put_varint(head, l);
+        sk_put_varint(head, sub.segments);
+        head.insert(head.end(), sub.head.begin(), sub.head.end());
+        data.insert(data.end(), sub.data.begin(), sub.data.end());
+        ++segments;
+    }
     // The inner bytes: the segments' count, the segments, then the data; and how long the skeleton is.
     std::vector<uint8_t> inner(size_t& skeleton) const
     {
@@ -1088,52 +1104,82 @@ std::vector<uint8_t> deflate_skeleton_remake(const std::vector<uint8_t>& inner, 
         return from;
     };
     std::vector<uint8_t> out;
-    const uint64_t count = sk_get_varint(sk, at);
-    for (uint64_t k = 0; k < count; ++k)
-    {
-        if (at >= sk.size()) throw std::runtime_error("a deflate skeleton ends early");
-        const uint8_t kind = sk[at++];
-        const uint64_t n = sk_get_varint(sk, at);
-        if (kind == 0)
+    std::function<void(uint64_t, std::vector<uint8_t>&, int)> run = [&](uint64_t count, std::vector<uint8_t>& out, int depth) {
+        for (uint64_t k = 0; k < count; ++k)
         {
-            if (n > sk.size() - at) throw std::runtime_error("a deflate skeleton ends early");
-            out.insert(out.end(), sk.begin() + std::ptrdiff_t(at), sk.begin() + std::ptrdiff_t(at + n));
-            at += size_t(n);
+            if (at >= sk.size()) throw std::runtime_error("a deflate skeleton ends early");
+            const uint8_t kind = sk[at++];
+            const uint64_t n = sk_get_varint(sk, at);
+            if (kind == 5)
+            {
+                // v25: a run of chunks: n chunks' lengths, then the segments of their data joined.
+                if (depth > 0 || n == 0 || n > (uint64_t(1) << 24)) throw std::runtime_error("a skeleton's run of chunks that is not one");
+                std::vector<uint64_t> lengths = std::vector<uint64_t>(size_t(n));
+                uint64_t total = 0;
+                for (auto& l : lengths)
+                {
+                    l = sk_get_varint(sk, at);
+                    if (l > 0x7FFFFFFFu) throw std::runtime_error("a chunk longer than a PNG's may be");
+                    total += l;
+                }
+                std::vector<uint8_t> joined;
+                run(sk_get_varint(sk, at), joined, depth + 1);
+                if (joined.size() != total) throw std::runtime_error("a run of chunks whose data is not their lengths");
+                size_t from = 0;
+                for (const uint64_t l : lengths)
+                {
+                    for (int b = 3; b >= 0; --b) out.push_back(uint8_t(l >> (8 * b)));
+                    const size_t name_at = out.size();
+                    for (const char c : {'I', 'D', 'A', 'T'}) out.push_back(uint8_t(c));
+                    out.insert(out.end(), joined.begin() + std::ptrdiff_t(from), joined.begin() + std::ptrdiff_t(from + l));
+                    from += size_t(l);
+                    const uint32_t crc = uint32_t(crc32(0, out.data() + name_at, uInt(out.size() - name_at)));
+                    for (int b = 3; b >= 0; --b) out.push_back(uint8_t(crc >> (8 * b)));
+                }
+                continue;
+            }
+            if (kind == 0)
+            {
+                if (n > sk.size() - at) throw std::runtime_error("a deflate skeleton ends early");
+                out.insert(out.end(), sk.begin() + std::ptrdiff_t(at), sk.begin() + std::ptrdiff_t(at + n));
+                at += size_t(n);
+            }
+            else if (kind == 1)
+            {
+                const size_t from = take_data(n);
+                out.insert(out.end(), inner.begin() + std::ptrdiff_t(from), inner.begin() + std::ptrdiff_t(from + n));
+            }
+            else if (kind == 2)
+            {
+                const uint64_t d = sk_get_varint(sk, at);
+                if (d > sk.size() - at) throw std::runtime_error("a deflate skeleton ends early");
+                const std::vector<uint8_t> diff(sk.begin() + std::ptrdiff_t(at), sk.begin() + std::ptrdiff_t(at + d));
+                at += size_t(d);
+                const size_t from = take_data(n);
+                const std::vector<uint8_t> un(inner.begin() + std::ptrdiff_t(from), inner.begin() + std::ptrdiff_t(from + n));
+                std::vector<uint8_t> raw;
+                if (!preflate_join(un, diff, raw)) throw std::runtime_error("preflate could not make a deflate stream again");
+                out.insert(out.end(), raw.begin(), raw.end());
+            }
+            else if (kind == 3 || kind == 4)
+            {
+                const size_t np = kind == 3 ? 1 : 5;
+                if (np + 2 > sk.size() - at) throw std::runtime_error("a skeleton ends early");
+                const uint8_t* props = sk.data() + at;
+                const int level = sk[at + np];
+                const uint8_t flags = sk[at + np + 1];
+                at += np + 2;
+                if (level > 9 || (flags & ~3) || (kind == 4 && (flags & 1)) || (kind == 3 && props[0] > 40))
+                    throw std::runtime_error("a skeleton's LZMA settings this Sieve does not know");
+                const size_t from = take_data(n);
+                const std::vector<uint8_t> un(inner.begin() + std::ptrdiff_t(from), inner.begin() + std::ptrdiff_t(from + n));
+                const std::vector<uint8_t> f = sdk_stream(un, kind == 3, props, level, (flags & 1) ? lzma2_auto_block(props[0]) : 0, (flags & 2) != 0);
+                out.insert(out.end(), f.begin(), f.end());
+            }
+            else throw std::runtime_error("a deflate skeleton's segment this Sieve does not know");
         }
-        else if (kind == 1)
-        {
-            const size_t from = take_data(n);
-            out.insert(out.end(), inner.begin() + std::ptrdiff_t(from), inner.begin() + std::ptrdiff_t(from + n));
-        }
-        else if (kind == 2)
-        {
-            const uint64_t d = sk_get_varint(sk, at);
-            if (d > sk.size() - at) throw std::runtime_error("a deflate skeleton ends early");
-            const std::vector<uint8_t> diff(sk.begin() + std::ptrdiff_t(at), sk.begin() + std::ptrdiff_t(at + d));
-            at += size_t(d);
-            const size_t from = take_data(n);
-            const std::vector<uint8_t> un(inner.begin() + std::ptrdiff_t(from), inner.begin() + std::ptrdiff_t(from + n));
-            std::vector<uint8_t> raw;
-            if (!preflate_join(un, diff, raw)) throw std::runtime_error("preflate could not make a deflate stream again");
-            out.insert(out.end(), raw.begin(), raw.end());
-        }
-        else if (kind == 3 || kind == 4)
-        {
-            const size_t np = kind == 3 ? 1 : 5;
-            if (np + 2 > sk.size() - at) throw std::runtime_error("a skeleton ends early");
-            const uint8_t* props = sk.data() + at;
-            const int level = sk[at + np];
-            const uint8_t flags = sk[at + np + 1];
-            at += np + 2;
-            if (level > 9 || (flags & ~3) || (kind == 4 && (flags & 1)) || (kind == 3 && props[0] > 40))
-                throw std::runtime_error("a skeleton's LZMA settings this Sieve does not know");
-            const size_t from = take_data(n);
-            const std::vector<uint8_t> un(inner.begin() + std::ptrdiff_t(from), inner.begin() + std::ptrdiff_t(from + n));
-            const std::vector<uint8_t> f = sdk_stream(un, kind == 3, props, level, (flags & 1) ? lzma2_auto_block(props[0]) : 0, (flags & 2) != 0);
-            out.insert(out.end(), f.begin(), f.end());
-        }
-        else throw std::runtime_error("a deflate skeleton's segment this Sieve does not know");
-    }
+    };
+    run(sk_get_varint(sk, at), out, 0);
     if (at != sk.size() || data != inner.size()) throw std::runtime_error("a deflate skeleton that does not use all it is given");
     return out;
 }
@@ -1296,6 +1342,59 @@ std::optional<DeflateSkeleton> zip_skeleton(const std::vector<uint8_t>& b)
         cur = e.data + e.csize;
     }
     s.literal(b.data() + cur, b.size() - cur);
+    return s;
+}
+
+// v25: a PNG as a skeleton: every chunk as it is but its IDATs, which are one run (kind 5): their
+// data joined is a zlib stream, its two-byte header and what follows its deflate (the Adler-32) kept
+// as they are, its deflate made again by preflate; each IDAT's CRC-32 worked out again on
+// installing. Nothing where a chunk's CRC is wrong, the IDATs are not all together, or preflate
+// cannot read the deflate.
+bool is_png(const std::vector<uint8_t>& b)
+{
+    static const uint8_t sig[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+    return b.size() >= 8 + 25 && std::memcmp(b.data(), sig, 8) == 0;
+}
+
+std::optional<DeflateSkeleton> png_skeleton(const std::vector<uint8_t>& b)
+{
+    if (!is_png(b)) return std::nullopt;
+    auto u32 = [&](size_t at) { return uint32_t(b[at]) << 24 | uint32_t(b[at + 1]) << 16 | uint32_t(b[at + 2]) << 8 | uint32_t(b[at + 3]); };
+    size_t at = 8, run_from = 0, run_to = 0;
+    std::vector<uint32_t> lengths;
+    std::vector<uint8_t> joined;
+    bool ended_run = false;
+    while (at < b.size())
+    {
+        if (b.size() - at < 12) return std::nullopt;
+        const uint32_t n = u32(at);
+        if (n > 0x7FFFFFFFu || n > b.size() - at - 12) return std::nullopt;
+        if (uint32_t(crc32(0, b.data() + at + 4, uInt(n + 4))) != u32(at + 8 + n)) return std::nullopt;
+        const bool idat = std::memcmp(b.data() + at + 4, "IDAT", 4) == 0;
+        if (idat)
+        {
+            if (ended_run) return std::nullopt; // IDATs apart
+            if (lengths.empty()) run_from = at;
+            lengths.push_back(n);
+            joined.insert(joined.end(), b.begin() + std::ptrdiff_t(at + 8), b.begin() + std::ptrdiff_t(at + 8 + n));
+            run_to = at + 12 + n;
+        }
+        else if (!lengths.empty()) ended_run = true;
+        const bool iend = std::memcmp(b.data() + at + 4, "IEND", 4) == 0;
+        at += 12 + size_t(n);
+        if (iend) break;
+    }
+    if (lengths.empty() || joined.size() < 7) return std::nullopt;
+    size_t used = 0;
+    if (!inflate_raw(joined.data() + 2, joined.size() - 2, &used)) return std::nullopt;
+    DeflateSkeleton sub;
+    sub.literal(joined.data(), 2);
+    if (!sub.deflated(joined.data() + 2, used)) return std::nullopt;
+    sub.literal(joined.data() + 2 + used, joined.size() - 2 - used);
+    DeflateSkeleton s;
+    s.literal(b.data(), run_from);
+    s.chunked(lengths, sub);
+    s.literal(b.data() + run_to, b.size() - run_to);
     return s;
 }
 
@@ -1629,6 +1728,19 @@ std::vector<uint8_t> lzma_alone_pack(const std::vector<uint8_t>& in, uint32_t pr
 
 std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector<uint8_t>& inner)
 {
+    if (recipe.rfind("stb ", 0) == 0)
+    {
+        // "stb <level> <filter> <width> <height> <components> <inner size>" (v25): a PNG stb_image_write
+        // made, made again from its pixels by the same.
+        int level = 0, filter = 0, w = 0, h = 0, c = 0;
+        unsigned long long size = 0;
+        char extra = 0;
+        if (std::sscanf(recipe.c_str(), "stb %d %d %d %d %d %llu%c", &level, &filter, &w, &h, &c, &size, &extra) != 6 || level < 0 || level > 9 ||
+            filter < -1 || filter > 4 || w < 1 || h < 1 || c < 1 || c > 4 || size != inner.size() || uint64_t(w) * uint64_t(h) * uint64_t(c) != size)
+            throw std::runtime_error("a PNG's recipe this Sieve does not know: " + recipe);
+        const std::string png = stb_png(inner, w, h, c, level, filter);
+        return std::vector<uint8_t>(png.begin(), png.end());
+    }
     if (recipe.rfind("sk ", 0) == 0)
     {
         // "sk <skeleton size> <inner size>" (v21): a gzip, zip or 7z made again from its skeleton and the
@@ -2088,11 +2200,22 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const bool v20 = gzip_remake && v20_on; // v20's (lz4, brotli, lzma, lzip, libarchive's)
     const bool v21 = v20 && v21_on;         // v21's (gzip, zip and 7z made again from a skeleton)
     const bool v22 = v21 && v22_on;         // v22's (a RAR made again by the machine's own rar)
+    // v23's (rope-wave-v6, the triangle): only where the newest instructions are made, in bytes; else
+    // the rope's search stops at v5.
+    if (!(v22 && binary && m.compact)) rope_newest = std::min<uint32_t>(rope_newest, 5);
+    // v24's (mix-v1): rope_newest 7 asks for mixing too (made only where v23 would be); the rope's
+    // own newest version is 6.
+    const bool mix_on = rope_newest >= 7;
+    // v25's (a PNG made again from its skeleton): rope_newest 8, made only where v24 would be.
+    const bool png_on = rope_newest >= 8 && v21;
+    bool png_made = false;
+    rope_newest = std::min<uint32_t>(rope_newest, 6);
     m.remake_gz = false;
     m.more_archives = false;
     m.v20 = false;
     m.v21 = false;
     m.v22 = false;
+    m.v25 = false;
     std::vector<std::string> rar_said; // v22: what came of each RAR tried
     // (SIEVE_ARCHIVES_ALWAYS=1 in the environment: every archive Sieve can read is carried as its contents
     // or remade, smaller or not, so the CI can test each reader on the small archives it has.)
@@ -2206,6 +2329,43 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 if (one) m.root = folder; // one archive located alone: its contents' folder is the root
                 return true;
             };
+            // v25: a PNG made again exactly from its skeleton: its IDATs' deflate by preflate, their CRCs
+            // worked out again; what it holds (its rows, as PNG filters them) carried as any file is.
+            if (png_on && is_png(b))
+            {
+                // stb_image_write's own (the hallway's screenshots): its pixels, and the level and filter
+                // that give it back, its default (8, each row's own filter) first.
+                std::vector<uint8_t> px;
+                int w = 0, h = 0, c = 0;
+                bool done = false;
+                if (png_pixels(b.data(), b.size(), px, w, h, c))
+                    for (const int level : {8, 9, 7, 6, 5, 4, 3, 2, 1, 0})
+                    {
+                        const std::string again = stb_png(px, w, h, c, level, -1);
+                        if (again.size() != b.size() || !std::equal(again.begin(), again.end(), reinterpret_cast<const char*>(b.data()))) continue;
+                        const std::string r = "stb " + std::to_string(level) + " -1 " + std::to_string(w) + " " + std::to_string(h) + " " + std::to_string(c) + " " +
+                                              std::to_string(px.size());
+                        done = single("png", std::move(px), r, contents_name(e.path, ".png"), 40);
+                        break;
+                    }
+                if (done)
+                {
+                    png_made = true;
+                    continue;
+                }
+            }
+            if (png_on && is_png(b))
+                if (auto sk = png_skeleton(b))
+                {
+                    size_t skeleton = 0;
+                    std::vector<uint8_t> whole = sk->inner(skeleton);
+                    const std::string r = "sk " + std::to_string(skeleton) + " " + std::to_string(whole.size());
+                            if (deflate_skeleton_remake(whole, skeleton) == b && single("png", std::move(whole), r, contents_name(e.path, ".png"), 40))
+                    {
+                        png_made = true;
+                        continue;
+                    }
+                }
             if (is_xz(b))
             {
                 auto inner = xz_inner(b);
@@ -2498,6 +2658,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             m.v21 = std::any_of(entries.begin(), entries.end(), [](const ManifestEntry& x) { return x.remake.rfind("sk ", 0) == 0; });
             // v22: some RAR to be made again by rar.
             m.v22 = std::any_of(m.unpacked.begin(), m.unpacked.end(), [](const Manifest::UnpackedArchive& u) { return !u.program.empty(); });
+            m.v25 = png_made; // v25: some PNG made again from its skeleton
             if (m.v22) m.v21 = true; // v22 is v21 and more
             if (m.v21) m.v20 = true; // v21 is v20 and more
             if (m.v20) m.more_archives = true; // v20 is v19 and more
@@ -2715,6 +2876,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     std::vector<std::vector<uint8_t>> piece_z(files.size()); // v13: a file's LZMA2 pieces, joined
     PackReport r;
     m.roped = m.rope_columns = m.rope_lines = m.rope_groups = m.pieces = m.rope_above = false;
+    bool rope_triangle = false; // v23: some rope way rope-wave-v6's
+    bool mixed = false;         // v24: some file carried by mixing
     if (m.compact && rope_seconds >= 0)
     {
         std::unordered_map<std::string, size_t> copies;
@@ -2747,11 +2910,42 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 params = fw.pieces_rope;
                 piece_z[i] = std::move(fw.pieces_z);
             }
+            // v24: mixing (mix-v1), for a file of 4 KiB to 16 MiB: first its start (up to 256 KiB)
+            // against LZMA2's estimate of it, and the whole only where the start comes out at least
+            // 3% smaller (mixing takes about 2.5 s a megabyte, coding and decoding alike).
+            if (mix_on && bytes[i].size() >= 4096 && bytes[i].size() <= (size_t(16) << 20) && !stop_requested())
+            {
+                const timings::Scope t("pack.mix");
+                const size_t sn = std::min<size_t>(bytes[i].size(), size_t(256) << 10);
+                const std::vector<uint8_t> start(bytes[i].begin(), bytes[i].begin() + std::ptrdiff_t(sn));
+                const uint64_t ms = mix_code(start, MixParams::for_size(sn)).size();
+                const uint64_t ls = sn == bytes[i].size() ? fw.lzma2 : estimate(start);
+                if (ms * 100 < ls * 97)
+                {
+                    const MixParams mp = MixParams::for_size(bytes[i].size());
+                    std::vector<uint8_t> mc = mix_code(bytes[i], mp);
+                    uint64_t len = mc.size(), vl = 1;
+                    while (len >>= 7) ++vl;
+                    if (mc.size() + vl < best)
+                    {
+                        best = mc.size() + vl;
+                        way = "mix " + mp.text();
+                        code = std::move(mc);
+                        params = RopeParams{};
+                        piece_z[i].clear();
+                    }
+                }
+            }
             if (way.empty()) continue;
             rope_codes[i] = std::move(code);
             rope_params[i] = params;
             files[i]->way = way;
             m.roped = true;
+            if (way.rfind("mix ", 0) == 0)
+            {
+                mixed = true; // v24
+                continue;
+            }
             if (way.rfind("pieces ", 0) == 0)
             {
                 m.pieces = true; // v13
@@ -2763,6 +2957,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             if (params.columns == 2) m.rope_lines = true; // v10
             if (params.grouped) m.rope_groups = m.rope_lines = true; // v11 (which reads v10's ways too)
             if (params.above) m.rope_above = true;                   // v15
+            if (rope_v6(params)) rope_triangle = true;               // v23
         }
     }
 
@@ -2793,8 +2988,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         }
     // v8: the rope stream, each code's length then the code, in the listing's order.
     m.rope_carried.clear();
+    uint64_t mix_lengths = 0; // v24: the bytes of mixing's codes' lengths, in the rope stream
     for (size_t i = 0; i < files.size(); ++i)
-        if (files[i]->way.rfind("rope ", 0) == 0 || files[i]->way.rfind("pieces ", 0) == 0)
+        if (files[i]->way.rfind("rope ", 0) == 0 || files[i]->way.rfind("pieces ", 0) == 0 || files[i]->way.rfind("mix ", 0) == 0)
         {
             uint64_t len = rope_codes[i].size();
             while (len >= 0x80)
@@ -2804,10 +3000,18 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             }
             m.rope_carried.push_back(uint8_t(len));
             m.rope_carried.insert(m.rope_carried.end(), rope_codes[i].begin(), rope_codes[i].end());
+            if (files[i]->way.rfind("mix ", 0) == 0)
+            {
+                ++r.mixed; // v24
+                r.mix_bytes += bytes[i].size();
+                r.mix_carried += rope_codes[i].size();
+                for (uint64_t n = rope_codes[i].size(); n; n >>= 7) ++mix_lengths; // its length's varint
+                continue;
+            }
             ++r.roped;
             r.rope_bytes += bytes[i].size();
         }
-    r.rope_carried = m.rope_carried.size();
+    r.rope_carried = m.rope_carried.size() - r.mix_carried - mix_lengths; // (the rope's codes alone)
     r.rope_columns = m.rope_columns;
     r.rope_lines = m.rope_lines;
     r.rope_groups = m.rope_groups;
@@ -2952,13 +3156,23 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     m.binary = binary && m.compact;
     // v20: wherever the head is in bytes at the newest, the body is too (and v20's archives allowed).
     const bool had_v21 = m.v21, had_v22 = m.v22;
+    const bool had_v25 = m.v25;
+    m.v25 = had_v25 && m.binary;              // (a PNG's skeleton only where the newest instructions are made: above)
+    m.v24 = mixed || m.v25;                   // (and mixing tried only there too)
+    m.v23 = rope_triangle || m.v24; // (rope-wave-v6 is searched only where the newest instructions are made: above)
+    if (m.v23 && !m.binary) throw std::logic_error("a rope-wave-v6 way in instructions not in bytes");
     m.v20 = m.v20 || (m.binary && gzip && v20_on);
     m.v21 = had_v21 && m.binary; // (v21 only in bytes, where a deflate is made again)
-    m.v22 = had_v22 && m.binary; // (v22 too, where a RAR is to be made again by rar)
+    m.v22 = (had_v22 && m.binary) || m.v23; // (v22 too, where a RAR is to be made again by rar; v23 is v22 and more)
+    if (m.v23) m.v21 = m.v20 = true;
     if (m.v20) m.more_archives = m.remake_gz = true;
     r.v20 = m.v20;
     r.v21 = m.v21;
     r.v22 = m.v22;
+    r.v23 = m.v23;
+    r.v24 = m.v24;
+    r.v25 = m.v25;
+    r.rope_v6 = rope_triangle;
     r.rar_said = rar_said;
     for (const auto& u : m.unpacked) r.rar_remade += !u.program.empty();
     if (m.binary)
@@ -3035,7 +3249,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
     };
     if (r.compact)
     {
-        const char* version = r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : r.more_archives ? kMoreArchivesManifestVersion : r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
+        const char* version = r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : r.more_archives ? kMoreArchivesManifestVersion : r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
                             : r.roped ? kRopeManifestVersion : kCompactManifestVersion;
         if (r.items)
         {
@@ -3048,7 +3262,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         else o << "items     none; " << version << "\n";
         if (r.listing_carried) o << "listing   " << r.listing << " bytes, carried as LZMA2 in " << r.listing_carried << "\n";
         if (r.binary)
-            o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << (r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : kBinaryManifestVersion)
+            o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << (r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : kBinaryManifestVersion)
               << (r.v20 ? "; its body in bytes too" : "") << ")\n";
         if (r.remade) o << "remade    " << r.remade << " archive(s) carried as what they hold, remade exactly on installing (" << version << ")\n";
         if (r.unpacked)
@@ -3061,7 +3275,10 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
               << " pulled tight by the rope (" << kPiecesManifestVersion << ")\n";
         if (r.lzma2_as_is) o << "as is     the files packed by LZMA2 carried as they are instead: it made them no smaller (" << kTrimmedManifestVersion << ")\n";
         if (r.roped)
-            o << "rope      " << r.roped << " file(s) pulled tight by " << (r.rope_above ? "rope-wave-v1 to v5" : r.rope_groups ? "rope-wave-v1 to v4" : r.rope_lines ? "rope-wave-v1 to v3" : r.rope_columns ? "rope-wave-v1 and v2" : "rope-wave-v1") << " (" << r.rope_bytes << " bytes, carried in " << r.rope_carried
+            o << "rope      " << r.roped << " file(s) pulled tight by " << (r.rope_v6 ? "rope-wave-v1 to v6" : r.rope_above ? "rope-wave-v1 to v5" : r.rope_groups ? "rope-wave-v1 to v4" : r.rope_lines ? "rope-wave-v1 to v3" : r.rope_columns ? "rope-wave-v1 and v2" : "rope-wave-v1") << " (" << r.rope_bytes << " bytes, carried in " << r.rope_carried
+              << "; " << version << ")\n";
+        if (r.mixed)
+            o << "mix       " << r.mixed << " file(s) carried by mixing, " << kMixVersion << " (" << r.mix_bytes << " bytes, carried in " << r.mix_carried
               << "; " << version << ")\n";
     }
     else if (r.items && r.item_places)

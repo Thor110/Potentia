@@ -7,5 +7,7 @@
 namespace sieve::cli {
 
 int cmd_rope(const Args& a);
+// `sieve mix`: a file coded by mixing (mix-v1, sieve/mix.hpp), beside LZMA2, read back and checked.
+int cmd_mix(const Args& a);
 
 } // namespace sieve::cli

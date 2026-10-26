@@ -363,7 +363,7 @@ const std::vector<Page>& pages()
          {{"sieve world", "how big the default worlds line is"},
           {"sieve world --world-models 2 --compose \"0:0.0.0.0|1:7.7.7.5\"", "two models in opposite corners, one turned"},
           {"sieve world --read ADDR --out world.obj", "save the world at an address"}}},
-        {"rope", "A file pulled tight by the tightened rope (rope-wave-v1 to v5): a wave through its values.",
+        {"rope", "A file pulled tight by the tightened rope (rope-wave-v1 to v6): a wave through its values.",
          "sieve rope FILE [--params \"L8 W949 S1 P3 K0\"] [--seconds S] [--out CODE]\n"
          "  sieve rope --decode CODE --params \"L8 W949 S1 P3 K0\" --size N --out FILE",
          "Edward's filter (IDEAS §19.87): a wave runs through the file's values, each value predicted\n"
@@ -371,13 +371,16 @@ const std::vector<Page>& pages()
          "occurs, exactly (sieve-weights-v1's tables and rANS). The wave's parameters: L the value\n"
          "length (8, 16 or 32 bits), W the values in a line, S how far back the value before is, P\n"
          "the phases (0 the rope alone, drawn through the kept values; 1 the value before; 2 the line\n"
-         "before as well, averaged; 3 the diagonal too), K whether the values at the start, a third,\n"
+         "before as well, averaged; 3 the diagonal too; 4 (rope-wave-v6) Edward's triangle, the value\n"
+         "before, the line before and the corner between, the median edge detector), K whether the values at the start, a third,\n"
          "the centre, two thirds and the end are kept for the rope; and C1 (rope-wave-v2), what is left\n"
          "counted column by column of the line, for files laid out in lines of a fixed length; and C2\n"
          "(rope-wave-v3, with L8 S1 P0 K0), bytes counted by their column in their text line, for\n"
          "text whose lines vary or break (tables, digits, logs); G1 after either (rope-wave-v4),\n"
          "the columns in groups that share one table and one stream, where they hold alike; and A1\n"
-         "after C2 G1 (rope-wave-v5), each byte counted by the byte above it too. Without --params,\n"
+         "after C2 G1 (rope-wave-v5), each byte counted by the byte above it too; and T1 after K with\n"
+         "P3 or P4 (rope-wave-v6), what is left coded by how busy its triangle is, in nine buckets.\n"
+         "Without --params,\n"
          "the search pulls\n"
          "it tight: every value length, phase and step, keep or not, and the widths at which the file\n"
          "best matches itself a line later. The code is read back and checked; LZMA2 is shown beside it.",
@@ -390,6 +393,19 @@ const std::vector<Page>& pages()
           {"--size N", "With --decode: the file's size in bytes."}},
          {{"sieve rope picture.bmp", "the best wave for a picture, and its code's size beside LZMA2's"},
           {"sieve rope sound.wav --params \"L16 W1 S1 P2 K0\" --out sound.rope", "a sound by a wave chosen, written out"}}},
+        {"mix", "A file coded by mixing (mix-v1): every bit predicted by several models, mixed.",
+         "sieve mix FILE [--params B22] [--out CODE]\n"
+         "  sieve mix --decode CODE --params B22 --size N --out FILE",
+         "Codes a file by mixing (mix-v1, IDEAS §19.102): every bit predicted by the bytes before it (0\n"
+         "to 6 of them) and by the word so far, the predictions mixed by weights that learn as the file\n"
+         "goes, and the mixed prediction coded exactly by a binary arithmetic coder, in integers only.\n"
+         "Strongest on text. Decoding takes as long as coding (about 0.4 MB/s). The code is read back\n"
+         "and checked; LZMA2 is shown beside it.",
+         {{"--params B", "The tables' size, 2^B counters each, B16 to B22 (else chosen by the file's size)."},
+          {"--out CODE", "Write the code here."},
+          {"--decode CODE", "The file back from its code, with --params, --size and --out."},
+          {"--size N", "With --decode: the file's size in bytes."}},
+         {{"sieve mix book.txt", "a text coded by mixing, beside LZMA2"}}},
         {"tensors", "A model file (safetensors) taken apart into its start and its weights, and weighed.",
          "sieve tensors FILE.safetensors [--config config.json] [--stats | --tsv] [--start-out FILE] [--pack OUT.sieve-weights]\n"
          "  sieve tensors --config config.json [--start-out FILE]\n"
@@ -996,7 +1012,7 @@ const std::vector<Page>& pages()
                       "of the AI line as its weights' digits, not its file's floats. The pages are\n"
                       "--page-length characters of --alphabet; the AI line is --ai-layers, --ai-width,\n"
                       "--ai-heads and --ai-bits (Micro without them)."},
-          {"--optimise-archives", "With --items: Optimise Archive Formats (sieve-manifest-v14, v17, v19, v20, v21, v22).\n"
+          {"--optimise-archives", "With --items: Optimise Archive Formats (sieve-manifest-v14, v17, v19 to v22, v25).\n"
                                   "An .xz, a .bz2, a .zst libzstd 1.5.7 made, an .lz4, a .br and an .lzma is carried\n"
                                   "as what it holds and remade exactly on installing; so is a .gz or .zip whoever made\n"
                                   "it (its deflate by preflate) and a .7z whose blocks are 7-Zip's LZMA or LZMA2\n"
@@ -1007,8 +1023,14 @@ const std::vector<Page>& pages()
                                   "from its files (with their times) is carried as its contents with that recipe\n"
                                   "(v22): installing gives the RAR back where the same rar is found, else its\n"
                                   "contents, with a warning. Which rar: SIEVE_RAR, else one beside Sieve, on the\n"
-                                  "PATH, or (Windows) in WinRAR's folder; SIEVE_RAR_TRACE=1 shows each try. Off\n"
-                                  "unless given."},
+                                  "PATH, or (Windows) in WinRAR's folder; SIEVE_RAR_TRACE=1 shows each try. A PNG\n"
+                                  "(v25): one stb_image_write made (as the hallway's screenshots are) as its\n"
+                                  "pixels, made again by it; any other from its skeleton, its deflate by preflate\n"
+                                  "and its chunks' CRCs worked out again. Off unless given."},
+          {"--v24", "As sieve-manifest-v24 at newest: no PNG made again from its skeleton (v25)."},
+          {"--v23", "As sieve-manifest-v23 at newest: no file carried by mixing (mix-v1, v24)."},
+          {"--v22", "As sieve-manifest-v22 at newest: the rope's ways at most rope-wave-v5's (no triangle:\n"
+                    "v23)."},
           {"--v21", "As sieve-manifest-v21 at newest: no RAR made again by rar (v22)."},
           {"--v20", "As sieve-manifest-v20 at newest: no gzip, zip or 7z made again from a skeleton (v21)."},
           {"--v19", "As sieve-manifest-v19 at newest: the listing's body as text (v20 writes it in bytes), and\n"
@@ -1343,7 +1365,7 @@ void print_usage()
         {"Files: places, installers, maps and the web", {"locate", "install", "map", "vault", "site", "web-host"}},
         {"Books", {"bind", "unbind"}},
         {"Other lines", {"mesh", "world", "ai", "ai-train", "diffuse"}},
-        {"Tools", {"rope", "tensors", "chat", "cipher", "version"}},
+        {"Tools", {"rope", "mix", "tensors", "chat", "cipher", "version"}},
     };
     std::vector<std::string> shown;
     auto show = [&](const Page& p) {

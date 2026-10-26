@@ -87,12 +87,33 @@ uint64_t predict(const std::vector<uint64_t>& x, const std::vector<int64_t>& rop
     if (left && !up) return x[i - p.step];
     if (up && !left) return x[i - p.width];
     if (p.phases == 2) return (x[i - p.step] + x[i - p.width]) / 2;
+    if (p.phases == 4)
+    {
+        // rope-wave-v6: the triangle (the median edge detector).
+        const uint64_t a = x[i - p.step], b = x[i - p.width], c = x[i - p.width - p.step];
+        const uint64_t mx = std::max(a, b), mn = std::min(a, b);
+        if (c >= mx) return mn;
+        if (c <= mn) return mx;
+        return a + b - c; // between mn and mx
+    }
     // phases 3: value before + line before - diagonal, held within the values
     const int64_t v = int64_t(x[i - p.step]) + int64_t(x[i - p.width]) - int64_t(x[i - p.width - p.step]);
     return v < 0 ? 0 : uint64_t(v) > mask ? mask : uint64_t(v);
 }
 
 uint64_t mask_of(uint32_t bits) { return bits == 64 ? ~uint64_t(0) : (uint64_t(1) << bits) - 1; }
+
+// rope-wave-v6 (T1): how busy value i's triangle is, as a bucket 0 to 7, or 8 where it has none.
+constexpr uint32_t kTriangleBuckets = 9;
+uint32_t triangle_bucket(const std::vector<uint64_t>& x, uint64_t i, const RopeParams& p)
+{
+    if (i % p.width < p.step || i < p.width + p.step) return 8;
+    const uint64_t a = x[i - p.step], b = x[i - p.width], c = x[i - p.width - p.step];
+    const uint64_t act = ((a > c ? a - c : c - a) + (b > c ? b - c : c - b)) >> (p.bits - 8);
+    uint32_t k = 0;
+    for (const uint64_t bound : {2, 4, 8, 16, 32, 64, 128}) k += act >= bound;
+    return k;
+}
 
 // What the wave leaves, for every value that is not kept, in order; and the kept points.
 std::vector<uint64_t> residuals(const std::vector<uint64_t>& x, const RopeParams& p, std::vector<uint64_t>& pts)
@@ -393,7 +414,8 @@ void RopeParams::check() const
     if (bits != 8 && bits != 16 && bits != 32) bad("values of 8, 16 or 32 bits");
     if (width < 1) bad("a line of at least one value");
     if (step < 1 || step > 8) bad("a step of 1 to 8 values");
-    if (phases > 3) bad("phases 0 to 3");
+    if (phases > 4) bad("phases 0 to 4");
+    if (triangle && (phases < 3 || columns)) bad("the triangle's contexts (T1) are for P3 or P4, with no columns");
     if (columns > 2) bad("columns 0, 1 or 2");
     if (above && (columns != 2 || !grouped)) bad("the byte above (A1) is for columns by line in groups: C2 G1 first");
     if (columns && width < 2) bad("columns need lines of two values or more");
@@ -405,7 +427,7 @@ void RopeParams::check() const
 std::string RopeParams::text() const
 {
     return "L" + std::to_string(bits) + " W" + std::to_string(width) + " S" + std::to_string(step) + " P" + std::to_string(phases) + " K" +
-           (keep ? "1" : "0") + (columns ? " C" + std::to_string(columns) : "") + (grouped ? " G1" : "") + (above ? " A1" : "");
+           (keep ? "1" : "0") + (columns ? " C" + std::to_string(columns) : "") + (grouped ? " G1" : "") + (above ? " A1" : "") + (triangle ? " T1" : "");
 }
 
 RopeParams RopeParams::parse(std::string_view t)
@@ -413,11 +435,14 @@ RopeParams RopeParams::parse(std::string_view t)
     RopeParams p;
     unsigned long long L = 0, W = 0, S = 0, P = 0, K = 0;
     char extra = 0;
-    const std::string s(t);
+    std::string s(t);
+    // rope-wave-v6's " T1", last.
+    const bool tri = s.size() > 3 && s.compare(s.size() - 3, 3, " T1") == 0;
+    if (tri) s.resize(s.size() - 3);
     unsigned long long C = 0, G = 0, A = 0;
     const int got = std::sscanf(s.c_str(), "L%llu W%llu S%llu P%llu K%llu C%llu G%llu A%llu%c", &L, &W, &S, &P, &K, &C, &G, &A, &extra);
-    if (got < 5 || got > 8 || K > 1 || C > 2 || G != (got >= 7 ? 1u : 0u) || A != (got == 8 ? 1u : 0u) || W > 0xFFFFFFFFull || L > 64 || S > 8 || P > 3)
-        bad("parameters are written \"L8 W949 S1 P3 K0\" (rope-wave-v2: and \" C1\"; v3: \" C2\"; v4: and \" G1\"; v5: and \" A1\"): " + s);
+    if (got < 5 || got > 8 || K > 1 || C > 2 || G != (got >= 7 ? 1u : 0u) || A != (got == 8 ? 1u : 0u) || W > 0xFFFFFFFFull || L > 64 || S > 8 || P > 4)
+        bad("parameters are written \"L8 W949 S1 P3 K0\" (rope-wave-v2: and \" C1\"; v3: \" C2\"; v4: and \" G1\"; v5: and \" A1\"; v6: P4, and \" T1\"): " + std::string(t));
     p.columns = uint32_t(C);
     p.grouped = G == 1;
     p.above = A == 1;
@@ -426,8 +451,9 @@ RopeParams RopeParams::parse(std::string_view t)
     p.step = uint32_t(S);
     p.phases = uint32_t(P);
     p.keep = K == 1;
+    p.triangle = tri;
     p.check();
-    if (p.text() != s) bad("parameters not written as they would be: " + s);
+    if (p.text() != std::string(t)) bad("parameters not written as they would be: " + std::string(t));
     return p;
 }
 
@@ -499,6 +525,25 @@ std::vector<uint8_t> rope_code(std::span<const uint8_t> file, const RopeParams& 
     const std::vector<uint64_t> e = residuals(v.x, p, pts);
     std::vector<uint8_t> out;
     const std::vector<uint64_t> pos = free_positions(v.x.size(), pts);
+    if (p.triangle)
+    {
+        // v6 (T1): for each plane, each bucket's count and segment, the values left in order.
+        std::vector<uint32_t> bucket(pos.size());
+        for (size_t j = 0; j < pos.size(); ++j) bucket[j] = triangle_bucket(v.x, pos[j], p);
+        for (uint32_t plane = 0; plane < v.bytes; ++plane)
+            for (uint32_t k = 0; k < kTriangleBuckets; ++k)
+            {
+                std::vector<uint16_t> sym;
+                for (size_t j = 0; j < pos.size(); ++j)
+                    if (bucket[j] == k) sym.push_back(uint16_t((e[j] >> (8 * plane)) & 0xFF));
+                put_varint(out, sym.size());
+                put_segment(out, sym, true);
+            }
+        for (const uint64_t i : pts)
+            for (uint32_t b = 0; b < v.bytes; ++b) out.push_back(file[i * v.bytes + b]);
+        for (size_t i = v.x.size() * v.bytes; i < file.size(); ++i) out.push_back(file[i]);
+        return out;
+    }
     const std::vector<std::vector<size_t>> cols = segments_of(pos, p);
     for (uint32_t plane = 0; plane < v.bytes; ++plane)
     {
@@ -627,6 +672,55 @@ std::vector<uint8_t> rope_file(std::span<const uint8_t> code, const RopeParams& 
     const std::vector<uint64_t> pts = p.keep ? kept_points(n) : std::vector<uint64_t>{};
     const uint64_t m = n - pts.size();
     size_t at = 0;
+    if (p.triangle)
+    {
+        // v6 (T1): every plane's buckets read first; then the file made again value by value, each
+        // taking the next of its triangle's bucket in each plane.
+        std::vector<std::vector<uint16_t>> seg(size_t(vb) * kTriangleBuckets);
+        for (uint32_t plane = 0; plane < vb; ++plane)
+        {
+            uint64_t total = 0;
+            for (uint32_t k = 0; k < kTriangleBuckets; ++k)
+            {
+                const uint64_t c = get_varint(code, at);
+                if (c > m - total) bad("buckets holding more values than the file");
+                total += c;
+                seg[size_t(plane) * kTriangleBuckets + k] = get_segment(code, at, c, true);
+            }
+            if (total != m) bad("buckets holding fewer values than the file");
+        }
+        const uint64_t tail = size - n * vb;
+        if (code.size() - at != pts.size() * vb + tail) bad("the code does not end where the file's kept bytes do");
+        std::vector<uint64_t> x(n, 0);
+        for (size_t k = 0; k < pts.size(); ++k)
+            for (uint32_t b = 0; b < vb; ++b) x[pts[k]] |= uint64_t(code[at + k * vb + b]) << (8 * b);
+        const std::vector<int64_t> rope = rope_of(x, pts);
+        const uint64_t mask = mask_of(p.bits);
+        std::vector<size_t> next(seg.size(), 0);
+        size_t k = 0;
+        for (uint64_t i = 0; i < n; ++i)
+        {
+            if (k < pts.size() && pts[k] == i)
+            {
+                ++k;
+                continue;
+            }
+            const uint32_t bk = triangle_bucket(x, i, p);
+            uint64_t ei = 0;
+            for (uint32_t plane = 0; plane < vb; ++plane)
+            {
+                const size_t s = size_t(plane) * kTriangleBuckets + bk;
+                if (next[s] >= seg[s].size()) bad("a bucket with fewer values than the file needs");
+                ei |= uint64_t(seg[s][next[s]++]) << (8 * plane);
+            }
+            x[i] = (ei + predict(x, rope, i, p, mask)) & mask;
+        }
+        std::vector<uint8_t> out(static_cast<size_t>(size));
+        for (uint64_t i = 0; i < n; ++i)
+            for (uint32_t b = 0; b < vb; ++b) out[i * vb + b] = uint8_t(x[i] >> (8 * b));
+        for (uint64_t t = 0; t < tail; ++t) out[n * vb + t] = code[at + pts.size() * vb + t];
+        return out;
+    }
     std::vector<uint64_t> e(m, 0);
     const std::vector<uint64_t> pos = free_positions(n, pts);
     const std::vector<std::vector<size_t>> cols = segments_of(pos, p);
@@ -716,6 +810,27 @@ double rope_estimate(std::span<const uint8_t> file, const RopeParams& p)
     std::vector<uint64_t> pts;
     const std::vector<uint64_t> e = residuals(v.x, p, pts);
     double bytes = double(pts.size() * v.bytes + (file.size() - v.x.size() * v.bytes));
+    if (p.triangle)
+    {
+        const std::vector<uint64_t> pos = free_positions(v.x.size(), pts);
+        std::vector<uint32_t> bucket(pos.size());
+        for (size_t j = 0; j < pos.size(); ++j) bucket[j] = triangle_bucket(v.x, pos[j], p);
+        for (uint32_t plane = 0; plane < v.bytes; ++plane)
+        {
+            std::vector<uint64_t> counts(size_t(kTriangleBuckets) * 256, 0), nb(kTriangleBuckets, 0);
+            for (size_t j = 0; j < e.size(); ++j)
+            {
+                ++counts[size_t(bucket[j]) * 256 + ((e[j] >> (8 * plane)) & 0xFF)];
+                ++nb[bucket[j]];
+            }
+            for (uint32_t k = 0; k < kTriangleBuckets; ++k)
+            {
+                const std::vector<uint64_t> one(counts.begin() + std::ptrdiff_t(k) * 256, counts.begin() + std::ptrdiff_t(k + 1) * 256);
+                bytes += 1 + (nb[k] ? entropy_bytes_v2(one, nb[k]) : 1);
+            }
+        }
+        return bytes;
+    }
     if (!p.columns)
     {
         for (uint32_t plane = 0; plane < v.bytes; ++plane)
@@ -772,7 +887,7 @@ bool rope_search_every_wave() { return g_every_wave.load(std::memory_order_relax
 
 RopeSearch rope_search(std::span<const uint8_t> file, double seconds, uint32_t newest)
 {
-    if (newest < 1 || newest > 5) bad("the newest version searched is 1 to 5");
+    if (newest < 1 || newest > 6) bad("the newest version searched is 1 to 6");
     char t[48];
     std::snprintf(t, sizeof t, "|%.6f|%u|%d", seconds, newest, int(rope_search_every_wave()));
     Sha256 h;
@@ -962,6 +1077,24 @@ RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds, u
                     if (w > 1 && step >= w) continue;
                     try_one(RopeParams{bits, w, step, phases, false});
                 }
+        // rope-wave-v6: the triangle (P4) at each width and step, and the triangle's contexts (T1)
+        // with it and with the plane (P3).
+        for (const uint32_t w : widths)
+            for (uint32_t step = 1; step <= 4 && w > 1 && newest >= 6; ++step)
+            {
+                if (step >= w) continue;
+                for (const auto& [phases, tri] : {std::pair<uint32_t, bool>{4, false}, {4, true}, {3, true}})
+                {
+                    if (out_of_time())
+                    {
+                        r.timed_out = true;
+                        goto keep;
+                    }
+                    RopeParams t{bits, w, step, phases, false};
+                    t.triangle = tri;
+                    try_one(t);
+                }
+            }
         // rope-wave-v2: each width's columns counted apart, for every phase (a column the same
         // byte all the way down, a separator in a table, then costs only its table entry).
         for (const uint32_t w : widths)

@@ -165,6 +165,21 @@ inline constexpr const char* kDeflateManifestVersion = "sieve-manifest-v21";
 // found and makes it again exactly; else the contents, said so. Its head's byte 22, in bytes only.
 inline constexpr const char* kRarManifestVersion = "sieve-manifest-v22";
 
+// v23 (26 October 2026): v22 whose rope ways may be rope-wave-v6's (the triangle, P4, and its
+// contexts, T1: Edward's triangle of a value and its neighbours before, above and on the diagonal).
+// Its head's byte 23, in bytes only. Made only where some rope way is one of these.
+inline constexpr const char* kRopeTriangleManifestVersion = "sieve-manifest-v23";
+
+// v24 (26 October 2026): v23 whose files may be carried by mixing (mix-v1, sieve/mix.hpp): a way
+// "mix B<bits>", its code next in the rope stream (a varint of its length, then it), as a rope way's
+// is. Its head's byte 24, in bytes only. Made only where some file is so carried.
+inline constexpr const char* kMixManifestVersion = "sieve-manifest-v24";
+
+// v25 (26 October 2026): v24 whose skeletons ("sk") may hold a run of chunks (a PNG's IDATs, segment
+// kind 5), so a PNG is made again exactly from what its deflate holds (preflate) and its chunks'
+// framing. Its head's byte 25, in bytes only. Made only where some PNG is.
+inline constexpr const char* kPngManifestVersion = "sieve-manifest-v25";
+
 // The "u" lines' formats v20 adds (an archive carried as its contents).
 inline bool is_v20_format(const std::string& f)
 {
@@ -249,6 +264,9 @@ struct Manifest
     bool v20 = false; // v20: some archive is lz4, brotli, lzma, lzip or libarchive's (more_archives is set too)
     bool v21 = false; // v21: some gzip or zip made again by preflate (v20 is set too)
     bool v22 = false; // v22: some RAR to be made again by rar (v21 is set too)
+    bool v23 = false; // v23: some rope way is rope-wave-v6's (v22 is set too)
+    bool v24 = false; // v24: some file is carried by mixing (v23 is set too)
+    bool v25 = false; // v25: some skeleton holds a run of chunks: a PNG (v24 is set too)
     bool body_text = false; // v20: its body as text after all (the head's flag 128), where that came out smaller
     // v14: each archive carried as its contents: its format ("7z", "xz"), its size, its path, and the
     // folder (or file) its contents are in.

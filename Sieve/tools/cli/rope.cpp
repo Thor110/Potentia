@@ -4,6 +4,7 @@
 #include "cli/compare.hpp"
 #include "cli/locate.hpp"
 #include "sieve/rope_wave.hpp"
+#include "sieve/mix.hpp"
 
 #include <chrono>
 #include <cstdio>
@@ -90,13 +91,51 @@ int cmd_rope(const Args& a)
     const std::vector<uint8_t> code = rope_code(file, p);
     if (rope_file(code, p, file.size()) != file) throw std::logic_error("rope-wave-v1 did not give the file back (a fault in the coder)");
     const uint64_t lz = lzma2_size(file);
-    std::cout << "wave      " << p.text() << " (" << (p.above ? kRopeWaveAboveVersion : p.grouped ? kRopeWaveGroupsVersion : p.columns == 2 ? kRopeWaveLinesVersion : p.columns ? kRopeWaveColumnsVersion : kRopeWaveVersion) << ")\n"
+    std::cout << "wave      " << p.text() << " (" << (rope_v6(p) ? kRopeWaveTriangleVersion : p.above ? kRopeWaveAboveVersion : p.grouped ? kRopeWaveGroupsVersion : p.columns == 2 ? kRopeWaveLinesVersion : p.columns ? kRopeWaveColumnsVersion : kRopeWaveVersion) << ")\n"
               << "code      " << code.size() << " bytes, " << pct(code.size(), file.size()) << " of the file; read back and checked\n"
               << "LZMA2     " << lz << " bytes, " << pct(lz, file.size()) << " (7z's, one stream, no container)\n";
     if (a.has("out"))
     {
         write_bytes(a.get("out"), code);
         std::cout << "written   " << a.get("out") << " (decode it with: sieve rope --decode " << a.get("out") << " --params \"" << p.text()
+                  << "\" --size " << file.size() << " --out FILE)\n";
+    }
+    return 0;
+}
+
+int cmd_mix(const Args& a)
+{
+    if (a.has("decode"))
+    {
+        if (!a.has("params") || !a.has("size") || !a.has("out")) throw std::invalid_argument("mix --decode CODE needs --params, --size and --out");
+        const std::vector<uint8_t> code = read_file_bytes(path_of(a.get("decode")));
+        const std::vector<uint8_t> file = mix_file(code, MixParams::parse(a.get("params")), std::stoull(a.get("size")));
+        write_bytes(a.get("out"), file);
+        std::cout << "file      " << a.get("out") << ": " << file.size() << " bytes, sha256 " << sha256_hex(file) << "\n";
+        return 0;
+    }
+    if (a.positional.empty()) throw std::invalid_argument("mix needs a file (see: sieve help mix)");
+    const std::string name = a.positional[0];
+    const std::vector<uint8_t> file = read_file_bytes(path_of(name));
+    std::cout << "file      " << name << ": " << file.size() << " bytes, sha256 " << sha256_hex(file) << "\n";
+    const MixParams p = a.has("params") ? MixParams::parse(a.get("params")) : MixParams::for_size(file.size());
+    using clk = std::chrono::steady_clock;
+    const auto t0 = clk::now();
+    const std::vector<uint8_t> code = mix_code(file, p);
+    const auto t1 = clk::now();
+    if (mix_file(code, p, file.size()) != file) throw std::logic_error("mix-v1 did not give the file back (a fault in the coder)");
+    const auto t2 = clk::now();
+    const uint64_t lz = lzma2_size(file);
+    char sp[96];
+    std::snprintf(sp, sizeof sp, "coded in %.2f s, read back in %.2f s", std::chrono::duration<double>(t1 - t0).count(),
+                  std::chrono::duration<double>(t2 - t1).count());
+    std::cout << "mix       " << p.text() << " (" << kMixVersion << ")\n"
+              << "code      " << code.size() << " bytes, " << pct(code.size(), file.size()) << " of the file; read back and checked (" << sp << ")\n"
+              << "LZMA2     " << lz << " bytes, " << pct(lz, file.size()) << " (7z's, one stream, no container)\n";
+    if (a.has("out"))
+    {
+        write_bytes(a.get("out"), code);
+        std::cout << "written   " << a.get("out") << " (decode it with: sieve mix --decode " << a.get("out") << " --params \"" << p.text()
                   << "\" --size " << file.size() << " --out FILE)\n";
     }
     return 0;

@@ -3947,6 +3947,31 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   (Edward): the remembered table and "Trust the new table" stay; no signing, ever ("I don't trust
   myself or any human being alive to keep a key safe").
 
+### Towards the minimum address: v23, v24 and v25 (26 October 2026)
+
+Edward's roadmap after the filter ideas (IDEAS §19.102): the triangle, mixing, generators. All three
+built, each a new instructions version, the older ones read as before.
+- **v23, rope-wave-v6 (Edward's triangle):** `P4` (the median edge detector: the value before, the
+  line before, the corner) and ` T1` (what is left coded in nine buckets by how busy the triangle
+  is). The search tries both at its widths. Vitruvian raw 762,766 bytes (before, 831,022).
+  `--v22` keeps to rope-wave-v5. Oracle: its own rope-wave-v6. Fixture: `tests/rope/`
+  (`vitruvian-centre-256.gray`, raw, so no JPEG decoder's version can change it).
+- **v24, mix-v1 (`core/mix.*`, `sieve mix`):** bitwise context mixing, integers only; a way
+  `mix B<bits>`, its code in the rope stream. Tried on files of 4 KiB to 16 MiB whose first 256 KiB
+  mixed beat LZMA2's estimate by 3%. Don Quixote 565,664 bytes of instructions (v23 683,195);
+  0.4 MB/s both ways. `--v23` turns it off. Oracle: its own mix-v1 (`mix-unpack`). A unit test
+  pins one code's SHA-256 (Windows and macOS must make the same bytes: check step 01 there).
+- **v25, PNGs (Optimise Archive Formats):** stb_image_write's own PNGs as their pixels (recipe
+  `stb <level> <filter> <w> <h> <c> <size>`, format 19), any other PNG by its skeleton with a new
+  segment, kind 5, a run of IDAT chunks (CRCs worked out again). Ten repository PNGs 657,221 →
+  247,695 bytes. `--v24` turns it off. Oracle: reads both, names them not made again.
+- **The newest switch inside the packer:** `rope_newest` now runs to 8: 6 the rope's v6, 7 and
+  mixing, 8 and PNGs (`add_packed` clamps it to 5 wherever the newest instructions are not made).
+- **Fixed on the way:** the oracle's `instructions_bytes` read a v22-or-later manifest file (head in
+  bytes) as a .sieve address; it now knows heads 16 to 25.
+- **CI:** step 11's v23, v24 and v25 blocks; step 10's rope checks allow rope-wave-v6. Steps 01, 10
+  and 11 run here (Linux).
+
 ### A RAR made again by the machine's own rar: `sieve-manifest-v22` (25 October 2026)
 
 - **What:** with Optimise Archive Formats, a RAR 5 that the packing machine's `rar` gives back byte

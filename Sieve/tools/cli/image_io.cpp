@@ -7,9 +7,11 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <mutex>
 #include <stdexcept>
 
 namespace sieve::cli {
@@ -106,6 +108,39 @@ void write_png(const std::string& path, uint32_t width, uint32_t height, const s
     std::ofstream out(std::filesystem::path(path), std::ios::binary);
     if (!out) throw std::runtime_error("cannot write '" + path + "'");
     out.write(png.data(), static_cast<std::streamsize>(png.size()));
+}
+
+bool png_pixels(const uint8_t* data, size_t size, std::vector<uint8_t>& pixels, int& width, int& height, int& components)
+{
+    if (size < 8 || size > 0x7FFFFFFF || std::memcmp(data, "\x89PNG\r\n\x1a\n", 8) != 0) return false;
+    if (stbi_is_16_bit_from_memory(data, int(size))) return false;
+    int w = 0, h = 0, c = 0;
+    unsigned char* px = stbi_load_from_memory(data, int(size), &w, &h, &c, 0);
+    if (!px) return false;
+    pixels.assign(px, px + size_t(w) * size_t(h) * size_t(c));
+    stbi_image_free(px);
+    width = w;
+    height = h;
+    components = c;
+    return true;
+}
+
+std::string stb_png(const std::vector<uint8_t>& pixels, int width, int height, int components, int level, int filter)
+{
+    // (stb_image_write keeps its settings in globals: set and put back under a lock.)
+    static std::mutex mx;
+    std::lock_guard<std::mutex> lock(mx);
+    const int keep_level = stbi_write_png_compression_level, keep_filter = stbi_write_force_png_filter;
+    stbi_write_png_compression_level = level;
+    stbi_write_force_png_filter = filter;
+    int len = 0;
+    unsigned char* out = stbi_write_png_to_mem(pixels.data(), width * components, width, height, components, &len);
+    stbi_write_png_compression_level = keep_level;
+    stbi_write_force_png_filter = keep_filter;
+    if (!out) throw std::runtime_error("stb_image_write could not write a PNG");
+    std::string r(reinterpret_cast<const char*>(out), size_t(len));
+    STBIW_FREE(out);
+    return r;
 }
 
 } // namespace sieve::cli

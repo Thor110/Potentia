@@ -23,6 +23,7 @@
 #include "sieve/aispace.hpp"
 #include "sieve/digit_histogram.hpp"
 #include "sieve/rope_wave.hpp"
+#include "sieve/mix.hpp"
 #include "sieve/training.hpp"
 #include "sieve/diffusion.hpp"
 #include "sieve/llm_tokenizer.hpp"
@@ -5890,6 +5891,56 @@ void test_shortest_path()
 
 // BigUint's byte conversions (a file read as one number and back), against the hex path they
 // replaced, and BinarySpace::file_at_place against bytes_at.
+// mix-v1: the parameters; every shape of file given back; a code cut short or with more after it
+// refused; and the code of one text pinned by its SHA-256, so every machine must make the same.
+void test_mix()
+{
+    CHECK(MixParams::parse("B22").table_bits == 22);
+    CHECK(MixParams::parse("B16").text() == "B16");
+    CHECK(throws([] { MixParams::parse("B15"); }));
+    CHECK(throws([] { MixParams::parse("B23"); }));
+    CHECK(throws([] { MixParams::parse("B022"); }));
+    CHECK(throws([] { MixParams::parse("B22 "); }));
+    CHECK(MixParams::for_size(0).table_bits == 16 && MixParams::for_size(1u << 20).table_bits == 21 && MixParams::for_size(1u << 30).table_bits == 22);
+    std::mt19937 rng(5);
+    std::vector<std::vector<uint8_t>> files{{}, {0}, {255}, std::vector<uint8_t>(5000, 'a')};
+    std::vector<uint8_t> noise(3000), all(256), text;
+    for (auto& b : noise) b = uint8_t(rng());
+    for (int i = 0; i < 256; ++i) all[size_t(i)] = uint8_t(i);
+    // A text that repeats with changes: sentences of words drawn from a few.
+    const char* words[] = {"the", "rope", "triangle", "pulls", "tight", "through", "every", "value", "Sieve", "mixes"};
+    for (int i = 0; i < 2500; ++i)
+    {
+        const std::string w = words[rng() % 10];
+        text.insert(text.end(), w.begin(), w.end());
+        text.push_back(rng() % 9 ? ' ' : '\n');
+    }
+    files.push_back(noise);
+    files.push_back(all);
+    files.push_back(text);
+    bool back = true;
+    for (const auto& f : files)
+        for (const uint32_t b : {16u, 18u})
+        {
+            MixParams p;
+            p.table_bits = b;
+            back = back && mix_file(mix_code(f, p), p, f.size()) == f;
+        }
+    CHECK(back);
+    MixParams p;
+    p.table_bits = 16;
+    const std::vector<uint8_t> c = mix_code(text, p);
+    CHECK(c.size() * 4 < text.size()); // a text of ten words: well under a quarter
+    std::vector<uint8_t> more = c;
+    more.insert(more.end(), {1, 2, 3, 4, 5, 6});
+    CHECK(throws([&] { mix_file(more, p, text.size()); }));
+    CHECK(throws([&] { mix_file(std::span<const uint8_t>(c.data(), c.size() / 2), p, text.size()); }));
+    CHECK(mix_file(c, p, text.size()) == text);
+    const std::string pinned = Sha256::hex(Sha256::hash(std::string(c.begin(), c.end())));
+    std::cout << "mix-v1: a text of " << text.size() << " bytes in " << c.size() << ", sha256 " << pinned << "\n";
+    CHECK(pinned == "503f61a3778a1f75a568e2bde90ffd6f6ea8f430ce9c87ac1357cf6175db302a");
+}
+
 void test_rope_wave()
 {
     // The parameters as written, and refused when written otherwise or out of range.
@@ -5897,7 +5948,7 @@ void test_rope_wave()
     CHECK((RopeParams::parse("L16 W1 S1 P2 K1") == RopeParams{16, 1, 1, 2, true}));
     CHECK(throws([] { RopeParams::parse("L12 W1 S1 P0 K0"); }));
     CHECK(throws([] { RopeParams::parse("L8 W0 S1 P0 K0"); }));
-    CHECK(throws([] { RopeParams::parse("L8 W1 S1 P4 K0"); }));
+    CHECK(throws([] { RopeParams::parse("L8 W1 S1 P5 K0"); }));
     CHECK(throws([] { RopeParams::parse("L8 W01 S1 P0 K0"); }));
     // rope-wave-v2: columns, written " C1"; lines of two values or more.
     CHECK((RopeParams::parse("L8 W111 S1 P0 K0 C1") == RopeParams{8, 111, 1, 0, false, 1}));
@@ -5921,6 +5972,19 @@ void test_rope_wave()
     CHECK(throws([] { RopeParams::parse("L8 W56 S1 P0 K0 C1 G1 A1"); }));
     CHECK(throws([] { RopeParams::parse("L8 W56 S1 P0 K0 C2 G1 A2"); }));
     CHECK(throws([] { RopeParams::parse("L8 W56 S1 P0 K0 C2 G1 A0"); }));
+    // rope-wave-v6: the triangle (P4), and its contexts (" T1" after K, with P3 or P4, no columns).
+    {
+        RopeParams t{8, 949, 1, 4, false};
+        t.triangle = true;
+        CHECK(RopeParams::parse("L8 W949 S1 P4 K0 T1") == t);
+        CHECK(RopeParams::parse("L16 W7 S2 P3 K1 T1").text() == "L16 W7 S2 P3 K1 T1");
+        CHECK(RopeParams::parse("L8 W949 S1 P4 K0").text() == "L8 W949 S1 P4 K0");
+        CHECK(rope_v6(RopeParams::parse("L8 W949 S1 P4 K0")) && !rope_v6(RopeParams::parse("L8 W949 S1 P3 K0")));
+        CHECK(throws([] { RopeParams::parse("L8 W9 S1 P2 K0 T1"); }));
+        CHECK(throws([] { RopeParams::parse("L8 W9 S1 P4 K0 C1 T1"); }));
+        CHECK(throws([] { RopeParams::parse("L8 W9 S1 P4 K0 T0"); }));
+        CHECK(throws([] { RopeParams::parse("L8 W9 S1 P4 K0 T1 "); }));
+    }
     // A file that is the rope exactly (x_i = i, 100 values, kept at 0, 33, 66 and 99: an even count
     // has no centre value): nothing is left, so its code is the table of one byte (1 + 1 + 4), its
     // stream's two words (1 + 8) and the four kept bytes.
@@ -5964,6 +6028,40 @@ void test_rope_wave()
                                     back = back && rope_file(rope_code(f, p), p, f.size()) == f;
                                 }
     CHECK(back);
+    // rope-wave-v6: the triangle and its contexts, on every shape of file too.
+    bool back6 = true;
+    for (const auto& f : files)
+        for (const uint32_t bits : {8u, 16u, 32u})
+            for (const uint32_t width : {1u, 3u, 24u})
+                for (uint32_t step = 1; step <= 4; ++step)
+                    for (const uint32_t phases : {3u, 4u})
+                        for (const bool keep : {false, true})
+                            for (const bool tri : {false, true})
+                                for (const uint32_t columns : {0u, 1u})
+                                {
+                                    if ((columns && (width < 2 || tri)) || (phases == 3 && !tri)) continue;
+                                    RopeParams p{bits, width, step, phases, keep, columns};
+                                    p.triangle = tri;
+                                    back6 = back6 && rope_file(rope_code(f, p), p, f.size()) == f;
+                                }
+    CHECK(back6);
+    {
+        // On a picture with an edge across it (160 by 120, smooth either side, a little noise) the
+        // triangle's contexts code it smaller than the plane (P3) does; on the small one, where nine
+        // tables cost more than they save, the search need not pick them. A code cut short, or a
+        // size not its, is refused.
+        std::vector<uint8_t> edge(160 * 120);
+        for (size_t y = 0; y < 120; ++y)
+            for (size_t x = 0; x < 160; ++x) edge[y * 160 + x] = uint8_t((x > y ? 150 : 20) + x / 4 + y / 5 + (rng() % 4));
+        RopeParams t{8, 160, 1, 4, false};
+        t.triangle = true;
+        CHECK(rope_code(edge, t).size() < rope_code(edge, RopeParams{8, 160, 1, 3, false}).size());
+        CHECK(rope_file(rope_code(edge, t), t, edge.size()) == edge);
+        t.width = 24;
+        const std::vector<uint8_t> c = rope_code(files[4], t);
+        CHECK(throws([&] { rope_file(std::span<const uint8_t>(c.data(), c.size() - 1), t, files[4].size()); }));
+        CHECK(throws([&] { rope_file(c, t, files[4].size() + 1); }));
+    }
     // A code that does not give the file is refused: one byte short, one too many, a size not its.
     {
         const RopeParams p{8, 24, 1, 3, true};
@@ -6240,6 +6338,7 @@ void run_all(int argc, char** argv)
         test_byte_conversions();
         test_digit_histogram();
         test_rope_wave();
+        test_mix();
     }
 }
 

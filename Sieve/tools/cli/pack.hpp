@@ -65,6 +65,12 @@ struct PackReport
     bool v20 = false;                    // v20: some lz4, brotli or lzma remade, or one of v20's carried as its contents
     bool v21 = false;                    // v21: some gzip or zip made again by preflate
     bool v22 = false;                    // v22: some RAR to be made again by rar
+    bool v23 = false;                    // v23: some rope way rope-wave-v6's (the triangle)
+    bool v24 = false;                    // v24: some file carried by mixing (mix-v1)
+    bool v25 = false;                    // v25: some PNG made again from its skeleton
+    size_t mixed = 0;                    // v24: files carried by mixing
+    bool rope_v6 = false;                // v23: some rope way rope-wave-v6's
+    uint64_t mix_bytes = 0, mix_carried = 0; // v24: their bytes, and their codes
     size_t rar_remade = 0;               // v22: RARs carried as their contents, the machine's rar making them again exactly
     std::vector<std::string> rar_said;   // v22: for each RAR tried, what came of it
     uint64_t head_text = 0, head_bytes = 0;          // v16: the listing as v15's text, and as carried
@@ -128,7 +134,7 @@ struct FileWays
     size_t tried = 0;               // waves tried
     bool forced = false;            // a force stop came first: only `lzma2` and `tried` are set
 };
-FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest = 5, bool pieces = true);
+FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest = 6, bool pieces = true);
 
 // v14: an archive remade from what it holds, by its recipe ("xz 6 crc64 <size>"): what installing
 // does (set as the manifest's remaker).

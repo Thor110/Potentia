@@ -2351,17 +2351,22 @@ def sw_decode(words, freq, n):
 # definition apart from core/rope_wave.*.
 
 def rope_params(text):
-    """(L, W, S, P, K, C, G, A): rope-wave-v1's parameters, rope-wave-v2's columns (" C1" after K),
-    v3's columns by line (" C2"), v4's groups of columns (" G1" after either) and v5's byte above
-    (" A1" after C2 G1)."""
-    m = re.fullmatch(r"L(8|16|32) W([1-9][0-9]*) S([1-8]) P([0-3]) K([01])(?:( C[12])(?:( G1)( A1)?)?)?", text)
+    """(L, W, S, P, K, C, G, A, T): rope-wave-v1's parameters, rope-wave-v2's columns (" C1" after K),
+    v3's columns by line (" C2"), v4's groups of columns (" G1" after either), v5's byte above
+    (" A1" after C2 G1), and v6's triangle (P4) and its contexts (" T1" after K, with P3 or P4)."""
+    T = 0
+    if text.endswith(" T1"):
+        T, text = 1, text[:-3]
+        if not re.fullmatch(r"L(8|16|32) W([1-9][0-9]*) S([1-8]) P([34]) K([01])", text):
+            sys.exit(f"rope-wave-v6: the triangle's contexts (T1) are for P3 or P4, with no columns: {text} T1")
+    m = re.fullmatch(r"L(8|16|32) W([1-9][0-9]*) S([1-8]) P([0-4]) K([01])(?:( C[12])(?:( G1)( A1)?)?)?", text)
     if m and m.group(8) and m.group(6) != " C2":
         m = None
     if not m or (m.group(6) and int(m.group(2)) < 2) or (m.group(6) == " C2" and not text.startswith("L8 ") or
                                                           m.group(6) == " C2" and m.group(3, 4, 5) != ("1", "0", "0")):
         sys.exit(f"rope-wave: parameters are written like \"L8 W949 S1 P3 K0\" (v2: and \" C1\", W 2 or more; v3: \" C2\", L8 S1 P0 K0; v4: and \" G1\"): {text}")
     return tuple(int(g) for g in m.groups()[:5]) + (int(m.group(6)[2]) if m.group(6) else 0, 1 if m.group(7) else 0,
-                                                    1 if m.group(8) else 0)
+                                                    1 if m.group(8) else 0, T)
 
 
 def rope_kept(n):
@@ -2376,7 +2381,7 @@ def rope_kept(n):
 
 
 def rope_wave_file(code, params, size):
-    L, W, S, P, K, C, G, A = rope_params(params)
+    L, W, S, P, K, C, G, A, T = rope_params(params)
     vb, mask = L // 8, (1 << L) - 1
     n = size // vb
     kept = rope_kept(n) if K else []
@@ -2509,6 +2514,71 @@ def rope_wave_file(code, params, size):
         at[0] += 4 * w
         return sw_decode(words, freq, count)
 
+    def predict(x, rope, i):
+        left = P >= 1 and i % W >= S
+        up = P >= 2 and i >= W
+        if left and up:
+            a, b = x[i - S], x[i - W]
+            if P == 2:
+                return (a + b) // 2
+            c = x[i - W - S]
+            if P == 4:  # rope-wave-v6: the triangle (the median edge detector)
+                return min(a, b) if c >= max(a, b) else max(a, b) if c <= min(a, b) else a + b - c
+            return min(max(a + b - c, 0), mask)
+        if left:
+            return x[i - S]
+        if up:
+            return x[i - W]
+        return rope[i] & mask
+
+    def rope_line(x, kept):
+        rope = [0] * n
+        if len(kept) == 1:
+            rope[kept[0]] = x[kept[0]]
+        for a, b in zip(kept, kept[1:]):
+            for i in range(a, b + 1):
+                rope[i] = x[a] + (2 * (x[b] - x[a]) * (i - a) + (b - a)) // (2 * (b - a))
+        return rope
+
+    if T:
+        # rope-wave-v6 (T1): for each plane, nine buckets' counts and segments (by how busy each
+        # value's triangle is: |a - c| + |b - c|, shifted down by L - 8, into 0 to 7 by the bounds
+        # 2, 4, 8, 16, 32, 64, 128; 8 for a value with no triangle); the file made value by value.
+        segs = []
+        for plane in range(vb):
+            row = []
+            for k in range(9):
+                count = varint()
+                row.append(segment_of(count))
+            if sum(len(r) for r in row) != m:
+                sys.exit("rope-wave-v6: buckets that do not hold the file's values")
+            segs.append(row)
+        tail = size - n * vb
+        if len(code) - at[0] != len(kept) * vb + tail:
+            sys.exit("rope-wave-v6: the code does not end where the kept bytes do")
+        x = [0] * n
+        for k, i in enumerate(kept):
+            x[i] = int.from_bytes(code[at[0] + k * vb:at[0] + (k + 1) * vb], "little")
+        rope = rope_line(x, kept)
+        keptset, nxt = set(kept), [[0] * 9 for _ in range(vb)]
+        for i in range(n):
+            if i in keptset:
+                continue
+            if i % W < S or i < W + S:
+                bk = 8
+            else:
+                a, b, c = x[i - S], x[i - W], x[i - W - S]
+                act = (abs(a - c) + abs(b - c)) >> (L - 8)
+                bk = sum(act >= bound for bound in (2, 4, 8, 16, 32, 64, 128))
+            e = 0
+            for plane in range(vb):
+                if nxt[plane][bk] >= len(segs[plane][bk]):
+                    sys.exit("rope-wave-v6: a bucket with fewer values than the file needs")
+                e |= segs[plane][bk][nxt[plane][bk]] << (8 * plane)
+                nxt[plane][bk] += 1
+            x[i] = (e + predict(x, rope, i)) & mask
+        return b"".join(v.to_bytes(vb, "little") for v in x) + code[at[0] + len(kept) * vb:]
+
     # The values left, by position; v1 one segment a plane, v2 one a column (position mod W) a plane.
     keptset = set(kept)
     free = [i for i in range(n) if i not in keptset]
@@ -2545,22 +2615,116 @@ def rope_wave_file(code, params, size):
     for i in range(n):
         if i in keptset:
             continue
-        left = P >= 1 and i % W >= S
-        up = P >= 2 and i >= W
-        if left and up:
-            if P == 2:
-                pred = (x[i - S] + x[i - W]) // 2
-            else:
-                pred = min(max(x[i - S] + x[i - W] - x[i - W - S], 0), mask)
-        elif left:
-            pred = x[i - S]
-        elif up:
-            pred = x[i - W]
-        else:
-            pred = rope[i] & mask
-        x[i] = (e[j] + pred) & mask
+        x[i] = (e[j] + predict(x, rope, i)) & mask
         j += 1
     return b"".join(v.to_bytes(vb, "little") for v in x) + code[at[0] + len(kept) * vb:]
+
+
+# ---------------------------------------------------------------- mix-v1 (IDEAS §19.102)
+# Mixing: every bit predicted by several models (the bytes before, 0 to 6 of them, and the word so
+# far), their predictions mixed by weights that learn, the mix coded by a binary arithmetic coder;
+# integers only. Written from SPECIFICATIONS §12.2 apart from core/mix.*.
+
+def mix_tables():
+    ts = [1, 2, 3, 6, 10, 16, 27, 45, 73, 120, 194, 310, 488, 747, 1101, 1546, 2047,
+          2549, 2994, 3348, 3607, 3785, 3901, 3975, 4024, 4050, 4068, 4079, 4085, 4089, 4092, 4093, 4094]
+    squash = [0] * 4096
+    for x in range(-2048, 2048):
+        w, i = x & 127, (x >> 7) + 16
+        squash[x + 2048] = (ts[i] * (128 - w) + ts[i + 1] * w + 64) >> 7
+    stretch, pi = [0] * 4096, 0
+    for x in range(-2047, 2048):
+        v = squash[x + 2048]
+        for j in range(pi, v + 1):
+            stretch[j] = x
+        pi = v + 1
+    for j in range(pi, 4096):
+        stretch[j] = 2047
+    return squash, stretch
+
+
+def mix_file(code, params, size):
+    m = re.fullmatch(r"B(1[6-9]|2[0-2])", params)
+    if not m:
+        sys.exit(f"mix-v1: parameters are written \"B22\" (B16 to B22): {params}")
+    mask, M = (1 << int(m.group(1))) - 1, 0xFFFFFFFF
+    squash, stretch = mix_tables()
+    sq = lambda x: squash[max(-2047, min(2047, x)) + 2048]
+    tables = [dict() for _ in range(8)]  # (context index) -> [p, n]
+    w = [1 << 14] * (8 * 256)
+    last, seen, word, c0 = [0] * 6, 0, 0, 1
+    base = [0] * 8
+
+    def new_byte():
+        base[0] = 0
+        for k, o in enumerate((1, 2, 3, 4, 5, 6)):
+            h = (o * 0x2545F491) & M
+            for j in range(min(o, seen)):
+                h = ((h ^ last[j]) * 0x01000193) & M
+            base[k + 1] = (h * 0x9E3779B1 + o * 0x632BE5AB) & M
+        base[7] = (word * 0x85EBCA6B + 0x7FEB352D) & M
+
+    new_byte()
+    at = [0]
+
+    def nxt():
+        b = code[at[0]] if at[0] < len(code) else 0
+        at[0] += 1
+        return b
+
+    x1, x2, x = 0, M, 0
+    for _ in range(4):
+        x = (x << 8) | nxt()
+    out = bytearray()
+    for _ in range(size):
+        c = 0
+        for _ in range(8):
+            idx = [(base[i] + c0 * 0x9E3779B1) & M & mask for i in range(8)]
+            cs = [tables[i].setdefault(idx[i], [32768, 0]) for i in range(8)]
+            st = [stretch[cell[0] >> 4] for cell in cs]
+            ws = c0 * 8
+            pm = sq(sum(st[i] * w[ws + i] for i in range(8)) >> 16)
+            p = min(max(pm, 1), 4095)
+            xmid = x1 + (((x2 - x1) * p) >> 12)
+            bit = 1 if x <= xmid else 0
+            if bit:
+                x2 = xmid
+            else:
+                x1 = xmid + 1
+            err = ((bit << 12) - pm) * 2
+            for i in range(8):
+                nw = w[ws + i] + ((st[i] * err) >> 12)
+                w[ws + i] = max(-(1 << 22), min(1 << 22, nw))
+                cell = cs[i]
+                d = (65535 if bit else 0) - cell[0]
+                q = abs(d) // (cell[1] + 2)
+                cell[0] += q if d >= 0 else -q  # (the C++'s division, toward zero)
+                if cell[1] < 255:
+                    cell[1] += 1
+            c0 = c0 * 2 + bit
+            c = c * 2 + bit
+            if c0 >= 256:
+                b = c0 - 256
+                last = [b] + last[:5]
+                seen += 1
+                word = ((word * 263 + (b | 32)) & M) if (97 <= b <= 122 or 65 <= b <= 90) else 0
+                c0 = 1
+                new_byte()
+            while ((x1 ^ x2) & 0xFF000000) == 0:
+                x1, x2, x = (x1 << 8) & M, ((x2 << 8) & M) | 255, ((x << 8) & M) | nxt()
+        out.append(c)
+        if at[0] > len(code) + 4:
+            sys.exit("mix-v1: a code that ends before the file does")
+    if at[0] < len(code):
+        sys.exit("mix-v1: a code with bytes past the file's end")
+    return bytes(out)
+
+
+def cmd_mix_unpack(args):
+    code = open(args.code, "rb").read()
+    out = mix_file(code, args.params, args.size)
+    open(args.out, "wb").write(out)
+    print(f"{len(out)}\t{hashlib.sha256(out).hexdigest()}")
 
 
 def cmd_rope_unpack(args):
@@ -6221,8 +6385,8 @@ def v7_item(spec, place, code, path, items_from):
 
 
 ARCHIVE_FORMATS = [None, "xz", "gz", "bz2", "zst", "lz4", "br", "lzma", "lz", "7z", "zip", "rar", "cab", "iso", "lha", "cpio", "ar",
-                   "warc", "sk"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
-RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3, "sk": 3}
+                   "warc", "sk", "stb"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
+RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3, "sk": 3, "stb": 7}
 
 
 def listing_from_bytes(b):
@@ -6323,9 +6487,12 @@ def v16_text(data):
     the streams' sizes and dictionaries' bytes, the tree's SHA-256 as 32 bytes, the body, packed or
     not) read back into v15's text, followed by what follows it. Anything else is returned as it is."""
     import lzma
-    if not data.startswith((b"sieve\x10", b"sieve\x11", b"sieve\x12", b"sieve\x13", b"sieve\x14", b"sieve\x15", b"sieve\x16")):
+    if not (len(data) > 5 and data[:5] == b"sieve" and 16 <= data[5] <= 25):
         return data
-    v22 = data[5] == 22  # v21 whose RARs may be made again by the machine's own rar ("ur" and "um" lines)
+    v25 = data[5] == 25  # v24 whose skeletons may hold a PNG's chunks, and PNGs stb_image_write made
+    v24 = data[5] == 24 or v25  # v23 whose files may be carried by mixing (mix-v1)
+    v23 = data[5] == 23 or v24  # v22 whose rope ways may be rope-wave-v6's (the triangle)
+    v22 = data[5] == 22 or v23  # v21 whose RARs may be made again by the machine's own rar ("ur" and "um" lines)
     v21 = data[5] == 21 or v22  # v20 whose gzip, zip and 7z files may be made again from a skeleton
     v20 = data[5] == 20 or v21  # v19 whose body is in bytes (listing_from_bytes), lz4, brotli and lzma remade too
     v17 = data[5] == 17  # v16 whose remade archives may be gzip files
@@ -6366,7 +6533,7 @@ def v16_text(data):
         sys.exit("v16: flags this reader does not know")
     if v18 and not flags & 0x40:
         sys.exit("v18 without its graph part")
-    head = b"sieve-manifest-v22\n" if v22 else b"sieve-manifest-v21\n" if v21 else b"sieve-manifest-v20\n" if v20 else b"sieve-manifest-v19\n" if v19 else b"sieve-manifest-v18\n" if v18 else b"sieve-manifest-v17\n" if v17 else b"sieve-manifest-v15\n"
+    head = b"sieve-manifest-v25\n" if v25 else b"sieve-manifest-v24\n" if v24 else b"sieve-manifest-v23\n" if v23 else b"sieve-manifest-v22\n" if v22 else b"sieve-manifest-v21\n" if v21 else b"sieve-manifest-v20\n" if v20 else b"sieve-manifest-v19\n" if v19 else b"sieve-manifest-v18\n" if v18 else b"sieve-manifest-v17\n" if v17 else b"sieve-manifest-v15\n"
     if flags & 1:
         head += b"root " + take(varint()) + b"\n"
     for bit, name in ((2, b"x86"), (4, b"lzma2"), (8, b"items")):
@@ -6425,7 +6592,10 @@ def cmd_unpack_v7(args, data):
     # v11 with no line for an empty items or rope stream, and the lzma2 stream perhaps carried as it is
     # v13 with archives optimised: an xz file remade exactly from what it holds, or an archive carried
     # as its contents ("u" lines after the tree's)
-    v22 = lines[0] == "sieve-manifest-v22"  # v21 whose RARs may be made again by the machine's own rar
+    v25 = lines[0] == "sieve-manifest-v25"  # v24 whose skeletons may hold a PNG's chunks, and PNGs stb_image_write made
+    v24 = lines[0] == "sieve-manifest-v24" or v25  # v23 whose files may be carried by mixing (mix-v1)
+    v23 = lines[0] == "sieve-manifest-v23" or v24  # v22 whose rope ways may be rope-wave-v6's (the triangle)
+    v22 = lines[0] == "sieve-manifest-v22" or v23  # v21 whose RARs may be made again by the machine's own rar
     v21 = lines[0] == "sieve-manifest-v21" or v22  # v20 whose gzip, zip and 7z files may be made again from a skeleton
     v20 = lines[0] == "sieve-manifest-v20" or v21  # v19 whose archives may also be lz4, brotli or lzma files (its body in bytes)
     v19 = lines[0] == "sieve-manifest-v19" or v20  # v18 whose archives may be bzip2 or zstd files; a graph part allowed
@@ -6530,11 +6700,21 @@ def cmd_unpack_v7(args, data):
     got, xa, pa, ia, ra = [None] * len(files), 0, 0, 0, 0
     remakes = {}
     for i, (path, size, sha, way) in enumerate(files):
+        if v25 and way.startswith("stb "):
+            # "stb <level> <filter> <width> <height> <components> <inner size> <way>": a PNG that
+            # stb_image_write made, made again from its pixels by the same (which the oracle has not).
+            _, level, filt, w, h, c, n, way = way.split(" ", 7)
+            if not (level.isdigit() and int(level) <= 9 and re.fullmatch(r"-1|[0-4]", filt) and w.isdigit() and h.isdigit() and
+                    c in ("1", "2", "3", "4") and n.isdigit() and int(w) * int(h) * int(c) == int(n)) or \
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ")):
+                sys.exit(f"{path}: a PNG recipe Sieve does not write")
+            remakes[i] = ("stb", size)
+            size = int(n)
         if v21 and way.startswith("sk "):
             # "sk <skeleton size> <inner size> <way>": a gzip, zip or 7z as a skeleton and the data it holds.
             _, skel, n, way = way.split(" ", 3)
             if not (skel.isdigit() and n.isdigit() and int(skel) <= int(n)) or \
-                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ")):
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ")):
                 sys.exit(f"{path}: a skeleton recipe Sieve does not write")
             remakes[i] = ("sk", int(skel), size)
             size = int(n)
@@ -6544,7 +6724,7 @@ def cmd_unpack_v7(args, data):
             _, level, block, linked, bsum, csum, sflag, n, way = way.split(" ", 8)
             if not re.fullmatch(r"-?[0-9]+", level) or block not in ("4", "5", "6", "7") or \
                     any(x not in ("0", "1") for x in (linked, bsum, csum, sflag)) or \
-                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ")):
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ")):
                 sys.exit(f"{path}: an lz4 recipe Sieve does not write")
             remakes[i] = ("lz4", int(level), int(block), linked == "1", bsum == "1", csum == "1", sflag == "1", size)
             size = int(n)
@@ -6552,21 +6732,21 @@ def cmd_unpack_v7(args, data):
             # "br <quality> <window> <inner size> <way>": brotli, as the brotli program writes.
             _, quality, window, n, way = way.split(" ", 4)
             if not re.fullmatch(r"[0-9]|1[01]", quality) or not re.fullmatch(r"1[0-9]|2[0-4]", window) or \
-                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ")):
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ")):
                 sys.exit(f"{path}: a brotli recipe Sieve does not write")
             remakes[i] = ("br", int(quality), int(window), size)
             size = int(n)
         if v20 and way.startswith("lzma "):
             # "lzma <preset>[e] <inner size> <way>": LZMA_Alone, as the lzma program writes.
             _, preset, n, way = way.split(" ", 3)
-            if not re.fullmatch(r"[0-9]e?", preset) or not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ")):
+            if not re.fullmatch(r"[0-9]e?", preset) or not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ")):
                 sys.exit(f"{path}: an lzma recipe Sieve does not write")
             remakes[i] = ("lzma", int(preset[0]) | (lzma.PRESET_EXTREME if preset.endswith("e") else 0), size)
             size = int(n)
         if v19 and way.startswith("bz2 "):
             # "bz2 <block size> <inner size> <way>": libbzip2, as the bzip2 program writes one stream.
             _, level, n, way = way.split(" ", 3)
-            if not re.fullmatch(r"[1-9]", level) or not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ")):
+            if not re.fullmatch(r"[1-9]", level) or not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ")):
                 sys.exit(f"{path}: a bzip2 recipe Sieve does not write")
             remakes[i] = ("bz2", int(level), size)
             size = int(n)
@@ -6575,7 +6755,7 @@ def cmd_unpack_v7(args, data):
             # by that version of libzstd (the zstandard module's, here).
             _, version, level, checksum, size_flag, n, way = way.split(" ", 6)
             if not re.fullmatch(r"-?[0-9]+", level) or checksum not in ("0", "1") or size_flag not in ("0", "1") or \
-                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ")):
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ")):
                 sys.exit(f"{path}: a zstd recipe Sieve does not write")
             remakes[i] = ("zst", version, int(level), checksum == "1", size_flag == "1", size)
             size = int(n)
@@ -6585,7 +6765,7 @@ def cmd_unpack_v7(args, data):
             _, level, mem, header, n, way = way.split(" ", 5)
             if not re.fullmatch(r"[1-9]", level) or not re.fullmatch(r"[1-9]", mem) or \
                     not re.fullmatch(r"(?:[0-9a-f]{2}){10,}", header) or \
-                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ")):
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ")):
                 sys.exit(f"{path}: a gzip recipe Sieve does not write")
             remakes[i] = ("gz", int(level), int(mem), bytes.fromhex(header), size)
             size = int(n)
@@ -6593,7 +6773,7 @@ def cmd_unpack_v7(args, data):
             # "xz <preset> <check> <inner size> <way>": what it holds first, by that way; remade below.
             _, preset, check, n, way = way.split(" ", 4)
             if not re.fullmatch(r"[0-9]e?", preset) or check not in ("none", "crc32", "crc64", "sha256") or \
-                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ")):
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ")):
                 sys.exit(f"{path}: an xz recipe Sieve does not write")
             remakes[i] = ("xz", int(preset[0]) | (lzma.PRESET_EXTREME if preset.endswith("e") else 0),
                           {"none": lzma.CHECK_NONE, "crc32": lzma.CHECK_CRC32, "crc64": lzma.CHECK_CRC64, "sha256": lzma.CHECK_SHA256}[check],
@@ -6626,6 +6806,8 @@ def cmd_unpack_v7(args, data):
                     break
             if params.endswith(" A1") and not v15:
                 sys.exit(f"{path}: a rope-wave-v5 way before sieve-manifest-v15")
+            if (params.endswith(" T1") or " P4 " in params) and not v23:
+                sys.exit(f"{path}: a rope-wave-v6 way before sieve-manifest-v23")
             r, ra = rope_wave_file(ropes[ra:ra + n], params, rsum), ra + n
             out, za, rb = bytearray(), 0, 0
             for p in pieces:
@@ -6650,11 +6832,24 @@ def cmd_unpack_v7(args, data):
                 sys.exit(f"{path}: a rope-wave-v2 way in sieve-manifest-v8")
             if way.endswith(" A1") and not v15:
                 sys.exit(f"{path}: a rope-wave-v5 way before sieve-manifest-v15")
+            if (way.endswith(" T1") or " P4 " in way) and not v23:
+                sys.exit(f"{path}: a rope-wave-v6 way before sieve-manifest-v23")
             if " G1" in way and not v11:
                 sys.exit(f"{path}: a rope-wave-v4 way before sieve-manifest-v11")
             if " C2" in way and not v10:
                 sys.exit(f"{path}: a rope-wave-v3 way before sieve-manifest-v10")
             got[i], ra = rope_wave_file(ropes[ra:ra + n], way[5:], size), ra + n
+        elif v24 and way.startswith("mix "):
+            # v24: made again by mixing, from its code, next in the rope stream (its length first).
+            n, shift = 0, 0
+            while True:
+                b = ropes[ra]
+                ra += 1
+                n |= (b & 0x7F) << shift
+                shift += 7
+                if not b & 0x80:
+                    break
+            got[i], ra = mix_file(ropes[ra:ra + n], way[4:], size), ra + n
         elif way.startswith("item "):
             k = int(way.split(" ")[1])
             if coded[k]:
@@ -6681,6 +6876,9 @@ def cmd_unpack_v7(args, data):
     import zlib
     unchecked = set()  # v21: files made again by preflate or the LZMA SDK, which the oracle has not
     for i, r in remakes.items():  # v14: xz remade by Python's lzma, as the xz program writes; v17: gzip by zlib
+        if r[0] == "stb":  # v25: its pixels given, at their size; the PNG not made (no stb_image_write here)
+            unchecked.add(i)
+            continue
         if r[0] == "sk":  # v21: the skeleton read and checked; made again where it is bytes and data alone
             _, skel, size = r
             made = skeleton_remake(got[i], skel, files[i][0])
@@ -6730,10 +6928,11 @@ def cmd_unpack_v7(args, data):
         if (size is not None and len(b) != size) or (sha != "-" and hashlib.sha256(b).hexdigest() != sha):
             sys.exit(f"{path} does not unpack to its size and SHA-256")
     if unchecked:
-        # Their bytes are made by preflate or the LZMA SDK's encoder, neither of which the oracle has:
-        # their skeletons and data were read and checked, but not the files themselves, nor the tree.
+        # Their bytes are made by preflate, the LZMA SDK's encoder or stb_image_write, none of which the
+        # oracle has: their skeletons (or recipes) and data were read and checked, but not the files
+        # themselves, nor the tree.
         for k in sorted(unchecked):
-            print(f"not made again by the oracle (preflate or the LZMA SDK): {files[k][0]}; the tree's SHA-256 not checked")
+            print(f"not made again by the oracle (preflate, the LZMA SDK or stb_image_write): {files[k][0]}; the tree's SHA-256 not checked")
     else:
         h = hashlib.sha256()
         for (path, size, sha, way), b in zip(files, got):
@@ -6786,38 +6985,58 @@ def skeleton_remake(inner, skel, path):
         data[0] += n
         return inner[data[0] - n:data[0]]
 
-    for _ in range(varint()):
-        if at[0] >= len(sk):
-            sys.exit(f"{path}: its skeleton ends early")
-        kind = sk[at[0]]
-        at[0] += 1
-        n = varint()
-        if kind == 0:
-            if n > len(sk) - at[0]:
+    def segments(count, depth):
+        nonlocal whole
+        out = b""
+        for _ in range(count):
+            if at[0] >= len(sk):
                 sys.exit(f"{path}: its skeleton ends early")
-            out += sk[at[0]:at[0] + n]
-            at[0] += n
-        elif kind == 1:
-            out += take_data(n)
-        elif kind == 2:
-            d = varint()
-            if d > len(sk) - at[0]:
-                sys.exit(f"{path}: its skeleton ends early")
-            at[0] += d
-            take_data(n)
-            whole = False
-        elif kind in (3, 4):
-            props = 1 if kind == 3 else 5
-            if props + 2 > len(sk) - at[0]:
-                sys.exit(f"{path}: its skeleton ends early")
-            level, flags = sk[at[0] + props], sk[at[0] + props + 1]
-            if level > 9 or flags & ~3 or (kind == 4 and flags & 1) or (kind == 3 and sk[at[0]] > 40):
-                sys.exit(f"{path}: LZMA settings Sieve does not write")
-            at[0] += props + 2
-            take_data(n)
-            whole = False
-        else:
-            sys.exit(f"{path}: a skeleton's segment Sieve does not write")
+            kind = sk[at[0]]
+            at[0] += 1
+            n = varint()
+            if kind == 5:
+                # v25: a run of n chunks (a PNG's IDATs): their lengths, then the segments of their data
+                # joined, cut back into chunks, each its length, "IDAT", its data and its CRC-32.
+                if depth or not n:
+                    sys.exit(f"{path}: a skeleton's run of chunks that is not one")
+                lengths = [varint() for _ in range(n)]
+                joined = segments(varint(), depth + 1)
+                if whole:
+                    if len(joined) != sum(lengths):
+                        sys.exit(f"{path}: a run of chunks whose data is not their lengths")
+                    for l in lengths:
+                        piece, joined = joined[:l], joined[l:]
+                        out += struct.pack(">I", l) + b"IDAT" + piece + struct.pack(">I", zlib.crc32(b"IDAT" + piece) & 0xFFFFFFFF)
+                continue
+            if kind == 0:
+                if n > len(sk) - at[0]:
+                    sys.exit(f"{path}: its skeleton ends early")
+                out += sk[at[0]:at[0] + n]
+                at[0] += n
+            elif kind == 1:
+                out += take_data(n)
+            elif kind == 2:
+                d = varint()
+                if d > len(sk) - at[0]:
+                    sys.exit(f"{path}: its skeleton ends early")
+                at[0] += d
+                take_data(n)
+                whole = False
+            elif kind in (3, 4):
+                props = 1 if kind == 3 else 5
+                if props + 2 > len(sk) - at[0]:
+                    sys.exit(f"{path}: its skeleton ends early")
+                level, flags = sk[at[0] + props], sk[at[0] + props + 1]
+                if level > 9 or flags & ~3 or (kind == 4 and flags & 1) or (kind == 3 and sk[at[0]] > 40):
+                    sys.exit(f"{path}: LZMA settings Sieve does not write")
+                at[0] += props + 2
+                take_data(n)
+                whole = False
+            else:
+                sys.exit(f"{path}: a skeleton's segment Sieve does not write")
+        return out
+
+    out = segments(varint(), 0)
     if at[0] != len(sk) or data[0] != len(inner):
         sys.exit(f"{path}: a skeleton that does not use all it is given")
     return out if whole else None
@@ -6827,7 +7046,8 @@ def instructions_bytes(data):
     """A manifest's bytes, or Sieve instructions as a .sieve holds them: their manifest's place on the
     binary line as raw bytes (binary-v1, §12.1), read back here to the manifest (every shorter file
     first: the count of files shorter than L bytes is (256**L - 1) / 255)."""
-    if data.startswith((b"sieve\x10", b"sieve\x11", b"sieve\x12", b"sieve\x13", b"sieve\x14", b"sieve\x15", b"sieve-manifest-v")):
+    # (A head in bytes: "sieve" and its version's byte, 16 to 25.)
+    if data.startswith(b"sieve-manifest-v") or (len(data) > 5 and data[:5] == b"sieve" and 16 <= data[5] <= 25):
         return data
     v = int.from_bytes(data, "big")
     length = max(0, len(data) - 1)
@@ -6853,7 +7073,7 @@ def cmd_unpack(args):
     if data.startswith((b"sieve-manifest-v7\n", b"sieve-manifest-v8\n", b"sieve-manifest-v9\n", b"sieve-manifest-v10\n",
                         b"sieve-manifest-v11\n", b"sieve-manifest-v12\n", b"sieve-manifest-v13\n", b"sieve-manifest-v14\n",
                         b"sieve-manifest-v15\n", b"sieve-manifest-v17\n", b"sieve-manifest-v18\n", b"sieve-manifest-v19\n",
-                                b"sieve-manifest-v20\n", b"sieve-manifest-v21\n", b"sieve-manifest-v22\n")):
+                                b"sieve-manifest-v20\n", b"sieve-manifest-v21\n", b"sieve-manifest-v22\n", b"sieve-manifest-v23\n", b"sieve-manifest-v24\n", b"sieve-manifest-v25\n")):
         return cmd_unpack_v7(args, data)
     end = data.index(b"\nend\n") + len(b"\nend\n")
     lines = data[:end].decode("utf-8").split("\n")[:-1]
@@ -6979,7 +7199,7 @@ def cmd_graph(args):
     """The graph part of Sieve instructions that are a map (sieve-manifest-v18, SPECIFICATIONS §12.3):
     the map's text, every line after its "g<TAB>", as it was written."""
     data = v16_text(instructions_bytes(open(args.file, "rb").read()))
-    if not data.startswith((b"sieve-manifest-v18\n", b"sieve-manifest-v19\n", b"sieve-manifest-v20\n", b"sieve-manifest-v21\n", b"sieve-manifest-v22\n")) or b"\ng\t" not in data:
+    if not data.startswith((b"sieve-manifest-v18\n", b"sieve-manifest-v19\n", b"sieve-manifest-v20\n", b"sieve-manifest-v21\n", b"sieve-manifest-v22\n", b"sieve-manifest-v23\n", b"sieve-manifest-v24\n", b"sieve-manifest-v25\n")) or b"\ng\t" not in data:
         sys.exit("not a map: no graph part")
     end = data.index(b"\nend\n") + 1
     out = b"".join(l[2:] + b"\n" for l in data[:end].split(b"\n") if l.startswith(b"g\t"))
@@ -9261,6 +9481,11 @@ def main():
     s.add_argument("--params", required=True)
     s.add_argument("--size", type=int, required=True)
     s.add_argument("--out", required=True)
+    s = sub.add_parser("mix-unpack")
+    s.add_argument("code")
+    s.add_argument("--params", required=True)
+    s.add_argument("--size", type=int, required=True)
+    s.add_argument("--out", required=True)
     s = sub.add_parser("llm-encode-lines")
     s.add_argument("file")
     s.add_argument("--model", required=True)
@@ -9448,6 +9673,8 @@ def main():
         cmd_weights_unpack(args)
     elif args.cmd == "rope-unpack":
         cmd_rope_unpack(args)
+    elif args.cmd == "mix-unpack":
+        cmd_mix_unpack(args)
     elif args.cmd == "kind-vectors":
         cmd_kind_vectors(args)
     elif args.cmd == "written-vectors":

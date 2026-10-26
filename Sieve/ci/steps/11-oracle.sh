@@ -490,15 +490,15 @@ with zipfile.ZipFile('a21/stored.zip', 'w', zipfile.ZIP_STORED) as z:
     z.writestr(zipfile.ZipInfo('sieve_ref.py', (2026, 10, 25, 12, 0, 0)), t)"
 cp ../tests/archives/sieve-7zip-lzma2.7z ../tests/archives/sieve-7zip-lzma.7z ../tests/archives/sieve-7zip-deflate.zip a21/
 SIEVE_ARCHIVES_ALWAYS=1 $S locate a21 --installer a21.sieve --items --optimise-archives --manifest a21.manifest | tr -d '\r' > a21.txt
-grep -c "^remade    6 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v21)$" a21.txt > /dev/null
-python -c "d = open('a21.manifest', 'rb').read(); assert d[:6] == b'sieve\x15', d[:6]"
+grep -c "^remade    6 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v2[1-5])$" a21.txt > /dev/null
+python -c "d = open('a21.manifest', 'rb').read(); assert d[:5] == b'sieve' and 21 <= d[5] <= 25, d[:6]"
 $S install a21.sieve --to a21_inst > /dev/null
 for f in huff.gz py.zip stored.zip sieve-7zip-lzma2.7z sieve-7zip-lzma.7z sieve-7zip-deflate.zip; do cmp a21/$f a21_inst/$f; done
 # The oracle reads every skeleton whole and makes the stored zip again; the others, made by preflate
 # or the LZMA SDK (which it has not), it names as not made again, and so leaves the tree unchecked.
 python sieve_ref.py unpack a21.manifest --to a21_oracle | tr -d '\r' > a21_oracle.txt
 cmp a21/stored.zip a21_oracle/stored.zip
-[ "$(grep -c "^not made again by the oracle (preflate or the LZMA SDK): " a21_oracle.txt)" -eq 5 ]
+[ "$(grep -c "^not made again by the oracle (preflate, the LZMA SDK or stb_image_write): " a21_oracle.txt)" -eq 5 ]
 $SI a21.sieve --to a21_si --yes > /dev/null
 diff -r a21_inst a21_si
 # v22 (25 October 2026): a RAR made again by the machine's own rar, where it gives the archive back
@@ -529,10 +529,66 @@ if [ "$(uname -s)" = Linux ] || [ "$(uname -s)" = Darwin ]; then
   cmp r22/made.rar r22_si/made.rar
   # In a folder: the archive given back in its place, the folder's other files as they were.
   cp r22/made.rar r22/folder/ && cp ../tests/manifest_fixture/a.txt r22/folder/
-  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/folder --installer r22f.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^unpacked .*sieve-manifest-v22" > /dev/null
+  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/folder --installer r22f.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^unpacked .*sieve-manifest-v2[2-5]" > /dev/null
   rm -rf r22f_inst && SIEVE_RAR="$RAR" $S install r22f.sieve --to r22f_inst > /dev/null
   diff -r r22/folder r22f_inst
   # --v21: as before, its contents alone.
   SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/made.rar --installer r21.sieve --items --optimise-archives --v21 | tr -d '\r' | grep -c "sieve-manifest-v21\|sieve-manifest-v20" > /dev/null
   rm -rf r21_inst && $S install r21.sieve --to r21_inst | tr -d '\r' | grep -c "^note      made.rar (rar, [0-9]* bytes) was carried as its contents" > /dev/null
 fi
+# v23 (26 October 2026): rope-wave-v6, Edward's triangle (P4: a value predicted from the one
+# before, the one above and the corner between, the median edge detector) and its contexts (T1:
+# what is left coded by how busy the triangle is). On the centre of the Vitruvian Man (tests/rope,
+# 256 by 256 grey bytes) the search finds the triangle, the instructions are v23, and Sieve and the
+# oracle both give the picture back; --v22 keeps to rope-wave-v5.
+cp ../tests/rope/vitruvian-centre-256.gray tri.raw
+$S rope tri.raw | tr -d '\r' | grep -c "^wave      L8 W256 S1 P4 K[01]\( T1\)\? (rope-wave-v6)" > /dev/null
+$S locate tri.raw --installer tri.sieve --items | tr -d '\r' | grep -c "^rope .*rope-wave-v1 to v6.*sieve-manifest-v23" > /dev/null
+python -c "assert open('tri.sieve', 'rb').read()[:0] == b''"
+rm -rf tri_inst tri_oracle
+$S install tri.sieve --to tri_inst > /dev/null
+cmp tri.raw tri_inst/tri.raw
+python sieve_ref.py unpack tri.sieve --to tri_oracle > /dev/null
+cmp tri.raw tri_oracle/tri.raw
+$S locate tri.raw --installer tri22.sieve --items --v22 | tr -d '\r' > tri22.txt
+grep -c "^rope .*rope-wave-v1\( to v[2-5]\)\? (" tri22.txt > /dev/null
+! grep -q "sieve-manifest-v23\|not an option" tri22.txt
+# The oracle's own rope-wave-v6 against Sieve's codes: every value length, steps, keep or not.
+for pr in "L8 W256 S1 P4 K0" "L8 W256 S1 P4 K1 T1" "L8 W256 S2 P3 K0 T1" "L16 W128 S1 P4 K0 T1" "L32 W64 S1 P4 K1 T1"; do
+  $S rope tri.raw --params "$pr" --out tri.rope > /dev/null
+  python sieve_ref.py rope-unpack tri.rope --params "$pr" --size 65536 --out tri.back > /dev/null
+  cmp tri.raw tri.back
+done
+# v24 (26 October 2026): mixing (mix-v1): every bit predicted by the bytes before it (0 to 6) and
+# the word so far, the predictions mixed by weights that learn, coded exactly in integers. The
+# start of Don Quixote (40,000 bytes): sieve mix gives it back; Sieve instructions carry it so (v24),
+# smaller than v23's; Sieve and the oracle (its own mix-v1) both give it back; --v23 does not mix.
+head -c 40000 ../data/anchors/public-domain/pg996.txt > dq.txt
+$S mix dq.txt --out dq.mix | tr -d '\r' > dqmix.txt
+grep -c "^mix       B17 (mix-v1)" dqmix.txt > /dev/null
+grep -c "read back and checked" dqmix.txt > /dev/null
+python sieve_ref.py mix-unpack dq.mix --params B17 --size 40000 --out dq.back > /dev/null
+cmp dq.txt dq.back
+$S locate dq.txt --installer dq.sieve --items | tr -d '\r' | grep -c "^mix       1 file(s) carried by mixing, mix-v1 (40000 bytes, carried in [0-9]*; sieve-manifest-v24)" > /dev/null
+$S locate dq.txt --installer dq23.sieve --items --v23 | tr -d '\r' > dq23.txt
+! grep -q "^mix \|sieve-manifest-v24\|not an option" dq23.txt
+[ "$(wc -c < dq.sieve)" -lt "$(wc -c < dq23.sieve)" ]
+rm -rf dq_inst dq_oracle
+$S install dq.sieve --to dq_inst > /dev/null
+cmp dq.txt dq_inst/dq.txt
+python sieve_ref.py unpack dq.sieve --to dq_oracle > /dev/null
+cmp dq.txt dq_oracle/dq.txt
+# v25 (26 October 2026): PNGs made again exactly (Optimise Archive Formats). A hallway screenshot
+# (docs/images: stb_image_write's own, at its default level 8) as its pixels, made again by
+# stb_image_write; the extension's icon (zlib's deflate) from its skeleton, its IDATs one run of
+# chunks, their deflate by preflate and their CRCs worked out again. Installed exactly; the oracle
+# reads both and names them (it has neither stb_image_write nor preflate); --v24 makes neither.
+rm -rf png25 && mkdir png25 && cp ../docs/images/hallway-audio.png ../web/extension/icon128.png png25/
+$S locate png25 --installer png25.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v25)$" > /dev/null
+[ "$(wc -c < png25.sieve)" -lt 50000 ]
+rm -rf png25_inst png25_oracle
+$S install png25.sieve --to png25_inst > /dev/null
+diff -r png25 png25_inst
+python sieve_ref.py unpack png25.sieve --to png25_oracle | tr -d '\r' | grep -c "^not made again by the oracle (preflate, the LZMA SDK or stb_image_write): " | grep -q "^2$"
+$S locate png25 --installer png24.sieve --items --optimise-archives --v24 2>&1 | tr -d '\r' > png24.txt
+! grep -q "sieve-manifest-v25\|not an option" png24.txt

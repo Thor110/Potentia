@@ -46,7 +46,7 @@ cli::Manifest file_instructions(const fs::path& p, const std::vector<uint8_t>& b
     cli::Manifest m = cli::manifest_of_file(p);
     m.contents = bytes;
     m.with_contents = true;
-    cli::add_packed_items(m, p.parent_path(), items, nullptr, 8, false, rope_seconds, 5, true, true, archives);
+    cli::add_packed_items(m, p.parent_path(), items, nullptr, 8, false, rope_seconds, 8, true, true, archives);
     return m;
 }
 
@@ -599,7 +599,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                     progress("packing its Sieve instructions");
                     const auto packing = Clock::now();
                     r.made_rope_seconds = by_total ? cli::budget_per_file(total, n) : per_file;
-                    cli::add_packed_items(with, p, host_.item_args ? host_.item_args() : cli::Args{}, nullptr, 8, false, r.made_rope_seconds, 5, true,
+                    cli::add_packed_items(with, p, host_.item_args ? host_.item_args() : cli::Args{}, nullptr, 8, false, r.made_rope_seconds, 8, true,
                                           true, archives);
                     r.pack_seconds = since(packing);
                 }
@@ -729,7 +729,7 @@ void FileLocator::save(const std::string& to)
                     // A file's instructions are a folder's holding just it (file_instructions).
                     const cli::Args items = host_.item_args ? host_.item_args() : cli::Args{};
                     cli::Manifest with = r.kind == Result::File ? file_instructions(from_u8(r.path), r.bytes, items, rope_seconds, archives) : r.manifest;
-                    if (r.kind != Result::File) cli::add_packed_items(with, from_u8(r.path), items, nullptr, 8, false, rope_seconds, 5, true, true, archives);
+                    if (r.kind != Result::File) cli::add_packed_items(with, from_u8(r.path), items, nullptr, 8, false, rope_seconds, 8, true, true, archives);
                     progress("the instructions' address");
                     address = cli::binary_address(with.file());
                 }

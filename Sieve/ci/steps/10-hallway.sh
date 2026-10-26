@@ -418,10 +418,10 @@ open('rope_mix/sound.raw', 'wb').write(bytes(b))
 "
 cp data/anchors/public-domain/universalbibliothek.txt rope_mix/
 build/sieve rope rope_mix/picture.raw --out picture.rope | tr -d '\r' > rope.txt
-q "^wave      L8 W[0-9]* S[1-8] P[0-3] K[01]\( C[12]\)\?\( G1\)\? (rope-wave-v[1-4])" rope.txt
+q "^wave      L8 W[0-9]* S[1-8] P[0-4] K[01]\( C[12]\)\?\( G1\)\?\( T1\)\? (rope-wave-v[1-46])" rope.txt
 q "read back and checked" rope.txt
 [ "$(wc -c < picture.rope)" -lt "$(sed -n 's/^LZMA2     \([0-9]*\) bytes.*/\1/p' rope.txt)" ]
-params=$(sed -n 's/^wave      \(.*\) (rope-wave-v[1-4])/\1/p' rope.txt)
+params=$(sed -n 's/^wave      \(.*\) (rope-wave-v[1-46])/\1/p' rope.txt)
 python reference/sieve_ref.py rope-unpack picture.rope --params "$params" --size 30000 --out picture.back > /dev/null
 cmp rope_mix/picture.raw picture.back
 # sieve-manifest-v8: the picture and the sound carried by the rope (the sound's wave at nine
@@ -429,8 +429,8 @@ cmp rope_mix/picture.raw picture.back
 # each the smaller way. Smaller than v7 (no rope); installed by sieve install, the oracle, and
 # sieve-install itself (no items, so the small installer needs nothing it lacks).
 build/sieve locate rope_mix --installer rope8.sieve --items --manifest rope8.manifest | tr -d '\r' > rope8.txt
-q "^rope      2 file(s) pulled tight by rope-wave-v1\( and v2\| to v[34]\)\? (46000 bytes" rope8.txt
-python -c "import sys; sys.argv = ['x']; sys.path.insert(0, 'reference'); import sieve_ref; sys.stdout.buffer.write(sieve_ref.v7_listing(sieve_ref.v16_text(open('rope8.manifest', 'rb').read())))" | q -a "^f	30000	rope L8 W[0-9]* S[1-8] P[0-3] K[01]\( C[12]\)\?\( G1\)\?	picture.raw$"
+q "^rope      2 file(s) pulled tight by rope-wave-v1\( and v2\| to v[3-6]\)\? (46000 bytes" rope8.txt
+python -c "import sys; sys.argv = ['x']; sys.path.insert(0, 'reference'); import sieve_ref; sys.stdout.buffer.write(sieve_ref.v7_listing(sieve_ref.v16_text(open('rope8.manifest', 'rb').read())))" | q -a "^f	30000	rope L8 W[0-9]* S[1-8] P[0-4] K[01]\( C[12]\)\?\( G1\)\?\( T1\)\?	picture.raw$"
 build/sieve locate rope_mix --installer rope7.sieve --items --v7 > /dev/null
 [ "$(wc -c < rope8.sieve)" -lt "$(wc -c < rope7.sieve)" ]
 build/sieve install rope8.sieve --to rope_inst > /dev/null
@@ -442,7 +442,7 @@ diff -r rope_mix rope_si
 # Weighed: the rope is a way to name any file, its code, its parameters and its size paid
 # for, and its name once for every file that uses it.
 build/sieve locate rope_mix --weigh 2>&1 | tr -d '\r' > ropeweigh.txt
-q "^  picture.raw  *[0-9]*  *[0-9]*   rope L8 W[0-9]* S[1-8] P[0-3] K[01]\( C[12]\)\?\( G1\)\?$" ropeweigh.txt
+q "^  picture.raw  *[0-9]*  *[0-9]*   rope L8 W[0-9]* S[1-8] P[0-4] K[01]\( C[12]\)\?\( G1\)\?\( T1\)\?$" ropeweigh.txt
 q "^  shared: rope, [1-3] file(s): shape 96 bits$" ropeweigh.txt
 # rope-wave-v2: digits in a table (groups of ten, ten groups a line, Windows line ends, from a
 # fixed generator), each column's bytes counted apart: the separators' columns cost their
