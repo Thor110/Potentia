@@ -1,6 +1,6 @@
 # Archives for the archive checks
 
-Five small archives that CI step 11 reads with Optimise Archive Formats (`sieve-manifest-v20`), one
+Five small archives that CI step 11 reads with Optimise Compressed Formats (`sieve-manifest-v20`), one
 for each kind Sieve reads through libarchive and cannot make itself. Each is copied unchanged from
 libarchive 3.8.10's own test suite (`libarchive/test/*.uu`, decoded), where they were made for
 libarchive's tests.

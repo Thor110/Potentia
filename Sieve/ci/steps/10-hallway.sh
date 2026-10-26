@@ -624,7 +624,7 @@ sed '1s/v13/v12/' mixed15.manifest > mixed-as-v12.manifest
 if build/sieve install mixed-as-v12.manifest --to mixed_bad > /dev/null 2>&1; then exit 1; fi
 if python reference/sieve_ref.py unpack mixed-as-v12.manifest --to mixed_bad > /dev/null 2>&1; then exit 1; fi
 test ! -e mixed_bad
-# sieve-manifest-v14, "Optimise Archive Formats" (--optimise-archives; the File Locator's box):
+# sieve-manifest-v14, "Optimise Compressed Formats" (--optimise-archives; the File Locator's box):
 # off by default, and then nothing changes. Ticked, an xz file is remade exactly from what it
 # holds (liblzma, as the xz program writes it) and a 7z (tests/optimise_fixture.7z: 20 blocks
 # of the pi-like table above, 22,222 bytes in 10,513) is carried as its contents, in a folder
@@ -668,14 +668,14 @@ q "^items     none; sieve-manifest-v1[2-6]$" arch_off.txt
 if grep -q "sieve-manifest-v14\|^remade\|^unpacked" arch_off.txt; then exit 1; fi
 build/sieve locate arch --installer arch.sieve --items --optimise-archives --v19 --manifest arch.manifest | tr -d '\r' > arch.txt
 q "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v17)$" arch.txt
-q "^unpacked  2 archive(s) carried as their contents, not as the archives (Optimise Archive Formats; sieve-manifest-v17)$" arch.txt
+q "^unpacked  2 archive(s) carried as their contents, not as the archives (Optimise Compressed Formats; sieve-manifest-v17)$" arch.txt
 q "^items     none; sieve-manifest-v17$" arch.txt
 [ "$(wc -c < arch.sieve)" -lt "$(wc -c < arch_off.sieve)" ]
 build/sieve install arch.sieve --to arch_inst | tr -d '\r' > arch_inst.txt
-q "^note      digits.7z (7z, 10513 bytes) was carried as its contents (Optimise Archive Formats): digits holds them, not the archive itself$" arch_inst.txt
+q "^note      digits.7z (7z, 10513 bytes) was carried as its contents (Optimise Compressed Formats): digits holds them, not the archive itself$" arch_inst.txt
 cmp arch/x/table.txt.xz arch_inst/x/table.txt.xz
 cmp arch/y.txt.gz arch_inst/y.txt.gz
-q "^note      w.zip (zip, [0-9]* bytes) was carried as its contents (Optimise Archive Formats): w holds them, not the archive itself$" arch_inst.txt
+q "^note      w.zip (zip, [0-9]* bytes) was carried as its contents (Optimise Compressed Formats): w holds them, not the archive itself$" arch_inst.txt
 test "$(cat arch_inst/w/two.txt)" = "hello"
 test ! -e arch_inst/w.zip
 cmp arch-digits.txt arch_inst/digits/digits.txt
@@ -713,13 +713,13 @@ open('arch19-two.txt', 'wb').write(d)
 "
 build/sieve locate arch19 --installer arch19.sieve --items --optimise-archives --v19 --manifest arch19.manifest | tr -d '\r' > arch19.txt
 q "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v19)$" arch19.txt
-q "^unpacked  1 archive(s) carried as their contents, not as the archives (Optimise Archive Formats; sieve-manifest-v19)$" arch19.txt
+q "^unpacked  1 archive(s) carried as their contents, not as the archives (Optimise Compressed Formats; sieve-manifest-v19)$" arch19.txt
 q "^items     none; sieve-manifest-v19$" arch19.txt
 build/sieve install arch19.sieve --to arch19_inst | tr -d '\r' > arch19_inst.txt
 cmp arch19/y.txt.bz2 arch19_inst/y.txt.bz2
 cmp arch19/y.txt.zst arch19_inst/y.txt.zst
 cmp arch19-two.txt arch19_inst/two
-q "^note      two.zst (zst, [0-9]* bytes) was carried as its contents (Optimise Archive Formats): two holds them, not the archive itself$" arch19_inst.txt
+q "^note      two.zst (zst, [0-9]* bytes) was carried as its contents (Optimise Compressed Formats): two holds them, not the archive itself$" arch19_inst.txt
 python reference/sieve_ref.py unpack arch19.manifest --to arch19_oracle > /dev/null
 diff -r arch19_inst arch19_oracle
 build/sieve-install arch19.sieve --to arch19_si --yes

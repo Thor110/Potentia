@@ -2446,7 +2446,7 @@ void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackRepor
                      a.has("v23") ? 6 : a.has("v24") ? 7 : 8,
                      !(a.has("v8") || a.has("v9") || a.has("v10") || a.has("v11")),
                      !(a.has("v8") || a.has("v9") || a.has("v10") || a.has("v11") || a.has("v12")),
-                     a.has("optimise-archives") && !a.has("v13"), !a.has("v15"), !a.has("v16"),
+                     (a.has("optimise-compressed") || a.has("optimise-archives")) && !a.has("v13"), !a.has("v15"), !a.has("v16"),
                      !a.has("v19"), !a.has("v20") && !a.has("v19"), !a.has("v21") && !a.has("v20") && !a.has("v19"));
 }
 

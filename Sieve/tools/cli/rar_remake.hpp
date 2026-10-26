@@ -4,7 +4,7 @@
 // a RAR back exactly is the `rar` that made it, run as ffmpeg is (as its own process; Sieve links
 // none of it). The same version of `rar`, with the same switches, given the same files with the
 // same times (to the nanosecond) and attributes in the same order, writes the same bytes. So the
-// packer (Optimise Archive Formats) reads a RAR 5 archive's headers for its switches and every
+// packer (Optimise Compressed Formats) reads a RAR 5 archive's headers for its switches and every
 // member's times and attributes, writes its files out so, has the `rar` found make the archive
 // again, and carries it as its contents with that recipe only where the result is byte for byte
 // the archive. Installing writes the contents, then, where the same `rar` is found, makes the

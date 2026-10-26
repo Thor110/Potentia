@@ -545,7 +545,7 @@ std::string pieces_text(const std::vector<std::pair<char, uint64_t>>& list)
     return t;
 }
 
-// ---- v14: archives ("Optimise Archive Formats")
+// ---- v14: archives ("Optimise Compressed Formats")
 
 bool is_xz(const std::vector<uint8_t>& b)
 {
@@ -2188,7 +2188,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         if (bytes[i].size() != e.size || sha256_hex(bytes[i]) != e.sha256) throw std::runtime_error(e.path + " changed while the folder was being read");
     }
 
-    // v14, "Optimise Archive Formats" (asked for, never by default): an xz file remade exactly from
+    // v14, "Optimise Compressed Formats" (asked for, never by default): an xz file remade exactly from
     // what it holds where liblzma does that, its contents carried; else, and a 7z always (Sieve has
     // no 7-Zip encoder), the archive carried as its contents, in a folder (or file) named after it,
     // and said so. Where that name is taken, or the archive cannot be read, it stays as it is.
@@ -2912,15 +2912,20 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             }
             // v24: mixing (mix-v1), for a file of 4 KiB to 16 MiB: first its start (up to 256 KiB)
             // against LZMA2's estimate of it, and the whole only where the start comes out at least
-            // 3% smaller (mixing takes about 2.5 s a megabyte, coding and decoding alike).
-            if (mix_on && bytes[i].size() >= 4096 && bytes[i].size() <= (size_t(16) << 20) && !stop_requested())
+            // 3% smaller (mixing takes about 2.5 s a megabyte, coding and decoding alike). Try every
+            // way (rope_search_every_wave): every file, whole, of any size, with no test first.
+            const bool every = rope_search_every_wave();
+            if (mix_on && !stop_requested() && (every || (bytes[i].size() >= 4096 && bytes[i].size() <= (size_t(16) << 20))))
             {
                 const timings::Scope t("pack.mix");
                 const size_t sn = std::min<size_t>(bytes[i].size(), size_t(256) << 10);
                 const std::vector<uint8_t> start(bytes[i].begin(), bytes[i].begin() + std::ptrdiff_t(sn));
-                const uint64_t ms = mix_code(start, MixParams::for_size(sn)).size();
-                const uint64_t ls = sn == bytes[i].size() ? fw.lzma2 : estimate(start);
-                if (ms * 100 < ls * 97)
+                const bool tried = every || [&] {
+                    const uint64_t ms = mix_code(start, MixParams::for_size(sn)).size();
+                    const uint64_t ls = sn == bytes[i].size() ? fw.lzma2 : estimate(start);
+                    return ms * 100 < ls * 97;
+                }();
+                if (tried)
                 {
                     const MixParams mp = MixParams::for_size(bytes[i].size());
                     std::vector<uint8_t> mc = mix_code(bytes[i], mp);
@@ -3266,7 +3271,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
               << (r.v20 ? "; its body in bytes too" : "") << ")\n";
         if (r.remade) o << "remade    " << r.remade << " archive(s) carried as what they hold, remade exactly on installing (" << version << ")\n";
         if (r.unpacked)
-            o << "unpacked  " << r.unpacked << " archive(s) carried as their contents, not as the archives (Optimise Archive Formats; " << version
+            o << "unpacked  " << r.unpacked << " archive(s) carried as their contents, not as the archives (Optimise Compressed Formats; " << version
               << ")\n";
         // v22: each RAR the machine's rar was tried on, and what came of it.
         for (const std::string& t : r.rar_said) o << "rar       " << t << "\n";

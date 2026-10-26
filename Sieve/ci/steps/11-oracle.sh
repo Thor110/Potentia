@@ -578,7 +578,7 @@ $S install dq.sieve --to dq_inst > /dev/null
 cmp dq.txt dq_inst/dq.txt
 python sieve_ref.py unpack dq.sieve --to dq_oracle > /dev/null
 cmp dq.txt dq_oracle/dq.txt
-# v25 (26 October 2026): PNGs made again exactly (Optimise Archive Formats). A hallway screenshot
+# v25 (26 October 2026): PNGs made again exactly (Optimise Compressed Formats). A hallway screenshot
 # (docs/images: stb_image_write's own, at its default level 8) as its pixels, made again by
 # stb_image_write; the extension's icon (zlib's deflate) from its skeleton, its IDATs one run of
 # chunks, their deflate by preflate and their CRCs worked out again. Installed exactly; the oracle

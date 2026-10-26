@@ -12,6 +12,7 @@
 #include "cli/locate.hpp"
 #include "cli/pack.hpp"
 #include "cli/timings.hpp"
+#include "sieve/rope_wave.hpp"
 #include "sieve/stop.hpp"
 
 #include <chrono>
@@ -241,6 +242,16 @@ void FileLocator::remember_search(double seconds, bool total, std::function<void
 }
 
 void FileLocator::remember_archives(bool on, std::function<void(bool)> changed) { kept_archives() = {on, std::move(changed)}; }
+
+namespace {
+std::function<void(bool)>& kept_every()
+{
+    static std::function<void(bool)> k;
+    return k;
+}
+} // namespace
+
+void FileLocator::remember_every(std::function<void(bool)> changed) { kept_every() = std::move(changed); }
 
 void FileLocator::set_archives(bool on) { optimise_archives_ = on; }
 
@@ -810,7 +821,8 @@ void FileLocator::event(const SDL_Event& e)
         // The search's time: [ and ] a file, with Shift the run.
         case SDLK_LEFTBRACKET: pressed = (e.key.mod & SDL_KMOD_SHIFT) ? "search_run_less" : "search_file_less"; break;
         case SDLK_RIGHTBRACKET: pressed = (e.key.mod & SDL_KMOD_SHIFT) ? "search_run_more" : "search_file_more"; break;
-        case SDLK_A: pressed = "archives"; break; // Optimise Archive Formats, on or off
+        case SDLK_A: pressed = "archives"; break; // Optimise Compressed Formats, on or off
+        case SDLK_E: pressed = "every"; break;    // Try every way, on or off
         case SDLK_S: pressed = busy_ ? "stop" : ""; break; // Stop: the best found so far kept
         case SDLK_RETURN:
         case SDLK_KP_ENTER: pressed = result_.kind == Result::File && in_world() ? "go" : ""; break;
@@ -838,6 +850,12 @@ void FileLocator::event(const SDL_Event& e)
     else if (pressed == "search_file_more") step_search(false, 1);
     else if (pressed == "search_run_less") step_search(true, -1);
     else if (pressed == "search_run_more") step_search(true, 1);
+    else if (pressed == "every")
+    {
+        const bool on = !sieve::rope_search_every_wave();
+        sieve::set_rope_search_every_wave(on);
+        if (kept_every()) kept_every()(on);
+    }
     else if (pressed == "archives")
     {
         optimise_archives_ = !optimise_archives_;
@@ -978,10 +996,12 @@ void FileLocator::draw(float W, float H)
         draw_text(r_, bx, row_y + 8, run, 1, white);
         bx += text_width(run, 1) + 12;
         button("search_run_more", "+", row_y);
-        // Optimise Archive Formats, under it: a box, off unless ticked (what installing gives back
-        // changes for an archive carried as its contents, so it is never on by itself).
+        // Optimise Compressed Formats, under it: a box, off unless ticked (what installing gives back
+        // changes for an archive carried as its contents, so it is never on by itself). Beside it,
+        // Try every way: the search's shortcuts off (slower; never larger).
         bx = 20;
         button("archives", std::string(optimise_archives_ ? "[x] " : "[ ] ") + tr("loc.archives"), row_y + 40);
+        button("every", std::string(sieve::rope_search_every_wave() ? "[x] " : "[ ] ") + tr("loc.every"), row_y + 40);
     };
     if (!busy && r.kind == Result::None && r.error.empty())
     {

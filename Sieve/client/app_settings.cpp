@@ -278,8 +278,8 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"models", "widen_weights", on_off(widen_weights), "on: a model file's BF16 and F16 weights widened as they load (twice the memory); off: as stored; the same numbers either way"},
         {"locator", "search_seconds", seconds_text(locator_search), "the File Locator's search for shorter addresses: seconds, 0 for no limit"},
         {"locator", "search_for", locator_search_run ? "run" : "file", "file: those seconds for each file; run: for the whole run, shared among its files"},
-        {"locator", "optimise_archives", locator_archives ? "1" : "0", "1: Optimise Archive Formats ticked (an archive remade exactly, else carried as its contents, where smaller); 0: off"},
-        {"locator", "search_every_wave", locator_every_wave ? "1" : "0", "1: the rope's search tries every wave, even on bytes its first waves make no smaller (a JPEG, a film); 0: it stops there"},
+        {"locator", "optimise_archives", locator_archives ? "1" : "0", "1: Optimise Compressed Formats ticked (an archive or a compressed file made again exactly, else carried as its contents, where smaller); 0: off"},
+        {"locator", "search_every_wave", locator_every_wave ? "1" : "0", "1: Try every way ticked: the search's shortcuts off (the rope through every wave, even on text and on bytes already packed; mixing tried on every file, whole); 0: off"},
     };
     for (const Settings::Entry& e : setup.entries()) r.push_back({"setup", e.key, e.value, e.note});
     r.push_back({"paths", "ffmpeg", ffmpeg, "the ffmpeg program; empty: SIEVE_FFMPEG, then one beside Sieve, then the PATH"});

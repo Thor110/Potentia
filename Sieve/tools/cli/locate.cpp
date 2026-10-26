@@ -1732,7 +1732,7 @@ static void finish_archives(const Manifest& m, const fs::path& dest, bool force,
     {
         if (u.program.empty())
         {
-            note(u.archive + " (" + u.format + ", " + std::to_string(u.size) + " bytes) was carried as its contents (Optimise Archive Formats): " + u.folder +
+            note(u.archive + " (" + u.format + ", " + std::to_string(u.size) + " bytes) was carried as its contents (Optimise Compressed Formats): " + u.folder +
                      " holds them, not the archive itself",
                  false);
             continue;

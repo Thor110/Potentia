@@ -92,11 +92,17 @@ public:
     // The search's time kept between runs (sieve-hallway.ini [locator]): what every File Locator
     // starts with, and what is called when the player changes it. Set once, at start.
     static void remember_search(double seconds, bool total, std::function<void(double, bool)> changed);
-    // "Optimise Archive Formats" (sieve-manifest-v14), kept between runs as the search's time is:
+    // "Optimise Compressed Formats" (once "Optimise Archive Formats"; sieve-manifest-v14 on), kept
+    // between runs as the search's time is:
     // off unless ticked; ticked, an archive is remade exactly from what it holds where Sieve can,
     // else carried as its contents, where either is clearly smaller. Set once, at start.
     static void remember_archives(bool on, std::function<void(bool)> changed);
-    void set_archives(bool on); // scripted runs (--optimise-archives)
+    void set_archives(bool on); // scripted runs (--optimise-compressed)
+    // "Try every way" ([locator] search_every_wave), kept between runs: the search's shortcuts off
+    // (the rope's early stops on text and on bytes already packed; mixing's size limits and its test
+    // on a file's start). It can only make the instructions smaller, never larger; it takes longer.
+    // Its state is the packer's own (sieve::rope_search_every_wave). Set once, at start.
+    static void remember_every(std::function<void(bool)> changed);
 
     // From the system dialogs' callbacks (any thread): what was chosen, handed to the next frame.
     void picked(const std::string& path);

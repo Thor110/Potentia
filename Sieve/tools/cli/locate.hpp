@@ -115,7 +115,7 @@ inline constexpr const char* kTrimmedManifestVersion = "sieve-manifest-v12";
 // pieces next in the lzma2 stream at the file's turn (as a raw file's bytes are), the r pieces
 // joined and coded by the rope, next in the rope stream; made only where some file's is.
 inline constexpr const char* kPiecesManifestVersion = "sieve-manifest-v13";
-// v13 with archives optimised ("Optimise Archive Formats", off unless asked for): a file remade
+// v13 with archives optimised ("Optimise Compressed Formats", off unless asked for): a file remade
 // exactly from what it holds, its way "xz <preset> <check> <inner size> <way of what it holds>"; or
 // an archive carried as its contents, a line "u\t<format>\t<size>\t<archive>\t<folder>" after the
 // tree's saying so. Made only where some file's is.

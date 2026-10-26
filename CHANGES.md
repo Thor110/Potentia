@@ -1,64 +1,35 @@
-# The roadmap: the triangle (v23), mixing (v24), PNGs (v25) (26 October 2026)
+# Optimise Compressed Formats, and Try every way (26 October 2026)
 
-Note : Commit misname this morning.
+Unzip over the repository root. Committed locally (not pushed), on top of your 1ad181a. No format changes: the manifest is still v25, and every older version reads as before. (Your note about this morning's commit name is gone with this file.)
 
-Unzip over the repository root. Commit 866ba4e locally (not pushed), on top of your bd1df0d. Each item is a new instructions version, and the older ones read as before. Details are in IDEAS §19.102 and SPECIFICATIONS §12.2.
+## 1. The rename: "Optimise Compressed Formats"
+- The box, its hint, the packer's report lines, the install note and the docs now say **Optimise Compressed Formats**, since a PNG isn't an archive.
+- **Command lines:** `--optimise-compressed` is the new name, in `sieve` and in the hallway. `--optimise-archives` still works, so your scripts don't break.
+- **The ini:** the key is still `optimise_archives`, so saved settings carry over.
+- SPECIFICATIONS notes the old name once. VOICES.md and older HANDOFF entries are left as they were.
 
-## 1. Your triangle: rope-wave-v6, `sieve-manifest-v23`
-- **`P4`:** predicts each value from the one before, the one above and the corner between them (the median edge detector of LOCO-I / JPEG-LS).
-- **` T1`:** codes what's left in nine tables, by how busy each value's triangle is.
-- **The search:** tries both at the widths it already finds, so the row length is still found from the bytes alone.
-- **Measured** (Vitruvian Man as raw grey pixels, 949 × 1300):
+## 2. A new box in the File Locator: "Try every way" (key E)
+- It sits beside the compressed-formats box (key A). The hints line now reads: `F a file   D a folder   I install   Enter go to it   [ ] search, Shift the run   A compressed formats   E every way   S stop   Esc back`.
+- When ticked, the search skips none of its shortcuts. The same switch as `--search-every-wave`, saved as `search_every_wave` in the ini.
+- **What it adds:** it also covers mixing. Without the box, mixing is tried only on files from 4 KiB to 16 MiB, and only when a 3% sample says it might win. With the box, it is tried on every file.
+- **Measured:** a 3,000-byte text (under the 4 KiB limit) came out at 1,563 bytes with the box against 1,688 without, and installed back exactly. So the limit can skip a winner on small files.
 
-  | Way | Bytes |
-  | :--- | ---: |
-  | `L8 W949 S1 P4 K1 T1` | 762,766 |
-  | The rope's best before | 831,022 |
-  | LZMA2 | 865,400 |
+## 3. On your question: should no time limit turn the box on by itself?
+My view: no, keep it a box only, off by default.
+- **A search with no time limit already finishes.** The shortcuts don't cut it short. They skip trials that never won on the files where they were measured, which is what lets an unlimited search end in reasonable time.
+- **Turning them all off can cost a lot of time.** That's worth choosing deliberately, not getting as a side effect of a time setting.
+- **The box gives you both:** no limit with shortcuts (finishes, nearly always as good), or no limit with every way (slowest, never misses).
+- The small-file case above shows the box is worth having. It also suggests lowering the mixing limit later, once more small files are measured.
 
-  It installs in 0.09 s. Where noise outweighs edges, the plain average (`P2`) can still win, and the search weighs them all.
-- **New fixture:** `tests/rope/vitruvian-centre-256.gray`, a 64 KB crop of the public-domain picture stored as raw bytes, so no JPEG decoder version can change it. On it, the search picks `P4` by itself.
+## Checks run here
+- The build passes, as does `check_help` (596 options, none missing).
+- CI steps 10 (hallway) and 11 (oracle) pass, with their expected outputs updated to the new name.
+- Screenshots show both boxes, and the hints line fits.
+- I didn't run the other CI steps; they don't touch this change.
 
-## 2. Mixing: mix-v1, `sieve-manifest-v24`, `sieve mix`
-- **How it works:** every bit is predicted by the bytes before it (0 to 6) and by the word so far. The predictions are mixed by weights that learn, then coded exactly by an arithmetic coder, in integers only.
-- **Measured** (Don Quixote, 2,391,678 bytes):
-
-  | Way | Bytes |
-  | :--- | ---: |
-  | Mixing | 565,596 |
-  | LZMA2 | 685,794 |
-  | The rope | 1,324,573 |
-
-  As Sieve instructions it comes to 565,664, against v23's 683,195. Packing took 22 s and installing 9.6 s: about 0.4 MB/s, decoding as slow as coding.
-- **When it's tried:** files of 4 KiB to 16 MiB whose first 256 KiB, mixed, beat LZMA2 by 3%. `--v23` turns it off.
-- **Same bytes everywhere:** a unit test pins one code's SHA-256. **If step 01 fails on Windows or macOS, that's the check telling us those machines make different bytes**, so please send me the line.
-
-## 3. PNGs made again exactly: `sieve-manifest-v25` (Optimise Archive Formats)
-- **Your Minecraft seed, found in Sieve's own files:** 9 of the 10 PNGs measured (the hallway screenshots) are exactly what stb_image_write writes at level 8. Those are carried as their pixels, and stb_image_write makes them again.
-- **Other PNGs (zlib's):** go by a skeleton with a new segment, a run of IDAT chunks. Their deflate goes through preflate, and the chunks' CRCs are worked out again.
-- **Measured:**
-  - 10 repository PNGs: 657,221 bytes become 247,695 (519,859 without the box).
-  - One screenshot: 43,886 bytes become 11,382.
-- **When it's tried:** with Optimise Archive Formats. `--v24` turns it off.
-
-## Also
-- **An oracle fix:** it read any v22-or-later manifest file, whose head is in bytes, as a `.sieve` address. It now knows heads 16 to 25. The `.sieve` checks never hit this; only reading a manifest file directly did.
-- **The oracle now has:**
-  - its own rope-wave-v6;
-  - its own mix-v1 (`mix-unpack`);
-  - PNG reading: it checks both kinds and names them, as it does for preflate, since it has neither stb_image_write nor preflate.
-- **CI:**
-  - step 11 gains v23, v24 and v25 blocks;
-  - step 10's rope checks now allow v6;
-  - three expectations of an exact version now take a range.
-- **Ran here (Linux):** the unit tests (154,116 checks) and steps 03, 10 and 11, all passing.
-- **Not run here:** Windows and macOS, which matters most for the pinned mixing code.
-- **Measured and not taken:**
-  - the triangle and mixing on the screenshots' pixels: LZ's long repeats suit flat interface colours better;
-  - preflate on stb_image_write's PNGs: its difference is bigger than the gain.
-
-## Next, when you want them
-- The triangle as one of mixing's models, so pictures can be mixed too.
-- Mixing's speed, then more models (a dictionary's words, a grammar, the line above).
-- LOCO-I's bias correction for the triangle.
-- More generators as they turn up.
+## Files
+- `Sieve/client/`: file_locator.cpp/.hpp, app_main.cpp, app_settings.cpp/.hpp, unpack_7z.hpp
+- `Sieve/data/lang/en.txt`
+- `Sieve/tools/`: sieve_cli.cpp, cli/args.hpp, cli/help.cpp, cli/pack.cpp, cli/locate.cpp/.hpp, cli/rar_remake.hpp
+- `Sieve/ci/steps/`: 10-hallway.sh, 11-oracle.sh
+- `Sieve/docs/`: HANDOFF.md, SPECIFICATIONS.md, SIEVE-INSTALL-USAGE.md; `Sieve/README.md`; `Sieve/tests/archives/README.md`

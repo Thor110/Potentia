@@ -1012,7 +1012,7 @@ const std::vector<Page>& pages()
                       "of the AI line as its weights' digits, not its file's floats. The pages are\n"
                       "--page-length characters of --alphabet; the AI line is --ai-layers, --ai-width,\n"
                       "--ai-heads and --ai-bits (Micro without them)."},
-          {"--optimise-archives", "With --items: Optimise Archive Formats (sieve-manifest-v14, v17, v19 to v22, v25).\n"
+          {"--optimise-compressed", "With --items: Optimise Compressed Formats (sieve-manifest-v14, v17, v19 to v22, v25).\n"
                                   "An .xz, a .bz2, a .zst libzstd 1.5.7 made, an .lz4, a .br and an .lzma is carried\n"
                                   "as what it holds and remade exactly on installing; so is a .gz or .zip whoever made\n"
                                   "it (its deflate by preflate) and a .7z whose blocks are 7-Zip's LZMA or LZMA2\n"
@@ -1028,6 +1028,7 @@ const std::vector<Page>& pages()
                                   "pixels, made again by it; any other from its skeleton, its deflate by preflate\n"
                                   "and its chunks' CRCs worked out again. Off unless given."},
           {"--v24", "As sieve-manifest-v24 at newest: no PNG made again from its skeleton (v25)."},
+          {"--optimise-archives", "The old name of --optimise-compressed (once Optimise Archive Formats); the same."},
           {"--v23", "As sieve-manifest-v23 at newest: no file carried by mixing (mix-v1, v24)."},
           {"--v22", "As sieve-manifest-v22 at newest: the rope's ways at most rope-wave-v5's (no triangle:\n"
                     "v23)."},

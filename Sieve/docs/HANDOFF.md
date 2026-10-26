@@ -3947,6 +3947,19 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   (Edward): the remembered table and "Trust the new table" stay; no signing, ever ("I don't trust
   myself or any human being alive to keep a key safe").
 
+### Optimise Compressed Formats, and Try every way (26 October 2026)
+
+- **The box renamed (Edward):** "Optimise Archive Formats" is "Optimise Compressed Formats" now (a
+  PNG is not an archive; the mechanism, a known compression undone and made again exactly, is the
+  same). The ini key `optimise_archives` and `--optimise-archives` stay, the new flag
+  `--optimise-compressed` beside it. Older entries below keep the old name.
+- **Try every way:** a box beside it in the File Locator (key E; [locator] search_every_wave,
+  `--search-every-wave`): the search's shortcuts off: the rope's early stops (on text, on bytes
+  already packed) and mixing's limits (4 KiB to 16 MiB, its test on the first 256 KiB). Off by
+  default, and not implied by no time limit (Edward and Claude: an unconstrained search finishes
+  anyway, and the shortcuts skip only what never won where measured; with them off every plain
+  locate, CI and the release would take far longer). It never makes instructions larger.
+
 ### Towards the minimum address: v23, v24 and v25 (26 October 2026)
 
 Edward's roadmap after the filter ideas (IDEAS §19.102): the triangle, mixing, generators. All three

@@ -48,7 +48,7 @@ struct SevenZip
 SevenZip list_7z(const std::vector<uint8_t>& archive);
 
 // Every entry with its bytes, in memory, in the archive's order (the paths as list_7z gives them):
-// for Sieve instructions that carry an archive as its contents ("Optimise Archive Formats").
+// for Sieve instructions that carry an archive as its contents ("Optimise Compressed Formats").
 struct InMemory
 {
     Unpacked entry;
