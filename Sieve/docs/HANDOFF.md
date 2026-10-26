@@ -3965,8 +3965,12 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
 - **Tested:** `ci/stand_in_rar.py`, a RAR 5 writer of stored files, plays `rar` in step 11 (Linux
   and macOS): alone and in a folder, with and without a `rar`, by `sieve-install` and the oracle,
   and `--v21`. **Not measured:** the real `rar` (none in the cloud session: rarlab.com refused).
-  Edward to try: `set SIEVE_RAR_TRACE=1`, then `sieve locate X.rar --installer x.sieve --items
-  --optimise-archives`; each try is shown with how many of its first bytes came out the same.
+  Edward to try: `tools\rar_check.bat` (or `py -3 tools\rar_check.py [MY.rar ...]`) makes RARs
+  from the repository's files with his rar at 14 settings (each level, solid, BLAKE2, quick open,
+  creation times, times to the second, a dictionary, files alone, one file), adds any given, and
+  for each packs it (with SIEVE_RAR_TRACE: each try and how many of its first bytes came out the
+  same), installs it with rar, with none (the warning) and with sieve-install, then prints a table
+  and writes `out\rar-check\rar-check.log`. Run here with the stand-in: 8 of the 8 it can make.
 
 ### Extract any archive, from the right-click menu (25 October 2026)
 
