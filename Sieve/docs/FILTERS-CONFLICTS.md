@@ -130,6 +130,24 @@ sampled and judged by the other, both ways (and the unit tests and the oracle as
 | `words-v1`, `window-v1` | `words-data-v1`, `window-data-v1` | the token form; where its automaton's table does not fit (long pages) it counts by its words' lengths as the built-ins do: the same counts at 1 to 9 (every unit to 4), 20, 32, 400, 1,500 (forced, at 1 MB) and 3,200 |
 | `words-v2`, `window-v2` | `words-data-v2`, `window-data-v2` | the token form with `padding trailing`: the same counts at 1, 2, 5, 12, 32, 80, 400, 1,500 (forced) and 3,200, every unit to length 4, padding-heavy random units, and the oracle's own build in CI |
 
+**It costs more than it gives** (not a line filter: a stage of mixing, kept here so that every
+retired thing is in one place). `sse-v1`, mixing's two SSE stages (each prediction refined by what
+was seen after it in the byte before's context, and in a hash of the two bytes before), retired by
+Edward on 27 October 2026. mix-v2 and mix-v3 (`sieve-manifest-v26`, `v27`) are made with them and
+are still read with them; mix-v4 (`v28`) runs without. Measured, decoding, best of three, after
+their rows were fetched early (`core/src/mix.cpp` has it beside the code, and SPECIFICATIONS §12.2):
+
+| File | With both stages | With the first only | With neither | Time with both against neither |
+| :--- | ---: | ---: | ---: | ---: |
+| Don Quixote, first 800 KB | 191,190 | 191,526 | 192,884 | 1.71 s, 1.57 s (+9%) |
+| The Vitruvian picture, raw grey | 728,919 | 729,163 | 729,462 | 2.44 s, 1.89 s (+29%) |
+| A screenshot's pixels, first 1 MB | 15,821 | 15,811 | 16,185 | 1.09 s, 0.90 s (+21%) |
+| The Utah teapot | 25,258 | 25,295 | 25,391 | 0.38 s, 0.33 s (+15%) |
+
+Why: 9% to 29% of the time for 0.07% to 2.3% of the size, and Edward chose decoding speed. The first
+stage alone keeps most of the gain at little time on text: the way back, if size is ever wanted
+again.
+
 ## Merging and retiring: what is left
 
 With each filter's share alone in the list (Filtered: X%), the remaining duplicates and clashes, and

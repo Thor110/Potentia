@@ -269,6 +269,14 @@ constexpr size_t kInputs2 = kMaxContexts + 4; // the inputs, at most: the contex
 
 uint32_t hash2(uint32_t a, uint32_t b) { return ((a * 0x9E3779B1u) ^ (b * 0x85EBCA6Bu) ^ (a >> 15)) * 0xC2B2AE35u + b; }
 
+// sse-v1, RETIRED (27 October 2026, Edward): the two SSE stages, kept for mix-v2 and mix-v3, which
+// are made with them and must be read so; mix-v4 runs without them. Why: measured (decoding, best of
+// three, after their rows were prefetched), they took 9% of the time on text, 15% on a mesh, 21% on
+// a screenshot and 29% on a photograph's grey pixels, for 0.9%, 0.5%, 2.3% and 0.07% of the size
+// (Don Quixote's first 800 KB 191,190 bytes with them, 192,884 without; the Vitruvian picture
+// 728,919 and 729,462; a screenshot's first 1 MB 15,821 and 16,185; the Utah teapot 25,258 and
+// 25,391). The first stage alone kept most of that (191,526; 729,163; 15,811; 25,295) at little time
+// on text: a way back if the size is ever wanted again (IDEAS §19.102, FILTERS-CONFLICTS' retired list).
 // An SSE stage: in each context, 33 probabilities (16 bits) at the stretched probability's 33
 // points, read between the two nearest and both moved 1/128 of the way to each bit.
 class Apm
@@ -321,9 +329,10 @@ static_assert(sizeof(Counter2) == 4, "a slot of 16 counters is one 64-byte line"
 class Model2
 {
 public:
-    Model2(const Mix2Params& p, uint64_t size, const MixDictionary* words = nullptr)
-        : words_(words), picture_(p.width > 0), bits_(p.table_bits), mask_((uint32_t(1) << p.table_bits) - 1), bpp_(p.channels),
-          row_(size_t(p.width) * p.channels), buf_(static_cast<size_t>(size)), ht_(size_t(1) << kMatchBits, 0), a1_(65536), a2_(65536)
+    // `sse`: sse-v1's two stages (mix-v2 and mix-v3); without (mix-v4), the mixers' average is coded.
+    Model2(const Mix2Params& p, uint64_t size, const MixDictionary* words = nullptr, bool sse = true)
+        : words_(words), sse_(sse), picture_(p.width > 0), bits_(p.table_bits), mask_((uint32_t(1) << p.table_bits) - 1), bpp_(p.channels),
+          row_(size_t(p.width) * p.channels), buf_(static_cast<size_t>(size)), ht_(size_t(1) << kMatchBits, 0), a1_(sse ? 65536 : 0), a2_(sse ? 65536 : 0)
     {
         // The contexts: order 0, orders 1 to 6 (a picture: 1 to 3), the word, then the column and
         // sparse contexts (a picture: the triangle's six), then the byte the match expects.
@@ -342,9 +351,14 @@ public:
     {
         const Tables& T = tables();
         // The SSE stages' contexts are known now: their rows fetched while the models are mixed.
-        const size_t cx1 = size_t(c0_) | size_t(c1()) << 8, cx2 = (hash2(uint32_t(c1() | c2() << 8), uint32_t(c0_)) >> 16) & 0xFFFF;
-        a1_.prefetch(cx1);
-        a2_.prefetch(cx2);
+        size_t cx1 = 0, cx2 = 0;
+        if (sse_)
+        {
+            cx1 = size_t(c0_) | size_t(c1()) << 8;
+            cx2 = (hash2(uint32_t(c1() | c2() << 8), uint32_t(c0_)) >> 16) & 0xFFFF;
+            a1_.prefetch(cx1);
+            a2_.prefetch(cx2);
+        }
         if (bitpos_ == 0 || bitpos_ == 4)
             for (size_t i = 0; i < nctx_; ++i)
             {
@@ -384,9 +398,12 @@ public:
         s1_ = dot(&w1_[size_t(c0_) * ninputs_]);
         s2_ = dot(&w2_[set2_ * ninputs_]);
         int pr = T.sq((s1_ + s2_) >> 1);
-        const int q1 = a1_.p(pr, cx1);
-        const int q2 = a2_.p(pr, cx2);
-        pr = (2 * pr + q1 + q2 + 2) >> 2;
+        if (sse_)
+        {
+            const int q1 = a1_.p(pr, cx1);
+            const int q2 = a2_.p(pr, cx2);
+            pr = (2 * pr + q1 + q2 + 2) >> 2;
+        }
         return pr < 1 ? 1 : pr > 4095 ? 4095 : pr;
     }
     void update(int bit)
@@ -407,8 +424,11 @@ public:
             c.p = moved(c.p, target, c.n);
             if (c.n < 255) ++c.n;
         }
-        a1_.update(bit);
-        a2_.update(bit);
+        if (sse_)
+        {
+            a1_.update(bit);
+            a2_.update(bit);
+        }
         c0_ = c0_ * 2 + bit;
         if (++bitpos_ == 8)
         {
@@ -536,6 +556,7 @@ private:
     }
 
     const MixDictionary* words_ = nullptr;
+    bool sse_ = true;       // sse-v1's stages (mix-v2, mix-v3); mix-v4 has none
     int node_ = 0;          // mix-v3: the word so far's node in the list, -1 once it has left it
     uint32_t letters_ = 0;  // and its letters, at most 40
     bool picture_;
@@ -789,6 +810,86 @@ std::vector<uint8_t> mix3_file(std::span<const uint8_t> code, const Mix3Params& 
     p2.table_bits = p.table_bits;
     Model2 m(p2, size, &words);
     return file_with(m, code, size, bad3);
+}
+
+// ---------------------------------------------------------------------------------------------
+// mix-v4 (see mix.hpp): mix-v2 and mix-v3 in one, without sse-v1's stages.
+
+namespace {
+[[noreturn]] void bad4(const std::string& why) { throw std::invalid_argument("mix-v4: " + why); }
+} // namespace
+
+void Mix4Params::check() const
+{
+    if (table_bits < 16 || table_bits > 22) bad4("tables of 2^16 to 2^22 counters (B16 to B22)");
+    if (width == 0 ? channels != 1 : (width < 2 || width > (uint32_t(1) << 24) || channels < 1 || channels > 4))
+        bad4("a picture 2 to 16,777,216 pixels wide, of 1 to 4 bytes a pixel (I949x1)");
+    if (dictionary != 0 && dictionary != 35 && dictionary != 60 && dictionary != 80) bad4("a word list D35, D60 or D80 (scowl-en-35, 60 or 80)");
+    if (dictionary && width) bad4("a word list for text, not a picture");
+}
+
+std::string Mix4Params::text() const
+{
+    std::string t = "B" + std::to_string(table_bits);
+    if (width) t += " I" + std::to_string(width) + "x" + std::to_string(channels);
+    if (dictionary) t += " D" + std::to_string(dictionary);
+    return t;
+}
+
+Mix4Params Mix4Params::parse(std::string_view t)
+{
+    Mix4Params p;
+    const std::string s(t);
+    unsigned b = 0, w = 0, c = 0, d = 0;
+    char extra = 0;
+    if (std::sscanf(s.c_str(), "B%u I%ux%u%c", &b, &w, &c, &extra) == 3) p.width = w, p.channels = c;
+    else if (std::sscanf(s.c_str(), "B%u D%u%c", &b, &d, &extra) == 2) p.dictionary = d;
+    else if (std::sscanf(s.c_str(), "B%u%c", &b, &extra) != 1)
+        bad4("its parameters are written \"B22\", a picture's \"B22 I949x1\", or with a word list \"B22 D60\": " + s);
+    p.table_bits = b;
+    p.check();
+    if (p.text() != s) bad4("parameters not written as they would be: " + s);
+    return p;
+}
+
+Mix4Params Mix4Params::for_size(uint64_t bytes, uint32_t width, uint32_t channels, uint32_t dictionary)
+{
+    Mix4Params p;
+    p.table_bits = MixParams::for_size(bytes).table_bits;
+    p.width = width;
+    p.channels = width ? channels : 1;
+    p.dictionary = dictionary;
+    p.check();
+    return p;
+}
+
+namespace {
+Mix2Params shape_of(const Mix4Params& p)
+{
+    Mix2Params s;
+    s.table_bits = p.table_bits;
+    s.width = p.width;
+    s.channels = p.channels;
+    return s;
+}
+} // namespace
+
+std::vector<uint8_t> mix4_code(std::span<const uint8_t> file, const Mix4Params& p, const MixDictionary* words)
+{
+    p.check();
+    if (file.size() >= (uint64_t(1) << 32)) bad4("a file of 4 GB or more");
+    if (p.dictionary && !words) bad4("parameters naming a word list, and none given");
+    Model2 m(shape_of(p), file.size(), p.dictionary ? words : nullptr, false);
+    return code_with(m, file);
+}
+
+std::vector<uint8_t> mix4_file(std::span<const uint8_t> code, const Mix4Params& p, const MixDictionary* words, uint64_t size)
+{
+    p.check();
+    if (size >= (uint64_t(1) << 32)) bad4("a file of 4 GB or more");
+    if (p.dictionary && !words) bad4("parameters naming a word list, and none given");
+    Model2 m(shape_of(p), size, p.dictionary ? words : nullptr, false);
+    return file_with(m, code, size, bad4);
 }
 
 namespace {

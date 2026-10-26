@@ -3947,6 +3947,27 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   (Edward): the remembered table and "Trust the new table" stay; no signing, ever ("I don't trust
   myself or any human being alive to keep a key safe").
 
+### mix-v4: the SSE stages retired (`sse-v1`), `sieve-manifest-v28` (27 October 2026)
+
+- **Why (Edward's call):** after the SSE rows were prefetched, the two stages cost 9% to 29% of
+  decoding for 0.07% to 2.3% of the size (the first stage alone kept most of it). Edward: retire both
+  as one filter with its figures kept. They are in FILTERS-CONFLICTS' retired list (a stage of
+  mixing, not a line filter: one place for every retired thing), beside the code in `mix.cpp`
+  (`Apm`, marked RETIRED), and in SPECIFICATIONS §12.2.
+- **Core:** `Model2` takes `sse` (true for mix-v2 and mix-v3, which must still be read so); mix-v4
+  (`Mix4Params`: `B22`, `B22 I949x1`, `B22 D60`; `mix4_code`/`mix4_file`) runs without, its SSE
+  tables not even made. mix-v2's and v3's codes unchanged (their pins).
+- **v28:** a way `mix4 ...`, tried in v2's and v3's place by the same tests; `rope_newest` 11
+  (`--v27` for 10; the File Locator passes 11). `sieve mix` makes mix-v4; `--v2` gives v2 or, with
+  `--words`, v3. Report: `mix-v4[, P as picture(s)][, W with a word list]`.
+- **Measured as instructions:** Don Quixote 533,148 bytes (v27 527,837), installed in 5.7 to 6.0 s
+  (v27 6.8 to 7.2 s); the ten PNGs 217,170 (v26/v27 210,046), on one thread 24.6 s (27.4 s), on four
+  9.1 to 9.7 s (9.6 to 10.0 s): four mixings at once are held back by the memory's speed instead.
+- **Oracle:** `mix4_file` (`mix-unpack --v4`), mix-v2's decoder with `sse=False`; reads v28.
+  **Unit test:** `test_mix4`, three codes pinned. **CI:** step 11's v26 and v27 blocks pin `--v2`
+  and `--v26`/`--v27`; a v28 block (a text with the list and a guessed picture in one folder; Sieve,
+  the oracle, sieve-install). A folder's report goes to standard error: `2>&1` there.
+
 ### mix-v3: a word list as a model (Edward's grammar), `sieve-manifest-v27` (27 October 2026)
 
 Edward's "grammar as a model", measured three ways in a scratchpad copy of mix-v2 (environment

@@ -187,6 +187,10 @@ inline constexpr const char* kMix2ManifestVersion = "sieve-manifest-v26";
 // v27 (27 October 2026): v26 whose files may be carried by mix-v3 (mix-v2 with a word list's model,
 // sieve/mix.hpp): a way "mix3 B<bits> D<list>", carried as v24's "mix" is.
 inline constexpr const char* kMix3ManifestVersion = "sieve-manifest-v27";
+// v28 (27 October 2026): v27 whose files may be carried by mix-v4 (mix-v2 and mix-v3 without the SSE
+// stages, sse-v1, which Edward retired): a way "mix4 B<bits>", a picture's "mix4 B<bits> I<w>x<c>",
+// or with a word list "mix4 B<bits> D<list>", carried as v24's "mix" is.
+inline constexpr const char* kMix4ManifestVersion = "sieve-manifest-v28";
 
 // The "u" lines' formats v20 adds (an archive carried as its contents).
 inline bool is_v20_format(const std::string& f)
@@ -277,6 +281,7 @@ struct Manifest
     bool v25 = false; // v25: some skeleton holds a run of chunks: a PNG (v24 is set too)
     bool v26 = false; // v26: some file is carried by mix-v2 (v25 is set too)
     bool v27 = false; // v27: some file is carried by mix-v3 (v26 is set too)
+    bool v28 = false; // v28: some file is carried by mix-v4 (v27 is set too)
     bool body_text = false; // v20: its body as text after all (the head's flag 128), where that came out smaller
     // v14: each archive carried as its contents: its format ("7z", "xz"), its size, its path, and the
     // folder (or file) its contents are in.

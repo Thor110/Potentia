@@ -71,6 +71,8 @@ struct PackReport
     bool v26 = false;                    // v26: some file carried by mix-v2
     bool v27 = false;                    // v27: some file carried by mix-v3
     size_t mixed3 = 0;                   // v27: files carried by mix-v3
+    bool v28 = false;                    // v28: some file carried by mix-v4
+    size_t mixed4 = 0, mixed4_pictures = 0, mixed4_words = 0; // v28: files carried by mix-v4, as pictures, with a word list
     size_t mixed2 = 0;                   // v26: files carried by mix-v2 (of `mixed`), as pictures
     size_t mixed2_pictures = 0;
     size_t decoding_first = 0;           // files mixing was not tried on: Prioritise Decoding Speed

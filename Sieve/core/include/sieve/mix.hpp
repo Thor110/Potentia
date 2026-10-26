@@ -111,6 +111,28 @@ struct Mix3Params
 std::vector<uint8_t> mix3_code(std::span<const uint8_t> file, const Mix3Params& p, const MixDictionary& words);
 std::vector<uint8_t> mix3_file(std::span<const uint8_t> code, const Mix3Params& p, const MixDictionary& words, uint64_t size);
 
+// mix-v4 (27 October 2026, SPECIFICATIONS §12.2): mix-v2 and mix-v3 in one, without the two SSE
+// stages, which Edward retired (sse-v1): the mixers' average is what is coded. Text ("B22"), a
+// picture ("B22 I949x1") or text with a word list ("B22 D60"). Measured: 9% to 29% faster to decode
+// than with them, 0.07% (a photograph) to 2.3% (a screenshot) larger (mix.cpp says more).
+inline constexpr const char* kMix4Version = "mix-v4";
+
+struct Mix4Params
+{
+    uint32_t table_bits = 22;
+    uint32_t width = 0, channels = 1; // a picture's shape, as mix-v2's (0: not a picture)
+    uint32_t dictionary = 0;          // a word list, as mix-v3's (0: none; else 35, 60 or 80)
+    void check() const;
+    std::string text() const;
+    static Mix4Params parse(std::string_view text);
+    static Mix4Params for_size(uint64_t bytes, uint32_t width = 0, uint32_t channels = 1, uint32_t dictionary = 0);
+    bool operator==(const Mix4Params&) const = default;
+};
+
+// `words`: the word list the parameters name (nullptr where they name none).
+std::vector<uint8_t> mix4_code(std::span<const uint8_t> file, const Mix4Params& p, const MixDictionary* words = nullptr);
+std::vector<uint8_t> mix4_file(std::span<const uint8_t> code, const Mix4Params& p, const MixDictionary* words, uint64_t size);
+
 // Prioritise Decoding Speed (--prioritise-decoding, the File Locator's box, [locator]
 // prioritise_decoding): the packer carries no file by mixing, whose decoding (0.3 to 1 MB/s,
 // measured 27 October 2026) is 15 to 60 times slower than the rope's (15 to 20 MB/s) or LZMA2's;

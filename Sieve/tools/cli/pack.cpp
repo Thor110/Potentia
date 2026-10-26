@@ -2255,6 +2255,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const bool mix2_on = rope_newest >= 9;
     // v27's (mix-v3: mix-v2 with a word list, for text): rope_newest 10, made only where v26 would be.
     const bool mix3_on = rope_newest >= 10;
+    // v28's (mix-v4: v2 and v3 without sse-v1's stages, retired): rope_newest 11, in their place.
+    const bool mix4_on = rope_newest >= 11;
     bool png_made = false;
     rope_newest = std::min<uint32_t>(rope_newest, 6);
     m.remake_gz = false;
@@ -2927,6 +2929,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     bool mixed = false;         // v24: some file carried by mixing
     bool mixed2 = false;        // v26: some file carried by mix-v2
     bool mixed3 = false;        // v27: some file carried by mix-v3
+    bool mixed4 = false;        // v28: some file carried by mix-v4
     if (m.compact && rope_seconds >= 0)
     {
         std::unordered_map<std::string, size_t> copies;
@@ -2986,6 +2989,12 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 std::optional<std::pair<uint32_t, uint32_t>> guessed;
                 if (mix2_on && !picture) guessed = picture_shape(bytes[i]);
                 auto code_of = [&](std::span<const uint8_t> f, std::string& way_text, uint32_t w, uint32_t c, const MixDictionary* words = nullptr) {
+                    if (mix4_on)
+                    {
+                        const Mix4Params mp = Mix4Params::for_size(f.size(), w, c, words ? 60 : 0);
+                        way_text = "mix4 " + mp.text();
+                        return mix4_code(f, mp, words);
+                    }
                     if (words)
                     {
                         const Mix3Params mp = Mix3Params::for_size(f.size(), 60);
@@ -3057,11 +3066,12 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             rope_params[i] = params;
             files[i]->way = way;
             m.roped = true;
-            if (way.rfind("mix ", 0) == 0 || way.rfind("mix2 ", 0) == 0 || way.rfind("mix3 ", 0) == 0)
+            if (way.rfind("mix ", 0) == 0 || way.rfind("mix2 ", 0) == 0 || way.rfind("mix3 ", 0) == 0 || way.rfind("mix4 ", 0) == 0)
             {
                 mixed = true; // v24
                 if (way.rfind("mix2 ", 0) == 0) mixed2 = true; // v26
                 if (way.rfind("mix3 ", 0) == 0) mixed3 = true; // v27
+                if (way.rfind("mix4 ", 0) == 0) mixed4 = true; // v28
                 continue;
             }
             if (way.rfind("pieces ", 0) == 0)
@@ -3109,7 +3119,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     uint64_t mix_lengths = 0; // v24: the bytes of mixing's codes' lengths, in the rope stream
     for (size_t i = 0; i < files.size(); ++i)
         if (files[i]->way.rfind("rope ", 0) == 0 || files[i]->way.rfind("pieces ", 0) == 0 || files[i]->way.rfind("mix ", 0) == 0 ||
-            files[i]->way.rfind("mix2 ", 0) == 0 || files[i]->way.rfind("mix3 ", 0) == 0)
+            files[i]->way.rfind("mix2 ", 0) == 0 || files[i]->way.rfind("mix3 ", 0) == 0 || files[i]->way.rfind("mix4 ", 0) == 0)
         {
             uint64_t len = rope_codes[i].size();
             while (len >= 0x80)
@@ -3119,11 +3129,18 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             }
             m.rope_carried.push_back(uint8_t(len));
             m.rope_carried.insert(m.rope_carried.end(), rope_codes[i].begin(), rope_codes[i].end());
-            if (files[i]->way.rfind("mix ", 0) == 0 || files[i]->way.rfind("mix2 ", 0) == 0 || files[i]->way.rfind("mix3 ", 0) == 0)
+            if (files[i]->way.rfind("mix ", 0) == 0 || files[i]->way.rfind("mix2 ", 0) == 0 || files[i]->way.rfind("mix3 ", 0) == 0 ||
+                files[i]->way.rfind("mix4 ", 0) == 0)
             {
                 ++r.mixed; // v24
                 if (files[i]->way.rfind("mix2 ", 0) == 0) ++r.mixed2, r.mixed2_pictures += files[i]->way.find(" I") != std::string::npos; // v26
                 if (files[i]->way.rfind("mix3 ", 0) == 0) ++r.mixed3; // v27
+                if (files[i]->way.rfind("mix4 ", 0) == 0)
+                {
+                    ++r.mixed4; // v28
+                    r.mixed4_pictures += files[i]->way.find(" I") != std::string::npos;
+                    r.mixed4_words += files[i]->way.find(" D") != std::string::npos;
+                }
                 r.mix_bytes += bytes[i].size();
                 r.mix_carried += rope_codes[i].size();
                 for (uint64_t n = rope_codes[i].size(); n; n >>= 7) ++mix_lengths; // its length's varint
@@ -3278,7 +3295,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // v20: wherever the head is in bytes at the newest, the body is too (and v20's archives allowed).
     const bool had_v21 = m.v21, had_v22 = m.v22;
     const bool had_v25 = m.v25;
-    m.v27 = mixed3;                           // (mix-v3 only where the newest instructions are made: above)
+    m.v28 = mixed4;                           // (mix-v4 only where the newest instructions are made: above)
+    m.v27 = mixed3 || m.v28;                  // (mix-v3 only where the newest instructions are made: above)
     m.v26 = mixed2 || m.v27;                  // (mix-v2 only where the newest instructions are made: above)
     m.v25 = (had_v25 && m.binary) || m.v26;   // (a PNG's skeleton only where the newest instructions are made: above)
     m.v24 = mixed || m.v25;                   // (and mixing tried only there too)
@@ -3297,6 +3315,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     r.v25 = m.v25;
     r.v26 = m.v26;
     r.v27 = m.v27;
+    r.v28 = m.v28;
     r.rope_v6 = rope_triangle;
     r.rar_said = rar_said;
     for (const auto& u : m.unpacked) r.rar_remade += !u.program.empty();
@@ -3374,7 +3393,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
     };
     if (r.compact)
     {
-        const char* version = r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : r.more_archives ? kMoreArchivesManifestVersion : r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
+        const char* version = r.v28 ? kMix4ManifestVersion : r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : r.more_archives ? kMoreArchivesManifestVersion : r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
                             : r.roped ? kRopeManifestVersion : kCompactManifestVersion;
         if (r.items)
         {
@@ -3387,7 +3406,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         else o << "items     none; " << version << "\n";
         if (r.listing_carried) o << "listing   " << r.listing << " bytes, carried as LZMA2 in " << r.listing_carried << "\n";
         if (r.binary)
-            o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << (r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : kBinaryManifestVersion)
+            o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << (r.v28 ? kMix4ManifestVersion : r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : kBinaryManifestVersion)
               << (r.v20 ? "; its body in bytes too" : "") << ")\n";
         if (r.remade) o << "remade    " << r.remade << " archive(s) carried as what they hold, remade exactly on installing (" << version << ")\n";
         if (r.unpacked)
@@ -3407,14 +3426,16 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         if (r.mixed)
             o << "mix       " << r.mixed << " file(s) carried by mixing, " << [&] {
                 // The one version used, or how many by each (mix-v3's with a word list).
-                const size_t v1 = r.mixed - r.mixed2 - r.mixed3;
-                const std::pair<size_t, std::string> by[] = {{v1, kMixVersion}, {r.mixed2, kMix2Version}, {r.mixed3, std::string(kMix3Version) + " (with a word list)"}};
+                const size_t v1 = r.mixed - r.mixed2 - r.mixed3 - r.mixed4;
+                const std::pair<size_t, std::string> by[] = {{v1, kMixVersion}, {r.mixed2, kMix2Version}, {r.mixed3, std::string(kMix3Version) + " (with a word list)"},
+                                                             {r.mixed4, kMix4Version}};
                 std::string t;
                 for (const auto& [n, name] : by)
                     if (n) t += (t.empty() ? "" : ", ") + (n == r.mixed ? name : std::to_string(n) + " by " + name);
                 return t;
             }()
-              << (r.mixed2_pictures ? ", " + std::to_string(r.mixed2_pictures) + " as picture(s)" : std::string()) << " (" << r.mix_bytes
+              << (r.mixed2_pictures + r.mixed4_pictures ? ", " + std::to_string(r.mixed2_pictures + r.mixed4_pictures) + " as picture(s)" : std::string())
+              << (r.mixed4_words ? ", " + std::to_string(r.mixed4_words) + " with a word list" : std::string()) << " (" << r.mix_bytes
               << " bytes, carried in " << r.mix_carried << "; " << version << ")\n";
     }
     else if (r.items && r.item_places)

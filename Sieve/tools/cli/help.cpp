@@ -393,29 +393,32 @@ const std::vector<Page>& pages()
           {"--size N", "With --decode: the file's size in bytes."}},
          {{"sieve rope picture.bmp", "the best wave for a picture, and its code's size beside LZMA2's"},
           {"sieve rope sound.wav --params \"L16 W1 S1 P2 K0\" --out sound.rope", "a sound by a wave chosen, written out"}}},
-        {"mix", "A file coded by mixing (mix-v2, mix-v3 with a word list, or mix-v1): every bit predicted by several models, mixed.",
-         "sieve mix FILE [--picture WxC | --words 60] [--params B22] [--v1] [--out CODE]\n"
-         "  sieve mix --decode CODE [--v1 | --words 60] --params B22 --size N --out FILE",
+        {"mix", "A file coded by mixing (mix-v4; mix-v1 to v3 as asked): every bit predicted by several models, mixed.",
+         "sieve mix FILE [--picture WxC | --words 60] [--params B22] [--v1 | --v2] [--out CODE]\n"
+         "  sieve mix --decode CODE [--v1 | --v2] --params B22 --size N --out FILE",
          "Codes a file by mixing (IDEAS §19.102): every bit predicted by several models at once, the\n"
          "predictions mixed by weights that learn as the file goes, and the mixed prediction coded\n"
-         "exactly by a binary arithmetic coder, in integers only. mix-v2 (the default): the bytes before\n"
+         "exactly by a binary arithmetic coder, in integers only. mix-v4 (the default): the bytes before\n"
          "(0 to 6 of them), the word so far, the longest earlier stretch the last bytes repeat (the\n"
-         "match), and the column and field (tables), or for a picture (--picture) Edward's triangle and\n"
-         "its neighbours; two mixers and two SSE stages. mix-v1 (--v1): the bytes before and the word.\n"
-         "Decoding takes as long as coding (about 0.3 MB/s); mix-v2 holds about 240 MB at B22. The code\n"
+         "match), and the column and field (tables); for a picture (--picture) Edward's triangle and its\n"
+         "neighbours; for text with a word list (--words) the letters the list has next; two mixers.\n"
+         "mix-v2 and mix-v3 (--v2) are the same with two SSE stages after the mixers (sse-v1, retired:\n"
+         "9% to 29% of the time for 0.07% to 2.3% of the size); mix-v1 (--v1) the bytes before and the\n"
+         "word. Decoding takes as long as coding (about 0.5 to 1 MB/s); about 240 MB at B22. The code\n"
          "is read back and checked; LZMA2 is shown beside it.",
-         {{"--picture WxC", "mix-v2: the file is a picture's pixels, W wide, C bytes a pixel (1 to 4), row by row:\n"
+         {{"--picture WxC", "The file is a picture's pixels, W wide, C bytes a pixel (1 to 4), row by row:\n"
                             "949x1 (grey), 1280x3 (RGB). Its parameters are then written \"B22 I949x1\"."},
-          {"--params B", "The tables' size, 2^B counters each, B16 to B22 (else chosen by the file's size);\n"
-                         "mix-v2's for a picture with its shape, \"B22 I949x1\"."},
-          {"--v1", "mix-v1 (sieve-manifest-v24's), not mix-v2."},
-          {"--words N", "mix-v3 (sieve-manifest-v27's): mix-v2 for text with a word list's model, the registered\n"
-                        "SCOWL list of size N (35, 60 or 80; scowl-en-N, its SHA-256 checked): from the word so far,\n"
-                        "the letters the list has next give each bit a probability. Its parameters \"B22 D60\"."},
+          {"--words N", "Text with a word list's model: the registered SCOWL list of size N (35, 60 or 80;\n"
+                        "scowl-en-N, its SHA-256 checked): from the word so far, the letters the list has next\n"
+                        "give each bit a probability. Its parameters \"B22 D60\" (with --v2: mix-v3)."},
+          {"--params B", "The tables' size, 2^B counters each, B16 to B22 (else chosen by the file's size), and a\n"
+                         "picture's shape or a word list as above: \"B22\", \"B22 I949x1\", \"B22 D60\"."},
+          {"--v2", "mix-v2 (sieve-manifest-v26's), or with --words mix-v3 (v27's): with sse-v1's stages."},
+          {"--v1", "mix-v1 (sieve-manifest-v24's)."},
           {"--out CODE", "Write the code here."},
-          {"--decode CODE", "The file back from its code, with --params, --size and --out (and --v1 for mix-v1's)."},
+          {"--decode CODE", "The file back from its code, with --params, --size and --out (and --v1 or --v2 for those)."},
           {"--size N", "With --decode: the file's size in bytes."}},
-         {{"sieve mix book.txt", "a text coded by mixing, beside LZMA2"},
+         {{"sieve mix book.txt --words 60", "a text coded by mixing with the word list, beside LZMA2"},
           {"sieve mix screen.rgb --picture 1280x3", "a picture's raw pixels, by the triangle inside mixing"}}},
         {"tensors", "A model file (safetensors) taken apart into its start and its weights, and weighed.",
          "sieve tensors FILE.safetensors [--config config.json] [--stats | --tsv] [--start-out FILE] [--pack OUT.sieve-weights]\n"
@@ -1038,6 +1041,7 @@ const std::vector<Page>& pages()
                                   "(v25): one stb_image_write made (as the hallway's screenshots are) as its\n"
                                   "pixels, made again by it; any other from its skeleton, its deflate by preflate\n"
                                   "and its chunks' CRCs worked out again. Off unless given."},
+          {"--v27", "As sieve-manifest-v27 at newest: mixing with sse-v1's stages (mix-v2, mix-v3), not mix-v4 (v28)."},
           {"--v26", "As sieve-manifest-v26 at newest: no text mixed with a word list (mix-v3, v27)."},
           {"--v25", "As sieve-manifest-v25 at newest: mixing by mix-v1, not mix-v2 (v26)."},
           {"--v24", "As sieve-manifest-v24 at newest: no PNG made again from its skeleton (v25)."},

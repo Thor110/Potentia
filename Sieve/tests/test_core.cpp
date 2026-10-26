@@ -6052,6 +6052,58 @@ void test_mix3()
     CHECK(pinned == "21fe39717297673e2bdc3a9644a9a3e9c3bc26830cb2378b328899589fc915c3");
 }
 
+// mix-v4: mix-v2 and mix-v3 without sse-v1's stages (retired): the parameters (text, a picture, a
+// word list, never both of the last two); every shape of file given back each way; the same models
+// as mix-v2's but no SSE, so a different code; three codes pinned by their SHA-256.
+void test_mix4()
+{
+    CHECK(Mix4Params::parse("B22").text() == "B22" && Mix4Params::parse("B20 I949x1").width == 949 && Mix4Params::parse("B16 D60").dictionary == 60);
+    CHECK(throws([] { Mix4Params::parse("B22 I949x1 D60"); }));
+    CHECK(throws([] { Mix4Params::parse("B22 D61"); }));
+    CHECK(throws([] { Mix4Params::parse("B22 I1x1"); }));
+    CHECK(throws([] { Mix4Params::parse("B23"); }));
+    CHECK(throws([] { Mix4Params::parse("B22 "); }));
+    CHECK(Mix4Params::for_size(4096, 64, 3).text() == "B16 I64x3" && Mix4Params::for_size(1u << 20, 0, 1, 60).text() == "B21 D60");
+    CHECK(throws([] { mix4_code(std::vector<uint8_t>{1, 2}, Mix4Params::parse("B16 D60"), nullptr); })); // a list named, none given
+    const std::string list_text = "the\nrope\ntriangle\npulls\ntight\nthrough\nevery\nvalue\nsieve\nmixes\n";
+    const MixDictionary words(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(list_text.data()), list_text.size()));
+    std::mt19937 rng(13);
+    std::vector<uint8_t> noise(3000), text, picture;
+    for (auto& b : noise) b = uint8_t(rng());
+    const char* said[] = {"the", "rope", "triangle", "pulls", "tight", "through", "every", "value", "Sieve", "mixes"};
+    for (int i = 0; i < 2000; ++i)
+    {
+        const std::string w = said[rng() % 10];
+        text.insert(text.end(), w.begin(), w.end());
+        text.push_back(rng() % 8 ? ' ' : '\n');
+    }
+    for (int y = 0; y < 40; ++y)
+        for (int x = 0; x < 60; ++x)
+            for (int c = 0; c < 3; ++c) picture.push_back(uint8_t((x * 3 + y * 2 + c * 40 + (x > 30 ? 90 : 0) + int(rng() % 5)) & 255));
+    const std::vector<std::vector<uint8_t>> files{{}, {0}, {255}, std::vector<uint8_t>(5000, 'a'), noise, text, picture};
+    bool back = true;
+    for (const auto& f : files)
+        for (const char* params : {"B16", "B16 I60x3", "B16 I2x1", "B16 D60"})
+        {
+            const Mix4Params p = Mix4Params::parse(params);
+            back = back && mix4_file(mix4_code(f, p, &words), p, &words, f.size()) == f;
+        }
+    CHECK(back);
+    const Mix4Params pt = Mix4Params::parse("B16"), pp = Mix4Params::parse("B16 I60x3"), pw = Mix4Params::parse("B16 D60");
+    const std::vector<uint8_t> ct = mix4_code(text, pt), cp = mix4_code(picture, pp), cw = mix4_code(text, pw, &words);
+    CHECK(ct != mix2_code(text, Mix2Params::parse("B16"))); // no SSE stages: not mix-v2's code
+    std::vector<uint8_t> more = ct;
+    more.insert(more.end(), {1, 2, 3, 4, 5, 6});
+    CHECK(throws([&] { mix4_file(more, pt, nullptr, text.size()); }));
+    CHECK(throws([&] { mix4_file(std::span<const uint8_t>(ct.data(), ct.size() / 2), pt, nullptr, text.size()); }));
+    auto sha = [](const std::vector<uint8_t>& c) { return Sha256::hex(Sha256::hash(std::string(c.begin(), c.end()))); };
+    std::cout << "mix-v4: a text of " << text.size() << " bytes in " << ct.size() << ", sha256 " << sha(ct) << "; with the list in " << cw.size()
+              << ", sha256 " << sha(cw) << "; a picture of " << picture.size() << " in " << cp.size() << ", sha256 " << sha(cp) << "\n";
+    CHECK(sha(ct) == "41e1ecd2da3a84f4c7230125ff73ed390b5b08d5cde7fb84925959713c21d116");
+    CHECK(sha(cw) == "be848447a86d69e0603c8659c9c548d39c2d4e89d0fac5ddb4837af6fa3702e8");
+    CHECK(sha(cp) == "300960c718b6a53ab2cf6b1837e6e29798f455ede671303747875f40731d535f");
+}
+
 void test_rope_wave()
 {
     // The parameters as written, and refused when written otherwise or out of range.
@@ -6452,6 +6504,7 @@ void run_all(int argc, char** argv)
         test_mix();
         test_mix2();
         test_mix3();
+        test_mix4();
     }
 }
 

@@ -4928,7 +4928,12 @@ measured on this repository's own files.
   247,692 bytes, against 28 s and 210,046); files decoded at once when installing (28.3 s to 9.1 s
   on 4 cores); mixing itself faster with the same codes (the SSE rows and the counters' slots
   fetched before they are needed: 8% to 18%).
-- *Next:* the SSE stages are about 40% of mixing's time and 0.07% to 1.7% of its size: dropping or
-  shrinking them is a format change worth weighing; a word list with how often each word is used
+- **The SSE stages retired (27 October 2026, Edward): mix-v4, `sieve-manifest-v28`.** Measured again
+  after their rows were fetched early, they took 9% (text) to 29% (a photograph's grey pixels) of
+  the decoding time for 0.07% to 2.3% of the size; the first stage alone kept most of that. Edward:
+  retire both as one filter (`sse-v1`), its figures kept (FILTERS-CONFLICTS' retired list, the code
+  beside it), so it can be looked at again. mix-v2 and mix-v3 keep them and are read as before.
+- *Next:* mixing the stream every small file shares (in place of its LZMA2: 294 of the repository's
+  small texts 95,425 bytes against 110,835); a word list with how often each word is used
   (SCOWL has none; a frequency list would be a new pinned file); and more generators as they turn
   up (zlib's PNGs remade by zlib itself where it can, without preflate's difference).

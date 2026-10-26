@@ -106,28 +106,47 @@ int cmd_rope(const Args& a)
 
 int cmd_mix(const Args& a)
 {
-    // mix-v2 unless --v1 is given. Parameters: mix-v1's "B22"; mix-v2's "B22", or a picture's "B22 I949x1".
-    const bool v1 = a.has("v1"), v3 = a.has("words");
-    if (v1 && a.has("picture")) throw std::invalid_argument("mix --picture is mix-v2's (not with --v1)");
-    if (v3 && (v1 || a.has("picture"))) throw std::invalid_argument("mix --words is mix-v3's, for text (not with --v1 or --picture)");
-    // mix-v3's word list: the registered one of that size, made ready once.
+    // mix-v4 unless --v1 or --v2 is given (--v2 --words: mix-v3). Parameters: "B22", a picture's
+    // "B22 I949x1", or with a word list "B22 D60" (mix-v4's; mix-v2's and mix-v3's the same, but
+    // mix-v1's "B22" only).
+    if (a.has("v1") && a.has("v2")) throw std::invalid_argument("mix: --v1 or --v2, not both");
+    if (a.has("picture") && a.has("words")) throw std::invalid_argument("mix: --picture or --words, not both (a word list is for text)");
+    if (a.has("v1") && (a.has("picture") || a.has("words"))) throw std::invalid_argument("mix --v1 takes neither --picture nor --words");
     uint32_t list = 0;
-    if (v3)
+    if (a.has("words"))
     {
         const std::string w = a.get("words");
         if (w != "35" && w != "60" && w != "80") throw std::invalid_argument("mix --words is 35, 60 or 80 (scowl-en-35, 60 or 80): " + w);
         list = uint32_t(std::stoul(w));
+    }
+    // The parameters given (decoding, or --params) may name the list themselves.
+    if (a.has("params"))
+        if (const size_t d = a.get("params").find(" D"); d != std::string::npos && !list) list = uint32_t(std::stoul(a.get("params").substr(d + 2)));
+    const int version = a.has("v1") ? 1 : a.has("v2") ? (list ? 3 : 2) : 4;
+    const char* name_of_version = version == 1 ? kMixVersion : version == 2 ? kMix2Version : version == 3 ? kMix3Version : kMix4Version;
+    const MixDictionary* words = nullptr;
+    if (list)
+    {
         if (!mix_words()) use_item_maker();
+        words = &mix_words()(list); // the registered list, its SHA-256 checked, made ready once
     }
     auto code_of = [&](std::span<const uint8_t> f, const std::string& params) {
-        return v1 ? mix_code(f, MixParams::parse(params))
-               : v3 ? mix3_code(f, Mix3Params::parse(params), mix_words()(list))
-                    : mix2_code(f, Mix2Params::parse(params));
+        switch (version)
+        {
+        case 1: return mix_code(f, MixParams::parse(params));
+        case 2: return mix2_code(f, Mix2Params::parse(params));
+        case 3: return mix3_code(f, Mix3Params::parse(params), *words);
+        default: return mix4_code(f, Mix4Params::parse(params), words);
+        }
     };
     auto file_of = [&](std::span<const uint8_t> c, const std::string& params, uint64_t size) {
-        return v1 ? mix_file(c, MixParams::parse(params), size)
-               : v3 ? mix3_file(c, Mix3Params::parse(params), mix_words()(list), size)
-                    : mix2_file(c, Mix2Params::parse(params), size);
+        switch (version)
+        {
+        case 1: return mix_file(c, MixParams::parse(params), size);
+        case 2: return mix2_file(c, Mix2Params::parse(params), size);
+        case 3: return mix3_file(c, Mix3Params::parse(params), *words, size);
+        default: return mix4_file(c, Mix4Params::parse(params), words, size);
+        }
     };
     if (a.has("decode"))
     {
@@ -144,34 +163,38 @@ int cmd_mix(const Args& a)
     std::cout << "file      " << name << ": " << file.size() << " bytes, sha256 " << sha256_hex(file) << "\n";
     std::string params;
     if (a.has("params")) params = a.get("params");
-    else if (v1) params = MixParams::for_size(file.size()).text();
-    else if (v3) params = Mix3Params::for_size(file.size(), list).text();
     else
     {
         unsigned w = 0, c = 1;
         char extra = 0;
         if (a.has("picture") && std::sscanf(a.get("picture").c_str(), "%ux%u%c", &w, &c, &extra) != 2)
             throw std::invalid_argument("mix --picture is written WIDTHxBYTES, the bytes a pixel (949x1, 1280x3): " + a.get("picture"));
-        params = Mix2Params::for_size(file.size(), w, c).text();
+        switch (version)
+        {
+        case 1: params = MixParams::for_size(file.size()).text(); break;
+        case 2: params = Mix2Params::for_size(file.size(), w, c).text(); break;
+        case 3: params = Mix3Params::for_size(file.size(), list).text(); break;
+        default: params = Mix4Params::for_size(file.size(), w, c, list).text(); break;
+        }
     }
     using clk = std::chrono::steady_clock;
     const auto t0 = clk::now();
     const std::vector<uint8_t> code = code_of(file, params);
     const auto t1 = clk::now();
-    if (file_of(code, params, file.size()) != file) throw std::logic_error(std::string(v1 ? kMixVersion : v3 ? kMix3Version : kMix2Version) + " did not give the file back (a fault in the coder)");
+    if (file_of(code, params, file.size()) != file) throw std::logic_error(std::string(name_of_version) + " did not give the file back (a fault in the coder)");
     const auto t2 = clk::now();
     const uint64_t lz = lzma2_size(file);
     char sp[96];
     std::snprintf(sp, sizeof sp, "coded in %.2f s, read back in %.2f s", std::chrono::duration<double>(t1 - t0).count(),
                   std::chrono::duration<double>(t2 - t1).count());
-    std::cout << "mix       " << params << " (" << (v1 ? kMixVersion : v3 ? kMix3Version : kMix2Version) << ")\n"
+    std::cout << "mix       " << params << " (" << name_of_version << ")\n"
               << "code      " << code.size() << " bytes, " << pct(code.size(), file.size()) << " of the file; read back and checked (" << sp << ")\n"
               << "LZMA2     " << lz << " bytes, " << pct(lz, file.size()) << " (7z's, one stream, no container)\n";
     if (a.has("out"))
     {
         write_bytes(a.get("out"), code);
-        std::cout << "written   " << a.get("out") << " (decode it with: sieve mix --decode " << a.get("out") << (v1 ? " --v1" : v3 ? " --words " + std::to_string(list) : std::string()) << " --params \"" << params
-                  << "\" --size " << file.size() << " --out FILE)\n";
+        std::cout << "written   " << a.get("out") << " (decode it with: sieve mix --decode " << a.get("out")
+                  << (version == 1 ? " --v1" : version <= 3 ? " --v2" : "") << " --params \"" << params << "\" --size " << file.size() << " --out FILE)\n";
     }
     return 0;
 }
