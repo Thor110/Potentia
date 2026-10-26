@@ -179,6 +179,10 @@ inline constexpr const char* kMixManifestVersion = "sieve-manifest-v24";
 // kind 5), so a PNG is made again exactly from what its deflate holds (preflate) and its chunks'
 // framing. Its head's byte 25, in bytes only. Made only where some PNG is.
 inline constexpr const char* kPngManifestVersion = "sieve-manifest-v25";
+// v26 (27 October 2026): v25 whose files may be carried by mixing's second version (mix-v2,
+// sieve/mix.hpp): a way "mix2 B<bits>", or a picture's "mix2 B<bits> I<width>x<bytes a pixel>", its
+// code next in the rope stream as v24's is.
+inline constexpr const char* kMix2ManifestVersion = "sieve-manifest-v26";
 
 // The "u" lines' formats v20 adds (an archive carried as its contents).
 inline bool is_v20_format(const std::string& f)
@@ -267,6 +271,7 @@ struct Manifest
     bool v23 = false; // v23: some rope way is rope-wave-v6's (v22 is set too)
     bool v24 = false; // v24: some file is carried by mixing (v23 is set too)
     bool v25 = false; // v25: some skeleton holds a run of chunks: a PNG (v24 is set too)
+    bool v26 = false; // v26: some file is carried by mix-v2 (v25 is set too)
     bool body_text = false; // v20: its body as text after all (the head's flag 128), where that came out smaller
     // v14: each archive carried as its contents: its format ("7z", "xz"), its size, its path, and the
     // folder (or file) its contents are in.

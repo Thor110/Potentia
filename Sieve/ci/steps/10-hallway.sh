@@ -427,8 +427,9 @@ cmp rope_mix/picture.raw picture.back
 # sieve-manifest-v8: the picture and the sound carried by the rope (the sound's wave at nine
 # of its cycles, a line of 1,131 values: 10,213 bytes against LZMA2's 10,295), the text by LZMA2,
 # each the smaller way. Smaller than v7 (no rope); installed by sieve install, the oracle, and
-# sieve-install itself (no items, so the small installer needs nothing it lacks).
-build/sieve locate rope_mix --installer rope8.sieve --items --manifest rope8.manifest | tr -d '\r' > rope8.txt
+# sieve-install itself (no items, so the small installer needs nothing it lacks). (--v25: v26's
+# mix-v2 carries the sound and the text otherwise.)
+build/sieve locate rope_mix --installer rope8.sieve --items --v25 --manifest rope8.manifest | tr -d '\r' > rope8.txt
 q "^rope      2 file(s) pulled tight by rope-wave-v1\( and v2\| to v[3-6]\)\? (46000 bytes" rope8.txt
 python -c "import sys; sys.argv = ['x']; sys.path.insert(0, 'reference'); import sieve_ref; sys.stdout.buffer.write(sieve_ref.v7_listing(sieve_ref.v16_text(open('rope8.manifest', 'rb').read())))" | q -a "^f	30000	rope L8 W[0-9]* S[1-8] P[0-4] K[01]\( C[12]\)\?\( G1\)\?\( T1\)\?	picture.raw$"
 build/sieve locate rope_mix --installer rope7.sieve --items --v7 > /dev/null

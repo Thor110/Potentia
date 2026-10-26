@@ -105,11 +105,20 @@ int cmd_rope(const Args& a)
 
 int cmd_mix(const Args& a)
 {
+    // mix-v2 unless --v1 is given. Parameters: mix-v1's "B22"; mix-v2's "B22", or a picture's "B22 I949x1".
+    const bool v1 = a.has("v1");
+    if (v1 && a.has("picture")) throw std::invalid_argument("mix --picture is mix-v2's (not with --v1)");
+    auto code_of = [&](std::span<const uint8_t> f, const std::string& params) {
+        return v1 ? mix_code(f, MixParams::parse(params)) : mix2_code(f, Mix2Params::parse(params));
+    };
+    auto file_of = [&](std::span<const uint8_t> c, const std::string& params, uint64_t size) {
+        return v1 ? mix_file(c, MixParams::parse(params), size) : mix2_file(c, Mix2Params::parse(params), size);
+    };
     if (a.has("decode"))
     {
         if (!a.has("params") || !a.has("size") || !a.has("out")) throw std::invalid_argument("mix --decode CODE needs --params, --size and --out");
         const std::vector<uint8_t> code = read_file_bytes(path_of(a.get("decode")));
-        const std::vector<uint8_t> file = mix_file(code, MixParams::parse(a.get("params")), std::stoull(a.get("size")));
+        const std::vector<uint8_t> file = file_of(code, a.get("params"), std::stoull(a.get("size")));
         write_bytes(a.get("out"), file);
         std::cout << "file      " << a.get("out") << ": " << file.size() << " bytes, sha256 " << sha256_hex(file) << "\n";
         return 0;
@@ -118,24 +127,34 @@ int cmd_mix(const Args& a)
     const std::string name = a.positional[0];
     const std::vector<uint8_t> file = read_file_bytes(path_of(name));
     std::cout << "file      " << name << ": " << file.size() << " bytes, sha256 " << sha256_hex(file) << "\n";
-    const MixParams p = a.has("params") ? MixParams::parse(a.get("params")) : MixParams::for_size(file.size());
+    std::string params;
+    if (a.has("params")) params = a.get("params");
+    else if (v1) params = MixParams::for_size(file.size()).text();
+    else
+    {
+        unsigned w = 0, c = 1;
+        char extra = 0;
+        if (a.has("picture") && std::sscanf(a.get("picture").c_str(), "%ux%u%c", &w, &c, &extra) != 2)
+            throw std::invalid_argument("mix --picture is written WIDTHxBYTES, the bytes a pixel (949x1, 1280x3): " + a.get("picture"));
+        params = Mix2Params::for_size(file.size(), w, c).text();
+    }
     using clk = std::chrono::steady_clock;
     const auto t0 = clk::now();
-    const std::vector<uint8_t> code = mix_code(file, p);
+    const std::vector<uint8_t> code = code_of(file, params);
     const auto t1 = clk::now();
-    if (mix_file(code, p, file.size()) != file) throw std::logic_error("mix-v1 did not give the file back (a fault in the coder)");
+    if (file_of(code, params, file.size()) != file) throw std::logic_error(std::string(v1 ? kMixVersion : kMix2Version) + " did not give the file back (a fault in the coder)");
     const auto t2 = clk::now();
     const uint64_t lz = lzma2_size(file);
     char sp[96];
     std::snprintf(sp, sizeof sp, "coded in %.2f s, read back in %.2f s", std::chrono::duration<double>(t1 - t0).count(),
                   std::chrono::duration<double>(t2 - t1).count());
-    std::cout << "mix       " << p.text() << " (" << kMixVersion << ")\n"
+    std::cout << "mix       " << params << " (" << (v1 ? kMixVersion : kMix2Version) << ")\n"
               << "code      " << code.size() << " bytes, " << pct(code.size(), file.size()) << " of the file; read back and checked (" << sp << ")\n"
               << "LZMA2     " << lz << " bytes, " << pct(lz, file.size()) << " (7z's, one stream, no container)\n";
     if (a.has("out"))
     {
         write_bytes(a.get("out"), code);
-        std::cout << "written   " << a.get("out") << " (decode it with: sieve mix --decode " << a.get("out") << " --params \"" << p.text()
+        std::cout << "written   " << a.get("out") << " (decode it with: sieve mix --decode " << a.get("out") << (v1 ? " --v1" : "") << " --params \"" << params
                   << "\" --size " << file.size() << " --out FILE)\n";
     }
     return 0;

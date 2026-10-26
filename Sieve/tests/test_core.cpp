@@ -5941,6 +5941,66 @@ void test_mix()
     CHECK(pinned == "503f61a3778a1f75a568e2bde90ffd6f6ea8f430ce9c87ac1357cf6175db302a");
 }
 
+// mix-v2: the parameters (a picture's shape among them); every shape of file given back, as text
+// and as pictures of each width and bytes a pixel; a code cut short or with more after it refused;
+// and the codes of one text and one picture pinned by their SHA-256.
+void test_mix2()
+{
+    CHECK(Mix2Params::parse("B22").width == 0);
+    CHECK(Mix2Params::parse("B20 I949x1").width == 949 && Mix2Params::parse("B20 I949x1").channels == 1);
+    CHECK(Mix2Params::parse("B16 I1280x3").text() == "B16 I1280x3");
+    CHECK(throws([] { Mix2Params::parse("B15"); }));
+    CHECK(throws([] { Mix2Params::parse("B23"); }));
+    CHECK(throws([] { Mix2Params::parse("B22 I1x1"); }));    // a picture one pixel wide
+    CHECK(throws([] { Mix2Params::parse("B22 I949x5"); }));  // five bytes a pixel
+    CHECK(throws([] { Mix2Params::parse("B22 I949x0"); }));
+    CHECK(throws([] { Mix2Params::parse("B22 I0949x1"); })); // not written as it would be
+    CHECK(throws([] { Mix2Params::parse("B22 I949"); }));
+    CHECK(throws([] { Mix2Params::parse("B22 "); }));
+    CHECK(Mix2Params::for_size(1u << 20).text() == "B21" && Mix2Params::for_size(4096, 64, 3).text() == "B16 I64x3");
+    std::mt19937 rng(9);
+    std::vector<uint8_t> noise(3000), all(256), text, picture;
+    for (auto& b : noise) b = uint8_t(rng());
+    for (int i = 0; i < 256; ++i) all[size_t(i)] = uint8_t(i);
+    const char* words[] = {"the", "rope", "triangle", "pulls", "tight", "through", "every", "value", "Sieve", "mixes"};
+    for (int i = 0; i < 2500; ++i)
+    {
+        const std::string w = words[rng() % 10];
+        text.insert(text.end(), w.begin(), w.end());
+        text.push_back(rng() % 9 ? (rng() % 5 ? ' ' : '\t') : '\n');
+    }
+    // A picture: 60 by 40, three bytes a pixel, smooth ramps with a little noise and an edge.
+    for (int y = 0; y < 40; ++y)
+        for (int x = 0; x < 60; ++x)
+            for (int c = 0; c < 3; ++c) picture.push_back(uint8_t((x * 3 + y * 2 + c * 40 + (x > 30 ? 90 : 0) + int(rng() % 5)) & 255));
+    const std::vector<std::vector<uint8_t>> files{{}, {0}, {255}, std::vector<uint8_t>(5000, 'a'), noise, all, text, picture};
+    bool back = true;
+    for (const auto& f : files)
+        for (const char* params : {"B16", "B18", "B16 I2x1", "B16 I60x3", "B16 I7x4", "B16 I3000x1"})
+        {
+            const Mix2Params p = Mix2Params::parse(params);
+            back = back && mix2_file(mix2_code(f, p), p, f.size()) == f;
+        }
+    CHECK(back);
+    const Mix2Params p = Mix2Params::parse("B16");
+    const std::vector<uint8_t> c = mix2_code(text, p);
+    CHECK(c.size() * 4 < text.size());
+    std::vector<uint8_t> more = c;
+    more.insert(more.end(), {1, 2, 3, 4, 5, 6});
+    CHECK(throws([&] { mix2_file(more, p, text.size()); }));
+    CHECK(throws([&] { mix2_file(std::span<const uint8_t>(c.data(), c.size() / 2), p, text.size()); }));
+    CHECK(mix2_file(c, p, text.size()) == text);
+    const Mix2Params pp = Mix2Params::parse("B16 I60x3");
+    const std::vector<uint8_t> cp = mix2_code(picture, pp);
+    CHECK(cp.size() < mix2_code(picture, p).size()); // as a picture, smaller than as bytes
+    const std::string pinned = Sha256::hex(Sha256::hash(std::string(c.begin(), c.end())));
+    const std::string pinned_picture = Sha256::hex(Sha256::hash(std::string(cp.begin(), cp.end())));
+    std::cout << "mix-v2: a text of " << text.size() << " bytes in " << c.size() << ", sha256 " << pinned << "; a picture of "
+              << picture.size() << " in " << cp.size() << ", sha256 " << pinned_picture << "\n";
+    CHECK(pinned == "2a3b7d5ec944128c74ab0946fe8c2c36ba13714c674dec4ee97e3d704b1e6626");
+    CHECK(pinned_picture == "cc0a6fe8d16932d05fcd967de60566e9c025605383fec73144d2c72dd0446251");
+}
+
 void test_rope_wave()
 {
     // The parameters as written, and refused when written otherwise or out of range.
@@ -6339,6 +6399,7 @@ void run_all(int argc, char** argv)
         test_digit_histogram();
         test_rope_wave();
         test_mix();
+        test_mix2();
     }
 }
 

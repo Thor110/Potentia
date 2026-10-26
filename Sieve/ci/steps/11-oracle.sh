@@ -490,8 +490,8 @@ with zipfile.ZipFile('a21/stored.zip', 'w', zipfile.ZIP_STORED) as z:
     z.writestr(zipfile.ZipInfo('sieve_ref.py', (2026, 10, 25, 12, 0, 0)), t)"
 cp ../tests/archives/sieve-7zip-lzma2.7z ../tests/archives/sieve-7zip-lzma.7z ../tests/archives/sieve-7zip-deflate.zip a21/
 SIEVE_ARCHIVES_ALWAYS=1 $S locate a21 --installer a21.sieve --items --optimise-archives --manifest a21.manifest | tr -d '\r' > a21.txt
-grep -c "^remade    6 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v2[1-5])$" a21.txt > /dev/null
-python -c "d = open('a21.manifest', 'rb').read(); assert d[:5] == b'sieve' and 21 <= d[5] <= 25, d[:6]"
+grep -c "^remade    6 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v2[1-6])$" a21.txt > /dev/null
+python -c "d = open('a21.manifest', 'rb').read(); assert d[:5] == b'sieve' and 21 <= d[5] <= 26, d[:6]"
 $S install a21.sieve --to a21_inst > /dev/null
 for f in huff.gz py.zip stored.zip sieve-7zip-lzma2.7z sieve-7zip-lzma.7z sieve-7zip-deflate.zip; do cmp a21/$f a21_inst/$f; done
 # The oracle reads every skeleton whole and makes the stored zip again; the others, made by preflate
@@ -529,7 +529,7 @@ if [ "$(uname -s)" = Linux ] || [ "$(uname -s)" = Darwin ]; then
   cmp r22/made.rar r22_si/made.rar
   # In a folder: the archive given back in its place, the folder's other files as they were.
   cp r22/made.rar r22/folder/ && cp ../tests/manifest_fixture/a.txt r22/folder/
-  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/folder --installer r22f.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^unpacked .*sieve-manifest-v2[2-5]" > /dev/null
+  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/folder --installer r22f.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^unpacked .*sieve-manifest-v2[2-6]" > /dev/null
   rm -rf r22f_inst && SIEVE_RAR="$RAR" $S install r22f.sieve --to r22f_inst > /dev/null
   diff -r r22/folder r22f_inst
   # --v21: as before, its contents alone.
@@ -540,10 +540,11 @@ fi
 # before, the one above and the corner between, the median edge detector) and its contexts (T1:
 # what is left coded by how busy the triangle is). On the centre of the Vitruvian Man (tests/rope,
 # 256 by 256 grey bytes) the search finds the triangle, the instructions are v23, and Sieve and the
-# oracle both give the picture back; --v22 keeps to rope-wave-v5.
+# oracle both give the picture back; --v22 keeps to rope-wave-v5. (--v25: v26's mix-v2 takes the
+# picture otherwise.)
 cp ../tests/rope/vitruvian-centre-256.gray tri.raw
 $S rope tri.raw | tr -d '\r' | grep -c "^wave      L8 W256 S1 P4 K[01]\( T1\)\? (rope-wave-v6)" > /dev/null
-$S locate tri.raw --installer tri.sieve --items | tr -d '\r' | grep -c "^rope .*rope-wave-v1 to v6.*sieve-manifest-v23" > /dev/null
+$S locate tri.raw --installer tri.sieve --items --v25 | tr -d '\r' | grep -c "^rope .*rope-wave-v1 to v6.*sieve-manifest-v23" > /dev/null
 python -c "assert open('tri.sieve', 'rb').read()[:0] == b''"
 rm -rf tri_inst tri_oracle
 $S install tri.sieve --to tri_inst > /dev/null
@@ -563,13 +564,14 @@ done
 # the word so far, the predictions mixed by weights that learn, coded exactly in integers. The
 # start of Don Quixote (40,000 bytes): sieve mix gives it back; Sieve instructions carry it so (v24),
 # smaller than v23's; Sieve and the oracle (its own mix-v1) both give it back; --v23 does not mix.
+# (--v1 and --v25: mix-v1, which v26's mix-v2 replaces.)
 head -c 40000 ../data/anchors/public-domain/pg996.txt > dq.txt
-$S mix dq.txt --out dq.mix | tr -d '\r' > dqmix.txt
+$S mix dq.txt --v1 --out dq.mix | tr -d '\r' > dqmix.txt
 grep -c "^mix       B17 (mix-v1)" dqmix.txt > /dev/null
 grep -c "read back and checked" dqmix.txt > /dev/null
 python sieve_ref.py mix-unpack dq.mix --params B17 --size 40000 --out dq.back > /dev/null
 cmp dq.txt dq.back
-$S locate dq.txt --installer dq.sieve --items | tr -d '\r' | grep -c "^mix       1 file(s) carried by mixing, mix-v1 (40000 bytes, carried in [0-9]*; sieve-manifest-v24)" > /dev/null
+$S locate dq.txt --installer dq.sieve --items --v25 | tr -d '\r' | grep -c "^mix       1 file(s) carried by mixing, mix-v1 (40000 bytes, carried in [0-9]*; sieve-manifest-v24)" > /dev/null
 $S locate dq.txt --installer dq23.sieve --items --v23 | tr -d '\r' > dq23.txt
 ! grep -q "^mix \|sieve-manifest-v24\|not an option" dq23.txt
 [ "$(wc -c < dq.sieve)" -lt "$(wc -c < dq23.sieve)" ]
@@ -584,7 +586,7 @@ cmp dq.txt dq_oracle/dq.txt
 # chunks, their deflate by preflate and their CRCs worked out again. Installed exactly; the oracle
 # reads both and names them (it has neither stb_image_write nor preflate); --v24 makes neither.
 rm -rf png25 && mkdir png25 && cp ../docs/images/hallway-audio.png ../web/extension/icon128.png png25/
-$S locate png25 --installer png25.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v25)$" > /dev/null
+$S locate png25 --installer png25.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v2[56])$" > /dev/null
 [ "$(wc -c < png25.sieve)" -lt 50000 ]
 rm -rf png25_inst png25_oracle
 $S install png25.sieve --to png25_inst > /dev/null
@@ -592,3 +594,35 @@ diff -r png25 png25_inst
 python sieve_ref.py unpack png25.sieve --to png25_oracle | tr -d '\r' | grep -c "^not made again by the oracle (preflate, the LZMA SDK or stb_image_write): " | grep -q "^2$"
 $S locate png25 --installer png24.sieve --items --optimise-archives --v24 2>&1 | tr -d '\r' > png24.txt
 ! grep -q "sieve-manifest-v25\|not an option" png24.txt
+# v26 (27 October 2026): mix-v2: mix-v1 grown (a match model, the column and field, sparse
+# contexts; for a picture, Edward's triangle and its neighbours; two mixers and two SSE stages).
+# The same 40,000 bytes of Don Quixote: smaller than mix-v1's code, and the instructions smaller than
+# v25's; the top 64 rows of the Vitruvian centre (16,384 grey bytes) carried as a picture, its shape
+# guessed from its bytes (I256x1), smaller than v25's instructions. Sieve and the oracle (its own
+# mix-v2) give both back, from the codes and from the instructions; --v25 makes no mix-v2.
+$S mix dq.txt --out dq2.mix | tr -d '\r' > dqmix2.txt
+grep -c "^mix       B17 (mix-v2)" dqmix2.txt > /dev/null
+[ "$(wc -c < dq2.mix)" -lt "$(wc -c < dq.mix)" ]
+python sieve_ref.py mix-unpack dq2.mix --v2 --params B17 --size 40000 --out dq2.back > /dev/null
+cmp dq.txt dq2.back
+$S locate dq.txt --installer dq26.sieve --items | tr -d '\r' | grep -c "^mix       1 file(s) carried by mixing, mix-v2 (40000 bytes, carried in [0-9]*; sieve-manifest-v26)" > /dev/null
+[ "$(wc -c < dq26.sieve)" -lt "$(wc -c < dq.sieve)" ]
+rm -rf dq26_inst dq26_oracle
+$S install dq26.sieve --to dq26_inst > /dev/null
+cmp dq.txt dq26_inst/dq.txt
+python sieve_ref.py unpack dq26.sieve --to dq26_oracle > /dev/null
+cmp dq.txt dq26_oracle/dq.txt
+head -c 16384 tri.raw > top.raw
+$S mix top.raw --picture 256x1 --out top.mix | tr -d '\r' | grep -c "^mix       B16 I256x1 (mix-v2)" > /dev/null
+python sieve_ref.py mix-unpack top.mix --v2 --params "B16 I256x1" --size 16384 --out top.back > /dev/null
+cmp top.raw top.back
+$S locate top.raw --installer top26.sieve --items | tr -d '\r' > top26.txt
+grep -c "^mix       1 file(s) carried by mixing, mix-v2, 1 as picture(s) (16384 bytes, carried in [0-9]*; sieve-manifest-v26)" top26.txt > /dev/null
+$S locate top.raw --installer top25.sieve --items --v25 | tr -d '\r' > top25.txt
+! grep -q "mix-v2\|sieve-manifest-v26\|not an option" top25.txt
+[ "$(wc -c < top26.sieve)" -lt "$(wc -c < top25.sieve)" ]
+rm -rf top26_inst top26_oracle
+$S install top26.sieve --to top26_inst > /dev/null
+cmp top.raw top26_inst/top.raw
+python sieve_ref.py unpack top26.sieve --to top26_oracle | tr -d '\r' | grep -c "^mix2 B16 I256x1	16384	top.raw" > /dev/null
+cmp top.raw top26_oracle/top.raw

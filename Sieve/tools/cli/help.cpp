@@ -393,19 +393,27 @@ const std::vector<Page>& pages()
           {"--size N", "With --decode: the file's size in bytes."}},
          {{"sieve rope picture.bmp", "the best wave for a picture, and its code's size beside LZMA2's"},
           {"sieve rope sound.wav --params \"L16 W1 S1 P2 K0\" --out sound.rope", "a sound by a wave chosen, written out"}}},
-        {"mix", "A file coded by mixing (mix-v1): every bit predicted by several models, mixed.",
-         "sieve mix FILE [--params B22] [--out CODE]\n"
-         "  sieve mix --decode CODE --params B22 --size N --out FILE",
-         "Codes a file by mixing (mix-v1, IDEAS §19.102): every bit predicted by the bytes before it (0\n"
-         "to 6 of them) and by the word so far, the predictions mixed by weights that learn as the file\n"
-         "goes, and the mixed prediction coded exactly by a binary arithmetic coder, in integers only.\n"
-         "Strongest on text. Decoding takes as long as coding (about 0.4 MB/s). The code is read back\n"
-         "and checked; LZMA2 is shown beside it.",
-         {{"--params B", "The tables' size, 2^B counters each, B16 to B22 (else chosen by the file's size)."},
+        {"mix", "A file coded by mixing (mix-v2, or mix-v1): every bit predicted by several models, mixed.",
+         "sieve mix FILE [--picture WxC] [--params B22] [--v1] [--out CODE]\n"
+         "  sieve mix --decode CODE [--v1] --params B22 --size N --out FILE",
+         "Codes a file by mixing (IDEAS §19.102): every bit predicted by several models at once, the\n"
+         "predictions mixed by weights that learn as the file goes, and the mixed prediction coded\n"
+         "exactly by a binary arithmetic coder, in integers only. mix-v2 (the default): the bytes before\n"
+         "(0 to 6 of them), the word so far, the longest earlier stretch the last bytes repeat (the\n"
+         "match), and the column and field (tables), or for a picture (--picture) Edward's triangle and\n"
+         "its neighbours; two mixers and two SSE stages. mix-v1 (--v1): the bytes before and the word.\n"
+         "Decoding takes as long as coding (about 0.3 MB/s); mix-v2 holds about 240 MB at B22. The code\n"
+         "is read back and checked; LZMA2 is shown beside it.",
+         {{"--picture WxC", "mix-v2: the file is a picture's pixels, W wide, C bytes a pixel (1 to 4), row by row:\n"
+                            "949x1 (grey), 1280x3 (RGB). Its parameters are then written \"B22 I949x1\"."},
+          {"--params B", "The tables' size, 2^B counters each, B16 to B22 (else chosen by the file's size);\n"
+                         "mix-v2's for a picture with its shape, \"B22 I949x1\"."},
+          {"--v1", "mix-v1 (sieve-manifest-v24's), not mix-v2."},
           {"--out CODE", "Write the code here."},
-          {"--decode CODE", "The file back from its code, with --params, --size and --out."},
+          {"--decode CODE", "The file back from its code, with --params, --size and --out (and --v1 for mix-v1's)."},
           {"--size N", "With --decode: the file's size in bytes."}},
-         {{"sieve mix book.txt", "a text coded by mixing, beside LZMA2"}}},
+         {{"sieve mix book.txt", "a text coded by mixing, beside LZMA2"},
+          {"sieve mix screen.rgb --picture 1280x3", "a picture's raw pixels, by the triangle inside mixing"}}},
         {"tensors", "A model file (safetensors) taken apart into its start and its weights, and weighed.",
          "sieve tensors FILE.safetensors [--config config.json] [--stats | --tsv] [--start-out FILE] [--pack OUT.sieve-weights]\n"
          "  sieve tensors --config config.json [--start-out FILE]\n"
@@ -1027,6 +1035,7 @@ const std::vector<Page>& pages()
                                   "(v25): one stb_image_write made (as the hallway's screenshots are) as its\n"
                                   "pixels, made again by it; any other from its skeleton, its deflate by preflate\n"
                                   "and its chunks' CRCs worked out again. Off unless given."},
+          {"--v25", "As sieve-manifest-v25 at newest: mixing by mix-v1, not mix-v2 (v26)."},
           {"--v24", "As sieve-manifest-v24 at newest: no PNG made again from its skeleton (v25)."},
           {"--optimise-archives", "The old name of --optimise-compressed (once Optimise Archive Formats); the same."},
           {"--v23", "As sieve-manifest-v23 at newest: no file carried by mixing (mix-v1, v24)."},

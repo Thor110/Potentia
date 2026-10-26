@@ -68,6 +68,9 @@ struct PackReport
     bool v23 = false;                    // v23: some rope way rope-wave-v6's (the triangle)
     bool v24 = false;                    // v24: some file carried by mixing (mix-v1)
     bool v25 = false;                    // v25: some PNG made again from its skeleton
+    bool v26 = false;                    // v26: some file carried by mix-v2
+    size_t mixed2 = 0;                   // v26: files carried by mix-v2 (of `mixed`), as pictures
+    size_t mixed2_pictures = 0;
     size_t mixed = 0;                    // v24: files carried by mixing
     bool rope_v6 = false;                // v23: some rope way rope-wave-v6's
     uint64_t mix_bytes = 0, mix_carried = 0; // v24: their bytes, and their codes

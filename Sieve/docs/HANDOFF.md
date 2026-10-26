@@ -3947,6 +3947,43 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   (Edward): the remembered table and "Trust the new table" stay; no signing, ever ("I don't trust
   myself or any human being alive to keep a key safe").
 
+### mix-v2: mixing existing methods in a new way, `sieve-manifest-v26` (27 October 2026)
+
+Edward's IDEAS §19.102, its "Next" taken up. Every part measured on the repository's own files
+(scratchpad prototype first), taken only where it paid; the rest is in IDEAS as not taken.
+- **mix-v2 (`core/mix.*`, `sieve mix` now makes it; `--v1` for mix-v1):** a match model (what LZ
+  does, and v1 lacked), the column and field (tables), sparse contexts, two mixers, two SSE stages,
+  counters in slots of 16 a half-byte. For a **picture** (parameters `B22 I<w>x<c>`, `sieve mix
+  --picture WxC`), Edward's triangle and its neighbours replace the column and sparse contexts.
+  About 0.3 MB/s both ways, as v1; about 240 MB at B22 (v1 128 MB).
+- **v26:** a way `mix2 B<bits>[ I<w>x<c>]`, carried as v24's `mix`. The packer tries mix-v2 in
+  mix-v1's place (`rope_newest` 9; `--v25` gives v1 back). A picture's shape: the rope's best wave
+  where it reads the file as one (L8, P2 to P4, W a multiple of S, two lines or more), else
+  `picture_shape` guesses from the bytes (non-text only; the step 1 to 4 with the least difference,
+  then a row of 8 to 16,384 pixels) and the start is coded both ways, the smaller kept. The guess
+  exists because the rope's search misses the width of small pictures (64 rows of the Vitruvian
+  centre: it chose W1).
+- **The File Locator** passes 9 now (three places in `client/file_locator.cpp`).
+- **Measured:** Don Quixote 532,168 bytes (v1 565,596); the Vitruvian picture 727,842 (rope-wave-v6
+  762,766); a screenshot's pixels 62,925 (LZMA2 93,936). Sieve instructions: Don Quixote 532,501
+  (v25 565,664); the ten PNGs 210,046 (v25 247,692).
+- **Install time, the trade-off (told to Edward):** Don Quixote installs in 8.4 s (v25 11.7 s:
+  mix-v2 decodes faster than v1); the ten PNGs in 28.3 s against v25's 0.75 s (their 24.8 MB of
+  pixels, carried by the rope and LZMA2 in v25, are decoded by mixing at about 1 MB/s). Packing
+  the same (271 s, v25 262 s). The packer still keeps the smallest; weighing install time too would
+  be a small change there, if Edward wants it.
+- **Not taken:** LOCO-I's bias correction for the rope (0.4% on the Vitruvian; the screenshot twice
+  as large), a dictionary read first, two-rate counters, 2^23 tables (IDEAS §19.102).
+- **Oracle:** its own mix-v2 from SPECIFICATIONS §12.2 (`mix-unpack --v2`); it matched Sieve's codes
+  on its first run (text, grey and RGB pictures), and reads v26.
+- **Unit test:** `test_mix2`, two codes' SHA-256 pinned (a text and a 60 by 40 RGB picture):
+  Windows and macOS must make the same bytes (check step 01 there). A check that v2 beats v1 on the
+  synthetic words was dropped: on words drawn at random (nothing ever repeats) v2's faster counters
+  lose a little to v1's, as expected.
+- **CI:** step 11's v23, v24 and v25 blocks pin their versions with `--v25` (mix-v2 wins on their
+  files otherwise); a v26 block (Don Quixote's start, and 64 rows of the Vitruvian centre as a
+  guessed picture), Sieve and the oracle.
+
 ### Optimise Compressed Formats, and Try every way (26 October 2026)
 
 - **The box renamed (Edward):** "Optimise Archive Formats" is "Optimise Compressed Formats" now (a

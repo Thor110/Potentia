@@ -4860,7 +4860,7 @@ and the software crawler stopped with it). Whether it could also refuse to serve
 rather than only report it, is for when it is thought about. A thought only; nothing to work on.
 
 **19.102 Towards the minimum address: the triangle, mixing and generators (Edward, 26 October 2026;
-the three built).** Edward asked for filters aimed at the shortest address a real file can have, even
+the three built; mix-v2, 27 October 2026).** Edward asked for filters aimed at the shortest address a real file can have, even
 if the true minimum is out of reach. Any address is two parts: the model the reader must already
 have, and where the file falls among what that model allows; a filter is a model, and a better one
 makes the second part shorter. Two limits stay in view: there are fewer short numbers than files
@@ -4894,7 +4894,27 @@ measured on this repository's own files.
   long repeats: their filtered rows by xz 274,588 in all, their pixels by the rope 582,870, by mixing
   344,626); preflate on stb_image_write's PNGs (its difference about 28 KB on a 44 KB screenshot:
   larger than the PNG).
-- *Next:* the triangle as a model inside mixing (pictures by mixing); mixing's speed, then more
-  models (a dictionary's words, a grammar, the column and the line above for tables); bias
-  cancellation for the triangle (LOCO-I's); and more generators as they turn up (zlib's PNGs remade
-  by zlib itself where it can, without preflate's difference).
+- **Mixing existing methods in a new way: built, mix-v2 (27 October 2026, `sieve-manifest-v26`).**
+  Edward's ask, taken up: the filters Sieve already had, each made a model inside mixing, weighed bit
+  by bit. Measured first on this repository's files, each part taken only where it paid: a **match
+  model** (the longest earlier stretch the last six bytes repeat: what LZ does, and what mix-v1
+  lacked: the teapot 53,595 bytes by v1, 38,030 with it); the **column** (the rope's byte above,
+  v5's idea) and the field, for tables (moby-pos 205,122 to 167,683; a word list 71,873 to 43,209);
+  sparse contexts; two mixers and two SSE stages; counters in slots of 16 a half-byte (two places
+  in memory a byte, not eight: as fast as v1 with twice the models). And **the triangle inside
+  mixing**: for a picture (its width and bytes a pixel, from the rope's search or guessed from its
+  bytes) the triangle's prediction and its neighbours are contexts: the Vitruvian picture 727,842
+  bytes (rope-wave-v6 762,766, mix-v1 802,822); a screenshot's pixels 62,925 (LZMA2 93,936, mix-v1
+  105,134). All against mix-v1: Don Quixote 532,168 (565,596), `test_core.cpp` 53,002 (64,777), a
+  SCOWL word list 41,010 (84,763). As Sieve instructions: Don Quixote 532,501 (v25 565,664); the ten
+  PNGs 210,046 (v25 247,692, measured again the same day).
+- *Measured and not taken (27 October 2026):* LOCO-I's bias correction on the triangle (0.4% on
+  the Vitruvian picture, and the screenshot twice as large; mixing with the triangle does 4.6%
+  better anyway); a dictionary (SCOWL) read first, as a model every reader has (2% on Don Quixote,
+  worse on a 3 KB text); a fast-moving second probability in every counter, or inputs scaled by how
+  often their context was seen (each better on one file, worse on most); tables of 2^23 (under 1%,
+  twice the memory).
+- *Next:* mixing's speed (about 0.3 to 1 MB/s, both ways: the ten PNGs' 24.8 MB of pixels take
+  28 s to install, where v25's rope and LZMA2 took 0.75 s); a grammar as a model (Edward's rulesets as predictions); and more
+  generators as they turn up (zlib's PNGs remade by zlib itself where it can, without preflate's
+  difference).

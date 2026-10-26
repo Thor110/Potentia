@@ -2051,6 +2051,40 @@ std::string contents_name(const std::string& path, const char* ext)
 SampleAsWhole::SampleAsWhole(uint64_t whole_bytes) { g_sample_floor = dictionary_for(whole_bytes); }
 SampleAsWhole::~SampleAsWhole() { g_sample_floor = 0; }
 
+// v26: a picture's shape for mix-v2, where the rope's search gives none, for a file not text (under
+// 95% of its bytes printable ASCII or white space). With the mean difference at a lag (over 2,048
+// evenly spread bytes): the step of 1 to 4 bytes with the least (the bytes a pixel), then the line,
+// a multiple of the step of 8 to 16,384 pixels and no more than half the file, with the least.
+// Nothing for text, or a file too short for two lines of 8 pixels. A guess: mixing then weighs it
+// against the file as bytes.
+static std::optional<std::pair<uint32_t, uint32_t>> picture_shape(std::span<const uint8_t> b)
+{
+    if (b.size() < 64) return std::nullopt;
+    uint64_t text = 0;
+    for (const uint8_t c : b) text += (c >= 32 && c < 127) || c == 9 || c == 10 || c == 13;
+    if (double(text) >= 0.95 * double(b.size())) return std::nullopt;
+    auto mean_diff = [&](uint64_t lag) {
+        const uint64_t span = b.size() - lag, samples = std::min<uint64_t>(span, 2048);
+        uint64_t sum = 0;
+        for (uint64_t k = 0; k < samples; ++k)
+        {
+            const uint64_t i = lag + k * span / samples;
+            sum += uint64_t(std::abs(int(b[i]) - int(b[i - lag])));
+        }
+        return double(sum) / double(samples);
+    };
+    uint32_t step = 1;
+    double best = -1;
+    for (uint32_t st = 1; st <= 4; ++st)
+        if (const double d = mean_diff(st); best < 0 || d < best) best = d, step = st;
+    best = -1;
+    uint64_t line = 0;
+    for (uint64_t l = uint64_t(step) * 8; l <= std::min<uint64_t>(b.size() / 2, uint64_t(step) * 16384); l += step)
+        if (const double d = mean_diff(l); best < 0 || d < best) best = d, line = l;
+    if (!line) return std::nullopt;
+    return std::pair<uint32_t, uint32_t>{uint32_t(line / step), step};
+}
+
 FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest, bool pieces)
 {
     auto varint_of = [](uint64_t n) {
@@ -2208,6 +2242,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const bool mix_on = rope_newest >= 7;
     // v25's (a PNG made again from its skeleton): rope_newest 8, made only where v24 would be.
     const bool png_on = rope_newest >= 8 && v21;
+    // v26's (mix-v2 in mix-v1's place): rope_newest 9, made only where v24 would be.
+    const bool mix2_on = rope_newest >= 9;
     bool png_made = false;
     rope_newest = std::min<uint32_t>(rope_newest, 6);
     m.remake_gz = false;
@@ -2878,6 +2914,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     m.roped = m.rope_columns = m.rope_lines = m.rope_groups = m.pieces = m.rope_above = false;
     bool rope_triangle = false; // v23: some rope way rope-wave-v6's
     bool mixed = false;         // v24: some file carried by mixing
+    bool mixed2 = false;        // v26: some file carried by mix-v2
     if (m.compact && rope_seconds >= 0)
     {
         std::unordered_map<std::string, size_t> copies;
@@ -2914,27 +2951,60 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             // against LZMA2's estimate of it, and the whole only where the start comes out at least
             // 3% smaller (mixing takes about 2.5 s a megabyte, coding and decoding alike). Try every
             // way (rope_search_every_wave): every file, whole, of any size, with no test first.
+            // v26: mix-v2 in its place; as a picture where the rope's best wave reads it as one (8-bit
+            // values predicted from the line before, P2 to P4, its line a whole number of steps of 1 to
+            // 4, two lines or more: so W / S pixels wide, S bytes a pixel); else, for a file not text,
+            // as one where a shape guessed from its bytes (picture_shape) makes its start smaller than
+            // as bytes; else as bytes.
             const bool every = rope_search_every_wave();
             if (mix_on && !stop_requested() && (every || (bytes[i].size() >= 4096 && bytes[i].size() <= (size_t(16) << 20))))
             {
                 const timings::Scope t("pack.mix");
                 const size_t sn = std::min<size_t>(bytes[i].size(), size_t(256) << 10);
                 const std::vector<uint8_t> start(bytes[i].begin(), bytes[i].begin() + std::ptrdiff_t(sn));
+                const RopeParams& rp = fw.rope;
+                const bool picture = mix2_on && rp.bits == 8 && rp.phases >= 2 && rp.step >= 1 && rp.step <= 4 && rp.width > rp.step &&
+                                     rp.width % rp.step == 0 && rp.width / rp.step <= (uint32_t(1) << 24) &&
+                                     uint64_t(rp.width) * 2 <= bytes[i].size(); // (two whole lines at least)
+                uint32_t pw = picture ? rp.width / rp.step : 0, pc = picture ? rp.step : 1;
+                // (Else a shape guessed from the bytes alone, weighed on the start against them as bytes.)
+                std::optional<std::pair<uint32_t, uint32_t>> guessed;
+                if (mix2_on && !picture) guessed = picture_shape(bytes[i]);
+                auto code_of = [&](std::span<const uint8_t> f, std::string& way_text, uint32_t w, uint32_t c) {
+                    if (!mix2_on)
+                    {
+                        const MixParams mp = MixParams::for_size(f.size());
+                        way_text = "mix " + mp.text();
+                        return mix_code(f, mp);
+                    }
+                    const Mix2Params mp = Mix2Params::for_size(f.size(), w, c);
+                    way_text = "mix2 " + mp.text();
+                    return mix2_code(f, mp);
+                };
+                uint64_t ms = 0;
+                std::string unused;
+                if (!every || guessed) ms = code_of(start, unused, pw, pc).size();
+                if (guessed)
+                    if (const uint64_t as_picture = code_of(start, unused, guessed->first, guessed->second).size(); as_picture < ms)
+                    {
+                        ms = as_picture;
+                        pw = guessed->first;
+                        pc = guessed->second;
+                    }
                 const bool tried = every || [&] {
-                    const uint64_t ms = mix_code(start, MixParams::for_size(sn)).size();
                     const uint64_t ls = sn == bytes[i].size() ? fw.lzma2 : estimate(start);
                     return ms * 100 < ls * 97;
                 }();
                 if (tried)
                 {
-                    const MixParams mp = MixParams::for_size(bytes[i].size());
-                    std::vector<uint8_t> mc = mix_code(bytes[i], mp);
+                    std::string mix_way;
+                    std::vector<uint8_t> mc = code_of(bytes[i], mix_way, pw, pc);
                     uint64_t len = mc.size(), vl = 1;
                     while (len >>= 7) ++vl;
                     if (mc.size() + vl < best)
                     {
                         best = mc.size() + vl;
-                        way = "mix " + mp.text();
+                        way = mix_way;
                         code = std::move(mc);
                         params = RopeParams{};
                         piece_z[i].clear();
@@ -2946,9 +3016,10 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             rope_params[i] = params;
             files[i]->way = way;
             m.roped = true;
-            if (way.rfind("mix ", 0) == 0)
+            if (way.rfind("mix ", 0) == 0 || way.rfind("mix2 ", 0) == 0)
             {
                 mixed = true; // v24
+                if (way.rfind("mix2 ", 0) == 0) mixed2 = true; // v26
                 continue;
             }
             if (way.rfind("pieces ", 0) == 0)
@@ -2995,7 +3066,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     m.rope_carried.clear();
     uint64_t mix_lengths = 0; // v24: the bytes of mixing's codes' lengths, in the rope stream
     for (size_t i = 0; i < files.size(); ++i)
-        if (files[i]->way.rfind("rope ", 0) == 0 || files[i]->way.rfind("pieces ", 0) == 0 || files[i]->way.rfind("mix ", 0) == 0)
+        if (files[i]->way.rfind("rope ", 0) == 0 || files[i]->way.rfind("pieces ", 0) == 0 || files[i]->way.rfind("mix ", 0) == 0 ||
+            files[i]->way.rfind("mix2 ", 0) == 0)
         {
             uint64_t len = rope_codes[i].size();
             while (len >= 0x80)
@@ -3005,9 +3077,10 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             }
             m.rope_carried.push_back(uint8_t(len));
             m.rope_carried.insert(m.rope_carried.end(), rope_codes[i].begin(), rope_codes[i].end());
-            if (files[i]->way.rfind("mix ", 0) == 0)
+            if (files[i]->way.rfind("mix ", 0) == 0 || files[i]->way.rfind("mix2 ", 0) == 0)
             {
                 ++r.mixed; // v24
+                if (files[i]->way.rfind("mix2 ", 0) == 0) ++r.mixed2, r.mixed2_pictures += files[i]->way.find(" I") != std::string::npos; // v26
                 r.mix_bytes += bytes[i].size();
                 r.mix_carried += rope_codes[i].size();
                 for (uint64_t n = rope_codes[i].size(); n; n >>= 7) ++mix_lengths; // its length's varint
@@ -3162,7 +3235,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // v20: wherever the head is in bytes at the newest, the body is too (and v20's archives allowed).
     const bool had_v21 = m.v21, had_v22 = m.v22;
     const bool had_v25 = m.v25;
-    m.v25 = had_v25 && m.binary;              // (a PNG's skeleton only where the newest instructions are made: above)
+    m.v26 = mixed2;                           // (mix-v2 only where the newest instructions are made: above)
+    m.v25 = (had_v25 && m.binary) || m.v26;   // (a PNG's skeleton only where the newest instructions are made: above)
     m.v24 = mixed || m.v25;                   // (and mixing tried only there too)
     m.v23 = rope_triangle || m.v24; // (rope-wave-v6 is searched only where the newest instructions are made: above)
     if (m.v23 && !m.binary) throw std::logic_error("a rope-wave-v6 way in instructions not in bytes");
@@ -3177,6 +3251,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     r.v23 = m.v23;
     r.v24 = m.v24;
     r.v25 = m.v25;
+    r.v26 = m.v26;
     r.rope_v6 = rope_triangle;
     r.rar_said = rar_said;
     for (const auto& u : m.unpacked) r.rar_remade += !u.program.empty();
@@ -3254,7 +3329,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
     };
     if (r.compact)
     {
-        const char* version = r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : r.more_archives ? kMoreArchivesManifestVersion : r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
+        const char* version = r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : r.more_archives ? kMoreArchivesManifestVersion : r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
                             : r.roped ? kRopeManifestVersion : kCompactManifestVersion;
         if (r.items)
         {
@@ -3267,7 +3342,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         else o << "items     none; " << version << "\n";
         if (r.listing_carried) o << "listing   " << r.listing << " bytes, carried as LZMA2 in " << r.listing_carried << "\n";
         if (r.binary)
-            o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << (r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : kBinaryManifestVersion)
+            o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << (r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : kBinaryManifestVersion)
               << (r.v20 ? "; its body in bytes too" : "") << ")\n";
         if (r.remade) o << "remade    " << r.remade << " archive(s) carried as what they hold, remade exactly on installing (" << version << ")\n";
         if (r.unpacked)
@@ -3283,8 +3358,11 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
             o << "rope      " << r.roped << " file(s) pulled tight by " << (r.rope_v6 ? "rope-wave-v1 to v6" : r.rope_above ? "rope-wave-v1 to v5" : r.rope_groups ? "rope-wave-v1 to v4" : r.rope_lines ? "rope-wave-v1 to v3" : r.rope_columns ? "rope-wave-v1 and v2" : "rope-wave-v1") << " (" << r.rope_bytes << " bytes, carried in " << r.rope_carried
               << "; " << version << ")\n";
         if (r.mixed)
-            o << "mix       " << r.mixed << " file(s) carried by mixing, " << kMixVersion << " (" << r.mix_bytes << " bytes, carried in " << r.mix_carried
-              << "; " << version << ")\n";
+            o << "mix       " << r.mixed << " file(s) carried by mixing, "
+              << (r.mixed2 == 0 ? std::string(kMixVersion)
+                  : r.mixed2 == r.mixed ? std::string(kMix2Version) : std::to_string(r.mixed2) + " by " + kMix2Version)
+              << (r.mixed2_pictures ? ", " + std::to_string(r.mixed2_pictures) + " as picture(s)" : std::string()) << " (" << r.mix_bytes
+              << " bytes, carried in " << r.mix_carried << "; " << version << ")\n";
     }
     else if (r.items && r.item_places)
         o << "items     " << r.items << " file(s) carried as items of Sieve's lines (" << r.item_bytes << " bytes, as " << r.item_places
