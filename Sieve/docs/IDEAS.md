@@ -487,8 +487,9 @@ Recorded so they do not come back around.
 - **Mods as vectors is elegant and overstated.** `base + v` instead of a file overwrite is an
   interesting reframe, but "different axes can never conflict" ignores semantic coupling.
 - **The multiverse cluster and the OS are separate documents.** Roughly forty turns of hypervisor
-  and emulators, and ninety of Framework OS. Two things survive: the category definition file, and
-  the stated position that they deserve recording rather than building.
+  and emulators, and ninety of Framework OS (PotentiaOS since 27 October 2026). Two things survive:
+  the category definition file, and the stated position that they deserve recording rather than
+  building.
 
 ---
 
@@ -892,7 +893,7 @@ the delta over the top. That is "throwing more memory at the problem" put to use
 memory spent to rebuild what can be rebuilt, so that only what cannot is written down.
 
 **Where it pays: the storage footprint.** The aim is not a shorter UV map in use but less to keep:
-if Sieve's back end grows into an operating system and its front end into a game engine, an asset
+if Sieve's back end grows into an operating system (PotentiaOS) and its front end into a game engine, an asset
 is stored as model + texture + UV algorithm (+ delta where needed), and the engine rebuilds the
 UVs when it loads it. Once rebuilt (and cached) they take as much memory as the original UVs did,
 and rebuilding costs some computation and working memory; what is saved is what sits on disk and
@@ -1487,6 +1488,33 @@ by function sections). Edward: "It probably isn't worth it then."
   packer does refers to it.
 - *The anchors folder left out of the release's source:* Edward: "Not a bother to be honest, I
   think it is fine as it is for now."
+
+**17.8 Page scripts in the browser, checked or held back (27 October 2026; set aside for
+PotentiaOS).** What is true now: a script is a file like any other, so its bytes are checked
+already (`sieve site build` gives every `<script src>` its `integrity`, which the browser enforces,
+and the site's table holds each script's hash; an inline script is part of its page's hash). What
+cannot be done is to run them inside the checked viewer, which runs no scripts (so a page with one,
+the test site's gallery among them, is kept plain), or to keep a guarded site's page from starting
+its scripts before the extension's check ends. Two ways were proposed, neither tried:
+- *Checked scripts in the viewer.* The decoded page in a sandboxed frame (no origin of its own, no
+  reach into the extension or the site's cookies), with a Content-Security-Policy whose
+  `script-src` names only the SHA-256 of each script the `.sieve` holds, and every script it loads
+  taken from the same `.sieve`, as its pictures are. A self-contained interactive page could then be
+  a `.sieve` and still run. Its limits: no logging in, no cookies, no calls to its server. Chrome
+  would need trying first, since an extension page's own policy may refuse inline scripts in a
+  frame it makes (a sandboxed extension page with its own policy is the likely way round).
+- *The page held back until checked, in Firefox.* Firefox still lets an extension hold a page's
+  response as it arrives (`webRequest.filterResponseData`): hash the whole of it against the table
+  and pass it on only if it matches, so a changed page's scripts never start. Chrome took that
+  from ordinary extensions in Manifest V3, so there the gap stays. It would need a Firefox build of
+  the extension and a host registration Firefox finds (the install scripts register Chrome,
+  Chromium and Edge only).
+What neither reaches, and so waits for PotentiaOS: pages a server writes as it serves them, scripts
+that fetch whatever they like as they run, and holding everything until it is checked in every
+browser. (Chrome's Isolated Web Apps package a whole site with every file checked, but they rest
+on signing keys, which the web part of Sieve does without.) Edward: "Honestly I think we shouldnt
+bother with either at the moment. I still think we should as a society be looking to compile web
+pages down into real code. So perhaps it may all have to wait on a PotentiaOS."
 
 ## 18. Edward's ideas of 11 October 2026
 
