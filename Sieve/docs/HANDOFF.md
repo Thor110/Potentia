@@ -3947,6 +3947,20 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   (Edward): the remembered table and "Trust the new table" stay; no signing, ever ("I don't trust
   myself or any human being alive to keep a key safe").
 
+### `source.sieve`: the source folder's own instructions (27 October 2026)
+
+Edward: `source.sieve` came out at 49,244,484 bytes with v31, as at v29 and v30. It was still a
+sealed map holding the source's 7z, and v31 could only do better where Sieve made that 7z again
+byte for byte, which it did not on his machine (with a stand-in for the anchors folder here, 58.5
+MB of random bytes, it did: 66,614,143 to 64,742,836, little, the stand-in being incompressible).
+What he expected, and asked for: a plain .sieve of the source folder. `make_release.py` step 7 now
+runs `sieve locate <the committed tree> --installer source.sieve --items` on the same tree the 7z is
+made from, checks it installs back to that tree file for file, and publishes `sieve-source.7z`
+beside it as the baseline (five files with `metrics.txt`). `--map-with` is gone (there is no map
+to make again), and so is `-mmt=1`. Measured on the source without the anchors folder: 6,185,486
+bytes (v30), against the 7z's 8,006,568; step 7 took 4 min 26 s here. `source.sieve` no longer
+names `sieve.exe` and `sieve.sieve`: SHA256SUMS.txt and the release notes do.
+
 ### Every .sieve at the newest, the estimate, temporary and permanent: `sieve-manifest-v31` (27 October 2026)
 
 Edward's three: a .sieve always the latest, the estimate counted as used, and the permanent and
@@ -3974,7 +3988,8 @@ temporary choice (IDEAS §19.88) that was never built.
 - **Measured** (on the source without the anchors folder, which the release's source holds, so not the release's own `source.sieve`,
   about 49 MB at v29 and v30 by Edward's): the 7z (single-threaded) 8,005,603 to 6,189,674; a map holding it 6,189,841,
   installed in 47 s (the 7z made again); a 7z p7zip made on four threads is not made again (so
-  `make_release.py` now passes `-mmt=1`). The small docs 7z: v30 1,081,922 (not unpacked by LZMA2's
+  `make_release.py` passed `-mmt=1` for a while; dropped the same day, when `source.sieve` became the
+  source tree's own instructions, below). The small docs 7z: v30 1,081,922 (not unpacked by LZMA2's
   measure), v31 976,356.
 - **Oracle:** `skm`, members, tree without them; a stored zip made again fully (CI's case).
 

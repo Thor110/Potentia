@@ -4128,7 +4128,9 @@ lost:
     one box as it was). Temporary carries a 7z's or zip's data as the archive's own files (`skm`,
     members `<archive>/<n>`), each its own way, the archive made again exactly; the format as a
     number (below) is still to do. The source's 7z, without the anchors folder: 8,005,603 bytes to 6,189,674, given back byte
-    for byte (made with `-mmt=1`: 7-Zip's LZMA2 on several threads is not made again).
+    for byte (made with `-mmt=1`: 7-Zip's LZMA2 on several threads is not made again). The
+    release's `source.sieve` became the source tree's own instructions the same day (Edward), so it
+    no longer depends on that.
   - **Permanent or temporary (Edward, 25 October 2026; built 27 October 2026, above).** Two choices in place of one
     box. **Optimise archives (permanent):** an archive (a game's `.pak`, say) unpacked and kept as
     `.sieve` for good; installing gives back its files, not the archive (today's `u` lines, as a 7z
@@ -4958,7 +4960,7 @@ measured on this repository's own files.
   the repository's texts they were 4% smaller than 8 MiB. The group size is the packer's, so it
   can be moved without a new version.
 - **Every .sieve at the newest (27 October 2026, Edward: "a .sieve should always be the latest").**
-  Maps (`source.sieve`, sites' tables), sites' pages, training runs, the hallway's saves (its
+  Maps (sites' tables), the release's `source.sieve` (now the source tree's own instructions), sites' pages, training runs, the hallway's saves (its
   degree sample: 7,887 bytes, against 482,495 as v4) and the music favourites all use one helper,
   `add_packed_newest`; the File Locator and `sieve locate` were already newest.
 - **The File Locator's estimate counts the search as used (27 October 2026).** It counted each

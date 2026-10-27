@@ -1,25 +1,30 @@
-# Proof files made again, and the source.sieve figures corrected (27 October 2026)
+# source.sieve: a plain .sieve of the source folder (27 October 2026)
 
-Unzip over the repository root, after the v31 zip. Committed locally (not pushed), on top of v31 (cfe3fc3). No format change.
+Unzip over the repository root. Committed locally (not pushed), on top of your 3e7fecb. No format change; nothing to rebuild (only the release script and docs changed).
 
-## Proof/
-Both files made again with today's Sieve. Each installs back byte for byte, and the oracle gives the degree sample back too.
+## What was wrong
+- **`source.sieve` was still a sealed map holding the 7z.** So it was never smaller than the 7z. v31 could only help where Sieve made that 7z again byte for byte, and on your machine it didn't, hence 49,244,484 bytes.
+- **On a stand-in here** (58.5 MB of random bytes in place of your anchors folder), the 7z was made again and the result went from 66,614,143 to 64,742,836. That's little, because the stand-in can't be compressed.
 
-| | Before | Now |
-| :--- | ---: | ---: |
-| `degrees.sieve` (3,960 files, 13,321,756 bytes) | 8,784 | **7,887** |
-| `welcome to the sieve.sieve` (32 bytes) | 162 | **159** |
+## What the release script does now
+- **Step 7:** `source.sieve` is the committed source tree's own Sieve instructions, newest version (`sieve locate <tree> --installer source.sieve --items`). It's made from the same tree as `sieve-source.7z` and installs as the Sieve folder.
+- **Step 8:** checks that `source.sieve` installs back to that tree, file for file.
+- **Publishing:** five files: `sieve.exe`, `sieve.sieve`, `source.sieve`, `sieve-source.7z` (the baseline, now published) and `metrics.txt`. SHA256SUMS.txt and the release notes list all five.
+- **`--map-with` is gone:** there's no map to make again.
+- **`-mmt=1` is gone:** it was only there so the held 7z could be made again.
+- **`source.sieve` no longer names `sieve.exe` and `sieve.sieve`:** the SHA-256 list and the notes do.
 
-- **Same version:** both are still v20. Items of Sieve's lines plus LZMA2 is all they use, so v21–v31 add nothing to them. The saving comes from today's packer; I haven't traced which change gave it.
-- **The hallway gives the same file:** `hallway --sample-degrees` now writes exactly the same 7,887-byte `degrees.sieve` as `sieve locate --items`.
-- **PROOF.md:** the two sizes are updated. Your 7z figure (22,961) and your install timing are your own measurements, so I left them. The 7z here (p7zip 16.02, one thread) came to 22,567.
+## Measured here
+On the source without your anchors folder (749 files, 38,415,528 bytes):
 
-## source.sieve: what my figures measured
-- **What they were:** my "about 8.0 MB before, 6,189,841 after" was a stand-in. It was the source from git with your anchors folder left out (38.4 MB of files, a 7z of 8,005,603 bytes), because I keep that folder out of measurements.
-- **The release's own** holds the anchors folder too: about 49 MB at v29 and v30, by your figures. Its maps were still v18 then, as you thought. I can't say what v31 makes of it without measuring that folder.
-- **Corrected:** SPECIFICATIONS, IDEAS, HANDOFF and the comment in `make_release.py` now say which source the figures are for.
+| | Bytes |
+| :--- | ---: |
+| `sieve-source.7z` | 8,006,568 |
+| `source.sieve` (v30) | 6,185,486 |
+
+- **Time:** step 7, with its install check, took 4 min 26 s here.
+- **Your release:** it holds the anchors folder too (58.5 MB in 6 files), so your figure will be larger. How much depends on how those files pack.
 
 ## Files
-- `Proof/`: PROOF.md, degrees.sieve, welcome to the sieve.sieve
-- `Sieve/docs/`: SPECIFICATIONS.md, IDEAS.md, HANDOFF.md
-- `Sieve/tools/make_release.py` (a comment only)
+- `Sieve/tools/make_release.py`
+- `Sieve/docs/`: SPECIFICATIONS.md, IDEAS.md, HANDOFF.md, SIEVE-INSTALL-USAGE.md

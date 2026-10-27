@@ -225,12 +225,13 @@ Publish the four files. GitHub adds the tagged commit's source zip by itself.
 as the last commit has it (`git archive` of the Sieve folder alone, run from the repository's top
 folder), 7-zipped. So it holds exactly what is committed, the release script included, and none
 of the build's or the checks' scratch. The script warns if there are changes not committed, since
-they would not be in it, so commit first. The published `sieve.map` names `sieve.exe` and
-`sieve.sieve` (found beside it) and **holds** `sieve-source.7z` (its bytes inside the map,
-`sieve-map-v2`), so the map is the size of the compressed source. Publish three files: the
-installer, the instructions and the map. The whole Potentia repository, Sieve included, is the
-release's own "Source code" download on GitHub. (`--map-with FILE` can make the map again to name
-another file as well.)
+they would not be in it, so commit first. The same tree is made into `source.sieve`, Sieve
+instructions of the newest version (`sieve locate --items`), which install as the Sieve folder and
+are checked to give it back file for file; the 7z is published beside it, the baseline it is
+compared with. (Until 27 October 2026 the published map, `sieve.map` and then `source.sieve`, held
+the 7z itself, so it was no smaller than the 7z.) Publish five files: the installer, the
+instructions, `source.sieve`, `sieve-source.7z` and `metrics.txt`. The whole Potentia repository,
+Sieve included, is the release's own "Source code" download on GitHub.
 
 The installers install the runnable folder directly, and are smaller than the 7z route made them
 (measured above). `--seven-zip` makes them the old way, carrying a solid 7z of the folder, so the
