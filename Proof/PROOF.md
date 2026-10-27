@@ -16,13 +16,13 @@ There is also room for further reductions when the initial overhead instructions
 Included is a sample file that takes 360 files from every single dimension.
 
 degrees.sieve              every dimension at every whole degree 0-359: 3,960 files,
-                           13,321,756 bytes -> 8,784 bytes (7z of the folder: 22,961)
+                           13,321,756 bytes -> 7,887 bytes (7z of the folder: 22,961)
 
 Note : These files are essentially just noise and finding a perfect reduction is incredibly unlikely within a reasonable amount of time.
 
 As well as a file that is somewhat representative of the information floor where file sizes increase due to including the overhead.
 
-welcome to the sieve.sieve the starting page (32 bytes) -> 162 bytes
+welcome to the sieve.sieve the starting page (32 bytes) -> 159 bytes
 
 The overhead also includes a file hash for verification.
 

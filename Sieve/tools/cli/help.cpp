@@ -984,8 +984,8 @@ const std::vector<Page>& pages()
          "file is cut into pieces, LZMA2 taking what repeats and the rope what is unevenly spread (a\n"
          "phone's photo: its metadata and its picture); v14, v17, v19 and v20 where archives are\n"
          "optimised (--optimise-archives); and v20 at the newest, the listing's head and body in\n"
-         "bytes rather than text. (--v19 down to --v5 make the older ones; v18, a map, is made by\n"
-         "sieve map.)\n"
+         "bytes rather than text. (--v30 down to --v5 make the older ones. Maps, sites' pages and\n"
+         "tables, training runs and the hallway's saves are made as the newest instructions are too.)\n"
          "\n"
          "--weigh weighs every file against its own address: its number among the binary line's\n"
          "survivors, where the settings file's [binary] filters rank and it passes them; and, where\n"
@@ -1041,6 +1041,8 @@ const std::vector<Page>& pages()
                                   "(v25): one stb_image_write made (as the hallway's screenshots are) as its\n"
                                   "pixels, made again by it; any other from its skeleton, its deflate by preflate\n"
                                   "and its chunks' CRCs worked out again. Off unless given."},
+          {"--v30", "As sieve-manifest-v30 at newest: an archive made again from its skeleton carries what it\n"
+                    "holds as one (v21's way), not as its own files (v31)."},
           {"--v29", "As sieve-manifest-v29 at newest: no groups of files mixed together (v30)."},
           {"--v28", "As sieve-manifest-v28 at newest: the files carried together packed by LZMA2, never mixed (v29)."},
           {"--v27", "As sieve-manifest-v27 at newest: mixing with sse-v1's stages (mix-v2, mix-v3), not mix-v4 (v28)."},
@@ -1048,6 +1050,11 @@ const std::vector<Page>& pages()
           {"--v25", "As sieve-manifest-v25 at newest: mixing by mix-v1, not mix-v2 (v26)."},
           {"--v24", "As sieve-manifest-v24 at newest: no PNG made again from its skeleton (v25)."},
           {"--optimise-archives", "The old name of --optimise-compressed (once Optimise Archive Formats); the same."},
+          {"--compressed-temporary", "Optimise Compressed Formats, temporary (v31): an archive or compressed file only made again\n"
+                                     "exactly on installing (what it holds carried, the original given back); one Sieve cannot make\n"
+                                     "again is left as it is. With --compressed-permanent, or as --optimise-compressed: either."},
+          {"--compressed-permanent", "Optimise Compressed Formats, permanent (v31): an archive or compressed file carried as what it\n"
+                                     "holds, and installed so (its files, not the archive), even where Sieve could make it again."},
           {"--v23", "As sieve-manifest-v23 at newest: no file carried by mixing (mix-v1, v24)."},
           {"--v22", "As sieve-manifest-v22 at newest: the rope's ways at most rope-wave-v5's (no triangle:\n"
                     "v23)."},
@@ -1166,7 +1173,8 @@ const std::vector<Page>& pages()
          "walk to it on the binary line. A sealed map is not changed by the tools (the release map\n"
          "is sealed). The text is canonical.\n"
          "\n"
-         "A map is written as Sieve instructions (sieve-manifest-v18): its held files are their\n"
+         "A map is written as the newest Sieve instructions (sieve-manifest-v18 at the least, the\n"
+         "version its graph part came in), compressed formats optimised: its held files are their\n"
          "files, put back by sieve install, and its text is their graph part. Any .sieve reads as a\n"
          "map: one without a graph part as the map of the tree it carries. Older .map files\n"
          "(sieve-map-v1, v2) are still read, and --out turns one into a .sieve; nothing writes .map\n"
@@ -1198,7 +1206,7 @@ const std::vector<Page>& pages()
          "version from sieve-manifest-v2 (every file read back from its address) to the newest,\n"
          "files packed by LZMA2, pulled tight by the rope, cut into pieces, or carried as items of\n"
          "Sieve's lines (made again from their places, as sieve-install does too),\n"
-         "and archives remade or given back as their contents (it says so). A map (v18) installs\n"
+         "and archives remade or given back as their contents (it says so). A map installs\n"
          "the files it holds and says how many it only names. An installer program made with\n"
          "--program installs the same way, and so does an installer's manifest itself.\n"
          "Every file is checked against its size and SHA-256 before anything is written, so a bad\n"

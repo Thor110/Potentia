@@ -3947,6 +3947,37 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   (Edward): the remembered table and "Trust the new table" stay; no signing, ever ("I don't trust
   myself or any human being alive to keep a key safe").
 
+### Every .sieve at the newest, the estimate, temporary and permanent: `sieve-manifest-v31` (27 October 2026)
+
+Edward's three: a .sieve always the latest, the estimate counted as used, and the permanent and
+temporary choice (IDEAS §19.88) that was never built.
+- **Newest everywhere:** `add_packed_newest` (items.cpp) for maps (`map_sieve.cpp`, temporary only,
+  so a held archive comes back byte for byte), sites (`site.cpp`, no items), training runs
+  (`train.cpp`), the hallway's saves (`item_save.cpp`) and music favourites (`music.cpp`, staged to
+  a temporary folder; read with `installable_manifest`, so v3 ones still read). `kNewestRope`
+  (pack.hpp) replaces the literal levels. `sieve map` reports the version it wrote (from the head).
+  CI: a map of two 9,000-byte texts is v30 (mixed together); a site's page is mix-v4. Step 10's
+  degree sample is now smaller than v5, so its check compares v5 against an explicit `--v4`.
+- **Estimate:** `rope_search_spent()` (rope_wave) counts the searches' seconds taken and given;
+  the File Locator learns the share of packing's and weighing's limits used (wall time past the
+  sampled work, steps 1 to 3 giving the speed ratio), keeps it in `[locator] search_share_packing`
+  / `_weighing` (-1 until measured), and ticks the estimate once a second while packing. Under the
+  graph: `estimate: X` while it works, `took: Y` after, beside `Z across`.
+- **v31:** `skm <members> <skeleton> <way>`; members `<archive>/<n>` flagged `ManifestEntry::member`
+  at parse, joined after every other file (and after derivations) and made again through the `sk`
+  remaker; kept in `Manifest::parse`'s result (the packer's read-back compares contents),
+  left out of the tree's SHA-256, and stripped by `manifest_of_installer`/`installable_manifest`
+  (`without_members`), which every installer and the map read through. Packer: `as_members` for
+  7z (read_7z) and zip (zip_entries) where the data after the skeleton is exactly their files in
+  order. `set_compressed_modes(temporary, permanent)` (pack.hpp) is the run's choice; the File
+  Locator's two boxes set it per job; `sieve locate` from the flags. `mixed_estimate` in `worth`.
+- **Measured** (on the source without the anchors folder, which the release's source holds, so not the release's own `source.sieve`,
+  about 49 MB at v29 and v30 by Edward's): the 7z (single-threaded) 8,005,603 to 6,189,674; a map holding it 6,189,841,
+  installed in 47 s (the 7z made again); a 7z p7zip made on four threads is not made again (so
+  `make_release.py` now passes `-mmt=1`). The small docs 7z: v30 1,081,922 (not unpacked by LZMA2's
+  measure), v31 976,356.
+- **Oracle:** `skm`, members, tree without them; a stored zip made again fully (CI's case).
+
 ### Groups of files mixed together: `sieve-manifest-v30` (27 October 2026)
 
 The next step after v29 (Edward: "Make a start on the next step").

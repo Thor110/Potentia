@@ -241,6 +241,22 @@ void add_packed_items(Manifest& m, const std::filesystem::path& root, const Args
                version >= 8 && trim && pieces && rope_newest >= 5 && binary, gzip, gzip && v20, gzip && v20 && v21, gzip && v20 && v21 && v22);
 }
 
+void add_packed_newest(Manifest& m, const std::filesystem::path& root, PackReport* report, double rope_seconds, bool optimise_compressed,
+                       bool items)
+{
+    if (items)
+    {
+        add_packed_items(m, root, Args{}, report, 8, false, rope_seconds, kNewestRope, true, true, optimise_compressed);
+        return;
+    }
+    // Nothing carried as items: no lines in the listing.
+    m.minimal = m.compact = true;
+    m.lines.clear();
+    m.line_widths.clear();
+    m.line_codings.clear();
+    add_packed(m, root, report, nullptr, false, nullptr, rope_seconds, kNewestRope, true, true, optimise_compressed, true, true, true, true, true);
+}
+
 const MixDictionary& mix_word_list(uint32_t list)
 {
     // v27: a SCOWL list from the dictionary registry, its SHA-256 checked, made ready once a run.

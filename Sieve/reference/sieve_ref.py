@@ -6654,8 +6654,8 @@ def v7_item(spec, place, code, path, items_from):
 
 
 ARCHIVE_FORMATS = [None, "xz", "gz", "bz2", "zst", "lz4", "br", "lzma", "lz", "7z", "zip", "rar", "cab", "iso", "lha", "cpio", "ar",
-                   "warc", "sk", "stb"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
-RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3, "sk": 3, "stb": 7}
+                   "warc", "sk", "stb", "skm"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
+RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3, "sk": 3, "stb": 7, "skm": 3}
 
 
 def listing_from_bytes(b):
@@ -6756,9 +6756,10 @@ def v16_text(data):
     the streams' sizes and dictionaries' bytes, the tree's SHA-256 as 32 bytes, the body, packed or
     not) read back into v15's text, followed by what follows it. Anything else is returned as it is."""
     import lzma
-    if not (len(data) > 5 and data[:5] == b"sieve" and 16 <= data[5] <= 30):
+    if not (len(data) > 5 and data[:5] == b"sieve" and 16 <= data[5] <= 31):
         return data
-    v30 = data[5] == 30  # v29 whose files may be mixed together in groups
+    v31 = data[5] == 31  # v30 whose archives may be made again from a skeleton and their files apart
+    v30 = data[5] == 30 or v31  # v29 whose files may be mixed together in groups
     v29 = data[5] == 29 or v30  # v28 whose lzma2 stream may be mixed (mix-v4)
     v28 = data[5] == 28 or v29  # v27 whose files may be carried by mix-v4
     v27 = data[5] == 27 or v28  # v26 whose files may be carried by mix-v3
@@ -6810,7 +6811,7 @@ def v16_text(data):
         sys.exit("v16: flags this reader does not know")
     if v18 and not flags & 0x40:
         sys.exit("v18 without its graph part")
-    head = b"sieve-manifest-v30\n" if v30 else b"sieve-manifest-v29\n" if v29 else b"sieve-manifest-v28\n" if v28 else b"sieve-manifest-v27\n" if v27 else b"sieve-manifest-v26\n" if v26 else b"sieve-manifest-v25\n" if v25 else b"sieve-manifest-v24\n" if v24 else b"sieve-manifest-v23\n" if v23 else b"sieve-manifest-v22\n" if v22 else b"sieve-manifest-v21\n" if v21 else b"sieve-manifest-v20\n" if v20 else b"sieve-manifest-v19\n" if v19 else b"sieve-manifest-v18\n" if v18 else b"sieve-manifest-v17\n" if v17 else b"sieve-manifest-v15\n"
+    head = b"sieve-manifest-v31\n" if v31 else b"sieve-manifest-v30\n" if v30 else b"sieve-manifest-v29\n" if v29 else b"sieve-manifest-v28\n" if v28 else b"sieve-manifest-v27\n" if v27 else b"sieve-manifest-v26\n" if v26 else b"sieve-manifest-v25\n" if v25 else b"sieve-manifest-v24\n" if v24 else b"sieve-manifest-v23\n" if v23 else b"sieve-manifest-v22\n" if v22 else b"sieve-manifest-v21\n" if v21 else b"sieve-manifest-v20\n" if v20 else b"sieve-manifest-v19\n" if v19 else b"sieve-manifest-v18\n" if v18 else b"sieve-manifest-v17\n" if v17 else b"sieve-manifest-v15\n"
     if flags & 1:
         head += b"root " + take(varint()) + b"\n"
     for bit, name in ((2, b"x86"), (4, b"lzma2"), (8, b"items")):
@@ -6870,7 +6871,8 @@ def cmd_unpack_v7(args, data):
     # v11 with no line for an empty items or rope stream, and the lzma2 stream perhaps carried as it is
     # v13 with archives optimised: an xz file remade exactly from what it holds, or an archive carried
     # as its contents ("u" lines after the tree's)
-    v30 = lines[0] == "sieve-manifest-v30"  # v29 whose files may be mixed together in groups (mix-v4)
+    v31 = lines[0] == "sieve-manifest-v31"  # v30 whose archives may be made again from a skeleton and their files apart
+    v30 = lines[0] == "sieve-manifest-v30" or v31  # v29 whose files may be mixed together in groups (mix-v4)
     v29 = lines[0] == "sieve-manifest-v29" or v30  # v28 whose lzma2 stream may be mixed (mix-v4)
     v28 = lines[0] == "sieve-manifest-v28" or v29  # v27 whose files may be carried by mix-v4
     v27 = lines[0] == "sieve-manifest-v27" or v28  # v26 whose files may be carried by mix-v3
@@ -6994,6 +6996,19 @@ def cmd_unpack_v7(args, data):
     got, xa, pa, ia, ra = [None] * len(files), 0, 0, 0, 0
     group = None  # v30: the open group of files mixed together: its bytes, how many are given out, its first file
     remakes = {}
+    # v31: each archive made again from its skeleton and its members, the files listed under its own
+    # path ("<archive>/<n>"), as many as its recipe says: not files of the tree.
+    members = {}
+    for i, (path, size, sha, way) in enumerate(files):
+        if v31 and way.startswith("skm "):
+            n = way.split(" ")[1]
+            if not n.isdigit():
+                sys.exit(f"{path}: an archive's members not counted as Sieve counts them")
+            mine = [k for k, f in enumerate(files) if f[0].startswith(path + "/")]
+            if len(mine) != int(n) or any(k in members for k in mine) or any(files[k][3].startswith("skm ") for k in mine):
+                sys.exit(f"{path} does not list the members its recipe counts")
+            for k in mine:
+                members[k] = i
     for i, (path, size, sha, way) in enumerate(files):
         if v25 and way.startswith("stb "):
             # "stb <level> <filter> <width> <height> <components> <inner size> <way>": a PNG that
@@ -7005,6 +7020,14 @@ def cmd_unpack_v7(args, data):
                 sys.exit(f"{path}: a PNG recipe Sieve does not write")
             remakes[i] = ("stb", size)
             size = int(n)
+        if v31 and way.startswith("skm "):
+            # "skm <members> <skeleton size> <way>": a gzip, zip or 7z as a skeleton, what it holds its members.
+            _, n, skel, way = way.split(" ", 3)
+            if not skel.isdigit() or \
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn"):
+                sys.exit(f"{path}: a skeleton recipe Sieve does not write")
+            remakes[i] = ("skm", int(skel), size)
+            size = int(skel)
         if v21 and way.startswith("sk "):
             # "sk <skeleton size> <inner size> <way>": a gzip, zip or 7z as a skeleton and the data it holds.
             _, skel, n, way = way.split(" ", 3)
@@ -7207,9 +7230,10 @@ def cmd_unpack_v7(args, data):
         if r[0] == "stb":  # v25: its pixels given, at their size; the PNG not made (no stb_image_write here)
             unchecked.add(i)
             continue
-        if r[0] == "sk":  # v21: the skeleton read and checked; made again where it is bytes and data alone
+        if r[0] in ("sk", "skm"):  # v21: the skeleton read and checked; made again where it is bytes and data alone
             _, skel, size = r
-            made = skeleton_remake(got[i], skel, files[i][0])
+            inner = got[i] + b"".join(got[k] for k in sorted(members) if members[k] == i) if r[0] == "skm" else got[i]  # v31: its members after it
+            made = skeleton_remake(inner, skel, files[i][0])
             if made is None:
                 unchecked.add(i)
                 continue
@@ -7265,8 +7289,9 @@ def cmd_unpack_v7(args, data):
             print(f"not made again by the oracle (preflate, the LZMA SDK or stb_image_write): {files[k][0]}; the tree's SHA-256 not checked")
     else:
         h = hashlib.sha256()
-        for (path, size, sha, way), b in zip(files, got):
-            h.update((path + "\n" + hashlib.sha256(b).hexdigest() + "\n").encode("utf-8"))
+        for k, ((path, size, sha, way), b) in enumerate(zip(files, got)):
+            if k not in members:  # (v31: an archive's members are not files of the tree)
+                h.update((path + "\n" + hashlib.sha256(b).hexdigest() + "\n").encode("utf-8"))
         if h.hexdigest() != tree:
             sys.exit("the tree's SHA-256 differs")
     if args.to:
@@ -7274,7 +7299,7 @@ def cmd_unpack_v7(args, data):
             if len(e) == 1:
                 os.makedirs(os.path.join(args.to, e[0]), exist_ok=True)
         for k, ((path, size, sha, way), b) in enumerate(zip(files, got)):
-            if k in unchecked:
+            if k in unchecked or k in members:
                 continue
             target = os.path.join(args.to, path)
             os.makedirs(os.path.dirname(target) or ".", exist_ok=True)
@@ -7376,8 +7401,8 @@ def instructions_bytes(data):
     """A manifest's bytes, or Sieve instructions as a .sieve holds them: their manifest's place on the
     binary line as raw bytes (binary-v1, §12.1), read back here to the manifest (every shorter file
     first: the count of files shorter than L bytes is (256**L - 1) / 255)."""
-    # (A head in bytes: "sieve" and its version's byte, 16 to 30.)
-    if data.startswith(b"sieve-manifest-v") or (len(data) > 5 and data[:5] == b"sieve" and 16 <= data[5] <= 30):
+    # (A head in bytes: "sieve" and its version's byte, 16 to 31.)
+    if data.startswith(b"sieve-manifest-v") or (len(data) > 5 and data[:5] == b"sieve" and 16 <= data[5] <= 31):
         return data
     v = int.from_bytes(data, "big")
     length = max(0, len(data) - 1)
@@ -7403,7 +7428,7 @@ def cmd_unpack(args):
     if data.startswith((b"sieve-manifest-v7\n", b"sieve-manifest-v8\n", b"sieve-manifest-v9\n", b"sieve-manifest-v10\n",
                         b"sieve-manifest-v11\n", b"sieve-manifest-v12\n", b"sieve-manifest-v13\n", b"sieve-manifest-v14\n",
                         b"sieve-manifest-v15\n", b"sieve-manifest-v17\n", b"sieve-manifest-v18\n", b"sieve-manifest-v19\n",
-                                b"sieve-manifest-v20\n", b"sieve-manifest-v21\n", b"sieve-manifest-v22\n", b"sieve-manifest-v23\n", b"sieve-manifest-v24\n", b"sieve-manifest-v25\n", b"sieve-manifest-v26\n", b"sieve-manifest-v27\n", b"sieve-manifest-v28\n", b"sieve-manifest-v29\n", b"sieve-manifest-v30\n")):
+                                b"sieve-manifest-v20\n", b"sieve-manifest-v21\n", b"sieve-manifest-v22\n", b"sieve-manifest-v23\n", b"sieve-manifest-v24\n", b"sieve-manifest-v25\n", b"sieve-manifest-v26\n", b"sieve-manifest-v27\n", b"sieve-manifest-v28\n", b"sieve-manifest-v29\n", b"sieve-manifest-v30\n", b"sieve-manifest-v31\n")):
         return cmd_unpack_v7(args, data)
     end = data.index(b"\nend\n") + len(b"\nend\n")
     lines = data[:end].decode("utf-8").split("\n")[:-1]
@@ -7529,7 +7554,7 @@ def cmd_graph(args):
     """The graph part of Sieve instructions that are a map (sieve-manifest-v18, SPECIFICATIONS §12.3):
     the map's text, every line after its "g<TAB>", as it was written."""
     data = v16_text(instructions_bytes(open(args.file, "rb").read()))
-    if not data.startswith((b"sieve-manifest-v18\n", b"sieve-manifest-v19\n", b"sieve-manifest-v20\n", b"sieve-manifest-v21\n", b"sieve-manifest-v22\n", b"sieve-manifest-v23\n", b"sieve-manifest-v24\n", b"sieve-manifest-v25\n", b"sieve-manifest-v26\n", b"sieve-manifest-v27\n", b"sieve-manifest-v28\n", b"sieve-manifest-v29\n", b"sieve-manifest-v30\n")) or b"\ng\t" not in data:
+    if not data.startswith((b"sieve-manifest-v18\n", b"sieve-manifest-v19\n", b"sieve-manifest-v20\n", b"sieve-manifest-v21\n", b"sieve-manifest-v22\n", b"sieve-manifest-v23\n", b"sieve-manifest-v24\n", b"sieve-manifest-v25\n", b"sieve-manifest-v26\n", b"sieve-manifest-v27\n", b"sieve-manifest-v28\n", b"sieve-manifest-v29\n", b"sieve-manifest-v30\n", b"sieve-manifest-v31\n")) or b"\ng\t" not in data:
         sys.exit("not a map: no graph part")
     end = data.index(b"\nend\n") + 1
     out = b"".join(l[2:] + b"\n" for l in data[:end].split(b"\n") if l.startswith(b"g\t"))

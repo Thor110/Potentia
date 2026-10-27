@@ -122,8 +122,16 @@ struct AppSettings
     bool locator_search_run = false;
     bool locator_every_wave = false; // the rope's search through every wave, even on packed bytes
     bool locator_decoding = false;   // Prioritise Decoding Speed: no file mixed
-    // "Optimise Compressed Formats" ([locator] optimise_archives, the key's old name kept): off unless ticked.
+    // "Optimise Compressed Formats" ([locator] optimise_archives, the key's old name kept): off unless
+    // ticked; read, both halves below ticked (written: either is).
     bool locator_archives = false;
+    // v31: which of its two halves are ticked: temporary (made again exactly on installing) and
+    // permanent (carried as what it holds); [locator] compressed_temporary, compressed_permanent. An
+    // older file's optimise_archives = 1 ticks both (what the one box did).
+    bool locator_temporary = false, locator_permanent = false;
+    // The share of the search's limit runs here have used, packing and weighing (-1: not measured
+    // yet): the File Locator's estimate counts that much of the search, not all of it.
+    double locator_share_packing = -1, locator_share_weighing = -1;
     // The setup menu's settings ([setup]): every line's shape and the GLOBAL settings, as they
     // were when the setup menu last changed them. Its ffmpeg is not kept here but below.
     Settings setup;

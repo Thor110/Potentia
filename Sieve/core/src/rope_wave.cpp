@@ -880,7 +880,30 @@ std::atomic<bool> g_every_wave{false};
 std::mutex g_cache_mx;
 std::map<std::string, RopeSearch> g_cache;
 
+// The searches' time since the last reset (under g_cache_mx).
+RopeSearchSpent g_spent;
+
+void count_search(double seconds, double took)
+{
+    std::lock_guard<std::mutex> lock(g_cache_mx);
+    ++g_spent.searches;
+    g_spent.took += took;
+    if (seconds > 0) g_spent.given += seconds;
+}
+
 } // namespace
+
+RopeSearchSpent rope_search_spent()
+{
+    std::lock_guard<std::mutex> lock(g_cache_mx);
+    return g_spent;
+}
+
+void reset_rope_search_spent()
+{
+    std::lock_guard<std::mutex> lock(g_cache_mx);
+    g_spent = {};
+}
 
 void set_rope_search_every_wave(bool every) { g_every_wave = every; }
 bool rope_search_every_wave() { return g_every_wave.load(std::memory_order_relaxed); }
@@ -895,9 +918,17 @@ RopeSearch rope_search(std::span<const uint8_t> file, double seconds, uint32_t n
     const std::string key = Sha256::hex(h.finish()) + t;
     {
         std::lock_guard<std::mutex> lock(g_cache_mx);
-        if (auto it = g_cache.find(key); it != g_cache.end()) return it->second;
+        if (auto it = g_cache.find(key); it != g_cache.end())
+        {
+            const RopeSearch r = it->second;
+            ++g_spent.searches;
+            if (seconds > 0) g_spent.given += seconds;
+            return r;
+        }
     }
+    const auto start = std::chrono::steady_clock::now();
     RopeSearch r = rope_search_uncached(file, seconds, newest);
+    count_search(seconds, std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count());
     if (stop_requested()) return r; // a search cut short is not the answer to keep for next time
     std::lock_guard<std::mutex> lock(g_cache_mx);
     if (g_cache.size() >= 4096) g_cache.clear();

@@ -3,6 +3,7 @@
 #include "cli/locate.hpp"
 #include "cli/map.hpp"
 #include "cli/map_sieve.hpp"
+#include "cli/items.hpp"
 #include "cli/pack.hpp"
 #include "cli/web_host.hpp"
 
@@ -216,7 +217,7 @@ const Attr* resource_of(const Tag& t, const std::string& h)
     return t.attr("href");
 }
 
-// The site's table: every file named by its SHA-256 (sieve-manifest-v18), at the site's top as
+// The site's table: every file named by its SHA-256 (a map: the newest instructions), at the site's top as
 // index.sieve, so the extension and a crawler know where to look (25 October 2026; site.sieve
 // before, which check still reads).
 constexpr const char* kTable = "index.sieve";
@@ -293,7 +294,7 @@ std::optional<std::string> stated_of(const std::string& integrity)
     return std::nullopt;
 }
 
-// A file as Sieve instructions, the newest version, nothing carried as items of Sieve's lines (the
+// A file as Sieve instructions, the newest version (add_packed_newest), nothing carried as items of Sieve's lines (the
 // extension shows none: they need lines and models to be made again).
 void make_sieve(const fs::path& file, const fs::path& out, double seconds)
 {
@@ -302,7 +303,7 @@ void make_sieve(const fs::path& file, const fs::path& out, double seconds)
     m.with_contents = true;
     m.minimal = m.compact = true;
     m.lines.clear();
-    add_packed(m, file.parent_path(), nullptr, nullptr, false, nullptr, seconds, 5, true, true, false, true, true);
+    add_packed_newest(m, file.parent_path(), nullptr, seconds, false, false);
     fs::create_directories(out.parent_path());
     write_address_file(out, binary_address(m.file()), false);
 }
@@ -654,7 +655,7 @@ SiteReport build_site(const fs::path& src_in, const fs::path& out_in, const Site
         write_text(out / path_of(f), h);
     }
 
-    // The site's map: every file, named by its SHA-256 (sieve-manifest-v18); its own hash is the root.
+    // The site's map: every file, named by its SHA-256 (the newest instructions); its own hash is the root.
     Map map = map_of_folder(out, name_of(rel_of(src)));
     map.name = name_of(rel_of(src));
     write_map_instructions(map, out / kTable, 0);

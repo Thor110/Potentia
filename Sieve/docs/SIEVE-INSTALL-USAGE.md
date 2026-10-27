@@ -147,8 +147,8 @@ into memory first.
 
 The list is one table in the code (`archive_kinds`, `tools/cli/pack.cpp`); `sieve-install
 --archive-extensions` prints its names, which is what the right-click menu is made from, so a kind
-added there reaches the menu when `install_context.bat` is run again. (Optimise Compressed Formats,
-which carries archives inside `.sieve` files, is another thing: what it does with each kind is in
+added there reaches the menu when `install_context.bat` is run again. (The File Locator's Compressed
+formats boxes, temporary and permanent, which carry archives inside `.sieve` files, are another thing: what it does with each kind is in
 `sieve help locate` and SPECIFICATIONS §12.2.)
 
 **A RAR made again by your own `rar` (sieve-manifest-v22, 25 October 2026).** With Optimise

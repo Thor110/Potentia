@@ -990,9 +990,8 @@ int cmd_version()
     std::cout << "\n  other lines             " << kCompositionVersion << " (tracks, movies), " << kBookSpaceVersion << " (books), " << kBinarySpaceVersion
               << " (binary)\n                          " << kModelSpaceVersion << " (models), " << kWorldSpaceVersion << " (worlds), " << kAiSpaceVersion << " (ai, "
               << kCanonicalModelVersion << ")\n"
-              << "  instructions (.sieve)   " << kGraphManifestVersion << " (maps); installers " << kBinaryManifestVersion << ", or "
-              << kGzipManifestVersion << " where a gzip is remade, " << kMoreArchivesManifestVersion << " where a bzip2 or zstd file is; "
-              << kNewestArchivesManifestVersion << " newest (the listing in bytes)\n"
+              << "  instructions (.sieve)   " << kSkeletonMembersManifestVersion << " newest (installers, maps, sites, training runs); each made\n"
+              << "                          only as new as what it holds needs (" << kBinaryManifestVersion << " at the least, " << kGraphManifestVersion << " for an old map)\n"
               << "  packing                 " << kRopeWaveAboveVersion << " (the tightened rope), " << kDigitHistogramVersion << ", " << kFileKindsVersion << "\n"
               << "  records                 " << kBookFormat2 << " (books), " << kMapVersion2 << " (maps, read)\n"
               << "  vault                   " << vault::kVersion << ", " << vault::kDecoders << ", " << cdc::kVersion << ", " << vault::kChunkMatch << ", "
@@ -2441,13 +2440,18 @@ void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackRepor
         }
         if (used != v.size() || !(rope_seconds >= 0)) throw std::invalid_argument("--search-per-file: seconds, 0 or more (0: no limit): " + v);
     }
+    // v31: --compressed-temporary (made again exactly, else left as it is) or --compressed-permanent
+    // (carried as what it holds); either alone asks Optimise Compressed Formats; both, or
+    // --optimise-compressed, made again where Sieve can, else carried as what it holds.
+    const bool temporary = a.has("compressed-temporary"), permanent = a.has("compressed-permanent");
+    set_compressed_modes(temporary || !permanent, permanent || !temporary);
     add_packed_items(m, root, a, &rep, a.has("v5") ? 5 : a.has("v6") ? 6 : a.has("v7") ? 7 : 8, a.has("item-hashes") || a.has("file-hashes"),
                      rope_seconds, a.has("v8") ? 1 : a.has("v9") ? 2 : a.has("v10") ? 3 : a.has("v11") || a.has("v12") || a.has("v13") || a.has("v14") ? 4 :
                      a.has("v15") || a.has("v16") || a.has("v19") || a.has("v20") || a.has("v21") || a.has("v22") ? 5 :
-                     a.has("v23") ? 6 : a.has("v24") ? 7 : a.has("v25") ? 8 : a.has("v26") ? 9 : a.has("v27") ? 10 : a.has("v28") ? 11 : a.has("v29") ? 12 : 13,
+                     a.has("v23") ? 6 : a.has("v24") ? 7 : a.has("v25") ? 8 : a.has("v26") ? 9 : a.has("v27") ? 10 : a.has("v28") ? 11 : a.has("v29") ? 12 : a.has("v30") ? 13 : kNewestRope,
                      !(a.has("v8") || a.has("v9") || a.has("v10") || a.has("v11")),
                      !(a.has("v8") || a.has("v9") || a.has("v10") || a.has("v11") || a.has("v12")),
-                     (a.has("optimise-compressed") || a.has("optimise-archives")) && !a.has("v13"), !a.has("v15"), !a.has("v16"),
+                     (a.has("optimise-compressed") || a.has("optimise-archives") || temporary || permanent) && !a.has("v13"), !a.has("v15"), !a.has("v16"),
                      !a.has("v19"), !a.has("v20") && !a.has("v19"), !a.has("v21") && !a.has("v20") && !a.has("v19"));
 }
 
@@ -2636,6 +2640,7 @@ int cmd_locate(const Args& a)
         const std::string o = a.get("installer");
         write_address_file(fs::path(std::u8string(o.begin(), o.end())), iaddr, a.has("hex"));
         *info << "installer " << o << ": the address of the installer's manifest (" << (!(m.with_contents ? m.packed : inst.packed) ? "v3: the listing, then every file's bytes"
+                                    : (m.with_contents ? m.v31 : inst.v31) ? "v31: as v30, and archives made again from their skeleton with their files carried apart"
                                     : (m.with_contents ? m.v30 : inst.v30) ? "v30: as v29, and files mixed together in groups, decoded at once"
                                     : (m.with_contents ? m.v29 : inst.v29) ? "v29: as v28, and the files carried together mixed"
                                     : (m.with_contents ? m.v28 : inst.v28) ? "v28: as v27, and files carried by mix-v4 (no SSE stages: quicker to decode)"
@@ -2874,8 +2879,15 @@ int cmd_map(const Args& a)
     *info << "map       " << m.name << (m.sealed ? " (sealed)" : "") << ": " << m.nodes.size() << " nodes (" << files << " files, " << held
           << " held; " << m.nodes.size() - files << " folders), " << m.edges.size() << " edges\n";
     if (!written.empty())
-        *info << "wrote     " << a.get("out") << ": Sieve instructions (" << kGraphManifestVersion << "), " << written.size() << " bytes\n"
+    {
+        // Its version from its head alone (the binary head's byte 5, else the text's first line).
+        const std::vector<uint8_t> mb = file_at(read_address_file(path_of(a.get("out")), false));
+        const std::string version = mb.size() > 5 && std::equal(mb.begin(), mb.begin() + 5, "sieve")
+                                        ? "sieve-manifest-v" + std::to_string(mb[5])
+                                        : std::string(mb.begin(), std::find(mb.begin(), mb.end(), uint8_t('\n')));
+        *info << "wrote     " << a.get("out") << ": Sieve instructions (" << version << "), " << written.size() << " bytes\n"
               << "sha256    " << sha256_hex(written) << "  (the map's identity)\n";
+    }
     if (a.has("dot")) *info << "wrote     " << a.get("dot") << " (Graphviz DOT)\n";
     if (a.has("graphml")) *info << "wrote     " << a.get("graphml") << " (GraphML)\n";
     return 0;

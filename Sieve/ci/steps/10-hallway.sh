@@ -258,11 +258,14 @@ build/sieve install degrees.sieve --to deg_inst > /dev/null
 diff -r degrees deg_inst
 # The same as sieve-manifest-v5 (--items): the pages, pictures, films and melodies carried as
 # their lines and places, made again on installing, every file the same; smaller than v4;
-# and sieve-install, the full installer, makes them again too.
+# and sieve-install, the full installer, makes them again too. (The hallway's own sample is
+# the newest instructions since 27 October 2026, smaller than both.)
 build/sieve locate degrees --installer degrees-v5.sieve --items --v5 --manifest degrees-v5.manifest | tr -d '\r' | q "^items     1368 file(s) carried as items"
 python reference/sieve_ref.py unpack degrees-v5.manifest --items-from degrees --to deg_oracle5 > /dev/null
 diff -r degrees deg_oracle5
-[ "$(wc -c < degrees-v5.sieve)" -lt "$(wc -c < degrees2.sieve)" ]
+build/sieve locate degrees --installer degrees-v4.sieve --v4 > /dev/null
+[ "$(wc -c < degrees-v5.sieve)" -lt "$(wc -c < degrees-v4.sieve)" ]
+[ "$(wc -c < degrees2.sieve)" -lt "$(wc -c < degrees-v5.sieve)" ]
 build/sieve install degrees-v5.sieve --to deg_inst5 > /dev/null
 diff -r degrees deg_inst5
 build/sieve-install degrees-v5.sieve --to deg_inst5b --yes

@@ -96,8 +96,8 @@ public:
     // between runs as the search's time is:
     // off unless ticked; ticked, an archive is remade exactly from what it holds where Sieve can,
     // else carried as its contents, where either is clearly smaller. Set once, at start.
-    static void remember_archives(bool on, std::function<void(bool)> changed);
-    void set_archives(bool on); // scripted runs (--optimise-compressed)
+    static void remember_archives(bool temporary, bool permanent, std::function<void(bool, bool)> changed);
+    void set_archives(bool temporary, bool permanent); // scripted runs (--optimise-compressed, --compressed-temporary, --compressed-permanent)
     // "Try every way" ([locator] search_every_wave), kept between runs: the search's shortcuts off
     // (the rope's early stops on text and on bytes already packed; mixing's size limits and its test
     // on a file's start). It can only make the instructions smaller, never larger; it takes longer.
@@ -107,6 +107,10 @@ public:
     // by mixing (0.3 to 1 MB/s to decode, 15 to 60 times slower than the other ways), so the
     // instructions install quickly; larger. Its state is the packer's own (sieve::prioritise_decoding).
     static void remember_decoding(std::function<void(bool)> changed);
+    // The share of the search's time a run has really used, packing and weighing, learned on this
+    // machine ([locator] search_share_packing, search_share_weighing; 1 until a run has measured
+    // it): what the first estimate counts of the search, rather than all of it. Set once, at start.
+    static void remember_shares(double packing, double weighing, std::function<void(double, double)> changed);
 
     // From the system dialogs' callbacks (any thread): what was chosen, handed to the next frame.
     void picked(const std::string& path);
@@ -136,7 +140,7 @@ private:
         std::optional<sieve::cli::Manifest> instructions;
         sieve::BigUint instructions_address;
         double made_rope_seconds = 0;
-        bool made_archives = false;
+        int made_archives = 0; // the Compressed formats boxes it was made with (1 temporary, 2 permanent)
         bool made_every = false;    // Try every way, as it was when they were made
         bool made_decoding = false; // Prioritise Decoding Speed, as it was
     };
@@ -173,9 +177,18 @@ private:
     // ones took against their prediction; the first estimate kept, to say beside the time taken.
     std::array<double, 6> est_steps_{}; // address and SHA-256, zip, 7z, the instructions, compared, the weighing
     bool est_on_ = false;
-    double est_first_ = -1, est_pack_search_ = 0, est_weigh_search_ = 0;
-    std::chrono::steady_clock::time_point est_work_start_{};
+    // The search's limits for packing and for weighing (seconds, all of it), and the share of them a
+    // run uses as learned (est_share_*); est_ratio_: this run's speed against the samples, from the
+    // steps with no search in them (1 to 3); est_done_: the steps done.
+    double est_first_ = -1, est_pack_search_ = 0, est_weigh_search_ = 0, est_share_pack_ = 1, est_share_weigh_ = 1, est_ratio_ = 1;
+    size_t est_done_ = 0;
+    std::chrono::steady_clock::time_point est_work_start_{}, est_pack_start_{}, est_weigh_start_{}, est_ticked_{};
+    double est_pack_share_seen_ = -1; // this run's packing: the share of its search's limit it used
+    double last_took_ = -1;           // the last job's time, shown under the graph once it is done
     void refine_estimate(size_t steps_done); // after step steps_done - 1 is done; under no lock
+    void tick_estimate();                    // while packing: the search's part again, as its files are done; under no lock
+    void estimate_now(double remaining);     // under mx_
+    void learn_shares(bool stopped);         // at the job's end; under mx_
     void start_job(bool new_graph = true);
     // The graph of the best so far: each new best of a step (its bytes as a share of what it
     // packs), handed over by the worker (under mx_) and drawn onto graph_ as it comes, then let go,
@@ -211,7 +224,10 @@ private:
     // How long tailoring may search for shorter addresses (cli::WeighBudget): seconds a file and
     // for the whole run, 0 for no limit. Each moves the other, through the files counted: the run's
     // is the file's times the files, and the file's is the run's shared out among them.
-    bool optimise_archives_ = false; // the box, off by default
+    // Compressed formats (v31; Optimise Compressed Formats before): temporary, made again exactly on
+    // installing; permanent, carried as what it holds. Both off by default; both ticked, either.
+    bool temporary_ = false, permanent_ = false;
+    int compressed() const { return (temporary_ ? 1 : 0) | (permanent_ ? 2 : 0); }
     double search_per_file_ = 0, search_total_ = 0;
     bool search_by_total_ = false; // which was set last: the other follows it
     size_t files_counted() const;

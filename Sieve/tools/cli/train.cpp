@@ -2,6 +2,7 @@
 #include "cli/train.hpp"
 
 #include "cli/locate.hpp"
+#include "cli/items.hpp"
 #include "cli/pack.hpp"
 #include "sieve/sha256.hpp"
 
@@ -449,7 +450,7 @@ double measure_training_step(const training::Recipe& rc, const std::vector<Train
 void pack_training_run(const fs::path& folder, const fs::path& sieve_file)
 {
     Manifest m = walk_folder(folder);
-    add_packed(m, folder);
+    add_packed_newest(m, folder);
     write_address_file(sieve_file, binary_address(m.file()), false);
 }
 

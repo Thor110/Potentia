@@ -2205,6 +2205,18 @@ std::vector<uint8_t> place_bytes_of(const std::string& hex, uint32_t width)
 
 } // namespace
 
+namespace {
+std::atomic<bool> g_compressed_temporary{true}, g_compressed_permanent{true};
+} // namespace
+
+void set_compressed_modes(bool temporary, bool permanent)
+{
+    g_compressed_temporary = temporary;
+    g_compressed_permanent = permanent;
+}
+bool compressed_temporary() { return g_compressed_temporary.load(std::memory_order_relaxed); }
+bool compressed_permanent() { return g_compressed_permanent.load(std::memory_order_relaxed); }
+
 void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const ItemFinder* items, bool item_hashes, const PlaceCoder* coder,
                 double rope_seconds, uint32_t rope_newest, bool trim, bool pieces, bool optimise_archives, bool binary, bool gzip,
                 bool v20_on, bool v21_on, bool v22_on)
@@ -2261,6 +2273,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const bool mix_stream_on = rope_newest >= 12;
     // v30's (files mixed together in groups, decoded at once): rope_newest 13, in v29's together's place.
     const bool mix_groups_on = rope_newest >= 13;
+    // v31's: an archive made again from its skeleton with what it holds carried as its own files
+    // (each its own way, in the groups), and whether unpacking pays judged by mixing too.
+    const bool members_on = rope_newest >= 14 && v21;
     bool png_made = false;
     rope_newest = std::min<uint32_t>(rope_newest, 6);
     m.remake_gz = false;
@@ -2274,6 +2289,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // or remade, smaller or not, so the CI can test each reader on the small archives it has.)
     const char* always_env = std::getenv("SIEVE_ARCHIVES_ALWAYS");
     const bool archives_always = always_env && std::string(always_env) == "1";
+    // v31: made again exactly (temporary), carried as what it holds (permanent), or either.
+    const bool temporary_ok = compressed_temporary(), permanent_ok = compressed_permanent();
     if (optimise_archives && m.compact)
     {
         std::unordered_set<std::string> taken;
@@ -2318,9 +2335,27 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             // against what it holds, packed by LZMA2 or pulled tight by the rope (the search is
             // remembered, so packing it later does not search again), its names and recipe counted.
             const uint64_t as_is = std::min<uint64_t>(b.size(), estimate(b));
+            // v31: what mixing makes of what it holds, timed on 1 MiB in 8 stretches evenly across it
+            // (LZMA2's estimate understates what Sieve does with a folder of text: the source's 7z,
+            // made by 7-Zip at its strongest, was left as it was by LZMA2's measure, though mixed
+            // its files came to 23% less; 27 October 2026).
+            auto mixed_estimate = [&](const std::vector<uint8_t>& inner) -> uint64_t {
+                if (!members_on || prioritise_decoding() || inner.size() < (size_t(64) << 10)) return ~uint64_t(0);
+                const size_t each = std::min<size_t>(inner.size(), size_t(1) << 20) / 8;
+                std::vector<uint8_t> s;
+                for (size_t k = 0; k < 8; ++k)
+                {
+                    const size_t at = (inner.size() - each) * k / 7;
+                    s.insert(s.end(), inner.begin() + std::ptrdiff_t(at), inner.begin() + std::ptrdiff_t(at + each));
+                }
+                // Mixing's gain over LZMA2 on the sample, applied to LZMA2's estimate of the whole (a
+                // sample alone misses what repeats across the whole, which LZMA2's dictionary finds).
+                const double code = double(mix4_code(s, Mix4Params::for_size(s.size())).size()), lz = double(std::max<uint64_t>(1, estimate(s)));
+                return uint64_t(double(estimate(inner)) * std::min(1.0, code / lz));
+            };
             auto worth = [&](const std::vector<uint8_t>& inner, uint64_t extra, bool one_file = true) {
                 if (archives_always) return true; // SIEVE_ARCHIVES_ALWAYS: every archive read, for testing the readers
-                uint64_t cost = estimate(inner);
+                uint64_t cost = std::min(estimate(inner), mixed_estimate(inner));
                 if (one_file && rope_seconds >= 0 && inner.size() >= 512) cost = std::min<uint64_t>(cost, uint64_t(rope_search(inner, rope_seconds, rope_newest).estimate));
                 // By a clear margin (64 bytes and 0.5%): the estimate is LZMA2 at preset 6, the stream
                 // preset 9, and a near thing is not worth giving up the archive as it was.
@@ -2331,14 +2366,14 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             auto single = [&](const char* format, std::optional<std::vector<uint8_t>> inner, const std::string& recipe, const std::string& name,
                               uint64_t extra) {
                 if (!inner || !worth(*inner, extra)) return false;
-                if (!recipe.empty())
+                if (!recipe.empty() && temporary_ok)
                 {
                     ManifestEntry r = e;
                     r.remake = recipe;
                     add_file(r, std::move(*inner), std::move(b));
                     return true;
                 }
-                if (taken.count(name)) return false;
+                if (!permanent_ok || taken.count(name)) return false; // (temporary only: what Sieve cannot make again is left as it is)
                 taken.insert(name);
                 m.unpacked.push_back({format, e.path, name, e.size});
                 ManifestEntry c = e;
@@ -2349,6 +2384,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             };
             // An archive of files (7z, zip): carried as its contents, in a folder named after it.
             auto contents = [&](const char* format, std::vector<sieve::install::InMemory> all, const char* ext) {
+                if (!permanent_ok) return false; // (temporary only: an archive is made again or left as it is)
                 const std::string folder = contents_name(e.path, ext);
                 std::vector<uint8_t> joined;
                 uint64_t names = 0;
@@ -2380,6 +2416,38 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     add_file(fe, std::move(in.bytes), {});
                 }
                 if (one) m.root = folder; // one archive located alone: its contents' folder is the root
+                return true;
+            };
+            // v31: an archive made again from its skeleton, what it holds carried as its own files: the
+            // archive's entry carries the skeleton alone ("skm <members> <skeleton size>"), each file
+            // follows it as "<archive>/<n>" (n from 1, as many digits as the last, so their order is the
+            // archive's), each carried its own way. Only where the data after the skeleton is the
+            // archive's files, one after another, as it lists them; else as one (v21's "sk").
+            auto as_members = [&](const std::vector<uint8_t>& whole, size_t skeleton, const std::vector<sieve::install::InMemory>& all) {
+                if (!members_on) return false;
+                std::vector<std::pair<size_t, size_t>> parts;
+                size_t at = skeleton;
+                for (const auto& in : all)
+                {
+                    if (in.entry.dir || in.bytes.empty()) continue;
+                    if (whole.size() - at < in.bytes.size() || !std::equal(in.bytes.begin(), in.bytes.end(), whole.begin() + std::ptrdiff_t(at))) return false;
+                    parts.emplace_back(at, in.bytes.size());
+                    at += in.bytes.size();
+                }
+                if (at != whole.size() || parts.size() < 2) return false;
+                ManifestEntry r = e;
+                r.remake = "skm " + std::to_string(parts.size()) + " " + std::to_string(skeleton);
+                add_file(r, std::vector<uint8_t>(whole.begin(), whole.begin() + std::ptrdiff_t(skeleton)), std::move(b));
+                const size_t digits = std::to_string(parts.size()).size();
+                for (size_t k = 0; k < parts.size(); ++k)
+                {
+                    std::string n = std::to_string(k + 1);
+                    n.insert(0, digits - n.size(), '0');
+                    ManifestEntry me;
+                    me.path = e.path + "/" + n;
+                    me.member = true;
+                    add_file(me, std::vector<uint8_t>(whole.begin() + std::ptrdiff_t(parts[k].first), whole.begin() + std::ptrdiff_t(parts[k].first + parts[k].second)), {});
+                }
                 return true;
             };
             // v25: a PNG made again exactly from its skeleton: its IDATs' deflate by preflate, their CRCs
@@ -2497,12 +2565,14 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             // (Its contents weighed first, as cheaply as that is done for them: where they would come out
             // no smaller, the search for the levels that make its blocks again is not worth starting.)
             bool sevenz_worth = false;
-            if (v21 && sieve::install::is_7z(b))
+            std::vector<sieve::install::InMemory> held7z; // (its files, for v31's members)
+            if (v21 && temporary_ok && sieve::install::is_7z(b))
             {
                 try
                 {
+                    held7z = sieve::install::read_7z(b);
                     std::vector<uint8_t> joined;
-                    for (const auto& in : sieve::install::read_7z(b)) joined.insert(joined.end(), in.bytes.begin(), in.bytes.end());
+                    for (const auto& in : held7z) joined.insert(joined.end(), in.bytes.begin(), in.bytes.end());
                     sevenz_worth = !joined.empty() && worth(joined, 40, false);
                 }
                 catch (const std::exception&)
@@ -2516,7 +2586,11 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     size_t skeleton = 0;
                     std::vector<uint8_t> whole = sk->inner(skeleton);
                     const std::string r = "sk " + std::to_string(skeleton) + " " + std::to_string(whole.size());
-                    if (deflate_skeleton_remake(whole, skeleton) == b && single("7z", std::move(whole), r, contents_name(e.path, ".7z"), 40)) continue;
+                    if (deflate_skeleton_remake(whole, skeleton) == b)
+                    {
+                        if (as_members(whole, skeleton, held7z)) continue;
+                        if (single("7z", std::move(whole), r, contents_name(e.path, ".7z"), 40)) continue;
+                    }
                 }
             if (sieve::install::is_7z(b))
             {
@@ -2532,20 +2606,29 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 if (contents("7z", std::move(all), ".7z")) continue;
             }
             // v21: a zip made again exactly from its skeleton and the data it holds; else, as before, its contents.
-            if (v21 && b.size() >= 4 && b[0] == 'P' && b[1] == 'K' && b[2] == 3 && b[3] == 4)
+            if (v21 && temporary_ok && b.size() >= 4 && b[0] == 'P' && b[1] == 'K' && b[2] == 3 && b[3] == 4)
                 if (auto sk = zip_skeleton(b))
                 {
                     size_t skeleton = 0;
                     std::vector<uint8_t> whole = sk->inner(skeleton);
                     const std::string r = "sk " + std::to_string(skeleton) + " " + std::to_string(whole.size());
-                    if (deflate_skeleton_remake(whole, skeleton) == b && single("zip", std::move(whole), r, contents_name(e.path, ".zip"), 40)) continue;
+                    if (deflate_skeleton_remake(whole, skeleton) == b)
+                    {
+                        if (members_on)
+                            if (auto held = zip_entries(b))
+                            {
+                                std::vector<uint8_t> data(whole.begin() + std::ptrdiff_t(skeleton), whole.end());
+                                if (worth(data, 40, false) && as_members(whole, skeleton, *held)) continue;
+                            }
+                        if (single("zip", std::move(whole), r, contents_name(e.path, ".zip"), 40)) continue;
+                    }
                 }
             if (auto all = zip_entries(b))
                 if (contents("zip", std::move(*all), ".zip")) continue;
             // v22: a RAR 5 made again by the machine's own rar, where it gives the archive back byte for
             // byte from its files with their times; carried as its contents, with the recipe. Else, as
             // before, its contents alone.
-            if (v22 && b.size() >= 8 && std::memcmp(b.data(), "Rar!\x1A\x07\x01\x00", 8) == 0)
+            if (v22 && temporary_ok && b.size() >= 8 && std::memcmp(b.data(), "Rar!\x1A\x07\x01\x00", 8) == 0)
             {
                 std::string why, version, how, switches;
                 std::optional<std::filesystem::path> program;
@@ -3575,7 +3658,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // v20: wherever the head is in bytes at the newest, the body is too (and v20's archives allowed).
     const bool had_v21 = m.v21, had_v22 = m.v22;
     const bool had_v25 = m.v25;
-    m.v30 = r.mix_groups > 0;                 // (groups only where the newest instructions are made: above)
+    // v31: some archive made again from its skeleton and its members (only where the newest are made: above).
+    m.v31 = m.binary && std::any_of(m.entries.begin(), m.entries.end(), [](const ManifestEntry& x) { return x.remake.rfind("skm ", 0) == 0; });
+    m.v30 = r.mix_groups > 0 || m.v31;        // (groups only where the newest instructions are made: above)
     m.v29 = !m.lzma2.mixed.empty() || m.v30;  // (the stream mixed only where the newest instructions are made: above)
     m.v28 = mixed4 || m.v29;                  // (mix-v4 only where the newest instructions are made: above)
     m.v27 = mixed3 || m.v28;                  // (mix-v3 only where the newest instructions are made: above)
@@ -3600,6 +3685,12 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     r.v28 = m.v28;
     r.v29 = m.v29;
     r.v30 = m.v30;
+    r.v31 = m.v31;
+    for (const ManifestEntry& x : m.entries)
+    {
+        r.member_archives += x.remake.rfind("skm ", 0) == 0;
+        r.members += x.member;
+    }
     r.rope_v6 = rope_triangle;
     r.rar_said = rar_said;
     for (const auto& u : m.unpacked) r.rar_remade += !u.program.empty();
@@ -3677,7 +3768,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
     };
     if (r.compact)
     {
-        const char* version = r.v30 ? kMixGroupsManifestVersion : r.v29 ? kMixedStreamManifestVersion : r.v28 ? kMix4ManifestVersion : r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : r.more_archives ? kMoreArchivesManifestVersion : r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
+        const char* version = r.v31 ? kSkeletonMembersManifestVersion : r.v30 ? kMixGroupsManifestVersion : r.v29 ? kMixedStreamManifestVersion : r.v28 ? kMix4ManifestVersion : r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : r.more_archives ? kMoreArchivesManifestVersion : r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
                             : r.roped ? kRopeManifestVersion : kCompactManifestVersion;
         if (r.items)
         {
@@ -3690,9 +3781,12 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         else o << "items     none; " << version << "\n";
         if (r.listing_carried) o << "listing   " << r.listing << " bytes, carried as LZMA2 in " << r.listing_carried << "\n";
         if (r.binary)
-            o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << (r.v30 ? kMixGroupsManifestVersion : r.v29 ? kMixedStreamManifestVersion : r.v28 ? kMix4ManifestVersion : r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : kBinaryManifestVersion)
+            o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << (r.v31 ? kSkeletonMembersManifestVersion : r.v30 ? kMixGroupsManifestVersion : r.v29 ? kMixedStreamManifestVersion : r.v28 ? kMix4ManifestVersion : r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : kBinaryManifestVersion)
               << (r.v20 ? "; its body in bytes too" : "") << ")\n";
         if (r.remade) o << "remade    " << r.remade << " archive(s) carried as what they hold, remade exactly on installing (" << version << ")\n";
+        if (r.member_archives)
+            o << "members   " << r.member_archives << " of them made again from their skeleton and their " << r.members
+              << " file(s), each carried its own way (" << kSkeletonMembersManifestVersion << ")\n";
         if (r.unpacked)
             o << "unpacked  " << r.unpacked << " archive(s) carried as their contents, not as the archives (Optimise Compressed Formats; " << version
               << ")\n";

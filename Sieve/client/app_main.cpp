@@ -196,8 +196,10 @@ const char* kUsage =
     "                      with --main-menu: the main menu's, with no world to walk to)\n"
     "  --search-per-file S, --search-total S   the File Locator's search for shorter addresses: seconds a\n"
     "                      file, or for the run (one of them; the other follows, the files counted)\n"
-    "  --optimise-compressed the File Locator's Optimise Compressed Formats ticked, for this run\n"
+    "  --optimise-compressed the File Locator's Compressed formats boxes both ticked, for this run\n"
     "                      (--optimise-archives, its old name, works too)\n"
+    "  --compressed-temporary its Compressed formats: temporary ticked (made again exactly), for this run\n"
+    "  --compressed-permanent its Compressed formats: permanent ticked (carried as what it holds), for this run\n"
     "  --install FILE --install-to DIR   the File Locator's install, at once\n"
     "  --harness           a picture of the AI Training Harness (--training-dir DIR: its runs; --script KEYS:\n"
     "                      keys and =typed text, each step waiting for a training to finish)\n"
@@ -778,10 +780,21 @@ int run(const Args& a)
         app.locator_decoding = on;
         app.save(app_path);
     });
-    FileLocator::remember_archives(app.locator_archives || a.has("optimise-archives") || a.has("optimise-compressed"), shot ? std::function<void(bool)>() : [&app, app_path](bool on) {
-        app.locator_archives = on;
+    FileLocator::remember_shares(app.locator_share_packing, app.locator_share_weighing, shot ? std::function<void(double, double)>() : [&app, app_path](double p, double w) {
+        app.locator_share_packing = p;
+        app.locator_share_weighing = w;
         app.save(app_path);
     });
+    {
+        // The Compressed formats boxes (v31): --optimise-compressed ticks both, as the one box was.
+        const bool both = a.has("optimise-archives") || a.has("optimise-compressed");
+        FileLocator::remember_archives(app.locator_temporary || both || a.has("compressed-temporary"), app.locator_permanent || both || a.has("compressed-permanent"),
+                                       shot ? std::function<void(bool, bool)>() : [&app, app_path](bool temporary, bool permanent) {
+                                           app.locator_temporary = temporary;
+                                           app.locator_permanent = permanent;
+                                           app.save(app_path);
+                                       });
+    }
     if (!shot && !a.has("size")) { w = app.resolution.w; h = app.resolution.h; }
     if (shot && app.resolution.w <= 0) app.resolution = {w, h}; // the screenshot's own size
     set_language(a.has("language") ? a.get("language") : app.language);

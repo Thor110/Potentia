@@ -249,7 +249,7 @@ rm -f defaults.ini again.ini
 $H --write-settings defaults.ini | q "wrote defaults.ini"
 $H --settings defaults.ini --write-settings again.ini > /dev/null
 cmp defaults.ini again.ini
-for k in "^\[setup\]" "^\[paths\]" "^ffmpeg = *;" "^binary_length = 32 " "^ai_width = 16 " "^items_per_wall = 128 " "^title_length = 32 " "^\[locator\]" "^search_seconds = 0 " "^search_for = file "; do grep -q "$k" defaults.ini; done
+for k in "^\[setup\]" "^\[paths\]" "^ffmpeg = *;" "^binary_length = 32 " "^ai_width = 16 " "^items_per_wall = 128 " "^title_length = 32 " "^\[locator\]" "^search_seconds = 0 " "^search_for = file " "^search_share_packing = -1 " "^search_share_weighing = -1 "; do grep -q "$k" defaults.ini; done
 if grep -v "^;" defaults.ini | grep -v "^\[" | grep -v "^$" | grep -v " ; "; then exit 1; fi
 # An older file gains the entries it lacks and keeps its own values; a value a setting
 # cannot have leaves it at its default.

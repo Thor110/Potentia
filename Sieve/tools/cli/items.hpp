@@ -64,9 +64,15 @@ void use_item_maker();
 // wrote it) or 5 (in hex, without the AI line). The lines are those item_lines makes of `a`. Shared
 // by `sieve locate --items` and the File Locator.
 void add_packed_items(Manifest& m, const std::filesystem::path& root, const Args& a, PackReport* report = nullptr, int version = 8,
-                      bool item_hashes = false, double rope_seconds = 0, uint32_t rope_newest = 13, bool trim = true,
+                      bool item_hashes = false, double rope_seconds = 0, uint32_t rope_newest = kNewestRope, bool trim = true,
                       bool pieces = true, bool optimise_archives = false, bool binary = true,
                       bool gzip = true, bool v20 = true, bool v21 = true, bool v22 = true);
+// Instructions of the newest version for a folder, for whatever makes them other than `sieve
+// locate` and the File Locator (maps, sites, training runs, the hallway's saves): with `items`, the
+// items of Sieve's default lines carried as their places; the rope searched `rope_seconds` a file
+// (0: no limit); compressed formats optimised where `optimise_compressed`.
+void add_packed_newest(Manifest& m, const std::filesystem::path& root, PackReport* report = nullptr, double rope_seconds = 0,
+                       bool optimise_compressed = false, bool items = true);
 // v7: an AI model's place (hex) on `ai` coded by digit-histogram-v1, its tensors the segments, as
 // the fewest bytes that hold the number; and back.
 std::vector<uint8_t> ai_place_code(const AiSpace& ai, const std::string& place);

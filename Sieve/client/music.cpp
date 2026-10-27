@@ -14,6 +14,7 @@
 #include "strings.hpp"
 
 #include "cli/lines.hpp"
+#include "cli/items.hpp"
 #include "cli/locate.hpp"
 #include "sieve/audio.hpp"
 #include "sieve/composition.hpp"
@@ -1049,7 +1050,7 @@ void MusicPlayer::save() const
     out << o.str();
 }
 
-// Favourites: Sieve instructions (a sieve-manifest-v3, as its address) holding favourites.tsv
+// Favourites: Sieve instructions (the newest version, as its address) holding favourites.tsv
 // (one line a melody: file, mode, when, notes, its note set and, for a track, its units) and
 // each melody as a MIDI file.
 void MusicPlayer::write_favourites(const std::vector<MusicMelody>& favs) const
@@ -1077,22 +1078,36 @@ void MusicPlayer::write_favourites(const std::vector<MusicMelody>& favs) const
                  (favs[i].units ? "\ttracks:" + std::to_string(favs[i].units) : std::string()) + "\n";
     }
     files.emplace_back("favourites.tsv", std::vector<uint8_t>(index.begin(), index.end()));
-    std::sort(files.begin(), files.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
-    sieve::cli::Manifest m;
-    m.root = "favourites";
-    m.with_contents = true;
-    for (const auto& [name, bytes] : files)
+    // Laid out as a folder named favourites, then packed as the newest instructions are (a moment's
+    // search a file: they are small, and written whenever one is added or taken away).
+    std::random_device rd;
+    const fs::path work = fs::temp_directory_path() / ("sieve-favourites-" + std::to_string(rd()) + std::to_string(rd()));
+    const fs::path dir = work / "favourites";
+    struct Cleanup
     {
-        sieve::cli::ManifestEntry e;
-        e.path = name;
-        e.size = bytes.size();
-        e.sha256 = sieve::cli::sha256_hex(bytes);
-        m.entries.push_back(e);
-        m.files += 1;
-        m.bytes += bytes.size();
-        m.contents.insert(m.contents.end(), bytes.begin(), bytes.end());
+        fs::path p;
+        ~Cleanup()
+        {
+            std::error_code e;
+            fs::remove_all(p, e);
+        }
+    } cleanup{work};
+    try
+    {
+        fs::create_directories(dir);
+        for (const auto& [name, bytes] : files)
+        {
+            std::ofstream f(dir / name, std::ios::binary);
+            f.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+        }
+        sieve::cli::Manifest m = sieve::cli::walk_folder(dir);
+        sieve::cli::add_packed_newest(m, dir, nullptr, 0.25, false, false);
+        sieve::cli::write_address_file(fav_path_, sieve::cli::binary_address(m.file()), false);
     }
-    sieve::cli::write_address_file(fav_path_, sieve::cli::binary_address(m.file()), false);
+    catch (const std::exception&)
+    {
+        // (Not saved this time: the ones before stay as they were.)
+    }
 }
 
 void MusicPlayer::read_favourites()
@@ -1101,8 +1116,8 @@ void MusicPlayer::read_favourites()
     if (!fs::exists(fav_path_, ec)) return;
     try
     {
-        const std::vector<uint8_t> whole = sieve::cli::file_at(sieve::cli::read_address_file(fav_path_, false));
-        const sieve::cli::Manifest m = sieve::cli::Manifest::parse(std::string_view(reinterpret_cast<const char*>(whole.data()), whole.size()));
+        // Any version: those written before 27 October 2026 are sieve-manifest-v3, the newer the newest.
+        const sieve::cli::Manifest m = sieve::cli::installable_manifest(fav_path_, false);
         size_t at = 0;
         for (const auto& e : m.entries)
         {

@@ -48,7 +48,7 @@ cli::Manifest file_instructions(const fs::path& p, const std::vector<uint8_t>& b
     cli::Manifest m = cli::manifest_of_file(p);
     m.contents = bytes;
     m.with_contents = true;
-    cli::add_packed_items(m, p.parent_path(), items, nullptr, 8, false, rope_seconds, 13, true, true, archives);
+    cli::add_packed_items(m, p.parent_path(), items, nullptr, 8, false, rope_seconds, cli::kNewestRope, true, true, archives);
     return m;
 }
 
@@ -226,8 +226,8 @@ KeptSearch& kept_search()
 
 struct KeptArchives
 {
-    bool on = false;
-    std::function<void(bool)> changed;
+    bool temporary = false, permanent = false;
+    std::function<void(bool, bool)> changed;
 };
 KeptArchives& kept_archives()
 {
@@ -242,7 +242,10 @@ void FileLocator::remember_search(double seconds, bool total, std::function<void
     kept_search() = {seconds, total, std::move(changed)};
 }
 
-void FileLocator::remember_archives(bool on, std::function<void(bool)> changed) { kept_archives() = {on, std::move(changed)}; }
+void FileLocator::remember_archives(bool temporary, bool permanent, std::function<void(bool, bool)> changed)
+{
+    kept_archives() = {temporary, permanent, std::move(changed)};
+}
 
 namespace {
 std::function<void(bool)>& kept_every()
@@ -264,13 +267,42 @@ std::function<void(bool)>& kept_decoding()
 
 void FileLocator::remember_decoding(std::function<void(bool)> changed) { kept_decoding() = std::move(changed); }
 
-void FileLocator::set_archives(bool on) { optimise_archives_ = on; }
+namespace {
+// The search's shares as learned (-1: not measured yet), and what saves them.
+struct KeptShares
+{
+    double packing = -1, weighing = -1;
+    std::function<void(double, double)> changed;
+};
+KeptShares& kept_shares()
+{
+    static KeptShares k;
+    return k;
+}
+} // namespace
+
+void FileLocator::remember_shares(double packing, double weighing, std::function<void(double, double)> changed)
+{
+    kept_shares() = {packing, weighing, std::move(changed)};
+}
+
+void FileLocator::set_archives(bool temporary, bool permanent)
+{
+    temporary_ = temporary;
+    permanent_ = permanent;
+}
+
+namespace {
+// The packer's own modes from the boxes (both, or neither ticked: either way; cli/pack.hpp).
+void use_compressed(int boxes) { cli::set_compressed_modes(boxes != 2, boxes != 1); }
+} // namespace
 
 FileLocator::FileLocator(SDL_Window* window, SDL_Renderer* renderer, Host host) : window_(window), r_(renderer), host_(std::move(host))
 {
     (kept_search().total ? search_total_ : search_per_file_) = kept_search().seconds;
     search_by_total_ = kept_search().total;
-    optimise_archives_ = kept_archives().on;
+    temporary_ = kept_archives().temporary;
+    permanent_ = kept_archives().permanent;
     relink_search();
 }
 
@@ -315,27 +347,71 @@ void FileLocator::start_job(bool new_graph)
     job_started_ = Clock::now();
     job_estimate_ = -1;
     job_estimate_text_.clear();
+    last_took_ = -1;
+    est_done_ = 0;
     progress_.clear();
     stop_ = 0;
 }
 
 // After the reading's first `steps_done` steps (est_steps_), the estimate again: the time so far,
-// and what is left as the samples predict it, times how long the done steps took against their
-// prediction (the search's time taken out, as far as it can have been spent), with the searches'
-// time still to come. Locks mx_ itself.
+// and what is left as the samples predict it, times this run's speed against them (est_ratio_, from
+// the steps with no search in them: 1 to 3), with the searches' time still to come as learned
+// (est_share_*: the share of their limits a run uses). Locks mx_ itself.
 void FileLocator::refine_estimate(size_t steps_done)
 {
     std::lock_guard<std::mutex> lock(mx_);
     if (!est_on_ || steps_done == 0 || steps_done > est_steps_.size()) return;
-    double predicted = 0, left = 0;
-    for (size_t k = 0; k < est_steps_.size(); ++k) (k < steps_done ? predicted : left) += est_steps_[k];
-    double worked = since(est_work_start_);
-    if (steps_done >= 4) worked = std::max(worked - est_pack_search_, 0.5 * worked); // the instructions' search
-    if (predicted < 1) return; // too little done to tell anything
-    const double ratio = std::clamp(worked / predicted, 0.5, 4.0);
-    const double remaining = left * ratio + est_weigh_search_ + (steps_done < 4 ? est_pack_search_ : 0);
+    est_done_ = steps_done;
+    if (steps_done <= 3)
+    {
+        double predicted = 0;
+        for (size_t k = 0; k < steps_done; ++k) predicted += est_steps_[k];
+        if (predicted >= 1) est_ratio_ = std::clamp(since(est_work_start_) / predicted, 0.5, 4.0);
+        if (steps_done == 3) est_pack_start_ = Clock::now();
+    }
+    else if (steps_done == 4 && est_pack_search_ > 0)
+        // Packing's time past what its own work took is its search's: the share of the limit it used.
+        est_pack_share_seen_ = std::clamp((since(est_pack_start_) - est_steps_[3] * est_ratio_) / est_pack_search_, 0.0, 1.0);
+    if (steps_done == 5) est_weigh_start_ = Clock::now();
+    double left = 0;
+    for (size_t k = steps_done; k < est_steps_.size(); ++k) left += est_steps_[k];
+    estimate_now(left * est_ratio_ + est_weigh_search_ * est_share_weigh_ + (steps_done < 4 ? est_pack_search_ * est_share_pack_ : 0));
+}
+
+// While packing, about once a second: as the files' searches are given their time (the share of
+// the packing's limit handed out so far), what is left of packing, its own work and its search.
+void FileLocator::tick_estimate()
+{
+    std::lock_guard<std::mutex> lock(mx_);
+    if (!est_on_ || est_done_ != 3 || est_pack_search_ <= 0 || since(est_ticked_) < 1) return;
+    est_ticked_ = Clock::now();
+    const double handed = std::clamp(sieve::rope_search_spent().given / est_pack_search_, 0.0, 1.0);
+    const double packing = (est_steps_[3] * est_ratio_ + est_pack_search_ * est_share_pack_) * (1 - handed);
+    estimate_now(packing + (est_steps_[4] + est_steps_[5]) * est_ratio_ + est_weigh_search_ * est_share_weigh_);
+}
+
+void FileLocator::estimate_now(double remaining)
+{
     job_estimate_ = since(job_started_) + remaining;
     job_estimate_text_ = trf("loc.estimate.refined", {duration_text(job_estimate_), duration_text(remaining)});
+}
+
+// A run that was not stopped: the share of each search's limit it used, kept for the next estimate
+// (the first measured replaces "not measured"; after it, half the old and half the new).
+void FileLocator::learn_shares(bool stopped)
+{
+    if (!est_on_ || stopped) return;
+    KeptShares& k = kept_shares();
+    bool changed = false;
+    auto learn = [&](double& kept, double seen) {
+        if (seen < 0) return;
+        kept = kept < 0 ? seen : 0.5 * kept + 0.5 * seen;
+        changed = true;
+    };
+    learn(k.packing, est_pack_share_seen_);
+    if (est_weigh_search_ > 0 && est_done_ >= 5)
+        learn(k.weighing, std::clamp((since(est_weigh_start_) - est_steps_[5] * est_ratio_) / est_weigh_search_, 0.0, 1.0));
+    if (changed && k.changed) k.changed(k.packing, k.weighing);
 }
 
 // Under mx_.
@@ -347,6 +423,7 @@ std::string FileLocator::finish_job()
                         ? trf("loc.took.refined", {duration_text(took), duration_text(est_first_), duration_text(job_estimate_)})
                         : trf("loc.took.estimated", {duration_text(took), duration_text(job_estimate_)});
     job_estimate_ = -1;
+    last_took_ = took;
     est_on_ = false;
     est_first_ = -1;
     job_estimate_text_.clear();
@@ -444,9 +521,11 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
     // counted, once they are.
     const double per_file = search_per_file_, total = search_total_;
     const bool by_total = search_by_total_;
-    const bool archives = optimise_archives_;
+    const int boxes = compressed();
+    const bool archives = boxes != 0;
+    use_compressed(boxes);
     start_job();
-    auto job = [this, path, tailor, per_file, total, by_total, archives] {
+    auto job = [this, path, tailor, per_file, total, by_total, archives, boxes] {
         // Stop asks every search and every trial not needed for a result to end, the best so far
         // kept; what the work is doing, and its best so far, goes to the line under the status.
         const StopScope scope(&stop_, [this](const std::string& what, double best, double of) { report(what, best, of); });
@@ -502,7 +581,13 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 est_on_ = true;
                 est_pack_search_ = r.pack_search_unlimited ? 0 : r.pack_search;
                 est_weigh_search_ = r.pack_search_unlimited ? 0 : weigh_search;
+                // The share of the search's limits a run uses, as learned here (all of it until measured).
+                est_share_pack_ = kept_shares().packing < 0 ? 1 : kept_shares().packing;
+                est_share_weigh_ = kept_shares().weighing < 0 ? 1 : kept_shares().weighing;
+                est_ratio_ = 1;
+                est_pack_share_seen_ = -1;
                 est_work_start_ = Clock::now();
+                sieve::reset_rope_search_spent(); // (the samples' own searches not counted)
                 if (r.pack_search_unlimited)
                 {
                     job_estimate_ = reading;
@@ -510,8 +595,10 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 }
                 else
                 {
-                    job_estimate_ = reading + r.pack_search + weigh_search;
-                    job_estimate_text_ = trf("loc.estimate", {duration_text(job_estimate_), duration_text(reading), duration_text(r.pack_search + weigh_search)});
+                    const double search = est_pack_search_ * est_share_pack_ + est_weigh_search_ * est_share_weigh_;
+                    job_estimate_ = reading + search;
+                    job_estimate_text_ = trf(kept_shares().packing < 0 ? "loc.estimate" : "loc.estimate.learned",
+                                             {duration_text(job_estimate_), duration_text(reading), duration_text(search), duration_text(r.pack_search + weigh_search)});
                 }
                 job_estimate_ += since(job_started_); // from the job's start, the samples' time in it
                 est_first_ = job_estimate_;
@@ -575,7 +662,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 r.instructions = std::move(fi);
                 r.instructions_address = std::move(ma);
                 r.made_rope_seconds = by_total ? total : per_file;
-                r.made_archives = archives;
+                r.made_archives = boxes;
                 r.made_every = sieve::rope_search_every_wave();
                 r.made_decoding = sieve::prioritise_decoding();
                 refine_estimate(5);
@@ -623,7 +710,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                     progress("packing its Sieve instructions");
                     const auto packing = Clock::now();
                     r.made_rope_seconds = by_total ? cli::budget_per_file(total, n) : per_file;
-                    cli::add_packed_items(with, p, host_.item_args ? host_.item_args() : cli::Args{}, nullptr, 8, false, r.made_rope_seconds, 13, true,
+                    cli::add_packed_items(with, p, host_.item_args ? host_.item_args() : cli::Args{}, nullptr, 8, false, r.made_rope_seconds, cli::kNewestRope, true,
                                           true, archives);
                     r.pack_seconds = since(packing);
                 }
@@ -641,7 +728,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 c.installer_raw = (ma.bit_length() + 7) / 8;
                 r.instructions = std::move(with);
                 r.instructions_address = std::move(ma);
-                r.made_archives = archives;
+                r.made_archives = boxes;
                 r.made_every = sieve::rope_search_every_wave();
                 r.made_decoding = sieve::prioritise_decoding();
                 const std::string plain = r.manifest.text(); // the tree's identity is its v1 manifest's
@@ -700,6 +787,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
         }
         r.stopped = stop_ != 0;
         std::lock_guard<std::mutex> lock(mx_);
+        learn_shares(r.stopped || r.kind == Result::None);
         result_ = std::move(r);
         relink_search(); // the files counted may have changed
         status_ = finish_job();
@@ -719,10 +807,12 @@ void FileLocator::save(const std::string& to)
     const int what = save_what_;
     const Result& r = result_; // not changed while busy (nothing else starts), so read in place
     const double rope_seconds = search_per_file_; // the rope's time for each file, as the search row sets it
-    const bool archives = optimise_archives_;
+    const int boxes = compressed();
+    const bool archives = boxes != 0;
+    use_compressed(boxes);
     // Made when it was read, with what is set now: written as it is, nothing packed again (and the
     // graph of how it was made is kept).
-    const bool made = r.instructions && r.made_rope_seconds == rope_seconds && r.made_archives == archives &&
+    const bool made = r.instructions && r.made_rope_seconds == rope_seconds && r.made_archives == boxes &&
                       r.made_every == sieve::rope_search_every_wave() && r.made_decoding == sieve::prioritise_decoding();
     start_job(!made);
     if (made)
@@ -756,7 +846,7 @@ void FileLocator::save(const std::string& to)
                     // A file's instructions are a folder's holding just it (file_instructions).
                     const cli::Args items = host_.item_args ? host_.item_args() : cli::Args{};
                     cli::Manifest with = r.kind == Result::File ? file_instructions(from_u8(r.path), r.bytes, items, rope_seconds, archives) : r.manifest;
-                    if (r.kind != Result::File) cli::add_packed_items(with, from_u8(r.path), items, nullptr, 8, false, rope_seconds, 13, true, true, archives);
+                    if (r.kind != Result::File) cli::add_packed_items(with, from_u8(r.path), items, nullptr, 8, false, rope_seconds, cli::kNewestRope, true, true, archives);
                     progress("the instructions' address");
                     address = cli::binary_address(with.file());
                 }
@@ -837,7 +927,8 @@ void FileLocator::event(const SDL_Event& e)
         // The search's time: [ and ] a file, with Shift the run.
         case SDLK_LEFTBRACKET: pressed = (e.key.mod & SDL_KMOD_SHIFT) ? "search_run_less" : "search_file_less"; break;
         case SDLK_RIGHTBRACKET: pressed = (e.key.mod & SDL_KMOD_SHIFT) ? "search_run_more" : "search_file_more"; break;
-        case SDLK_A: pressed = "archives"; break; // Optimise Compressed Formats, on or off
+        case SDLK_A: pressed = "temporary"; break; // Compressed formats: temporary, on or off
+        case SDLK_U: pressed = "permanent"; break; // Compressed formats: permanent, on or off
         case SDLK_E: pressed = "every"; break;    // Try every way, on or off
         case SDLK_P: pressed = "decoding"; break; // Prioritise Decoding Speed, on or off
         case SDLK_S: pressed = busy_ ? "stop" : ""; break; // Stop: the best found so far kept
@@ -879,11 +970,12 @@ void FileLocator::event(const SDL_Event& e)
         sieve::set_prioritise_decoding(on);
         if (kept_decoding()) kept_decoding()(on);
     }
-    else if (pressed == "archives")
+    else if (pressed == "temporary" || pressed == "permanent")
     {
-        optimise_archives_ = !optimise_archives_;
-        kept_archives().on = optimise_archives_;
-        if (kept_archives().changed) kept_archives().changed(optimise_archives_);
+        (pressed == "temporary" ? temporary_ : permanent_) ^= true;
+        kept_archives().temporary = temporary_;
+        kept_archives().permanent = permanent_;
+        if (kept_archives().changed) kept_archives().changed(temporary_, permanent_);
     }
     else if (pressed == "use_filters" && result_.tailored_filters)
     {
@@ -996,6 +1088,7 @@ void FileLocator::draw(float W, float H)
         waiting = !graph_pending_.empty();
     }
     const bool graph_beside = !busy && r.kind != Result::None && (graph_drawn_ || waiting);
+    if (busy) tick_estimate();
     if (busy) draw_graph(20, y + 50, W - 40, std::max(60.0f, std::min(220.0f, H - y - 190)), ink, grey);
     else if (graph_beside) draw_graph(W * 0.62f, y + 13, W * 0.38f - 20, 60, ink, grey);
     // How long the search for shorter addresses may take: a file, and the run, each moving the
@@ -1019,8 +1112,11 @@ void FileLocator::draw(float W, float H)
         draw_text(r_, bx, row_y + 8, run, 1, white);
         bx += text_width(run, 1) + 12;
         button("search_run_more", "+", row_y);
-        // Optimise Compressed Formats, under it: a box, off unless ticked (what installing gives back
-        // changes for an archive carried as its contents, so it is never on by itself). Beside it,
+        // Compressed formats, under it: two boxes, off unless ticked (v31; Optimise Compressed Formats,
+        // one box, before). Temporary: an archive or compressed file made again exactly on installing,
+        // what it holds carried (only where Sieve can make it again). Permanent: carried as what it
+        // holds, installed so (what installing gives back changes, so neither is ever on by itself).
+        // Both: made again where Sieve can, else carried as what it holds. Beside them,
         // Try every way: the search's shortcuts off (slower; never larger); and Prioritise Decoding
         // Speed: no file mixed (quicker to install; larger). A box that does not fit goes to the next
         // row, as the filter settings' do. The last row's y, for what goes under it.
@@ -1035,7 +1131,8 @@ void FileLocator::draw(float W, float H)
             }
             button(id, text, box_y);
         };
-        box("archives", optimise_archives_, tr("loc.archives"));
+        box("temporary", temporary_, tr("loc.temporary"));
+        box("permanent", permanent_, tr("loc.permanent"));
         box("every", sieve::rope_search_every_wave(), tr("loc.every"));
         box("decoding", sieve::prioritise_decoding(), tr("loc.decoding"));
         return box_y;
@@ -1167,12 +1264,13 @@ void FileLocator::draw_graph(float x, float y, float w, float h, SDL_Color ink, 
     const int tw = std::max(16, int(w)), th = std::max(16, int(h));
     std::vector<GraphPoint> points;
     bool reset = false;
-    double estimate = -1;
+    double estimate = -1, took = -1;
     {
         std::lock_guard<std::mutex> lock(mx_);
         points.swap(graph_pending_);
         reset = std::exchange(graph_reset_, false);
         estimate = job_estimate_;
+        took = last_took_;
     }
     SDL_Texture* const before = SDL_GetRenderTarget(r_);
     auto blank = [&](SDL_Texture* t) {
@@ -1282,7 +1380,10 @@ void FileLocator::draw_graph(float x, float y, float w, float h, SDL_Color ink, 
     std::snprintf(depth, sizeof depth, graph_depth_ < 0.1 ? "%.1f" : "%.0f", graph_depth_ * 100);
     const std::string bottom = trf("loc.graph.bottom", {depth});
     draw_text(r_, x, y + h + 4, bottom, 1, grey);
-    const std::string across = duration_text(graph_span_);
+    // The time across, and beside it the job's estimate while it works, then the time it took.
+    std::string across = trf("loc.graph.across", {duration_text(graph_span_)});
+    if (estimate > 0) across = trf("loc.graph.estimate", {duration_text(estimate)}) + "   " + across;
+    else if (took >= 0) across = trf("loc.graph.took", {duration_text(took)}) + "   " + across;
     draw_text(r_, x + w - text_width(across, 1), y + h + 4, across, 1, grey);
     float lx = x + text_width(bottom, 1) + 16;
     for (size_t k = 0; k < graph_steps_.size() && lx + text_width(graph_steps_[k], 1) < x + w - text_width(across, 1) - 16; ++k)

@@ -201,6 +201,10 @@ inline constexpr const char* kMixedStreamManifestVersion = "sieve-manifest-v29";
 // in the rope stream; each of its other files "mixn", the next bytes of the open group, in the
 // listing's order (other ways may come between).
 inline constexpr const char* kMixGroupsManifestVersion = "sieve-manifest-v30";
+// v31 (27 October 2026): an archive made again from its skeleton (v21's "sk") whose data is carried
+// as the archive's own files, one listing entry each ("skm <members> <skeleton size> <way>"; the
+// members "<archive>/<n>", in the archive's order), so each is carried its own way.
+inline constexpr const char* kSkeletonMembersManifestVersion = "sieve-manifest-v31";
 
 // The "u" lines' formats v20 adds (an archive carried as its contents).
 inline bool is_v20_format(const std::string& f)
@@ -230,6 +234,7 @@ struct ManifestEntry
                          // (v6 writes "item K" alone, the index carried in its items stream); in v7, on
                          // a line whose places are coded, "item K h<the code's bytes in hex>"; in v8
                          // also "rope L8 W949 S1 P3 K0", its code in the rope stream
+    bool member = false; // v31: a piece of an archive made again ("<archive>/<n>"), not a file of the tree
 };
 // v7: an item's size, until it is made (its entry gives none).
 inline constexpr uint64_t kSizeAsMade = ~uint64_t(0);
@@ -297,6 +302,7 @@ struct Manifest
     bool v28 = false; // v28: some file is carried by mix-v4 (v27 is set too)
     bool v29 = false; // v29: the lzma2 stream is mixed (v28 is set too)
     bool v30 = false; // v30: files mixed together in groups (v29 is set too)
+    bool v31 = false; // v31: archives made again from their skeleton and their files apart (v30 is set too)
     bool body_text = false; // v20: its body as text after all (the head's flag 128), where that came out smaller
     // v14: each archive carried as its contents: its format ("7z", "xz"), its size, its path, and the
     // folder (or file) its contents are in.

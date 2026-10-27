@@ -200,7 +200,7 @@ $S locate ../tests/manifest_fixture --manifest fixture.manifest --addresses addr
 python sieve_ref.py manifest ../tests/manifest_fixture | cmp - fixture.manifest
 python sieve_ref.py manifest ../tests/manifest_fixture --addresses addr
 grep -q "7z (LZMA2" locate.out
-# A map is Sieve instructions (sieve-manifest-v18): its text, the graph part, is the
+# A map is Sieve instructions (sieve-manifest-v18 at the least): its text, the graph part, is the
 # oracle's to the byte, read back by both; it is written for other programs as DOT and as
 # well-formed GraphML. Nothing writes the older map files (sieve-map-v1, v2) any more.
 $S map ../tests/manifest_fixture --out fixture.sieve --dot fixture.dot --graphml fixture.graphml > /dev/null
@@ -261,6 +261,29 @@ $S map old.sieve | cmp - old.txt
 rm -rf old_in
 $S install old.sieve --to old_in > /dev/null
 cmp old_in/a.txt $F/a.txt
+# Maps are made as the newest instructions are (27 October 2026): two held texts of 9,000 bytes
+# are mixed together in one group (sieve-manifest-v30), as the report says, and read back by Sieve
+# and the oracle. (The same holds for sites, training runs and the hallway's saves: one helper,
+# add_packed_newest, makes them all; a site's page is checked below.)
+head -c 9000 ../README.md > mt1.md
+head -c 9000 ../docs/GAME.md > mt2.md
+$S map --new t --out mt.sieve 2> /dev/null
+$S map mt.sieve --add mt1.md --out mt.sieve 2> /dev/null
+$S map mt.sieve --add mt2.md --out mt.sieve > mt.txt 2>&1
+grep -c "^wrote     mt.sieve: Sieve instructions (sieve-manifest-v30), " mt.txt > /dev/null
+rm -rf mt_in mt_oracle
+$S install mt.sieve --to mt_in > /dev/null
+cmp mt_in/mt1.md mt1.md
+cmp mt_in/mt2.md mt2.md
+python sieve_ref.py unpack mt.sieve --to mt_oracle | grep -c "^mixt " > /dev/null
+cmp mt_oracle/mt2.md mt2.md
+# A site's page of 9,000 bytes made into a .sieve is mixed (mix-v4, with the word list).
+rm -rf mts mts_out mts_oracle && mkdir mts
+printf '<html><body><a href="long.html">long</a></body></html>\n' > mts/index.html
+(printf '<html><body><pre>\n'; head -c 9000 ../README.md; printf '</pre></body></html>\n') > mts/long.html
+$S site build mts --out mts_out --sieve-pages > /dev/null 2>&1
+python sieve_ref.py unpack mts_out/long.sieve --to mts_oracle | grep -c "^mix4 B[0-9]* D60	" > /dev/null
+cmp mts_oracle/long.html mts/long.html
 # The web plugin's host (web/README.md), talked to as Chrome does (native messaging: a
 # length, then JSON): a single file's .sieve decoded to the same bytes, its hash stated as
 # an integrity attribute; refused with a wrong hash, and a .sieve of many files refused
@@ -490,8 +513,8 @@ with zipfile.ZipFile('a21/stored.zip', 'w', zipfile.ZIP_STORED) as z:
     z.writestr(zipfile.ZipInfo('sieve_ref.py', (2026, 10, 25, 12, 0, 0)), t)"
 cp ../tests/archives/sieve-7zip-lzma2.7z ../tests/archives/sieve-7zip-lzma.7z ../tests/archives/sieve-7zip-deflate.zip a21/
 SIEVE_ARCHIVES_ALWAYS=1 $S locate a21 --installer a21.sieve --items --optimise-archives --manifest a21.manifest | tr -d '\r' > a21.txt
-grep -c "^remade    6 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v\(2[1-9]\|30\))$" a21.txt > /dev/null
-python -c "d = open('a21.manifest', 'rb').read(); assert d[:5] == b'sieve' and 21 <= d[5] <= 30, d[:6]"
+grep -c "^remade    6 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v\(2[1-9]\|3[01]\))$" a21.txt > /dev/null
+python -c "d = open('a21.manifest', 'rb').read(); assert d[:5] == b'sieve' and 21 <= d[5] <= 31, d[:6]"
 $S install a21.sieve --to a21_inst > /dev/null
 for f in huff.gz py.zip stored.zip sieve-7zip-lzma2.7z sieve-7zip-lzma.7z sieve-7zip-deflate.zip; do cmp a21/$f a21_inst/$f; done
 # The oracle reads every skeleton whole and makes the stored zip again; the others, made by preflate
@@ -529,7 +552,7 @@ if [ "$(uname -s)" = Linux ] || [ "$(uname -s)" = Darwin ]; then
   cmp r22/made.rar r22_si/made.rar
   # In a folder: the archive given back in its place, the folder's other files as they were.
   cp r22/made.rar r22/folder/ && cp ../tests/manifest_fixture/a.txt r22/folder/
-  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/folder --installer r22f.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^unpacked .*sieve-manifest-v\(2[2-9]\|30\)" > /dev/null
+  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/folder --installer r22f.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^unpacked .*sieve-manifest-v\(2[2-9]\|3[01]\)" > /dev/null
   rm -rf r22f_inst && SIEVE_RAR="$RAR" $S install r22f.sieve --to r22f_inst > /dev/null
   diff -r r22/folder r22f_inst
   # --v21: as before, its contents alone.
@@ -586,7 +609,7 @@ cmp dq.txt dq_oracle/dq.txt
 # chunks, their deflate by preflate and their CRCs worked out again. Installed exactly; the oracle
 # reads both and names them (it has neither stb_image_write nor preflate); --v24 makes neither.
 rm -rf png25 && mkdir png25 && cp ../docs/images/hallway-audio.png ../web/extension/icon128.png png25/
-$S locate png25 --installer png25.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v\(2[5-9]\|30\))$" > /dev/null
+$S locate png25 --installer png25.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v\(2[5-9]\|3[01]\))$" > /dev/null
 [ "$(wc -c < png25.sieve)" -lt 50000 ]
 rm -rf png25_inst png25_oracle
 $S install png25.sieve --to png25_inst > /dev/null
@@ -710,6 +733,32 @@ python sieve_ref.py unpack t30.sieve --to t30_oracle > /dev/null
 diff -r t29 t30_oracle
 $SI t30.sieve --to t30_si --yes > /dev/null
 diff -r t29 t30_si
+
+# v31 (27 October 2026): an archive made again from its skeleton with what it holds carried as its
+# own files ("skm", the files "<archive>/<n>" in its order), each carried its own way. A zip of three
+# stored files (forced: on files this small unpacking would not pay): with --compressed-temporary,
+# v31, the zip given back by Sieve, by the oracle (which makes a stored zip again itself, so the
+# tree is checked) and by sieve-install, and nothing else installed; --v30 makes no v31; with
+# --compressed-permanent, its files installed in its place.
+rm -rf z31 && mkdir z31
+python -c "import zipfile; z = zipfile.ZipFile('z31/three.zip', 'w', zipfile.ZIP_STORED); [z.write('../' + f, f) for f in ('tools/check_help.py', 'tools/rar_check.py', 'ci/steps/03-filters.sh')]; z.close()"
+SIEVE_ARCHIVES_ALWAYS=1 $S locate z31 --installer z31.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > z31.txt
+grep -c "^members   1 of them made again from their skeleton and their 3 file(s), each carried its own way (sieve-manifest-v31)$" z31.txt > /dev/null
+rm -rf z31_inst z31_oracle z31_si z31p_inst
+$S install z31.sieve --to z31_inst > /dev/null
+cmp z31/three.zip z31_inst/three.zip
+[ "$(ls z31_inst | wc -l)" -eq 1 ]
+python sieve_ref.py unpack z31.sieve --to z31_oracle | grep -c "^skm 3 " > /dev/null
+cmp z31/three.zip z31_oracle/three.zip
+[ "$(ls z31_oracle | wc -l)" -eq 1 ]
+$SI z31.sieve --to z31_si --yes > /dev/null
+cmp z31/three.zip z31_si/three.zip
+SIEVE_ARCHIVES_ALWAYS=1 $S locate z31 --installer z31v30.sieve --items --compressed-temporary --v30 2>&1 | tr -d '\r' > z31v30.txt
+! grep -q "sieve-manifest-v31\|^members " z31v30.txt
+SIEVE_ARCHIVES_ALWAYS=1 $S locate z31 --installer z31p.sieve --items --compressed-permanent 2>&1 | tr -d '\r' > z31p.txt
+! grep -q "^members \|^remade " z31p.txt
+$S install z31p.sieve --to z31p_inst > /dev/null
+cmp z31p_inst/three/tools/check_help.py ../tools/check_help.py
 # Prioritise Decoding Speed (27 October 2026; --prioritise-decoding, the File Locator's box): no
 # file mixed, so the instructions install quickly: Don Quixote's start carried by the rope or
 # LZMA2 instead, larger than with mixing, the report saying so; installed by Sieve and the oracle.

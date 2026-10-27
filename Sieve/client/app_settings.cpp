@@ -217,9 +217,22 @@ AppSettings AppSettings::load(const fs::path& path)
                 }
             }
             else if (key == "search_for") s.locator_search_run = value == "run";
-            else if (key == "optimise_archives") s.locator_archives = value == "1";
+            else if (key == "optimise_archives") s.locator_archives = s.locator_temporary = s.locator_permanent = value == "1";
+            else if (key == "compressed_temporary") s.locator_temporary = value == "1";
+            else if (key == "compressed_permanent") s.locator_permanent = value == "1";
             else if (key == "search_every_wave") s.locator_every_wave = value == "1";
             else if (key == "prioritise_decoding") s.locator_decoding = value == "1";
+            else if (key == "search_share_packing" || key == "search_share_weighing")
+            {
+                try
+                {
+                    const double v = std::stod(value);
+                    if (v == -1 || (v >= 0 && v <= 1)) (key == "search_share_packing" ? s.locator_share_packing : s.locator_share_weighing) = v;
+                }
+                catch (...)
+                {
+                }
+            }
         }
         else if (section == "setup") s.setup.set_entry(key, value); // a value it cannot have is left out
         else if (section == "paths")
@@ -250,6 +263,9 @@ std::string seconds_text(double v)
     return t.empty() ? "0" : t;
 }
 
+// A learned share (0 to 1, three places), or -1 not yet measured.
+std::string share_text(double v) { return v < 0 ? "-1" : seconds_text(v); }
+
 } // namespace
 
 std::vector<AppSettings::Row> AppSettings::rows() const
@@ -279,9 +295,13 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"models", "widen_weights", on_off(widen_weights), "on: a model file's BF16 and F16 weights widened as they load (twice the memory); off: as stored; the same numbers either way"},
         {"locator", "search_seconds", seconds_text(locator_search), "the File Locator's search for shorter addresses: seconds, 0 for no limit"},
         {"locator", "search_for", locator_search_run ? "run" : "file", "file: those seconds for each file; run: for the whole run, shared among its files"},
-        {"locator", "optimise_archives", locator_archives ? "1" : "0", "1: Optimise Compressed Formats ticked (an archive or a compressed file made again exactly, else carried as its contents, where smaller); 0: off"},
+        {"locator", "optimise_archives", (locator_temporary || locator_permanent) ? "1" : "0", "1: either half of Compressed formats ticked (as Optimise Compressed Formats, the one box before v31, read it: both); the next two say which; 0: off"},
+        {"locator", "compressed_temporary", locator_temporary ? "1" : "0", "1: Compressed formats: temporary ticked (an archive or a compressed file made again exactly on installing, where Sieve can); 0: off"},
+        {"locator", "compressed_permanent", locator_permanent ? "1" : "0", "1: Compressed formats: permanent ticked (an archive or a compressed file carried as what it holds, installed so); 0: off"},
         {"locator", "search_every_wave", locator_every_wave ? "1" : "0", "1: Try every way ticked: the search's shortcuts off (the rope through every wave, even on text and on bytes already packed; mixing tried on every file, whole); 0: off"},
         {"locator", "prioritise_decoding", locator_decoding ? "1" : "0", "1: Prioritise Decoding Speed ticked: no file carried by mixing, nor the files carried together mixed (quicker to install, larger); 0: off"},
+        {"locator", "search_share_packing", share_text(locator_share_packing), "learned: the share of the search's time packing has used here, 0 to 1, for the time estimate; -1: not measured yet"},
+        {"locator", "search_share_weighing", share_text(locator_share_weighing), "learned: the share of the search's time weighing has used here, 0 to 1, for the time estimate; -1: not measured yet"},
     };
     for (const Settings::Entry& e : setup.entries()) r.push_back({"setup", e.key, e.value, e.note});
     r.push_back({"paths", "ffmpeg", ffmpeg, "the ffmpeg program; empty: SIEVE_FFMPEG, then one beside Sieve, then the PATH"});

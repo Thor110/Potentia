@@ -77,6 +77,8 @@ struct PackReport
     std::string stream_mixed_params;     // v29: its parameters ("B21", "B21 D60")
     size_t mixed_together = 0;           // v29: files that would be mixed one by one, mixed together in it instead
     bool v30 = false;                    // v30: files mixed together in groups
+    bool v31 = false;                    // v31: archives made again from their skeleton, their files carried apart
+    size_t member_archives = 0, members = 0; // v31: those archives, and their files
     size_t mix_groups = 0, mix_group_files = 0; // v30: the groups, and the files in them
     uint64_t mix_group_bytes = 0, mix_group_code = 0, mix_group_apart = 0; // v30: their bytes, codes, and what they came to apart
     uint64_t mixed_together_apart = 0;   // v29: what they and the stream came to apart (their codes, and LZMA2's estimate)
@@ -125,6 +127,20 @@ struct SampleAsWhole
     SampleAsWhole(const SampleAsWhole&) = delete;
     SampleAsWhole& operator=(const SampleAsWhole&) = delete;
 };
+
+// The newest level of the packer's ways (the rope's waves, mixing, groups, archives' members): 14,
+// sieve-manifest-v31.
+// Everything that makes instructions passes it unless an older version is asked for by name.
+inline constexpr uint32_t kNewestRope = 14;
+
+// What Optimise Compressed Formats does with an archive or a compressed file, for the whole run:
+// `temporary`, made again exactly on installing, so the program that wants it still finds it (only
+// formats Sieve makes again byte for byte); `permanent`, carried as what it holds, installing that
+// in its place. Both (the default, and Optimise Compressed Formats before v31): made again where
+// Sieve can, else carried as what it holds.
+void set_compressed_modes(bool temporary, bool permanent);
+bool compressed_temporary();
+bool compressed_permanent();
 
 void add_packed(Manifest& m, const std::filesystem::path& root, PackReport* report = nullptr, const ItemFinder* items = nullptr,
                 bool item_hashes = false, const PlaceCoder* coder = nullptr, double rope_seconds = -1, uint32_t rope_newest = 5,

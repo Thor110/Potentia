@@ -424,7 +424,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
             groups.back()->used += e.size;
             late[i] = 1;
         }
-        else if (m.roped && (m.v24 && e.way.rfind("mix ", 0) == 0 || m.v26 && e.way.rfind("mix2 ", 0) == 0 || m.v27 && e.way.rfind("mix3 ", 0) == 0 || m.v28 && e.way.rfind("mix4 ", 0) == 0))
+        else if (m.roped && ((m.v24 && e.way.rfind("mix ", 0) == 0) || (m.v26 && e.way.rfind("mix2 ", 0) == 0) || (m.v27 && e.way.rfind("mix3 ", 0) == 0) || (m.v28 && e.way.rfind("mix4 ", 0) == 0)))
         {
             // v24: made again by mixing, from its code, next in the rope stream (a varint of its length first).
             // v26: "mix2 B22" (mix-v2), or a picture's "mix2 B22 I949x1", the same way.
@@ -488,7 +488,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
         }
         else if (e.way.rfind("lines ", 0) != 0) throw std::runtime_error("manifest: " + e.path + " has no way to be carried (its way: \"" + e.way + "\")");
         if (!deferred.empty() && deferred.back().i == i) late[i] = 1;
-        if (!e.remake.empty() && !late[i]) // (a file whose bytes come later, once they have)
+        if (!e.remake.empty() && !late[i] && e.remake.rfind("skm ", 0) != 0) // (a file whose bytes come later, once they have; v31's, below)
         {
             if (!remaker())
                 throw std::runtime_error("these Sieve instructions remake an archive from what it holds (" + e.path +
@@ -514,7 +514,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
     {
         if (!late[d]) continue;
         const ManifestEntry& e = *files[d];
-        if (e.remake.empty()) continue;
+        if (e.remake.empty() || e.remake.rfind("skm ", 0) == 0) continue;
         if (!remaker())
             throw std::runtime_error("these Sieve instructions remake an archive from what it holds (" + e.path +
                                      "): open them with Sieve (sieve install, or the hallway's File Locator), which remakes it");
@@ -549,6 +549,25 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
                 bytes[i].insert(bytes[i].end(), lines[l].begin(), lines[l].end());
                 first = false;
             }
+    }
+    // v31: each archive made again from its skeleton (its own bytes) and its members' bytes after,
+    // in the listing's order, which is the archive's; the members stay (not installed).
+    for (size_t d = 0; d < files.size(); ++d)
+    {
+        const ManifestEntry& e = *files[d];
+        if (e.remake.rfind("skm ", 0) != 0) continue;
+        if (!remaker())
+            throw std::runtime_error("these Sieve instructions remake an archive from what it holds (" + e.path +
+                                     "): open them with Sieve (sieve install, or the hallway's File Locator), which remakes it");
+        const std::string under = e.path + "/";
+        std::vector<uint8_t> whole = bytes[d];
+        for (size_t k = 0; k < files.size(); ++k)
+            if (files[k]->member && files[k]->path.rfind(under, 0) == 0) whole.insert(whole.end(), bytes[k].begin(), bytes[k].end());
+        const std::string skeleton = e.remake.substr(e.remake.rfind(' ') + 1);
+        bytes[d] = remaker()("sk " + skeleton + " " + std::to_string(whole.size()), whole);
+        if (bytes[d].size() != e.size)
+            throw std::runtime_error(e.path + " was not remade as it was (" + std::to_string(bytes[d].size()) + " bytes, not " + std::to_string(e.size) +
+                                     "): this Sieve's compressor writes differently from the one that made the instructions");
     }
     std::vector<uint8_t> contents;
     contents.reserve(size_t(m.bytes));
@@ -643,7 +662,7 @@ std::string manifest_path(const fs::path& p, const fs::path& root)
 
 const char* Manifest::version() const
 {
-    return v30 ? kMixGroupsManifestVersion : v29 ? kMixedStreamManifestVersion : v28 ? kMix4ManifestVersion : v27 ? kMix3ManifestVersion : v26 ? kMix2ManifestVersion : v25 ? kPngManifestVersion : v24 ? kMixManifestVersion : v23 ? kRopeTriangleManifestVersion : v22 ? kRarManifestVersion : v21 ? kDeflateManifestVersion : v20 ? kNewestArchivesManifestVersion : more_archives ? kMoreArchivesManifestVersion : !graph.empty() ? kGraphManifestVersion : remake_gz ? kGzipManifestVersion : binary ? kBinaryManifestVersion : rope_above ? kRopeAboveManifestVersion : archives ? kArchivesManifestVersion : pieces ? kPiecesManifestVersion : trimmed ? kTrimmedManifestVersion : rope_groups ? kRopeGroupsManifestVersion : rope_lines ? kRopeLinesManifestVersion : rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
+    return v31 ? kSkeletonMembersManifestVersion : v30 ? kMixGroupsManifestVersion : v29 ? kMixedStreamManifestVersion : v28 ? kMix4ManifestVersion : v27 ? kMix3ManifestVersion : v26 ? kMix2ManifestVersion : v25 ? kPngManifestVersion : v24 ? kMixManifestVersion : v23 ? kRopeTriangleManifestVersion : v22 ? kRarManifestVersion : v21 ? kDeflateManifestVersion : v20 ? kNewestArchivesManifestVersion : more_archives ? kMoreArchivesManifestVersion : !graph.empty() ? kGraphManifestVersion : remake_gz ? kGzipManifestVersion : binary ? kBinaryManifestVersion : rope_above ? kRopeAboveManifestVersion : archives ? kArchivesManifestVersion : pieces ? kPiecesManifestVersion : trimmed ? kTrimmedManifestVersion : rope_groups ? kRopeGroupsManifestVersion : rope_lines ? kRopeLinesManifestVersion : rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
          : with_contents ? kInstallManifestVersion : with_addresses ? kAddressManifestVersion : kManifestVersion;
 }
 
@@ -899,7 +918,8 @@ std::string listing_body(const Manifest& m)
 
 static const char* const kArchiveFormats[] = {nullptr, "xz", "gz", "bz2", "zst", "lz4", "br", "lzma", "lz", "7z", "zip", "rar", "cab", "iso", "lha", "cpio", "ar", "warc",
                                               "sk", // (v21: 18, a skeleton and what it holds: a gzip, zip or 7z made again)
-                                              "stb"}; // (v25: 19, a PNG stb_image_write made, made again from its pixels)
+                                              "stb", // (v25: 19, a PNG stb_image_write made, made again from its pixels)
+                                              "skm"}; // (v31: 20, a skeleton, what it holds carried as its own files)
 
 int archive_format_number(const std::string& name)
 {
@@ -918,7 +938,7 @@ static int recipe_words(std::string_view way)
 {
     const std::string_view kind = way.substr(0, way.find(' '));
     return kind == "xz" ? 4 : kind == "gz" ? 5 : kind == "bz2" ? 3 : kind == "zst" ? 6 : kind == "lz4" ? 8 : kind == "br" ? 4 : kind == "lzma" ? 3 :
-           kind == "sk" ? 3 : kind == "stb" ? 7 : 0;
+           kind == "sk" ? 3 : kind == "stb" ? 7 : kind == "skm" ? 3 : 0;
 }
 
 static void put_text(std::vector<uint8_t>& o, std::string_view t)
@@ -1106,7 +1126,7 @@ std::string listing_from_bytes(std::string_view b)
 // its size, then it.
 static std::vector<uint8_t> binary_head(const Manifest& m)
 {
-    std::vector<uint8_t> o = {'s', 'i', 'e', 'v', 'e', uint8_t(m.v30 ? 30 : m.v29 ? 29 : m.v28 ? 28 : m.v27 ? 27 : m.v26 ? 26 : m.v25 ? 25 : m.v24 ? 24 : m.v23 ? 23 : m.v22 ? 22 : m.v21 ? 21 : m.v20 ? 20 : m.more_archives ? 19 : !m.graph.empty() ? 18 : m.remake_gz ? 17 : 16)};
+    std::vector<uint8_t> o = {'s', 'i', 'e', 'v', 'e', uint8_t(m.v31 ? 31 : m.v30 ? 30 : m.v29 ? 29 : m.v28 ? 28 : m.v27 ? 27 : m.v26 ? 26 : m.v25 ? 25 : m.v24 ? 24 : m.v23 ? 23 : m.v22 ? 22 : m.v21 ? 21 : m.v20 ? 20 : m.more_archives ? 19 : !m.graph.empty() ? 18 : m.remake_gz ? 17 : 16)};
     const bool root = !m.one_file_root(), items = !m.trimmed || m.item_stream.packed || m.item_stream.bytes;
     const bool body_packed = m.listing_stream.packed != 0;
     o.push_back(uint8_t((root ? 1 : 0) | (m.x86.packed ? 2 : 0) | (m.lzma2.packed ? 4 : 0) | (items ? 8 : 0) | (m.roped ? 16 : 0) |
@@ -1288,7 +1308,7 @@ Manifest Manifest::parse(std::string_view whole)
 {
     // v16: the head in bytes, read back into v15's text (its root's and streams' lines, its lines,
     // the tree's, the rest of its body, "end"), followed by what follows it.
-    if (whole.size() >= 6 && whole.substr(0, 5) == "sieve" && uint8_t(whole[5]) >= 16 && uint8_t(whole[5]) <= 30)
+    if (whole.size() >= 6 && whole.substr(0, 5) == "sieve" && uint8_t(whole[5]) >= 16 && uint8_t(whole[5]) <= 31)
     {
         const uint8_t v = uint8_t(whole[5]);
         size_t at = 6;
@@ -1299,7 +1319,7 @@ Manifest Manifest::parse(std::string_view whole)
         // (v17's text is v15's with gzip remade allowed, v18's with a graph part too, v19's with bzip2
         // and zstd as well: its first line says so.)
         std::string text =
-            std::string(v == 30 ? kMixGroupsManifestVersion : v == 29 ? kMixedStreamManifestVersion : v == 28 ? kMix4ManifestVersion : v == 27 ? kMix3ManifestVersion : v == 26 ? kMix2ManifestVersion : v == 25 ? kPngManifestVersion : v == 24 ? kMixManifestVersion : v == 23 ? kRopeTriangleManifestVersion : v == 22 ? kRarManifestVersion : v == 21 ? kDeflateManifestVersion : v == 20 ? kNewestArchivesManifestVersion : v == 19 ? kMoreArchivesManifestVersion : v == 18 ? kGraphManifestVersion : v == 17 ? kGzipManifestVersion : kRopeAboveManifestVersion) + "\n";
+            std::string(v == 31 ? kSkeletonMembersManifestVersion : v == 30 ? kMixGroupsManifestVersion : v == 29 ? kMixedStreamManifestVersion : v == 28 ? kMix4ManifestVersion : v == 27 ? kMix3ManifestVersion : v == 26 ? kMix2ManifestVersion : v == 25 ? kPngManifestVersion : v == 24 ? kMixManifestVersion : v == 23 ? kRopeTriangleManifestVersion : v == 22 ? kRarManifestVersion : v == 21 ? kDeflateManifestVersion : v == 20 ? kNewestArchivesManifestVersion : v == 19 ? kMoreArchivesManifestVersion : v == 18 ? kGraphManifestVersion : v == 17 ? kGzipManifestVersion : kRopeAboveManifestVersion) + "\n";
         auto take = [&](uint64_t n) {
             if (n > whole.size() - at) throw std::runtime_error("manifest: its head ends early");
             const std::string_view v = whole.substr(at, size_t(n));
@@ -1442,8 +1462,8 @@ Manifest Manifest::parse(std::string_view whole)
     else if (lines[0] == kRopeGroupsManifestVersion)
         m.rope_groups = m.rope_lines = m.rope_columns = m.roped = m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] == kGzipManifestVersion || lines[0] == kGraphManifestVersion || lines[0] == kMoreArchivesManifestVersion ||
-             lines[0] == kNewestArchivesManifestVersion || lines[0] == kDeflateManifestVersion || lines[0] == kRarManifestVersion || lines[0] == kRopeTriangleManifestVersion || lines[0] == kMixManifestVersion || lines[0] == kPngManifestVersion || lines[0] == kMix2ManifestVersion || lines[0] == kMix3ManifestVersion || lines[0] == kMix4ManifestVersion || lines[0] == kMixedStreamManifestVersion || lines[0] == kMixGroupsManifestVersion)
-        m.v30 = lines[0] == kMixGroupsManifestVersion, m.v29 = lines[0] == kMixedStreamManifestVersion || m.v30, m.v28 = lines[0] == kMix4ManifestVersion || m.v29, m.v27 = lines[0] == kMix3ManifestVersion || m.v28, m.v26 = lines[0] == kMix2ManifestVersion || m.v27, m.v25 = lines[0] == kPngManifestVersion || m.v26, m.v24 = lines[0] == kMixManifestVersion || m.v25, m.v23 = lines[0] == kRopeTriangleManifestVersion || m.v24, m.v22 = lines[0] == kRarManifestVersion || m.v23, m.v21 = lines[0] == kDeflateManifestVersion || m.v22, m.v20 = lines[0] == kNewestArchivesManifestVersion || m.v21,
+             lines[0] == kNewestArchivesManifestVersion || lines[0] == kDeflateManifestVersion || lines[0] == kRarManifestVersion || lines[0] == kRopeTriangleManifestVersion || lines[0] == kMixManifestVersion || lines[0] == kPngManifestVersion || lines[0] == kMix2ManifestVersion || lines[0] == kMix3ManifestVersion || lines[0] == kMix4ManifestVersion || lines[0] == kMixedStreamManifestVersion || lines[0] == kMixGroupsManifestVersion || lines[0] == kSkeletonMembersManifestVersion)
+        m.v31 = lines[0] == kSkeletonMembersManifestVersion, m.v30 = lines[0] == kMixGroupsManifestVersion || m.v31, m.v29 = lines[0] == kMixedStreamManifestVersion || m.v30, m.v28 = lines[0] == kMix4ManifestVersion || m.v29, m.v27 = lines[0] == kMix3ManifestVersion || m.v28, m.v26 = lines[0] == kMix2ManifestVersion || m.v27, m.v25 = lines[0] == kPngManifestVersion || m.v26, m.v24 = lines[0] == kMixManifestVersion || m.v25, m.v23 = lines[0] == kRopeTriangleManifestVersion || m.v24, m.v22 = lines[0] == kRarManifestVersion || m.v23, m.v21 = lines[0] == kDeflateManifestVersion || m.v22, m.v20 = lines[0] == kNewestArchivesManifestVersion || m.v21,
         m.more_archives = lines[0] == kMoreArchivesManifestVersion || m.v20, m.remake_gz = m.binary = m.rope_above = m.archives = m.pieces = m.trimmed = m.rope_groups = m.rope_lines = m.rope_columns = m.roped = m.compact =
             m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] == kRopeAboveManifestVersion)
@@ -1581,7 +1601,7 @@ Manifest Manifest::parse(std::string_view whole)
         if (m.items) m.tree = field(lines[first++], "tree");
     }
     const bool graph_allowed = lines[0] == kGraphManifestVersion || lines[0] == kMoreArchivesManifestVersion || lines[0] == kNewestArchivesManifestVersion ||
-                               lines[0] == kDeflateManifestVersion || lines[0] == kRarManifestVersion || lines[0] == kRopeTriangleManifestVersion || lines[0] == kMixManifestVersion || lines[0] == kPngManifestVersion || lines[0] == kMix2ManifestVersion || lines[0] == kMix3ManifestVersion || lines[0] == kMix4ManifestVersion || lines[0] == kMixedStreamManifestVersion || lines[0] == kMixGroupsManifestVersion;
+                               lines[0] == kDeflateManifestVersion || lines[0] == kRarManifestVersion || lines[0] == kRopeTriangleManifestVersion || lines[0] == kMixManifestVersion || lines[0] == kPngManifestVersion || lines[0] == kMix2ManifestVersion || lines[0] == kMix3ManifestVersion || lines[0] == kMix4ManifestVersion || lines[0] == kMixedStreamManifestVersion || lines[0] == kMixGroupsManifestVersion || lines[0] == kSkeletonMembersManifestVersion;
     const bool graph_needed = lines[0] == kGraphManifestVersion; // (v19's is allowed, not needed)
     for (size_t i = first; i + 1 < lines.size(); ++i)
     {
@@ -1679,7 +1699,8 @@ Manifest Manifest::parse(std::string_view whole)
                        lzma = m.v20 && e.way.rfind("lzma ", 0) == 0;
             const bool sk = m.v21 && e.way.rfind("sk ", 0) == 0;
             const bool stb = m.v25 && e.way.rfind("stb ", 0) == 0;
-            if ((m.archives && e.way.rfind("xz ", 0) == 0) || gz || bz2 || zst || lz4 || br || lzma || sk || stb)
+            const bool skm = m.v31 && e.way.rfind("skm ", 0) == 0;
+            if ((m.archives && e.way.rfind("xz ", 0) == 0) || gz || bz2 || zst || lz4 || br || lzma || sk || stb || skm)
             {
                 // v14: "xz <preset> <check> <inner size> <way>"; v17: "gz <level> <memory level>
                 // <header> <inner size> <way>"; v19: "bz2 <block size> <inner size> <way>", "zst
@@ -1689,8 +1710,8 @@ Manifest Manifest::parse(std::string_view whole)
                 // size> <inner size> <way>", "br <quality> <window> <inner size> <way>", "lzma <preset>
                 // <inner size> <way>".
                 // v21: "sk <skeleton size> <inner size> <way>". v25: "stb <level> <filter> <width>
-                // <height> <components> <inner size> <way>".
-                const int words = gz ? 5 : bz2 ? 3 : zst ? 6 : lz4 ? 8 : br ? 4 : lzma ? 3 : sk ? 3 : stb ? 7 : 4;
+                // <height> <components> <inner size> <way>". v31: "skm <members> <skeleton size> <way>".
+                const int words = gz ? 5 : bz2 ? 3 : zst ? 6 : lz4 ? 8 : br ? 4 : lzma ? 3 : sk ? 3 : stb ? 7 : skm ? 3 : 4;
                 size_t at = 0;
                 for (int k = 0; k < words && at != std::string::npos; ++k) at = e.way.find(' ', at + 1);
                 if (at == std::string::npos) throw std::runtime_error("manifest: " + e.path + "'s way has no inner way");
@@ -1776,6 +1797,26 @@ Manifest Manifest::parse(std::string_view whole)
             m.root = m.entries[0].path;
         }
     }
+    // v31: each archive made again from its skeleton and its members: those listed under its own
+    // path ("<archive>/<n>"), as many as its recipe says, files and nothing more.
+    if (m.v31)
+        for (const ManifestEntry& a : m.entries)
+        {
+            if (a.remake.rfind("skm ", 0) != 0) continue;
+            const std::string n = a.remake.substr(4, a.remake.find(' ', 4) - 4);
+            if (n.empty() || n.size() > 9 || n.find_first_not_of("0123456789") != std::string::npos)
+                throw std::runtime_error("manifest: " + a.path + "'s members are not counted as Sieve counts them");
+            const std::string under = a.path + "/";
+            size_t found = 0;
+            for (ManifestEntry& e : m.entries)
+            {
+                if (e.path.rfind(under, 0) != 0) continue;
+                if (e.dir || !e.remake.empty() || e.member) throw std::runtime_error("manifest: " + e.path + " is not a member as Sieve writes one");
+                e.member = true;
+                ++found;
+            }
+            if (found != std::stoull(n)) throw std::runtime_error("manifest: " + a.path + " does not list the members its recipe counts");
+        }
     if (m.packed) m.contents = unpack_v4(m); // every file's bytes, each by its way
     if (m.compact)
     {
@@ -1809,6 +1850,7 @@ std::string tree_sha256(const Manifest& m)
         if (m.contents.size() - at < e.size) throw std::runtime_error("manifest: its files' bytes end before " + e.path);
         const std::vector<uint8_t> bytes(m.contents.begin() + std::ptrdiff_t(at), m.contents.begin() + std::ptrdiff_t(at + e.size));
         at += size_t(e.size);
+        if (e.member) continue; // v31: a piece of an archive, not a file of the tree
         h.update(e.path + "\n" + sha256_hex(bytes) + "\n");
     }
     return Sha256::hex(h.finish());
@@ -1959,12 +2001,41 @@ void write_address_file(const fs::path& file, const BigUint& address, bool hex)
     if (!out) throw std::runtime_error("cannot write " + file.generic_string());
 }
 
+// v31: an archive's members left out (made again into it when it was read): what installs is the tree.
+static Manifest without_members(Manifest m)
+{
+    if (!std::any_of(m.entries.begin(), m.entries.end(), [](const ManifestEntry& e) { return e.member; })) return m;
+    std::vector<ManifestEntry> entries;
+    std::vector<uint8_t> contents;
+    size_t at = 0;
+    m.files = 0;
+    m.bytes = 0;
+    for (ManifestEntry& e : m.entries)
+    {
+        if (e.dir)
+        {
+            entries.push_back(std::move(e));
+            continue;
+        }
+        const size_t from = at;
+        at += size_t(e.size);
+        if (e.member) continue;
+        if (m.with_contents) contents.insert(contents.end(), m.contents.begin() + std::ptrdiff_t(from), m.contents.begin() + std::ptrdiff_t(at));
+        ++m.files;
+        m.bytes += e.size;
+        entries.push_back(std::move(e));
+    }
+    m.entries = std::move(entries);
+    if (m.with_contents) m.contents = std::move(contents);
+    return m;
+}
+
 Manifest manifest_of_installer(const BigUint& address)
 {
     const auto bytes = file_at(address);
     Manifest m = Manifest::parse(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
     if (!m.with_addresses && !m.with_contents) throw std::runtime_error("that is a manifest without the files in it (v1): nothing to install from");
-    return m;
+    return without_members(std::move(m));
 }
 
 Manifest installable_manifest(const fs::path& file, bool hex)
@@ -1981,7 +2052,7 @@ Manifest installable_manifest(const fs::path& file, bool hex)
             Manifest m = Manifest::parse(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
             if (!m.with_addresses && !m.with_contents)
                 throw std::runtime_error("that is a manifest without the files in it (v1): nothing to install from");
-            return m;
+            return without_members(std::move(m));
         }
     }
     return manifest_of_installer(read_address_file(file, hex));

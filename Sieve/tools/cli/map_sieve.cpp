@@ -103,8 +103,21 @@ void write_map_instructions(const Map& map, const fs::path& out, double search_p
     }
     Manifest m = walk_folder(dir);
     m.graph = map.text(); // before packing: the listing packed is the one with the graph part
-    // (A map stays v18: its listing as text, not v20's in bytes.)
-    add_packed_items(m, dir, Args{}, nullptr, 8, false, search_per_file, 5, true, true, false, true, true, false);
+    // The newest version (its listing in bytes holds the graph part's lines as they are), compressed
+    // formats optimised but only made again exactly (temporary): a held archive is carried as what it
+    // holds where that is smaller and Sieve gives it back byte for byte, its SHA-256 the map's.
+    const bool temporary = compressed_temporary(), permanent = compressed_permanent();
+    set_compressed_modes(true, false);
+    try
+    {
+        add_packed_newest(m, dir, nullptr, search_per_file, true);
+    }
+    catch (...)
+    {
+        set_compressed_modes(temporary, permanent);
+        throw;
+    }
+    set_compressed_modes(temporary, permanent);
     write_address_file(out, binary_address(m.file()), false);
 }
 

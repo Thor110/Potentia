@@ -4123,7 +4123,13 @@ lost:
     copied beside the programs by the build. Next to look at, licences to read first: lz4 and
     brotli, cab, lzip, and RAR (its decoder's licence forbids using it to make a RAR compressor;
     whether carrying a RAR as its contents is allowed is to check).
-  - **Permanent or temporary (Edward, 25 October 2026; not built).** Two choices in place of one
+  - **Built (27 October 2026, `sieve-manifest-v31`):** the two choices, boxes in the File Locator
+    (temporary, A; permanent, U) and `--compressed-temporary`, `--compressed-permanent` (both: the
+    one box as it was). Temporary carries a 7z's or zip's data as the archive's own files (`skm`,
+    members `<archive>/<n>`), each its own way, the archive made again exactly; the format as a
+    number (below) is still to do. The source's 7z, without the anchors folder: 8,005,603 bytes to 6,189,674, given back byte
+    for byte (made with `-mmt=1`: 7-Zip's LZMA2 on several threads is not made again).
+  - **Permanent or temporary (Edward, 25 October 2026; built 27 October 2026, above).** Two choices in place of one
     box. **Optimise archives (permanent):** an archive (a game's `.pak`, say) unpacked and kept as
     `.sieve` for good; installing gives back its files, not the archive (today's `u` lines, as a 7z
     or zip is now). **Optimise archives (temporary):** the same unpacking, with a note of the format
@@ -4544,7 +4550,10 @@ installed back byte for byte:
   SHA-256 (32 bytes) and the file's name. "1 - 0 - 112" is the idealised form (§9) and is not a
   format.
 - The hallway's `--sample-degrees` still writes v4; the CI checks that the newest made from the
-  sample is smaller than it, so changing it waits for a check of its own.
+  sample is smaller than it, so changing it waits for a check of its own. *(Done 27 October 2026:
+  it writes the newest, and the CI's check compares v5 with `--v4`.)* Made again that day, both
+  still v20 (items and LZMA2 are all they use): the sample 7,887 bytes (8,784 before), the
+  starting page 159 (162), each installed back byte for byte; Proof/ holds them.
 
 **19.97 A time estimate in the File Locator, and cutting into pieces made cheaper (Edward, 22
 October 2026; built).** His ask: "We will want to show a time estimate for compressing files in
@@ -4948,6 +4957,16 @@ measured on this repository's own files.
   were as small there (3,099,798) but installed in 28.6 s, one group on one thread; on 34 MB of
   the repository's texts they were 4% smaller than 8 MiB. The group size is the packer's, so it
   can be moved without a new version.
+- **Every .sieve at the newest (27 October 2026, Edward: "a .sieve should always be the latest").**
+  Maps (`source.sieve`, sites' tables), sites' pages, training runs, the hallway's saves (its
+  degree sample: 7,887 bytes, against 482,495 as v4) and the music favourites all use one helper,
+  `add_packed_newest`; the File Locator and `sieve locate` were already newest.
+- **The File Locator's estimate counts the search as used (27 October 2026).** It counted each
+  search's whole limit, three times over (a file whole, its pieces, the weighing, which mostly
+  finds packing's answers cached); the searches stop early on most files. Now the share of the
+  limit runs here have used is learned (`[locator] search_share_*`), and the estimate comes down
+  as the files' searches finish. Sieve's data folder at 0.5 s a file: estimated 6 min 44 s at
+  first, took 3 min 06 s; both shares measured 0 there.
 - *Next:* a word list with how often each word is used
   (SCOWL has none; a frequency list would be a new pinned file); and more generators as they turn
   up (zlib's PNGs remade by zlib itself where it can, without preflate's difference).

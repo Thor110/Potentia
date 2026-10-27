@@ -106,6 +106,16 @@ struct RopeSearch
     size_t best_trial = 0;
 };
 RopeSearch rope_search(std::span<const uint8_t> file, double seconds = 0, uint32_t newest = 6);
+// The searches since the last reset, for the File Locator's estimate (which counts a search at its
+// limit until it is done, then at what it took): how many, the seconds they took, and the seconds
+// those with a limit were given (a search answered from the run's cache took none of its time).
+struct RopeSearchSpent
+{
+    size_t searches = 0;
+    double took = 0, given = 0;
+};
+RopeSearchSpent rope_search_spent();
+void reset_rope_search_spent();
 // Whether parameters need rope-wave-v6 (P4, or T1).
 inline bool rope_v6(const RopeParams& p) { return p.phases == 4 || p.triangle; }
 // The search stops early on bytes that its first waves make no smaller (already packed: a JPEG, a

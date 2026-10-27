@@ -175,10 +175,13 @@ def default_build_dir():
 
 
 def seven_zip(sz, archive, inputs, cwd):
-    # Solid LZMA2 at 7-Zip's strongest (-mx=9), as the comparison's "7z" measures.
+    # Solid LZMA2 at 7-Zip's strongest (-mx=9), as the comparison's "7z" measures; on one thread
+    # (-mmt=1), so Sieve's LZMA SDK makes it again byte for byte and source.sieve carries the source's
+    # files rather than the 7z (sieve-manifest-v31: 6,189,674 bytes against 8,005,603 for the source
+    # without the anchors folder, 27 October 2026; made on several threads, 7-Zip's LZMA2 is not made again).
     if archive.exists():
         archive.unlink()
-    run([sz, "a", "-t7z", "-m0=lzma2", "-mx=9", "-ms=on", "-bd", archive] + inputs, cwd=cwd)
+    run([sz, "a", "-t7z", "-m0=lzma2", "-mx=9", "-ms=on", "-mmt=1", "-bd", archive] + inputs, cwd=cwd)
 
 
 def source_7z(dest, sz, work):

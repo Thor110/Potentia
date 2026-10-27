@@ -17,6 +17,7 @@
 #include "cli/lines.hpp"
 #include "cli/locate.hpp"
 #include "cli/media_decode.hpp"
+#include "cli/items.hpp"
 #include "cli/pack.hpp"
 #include "cli/vault.hpp"
 #include "sieve/filekind.hpp"
@@ -445,11 +446,11 @@ std::string Hallway::sample_degrees(const std::string& dir, const std::string& s
         total += saved;
     }
     cli::Manifest m = cli::walk_folder(root);
-    cli::add_packed(m, root);
+    cli::add_packed_newest(m, root);
     const std::vector<uint8_t> file = m.file();
     cli::write_address_file(from_u8(sieve_out), cli::binary_address(file), false);
     report += "sample: " + std::to_string(total) + " items, " + std::to_string(m.bytes) + " bytes, as Sieve instructions of " +
-              std::to_string(file.size()) + " bytes (" + (m.packed ? "sieve-manifest-v4" : "sieve-manifest-v3") + ") in " + sieve_out + "\n";
+              std::to_string(file.size()) + " bytes (" + m.version() + ") in " + sieve_out + "\n";
     return report;
 }
 
