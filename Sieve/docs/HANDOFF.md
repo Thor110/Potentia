@@ -40,6 +40,10 @@ These are not preferences. Work that breaks one of them is wrong.
   saving to be had by splitting an address into room and item, or by any other re-coordinating.
   Only a genuinely guided ordering is smaller, because a guided ordering *is* a compressor.
   §0 of `docs/IDEAS.md` sets this out; a proposal that forgets it is the commonest mistake.
+- **The `.sieve` format is frozen at `sieve-manifest-v31`** (Edward, 27 October 2026: "Yes, it is
+  time I stopped pushing more manifest versions, that was just caused by a succession of ideas for
+  filters that cascaded into many manifest versions"). Packer improvements that need no new format
+  are free to land; anything that would need v32 waits until it is worth a version on its own.
 - **Purely functional.** Nothing is stored. The engine sieves the state space; it does not keep a
   database of what it found.
 
@@ -3946,6 +3950,19 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   crawler against the test site served locally. Left: PHP and scripts' own fetches. Decided
   (Edward): the remembered table and "Trust the new table" stay; no signing, ever ("I don't trust
   myself or any human being alive to keep a key safe").
+
+### The READMEs rewritten, a benchmark, and a plan for showing Sieve (27 October 2026)
+
+Edward: "it is very difficult for people to get into and takes me a long time to explain to
+people ... Help me present the project better through the readmes and help me put together a plan
+to show off its utility." Both READMEs now lead with what works today and how to try it; the
+vision moved whole to `VISION.md` at the top, and the Sieve README's reference sections whole to
+`docs/MANUAL.md`; the old READMEs are kept as `Previous/READMEv2.md` and
+`Previous/SIEVE-READMEv1.md`. `tools/bench/compare.py` measures Sieve against 7-Zip, xz, zstd,
+brotli, bzip2, gzip and zip on any folder; its first table (this repository's `Sieve` source tree)
+is in `README.md`. `docs/SHOWCASE-PLAN.md` is the plan: the format frozen, the benchmark on public
+data, the ISO test set, six short demonstrations, and who to show what. Found on the way: a
+committed `lt/` folder (a language-test leftover), to remove.
 
 ### A second code review (27 October 2026)
 
