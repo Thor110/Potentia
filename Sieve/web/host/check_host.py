@@ -69,24 +69,27 @@ def main():
         return
     if not head.get("ok"):
         sys.exit("refused: " + head.get("error", ""))
-    if mode == "--table":
-        for f in head.get("files", []):
-            print(f"table: {f['path']}  {f['sha256']}")
-        print(f"table: {len(head.get('files', []))} files")
-        return
-    if mode == "--listing":
-        if not head.get("listing") or not head.get("files"):
-            sys.exit("no listing")
-        for f in head["files"]:
-            print(f"listed: {f['path']}  {f['size']} bytes  {f['sha256']}")
-        print(f"listing: {len(head['files'])} files, {len(head['folders'])} folders, {head['size']} bytes")
-        return
-    if head.get("listing"):
-        sys.exit("a listing, not a file")
+    # A file's bytes, a listing and a table all come in parts, joined in order as one base64 text.
     parts = replies[2:]
     if len(parts) != head["parts"]:
         sys.exit(f"{len(parts)} parts, not {head['parts']}")
-    got = b"".join(base64.b64decode(p["data"]) for p in sorted(parts, key=lambda p: p["part"]))
+    got = base64.b64decode("".join(p["data"] for p in sorted(parts, key=lambda p: p["part"])))
+    if mode == "--table":
+        files = json.loads(got.decode("utf-8"))["files"]
+        for f in files:
+            print(f"table: {f['path']}  {f['sha256']}")
+        print(f"table: {len(files)} files")
+        return
+    if mode == "--listing":
+        body = json.loads(got.decode("utf-8")) if head.get("listing") else {}
+        if not body.get("files"):
+            sys.exit("no listing")
+        for f in body["files"]:
+            print(f"listed: {f['path']}  {f['size']} bytes  {f['sha256']}")
+        print(f"listing: {len(body['files'])} files, {len(body['folders'])} folders, {head['size']} bytes in {len(parts)} part(s)")
+        return
+    if head.get("listing"):
+        sys.exit("a listing, not a file")
     want = open(mode, "rb").read()
     if got != want or hashlib.sha256(got).hexdigest() != head["sha256"]:
         sys.exit("the bytes are not the file's")

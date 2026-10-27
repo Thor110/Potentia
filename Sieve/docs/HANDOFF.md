@@ -3959,6 +3959,13 @@ and the core and the `sieve` tool are warning-free under GCC 13 and clang 18 (th
 built here). No format, version or address changed. The
 plan below is unchanged.
 
+Then the two left open that Edward asked for (27 October 2026, "Both of those fixes are
+necessary"): "Show it anyway" kept by the extension per tab, not in the page's storage; and a
+listing or a site's table sent in parts, as a file is (a `.sieve` of 10,000 files had made one
+message of 1,178,012 bytes; CI step 11 now checks one). Trying them in Chromium found a third: the
+guard's fetch of the page could come from the extension's own cache, and so pass a page changed on
+the server; it now revalidates. Details in `docs/REVIEW.md` and `web/README.md`.
+
 ### For the next session (27 October 2026): where the work stopped
 
 This session ran from mix-v2 (`sieve-manifest-v26`) to `sieve-manifest-v31`; its entries follow,

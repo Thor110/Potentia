@@ -102,7 +102,9 @@ instantly". What `sieve site build` writes, and what checks it:
   - **the table has changed:** the table is not the one remembered. If the site's owner updated it,
     **Trust the new table**; if not, leave;
   - **not in the table:** a page the table does not name, which can be shown anyway, unchecked, in
-    that tab.
+    that tab. The extension remembers that for the tab (not the page's own storage, which its
+    scripts could set), and only for a page the table does not name: one that does not match is
+    refused all the same. The notice's buttons answer only the reader's own clicks.
   Its settings page (right-click the icon, Options) lists the sites remembered, forgets one, or
   saves a site's table hash by hand before the first visit, so not even that is taken on trust.
 - **The crawler**, `web/crawl_site.py` (or `crawl_site.bat`):
@@ -118,6 +120,13 @@ instantly". What `sieve site build` writes, and what checks it:
   option at all"). No signing: "I don't trust myself or any human being alive to keep a key safe".
   A server replaced whole is out of the extension's hands; the crawler, holding the hash the build
   printed, is what notices it.
+- **Seen in Chromium again** (27 October 2026, headless, the test site served, Sieve as the host):
+  the same, and besides: a page not in the table whose own script sets the old "shown anyway" mark
+  and clicks the notice's buttons is still stopped; shown anyway by a real click, in that tab only;
+  a changed table not trusted by the page's clicks, trusted by the reader's; a `.sieve` of 10,000
+  files listed in the viewer (its listing in two parts); and a page changed on a server that sends
+  `Cache-Control: max-age=600`, which had been "checked" against the extension's cached copy while
+  the tab showed it changed, now refused (the page is fetched revalidated).
 - **Seen in Chromium** (25 October 2026, the test site served): the first visit remembered the
   table; later visits checked (the folder's address as its `index.html`); `gallery.html` changed
   on the server, refused; a page not in the table, offered and shown anyway; the site rebuilt with a
@@ -211,11 +220,14 @@ length, in this machine's byte order, then that many bytes of JSON.
 |---|---|
 | `{"id": N, "op": "hello"}` | `{"id": N, "ok": true, "sieve": "0.13.75"}` |
 | `{"id": N, "op": "decode", "sha256": "sha256-...", "name": "...", "data": "<the .sieve, base64>"}`, and `"path"` for one file of many | `{"id": N, "ok": true, "name", "type", "size", "sha256", "seconds", "parts": K}`, then K messages `{"id": N, "part": i, "data": "<base64>"}` |
-| a decode of a `.sieve` of many files, no `"path"` | `{"id": N, "ok": true, "listing": true, "name", "files": [{"path", "size", "sha256"}, ...], "folders": ["a/", ...], "size", "seconds", "parts": 0}` |
-| either, refused | `{"id": N, "ok": false, "error": "<why>"}` |
+| a decode of a `.sieve` of many files, no `"path"` | `{"id": N, "ok": true, "listing": true, "name", "size", "seconds", "parts": K}`, then in K parts the JSON `{"files": [{"path", "size", "sha256"}, ...], "folders": ["a/", ...]}` |
+| `{"id": N, "op": "table", "sha256": "...", "data": "<a site's index.sieve, base64>"}` | `{"id": N, "ok": true, "parts": K}`, then in K parts the JSON `{"files": [{"path", "sha256"}, ...]}` |
+| any, refused | `{"id": N, "ok": false, "error": "<why>"}` |
 
-A message to the browser is at most 1 MB, so a file comes back in parts of 699,999 bytes (whole
-groups of three, so the parts' base64 join as one). `seconds` is how long checking and decoding it took in Sieve;
+A message to the browser is at most 1 MB, so a file, a listing and a table come back in parts of
+699,999 bytes (whole groups of three, so the parts' base64 join as one; a listing or a table is
+its JSON's UTF-8 bytes, since 27 October 2026, when one of 10,000 files had come to 1,178,012 bytes
+in one message, which the browser refuses). `seconds` is how long checking and decoding it took in Sieve;
 the viewer's bar gives it, with how long fetching the `.sieve` and checking its hash took, the
 whole hand-over to Sieve and back, and (for a page) its own `.sieve` pictures. A picture's tooltip
 gives its times too.

@@ -74,19 +74,23 @@ silent on the core and the tool.
 
 ### Found and left
 
-1. **The site guard can be argued with by the page it guards.** `guard.css` hides a page until it
-   is checked, but the page's scripts run meanwhile, and they share its DOM and its
-   `sessionStorage`. A changed page can set `sieve-unchecked:<its URL>` itself and reload, and
-   `guard.js` then skips the check entirely (not only for a page missing from the table, which is
-   what "Show it anyway" is for); it can also put its own content back after the notice replaces
-   it. The buttons are fixed above; the rest is a question of design. Keeping "shown anyway" in
-   the extension (the background, per tab) rather than the page's storage closes the first; the
-   second needs the page stopped before its scripts run, which a content script cannot do.
-2. **A listing or a table larger than 1 MB.** The host sends a `.sieve`'s listing, and a site's
-   table, as one message, and Chrome refuses a message from a host over 1 MB, closing the port.
-   Measured: 2,000 files named `pages/page-N.html` came to 234,017 bytes, 117 a file, so about
-   9,000 such files (fewer with longer names). Sending them in parts, as a file's bytes already
-   are, needs `background.js` and the host changed together.
+1. *Done, 27 October 2026 (Edward: "Both of those fixes are necessary").* **The site guard could be
+   argued with by the page it guards.** "Show it anyway" was kept in the page's own
+   `sessionStorage`, where its scripts could set it, and `guard.js` then skipped the check
+   entirely. It is now kept by the background, per tab (`chrome.storage.session`, forgotten when the
+   tab closes), set only by the notice's button, and honoured only for a page the table does not
+   name. What is left, as `web/README.md` already says: a page's scripts may run before the check
+   ends, and can fight the notice once it is shown; a content script cannot stop them first.
+   Found while trying it: **the guard hashed its own cached copy of the page.** Its `fetch` used the
+   extension's HTTP cache, which the browser keeps apart from the page's, so on a server sending
+   `Cache-Control: max-age=600` (GitHub Pages does) a page changed on the server was "checked"
+   against the copy cached earlier while the tab showed the changed bytes (measured: the tab had
+   3,684 bytes, the changed page). The fetch now revalidates (`cache: "no-cache"`), and the same
+   case is refused. Tried in Chromium, headless, with Sieve as the host: `web/README.md`.
+2. *Done, 27 October 2026.* **A listing or a table larger than 1 MB.** Both now come in parts, as a
+   file's bytes do: a head saying how many, then the JSON's UTF-8 bytes as base64. Measured before:
+   a `.sieve` of 10,000 files gave one message of 1,178,012 bytes; after, two parts, and the viewer
+   lists all 10,000. CI step 11 checks it (`check_host.py` refuses any message over 1 MB).
 3. **`stb_image_write`'s settings are globals.** `stb_png` sets and restores them under a lock;
    `encode_png` reads them without it, so a PNG written while a v25 PNG is being made again on
    another thread can be written at that one's level and filter. Still a valid PNG, of other bytes.

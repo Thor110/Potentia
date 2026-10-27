@@ -299,6 +299,15 @@ python ../web/host/check_host.py $S tree.sieve --listing | grep -c "^listing: 6 
 python ../web/host/check_host.py $S tree.sieve --path "sub dir/deeper/c.txt" "$F/sub dir/deeper/c.txt" | grep -c "^decoded: c.txt" > /dev/null
 if python ../web/host/check_host.py $S tree.sieve --path nothing.txt $F/a.txt > nothing.txt 2>&1; then exit 1; fi
 grep -c "it holds no file nothing.txt" nothing.txt > /dev/null
+# A listing past the 1 MB a message to the browser may be (27 October 2026): 10,000 files, whose
+# listing is about 1.18 MB, comes in two parts, and check_host.py refuses any message over 1 MB.
+rm -rf web-many && python -c "
+import os
+os.makedirs('web-many/pages')
+for i in range(10000): open('web-many/pages/page-%d.html' % i, 'w', newline='').write('page %d\n' % i)"
+$S locate web-many --installer web-many.sieve > /dev/null 2>&1
+python ../web/host/check_host.py $S web-many.sieve --listing | grep -c "^listing: 10000 files, 1 folders, 98890 bytes in 2 part(s)" > /dev/null
+python ../web/host/check_host.py $S web-many.sieve --path pages/page-9999.html web-many/pages/page-9999.html | grep -c "^decoded: page-9999.html" > /dev/null
 python ../web/test-site/make_site.py $S --out web-site | grep -c "^pictures/tampered.sieve" > /dev/null
 [ "$(grep -o 'integrity="sha256-' web-site/gallery.html | wc -l)" -eq 8 ] # 7 pictures, and its stylesheet
 $S site check web-site 2>&1 | grep -c "0 not as stated, 3 kept as written" > /dev/null

@@ -50,6 +50,7 @@ globalThis.sieveNotice = (() => {
   function tell(r) {
     if (r.ok) {
       if (r.none) return shown();
+      if (r.unchecked) return badge("Sieve: shown anyway - this page is not in its site's table, and was not checked");
       return badge("Sieve: checked against this site's table" + (r.first ? " (remembered from now on: first visit)" : "") + " - " + r.path);
     }
     if (r.changed)
@@ -65,10 +66,10 @@ globalThis.sieveNotice = (() => {
       ], [["Leave", () => history.back()]]);
     if (r.unlisted)
       return stop("Sieve: not in this site's table", ["This page (" + r.path + ") is not one the site's table names, so it cannot be checked."],
-        [["Show it anyway (not checked)", () => {
-          sessionStorage.setItem("sieve-unchecked:" + location.href, "1"); // for this tab's session only
-          location.reload();
-        }], ["Leave", () => history.back()]]);
+        [["Show it anyway (not checked)", () =>
+          // Kept by the extension for this tab (background.js), not in the page's own storage.
+          chrome.runtime.sendMessage({ op: "unchecked", url: location.href }, () => location.reload())],
+         ["Leave", () => history.back()]]);
     return stop("Sieve: the page could not be checked", [r.error || "no answer"], [["Leave", () => history.back()]]);
   }
 

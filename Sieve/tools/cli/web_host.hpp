@@ -18,7 +18,9 @@
 // Native messaging (Chrome's, as Edge's and Firefox's): the browser starts the program with the
 // extension's origin as its first argument and talks over standard input and output, each message
 // a 4-byte length (this machine's byte order) and that many bytes of UTF-8 JSON. A message to the
-// browser is at most 1 MB, so a file comes back in parts.
+// browser is at most 1 MB, so a file, a listing and a table come back in parts: a head saying how
+// many, then K messages {"id": N, "part": i, "data": "<base64>"}, i from 0, whose data joined is
+// one base64 text (27 October 2026: a listing past about 9,000 files was more than 1 MB).
 //
 // Requests, one JSON object each:
 //   {"id": N, "op": "hello"}
@@ -27,16 +29,17 @@
 //    "name": "<the .sieve's name, for messages>", "data": "<the .sieve, base64>"}
 //       -> {"id": N, "ok": true, "name": "<the file's name>", "type": "<its media type>",
 //           "size": <bytes>, "sha256": "<its SHA-256, hex>", "seconds": <checking and decoding
-//           it here took>, "parts": K}
-//          then K messages {"id": N, "part": i, "data": "<base64>"}, i from 0;
+//           it here took>, "parts": K}, then its bytes in K parts;
 //       or, for a .sieve of many files and no "path": {"id": N, "ok": true, "listing": true,
-//           "name": "<the .sieve's own name>", "files": [{"path", "size", "sha256"}, ...],
-//           "folders": ["<path>/", ...], "size": <every file's bytes>, "seconds", "parts": 0};
+//           "name": "<the .sieve's own name>", "size": <every file's bytes>, "seconds", "parts": K},
+//           then in K parts the JSON (UTF-8) {"files": [{"path", "size", "sha256"}, ...],
+//           "folders": ["<path>/", ...]};
 //       or {"id": N, "ok": false, "error": "<why it was refused>"}.
 //   A decode may name "path": the file of that path in the .sieve (as its listing gives it).
 //   {"id": N, "op": "table", "sha256": "<as for decode>", "data": "<a site's index.sieve, base64>"}
-//       -> {"id": N, "ok": true, "files": [{"path", "sha256"}, ...]}: a site's table (a map, as
-//          `sieve site build` writes it), every file it names by its SHA-256 (25 October 2026).
+//       -> {"id": N, "ok": true, "parts": K}, then in K parts the JSON {"files": [{"path",
+//          "sha256"}, ...]}: a site's table (a map, as `sieve site build` writes it), every file it
+//          names by its SHA-256 (25 October 2026).
 #pragma once
 
 #include <cstdint>

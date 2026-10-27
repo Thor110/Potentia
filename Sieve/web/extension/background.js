@@ -63,6 +63,15 @@ function base64Of(bytes) {
   return btoa(s);
 }
 
+// A listing's or a table's body, sent in parts as base64 of UTF-8 JSON (a message from Sieve is at
+// most 1 MB, and a listing of thousands of files is more).
+function bodyOf(base64) {
+  const s = atob(base64);
+  const b = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
+  return JSON.parse(new TextDecoder("utf-8").decode(b));
+}
+
 // `path`: one file of a .sieve of many (as its listing names it); without it, such a .sieve is
 // answered with its listing.
 async function decode(url, integrity, path) {
@@ -84,8 +93,10 @@ async function decode(url, integrity, path) {
   // The times, in seconds: fetching it and checking its hash here; Sieve's own checking and
   // decoding; and the whole round trip to Sieve (the decoding, and handing the bytes both ways).
   const times = { fetched: (checked - started) / 1000, decoded: Number(head.seconds || 0), sieve: (done - checked) / 1000, total: (done - started) / 1000 };
-  if (head.listing)
-    return { listing: true, name: head.name, files: head.files, folders: head.folders, size: head.size, sieveSha256: stated, sieveBytes: bytes.length, times };
+  if (head.listing) {
+    const body = bodyOf(data);
+    return { listing: true, name: head.name, files: body.files, folders: body.folders, size: head.size, sieveSha256: stated, sieveBytes: bytes.length, times };
+  }
   return { name: head.name, type: head.type, size: head.size, sha256: head.sha256, sieveSha256: stated, sieveBytes: bytes.length, times, data };
 }
 
@@ -133,8 +144,8 @@ async function tableOf(tableUrl) {
   const bytes = new Uint8Array(await response.arrayBuffer());
   const sha = await sha256Hex(bytes);
   if (!tables.has(sha)) {
-    const { head } = await ask({ op: "table", sha256: sha, data: base64Of(bytes) });
-    tables.set(sha, new Map(head.files.map((f) => [f.path, f.sha256])));
+    const { data } = await ask({ op: "table", sha256: sha, data: base64Of(bytes) });
+    tables.set(sha, new Map(bodyOf(data).files.map((f) => [f.path, f.sha256])));
   }
   return { sha, files: tables.get(sha) };
 }
@@ -147,14 +158,40 @@ async function siteOf(url) {
   return best ? { prefix: best, ...sites[best] } : null;
 }
 
-// A page checked against its site's table. `tableUrl`: where the page says the table is (a site not
-// yet remembered); a remembered site's is its prefix + index.sieve. Answers {ok} with what was
-// found, or {ok: false} and why: changed (the table's hash is not the one remembered), unlisted,
-// mismatch, or an error.
-async function guard(pageUrl, tableUrl) {
-  const page = new URL(pageUrl);
+// A page as the guard knows it: its address without its query or fragment.
+function pageOf(url) {
+  const page = new URL(url);
   page.hash = "";
   page.search = "";
+  return page;
+}
+
+// "Show it anyway" for a page not in its site's table, in one tab, until the tab is closed (or the
+// browser is): kept here, where the page's own scripts cannot set it, as they could the page's
+// sessionStorage (27 October 2026).
+async function shownAnyway() {
+  return (await chrome.storage.session.get("unchecked")).unchecked || {};
+}
+
+async function showAnyway(tabId, url) {
+  const unchecked = await shownAnyway();
+  unchecked[tabId + " " + pageOf(url).href] = true;
+  await chrome.storage.session.set({ unchecked });
+}
+
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  const unchecked = await shownAnyway();
+  for (const key of Object.keys(unchecked)) if (key.startsWith(tabId + " ")) delete unchecked[key];
+  await chrome.storage.session.set({ unchecked });
+});
+
+// A page checked against its site's table. `tableUrl`: where the page says the table is (a site not
+// yet remembered); a remembered site's is its prefix + index.sieve. `tabId`: the tab it is in.
+// Answers {ok} with what was found (unchecked: a page not in the table, shown anyway in this tab),
+// or {ok: false} and why: changed (the table's hash is not the one remembered), unlisted, mismatch,
+// or an error.
+async function guard(pageUrl, tableUrl, tabId) {
+  const page = pageOf(pageUrl);
   let site = await siteOf(page.href);
   let first = false;
   if (!site) {
@@ -174,8 +211,16 @@ async function guard(pageUrl, tableUrl) {
   let path = decodeURIComponent(page.href.slice(site.prefix.length));
   if (path === "" || path.endsWith("/")) path += "index.html";
   const want = t.files.get(path);
-  if (!want) return { ok: false, unlisted: true, path, prefix: site.prefix };
-  const response = await fetch(page.href, { credentials: "include" });
+  if (!want) {
+    // (Only a page the table does not name can be shown anyway: one that does not match is refused
+    // whatever was chosen before.)
+    if (tabId !== undefined && (await shownAnyway())[tabId + " " + page.href]) return { ok: true, unchecked: true, path, prefix: site.prefix };
+    return { ok: false, unlisted: true, path, prefix: site.prefix };
+  }
+  // (Revalidated, never taken from this extension's own cache: the browser keeps the page's cache
+  // apart from it, so a copy cached here can be the page as it was while the tab shows it changed.
+  // Seen with a server sending max-age=600, as GitHub Pages does: "checked", on a changed page.)
+  const response = await fetch(page.href, { credentials: "include", cache: "no-cache" });
   const got = await sha256Hex(new Uint8Array(await response.arrayBuffer()));
   if (got !== want) return { ok: false, mismatch: true, path, prefix: site.prefix, got, want };
   return { ok: true, path, prefix: site.prefix, table: t.sha, first };
@@ -201,7 +246,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     p.then((r) => sendResponse(r)).catch((e) => sendResponse({ ok: false, error: e.message }));
     return true;
   };
-  if (request.op === "guard") return answer(guard(request.url, request.table));
+  const tabId = sender.tab ? sender.tab.id : undefined;
+  if (request.op === "guard") return answer(guard(request.url, request.table, tabId));
+  if (request.op === "unchecked") {
+    if (tabId === undefined) return false;
+    return answer(showAnyway(tabId, request.url).then(() => ({ ok: true })));
+  }
   if (request.op === "trust") return answer(trust(request.prefix, request.sha256, request.how || "accepted").then(() => ({ ok: true })));
   if (request.op === "forget") return answer(forget(request.prefix).then(() => ({ ok: true })));
   if (request.op === "sites") return answer(rememberedSites().then((sites) => ({ ok: true, sites })));
