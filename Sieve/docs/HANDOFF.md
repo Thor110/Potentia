@@ -3947,6 +3947,70 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   (Edward): the remembered table and "Trust the new table" stay; no signing, ever ("I don't trust
   myself or any human being alive to keep a key safe").
 
+### For the next session (27 October 2026): where the work stopped
+
+This session ran from mix-v2 (`sieve-manifest-v26`) to `sieve-manifest-v31`; its entries follow,
+newest first. Edward closed it here, the session having grown too long.
+
+**State.** Edward's repository has v31 (`3e7fecb`, "sieve manifest v31": every `.sieve` at the
+newest, the File Locator's estimate counting the search as used, Compressed formats temporary and
+permanent, and v31's archive members) and the Proof files made again. Delivered after it, as a
+zip, and to be found in his next commit: `source.sieve` as a plain `.sieve` of the source folder
+(`make_release.py` step 7; his release: 47,299,016 bytes, the anchors folder being most of it, which
+he is content to leave). CI was green on his machine for v31.
+
+**The plan Edward agreed (27 October 2026), and where each step is.** He asked where the next gains
+would come from:
+1. *Mix the shared stream.* Done, and further: v29 (the stream mixed), v30 (files mixed together in
+   groups of up to 8 MiB, decoded at once), v31 (an archive's files carried one by one).
+2. **The web dictionary: next.** Edward is choosing the outside pages it is made from (he was still
+   looking into sources when the session closed; ask him). Where it stands: on 22 October a
+   dictionary learnt from a 2014 snapshot of 90 sites, used as LZMA2's preset dictionary, came to
+   0.5% below brotli on unseen pages but 6.6% above it on Edward's own small pages (IDEAS §19.92);
+   since then mixing with a word list (mix-v3/v4, `D60`) carries pages of 4 KiB and more, and
+   `release.html` came to 8,215 bytes against brotli's 8,147, while `sieve.html` (under 4 KiB, so
+   not mixed) is 1,519 against 1,121. The steps: gather today's pages from the sources Edward
+   chooses (their licences allowing it; Edward's own pages kept for testing, never for learning);
+   learn from them (a) a preset dictionary for LZMA2 and (b) a web vocabulary for mixing's word
+   list, or a mixing model primed on them; try mixing on pages below 4 KiB with it; measure on
+   pages it never saw and on Edward's pages, against brotli, as on 22 October. A new version only
+   if it beats brotli.
+3. JPEG recompressed losslessly (its coefficients carried and coded better, the JPEG made again
+   exactly), for the photos and pictures Sieve now carries as they are.
+4. Mixing in parallel when packing (the groups already are; a single large file is not), and
+   "Create .sieve" in the right-click menu (§19.100).
+5. Then: a model for sound in mixing; zlib's own PNGs made again by zlib (no preflate difference);
+   CI's time.
+
+**Open from 27 October.**
+- The archive format as a number in the listing (IDEAS §19.88), for v31's members and the rest.
+- Mixing's word list with how often each word is used (SCOWL has none; a frequency list would be a
+  new pinned file).
+- The estimate's learned shares (`[locator] search_share_*`) start at -1 and are set by Edward's
+  first runs; how close the next first estimate comes is unmeasured on his machine.
+- A rebuilt site's `index.sieve` has new bytes (the newest instructions), so the extension says a
+  remembered site's table changed, once.
+- `source.sieve` no longer names `sieve.exe` and `sieve.sieve`; SHA256SUMS.txt and the release
+  notes do.
+- Tried and set aside today, with their figures: IDEAS §17.4 (square and circle wave filters: the
+  triangle stays best), §17.5 (the map holding the 7z), §17.6 (a smaller `sieve-install`), §17.7.
+
+**Edward's rules this session held to** (with "How Edward works" at the end of this file):
+- Deliver each update as a zip of the changed files with a root `CHANGES.md`.
+- Never push: commit locally, and answer each push reminder only with "Not pushing, at Edward's
+  instruction." Sync with `git fetch origin main && git reset origin/main && git checkout -- .`
+  whenever he says he has updated the repository.
+- British English; no figure that was not measured.
+- A new manifest version for each format change, every older one still read.
+- Run only the CI steps a change touches (he runs the whole CI).
+- Leave `docs/VOICES.md` alone.
+- Never measure his anchors folder (`data/anchors/edward-james-gordon-thor110/`).
+- Nothing from his personal photos goes in the repository, nor a certified register entry he once
+  uploaded.
+- Test pictures from the repository only.
+- `pi6.txt` and his WoW game files are never committed (the WoW files are for measuring only).
+- His screenshots are 1920 by 1080.
+
 ### `source.sieve`: the source folder's own instructions (27 October 2026)
 
 Edward: `source.sieve` came out at 49,244,484 bytes with v31, as at v29 and v30. It was still a

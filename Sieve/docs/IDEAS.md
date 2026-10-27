@@ -1417,6 +1417,77 @@ is loading and working in the hallway itself, which this would not touch; so the
 trade. In the far future, he says, the deprecated ideas can be looked back over, to see whether any
 still stand out as worthwhile. (Not measured here: what each way takes to decode.)
 
+**17.4 Square and circle wave filters (Edward, 27 October 2026; measured, not taken).** The
+proposal, beside the rope and the triangle: lay a file's bytes out W wide and H high, draw a
+square or a circle through them, and record the bytes the shape passes through to rebuild the rest
+from (the shape and the grid's width and height reconstructing that part of the data), searched as
+the rope's ways are. Two modes, both tried: only the shape's vertices kept (a square's four corners,
+a circle's 4 or 8 compass points, the outline drawn between them, as the rope draws straight
+between its kept values), and every byte on the outline kept. Inside, each row (and a square's
+columns) filled between where it meets the outline; outside a circle, the nearest outline value
+along the row. Tried over the whole grid and over tiles (squares of 8 to 64, and rectangles of 4 to
+64 by 4 to 64), the best widths of each file, the rope's phases on top or not, the kept bytes costed
+a byte each and the rest as the rope costs a plane (prototype in Python, the rope's own cost model;
+the real rope's code beside it, 20 s of search). Bytes:
+
+| File | The phases alone | Best shape | The rope today |
+| :--- | ---: | ---: | ---: |
+| radial (made up: smooth, plus a little noise) | 21,165 | 18,989 (square, vertices, 16 by 16 tiles, no phases) | 19,085 |
+| gradient (made up: smooth) | 7,235 | 7,117 (square, vertices, 32 high by 16 wide) | 5,539 |
+| the Vitruvian picture (`tests/rope`) | 44,422 | 46,079 (circle, vertices) | 44,729 |
+| the README, first 64 KB | 38,857 | 50,390 (square, vertices) | 39,028 |
+| `data/filters/moby-pos-v1.tsv`, first 128 KB | 73,730 | 99,639 (circle, vertices) | 48,571 |
+| the Utah teapot (public domain) | 124,260 | 145,275 (circle, vertices) | 75,237 |
+
+Why not: the shapes win only on a smooth field with noise in it (the made-up radial, where a
+baseline from corners 16 apart ignores the noise that each neighbour's prediction carries), and
+there the rope's contexts already come within about 0.5%. On the real picture the neighbours (the
+triangle) predict better; on text and models a drawn shape has nothing to follow. Every byte of
+the outline kept was worse than its vertices alone everywhere, and a circle never beat a square:
+the best was always a lattice of kept corners with straight lines between, which is interpolation,
+not a new kind of wave. Edward: "Pythagoras be damned, the triangle would be the best". Worth
+looking at again only for files that are smooth and noisy (scans, sensor grids, some scientific
+data), and then as one more way in the rope's search. The prototype (`shapes.py`) was not kept in
+the repository; it is short, and this paragraph says what it did.
+
+**17.5 `source.sieve` as a map holding the source's 7z (27 October 2026; replaced the same day).**
+The release's `source.sieve` was a sealed map naming `sieve.exe` and `sieve.sieve` and holding
+`sieve-source.7z`, so it was never smaller than the 7z (Edward's: 49,240,740 bytes at v29 and v30).
+v31 tried to keep it so and carry the 7z's files inside (the 7z made again exactly on installing),
+but that holds only where Sieve's LZMA SDK makes the 7z again byte for byte, which it did not on
+Edward's machine (49,244,484 bytes). Edward had meant a plain `.sieve` of the source folder, and
+that is what the release makes now (47,299,016 bytes on his machine; without the anchors folder,
+6,185,486 against the 7z's 8,006,568); the 7z is published beside it as the baseline. Not done
+instead: a map whose held files may have paths (a map holding a folder), a format change for
+something the plain `.sieve` already gives.
+
+**17.6 Smaller `sieve-install` (27 October 2026; looked at, not pursued).** It grew to 4,471,320
+bytes when it became the full installer (24 October, d6e4d85, linking `sieve_lines` and
+`sieve_compare`, so it installs everything Sieve can make): the remake compressors (brotli, zstd's encoder and the rest) about 2.07 MB, SDL
+1.19 MB, the reader about 0.72 MB, items about 0.56 MB, libarchive about 0.5 MB (Linux, measured
+by function sections). Edward: "It probably isn't worth it then."
+
+**17.7 Smaller decisions of 27 October 2026, kept with their reasons.**
+- *Every `.sieve` stamped with the newest version:* not taken. A file names the oldest version
+  that holds what it uses (the degree sample is v20 whatever made it), so any Sieve from that
+  version on reads it; stamping the newest would only make older readers refuse files they can
+  read.
+- *Groups of 16 MiB for files mixed together:* not taken for 8 MiB (v30). On Sieve's data folder
+  16 MiB was no smaller (3,099,798 against 3,100,643) and installed in 28.6 s against 14.1 s, a
+  group decoding on one thread; on 34 MB of the repository's texts 16 MiB was 4% smaller. The size
+  is the packer's alone, so it can move without a new version.
+- *Groups made by kind of file rather than the listing's order:* 0.4% smaller, not worth a way to
+  say it.
+- *Whether a compressed format is worth unpacking, judged by a sample mixed alone:* 1 MiB in 8
+  stretches, mixed, put the source at 10,990,184 bytes against LZMA2's 7,992,234, since a sample
+  misses what repeats across the whole. Kept instead: mixing's gain over LZMA2 on the sample,
+  applied to LZMA2's estimate of the whole (6,702,006; it came to 6,189,674).
+- *"Welcome to the sieve" as a setting:* not needed for compression. It is only where the hallway
+  starts (0% along the pages line because its own address is small); nothing a search or the
+  packer does refers to it.
+- *The anchors folder left out of the release's source:* Edward: "Not a bother to be honest, I
+  think it is fine as it is for now."
+
 ## 18. Edward's ideas of 11 October 2026
 
 **18.1 Random maze generators as distortion filters.** Edward's words: random maze generators used

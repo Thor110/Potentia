@@ -1,30 +1,31 @@
-# source.sieve: a plain .sieve of the source folder (27 October 2026)
+# Notes for the next session: ideas set aside, and the handoff (27 October 2026)
 
-Unzip over the repository root. Committed locally (not pushed), on top of your 3e7fecb. No format change; nothing to rebuild (only the release script and docs changed).
+Unzip over the repository root, after the `source.sieve` zip. Committed locally (not pushed). Documentation only: nothing to rebuild.
 
-## What was wrong
-- **`source.sieve` was still a sealed map holding the 7z.** So it was never smaller than the 7z. v31 could only help where Sieve made that 7z again byte for byte, and on your machine it didn't, hence 49,244,484 bytes.
-- **On a stand-in here** (58.5 MB of random bytes in place of your anchors folder), the 7z was made again and the result went from 66,614,143 to 64,742,836. That's little, because the stand-in can't be compressed.
+## IDEAS.md, section 17 (Deprecated ideas)
+- **17.4 Square and circle wave filters:** the idea, how it was tried (vertices only and every byte on the outline; whole grid and tiles; squares and rectangles; the phases on top or not), the table of results against the phases and the rope, and why it isn't taken. Your words on the triangle are quoted.
+- **17.5 `source.sieve` as a map holding the 7z:** replaced the same day by the plain .sieve of the source folder, with your sizes.
+- **17.6 A smaller `sieve-install`:** the size breakdown, and your "It probably isn't worth it then."
+- **17.7 Smaller decisions of the day, with their reasons:**
+  - every .sieve stamped with the newest version;
+  - 16 MiB groups;
+  - groups made by kind of file;
+  - the "worth unpacking" test from a sample alone;
+  - the welcome page as a setting;
+  - the anchors folder left in the release's source.
 
-## What the release script does now
-- **Step 7:** `source.sieve` is the committed source tree's own Sieve instructions, newest version (`sieve locate <tree> --installer source.sieve --items`). It's made from the same tree as `sieve-source.7z` and installs as the Sieve folder.
-- **Step 8:** checks that `source.sieve` installs back to that tree, file for file.
-- **Publishing:** five files: `sieve.exe`, `sieve.sieve`, `source.sieve`, `sieve-source.7z` (the baseline, now published) and `metrics.txt`. SHA256SUMS.txt and the release notes list all five.
-- **`--map-with` is gone:** there's no map to make again.
-- **`-mmt=1` is gone:** it was only there so the held 7z could be made again.
-- **`source.sieve` no longer names `sieve.exe` and `sieve.sieve`:** the SHA-256 list and the notes do.
-
-## Measured here
-On the source without your anchors folder (749 files, 38,415,528 bytes):
-
-| | Bytes |
-| :--- | ---: |
-| `sieve-source.7z` | 8,006,568 |
-| `source.sieve` (v30) | 6,185,486 |
-
-- **Time:** step 7, with its install check, took 4 min 26 s here.
-- **Your release:** it holds the anchors folder too (58.5 MB in 6 files), so your figure will be larger. How much depends on how those files pack.
+## HANDOFF.md
+A new entry at the top of the newest ones: "For the next session (27 October 2026): where the work stopped". It covers:
+- **State:** v31 in your repository, and `source.sieve` as a plain .sieve delivered after it.
+- **The plan you agreed, and where each step is:**
+  1. done (v29, v30, v31);
+  2. **the web dictionary, next:** waiting on your choice of outside pages, with the steps and the figures to beat;
+  3. JPEG recompressed losslessly;
+  4. parallel mixing and "Create .sieve";
+  5. a sound model, zlib PNGs and CI time.
+- **What's still open from today.**
+- **Your working rules this session held to.**
 
 ## Files
-- `Sieve/tools/make_release.py`
-- `Sieve/docs/`: SPECIFICATIONS.md, IDEAS.md, HANDOFF.md, SIEVE-INSTALL-USAGE.md
+- `Sieve/docs/IDEAS.md`
+- `Sieve/docs/HANDOFF.md`
