@@ -2259,6 +2259,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const bool mix4_on = rope_newest >= 11;
     // v29's (the lzma2 stream mixed by mix-v4 where that is smaller): rope_newest 12.
     const bool mix_stream_on = rope_newest >= 12;
+    // v30's (files mixed together in groups, decoded at once): rope_newest 13, in v29's together's place.
+    const bool mix_groups_on = rope_newest >= 13;
     bool png_made = false;
     rope_newest = std::min<uint32_t>(rope_newest, 6);
     m.remake_gz = false;
@@ -3097,6 +3099,120 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // apart, 239,547 together). Where the stream with them, mixed whole, comes out smaller than their
     // codes and the stream without them (by LZMA2's estimate), they are carried as they are, and the
     // stream's code made here is the one used below. Not with Prioritise Decoding Speed (as mixing).
+    // v30: files mixed together in groups of at most 8 MiB, each decoded as one and the groups at
+    // once: every file that compresses and is carried as it is or would be mixed alone (not as a
+    // picture, which has models of its own; not one already compressed, which mixing cannot help
+    // and only slows), in the listing's order, cut where the next would take a group past 8 MiB.
+    // A group is kept where it, mixed, is smaller than its files apart (the codes of those mixed
+    // alone, and LZMA2's estimate of the rest). Measured (27 October 2026) on 34 MB of Sieve's files
+    // that compress: alone 5,740,563 bytes; in groups of 4 MiB 5,259,051, of 8 MiB 4,884,492, of 16
+    // MiB 4,681,922, all as one 4,694,273 (mixing's tables are full by then); by kind of file rather
+    // than the listing's order, 0.4% smaller (not worth a way to say it). Groups are mixed at once too,
+    // on as many threads as the memory free holds them (the groups, so the instructions, are the same
+    // at any count). Not with Prioritise Decoding Speed (as mixing).
+    if (mix_groups_on && !prioritise_decoding() && !stop_requested())
+    {
+        const timings::Scope t("pack.mix_groups");
+        // Groups of up to 8 MiB: a group decodes on one thread (about 0.6 MB a second), so the largest
+        // group sets the install's time. Sieve's data folder (27 October 2026, four threads), size then
+        // install: v29 3,160,426 bytes in 12.4 s; groups of 4 MiB 3,154,427 in 9.9 s; 8 MiB 3,100,643
+        // in 14.1 s; 16 MiB 3,099,798 in 28.6 s. (On 34 MB of the repository's texts 16 MiB was 4%
+        // smaller than 8.) The size is the packer's choice: a reader takes a group of any size.
+        constexpr uint64_t kGroup = uint64_t(8) << 20;
+        std::vector<size_t> cand;
+        for (size_t i = 0; i < files.size(); ++i)
+        {
+            const std::string& w = files[i]->way;
+            const bool alone = (w.rfind("mix2 ", 0) == 0 || w.rfind("mix3 ", 0) == 0 || w.rfind("mix4 ", 0) == 0) && w.find(" I") == std::string::npos;
+            if ((!alone && w != "raw") || bytes[i].empty() || bytes[i].size() > kGroup) continue;
+            {
+                // (already compressed, carried as it is or mixed alone for the little mixing finds in it:
+                // LZMA2 makes its start no smaller than 95% of it)
+                const size_t sn = std::min<size_t>(bytes[i].size(), size_t(256) << 10);
+                if (sn >= 64 && double(estimate(std::vector<uint8_t>(bytes[i].begin(), bytes[i].begin() + std::ptrdiff_t(sn)))) >= 0.95 * double(sn)) continue;
+            }
+            cand.push_back(i);
+        }
+        std::vector<std::vector<size_t>> groups;
+        uint64_t in_group = 0;
+        for (const size_t i : cand)
+        {
+            if (groups.empty() || in_group + bytes[i].size() > kGroup) groups.emplace_back(), in_group = 0;
+            groups.back().push_back(i);
+            in_group += bytes[i].size();
+        }
+        // (a group of one file mixed alone already is that file's own code: left as it is)
+        struct Made
+        {
+            std::vector<uint8_t> code;
+            std::string params;
+            uint64_t apart = 0, total = 0;
+            bool kept = false;
+        };
+        std::vector<Made> made(groups.size());
+        const uint64_t free = memory_free(), each = (uint64_t(16) << 22) * 4 + (uint64_t(48) << 20);
+        const unsigned at_once = unsigned(std::clamp<uint64_t>(free ? free / 2 / each : 2, 1, pack_threads()));
+        progress("the files mixed together, in groups");
+        for_each_index(groups.size(), at_once, [&](size_t g) {
+            if (stop_requested() || groups[g].size() < 2) return;
+            std::vector<uint8_t> joined, rest;
+            uint64_t apart = 0;
+            for (const size_t i : groups[g])
+            {
+                joined.insert(joined.end(), bytes[i].begin(), bytes[i].end());
+                if (files[i]->way == "raw") rest.insert(rest.end(), bytes[i].begin(), bytes[i].end());
+                else
+                {
+                    uint64_t len = rope_codes[i].size(), vl = 1;
+                    while (len >>= 7) ++vl;
+                    apart += rope_codes[i].size() + vl;
+                }
+            }
+            if (!rest.empty()) apart += estimate(rest);
+            // The word list where the group's start is text and it makes that start smaller.
+            const size_t sn = std::min<size_t>(joined.size(), size_t(256) << 10);
+            const std::span<const uint8_t> start(joined.data(), sn);
+            const MixDictionary* words = nullptr;
+            if (text_like(start) && mix_words())
+                try
+                {
+                    const MixDictionary& list = mix_words()(60);
+                    if (mix4_code(start, Mix4Params::for_size(sn, 0, 1, 60), &list).size() < mix4_code(start, Mix4Params::for_size(sn)).size()) words = &list;
+                }
+                catch (const std::exception&)
+                {
+                    // (no word list here: without it)
+                }
+            const Mix4Params mp = Mix4Params::for_size(joined.size(), 0, 1, words ? 60 : 0);
+            Made& d = made[g];
+            d.code = mix4_code(joined, mp, words);
+            d.params = mp.text();
+            d.apart = apart;
+            d.total = joined.size();
+            uint64_t len = d.code.size(), vl = 1;
+            while (len >>= 7) ++vl;
+            // (its way's text, "mixt ... T<bytes>" and the others' "mixn", against theirs: counted as their length)
+            d.kept = d.code.size() + vl + d.params.size() + 24 + 5 * groups[g].size() < apart;
+        });
+        for (size_t g = 0; g < groups.size(); ++g)
+        {
+            if (!made[g].kept) continue;
+            for (size_t k = 0; k < groups[g].size(); ++k)
+            {
+                const size_t i = groups[g][k];
+                files[i]->way = k == 0 ? "mixt " + made[g].params + " T" + std::to_string(made[g].total) : "mixn";
+                rope_codes[i].clear();
+                rope_params[i] = RopeParams{};
+                piece_z[i].clear();
+            }
+            rope_codes[groups[g][0]] = std::move(made[g].code);
+            ++r.mix_groups;
+            r.mix_group_files += groups[g].size();
+            r.mix_group_bytes += made[g].total;
+            r.mix_group_apart += made[g].apart;
+        }
+        if (r.mix_groups) m.roped = true;
+    }
     std::vector<uint8_t> premixed;
     std::string premixed_params;
     if (mix_stream_on && !prioritise_decoding() && !stop_requested())
@@ -3126,7 +3242,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             return out;
         };
         const bool every = rope_search_every_wave();
-        if (apart)
+        if (apart && !mix_groups_on) // (v30's groups take their place)
         {
             const std::vector<uint8_t> together = stream_of(true);
             if (every || together.size() <= (size_t(16) << 20))
@@ -3211,7 +3327,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     uint64_t mix_lengths = 0; // v24: the bytes of mixing's codes' lengths, in the rope stream
     for (size_t i = 0; i < files.size(); ++i)
         if (files[i]->way.rfind("rope ", 0) == 0 || files[i]->way.rfind("pieces ", 0) == 0 || files[i]->way.rfind("mix ", 0) == 0 ||
-            files[i]->way.rfind("mix2 ", 0) == 0 || files[i]->way.rfind("mix3 ", 0) == 0 || files[i]->way.rfind("mix4 ", 0) == 0)
+            files[i]->way.rfind("mix2 ", 0) == 0 || files[i]->way.rfind("mix3 ", 0) == 0 || files[i]->way.rfind("mix4 ", 0) == 0 ||
+            files[i]->way.rfind("mixt ", 0) == 0)
         {
             uint64_t len = rope_codes[i].size();
             while (len >= 0x80)
@@ -3221,6 +3338,13 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             }
             m.rope_carried.push_back(uint8_t(len));
             m.rope_carried.insert(m.rope_carried.end(), rope_codes[i].begin(), rope_codes[i].end());
+            if (files[i]->way.rfind("mixt ", 0) == 0)
+            {
+                r.mix_group_code += rope_codes[i].size(); // v30: a group's code
+                r.mix_carried += rope_codes[i].size();
+                for (uint64_t n = rope_codes[i].size(); n; n >>= 7) ++mix_lengths;
+                continue;
+            }
             if (files[i]->way.rfind("mix ", 0) == 0 || files[i]->way.rfind("mix2 ", 0) == 0 || files[i]->way.rfind("mix3 ", 0) == 0 ||
                 files[i]->way.rfind("mix4 ", 0) == 0)
             {
@@ -3451,7 +3575,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // v20: wherever the head is in bytes at the newest, the body is too (and v20's archives allowed).
     const bool had_v21 = m.v21, had_v22 = m.v22;
     const bool had_v25 = m.v25;
-    m.v29 = !m.lzma2.mixed.empty();           // (the stream mixed only where the newest instructions are made: above)
+    m.v30 = r.mix_groups > 0;                 // (groups only where the newest instructions are made: above)
+    m.v29 = !m.lzma2.mixed.empty() || m.v30;  // (the stream mixed only where the newest instructions are made: above)
     m.v28 = mixed4 || m.v29;                  // (mix-v4 only where the newest instructions are made: above)
     m.v27 = mixed3 || m.v28;                  // (mix-v3 only where the newest instructions are made: above)
     m.v26 = mixed2 || m.v27;                  // (mix-v2 only where the newest instructions are made: above)
@@ -3474,6 +3599,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     r.v27 = m.v27;
     r.v28 = m.v28;
     r.v29 = m.v29;
+    r.v30 = m.v30;
     r.rope_v6 = rope_triangle;
     r.rar_said = rar_said;
     for (const auto& u : m.unpacked) r.rar_remade += !u.program.empty();
@@ -3551,7 +3677,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
     };
     if (r.compact)
     {
-        const char* version = r.v29 ? kMixedStreamManifestVersion : r.v28 ? kMix4ManifestVersion : r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : r.more_archives ? kMoreArchivesManifestVersion : r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
+        const char* version = r.v30 ? kMixGroupsManifestVersion : r.v29 ? kMixedStreamManifestVersion : r.v28 ? kMix4ManifestVersion : r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : r.more_archives ? kMoreArchivesManifestVersion : r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
                             : r.roped ? kRopeManifestVersion : kCompactManifestVersion;
         if (r.items)
         {
@@ -3564,7 +3690,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         else o << "items     none; " << version << "\n";
         if (r.listing_carried) o << "listing   " << r.listing << " bytes, carried as LZMA2 in " << r.listing_carried << "\n";
         if (r.binary)
-            o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << (r.v29 ? kMixedStreamManifestVersion : r.v28 ? kMix4ManifestVersion : r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : kBinaryManifestVersion)
+            o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << (r.v30 ? kMixGroupsManifestVersion : r.v29 ? kMixedStreamManifestVersion : r.v28 ? kMix4ManifestVersion : r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : kBinaryManifestVersion)
               << (r.v20 ? "; its body in bytes too" : "") << ")\n";
         if (r.remade) o << "remade    " << r.remade << " archive(s) carried as what they hold, remade exactly on installing (" << version << ")\n";
         if (r.unpacked)
@@ -3603,7 +3729,10 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
     else if (r.items)
         o << "items     " << r.items << " file(s) carried as items of Sieve's lines (" << r.item_bytes << " bytes, named in " << r.item_text
           << " characters of the listing; sieve-manifest-v5, made again on installing)\n";
-    if (r.v29)
+    if (r.mix_groups)
+        o << "groups    " << r.mix_group_files << " file(s) mixed together in " << r.mix_groups << " group(s) by " << kMix4Version << " ("
+          << r.mix_group_bytes << " bytes, carried in " << r.mix_group_code << "; apart " << r.mix_group_apart << "; " << kMixGroupsManifestVersion << ")\n";
+    if (r.v29 && !r.stream_mixed_params.empty())
         o << "stream    the files carried together mixed by " << kMix4Version << " (" << r.stream_mixed_params << "): " << r.stream_mixed << " bytes, LZMA2's "
           << r.stream_lzma2
           << (r.mixed_together ? "; " + std::to_string(r.mixed_together) + " of them mixed together rather than one by one (" +

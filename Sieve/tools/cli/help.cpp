@@ -1041,6 +1041,7 @@ const std::vector<Page>& pages()
                                   "(v25): one stb_image_write made (as the hallway's screenshots are) as its\n"
                                   "pixels, made again by it; any other from its skeleton, its deflate by preflate\n"
                                   "and its chunks' CRCs worked out again. Off unless given."},
+          {"--v29", "As sieve-manifest-v29 at newest: no groups of files mixed together (v30)."},
           {"--v28", "As sieve-manifest-v28 at newest: the files carried together packed by LZMA2, never mixed (v29)."},
           {"--v27", "As sieve-manifest-v27 at newest: mixing with sse-v1's stages (mix-v2, mix-v3), not mix-v4 (v28)."},
           {"--v26", "As sieve-manifest-v26 at newest: no text mixed with a word list (mix-v3, v27)."},
@@ -1083,7 +1084,7 @@ const std::vector<Page>& pages()
                                   "waves (by line, and by column where its lines are all one length) are tried.\n"
                                   "Any command that makes instructions takes it (locate, site, map, rope)."},
           {"--prioritise-decoding", "Prioritise Decoding Speed (the File Locator's box): no file carried by mixing, and the\n"
-                                    "files carried together not mixed (v29), mixing's decoding (0.3 to 1 MB/s) being 15 to\n"
+                                    "files carried together not mixed (v29) nor in groups (v30), mixing's decoding (0.3 to 1 MB/s) being 15 to\n"
                                     "60 times slower than the rope's or LZMA2's; of the other ways, the smallest. Quicker to install, larger. The report says how many\n"
                                     "files mixing was not tried on. Any command that makes instructions takes it."},
           {"SIEVE_PACK_THREADS=N", "(Not an option: in the environment.) The packer uses every core (cutting into pieces, LZMA2's passes), and the\n"

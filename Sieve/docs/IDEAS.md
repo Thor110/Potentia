@@ -4941,8 +4941,13 @@ measured on this repository's own files.
   349,689 bytes to 260,529 (−25.5%), `client` 336,403 to 247,045 (−26.6%), `docs` −6.8%, `tests`
   −1.2%. The cost: one stream decodes in one piece (`docs` 1.1 s to 4.2 s), and it is held to 16
   MiB, so a folder as large as the release (Sieve's data, 27 MB) is not mixed together.
-- *Next:* several mixed streams (a folder's files in groups, each mixed, decoded at once): no 16 MiB
-  limit, and installing as quick as before; the files already compressed (screenshots, JPEGs)
-  left out of the mixed stream, where they cost time and gain nothing; a word list with how often each word is used
+- **Groups of files mixed together (27 October 2026, `sieve-manifest-v30`).** The folder's files
+  that compress cut into groups of up to 8 MiB in the listing's order, each group mixed, the groups
+  decoded at once; files already compressed (LZMA2 can't shrink their start by 5%) left out. Sieve's
+  data folder: 3,160,426 bytes (v29) to 3,100,643, installed in 14.1 s (12.4 s). Groups of 16 MiB
+  were as small there (3,099,798) but installed in 28.6 s, one group on one thread; on 34 MB of
+  the repository's texts they were 4% smaller than 8 MiB. The group size is the packer's, so it
+  can be moved without a new version.
+- *Next:* a word list with how often each word is used
   (SCOWL has none; a frequency list would be a new pinned file); and more generators as they turn
   up (zlib's PNGs remade by zlib itself where it can, without preflate's difference).

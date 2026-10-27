@@ -195,6 +195,12 @@ inline constexpr const char* kMix4ManifestVersion = "sieve-manifest-v28";
 // pieces LZMA2 takes) may be mixed by mix-v4 instead: its line "stream lzma2 P B 0 mix4 B21[ D60]",
 // in bytes its dictionary byte 0xFE and then the parameters (a varint of their length, then them).
 inline constexpr const char* kMixedStreamManifestVersion = "sieve-manifest-v29";
+// v30 (27 October 2026): v29 whose files may be mixed together in groups (mix-v4), each group
+// decoded as one and then cut into its files: a group's first file's way "mixt <parameters>
+// T<the group's bytes>" (parameters as mix-v4's for text or bytes: "B22", "B22 D60"), its code next
+// in the rope stream; each of its other files "mixn", the next bytes of the open group, in the
+// listing's order (other ways may come between).
+inline constexpr const char* kMixGroupsManifestVersion = "sieve-manifest-v30";
 
 // The "u" lines' formats v20 adds (an archive carried as its contents).
 inline bool is_v20_format(const std::string& f)
@@ -290,6 +296,7 @@ struct Manifest
     bool v27 = false; // v27: some file is carried by mix-v3 (v26 is set too)
     bool v28 = false; // v28: some file is carried by mix-v4 (v27 is set too)
     bool v29 = false; // v29: the lzma2 stream is mixed (v28 is set too)
+    bool v30 = false; // v30: files mixed together in groups (v29 is set too)
     bool body_text = false; // v20: its body as text after all (the head's flag 128), where that came out smaller
     // v14: each archive carried as its contents: its format ("7z", "xz"), its size, its path, and the
     // folder (or file) its contents are in.

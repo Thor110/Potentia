@@ -490,8 +490,8 @@ with zipfile.ZipFile('a21/stored.zip', 'w', zipfile.ZIP_STORED) as z:
     z.writestr(zipfile.ZipInfo('sieve_ref.py', (2026, 10, 25, 12, 0, 0)), t)"
 cp ../tests/archives/sieve-7zip-lzma2.7z ../tests/archives/sieve-7zip-lzma.7z ../tests/archives/sieve-7zip-deflate.zip a21/
 SIEVE_ARCHIVES_ALWAYS=1 $S locate a21 --installer a21.sieve --items --optimise-archives --manifest a21.manifest | tr -d '\r' > a21.txt
-grep -c "^remade    6 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v2[1-9])$" a21.txt > /dev/null
-python -c "d = open('a21.manifest', 'rb').read(); assert d[:5] == b'sieve' and 21 <= d[5] <= 29, d[:6]"
+grep -c "^remade    6 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v\(2[1-9]\|30\))$" a21.txt > /dev/null
+python -c "d = open('a21.manifest', 'rb').read(); assert d[:5] == b'sieve' and 21 <= d[5] <= 30, d[:6]"
 $S install a21.sieve --to a21_inst > /dev/null
 for f in huff.gz py.zip stored.zip sieve-7zip-lzma2.7z sieve-7zip-lzma.7z sieve-7zip-deflate.zip; do cmp a21/$f a21_inst/$f; done
 # The oracle reads every skeleton whole and makes the stored zip again; the others, made by preflate
@@ -529,7 +529,7 @@ if [ "$(uname -s)" = Linux ] || [ "$(uname -s)" = Darwin ]; then
   cmp r22/made.rar r22_si/made.rar
   # In a folder: the archive given back in its place, the folder's other files as they were.
   cp r22/made.rar r22/folder/ && cp ../tests/manifest_fixture/a.txt r22/folder/
-  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/folder --installer r22f.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^unpacked .*sieve-manifest-v2[2-9]" > /dev/null
+  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/folder --installer r22f.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^unpacked .*sieve-manifest-v\(2[2-9]\|30\)" > /dev/null
   rm -rf r22f_inst && SIEVE_RAR="$RAR" $S install r22f.sieve --to r22f_inst > /dev/null
   diff -r r22/folder r22f_inst
   # --v21: as before, its contents alone.
@@ -586,7 +586,7 @@ cmp dq.txt dq_oracle/dq.txt
 # chunks, their deflate by preflate and their CRCs worked out again. Installed exactly; the oracle
 # reads both and names them (it has neither stb_image_write nor preflate); --v24 makes neither.
 rm -rf png25 && mkdir png25 && cp ../docs/images/hallway-audio.png ../web/extension/icon128.png png25/
-$S locate png25 --installer png25.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v2[5-9])$" > /dev/null
+$S locate png25 --installer png25.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v\(2[5-9]\|30\))$" > /dev/null
 [ "$(wc -c < png25.sieve)" -lt 50000 ]
 rm -rf png25_inst png25_oracle
 $S install png25.sieve --to png25_inst > /dev/null
@@ -678,7 +678,7 @@ diff -r m28 m28_si
 # --v28 and Prioritise Decoding Speed make no v29.
 rm -rf t29 && mkdir t29 && cp ../tools/check_help.py ../tools/rar_check.py ../ci/steps/03-filters.sh ../ci/steps/07-sound.sh t29/
 head -c 3000 ../README.md > t29/small.md
-$S locate t29 --installer t29.sieve --items 2>&1 | tr -d '\r' > t29.txt
+$S locate t29 --installer t29.sieve --items --v29 2>&1 | tr -d '\r' > t29.txt
 grep -c "^stream    the files carried together mixed by mix-v4 (B[0-9]* D60): [0-9]* bytes, LZMA2's [0-9]*; [0-9]* of them mixed together rather than one by one ([0-9]* bytes apart) (sieve-manifest-v29)$" t29.txt > /dev/null
 $S locate t29 --installer t28.sieve --items --v28 2>&1 | tr -d '\r' > t28.txt
 ! grep -q "sieve-manifest-v29\|not an option" t28.txt
@@ -692,6 +692,24 @@ python sieve_ref.py unpack t29.sieve --to t29_oracle > /dev/null
 diff -r t29 t29_oracle
 $SI t29.sieve --to t29_si --yes > /dev/null
 diff -r t29 t29_si
+
+# v30 (27 October 2026): files mixed together in groups of up to 16 MiB, each group its own mixed
+# code in the rope stream, the groups decoded at once; files that LZMA2 can't shrink by 5% (already
+# compressed) are left out. The same five files: v30, smaller than v28, read back by Sieve, the
+# oracle and sieve-install. --v29 and Prioritise Decoding Speed make no v30.
+$S locate t29 --installer t30.sieve --items 2>&1 | tr -d '\r' > t30.txt
+grep -c "^groups    [0-9]* file(s) mixed together in 1 group(s) by mix-v4 ([0-9]* bytes, carried in [0-9]*; apart [0-9]*; sieve-manifest-v30)$" t30.txt > /dev/null
+! grep -q "sieve-manifest-v30" t29.txt
+[ "$(wc -c < t30.sieve)" -lt "$(wc -c < t28.sieve)" ]
+$S locate t29 --installer t30fast.sieve --items --prioritise-decoding 2>&1 | tr -d '\r' > t30fast.txt
+! grep -q "sieve-manifest-v30\|^groups    " t30fast.txt
+rm -rf t30_inst t30_oracle t30_si
+$S install t30.sieve --to t30_inst > /dev/null
+diff -r t29 t30_inst
+python sieve_ref.py unpack t30.sieve --to t30_oracle > /dev/null
+diff -r t29 t30_oracle
+$SI t30.sieve --to t30_si --yes > /dev/null
+diff -r t29 t30_si
 # Prioritise Decoding Speed (27 October 2026; --prioritise-decoding, the File Locator's box): no
 # file mixed, so the instructions install quickly: Don Quixote's start carried by the rope or
 # LZMA2 instead, larger than with mixing, the report saying so; installed by Sieve and the oracle.

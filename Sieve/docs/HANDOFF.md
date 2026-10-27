@@ -3947,6 +3947,30 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   (Edward): the remembered table and "Trust the new table" stay; no signing, ever ("I don't trust
   myself or any human being alive to keep a key safe").
 
+### Groups of files mixed together: `sieve-manifest-v30` (27 October 2026)
+
+The next step after v29 (Edward: "Make a start on the next step").
+- **Format:** ways `mixt <mix-v4 parameters> T<total>` (a group's first file; its code next in the
+  rope stream, varint then code) and `mixn` (the group's other files, in the listing's order, each
+  taking the next `size` bytes). `Manifest::v30`; head byte 30; `kMixGroupsManifestVersion`.
+- **Reader (`unpack_v4`):** a `mixt` pushes one `Deferred` job (`mix4_file`) writing to the group's
+  own bytes (`Deferred::out`), so the groups decode at once with the files mixed alone
+  (`decode_deferred`). Files in groups are `late`: their slices are handed out after decoding, then
+  their remakes run. Refused: a group not used up exactly, `mixn` with none open, another way inside
+  a group.
+- **Packer:** files `raw` or mixed alone (not pictures), non-empty, and not already compressed (LZMA2
+  of the first 256 KiB at least 95% of it), in listing order, cut at **8 MiB**; groups mixed on
+  `for_each_index` with as many at once as memory holds (about 300 MB each); kept where code + way
+  + varint beat the members apart; groups of one skipped. Replaces v29's together path when on.
+- **Why 8 MiB (measured, data folder, four threads):** v29 3,160,426 / 12.4 s; 4 MiB 3,154,427 /
+  9.9 s; 8 MiB 3,100,643 / 14.1 s; 16 MiB 3,099,798 / 28.6 s. A group decodes on one thread
+  (~0.6 MB/s), so the largest sets the install time. Packing: 94 s, 100 s, 108 s, 140 s. It's the
+  packer's choice: no format change to move it.
+- **Switches:** `rope_newest` 13 (`--v29` for 12; the File Locator passes 13; `items.hpp` default 13);
+  Prioritise Decoding Speed turns it off. Report: `groups    N file(s) mixed together in G group(s)`.
+- **Oracle:** `mixt`/`mixn` branches, its group checked used up at the end. **CI:** step 11's v29
+  block pins `--v29`; a v30 block (the same five files); version ranges widened to 30.
+
 ### Files mixed together: `sieve-manifest-v29` (27 October 2026)
 
 Step 1 of the plan Edward saw (mixing the shared stream), and what it turned into.

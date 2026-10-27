@@ -145,6 +145,7 @@ struct Deferred
     std::string path;
     std::function<std::vector<uint8_t>()> decode;
     uint64_t memory = 0;
+    std::vector<uint8_t>* out = nullptr; // v30: a group's bytes, cut into its files after (else bytes[i])
 };
 
 // Every deferred file decoded into bytes[i], on up to pack_threads() threads at once, with no more
@@ -174,7 +175,7 @@ void decode_deferred(const std::vector<Deferred>& jobs, std::vector<std::vector<
             }
             try
             {
-                bytes[jobs[j].i] = jobs[j].decode();
+                (jobs[j].out ? *jobs[j].out : bytes[jobs[j].i]) = jobs[j].decode();
             }
             catch (...)
             {
@@ -218,6 +219,27 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
     std::vector<std::pair<size_t, std::vector<uint8_t>>> masks(files.size()); // derived: its base, its mask
     size_t xa = 0, pa = 0, ra = 0;
     std::vector<Deferred> deferred; // the rope's and mixing's files, decoded at once after the listing is read
+    std::vector<char> late(files.size(), 0); // files whose bytes come after the listing is read (remade after, too)
+    // v30: groups of files mixed together, each decoded as one ("mixt <parameters> T<bytes>" opens
+    // one, its code next in the rope stream; "mixn" is the next of the open group's files), then cut.
+    struct Group
+    {
+        std::vector<uint8_t> bytes;
+        uint64_t total = 0, used = 0;
+        std::string first; // its first file, to name it
+    };
+    std::vector<std::unique_ptr<Group>> groups;
+    struct Slice
+    {
+        size_t i, group;
+        uint64_t at, size;
+    };
+    std::vector<Slice> slices;
+    auto group_done = [&](const char* where) {
+        if (!groups.empty() && groups.back()->used != groups.back()->total)
+            throw std::runtime_error("manifest: the group of files mixed together from " + groups.back()->first + " ends " + where +
+                                     " before its files have its bytes");
+    };
     auto take = [](const std::vector<uint8_t>& from, size_t& at, uint64_t n, const std::string& path) {
         if (from.size() - at < n) throw std::runtime_error("the installer ends before " + path);
         std::vector<uint8_t> out(from.begin() + std::ptrdiff_t(at), from.begin() + std::ptrdiff_t(at + n));
@@ -234,7 +256,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
         {
             const std::string inner = e.remake.substr(e.remake.rfind(' ') + 1);
             if (inner.empty() || inner.size() > 19 || inner.find_first_not_of("0123456789") != std::string::npos ||
-                (e.way != "raw" && e.way.rfind("rope ", 0) != 0 && e.way.rfind("pieces ", 0) != 0 && e.way.rfind("mix ", 0) != 0 && e.way.rfind("mix2 ", 0) != 0 && e.way.rfind("mix3 ", 0) != 0 && e.way.rfind("mix4 ", 0) != 0))
+                (e.way != "raw" && e.way.rfind("rope ", 0) != 0 && e.way.rfind("pieces ", 0) != 0 && e.way.rfind("mix ", 0) != 0 && e.way.rfind("mix2 ", 0) != 0 && e.way.rfind("mix3 ", 0) != 0 && e.way.rfind("mix4 ", 0) != 0 && e.way.rfind("mixt ", 0) != 0 && e.way != "mixn"))
                 throw std::runtime_error("manifest: " + e.path + " is remade from what no way gives");
             e.size = std::stoull(inner);
         }
@@ -345,6 +367,63 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
             }
             ra += size_t(len);
         }
+        else if (m.roped && m.v30 && e.way.rfind("mixt ", 0) == 0)
+        {
+            // v30: a group's first file: the group's parameters and size, its code next in the rope stream.
+            group_done("at another group");
+            const std::string w = e.way.substr(5);
+            const size_t t = w.rfind(" T");
+            if (t == std::string::npos || w.find_first_not_of("0123456789", t + 2) != std::string::npos || t + 2 >= w.size() || w.size() - t - 2 > 19)
+                throw std::runtime_error("manifest: " + e.path + "'s group is not written as Sieve writes it");
+            const uint64_t total = std::stoull(w.substr(t + 2));
+            if (std::to_string(total) != w.substr(t + 2)) throw std::runtime_error("manifest: " + e.path + "'s group is not written as Sieve writes it");
+            uint64_t len = 0;
+            for (int shift = 0;; shift += 7)
+            {
+                if (ra >= m.rope_carried.size() || shift > 56) throw std::runtime_error("the installer's rope stream ends before " + e.path);
+                const uint8_t b = m.rope_carried[ra++];
+                len |= uint64_t(b & 0x7F) << shift;
+                if (!(b & 0x80)) break;
+            }
+            if (m.rope_carried.size() - ra < len) throw std::runtime_error("the installer's rope stream ends before " + e.path);
+            try
+            {
+                const Mix4Params mp = Mix4Params::parse(w.substr(0, t));
+                if (mp.width) throw std::invalid_argument("a picture's parameters for a group of files");
+                const MixDictionary* words = nullptr;
+                if (mp.dictionary)
+                {
+                    if (!mix_words())
+                        throw std::runtime_error("these Sieve instructions carry files mixed with a word list (" + e.path +
+                                                 "): open them with Sieve (sieve install, or the hallway's File Locator), which has it");
+                    words = &mix_words()(mp.dictionary);
+                }
+                groups.push_back(std::make_unique<Group>());
+                groups.back()->total = total;
+                groups.back()->first = e.path;
+                const std::span<const uint8_t> code(m.rope_carried.data() + ra, size_t(len));
+                const uint64_t memory = (uint64_t(16) << mp.table_bits) * 4 + (uint64_t(16) << 20) + total;
+                deferred.push_back({i, e.path, [code, mp, words, total] { return mix4_file(code, mp, words, total); }, memory, &groups.back()->bytes});
+            }
+            catch (const std::invalid_argument& x)
+            {
+                throw std::runtime_error("manifest: " + e.path + ": " + x.what());
+            }
+            ra += size_t(len);
+            if (groups.back()->total - groups.back()->used < e.size) throw std::runtime_error("manifest: " + e.path + " is larger than its group");
+            slices.push_back({i, groups.size() - 1, groups.back()->used, e.size});
+            groups.back()->used += e.size;
+            late[i] = 1;
+        }
+        else if (m.v30 && e.way == "mixn")
+        {
+            // v30: the next of the open group's files.
+            if (groups.empty() || groups.back()->total - groups.back()->used < e.size)
+                throw std::runtime_error("manifest: " + e.path + " is in a group of files mixed together that is not open, or is too small for it");
+            slices.push_back({i, groups.size() - 1, groups.back()->used, e.size});
+            groups.back()->used += e.size;
+            late[i] = 1;
+        }
         else if (m.roped && (m.v24 && e.way.rfind("mix ", 0) == 0 || m.v26 && e.way.rfind("mix2 ", 0) == 0 || m.v27 && e.way.rfind("mix3 ", 0) == 0 || m.v28 && e.way.rfind("mix4 ", 0) == 0))
         {
             // v24: made again by mixing, from its code, next in the rope stream (a varint of its length first).
@@ -408,7 +487,8 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
             ra += size_t(len);
         }
         else if (e.way.rfind("lines ", 0) != 0) throw std::runtime_error("manifest: " + e.path + " has no way to be carried (its way: \"" + e.way + "\")");
-        if (!e.remake.empty() && !(!deferred.empty() && deferred.back().i == i)) // (a deferred file's, once it is decoded)
+        if (!deferred.empty() && deferred.back().i == i) late[i] = 1;
+        if (!e.remake.empty() && !late[i]) // (a file whose bytes come later, once they have)
         {
             if (!remaker())
                 throw std::runtime_error("these Sieve instructions remake an archive from what it holds (" + e.path +
@@ -421,17 +501,26 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
     }
     if (ra != m.rope_carried.size()) throw std::runtime_error("manifest: its rope stream holds more than its files");
     // The deferred files decoded, at once; then those remade from them, in order.
+    group_done("with the listing");
     decode_deferred(deferred, bytes);
-    for (const Deferred& d : deferred)
+    // v30: each group cut into its files.
+    for (const Slice& c : slices)
     {
-        const ManifestEntry& e = *files[d.i];
+        const std::vector<uint8_t>& g = groups[c.group]->bytes;
+        bytes[c.i].assign(g.begin() + std::ptrdiff_t(c.at), g.begin() + std::ptrdiff_t(c.at + c.size));
+    }
+    groups.clear();
+    for (size_t d = 0; d < files.size(); ++d)
+    {
+        if (!late[d]) continue;
+        const ManifestEntry& e = *files[d];
         if (e.remake.empty()) continue;
         if (!remaker())
             throw std::runtime_error("these Sieve instructions remake an archive from what it holds (" + e.path +
                                      "): open them with Sieve (sieve install, or the hallway's File Locator), which remakes it");
-        bytes[d.i] = remaker()(e.remake, bytes[d.i]);
-        if (bytes[d.i].size() != e.size)
-            throw std::runtime_error(e.path + " was not remade as it was (" + std::to_string(bytes[d.i].size()) + " bytes, not " +
+        bytes[d] = remaker()(e.remake, bytes[d]);
+        if (bytes[d].size() != e.size)
+            throw std::runtime_error(e.path + " was not remade as it was (" + std::to_string(bytes[d].size()) + " bytes, not " +
                                      std::to_string(e.size) + "): this Sieve's compressor writes differently from the one that made the instructions");
     }
     for (size_t i = 0; i < files.size(); ++i)
@@ -440,7 +529,8 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
         if (e.way.rfind("lines ", 0) != 0) continue;
         const size_t k = size_t(std::stoull(e.way.substr(6)));
         if (k >= files.size() || (files[k]->way != "x86" && files[k]->way != "raw" && files[k]->way.rfind("item ", 0) != 0 &&
-                                  files[k]->way.rfind("rope ", 0) != 0 && files[k]->way.rfind("pieces ", 0) != 0 && files[k]->way.rfind("mix ", 0) != 0 && files[k]->way.rfind("mix2 ", 0) != 0 && files[k]->way.rfind("mix3 ", 0) != 0 && files[k]->way.rfind("mix4 ", 0) != 0))
+                                  files[k]->way.rfind("rope ", 0) != 0 && files[k]->way.rfind("pieces ", 0) != 0 && files[k]->way.rfind("mix ", 0) != 0 && files[k]->way.rfind("mix2 ", 0) != 0 && files[k]->way.rfind("mix3 ", 0) != 0 && files[k]->way.rfind("mix4 ", 0) != 0 && files[k]->way.rfind("mixt ", 0) != 0 &&
+                                  files[k]->way != "mixn"))
             throw std::runtime_error("manifest: " + e.path + " is derived from a file that is not carried");
         const auto lines = lines_of(bytes[k]);
         masks[i] = {k, take(plain, pa, (lines.size() + 7) / 8, e.path)};
@@ -553,7 +643,7 @@ std::string manifest_path(const fs::path& p, const fs::path& root)
 
 const char* Manifest::version() const
 {
-    return v29 ? kMixedStreamManifestVersion : v28 ? kMix4ManifestVersion : v27 ? kMix3ManifestVersion : v26 ? kMix2ManifestVersion : v25 ? kPngManifestVersion : v24 ? kMixManifestVersion : v23 ? kRopeTriangleManifestVersion : v22 ? kRarManifestVersion : v21 ? kDeflateManifestVersion : v20 ? kNewestArchivesManifestVersion : more_archives ? kMoreArchivesManifestVersion : !graph.empty() ? kGraphManifestVersion : remake_gz ? kGzipManifestVersion : binary ? kBinaryManifestVersion : rope_above ? kRopeAboveManifestVersion : archives ? kArchivesManifestVersion : pieces ? kPiecesManifestVersion : trimmed ? kTrimmedManifestVersion : rope_groups ? kRopeGroupsManifestVersion : rope_lines ? kRopeLinesManifestVersion : rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
+    return v30 ? kMixGroupsManifestVersion : v29 ? kMixedStreamManifestVersion : v28 ? kMix4ManifestVersion : v27 ? kMix3ManifestVersion : v26 ? kMix2ManifestVersion : v25 ? kPngManifestVersion : v24 ? kMixManifestVersion : v23 ? kRopeTriangleManifestVersion : v22 ? kRarManifestVersion : v21 ? kDeflateManifestVersion : v20 ? kNewestArchivesManifestVersion : more_archives ? kMoreArchivesManifestVersion : !graph.empty() ? kGraphManifestVersion : remake_gz ? kGzipManifestVersion : binary ? kBinaryManifestVersion : rope_above ? kRopeAboveManifestVersion : archives ? kArchivesManifestVersion : pieces ? kPiecesManifestVersion : trimmed ? kTrimmedManifestVersion : rope_groups ? kRopeGroupsManifestVersion : rope_lines ? kRopeLinesManifestVersion : rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
          : with_contents ? kInstallManifestVersion : with_addresses ? kAddressManifestVersion : kManifestVersion;
 }
 
@@ -1016,7 +1106,7 @@ std::string listing_from_bytes(std::string_view b)
 // its size, then it.
 static std::vector<uint8_t> binary_head(const Manifest& m)
 {
-    std::vector<uint8_t> o = {'s', 'i', 'e', 'v', 'e', uint8_t(m.v29 ? 29 : m.v28 ? 28 : m.v27 ? 27 : m.v26 ? 26 : m.v25 ? 25 : m.v24 ? 24 : m.v23 ? 23 : m.v22 ? 22 : m.v21 ? 21 : m.v20 ? 20 : m.more_archives ? 19 : !m.graph.empty() ? 18 : m.remake_gz ? 17 : 16)};
+    std::vector<uint8_t> o = {'s', 'i', 'e', 'v', 'e', uint8_t(m.v30 ? 30 : m.v29 ? 29 : m.v28 ? 28 : m.v27 ? 27 : m.v26 ? 26 : m.v25 ? 25 : m.v24 ? 24 : m.v23 ? 23 : m.v22 ? 22 : m.v21 ? 21 : m.v20 ? 20 : m.more_archives ? 19 : !m.graph.empty() ? 18 : m.remake_gz ? 17 : 16)};
     const bool root = !m.one_file_root(), items = !m.trimmed || m.item_stream.packed || m.item_stream.bytes;
     const bool body_packed = m.listing_stream.packed != 0;
     o.push_back(uint8_t((root ? 1 : 0) | (m.x86.packed ? 2 : 0) | (m.lzma2.packed ? 4 : 0) | (items ? 8 : 0) | (m.roped ? 16 : 0) |
@@ -1198,7 +1288,7 @@ Manifest Manifest::parse(std::string_view whole)
 {
     // v16: the head in bytes, read back into v15's text (its root's and streams' lines, its lines,
     // the tree's, the rest of its body, "end"), followed by what follows it.
-    if (whole.size() >= 6 && whole.substr(0, 5) == "sieve" && uint8_t(whole[5]) >= 16 && uint8_t(whole[5]) <= 29)
+    if (whole.size() >= 6 && whole.substr(0, 5) == "sieve" && uint8_t(whole[5]) >= 16 && uint8_t(whole[5]) <= 30)
     {
         const uint8_t v = uint8_t(whole[5]);
         size_t at = 6;
@@ -1209,7 +1299,7 @@ Manifest Manifest::parse(std::string_view whole)
         // (v17's text is v15's with gzip remade allowed, v18's with a graph part too, v19's with bzip2
         // and zstd as well: its first line says so.)
         std::string text =
-            std::string(v == 29 ? kMixedStreamManifestVersion : v == 28 ? kMix4ManifestVersion : v == 27 ? kMix3ManifestVersion : v == 26 ? kMix2ManifestVersion : v == 25 ? kPngManifestVersion : v == 24 ? kMixManifestVersion : v == 23 ? kRopeTriangleManifestVersion : v == 22 ? kRarManifestVersion : v == 21 ? kDeflateManifestVersion : v == 20 ? kNewestArchivesManifestVersion : v == 19 ? kMoreArchivesManifestVersion : v == 18 ? kGraphManifestVersion : v == 17 ? kGzipManifestVersion : kRopeAboveManifestVersion) + "\n";
+            std::string(v == 30 ? kMixGroupsManifestVersion : v == 29 ? kMixedStreamManifestVersion : v == 28 ? kMix4ManifestVersion : v == 27 ? kMix3ManifestVersion : v == 26 ? kMix2ManifestVersion : v == 25 ? kPngManifestVersion : v == 24 ? kMixManifestVersion : v == 23 ? kRopeTriangleManifestVersion : v == 22 ? kRarManifestVersion : v == 21 ? kDeflateManifestVersion : v == 20 ? kNewestArchivesManifestVersion : v == 19 ? kMoreArchivesManifestVersion : v == 18 ? kGraphManifestVersion : v == 17 ? kGzipManifestVersion : kRopeAboveManifestVersion) + "\n";
         auto take = [&](uint64_t n) {
             if (n > whole.size() - at) throw std::runtime_error("manifest: its head ends early");
             const std::string_view v = whole.substr(at, size_t(n));
@@ -1352,8 +1442,8 @@ Manifest Manifest::parse(std::string_view whole)
     else if (lines[0] == kRopeGroupsManifestVersion)
         m.rope_groups = m.rope_lines = m.rope_columns = m.roped = m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] == kGzipManifestVersion || lines[0] == kGraphManifestVersion || lines[0] == kMoreArchivesManifestVersion ||
-             lines[0] == kNewestArchivesManifestVersion || lines[0] == kDeflateManifestVersion || lines[0] == kRarManifestVersion || lines[0] == kRopeTriangleManifestVersion || lines[0] == kMixManifestVersion || lines[0] == kPngManifestVersion || lines[0] == kMix2ManifestVersion || lines[0] == kMix3ManifestVersion || lines[0] == kMix4ManifestVersion || lines[0] == kMixedStreamManifestVersion)
-        m.v29 = lines[0] == kMixedStreamManifestVersion, m.v28 = lines[0] == kMix4ManifestVersion || m.v29, m.v27 = lines[0] == kMix3ManifestVersion || m.v28, m.v26 = lines[0] == kMix2ManifestVersion || m.v27, m.v25 = lines[0] == kPngManifestVersion || m.v26, m.v24 = lines[0] == kMixManifestVersion || m.v25, m.v23 = lines[0] == kRopeTriangleManifestVersion || m.v24, m.v22 = lines[0] == kRarManifestVersion || m.v23, m.v21 = lines[0] == kDeflateManifestVersion || m.v22, m.v20 = lines[0] == kNewestArchivesManifestVersion || m.v21,
+             lines[0] == kNewestArchivesManifestVersion || lines[0] == kDeflateManifestVersion || lines[0] == kRarManifestVersion || lines[0] == kRopeTriangleManifestVersion || lines[0] == kMixManifestVersion || lines[0] == kPngManifestVersion || lines[0] == kMix2ManifestVersion || lines[0] == kMix3ManifestVersion || lines[0] == kMix4ManifestVersion || lines[0] == kMixedStreamManifestVersion || lines[0] == kMixGroupsManifestVersion)
+        m.v30 = lines[0] == kMixGroupsManifestVersion, m.v29 = lines[0] == kMixedStreamManifestVersion || m.v30, m.v28 = lines[0] == kMix4ManifestVersion || m.v29, m.v27 = lines[0] == kMix3ManifestVersion || m.v28, m.v26 = lines[0] == kMix2ManifestVersion || m.v27, m.v25 = lines[0] == kPngManifestVersion || m.v26, m.v24 = lines[0] == kMixManifestVersion || m.v25, m.v23 = lines[0] == kRopeTriangleManifestVersion || m.v24, m.v22 = lines[0] == kRarManifestVersion || m.v23, m.v21 = lines[0] == kDeflateManifestVersion || m.v22, m.v20 = lines[0] == kNewestArchivesManifestVersion || m.v21,
         m.more_archives = lines[0] == kMoreArchivesManifestVersion || m.v20, m.remake_gz = m.binary = m.rope_above = m.archives = m.pieces = m.trimmed = m.rope_groups = m.rope_lines = m.rope_columns = m.roped = m.compact =
             m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] == kRopeAboveManifestVersion)
@@ -1491,7 +1581,7 @@ Manifest Manifest::parse(std::string_view whole)
         if (m.items) m.tree = field(lines[first++], "tree");
     }
     const bool graph_allowed = lines[0] == kGraphManifestVersion || lines[0] == kMoreArchivesManifestVersion || lines[0] == kNewestArchivesManifestVersion ||
-                               lines[0] == kDeflateManifestVersion || lines[0] == kRarManifestVersion || lines[0] == kRopeTriangleManifestVersion || lines[0] == kMixManifestVersion || lines[0] == kPngManifestVersion || lines[0] == kMix2ManifestVersion || lines[0] == kMix3ManifestVersion || lines[0] == kMix4ManifestVersion || lines[0] == kMixedStreamManifestVersion;
+                               lines[0] == kDeflateManifestVersion || lines[0] == kRarManifestVersion || lines[0] == kRopeTriangleManifestVersion || lines[0] == kMixManifestVersion || lines[0] == kPngManifestVersion || lines[0] == kMix2ManifestVersion || lines[0] == kMix3ManifestVersion || lines[0] == kMix4ManifestVersion || lines[0] == kMixedStreamManifestVersion || lines[0] == kMixGroupsManifestVersion;
     const bool graph_needed = lines[0] == kGraphManifestVersion; // (v19's is allowed, not needed)
     for (size_t i = first; i + 1 < lines.size(); ++i)
     {
