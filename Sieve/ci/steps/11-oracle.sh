@@ -315,7 +315,10 @@ $S site check web-site 2>&1 | grep -c "0 not as stated, 3 kept as written" > /de
 # extension reads it; and the crawler (web/crawl_site.py) against the site served here:
 # all as kept, then a stylesheet changed on the server, and a table that is not the one kept.
 grep -c '<link rel="sieve-table" href="index.sieve">' web-site/index.html > /dev/null
-python ../web/host/check_host.py $S web-site/index.sieve --table | grep -c "^table: 13 files" > /dev/null
+python ../web/host/check_host.py $S web-site/index.sieve --table | grep -c "^table: 14 files" > /dev/null
+# Directory Listing Testing: four pictures in folders within folders and a page, one .sieve.
+python ../web/host/check_host.py $S web-site/directory.sieve --listing | grep -c "^listing: 5 files, 3 folders, 339459 bytes" > /dev/null
+python ../web/host/check_host.py $S web-site/directory.sieve --path hallway/menus/filters.jpg ../web/test-site/src/pictures/filters.jpg | grep -c "^decoded: filters.jpg" > /dev/null
 table=$(python -c "import hashlib; print(hashlib.sha256(open('web-site/index.sieve', 'rb').read()).hexdigest())")
 python -m http.server 8799 --bind 127.0.0.1 --directory web-site > /dev/null 2>&1 &
 server=$!
@@ -325,7 +328,7 @@ for _ in range(50):
         urllib.request.urlopen('http://127.0.0.1:8799/index.sieve'); break
     except Exception:
         time.sleep(0.2)"
-python ../web/crawl_site.py http://127.0.0.1:8799/ --table $table --sieve $S | grep -c "table as kept, 13 files fetched; 28 checked, 0 not as stated" > /dev/null
+python ../web/crawl_site.py http://127.0.0.1:8799/ --table $table --sieve $S | grep -c "table as kept, 14 files fetched; 30 checked, 0 not as stated" > /dev/null
 printf x >> web-site/style.css
 if python ../web/crawl_site.py http://127.0.0.1:8799/ --table $table --sieve $S > crawl.txt; then exit 1; fi
 grep -c "MISMATCH  index.html: the hash it states for style.css is not that file's" crawl.txt > /dev/null

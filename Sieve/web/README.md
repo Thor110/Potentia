@@ -192,7 +192,9 @@ in 2.9 s, its 5 pages with scripts kept plain, and its 90 pictures copied as the
 page of it shows one yet; checked, none wrong.
 
 `make_site.py` adds only what is the test's own before calling it: the link home, the many-file
-`pages.sieve`, and the tampered picture with its hash.
+`pages.sieve`, `directory.sieve` (Directory Listing Testing: four of the pictures in
+`drawings/`, `hallway/` and `hallway/menus/`, and a page among them showing them by their paths
+in it), and the tampered picture with its hash.
 
 The pictures are the hallway's screenshots from `docs/images` and the public-domain Vitruvian Man
 from `data/anchors/public-domain`, as JPEGs (`test-site/src/pictures`). The pages are styled as the

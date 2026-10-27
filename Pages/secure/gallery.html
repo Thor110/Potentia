@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<link rel="sieve-table" href="index.sieve">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Potentia // Sieve Secure Test // Gallery</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css" integrity="sha256-U0yPrpMo2QW4JS+yHcT2Gtyj1ODVuuFu2EtZyHs0D8o=">
 </head>
 <body>
 <h1>Potentia // Sieve Secure Test // Gallery</h1>
@@ -14,13 +15,13 @@
 <p>Each picture is a <code>.sieve</code> in <code>images/</code>, beside this page, which states each one's hash. The fourth has had one byte changed since its hash was written into this page, so the extension refuses it in place.</p>
 </div>
 <div class="slideshow" id="show">
-<figure><img src="pictures/door.sieve" alt="A door in the hallway" integrity="sha256-z2ccRRFzjo1AOlLcMNDiIzL6vIqhMZ4y7Ve0ejfWPNs="><figcaption>1. A door in the hallway</figcaption></figure>
-<figure><img src="pictures/book.sieve" alt="A book on a shelf" integrity="sha256-IwJHhVv2d4UER04z9jx3NCI1g3ZnlU3u9qHkYC5Lwg8="><figcaption>2. A book on a shelf</figcaption></figure>
-<figure><img src="pictures/audio.sieve" alt="The audio line" integrity="sha256-RzV2RYsvQt1jSJviW9AQIl69gGUVXaxSTcI6zi9dpiw="><figcaption>3. The audio line</figcaption></figure>
-<figure><img id="tampered" src="pictures/tampered.sieve" integrity="sha256-N8AYvFOEsB0eLWgcZbzveVpysPBJzI80TiR0p8InwcU=" data-sieve-keep alt="Tampered with"><figcaption>4. Tampered with: one byte changed after its hash was written, so it should be refused</figcaption></figure>
-<figure><img src="pictures/picture-in-hand.sieve" alt="A picture in hand" integrity="sha256-ovAGNNdYfngirIi6ec8+Dt9BqDi2P4GGw8Ar6EIKMI0="><figcaption>5. A picture in hand</figcaption></figure>
-<figure><img src="pictures/filters.sieve" alt="The filters" integrity="sha256-r9OXPp+gScdedZbAWgzLPguI+DKMv+LZ8EPuIWvwWmE="><figcaption>6. The filters</figcaption></figure>
-<figure><img src="pictures/vitruvian.sieve" alt="Vitruvian Man" integrity="sha256-N8AYvFOEsB0eLWgcZbzveVpysPBJzI80TiR0p8InwcU="><figcaption>7. Vitruvian Man (public domain), the file the fourth was made from</figcaption></figure>
+<figure><img src="pictures/door.sieve" alt="A door in the hallway" integrity="sha256-y35RbDAoAvRy3iQskg+cSOyFg9B9PuJ1TvtCAztcA+Y="><figcaption>1. A door in the hallway</figcaption></figure>
+<figure><img src="pictures/book.sieve" alt="A book on a shelf" integrity="sha256-OUOeBNI1TVIabXDib1cZ9xK+/d+sLeyImR63+tHQpD4="><figcaption>2. A book on a shelf</figcaption></figure>
+<figure><img src="pictures/audio.sieve" alt="The audio line" integrity="sha256-k0eAz3udH5cDcpI9XecyoqSum1M/mykcwTtZMuXukJg="><figcaption>3. The audio line</figcaption></figure>
+<figure><img id="tampered" src="pictures/tampered.sieve" integrity="sha256-4KPYFvGzgy4u1O0O8m6dvydefxr9ZnOmQKur1uBg8tU=" data-sieve-keep alt="Tampered with"><figcaption>4. Tampered with: one byte changed after its hash was written, so it should be refused</figcaption></figure>
+<figure><img src="pictures/picture-in-hand.sieve" alt="A picture in hand" integrity="sha256-QRoczkwpOZtw0UluYqh3bA6DZ49pqpRhtE9NkdcPRRw="><figcaption>5. A picture in hand</figcaption></figure>
+<figure><img src="pictures/filters.sieve" alt="The filters" integrity="sha256-2iMHhEVg9MqQLTGSa+OrAtBhoCzhjEaEMVetUpyJoiw="><figcaption>6. The filters</figcaption></figure>
+<figure><img src="pictures/vitruvian.sieve" alt="Vitruvian Man" integrity="sha256-4KPYFvGzgy4u1O0O8m6dvydefxr9ZnOmQKur1uBg8tU="><figcaption>7. Vitruvian Man (public domain), the file the fourth was made from</figcaption></figure>
 <div class="controls"><button id="prev">Previous</button> <span id="count"></span> <button id="next">Next</button></div>
 </div>
 <script>

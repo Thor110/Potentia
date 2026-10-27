@@ -19,6 +19,8 @@
 <li><a href="gallery.html">The gallery</a>: a slideshow of <code>.sieve</code> pictures, one of them tampered with.</li>
 <li><a href="about.html">About</a>: a page held in a <code>.sieve</code>, with a <code>.sieve</code> picture of its own.</li>
 <li><a href="notes.html">Notes</a>: another, which links back here.</li>
+<li><a href="directory.sieve">Directory Listing Testing</a>: four pictures in folders within folders, and a page among them, all in one <code>.sieve</code>. It opens as a listing of its folders and files, each with its size and SHA-256; open any file from it, and the page shows the pictures beside it by their paths in the same <code>.sieve</code>.</li>
+<li><a href="pages.sieve">Every page in one <code>.sieve</code></a>: the site's own pages and stylesheet, opened as their listing.</li>
 </ul>
 </div>
 <h2>Links That Should Be Refused</h2>
@@ -26,7 +28,6 @@
 <ul>
 <li><a href="notes.sieve" integrity="sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=" data-sieve-keep>Notes, with the wrong hash</a>: the link states the hash of an empty file.</li>
 <li><a href="notes.sieve" data-sieve-keep>Notes, with no hash</a>: the link states none, so nothing vouches for the file.</li>
-<li><a href="pages.sieve">Every page in one <code>.sieve</code></a>: the right hash, but it holds many files, and the extension shows one file a link names.</li>
 </ul>
 </div>
 <p class="note">Each link names a file below it by its hash, and the pages it opens link back here by name only. Two pages cannot each hold the other's hash: changing either would change both, without end. Instead the site has one table of every file's hash, <code>index.sieve</code>, whose own hash is the one to trust for all of it: the extension remembers it on your first visit, and shows this page and the gallery only once they are the ones it names.</p>

@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<link rel="sieve-table" href="index.sieve">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Potentia // Sieve Secure Test</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css" integrity="sha256-U0yPrpMo2QW4JS+yHcT2Gtyj1ODVuuFu2EtZyHs0D8o=">
 </head>
 <body>
 <h1>Potentia // Sieve Secure Test</h1>
@@ -17,8 +18,10 @@
 <div class="box">
 <ul>
 <li><a href="gallery.html">The gallery</a>: a slideshow of <code>.sieve</code> pictures, one of them tampered with.</li>
-<li><a href="about.sieve" integrity="sha256-ww0tJRngJ4vRVUxeKTWdjk8rpP8agB70XZETM1k/9Hc=">About</a>: a page held in a <code>.sieve</code>, with a <code>.sieve</code> picture of its own.</li>
-<li><a href="notes.sieve" integrity="sha256-xjKK/b6ayhoJzqUn19+uLta1LvJ/0Wda0KCgyPf3JKw=">Notes</a>: another, which links back here.</li>
+<li><a href="about.sieve" integrity="sha256-Ri8juMhrn/ZBB5Cuhf0G3xMGlQtiouvRZflEg56xdL4=">About</a>: a page held in a <code>.sieve</code>, with a <code>.sieve</code> picture of its own.</li>
+<li><a href="notes.sieve" integrity="sha256-Q402nnSFrwXsuXdZibBXxB84ls8Yo7S9//dN94KqBiE=">Notes</a>: another, which links back here.</li>
+<li><a href="directory.sieve" integrity="sha256-MZTOagiuEbe9NY7DyRtyuvoW7Trz3QpYJnglM2MTk40=">Directory Listing Testing</a>: four pictures in folders within folders, and a page among them, all in one <code>.sieve</code>. It opens as a listing of its folders and files, each with its size and SHA-256; open any file from it, and the page shows the pictures beside it by their paths in the same <code>.sieve</code>.</li>
+<li><a href="pages.sieve" integrity="sha256-IvmQGnCyos4VlrvFnLLV6nlkX1RYtsU+b9jFUxYPDpQ=">Every page in one <code>.sieve</code></a>: the site's own pages and stylesheet, opened as their listing.</li>
 </ul>
 </div>
 <h2>Links That Should Be Refused</h2>
@@ -26,10 +29,9 @@
 <ul>
 <li><a href="notes.sieve" integrity="sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=" data-sieve-keep>Notes, with the wrong hash</a>: the link states the hash of an empty file.</li>
 <li><a href="notes.sieve" data-sieve-keep>Notes, with no hash</a>: the link states none, so nothing vouches for the file.</li>
-<li><a href="pages.sieve" integrity="sha256-myUh13LOqtWXq9dcN0J9cAauIM3cyRqcqY1+iA3HLF0=">Every page in one <code>.sieve</code></a>: the right hash, but it holds many files, and the extension shows one file a link names.</li>
 </ul>
 </div>
-<p class="note">Each link names a file below it by its hash, and the pages it opens link back here by name only. Two pages cannot each hold the other's hash: changing either would change both, without end. Instead the site has one list of every file's hash, <code>site.sieve</code>, whose own hash is the one to trust for all of it; the extension does not read it yet.</p>
+<p class="note">Each link names a file below it by its hash, and the pages it opens link back here by name only. Two pages cannot each hold the other's hash: changing either would change both, without end. Instead the site has one table of every file's hash, <code>index.sieve</code>, whose own hash is the one to trust for all of it: the extension remembers it on your first visit, and shows this page and the gallery only once they are the ones it names.</p>
 <script>
   // The extension marks every page it runs in; without it, say so rather than show broken pictures.
   // (mark.js marks the page as it starts; looked for once the page has loaded, and the note taken

@@ -7,8 +7,10 @@ one given that file's hash, and index.sieve, the table of every file. What this 
 own: before the build, in a copy of src/,
 
   - {{home}} becomes a link back to the website's Sieve Secure page (--home), or nothing;
-  - pages.sieve: the pages' sources and style.css, many files in one .sieve, which the extension
-    refuses to show;
+  - pages.sieve: the pages' sources and style.css, many files in one .sieve, which the extension's
+    viewer shows as their listing;
+  - directory.sieve: four of the pictures in folders within folders, and a page among them showing
+    them by their paths there, for the viewer's directory listing (Directory Listing Testing);
   - pictures/tampered.sieve: Vitruvian Man's .sieve (made as the build makes it) with one byte
     changed after its hash was taken, and that hash written into the gallery's {{tampered}}.
 
@@ -35,6 +37,34 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 SRC = HERE / "src"
 PLAIN = ["gallery.html"]   # kept a plain page (its slideshow is a script); index.html always is
+
+
+# directory.sieve's pictures: (its folder, a picture of src/pictures).
+DIRECTORY = [("drawings", "vitruvian.jpg"), ("hallway", "door.jpg"), ("hallway", "book.jpg"), ("hallway/menus", "filters.jpg")]
+
+DIRECTORY_PAGE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Directory Listing Testing</title>
+<style>
+body { background: #0b0b0b; color: #d8d8d8; font: 15px/1.5 sans-serif; margin: 2em; }
+img { max-width: 360px; border: 1px solid #333; display: block; margin: 0.5em 0 1.5em; }
+a { color: #7fd0ff; }
+</style>
+</head>
+<body>
+<h1>Directory Listing Testing</h1>
+<p>This page is one of the files of <code>directory.sieve</code>. Its pictures are others, named by
+their paths in it, so each is taken from the same <code>.sieve</code> and checked against the same hash.</p>
+<p>drawings/vitruvian.jpg</p><img src="drawings/vitruvian.jpg" alt="Vitruvian Man">
+<p>hallway/door.jpg</p><img src="hallway/door.jpg" alt="A door in the hallway">
+<p>hallway/book.jpg</p><img src="hallway/book.jpg" alt="A book in the hallway">
+<p>hallway/menus/filters.jpg</p><img src="hallway/menus/filters.jpg" alt="The setup menu's filters">
+<p><a href="hallway/menus/filters.jpg">The setup menu's picture alone</a>, opened from the same <code>.sieve</code>.</p>
+</body>
+</html>
+"""
 
 
 def sri(path):
@@ -75,6 +105,15 @@ def main():
         for f in sorted(stage.glob("*.html")) + [stage / "style.css"]:
             shutil.copy2(f, pages / f.name)
         run(sieve, "locate", pages, "--installer", stage / "pages.sieve", "--search-per-file", "1")
+
+        # A small tree of pictures in one .sieve, for the viewer's directory listing: folders within
+        # folders, and a page among them whose pictures and links are other files of the same .sieve.
+        tree = Path(tmp) / "directory"
+        for folder, name in DIRECTORY:
+            (tree / folder).mkdir(parents=True, exist_ok=True)
+            shutil.copy2(SRC / "pictures" / name, tree / folder / name)
+        (tree / "index.html").write_text(DIRECTORY_PAGE, encoding="utf-8", newline="\n")
+        run(sieve, "locate", tree, "--installer", stage / "directory.sieve", "--search-per-file", "1")
 
         # Vitruvian Man made as the build makes it, its hash taken, then one byte changed.
         alone = Path(tmp) / "alone"
