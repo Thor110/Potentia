@@ -1,44 +1,46 @@
-# The SSE stages retired (`sse-v1`): mix-v4, `sieve-manifest-v28` (27 October 2026)
+# Files mixed together: `sieve-manifest-v29` (27 October 2026)
 
-Unzip over the repository root. Committed locally (not pushed), on top of my 324a698 (the decoding-speed and word-list update, if you haven't applied it yet: this zip holds both, as three commits). One new instructions version, v28. Every older one reads as before: mix-v2 and mix-v3 keep the stages they were made with, and their pinned codes are unchanged.
+Unzip over the repository root. Committed locally (not pushed), on top of your be8b2d6. One new instructions version (v29); every older one reads as before.
 
-## What you asked for
-- **Both correction stages retired as one filter, `sse-v1`,** with their figures and the reasons kept in three places:
-  - the "Retired filters" list in FILTERS-CONFLICTS.md (a stage of mixing rather than a line filter, but one place for everything retired);
-  - beside the code in `core/src/mix.cpp`;
-  - SPECIFICATIONS §12.2, with IDEAS §19.102 and HANDOFF too.
-- **mix-v4 is mixing without them.** It covers text (`B22`), pictures (`B22 I949x1`) and text with the word list (`B22 D60`). The packer uses it in mix-v2's and mix-v3's place, by the same tests.
+## What step 1 turned into
+- **The plan was to mix the shared stream** (every file carried as it is) instead of packing it with LZMA2.
+- **That alone gains little:** in real instructions the stream is small, since every file over 4 KiB is already mixed on its own. Sieve's tools folder: 79 KB of 1.36 MB. Mixing it saved only 0.3 to 0.6%.
+- **The real gain was in the files mixed one by one.** Each one starts from nothing; mixed together in that stream, each starts from what the files before it taught. So v29 tries exactly that, for every file that would be mixed alone (pictures keep their own models), and keeps it only where it's smaller.
 
-| File | With both stages | First only | Neither (mix-v4) | Decode time, both against neither |
+| Folder | v28 | v29 | Change | Install, v28 → v29 |
 | :--- | ---: | ---: | ---: | ---: |
-| Don Quixote, first 800 KB | 191,190 | 191,526 | 192,884 | +9% |
-| Vitruvian picture | 728,919 | 729,163 | 729,462 | +29% |
-| Screenshot pixels, 1 MB | 15,821 | 15,811 | 16,185 | +21% |
-| Utah teapot | 25,258 | 25,295 | 25,391 | +15% |
+| Sieve/tools (63 files) | 349,689 | 260,529 | −25.5% | about 3 s |
+| Sieve/client (47 files) | 336,403 | 247,045 | −26.6% | about 3 s |
+| Sieve/docs | 1,045,190 | 973,631 | −6.8% | 1.1 s → 4.2 s |
+| Sieve/tests | 401,156 | 396,337 | −1.2% | 1.0 s → 3.3 s |
+| one file alone | — | the same | — | — |
 
-## As instructions (two runs each)
-- **Don Quixote:** 533,148 bytes (v27: 527,837, so +1.0%), installed in 5.7 to 6.0 s (v27: 6.8 to 7.2 s, so about 15% faster).
-- **The ten PNGs:** 217,170 bytes (v27: 210,046, so +3.4%).
-  - On one thread they install in 24.6 s against 27.4 s (10% faster).
-  - On four threads both take about 9.5 s. Four mixings at once are held back by memory speed, so the saving disappears there. On your 12 threads it may differ.
-- **In short:** text gets 10 to 15% quicker at about 1% in size. Pictures gain mostly when installed one at a time.
+## The costs
+- **Packing takes about 25% longer:** the files are mixed a second time, together.
+- **Installing can be slower:** one stream is decoded in one piece, where files mixed alone were decoded at once. In docs, its screenshots (already compressed) sit in the mixed stream too, costing time and gaining nothing.
+- **It's held to 16 MiB of stream.** So a folder the size of the release (Sieve's data alone is 27 MB) isn't mixed together, and `sieve.sieve` won't change yet.
+- **Prioritise decoding speed turns it off,** as it does all mixing.
 
-## Using it
-- **`sieve mix FILE`** now makes mix-v4: `--picture 1280x3` for a picture, `--words 60` for the word list. `--v2` gives the versions with the stages (mix-v2, or mix-v3 with `--words`), and `--v1` gives mix-v1.
-- **`sieve locate --items`** and the File Locator make v28. `--v27` keeps the stages (v27 or older).
-- **The oracle** has its own mix-v4 (`mix-unpack --v4`), which is mix-v2's decoder without the stages. It matched on its first run and reads v28.
+## The format
+- **The stream line:** `stream lzma2 P B 0 mix4 B22 D60`.
+- **In bytes:** the dictionary byte 0xFE, then the parameters.
+- **`--v28`** makes v28 or older.
+- **The report line:** `stream    the files carried together mixed by mix-v4 (B22 D60): N bytes, LZMA2's M; K of them mixed together rather than one by one (A bytes apart)`.
+- **The oracle** reads it, mixing the stream back with its own mix-v4.
+
+## Next, to remove those costs (suggestion)
+- **Several mixed streams:** the folder's files in groups, each group mixed, the groups decoded at once. That lifts the 16 MiB limit and brings installing back to its old speed.
+- **Already-compressed files left out** of the mixed streams.
+- Both are a further format step (v30). I haven't started either.
 
 ## Checks run here
-- The build passes, as do the unit tests (77,108 checks, 0 failures; `test_mix4` pins three codes: a text, the same with the word list, a picture) and `check_help` (604 options, none missing).
-- CI steps 10 and 11 pass (10 in 905 s, 11 in 2,124 s here).
-- CI step 11's v26 and v27 checks now name their versions (`--v2`, `--v26`, `--v27`). A new v28 check covers a text with the word list and a guessed picture in one folder, read back by Sieve, the oracle and sieve-install.
+- The build passes, as do the unit tests (154,214 checks, 0 failures) and `check_help` (605 options, none missing).
+- CI steps 10 and 11 pass (10 in 837 s, 11 in 1,950 s here).
+- **CI changes:** step 11's v28 block now names `--v28`. A new v29 block mixes five small repository files together (9,982 bytes against v28's 11,280) and reads them back with Sieve, the oracle and sieve-install; `--v28` and Prioritise Decoding Speed make no v29.
 
-## Files (this zip: all three commits since your f155116)
-- `Sieve/core/`: include/sieve/mix.hpp, src/mix.cpp
-- `Sieve/tools/`: cli/pack.cpp, pack.hpp, locate.cpp, locate.hpp, items.cpp, items.hpp, rope.cpp, help.cpp, args.hpp; sieve_cli.cpp
-- `Sieve/client/`: file_locator.cpp, file_locator.hpp, app_main.cpp, app_settings.cpp, app_settings.hpp
-- `Sieve/data/lang/en.txt`
+## Files
+- `Sieve/tools/`: cli/pack.cpp, pack.hpp, locate.cpp, locate.hpp, items.hpp, help.cpp, args.hpp; sieve_cli.cpp
+- `Sieve/client/`: file_locator.cpp, app_settings.cpp
 - `Sieve/reference/sieve_ref.py`
-- `Sieve/tests/test_core.cpp`
 - `Sieve/ci/steps/11-oracle.sh`
-- `Sieve/docs/`: SPECIFICATIONS.md, IDEAS.md, HANDOFF.md, FILTERS-CONFLICTS.md; `Sieve/README.md`
+- `Sieve/docs/`: SPECIFICATIONS.md, IDEAS.md, HANDOFF.md

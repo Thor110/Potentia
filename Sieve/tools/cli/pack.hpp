@@ -72,6 +72,11 @@ struct PackReport
     bool v27 = false;                    // v27: some file carried by mix-v3
     size_t mixed3 = 0;                   // v27: files carried by mix-v3
     bool v28 = false;                    // v28: some file carried by mix-v4
+    bool v29 = false;                    // v29: the lzma2 stream mixed
+    uint64_t stream_mixed = 0, stream_lzma2 = 0; // v29: its mixed code's size, and LZMA2's that it replaced
+    std::string stream_mixed_params;     // v29: its parameters ("B21", "B21 D60")
+    size_t mixed_together = 0;           // v29: files that would be mixed one by one, mixed together in it instead
+    uint64_t mixed_together_apart = 0;   // v29: what they and the stream came to apart (their codes, and LZMA2's estimate)
     size_t mixed4 = 0, mixed4_pictures = 0, mixed4_words = 0; // v28: files carried by mix-v4, as pictures, with a word list
     size_t mixed2 = 0;                   // v26: files carried by mix-v2 (of `mixed`), as pictures
     size_t mixed2_pictures = 0;

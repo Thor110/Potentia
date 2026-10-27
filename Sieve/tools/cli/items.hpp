@@ -64,7 +64,7 @@ void use_item_maker();
 // wrote it) or 5 (in hex, without the AI line). The lines are those item_lines makes of `a`. Shared
 // by `sieve locate --items` and the File Locator.
 void add_packed_items(Manifest& m, const std::filesystem::path& root, const Args& a, PackReport* report = nullptr, int version = 8,
-                      bool item_hashes = false, double rope_seconds = 0, uint32_t rope_newest = 11, bool trim = true,
+                      bool item_hashes = false, double rope_seconds = 0, uint32_t rope_newest = 12, bool trim = true,
                       bool pieces = true, bool optimise_archives = false, bool binary = true,
                       bool gzip = true, bool v20 = true, bool v21 = true, bool v22 = true);
 // v7: an AI model's place (hex) on `ai` coded by digit-histogram-v1, its tensors the segments, as

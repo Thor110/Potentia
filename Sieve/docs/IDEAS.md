@@ -4933,7 +4933,16 @@ measured on this repository's own files.
   the decoding time for 0.07% to 2.3% of the size; the first stage alone kept most of that. Edward:
   retire both as one filter (`sse-v1`), its figures kept (FILTERS-CONFLICTS' retired list, the code
   beside it), so it can be looked at again. mix-v2 and mix-v3 keep them and are read as before.
-- *Next:* mixing the stream every small file shares (in place of its LZMA2: 294 of the repository's
-  small texts 95,425 bytes against 110,835); a word list with how often each word is used
+- **Files mixed together (27 October 2026, `sieve-manifest-v29`).** Mixing the stream the small
+  files share in place of its LZMA2 was the plan (294 small texts: 95,425 bytes against 110,835); in
+  real instructions that stream turned out small, every file over 4 KiB being mixed on its own. The
+  gain was in the files mixed one by one: each starts from nothing, so mixed together (in that
+  stream, in the listing's order) each starts from what the others taught. Sieve's `tools`
+  349,689 bytes to 260,529 (−25.5%), `client` 336,403 to 247,045 (−26.6%), `docs` −6.8%, `tests`
+  −1.2%. The cost: one stream decodes in one piece (`docs` 1.1 s to 4.2 s), and it is held to 16
+  MiB, so a folder as large as the release (Sieve's data, 27 MB) is not mixed together.
+- *Next:* several mixed streams (a folder's files in groups, each mixed, decoded at once): no 16 MiB
+  limit, and installing as quick as before; the files already compressed (screenshots, JPEGs)
+  left out of the mixed stream, where they cost time and gain nothing; a word list with how often each word is used
   (SCOWL has none; a frequency list would be a new pinned file); and more generators as they turn
   up (zlib's PNGs remade by zlib itself where it can, without preflate's difference).

@@ -2444,7 +2444,7 @@ void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackRepor
     add_packed_items(m, root, a, &rep, a.has("v5") ? 5 : a.has("v6") ? 6 : a.has("v7") ? 7 : 8, a.has("item-hashes") || a.has("file-hashes"),
                      rope_seconds, a.has("v8") ? 1 : a.has("v9") ? 2 : a.has("v10") ? 3 : a.has("v11") || a.has("v12") || a.has("v13") || a.has("v14") ? 4 :
                      a.has("v15") || a.has("v16") || a.has("v19") || a.has("v20") || a.has("v21") || a.has("v22") ? 5 :
-                     a.has("v23") ? 6 : a.has("v24") ? 7 : a.has("v25") ? 8 : a.has("v26") ? 9 : a.has("v27") ? 10 : 11,
+                     a.has("v23") ? 6 : a.has("v24") ? 7 : a.has("v25") ? 8 : a.has("v26") ? 9 : a.has("v27") ? 10 : a.has("v28") ? 11 : 12,
                      !(a.has("v8") || a.has("v9") || a.has("v10") || a.has("v11")),
                      !(a.has("v8") || a.has("v9") || a.has("v10") || a.has("v11") || a.has("v12")),
                      (a.has("optimise-compressed") || a.has("optimise-archives")) && !a.has("v13"), !a.has("v15"), !a.has("v16"),
@@ -2636,6 +2636,7 @@ int cmd_locate(const Args& a)
         const std::string o = a.get("installer");
         write_address_file(fs::path(std::u8string(o.begin(), o.end())), iaddr, a.has("hex"));
         *info << "installer " << o << ": the address of the installer's manifest (" << (!(m.with_contents ? m.packed : inst.packed) ? "v3: the listing, then every file's bytes"
+                                    : (m.with_contents ? m.v29 : inst.v29) ? "v29: as v28, and the files carried together mixed"
                                     : (m.with_contents ? m.v28 : inst.v28) ? "v28: as v27, and files carried by mix-v4 (no SSE stages: quicker to decode)"
                                     : (m.with_contents ? m.v27 : inst.v27) ? "v27: as v26, and text carried by mix-v3, with a word list"
                                     : (m.with_contents ? m.v26 : inst.v26) ? "v26: as v25, and files carried by mix-v2 (pictures too)"

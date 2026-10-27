@@ -191,6 +191,10 @@ inline constexpr const char* kMix3ManifestVersion = "sieve-manifest-v27";
 // stages, sse-v1, which Edward retired): a way "mix4 B<bits>", a picture's "mix4 B<bits> I<w>x<c>",
 // or with a word list "mix4 B<bits> D<list>", carried as v24's "mix" is.
 inline constexpr const char* kMix4ManifestVersion = "sieve-manifest-v28";
+// v29 (27 October 2026): v28 whose lzma2 stream (every file carried as it is, the masks and the
+// pieces LZMA2 takes) may be mixed by mix-v4 instead: its line "stream lzma2 P B 0 mix4 B21[ D60]",
+// in bytes its dictionary byte 0xFE and then the parameters (a varint of their length, then them).
+inline constexpr const char* kMixedStreamManifestVersion = "sieve-manifest-v29";
 
 // The "u" lines' formats v20 adds (an archive carried as its contents).
 inline bool is_v20_format(const std::string& f)
@@ -229,6 +233,9 @@ struct PackedStream
 {
     uint64_t packed = 0, bytes = 0; // its size as carried, and unpacked
     uint32_t dictionary = 0;        // the LZMA2 dictionary it was packed with
+    // v29: the lzma2 stream mixed (mix-v4) instead, by these parameters ("B21", or with the word
+    // list "B21 D60"); its dictionary 0. Empty: LZMA2 (or, with dictionary 0, carried as it is).
+    std::string mixed;
 };
 
 struct Manifest
@@ -282,6 +289,7 @@ struct Manifest
     bool v26 = false; // v26: some file is carried by mix-v2 (v25 is set too)
     bool v27 = false; // v27: some file is carried by mix-v3 (v26 is set too)
     bool v28 = false; // v28: some file is carried by mix-v4 (v27 is set too)
+    bool v29 = false; // v29: the lzma2 stream is mixed (v28 is set too)
     bool body_text = false; // v20: its body as text after all (the head's flag 128), where that came out smaller
     // v14: each archive carried as its contents: its format ("7z", "xz"), its size, its path, and the
     // folder (or file) its contents are in.

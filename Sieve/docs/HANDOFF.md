@@ -3947,6 +3947,30 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   (Edward): the remembered table and "Trust the new table" stay; no signing, ever ("I don't trust
   myself or any human being alive to keep a key safe").
 
+### Files mixed together: `sieve-manifest-v29` (27 October 2026)
+
+Step 1 of the plan Edward saw (mixing the shared stream), and what it turned into.
+- **Format:** the lzma2 stream may be mixed (mix-v4): `PackedStream::mixed` holds its parameters
+  (`B22`, `B22 D60`); text `stream lzma2 P B 0 mix4 <parameters>`; in bytes the dictionary byte
+  0xFE, then a varint and the parameters. `unpack_stream` mixes it back (the word list through
+  `mix_words()`). Reader checks: only the lzma2 stream, never a picture's parameters.
+- **What it is used for:** in real instructions that stream is small (every file over 4 KiB is mixed
+  on its own: tools' stream 79 KB of 1.36 MB), so mixing it alone gained 0.3% to 0.6%. The gain is
+  in mixing **together** the files mixed one by one: just before the streams are built, those not
+  carried as pictures are tried in the stream with the rest (`stream_of(true)`, the same order the
+  stream is built in), mixed once; where that beats their codes plus LZMA2's estimate of the stream
+  without them, they become `raw` and that code is used (`premixed`), kept only if smaller than
+  LZMA2 of the stream. Else the stream alone is weighed (4 KiB to 16 MiB, the 3% start test).
+- **Measured:** tools 349,689 to 260,529; client 336,403 to 247,045; docs 1,045,190 to 973,631;
+  tests 401,156 to 396,337. Packing about 25% longer; installing slower where files were decoded at
+  once (docs 1.1 s to 4.2 s): one stream decodes in one piece. Held to 16 MiB (so not the release).
+- **Switches:** `rope_newest` 12 (`--v28` for 11; the File Locator passes 12); Prioritise Decoding
+  Speed turns it off. Report: `stream    the files carried together mixed by mix-v4 (...)`.
+- **Oracle:** reads 0xFE and ` mix4 `, and mixes the stream back with its `mix4_file` (slow in Python:
+  CI's fixture is five small files). **CI:** step 11's v28 block pins `--v28`; a v29 block.
+- **Next (IDEAS §19.102):** several mixed streams decoded at once (no 16 MiB limit, install as quick
+  as before), and already-compressed files kept out of them.
+
 ### mix-v4: the SSE stages retired (`sse-v1`), `sieve-manifest-v28` (27 October 2026)
 
 - **Why (Edward's call):** after the SSE rows were prefetched, the two stages cost 9% to 29% of

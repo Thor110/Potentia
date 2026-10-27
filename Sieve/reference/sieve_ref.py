@@ -6756,9 +6756,10 @@ def v16_text(data):
     the streams' sizes and dictionaries' bytes, the tree's SHA-256 as 32 bytes, the body, packed or
     not) read back into v15's text, followed by what follows it. Anything else is returned as it is."""
     import lzma
-    if not (len(data) > 5 and data[:5] == b"sieve" and 16 <= data[5] <= 28):
+    if not (len(data) > 5 and data[:5] == b"sieve" and 16 <= data[5] <= 29):
         return data
-    v28 = data[5] == 28  # v27 whose files may be carried by mix-v4
+    v29 = data[5] == 29  # v28 whose lzma2 stream may be mixed (mix-v4)
+    v28 = data[5] == 28 or v29  # v27 whose files may be carried by mix-v4
     v27 = data[5] == 27 or v28  # v26 whose files may be carried by mix-v3
     v26 = data[5] == 26 or v27  # v25 whose files may be carried by mix-v2
     v25 = data[5] == 25 or v26  # v24 whose skeletons may hold a PNG's chunks, and PNGs stb_image_write made
@@ -6798,25 +6799,29 @@ def v16_text(data):
 
     def stream():
         packed, size = varint(), varint()
-        return packed, size, dictionary(take(1)[0])
+        b = take(1)[0]
+        if b == 0xFE and v29:  # v29: mixed by mix-v4, its parameters after
+            return packed, size, 0, take(varint()).decode("ascii")
+        return packed, size, dictionary(b)
 
     flags = take(1)[0]
     if (flags & 0x80 and not v20) or (flags & 0x40 and not (v18 or v19 or v20)):
         sys.exit("v16: flags this reader does not know")
     if v18 and not flags & 0x40:
         sys.exit("v18 without its graph part")
-    head = b"sieve-manifest-v28\n" if v28 else b"sieve-manifest-v27\n" if v27 else b"sieve-manifest-v26\n" if v26 else b"sieve-manifest-v25\n" if v25 else b"sieve-manifest-v24\n" if v24 else b"sieve-manifest-v23\n" if v23 else b"sieve-manifest-v22\n" if v22 else b"sieve-manifest-v21\n" if v21 else b"sieve-manifest-v20\n" if v20 else b"sieve-manifest-v19\n" if v19 else b"sieve-manifest-v18\n" if v18 else b"sieve-manifest-v17\n" if v17 else b"sieve-manifest-v15\n"
+    head = b"sieve-manifest-v29\n" if v29 else b"sieve-manifest-v28\n" if v28 else b"sieve-manifest-v27\n" if v27 else b"sieve-manifest-v26\n" if v26 else b"sieve-manifest-v25\n" if v25 else b"sieve-manifest-v24\n" if v24 else b"sieve-manifest-v23\n" if v23 else b"sieve-manifest-v22\n" if v22 else b"sieve-manifest-v21\n" if v21 else b"sieve-manifest-v20\n" if v20 else b"sieve-manifest-v19\n" if v19 else b"sieve-manifest-v18\n" if v18 else b"sieve-manifest-v17\n" if v17 else b"sieve-manifest-v15\n"
     if flags & 1:
         head += b"root " + take(varint()) + b"\n"
     for bit, name in ((2, b"x86"), (4, b"lzma2"), (8, b"items")):
         if flags & bit:
-            head += b"stream %s %d %d %d\n" % ((name,) + stream())
+            s4 = stream()
+            head += b"stream %s %d %d %d" % ((name,) + s4[:3]) + (b" mix4 " + s4[3].encode("ascii") if len(s4) == 4 else b"") + b"\n"
     if flags & 16:
         n = varint()
         head += b"stream rope %d %d 0\n" % (n, n)
     tree = take(32).hex().encode()
     if flags & 32:
-        packed, size, d = stream()
+        packed, size, d = stream()[:3]
         body = lzma.decompress(take(packed), format=lzma.FORMAT_RAW, filters=[{"id": lzma.FILTER_LZMA2, "dict_size": d}])
         if len(body) != size:
             sys.exit("v16: its body unpacks to the wrong size")
@@ -6864,7 +6869,8 @@ def cmd_unpack_v7(args, data):
     # v11 with no line for an empty items or rope stream, and the lzma2 stream perhaps carried as it is
     # v13 with archives optimised: an xz file remade exactly from what it holds, or an archive carried
     # as its contents ("u" lines after the tree's)
-    v28 = lines[0] == "sieve-manifest-v28"  # v27 whose files may be carried by mix-v4
+    v29 = lines[0] == "sieve-manifest-v29"  # v28 whose lzma2 stream may be mixed (mix-v4)
+    v28 = lines[0] == "sieve-manifest-v28" or v29  # v27 whose files may be carried by mix-v4
     v27 = lines[0] == "sieve-manifest-v27" or v28  # v26 whose files may be carried by mix-v3
     v26 = lines[0] == "sieve-manifest-v26" or v27  # v25 whose files may be carried by mix-v2
     v25 = lines[0] == "sieve-manifest-v25" or v26  # v24 whose skeletons may hold a PNG's chunks, and PNGs stb_image_write made
@@ -6886,15 +6892,21 @@ def cmd_unpack_v7(args, data):
     v9 = lines[0] == "sieve-manifest-v9" or v10  # v8 whose rope ways may be rope-wave-v2's (columns)
     v8 = lines[0] == "sieve-manifest-v8" or v9  # v7 with files carried by rope-wave-v1, in a fourth stream
     streams = {"x86": (0, 0, 0), "lzma2": (0, 0, 0), "items": (0, 0, 0), "rope": (0, 0, 0)}
+    mixed_stream = ""  # v29: the lzma2 stream's mix-v4 parameters, where it is mixed
     for name in ("x86", "lzma2", "items", "rope"):
         if lines[at].startswith(f"stream {name} "):
-            streams[name] = tuple(int(x) for x in lines[at].split(" ")[2:])
+            words = lines[at].split(" ")[2:]
+            if v29 and name == "lzma2" and len(words) > 4 and words[3] == "mix4":
+                mixed_stream, words = " ".join(words[4:]), words[:3]
+                if words[2] != "0":
+                    sys.exit("a mixed stream with a dictionary")
+            streams[name] = tuple(int(x) for x in words)
             at += 1
         elif not v12 and (name == "items" or (name == "rope" and v8)):
             sys.exit(f"no {name} stream")
     if streams["x86"][0] and streams["x86"][2] == 0:
         sys.exit("the x86 stream is never carried as it is")
-    if streams["lzma2"][0] and streams["lzma2"][2] == 0 and (not v12 or streams["lzma2"][0] != streams["lzma2"][1]):
+    if streams["lzma2"][0] and streams["lzma2"][2] == 0 and not mixed_stream and (not v12 or streams["lzma2"][0] != streams["lzma2"][1]):
         sys.exit("the lzma2 stream is carried as it is only in sieve-manifest-v12, and then at its own size")
     if streams["rope"][0] != streams["rope"][1] or streams["rope"][2] != 0:
         sys.exit("the rope stream is carried as it is")
@@ -6926,7 +6938,12 @@ def cmd_unpack_v7(args, data):
 
     x86 = decode(payload[:sx[0]], sx[1], sx[2], True)
     # v12: the lzma2 stream carried as it is at dictionary 0.
-    plain = payload[sx[0]:sx[0] + sl[0]] if sl[0] and sl[2] == 0 else decode(payload[sx[0]:sx[0] + sl[0]], sl[1], sl[2], False)
+    if mixed_stream:  # v29: mixed by mix-v4 (never a picture's parameters)
+        if " I" in mixed_stream:
+            sys.exit("a mixed stream with a picture's parameters")
+        plain = mix4_file(payload[sx[0]:sx[0] + sl[0]], mixed_stream, sl[1])
+    else:
+        plain = payload[sx[0]:sx[0] + sl[0]] if sl[0] and sl[2] == 0 else decode(payload[sx[0]:sx[0] + sl[0]], sl[1], sl[2], False)
     carried = payload[sx[0] + sl[0]:sx[0] + sl[0] + si[0]]
     ropes = payload[sx[0] + sl[0] + si[0]:]
     places = carried if si[2] == 0 else decode(carried, si[1], si[2], False)
@@ -7329,8 +7346,8 @@ def instructions_bytes(data):
     """A manifest's bytes, or Sieve instructions as a .sieve holds them: their manifest's place on the
     binary line as raw bytes (binary-v1, §12.1), read back here to the manifest (every shorter file
     first: the count of files shorter than L bytes is (256**L - 1) / 255)."""
-    # (A head in bytes: "sieve" and its version's byte, 16 to 28.)
-    if data.startswith(b"sieve-manifest-v") or (len(data) > 5 and data[:5] == b"sieve" and 16 <= data[5] <= 28):
+    # (A head in bytes: "sieve" and its version's byte, 16 to 29.)
+    if data.startswith(b"sieve-manifest-v") or (len(data) > 5 and data[:5] == b"sieve" and 16 <= data[5] <= 29):
         return data
     v = int.from_bytes(data, "big")
     length = max(0, len(data) - 1)
@@ -7356,7 +7373,7 @@ def cmd_unpack(args):
     if data.startswith((b"sieve-manifest-v7\n", b"sieve-manifest-v8\n", b"sieve-manifest-v9\n", b"sieve-manifest-v10\n",
                         b"sieve-manifest-v11\n", b"sieve-manifest-v12\n", b"sieve-manifest-v13\n", b"sieve-manifest-v14\n",
                         b"sieve-manifest-v15\n", b"sieve-manifest-v17\n", b"sieve-manifest-v18\n", b"sieve-manifest-v19\n",
-                                b"sieve-manifest-v20\n", b"sieve-manifest-v21\n", b"sieve-manifest-v22\n", b"sieve-manifest-v23\n", b"sieve-manifest-v24\n", b"sieve-manifest-v25\n", b"sieve-manifest-v26\n", b"sieve-manifest-v27\n", b"sieve-manifest-v28\n")):
+                                b"sieve-manifest-v20\n", b"sieve-manifest-v21\n", b"sieve-manifest-v22\n", b"sieve-manifest-v23\n", b"sieve-manifest-v24\n", b"sieve-manifest-v25\n", b"sieve-manifest-v26\n", b"sieve-manifest-v27\n", b"sieve-manifest-v28\n", b"sieve-manifest-v29\n")):
         return cmd_unpack_v7(args, data)
     end = data.index(b"\nend\n") + len(b"\nend\n")
     lines = data[:end].decode("utf-8").split("\n")[:-1]
@@ -7482,7 +7499,7 @@ def cmd_graph(args):
     """The graph part of Sieve instructions that are a map (sieve-manifest-v18, SPECIFICATIONS §12.3):
     the map's text, every line after its "g<TAB>", as it was written."""
     data = v16_text(instructions_bytes(open(args.file, "rb").read()))
-    if not data.startswith((b"sieve-manifest-v18\n", b"sieve-manifest-v19\n", b"sieve-manifest-v20\n", b"sieve-manifest-v21\n", b"sieve-manifest-v22\n", b"sieve-manifest-v23\n", b"sieve-manifest-v24\n", b"sieve-manifest-v25\n", b"sieve-manifest-v26\n", b"sieve-manifest-v27\n", b"sieve-manifest-v28\n")) or b"\ng\t" not in data:
+    if not data.startswith((b"sieve-manifest-v18\n", b"sieve-manifest-v19\n", b"sieve-manifest-v20\n", b"sieve-manifest-v21\n", b"sieve-manifest-v22\n", b"sieve-manifest-v23\n", b"sieve-manifest-v24\n", b"sieve-manifest-v25\n", b"sieve-manifest-v26\n", b"sieve-manifest-v27\n", b"sieve-manifest-v28\n", b"sieve-manifest-v29\n")) or b"\ng\t" not in data:
         sys.exit("not a map: no graph part")
     end = data.index(b"\nend\n") + 1
     out = b"".join(l[2:] + b"\n" for l in data[:end].split(b"\n") if l.startswith(b"g\t"))

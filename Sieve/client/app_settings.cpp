@@ -281,7 +281,7 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"locator", "search_for", locator_search_run ? "run" : "file", "file: those seconds for each file; run: for the whole run, shared among its files"},
         {"locator", "optimise_archives", locator_archives ? "1" : "0", "1: Optimise Compressed Formats ticked (an archive or a compressed file made again exactly, else carried as its contents, where smaller); 0: off"},
         {"locator", "search_every_wave", locator_every_wave ? "1" : "0", "1: Try every way ticked: the search's shortcuts off (the rope through every wave, even on text and on bytes already packed; mixing tried on every file, whole); 0: off"},
-        {"locator", "prioritise_decoding", locator_decoding ? "1" : "0", "1: Prioritise Decoding Speed ticked: no file carried by mixing (quicker to install, larger); 0: off"},
+        {"locator", "prioritise_decoding", locator_decoding ? "1" : "0", "1: Prioritise Decoding Speed ticked: no file carried by mixing, nor the files carried together mixed (quicker to install, larger); 0: off"},
     };
     for (const Settings::Entry& e : setup.entries()) r.push_back({"setup", e.key, e.value, e.note});
     r.push_back({"paths", "ffmpeg", ffmpeg, "the ffmpeg program; empty: SIEVE_FFMPEG, then one beside Sieve, then the PATH"});
