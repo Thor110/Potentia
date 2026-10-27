@@ -1,31 +1,55 @@
-# Notes for the next session: ideas set aside, and the handoff (27 October 2026)
+# A second code review: fixes where Sieve reads other people's files (27 October 2026)
 
-Unzip over the repository root, after the `source.sieve` zip. Committed locally (not pushed). Documentation only: nothing to rebuild.
+Unzip over the repository root. Committed locally (not pushed). Rebuild needed: the core, the
+`sieve` tool and `sieve-install` (no format, version or address changes; the hallway is untouched
+apart from what it links from `tools/cli`).
 
-## IDEAS.md, section 17 (Deprecated ideas)
-- **17.4 Square and circle wave filters:** the idea, how it was tried (vertices only and every byte on the outline; whole grid and tiles; squares and rectangles; the phases on top or not), the table of results against the phases and the rope, and why it isn't taken. Your words on the triangle are quoted.
-- **17.5 `source.sieve` as a map holding the 7z:** replaced the same day by the plain .sieve of the source folder, with your sizes.
-- **17.6 A smaller `sieve-install`:** the size breakdown, and your "It probably isn't worth it then."
-- **17.7 Smaller decisions of the day, with their reasons:**
-  - every .sieve stamped with the newest version;
-  - 16 MiB groups;
-  - groups made by kind of file;
-  - the "worth unpacking" test from a sample alone;
-  - the welcome page as a setting;
-  - the anchors folder left in the release's source.
+The full account, with how each fix was tried, is in `Sieve/docs/REVIEW.md` under "The second pass".
 
-## HANDOFF.md
-A new entry at the top of the newest ones: "For the next session (27 October 2026): where the work stopped". It covers:
-- **State:** v31 in your repository, and `source.sieve` as a plain .sieve delivered after it.
-- **The plan you agreed, and where each step is:**
-  1. done (v29, v30, v31);
-  2. **the web dictionary, next:** waiting on your choice of outside pages, with the steps and the figures to beat;
-  3. JPEG recompressed losslessly;
-  4. parallel mixing and "Create .sieve";
-  5. a sound model, zlib PNGs and CI time.
-- **What's still open from today.**
-- **Your working rules this session held to.**
+## Fixed
+- **A RAR's recipe in a `.sieve` was trusted on installing** (`locate.cpp`, `rar_remake.*`). Its
+  `rar` switches went to `rar` as written (`-df` deletes what it archives), and its archive, folder
+  and member paths were never checked (members had `chmod` and their times set before anything was
+  verified). Now refused when the instructions are read: switches must be ones Sieve writes, paths
+  must stay inside the folder (the same rule as every file's path).
+- **The web host decoded first and checked its 256 MiB limit after** (`web_host.cpp`,
+  `locate.*`). A page can trigger a decode with no click, and a few hundred bytes could declare
+  gigabytes. New `DecodeLimit`: declared stream and file sizes are checked before anything is made.
+  Set only by the web host; everything else is unchanged.
+- **The web host skipped the vault** (`web_host.cpp`). The file it returns is now checked, as
+  Extract checks one.
+- **The web host could send text that is not UTF-8** (`web_host.cpp`), which makes Chrome close the
+  connection. Strings in its replies are now made well-formed.
+- **A failed or cancelled Extract with Replace ticked deleted files it had written over**
+  (`pack.cpp`, `unpack_archive`). It now removes only what it created, as installing does.
+- **The page could press the guard notice's buttons** (`web/extension/notice.js`), including "Trust
+  the new table". They now act only on a real click (`event.isTrusted`). The buttons themselves stay.
+- **A safetensors header with one name twice could pass** (`safetensors.cpp`), when the two were
+  not neighbours in the data. Two unit checks added.
+- **Warnings under `-Wall -Wextra -Wpedantic`** (GCC 13 and clang 18): 17 missing-initialiser
+  warnings (constructors added to `PackedStream` and `UnpackedArchive`, no call site changed), an
+  unused `sat()` in `training.cpp`, and an unused copy of `kL` in `weights.cpp`.
+
+## Checked here
+- Unit suite: 77,110 checks, 0 failures (clang Release, core and tool; the hallway was not built).
+- CI step 11's web-host block and v22 RAR block run alone against the changed build: passed.
+- Each fix tried against crafted input, before and after where the old code could be rebuilt.
+
+## Found and left (questions for you, in `REVIEW.md`)
+1. The site guard can be bypassed by a changed page's own scripts (they run before the check and
+   share `sessionStorage`, where "Show it anyway" is kept). Moving that flag into the extension is
+   a small change; whether to is your call.
+2. A listing or site table over 1 MB (measured: about 9,000 files of short names) is sent as one
+   native message, which Chrome refuses. Fix needs the host and `background.js` changed together.
+3. Smaller items: `stb_image_write` globals read without the lock in `encode_png`; Firefox not
+   registered by the host scripts; `install_host.sh` path not JSON-escaped; a detached thread in
+   the harness.
 
 ## Files
-- `Sieve/docs/IDEAS.md`
-- `Sieve/docs/HANDOFF.md`
+- `Sieve/core/src/safetensors.cpp`, `Sieve/core/src/training.cpp`, `Sieve/core/src/weights.cpp`
+- `Sieve/tools/cli/locate.cpp`, `Sieve/tools/cli/locate.hpp`, `Sieve/tools/cli/pack.cpp`
+- `Sieve/tools/cli/rar_remake.cpp`, `Sieve/tools/cli/rar_remake.hpp`
+- `Sieve/tools/cli/web_host.cpp`, `Sieve/tools/cli/web_host.hpp`
+- `Sieve/web/extension/notice.js`
+- `Sieve/tests/test_core.cpp`
+- `Sieve/docs/REVIEW.md`, `Sieve/docs/HANDOFF.md`

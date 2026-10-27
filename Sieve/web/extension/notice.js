@@ -31,7 +31,11 @@ globalThis.sieveNotice = (() => {
     for (const [label, action] of buttons) {
       const button = document.createElement("button");
       button.textContent = label;
-      button.addEventListener("click", action);
+      // Only the reader's own click: the page's scripts share this document and can call click()
+      // on a button, and "Trust the new table" from a changed site's own script would undo the check.
+      button.addEventListener("click", (event) => {
+        if (event.isTrusted) action();
+      });
       row.append(button);
     }
     box.append(row);

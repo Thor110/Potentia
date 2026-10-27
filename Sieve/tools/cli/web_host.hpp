@@ -11,7 +11,9 @@
 //     decoded when it is asked for by its path (24 October 2026; never written to the disk);
 //   - nothing that asks for more than decoding: no items of Sieve's lines, no remade archives, no
 //     map's graph part;
-//   - at most `max_bytes` decoded (256 MiB unless given).
+//   - at most `max_bytes` decoded (256 MiB unless given), by the sizes the instructions declare,
+//     checked before anything that size is made (locate.hpp's DecodeLimit);
+//   - nothing the vault withholds (vault.hpp), as installing and extracting refuse it.
 //
 // Native messaging (Chrome's, as Edge's and Firefox's): the browser starts the program with the
 // extension's origin as its first argument and talks over standard input and output, each message

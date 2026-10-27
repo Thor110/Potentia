@@ -15,7 +15,6 @@ namespace {
 
 [[noreturn]] void bad(const std::string& what) { throw std::invalid_argument("sieve-weights-v1: " + what); }
 
-constexpr uint64_t kL = uint64_t(1) << 31;
 constexpr uint32_t kM = uint32_t(1) << kScaleBits;
 const std::string kMagic = std::string(kVersion) + "\n";
 

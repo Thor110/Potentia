@@ -3947,6 +3947,18 @@ IDEAS §19.79, in the order of the plan agreed with Edward.
   (Edward): the remembered table and "Trust the new table" stay; no signing, ever ("I don't trust
   myself or any human being alive to keep a key safe").
 
+### A second code review (27 October 2026)
+
+A fresh session read the project from this file down and reviewed it, mostly where Sieve reads
+files from someone else. `docs/REVIEW.md` ("The second pass") has what was fixed and what was left,
+with how each was tried. In short: a RAR's recipe (its `rar` switches and paths) is checked when
+instructions are read; the web host holds decoding to its limit before anything is made, checks
+the vault, and sends only UTF-8; a failed Extract no longer deletes files it wrote over; the site
+notice's buttons answer only the reader's own clicks; a safetensors name given twice is refused;
+and the core and the `sieve` tool are warning-free under GCC 13 and clang 18 (the hallway was not
+built here). No format, version or address changed. The
+plan below is unchanged.
+
 ### For the next session (27 October 2026): where the work stopped
 
 This session ran from mix-v2 (`sieve-manifest-v26`) to `sieve-manifest-v31`; its entries follow,

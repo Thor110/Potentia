@@ -4039,9 +4039,12 @@ bool unpack_archive(const AnyArchive& a, const std::filesystem::path& dest, bool
             }
             make_dirs(to.parent_path());
             vault::check_bytes(e.bytes, e.path); // nothing the vault withholds is written, whatever it arrives in
+            // (A file written over, Replace ticked, is not removed by a cancel or a failure: only what
+            // this made, as installing does. Removing it would lose the file outright.)
+            const bool existed = fs::exists(to);
             std::ofstream f(to, std::ios::binary | std::ios::trunc);
             if (!f) throw std::runtime_error("cannot write " + e.path);
-            written.push_back(to);
+            if (!existed) written.push_back(to);
             if (!e.bytes.empty()) f.write(reinterpret_cast<const char*>(e.bytes.data()), std::streamsize(e.bytes.size()));
             f.close();
             if (!f) throw std::runtime_error("cannot write " + e.path);

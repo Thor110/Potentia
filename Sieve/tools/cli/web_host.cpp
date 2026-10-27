@@ -3,6 +3,7 @@
 #include "cli/locate.hpp"
 #include "cli/map.hpp"
 #include "cli/map_sieve.hpp"
+#include "cli/vault.hpp"
 #include "sieve/json.hpp"
 
 #include <algorithm>
@@ -125,7 +126,10 @@ WebOpened web_open(const std::vector<uint8_t>& sieve, const std::string& expecte
     const std::string want = expected_hex(expected);
     const std::string got = sha256_hex(sieve);
     if (got != want) throw std::runtime_error("the .sieve's SHA-256 is " + got + ", not the " + want + " its link states: refused");
-    // 2. Read as instructions, and only what the plugin shows.
+    // 2. Read as instructions, and only what the plugin shows. The hash says only that the file is
+    // the one the page chose, not that its sizes are honest, so nothing larger than the plugin
+    // unpacks is made while it is read (a page could otherwise ask for gigabytes in a few bytes).
+    const DecodeLimit limit(max_bytes);
     const Manifest m = manifest_of_installer(address_of_raw(sieve));
     if (!m.graph.empty()) throw std::runtime_error("it is a map (a graph part): open it in the hallway's node graph, not the browser");
     if (!m.lines.empty()) throw std::runtime_error("it carries items of Sieve's lines: install it with Sieve");
@@ -183,6 +187,9 @@ WebOpened web_open(const std::vector<uint8_t>& sieve, const std::string& expecte
     }
     auto [b, sha] = bytes_of(k);
     const std::string& p = files[k]->path;
+    // The vault: nothing it withholds is shown or passed on, the browser included (as installing and
+    // extracting check every file they write).
+    vault::check_bytes(b, p);
     const size_t slash = p.rfind('/');
     o.file.name = slash == std::string::npos ? p : p.substr(slash + 1);
     o.file.type = media_type_of(o.file.name);
@@ -196,6 +203,7 @@ std::vector<WebFile> web_table(const std::vector<uint8_t>& sieve, const std::str
     const std::string want = expected_hex(expected);
     const std::string got = sha256_hex(sieve);
     if (got != want) throw std::runtime_error("the table's SHA-256 is " + got + ", not the " + want + " expected: refused");
+    const DecodeLimit limit(kWebMaxBytes); // (as web_open: a table's sizes are only what it says)
     const Manifest m = manifest_of_installer(address_of_raw(sieve));
     if (m.graph.empty()) throw std::runtime_error("it is not a site's table (it has no graph part)");
     const Map map = map_of_instructions(m, "table");
@@ -239,6 +247,40 @@ void write_message(std::ostream& out, const json::Value& v)
 
 json::Value num(uint64_t n) { return json::Value::make_number(std::to_string(n)); }
 
+// A string for the browser, as well-formed UTF-8: each byte that does not begin a well-formed
+// sequence becomes U+FFFD. Names and messages can carry a .sieve's own bytes, and a browser that is
+// handed text that is not UTF-8 closes the connection, failing every request still waiting on it.
+json::Value utf8_text(const std::string& s)
+{
+    std::string out;
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size();)
+    {
+        const unsigned char c = static_cast<unsigned char>(s[i]);
+        const size_t n = c < 0x80 ? 1 : (c >> 5) == 6 ? 2 : (c >> 4) == 14 ? 3 : (c >> 3) == 30 ? 4 : 0;
+        bool ok = n && i + n <= s.size();
+        uint32_t v = n == 1 ? c : n == 2 ? c & 31u : n == 3 ? c & 15u : c & 7u;
+        for (size_t k = 1; ok && k < n; ++k)
+        {
+            const unsigned char d = static_cast<unsigned char>(s[i + k]);
+            ok = (d >> 6) == 2;
+            v = v << 6 | (d & 63u);
+        }
+        ok = ok && !((n == 2 && v < 0x80) || (n == 3 && v < 0x800) || (n == 4 && v < 0x10000) || v > 0x10FFFF || (v >= 0xD800 && v < 0xE000));
+        if (ok)
+        {
+            out.append(s, i, n);
+            i += n;
+        }
+        else
+        {
+            out += "\xEF\xBF\xBD";
+            ++i;
+        }
+    }
+    return json::Value::make_string(std::move(out));
+}
+
 } // namespace
 
 int run_web_host(std::istream& in, std::ostream& out, const std::string& version, uint64_t max_bytes)
@@ -256,7 +298,7 @@ int run_web_host(std::istream& in, std::ostream& out, const std::string& version
             const std::string op = req.at("op").string();
             if (op == "hello")
             {
-                write_message(out, json::Value::make_object({{"id", id}, {"ok", json::Value::make_bool(true)}, {"sieve", json::Value::make_string(version)}}));
+                write_message(out, json::Value::make_object({{"id", id}, {"ok", json::Value::make_bool(true)}, {"sieve", utf8_text(version)}}));
                 continue;
             }
             if (op == "table")
@@ -264,7 +306,7 @@ int run_web_host(std::istream& in, std::ostream& out, const std::string& version
                 const json::Value* h = req.find("sha256");
                 std::vector<json::Value> files;
                 for (const WebFile& f : web_table(bytes_of_base64(req.at("data").string()), h ? h->string() : std::string()))
-                    files.push_back(json::Value::make_object({{"path", json::Value::make_string(f.path)}, {"sha256", json::Value::make_string(f.sha256)}}));
+                    files.push_back(json::Value::make_object({{"path", utf8_text(f.path)}, {"sha256", utf8_text(f.sha256)}}));
                 write_message(out, json::Value::make_object({{"id", id}, {"ok", json::Value::make_bool(true)}, {"files", json::Value::make_array(std::move(files))}}));
                 continue;
             }
@@ -280,15 +322,15 @@ int run_web_host(std::istream& in, std::ostream& out, const std::string& version
             {
                 std::vector<json::Value> files, folders;
                 for (const WebFile& f : o.files)
-                    files.push_back(json::Value::make_object({{"path", json::Value::make_string(f.path)},
+                    files.push_back(json::Value::make_object({{"path", utf8_text(f.path)},
                                                               {"size", num(f.size)},
-                                                              {"sha256", json::Value::make_string(f.sha256)}}));
-                for (const std::string& d : o.folders) folders.push_back(json::Value::make_string(d));
+                                                              {"sha256", utf8_text(f.sha256)}}));
+                for (const std::string& d : o.folders) folders.push_back(utf8_text(d));
                 const json::Value* n = req.find("name");
                 write_message(out, json::Value::make_object({{"id", id},
                                                              {"ok", json::Value::make_bool(true)},
                                                              {"listing", json::Value::make_bool(true)},
-                                                             {"name", json::Value::make_string(n ? n->string() : std::string())},
+                                                             {"name", utf8_text(n ? n->string() : std::string())},
                                                              {"files", json::Value::make_array(std::move(files))},
                                                              {"folders", json::Value::make_array(std::move(folders))},
                                                              {"size", num(o.total)},
@@ -300,10 +342,10 @@ int run_web_host(std::istream& in, std::ostream& out, const std::string& version
             const size_t parts = (d.bytes.size() + kPart - 1) / kPart;
             write_message(out, json::Value::make_object({{"id", id},
                                                          {"ok", json::Value::make_bool(true)},
-                                                         {"name", json::Value::make_string(d.name)},
-                                                         {"type", json::Value::make_string(d.type)},
+                                                         {"name", utf8_text(d.name)},
+                                                         {"type", utf8_text(d.type)},
                                                          {"size", num(d.bytes.size())},
-                                                         {"sha256", json::Value::make_string(d.sha256)},
+                                                         {"sha256", utf8_text(d.sha256)},
                                                          {"seconds", json::Value::make_number(seconds)},
                                                          {"parts", num(parts)}}));
             for (size_t k = 0; k < parts; ++k)
@@ -314,7 +356,7 @@ int run_web_host(std::istream& in, std::ostream& out, const std::string& version
         }
         catch (const std::exception& e)
         {
-            write_message(out, json::Value::make_object({{"id", id}, {"ok", json::Value::make_bool(false)}, {"error", json::Value::make_string(e.what())}}));
+            write_message(out, json::Value::make_object({{"id", id}, {"ok", json::Value::make_bool(false)}, {"error", utf8_text(e.what())}}));
         }
     }
     return 0;

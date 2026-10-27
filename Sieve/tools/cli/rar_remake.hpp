@@ -57,6 +57,12 @@ std::string looked();
 // time cannot be set here (a creation time on a Unix system).
 bool set_times(const std::filesystem::path& folder, const std::vector<Member>& members, std::string& why);
 
+// Whether every word of `switches` is one read_headers can give (-m, -md, -s, -k, -htb, -ow, -tsm,
+// -tsc, -tsa, -qo). Installing hands a recipe's switches to rar, and the recipe comes from Sieve
+// instructions that may be a stranger's, so anything else (-df, which deletes what it archives, say)
+// is refused when they are read.
+bool switches_known(const std::string& switches);
+
 // rar run in `folder` on the members, making `out`: how ("top", the top names with -r; "list", every
 // member named in a list file) and with which switches. Its exit status; what it printed in `said`.
 int make(const std::filesystem::path& program, const std::filesystem::path& folder, const std::vector<Member>& members,

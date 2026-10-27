@@ -149,8 +149,6 @@ constexpr int64_t kLog2Theta = 57070290109;     // log2(10000) in Q32 (rope_thet
 constexpr int64_t kGradLimit = int64_t(1) << 43;
 constexpr int64_t kVelocityLimit = int64_t(1) << 46;
 
-inline int64_t sat(int64_t v) { return std::clamp(v, -kLimit, kLimit); }
-
 // Decimal text (digits, an optional point and digits) to round(x * 2^bits), halves up.
 int64_t decimal_q(const std::string& s, const char* what, unsigned bits)
 {

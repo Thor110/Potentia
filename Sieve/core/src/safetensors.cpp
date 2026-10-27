@@ -97,6 +97,8 @@ Header parse_header(std::span<const uint8_t> start)
         if (t->begin != at) bad("tensor " + t->name + (t->begin < at ? " overlaps the one before it" : " leaves a gap before it"));
         at = t->end;
     }
+    // (By name, not by place: two of one name need not lie side by side.)
+    std::sort(by.begin(), by.end(), [](const Tensor* a, const Tensor* b) { return a->name < b->name; });
     for (size_t i = 1; i < by.size(); ++i)
         if (by[i]->name == by[i - 1]->name) bad("two tensors named " + by[i]->name);
     return h;

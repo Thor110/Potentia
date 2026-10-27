@@ -492,6 +492,21 @@ bool set_times(const fs::path& folder, const std::vector<Member>& members, std::
     return true;
 }
 
+bool switches_known(const std::string& switches)
+{
+    static const std::set<std::string> fixed = {"-s", "-k", "-htb", "-ow", "-tsm-", "-tsm1", "-tsc", "-tsa", "-qo+", "-qo-"};
+    auto digits = [](const std::string& t) { return !t.empty() && t.size() <= 10 && t.find_first_not_of("0123456789") == std::string::npos; };
+    std::istringstream in(switches);
+    for (std::string w; in >> w;)
+    {
+        if (fixed.count(w)) continue;
+        if (w.size() == 3 && w.compare(0, 2, "-m") == 0 && w[2] >= '0' && w[2] <= '9') continue; // -m3
+        if (w.size() > 4 && w.compare(0, 3, "-md") == 0 && w.back() == 'k' && digits(w.substr(3, w.size() - 4))) continue; // -md4096k
+        return false;
+    }
+    return true;
+}
+
 int make(const fs::path& program, const fs::path& folder, const std::vector<Member>& members, const std::string& how, const std::string& switches,
          const fs::path& out_in, std::string* said)
 {

@@ -3373,6 +3373,10 @@ void test_safetensors()
     CHECK(throws([&] { (void)parse_text(header(R"({"a":{"dtype":"F16","shape":[1],"data_offsets":[2,4]}})")); }));          // a gap
     CHECK(throws([&] { (void)parse_text(header(R"({"a":{"dtype":"F16","shape":[2],"data_offsets":[0,4]},"b":{"dtype":"F16","shape":[1],"data_offsets":[2,4]}})")); })); // overlap
     CHECK(throws([&] { (void)parse_text(header(R"({"a":{"dtype":"Q4","shape":[1],"data_offsets":[0,1]}})")); }));            // unknown type
+    // One name twice, side by side in the data and with another between (the second was let through
+    // when the names were compared in the data's order).
+    CHECK(throws([&] { (void)parse_text(header(R"({"a":{"dtype":"F16","shape":[1],"data_offsets":[0,2]},"a":{"dtype":"F16","shape":[1],"data_offsets":[2,4]}})")); }));
+    CHECK(throws([&] { (void)parse_text(header(R"({"a":{"dtype":"F16","shape":[1],"data_offsets":[0,2]},"b":{"dtype":"F16","shape":[1],"data_offsets":[2,4]},"a":{"dtype":"F16","shape":[1],"data_offsets":[4,6]}})")); }));
     // The real model's start, from its config alone: the first 32,672 bytes of SmolLM2-360M-Instruct's
     // model.safetensors (commit a10cc15), whose SHA-256 is pinned here.
     const auto smol = sieve::json::parse(R"({"hidden_size":960,"intermediate_size":2560,"model_type":"llama","num_attention_heads":15,

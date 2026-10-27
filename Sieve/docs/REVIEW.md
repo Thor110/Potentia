@@ -4,7 +4,103 @@ A sweep over `core/`, `client/`, `tools/`, `tests/` and `reference/` looking for
 optimisations with evidence behind them, and for places where the code does not explain itself.
 What was fixed is listed first; what was found and left is listed after, so nothing is lost.
 
-## Fixed in this pass
+## The second pass (27 October 2026)
+
+A fresh session, reading from the handoff down, with most of its time on what reads files from
+someone else: `.sieve` instructions (installing, the web plugin's host), archives (Extract), model
+files, and the browser extension. Checked by the unit suite (77,110 checks, 0 failures, a clang
+Release build of the core and the `sieve` tool), the web host and v22 blocks of CI step 11 run
+alone (they passed), and each fix below tried against crafted input before and after.
+
+### Fixed
+
+**`tools/cli/locate.cpp` — a RAR's recipe was trusted on installing.** A v22 `.sieve` names, for a
+RAR made again, the switches to give `rar`, the archive's path, its folder, and every member's
+path. None was checked: the switches went to `rar`'s command line as they were (`-df` deletes what
+it archives), the members' paths had their attributes and times set (`chmod`, `utimensat`) before
+anything was verified, and the paths could be absolute or climb out with `..`. Now, when the
+instructions are read: the switches must be ones `rar::read_headers` itself writes
+(`rar::switches_known`: `-m`, `-md…k`, `-s`, `-k`, `-htb`, `-ow`, `-tsm-`, `-tsm1`, `-tsc`,
+`-tsa`, `-qo±`), and the archive, its folder and its members are held to the same rule as every
+file's path (`leaves_folder`, which the file entries' check became). Tried: `-df`, `-ilog…`,
+`../../etc/passwd`, `/etc/passwd`, `../evil.rar` and a folder of `/tmp` are each refused with a
+line saying why; a recipe of `-m3 -md4096k -s -qo-` still installs.
+
+**`tools/cli/web_host.cpp`, `tools/cli/locate.cpp` — the web host's 256 MiB limit came after the
+decoding.** The limit was checked on the files once the instructions had been read, but reading
+them allocates (and fills with zeros) every stream and file at the size the instructions declare.
+The link's hash only proves the file is the one the page chose, and a page asks for a decode with
+no click (`<img src="….sieve" integrity=…>`), so a `.sieve` of a few hundred bytes could have the
+host make gigabytes. `DecodeLimit` (locate.hpp) now holds, for the length of a read, the most any
+stream or all the files together may declare, checked before anything that size is made; the host
+sets it to its limit. Elsewhere it is unset and nothing changes. Tried: a listing declaring an
+8,000,000,000-byte file, and one declaring a stream of that size, are both refused at once; a
+`.sieve` made by `sieve locate` still decodes and lists.
+
+**`tools/cli/web_host.cpp` — the vault did not cover the browser.** Installing and extracting
+check every file against the vault; the host handed decoded bytes to the browser unchecked. The
+file it returns is now checked as Extract checks one (`vault::check_bytes`). Tried with a `.sieve`
+holding the built-in test bytes: refused, "withheld by the vault".
+
+**`tools/cli/web_host.cpp` — replies that were not UTF-8.** Paths and error messages can carry a
+`.sieve`'s own bytes, and Chrome closes a native host that sends text that is not UTF-8, failing
+every request still waiting. Every string the host sends now has each byte that does not begin a
+well-formed sequence replaced by U+FFFD (the base64 parts, which are ASCII, are left alone). The
+JSON writer itself is unchanged, since the safetensors layout is written through it.
+
+**`tools/cli/pack.cpp`, `unpack_archive` — a failed Extract deleted the user's own files.** With
+Replace ticked, a file already there was overwritten and then, if a later entry failed (the vault,
+a full disk) or the extraction was cancelled, removed with the rest, so it was lost outright.
+Installing already kept such files (`existed`); Extract now does the same. Tried with a zip whose
+second entry is the vault's test bytes: before, the first file was gone; after, it is there.
+
+**`web/extension/notice.js` — the page could press the notice's buttons.** The notice is built in
+the page's own document, and `button.click()` from the page's scripts runs a listener, so a changed
+site's own script could press "Trust the new table" and have its table remembered. Each button now
+acts only on a click the browser marks as the reader's (`event.isTrusted`). The buttons themselves
+stay as Edward decided.
+
+**`core/src/safetensors.cpp` — a name given twice could pass.** Duplicate names were looked for
+between tensors next to each other in the data's order, so `a`, `b`, `a` passed. They are now
+compared by name. Two checks added to `tests/test_core.cpp`, one of which the old code passes.
+
+**Warnings.** The tree was not warning-free at `-Wall -Wextra -Wpedantic` with GCC 13 or clang 18:
+seventeen "missing field initializer" warnings on brace-initialised `PackedStream` and
+`UnpackedArchive` values (now constructors, so no call site changed), an unused `sat()` in
+`training.cpp` and an unused copy of `kL` in `weights.cpp` (the one `weights_rans.cpp` uses is the
+real one). Neither unused definition could have been meant to be used: `training-v1` and
+`sieve-weights-v1` are pinned, and using either would change their results. Both compilers are now
+silent on the core and the tool.
+
+### Found and left
+
+1. **The site guard can be argued with by the page it guards.** `guard.css` hides a page until it
+   is checked, but the page's scripts run meanwhile, and they share its DOM and its
+   `sessionStorage`. A changed page can set `sieve-unchecked:<its URL>` itself and reload, and
+   `guard.js` then skips the check entirely (not only for a page missing from the table, which is
+   what "Show it anyway" is for); it can also put its own content back after the notice replaces
+   it. The buttons are fixed above; the rest is a question of design. Keeping "shown anyway" in
+   the extension (the background, per tab) rather than the page's storage closes the first; the
+   second needs the page stopped before its scripts run, which a content script cannot do.
+2. **A listing or a table larger than 1 MB.** The host sends a `.sieve`'s listing, and a site's
+   table, as one message, and Chrome refuses a message from a host over 1 MB, closing the port.
+   Measured: 2,000 files named `pages/page-N.html` came to 234,017 bytes, 117 a file, so about
+   9,000 such files (fewer with longer names). Sending them in parts, as a file's bytes already
+   are, needs `background.js` and the host changed together.
+3. **`stb_image_write`'s settings are globals.** `stb_png` sets and restores them under a lock;
+   `encode_png` reads them without it, so a PNG written while a v25 PNG is being made again on
+   another thread can be written at that one's level and filter. Still a valid PNG, of other bytes.
+4. **Still open from the first pass:** items 3, 5 and 7 below, and the last two of 6, as they were
+   (item 2 was done on 24 October 2026, as `symbol-entropy-v2` and `model-information-v2`).
+5. **Smaller:** `sieve web-host` recognises `moz-extension://` as its first argument, but Firefox
+   gives the manifest's path first and the install scripts register Chrome, Chromium and Edge only;
+   `install_host.sh` writes the program's path into JSON unescaped (a `"` or `\` in it breaks the
+   file); and the harness's trial measurement runs on a detached thread that can still be running
+   when the program exits.
+
+## The first pass
+
+### Fixed in this pass
 
 **`client/hallway.cpp`, `draw_face_image`** — pictures on items warped as the camera moved close
 to them: SDL textures a triangle affinely, and each picture was cut into only 2x2 cells, so up
@@ -95,7 +191,7 @@ digits, and a model its coordinates' digits followed by its faces', so each pack
 `BigUint::from_digits`, `to_digits`, `pow` and one multiplication or division, and both now get
 the fast conversions for free. `BigUint::pow` takes a 64-bit exponent for the purpose.
 
-## Found and left
+### Found and left
 
 In rough order of value. These are the work of a session each, not of a paragraph.
 

@@ -54,10 +54,21 @@ uint8_t lzma2_property(uint32_t dictionary)
     return 40;
 }
 
+thread_local uint64_t g_decode_limit = 0; // DecodeLimit's: 0, none
+
+// Refuses a size the instructions declare that is past this thread's DecodeLimit.
+void within_decode_limit(uint64_t bytes, const char* what)
+{
+    if (g_decode_limit && bytes > g_decode_limit)
+        throw std::runtime_error(std::string("these Sieve instructions declare ") + what + " of " + std::to_string(bytes) + " bytes, more than the " +
+                                 std::to_string(g_decode_limit) + " allowed here");
+}
+
 // One stream: raw LZMA2 of `bytes` bytes, then (x86) the x86 branch filter undone, as 7-Zip's BCJ
 // and xz's x86 filter both define it, from position 0.
 std::vector<uint8_t> unpack_stream(std::span<const uint8_t> packed, const PackedStream& s, bool x86)
 {
+    within_decode_limit(s.bytes, "a stream");
     std::vector<uint8_t> out(size_t(s.bytes));
     if (s.bytes == 0)
     {
@@ -208,6 +219,22 @@ void decode_deferred(const std::vector<Deferred>& jobs, std::vector<std::vector<
 
 std::vector<uint8_t> unpack_v4(Manifest& m)
 {
+    if (g_decode_limit)
+    {
+        // Every file's bytes as declared, and what each archive made again is made from, before any
+        // of them is made (an item's size is what it is made, from a place no longer than its line's).
+        uint64_t declared = 0;
+        auto add = [&](uint64_t n) { declared = n > UINT64_MAX - declared ? UINT64_MAX : declared + n; };
+        for (const ManifestEntry& e : m.entries)
+        {
+            if (e.dir) continue;
+            if (e.size != kSizeAsMade) add(e.size);
+            if (e.remake.empty()) continue;
+            const std::string inner = e.remake.substr(e.remake.rfind(' ') + 1);
+            if (!inner.empty() && inner.size() <= 19 && inner.find_first_not_of("0123456789") == std::string::npos) add(std::stoull(inner));
+        }
+        within_decode_limit(declared, "files");
+    }
     if (m.streams.size() != m.x86.packed + m.lzma2.packed) throw std::runtime_error("manifest: its streams are not the size its lines say");
     const std::span<const uint8_t> all(m.streams);
     const std::vector<uint8_t> x86 = unpack_stream(all.subspan(0, size_t(m.x86.packed)), m.x86, true);
@@ -1304,6 +1331,24 @@ void add_contents(Manifest& m, const std::filesystem::path& root_in)
     m.with_addresses = false;
 }
 
+// Whether a path from Sieve instructions could point outside the folder being installed: an
+// absolute path, a drive, a backslash, or a part that is "." or ".." (a name with dots in it is
+// fine; so is one "/" at the end, a folder's). Every path installing writes to, or hands to another
+// program, goes through this when the instructions are read.
+static bool leaves_folder(const std::string& p)
+{
+    if (p.empty() || p[0] == '/' || p.find(':') != std::string::npos || p.find('\\') != std::string::npos) return true;
+    for (size_t at = 0; at <= p.size();)
+    {
+        size_t slash = p.find('/', at);
+        if (slash == std::string::npos) slash = p.size();
+        const std::string part = p.substr(at, slash - at);
+        if (part == "." || part == ".." || (part.empty() && slash != p.size())) return true;
+        at = slash + 1;
+    }
+    return false;
+}
+
 Manifest Manifest::parse(std::string_view whole)
 {
     // v16: the head in bytes, read back into v15's text (its root's and streams' lines, its lines,
@@ -1631,6 +1676,9 @@ Manifest Manifest::parse(std::string_view whole)
             u.size = std::stoull(f[2]);
             u.archive = f[3];
             u.folder = f[4];
+            // (A RAR made again is written at its path and its folder emptied: both inside.)
+            if (leaves_folder(u.archive) || leaves_folder(u.folder))
+                throw std::runtime_error("manifest: line " + std::to_string(i + 1) + " names an archive outside the folder being installed");
             m.unpacked.push_back(u);
             continue;
         }
@@ -1648,6 +1696,9 @@ Manifest Manifest::parse(std::string_view whole)
             if (m.unpacked.empty() || !m.unpacked.back().program.empty() || m.unpacked.back().format != "rar" || f[1] != "rar" ||
                 (f[4] != "top" && f[4] != "list") || f[3].size() != 64)
                 throw std::runtime_error("manifest: line " + std::to_string(i + 1) + " is not a RAR's recipe");
+            // Its switches go to rar on installing: only those Sieve itself writes.
+            if (!rar::switches_known(f[5]))
+                throw std::runtime_error("manifest: line " + std::to_string(i + 1) + " gives rar switches Sieve does not write (" + f[5] + ")");
             Manifest::UnpackedArchive& u = m.unpacked.back();
             u.program = f[1];
             u.program_version = f[2];
@@ -1669,6 +1720,8 @@ Manifest Manifest::parse(std::string_view whole)
             mb.ctime = number(f[4]);
             mb.atime = number(f[5]);
             mb.path = f[6];
+            // (Its times are set, and it is removed once the RAR is made again: inside its folder.)
+            if (leaves_folder(mb.path)) throw std::runtime_error("manifest: refused path " + mb.path);
             m.unpacked.back().members.push_back(std::move(mb));
             continue;
         }
@@ -1728,18 +1781,8 @@ Manifest Manifest::parse(std::string_view whole)
             e.path = f.back();
         }
         else throw std::runtime_error("manifest: line " + std::to_string(i + 1) + " is not an entry");
-        // Nothing may point outside the folder being installed: no absolute path, no drive, no
-        // backslash, and no part that is "." or ".." (a name with dots in it is fine).
-        bool bad = e.path.empty() || e.path[0] == '/' || e.path.find(':') != std::string::npos || e.path.find('\\') != std::string::npos;
-        for (size_t at = 0; !bad && at <= e.path.size();)
-        {
-            size_t slash = e.path.find('/', at);
-            if (slash == std::string::npos) slash = e.path.size();
-            const std::string part = e.path.substr(at, slash - at);
-            bad = part == "." || part == ".." || (part.empty() && slash != e.path.size());
-            at = slash + 1;
-        }
-        if (bad) throw std::runtime_error("manifest: refused path " + e.path);
+        // Nothing may point outside the folder being installed.
+        if (leaves_folder(e.path)) throw std::runtime_error("manifest: refused path " + e.path);
         m.entries.push_back(std::move(e));
     }
     if (graph_needed && m.graph.empty()) throw std::runtime_error("manifest: v18 without its graph part");
@@ -1858,6 +1901,13 @@ std::string tree_sha256(const Manifest& m)
 
 void set_item_maker(ItemMaker maker) { item_maker() = std::move(maker); }
 void set_remaker(Remaker r) { remaker() = std::move(r); }
+
+// (Nested limits keep the tighter; the one before comes back when this one ends.)
+DecodeLimit::DecodeLimit(uint64_t bytes) : before_(g_decode_limit)
+{
+    if (bytes && (!g_decode_limit || bytes < g_decode_limit)) g_decode_limit = bytes;
+}
+DecodeLimit::~DecodeLimit() { g_decode_limit = before_; }
 
 MixWords& mix_words_hook()
 {

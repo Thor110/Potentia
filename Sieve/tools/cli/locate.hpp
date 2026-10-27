@@ -78,6 +78,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace sieve::cli {
@@ -242,6 +243,13 @@ inline constexpr uint64_t kSizeAsMade = ~uint64_t(0);
 // One of a v4 manifest's two streams.
 struct PackedStream
 {
+    // (Constructors rather than an aggregate, so that the three numbers alone can be given without
+    // -Wextra asking after `mixed` at every one of them.)
+    PackedStream() = default;
+    PackedStream(uint64_t packed_, uint64_t bytes_, uint32_t dictionary_, std::string mixed_ = {})
+        : packed(packed_), bytes(bytes_), dictionary(dictionary_), mixed(std::move(mixed_))
+    {
+    }
     uint64_t packed = 0, bytes = 0; // its size as carried, and unpacked
     uint32_t dictionary = 0;        // the LZMA2 dictionary it was packed with
     // v29: the lzma2 stream mixed (mix-v4) instead, by these parameters ("B21", or with the word
@@ -308,6 +316,11 @@ struct Manifest
     // folder (or file) its contents are in.
     struct UnpackedArchive
     {
+        UnpackedArchive() = default; // (as PackedStream's: the first four alone, without -Wextra's warnings)
+        UnpackedArchive(std::string format_, std::string archive_, std::string folder_, uint64_t size_)
+            : format(std::move(format_)), archive(std::move(archive_)), folder(std::move(folder_)), size(size_)
+        {
+        }
         std::string format, archive, folder;
         uint64_t size = 0;
         // v22: made again by this program ("rar"), where its version is this, giving this SHA-256;
@@ -408,6 +421,23 @@ void write_installer_program(const std::filesystem::path& program, const BigUint
 std::optional<BigUint> attached_address(const std::filesystem::path& program);
 // An address from its raw bytes (base 256, most significant first; no bytes is 0).
 BigUint address_of_raw(const std::vector<uint8_t>& bytes);
+
+// The most that reading Sieve instructions may decode on this thread, while one of these lives: each
+// stream, and every file's bytes together, by the sizes the instructions declare, checked before
+// anything that size is made. For instructions from a stranger (the web plugin's host), whose sizes
+// are whatever they say, so that a few bytes cannot ask for gigabytes of memory. 0 is no limit, as
+// it is everywhere else.
+class DecodeLimit
+{
+public:
+    explicit DecodeLimit(uint64_t bytes);
+    ~DecodeLimit();
+    DecodeLimit(const DecodeLimit&) = delete;
+    DecodeLimit& operator=(const DecodeLimit&) = delete;
+
+private:
+    uint64_t before_;
+};
 
 // The manifest an installer holds, read back from it and checked to be one that can install (v3,
 // or the older v2).
