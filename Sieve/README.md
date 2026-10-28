@@ -7,8 +7,7 @@ small installer (`sieve-install`), a right-click menu, a browser extension, and 
 3D walk through the Gallery of Babel. Everything it does is exact and checked: it either gives you
 back precisely what went in, or refuses and says why.
 
-**Concept and architecture by Edward James Gordon.** Built with Claude Opus 5.5, from my
-specifications.
+**Concept and architecture by Edward James Gordon.** Built with Claude Opus 5.5, from my specifications.
 
 - [What it does](#what-it-does)
 - [Get it](#get-it)
