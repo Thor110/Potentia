@@ -386,6 +386,12 @@ SIEVE_PACK_THREADS=1 $S locate ../data/anchors/public-domain/Vitruvian.jpg --ins
 SIEVE_PACK_THREADS=4 $S locate ../data/anchors/public-domain/Vitruvian.jpg --installer thr4.sieve --search-per-file 0 > /dev/null
 grep -c "1 file(s) cut into pieces" thr1.txt > /dev/null
 cmp thr1.sieve thr4.sieve
+# And a folder, whose files are worked on several at once (IDEAS §19.99): the test site's pages
+# and pictures, on one thread and on four, the same; and the oracle unpacks it.
+SIEVE_PACK_THREADS=1 $S locate ../web/test-site/src --installer thrf1.sieve --search-per-file 0 > /dev/null
+SIEVE_PACK_THREADS=4 $S locate ../web/test-site/src --installer thrf4.sieve --search-per-file 0 > /dev/null
+cmp thrf1.sieve thrf4.sieve
+python sieve_ref.py unpack thrf4.sieve > /dev/null
 # A v2 manifest (every file's address listed) is the oracle's to the byte.
 $S locate ../tests/manifest_fixture --manifest fixture2.manifest --with-addresses > /dev/null
 python sieve_ref.py manifest ../tests/manifest_fixture --with-addresses | cmp - fixture2.manifest

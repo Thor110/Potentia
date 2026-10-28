@@ -17,6 +17,8 @@ bool force_requested() { return t_stop && t_stop->load(std::memory_order_relaxed
 
 const std::atomic<int>* current_stop() { return t_stop; }
 
+ProgressSink current_progress() { return t_report; }
+
 void progress(const std::string& what, double best, double of)
 {
     if (t_report) t_report(what, best, of);

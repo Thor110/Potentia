@@ -88,8 +88,12 @@ namespace fs = std::filesystem;
 // thread scores it and the best taken in the same order (ties to the earlier), so the instructions
 // are the same at any thread count. SIEVE_PACK_THREADS sets how many (1: one, as before); unless
 // given, every core.
+// (A thread doing one file of several at once is given its share instead: InnerThreads.)
+thread_local unsigned t_inner_threads = 0;
+
 unsigned pack_threads()
 {
+    if (t_inner_threads) return t_inner_threads;
     static const unsigned n = [] {
         if (const char* e = std::getenv("SIEVE_PACK_THREADS"))
             if (const int v = std::atoi(e); v >= 1) return unsigned(v);
@@ -126,10 +130,22 @@ unsigned passes_at_once(uint32_t dict)
     return unsigned(std::clamp<uint64_t>(free / 2 / each, 1, t));
 }
 
+// For the length of a scope, the threads this thread's work may use (pack_threads), where several
+// files are worked on at once and each takes its share of the cores; 0 leaves it as it was.
+struct InnerThreads
+{
+    unsigned old = t_inner_threads;
+    explicit InnerThreads(unsigned n) { if (n) t_inner_threads = n; }
+    ~InnerThreads() { t_inner_threads = old; }
+    InnerThreads(const InnerThreads&) = delete;
+    InnerThreads& operator=(const InnerThreads&) = delete;
+};
+
 // f(i) for every i below n, on up to `threads` threads (this one among them), each taking the next
-// index there is; the threads take on this thread's flag to stop.
+// index there is; the threads take on this thread's flag to stop, and with `heard` its progress too
+// (one at a time, through a lock).
 template <class F>
-void for_each_index(size_t n, unsigned threads, F&& f)
+void for_each_index(size_t n, unsigned threads, F&& f, bool heard = false)
 {
     threads = unsigned(std::min<size_t>(std::max(1u, threads), n));
     if (threads <= 1)
@@ -141,6 +157,14 @@ void for_each_index(size_t n, unsigned threads, F&& f)
     std::exception_ptr failed;
     std::mutex failed_mx;
     const std::atomic<int>* stop = current_stop();
+    ProgressSink sink;
+    std::mutex sink_mx;
+    if (heard)
+        if (ProgressSink outer = current_progress())
+            sink = [outer, &sink_mx](const std::string& what, double best, double of) {
+                std::lock_guard<std::mutex> lock(sink_mx);
+                outer(what, best, of);
+            };
     auto work = [&] {
         try
         {
@@ -156,10 +180,13 @@ void for_each_index(size_t n, unsigned threads, F&& f)
     std::vector<std::thread> pool;
     for (unsigned k = 1; k < threads; ++k)
         pool.emplace_back([&, stop] {
-            const StopScope scope(stop, {});
+            const StopScope scope(stop, sink);
             work();
         });
+    std::optional<StopScope> mine; // (this thread too, so its reports and the others' take turns)
+    if (sink) mine.emplace(stop, sink);
     work();
+    mine.reset();
     for (std::thread& t : pool) t.join();
     if (failed) std::rethrow_exception(failed);
 }
@@ -3021,15 +3048,38 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     {
         std::unordered_map<std::string, size_t> copies;
         for (size_t i = 0; i < files.size(); ++i) ++copies[sha256_hex(bytes[i])];
+        std::vector<size_t> todo;
         for (size_t i = 0; i < files.size(); ++i)
+            if (files[i]->way == "raw" && bytes[i].size() >= 512 && copies[sha256_hex(bytes[i])] == 1) todo.push_back(i);
+        // Each file's way found on its own (IDEAS §19.99), several files at once: as many as the
+        // threads, and no more than half the memory free holds a mixer each (its tables, as the
+        // groups' below); each file's own work (cutting, LZMA2's passes) takes its share of the
+        // threads, so a search with a time limit has a core of its own as it had alone. What each
+        // finds is kept by file and taken below in the listing's order, as one thread takes it, so
+        // the instructions are the same at any count (but where a search's time limit cuts it short).
+        struct Found
         {
-            if (files[i]->way != "raw" || bytes[i].size() < 512 || copies[sha256_hex(bytes[i])] > 1) continue;
-            if (stop_requested()) break; // asked to stop: the rest carried as they are, by LZMA2
+            bool done = false;
+            size_t tried = 0;
+            bool decoding_first = false;
+            std::string way;
+            std::vector<uint8_t> code;
+            RopeParams params;
+        };
+        std::vector<Found> found(files.size());
+        const uint64_t free_now = memory_free(), mixer = (uint64_t(16) << 22) * 4 + (uint64_t(48) << 20);
+        const unsigned workers = unsigned(std::clamp<uint64_t>(std::min<uint64_t>(todo.size(), free_now ? free_now / 2 / mixer : 2), 1, pack_threads()));
+        const unsigned share = workers > 1 ? std::max(1u, pack_threads() / workers) : 0;
+        for_each_index(todo.size(), workers, [&](size_t k) {
+            const size_t i = todo[k];
+            const InnerThreads inner(share);
+            if (stop_requested()) return; // asked to stop: the rest carried as they are, by LZMA2
+            Found& got = found[i];
             progress("file " + std::to_string(i + 1) + " of " + std::to_string(files.size()) + ": " + files[i]->path + ", the rope and pieces");
             // The smallest of LZMA2 alone, the rope, and (v13) the file in pieces (file_ways).
             FileWays fw = file_ways(bytes[i], rope_seconds, rope_newest, pieces);
-            r.rope_tried += fw.tried;
-            if (fw.forced || force_requested()) break; // force stop: this file and the rest as they are
+            got.tried = fw.tried;
+            if (fw.forced || force_requested()) return; // force stop: this file and the rest as they are
             std::string way;
             std::vector<uint8_t> code;
             RopeParams params;
@@ -3061,7 +3111,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             const bool every = rope_search_every_wave();
             // Prioritise Decoding Speed (prioritise_decoding): no file mixed (r.mix_skipped counts them).
             const bool decoding_first = prioritise_decoding();
-            if (mix_on && decoding_first) ++r.decoding_first;
+            if (mix_on && decoding_first) got.decoding_first = true;
             if (mix_on && !decoding_first && !stop_requested() && (every || (bytes[i].size() >= 4096 && bytes[i].size() <= (size_t(16) << 20))))
             {
                 const timings::Scope t("pack.mix");
@@ -3148,7 +3198,24 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     }
                 }
             }
-            if (way.empty()) continue;
+            got.way = std::move(way);
+            got.code = std::move(code);
+            got.params = params;
+            got.done = true;
+        }, true);
+        for (const size_t i : todo)
+        {
+            Found& got = found[i];
+            r.rope_tried += got.tried;
+            if (got.decoding_first) ++r.decoding_first;
+            if (!got.done || got.way.empty())
+            {
+                piece_z[i].clear(); // (a file whose work was stopped part way is carried as it is)
+                continue;
+            }
+            std::string way = std::move(got.way);
+            std::vector<uint8_t> code = std::move(got.code);
+            const RopeParams params = got.params;
             rope_codes[i] = std::move(code);
             rope_params[i] = params;
             files[i]->way = way;

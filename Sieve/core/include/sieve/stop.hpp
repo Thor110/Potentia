@@ -34,6 +34,9 @@ void progress(const std::string& what, double best = -1, double of = -1);
 // Where a thread's progress goes: what it is doing, and a new best (-1, -1 when there is none).
 using ProgressSink = std::function<void(const std::string& what, double best, double of)>;
 
+// This thread's sink (empty where none was given), for threads it starts that should be heard too.
+ProgressSink current_progress();
+
 // For the length of a scope, this thread's flag to stop and where its progress goes (either may
 // be empty); the ones before are put back after.
 class StopScope

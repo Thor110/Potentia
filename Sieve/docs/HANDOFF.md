@@ -4052,7 +4052,9 @@ order:
      `.sieve` is the same size under every weighing, since mixing the whole file beats every cut;
      not kept, and what remains of it (mixing as a kind of piece) waits for a new version;*
    - making faster: the ways tried for a file (LZMA2's passes, the rope's search, mixing's trial)
-     run at once where the result is the same at any thread count (IDEAS §19.99);
+     run at once where the result is the same at any thread count (IDEAS §19.99); *done the same
+     day for a folder: its files worked on several at once, the same bytes at any thread count
+     (`docs`, 33 files: 40.8 s → 20.1 s); a single file's time is now mixing's own;*
    - the estimate's error, measured again on Edward's machine now the search shares are learned
      (IDEAS §19.97).
 4. **For others to build on:** a short `.sieve` v31 specification on its own, enough for an

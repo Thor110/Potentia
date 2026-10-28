@@ -34,11 +34,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 STAGES = ["pack.rope.search", "pack.pieces.rope", "pack.pieces.cut", "pack.pieces.blocks", "pack.pieces.boundaries", "pack.rope.code", "pack.lzma2.quick",
           "pack.lzma2.settings-trial", "pack.lzma2.first-pass", "pack.lzma2.tuned-pass", "pack.lzma2.7zip-pass",
-          "pack.archives.recipe"]
+          "pack.archives.recipe", "pack.mix"]
 SHORT = {"pack.rope.search": "rope search", "pack.pieces.rope": "pieces' rope", "pack.pieces.cut": "cutting", "pack.pieces.blocks": "blocks", "pack.pieces.boundaries": "boundaries",
          "pack.rope.code": "rope code", "pack.lzma2.quick": "LZMA2 quick", "pack.lzma2.settings-trial": "LZMA2 trial",
          "pack.lzma2.first-pass": "LZMA2 pass 1", "pack.lzma2.tuned-pass": "LZMA2 tuned", "pack.lzma2.7zip-pass": "7-Zip pass",
-         "pack.archives.recipe": "archives"}
+         "pack.archives.recipe": "archives", "pack.mix": "mixing"}
 
 # The set: (name in the set, kind, where in the repository, or how it is made).
 QUICK = [
@@ -71,10 +71,15 @@ def make_wav(path):
                 + b"data" + struct.pack("<I", len(data)) + data)
 
 
-def build_set(which, into):
+OWN_ANCHORS = "data/anchors/edward-james-gordon-thor110/"
+
+
+def build_set(which, into, without_own_anchors=False):
     into.mkdir(parents=True, exist_ok=True)
     files = []
     for name, kind, src in QUICK + (LARGE if which == "full" else []):
+        if without_own_anchors and src.startswith(OWN_ANCHORS):
+            continue  # (and so the tar holds none of them either)
         out = into / name
         if src.startswith("made: 2 s"):
             make_wav(out)
@@ -127,6 +132,8 @@ def main():
     ap.add_argument("--search", default="1", help="seconds of the rope's search a file, comma-separated (default 1)")
     ap.add_argument("--out", type=Path, default=ROOT / "results")
     ap.add_argument("--only", default="", help="only these files of the set (names, comma-separated)")
+    ap.add_argument("--without-own-anchors", action="store_true",
+                    help="leave out the files from Edward's own anchors folder (" + OWN_ANCHORS + "), the tar's copies too")
     a = ap.parse_args()
     sieve = a.sieve.resolve()
     searches = [float(s) for s in a.search.split(",")]
@@ -139,7 +146,7 @@ def main():
     tsv.write(f"# sieve bench-make, {date}, {machine()}, {sieve.name}\n" + "\t".join(cols) + "\n")
     only = set(filter(None, a.only.split(",")))
     with tempfile.TemporaryDirectory() as tmp:
-        files = build_set(a.set, Path(tmp) / "set")
+        files = build_set(a.set, Path(tmp) / "set", a.without_own_anchors)
         for search in searches:
             for name, kind, src in files:
                 if only and name not in only:

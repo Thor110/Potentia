@@ -4999,6 +4999,22 @@ blocks and boundaries, and LZMA2's three full passes, on the 40 MB tar and the r
   6.8 s → 0.64 s. Not moving the boundaries at all was tried too: Vitruvian Man 41 bytes larger, so
   they stay. (A tar of the source, and the same files joined with text, were not cut at all: LZMA2
   wins every block.) Most of the recording's time is now LZMA2's full passes and the rope's search.
+- *A folder's files worked on several at once (28 October 2026, step 3 of the plan of that day;
+  no new version).* Measured first (`bench_make.py`, which now times mixing as `pack.mix`, and
+  `--without-own-anchors` leaves out Edward's own anchors folder): since mixing came (v24 to v30),
+  it is most of a file's time (prose 2.37 s of 3.59, the quick set's tar 10.73 of 22.94, its check
+  by decoding most of the rest), and one file's mixing is one stream, which threads cannot split
+  without a new version. But a folder's files were found one at a time: on this repository's
+  `docs` (33 files, 2.4 MB, 4 threads) the rope's searches came to 17.3 s and mixing to 9.5 s of
+  40.8, on one core. Now each file's way is found on its own, as many files at once as the threads
+  and half the memory free allow (a mixer's tables each, as the groups' rule), each file's own work
+  (cutting, LZMA2's passes) given its share of the threads so a timed search keeps a core; what each
+  finds is taken in the listing's order as one thread took it, and its progress reaches the File
+  Locator through a lock. Measured on `docs`: 40.8 s → 20.1 s at 1 s of search a file; with no limit
+  51.3 s (one thread) → 23.0 s (four); the instructions the same, byte for byte, on one thread and on
+  four, with the search unlimited and at 1 s, installed back identical. The CI makes the test site's
+  folder on one thread and on four and compares them (step 11). A single file is as fast as before:
+  its time is mixing's, and mixing faster with the same codes is what is left.
 
 **19.100 "Create .sieve" in the right-click menu (Edward, 24 October 2026; noted, not to be built
 yet).** "I was thinking about adding create .sieve to the context menu, but that brings with it a
