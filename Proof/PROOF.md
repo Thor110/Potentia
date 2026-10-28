@@ -11,7 +11,7 @@ item
 
 The amount of time it might take to find that address? Irrelevant.
 
-There is also room for further reductions when the initial overhead instructions are eventually reduced by being packed down into a bitmask.
+There is also room for further reductions when the initial overhead instructions are eventually reduced by being packed down into a bitmask or integer list.
 
 Included is a sample file that takes 360 files from every single dimension.
 
