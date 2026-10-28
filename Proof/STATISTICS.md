@@ -1,124 +1,182 @@
-## Sieve of Potentia - Statistics
+# Sieve of Potentia: Statistics
 
-most of these tests are from early versions of the manifest
+What Sieve's `.sieve` files have come to, file by file, against 7-Zip on the same files. Most of
+these were measured on Edward's machine (Windows) at earlier versions of the `.sieve` format, as
+each was built; the version is given where it is known. Sizes are in bytes. "On disk" is the space
+Windows gives a file, in whole clusters of 4,096 bytes. The ratios and percentages are worked out
+from the sizes given.
 
-random image someone sent me a link to at 3653x5480 resolution
+## Contents
 
-1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg			: 3,844,213 bytes ( 3,846,144 bytes on disk )
-1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg.7z		: 3,843,942 bytes ( 3,846,144 bytes on disk )
-1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg.7z.sieve	: 3,829,453 bytes ( 3,829,760 bytes on disk )
-1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg.sieve		: 3,826,046 bytes ( 3,829,760 bytes on disk )
+- [At a glance](#at-a-glance)
+- [The application itself](#the-application-itself)
+- [Sieve's source tree, against the usual compressors](#sieves-source-tree-against-the-usual-compressors)
+- [A game archive: MAPS.WoW](#a-game-archive-mapswow)
+- [A million digits of pi](#a-million-digits-of-pi)
+- [A book: Don Quixote](#a-book-don-quixote)
+- [Photographs (JPEG)](#photographs-jpeg)
+- [A small script](#a-small-script)
+- [Files that are items of Sieve's own lines](#files-that-are-items-of-sieves-own-lines)
 
-A file from Jeff Wayne's The War of the Worlds the 1998 PC RTS game, proprietary .WoW archive format.
+## At a glance
 
-Early results
+| What | Original | 7z | `.sieve` | Ratio | Against 7z |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| [Sieve's own release](#the-application-itself) | 44,647,549 | | 6,319,561 | 7.06:1 | |
+| [Sieve's source tree](#sieves-source-tree-against-the-usual-compressors) | 35,396,955 | 6,844,677 | 5,196,966 | 6.81:1 | −24.07% |
+| [MAPS.WoW](#a-game-archive-mapswow), a game's archive | 160,890,897 | 60,791,826 | 52,996,145 | 3.04:1 | −12.82% |
+| [A million digits of pi](#a-million-digits-of-pi) | 1,111,103 | 512,745 | 417,052 | 2.66:1 | −18.66% |
+| [Don Quixote](#a-book-don-quixote), plain text | 2,391,678 | 686,020 | 683,205 | 3.50:1 | −0.41% |
+| [A photograph](#photographs-jpeg), JPEG | 4,587,473 | 4,575,201 | 4,558,132 | 1.01:1 | −0.37% |
+| [A Python script](#a-small-script) of 1,597 bytes | 1,597 | 822 | 832 | 1.92:1 | +1.22% |
+| [Every dimension at every degree](#files-that-are-items-of-sieves-own-lines) | 13,321,756 | 22,961 | 7,887 | 1,689:1 | −65.65% |
 
-MAPS.WoW		: 160,890,897 bytes
-MAPS.7z			: 60,791,826 bytes
-MAPS.WoW.sieve	: 60,130,147 bytes
+"Against 7z" is how much smaller (−) or larger (+) the `.sieve` is than the `.7z` of the same files.
 
-The potential utility line - 100mbs or more is when the search time penalty begins to kick in
+## The application itself
 
-Latest results for MAPS.WoW since manifest v28
+Sieve's release folder (the programs and their data) as a `.sieve`, version by version:
 
-optimised for size
+| Format | `.sieve` | Unpacks to | Ratio | Of the folder |
+| :--- | ---: | ---: | ---: | ---: |
+| v28 | 6,383,087 | | | |
+| v29 | 6,312,557 | 44,542,021 | 7.06:1 | 14.17% |
+| v30 | 6,311,463 | 44,582,469 | 7.06:1 | 14.16% |
+| v31 | 6,318,477 | 44,621,183 | 7.06:1 | 14.16% |
+| v31, the release in the READMEs | 6,319,561 | 44,647,549 | 7.06:1 | 14.15% |
 
-	encoding
-7zip - ~18s - 60,791,826 bytes
-sieve - 350.1s - 52,996,145 bytes
+The same folder at v30 as a 7z: **7,774,880** bytes (5.73:1), which the `.sieve` beat by 18.82%.
 
-	decoding
-7zip - ~1s
-sieve - 202.769s - checked and written in 0.918s
+From v29 to v30 the payload grew by 40,448 bytes and the `.sieve` shrank by 1,094. From v30 to v31
+the payload grew by 38,714 bytes and the `.sieve` grew by 7,014.
 
-optimised for decoding
+## Sieve's source tree, against the usual compressors
 
-	encoding
-sieve - 349.5s - 60,130,138 bytes
+This repository's own `Sieve` folder at commit `4864f4d`, without `data/anchors/`: 743 files,
+35,396,955 bytes. Measured with `Sieve/tools/bench/compare.py` on Linux (4 logical processors), 27
+October 2026, every result checked to give the folder back. The 7z was made by py7zr (LZMA2 at its
+strongest), and zstd and brotli by their Python packages.
 
-	decoding
-sieve - 4.563s - checked and written in 0.928s
+| Method | Bytes | Ratio | Of the folder | Make | Unpack |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| **Sieve** (`.sieve`) | **5,196,966** | **6.81:1** | **14.68%** | 224.7 s | 19.39 s |
+| 7z (LZMA2 9 extreme, solid) | 6,844,677 | 5.17:1 | 19.34% | 52.8 s | 1.04 s |
+| xz -9e | 6,852,652 | 5.17:1 | 19.36% | 50.3 s | 0.58 s |
+| brotli 11, window 24 | 6,943,118 | 5.10:1 | 19.62% | 70.1 s | 0.14 s |
+| zstd 22, long window | 7,082,928 | 5.00:1 | 20.01% | 28.0 s | 0.07 s |
+| zstd 19 | 7,144,868 | 4.95:1 | 20.18% | 16.1 s | 0.05 s |
+| gzip -9 | 10,857,358 | 3.26:1 | 30.67% | 7.2 s | 0.17 s |
+| bzip2 -9 | 11,029,078 | 3.21:1 | 31.16% | 3.9 s | 1.66 s |
+| zip (deflate 9) | 11,194,250 | 3.16:1 | 31.62% | 7.1 s | 0.26 s |
 
-random test - the gutenberg by don quixote
+Part of Sieve's lead here is the folder's own: nine English word lists, most of them the lines of
+the largest, which Sieve finds and carries as masks over it.
 
-pg996.txt		: 2,391,678 bytes	(2,392,064 bytes on disk)
-pg996.7z		: 686,020 bytes		(688,128 bytes on disk)
-pg996.txt.sieve	: 683,205 bytes		(684,032 bytes on disk)
+## A game archive: MAPS.WoW
 
-pi6.txt stress test, file sourced from : https://www.exeter.ac.uk/v8media/facultysites/ese/physics/pi6.txt
+A file from Jeff Wayne's *The War of the Worlds* (1998, PC), in the game's own `.WoW` archive format.
 
-pi6.txt			: 1,111,103 bytes	(1,114,112 bytes on disk)	- original
-pi6.7z			: 512,745 bytes		(516,096 bytes on disk)		- 7zipped
+| | Bytes | Ratio | Against 7z |
+| :--- | ---: | ---: | ---: |
+| MAPS.WoW | 160,890,897 | | |
+| MAPS.7z | 60,791,826 | 2.65:1 | |
+| MAPS.WoW.sieve, early results | 60,130,147 | 2.68:1 | −1.09% |
 
-this shows the progress from an early v4 to the latest version of the manifest format (the overhead and filter settings)
+Since v28, two ways of making it, against 7-Zip:
 
-1 Million Digits of Pi									Theoretical floor distance remaining
-														Increase from floor						Decrease from floor
-pi6.txt.sieve : 490,473 bytes (491,520 bytes on disk)	: 18.117671424546227%					: -15.338662882564384%
+| | Size | Making it | Unpacking it |
+| :--- | ---: | ---: | ---: |
+| 7-Zip | 60,791,826 | about 18 s | about 1 s |
+| Sieve, optimised for size | **52,996,145** | 350.1 s | 202.769 s, then checked and written in 0.918 s |
+| Sieve, optimised for decoding | 60,130,138 | 349.5 s | 4.563 s, then checked and written in 0.928 s |
 
-to
+Optimised for size, it is 12.82% smaller than 7-Zip's and takes about three and a half minutes to
+unpack; optimised for decoding, 1.09% smaller and about five and a half seconds in all.
 
-pi6.txt.sieve : 421,491 bytes (421,888 bytes on disk)	: 1.5051500213129243%					: -1.482831187380039%
+The potential utility line: at 100 MB or more, the search's time begins to tell.
 
-to
+## A million digits of pi
 
-pi6.txt.sieve : 419,115 bytes (421,888 bytes on disk)	: 0.932952189210603%					: -0.9243286448826694%
+`pi6.txt`, a million digits of pi, from
+[the University of Exeter](https://www.exeter.ac.uk/v8media/facultysites/ese/physics/pi6.txt): a
+stress test, since digits of pi are as close to random as text gets.
 
-then to
+| | Bytes | On disk |
+| :--- | ---: | ---: |
+| pi6.txt, the original | 1,111,103 | 1,114,112 |
+| pi6.7z | 512,745 | 516,096 |
+| pi6.txt.sieve, the latest | **417,052** | 417,792 |
 
-pi6.txt.sieve : 419,096 bytes (421,888 bytes on disk)	: 0.9283765331458117%					: -0.9198369824574799%
+**The floor.** A million digits treated as random hold 1,000,000 × log₂10 ÷ 8 = **415,241** bytes of
+information, and no file of them can be smaller on average. The latest `.sieve` is **1,811 bytes**
+above it, within 0.44%. Its progress, from an early v4 to the newest version of the format (its
+overhead and filter settings):
 
-and now to
+| Step | `pi6.txt.sieve` | On disk | Above the floor | The floor below it |
+| :--- | ---: | ---: | ---: | ---: |
+| An early v4 | 490,473 | 491,520 | +18.1177% | −15.3387% |
+| | 421,491 | 421,888 | +1.5052% | −1.4828% |
+| | 419,115 | 421,888 | +0.9330% | −0.9243% |
+| | 419,096 | 421,888 | +0.9284% | −0.9198% |
+| | 417,139 | 417,792 | +0.4571% | −0.4550% |
+| Another step's reductions | 417,061 | 417,792 | +0.4383% | −0.4364% |
+| The rope wave updated | **417,052** | 417,792 | +0.4361% | −0.4342% |
 
-pi6.txt.sieve : 417,139 bytes (417,792 bytes on disk)	: 0.45708395847230887%					: -0.4550042072306833%
+"Above the floor" is how much larger than 415,241 bytes the file is, as a share of the floor; "the
+floor below it" is how much smaller the floor is, as a share of the file.
 
-another steps reductions
+## A book: Don Quixote
 
-pi6.txt.sieve : 417,061 bytes (417,792 bytes on disk)	: 0.43829968620632354%					: -0.436387003340039%
+`pg996.txt`, Project Gutenberg's *Don Quixote*, as plain text.
 
-rope wave updated
+| | Bytes | On disk | Ratio | Against 7z |
+| :--- | ---: | ---: | ---: | ---: |
+| pg996.txt | 2,391,678 | 2,392,064 | | |
+| pg996.7z | 686,020 | 688,128 | 3.49:1 | |
+| pg996.txt.sieve | 683,205 | 684,032 | 3.50:1 | −0.41% |
 
-pi6.txt.sieve : 417,052 bytes (417,792 bytes on disk)	:
+## Photographs (JPEG)
 
-now 1,811 bytes away from the theoretical limit
+A JPEG is compressed already, so neither 7-Zip nor Sieve can take much off. Both `.sieve` files are
+given: of the photograph itself, and of its `.7z`.
 
-The theoretical floor for a million digits treated as random is ~415,241 bytes, so this is within 0.43% of it.
+| | Original | 7z | `.7z.sieve` | `.jpg.sieve` | Against 7z |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| A picture at 3653×5480 someone sent a link to | 3,844,213 | 3,843,942 | 3,829,453 | 3,826,046 | −0.47% |
+| 20230830_163945.jpg | 4,139,682 | 4,127,434 | 4,112,541 | 4,111,592 | −0.38% |
+| 20240407_153939.jpg | 4,587,473 | 4,575,201 | 4,559,089 | 4,558,132 | −0.37% |
 
-A couple of random images
+On disk:
 
-20230830_163945.jpg			: 4,139,682 bytes	(4,141,056 bytes on disk)
-20230830_163945.7z			: 4,127,434 bytes	(4,128,768 bytes on disk)
-20230830_163945.7z.sieve	: 4,112,541 bytes	(4,116,480 bytes on disk)
-20230830_163945.jpg.sieve	: 4,111,592 bytes	(4,112,384 bytes on disk)
+| | Original | 7z | `.7z.sieve` | `.jpg.sieve` |
+| :--- | ---: | ---: | ---: | ---: |
+| 1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg | 3,846,144 | 3,846,144 | 3,829,760 | 3,829,760 |
+| 20230830_163945.jpg | 4,141,056 | 4,128,768 | 4,116,480 | 4,112,384 |
+| 20240407_153939.jpg | 4,587,520 | 4,575,232 | 4,562,944 | 4,558,848 |
 
-20240407_153939.jpg			: 4,587,473 bytes	(4,587,520 bytes on disk)
-20240407_153939.7z			: 4,575,201 bytes	(4,575,232 bytes on disk)
-20240407_153939.7z.sieve	: 4,559,089 bytes	(4,562,944 bytes on disk)
-20240407_153939.jpg.sieve	: 4,558,132 bytes	(4,558,848 bytes on disk)
+## A small script
 
-This test on a python script is 10 bytes larger than 7zip, without the overhead and hash it would be smaller.
+`control.py`, a Python script of 1,597 bytes. Here the `.sieve` is 10 bytes larger than the 7z: what
+every `.sieve` carries besides the file (its listing, and the file's hash for checking it) costs more
+than Sieve saves on a file this small. Without that overhead and the hash it would be smaller.
 
-control.py					: 1,597 bytes	(4,096 bytes on disk)
-control.7z					: 822 bytes		(4,096 bytes on disk)
-control.7z.sieve			: 959 bytes		(4,096 bytes on disk)
-control.py.sieve			: 832 bytes		(4,096 bytes on disk)
+| | Bytes | Against 7z |
+| :--- | ---: | ---: |
+| control.py | 1,597 | |
+| control.7z | 822 | |
+| control.7z.sieve | 959 | +16.67% |
+| control.py.sieve | 832 | +1.22% |
 
-The application itself as a .sieve file
+All four take one cluster on disk, 4,096 bytes.
 
-v28 : 6,383,087
-v29 : 6,312,557
+## Files that are items of Sieve's own lines
 
-Which unpacks to 44,542,021 bytes
+`degrees.sieve` (in this folder) holds 3,960 files: an item of every dimension at every whole degree
+from 0 to 359. Each is an item of one of Sieve's lines, so the `.sieve` carries only its place on its
+line, and Sieve makes it again on installing. 13,321,756 bytes come to **7,887** (1,689:1), where a
+7z of the same folder is 22,961. Installed on Edward's machine: 3,960 files, every one checked
+against its SHA-256, decoded in 0.356 s, checked and written in 1.461 s.
 
-v30 : 6,311,463
-as 7z : 7,774,880 bytes
-
-Which unpacks to 44,582,469 bytes
-
-The payload grew by 40,448 bytes and the sieve file shrunk by 1094 bytes.
-
-v31 : 6,318,477
-
-Which unpacks to 44,621,183 bytes
-
-Payload grew by 38,714 bytes and the sieve file grew by 7,014 bytes.
+This works only for files that are Sieve's own items, made from their places; a file from anywhere
+else is carried as itself. [PROOF.md](PROOF.md) has the sample, and `welcome to the sieve.sieve`
+(the starting page: 32 bytes as 159), where the overhead is more than the file.

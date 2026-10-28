@@ -43,7 +43,7 @@ The same exactness serves the archive: a **Museum of Human Creations**, each wor
 its bytes, and the **Gallery of Babel** around it, every possible work at one address, searched
 outwards from the real ones with filters that set noise aside without ever visiting it.
 
-The full argument, the evidence behind it, and the design of the Gallery's filtration layers are in **[VISION.md](VISION.md)** and the Proof folder.
+The full argument, the evidence behind it, and the design of the Gallery's filtration layers are in **[VISION.md](VISION.md)** and the **[Proof](Proof/)** folder.
 
 ## Where it stands
 
@@ -71,6 +71,7 @@ environment, the Museum and the reconstruction tools set out in the vision.
 
 - **[Sieve's README](Sieve/README.md)**: what Sieve does, with commands and measurements.
 - **[VISION.md](VISION.md)**: why Potentia exists and what it is meant to become.
+- **[Proof/STATISTICS.md](Proof/STATISTICS.md)**: what Sieve's files have come to, file by file, against 7-Zip.
 - **[Sieve Secure](Pages/secure.html)**: the web extension, with a live test site.
 - **[Previous](Previous/)**: earlier versions of these documents.
 - A controlled study of how and why language models invent things that do not exist:

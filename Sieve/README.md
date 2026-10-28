@@ -48,7 +48,9 @@ Sieve's own release, 44,647,549 bytes of programs and data, is a 6,319,561-byte 
 743 files, 35,396,955 bytes (the `Sieve` folder at commit `4864f4d`, without `data/anchors/`);
 Linux, 4 logical processors, 27 October 2026; every result checked to give the folder back. Sieve
 comes out 24% smaller than 7z. Part of that is this folder's own: nine English word lists, most of
-them the lines of the largest, which Sieve finds and carries as masks over it.
+them the lines of the largest, which Sieve finds and carries as masks over it. More results, file
+by file (a game's archive, a million digits of pi, a book, photographs, a small script), are in
+[Proof/STATISTICS.md](../Proof/STATISTICS.md).
 
 What it costs: time. Making a `.sieve` takes four times as long as 7z here, since it tries several
 ways for each file, and unpacking takes seconds where the others take less than one, since mixing
@@ -99,7 +101,7 @@ sieve read --length 32 --mode scrambled 007b30165818bf0311497600aa52996f9395e27
 ```
 
 Every possible page of text, picture, melody, film, 3D model, language model and file has exactly
-one address, worked out in exact integer arithmetic and is the same on every machine. Filters set the
+one address, worked out in exact integer arithmetic, and it is the same on every machine. Filters set the
 noise aside without visiting it: they count exactly how much of a line survives, and number the
 survivors. The **hallway** lays it all out as a corridor of bookcases to walk; its setup menu sets
 each line's shape and filters. A *guided* ordering gives likely text short addresses (about 2 bits
