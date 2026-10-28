@@ -12,6 +12,7 @@ from the sizes given.
 - [The application itself](#the-application-itself)
 - [Sieve's source tree, against the usual compressors](#sieves-source-tree-against-the-usual-compressors)
 - [enwik8: the first 100 MB of English Wikipedia](#enwik8-the-first-100-mb-of-english-wikipedia)
+- [enwik9: the first 1 GB of English Wikipedia](#enwik9-the-first-1-gb-of-english-wikipedia)
 - [A game archive: MAPS.WoW](#a-game-archive-mapswow)
 - [A million digits of pi](#a-million-digits-of-pi)
 - [A book: Don Quixote](#a-book-don-quixote)
@@ -90,12 +91,32 @@ mixing).
 | 7z | 26,080,445 | 3.83:1 | 26.08% | | about 28 s | under 1 s |
 | Sieve, prioritised for decoding | 24,768,410 | 4.04:1 | 24.77% | −5.03% | 102.4 s | 1.792 s, then checked and written in 0.538 s |
 | **Sieve** (`.sieve`), optimised for size | **21,675,870** | **4.61:1** | **21.68%** | **−16.89%** | 109.3 s | 148.7 s, then checked and written in 0.537 s |
+| PPMd (`enwik8.pmd`), as published | 21,388,296 | 4.68:1 | 21.39% | −17.99% | | |
 
 Optimised for size, Sieve makes it at about 0.91 MB a second and unpacks it at about 0.67: mixing
 decodes as slowly as it codes. Prioritised for decoding, it is 14.27% larger than that but still
-5.03% under 7z, and unpacks in under two and a half seconds in all. The benchmark's own table
+5.03% under 7z, and unpacks in under two and a half seconds in all.
+
+PPMd's figure is not measured here: it is the size of `enwik8.pmd` given on the benchmark's page
+about its test data (<https://mattmahoney.net/dc/textdata.html>), as Edward read it there on 28
+October 2026. Sieve optimised for size is 287,574 bytes (1.34%) larger than it. The benchmark's own table
 ranks the strongest context-mixing programs, which are smaller still and slower; it also counts
 the size of the program that unpacks, which for Sieve is `sieve-install`.
+
+## enwik9: the first 1 GB of English Wikipedia
+
+`enwik9`, the benchmark's larger file: 1,000,000,000 bytes, of which enwik8 is the first tenth. To be
+measured on Edward's machine as enwik8 was, both ways.
+
+| Method | Bytes | Ratio | Of the file | Against 7z | Make | Unpack |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| zip | | | | | | |
+| 7z | | | | | | |
+| Sieve, prioritised for decoding | | | | | | |
+| **Sieve** (`.sieve`), optimised for size | | | | | | |
+| PPMd (`enwik9.pmd`), as published | 183,964,915 | 5.44:1 | 18.40% | | | |
+
+PPMd's figure is from the same page as enwik8's, not measured here.
 
 ## A game archive: MAPS.WoW
 
