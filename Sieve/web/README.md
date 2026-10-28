@@ -220,7 +220,7 @@ length, in this machine's byte order, then that many bytes of JSON.
 
 | Request | Answer |
 |---|---|
-| `{"id": N, "op": "hello"}` | `{"id": N, "ok": true, "sieve": "0.13.75"}` |
+| `{"id": N, "op": "hello"}` | `{"id": N, "ok": true, "sieve": "0.13.76"}` |
 | `{"id": N, "op": "decode", "sha256": "sha256-...", "name": "...", "data": "<the .sieve, base64>"}`, and `"path"` for one file of many | `{"id": N, "ok": true, "name", "type", "size", "sha256", "seconds", "parts": K}`, then K messages `{"id": N, "part": i, "data": "<base64>"}` |
 | a decode of a `.sieve` of many files, no `"path"` | `{"id": N, "ok": true, "listing": true, "name", "size", "seconds", "parts": K}`, then in K parts the JSON `{"files": [{"path", "size", "sha256"}, ...], "folders": ["a/", ...]}` |
 | `{"id": N, "op": "table", "sha256": "...", "data": "<a site's index.sieve, base64>"}` | `{"id": N, "ok": true, "parts": K}`, then in K parts the JSON `{"files": [{"path", "sha256"}, ...]}` |
