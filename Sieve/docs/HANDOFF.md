@@ -4042,10 +4042,15 @@ order:
    - Silesia, the same two ways, file by file and in all (it is mixed files, where Sieve should do
      best; the published tables list each file);
    - the lower edge of where Sieve wins: one text, one picture and one program cut at 1, 4, 16, 64,
-     256 and 1,024 KB, each packed by Sieve and 7z (a small script beside `compare.py`).
+     256 and 1,024 KB, each packed by Sieve and 7z: `tools/bench/ladder.py FILE ... --sieve PATH
+     [--decoding] [--out results/ladder-NAME.md]` (written the same day; tried here on GAME.md with
+     py7zr standing in for 7-Zip: Sieve 13% smaller at 1 KB, 22% at 4 KB, so for text the edge may
+     be well under a megabyte; Edward's run with 7-Zip itself is the measure).
    Then "where it shines" goes in the READMEs with the numbers.
 3. **The packer, measured before kept** (the same format, other choices):
-   - pieces weighed by the ways that code them (IDEAS §19.103);
+   - pieces weighed by the ways that code them (IDEAS §19.103); *measured the same day: the
+     `.sieve` is the same size under every weighing, since mixing the whole file beats every cut;
+     not kept, and what remains of it (mixing as a kind of piece) waits for a new version;*
    - making faster: the ways tried for a file (LZMA2's passes, the rope's search, mixing's trial)
      run at once where the result is the same at any thread count (IDEAS §19.99);
    - the estimate's error, measured again on Edward's machine now the search shares are learned

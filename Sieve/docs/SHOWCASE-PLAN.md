@@ -26,6 +26,8 @@ should have a number behind it and a way to reproduce it.
 `tools/bench/compare.py FOLDER --sieve PATH` runs Sieve and the usual compressors on one folder:
 size, ratio, time to make, time to unpack, and a check that each gives the folder back. It uses
 7-Zip's own program where it finds one (and zstd's and brotli's), else Python packages.
+`tools/bench/ladder.py FILE ... --sieve PATH` cuts files to 1 KB, 4 KB, 16 KB and up and sets
+Sieve beside 7z at each size, to show where Sieve starts to win for each kind of file.
 
 **Corpora, in this order:**
 1. **Sieve's own release folder** (Edward's machine, Windows, with the real 7-Zip): the 7.06:1

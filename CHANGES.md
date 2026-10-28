@@ -1,16 +1,23 @@
-# Only the latest push is tested; a game as a test bed planned (28 October 2026)
+# The pieces measured, and a script for where Sieve starts to win (28 October 2026)
 
-Unzip over the repository root. Committed locally (not pushed). No code changed.
+Unzip over the repository root. Committed locally (not pushed). No code of Sieve's changed; one
+new script.
 
-- `.github/workflows/build.yml`: a `concurrency` group, so a new push to a branch (or a pull
-  request) cancels its run still in progress, on Windows, Linux and macOS alike. Only the latest
-  commit is tested, and macOS jobs no longer queue behind old ones.
-- `Sieve/docs/IDEAS.md`: §19.104, a game's files sieved and streamed into a cache as it runs, with
-  Edward's *Alien Trilogy* engine as the test bed: why it suits Sieve, what Sieve has towards it,
-  what it lacks (a file decoded without the rest), and what to record.
-- `Sieve/docs/HANDOFF.md`: the plan's step 7 (the game), and the workflow change noted.
+- `Sieve/tools/bench/ladder.py` (new): each file given, cut to its first 1 KB, 4 KB, 16 KB, 64 KB,
+  256 KB and 1 MB (or `--sizes`), each cut packed by Sieve (installed back and checked) and by 7z
+  (7-Zip's program, else py7zr); `--decoding` for Prioritise Decoding Speed; `--out` writes the
+  table. For the plan's step 2: run it on a text, a picture and a program with 7-Zip installed.
+  Tried here on `docs/GAME.md` with py7zr: Sieve 676 bytes against 777 at 1 KB (−13.00%), 1,692
+  against 2,183 at 4 KB (−22.49%).
+- `Sieve/docs/IDEAS.md` §19.103 measured: each block weighed with what comes before it (LZMA2's
+  history, the rope's true wave), tried as a switch on four files. The `.sieve` came out the same
+  size under every weighing, since mixing the whole file beats every cut (a mixed tar: best cut
+  1,065,770 bytes, mixed whole 780,192). Not kept; the switch is gone. What remains, mixing as a
+  kind of piece, waits for a new version.
+- `Sieve/docs/HANDOFF.md`, `Sieve/docs/SHOWCASE-PLAN.md`: both noted in the plan.
 
 ## Files
-- `.github/workflows/build.yml`
 - `Sieve/docs/HANDOFF.md`
 - `Sieve/docs/IDEAS.md`
+- `Sieve/docs/SHOWCASE-PLAN.md`
+- `Sieve/tools/bench/ladder.py` (new)

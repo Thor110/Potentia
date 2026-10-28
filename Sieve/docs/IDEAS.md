@@ -33,7 +33,8 @@ and so wait; most are small, and are best gathered into one version when the pau
 - the rope's next contexts (the byte 21 lines above, more phases: §19.87, at most 0.3% on one file);
 - a word list with how often each word is used, for mixing (§19.102, *Next*);
 - BCJ2 for programs, where 7-Zip still leads on small folders of programs (§19.95; measure first);
-- each piece of a file its own rope wave, and mixing as a third kind of piece (§19.103);
+- each piece of a file its own rope wave, and mixing as a third kind of piece (§19.103: the
+  packer-only first step was measured and gains nothing, as mixing the whole file beats every cut);
 - the overhead on a small file packed tighter (Edward, 28 October 2026: `control.py`'s `.sieve` is 10
   bytes over its 7z, and more than that can be taken off; the listing in bytes, §19.90, is where);
 - the other lines' places coded by the rope (§19.87, *Not yet*).
@@ -5155,6 +5156,25 @@ the whole stream, and would it be worth doing if not?
 - *Later, a new version (waits for the pause to end):* each rope piece its own wave (two pictures
   of different widths in one tar each with its width), and mixing as a third kind of piece, so a
   file's text is mixed while its pictures go to the rope.
+- *Measured (28 October 2026): the first step gains nothing; not kept.* Tried as a switch, each
+  block weighed with the 64 KiB before it (LZMA2 with that history; the rope by the whole file's
+  best wave, as the difference of its estimates), on four files packed with `--items` and 5 s of
+  search a file. The `.sieve` came out the same size, byte for byte, under all four weighings
+  (today's, LZMA2's history, the rope's, both), because mixing the whole file beat every cut:
+
+  | File | Bytes | LZMA2 | Rope | Best cut (weighing) | Mixed whole: the `.sieve` |
+  | :--- | ---: | ---: | ---: | ---: | ---: |
+  | Vitruvian Man as a BMP | 1,288,614 | 816,846 | 597,269 | 823,554 (both; the others made no cut) | 558,858 |
+  | the test site's pages and JPEGs, a tar | 501,760 | 451,965 | 494,152 | 452,651 (both) | 451,341 |
+  | `Pages/order.pdf` | 789,552 | 787,477 | 790,448 | 787,629 (rope) | 787,457 |
+  | two docs, a screenshot and Vitruvian as BMPs, meshes: a tar | 7,618,560 | 1,107,004 | 1,967,824 | 1,065,770 (both) | 780,192 |
+
+  The new weighing did make better cuts where there was something to cut (the tar: 1,065,770
+  against no cut at all before), but pieces only choose between LZMA2 and the rope, and mixing
+  (mix-v2's pictures and text, since 27 October) now beats both. So what is left of the idea is
+  the later step: **mixing as a kind of piece,** or a mixer told where a file's parts change (the
+  tar above was mixed whole as one picture, its text included). That is a new version, in the list
+  at the top.
 
 **19.104 A game's files, sieved, and streamed into a cache as it runs (Edward, 28 October 2026;
 planned, nothing built).** Edward has another Claude session rebuilding the engine of *Alien
