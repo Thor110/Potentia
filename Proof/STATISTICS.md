@@ -81,15 +81,19 @@ and the Hutter Prize: 100,000,000 bytes of Wikipedia's XML. Anyone can download 
 Measured on Edward's machine (Windows; an 11th Gen Intel Core i5-11400F, 6 cores and 12 logical
 processors, 32 GB of memory), 28 October 2026, at `sieve-manifest-v31`, made in the File Locator
 with **Try every way** ticked (so the file was mixed whole: without it, mixing is tried only on
-files of 4 KiB to 16 MiB).
+files of 4 KiB to 16 MiB), and made again with **Prioritise Decoding Speed** ticked as well (no
+mixing).
 
 | Method | Bytes | Ratio | Of the file | Against 7z | Make | Unpack |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
 | zip | 35,194,836 | 2.84:1 | 35.19% | +34.95% | about 9 s | under 1 s |
 | 7z | 26,080,445 | 3.83:1 | 26.08% | | about 28 s | under 1 s |
-| **Sieve** (`.sieve`) | **21,675,870** | **4.61:1** | **21.68%** | **−16.89%** | 109.3 s | 148.7 s, then checked and written in 0.537 s |
+| Sieve, prioritised for decoding | 24,768,410 | 4.04:1 | 24.77% | −5.03% | 102.4 s | 1.792 s, then checked and written in 0.538 s |
+| **Sieve** (`.sieve`), optimised for size | **21,675,870** | **4.61:1** | **21.68%** | **−16.89%** | 109.3 s | 148.7 s, then checked and written in 0.537 s |
 
-Sieve makes it at about 0.91 MB a second and unpacks it at about 0.67. The benchmark's own table
+Optimised for size, Sieve makes it at about 0.91 MB a second and unpacks it at about 0.67: mixing
+decodes as slowly as it codes. Prioritised for decoding, it is 14.27% larger than that but still
+5.03% under 7z, and unpacks in under two and a half seconds in all. The benchmark's own table
 ranks the strongest context-mixing programs, which are smaller still and slower; it also counts
 the size of the program that unpacks, which for Sieve is `sieve-install`.
 
