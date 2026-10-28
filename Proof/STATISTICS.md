@@ -112,18 +112,19 @@ information, and no file of them can be smaller on average. The latest `.sieve` 
 above it, within 0.44%. Its progress, from an early v4 to the newest version of the format (its
 overhead and filter settings):
 
-| Step | `pi6.txt.sieve` | On disk | Above the floor | The floor below it |
-| :--- | ---: | ---: | ---: | ---: |
-| An early v4 | 490,473 | 491,520 | +18.1177% | −15.3387% |
-| | 421,491 | 421,888 | +1.5052% | −1.4828% |
-| | 419,115 | 421,888 | +0.9330% | −0.9243% |
-| | 419,096 | 421,888 | +0.9284% | −0.9198% |
-| | 417,139 | 417,792 | +0.4571% | −0.4550% |
-| Another step's reductions | 417,061 | 417,792 | +0.4383% | −0.4364% |
-| The rope wave updated | **417,052** | 417,792 | +0.4361% | −0.4342% |
+| Step | `pi6.txt.sieve` | On disk | Above the floor | The floor below it | Against 7z |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| An early v4 | 490,473 | 491,520 | +18.1177% | −15.3387% | −4.34% |
+| | 421,491 | 421,888 | +1.5052% | −1.4828% | −17.80% |
+| | 419,115 | 421,888 | +0.9330% | −0.9243% | −18.26% |
+| | 419,096 | 421,888 | +0.9284% | −0.9198% | −18.26% |
+| | 417,139 | 417,792 | +0.4571% | −0.4550% | −18.65% |
+| Another step's reductions | 417,061 | 417,792 | +0.4383% | −0.4364% | −18.66% |
+| The rope wave updated | **417,052** | 417,792 | +0.4361% | −0.4342% | −18.66% |
 
 "Above the floor" is how much larger than 415,241 bytes the file is, as a share of the floor; "the
-floor below it" is how much smaller the floor is, as a share of the file.
+floor below it" is how much smaller the floor is, as a share of the file; "against 7z" is how much
+smaller the `.sieve` is than `pi6.7z` (512,745 bytes).
 
 ## A book: Don Quixote
 
