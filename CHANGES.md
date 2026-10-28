@@ -1,13 +1,15 @@
-# PPMd beside enwik8, and enwik9 ready to fill (28 October 2026)
+# PPMd's source, and the benchmark's published rows (28 October 2026)
 
 Unzip over the repository root. Committed locally (not pushed). Documentation only.
 
-- `Proof/STATISTICS.md`:
-  - enwik8: a PPMd row, `enwik8.pmd` at 21,388,296 bytes as published on
-    https://mattmahoney.net/dc/textdata.html (as Edward read it; the page could not be reached from
-    here to check). Sieve optimised for size is 287,574 bytes (1.34%) larger.
-  - enwik9: a new section with the table to fill (zip, 7z, Sieve both ways), and PPMd's published
-    `enwik9.pmd`, 183,964,915 bytes. In the contents too.
+- `Proof/STATISTICS.md`, enwik8 and enwik9: read from the benchmark's own pages now they can be
+  reached from here.
+  - PPMd's figures are the benchmark's downloads, `enwik8.pmd` and `enwik9.pmd`, made by PPMd var. J
+    at `-m256 -o10 -r1` (256 MB), on its test-data page (last updated 1 September 2011).
+  - A table of the benchmark's published enwik8 and enwik9 sizes, from its main table as updated
+    14 October 2026: cmix, paq8px, ppmonstr, 7-Zip's PPMd, PPMd, xz, zstd, brotli, bzip2, gzip. Its
+    times are left out (other machines). Sieve optimised for size falls between PPMd and xz; cmix is
+    about a third smaller.
 
 ## Files
 - `Proof/STATISTICS.md`

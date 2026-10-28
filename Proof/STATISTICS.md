@@ -91,17 +91,39 @@ mixing).
 | 7z | 26,080,445 | 3.83:1 | 26.08% | | about 28 s | under 1 s |
 | Sieve, prioritised for decoding | 24,768,410 | 4.04:1 | 24.77% | −5.03% | 102.4 s | 1.792 s, then checked and written in 0.538 s |
 | **Sieve** (`.sieve`), optimised for size | **21,675,870** | **4.61:1** | **21.68%** | **−16.89%** | 109.3 s | 148.7 s, then checked and written in 0.537 s |
-| PPMd (`enwik8.pmd`), as published | 21,388,296 | 4.68:1 | 21.39% | −17.99% | | |
+| PPMd var. J (`enwik8.pmd`), as published | 21,388,296 | 4.68:1 | 21.39% | −17.99% | | |
 
 Optimised for size, Sieve makes it at about 0.91 MB a second and unpacks it at about 0.67: mixing
 decodes as slowly as it codes. Prioritised for decoding, it is 14.27% larger than that but still
 5.03% under 7z, and unpacks in under two and a half seconds in all.
 
-PPMd's figure is not measured here: it is the size of `enwik8.pmd` given on the benchmark's page
-about its test data (<https://mattmahoney.net/dc/textdata.html>), as Edward read it there on 28
-October 2026. Sieve optimised for size is 287,574 bytes (1.34%) larger than it. The benchmark's own table
-ranks the strongest context-mixing programs, which are smaller still and slower; it also counts
-the size of the program that unpacks, which for Sieve is `sieve-install`.
+PPMd's figure is not measured here: it is `enwik8.pmd`, which the benchmark offers as a download
+on its page about the test data (<https://mattmahoney.net/dc/textdata.html>, last updated 1
+September 2011), made by PPMd var. J at its strongest (`-m256 -o10 -r1`, 256 MB of memory). Sieve
+optimised for size is 287,574 bytes (1.34%) larger than it.
+
+**Where that sits in the benchmark.** The [Large Text Compression
+Benchmark](https://mattmahoney.net/dc/text.html) (its table as updated 14 October 2026) ranks
+programs by enwik9's size plus the zipped size of the program that unpacks it. Some of its rows, as
+published (sizes in bytes; its times are on other machines, so they are left out):
+
+| Program, options (as published) | enwik8 | enwik9 |
+| :--- | ---: | ---: |
+| cmix v21 `-t` | 14,623,723 | 107,963,380 |
+| paq8px_v206fix1 `-12L` | 15,849,084 | 124,696,410 |
+| ppmonstr J `-m1700 -o16` | 19,055,092 | 157,007,383 |
+| 7zip 4.46a `-m0=ppmd:mem=1630m:o=10 ...` | 21,197,559 | 178,965,454 |
+| ppmd J1 `-m256 -o10 -r1` | 21,388,296 | 183,964,915 |
+| xz 5.2.1 `--lzma2=preset=9e,dict=1GiB,lc=4,pb=0` | 24,703,772 | 197,331,816 |
+| zstd 0.6.0 `-22 --ultra` | 25,405,601 | 215,674,670 |
+| brotli 18-Feb-2016 `-q 11 -w 24` | 25,764,698 | 223,597,884 |
+| bzip2 1.0.2 `-9` | 29,008,736 | 253,977,839 |
+| gzip 1.3.5 `-9` | 36,445,248 | 322,591,995 |
+
+On enwik8, Sieve optimised for size (21,675,870) falls between PPMd and xz at its strongest; the
+context-mixing programs at the top, made for this kind of test and far slower, are about a third
+smaller. The table's leaders now (transformer models, about 92 MB on enwik9) give no enwik8 figure. For Sieve, the
+program that unpacks is `sieve-install`.
 
 ## enwik9: the first 1 GB of English Wikipedia
 
@@ -114,9 +136,10 @@ measured on Edward's machine as enwik8 was, both ways.
 | 7z | | | | | | |
 | Sieve, prioritised for decoding | | | | | | |
 | **Sieve** (`.sieve`), optimised for size | | | | | | |
-| PPMd (`enwik9.pmd`), as published | 183,964,915 | 5.44:1 | 18.40% | | | |
+| PPMd var. J (`enwik9.pmd`), as published | 183,964,915 | 5.44:1 | 18.40% | | | |
 
-PPMd's figure is from the same page as enwik8's, not measured here.
+PPMd's figure is from the same page as enwik8's, not measured here; the benchmark's other published
+enwik9 sizes are in the enwik8 section's second table.
 
 ## A game archive: MAPS.WoW
 
