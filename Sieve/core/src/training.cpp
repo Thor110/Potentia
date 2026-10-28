@@ -829,13 +829,16 @@ struct Rope
 
 const Rope& rope_for(uint32_t D)
 {
-    static std::mutex m;
-    static std::deque<std::pair<uint32_t, Rope>> cache; // a deque: what it hands out stays put
-    std::lock_guard<std::mutex> lock(m);
-    for (const auto& [d, r] : cache)
+    // Made once and never destroyed: the hallway's harness measures a training step on a thread it
+    // does not wait for, which may still be reading this when the program exits and its statics
+    // are torn down.
+    static std::mutex* const m = new std::mutex;
+    static auto* const cache = new std::deque<std::pair<uint32_t, Rope>>; // a deque: what it hands out stays put
+    std::lock_guard<std::mutex> lock(*m);
+    for (const auto& [d, r] : *cache)
         if (d == D) return r;
-    cache.emplace_back(D, Rope(D, 512));
-    return cache.back().second;
+    cache->emplace_back(D, Rope(D, 512));
+    return cache->back().second;
 }
 
 // One example forward, and (with `grad`) back, adding its gradient (Q32) to grad. With a pool, its

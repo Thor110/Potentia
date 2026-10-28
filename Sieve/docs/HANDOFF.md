@@ -4031,6 +4031,11 @@ order:
    - *REVIEW's smaller items:* `install_host.sh` writes the program's path into JSON unescaped; the
      harness's trial thread can outlive the program; Firefox (`moz-extension://`) is half supported
      (Edward to say whether Firefox is wanted).
+   - *Done the same day,* but Firefox: the lock shared (a stress test: 1,199 of 1,200 item PNGs
+     wrong before, none after), the path escaped, the trial's shared tables never destroyed, and
+     `read --around --zoom 0` refused as `--at` refuses it (REVIEW, both passes). Left: REVIEW's
+     first pass items 3 (measure first), 5 (filter versions written by hand, about twenty filters)
+     and 6's last two (tests for the tile size and `read --around`).
 2. **The evidence, on Edward's machine** (STATISTICS has the tables ready):
    - enwik9, optimised for size and prioritised for decoding, beside zip and 7z (PPMd's published
      183,964,915 already there);

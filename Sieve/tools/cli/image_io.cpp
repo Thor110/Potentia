@@ -31,6 +31,12 @@ void append(void* ctx, void* data, int size)
     out->append(static_cast<const char*>(data), static_cast<size_t>(size));
 }
 
+// stb_image_write keeps its level and filter in globals, which every PNG it writes reads. stb_png
+// changes them to make a PNG again exactly (v25) and puts them back; every other writer must wait
+// while it does, or an item's PNG made on another thread at the same time (an install decodes files
+// at once) is written at the other's level and comes out other bytes, refused by its SHA-256.
+std::mutex g_stb_write;
+
 } // namespace
 
 std::vector<RgbaImage> load_image_frames(const std::string& path)
@@ -97,6 +103,7 @@ std::string encode_png(uint32_t width, uint32_t height, const std::vector<Rgb>& 
             o[0] = p.r; o[1] = p.g; o[2] = p.b;
         }
     std::string png;
+    std::lock_guard<std::mutex> lock(g_stb_write); // (the writer's settings: see g_stb_write)
     if (!stbi_write_png_to_func(append, &png, int(W), int(H), 3, rgb.data(), int(W) * 3))
         throw std::runtime_error("cannot encode PNG");
     return png;
@@ -127,9 +134,9 @@ bool png_pixels(const uint8_t* data, size_t size, std::vector<uint8_t>& pixels, 
 
 std::string stb_png(const std::vector<uint8_t>& pixels, int width, int height, int components, int level, int filter)
 {
-    // (stb_image_write keeps its settings in globals: set and put back under a lock.)
-    static std::mutex mx;
-    std::lock_guard<std::mutex> lock(mx);
+    // (stb_image_write keeps its settings in globals: set and put back under the lock every
+    // writer takes, g_stb_write.)
+    std::lock_guard<std::mutex> lock(g_stb_write);
     const int keep_level = stbi_write_png_compression_level, keep_filter = stbi_write_force_png_filter;
     stbi_write_png_compression_level = level;
     stbi_write_force_png_filter = filter;

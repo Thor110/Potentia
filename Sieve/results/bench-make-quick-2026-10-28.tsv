@@ -1,0 +1,17 @@
+# sieve bench-make, 2026-10-28, Intel64 Family 6 Model 167 Stepping 1, GenuineIntel, 12 threads, Windows 10, sieve.exe
+search	name	kind	bytes	sieve_bytes	version	seconds	mb_per_s	pack.rope.search	pack.pieces.rope	pack.pieces.cut	pack.pieces.blocks	pack.pieces.boundaries	pack.rope.code	pack.lzma2.quick	pack.lzma2.settings-trial	pack.lzma2.first-pass	pack.lzma2.tuned-pass	pack.lzma2.7zip-pass	pack.archives.recipe
+1.000	prose.md	prose	399087	101709	sieve-manifest-v28	2.644	0.151	0.066	0.000	0.014	0.013	0.000	0.060	0.370	0.003	0.001	0.001	0.001	0.000
+1.000	code.cpp	code	165882	29630	sieve-manifest-v28	1.510	0.110	0.069	0.000	0.008	0.007	0.000	0.068	0.140	0.003	0.001	0.001	0.001	0.000
+1.000	oracle.py	code	447532	89567	sieve-manifest-v28	3.027	0.148	0.115	0.000	0.018	0.017	0.000	0.097	0.458	0.004	0.001	0.001	0.001	0.000
+1.000	table.csv	table	17831	7262	sieve-manifest-v28	0.706	0.025	0.465	0.041	0.018	0.002	0.016	0.001	0.140	0.003	0.001	0.001	0.001	0.000
+1.000	words.txt	word list	2921105	310401	sieve-manifest-v28	11.494	0.254	0.182	0.000	0.125	0.120	0.000	0.163	2.370	0.003	0.001	0.001	0.001	0.000
+1.000	rope.txt	prose	11440	3633	sieve-manifest-v28	0.159	0.072	0.007	0.000	0.000	0.000	0.000	0.001	0.004	0.003	0.001	0.001	0.001	0.000
+1.000	screenshot.png	picture (PNG)	92628	80506	sieve-manifest-v20	0.668	0.139	0.005	0.011	0.038	0.005	0.033	0.003	0.319	0.026	0.025	0.031	0.015	0.000
+1.000	vitruvian.jpg	picture (JPEG)	207500	206956	sieve-manifest-v20	0.825	0.251	0.011	0.016	0.017	0.011	0.006	0.009	0.163	0.005	0.002	0.002	0.002	0.000
+1.000	door.jpg	picture (JPEG)	69298	63860	sieve-manifest-v20	0.406	0.171	0.004	0.000	0.004	0.004	0.000	0.002	0.046	0.017	0.015	0.020	0.008	0.000
+1.000	spitfire.obj	mesh	469717	53519	sieve-manifest-v28	2.415	0.194	0.059	0.000	0.019	0.018	0.000	0.065	0.424	0.003	0.001	0.001	0.001	0.000
+1.000	hymn.mid	melody (MIDI)	1377	230	sieve-manifest-v20	0.023	0.060	0.010	0.000	0.000	0.000	0.000	0.001	0.001	0.005	0.002	0.002	0.001	0.000
+1.000	film.mp4	video (MP4)	234633	233867	sieve-manifest-v20	1.272	0.184	0.011	0.018	0.016	0.009	0.006	0.007	0.197	0.061	0.053	0.063	0.024	0.000
+1.000	sound.wav	sound (WAV)	88244	3257	sieve-manifest-v28	2.149	0.041	1.586	0.103	0.097	0.005	0.092	0.008	0.669	0.003	0.001	0.001	0.001	0.000
+1.000	program.exe	program (Windows)	5337607	4275365	sieve-manifest-v20	3.583	1.490	0.000	0.000	0.000	0.000	0.000	0.000	0.000	0.396	1.583	3.102	1.253	0.000
+1.000	folder.tar	tar	5140480	1209279	sieve-manifest-v28	21.013	0.245	1.027	0.000	0.183	0.173	0.000	0.159	3.590	0.003	0.001	0.001	0.001	0.000

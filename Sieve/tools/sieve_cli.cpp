@@ -755,7 +755,7 @@ int cmd_read(const Args& a)
         if (a.has("around"))
         {
             // Books spaced 2^-zoom apart along the guided line, as the hallway shows them.
-            const uint32_t zoom = a.has("zoom") ? a.get_u32("zoom", 0) : uint32_t(std::max<size_t>(own.bits, 1));
+            const uint32_t zoom = a.has("zoom") ? a.get_positive("zoom", 1) : uint32_t(std::max<size_t>(own.bits, 1)); // (at least 1, as --at)
             if (zoom > g.scale_bits()) throw std::invalid_argument("--zoom is finer than the line (" + std::to_string(g.scale_bits()) + " bits)");
             std::cerr << "books 2^-" << zoom << " apart: each shows its point, then the length of the address of the\n"
                          "unit found there (its information content, to within 2 bits)\n";

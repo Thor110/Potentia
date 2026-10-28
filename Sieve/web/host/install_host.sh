@@ -13,6 +13,12 @@ else sieve=$here/../../build/sieve
 fi
 [ -x "$sieve" ] || { echo "sieve is not at $sieve: give its path"; exit 1; }
 sieve=$(cd "$(dirname "$sieve")" && pwd)/$(basename "$sieve")
+# The path goes into JSON as a string: a backslash or a double quote in it is escaped, and a path
+# with a control character (a line break, a tab) is refused, as JSON would need it written as one.
+case "$sieve" in
+  *[[:cntrl:]]*) echo "sieve's path has a control character in it (a line break or a tab): move it"; exit 1 ;;
+esac
+json_path=$(printf '%s' "$sieve" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
 case "$(uname)" in
   Darwin) dirs="$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts
 $HOME/Library/Application Support/Chromium/NativeMessagingHosts
@@ -27,7 +33,7 @@ echo "$dirs" | while IFS= read -r d; do
 {
   "name": "com.potentia.sieve",
   "description": "Sieve: decodes the .sieve files a page links to, for the Sieve extension",
-  "path": "$sieve",
+  "path": "$json_path",
   "type": "stdio",
   "allowed_origins": ["chrome-extension://bnigebolckfoapimidlcmbilcbhjbmjg/"]
 }

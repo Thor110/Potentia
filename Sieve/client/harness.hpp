@@ -137,7 +137,9 @@ private:
     int set_row_ = 0;
     bool lr_suggested_ = true, scale_suggested_ = true;
     // A trial runs on a thread of its own, never waited for (a large shape's step can take a minute),
-    // and leaves its answer here.
+    // and leaves its answer here. It holds its own copies of the recipe and files, and what it reads
+    // of the training code's shared state (rope_for's cache) is never destroyed, so the program may
+    // exit while it runs.
     struct Trial
     {
         std::mutex m;

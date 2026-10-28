@@ -91,16 +91,25 @@ silent on the core and the tool.
    file's bytes do: a head saying how many, then the JSON's UTF-8 bytes as base64. Measured before:
    a `.sieve` of 10,000 files gave one message of 1,178,012 bytes; after, two parts, and the viewer
    lists all 10,000. CI step 11 checks it (`check_host.py` refuses any message over 1 MB).
-3. **`stb_image_write`'s settings are globals.** `stb_png` sets and restores them under a lock;
+3. *Done, 28 October 2026.* **`stb_image_write`'s settings are globals.** `stb_png` sets and restores them under a lock;
    `encode_png` reads them without it, so a PNG written while a v25 PNG is being made again on
    another thread can be written at that one's level and filter. Still a valid PNG, of other bytes.
+   Reachable since v30, when an install began decoding files at once. Now `encode_png` takes the
+   same lock (`g_stb_write`, `tools/cli/image_io.cpp`). Measured with a stress test (four threads
+   making v25 PNGs at level 1 while four make an item's PNG, 1,200 of them): before, 1,199 came out
+   with other bytes; after, none.
 4. **Still open from the first pass:** items 3, 5 and 7 below, and the last two of 6, as they were
    (item 2 was done on 24 October 2026, as `symbol-entropy-v2` and `model-information-v2`).
 5. **Smaller:** `sieve web-host` recognises `moz-extension://` as its first argument, but Firefox
-   gives the manifest's path first and the install scripts register Chrome, Chromium and Edge only;
-   `install_host.sh` writes the program's path into JSON unescaped (a `"` or `\` in it breaks the
-   file); and the harness's trial measurement runs on a detached thread that can still be running
-   when the program exits.
+   gives the manifest's path first and the install scripts register Chrome, Chromium and Edge only
+   (open: whether Firefox is wanted is Edward's call); `install_host.sh` writes the program's path
+   into JSON unescaped (a `"` or `\` in it breaks the file); and the harness's trial measurement runs
+   on a detached thread that can still be running when the program exits.
+   *Done, 28 October 2026:* `install_host.sh` escapes a backslash and a double quote, and refuses a
+   path with a control character (tried with a folder named `we"ird\dir`: the JSON reads back to
+   the path, and a path with a tab is refused). The trial thread holds copies of what it is given;
+   the one shared thing it reads, the training code's rotation tables (`rope_for`), is now made once
+   and never destroyed, so it cannot be read after the program's statics are torn down.
 
 ## The first pass
 
@@ -232,8 +241,9 @@ In rough order of value. These are the work of a session each, not of a paragrap
      test binary of its own or a check placed at the very top of the run.
    - `read --around` has no test and no CI step anywhere, and it holds the fiddliest arithmetic in
      the tool: compact wraparound, guided zoom snapping, positional stepping.
-7. **`--zoom 0`** is rejected by `read --at` (`get_positive`) and accepted by `read --around`
-   (`get_u32`), for the same option with the same meaning. Pick one.
+7. *Done, 28 October 2026.* **`--zoom 0`** is rejected by `read --at` (`get_positive`) and accepted by `read --around`
+   (`get_u32`), for the same option with the same meaning. Pick one. Both refuse it now (a zoom of 0
+   puts the whole line in one book).
 8. *Done.* `hallway.cpp` was 3,532 lines and five unrelated subsystems; it is now split by
    subsystem, as `docs/HANDOFF.md` describes.
 9. **Three clang warnings**, in code this pass did not touch: unused private fields `f_` and
