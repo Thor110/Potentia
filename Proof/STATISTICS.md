@@ -11,6 +11,7 @@ from the sizes given.
 - [At a glance](#at-a-glance)
 - [The application itself](#the-application-itself)
 - [Sieve's source tree, against the usual compressors](#sieves-source-tree-against-the-usual-compressors)
+- [enwik8: the first 100 MB of English Wikipedia](#enwik8-the-first-100-mb-of-english-wikipedia)
 - [A game archive: MAPS.WoW](#a-game-archive-mapswow)
 - [A million digits of pi](#a-million-digits-of-pi)
 - [A book: Don Quixote](#a-book-don-quixote)
@@ -24,6 +25,7 @@ from the sizes given.
 | :--- | ---: | ---: | ---: | ---: | ---: |
 | [Sieve's own release](#the-application-itself) | 44,647,549 | | 6,319,561 | 7.06:1 | |
 | [Sieve's source tree](#sieves-source-tree-against-the-usual-compressors) | 35,396,955 | 6,844,677 | 5,196,966 | 6.81:1 | −24.07% |
+| [enwik8](#enwik8-the-first-100-mb-of-english-wikipedia), public test data | 100,000,000 | 26,080,445 | 21,675,870 | 4.61:1 | −16.89% |
 | [MAPS.WoW](#a-game-archive-mapswow), a game's archive | 160,890,897 | 60,791,826 | 52,996,145 | 3.04:1 | −12.82% |
 | [A million digits of pi](#a-million-digits-of-pi) | 1,111,103 | 512,745 | 417,052 | 2.66:1 | −18.66% |
 | [Don Quixote](#a-book-don-quixote), plain text | 2,391,678 | 686,020 | 683,205 | 3.50:1 | −0.41% |
@@ -71,6 +73,23 @@ strongest), and zstd and brotli by their Python packages.
 
 Part of Sieve's lead here is the folder's own: nine English word lists, most of them the lines of
 the largest, which Sieve finds and carries as masks over it.
+
+## enwik8: the first 100 MB of English Wikipedia
+
+`enwik8`, the file of the [Large Text Compression Benchmark](https://www.mattmahoney.net/dc/text.html)
+and the Hutter Prize: 100,000,000 bytes of Wikipedia's XML. Anyone can download it and repeat this.
+Measured on Edward's machine (Windows; an 11th Gen Intel Core i5-11400F, 6 cores and 12 logical
+processors, 32 GB of memory), 28 October 2026, at `sieve-manifest-v31`.
+
+| Method | Bytes | Ratio | Of the file | Against 7z | Make | Unpack |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| zip | 35,194,836 | 2.84:1 | 35.19% | +34.95% | about 9 s | under 1 s |
+| 7z | 26,080,445 | 3.83:1 | 26.08% | | about 28 s | under 1 s |
+| **Sieve** (`.sieve`) | **21,675,870** | **4.61:1** | **21.68%** | **−16.89%** | 109.3 s | 148.7 s, then checked and written in 0.537 s |
+
+Sieve makes it at about 0.91 MB a second and unpacks it at about 0.67. The benchmark's own table
+ranks the strongest context-mixing programs, which are smaller still and slower; it also counts
+the size of the program that unpacks, which for Sieve is `sieve-install`.
 
 ## A game archive: MAPS.WoW
 

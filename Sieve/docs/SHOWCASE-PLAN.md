@@ -34,7 +34,8 @@ size, ratio, time to make, time to unpack, and a check that each gives the folde
    anyone can check out and repeat.
 3. **Public test data**, so the results sit beside published tables: the Silesia corpus (211 MB of
    mixed files) and enwik8 (the first 100 MB of English Wikipedia, used by the Large Text
-   Compression Benchmark).
+   Compression Benchmark). *enwik8 done 28 October 2026* (Proof/STATISTICS.md: 21,675,870 bytes,
+   7z 26,080,445).
 4. **Folders people recognise:** a game's install folder, a program's folder, a photo folder (expect
    little: JPEGs are already compressed until step 3 of the plan in `HANDOFF.md`), a large source
    tree.

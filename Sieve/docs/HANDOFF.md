@@ -4001,6 +4001,10 @@ way as necessary." No code, format or figure changed: documentation and one scri
 - **MANUAL.md** and **web/README.md** no longer call maps v18 or `source.sieve` a sealed map.
 - **`Sieve/lt/`** removed (a language-test leftover, already in `.gitignore`).
 - **SHOWCASE-PLAN.md:** where it stands, and a running order for Edward's tutorial video.
+- **The first public benchmark:** enwik8 on Edward's machine, 21,675,870 bytes against 7z's
+  26,080,445 (−16.89%), made in 109.3 s and unpacked in 148.7 s (Proof/STATISTICS.md).
+- **IDEAS §19.103:** pieces weighed by the ways that code them, Edward's question; the first step
+  needs no new version and is to be measured.
 
 **The plan above, read against the pause.** Of the 27 October plan, step 2 (the web dictionary)
 can be gathered, learnt and measured now, but would ship only as a new version if it beats

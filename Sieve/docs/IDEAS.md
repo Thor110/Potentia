@@ -33,6 +33,7 @@ and so wait; most are small, and are best gathered into one version when the pau
 - the rope's next contexts (the byte 21 lines above, more phases: §19.87, at most 0.3% on one file);
 - a word list with how often each word is used, for mixing (§19.102, *Next*);
 - BCJ2 for programs, where 7-Zip still leads on small folders of programs (§19.95; measure first);
+- each piece of a file its own rope wave, and mixing as a third kind of piece (§19.103);
 - the other lines' places coded by the rope (§19.87, *Not yet*).
 
 **Work that needs no new version,** suited to the pause: measuring (the benchmark on public
@@ -5127,3 +5128,28 @@ measured on this repository's own files.
 - *Next:* a word list with how often each word is used
   (SCOWL has none; a frequency list would be a new pinned file); and more generators as they turn
   up (zlib's PNGs remade by zlib itself where it can, without preflate's difference).
+
+**19.103 Pieces weighed by the ways that code them (Edward, 28 October 2026; an idea, nothing
+built).** His question: is the rope checked against each of LZMA2's pieces on its own, or against
+the whole stream, and would it be worth doing if not?
+- *What is done now (v13, `pieces_of` in `tools/cli/pack.cpp`):* a file of 16 KiB or more is cut
+  into blocks of 4 KiB, and each block is weighed on its own: LZMA2 on that block alone against an
+  estimate of the rope, each byte priced by how often it occurs in the whole file (an order-0
+  count). Runs saving less than 64 bytes go to their neighbours' way, and each boundary is moved in
+  steps of 64 bytes to where the two cost least. Then every rope block is joined and coded with one
+  wave (one set of parameters), and every LZMA2 block goes to the shared LZMA2 stream. Mixing is
+  not a piece: it competes only for the whole file.
+- *Where the weighing is rough:* the estimate is not the rope. The rope predicts each byte from
+  its neighbours (the byte before, the line above, the triangle), so on smooth data it does better
+  than the count says, and a block it would win can go to LZMA2. And LZMA2 is weighed without the
+  history it has in the real stream, so a block that repeats something earlier in the file looks
+  dearer than it is. The two errors lean opposite ways; which wins on a given file is not measured.
+- *First, needing no new version (suited to the pause):* weigh each block by the rope's true cost
+  (the whole file's best wave run over it) and LZMA2 with the history before it. Only where the
+  bytes go changes; the pieces list is data, so the format is the same. Measure on the
+  repository's mixed files and a tar of the source, each packed with today's cut and the new,
+  before keeping it. A tar or a game's archive of pictures beside text and tables is where a gain
+  is likeliest; a single photo, whose metadata is already cut within a few bytes, least.
+- *Later, a new version (waits for the pause to end):* each rope piece its own wave (two pictures
+  of different widths in one tar each with its width), and mixing as a third kind of piece, so a
+  file's text is mixed while its pictures go to the rope.
