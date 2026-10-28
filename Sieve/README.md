@@ -155,6 +155,7 @@ an installed one is used, otherwise the first configure downloads and builds it.
 | [docs/MANUAL.md](docs/MANUAL.md) | The full manual: folders, build, lines, the hallway, filters, commands, canonicalisation, conformance, results |
 | [docs/SIEVE-INSTALL-USAGE.md](docs/SIEVE-INSTALL-USAGE.md) | Making installers, installing, making a release |
 | [web/README.md](web/README.md), [context/README.md](context/README.md) | The browser extension and site builder; the right-click menu |
+| [docs/SIEVE-FORMAT.md](docs/SIEVE-FORMAT.md) | The `.sieve` format on one page, for writing a decoder of your own |
 | [docs/SPECIFICATIONS.md](docs/SPECIFICATIONS.md) | The specification |
 | [docs/IDEAS.md](docs/IDEAS.md) | What is not built yet, and what was set aside and why |
 | [docs/HANDOFF.md](docs/HANDOFF.md) | The briefing for picking the work up cold |

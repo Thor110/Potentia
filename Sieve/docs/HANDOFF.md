@@ -4056,7 +4056,12 @@ order:
    - the estimate's error, measured again on Edward's machine now the search shares are learned
      (IDEAS §19.97).
 4. **For others to build on:** a short `.sieve` v31 specification on its own, enough for an
-   independent decoder (SHOWCASE-PLAN §1), checked against the oracle's `unpack`.
+   independent decoder (SHOWCASE-PLAN §1), checked against the oracle's `unpack`. *Written the same
+   day:* `docs/SIEVE-FORMAT.md`, the outer layer, head, body, streams, ways and check on one page,
+   each part pointing to its rules in §12.2 and its function in the oracle; tested by a decoder
+   written from the page alone (its coders borrowed from the oracle), which read three of Sieve's
+   own files back byte for byte, tree and all: a folder at v30 (a program in the x86 stream, five
+   files mixed together in a group) and two single files at v20.
 5. **A release** (0.13.76, set 28 October 2026 to keep it apart from the last release) once 1 and 2 are done: the notes leading with the benchmark
    tables and the three uses (smaller archives, right-click extract, installers that check).
 6. **Then the posts,** one audience at a time (SHOWCASE-PLAN §5), Edward's video among them.

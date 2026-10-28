@@ -16,7 +16,7 @@ should have a number behind it and a way to reproduce it.
   can only build on a format that holds still.
 - **A short specification of `.sieve` v31 on its own**, apart from `SPECIFICATIONS.md`: enough for
   someone to write an independent decoder. The oracle (`reference/sieve_ref.py unpack`) is already a
-  second decoder, which is worth saying.
+  second decoder, which is worth saying. *Written 28 October 2026:* `docs/SIEVE-FORMAT.md`.
 - **Tidy the repository's front:** the stray `Sieve/lt/` folder (a language-test leftover, committed
   on `d20b2bf`) removed and ignored. *Done 28 October 2026.*
 - **A fresh release** whose notes lead with the three uses below, and the benchmark table.
@@ -129,7 +129,7 @@ what it names), since that is the first thing a reader there will test.
 
 ## 7. Order
 
-1. The format frozen; `lt/` removed (both done); the `.sieve` v31 specification written.
+1. The format frozen; `lt/` removed; the `.sieve` v31 specification written (all three done).
 2. The benchmark on the release folder and on Silesia and enwik8 (Windows, with the real 7-Zip).
 3. The ISO test set, and the recordings of the demonstrations.
 4. The training write-up, run on two machines.
