@@ -3962,7 +3962,7 @@ vision moved whole to `VISION.md` at the top, and the Sieve README's reference s
 brotli, bzip2, gzip and zip on any folder; its first table (this repository's `Sieve` source tree)
 is in `README.md`. `docs/SHOWCASE-PLAN.md` is the plan: the format frozen, the benchmark on public
 data, the ISO test set, six short demonstrations, and who to show what. Found on the way: a
-committed `lt/` folder (a language-test leftover), to remove.
+committed `lt/` folder (a language-test leftover), to remove (removed 28 October 2026).
 
 ### A second code review (27 October 2026)
 
@@ -3982,6 +3982,32 @@ listing or a site's table sent in parts, as a file is (a `.sieve` of 10,000 file
 message of 1,178,012 bytes; CI step 11 now checks one). Trying them in Chromium found a third: the
 guard's fetch of the page could come from the extension's own cache, and so pass a page changed on
 the server; it now revalidates. Details in `docs/REVIEW.md` and `web/README.md`.
+
+### The documentation read through, during the format's pause (28 October 2026)
+
+Edward: "let the manifest v31 sit for a while before pressing forwards with new manifest versions
+... read through ideas and the general documentation base and make suggestions and edits along the
+way as necessary." No code, format or figure changed: documentation and one script's notes, with `lt/` removed.
+- **IDEAS.md** has a guide at its top: how to read it (the file grew in the order things were said,
+  so an entry's later notes may undo its first paragraph), where the built, set-aside and framing
+  parts are, the ideas that would need a new manifest version and so wait, and the work that needs
+  none. Entries found built or answered and marked so: §4.1, §4.3 (partly), §4.4, §4.5, §4.6
+  (no signing), the licence (§8, §11), §10's portal signs, warp by content, warp-to-start, CI on
+  three systems and `Previous/`, §11's names list, and §9.4 (now in Sieve's README). §16.3's
+  "folding maps in: set aside" and §19.53's plan are marked superseded (§19.93; this file's plans).
+- **SIEVE-INSTALL-USAGE.md** said the newest version was v16 and that releases were v4; it says
+  v31, and its one paragraph of every version's history is now a table. `make_release.py`'s notes
+  said v4 too (the code has passed `--items` since 22 October).
+- **MANUAL.md** and **web/README.md** no longer call maps v18 or `source.sieve` a sealed map.
+- **`Sieve/lt/`** removed (a language-test leftover, already in `.gitignore`).
+- **SHOWCASE-PLAN.md:** where it stands, and a running order for Edward's tutorial video.
+
+**The plan above, read against the pause.** Of the 27 October plan, step 2 (the web dictionary)
+can be gathered, learnt and measured now, but would ship only as a new version if it beats
+brotli; step 3 (JPEG made again from its coefficients) and step 5's sound model and zlib PNGs are
+new versions, and wait. Step 4 (mixing faster when packing, "Create .sieve") needs none where the
+bytes made are the same, and suits the pause, as do the benchmark on public data (SHOWCASE-PLAN)
+and a short `.sieve` v31 specification for independent decoders.
 
 ### For the next session (27 October 2026): where the work stopped
 

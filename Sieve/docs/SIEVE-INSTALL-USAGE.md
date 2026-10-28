@@ -3,9 +3,9 @@
 This page covers making an installer for a folder, handing it to someone, and installing from it.
 Installers **pack their files themselves**, so there is no separate compressing step. The plain
 installer is `sieve-manifest-v4` (`--v4`), described first below; the hallway's File Locator and
-`sieve locate --installer` make the newest (`sieve-manifest-v16`, or v17 where a gzip is remade), which
-also pull files tight with the rope, cut them into pieces, and carry items of Sieve's lines by their
-places (*The formats, as they grew*, below; every version in full: SPECIFICATIONS §12.2). Every
+`sieve locate --installer` make the newest (`sieve-manifest-v31`), which also mixes, pulls files
+tight with the rope, cuts them into pieces, and carries items of Sieve's lines by their places
+(*The formats, as they grew*, below; every version in full: SPECIFICATIONS §12.2). Every
 option: `sieve help locate`, `sieve help install`, `sieve-install --help`.
 
 ## What an installer is
@@ -65,7 +65,49 @@ unpacks it; see below.)
 
 ## The formats, as they grew
 
-An installer's manifest (`sieve-manifest-v4`) is the folder structure followed by every file **packed**: programs through the x86 filter, a text made of some of another file's lines as a mask of them (each SCOWL list but the largest), all of it LZMA2 at its strongest, so a release-shaped folder comes to 20% of its size, below one LZMA2 stream of it (21%); its own address is the installer. Unpacking gives every file back exactly, checked against its SHA-256. (`--v3` makes the older installer, every file's raw bytes; it is chosen anyway where packing would not be smaller.) (`--with-addresses` writes `sieve-manifest-v2` instead, a listing with every file's address in hex; installers made from v2 before still install.) `install` reads it back, checks every file against its size and SHA-256 before writing any, and will not replace files without `--force`. With `--compare`, `locate` also shows the installer's manifest compressed. **`--items`** makes `sieve-manifest-v5`: a file that is exactly an item of the pages, image, video or audio line (a page as its text, a picture or film as its PNG, a melody as its MIDI file) is carried as its line and its place there instead of its bytes, made again on installing, with one SHA-256 over the whole tree checking every file. `sieve install` and the hallway install it; the small `sieve-install`, which cannot make items, says to use them instead. **`--items --v6`** makes `sieve-manifest-v6`: each item's place written as raw bytes, the fewest its line's places need, all of them one stream carried raw or as LZMA2, whichever is smaller; a line's items carried as places only where that is smaller than its files packed, and otherwise as files; and a model of the AI line (one `sieve ai --out` writes) carried as its digits. **`--items` now makes `sieve-manifest-v7`**: v6 with nothing written that the rest already gives (the file and byte counts, empty streams, a single file's root, a line's options its id already fixes, and every file's own SHA-256, which the tree's covers: `--file-hashes` keeps them; an item listed as `i K path`), the whole listing carried as LZMA2 where that is smaller, and the AI line's places coded by **digit-histogram-v1** where that is smaller: each tensor's histogram of digits, then the model's rank among the models with those histograms, so a trained model, whose digits are less evenly spread than chance spreads them, has a shorter number. Measured on the degree sample (every dimension at every degree: the README's hallway section): v4 482,496 bytes, v5 443,973, v6 391,033, **v7 9,618** (its listing packs from 203,395 bytes to 6,110). For comparison: `tar` with `xz -9e`, 28,152 bytes; 7z's LZMA2 stream of the files' bytes alone, with no names, 9,226. A model trained by Sieve alone (universalbibliothek, 34,072 bytes as `sieve-ai-16432c2a3953.safetensors`): v4 5,818 bytes (the same as v5, which has no AI line), v6 4,486, **v7 4,257**, its 4,096 bytes of digits coded in 4,020; 7z's LZMA2 of the file, 5,576. The File Locator makes v7 too, with the AI line's shape from the setup menu's settings. **Since 19 October 2026 `--items` makes `sieve-manifest-v8`** where it helps: a file that **the tightened rope** (`rope-wave-v1`, Edward's filter: a wave through the file's values, each predicted from those before it, and what the wave leaves coded by how often each byte occurs) codes smaller than LZMA2 packs it is carried so, its wave searched for `--search-per-file` seconds (the File Locator's time for a file). It wins on smooth data: the Vitruvian picture as raw grey pixels, 832,146 bytes against LZMA2's 865,400, and in colour 468,078 against 623,717; not on prose. Its version 2 (`rope-wave-v2`, `C1`) counts each column of a fixed-width line apart, so a table's separators cost almost nothing: a million digits of pi laid out in lines comes to 420,025 bytes against LZMA2's 486,077, the digits' own floor being 415,241 (instructions with it are `sieve-manifest-v9`). Version 3 (`rope-wave-v3`, `C2`) counts each byte's column from the start of its line, for text whose lines vary or break: Edward's `pi6.txt` (pi to a million digits, 1,111,103 bytes, with blank lines and page breaks) comes to 421,491 bytes as Sieve instructions, against 7z's 512,745 (`sieve-manifest-v10`). Version 4 (`rope-wave-v4`, `G1`) lets columns that hold alike share one table and one stream: `pi6.txt` comes to 419,115 bytes as Sieve instructions (`sieve-manifest-v11`). Version 5 (`rope-wave-v5`, `A1`) counts each byte by the byte above it too, so a column whose bytes take turns line by line costs almost nothing: `pi6.txt` comes to 417,139 bytes (`sieve-manifest-v15`), against the digits' floor of 415,241. `sieve-manifest-v16` writes the listing's head in bytes rather than text (the streams' sizes as varints, the tree's SHA-256 as its 32 bytes): a small file's listing goes from 142 bytes to 67, `pi6.txt` to 417,061 and the trained model to 4,185. `sieve-manifest-v12` writes less around a file's bytes where it can: no line for an empty stream, and a file LZMA2 cannot make smaller (a PNG, a JPEG) carried as it is, so a compressed file's instructions are its bytes and about 145 more; `pi6.txt` is 419,096. `sieve-manifest-v13` cuts a file into pieces where that is smaller, LZMA2 taking what repeats and the rope what is unevenly spread: Edward's phone photos (4,139,682 and 4,587,473 bytes) come to 4,111,592 and 4,558,132, against 7z's 4,127,434 and 4,575,201. **Optimise Compressed Formats** (`--optimise-archives`, a box in the File Locator, off unless ticked; `sieve-manifest-v14`): an `.xz` is carried as what it holds and remade exactly on installing, and a `.7z` is carried as its contents, in a folder named after it (said so on installing), each only where clearly smaller: `pi6.txt` as an xz (507,092 bytes) comes to 419,117, as a 7z (507,182) to 419,128. Since 21 October a `.gz` is remade exactly where zlib made it (else carried as what it holds) and a `.zip` is carried as its contents (`sieve-manifest-v17`): `pi6.txt` as a gzip (546,741 bytes) comes to 417,128, as a zip (546,827) to 417,107. Since 26 October 2026: the rope's triangle (`rope-wave-v6`, `sieve-manifest-v23`: the Vitruvian picture as raw grey pixels, 831,022 bytes before, 762,766 now), mixing for text (`mix-v1`, `sieve-manifest-v24`: Don Quixote, 2,391,678 bytes, 683,195 before, 565,664 now; decoding at about 0.4 MB/s), and with Optimise Compressed Formats PNGs made again exactly (`sieve-manifest-v25`: ten of this repository's PNGs, 657,221 bytes, 247,695). Since 27 October 2026, mixing's second version (`mix-v2`, `sieve-manifest-v26`: a match model, the column for tables, and for a picture Edward's triangle inside mixing): Don Quixote 532,501 bytes, the ten PNGs 210,046; `sieve mix FILE` shows a file's code beside LZMA2 (`sieve help mix`). v8 needs no line, so `sieve-install` installs it unless it carries items. `sieve rope FILE` shows the wave a file pulls tight to and its code beside LZMA2 (`sieve help rope`), and the weighing (`--weigh`, the File Locator's table) weighs every file's rope code as a way to name it: its code, its wave's parameters and its size, the rope's name paid once.
+Every version is still read, and `sieve locate --installer` and the File Locator make the newest,
+**`sieve-manifest-v31`**, where the format now rests (HANDOFF's standing rules). Each version is in
+full in SPECIFICATIONS §12.2; the figures below were measured when each was built.
+
+**The older installers, by flag.** `--v4` makes the plain installer above. `--v3` makes every
+file's raw bytes (chosen anyway where packing would not be smaller). `--with-addresses` makes
+`sieve-manifest-v2`, a listing with every file's address in hex, twice as large as it need be.
+`install` reads them all back, checks every file against its size and SHA-256 before writing any,
+and will not replace files without `--force`. With `--compare`, `locate` also shows the
+installer's manifest compressed.
+
+**`--items` and after.** `--items` makes the newest. The versions it went through:
+
+| Version | What it added | Measured then |
+| :--- | :--- | :--- |
+| v5 | A file that is exactly an item of the pages, image, video or audio line (a page as its text, a picture or film as its PNG, a melody as its MIDI) carried as its line and place, made again on installing; one SHA-256 over the whole tree | The degree sample 443,973 bytes (v4 482,496) |
+| v6 (`--items --v6`) | Places as raw bytes in one stream; a line's items as places only where smaller than its files; an AI-line model as its digits | The degree sample 391,033 |
+| v7 | Nothing written that the rest already gives (counts, empty streams, each file's own SHA-256: `--file-hashes` keeps them); the listing as LZMA2 where smaller; the AI line by `digit-histogram-v1` | The degree sample **9,618** (7z of the files' bytes alone 9,226); a trained model of 34,072 bytes 4,257 (7z 5,576) |
+| v8 | The tightened rope (`rope-wave-v1`, Edward's filter): each value predicted from those before it, what is left coded by how often each byte occurs; searched for `--search-per-file` seconds | The Vitruvian picture as grey pixels 832,146 (LZMA2 865,400) |
+| v9, v10, v11 | `rope-wave-v2` (fixed-width columns), `v3` (columns from each line's start), `v4` (columns that hold alike share a table) | `pi6.txt` (1,111,103 bytes) 421,491, then 419,115 (7z 512,745) |
+| v12 | Less around a file: no line for an empty stream, a file LZMA2 cannot shrink (a PNG, a JPEG) carried as it is | `pi6.txt` 419,096 |
+| v13 | A file cut into pieces: LZMA2 for what repeats, the rope for what is unevenly spread | Edward's phone photos 4,111,592 and 4,558,132 (7z 4,127,434 and 4,575,201) |
+| v14 | Optimise Compressed Formats (`--optimise-compressed`): an `.xz` remade exactly, a `.7z` carried as its contents | `pi6.txt` as an xz 419,117, as a 7z 419,128 |
+| v15 | `rope-wave-v5`: each byte counted by the byte above it too | `pi6.txt` 417,139 (floor 415,241) |
+| v16 | The listing's head in bytes (varints, the tree's SHA-256 as 32 bytes) | A small file's listing 142 bytes to 67; `pi6.txt` 417,061 |
+| v17 | A `.gz` remade exactly where zlib made it; a `.zip` as its contents | `pi6.txt` as a gzip 417,128, as a zip 417,107 |
+| v18 | Maps folded in: a graph part (named-only files, edges, metadata, a seal) behind a head flag | |
+| v19, v20 | bzip2 and zstd remade; then lz4, brotli, `.lzma`, lzip, and libarchive's formats (RAR, cab, ISO and more) read; the listing's entries in bytes | A bzip2 word list of 766,439 bytes 469,671 |
+| v21 | 7z, zip and gzip made again exactly (preflate for deflate, the LZMA SDK's encoder) | A 7z at `-mx1` 329,861 → 280,971 |
+| v22 | A RAR 5 made again by the machine's own `rar` (below) | |
+| v23 | `rope-wave-v6`: the triangle (JPEG-LS's median edge detector) | The Vitruvian picture 762,766 |
+| v24 | Mixing for text (`mix-v1`) | Don Quixote (2,391,678) 565,664 (683,195 before) |
+| v25 | PNGs made again exactly, as their pixels | Ten of this repository's PNGs, 657,221 bytes, 247,695 |
+| v26, v27 | `mix-v2` (a match model, columns, the triangle inside mixing); `mix-v3` (a word list's prediction) | Don Quixote 532,501, then 527,837; the ten PNGs 210,046 |
+| v28 | `mix-v4`: the SSE stages retired for decoding speed | |
+| v29, v30 | Files mixed together, then in groups of up to 8 MiB decoded at once | Sieve's data folder 3,160,426 (v29) → 3,100,643 (v30) |
+| v31 | Compressed formats temporary (made again on installing) and permanent (kept as their contents): `--compressed-temporary`, `--compressed-permanent` | The source's 7z 8,005,603 → 6,189,674 |
+
+v8 and later need no line, so `sieve-install` installs them unless they carry items. Prioritise
+Decoding Speed (`--prioritise-decoding`) leaves mixing out where installing time matters more than
+size. `sieve rope FILE` and `sieve mix FILE` show a file's code beside LZMA2 (`sieve help rope`,
+`sieve help mix`), and the weighing (`--weigh`, the File Locator's table) sets every way of naming
+a file side by side.
 
 ## Making an installer
 
@@ -109,7 +151,7 @@ instructions and is for the tools. The command line still writes it (`sieve loca
 - **A `.sieve` file:** put it beside `sieve-install` and run that (it opens the one `.sieve` beside
   it), drop the file on its window, or open the file with it.
 - **From the command line:** `sieve install NAME.sieve --to FOLDER`, which also accepts an
-  installer program, or an installer's manifest itself (any version, v2 to v18). Add `--force` to
+  installer program, or an installer's manifest itself (any version, v2 to v31). Add `--force` to
   replace files that are already there.
 - **In the hallway:** the File Locator's **Install from Sieve instructions...** (or I) takes a
   `.sieve` or an installer program, then asks for the folder to put it in.
@@ -152,7 +194,7 @@ formats boxes, temporary and permanent, which carry archives inside `.sieve` fil
 `sieve help locate` and SPECIFICATIONS §12.2.)
 
 **A RAR made again by your own `rar` (sieve-manifest-v22, 25 October 2026).** With Optimise
-Archive Formats, a RAR 5 that the packing machine's own `rar` (`rar.exe`, WinRAR's) makes again byte
+Compressed Formats, a RAR 5 that the packing machine's own `rar` (`rar.exe`, WinRAR's) makes again byte
 for byte from its files is carried as its contents with that recipe. Installing it (`sieve-install`,
 `sieve install`, the hallway) gives the RAR back where the same version of `rar` is found, checked
 against its SHA-256. Where none is found, or another version, the files are given in a folder named
@@ -213,13 +255,13 @@ folder, the licences; no map is shipped inside the release, since the published 
 release's own files) as the folder `Sieve-<version>`, with `hallway` the one program at the top and
 `sieve` and `sieve-install` in `tools\` (with a short `README.txt`, so nobody starts the wrong
 program first; `sieve` there finds the data folders above it, checked). From the folder it makes
-`sieve.sieve` and `sieve.exe`, each the folder packed (`sieve-manifest-v4`), (`sieve-setup` on Linux and macOS, where a program has no
-extension), then a sealed `sieve.map` naming both. It then installs each into a scratch folder and compares
-the result byte for byte. It writes `metrics.txt`: how much of every line Sieve's reference filters
+`sieve.sieve` and `sieve.exe` (`sieve-setup` on Linux and macOS, where a program has no
+extension), each the folder packed at the newest version (`--items`; until 22 October 2026 they
+were v4). It then installs each into a scratch folder and compares the result byte for byte. It writes `metrics.txt`: how much of every line Sieve's reference filters
 (`data/metrics/reference-filters.ini`, the hard filters that count together) remove, counted by the
 build's hallway as its setup menu counts them (`hallway --metrics`), so one release can be compared
 with the next. Last, `SHA256SUMS.txt` and a `RELEASE-NOTES.md` draft, which carries the list too.
-Publish the four files. GitHub adds the tagged commit's source zip by itself.
+GitHub adds the tagged commit's source zip by itself.
 
 **The source, held in the map.** The script also makes `sieve-source.7z`: the Sieve folder's source
 as the last commit has it (`git archive` of the Sieve folder alone, run from the repository's top
@@ -234,7 +276,7 @@ instructions, `source.sieve`, `sieve-source.7z` and `metrics.txt`. The whole Pot
 Sieve included, is the release's own "Source code" download on GitHub.
 
 The installers install the runnable folder directly, and are smaller than the 7z route made them
-(measured above). `--seven-zip` makes them the old way, carrying a solid 7z of the folder, so the
+(measured above, at v4; the newest is smaller again: Proof/STATISTICS.md). `--seven-zip` makes them the old way, carrying a solid 7z of the folder, so the
 two can be weighed against each other on the same build.
 
 It needs Python 3.8+, CMake, 7-Zip (for the source archive), and Potentia's `LICENSE` one folder up. The build copies that
@@ -243,7 +285,6 @@ without it.
 
 ## Not yet
 
-- An icon for `sieve-install` and for the hallway, before the first release.
 - Code signing. Windows SmartScreen warns about unsigned programs downloaded from the internet.
 - Other "made from another file" ways than lines (a file that is another with a few bytes changed:
   a delta).

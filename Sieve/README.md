@@ -111,6 +111,11 @@ Why this does not make everything smaller: an address carries exactly as much in
 it names, so on its own it is not compression. Only the filters and guided ordering shorten
 addresses, by knowing what is likely. [docs/IDEAS.md §0](docs/IDEAS.md) sets out the argument.
 
+Why a library and not a generator: a generator that happens to make something worth keeping loses
+it as soon as it runs again, unless what it made is written down. An address is a place you can
+leave, come back to, and hand to someone else, and everyone who has the same text, picture or
+melody finds it at the same place.
+
 ## Get it
 
 **Windows:** download `sieve.exe` from the [latest release](https://github.com/Thor110/Potentia/releases/latest)

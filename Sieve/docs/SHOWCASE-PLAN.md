@@ -18,7 +18,7 @@ should have a number behind it and a way to reproduce it.
   someone to write an independent decoder. The oracle (`reference/sieve_ref.py unpack`) is already a
   second decoder, which is worth saying.
 - **Tidy the repository's front:** the stray `Sieve/lt/` folder (a language-test leftover, committed
-  on `d20b2bf`) removed and ignored.
+  on `d20b2bf`) removed and ignored. *Done 28 October 2026.*
 - **A fresh release** whose notes lead with the three uses below, and the benchmark table.
 
 ## 2. The benchmark: the strongest single piece of evidence
@@ -71,6 +71,23 @@ public:
 6. **The Gallery:** thirty seconds of the hallway; a sentence warped to its address and found on its
    shelf.
 
+**A tutorial video, the features in one sitting (Edward planned one, 28 October 2026).** A running
+order that leads with what a viewer can do, each part short enough to cut out as a clip of its own:
+1. *What it is, in one sentence,* over the release page: packs, checks and unpacks files exactly.
+2. *Installing Sieve* from `sieve.exe`, and the right-click menu (`install_context.bat`).
+3. *Right-click extract* of an `.iso` and a `.rar`.
+4. *Packing a folder* in the File Locator: the estimate, the graph of the best so far, Stop; then
+   the saved `.sieve` beside a 7z of the same folder, sizes on screen.
+5. *Installing it back*, then one byte of the `.sieve` changed and the install refused, the folder
+   untouched.
+6. *Sieve Secure:* the test site with the extension, the tampered picture refused.
+7. *Training repeated:* `sieve ai-train tests/training_run_v1` and its result's hash.
+8. *The hallway* last: a sentence warped to its address and found on its shelf, with §0's point
+   said once (an address is as long as what it names; the filters and the guided ordering are what
+   shorten it).
+Say where it is slow (making a `.sieve`) and where it gains little (JPEGs, video), as the posts
+will (§6).
+
 ## 5. Who to show, and where
 
 | Who | What to show them | Where |
@@ -100,9 +117,14 @@ for those who stay.
   would let others read `.sieve` freely. Not a recommendation to change anything, only the question
   adopters will ask.
 
+**Where it stands (28 October 2026).** Edward has joined encode.su. Before posting there, the
+Silesia and enwik8 tables (§2) are what that forum will ask for first, beside paq8px and cmix, and
+every public page it may follow a link to should agree with §0 of IDEAS (an address is as long as
+what it names), since that is the first thing a reader there will test.
+
 ## 7. Order
 
-1. The format frozen; `lt/` removed; the `.sieve` v31 specification written.
+1. The format frozen; `lt/` removed (both done); the `.sieve` v31 specification written.
 2. The benchmark on the release folder and on Silesia and enwik8 (Windows, with the real 7-Zip).
 3. The ISO test set, and the recordings of the demonstrations.
 4. The training write-up, run on two machines.

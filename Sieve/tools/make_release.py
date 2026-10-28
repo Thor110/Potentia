@@ -14,8 +14,9 @@ order matters and is easy to get wrong by hand:
      they are, so nobody starts the wrong program first. (A build folder keeps them together; the
      programs look in both places.) No map is
      shipped inside it.
-  4. (Nothing: the installer packs the folder itself now, sieve-manifest-v4. --seven-zip compresses
-     it to a solid 7z first and carries that instead, as releases did before, for comparing.)
+  4. (Nothing: the installer packs the folder itself now, at the newest version. --seven-zip
+     compresses it to a solid 7z first and carries that instead, as releases did before, for
+     comparing.)
   5. From the folder: Sieve instructions (sieve.sieve, for anyone with Sieve) and an installer
      program (sieve.exe on Windows, sieve-setup elsewhere, for anyone), made by the release's own
      sieve.
@@ -51,9 +52,9 @@ Usage (from the repository root, on the machine the release is for):
   python tools/make_release.py --version 0.13.75 --skip-build      # the build is already made
   python tools/make_release.py --version 0.13.75 --seven-zip       # 7z first, as before v4, to compare
 
-The instructions and the program carry the release folder packed (sieve-manifest-v4: the programs
-through the x86 filter, each SCOWL list but the largest as a mask over it, everything LZMA2 at its
-strongest), so they install straight to a runnable folder and are smaller than the 7z was.
+The instructions and the program carry the release folder packed at the newest version (sieve
+locate --items; until 22 October 2026 sieve-manifest-v4), so they install straight to a runnable
+folder and are smaller than the 7z was.
 --seven-zip makes them from a solid 7z of the folder instead, as releases were made before v4, so
 the two can be weighed against each other on the same build.
 

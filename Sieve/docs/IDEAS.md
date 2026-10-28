@@ -8,6 +8,39 @@ Nothing here is a commitment. Within each section the order is roughly by how mu
 
 **First, when work turns to the game (GAME.md; Edward, 6 October 2026): the colour-blindness pass (2.4).**
 
+**How to read it (28 October 2026).** The file grew in the order things were said, so an item's
+first paragraph may be an idea that later paragraphs, or a later section, built, changed or set
+aside. Look for the italic notes at the end of an entry (*Built*, *Measured*, *Set aside*,
+*Superseded*), and for a later section that names it. Broadly:
+
+- **Framing to keep:** §0 (addressing is not compression), §8 (things to be careful of), §9.
+- **Mostly built, kept as the record of why:** §4, §5, §7, §12 to §16, and most of §19. The
+  compression work (the rope, mixing, archives, pieces) is §19.87, §19.88 and §19.102; the web
+  extension and site builder §19.92; maps folded into `.sieve` §19.93.
+- **Set aside, with the reasons:** §17, and the measured "nothing built" entries (§19.91, §19.94,
+  §19.98), kept so the measurements are not repeated.
+- **The current plan** is not here: HANDOFF's plans (24 and 27 October 2026) supersede the older
+  orderings in this file (§19.53). How Sieve is to be shown: SHOWCASE-PLAN.md.
+
+**Waiting for the next format version.** The `.sieve` format rests at `sieve-manifest-v31` (Edward,
+27 October 2026: let it sit before pressing on). These ideas would each need a new manifest version
+and so wait; most are small, and are best gathered into one version when the pause ends:
+- an archive's format as a number rather than text, with its recipe (§19.88, "The format as a
+  number");
+- headers modelled rather than kept as they are (§19.88, "Headers kept as they are");
+- a shared web dictionary for pages (§19.92, measured: level with brotli on pages of 20 KB or
+  more, behind on small ones);
+- the rope's next contexts (the byte 21 lines above, more phases: §19.87, at most 0.3% on one file);
+- a word list with how often each word is used, for mixing (§19.102, *Next*);
+- BCJ2 for programs, where 7-Zip still leads on small folders of programs (§19.95; measure first);
+- the other lines' places coded by the rope (§19.87, *Not yet*).
+
+**Work that needs no new version,** suited to the pause: measuring (the benchmark on public
+corpora, SHOWCASE-PLAN), speed (threads, §19.99; making faster before a right-click "Create .sieve",
+§19.100), the estimate's accuracy (§19.97), the packer's choices (group sizes, search time), the
+hallway and the game (GAME.md), the web extension's remaining pieces (§19.92), and the
+documentation.
+
 ---
 
 ## 0. One correction first, because a lot depends on it
@@ -206,6 +239,8 @@ records the structure, filenames and sizes, and gets each file's key. Then it ta
 manifest itself. Buildable now, useful now, and it is the honest core of the genesis-key idea:
 one canonical, self-verifying description of a tree. Add total size to the manifest so an install
 can refuse before it starts.
+*Built:* `sieve locate` (§4.9, SPECIFICATIONS §12.2); every install checks the tree's SHA-256 before
+it writes anything.
 
 **4.2 Deduplication comes free.** Identical files land on the same key, so a tree never stores the
 same bytes twice. This is content-addressed storage — which is real and worth having — and it is
@@ -216,19 +251,29 @@ every key `sieve-build-release-v1`. The CLI reproduces its own release build fro
 as a post-build step, which is both a conformance test and the first entry in the archive. This is
 a good idea and it does not depend on the key being small — it depends on the key being canonical,
 which it is.
+*Partly built:* `make_release` installs every download back and compares it byte for byte, and
+publishes each file's SHA-256 (SIEVE-INSTALL-USAGE.md); the `sieve-build-release-v1` tag was not
+made.
 
 **4.4 Chunking, and why it matters twice.** Split a large file into fixed-size pieces, each its own
 unit on its own line. It makes generation multi-threadable, it makes a big file tractable on a
 small machine, and it is the only way an install can proceed in pieces rather than all at once.
+*Since:* files are cut into pieces where that is smaller (`sieve-manifest-v13`), and files and
+groups of files decode at once on several threads when installing
+(§19.102). A file split into fixed pieces on a line, for an install in pieces, is not built.
 
 **4.5 Real file types out of the CLI.** Already partly there: `read --out` writes `.png` for image
 and video, `.mid` for audio, `.txt` for text, and `mesh --out` writes `.obj`. Worth finishing —
 `.wav`, and a frame sequence rather than frames side by side — so any address can be handed to any
 other program.
+*Since:* `.wav` is written for sound (`pcm`), and a video's frames go to any format ffmpeg writes
+(`sieve help`).
 
 **4.6 A signed manifest, if tamper-checking is wanted.** Ordinary Merkle tree plus a signature.
 Says nothing about the generative layer, works perfectly well, and is the only thing that would
 actually stop a modified file passing (see §0).
+*Decided (Edward, 25 October 2026): no signing* (§19.92: "I don't trust myself or any human being
+alive to keep a key safe"). Links that state hashes, a site's table and the crawler stand in for it.
 
 **4.7 The CLI already is a server backend.** The 3D client only asks the core what is at a position;
 nothing about that is graphical. Turning it into a service is multi-threading and transport, not
@@ -482,7 +527,8 @@ Recorded so they do not come back around.
 - **The licence.** "AGPL with a non-commercial restriction" is not AGPL and is not an open-source
   licence — a field-of-use restriction makes it source-available. That may be the right choice, but
   it should be named accurately. No licence is worse: all rights reserved *and* nobody may fork it.
-  Sieve still has no licence file. Separately, whether user-ingested content can be redistributed
+  *Answered:* the repository is GNU AGPL v3 (`LICENSE` at its top, copied beside the programs by the
+  build), with no restriction added. Separately, whether user-ingested content can be redistributed
   needs an answer before any ingest ships.
 - **Mods as vectors is elegant and overstated.** `base + v` instead of a file overwrite is an
   interesting reframe, but "different axes can never conflict" ignores semantic coupling.
@@ -512,7 +558,8 @@ filter and curate. Writing is excavation. Cartographers, not authors.
 **9.4 Why a library and not a generator.** A generator that happens to emit something valid loses
 it the moment you press the button again, unless you write it to disk — which defeats the premise.
 An addressed library gives you a place you can leave, return to, and hand to someone else. The
-cleanest one-paragraph justification of the project, and it belongs in the README.
+cleanest one-paragraph justification of the project, and it belongs in the README. *Done (28 October
+2026):* Sieve's README, under The Gallery of Babel.
 
 **9.5 The scale anchor.** ~10^1,834,097 books; ~10^394,951 meaningful at one bit per character;
 filtering removes about 1.44 million orders of magnitude, and what is left is still ~394,800 orders
@@ -543,6 +590,7 @@ are cheap and because they are the sort of thing that is lost otherwise.
   line starts together.
 - Portal signs: a plain rectangle above each doorway naming the line it leads to, either neon in
   that line's colour or bubble letters carrying the portal's own shimmer. Try the second first.
+  *Built:* a sign over every doorway in its line's colours (`client/door_portal.cpp`).
 - Shimmer on an item: on the crosshair and on select for certain; on walking past, undecided.
 - A shelf's items could face outward on the outside of the ring or inward. Both should exist as a
   graphics toggle; which way you face only reorders how the lines are listed in the readout.
@@ -568,7 +616,9 @@ are cheap and because they are the sort of thing that is lost otherwise.
 - Wheel scrolling already moves through tiles, and shift scrolls faster. The same mechanism should
   move through the forks at a junction — see §5.12 for the shape that makes that work.
 - Warp by content: paste a paragraph and be taken to its address. Built for text; worth a button.
-- A warp-to-start, which is the only realistic way anyone ever sees a loop marker.
+  *Built:* T opens the warp box in the hallway (and `hallway --warp` on start).
+- A warp-to-start, which is the only realistic way anyone ever sees a loop marker. *Built:* Home
+  goes to corridor tile 0, every line's start.
 - Telescopes at the edge that really do pull the camera out to see the whole structure.
 - A coin toss into the drop that mints one permanent seed per machine.
 - Multi-pane views were considered and rejected: "it feels like it would be a headache to look at".
@@ -590,12 +640,14 @@ are cheap and because they are the sort of thing that is lost otherwise.
 
 - The old README moves to a `Previous` folder rather than being versioned, and it is written by
   hand, because an outsider's view of the project is still possible to fake but not for long.
+  *Done:* `Previous/` holds the earlier READMEs.
 - The final documentation pass waits until the visuals are done, because "that last task is usually
   the sort of thing that gets skipped or only half done".
 - There is a pile of loose notes — `engine-idea`, `nextclaude2` through `claude5`,
   `downloaderfriendidea`, `state-space-near-zero-...` — that has never been reconciled with the
   repository.
-- Nothing has ever run on GitHub's Windows or macOS runners, only Linux.
+- Nothing has ever run on GitHub's Windows or macOS runners, only Linux. *Done since:* CI runs on
+  Windows, Linux and macOS on every push.
 - The first release is to be the archive's first verified anchor, every key tagged
   `sieve-build-release-v1`.
 
@@ -610,7 +662,8 @@ are cheap and because they are the sort of thing that is lost otherwise.
   word streams? `lower27` throws away every capital and every mark of punctuation.
 - **Does the `scowl-en-60-names` side effect matter?** It has 130 two-letter tokens where the plain
   list had 69, so `zn`, `tb` and `pt` now pass and stand among real words on a compact shelf. The
-  fix is a new dictionary version; the call was never made.
+  fix is a new dictionary version; the call was never made. *Answered (24 October 2026):* the
+  `-names-v2` lists, the default since (§2.3).
 - **What is the vertex ceiling for models,** and what makes a textured triangle not noise? The
   hardest filter question on that line and it has no answer yet.
 - **Which font comes next** — Cyrillic, Polish and Czech need a taller one, and the 8-pixel layouts
@@ -618,7 +671,7 @@ are cheap and because they are the sort of thing that is lost otherwise.
 - **Which media types cross paths in the state space?** A cheap experiment, named and never run.
 - **How much would the reducer actually save** on a real corpus? Never measured, and it is the
   number that decides whether the key idea is worth anything (see §0).
-- **The licence.** Still nothing in the repository.
+- **The licence.** *Answered:* GNU AGPL v3 (§8).
 
 ---
 
@@ -1269,6 +1322,8 @@ manifest lacks (files named but not held, edges, metadata, a seal), and all of i
 manifest; but every `.sieve` would then have to allow for entries only some files need, and,
 Edward's rule, a file carries only what it needs. So maps stay maps, for the node graph and its
 anchors; the manifest gains nothing for them; and v5 is about carrying items more tightly.
+*Superseded (22 October 2026, §19.93):* once the head had flag bits free, a map's parts cost
+ordinary instructions nothing, and maps were folded into `.sieve` (`sieve-manifest-v18`).
 Training runs need neither: a run is a folder of ordinary files (the recipe, the corpus, the
 result), packed as ordinary Sieve instructions by the harness (SPECIFICATIONS §12.0e), so other
 `.sieve` files carry nothing of training's.
@@ -2971,7 +3026,8 @@ combinations of data, to be expanded and catalogued mathematically.
   as a picture, a page as a melody), which is the "as anything".
 
 **19.53 The plan, in order of importance (13 October 2026).** What to build next, and why in this
-order.
+order. *Superseded:* the plans in HANDOFF (24 and 27 October 2026) are the current ones; this is
+kept as the plan of its day.
 1. **The Encryption Engine, stage 1** (§19.52): asked for next. It also teaches the
    format-preserving view of every line, which the rest builds on.
 2. **Metrics for every build, charted** (§19.50): cheap, and it makes progress visible on the

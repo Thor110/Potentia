@@ -86,7 +86,7 @@ Edward, 25 October 2026: "index.sieve would be the full table ... a crawler can 
 against the table regularly, meaning that if any page or the table mismatches, we would know
 instantly". What `sieve site build` writes, and what checks it:
 - **The table**, `index.sieve` at the site's top: every file of the site by its SHA-256
-  (sieve-manifest-v18, a map). `sieve site build` prints its own SHA-256: keep it.
+  (a map: Sieve instructions with a graph part, made at the newest version). `sieve site build` prints its own SHA-256: keep it.
 - **Every plain HTML page** names the table, `<link rel="sieve-table" href="index.sieve">` (the
   path up to the site's top from where the page is).
 - **Scripts and stylesheets** the site loads (`<script src>`, `<link rel="stylesheet|modulepreload|preload">`)
