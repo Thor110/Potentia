@@ -4055,6 +4055,10 @@ order:
 5. **A release** (0.13.76, set 28 October 2026 to keep it apart from the last release) once 1 and 2 are done: the notes leading with the benchmark
    tables and the three uses (smaller archives, right-click extract, installers that check).
 6. **Then the posts,** one audience at a time (SHOWCASE-PLAN §5), Edward's video among them.
+7. **A game as a test bed** (Edward, 28 October 2026; IDEAS §19.104): once his *Alien Trilogy*
+   engine (another Claude session's work) runs normally, its small files sieved, and decoded or
+   streamed into a cache as the game asks for them. Measured first with a cache filled at start-up,
+   which needs no new version.
 
 **The macOS emails (28 October 2026).** Edward had been told by email that the macOS build was
 failing. In the last twenty runs it failed twice (runs 68 and 80), each time the same way: the
@@ -4062,7 +4066,9 @@ macOS job was never given a runner (no step ran) and was cancelled about 15 minu
 Windows and Linux passed. Both were pushes of documentation only, with green macOS runs either side
 (run 81 passed on all three). So it is GitHub's macOS runners not being had, not Sieve's code; a run
 takes about an hour and pushes often come every 15 to 30 minutes, so macOS jobs queue. The version
-is 0.13.76 from the same day, to keep the next build apart from the published release.
+is 0.13.76 from the same day, to keep the next build apart from the published release. Edward
+then asked for a new push to cancel the run still going, on all three systems: the workflow's
+`concurrency` group does it, so only the latest commit of a branch is tested.
 
 Left for later, by Edward's word or the pause: "Create .sieve" in the right-click menu (after 3's
 speed), the web dictionary's learning (it may be gathered and measured now, shipped only as a new

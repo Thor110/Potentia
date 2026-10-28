@@ -7,6 +7,13 @@ name: build
 
 on: [push, pull_request]
 
+# A new push to a branch (or a pull request) cancels its run still in progress, on all three
+# systems, so only the latest commit is tested and GitHub's runners are not kept busy with old ones
+# (Edward, 28 October 2026: macOS jobs had queued behind each other and been cancelled unstarted).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   PROJECT_DIR: Sieve
 

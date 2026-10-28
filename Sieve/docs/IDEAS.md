@@ -5155,3 +5155,24 @@ the whole stream, and would it be worth doing if not?
 - *Later, a new version (waits for the pause to end):* each rope piece its own wave (two pictures
   of different widths in one tar each with its width), and mixing as a third kind of piece, so a
   file's text is mixed while its pictures go to the rope.
+
+**19.104 A game's files, sieved, and streamed into a cache as it runs (Edward, 28 October 2026;
+planned, nothing built).** Edward has another Claude session rebuilding the engine of *Alien
+Trilogy*. Once it runs normally it is the test bed for sieving a game's small files and decoding
+them, or streaming them into a cache, as the game asks for them.
+- *Why it suits Sieve:* a game of that age is many small files (levels, sprites, sounds, palettes),
+  the sizes where the statistics show Sieve's gain is largest, and an engine of its own means the
+  loading can be changed to read from a `.sieve` with nothing else to persuade.
+- *What Sieve has towards it now:* the web host decodes one file of a `.sieve` of many by its path
+  (§19.92), checked against its own SHA-256, though the whole `.sieve` is decoded and checked first
+  and the file cut from it; Prioritise Decoding Speed leaves mixing out (enwik8 decoded in 1.8 s
+  against 148.7 s mixed); files mixed together are decoded a group at a time (up to 8 MiB, v30);
+  and Optimise Compressed Formats, temporary, carries a game's own archive as its files and makes
+  the archive again on installing (v31).
+- *What it lacks, to measure before building:* a file decoded without decoding the rest. A
+  `.sieve` decodes as a whole (its streams, its groups), so the first file costs the time of the
+  whole; a cache filled at start-up hides that, and is the first thing to try. Reading a group at a
+  time, or the listing first and each stream only when a file in it is asked for, would come next.
+  Each of those that changes what is written needs a new version, so it waits for the pause to end.
+- *What to record:* the game's files, their sizes, 7z and Sieve both ways (size, and time to first
+  file and to all), and the engine's load time from the folder against from the `.sieve`.
