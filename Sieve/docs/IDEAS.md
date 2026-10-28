@@ -34,6 +34,8 @@ and so wait; most are small, and are best gathered into one version when the pau
 - a word list with how often each word is used, for mixing (§19.102, *Next*);
 - BCJ2 for programs, where 7-Zip still leads on small folders of programs (§19.95; measure first);
 - each piece of a file its own rope wave, and mixing as a third kind of piece (§19.103);
+- the overhead on a small file packed tighter (Edward, 28 October 2026: `control.py`'s `.sieve` is 10
+  bytes over its 7z, and more than that can be taken off; the listing in bytes, §19.90, is where);
 - the other lines' places coded by the rope (§19.87, *Not yet*).
 
 **Work that needs no new version,** suited to the pause: measuring (the benchmark on public

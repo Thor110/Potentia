@@ -4013,6 +4013,48 @@ new versions, and wait. Step 4 (mixing faster when packing, "Create .sieve") nee
 bytes made are the same, and suits the pause, as do the benchmark on public data (SHOWCASE-PLAN)
 and a short `.sieve` v31 specification for independent decoders.
 
+### The plan from here (28 October 2026), while the format rests at v31
+
+Edward: "we should take a look through everything again and plan for what is next." Read from
+this file, IDEAS (its guide at the top), REVIEW, SHOWCASE-PLAN and the statistics. Nothing here
+needs a new manifest version; what does is gathered in IDEAS's list, for when the pause ends. In
+order:
+
+1. **Correctness, small and first.**
+   - *The PNG writer's settings (REVIEW, second pass, item 3).* `stb_png` sets
+     `stbi_write_png_compression_level` and `stbi_write_force_png_filter` under a lock to make a v25
+     PNG again; `encode_png` (`tools/cli/image_io.cpp`), which makes an item's PNG, reads them without
+     it. Since v30 an install decodes files at once on several threads, so an item's PNG made beside
+     a v25 PNG can come out at the other's level: other bytes, refused by its SHA-256 (the install
+     fails safe, but fails). The fix: `encode_png` takes the same lock. Not yet seen to happen;
+     reachable by reading the code.
+   - *REVIEW's smaller items:* `install_host.sh` writes the program's path into JSON unescaped; the
+     harness's trial thread can outlive the program; Firefox (`moz-extension://`) is half supported
+     (Edward to say whether Firefox is wanted).
+2. **The evidence, on Edward's machine** (STATISTICS has the tables ready):
+   - enwik9, optimised for size and prioritised for decoding, beside zip and 7z (PPMd's published
+     183,964,915 already there);
+   - Silesia, the same two ways, file by file and in all (it is mixed files, where Sieve should do
+     best; the published tables list each file);
+   - the lower edge of where Sieve wins: one text, one picture and one program cut at 1, 4, 16, 64,
+     256 and 1,024 KB, each packed by Sieve and 7z (a small script beside `compare.py`).
+   Then "where it shines" goes in the READMEs with the numbers.
+3. **The packer, measured before kept** (the same format, other choices):
+   - pieces weighed by the ways that code them (IDEAS §19.103);
+   - making faster: the ways tried for a file (LZMA2's passes, the rope's search, mixing's trial)
+     run at once where the result is the same at any thread count (IDEAS §19.99);
+   - the estimate's error, measured again on Edward's machine now the search shares are learned
+     (IDEAS §19.97).
+4. **For others to build on:** a short `.sieve` v31 specification on its own, enough for an
+   independent decoder (SHOWCASE-PLAN §1), checked against the oracle's `unpack`.
+5. **A release** (0.13.75 is set) once 1 and 2 are done: the notes leading with the benchmark
+   tables and the three uses (smaller archives, right-click extract, installers that check).
+6. **Then the posts,** one audience at a time (SHOWCASE-PLAN §5), Edward's video among them.
+
+Left for later, by Edward's word or the pause: "Create .sieve" in the right-click menu (after 3's
+speed), the web dictionary's learning (it may be gathered and measured now, shipped only as a new
+version), and the overhead on small files (a new version; Edward: not vital now).
+
 ### For the next session (27 October 2026): where the work stopped
 
 This session ran from mix-v2 (`sieve-manifest-v26`) to `sieve-manifest-v31`; its entries follow,
