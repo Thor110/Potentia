@@ -9,9 +9,21 @@ dimension
 rotation
 item
 
-The amount of time it might take to find that address? Irrelevant.
+The scope is borderline infinite: every dimension, every filter design and every combination of them is somewhere to search, for as long as anyone cares to search.
+
+Without filters, the rotation is the length of the file: a file's place on its line is its own bytes read as one number, so the four values together are as long as the file itself.
+
+A filter shortens them only when the reader already has it.
+
+A filter made for one file becomes part of that file's address, and the more filters there are to choose from, the more it costs to say which one was chosen.
+
+That is why a perfect reduction is rare, and why finding one for a real file would mean something.
+
+# Overhead
 
 There is also room for further reductions when the initial overhead instructions are eventually reduced by being packed down into a bitmask or integer list.
+
+# Sample
 
 Included is a sample file that takes 360 files from every single dimension.
 
