@@ -18,7 +18,7 @@ picture and melody as a place with an address.
 | **Install only what was meant** | Every file is checked against its SHA-256 before anything is written, so a damaged or incomplete download changes nothing on your disk. |
 | **Publish web pages that prove themselves** | A browser extension shows a site's files only when each is exactly the file its link vouches for. [Sieve Secure](Pages/secure.html) |
 | **Train a model that anyone can train again, to the bit** | A small language model trained in pinned integer arithmetic, with a record of everything it read and in what order: retraining it on any machine gives the same model. |
-| **Walk the Gallery of Babel** | Every possible page, picture, melody, film, 3D model and file, each at exactly one address, laid out as a corridor you can walk and search with filters. |
+| **Walk the hallways of the Gallery of Babel** | Every possible page, picture, melody, film, 3D model and file, each at exactly one address, laid out as a corridor you can walk and search with filters. |
 
 ## Try it
 
@@ -43,8 +43,7 @@ The same exactness serves the archive: a **Museum of Human Creations**, each wor
 its bytes, and the **Gallery of Babel** around it, every possible work at one address, searched
 outwards from the real ones with filters that set noise aside without ever visiting it.
 
-The full argument, the evidence behind it, and the design of the Gallery's filtration layers are
-in **[VISION.md](VISION.md)**.
+The full argument, the evidence behind it, and the design of the Gallery's filtration layers are in **[VISION.md](VISION.md)** and the Proof folder.
 
 ## Where it stands
 
@@ -74,7 +73,7 @@ environment, the Museum and the reconstruction tools set out in the vision.
 - **[VISION.md](VISION.md)**: why Potentia exists and what it is meant to become.
 - **[Sieve Secure](Pages/secure.html)**: the web extension, with a live test site.
 - **[Previous](Previous/)**: earlier versions of these documents.
-- A controlled study of how language models invent things that do not exist:
+- A controlled study of how and why language models invent things that do not exist:
   [Non-Existent-Data-LLM-Stress-Testing](https://github.com/thor110/Non-Existent-Data-LLM-Stress-Testing).
 
 ## Contributing
@@ -94,8 +93,7 @@ GNU AGPL v3.0.
 
 Special thanks to Llama 3.3-307B-Instruct for early refinement of the concept
 ([conversation logs](https://hf.co/chat/r/1gJTQ7w?leafId=21fc542d-b68e-42d4-8a9e-723e0d0bef63)).
-The idea was refined further in discussions with GPT5 and Gemini3. Sieve was built with Claude
-Opus 5.5, based on my specifications.
+The idea was refined further in discussions with GPT5 and Gemini3. Sieve was built with Claude Opus 5.5, based on my specifications.
 
 ## Changelog
 

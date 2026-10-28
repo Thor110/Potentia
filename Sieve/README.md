@@ -1,7 +1,6 @@
 # Sieve
 
-*Packs, checks and unpacks files exactly; and gives every possible text, picture, melody and file
-an exact address.*
+*Packs, checks and unpacks files exactly; and gives every possible text, picture, melody and file an exact address.*
 
 Sieve is the working part of [Potentia](../README.md). It is one command-line tool (`sieve`), a
 small installer (`sieve-install`), a right-click menu, a browser extension, and the **hallway**, a
@@ -101,7 +100,7 @@ sieve read --length 32 --mode scrambled 007b30165818bf0311497600aa52996f9395e27
 ```
 
 Every possible page of text, picture, melody, film, 3D model, language model and file has exactly
-one address, worked out in exact integer arithmetic and the same on every machine. Filters set the
+one address, worked out in exact integer arithmetic and is the same on every machine. Filters set the
 noise aside without visiting it: they count exactly how much of a line survives, and number the
 survivors. The **hallway** lays it all out as a corridor of bookcases to walk; its setup menu sets
 each line's shape and filters. A *guided* ordering gives likely text short addresses (about 2 bits
