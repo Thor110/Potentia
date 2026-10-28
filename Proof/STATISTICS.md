@@ -79,7 +79,9 @@ the largest, which Sieve finds and carries as masks over it.
 `enwik8`, the file of the [Large Text Compression Benchmark](https://www.mattmahoney.net/dc/text.html)
 and the Hutter Prize: 100,000,000 bytes of Wikipedia's XML. Anyone can download it and repeat this.
 Measured on Edward's machine (Windows; an 11th Gen Intel Core i5-11400F, 6 cores and 12 logical
-processors, 32 GB of memory), 28 October 2026, at `sieve-manifest-v31`.
+processors, 32 GB of memory), 28 October 2026, at `sieve-manifest-v31`, made in the File Locator
+with **Try every way** ticked (so the file was mixed whole: without it, mixing is tried only on
+files of 4 KiB to 16 MiB).
 
 | Method | Bytes | Ratio | Of the file | Against 7z | Make | Unpack |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |

@@ -12,6 +12,8 @@ Unzip over the repository root. Committed locally (not pushed). Documentation on
   latter added to the list that waits for the format's pause to end.
 - `Sieve/docs/SHOWCASE-PLAN.md`: enwik8 marked done.
 - `Sieve/docs/HANDOFF.md`: both noted in this session's entry.
+- Since: enwik8 made with Try every way ticked (said so under its table); SHOWCASE-PLAN says
+  nothing is posted until enwik9 and Silesia are measured.
 
 ## Files
 - `Proof/STATISTICS.md`

@@ -118,7 +118,9 @@ for those who stay.
   would let others read `.sieve` freely. Not a recommendation to change anything, only the question
   adopters will ask.
 
-**Where it stands (28 October 2026).** Edward has joined encode.su. Before posting there, the
+**Where it stands (28 October 2026).** Edward has joined encode.su, and will post nothing there or
+elsewhere until enwik9 and Silesia are measured too, beside enwik8 (Proof/STATISTICS.md). Before
+posting there, the
 Silesia and enwik8 tables (§2) are what that forum will ask for first, beside paq8px and cmix, and
 every public page it may follow a link to should agree with §0 of IDEAS (an address is as long as
 what it names), since that is the first thing a reader there will test.
