@@ -186,6 +186,7 @@ private:
     std::chrono::steady_clock::time_point est_work_start_{}, est_pack_start_{}, est_weigh_start_{}, est_ticked_{};
     double est_pack_share_seen_ = -1; // this run's packing: the share of its search's limit it used
     double last_took_ = -1;           // the last job's time, shown under the graph once it is done
+    double read_took_ = -1;           // the last reading's whole time (its search with it), for a save that packs nothing again
     void refine_estimate(size_t steps_done); // after step steps_done - 1 is done; under no lock
     void tick_estimate();                    // while packing: the search's part again, as its files are done; under no lock
     void estimate_now(double remaining);     // under mx_
@@ -206,6 +207,7 @@ private:
     SDL_Texture* graph_ = nullptr;
     int graph_w_ = 0, graph_h_ = 0;
     double graph_span_ = 10;       // seconds across
+    double graph_best_at_ = -1;    // when the last best so far came, seconds into the job
     float graph_x_ = -1, graph_y_ = -1;
     double graph_of_ = -1;
     double graph_first_ = 1;    // the step's first try (a share), which its line starts from at the top

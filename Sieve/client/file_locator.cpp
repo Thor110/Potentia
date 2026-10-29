@@ -70,6 +70,18 @@ using Clock = std::chrono::steady_clock;
 
 double since(Clock::time_point t) { return std::chrono::duration<double>(Clock::now() - t).count(); }
 
+std::string duration_text(double s);
+
+// A job's time as the status says it when it is done: past a minute, its seconds as well, so a
+// time can be written down exactly (STATISTICS) and not only to the minute.
+std::string duration_exact(double s)
+{
+    if (s < 60) return duration_text(s);
+    char b[32];
+    std::snprintf(b, sizeof b, " (%.1f s)", s);
+    return duration_text(s) + b;
+}
+
 std::string duration_text(double s)
 {
     char b[64];
@@ -423,10 +435,10 @@ void FileLocator::learn_shares(bool stopped)
 std::string FileLocator::finish_job()
 {
     const double took = since(job_started_);
-    std::string t = job_estimate_ < 0 ? trf("loc.took", {duration_text(took)})
+    std::string t = job_estimate_ < 0 ? trf("loc.took", {duration_exact(took)})
                     : est_first_ >= 0 && std::abs(est_first_ - job_estimate_) >= 1
-                        ? trf("loc.took.refined", {duration_text(took), duration_text(est_first_), duration_text(job_estimate_)})
-                        : trf("loc.took.estimated", {duration_text(took), duration_text(job_estimate_)});
+                        ? trf("loc.took.refined", {duration_exact(took), duration_text(est_first_), duration_text(job_estimate_)})
+                        : trf("loc.took.estimated", {duration_exact(took), duration_text(job_estimate_)});
     job_estimate_ = -1;
     last_took_ = took;
     est_on_ = false;
@@ -828,6 +840,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
         result_ = std::move(r);
         relink_search(); // the files counted may have changed
         status_ = finish_job();
+        read_took_ = last_took_; // (the reading's whole time, the search with it: a save after it says it too)
         busy_ = false;
     };
     if (sync) job();
@@ -911,6 +924,9 @@ void FileLocator::save(const std::string& to)
         }
         std::lock_guard<std::mutex> lock(mx_);
         status_ = done + "; " + finish_job();
+        // A save that packed nothing again took seconds: the time that made the instructions, the
+        // search with it, was the reading's, said beside it (else only the save's was shown).
+        if (made && read_took_ >= 0) status_ += "; " + trf("loc.took.reading", {duration_exact(read_took_)});
         busy_ = false;
     });
 }
@@ -1112,15 +1128,34 @@ void FileLocator::draw(float W, float H)
     draw_text(r_, 20, 16, tr("loc.title"), 3, ink);
     draw_text(r_, 20, 48, fit_text(tr("loc.subtitle"), W - 40, 1), 1, grey);
     buttons_.clear();
-    float bx = 20, row = 0; // (the buttons wrap onto a row below where the window is too narrow)
+    // (A top button the window is too narrow for goes up beside the title, at its right, where there
+    // is room; else onto a row below, and what is under them starts that much lower. Every later
+    // button is placed where it is asked to be.)
+    float bx = 20, row = 0, title_x = W - 20;
+    const float title_end = 20 + text_width(tr("loc.title"), 3) + 24;
+    bool wrap = true;
     auto button = [&](const std::string& id, const std::string& label, float y, bool enabled = true) {
         const float w = text_width(label, 2) + 24;
-        if (bx > 20 && bx + w > W - 20)
+        float at_y = y + row;
+        const float keep_bx = bx;
+        bool beside_title = false;
+        if (wrap && bx > 20 && bx + w > W - 20)
         {
-            bx = 20;
-            row += 40;
+            if (title_x - w >= title_end)
+            {
+                beside_title = true;
+                bx = title_x - w;
+                title_x -= w + 12;
+                at_y = 10;
+            }
+            else
+            {
+                bx = 20;
+                row += 40;
+                at_y = y + row;
+            }
         }
-        const SDL_FRect r{bx, y + row, w, 30};
+        const SDL_FRect r{bx, at_y, w, 30};
         const bool hot = mouse_x_ >= r.x && mouse_x_ < r.x + r.w && mouse_y_ >= r.y && mouse_y_ < r.y + r.h;
         SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, hot && enabled ? 60 : 20);
         SDL_RenderFillRect(r_, &r);
@@ -1128,7 +1163,7 @@ void FileLocator::draw(float W, float H)
         SDL_RenderRect(r_, &r);
         draw_text(r_, r.x + 12, r.y + 7, label, 2, enabled ? white : grey);
         if (enabled) buttons_.emplace_back(r, id);
-        bx += w + 12;
+        bx = beside_title ? keep_bx : bx + w + 12;
     };
     const bool busy = busy_;
     button("file", tr("loc.choose_file"), 76, !busy);
@@ -1144,6 +1179,8 @@ void FileLocator::draw(float W, float H)
         row -= 40; // (as before: the text starts below it, at 126)
     }
     float y = 126 + row;
+    row = 0;
+    wrap = false;
     std::string status;
     {
         std::lock_guard<std::mutex> lock(mx_);
@@ -1371,9 +1408,11 @@ void FileLocator::draw_graph(float x, float y, float w, float h, SDL_Color ink, 
         graph_step_.clear();
         graph_steps_.clear();
         graph_drawn_ = false;
+        graph_best_at_ = -1;
     }
     for (const GraphPoint& p : points)
     {
+        graph_best_at_ = std::max(graph_best_at_, p.seconds);
         if (!graph_drawn_ && estimate > 0) graph_span_ = std::max(graph_span_, estimate * 1.1);
         while (p.seconds > graph_span_)
         {
@@ -1453,9 +1492,15 @@ void FileLocator::draw_graph(float x, float y, float w, float h, SDL_Color ink, 
     std::string across = trf("loc.graph.across", {duration_text(graph_span_)});
     if (estimate > 0) across = trf("loc.graph.estimate", {duration_text(estimate)}) + "   " + across;
     else if (took >= 0) across = trf("loc.graph.took", {duration_text(took)}) + "   " + across;
-    draw_text(r_, x + w - text_width(across, 1), y + h + 4, across, 1, grey);
+    // When the last best so far came: the time to the result kept, beside the time the job took
+    // (the search goes on, to its limit, after its last improvement).
+    if (graph_best_at_ >= 0) across = trf("loc.graph.best_at", {duration_text(graph_best_at_)}) + "   " + across;
+    // (On a line of its own under the depth where the two do not fit side by side.)
+    const bool own_line = text_width(bottom, 1) + 16 + text_width(across, 1) > w;
+    const float across_w = own_line ? 0 : text_width(across, 1);
+    draw_text(r_, x + w - std::min(w, text_width(across, 1)), y + h + (own_line ? 17 : 4), fit_text(across, w, 1), 1, grey);
     float lx = x + text_width(bottom, 1) + 16;
-    for (size_t k = 0; k < graph_steps_.size() && lx + text_width(graph_steps_[k], 1) < x + w - text_width(across, 1) - 16; ++k)
+    for (size_t k = 0; k < graph_steps_.size() && lx + text_width(graph_steps_[k], 1) < x + w - across_w - 16; ++k)
     {
         const SDL_Color c = kColours[k % (sizeof kColours / sizeof kColours[0])];
         draw_text(r_, lx, y + h + 4, graph_steps_[k], 1, c);

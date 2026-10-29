@@ -578,6 +578,7 @@ loc.graph.bottom = {0}% smaller
 loc.graph.across = {0} across
 loc.graph.estimate = estimate: {0}
 loc.graph.took = took: {0}
+loc.graph.best_at = last new best: {0}
 loc.stop = Stop (keep the best so far)
 loc.stop.pressed = Stopping...
 loc.force = Force stop (the last finished result)
@@ -590,6 +591,7 @@ loc.save.made = writing the instructions made when it was read (the same setting
 loc.save.made.stopped = writing the instructions made when it was read, as they were when it was stopped: nothing packed again
 loc.took.estimated = took {0} (estimated {1})
 loc.took.refined = took {0} (estimated {1} at first, {2} as it went)
+loc.took.reading = reading it (the search with it) took {0}
 loc.filters_kept = the tailored filters are saved: the next hallway built uses them
 loc.filters_not_saved = the tailored filters could not be saved ({0}): they are kept for this session
 
