@@ -227,7 +227,7 @@ it; the oracle (`reference/sieve_ref.py unpack`) unpacks v4 with Python's own lz
 - `sieve-install` is built on a trimmed SDL of its own (`SIEVE_SMALL_INSTALLER`, on by default).
   Since 24 October 2026 it is the full installer, carrying the lines' code and the compressors so
   that it installs anything Sieve makes: measured on Linux (Release), 2,227,000 bytes before and
-  5,209,160 after; Windows not measured yet (about 4.9 MB before). That is the fixed cost of every
+  5,209,160 after; on Windows 4,497,408 (Edward's WoWRevived installer, 28 October 2026). That is the fixed cost of every
   installer program.
 - For a small folder, that fixed cost is most of the program. Hand out the `.sieve` file on its
   own instead, when the other person already has `sieve-install`.

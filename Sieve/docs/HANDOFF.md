@@ -4055,6 +4055,8 @@ order:
      run at once where the result is the same at any thread count (IDEAS §19.99); *done the same
      day for a folder: its files worked on several at once, the same bytes at any thread count
      (`docs`, 33 files: 40.8 s → 20.1 s); a single file's time is now mixing's own;*
+   - mixing faster with the same codes (IDEAS §19.102, *done the same day*: the mixers' sums and
+     training in SSE2, exactly; 13.9% fewer instructions, every code the same);
    - the estimate's error, measured again on Edward's machine now the search shares are learned
      (IDEAS §19.97).
 4. **For others to build on:** a short `.sieve` v31 specification on its own, enough for an
@@ -4081,6 +4083,13 @@ takes about an hour and pushes often come every 15 to 30 minutes, so macOS jobs 
 is 0.13.76 from the same day, to keep the next build apart from the published release. Edward
 then asked for a new push to cancel the run still going, on all three systems: the workflow's
 `concurrency` group does it, so only the latest commit of a branch is tested.
+
+**WoWRevived, the first large real test (28 October 2026).** Edward's release (1.43 GB, mostly films
+and music) came to 0.20% over 7z, and its installer went to 12 GB of memory. Found and fixed the
+same day (IDEAS §19.105): a `.sieve` read and made through a number the file's size, and the rope's
+coder holding every byte as 64 bits; the same bytes, installing in a fifth of the memory and making
+in a third. Its figures are in
+Proof/STATISTICS.md.
 
 Left for later, by Edward's word or the pause: "Create .sieve" in the right-click menu (after 3's
 speed), the web dictionary's learning (it may be gathered and measured now, shipped only as a new

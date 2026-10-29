@@ -2507,11 +2507,11 @@ int cmd_locate(const Args& a)
             else pack_with_items(a, m, fs::absolute(target).parent_path(), rep);
             if ((a.has("installer") || a.has("program")) && m.packed) std::cout << pack_report_text(rep, m.bytes);
             const std::vector<uint8_t> ibytes = m.file();
-            const BigUint iaddr = binary_address(ibytes);
+            const std::vector<uint8_t> iraw = raw_of_file(ibytes); // (its address's raw bytes, with no number made)
             if (a.has("installer"))
             {
                 const std::string o = a.get("installer");
-                write_address_file(fs::path(std::u8string(o.begin(), o.end())), iaddr, a.has("hex"));
+                write_raw_address_file(fs::path(std::u8string(o.begin(), o.end())), iraw, a.has("hex"));
                 std::cout << "installer " << o << ": Sieve instructions for the file (its name, size and SHA-256, then its bytes"
                           << (m.items ? std::string(", as an item of a line: ") + m.version() : m.packed ? ", packed: sieve-manifest-v4" : ", as they are: sieve-manifest-v3") << "), as " << (a.has("hex") ? "hex" : "raw bytes") << "\n";
             }
@@ -2520,7 +2520,7 @@ int cmd_locate(const Args& a)
                 const std::string o = a.get("program");
                 const auto stub = installer_program_beside(own_executable(g_argv0).parent_path());
                 if (!stub) throw std::runtime_error("--program needs sieve-install beside sieve (build it with the client)");
-                write_installer_program(*stub, iaddr, fs::path(std::u8string(o.begin(), o.end())));
+                write_installer_program(*stub, iraw, fs::path(std::u8string(o.begin(), o.end())));
                 std::cout << "program   " << o << ": sieve-install with the instructions attached; run it to install\n";
             }
             if (a.has("compare"))
@@ -2528,8 +2528,8 @@ int cmd_locate(const Args& a)
                 cmp.manifest = ibytes.size();
                 cmp.manifest_deflate = deflate_size(ibytes);
                 cmp.manifest_lzma2 = lzma2_size(ibytes);
-                cmp.installer_hex = iaddr.is_zero() ? 1 : iaddr.to_hex().size();
-                cmp.installer_raw = address_bytes(iaddr);
+                cmp.installer_hex = raw_hex_digits(iraw);
+                cmp.installer_raw = iraw.size();
                 cmp.packed = m.packed;
                 cmp.version = m.version();
             }
@@ -2561,7 +2561,7 @@ int cmd_locate(const Args& a)
         add_files(inst);
     }
     const std::vector<uint8_t> ibytes = !installer ? std::vector<uint8_t>{} : m.with_contents ? mbytes : inst.file();
-    const BigUint maddr = binary_address(mbytes);
+    const std::vector<uint8_t> mraw = raw_of_file(mbytes); // (the manifest's address's raw bytes, with no number made)
     // The manifest to --manifest, or to standard output (a v3 manifest's text part only: its
     // files' bytes are no use on a terminal); what it says about itself to standard error when
     // the manifest is on standard output, so the two never mix.
@@ -2584,7 +2584,7 @@ int cmd_locate(const Args& a)
     if (m.skipped) *info << " (" << m.skipped << " links and other entries skipped)";
     *info << "\nmanifest  " << text.substr(0, text.find('\n')) << ", " << mbytes.size() << " bytes" << (a.has("manifest") ? ", written to " + a.get("manifest") : std::string())
           << "\nsha256    " << sha256_hex(mbytes) << (m.with_addresses || m.with_contents ? "\n" : "  (the tree's identity)\n")
-          << "address   " << (maddr.is_zero() ? 1 : maddr.to_hex().size()) << " hex digits: the manifest's own place on the binary line\n";
+          << "address   " << raw_hex_digits(mraw) << " hex digits: the manifest's own place on the binary line\n";
     // Every file's address, as <DIR>/<path>.hex, and the comparison over all of them.
     const fs::path root = fs::absolute(target).lexically_normal();
     std::vector<uint8_t> all; // every file, in manifest order, for the solid LZMA2 stream
@@ -2619,7 +2619,8 @@ int cmd_locate(const Args& a)
         }
         if (a.has("addresses")) *info << "addresses " << m.files << " files' addresses written under " << d << "\n";
     }
-    const BigUint iaddr = installer ? (m.with_contents ? maddr : binary_address(ibytes)) : BigUint();
+    const std::vector<uint8_t> iraw_own = installer && !m.with_contents ? raw_of_file(ibytes) : std::vector<uint8_t>{};
+    const std::vector<uint8_t>& iraw = m.with_contents ? mraw : iraw_own;
     if (installer && !a.has("v3")) *info << pack_report_text(rep, m.bytes);
     if (a.has("program"))
     {
@@ -2627,7 +2628,7 @@ int cmd_locate(const Args& a)
         const std::string o = a.get("program");
         const auto stub = installer_program_beside(own_executable(g_argv0).parent_path());
         if (!stub) throw std::runtime_error("--program needs sieve-install beside sieve (build it with the client)");
-        write_installer_program(*stub, iaddr, fs::path(std::u8string(o.begin(), o.end())));
+        write_installer_program(*stub, iraw, fs::path(std::u8string(o.begin(), o.end())));
         *info << "program   " << o << ": sieve-install with the installer attached (" << fs::file_size(fs::path(std::u8string(o.begin(), o.end())))
               << " bytes); run it to install\n";
         std::error_code ec;
@@ -2638,7 +2639,7 @@ int cmd_locate(const Args& a)
     if (a.has("installer"))
     {
         const std::string o = a.get("installer");
-        write_address_file(fs::path(std::u8string(o.begin(), o.end())), iaddr, a.has("hex"));
+        write_raw_address_file(fs::path(std::u8string(o.begin(), o.end())), iraw, a.has("hex"));
         *info << "installer " << o << ": the address of the installer's manifest (" << (!(m.with_contents ? m.packed : inst.packed) ? "v3: the listing, then every file's bytes"
                                     : (m.with_contents ? m.v31 : inst.v31) ? "v31: as v30, and archives made again from their skeleton with their files carried apart"
                                     : (m.with_contents ? m.v30 : inst.v30) ? "v30: as v29, and files mixed together in groups, decoded at once"
@@ -2680,8 +2681,8 @@ int cmd_locate(const Args& a)
             cmp.manifest = ibytes.size();
             cmp.manifest_deflate = deflate_size(ibytes);
             cmp.manifest_lzma2 = lzma2_size(ibytes);
-            cmp.installer_hex = iaddr.is_zero() ? 1 : iaddr.to_hex().size();
-            cmp.installer_raw = address_bytes(iaddr);
+            cmp.installer_hex = raw_hex_digits(iraw);
+            cmp.installer_raw = iraw.size();
             cmp.packed = m.with_contents ? m.packed : inst.packed;
             {
                 const Manifest& made = m.with_contents ? m : inst;

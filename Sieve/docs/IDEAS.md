@@ -5147,6 +5147,35 @@ measured on this repository's own files.
 - *Next:* a word list with how often each word is used
   (SCOWL has none; a frequency list would be a new pinned file); and more generators as they turn
   up (zlib's PNGs remade by zlib itself where it can, without preflate's difference).
+- **Mixing made faster, the same codes (28 October 2026; Edward: "make a start on all of that").**
+  Mixing is a single file's floor (enwik8: 109 s to make, 149 s to unpack), and it codes and decodes
+  alike, so a gain is both. The rule: every code the same, byte for byte; anything that changes what
+  mixing predicts is a new version and waits.
+  - *Measured first.* A set of five (`IDEAS.md` as prose, with and without the word list; SCOWL's
+    80 list; a tar of `tools/cli`; the Vitruvian picture as 560 × 767 RGB pixels), coded and decoded
+    on one thread, each code's SHA-256 kept as the guard. Profiled with callgrind on 128 KiB of the
+    prose (`perf` was not to be had): about 1,590 instructions a bit, of which the mixers' two sums
+    (`dot`) 16.4% and their training about 20%, each done an input at a time (the products need 64
+    bits, and SSE2 has no 32-bit multiply, so no compiler vectorises them at the plain x86-64 the
+    build is for); moving the counters about a quarter, 2.9% of it the check, on every call, that a
+    function's `static` table was made.
+  - *Done.* The sums and the training in SSE2 (every x86-64 has it), eight inputs at a time and
+    exactly: an input is within ±2,047 and a weight within ±2^22, so a weight is split into its high
+    part (w >> 11) and its low part (11 bits), each 16 bits, and `pmaddwd` sums each against the
+    inputs in 32 bits, the two meeting in 64; training's input times error (within ±2^24) is joined
+    from two 16-bit multiplies, shifted and held as before. The inputs padded to eight (those past
+    the last are 0, so they add nothing and change no weight). The reciprocals' table made when the
+    program is built, the stretch and squash tables before it starts, so no call checks them. Other
+    machines (ARM) keep the plain loops; the unit tests pin mixing's codes by their SHA-256 (a text,
+    with the word list, a picture: mix-v2, v3 and v4), and the CI runs them on Windows and Linux
+    (SSE2) and macOS (ARM, the plain loops), so both are held to the same codes.
+  - *Measured after:* on the 128 KiB, instructions 1,666,867,467 → 1,434,774,488 (13.9% fewer), data
+    reads 514 → 381 million, cache misses the same (so mixing is bound by its instructions more than
+    by memory here). Every code of the five the same SHA-256. Wall-clock time on this shared machine
+    moved by more than the gain from run to run (coding about 9% faster over three runs each, decoding
+    within the noise), so the time is Edward's to measure: `sieve mix FILE` gives both.
+  - *Left:* the counters' moving (a quarter now): each needs a 64-bit multiply and the counters lie
+    apart, so gathering them for SSE2 may cost what it saves; measure before trying.
 
 **19.103 Pieces weighed by the ways that code them (Edward, 28 October 2026; an idea, nothing
 built).** His question: is the rope checked against each of LZMA2's pieces on its own, or against
@@ -5212,3 +5241,33 @@ them, or streaming them into a cache, as the game asks for them.
   Each of those that changes what is written needs a new version, so it waits for the pause to end.
 - *What to record:* the game's files, their sizes, 7z and Sieve both ways (size, and time to first
   file and to all), and the engine's load time from the folder against from the `.sieve`.
+
+**19.105 A gigabyte's instructions, read and made in proportion (Edward, 28 October 2026; built).**
+Edward's WoWRevived release (1,426,355,971 bytes, mostly films and music already compressed;
+Proof/STATISTICS.md) came to 1,075,924,966 bytes as `.sieve`, 0.20% over 7z, and its installer
+program went to 6 to 12 GB of memory and stopped answering while it read the file. Measured here on
+a folder made like it (377 MB: three 125 MB files of noise and this repository's docs):
+- *Reading a `.sieve`:* the file's bytes were made into hex text (twice their size), the text into
+  one number, the number back into the manifest's bytes; `sieve-install` did it twice, once to see
+  whether anything was attached to it (on its window's thread) and again to read it. The manifest is
+  only the file's bytes with 1 taken from each, borrowed from the last (SIEVE-FORMAT §1), so it is
+  now done in place in one pass (`file_of_raw`, and `raw_of_file` the other way for every writer:
+  `sieve locate`, the File Locator, sites, maps, training runs, items and music); whether a program
+  has one attached is read from its last 24 bytes. The same bytes either way: 85,807 files and raw
+  strings (every one of up to two bytes) read and made both ways and compared.
+- *The rope's coder:* it held each value as 64 bits in five arrays the file's length (the values,
+  what the wave leaves, the positions, the segments, the rope), so a file of bytes took about 40
+  times its size to decode and the search's estimates as much each time. Now values are read where
+  they lie (encoding, estimating) or held at their own width (decoding, into the output itself), and
+  the positions, segments and rope are made only where kept values or columns need them. The same
+  codes and estimates: 100 files and settings (every version's ways, keep, columns, groups, the byte
+  above, the triangle, 8, 16 and 32 bits) coded, estimated and read back, against the old build's.
+- *Measured, the 377 MB folder:* installing 63 s and 11.5 GB at most → 13.6 s and 2.4 GB; making
+  205 s and 11.8 GB → 182 s and 4.1 GB. The 42 MB one: installing 1.9 GB → 325 MB. Made with the
+  search unlimited, this repository's docs come out byte for byte as before (and in 19.7 s against
+  23.0); with a time limit the search gets further in its time now, so a `.sieve` may come out a
+  few bytes smaller (the 377 MB folder: 11).
+- *Left:* `sieve-install` still reads a file on its window's thread (now seconds, not a minute, but
+  the window does not answer meanwhile); a file's LZMA2 estimate takes most of making a large
+  incompressible one (112 s of 139 on a 125 MB file, at about 1.1 MB/s); and where WoWRevived's
+  0.20% against 7z is, file by file.

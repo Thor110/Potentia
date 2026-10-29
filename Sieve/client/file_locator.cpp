@@ -115,11 +115,9 @@ Steps sample_seconds(const std::vector<uint8_t>& sample, const fs::path& name, c
         out[k] += since(t0);
         t0 = Clock::now();
     };
-    BigUint a;
     {
         const T t("estimate.address");
-        a = cli::binary_address(sample);
-        (void)a.to_hex();
+        (void)cli::raw_summary(sample, 24);
     }
     {
         const T t("estimate.sha256");
@@ -145,10 +143,9 @@ Steps sample_seconds(const std::vector<uint8_t>& sample, const fs::path& name, c
     {
         const T t("estimate.instructions-compared");
         const std::vector<uint8_t> mb = fi.file();
-        const BigUint ma = cli::binary_address(mb);
         (void)cli::deflate_size(mb);
         (void)cli::lzma2_size(mb);
-        (void)ma.to_hex();
+        (void)cli::raw_of_file(mb);
     }
     next(4);
     {
@@ -176,11 +173,6 @@ std::vector<uint8_t> spread_of(const fs::path& file, uint64_t size, size_t slice
         out.insert(out.end(), buf.begin(), buf.begin() + std::ptrdiff_t(in.gcount()));
     }
     return out;
-}
-
-std::string head_tail(const std::string& h, size_t each)
-{
-    return h.size() <= 2 * each + 3 ? h : h.substr(0, each) + "..." + h.substr(h.size() - each);
 }
 
 void SDLCALL on_picked(void* user, const char* const* files, int)
@@ -611,11 +603,12 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 progress("reading it, its address and its SHA-256");
                 using T = cli::timings::Scope; // each step as the estimate times it ("estimate.*")
                 r.bytes = cli::read_file_bytes(p);
-                BigUint a;
+                cli::RawSummary a;
                 {
                     const T t("locator.address");
-                    a = cli::binary_address(r.bytes);
-                    r.hex = a.is_zero() ? "0" : a.to_hex();
+                    a = cli::raw_summary(r.bytes, 24);
+                    r.hex = a.hex;
+                    r.hex_digits = a.hex_digits;
                 }
                 {
                     const T t("locator.sha256");
@@ -635,8 +628,8 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                     c.lzma2 = measured(cli::lzma2_size, r.bytes);
                 }
                 refine_estimate(3);
-                c.address_bytes = (a.bit_length() + 7) / 8;
-                c.address_hex = a.is_zero() ? 0 : r.hex.size();
+                c.address_bytes = a.bytes;
+                c.address_hex = a.bytes ? a.hex_digits : 0;
                 // Its Sieve instructions, as a folder's: its name, size and SHA-256, then its bytes.
                 r.manifest = cli::manifest_of_file(p);
                 progress("packing its Sieve instructions");
@@ -648,19 +641,19 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 r.pack_seconds = since(packing);
                 refine_estimate(4);
                 const T tc("locator.instructions-compared");
-                const std::vector<uint8_t> mb = fi.file();
+                std::vector<uint8_t> mb = fi.file();
                 c.packed = fi.packed;
                 c.version = fi.version();
-                progress("the instructions' address");
-                BigUint ma = cli::binary_address(mb);
                 c.manifest = mb.size();
-                progress("Sieve instructions of " + std::to_string((ma.bit_length() + 7) / 8) + " bytes; what zip and 7z make of them");
+                progress("Sieve instructions of " + std::to_string(cli::raw_summary(mb, 24).bytes) + " bytes; what zip and 7z make of them");
                 c.manifest_deflate = measured(cli::deflate_size, mb);
                 c.manifest_lzma2 = measured(cli::lzma2_size, mb);
-                c.installer_hex = ma.is_zero() ? 1 : ma.to_hex().size();
-                c.installer_raw = (ma.bit_length() + 7) / 8;
+                progress("the instructions' address");
+                std::vector<uint8_t> raw = cli::raw_of_file(std::move(mb));
+                c.installer_hex = cli::raw_hex_digits(raw);
+                c.installer_raw = raw.size();
                 r.instructions = std::move(fi);
-                r.instructions_address = std::move(ma);
+                r.instructions_raw = std::move(raw);
                 r.made_rope_seconds = by_total ? total : per_file;
                 r.made_archives = boxes;
                 r.made_every = sieve::rope_search_every_wave();
@@ -690,11 +683,11 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 {
                     if (e.dir) continue;
                     const auto bytes = cli::read_file_bytes(p / from_u8(e.path));
-                    const BigUint a = cli::binary_address(bytes);
+                    const cli::RawSummary a = cli::raw_summary(bytes, 24);
                     c.original += bytes.size();
                     c.deflate = plus(c.deflate, measured(cli::deflate_size, bytes));
-                    c.address_bytes += (a.bit_length() + 7) / 8;
-                    c.address_hex += a.is_zero() ? 0 : a.to_hex().size();
+                    c.address_bytes += a.bytes;
+                    c.address_hex += a.bytes ? a.hex_digits : 0;
                     all.insert(all.end(), bytes.begin(), bytes.end());
                 }
                 refine_estimate(2);
@@ -717,17 +710,17 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 refine_estimate(4);
                 c.packed = with.packed;
                 c.version = with.version();
-                const std::vector<uint8_t> mb = with.file();
-                progress("the instructions' address");
-                BigUint ma = cli::binary_address(mb);
+                std::vector<uint8_t> mb = with.file();
                 c.manifest = mb.size();
-                progress("Sieve instructions of " + std::to_string((ma.bit_length() + 7) / 8) + " bytes; what zip and 7z make of them");
+                progress("Sieve instructions of " + std::to_string(cli::raw_summary(mb, 24).bytes) + " bytes; what zip and 7z make of them");
                 c.manifest_deflate = measured(cli::deflate_size, mb);
                 c.manifest_lzma2 = measured(cli::lzma2_size, mb);
-                c.installer_hex = ma.is_zero() ? 1 : ma.to_hex().size();
-                c.installer_raw = (ma.bit_length() + 7) / 8;
+                progress("the instructions' address");
+                std::vector<uint8_t> raw = cli::raw_of_file(std::move(mb));
+                c.installer_hex = cli::raw_hex_digits(raw);
+                c.installer_raw = raw.size();
                 r.instructions = std::move(with);
-                r.instructions_address = std::move(ma);
+                r.instructions_raw = std::move(raw);
                 r.made_archives = boxes;
                 r.made_every = sieve::rope_search_every_wave();
                 r.made_decoding = sieve::prioritise_decoding();
@@ -839,23 +832,23 @@ void FileLocator::save(const std::string& to)
         {
             const fs::path out = from_u8(to);
             {
-                BigUint address;
-                if (made) address = r.instructions_address;
-                else
+                std::vector<uint8_t> fresh; // (made again here, where the settings changed since it was read)
+                if (!made)
                 {
                     // A file's instructions are a folder's holding just it (file_instructions).
                     const cli::Args items = host_.item_args ? host_.item_args() : cli::Args{};
                     cli::Manifest with = r.kind == Result::File ? file_instructions(from_u8(r.path), r.bytes, items, rope_seconds, archives) : r.manifest;
                     if (r.kind != Result::File) cli::add_packed_items(with, from_u8(r.path), items, nullptr, 8, false, rope_seconds, cli::kNewestRope, true, true, archives);
                     progress("the instructions' address");
-                    address = cli::binary_address(with.file());
+                    fresh = cli::raw_of_file(with.file());
                 }
+                const std::vector<uint8_t>& raw = made ? r.instructions_raw : fresh;
                 progress("writing them");
                 // The installer on its own (for anyone with Sieve: sieve install, or sieve-install),
                 // or an installer program, sieve-install with it attached, one file for anyone.
                 if (what == 4)
                 {
-                    cli::write_address_file(out, address, false);
+                    cli::write_raw_address_file(out, raw, false);
                     done = trf("loc.saved.installer", {to});
                 }
                 else
@@ -863,7 +856,7 @@ void FileLocator::save(const std::string& to)
                     const char* base = SDL_GetBasePath();
                     const auto stub = cli::installer_program_beside(base ? from_u8(base) : fs::current_path());
                     if (!stub) throw std::runtime_error(tr("loc.no_installer_program"));
-                    cli::write_installer_program(*stub, address, out);
+                    cli::write_installer_program(*stub, raw, out);
                     done = trf("loc.saved.program", {to});
                 }
             }
@@ -1159,7 +1152,7 @@ void FileLocator::draw(float W, float H)
             line(tr("loc.file"), r.path);
             line(tr("loc.bytes"), std::to_string(r.bytes.size()));
             line(tr("loc.sha256"), r.sha256);
-            line(tr("loc.address"), trf("loc.address.value", {std::to_string(r.hex.size()), head_tail(r.hex, 24)}));
+            line(tr("loc.address"), trf("loc.address.value", {std::to_string(r.hex_digits), r.hex}));
             // Where it can be walked to: the length it needs against the BINARY length now.
             if (in_world() && host_.binary_bytes)
                 line(tr("loc.line"), trf("loc.line.value", {std::to_string(r.bytes.size()), std::to_string(host_.binary_bytes())}));

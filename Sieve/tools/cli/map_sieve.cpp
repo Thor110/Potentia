@@ -118,7 +118,7 @@ void write_map_instructions(const Map& map, const fs::path& out, double search_p
         throw;
     }
     set_compressed_modes(temporary, permanent);
-    write_address_file(out, binary_address(m.file()), false);
+    write_raw_address_file(out, raw_of_file(m.file()), false);
 }
 
 } // namespace sieve::cli

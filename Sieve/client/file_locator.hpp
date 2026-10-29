@@ -121,7 +121,8 @@ private:
     struct Result
     {
         enum Kind { None, File, Folder } kind = None;
-        std::string path, sha256, hex, table, error;
+        std::string path, sha256, hex, table, error; // (hex: the address as shown, cli::raw_summary)
+        size_t hex_digits = 1;
         std::vector<uint8_t> bytes; // a file
         sieve::cli::Manifest manifest; // a folder
         // Its files weighed against their own addresses, under the host's lines and filters
@@ -138,7 +139,7 @@ private:
         // Its Sieve instructions as made when it was read, their address, and what they were made
         // with: saving writes these where nothing has changed since, rather than packing again.
         std::optional<sieve::cli::Manifest> instructions;
-        sieve::BigUint instructions_address;
+        std::vector<uint8_t> instructions_raw; // their address's raw bytes (cli::raw_of_file)
         double made_rope_seconds = 0;
         int made_archives = 0; // the Compressed formats boxes it was made with (1 temporary, 2 permanent)
         bool made_every = false;    // Try every way, as it was when they were made

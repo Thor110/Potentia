@@ -399,6 +399,29 @@ Manifest walk_folder(const std::filesystem::path& root);
 BigUint read_address_file(const std::filesystem::path& file, bool hex);
 void write_address_file(const std::filesystem::path& file, const BigUint& address, bool hex);
 
+// The same, between a file and its address's raw bytes directly, with no number made: the address
+// of a file of L bytes is the file read as a number plus 0101...01 (L of them, the count of every
+// shorter file), so its raw bytes are the file's with 1 added to every byte, carried from the last
+// (and a 01 in front where the carry runs past the first); and back. In place, in one pass, so a
+// gigabyte's instructions take a gigabyte, not the several a number and its hex took (Edward's
+// installer of 1.4 GB went to 12 GB of memory, 28 October 2026). The same bytes as the number's.
+std::vector<uint8_t> raw_of_file(std::vector<uint8_t> file);
+std::vector<uint8_t> file_of_raw(std::vector<uint8_t> raw);
+// How many hex digits the address has (1 for the empty file's, 0), from its raw bytes.
+size_t raw_hex_digits(const std::vector<uint8_t>& raw);
+// A file's address described without making it: its raw bytes' count, its hex digits' count, and
+// its hex as the File Locator shows it (whole where it is at most 2 * each + 3 digits, else its
+// first and last `each` digits with "..." between), in one pass and no copy of the file.
+struct RawSummary
+{
+    uint64_t bytes = 0;
+    size_t hex_digits = 1;
+    std::string hex = "0";
+};
+RawSummary raw_summary(const std::vector<uint8_t>& file, size_t each);
+// write_address_file's, from the raw bytes.
+void write_raw_address_file(const std::filesystem::path& file, const std::vector<uint8_t>& raw, bool hex);
+
 // An installer program: a copy of sieve-install with an installer attached to its end, one file
 // to hand to someone. Programs are read from their start, so what follows the program itself is
 // left alone by the system that runs it; sieve-install looks at its own end for it:
@@ -417,8 +440,12 @@ std::filesystem::path own_executable(const char* argv0);
 std::optional<std::filesystem::path> installer_program_beside(const std::filesystem::path& dir);
 // Writes `program` (sieve-install) with `address` attached as `out`, marked runnable.
 void write_installer_program(const std::filesystem::path& program, const BigUint& address, const std::filesystem::path& out);
-// The address attached to a program, if it has one.
+void write_installer_program(const std::filesystem::path& program, const std::vector<uint8_t>& raw, const std::filesystem::path& out);
+// The address attached to a program, if it has one; its raw bytes; and only whether it has one,
+// read from its last 24 bytes alone.
 std::optional<BigUint> attached_address(const std::filesystem::path& program);
+std::optional<std::vector<uint8_t>> attached_raw(const std::filesystem::path& program);
+bool has_attached(const std::filesystem::path& program);
 // An address from its raw bytes (base 256, most significant first; no bytes is 0).
 BigUint address_of_raw(const std::vector<uint8_t>& bytes);
 
@@ -442,6 +469,7 @@ private:
 // The manifest an installer holds, read back from it and checked to be one that can install (v3,
 // or the older v2).
 Manifest manifest_of_installer(const BigUint& address);
+Manifest manifest_of_installer_raw(std::vector<uint8_t> raw); // (from its raw bytes: file_of_raw)
 
 // The manifest to install from, whatever the file is: an installer (.sieve, raw bytes, or with
 // `hex` written in hex), an installer program (sieve-install with one attached), or an installer's

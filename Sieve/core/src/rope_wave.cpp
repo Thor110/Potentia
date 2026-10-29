@@ -41,9 +41,28 @@ std::vector<uint64_t> kept_points(uint64_t n)
     return p;
 }
 
+// A file's values read where they lie: value i is the L / 8 bytes at i * L / 8, little-endian. (A
+// copy of 64 bits a value took eight times a file of bytes, and the search makes many: 28 October
+// 2026, a 1.4 GB folder's packing went past 11 GB.)
+struct FileValues
+{
+    const uint8_t* b = nullptr;
+    uint32_t vb = 1;
+    size_t n = 0;
+    size_t size() const { return n; }
+    uint64_t operator[](size_t i) const
+    {
+        const uint8_t* q = b + i * vb;
+        if (vb == 1) return q[0];
+        uint64_t a = 0;
+        for (uint32_t k = 0; k < vb; ++k) a |= uint64_t(q[k]) << (8 * k);
+        return a;
+    }
+};
+
 struct Values
 {
-    std::vector<uint64_t> x;
+    FileValues x;
     uint32_t bytes = 1; // L / 8
 };
 
@@ -51,20 +70,16 @@ Values values_of(std::span<const uint8_t> file, uint32_t bits)
 {
     Values v;
     v.bytes = bits / 8;
-    const size_t n = file.size() / v.bytes;
-    v.x.resize(n);
-    for (size_t i = 0; i < n; ++i)
-    {
-        uint64_t a = 0;
-        for (uint32_t b = 0; b < v.bytes; ++b) a |= uint64_t(file[i * v.bytes + b]) << (8 * b);
-        v.x[i] = a;
-    }
+    v.x = FileValues{file.data(), v.bytes, file.size() / v.bytes};
     return v;
 }
 
-// The rope at every value, from the kept points (0 everywhere without them).
-std::vector<int64_t> rope_of(const std::vector<uint64_t>& x, const std::vector<uint64_t>& pts)
+// The rope at every value, from the kept points (0 everywhere without them: then nothing is made,
+// and a reader takes an empty rope as 0).
+template <class X>
+std::vector<int64_t> rope_of(const X& x, const std::vector<uint64_t>& pts)
 {
+    if (pts.empty()) return {};
     std::vector<int64_t> r(x.size(), 0);
     if (pts.size() == 1) r[pts[0]] = int64_t(x[pts[0]]);
     for (size_t k = 0; k + 1 < pts.size(); ++k)
@@ -76,17 +91,19 @@ std::vector<int64_t> rope_of(const std::vector<uint64_t>& x, const std::vector<u
     return r;
 }
 
-// The prediction of value i from the values before it (and the rope).
-uint64_t predict(const std::vector<uint64_t>& x, const std::vector<int64_t>& rope, uint64_t i, const RopeParams& p, uint64_t mask)
+// The prediction of value i from the values before it (and the rope). X: the values, read in place
+// or held at their own width; each is taken as 64 bits before anything is done with it.
+template <class X>
+uint64_t predict(const X& x, const std::vector<int64_t>& rope, uint64_t i, const RopeParams& p, uint64_t mask)
 {
     const uint64_t col = i % p.width;
     const bool left = p.phases >= 1 && col >= p.step;
     const bool up = p.phases >= 2 && i >= p.width;
-    const uint64_t r = uint64_t(rope[i]) & mask;
+    const uint64_t r = rope.empty() ? 0 : uint64_t(rope[i]) & mask;
     if (!left && !up) return r;
-    if (left && !up) return x[i - p.step];
-    if (up && !left) return x[i - p.width];
-    if (p.phases == 2) return (x[i - p.step] + x[i - p.width]) / 2;
+    if (left && !up) return uint64_t(x[i - p.step]);
+    if (up && !left) return uint64_t(x[i - p.width]);
+    if (p.phases == 2) return (uint64_t(x[i - p.step]) + uint64_t(x[i - p.width])) / 2;
     if (p.phases == 4)
     {
         // rope-wave-v6: the triangle (the median edge detector).
@@ -105,7 +122,8 @@ uint64_t mask_of(uint32_t bits) { return bits == 64 ? ~uint64_t(0) : (uint64_t(1
 
 // rope-wave-v6 (T1): how busy value i's triangle is, as a bucket 0 to 7, or 8 where it has none.
 constexpr uint32_t kTriangleBuckets = 9;
-uint32_t triangle_bucket(const std::vector<uint64_t>& x, uint64_t i, const RopeParams& p)
+template <class X>
+uint32_t triangle_bucket(const X& x, uint64_t i, const RopeParams& p)
 {
     if (i % p.width < p.step || i < p.width + p.step) return 8;
     const uint64_t a = x[i - p.step], b = x[i - p.width], c = x[i - p.width - p.step];
@@ -115,15 +133,17 @@ uint32_t triangle_bucket(const std::vector<uint64_t>& x, uint64_t i, const RopeP
     return k;
 }
 
-// What the wave leaves, for every value that is not kept, in order; and the kept points.
-std::vector<uint64_t> residuals(const std::vector<uint64_t>& x, const RopeParams& p, std::vector<uint64_t>& pts)
+// What the wave leaves, for every value that is not kept, in order; and the kept points. E: each
+// held at the values' own width (what is left is below 2^L).
+template <class E, class X>
+std::vector<E> residuals(const X& x, const RopeParams& p, std::vector<uint64_t>& pts)
 {
     if (x.size() > 0 && p.columns && p.width < 2) bad("columns need lines of two values or more");
     const uint64_t mask = mask_of(p.bits);
     pts = p.keep ? kept_points(x.size()) : std::vector<uint64_t>{};
     const std::vector<int64_t> rope = rope_of(x, pts);
-    std::vector<uint64_t> e;
-    e.reserve(x.size());
+    std::vector<E> e;
+    e.reserve(x.size() - pts.size());
     size_t k = 0;
     for (uint64_t i = 0; i < x.size(); ++i)
     {
@@ -132,7 +152,7 @@ std::vector<uint64_t> residuals(const std::vector<uint64_t>& x, const RopeParams
             ++k;
             continue;
         }
-        e.push_back((x[i] - predict(x, rope, i, p, mask)) & mask);
+        e.push_back(E((uint64_t(x[i]) - predict(x, rope, i, p, mask)) & mask));
     }
     return e;
 }
@@ -457,6 +477,85 @@ RopeParams RopeParams::parse(std::string_view t)
     return p;
 }
 
+// rope_code's values (no columns by line): what the wave leaves, E wide, then each plane's segments.
+// Where no value is kept, a value's place among those left is its own (no list of them is made).
+template <class E>
+std::vector<uint8_t> code_values(std::span<const uint8_t> file, const RopeParams& p)
+{
+    const Values v = values_of(file, p.bits);
+    std::vector<uint64_t> pts;
+    const std::vector<E> e = residuals<E>(v.x, p, pts);
+    std::vector<uint8_t> out;
+    std::vector<uint64_t> listed;
+    if (!pts.empty() || p.columns) listed = free_positions(v.x.size(), pts);
+    auto pos = [&](size_t j) { return pts.empty() && !p.columns ? uint64_t(j) : listed[j]; };
+    if (p.triangle)
+    {
+        // v6 (T1): for each plane, each bucket's count and segment, the values left in order.
+        std::vector<uint8_t> bucket(e.size());
+        for (size_t j = 0; j < e.size(); ++j) bucket[j] = uint8_t(triangle_bucket(v.x, pos(j), p));
+        for (uint32_t plane = 0; plane < v.bytes; ++plane)
+            for (uint32_t k = 0; k < kTriangleBuckets; ++k)
+            {
+                std::vector<uint16_t> sym;
+                for (size_t j = 0; j < e.size(); ++j)
+                    if (bucket[j] == k) sym.push_back(uint16_t((uint64_t(e[j]) >> (8 * plane)) & 0xFF));
+                put_varint(out, sym.size());
+                put_segment(out, sym, true);
+            }
+        for (const uint64_t i : pts)
+            for (uint32_t b = 0; b < v.bytes; ++b) out.push_back(file[i * v.bytes + b]);
+        for (size_t i = v.x.size() * v.bytes; i < file.size(); ++i) out.push_back(file[i]);
+        return out;
+    }
+    auto byte_of = [&](size_t j, uint32_t plane) { return uint16_t((uint64_t(e[j]) >> (8 * plane)) & 0xFF); };
+    if (!p.columns)
+    {
+        // v1's one segment a plane: every value left, in order.
+        for (uint32_t plane = 0; plane < v.bytes; ++plane)
+        {
+            std::vector<uint16_t> sym(e.size());
+            for (size_t j = 0; j < e.size(); ++j) sym[j] = byte_of(j, plane);
+            put_segment(out, sym, false);
+        }
+    }
+    else
+    {
+        const std::vector<std::vector<size_t>> cols = segments_of(listed, p);
+        for (uint32_t plane = 0; plane < v.bytes; ++plane)
+        {
+            const std::vector<std::vector<size_t>>* seg = &cols;
+            std::vector<std::vector<size_t>> grouped;
+            if (p.grouped)
+            {
+                // v4: this plane's columns' groups, then each group's segment (its values in order).
+                std::vector<uint64_t> counts(size_t(p.width) * 256, 0), n(p.width, 0);
+                for (uint32_t c = 0; c < p.width; ++c)
+                {
+                    for (const size_t j : cols[c]) ++counts[size_t(c) * 256 + byte_of(j, plane)];
+                    n[c] = cols[c].size();
+                }
+                double cost = 0;
+                const std::vector<uint32_t> group = group_columns(counts, n, 0, cost);
+                put_groups(out, group);
+                grouped.resize(size_t(*std::max_element(group.begin(), group.end())) + 1);
+                for (size_t j = 0; j < listed.size(); ++j) grouped[group[size_t(listed[j] % p.width)]].push_back(j);
+                seg = &grouped;
+            }
+            for (const std::vector<size_t>& one : *seg)
+            {
+                std::vector<uint16_t> sym(one.size());
+                for (size_t i = 0; i < one.size(); ++i) sym[i] = byte_of(one[i], plane);
+                put_segment(out, sym, true);
+            }
+        }
+    }
+    for (const uint64_t i : pts)
+        for (uint32_t b = 0; b < v.bytes; ++b) out.push_back(file[i * v.bytes + b]);
+    for (size_t i = v.x.size() * v.bytes; i < file.size(); ++i) out.push_back(file[i]);
+    return out;
+}
+
 std::vector<uint8_t> rope_code(std::span<const uint8_t> file, const RopeParams& p)
 {
     p.check();
@@ -520,63 +619,127 @@ std::vector<uint8_t> rope_code(std::span<const uint8_t> file, const RopeParams& 
         }
         return out;
     }
-    const Values v = values_of(file, p.bits);
-    std::vector<uint64_t> pts;
-    const std::vector<uint64_t> e = residuals(v.x, p, pts);
-    std::vector<uint8_t> out;
-    const std::vector<uint64_t> pos = free_positions(v.x.size(), pts);
+    if (p.bits == 8) return code_values<uint8_t>(file, p);
+    if (p.bits == 16) return code_values<uint16_t>(file, p);
+    return code_values<uint32_t>(file, p);
+}
+
+// rope_file's values (no columns by line), each held V wide (L bits). What the wave leaves is read
+// straight into the values' places, and each made the value by adding its prediction, which reads
+// only values before it; for bytes, the values are the file itself.
+template <class V>
+std::vector<uint8_t> file_values(std::span<const uint8_t> code, const RopeParams& p, uint64_t size)
+{
+    const uint32_t vb = p.bits / 8;
+    const uint64_t n = size / vb;
+    const std::vector<uint64_t> pts = p.keep ? kept_points(n) : std::vector<uint64_t>{};
+    const uint64_t m = n - pts.size();
+    size_t at = 0;
+    std::vector<V> x(static_cast<size_t>(n), 0);
+    // The kept values, after the segments; and how many bytes past the last whole value.
+    auto finish = [&](size_t from) {
+        const uint64_t tail = size - n * vb;
+        if (code.size() - from != pts.size() * vb + tail) bad("the code does not end where the file's kept bytes do");
+        for (size_t k = 0; k < pts.size(); ++k)
+            for (uint32_t b = 0; b < vb; ++b) x[pts[k]] = V(uint64_t(x[pts[k]]) | uint64_t(code[from + k * vb + b]) << (8 * b));
+        return tail;
+    };
+    auto output = [&](size_t from, uint64_t tail) {
+        if constexpr (sizeof(V) == 1)
+            if (tail == 0) return std::vector<uint8_t>(std::move(x)); // (the values are the bytes)
+        std::vector<uint8_t> out(static_cast<size_t>(size));
+        for (uint64_t i = 0; i < n; ++i)
+            for (uint32_t b = 0; b < vb; ++b) out[i * vb + b] = uint8_t(uint64_t(x[i]) >> (8 * b));
+        for (uint64_t t = 0; t < tail; ++t) out[n * vb + t] = code[from + pts.size() * vb + t];
+        return out;
+    };
+    const uint64_t mask = mask_of(p.bits);
     if (p.triangle)
     {
-        // v6 (T1): for each plane, each bucket's count and segment, the values left in order.
-        std::vector<uint32_t> bucket(pos.size());
-        for (size_t j = 0; j < pos.size(); ++j) bucket[j] = triangle_bucket(v.x, pos[j], p);
-        for (uint32_t plane = 0; plane < v.bytes; ++plane)
+        // v6 (T1): every plane's buckets read first; then the file made again value by value, each
+        // taking the next of its triangle's bucket in each plane.
+        std::vector<std::vector<uint16_t>> seg(size_t(vb) * kTriangleBuckets);
+        for (uint32_t plane = 0; plane < vb; ++plane)
+        {
+            uint64_t total = 0;
             for (uint32_t k = 0; k < kTriangleBuckets; ++k)
             {
-                std::vector<uint16_t> sym;
-                for (size_t j = 0; j < pos.size(); ++j)
-                    if (bucket[j] == k) sym.push_back(uint16_t((e[j] >> (8 * plane)) & 0xFF));
-                put_varint(out, sym.size());
-                put_segment(out, sym, true);
+                const uint64_t c = get_varint(code, at);
+                if (c > m - total) bad("buckets holding more values than the file");
+                total += c;
+                seg[size_t(plane) * kTriangleBuckets + k] = get_segment(code, at, c, true);
             }
-        for (const uint64_t i : pts)
-            for (uint32_t b = 0; b < v.bytes; ++b) out.push_back(file[i * v.bytes + b]);
-        for (size_t i = v.x.size() * v.bytes; i < file.size(); ++i) out.push_back(file[i]);
-        return out;
-    }
-    const std::vector<std::vector<size_t>> cols = segments_of(pos, p);
-    for (uint32_t plane = 0; plane < v.bytes; ++plane)
-    {
-        auto byte_of = [&](size_t j) { return uint16_t((e[j] >> (8 * plane)) & 0xFF); };
-        const std::vector<std::vector<size_t>>* seg = &cols;
-        std::vector<std::vector<size_t>> grouped;
-        if (p.grouped)
+            if (total != m) bad("buckets holding fewer values than the file");
+        }
+        const uint64_t tail = finish(at);
+        const std::vector<int64_t> rope = rope_of(x, pts);
+        std::vector<size_t> next(seg.size(), 0);
+        size_t k = 0;
+        for (uint64_t i = 0; i < n; ++i)
         {
-            // v4: this plane's columns' groups, then each group's segment (its values in order).
-            std::vector<uint64_t> counts(size_t(p.width) * 256, 0), n(p.width, 0);
-            for (uint32_t c = 0; c < p.width; ++c)
+            if (k < pts.size() && pts[k] == i)
             {
-                for (const size_t j : cols[c]) ++counts[size_t(c) * 256 + byte_of(j)];
-                n[c] = cols[c].size();
+                ++k;
+                continue;
             }
-            double cost = 0;
-            const std::vector<uint32_t> group = group_columns(counts, n, 0, cost);
-            put_groups(out, group);
-            grouped.resize(size_t(*std::max_element(group.begin(), group.end())) + 1);
-            for (size_t j = 0; j < pos.size(); ++j) grouped[group[size_t(pos[j] % p.width)]].push_back(j);
-            seg = &grouped;
+            const uint32_t bk = triangle_bucket(x, i, p);
+            uint64_t ei = 0;
+            for (uint32_t plane = 0; plane < vb; ++plane)
+            {
+                const size_t s = size_t(plane) * kTriangleBuckets + bk;
+                if (next[s] >= seg[s].size()) bad("a bucket with fewer values than the file needs");
+                ei |= uint64_t(seg[s][next[s]++]) << (8 * plane);
+            }
+            x[i] = V((ei + predict(x, rope, i, p, mask)) & mask);
         }
-        for (const std::vector<size_t>& one : *seg)
+        return output(at, tail);
+    }
+    std::vector<uint64_t> listed;
+    if (!pts.empty() || p.columns) listed = free_positions(n, pts);
+    auto pos = [&](size_t j) { return pts.empty() && !p.columns ? uint64_t(j) : listed[j]; };
+    if (!p.columns)
+    {
+        for (uint32_t plane = 0; plane < vb; ++plane)
         {
-            std::vector<uint16_t> sym(one.size());
-            for (size_t i = 0; i < one.size(); ++i) sym[i] = byte_of(one[i]);
-            put_segment(out, sym, p.columns != 0);
+            const std::vector<uint16_t> sym = get_segment(code, at, m, false);
+            for (size_t j = 0; j < sym.size(); ++j) x[pos(j)] = V(uint64_t(x[pos(j)]) | uint64_t(sym[j]) << (8 * plane));
         }
     }
-    for (const uint64_t i : pts)
-        for (uint32_t b = 0; b < v.bytes; ++b) out.push_back(file[i * v.bytes + b]);
-    for (size_t i = v.x.size() * v.bytes; i < file.size(); ++i) out.push_back(file[i]);
-    return out;
+    else
+    {
+        const std::vector<std::vector<size_t>> cols = segments_of(listed, p);
+        for (uint32_t plane = 0; plane < vb; ++plane)
+        {
+            const std::vector<std::vector<size_t>>* seg = &cols;
+            std::vector<std::vector<size_t>> grouped;
+            if (p.grouped)
+            {
+                uint32_t groups = 0;
+                const std::vector<uint32_t> group = get_groups(code, at, p.width, groups);
+                grouped.resize(groups);
+                for (size_t j = 0; j < listed.size(); ++j) grouped[group[size_t(listed[j] % p.width)]].push_back(j);
+                seg = &grouped;
+            }
+            for (const std::vector<size_t>& one : *seg)
+            {
+                const std::vector<uint16_t> sym = get_segment(code, at, one.size(), true);
+                for (size_t i = 0; i < one.size(); ++i) x[pos(one[i])] = V(uint64_t(x[pos(one[i])]) | uint64_t(sym[i]) << (8 * plane));
+            }
+        }
+    }
+    const uint64_t tail = finish(at);
+    const std::vector<int64_t> rope = rope_of(x, pts);
+    size_t k = 0;
+    for (uint64_t i = 0; i < n; ++i)
+    {
+        if (k < pts.size() && pts[k] == i)
+        {
+            ++k;
+            continue;
+        }
+        x[i] = V((uint64_t(x[i]) + predict(x, rope, i, p, mask)) & mask);
+    }
+    return output(at, tail);
 }
 
 std::vector<uint8_t> rope_file(std::span<const uint8_t> code, const RopeParams& p, uint64_t size)
@@ -667,103 +830,76 @@ std::vector<uint8_t> rope_file(std::span<const uint8_t> code, const RopeParams& 
         }
         return out;
     }
-    const uint32_t vb = p.bits / 8;
-    const uint64_t n = size / vb;
-    const std::vector<uint64_t> pts = p.keep ? kept_points(n) : std::vector<uint64_t>{};
-    const uint64_t m = n - pts.size();
-    size_t at = 0;
+    if (p.bits == 8) return file_values<uint8_t>(code, p, size);
+    if (p.bits == 16) return file_values<uint16_t>(code, p, size);
+    return file_values<uint32_t>(code, p, size);
+}
+
+// rope_estimate's values (no columns by line), what the wave leaves held E wide.
+template <class E>
+double estimate_values(std::span<const uint8_t> file, const RopeParams& p)
+{
+    const Values v = values_of(file, p.bits);
+    std::vector<uint64_t> pts;
+    const std::vector<E> e = residuals<E>(v.x, p, pts);
+    double bytes = double(pts.size() * v.bytes + (file.size() - v.x.size() * v.bytes));
     if (p.triangle)
     {
-        // v6 (T1): every plane's buckets read first; then the file made again value by value, each
-        // taking the next of its triangle's bucket in each plane.
-        std::vector<std::vector<uint16_t>> seg(size_t(vb) * kTriangleBuckets);
-        for (uint32_t plane = 0; plane < vb; ++plane)
+        std::vector<uint64_t> listed;
+        if (!pts.empty()) listed = free_positions(v.x.size(), pts);
+        std::vector<uint8_t> bucket(e.size());
+        for (size_t j = 0; j < e.size(); ++j) bucket[j] = uint8_t(triangle_bucket(v.x, pts.empty() ? uint64_t(j) : listed[j], p));
+        for (uint32_t plane = 0; plane < v.bytes; ++plane)
         {
-            uint64_t total = 0;
+            std::vector<uint64_t> counts(size_t(kTriangleBuckets) * 256, 0), nb(kTriangleBuckets, 0);
+            for (size_t j = 0; j < e.size(); ++j)
+            {
+                ++counts[size_t(bucket[j]) * 256 + ((uint64_t(e[j]) >> (8 * plane)) & 0xFF)];
+                ++nb[bucket[j]];
+            }
             for (uint32_t k = 0; k < kTriangleBuckets; ++k)
             {
-                const uint64_t c = get_varint(code, at);
-                if (c > m - total) bad("buckets holding more values than the file");
-                total += c;
-                seg[size_t(plane) * kTriangleBuckets + k] = get_segment(code, at, c, true);
+                const std::vector<uint64_t> one(counts.begin() + std::ptrdiff_t(k) * 256, counts.begin() + std::ptrdiff_t(k + 1) * 256);
+                bytes += 1 + (nb[k] ? entropy_bytes_v2(one, nb[k]) : 1);
             }
-            if (total != m) bad("buckets holding fewer values than the file");
         }
-        const uint64_t tail = size - n * vb;
-        if (code.size() - at != pts.size() * vb + tail) bad("the code does not end where the file's kept bytes do");
-        std::vector<uint64_t> x(n, 0);
-        for (size_t k = 0; k < pts.size(); ++k)
-            for (uint32_t b = 0; b < vb; ++b) x[pts[k]] |= uint64_t(code[at + k * vb + b]) << (8 * b);
-        const std::vector<int64_t> rope = rope_of(x, pts);
-        const uint64_t mask = mask_of(p.bits);
-        std::vector<size_t> next(seg.size(), 0);
-        size_t k = 0;
-        for (uint64_t i = 0; i < n; ++i)
-        {
-            if (k < pts.size() && pts[k] == i)
-            {
-                ++k;
-                continue;
-            }
-            const uint32_t bk = triangle_bucket(x, i, p);
-            uint64_t ei = 0;
-            for (uint32_t plane = 0; plane < vb; ++plane)
-            {
-                const size_t s = size_t(plane) * kTriangleBuckets + bk;
-                if (next[s] >= seg[s].size()) bad("a bucket with fewer values than the file needs");
-                ei |= uint64_t(seg[s][next[s]++]) << (8 * plane);
-            }
-            x[i] = (ei + predict(x, rope, i, p, mask)) & mask;
-        }
-        std::vector<uint8_t> out(static_cast<size_t>(size));
-        for (uint64_t i = 0; i < n; ++i)
-            for (uint32_t b = 0; b < vb; ++b) out[i * vb + b] = uint8_t(x[i] >> (8 * b));
-        for (uint64_t t = 0; t < tail; ++t) out[n * vb + t] = code[at + pts.size() * vb + t];
-        return out;
+        return bytes;
     }
-    std::vector<uint64_t> e(m, 0);
-    const std::vector<uint64_t> pos = free_positions(n, pts);
-    const std::vector<std::vector<size_t>> cols = segments_of(pos, p);
-    for (uint32_t plane = 0; plane < vb; ++plane)
+    if (!p.columns)
     {
-        const std::vector<std::vector<size_t>>* seg = &cols;
-        std::vector<std::vector<size_t>> grouped;
+        for (uint32_t plane = 0; plane < v.bytes; ++plane)
+        {
+            std::vector<uint64_t> counts(256, 0);
+            for (const E r : e) ++counts[(uint64_t(r) >> (8 * plane)) & 0xFF];
+            bytes += entropy_bytes(counts, e.size());
+        }
+        return bytes;
+    }
+    // Columns: each column's bytes counted on their own, a pass over what is left.
+    const std::vector<uint64_t> pos = free_positions(v.x.size(), pts);
+    for (uint32_t plane = 0; plane < v.bytes; ++plane)
+    {
+        std::vector<uint64_t> counts(size_t(p.width) * 256, 0), n(p.width, 0);
+        for (size_t j = 0; j < e.size(); ++j)
+        {
+            const size_t c = size_t(pos[j] % p.width);
+            ++counts[c * 256 + ((uint64_t(e[j]) >> (8 * plane)) & 0xFF)];
+            ++n[c];
+        }
         if (p.grouped)
         {
-            uint32_t groups = 0;
-            const std::vector<uint32_t> group = get_groups(code, at, p.width, groups);
-            grouped.resize(groups);
-            for (size_t j = 0; j < pos.size(); ++j) grouped[group[size_t(pos[j] % p.width)]].push_back(j);
-            seg = &grouped;
-        }
-        for (const std::vector<size_t>& one : *seg)
-        {
-            const std::vector<uint16_t> sym = get_segment(code, at, one.size(), p.columns != 0);
-            for (size_t i = 0; i < one.size(); ++i) e[one[i]] |= uint64_t(sym[i]) << (8 * plane);
-        }
-    }
-    const uint64_t tail = size - n * vb;
-    if (code.size() - at != pts.size() * vb + tail) bad("the code does not end where the file's kept bytes do");
-    std::vector<uint64_t> x(n, 0);
-    for (size_t k = 0; k < pts.size(); ++k)
-        for (uint32_t b = 0; b < vb; ++b) x[pts[k]] |= uint64_t(code[at + k * vb + b]) << (8 * b);
-    const std::vector<int64_t> rope = rope_of(x, pts);
-    const uint64_t mask = mask_of(p.bits);
-    size_t k = 0, j = 0;
-    for (uint64_t i = 0; i < n; ++i)
-    {
-        if (k < pts.size() && pts[k] == i)
-        {
-            ++k;
+            double cost = 0;
+            group_columns(counts, n, 0, cost);
+            bytes += cost;
             continue;
         }
-        x[i] = (e[j++] + predict(x, rope, i, p, mask)) & mask;
+        for (uint32_t c = 0; c < p.width; ++c)
+        {
+            const std::vector<uint64_t> one(counts.begin() + std::ptrdiff_t(c) * 256, counts.begin() + std::ptrdiff_t(c + 1) * 256);
+            bytes += n[c] ? entropy_bytes_v2(one, n[c]) : 1;
+        }
     }
-    std::vector<uint8_t> out(static_cast<size_t>(size));
-    for (uint64_t i = 0; i < n; ++i)
-        for (uint32_t b = 0; b < vb; ++b) out[i * vb + b] = uint8_t(x[i] >> (8 * b));
-    for (uint64_t t = 0; t < tail; ++t) out[n * vb + t] = code[at + pts.size() * vb + t];
-    return out;
+    return bytes;
 }
 
 double rope_estimate(std::span<const uint8_t> file, const RopeParams& p)
@@ -806,66 +942,9 @@ double rope_estimate(std::span<const uint8_t> file, const RopeParams& p)
         }
         return bytes;
     }
-    const Values v = values_of(file, p.bits);
-    std::vector<uint64_t> pts;
-    const std::vector<uint64_t> e = residuals(v.x, p, pts);
-    double bytes = double(pts.size() * v.bytes + (file.size() - v.x.size() * v.bytes));
-    if (p.triangle)
-    {
-        const std::vector<uint64_t> pos = free_positions(v.x.size(), pts);
-        std::vector<uint32_t> bucket(pos.size());
-        for (size_t j = 0; j < pos.size(); ++j) bucket[j] = triangle_bucket(v.x, pos[j], p);
-        for (uint32_t plane = 0; plane < v.bytes; ++plane)
-        {
-            std::vector<uint64_t> counts(size_t(kTriangleBuckets) * 256, 0), nb(kTriangleBuckets, 0);
-            for (size_t j = 0; j < e.size(); ++j)
-            {
-                ++counts[size_t(bucket[j]) * 256 + ((e[j] >> (8 * plane)) & 0xFF)];
-                ++nb[bucket[j]];
-            }
-            for (uint32_t k = 0; k < kTriangleBuckets; ++k)
-            {
-                const std::vector<uint64_t> one(counts.begin() + std::ptrdiff_t(k) * 256, counts.begin() + std::ptrdiff_t(k + 1) * 256);
-                bytes += 1 + (nb[k] ? entropy_bytes_v2(one, nb[k]) : 1);
-            }
-        }
-        return bytes;
-    }
-    if (!p.columns)
-    {
-        for (uint32_t plane = 0; plane < v.bytes; ++plane)
-        {
-            std::vector<uint64_t> counts(256, 0);
-            for (const uint64_t r : e) ++counts[(r >> (8 * plane)) & 0xFF];
-            bytes += entropy_bytes(counts, e.size());
-        }
-        return bytes;
-    }
-    // Columns: each column's bytes counted on their own, a pass over what is left.
-    const std::vector<uint64_t> pos = free_positions(v.x.size(), pts);
-    for (uint32_t plane = 0; plane < v.bytes; ++plane)
-    {
-        std::vector<uint64_t> counts(size_t(p.width) * 256, 0), n(p.width, 0);
-        for (size_t j = 0; j < e.size(); ++j)
-        {
-            const size_t c = size_t(pos[j] % p.width);
-            ++counts[c * 256 + ((e[j] >> (8 * plane)) & 0xFF)];
-            ++n[c];
-        }
-        if (p.grouped)
-        {
-            double cost = 0;
-            group_columns(counts, n, 0, cost);
-            bytes += cost;
-            continue;
-        }
-        for (uint32_t c = 0; c < p.width; ++c)
-        {
-            const std::vector<uint64_t> one(counts.begin() + std::ptrdiff_t(c) * 256, counts.begin() + std::ptrdiff_t(c + 1) * 256);
-            bytes += n[c] ? entropy_bytes_v2(one, n[c]) : 1;
-        }
-    }
-    return bytes;
+    if (p.bits == 8) return estimate_values<uint8_t>(file, p);
+    if (p.bits == 16) return estimate_values<uint16_t>(file, p);
+    return estimate_values<uint32_t>(file, p);
 }
 
 namespace {

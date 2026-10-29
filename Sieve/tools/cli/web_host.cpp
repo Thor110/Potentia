@@ -132,7 +132,7 @@ WebOpened web_open(const std::vector<uint8_t>& sieve, const std::string& expecte
     // the one the page chose, not that its sizes are honest, so nothing larger than the plugin
     // unpacks is made while it is read (a page could otherwise ask for gigabytes in a few bytes).
     const DecodeLimit limit(max_bytes);
-    const Manifest m = manifest_of_installer(address_of_raw(sieve));
+    const Manifest m = manifest_of_installer_raw(sieve);
     if (!m.graph.empty()) throw std::runtime_error("it is a map (a graph part): open it in the hallway's node graph, not the browser");
     if (!m.lines.empty()) throw std::runtime_error("it carries items of Sieve's lines: install it with Sieve");
     if (!m.unpacked.empty()) throw std::runtime_error("it carries an archive as what it holds, not as the archive: install it with Sieve");
@@ -206,7 +206,7 @@ std::vector<WebFile> web_table(const std::vector<uint8_t>& sieve, const std::str
     const std::string got = sha256_hex(sieve);
     if (got != want) throw std::runtime_error("the table's SHA-256 is " + got + ", not the " + want + " expected: refused");
     const DecodeLimit limit(kWebMaxBytes); // (as web_open: a table's sizes are only what it says)
-    const Manifest m = manifest_of_installer(address_of_raw(sieve));
+    const Manifest m = manifest_of_installer_raw(sieve);
     if (m.graph.empty()) throw std::runtime_error("it is not a site's table (it has no graph part)");
     const Map map = map_of_instructions(m, "table");
     std::vector<WebFile> files;

@@ -14,6 +14,7 @@ from the sizes given.
 - [enwik8: the first 100 MB of English Wikipedia](#enwik8-the-first-100-mb-of-english-wikipedia)
 - [enwik9: the first 1 GB of English Wikipedia](#enwik9-the-first-1-gb-of-english-wikipedia)
 - [A game archive: MAPS.WoW](#a-game-archive-mapswow)
+- [A game's release: WoWRevived](#a-games-release-wowrevived)
 - [A million digits of pi](#a-million-digits-of-pi)
 - [A book: Don Quixote](#a-book-don-quixote)
 - [Photographs (JPEG)](#photographs-jpeg)
@@ -28,6 +29,7 @@ from the sizes given.
 | [Sieve's source tree](#sieves-source-tree-against-the-usual-compressors) | 35,396,955 | 6,844,677 | 5,196,966 | 6.81:1 | −24.07% |
 | [enwik8](#enwik8-the-first-100-mb-of-english-wikipedia), public test data | 100,000,000 | 26,080,445 | 21,675,870 | 4.61:1 | −16.89% |
 | [MAPS.WoW](#a-game-archive-mapswow), a game's archive | 160,890,897 | 60,791,826 | 52,996,145 | 3.04:1 | −12.82% |
+| [WoWRevived](#a-games-release-wowrevived), a game's release, mostly films and music | 1,426,355,971 | 1,073,748,445 | 1,075,924,966 | 1.33:1 | +0.20% |
 | [A million digits of pi](#a-million-digits-of-pi) | 1,111,103 | 512,745 | 417,052 | 2.66:1 | −18.66% |
 | [Don Quixote](#a-book-don-quixote), plain text | 2,391,678 | 686,020 | 683,205 | 3.50:1 | −0.41% |
 | [A photograph](#photographs-jpeg), JPEG | 4,587,473 | 4,575,201 | 4,558,132 | 1.01:1 | −0.37% |
@@ -163,6 +165,36 @@ Optimised for size, it is 12.82% smaller than 7-Zip's and takes about three and 
 unpack; optimised for decoding, 1.09% smaller and about five and a half seconds in all.
 
 The potential utility line: at 100 MB or more, the search's time begins to tell.
+
+## A game's release: WoWRevived
+
+Edward's WoWRevived, the final release of his restoration of *The War of the Worlds* (English,
+v1.1.2): 237 files, most of the size upscaled films and music, already compressed. Made on Edward's
+machine, 28 October 2026, in the File Locator with Try every way and Prioritise Decoding Speed both
+ticked (so no file mixed).
+
+| | Bytes | Ratio | Of the folder | Against 7z |
+| :--- | ---: | ---: | ---: | ---: |
+| The folder | 1,426,355,971 | | | |
+| zip | 1,195,057,828 | 1.19:1 | 83.78% | +11.30% |
+| 7z | 1,073,748,445 | 1.33:1 | 75.28% | |
+| **`.sieve`** | **1,075,924,966** | **1.33:1** | **75.43%** | **+0.20%** |
+| The installer program (`sieve-install` and the `.sieve`) | 1,080,422,398 | 1.32:1 | 75.75% | +0.62% |
+
+7z won here, by 2,176,521 bytes (0.20%): on files already compressed there is little for either to
+take, and which files the difference is in is not yet measured (Sieve's mixing was off). Installed from the
+hallway: 237 files, decoded in 62.658 s, checked and written in 7.215 s; `sieve-install` (the
+installer program) took 6 to 12 GB of memory while it read the file, and stopped answering until it
+had.
+
+What it found: reading a `.sieve` went through one number the size of the file, and its hex text,
+several copies at once; and the rope's coder held every byte as 64 bits in several arrays. Both were
+remade the same day with the same results (IDEAS §19.105). Measured here on a folder of 377 MB made
+like it (three 125 MB files of noise, as compressed films are, and this repository's docs): installing
+63 s and 11.5 GB at most → 13.6 s and 2.4 GB; making 205 s and 11.8 GB → 182 s and 4.1 GB.
+
+The installer program less the `.sieve` and its 24-byte trailer gives `sieve-install` itself on
+Windows: 4,497,408 bytes, every installer program's fixed cost.
 
 ## A million digits of pi
 

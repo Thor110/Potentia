@@ -305,7 +305,7 @@ void make_sieve(const fs::path& file, const fs::path& out, double seconds)
     m.lines.clear();
     add_packed_newest(m, file.parent_path(), nullptr, seconds, false, false);
     fs::create_directories(out.parent_path());
-    write_address_file(out, binary_address(m.file()), false);
+    write_raw_address_file(out, raw_of_file(m.file()), false);
 }
 
 std::vector<std::string> files_of(const fs::path& root)

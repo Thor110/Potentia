@@ -1943,6 +1943,118 @@ BigUint address_of_raw(const std::vector<uint8_t>& bytes)
     return h.empty() ? BigUint() : BigUint::from_hex(h);
 }
 
+std::vector<uint8_t> raw_of_file(std::vector<uint8_t> file)
+{
+    unsigned carry = 0;
+    for (size_t k = file.size(); k-- > 0;)
+    {
+        const unsigned v = unsigned(file[k]) + 1 + carry;
+        file[k] = uint8_t(v);
+        carry = v >> 8;
+    }
+    if (carry) file.insert(file.begin(), 1);
+    return file;
+}
+
+std::vector<uint8_t> file_of_raw(std::vector<uint8_t> raw)
+{
+    // (Leading zero bytes add nothing to the number.)
+    size_t lead = 0;
+    while (lead < raw.size() && raw[lead] == 0) ++lead;
+    if (lead) raw.erase(raw.begin(), raw.begin() + std::ptrdiff_t(lead));
+    const size_t n = raw.size();
+    if (n == 0) return raw; // 0: the empty file
+    // The file's length L: the most with 0101...01 (L of them) no more than the number. With n
+    // bytes and the first not 0, that is n where the bytes are at least n 01s, else n - 1.
+    size_t i = 0;
+    while (i < n && raw[i] == 1) ++i;
+    const size_t L = (i == n || raw[i] > 1) ? n : n - 1;
+    int borrow = 0;
+    for (size_t k = n; k-- > 0;)
+    {
+        const int v = int(raw[k]) - (k >= n - L ? 1 : 0) - borrow;
+        borrow = v < 0;
+        raw[k] = uint8_t(v + (borrow ? 256 : 0));
+    }
+    // (No borrow is left, the number being at least the L 01s; and with L = n - 1 what is left
+    // is below 256^L, so its first byte is now 0.)
+    if (L < n) raw.erase(raw.begin());
+    return raw;
+}
+
+size_t raw_hex_digits(const std::vector<uint8_t>& raw)
+{
+    size_t lead = 0;
+    while (lead < raw.size() && raw[lead] == 0) ++lead;
+    if (lead == raw.size()) return 1;
+    return (raw.size() - lead) * 2 - (raw[lead] < 16 ? 1 : 0);
+}
+
+RawSummary raw_summary(const std::vector<uint8_t>& file, size_t each)
+{
+    static constexpr char kHex[] = "0123456789abcdef";
+    RawSummary out;
+    const size_t n = file.size();
+    if (n == 0) return out; // 0: no bytes, one hex digit
+    auto hex_of = [](const std::vector<uint8_t>& b, bool strip) {
+        std::string h;
+        for (size_t k = 0; k < b.size(); ++k)
+        {
+            if (!(strip && k == 0 && b[k] < 16)) h += kHex[b[k] >> 4];
+            h += kHex[b[k] & 15];
+        }
+        return h;
+    };
+    if (n <= each + 4)
+    {
+        const std::vector<uint8_t> raw = raw_of_file(file);
+        out.bytes = raw.size();
+        out.hex = hex_of(raw, true);
+        out.hex_digits = out.hex.size();
+        if (out.hex.size() > 2 * each + 3) out.hex = out.hex.substr(0, each) + "..." + out.hex.substr(out.hex.size() - each);
+        return out;
+    }
+    // One pass from the end, as raw_of_file adds: each byte plus 1 and the carry; only the first
+    // and last few bytes kept.
+    const size_t head = each / 2 + 2, tail = each / 2 + 2;
+    std::vector<uint8_t> first(head), last(tail);
+    unsigned carry = 0;
+    for (size_t k = n; k-- > 0;)
+    {
+        const unsigned v = unsigned(file[k]) + 1 + carry;
+        if (k < head) first[k] = uint8_t(v);
+        if (k >= n - tail) last[k - (n - tail)] = uint8_t(v);
+        carry = v >> 8;
+    }
+    if (carry) first.insert(first.begin(), 1);
+    out.bytes = n + carry;
+    out.hex_digits = size_t(out.bytes) * 2 - (first[0] < 16 ? 1 : 0);
+    const std::string h = hex_of(first, true), t = hex_of(last, false);
+    out.hex = h.substr(0, each) + "..." + t.substr(t.size() - each);
+    return out;
+}
+
+void write_raw_address_file(const fs::path& file, const std::vector<uint8_t>& raw, bool hex)
+{
+    size_t lead = 0;
+    while (lead < raw.size() && raw[lead] == 0) ++lead;
+    std::ofstream out(file, std::ios::binary);
+    if (hex)
+    {
+        static constexpr char kHex[] = "0123456789abcdef";
+        std::string h;
+        h.reserve((raw.size() - lead) * 2 + 1);
+        for (size_t k = lead; k < raw.size(); ++k)
+        {
+            if (!(k == lead && raw[k] < 16)) h += kHex[raw[k] >> 4];
+            h += kHex[raw[k] & 15];
+        }
+        out << (h.empty() ? std::string("0") : h) << "\n";
+    }
+    else out.write(reinterpret_cast<const char*>(raw.data() + lead), std::streamsize(raw.size() - lead));
+    if (!out) throw std::runtime_error("cannot write " + file.generic_string());
+}
+
 fs::path own_executable(const char* argv0)
 {
 #ifdef _WIN32
@@ -2024,6 +2136,50 @@ void write_installer_program(const fs::path& program, const BigUint& address, co
     fs::permissions(out, fs::perms::owner_exec | fs::perms::group_exec | fs::perms::others_exec, fs::perm_options::add, ec);
 }
 
+void write_installer_program(const fs::path& program, const std::vector<uint8_t>& raw_in, const fs::path& out)
+{
+    const auto p = read_file_bytes(program);
+    const uint64_t length = program_length(p);
+    size_t lead = 0; // (as the number's bytes: no leading zero bytes)
+    while (lead < raw_in.size() && raw_in[lead] == 0) ++lead;
+    {
+        std::ofstream o(out, std::ios::binary);
+        o.write(reinterpret_cast<const char*>(p.data()), std::streamsize(length));
+        o.write(reinterpret_cast<const char*>(raw_in.data() + lead), std::streamsize(raw_in.size() - lead));
+        uint64_t n = raw_in.size() - lead;
+        for (int i = 0; i < 8; ++i, n >>= 8) o.put(char(n & 0xFF));
+        o.write(kAttachedMagic, std::streamsize(kMagic));
+        if (!o) throw std::runtime_error("cannot write " + out.generic_string());
+    }
+    std::error_code ec;
+    fs::permissions(out, fs::perms::owner_exec | fs::perms::group_exec | fs::perms::others_exec, fs::perm_options::add, ec);
+}
+
+std::optional<std::vector<uint8_t>> attached_raw(const fs::path& program)
+{
+    std::error_code ec;
+    if (!fs::is_regular_file(program, ec) || !has_attached(program)) return std::nullopt;
+    auto f = read_file_bytes(program);
+    uint64_t n = 0;
+    const uint64_t at = program_length(f, &n);
+    if (at == f.size()) return std::nullopt;
+    f.resize(size_t(at + n)); // (the trailer off the end, then the program off the front)
+    f.erase(f.begin(), f.begin() + std::ptrdiff_t(at));
+    return f;
+}
+
+bool has_attached(const fs::path& program)
+{
+    std::error_code ec;
+    const uint64_t size = fs::file_size(program, ec);
+    if (ec || size < kTrailer) return false;
+    std::ifstream in(program, std::ios::binary);
+    in.seekg(std::streamoff(size - kMagic));
+    char tail[kMagic] = {};
+    in.read(tail, std::streamsize(kMagic));
+    return in.gcount() == std::streamsize(kMagic) && std::memcmp(tail, kAttachedMagic, kMagic) == 0;
+}
+
 std::optional<BigUint> attached_address(const fs::path& program)
 {
     std::error_code ec;
@@ -2080,6 +2236,14 @@ static Manifest without_members(Manifest m)
     return m;
 }
 
+Manifest manifest_of_installer_raw(std::vector<uint8_t> raw)
+{
+    const std::vector<uint8_t> bytes = file_of_raw(std::move(raw));
+    Manifest m = Manifest::parse(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+    if (!m.with_addresses && !m.with_contents) throw std::runtime_error("that is a manifest without the files in it (v1): nothing to install from");
+    return without_members(std::move(m));
+}
+
 Manifest manifest_of_installer(const BigUint& address)
 {
     const auto bytes = file_at(address);
@@ -2092,7 +2256,7 @@ Manifest installable_manifest(const fs::path& file, bool hex)
 {
     if (!hex)
     {
-        if (const auto attached = attached_address(file)) return manifest_of_installer(*attached);
+        if (auto attached = attached_raw(file)) return manifest_of_installer_raw(std::move(*attached));
         std::ifstream in(file, std::ios::binary);
         char head[16] = {};
         in.read(head, sizeof head);
@@ -2105,6 +2269,7 @@ Manifest installable_manifest(const fs::path& file, bool hex)
             return without_members(std::move(m));
         }
     }
+    if (!hex) return manifest_of_installer_raw(read_file_bytes(file));
     return manifest_of_installer(read_address_file(file, hex));
 }
 

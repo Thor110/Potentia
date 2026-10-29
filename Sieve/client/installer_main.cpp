@@ -450,10 +450,12 @@ int main(int argc, char** argv)
     // installer program, made with sieve locate --program or the File Locator), else the one
     // .sieve file beside it.
     const fs::path self = own_executable(argc > 0 ? argv[0] : nullptr);
-    std::optional<BigUint> mine;
+    // (Whether one is attached is read from the program's last bytes; reading what is attached is
+    // open's, once.)
+    bool mine = false;
     try
     {
-        if (file_arg.empty()) mine = attached_address(self);
+        if (file_arg.empty()) mine = has_attached(self);
     }
     catch (const std::exception& e)
     {

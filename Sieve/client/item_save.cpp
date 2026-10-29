@@ -448,7 +448,7 @@ std::string Hallway::sample_degrees(const std::string& dir, const std::string& s
     cli::Manifest m = cli::walk_folder(root);
     cli::add_packed_newest(m, root);
     const std::vector<uint8_t> file = m.file();
-    cli::write_address_file(from_u8(sieve_out), cli::binary_address(file), false);
+    cli::write_raw_address_file(from_u8(sieve_out), cli::raw_of_file(file), false);
     report += "sample: " + std::to_string(total) + " items, " + std::to_string(m.bytes) + " bytes, as Sieve instructions of " +
               std::to_string(file.size()) + " bytes (" + m.version() + ") in " + sieve_out + "\n";
     return report;

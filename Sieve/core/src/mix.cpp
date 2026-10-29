@@ -10,6 +10,12 @@
 #if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
 #include <xmmintrin.h> // _mm_prefetch
 #endif
+// The mixers' sums and training in SSE2, which every x86-64 processor has: integer steps only, so
+// the numbers are exactly the plain loops' (checked against them on every input the models give).
+#if defined(__SSE2__) || defined(_M_X64)
+#include <emmintrin.h>
+#define SIEVE_MIX_SSE2 1
+#endif
 
 namespace sieve {
 
@@ -24,10 +30,10 @@ struct Tables
 {
     int squash[4096];
     int stretch[4096];
-    Tables()
+    constexpr Tables() : squash{}, stretch{}
     {
-        static const int ts[33] = {1,    2,    3,    6,    10,   16,   27,   45,   73,   120,  194,  310,  488,  747,  1101, 1546, 2047,
-                                   2549, 2994, 3348, 3607, 3785, 3901, 3975, 4024, 4050, 4068, 4079, 4085, 4089, 4092, 4093, 4094};
+        constexpr int ts[33] = {1,    2,    3,    6,    10,   16,   27,   45,   73,   120,  194,  310,  488,  747,  1101, 1546, 2047,
+                                2549, 2994, 3348, 3607, 3785, 3901, 3975, 4024, 4050, 4068, 4079, 4085, 4089, 4092, 4093, 4094};
         for (int x = -2048; x < 2048; ++x)
         {
             const int w = x & 127, i = (x >> 7) + 16;
@@ -45,11 +51,12 @@ struct Tables
     int sq(int x) const { return squash[(x > 2047 ? 2047 : x < -2047 ? -2047 : x) + 2048]; }
 };
 
-const Tables& tables()
-{
-    static const Tables t;
-    return t;
-}
+// Made once, before the program starts (or when it is built, where the compiler will), not on
+// first use, so no call pays for the check that it is made. (Not constexpr: its 8,192 entries may
+// be past a compiler's limit on work done while building.)
+const Tables kTables{};
+
+const Tables& tables() { return kTables; }
 
 // A counter's probability moved toward its target by 1/(n + 2), the division toward zero: as
 // (|d| * R) >> 32, R = 2^32 / (n + 2) + 1, which gives exactly |d| / (n + 2) for every |d| up to
@@ -58,16 +65,18 @@ const Tables& tables()
 struct Reciprocals
 {
     uint64_t r[258];
-    Reciprocals()
+    constexpr Reciprocals() : r{}
     {
         r[0] = r[1] = 0;
         for (uint32_t d = 2; d < 258; ++d) r[d] = (uint64_t(1) << 32) / d + 1;
     }
 };
 
+constexpr Reciprocals kReciprocals{}; // (made when built, as kTables)
+
 inline uint16_t moved(uint16_t p, int target, unsigned n)
 {
-    static const Reciprocals R;
+    const Reciprocals& R = kReciprocals;
     const int d = target - int(p);
     const int q = int((uint64_t(d < 0 ? -d : d) * R.r[n + 2]) >> 32);
     return uint16_t(int(p) + (d < 0 ? -q : q));
@@ -343,8 +352,11 @@ public:
         store_.resize((nctx_ << bits_) + 16);
         const uintptr_t at = reinterpret_cast<uintptr_t>(store_.data());
         t_ = store_.data() + ((64 - at % 64) % 64) / sizeof(Counter2);
-        w1_.assign(ninputs_ * 256, 1 << 14);
-        w2_.assign(ninputs_ * 2048, 1 << 14);
+        // (Eight more at the end: the SSE2 loops read a row to its inputs rounded up to eight, the
+        // last row's past its end, and the inputs there are 0, so nothing read there counts.)
+        w1_.assign(ninputs_ * 256 + 8, 1 << 14);
+        w2_.assign(ninputs_ * 2048 + 8, 1 << 14);
+        padded_ = (ninputs_ + 7) / 8 * 8;
         new_byte();
     }
     int p()
@@ -462,20 +474,69 @@ private:
         const uint64_t p = one * 4096 / (one + zero);
         return tables().stretch[p < 1 ? 1 : p > 4095 ? 4095 : p];
     }
+    // The sum of inputs times weights, in 64 bits. In SSE2, eight at a time, exactly: an input is
+    // within ±2047 and a weight within ±2^22, so a weight is its high part (w >> 11, within ±2048)
+    // times 2048 plus its low part (w & 2047), each 16 bits as the input is; pmaddwd sums their
+    // products in 32 bits (at most 20 inputs, each product under 2^22), and the two sums meet in 64.
     int dot(const int* w) const
     {
         int64_t d = 0;
-        for (size_t i = 0; i < ninputs_; ++i) d += int64_t(st_[i]) * w[i];
+        size_t i = 0;
+#if SIEVE_MIX_SSE2
+        __m128i hi = _mm_setzero_si128(), lo = _mm_setzero_si128();
+        const __m128i low_bits = _mm_set1_epi32(2047);
+        for (; i < padded_; i += 8) // (the inputs past ninputs_ are 0: what their weights hold adds nothing)
+        {
+            const __m128i s = _mm_packs_epi32(_mm_load_si128(reinterpret_cast<const __m128i*>(st_ + i)),
+                                              _mm_load_si128(reinterpret_cast<const __m128i*>(st_ + i + 4)));
+            const __m128i wa = _mm_loadu_si128(reinterpret_cast<const __m128i*>(w + i));
+            const __m128i wb = _mm_loadu_si128(reinterpret_cast<const __m128i*>(w + i + 4));
+            hi = _mm_add_epi32(hi, _mm_madd_epi16(s, _mm_packs_epi32(_mm_srai_epi32(wa, 11), _mm_srai_epi32(wb, 11))));
+            lo = _mm_add_epi32(lo, _mm_madd_epi16(s, _mm_packs_epi32(_mm_and_si128(wa, low_bits), _mm_and_si128(wb, low_bits))));
+        }
+        auto sum = [](__m128i v) { // (the four lanes added: each sum is well within 32 bits)
+            v = _mm_add_epi32(v, _mm_shuffle_epi32(v, _MM_SHUFFLE(1, 0, 3, 2)));
+            v = _mm_add_epi32(v, _mm_shuffle_epi32(v, _MM_SHUFFLE(2, 3, 0, 1)));
+            return int64_t(_mm_cvtsi128_si32(v));
+        };
+        d = sum(hi) * 2048 + sum(lo);
+#else
+        for (; i < ninputs_; ++i) d += int64_t(st_[i]) * w[i];
+#endif
         const int64_t s = d >> 16;
         return int(s > 2047 ? 2047 : s < -2047 ? -2047 : s);
     }
+    // Each weight moved by its input times the error (within ±2^24: 32 bits), shifted down by 12 and
+    // held within ±kWeightMax. In SSE2, eight at a time: the input and the error each 16 bits, their
+    // product's low and high halves joined into 32 bits, as the plain loop's.
     void train(int* w, int err)
     {
-        for (size_t i = 0; i < ninputs_; ++i)
+        size_t i = 0;
+#if SIEVE_MIX_SSE2
+        const __m128i e = _mm_set1_epi16(int16_t(err)), top = _mm_set1_epi32(kWeightMax), bottom = _mm_set1_epi32(-kWeightMax);
+        auto held = [&](__m128i v) {
+            const __m128i over = _mm_cmpgt_epi32(v, top), under = _mm_cmplt_epi32(v, bottom);
+            v = _mm_or_si128(_mm_andnot_si128(over, v), _mm_and_si128(over, top));
+            return _mm_or_si128(_mm_andnot_si128(under, v), _mm_and_si128(under, bottom));
+        };
+        for (; i < padded_; i += 8) // (past ninputs_ the input is 0: the weight is written back as it was)
+        {
+            const __m128i s = _mm_packs_epi32(_mm_load_si128(reinterpret_cast<const __m128i*>(st_ + i)),
+                                              _mm_load_si128(reinterpret_cast<const __m128i*>(st_ + i + 4)));
+            const __m128i plo = _mm_mullo_epi16(s, e), phi = _mm_mulhi_epi16(s, e);
+            const __m128i da = _mm_srai_epi32(_mm_unpacklo_epi16(plo, phi), 12), db = _mm_srai_epi32(_mm_unpackhi_epi16(plo, phi), 12);
+            __m128i* wa = reinterpret_cast<__m128i*>(w + i);
+            __m128i* wb = reinterpret_cast<__m128i*>(w + i + 4);
+            _mm_storeu_si128(wa, held(_mm_add_epi32(_mm_loadu_si128(wa), da)));
+            _mm_storeu_si128(wb, held(_mm_add_epi32(_mm_loadu_si128(wb), db)));
+        }
+#else
+        for (; i < ninputs_; ++i)
         {
             const int nw = w[i] + ((st_[i] * err) >> 12);
             w[i] = nw > kWeightMax ? kWeightMax : nw < -kWeightMax ? -kWeightMax : nw;
         }
+#endif
     }
     int at(size_t back) const { return pos_ >= back ? buf_[pos_ - back] : 0; }
     int c1() const { return at(1); }
@@ -563,7 +624,7 @@ private:
     uint32_t bits_, mask_;
     size_t bpp_, row_;
     int orders_ = 6;
-    size_t nctx_ = 0, ninputs_ = 0;
+    size_t nctx_ = 0, ninputs_ = 0, padded_ = 0; // (padded_: ninputs_ rounded up to eight)
     std::vector<uint8_t> buf_;
     size_t pos_ = 0, linestart_ = 0, prevline_ = 0;
     uint32_t field_ = 0, word_ = 0;
@@ -571,7 +632,8 @@ private:
     Counter2* t_ = nullptr;
     uint32_t base_[kMaxContexts] = {};
     size_t slot_[kMaxContexts] = {}, at_[kMaxContexts] = {};
-    alignas(32) int st_[kInputs2] = {};
+    // (Room for the inputs rounded up to eight, those past ninputs_ always 0, for the SSE2 loops.)
+    alignas(32) int st_[(kInputs2 + 7) / 8 * 8] = {};
     std::vector<int> w1_, w2_;
     Counter mm_[64];
     std::vector<uint32_t> ht_;

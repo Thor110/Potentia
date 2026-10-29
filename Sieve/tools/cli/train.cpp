@@ -451,7 +451,7 @@ void pack_training_run(const fs::path& folder, const fs::path& sieve_file)
 {
     Manifest m = walk_folder(folder);
     add_packed_newest(m, folder);
-    write_address_file(sieve_file, binary_address(m.file()), false);
+    write_raw_address_file(sieve_file, raw_of_file(m.file()), false);
 }
 
 ModelRun model_run_of(const std::string& id, const std::vector<std::filesystem::path>& dirs)

@@ -1102,7 +1102,7 @@ void MusicPlayer::write_favourites(const std::vector<MusicMelody>& favs) const
         }
         sieve::cli::Manifest m = sieve::cli::walk_folder(dir);
         sieve::cli::add_packed_newest(m, dir, nullptr, 0.25, false, false);
-        sieve::cli::write_address_file(fav_path_, sieve::cli::binary_address(m.file()), false);
+        sieve::cli::write_raw_address_file(fav_path_, sieve::cli::raw_of_file(m.file()), false);
     }
     catch (const std::exception&)
     {

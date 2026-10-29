@@ -679,7 +679,14 @@ std::optional<std::vector<uint8_t>> gzip_inner(const std::vector<uint8_t>& b, si
         const uint32_t len = uint32_t(t[4]) | uint32_t(t[5]) << 8 | uint32_t(t[6]) << 16 | uint32_t(t[7]) << 24;
         if (crc32(0, out->data(), uInt(out->size())) != crc || uint32_t(out->size()) != len) return std::nullopt;
         if (all.empty()) all = std::move(*out);
-        else all.insert(all.end(), out->begin(), out->end());
+        else
+        {
+            // (Appended by resize and copy: the same bytes as insert, which GCC 13 wrongly warns of
+            // here once this is inlined.)
+            const size_t was = all.size();
+            all.resize(was + out->size());
+            std::copy(out->begin(), out->end(), all.begin() + std::ptrdiff_t(was));
+        }
         at += h + used + 8;
         ++n;
     }
